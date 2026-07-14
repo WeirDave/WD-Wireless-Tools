@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Claude Code worktrees + dev tooling
+.claude/
+
+# Atomic-write temp files (created by edit tools when sync races)
+*.tmp.*
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ekahau project files (user data — never commit)
+*.esx
+
+# Sensitive session/cookie data
+*.cookies
+*.session

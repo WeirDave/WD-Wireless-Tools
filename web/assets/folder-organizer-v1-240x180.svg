@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" fill="none">
+  <!-- Main folder -->
+  <rect x="20" y="50" width="200" height="120" rx="10" fill="#d97706" opacity="0.15" stroke="#d97706" stroke-width="2.5"/>
+  <path d="M20 60 Q20 50 30 50 H85 L100 38 Q103 35 108 35 H210 Q220 35 220 45 V50 H20Z" fill="#d97706" opacity="0.25" stroke="#d97706" stroke-width="2"/>
+  <!-- Sub-folders -->
+  <rect x="38" y="75" width="50" height="38" rx="5" fill="#5fab4f" opacity="0.8" stroke="#5fab4f" stroke-width="1.5"/>
+  <text x="63" y="100" text-anchor="middle" fill="white" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="700">IMG</text>
+  <rect x="95" y="75" width="50" height="38" rx="5" fill="#1e77ac" opacity="0.8" stroke="#1e77ac" stroke-width="1.5"/>
+  <text x="120" y="100" text-anchor="middle" fill="white" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="700">FLP</text>
+  <rect x="152" y="75" width="50" height="38" rx="5" fill="#d97706" opacity="0.8" stroke="#d97706" stroke-width="1.5"/>
+  <text x="177" y="100" text-anchor="middle" fill="white" font-family="Segoe UI,system-ui,sans-serif" font-size="10" font-weight="700">RPT</text>
+  <!-- Arrows from scattered files to folders -->
+  <line x1="55" y1="145" x2="63" y2="118" stroke="#5fab4f" stroke-width="2" stroke-linecap="round" marker-end="url(#arr-g)"/>
+  <line x1="120" y1="150" x2="120" y2="118" stroke="#1e77ac" stroke-width="2" stroke-linecap="round" marker-end="url(#arr-b)"/>
+  <line x1="185" y1="145" x2="177" y2="118" stroke="#d97706" stroke-width="2" stroke-linecap="round" marker-end="url(#arr-a)"/>
+  <!-- Scattered file icons at bottom -->
+  <rect x="42" y="133" width="18" height="22" rx="2" fill="#5fab4f" opacity="0.4" stroke="#5fab4f" stroke-width="1"/>
+  <rect x="108" y="138" width="18" height="22" rx="2" fill="#1e77ac" opacity="0.4" stroke="#1e77ac" stroke-width="1"/>
+  <rect x="175" y="133" width="18" height="22" rx="2" fill="#d97706" opacity="0.4" stroke="#d97706" stroke-width="1"/>
+  <defs>
+    <marker id="arr-g" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6Z" fill="#5fab4f"/></marker>
+    <marker id="arr-b" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6Z" fill="#1e77ac"/></marker>
+    <marker id="arr-a" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6Z" fill="#d97706"/></marker>
+  </defs>
+  <!-- Title -->
+  <text x="120" y="24" text-anchor="middle" fill="#d97706" font-family="Segoe UI,system-ui,sans-serif" font-size="16" font-weight="700">WD Folder Organizer</text>
+</svg>

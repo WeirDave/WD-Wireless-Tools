@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Cloud Manager</title>
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  // Shared suite theme — apply saved choice before paint (default dark).
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+</head>
+<body class="tool-cloud">
+
+<!-- ════ LOGIN ════ -->
+<div id="loginScreen">
+  <div class="brand-card"><img src="/assets/cloud-manager-v1-560x822.png" alt="WD Cloud Manager" class="brand-logo-img"></div>
+  <div class="login-sub">Site &amp; Project Management</div>
+  <div class="login-card">
+    <div id="authChecking">
+      <div class="big-spin"></div>
+      <div class="login-status">Checking for an active session...</div>
+    </div>
+    <div id="authLogin" style="display:none">
+      <div style="font-size:36px;margin-bottom:12px;">&#9729;</div>
+      <div class="login-status" style="margin-bottom:5px;">Connect to Ekahau Cloud</div>
+      <div class="login-detail" style="margin-bottom:16px;">Log in with your browser — we'll pick up your session automatically.</div>
+      <button class="login-btn" onclick="openEkahauLogin()">Log in to Ekahau Cloud</button>
+    </div>
+    <div id="authWaiting" style="display:none">
+      <div class="big-spin"></div>
+      <div class="login-status">Waiting for you to log in...</div>
+      <div class="login-detail">Your browser should have opened. Log in to Ekahau Cloud, then come back here.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SETUP ════ -->
+<div id="setupScreen" style="display:none">
+  <div>
+    <div class="brand-card"><img src="/assets/cloud-manager-v1-560x822.png" alt="WD Cloud Manager" class="brand-logo-img"></div>
+    <div class="login-sub" style="margin-bottom:6px">Connected to Ekahau Cloud</div>
+    <div style="color:#34d399;font-size:13px;margin-bottom:24px;">&#10003; Logged in as <span id="setupEmail"></span></div>
+    <div class="login-card">
+      <div style="font-size:36px;margin-bottom:10px;">&#128193;</div>
+      <div class="login-status" style="margin-bottom:5px;">Where are your Ekahau project files?</div>
+      <div class="login-detail" style="margin-bottom:16px;">Select the folder that contains your site folders (each with .esx files inside).</div>
+      <button class="login-btn" onclick="setupPickFolder()">Choose Folder</button>
+      <div id="setupFolderPath" style="margin-top:10px;font-size:11px;color:#6bb3e0;word-break:break-all;display:none;"></div>
+      <button class="login-btn" id="setupContinueBtn" style="display:none;margin-top:10px;background:#059669;" onclick="setupContinue()">Continue</button>
+      <button class="login-btn secondary" onclick="setupSkip()">Skip for now</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════ APP ════ -->
+<div id="appScreen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="menu-wrap">
+        <button class="hamburger-btn" onclick="toggleMainMenu(event)" title="Menu"><span></span><span></span><span></span></button>
+        <div id="mainMenu" class="main-menu">
+          <div class="menu-section">&#9656; Navigation</div>
+          <a class="menu-item" href="/">&#8962; Home</a>
+          <a class="menu-item" href="/walls">· Quick Walls</a>
+          <a class="menu-item active" href="/cloud">· Cloud Manager</a>
+          <a class="menu-item" href="/organizer">· Squirrel</a>
+          <div class="menu-sep"></div>
+          <div class="menu-section">&#9656; Tools</div>
+          <button class="menu-item" onclick="closeMainMenu();openSettings()">· Settings</button>
+          <button class="menu-item" onclick="closeMainMenu();pickFolder()">· Change Local Folder</button>
+          <button class="menu-item" onclick="closeMainMenu();refreshData()">· Refresh</button>
+          <div class="menu-sep"></div>
+          <div class="menu-section">&#9656; Help &amp; Support</div>
+          <a class="menu-item" href="/guide-cloud" target="_blank">· User Guide</a>
+          <button class="menu-item" onclick="closeMainMenu();openAbout()">· About</button>
+        </div>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.6</span></h1>
+    </div>
+    <div class="topbar-right">
+      <button class="settings-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
+      <span class="dot"></span>
+      <span id="userEmail">Connected</span>
+      <button class="settings-btn" onclick="pickFolder()" title="Open Local Folder — choose which local folder the tool scans">&#128193; Folder</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" id="tabSites" onclick="switchTab('sites')">Sites</div>
+    <div class="tab" id="tabProjects" onclick="switchTab('projects')">Project Files</div>
+  </div>
+
+  <div class="dashboard">
+    <div class="dash-card allcard" data-filter="all" onclick="setFilter('all')">
+      <div class="number" id="dAll">-</div><div class="label">All</div>
+    </div>
+    <div class="dash-card mismatches" data-filter="mismatches" onclick="setFilter('mismatches')">
+      <div class="number" id="dMismatches">-</div><div class="label">Mismatches</div>
+    </div>
+    <div class="dash-card orphans" data-filter="orphans" onclick="setFilter('orphans')">
+      <div class="number" id="dOrphans">-</div><div class="label">Orphans</div>
+    </div>
+    <div class="dash-card matched" data-filter="synced" onclick="setFilter('synced')">
+      <div class="number" id="dSynced">-</div><div class="label">Synced</div>
+    </div>
+    <div class="dash-card unassigned" data-filter="unassigned" onclick="setFilter('unassigned')" id="dUnassignedCard" style="display:none;">
+      <div class="number" id="dUnassigned">-</div><div class="label">No Site</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" class="search" id="searchBox" placeholder="Search...">
+    <button class="clear-search" onclick="clearSearch()" title="Clear search">&#215;</button>
+    <label class="selall"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> All</label>
+    <span class="selcount" id="selCount"></span>
+    <button class="btn btn-secondary bulk-btn" id="bulkSyncTo" style="display:none" onclick="bulkSync('to-local')" title="Copy cloud names onto matched local">Sync &#8594;</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkSyncFrom" style="display:none" onclick="bulkSync('to-cloud')" title="Copy local names onto matched cloud">Sync &#8592;</button>
+    <button class="btn btn-secondary bulk-btn" id="compareBtn" style="display:none" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
+    <button class="btn btn-red bulk-btn" id="bulkDeleteBtn" style="display:none" onclick="bulkDelete()">Delete selected</button>
+    <span class="spacer"></span>
+    <button class="btn btn-blue" id="addNewBtn" onclick="showModal('createModal')">+ New Site</button>
+    <button class="btn btn-blue" onclick="openSettings()" title="Settings">&#9881;</button>
+    <button class="btn btn-secondary" id="liveBtn" onclick="toggleLive()" title="Live: auto-refresh from Ekahau Cloud (pauses while selecting or a dialog is open)">Live</button>
+    <button class="btn btn-blue" onclick="refreshData()">Refresh</button>
+  </div>
+
+  <div class="col-legend">
+    <span></span>
+    <span id="legCloud">Cloud Site</span>
+    <span>Sync</span>
+    <span id="legLocal">Local Folder</span>
+  </div>
+
+  <div class="rows-container" id="rowsContainer">
+    <div class="empty-msg">Loading...</div>
+  </div>
+</div>
+
+<!-- Rename Modal -->
+<div class="modal-overlay" id="renameModal">
+  <div class="modal">
+    <h3 id="renameTitle">Rename</h3>
+    <p class="sub" id="renameSub"></p>
+    <input type="text" id="renameInput">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('renameModal')">Cancel</button>
+      <button class="btn btn-blue" id="renameBtn" onclick="confirmRename()">Rename</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3 id="deleteTitle">Delete</h3>
+    <p class="sub" id="deleteSub"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn btn-red" id="deleteBtn" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Peek (folder contents) Modal -->
+<div class="modal-overlay" id="peekModal">
+  <div class="modal peek">
+    <h3 id="peekTitle">Folder contents</h3>
+    <div class="peek-body" id="peekBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('peekModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- About Modal -->
+<div class="modal-overlay" id="aboutModal">
+  <div class="modal">
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.6</span></h3>
+    <div class="about-body">
+      Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
+      <br><br>
+      Part of the <b>WD Wireless Tools</b> suite. Runs entirely on your machine; connects to Ekahau Cloud using your browser session.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('aboutModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Compare folders side by side -->
+<div class="modal-overlay" id="compareModal">
+  <div class="modal compare">
+    <h3 id="compareTitle">Compare</h3>
+    <p class="sub">Files highlighted <b class="amber">amber</b> appear in more than one of these folders — likely the same file or different versions. Scroll sideways to see more folders.</p>
+    <div class="cmp-wrap" id="compareBody"></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('compareModal')">Close</button></div>
+  </div>
+</div>
+
+<!-- Merge: destination picker -->
+<div class="modal-overlay" id="mergeDestModal">
+  <div class="modal peek">
+    <h3 id="mergeDestTitle">Merge into…</h3>
+    <input type="text" id="mergeDestSearch" placeholder="Filter folders…" oninput="renderMergeDests()">
+    <p class="sub">Pick the folder to move this one's files into. <b class="amber">★</b> marks folders that share the same site code.</p>
+    <div class="peek-list" id="mergeDestList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('mergeDestModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Merge: preview + conflict resolution -->
+<div class="modal-overlay" id="mergeModal">
+  <div class="modal peek merge-modal">
+    <h3 id="mergeTitle">Merge</h3>
+    <p class="sub" id="mergeSummary"></p>
+    <div id="mergeConflictWrap" style="display:none">
+      <div class="merge-rule">
+        <span>When a file already exists:</span>
+        <label><input type="radio" name="mrule" value="newer"> Keep newer</label>
+        <label><input type="radio" name="mrule" value="both" title="Keep both files — the newer keeps the clean name, the older gets a date stamp"> Keep both (date-stamp older)</label>
+        <label><input type="radio" name="mrule" value="skip"> Skip</label>
+      </div>
+      <label class="merge-remember"><input type="checkbox" id="mergeRemember"> Don't ask again — save this as my default (change later in Settings)</label>
+    </div>
+    <div class="peek-list" id="mergeFileList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('mergeModal')">Cancel</button>
+      <button class="btn btn-blue" id="mergeBtn" onclick="confirmMerge()">Merge</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h3>Settings</h3>
+    <div class="set-group">
+      <div class="set-label">When merging folders, if a file already exists in the destination:</div>
+      <label><input type="radio" name="setrule" value="ask"> Ask me each time</label>
+      <label><input type="radio" name="setrule" value="newer"> Keep newer (by timestamp)</label>
+      <label><input type="radio" name="setrule" value="both"> Keep both — the newer keeps its name, the older gets a date stamp</label>
+      <label><input type="radio" name="setrule" value="skip"> Skip existing files</label>
+    </div>
+    <div class="set-group" style="margin-top:14px;">
+      <div class="set-label">Live auto-refresh interval:</div>
+      <select id="setLiveInterval" style="padding:5px 8px; border-radius:4px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:13px;">
+        <option value="15000">15 seconds</option>
+        <option value="30000">30 seconds (default)</option>
+        <option value="60000">60 seconds</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('settingsModal')">Cancel</button>
+      <button class="btn btn-blue" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Site Modal -->
+<div class="modal-overlay" id="createModal">
+  <div class="modal">
+    <h3>Create New Site</h3>
+    <input type="text" id="newSiteName" placeholder="Site name">
+    <div style="display:flex; gap:16px; margin:10px 0 4px;">
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-2); cursor:pointer;">
+        <input type="checkbox" id="createCloud" checked style="accent-color:var(--blue);"> Cloud
+      </label>
+      <label style="display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text-2); cursor:pointer;">
+        <input type="checkbox" id="createLocal" checked style="accent-color:var(--green);"> Local Folder
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn btn-blue" onclick="createSite()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="moveToSiteModal">
+  <div class="modal">
+    <h3>Move to Site</h3>
+    <p style="font-size:13px;color:var(--text-2);margin:0 0 8px;" id="moveToSiteLabel">Project: —</p>
+    <select id="moveToSiteSelect" style="width:100%;padding:7px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);" onchange="toggleNewSiteInput()">
+      <option value="">Loading sites…</option>
+    </select>
+    <input type="text" id="moveToSiteNewName" placeholder="Enter new site name…" style="display:none;width:100%;padding:7px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;background:var(--surface);color:var(--text);margin-top:8px;box-sizing:border-box;">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('moveToSiteModal')">Cancel</button>
+      <button class="btn btn-blue" onclick="confirmMoveToSite()">Move</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script src="/assets/wd-nav.js"></script>
+<script>
+let currentTab = 'sites';       // 'sites' | 'projects'
+let data = null;                // current tab's data
+let activeFilter = 'all';
+let filterUnassigned = false;   // column-level "no site / no folder" toggle
+let renameTarget = null;
+let deleteTarget = null;
+let rowData = {};               // key -> action info for every row in current data
+let selected = new Set();       // keys of checked rows
+let collapsed = new Set();      // collapsed folder names in the Project Files tree
+let mergeState = {};            // in-progress folder→folder merge
+
+// Browser suite: route the old pywebview-style calls to the Flask server.
+const API_MAP = {
+  get_status: ['status', []],
+  open_ekahau_login: ['open_login', []],
+  get_data: ['get_data', ['kind']],
+  rename_cloud: ['rename_cloud', ['kind', 'id', 'name']],
+  delete_cloud: ['delete_cloud', ['kind', 'id']],
+  create_site: ['create_site', ['name']],
+  create_local_folder: ['create_local_folder', ['name']],
+  rename_local: ['rename_local', ['path', 'name']],
+  delete_local: ['delete_local', ['path']],
+  merge_preview: ['merge_preview', ['src', 'dst']],
+  merge_execute: ['merge_execute', ['src', 'dst', 'ops']],
+  pick_folder: ['pick_folder', []],
+  upload_project: ['upload_project', ['path', 'siteId']],
+  assign_to_site: ['assign_to_site', ['siteId', 'datasetId']],
+};
+async function pyApi(method, ...args) {
+  const entry = API_MAP[method];
+  if (!entry) throw new Error('unknown api: ' + method);
+  const [action, keys] = entry;
+  const body = {};
+  keys.forEach((k, i) => { body[k] = args[i]; });
+  const r = await fetch('/api/cloud/' + action, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return await r.json();
+}
+
+/* ── Auth / setup ── */
+function setAuthState(s) {
+  document.getElementById('authChecking').style.display = s === 'checking' ? '' : 'none';
+  document.getElementById('authLogin').style.display = s === 'login' ? '' : 'none';
+  document.getElementById('authWaiting').style.display = s === 'waiting' ? '' : 'none';
+}
+async function startAuth() {
+  // Auto-login is safe now (plain HTTP, no pywebview): the server tries your
+  // saved session + browser cookies. Connected → straight in; else show login.
+  setAuthState('checking');
+  try {
+    const s = await pyApi('get_status');
+    if (s.connected) { showApp(s.email); return; }
+  } catch (e) {}
+  setAuthState('login');
+}
+async function openEkahauLogin() {
+  setAuthState('waiting');
+  await pyApi('open_ekahau_login');          // opens ekahau.cloud in your browser
+  // Poll the server until it picks up your fresh session cookies.
+  const iv = setInterval(async () => {
+    try {
+      const s = await pyApi('get_status');
+      if (s.connected) { clearInterval(iv); showApp(s.email); }
+    } catch (e) {}
+  }, 3000);
+}
+
+async function showApp(email) {
+  const status = await pyApi('get_status');
+  if (!status.outputDir) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('setupScreen').style.display = 'block';
+    document.getElementById('setupEmail').textContent = email || '';
+    return;
+  }
+  goToDashboard(email);
+}
+function goToDashboard(email) {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('setupScreen').style.display = 'none';
+  document.getElementById('appScreen').style.display = 'flex';
+  document.getElementById('userEmail').textContent = email || 'Connected';
+  refreshData();
+  if (liveWanted()) startLive();   // resume auto-refresh if it was left on
+}
+
+/* ── Live auto-refresh with countdown ── */
+function liveMs() { try { return parseInt(localStorage.getItem('wd-live-ms')) || 30000; } catch (e) { return 30000; } }
+let liveTimer = null;    // 1-second tick interval
+let liveCountdown = 0;   // seconds until next refresh
+function liveWanted() { try { return localStorage.getItem('wd-live') === 'on'; } catch (e) { return false; } }
+function applyLiveUI() {
+  const b = document.getElementById('liveBtn');
+  if (!b) return;
+  const on = liveTimer !== null;
+  if (on) {
+    b.textContent = `Live ● ${liveCountdown}s`;
+  } else {
+    b.textContent = 'Live';
+  }
+  b.classList.toggle('live-on', on);
+}
+function startLive() {
+  if (!liveTimer) {
+    liveCountdown = liveMs() / 1000;
+    liveTimer = setInterval(liveTick, 1000);
+  }
+  applyLiveUI();
+}
+function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } applyLiveUI(); }
+function restartLive() { if (liveTimer) { stopLive(); startLive(); } }
+function toggleLive() {
+  if (liveTimer) {
+    stopLive(); try { localStorage.setItem('wd-live', 'off'); } catch (e) {}
+  } else {
+    startLive(); try { localStorage.setItem('wd-live', 'on'); } catch (e) {}
+    toast(`Live on — re-pulls from Ekahau Cloud every ${liveMs()/1000}s while idle`, 'info');
+  }
+}
+// Never yank data out from under an in-progress action.
+function liveBusy() {
+  if (document.querySelector('.modal-overlay.active')) return true;   // a dialog is open
+  if (selected.size > 0) return true;                                 // rows are selected
+  const sb = document.getElementById('searchBox');
+  if (sb && document.activeElement === sb && sb.value) return true;   // mid-search
+  return false;
+}
+function liveTick() {
+  liveCountdown--;
+  if (liveCountdown <= 0) {
+    liveCountdown = liveMs() / 1000;
+    if (!liveBusy()) refreshData(true);
+  }
+  applyLiveUI();
+}
+async function setupPickFolder() {
+  try {
+    const r = await pyApi('pick_folder');
+    if (r.path) {
+      document.getElementById('setupFolderPath').textContent = r.path;
+      document.getElementById('setupFolderPath').style.display = '';
+      document.getElementById('setupContinueBtn').style.display = '';
+    }
+  } catch (err) { toast(err.message, 'error'); }
+}
+async function setupContinue() { const s = await pyApi('get_status'); goToDashboard(s.email); }
+function setupSkip() { goToDashboard(document.getElementById('setupEmail').textContent); }
+
+/* ── Tabs ── */
+function switchTab(kind) {
+  if (kind === currentTab) return;
+  currentTab = kind;
+  document.getElementById('tabSites').classList.toggle('active', kind === 'sites');
+  document.getElementById('tabProjects').classList.toggle('active', kind === 'projects');
+  document.getElementById('addNewBtn').style.display = kind === 'sites' ? '' : 'none';
+  // Keep the active filter when switching tabs so the highlighted chip carries over.
+  document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
+  refreshData();
+}
+
+/* ── Data ── */
+function refreshData(silent) {
+  // silent = a live auto-refresh: don't clear selection or flash "Loading…",
+  // just swap the data in when it arrives.
+  if (!silent) {
+    clearSelection();
+    document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">Loading…</div>';
+  }
+  const tab = currentTab;
+  // Browser: await the fetch and hand the result to onData().
+  pyApi('get_data', tab)
+    .then(d => onData(tab, JSON.stringify(d)))
+    .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
+}
+
+function onData(kind, jsonStr) {
+  if (kind !== currentTab) return;   // ignore results from a tab we've left
+  try {
+    data = JSON.parse(jsonStr);
+  } catch (err) { toast('Bad data payload', 'error'); return; }
+  if (data.error) {
+    document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">' + e(data.error) + '</div>';
+    toast(data.error, 'error'); return;
+  }
+  indexRowData();
+  updateDashboard(); renderRows();
+}
+
+// Build a lookup of every selectable row (independent of search filter) so
+// bulk actions can resolve a selected key even if it's scrolled/filtered out.
+function indexRowData() {
+  rowData = {};
+  (data.matched || []).forEach(p => {
+    rowData['p:' + p.cloud.id] = { kind: 'pair', cloudId: p.cloud.id, cloudName: p.cloud.name, localName: p.local.name, localPath: p.local.path, mismatch: p.namesDiffer };
+  });
+  (data.cloudOnly || []).forEach(s => { rowData['c:' + s.id] = { kind: 'cloud', id: s.id, name: s.name }; });
+  (data.localOnly || []).forEach(f => { rowData['l:' + f.path] = { kind: 'local', path: f.path, name: f.name, isDir: f.isDir }; });
+}
+function updateDashboard() {
+  const s = data.summary;
+  // Synced = matched pairs whose names agree; mismatches are matched-but-differ;
+  // orphans = everything that exists on only one side (cloud-only + local-only).
+  document.getElementById('dAll').textContent = s.matched + s.cloudOnly + s.localOnly;
+  document.getElementById('dMismatches').textContent = s.mismatches;
+  document.getElementById('dOrphans').textContent = s.cloudOnly + s.localOnly;
+  document.getElementById('dSynced').textContent = s.matched - s.mismatches;
+  // "No Site" card — only visible on Project Files tab
+  const isProj = currentTab === 'projects';
+  const uCard = document.getElementById('dUnassignedCard');
+  uCard.style.display = isProj ? '' : 'none';
+  if (isProj) {
+    let noSite = 0;
+    (data.matched || []).forEach(p => { if (p.cloud && !p.cloud.hasSite) noSite++; });
+    (data.cloudOnly || []).forEach(c => { if (!c.hasSite) noSite++; });
+    document.getElementById('dUnassigned').textContent = noSite;
+  }
+  // Reset to 'all' if switching tabs while 'unassigned' is active on Sites tab
+  if (!isProj && activeFilter === 'unassigned') { activeFilter = 'all'; }
+  // Keep the active chip lit on every refresh (defaults to All).
+  document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
+}
+function setFilter(f) {
+  activeFilter = activeFilter === f ? 'all' : f;
+  document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
+  renderRows();
+}
+
+/* ── Character-level diff ── */
+function charDiff(a, b) {
+  if (a === b) return { a: e(a), b: e(b) };
+  if (!a) return { a: '', b: '<mark>' + e(b) + '</mark>' };
+  if (!b) return { a: '<mark>' + e(a) + '</mark>', b: '' };
+  const m = a.length, n = b.length, dp = [];
+  for (let i = 0; i <= m; i++) dp[i] = new Uint16Array(n + 1);
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++)
+    dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] + 1 : Math.max(dp[i-1][j], dp[i][j-1]);
+  const aK = new Uint8Array(m), bK = new Uint8Array(n);
+  let i = m, j = n;
+  while (i > 0 && j > 0) {
+    if (a[i-1] === b[j-1]) { aK[i-1] = 1; bK[j-1] = 1; i--; j--; }
+    else if (dp[i-1][j] >= dp[i][j-1]) i--; else j--;
+  }
+  const toH = (s, k) => {
+    let o = '', d = false;
+    for (let x = 0; x < s.length; x++) {
+      if (!k[x] && !d) { o += '<mark>'; d = true; }
+      if (k[x] && d) { o += '</mark>'; d = false; }
+      const c = s[x]; o += c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '&' ? '&amp;' : c;
+    }
+    if (d) o += '</mark>'; return o;
+  };
+  return { a: toH(a, aK), b: toH(b, bK) };
+}
+
+/* ── Render ── */
+// Both tabs are now full two-column ledgers: Sites lists every cloud site vs
+// every local folder; Project Files lists every cloud project vs the local
+// .esx folder tree. The old paired-row/split legend is retired.
+function renderRows() {
+  lastChkIndex = null;   // row indices change on re-render — reset the shift anchor
+  const el = document.getElementById('rowsContainer');
+  const q = document.getElementById('searchBox').value.toLowerCase();
+  const hit = n => !q || (n || '').toLowerCase().includes(q);
+
+  const legend = document.querySelector('.col-legend');
+  if (legend) legend.style.display = 'none';
+  el.innerHTML = renderLedger(hit);   // same WinDiff ledger for both tabs
+  updateBulkBar(); refreshSelAll();
+}
+
+// The site "code" (CSMS3, BALB01…) is auto-extracted from the START of the
+// name purely for MATCHING. Showing it as a chip just repeated the first word
+// of the name — redundant clutter — so we no longer render it.
+function chip(code) { return ''; }
+
+// Side-by-side view of unmatched cloud vs local items, sorted by site code
+// so related entries line up, with an amber bar on any item whose code also
+// appears in the other column (a likely duplicate to verify).
+/* ── Project Files: collapsible folder tree ── */
+function toggleFolder(fn) {
+  if (collapsed.has(fn)) collapsed.delete(fn); else collapsed.add(fn);
+  renderRows();
+}
+function statusBadge(st) {
+  if (st === 'synced') return `<span class="st ok">synced</span>`;
+  if (st === 'mismatch') return `<span class="st warn">mismatch</span>`;
+  return `<span class="st orph">orphan</span>`;
+}
+function renderEsxRow(en, stripe) {
+  const item = en.item, status = en.status, pair = en.pair;
+  const key = pair ? ('p:' + pair.cloud.id) : ('l:' + item.path);
+  const badge = status === 'synced' ? `<span class="st ok">synced</span>`
+              : status === 'mismatch' ? `<span class="st warn">mismatch</span>`
+              : `<span class="st orph">orphan</span>`;
+  let cloudInfo = '';
+  if (pair) {
+    const c = pair.cloud;
+    if (status === 'mismatch') {
+      cloudInfo = `<span class="tree-cloud" title="Cloud project: ${a(c.name)}">&#8596; ${e(c.name)}</span>
+        <button class="sync-btn" title="Cloud name → local file" onclick="syncRow('to-local','${a(c.id)}','${a(c.name)}','${a(item.path)}')">&#8594;</button>
+        <button class="sync-btn" title="Local name → cloud project" onclick="syncRow('to-cloud','${a(c.id)}','${a(item.name)}','${a(item.path)}')">&#8592;</button>`;
+    } else {
+      cloudInfo = `<span class="tree-cloud ok" title="Matched cloud project">&#10003; in cloud</span>`;
+    }
+  }
+  return `<div class="tree-row${stripe}">
+    <input type="checkbox" class="rowchk" data-k="${e(key)}" ${selected.has(key) ? 'checked' : ''}>
+    <span class="tree-esx">${e(item.name)}</span>
+    ${badge}
+    <span class="pair-meta">${e(item.meta)}</span>
+    <span class="grow"></span>
+    ${cloudInfo}
+    <button class="icon-btn" title="Rename .esx file" onclick="startRename('local','${a(item.path)}','${a(item.name)}')">&#9998;</button>
+    <button class="icon-btn del" title="Delete .esx file" onclick="startDelete('local','${a(item.path)}','${a(item.name)}',false)">&#128465;</button>
+  </div>`;
+}
+
+/* ── WinDiff-style aligned ledger (both tabs) ── */
+// One aligned row per reconciliation unit: a matched pair sits cloud-left /
+// local-right on the SAME row; an orphan fills its own side and leaves a blank
+// gap on the other (with a ghost button to create the missing counterpart).
+// Rows are ordered by name so related items (e.g. every CLMB1) cluster together.
+// Sites: cloud sites vs local folders. Project Files: cloud projects vs .esx.
+function renderLedger(hit) {
+  const isSites = currentTab === 'sites';
+  const showSynced = activeFilter === 'all' || activeFilter === 'synced';
+  const showMis = activeFilter === 'all' || activeFilter === 'mismatches';
+  const showOrph = activeFilter === 'all' || activeFilter === 'orphans';
+  const showUnassigned = activeFilter === 'unassigned';
+  const pass = (st, row) => {
+    if (showUnassigned) return row && row.cloud && !row.cloud.hasSite;
+    return (st === 'synced' && showSynced) || (st === 'mismatch' && showMis) || (st === 'orphan' && showOrph);
+  };
+
+  const rows = [];
+  (data.matched || []).forEach(p => rows.push({
+    status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id,
+    cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
+  }));
+  (data.cloudOnly || []).forEach(s => rows.push({ status: 'orphan', key: 'c:' + s.id, cloud: s, local: null, sort: s.name || '' }));
+  (data.localOnly || []).forEach(f => rows.push({ status: 'orphan', key: 'l:' + f.path, cloud: null, local: f, sort: f.name || '' }));
+
+  // A site code present on the OTHER side (matched or orphan) is the "you
+  // probably already have this" hint that flags likely duplicates.
+  const cloudCodes = new Set(rows.map(r => r.cloud && r.cloud.code).filter(Boolean));
+  const localCodes = new Set(rows.map(r => r.local && r.local.code).filter(Boolean));
+
+  const visible = rows
+    .filter(r => pass(r.status, r) && (hit(r.cloud && r.cloud.name) || hit(r.local && r.local.name)))
+    .sort((x, y) => x.sort.localeCompare(y.sort, undefined, { sensitivity: 'base' }));
+  const nCloud = visible.filter(r => r.cloud).length, nLocal = visible.filter(r => r.local).length;
+
+  let h = `<div class="ledger">`;
+  h += `<div class="ledger-head"><div class="lh-cell cloud">${isSites ? 'Cloud Sites' : 'Cloud Projects'} (${nCloud})</div><div class="lh-gut"></div><div class="lh-cell local">${isSites ? 'Local Folders' : 'Local .esx'} (${nLocal})</div></div>`;
+  if (!visible.length) { h += `<div class="empty-msg">Nothing here for this filter.</div></div>`; return h; }
+  let z = 0;
+  visible.forEach(r => {
+    h += `<div class="ledger-row ${r.status}${(z++ % 2) ? ' stripe' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>`;
+  });
+  h += `</div>`;
+  return h;
+}
+function gutCell(r) {
+  // Big WinDiff-style marker down the middle of every row.
+  if (r.status === 'mismatch') {
+    const c = r.cloud, l = r.local;
+    return `<div class="lr-gut mis">
+      <button class="gut-arrow" title="Apply cloud name onto the local folder" onclick="syncRow('to-local','${a(c.id)}','${a(c.name)}','${a(l.path)}')">&#10145;</button>
+      <button class="gut-arrow" title="Apply local name onto the cloud site" onclick="syncRow('to-cloud','${a(c.id)}','${a(l.name)}','${a(l.path)}')">&#11013;</button>
+    </div>`;
+  }
+  if (r.status === 'synced') {
+    return `<div class="lr-gut ok"><span class="gut-glyph" title="In sync">=</span></div>`;
+  }
+  // Orphan: bold arrow points at the empty side that needs filling.
+  // Sites tab: create the missing counterpart. Project Files tab: upload .esx.
+  if (r.cloud) {
+    const act = currentTab === 'sites'
+      ? `onclick="createLocalFolder('${a(r.cloud.name)}')"` : '';
+    const title = currentTab === 'sites' ? 'Create the matching local folder →' : 'Cloud only';
+    return currentTab === 'sites'
+      ? `<div class="lr-gut orph"><button class="gut-arrow orphan" title="${title}" ${act}>&#10145;</button></div>`
+      : `<div class="lr-gut orph"><span class="gut-glyph" title="${title}">&#10145;</span></div>`;
+  }
+  if (currentTab === 'sites') {
+    return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Create a cloud site from this folder" onclick="createFromLocal('${a(r.local.name)}')">&#11013;</button></div>`;
+  }
+  return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${a(r.local.path)}','${a(r.local.name)}')">&#11013;</button></div>`;
+}
+function cloudCell(r, localCodes) {
+  const isSites = currentTab === 'sites';
+  if (!r.cloud) {
+    if (isSites) {
+      return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Create a cloud site from this folder" onclick="createFromLocal('${a(r.local.name)}')">+ Cloud site</button></div>`;
+    }
+    return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${a(r.local.path)}','${a(r.local.name)}')">+ Upload</button></div>`;
+  }
+  const c = r.cloud, isMis = r.status === 'mismatch', thing = isSites ? 'cloud site' : 'cloud project';
+  // On Project Files a cloud project maps to an .esx, so show the extension for
+  // parity with the local side; cloud *sites* aren't files, so leave those bare.
+  const nameHtml = (isMis ? charDiff(c.name, r.local.name).a : e(c.name)) + (isSites ? '' : '.esx');
+  const dup = r.status === 'orphan' && c.code && localCodes.has(c.code);
+  return `<div class="lr-cell cloud${dup ? ' dup' : ''}"${dup ? ` title="A local ${isSites ? 'folder' : '.esx'} shares code ${a(c.code)} — likely the same place"` : ''}>
+    <input type="checkbox" class="rowchk" data-k="${e(r.key)}" ${selected.has(r.key) ? 'checked' : ''}>
+    <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(c.meta || '')}</span>
+    <span class="cell-actions">
+      ${!isSites ? `<button class="icon-btn" title="Move to a site" onclick="startMoveToSite('${a(c.id)}','${a(c.name)}')">&#8618;</button>` : ''}
+      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('cloud','${a(c.id)}','${a(c.name)}')">&#9998;</button>
+      <button class="icon-btn del" title="Delete ${thing}" onclick="startDelete('cloud','${a(c.id)}','${a(c.name)}',false)">&#128465;</button>
+    </span></div>`;
+}
+function localCell(r, cloudCodes) {
+  const isSites = currentTab === 'sites';
+  if (!r.local) {
+    return isSites
+      ? `<div class="lr-cell local empty"><button class="ghost-add" title="Create a matching local folder" onclick="createLocalFolder('${a(r.cloud.name)}')">+ Local folder</button></div>`
+      : `<div class="lr-cell local empty"></div>`;
+  }
+  const l = r.local, isMis = r.status === 'mismatch', thing = isSites ? 'local folder' : '.esx file';
+  // Show the .esx extension on files (not folders) so files are obvious. The
+  // extension is display-only — matching and actions still use the bare name.
+  const nameHtml = (isMis ? charDiff(r.cloud.name, l.name).b : e(l.name)) + (l.isDir ? '' : '.esx');
+  const dup = r.status === 'orphan' && l.code && cloudCodes.has(l.code);
+  const hasSrc = isSites && l.hasSource;
+  const hasContents = isSites && l.src && l.src.total > 0;
+  const flagged = l.name.charAt(0) === '!';
+  const srcUI = hasContents ? previewBadge(l) : '';
+  const flagBtn = isSites
+    ? `<button class="icon-btn${flagged ? ' flagged' : ''}" title="${flagged ? 'Un-flag (remove the ! prefix)' : 'Flag this folder for review — adds a ! prefix so it sorts to the top here and in Explorer'}" onclick="flagReview('${a(l.path)}','${a(l.name)}')">${flagged ? '&#9873;' : '&#9872;'}</button>`
+    : '';
+  return `<div class="lr-cell local${dup ? ' dup' : ''}"${dup ? ` title="A cloud ${isSites ? 'site' : 'project'} shares code ${a(l.code)} — likely the same place"` : ''}>
+    <input type="checkbox" class="rowchk" data-k="${e(r.key)}" ${selected.has(r.key) ? 'checked' : ''}>
+    <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(l.meta || '')}</span>
+    <span class="cell-actions">${srcUI}${flagBtn}
+      ${isSites ? `<button class="icon-btn" title="Merge this folder's files into another folder…" onclick="startMerge('${a(l.path)}','${a(l.name)}')">&#8649;</button>` : ''}
+      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('local','${a(l.path)}','${a(l.name)}')">&#9998;</button>
+      <button class="icon-btn del" title="Delete ${thing}${isSites ? ' and contents' : ''}" onclick="startDelete('local','${a(l.path)}','${a(l.name)}',${l.isDir})">&#128465;</button>
+    </span></div>`;
+}
+// ── Source-file (non-.esx) helpers: badge, peek, review-flag ──
+function localByPath(path) {
+  let item = null;
+  (data.matched || []).forEach(p => { if (p.local && p.local.path === path) item = p.local; });
+  (data.localOnly || []).forEach(f => { if (f.path === path) item = f; });
+  return item;
+}
+// Preview affordance: the SAME eyeball on every folder with contents, always
+// with a tooltip. Colour is the only difference — an amber eye means the folder
+// holds non-.esx source files (precious, not on the cloud); a neutral eye means
+// it's only .esx. Click either to see everything inside.
+function previewBadge(l) {
+  const s = l.src || {};
+  if (!s.total) return '';
+  let tip, cls = 'src-badge';
+  if (s.srcCount) {
+    const bits = [];
+    if (s.plans) bits.push(s.plans + ' floor plan' + (s.plans > 1 ? 's' : ''));
+    if (s.images) bits.push(s.images + ' image' + (s.images > 1 ? 's' : ''));
+    if (s.other) bits.push(s.other + ' other');
+    tip = `Holds ${s.srcCount} source file${s.srcCount > 1 ? 's' : ''} not on Ekahau Cloud (${bits.join(', ')}, ${s.srcSizeH}) · ${s.esx} .esx — click to view all`;
+    cls += ' hasrc';
+  } else {
+    tip = `${s.esx} Ekahau .esx file${s.esx > 1 ? 's' : ''} — click to view contents`;
+  }
+  return `<button class="${cls}" title="${a(tip)}" onclick="event.stopPropagation();openPeek('${a(l.path)}')">&#128065;</button>`;
+}
+function openPeek(path) {
+  const l = localByPath(path);
+  if (!l || !l.src) { toast('No file details available', 'info'); return; }
+  const s = l.src, files = s.files || [];
+  const groups = [
+    ['Ekahau projects (.esx)', files.filter(f => f.type === 'esx')],
+    ['Floor plans', files.filter(f => f.type === 'plan')],
+    ['Images', files.filter(f => f.type === 'image')],
+    ['Other files', files.filter(f => f.type === 'other')],
+  ];
+  let body = s.srcCount
+    ? `<p class="peek-sum"><b>${s.srcCount}</b> source file${s.srcCount > 1 ? 's' : ''} (${e(s.srcSizeH)}) here are <b>not on Ekahau Cloud</b> — this folder is their only home.</p>`
+    : `<p class="peek-sum">This folder holds only Ekahau <b>.esx</b> files (also backed up to the cloud).</p>`;
+  groups.forEach(([label, arr]) => {
+    if (!arr.length) return;
+    body += `<div class="peek-group">${label} (${arr.length})</div><div class="peek-list">`;
+    arr.forEach(f => {
+      const when = f.mtime ? new Date(f.mtime * 1000).toLocaleString() : '';
+      body += `<div class="peek-row"><span class="pk-name">${e(f.rel || f.name)}</span><span class="pk-date">${e(when)}</span><span class="pk-size">${e(f.sizeH)}</span></div>`;
+    });
+    body += `</div>`;
+  });
+  if (s.total > files.length) body += `<div class="peek-more">…and ${s.total - files.length} more</div>`;
+  document.getElementById('peekTitle').innerHTML = `Inside “${e(l.name)}”`;
+  document.getElementById('peekBody').innerHTML = body;
+  showModal('peekModal');
+}
+// ── Compare: side-by-side contents of the selected local folders ──
+function selectedLocalFolders() {
+  const seen = new Set(), out = [];
+  selected.forEach(k => {
+    const d = rowData[k]; if (!d) return;
+    const p = d.kind === 'pair' ? d.localPath : d.kind === 'local' ? d.path : null;
+    if (p && !seen.has(p)) { seen.add(p); const it = localByPath(p); if (it) out.push(it); }
+  });
+  return out;
+}
+function openCompare() {
+  const folders = selectedLocalFolders();
+  if (folders.length < 2) { toast('Select 2 or more local folders to compare', 'info'); return; }
+  // How many of the selected folders each filename appears in (to flag overlaps).
+  const freq = {};
+  folders.forEach(f => {
+    new Set(((f.src && f.src.files) || []).map(x => x.name.toLowerCase()))
+      .forEach(n => { freq[n] = (freq[n] || 0) + 1; });
+  });
+  let cols = '';
+  folders.forEach(f => {
+    const s = f.src || {};
+    const files = ((s.files) || []).slice().sort((x, y) => x.name.localeCompare(y.name));
+    let rows = '';
+    files.forEach(x => {
+      const common = (freq[x.name.toLowerCase()] || 0) > 1;
+      const when = x.mtime ? new Date(x.mtime * 1000).toLocaleString() : '';
+      rows += `<div class="cmp-file${common ? ' common' : ''}" title="${a(x.rel || x.name)}"><span class="cmp-n">${e(x.name)}</span><span class="cmp-meta">${e(when)}${when ? ' · ' : ''}${e(x.sizeH)}</span></div>`;
+    });
+    if (!files.length) rows = `<div class="cmp-empty">empty</div>`;
+    const sub = `${s.total || 0} file${(s.total || 0) !== 1 ? 's' : ''} · ${s.esx || 0} .esx${s.srcCount ? ` · ${s.srcCount} source` : ''}`;
+    cols += `<div class="cmp-col">
+      <div class="cmp-head"><div class="cmp-title" title="${a(f.name)}">${e(f.name)}</div><div class="cmp-sub">${sub}</div></div>
+      <div class="cmp-list">${rows}</div></div>`;
+  });
+  document.getElementById('compareTitle').textContent = `Compare ${folders.length} folders`;
+  document.getElementById('compareBody').innerHTML = cols;
+  showModal('compareModal');
+}
+async function flagReview(path, name) {
+  const flagged = name.charAt(0) === '!';
+  const newName = flagged ? name.replace(/^!+\s*/, '') : '!' + name;
+  try {
+    const r = await pyApi('rename_local', path, newName);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast(flagged ? 'Un-flagged' : 'Flagged for review (!)', 'success');
+    refreshData();
+  } catch (e) { toast('Flag failed: ' + e.message, 'error'); }
+}
+
+// ── Merge folder → folder (targeted consolidation) ──
+function mergeRule() { try { return localStorage.getItem('wd-merge-rule') || 'ask'; } catch (e) { return 'ask'; } }
+function setMergeRule(v) { try { localStorage.setItem('wd-merge-rule', v); } catch (e) {} }
+function localFolders() {
+  const out = [];
+  (data.matched || []).forEach(p => { if (p.local) out.push(p.local); });
+  (data.localOnly || []).forEach(f => out.push(f));
+  return out;
+}
+function startMerge(path, name) {
+  const src = localByPath(path);
+  mergeState = { srcPath: path, srcName: name, srcCode: src && src.code };
+  document.getElementById('mergeDestTitle').innerHTML = `Merge “${e(name)}” into…`;
+  document.getElementById('mergeDestSearch').value = '';
+  renderMergeDests();
+  showModal('mergeDestModal');
+}
+function renderMergeDests() {
+  const q = (document.getElementById('mergeDestSearch').value || '').toLowerCase();
+  const code = mergeState.srcCode;
+  const list = localFolders()
+    .filter(f => f.path !== mergeState.srcPath && (!q || f.name.toLowerCase().includes(q)))
+    .sort((x, y) => {
+      const xc = code && x.code === code ? 0 : 1, yc = code && y.code === code ? 0 : 1;
+      return (xc - yc) || x.name.localeCompare(y.name);
+    });
+  let h = list.length ? '' : `<div class="peek-more">No other folders to merge into.</div>`;
+  list.forEach(f => {
+    const same = code && f.code === code;
+    h += `<div class="peek-row pick" onclick="chooseMergeDest('${a(f.path)}')">
+      <span class="pk-name">${same ? '<b class="amber">★</b> ' : ''}${e(f.name)}</span>
+      <span class="pk-size">${e(f.meta || '')}</span></div>`;
+  });
+  document.getElementById('mergeDestList').innerHTML = h;
+}
+function chooseMergeDest(dstPath) {
+  const dst = localByPath(dstPath);
+  mergeState.dstPath = dstPath;
+  mergeState.dstName = dst ? dst.name : dstPath;
+  closeModal('mergeDestModal');
+  runMergePreview();
+}
+async function runMergePreview() {
+  let prev;
+  try { prev = await pyApi('merge_preview', mergeState.srcPath, mergeState.dstPath); }
+  catch (e) { toast('Preview failed: ' + e.message, 'error'); return; }
+  if (prev.error) { toast(prev.error, 'error'); return; }
+  mergeState.preview = prev;
+  showMergeModal(prev);
+}
+function mtimeCmp(f) {
+  const s = new Date(f.srcMtime * 1000).toLocaleString();
+  const d = new Date(f.dstMtime * 1000).toLocaleString();
+  const badge = f.newer === 'src' ? '<span class="amber">incoming is newer</span>'
+              : f.newer === 'dst' ? '<span>existing is newer</span>' : '<span>same time</span>';
+  return `incoming ${s} (${e(f.srcSizeH)}) · existing ${d} (${e(f.dstSizeH)}) — ${badge}`;
+}
+function showMergeModal(prev) {
+  document.getElementById('mergeTitle').innerHTML = `Merge “${e(mergeState.srcName)}” → “${e(mergeState.dstName)}”`;
+  const wrap = document.getElementById('mergeConflictWrap');
+  const btn = document.getElementById('mergeBtn');
+  const listEl = document.getElementById('mergeFileList');
+  if (!prev.files.length) {
+    document.getElementById('mergeSummary').textContent = 'Nothing to move — the source folder has no files.';
+    wrap.style.display = 'none'; listEl.innerHTML = ''; btn.disabled = true; showModal('mergeModal'); return;
+  }
+  btn.disabled = false;
+  document.getElementById('mergeSummary').innerHTML =
+    `Moving into <b>${e(mergeState.dstName)}</b>: <b>${prev.nClean}</b> new` +
+    (prev.nConflicts ? `, <b>${prev.nConflicts}</b> already exist. ` : `. `) +
+    `Untick any file you don't want to move — it stays put in the source folder.`;
+  // Conflict-resolution rule only matters if there are collisions.
+  if (prev.nConflicts) {
+    wrap.style.display = '';
+    const saved = mergeRule();
+    const preset = saved === 'ask' ? 'newer' : saved;
+    document.querySelectorAll('input[name="mrule"]').forEach(r => { r.checked = (r.value === preset); });
+    document.getElementById('mergeRemember').checked = false;
+  } else {
+    wrap.style.display = 'none';
+  }
+  // Full file list — every file that would move, with a tick to include/exclude it.
+  let h = '';
+  prev.files.forEach((f, i) => {
+    const status = f.conflict
+      ? `<span class="mfile-badge conflict">conflict</span><span class="mfile-cmp">${mtimeCmp(f)}</span>`
+      : `<span class="mfile-badge new">new</span><span class="mfile-cmp">${e(f.srcSizeH || '')}</span>`;
+    h += `<label class="mfile"><input type="checkbox" class="mfile-chk" data-i="${i}" checked>
+      <span class="mfile-name">${e(f.rel)}</span>${status}</label>`;
+  });
+  listEl.innerHTML = h;
+  showModal('mergeModal');
+}
+async function confirmMerge() {
+  const prev = mergeState.preview;
+  if (!prev) { closeModal('mergeModal'); return; }
+  let rule = 'newer';
+  if (prev.nConflicts) {
+    rule = (document.querySelector('input[name="mrule"]:checked') || {}).value || 'newer';
+    if (document.getElementById('mergeRemember').checked) setMergeRule(rule);
+  }
+  // Which files did the user leave ticked?
+  const included = new Set();
+  document.querySelectorAll('#mergeFileList .mfile-chk').forEach(chk => {
+    if (chk.checked) included.add(parseInt(chk.dataset.i, 10));
+  });
+  const ops = prev.files.map((f, i) => {
+    if (!included.has(i)) return { rel: f.rel, action: 'skip' };   // excluded — leave in source
+    if (!f.conflict) return { rel: f.rel, action: 'move' };
+    if (rule === 'both') return { rel: f.rel, action: 'keepboth' };
+    if (rule === 'skip') return { rel: f.rel, action: 'skip' };
+    return { rel: f.rel, action: f.newer === 'src' ? 'overwrite' : 'skip' };  // keep newer
+  });
+  const btn = document.getElementById('mergeBtn'); btn.disabled = true;
+  let res;
+  try { res = await pyApi('merge_execute', mergeState.srcPath, mergeState.dstPath, ops); }
+  catch (e) { toast('Merge failed: ' + e.message, 'error'); btn.disabled = false; return; }
+  if (res.error) { toast(res.error, 'error'); btn.disabled = false; return; }
+  closeModal('mergeModal');
+  const parts = [];
+  if (res.moved) parts.push(res.moved + ' moved');
+  if (res.overwritten) parts.push(res.overwritten + ' overwritten');
+  if (res.keptboth) parts.push(res.keptboth + ' kept both');
+  if (res.skipped) parts.push(res.skipped + ' skipped');
+  const nerr = (res.errors || []).length;
+  toast('Merged: ' + (parts.join(', ') || 'nothing') + (nerr ? ` · ${nerr} error(s)` : ''), nerr ? 'error' : 'success');
+  refreshData();
+  if (res.srcEmpty) setTimeout(() => startDelete('local', res.srcPath, res.srcName, true), 450);
+}
+// ── Main hamburger menu ──
+function toggleMainMenu(ev) {
+  if (ev) ev.stopPropagation();
+  document.getElementById('mainMenu').classList.toggle('open');
+}
+function closeMainMenu() {
+  const m = document.getElementById('mainMenu'); if (m) m.classList.remove('open');
+}
+function openAbout() { showModal('aboutModal'); }
+document.addEventListener('click', ev => {
+  const m = document.getElementById('mainMenu');
+  if (m && m.classList.contains('open') && !ev.target.closest('.menu-wrap')) m.classList.remove('open');
+});
+function openSettings() {
+  const cur = mergeRule();
+  document.querySelectorAll('input[name="setrule"]').forEach(r => { r.checked = (r.value === cur); });
+  document.getElementById('setLiveInterval').value = String(liveMs());
+  showModal('settingsModal');
+}
+function saveSettings() {
+  const v = (document.querySelector('input[name="setrule"]:checked') || {}).value || 'ask';
+  setMergeRule(v);
+  const ms = document.getElementById('setLiveInterval').value;
+  try { localStorage.setItem('wd-live-ms', ms); } catch (e) {}
+  restartLive();  // apply the new interval immediately if Live is on
+  toast('Settings saved', 'success');
+  closeModal('settingsModal');
+}
+
+/* ── Bulk selection ── */
+let lastChkIndex = null;
+// Delegated click handler on the rows container: normal single toggle, or
+// Shift-click to select the whole range between the last box and this one.
+function onRowChkClick(ev) {
+  const el = ev.target;
+  if (!el || !el.classList || !el.classList.contains('rowchk')) return;
+  const boxes = Array.from(document.querySelectorAll('#rowsContainer .rowchk'));
+  const idx = boxes.indexOf(el);
+  if (idx === -1) return;
+  if (ev.shiftKey && lastChkIndex !== null && lastChkIndex < boxes.length && lastChkIndex !== idx) {
+    const state = el.checked;                 // fill the range to the clicked box's state
+    const lo = Math.min(lastChkIndex, idx), hi = Math.max(lastChkIndex, idx);
+    for (let i = lo; i <= hi; i++) {
+      const k = boxes[i].dataset.k;
+      if (state) selected.add(k); else selected.delete(k);
+    }
+  } else {
+    const k = el.dataset.k;
+    if (el.checked) selected.add(k); else selected.delete(k);
+  }
+  // Reflect the selection on every box (covers the range + matched rows' twin boxes).
+  boxes.forEach(b => { b.checked = selected.has(b.dataset.k); });
+  lastChkIndex = idx;
+  updateBulkBar(); refreshSelAll();
+}
+function toggleSelectAll() {
+  const on = document.getElementById('selAll').checked;
+  document.querySelectorAll('.rowchk').forEach(b => {
+    b.checked = on;
+    if (on) selected.add(b.dataset.k); else selected.delete(b.dataset.k);
+  });
+  updateBulkBar();
+}
+function refreshSelAll() {
+  const boxes = document.querySelectorAll('.rowchk');
+  const sa = document.getElementById('selAll');
+  if (sa) sa.checked = boxes.length > 0 && [...boxes].every(b => b.checked);
+}
+function clearSelection() {
+  selected.clear();
+  lastChkIndex = null;
+  const sa = document.getElementById('selAll'); if (sa) sa.checked = false;
+  updateBulkBar();
+}
+function updateBulkBar() {
+  const n = selected.size;
+  document.getElementById('selCount').textContent = n ? n + ' selected' : '';
+  let anyPair = false, anyDeletable = false, localFolders = 0;
+  selected.forEach(k => {
+    const d = rowData[k]; if (!d) return;
+    if (d.kind === 'pair') { anyPair = true; localFolders++; }
+    if (d.kind === 'cloud' || d.kind === 'local') anyDeletable = true;
+    if (d.kind === 'local') localFolders++;
+  });
+  document.getElementById('bulkSyncTo').style.display = anyPair ? '' : 'none';
+  document.getElementById('bulkSyncFrom').style.display = anyPair ? '' : 'none';
+  document.getElementById('bulkDeleteBtn').style.display = anyDeletable ? '' : 'none';
+  // Compare needs 2+ local folders and only makes sense on the Sites tab.
+  document.getElementById('compareBtn').style.display = (currentTab === 'sites' && localFolders >= 2) ? '' : 'none';
+}
+async function bulkSync(dir) {
+  const pairs = [...selected].map(k => rowData[k]).filter(d => d && d.kind === 'pair');
+  if (!pairs.length) { toast('Select some matched rows first', 'info'); return; }
+  let ok = 0, fail = 0;
+  for (const d of pairs) {
+    try {
+      let r;
+      if (dir === 'to-local') r = await pyApi('rename_local', d.localPath, d.cloudName);
+      else r = await pyApi('rename_cloud', currentTab, d.cloudId, d.localName);
+      if (r && r.error) fail++; else ok++;
+    } catch (e) { fail++; }
+  }
+  toast(`Synced ${ok}${fail ? ' · ' + fail + ' failed' : ''}`, fail ? 'error' : 'success');
+  clearSelection(); refreshData();
+}
+function bulkDelete() {
+  const items = [...selected].map(k => rowData[k]).filter(d => d && (d.kind === 'cloud' || d.kind === 'local'));
+  if (!items.length) { toast('Bulk delete only applies to cloud-only or local-only rows', 'info'); return; }
+  const nCloud = items.filter(d => d.kind === 'cloud').length;
+  const nLocal = items.filter(d => d.kind === 'local').length;
+  const parts = [];
+  if (nCloud) parts.push(`<b>${nCloud}</b> cloud ${currentTab === 'sites' ? 'site(s)' : 'project(s)'}`);
+  if (nLocal) parts.push(`<b>${nLocal}</b> local ${currentTab === 'sites' ? 'folder(s) and all their contents' : '.esx file(s)'}`);
+  deleteTarget = { bulk: items };
+  document.getElementById('deleteTitle').textContent = 'Delete selected?';
+  document.getElementById('deleteSub').innerHTML = `Permanently delete ${parts.join(' and ')}. This cannot be undone.`;
+  showModal('deleteModal');
+}
+
+document.getElementById('searchBox').addEventListener('input', renderRows);
+function clearSearch() {
+  const sb = document.getElementById('searchBox');
+  if (sb.value) { sb.value = ''; renderRows(); }
+  sb.focus();
+}
+
+/* ── Sync ── */
+async function syncRow(dir, cloudId, name, localPath) {
+  try {
+    let r;
+    if (dir === 'to-local') r = await pyApi('rename_local', localPath, name);
+    else r = await pyApi('rename_cloud', currentTab, cloudId, name);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Synced', 'success'); refreshData();
+  } catch (err) { toast('Sync failed: ' + err.message, 'error'); }
+}
+
+/* ── Rename ── */
+function startRename(side, idOrPath, name) {
+  renameTarget = { side, idOrPath };
+  const noun = side === 'cloud'
+    ? (currentTab === 'sites' ? 'Cloud Site' : 'Cloud Project')
+    : (currentTab === 'sites' ? 'Local Folder' : 'Local .esx File');
+  document.getElementById('renameTitle').textContent = 'Rename ' + noun;
+  document.getElementById('renameSub').textContent = 'Current: ' + name;
+  document.getElementById('renameInput').value = name;
+  showModal('renameModal'); document.getElementById('renameInput').select();
+}
+async function confirmRename() {
+  const n = document.getElementById('renameInput').value.trim();
+  if (!n || !renameTarget) { closeModal('renameModal'); return; }
+  try {
+    let r;
+    if (renameTarget.side === 'cloud') r = await pyApi('rename_cloud', currentTab, renameTarget.idOrPath, n);
+    else r = await pyApi('rename_local', renameTarget.idOrPath, n);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Renamed', 'success'); closeModal('renameModal'); refreshData();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ── Delete ── */
+function startDelete(side, idOrPath, name, isDir) {
+  deleteTarget = { side, idOrPath };
+  let warn;
+  if (side === 'cloud') {
+    warn = currentTab === 'sites'
+      ? `Permanently delete the cloud site <b>“${e(name)}”</b> from Ekahau Cloud. Projects inside it are not deleted.`
+      : `Permanently delete the cloud project <b>“${e(name)}”</b> from Ekahau Cloud. This cannot be undone.`;
+  } else {
+    warn = isDir
+      ? `Delete the local folder <b>“${e(name)}”</b> and <b>everything inside it</b> from disk. This cannot be undone.`
+      : `Delete the local file <b>“${e(name)}.esx”</b> from disk. This cannot be undone.`;
+    if (isDir) {
+      const l = localByPath(idOrPath), s = l && l.src;
+      if (s && s.srcCount) {
+        const bits = [];
+        if (s.plans) bits.push(`${s.plans} floor plan${s.plans > 1 ? 's' : ''}`);
+        if (s.images) bits.push(`${s.images} image${s.images > 1 ? 's' : ''}`);
+        if (s.other) bits.push(`${s.other} other file${s.other > 1 ? 's' : ''}`);
+        warn += `<div class="del-warn">&#9888; This folder holds <b>${s.srcCount} source file${s.srcCount > 1 ? 's' : ''}</b> (${bits.join(', ')} · ${e(s.srcSizeH)}) that are <b>not on Ekahau Cloud</b>. Deleting removes the only copy.</div>`;
+      }
+    }
+  }
+  document.getElementById('deleteTitle').textContent = 'Delete?';
+  document.getElementById('deleteSub').innerHTML = warn;
+  showModal('deleteModal');
+}
+async function confirmDelete() {
+  if (!deleteTarget) { closeModal('deleteModal'); return; }
+  try {
+    if (deleteTarget.bulk) {
+      let ok = 0, fail = 0;
+      for (const d of deleteTarget.bulk) {
+        try {
+          let r;
+          if (d.kind === 'cloud') r = await pyApi('delete_cloud', currentTab, d.id);
+          else r = await pyApi('delete_local', d.path);
+          if (r && r.error) fail++; else ok++;
+        } catch (e) { fail++; }
+      }
+      toast(`Deleted ${ok}${fail ? ' · ' + fail + ' failed' : ''}`, fail ? 'error' : 'success');
+      closeModal('deleteModal'); clearSelection(); refreshData();
+      return;
+    }
+    let r;
+    if (deleteTarget.side === 'cloud') r = await pyApi('delete_cloud', currentTab, deleteTarget.idOrPath);
+    else r = await pyApi('delete_local', deleteTarget.idOrPath);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Deleted', 'success'); closeModal('deleteModal'); refreshData();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ── Create ── */
+async function createSite() {
+  const n = document.getElementById('newSiteName').value.trim();
+  if (!n) return;
+  const doCloud = document.getElementById('createCloud').checked;
+  const doLocal = document.getElementById('createLocal').checked;
+  if (!doCloud && !doLocal) { toast('Select at least one destination', 'error'); return; }
+  try {
+    const results = [];
+    if (doCloud) {
+      const r = await pyApi('create_site', n);
+      if (r && r.error) { toast('Cloud: ' + r.error, 'error'); return; }
+      results.push('cloud');
+    }
+    if (doLocal) {
+      const r = await pyApi('create_local_folder', n);
+      if (r && r.error) { toast('Local: ' + r.error, 'error'); return; }
+      results.push('local');
+    }
+    const where = results.join(' + ');
+    toast('Created "' + n + '" (' + where + ')', 'success'); closeModal('createModal');
+    document.getElementById('newSiteName').value = '';
+    document.getElementById('createCloud').checked = true;
+    document.getElementById('createLocal').checked = true;
+    refreshData();
+  } catch (err) { toast(err.message, 'error'); }
+}
+async function createFromLocal(name) {
+  try {
+    const r = await pyApi('create_site', name);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Created cloud site', 'success'); refreshData();
+  } catch (err) { toast(err.message, 'error'); }
+}
+async function uploadFromLocal(path, name, siteId) {
+  const msg = siteId
+    ? `Upload "${name}.esx" to Ekahau Cloud and assign to site?`
+    : `Upload "${name}.esx" to Ekahau Cloud?`;
+  if (!confirm(msg)) return;
+  try {
+    const params = { path };
+    if (siteId) params.siteId = siteId;
+    const r = await pyApi('upload_project', params);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Uploaded "' + name + '.esx"', 'success');
+    refreshData();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ── Utility functions ── */
+// HTML-escape for text content
+function e(s) {
+  if (s == null) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+// Attribute-escape (for onclick strings etc.)
+function a(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/'/g,'&#39;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ── Toast ── */
+function toast(msg, type) {
+  const container = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast' + (type ? ' ' + type : '');
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.remove(), 300); }, 4000);
+}
+
+/* ── Modal helpers ── */
+function showModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+/* ── Theme ── */
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  const next = cur === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try { localStorage.setItem('wd-theme', next); } catch (ex) {}
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = next === 'dark' ? '🌙' : '☀️';
+}
+
+/* ── Folder picker ── */
+async function pickFolder() {
+  const r = await pyApi('pick_folder');
+  if (!r || r.error) { if (r && r.error !== 'No folder selected') toast(r.error, 'error'); return; }
+  refreshData();
+}
+
+/* ── Create local folder from cloud name ── */
+async function createLocalFolder(name) {
+  try {
+    const r = await pyApi('create_local_folder', name);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Created local folder "' + name + '"', 'success');
+    refreshData();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ── Move to Site ── */
+let _moveToSiteProjectId = null;
+async function startMoveToSite(projectId, projectName) {
+  _moveToSiteProjectId = projectId;
+  document.getElementById('moveToSiteLabel').textContent = 'Project: ' + projectName;
+  const sel = document.getElementById('moveToSiteSelect');
+  sel.innerHTML = '<option value="">Loading sites…</option>';
+  showModal('moveToSiteModal');
+  try {
+    const d = await pyApi('get_data', 'sites');
+    let html = '<option value="">— Select a site —</option>';
+    const sites = (d.matched || []).map(p => p.cloud).concat(d.cloudOnly || []);
+    sites.sort((x,y) => (x.name||'').localeCompare(y.name||''));
+    sites.forEach(s => { html += '<option value="' + a(s.id) + '">' + e(s.name) + '</option>'; });
+    html += '<option value="__new__">+ Create new site…</option>';
+    sel.innerHTML = html;
+  } catch (err) { toast('Could not load sites', 'error'); }
+  document.getElementById('moveToSiteNewName').style.display = 'none';
+}
+function toggleNewSiteInput() {
+  const sel = document.getElementById('moveToSiteSelect');
+  const inp = document.getElementById('moveToSiteNewName');
+  inp.style.display = sel.value === '__new__' ? '' : 'none';
+  if (sel.value === '__new__') inp.focus();
+}
+async function confirmMoveToSite() {
+  const sel = document.getElementById('moveToSiteSelect');
+  let siteId = sel.value;
+  if (siteId === '__new__') {
+    const newName = document.getElementById('moveToSiteNewName').value.trim();
+    if (!newName) { toast('Enter a site name', 'error'); return; }
+    try {
+      const r = await pyApi('create_site', newName);
+      if (r && r.error) { toast(r.error, 'error'); return; }
+      siteId = r.id || r.siteId;
+    } catch (err) { toast(err.message, 'error'); return; }
+  }
+  if (!siteId) { toast('Select a site', 'error'); return; }
+  try {
+    const r = await pyApi('assign_to_site', siteId, _moveToSiteProjectId);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Moved to site', 'success');
+    closeModal('moveToSiteModal');
+    refreshData();
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ── About modal ── */
+function openAbout() { showModal('aboutModal'); }
+
+// ── Init ──
+startAuth();
+</script>
+</body>
+</html>

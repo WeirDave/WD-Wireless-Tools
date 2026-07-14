@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Wireless Tools</title>
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  // Apply saved theme before first paint (no flash). Default: dark.
+  (function () {
+    try {
+      var t = localStorage.getItem('wd-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  })();
+</script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+</head>
+<body class="tool-home">
+  <div class="topbar">
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+      <span class="ico" id="themeIco">🌙</span><span id="themeTxt">Dark</span>
+    </button>
+  </div>
+
+  <div class="wrap">
+    <div class="suite-badge"><img src="/assets/wireless-tools-v1-720x553.png" alt="WD Wireless Tools"></div>
+    <div class="tagline">A suite of Ekahau workflow tools</div>
+
+    <div class="cards">
+      <a class="card blue" href="/cloud">
+        <div class="logo-well"><img src="/assets/cloud-manager-v1-560x822.png" alt="WD Cloud Manager"></div>
+        <h2><span>Cloud</span> Manager</h2>
+        <p>Sync and manage your Ekahau Cloud sites and projects against your local files — match, rename, and clean up in bulk.</p>
+        <span class="open-btn">Open →</span>
+      </a>
+
+      <a class="card green" href="/walls">
+        <div class="logo-well"><img src="/assets/quick-walls-v1-560x852.png" alt="WD Quick Walls"></div>
+        <h2><span>Quick</span> Walls</h2>
+        <p>Open an .esx, remap wall types with hotkeys, tidy up your wall segments, and save it back — right in the browser.</p>
+        <span class="open-btn">Open →</span>
+      </a>
+
+      <a class="card amber" href="/organizer">
+        <div class="logo-well"><img src="/assets/wd-squirrel-v1-transparent.png" alt="WD Squirrel" class="logo-constrained"></div>
+        <h2><span>WD</span> Squirrel</h2>
+        <p>Stash your Ekahau files — sort loose files into organized subfolders, create new project folders with the right structure.</p>
+        <span class="open-btn">Open →</span>
+      </a>
+    </div>
+
+    <div class="foot"><b>WD Wireless Tools</b> · runs locally on your machine</div>
+  </div>
+
+  <script>
+    function applyThemeUI() {
+      const t = document.documentElement.getAttribute('data-theme');
+      const dark = t === 'dark';
+      document.getElementById('themeIco').textContent = dark ? '🌙' : '☀️';
+      document.getElementById('themeTxt').textContent = dark ? 'Dark' : 'Light';
+    }
+    function toggleTheme() {
+      const cur = document.documentElement.getAttribute('data-theme');
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('wd-theme', next); } catch (e) {}
+      applyThemeUI();
+    }
+    applyThemeUI();
+  </script>
+</body>
+</html>
