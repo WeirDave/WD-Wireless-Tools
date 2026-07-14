@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Squirrel — User Guide</title>
+<style>
+  :root {
+    --navy: #0e1b26;
+    --blue: #1e77ac;
+    --green: #5fab4f;
+    --amber: #d97706;
+    --text: #1a1a1a;
+    --text-muted: #666;
+    --bg: #ffffff;
+    --surface: #f7f8fa;
+    --border: #e2e5e9;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.7;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: var(--navy);
+    color: #fff;
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .topbar h1 {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .topbar h1 span { color: var(--green); }
+  .topbar .back-link {
+    color: rgba(255,255,255,0.6);
+    text-decoration: none;
+    font-size: 13px;
+    margin-left: auto;
+  }
+  .topbar .back-link:hover { color: #fff; }
+
+  /* ── Content ── */
+  .content {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+
+  .hero {
+    margin-bottom: 36px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--border);
+  }
+  .hero h2 {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .hero .subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 40px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--green);
+    color: var(--navy);
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-top: 24px;
+    margin-bottom: 8px;
+    color: var(--navy);
+  }
+
+  p { margin: 10px 0; font-size: 14.5px; }
+
+  ol, ul { margin: 10px 0 10px 28px; font-size: 14.5px; }
+  li { margin: 6px 0; }
+
+  code {
+    background: var(--surface);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  kbd {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--surface);
+    border: 1px solid #ccc;
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    color: var(--navy);
+  }
+
+  .step-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .step-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    border-left: 4px solid var(--blue);
+  }
+  .step-card .step-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--blue);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .step-card .step-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .step-card .step-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .tip-box {
+    background: #f0f9f0;
+    border: 1px solid #c3e6c3;
+    border-left: 4px solid var(--green);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 13.5px;
+  }
+  .tip-box strong { color: var(--green); }
+
+  .warning-box {
+    background: #fff8eb;
+    border: 1px solid #f0d68a;
+    border-left: 4px solid var(--amber);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 13.5px;
+  }
+  .warning-box strong { color: var(--amber); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 13.5px;
+  }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    background: var(--navy);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  th:first-child { border-radius: 6px 0 0 0; }
+  th:last-child { border-radius: 0 6px 0 0; }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:nth-child(even) td { background: var(--surface); }
+
+  .footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .footer a { color: var(--blue); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 640px) {
+    .content { padding: 24px 18px 60px; }
+    .step-grid { grid-template-columns: 1fr; }
+    .topbar { padding: 12px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1><span>WD</span> Squirrel — User Guide</h1>
+  <a class="back-link" href="/organizer">Back to Squirrel</a>
+</div>
+
+<div class="content">
+
+  <div class="hero">
+    <h2>WD Squirrel</h2>
+    <p class="subtitle">Stash your Ekahau files — sort loose files into organized subfolders, create new project folders with the right structure.</p>
+  </div>
+
+  <h2>Getting Started</h2>
+
+  <div class="step-grid">
+    <div class="step-card">
+      <div class="step-num">Step 1</div>
+      <div class="step-title">Pick a Folder</div>
+      <div class="step-desc">Click <strong>Browse</strong> to select a root folder containing site subfolders, or a single folder with loose files.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 2</div>
+      <div class="step-title">Scan</div>
+      <div class="step-desc">The tool scans every subfolder, classifies files by extension, and shows a preview of proposed moves.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 3</div>
+      <div class="step-title">Review</div>
+      <div class="step-desc">Check the preview, adjust destinations if needed using the per-file dropdowns.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 4</div>
+      <div class="step-title">Organize</div>
+      <div class="step-desc">Click <strong>Organize</strong> to move files into their destination subfolders.</div>
+    </div>
+  </div>
+
+  <p>You can enter a folder path directly using backslash notation (e.g. <code>C:\Sites\ProjectAlpha</code>) or use the browse button to pick one visually.</p>
+
+  <h2>The Preview</h2>
+  <p>After scanning, the tool displays every file it found along with its proposed destination. Files are grouped by their parent folder.</p>
+
+  <h3>Summary Chips</h3>
+  <p>At the top of the preview, colored summary chips show the breakdown of classified files:</p>
+  <ul>
+    <li>How many files are headed to <code>\images</code></li>
+    <li>How many files are headed to <code>\floorplans</code></li>
+    <li>How many files are headed to <code>\reports</code></li>
+    <li>How many files will be skipped (already organized or excluded)</li>
+  </ul>
+
+  <h3>Default Classification</h3>
+  <table>
+    <tr><th>Destination</th><th>File Types</th></tr>
+    <tr><td><code>\images</code></td><td><code>.png</code>, <code>.jpg</code>, <code>.jpeg</code>, <code>.gif</code>, <code>.bmp</code>, <code>.tiff</code>, <code>.svg</code></td></tr>
+    <tr><td><code>\floorplans</code></td><td><code>.dwg</code>, <code>.dxf</code>, plus PDFs without report keywords in the filename</td></tr>
+    <tr><td><code>\reports</code></td><td><code>.docx</code>, <code>.xlsx</code>, <code>.pptx</code>, <code>.csv</code>, plus PDFs with report keywords</td></tr>
+  </table>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> <code>.esx</code> files are never moved. They always stay in place so your Ekahau project structure is never disrupted.
+  </div>
+
+  <h2>Changing Destinations</h2>
+  <p>Every file row has a dropdown that lets you override where it will be moved.</p>
+
+  <h3>Per-File Dropdowns</h3>
+  <p>Click the destination dropdown on any file row to choose a different subfolder. The available destinations are <code>\images</code>, <code>\floorplans</code>, and <code>\reports</code>, plus a <strong>Skip</strong> option to leave the file where it is.</p>
+
+  <h3>Bulk Selection</h3>
+  <ul>
+    <li><strong>Click</strong> a file row to select it.</li>
+    <li><strong>Shift-click</strong> another row to select a range of files at once.</li>
+    <li>With files selected, use the <strong>bulk destination buttons</strong> to set all selected files to the same destination in one click.</li>
+  </ul>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> Shift-click range selection is the fastest way to reclassify a batch of files. Select the first file, hold <kbd>Shift</kbd>, click the last file, then hit a bulk destination button.
+  </div>
+
+  <h2>Executing the Move</h2>
+  <p>When you click <strong>Organize</strong>, the tool:</p>
+  <ol>
+    <li>Creates destination subfolders (<code>\images</code>, <code>\floorplans</code>, <code>\reports</code>) if they do not already exist.</li>
+    <li>Moves each file to its assigned destination.</li>
+    <li>Skips any files marked as <strong>Skip</strong> or already in the correct location.</li>
+    <li>Reports a summary of how many files were moved, skipped, or encountered errors.</li>
+  </ol>
+
+  <div class="warning-box">
+    <strong>Note:</strong> Files are moved, not copied. The originals will no longer be in their previous location. Make sure you are happy with the preview before clicking Organize.
+  </div>
+
+  <h2>Settings</h2>
+  <p>Open <strong>Settings</strong> to customize how files are classified.</p>
+
+  <h3>File Type Mappings</h3>
+  <p>The settings panel lets you change which file extensions map to which destination folder. You can:</p>
+  <ul>
+    <li>Add new extensions to an existing destination.</li>
+    <li>Move an extension from one destination to another.</li>
+    <li>Remove extensions you do not want classified.</li>
+  </ul>
+
+  <h3>Destination Folders</h3>
+  <p>The three default destinations use backslash notation: <code>\images</code>, <code>\floorplans</code>, and <code>\reports</code>. These subfolders are created relative to each site folder during the organize step.</p>
+
+  <h2>Tips</h2>
+
+  <table>
+    <tr><th>Topic</th><th>Details</th></tr>
+    <tr><td><strong>Shift-click selection</strong></td><td>Click a file, then <kbd>Shift</kbd>-click another to select every file in between. Combine with bulk buttons for fast reclassification.</td></tr>
+    <tr><td><strong>.esx files</strong></td><td>Ekahau project files are always left in place and never appear in the move preview.</td></tr>
+    <tr><td><strong>PDF classification</strong></td><td>PDFs are sorted by filename keywords. Names containing words like <em>report</em>, <em>audit</em>, <em>coverage</em>, <em>summary</em>, or <em>validation</em> go to <code>\reports</code>. All other PDFs go to <code>\floorplans</code>.</td></tr>
+    <tr><td><strong>Already-organized files</strong></td><td>Files already inside a destination subfolder are skipped automatically.</td></tr>
+    <tr><td><strong>Root folder mode</strong></td><td>Point the tool at a root folder containing multiple site subfolders and it will process each one independently.</td></tr>
+  </table>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> If a PDF is misclassified, just change its destination in the preview dropdown before clicking Organize. You can also adjust the keyword rules in Settings.
+  </div>
+
+  <div class="footer">
+    <p>WD Squirrel — part of the <a href="/">WD Wireless Tools</a> suite.</p>
+    <p>Built by <a href="https://weirdave.com" target="_blank">David Paine</a> — weirdave.com</p>
+  </div>
+
+</div>
+
+</body>
+</html>
+                      

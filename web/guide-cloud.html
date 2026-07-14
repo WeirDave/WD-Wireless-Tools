@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Cloud Manager — User Guide</title>
+<style>
+  :root {
+    --navy: #0e1b26;
+    --blue: #1e77ac;
+    --green: #5fab4f;
+    --amber: #d97706;
+    --text: #1a1a1a;
+    --text-muted: #666;
+    --bg: #ffffff;
+    --surface: #f7f8fa;
+    --border: #e2e5e9;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.7;
+  }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: var(--navy);
+    color: #fff;
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .topbar h1 {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .topbar h1 span { color: var(--green); }
+  .topbar .back-link {
+    color: rgba(255,255,255,0.6);
+    text-decoration: none;
+    font-size: 13px;
+    margin-left: auto;
+  }
+  .topbar .back-link:hover { color: #fff; }
+
+  /* ── Content ── */
+  .content {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+
+  .hero {
+    margin-bottom: 36px;
+    padding-bottom: 24px;
+    border-bottom: 2px solid var(--border);
+  }
+  .hero h2 {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .hero .subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-top: 40px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--green);
+    color: var(--navy);
+  }
+
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-top: 24px;
+    margin-bottom: 8px;
+    color: var(--navy);
+  }
+
+  p { margin: 10px 0; font-size: 14.5px; }
+
+  ol, ul { margin: 10px 0 10px 28px; font-size: 14.5px; }
+  li { margin: 6px 0; }
+
+  code {
+    background: var(--surface);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 13px;
+    border: 1px solid var(--border);
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  kbd {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    background: var(--surface);
+    border: 1px solid #ccc;
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    color: var(--navy);
+  }
+
+  .step-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 16px 0;
+  }
+  .step-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    border-left: 4px solid var(--blue);
+  }
+  .step-card .step-num {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--blue);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .step-card .step-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .step-card .step-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .tip-box {
+    background: #f0f9f0;
+    border: 1px solid #c3e6c3;
+    border-left: 4px solid var(--green);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 13.5px;
+  }
+  .tip-box strong { color: var(--green); }
+
+  .warning-box {
+    background: #fff8eb;
+    border: 1px solid #f0d68a;
+    border-left: 4px solid var(--amber);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 13.5px;
+  }
+  .warning-box strong { color: var(--amber); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 13.5px;
+  }
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    background: var(--navy);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  th:first-child { border-radius: 6px 0 0 0; }
+  th:last-child { border-radius: 0 6px 0 0; }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  tr:nth-child(even) td { background: var(--surface); }
+
+  .footer {
+    margin-top: 48px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+  .footer a { color: var(--blue); text-decoration: none; }
+  .footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 640px) {
+    .content { padding: 24px 18px 60px; }
+    .step-grid { grid-template-columns: 1fr; }
+    .topbar { padding: 12px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1><span>WD</span> Cloud Manager — User Guide</h1>
+  <a class="back-link" href="/cloud">Back to Cloud Manager</a>
+</div>
+
+<div class="content">
+
+  <div class="hero">
+    <h2>WD Cloud Manager</h2>
+    <p class="subtitle">Manage Ekahau cloud sites and local project folders side by side. Sync, merge, and organize your wireless survey projects.</p>
+  </div>
+
+  <h2>Getting Started</h2>
+
+  <div class="step-grid">
+    <div class="step-card">
+      <div class="step-num">Step 1</div>
+      <div class="step-title">Log In</div>
+      <div class="step-desc">Click <strong>Log In</strong> to authenticate with Ekahau Cloud. Your browser will open to complete the login flow.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 2</div>
+      <div class="step-title">Set Local Folder</div>
+      <div class="step-desc">Open <strong>Settings</strong> and set your local folder path — where your <code>.esx</code> project files are stored on disk.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 3</div>
+      <div class="step-title">Browse</div>
+      <div class="step-desc">The <strong>Sites</strong> tab shows the ledger view — cloud sites on the left, local folders on the right.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 4</div>
+      <div class="step-title">Manage</div>
+      <div class="step-desc">Rename, delete, create, or merge projects directly from the ledger. Changes sync immediately.</div>
+    </div>
+  </div>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> After logging in, Cloud Manager remembers your session. You only need to re-authenticate if your token expires or you log out.
+  </div>
+
+  <h2>The Ledger View</h2>
+  <p>The main interface is a two-column ledger that shows your <strong>Cloud Sites</strong> on the left and <strong>Local Folders</strong> on the right. This makes it easy to see what exists in each location at a glance and spot projects that are only on one side.</p>
+
+  <ul>
+    <li><strong>Cloud Sites (left)</strong> — projects stored in Ekahau Cloud, pulled from your account.</li>
+    <li><strong>Local Folders (right)</strong> — <code>.esx</code> files found in your configured local folder path.</li>
+    <li>Sites that exist in both locations are shown on the same row when names match.</li>
+    <li>Sites that only exist on one side appear with an empty cell on the other side.</li>
+  </ul>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> The ledger auto-refreshes on a configurable interval (see Settings). You can also manually refresh by clicking the refresh button in the toolbar.
+  </div>
+
+  <h2>Tabs</h2>
+
+  <table>
+    <tr><th>Tab</th><th>Purpose</th></tr>
+    <tr><td><strong>Sites</strong></td><td>The main ledger view — cloud vs. local side by side. This is where you manage, rename, delete, create, and merge projects.</td></tr>
+    <tr><td><strong>Project Files</strong></td><td>Browse the individual files within a selected project. Useful for inspecting floor plans, images, and survey data inside an <code>.esx</code> archive.</td></tr>
+  </table>
+
+  <h2>Managing Sites</h2>
+  <p>Right-click a site or use the action buttons on any row in the ledger to manage it.</p>
+
+  <h3>Create</h3>
+  <p>Create a new empty site on the cloud side, or a new project folder on the local side. The new entry appears in the ledger immediately.</p>
+
+  <h3>Rename</h3>
+  <p>Rename a cloud site or local folder directly from the ledger. The change takes effect on the cloud or filesystem right away.</p>
+
+  <h3>Delete</h3>
+  <p>Remove a cloud site or local folder. You will be prompted to confirm before anything is deleted.</p>
+
+  <div class="warning-box">
+    <strong>Note:</strong> Deleting a cloud site removes it from Ekahau Cloud permanently. Deleting a local folder moves it to the system recycle bin when possible.
+  </div>
+
+  <h2>Merging Projects</h2>
+  <p>The merge feature lets you compare a cloud site against a local project and sync differences between them.</p>
+
+  <ol>
+    <li>Select a row where both a cloud site and a local folder exist.</li>
+    <li>Click <strong>Merge</strong> to open the merge preview.</li>
+    <li>The preview shows what has changed — added, modified, or removed files on each side.</li>
+    <li>Choose which direction to sync: cloud to local, local to cloud, or resolve conflicts individually.</li>
+    <li>Confirm the merge to apply the changes.</li>
+  </ol>
+
+  <h3>Conflict Resolution</h3>
+  <p>When a file has been modified on both the cloud and local side since the last sync, a conflict is flagged. You choose which version to keep — cloud, local, or skip the file entirely.</p>
+
+  <div class="warning-box">
+    <strong>Note:</strong> Always review the merge preview before confirming. Merging overwrites files on the target side with the selected version.
+  </div>
+
+  <h2>Settings</h2>
+  <p>Open the <strong>Settings</strong> panel from the toolbar to configure Cloud Manager.</p>
+
+  <table>
+    <tr><th>Setting</th><th>Description</th></tr>
+    <tr><td><strong>Local Folder Path</strong></td><td>The directory on your machine where local <code>.esx</code> project files are stored. Cloud Manager scans this folder to populate the right side of the ledger.</td></tr>
+    <tr><td><strong>Auto-Refresh Interval</strong></td><td>How often the ledger re-fetches cloud sites and re-scans local folders (in seconds). Set to <code>0</code> to disable auto-refresh.</td></tr>
+  </table>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> Point the local folder path to the same directory Ekahau AI Pro uses for saving projects. That way the ledger always reflects what Ekahau sees.
+  </div>
+
+  <h2>Keyboard Shortcuts &amp; Tips</h2>
+
+  <table>
+    <tr><th>Shortcut / Action</th><th>What it does</th></tr>
+    <tr><td><kbd>F5</kbd></td><td>Refresh the ledger (re-fetch cloud sites and re-scan local folder)</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td>Delete the selected site or folder (with confirmation)</td></tr>
+    <tr><td><kbd>F2</kbd></td><td>Rename the selected site or folder</td></tr>
+    <tr><td>Double-click a row</td><td>Open the merge preview for that project (if both sides exist)</td></tr>
+    <tr><td>Click column header</td><td>Sort the ledger by that column</td></tr>
+  </table>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> Use consistent naming between cloud and local projects. Cloud Manager matches entries by name, so <code>Site-Alpha</code> in the cloud pairs with <code>Site-Alpha.esx</code> locally.
+  </div>
+
+  <div class="footer">
+    <p>WD Cloud Manager — part of the <a href="/">WD Wireless Tools</a> suite.</p>
+    <p>Built by <a href="https://weirdave.com" target="_blank">David Paine</a> — weirdave.com</p>
+  </div>
+
+</div>
+
+</body>
+</html>
