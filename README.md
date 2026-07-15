@@ -22,7 +22,7 @@ The suite currently includes three tools:
 <table>
 <tr>
 <td width="33%" align="center">
-  <img src="images/WD Cloud Manager - Transparent v5.0.png" alt="Cloud Manager" width="200"><br>
+  <img src="images/WD Cloud Manager - Transparent v4.0.png" alt="Cloud Manager" width="200"><br>
   <b>Cloud Manager</b><br>
   <sub>v3.6</sub>
 </td>
