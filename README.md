@@ -22,17 +22,17 @@ The suite currently includes three tools:
 <table>
 <tr>
 <td width="33%" align="center">
-  <img src="images/WD Cloud Manager - Transparent v4.0.png" alt="Cloud Manager" width="200"><br>
+  <img src="images/WD Cloud Manager - Transparent v5.0.png" alt="Cloud Manager" width="200"><br>
   <b>Cloud Manager</b><br>
   <sub>v3.6</sub>
 </td>
 <td width="33%" align="center">
-  <img src="images/WD Quick Walls v6.0.png" alt="Quick Walls" width="200"><br>
+  <img src="images/WD Quick Walls v7.0.png" alt="Quick Walls" width="200"><br>
   <b>Quick Walls</b><br>
   <sub>v7.15</sub>
 </td>
 <td width="33%" align="center">
-  <img src="images/WD Squirrel - Transparent v2.0.png" alt="Squirrel" width="200"><br>
+  <img src="images/WD Squirrel - Transparent v12.png" alt="Squirrel" width="200"><br>
   <b>Squirrel</b><br>
   <sub>v1.7</sub>
 </td>
