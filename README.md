@@ -32,7 +32,7 @@ The suite currently includes three tools:
   <sub>v7.15</sub>
 </td>
 <td width="33%" align="center">
-  <img src="images/WD Squirrel - Transparent v12.png" alt="Squirrel" width="200"><br>
+  <img src="images/WD Squirrel - Transparent v13.png" alt="Squirrel" width="200"><br>
   <b>Squirrel</b><br>
   <sub>v1.7</sub>
 </td>
