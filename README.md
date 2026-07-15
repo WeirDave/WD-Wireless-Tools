@@ -123,7 +123,11 @@ WD Wireless Tools/
 │   ├── guide*.html           # Built-in help pages
 │   └── assets/
 │       ├── wd-tools.css      # Shared stylesheet
-│       └── wd-nav.js         # Shared topbar + theme logic
+│       └── js/
+│           ├── wd-shared.js  # Shared utilities (theme, toast, modal, escape)
+│           ├── cloud.js      # Cloud Manager page logic
+│           ├── walls.js      # Quick Walls page logic
+│           └── organizer.js  # Squirrel page logic
 │
 ├── templates/                # Wall-type template presets (JSON)
 └── images/                   # Logos and branding assets
