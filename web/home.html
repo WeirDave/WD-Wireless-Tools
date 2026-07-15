@@ -55,21 +55,6 @@
     <div class="foot"><b>WD Wireless Tools</b> · runs locally on your machine</div>
   </div>
 
-  <script>
-    function applyThemeUI() {
-      const t = document.documentElement.getAttribute('data-theme');
-      const dark = t === 'dark';
-      document.getElementById('themeIco').textContent = dark ? '🌙' : '☀️';
-      document.getElementById('themeTxt').textContent = dark ? 'Dark' : 'Light';
-    }
-    function toggleTheme() {
-      const cur = document.documentElement.getAttribute('data-theme');
-      const next = cur === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      try { localStorage.setItem('wd-theme', next); } catch (e) {}
-      applyThemeUI();
-    }
-    applyThemeUI();
-  </script>
+<script src="/assets/js/wd-shared.js"></script>
 </body>
 </html>

@@ -148,9 +148,10 @@ class FolderOrganizer:
         name = name.strip()
         if not name:
             return {"ok": False, "error": "Folder name cannot be empty"}
-        # Sanitize: remove chars illegal on Windows/macOS
         import re
         safe_name = re.sub(r'[<>:"/\\|?*]', '-', name).rstrip('.')
+        if '..' in safe_name or '/' in safe_name or '\\' in safe_name:
+            return {"ok": False, "error": "Invalid folder name"}
         if not safe_name:
             return {"ok": False, "error": "Invalid folder name"}
         target = root_path / safe_name

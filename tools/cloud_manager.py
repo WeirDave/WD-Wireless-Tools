@@ -29,6 +29,14 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 COOKIE_FILE = CONFIG_DIR / "cookies.json"
 
 
+def _assert_inside(path, root):
+    """Raise ValueError if *path* resolves outside *root*."""
+    try:
+        Path(path).resolve().relative_to(Path(root).resolve())
+    except ValueError:
+        raise ValueError(f"Path is outside the allowed directory: {path}")
+
+
 # ── config / cookie persistence ───────────────────────────────────────
 def load_config():
     cfg = {"output_dir": ""}
@@ -49,8 +57,14 @@ def save_config(cfg):
 
 def save_cookies_to_disk(cookies, csrf):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(COOKIE_FILE, "w") as f:
-        json.dump({"cookies": cookies, "csrfToken": csrf}, f)
+    data = json.dumps({"cookies": cookies, "csrfToken": csrf})
+    if sys.platform != "win32":
+        fd = os.open(str(COOKIE_FILE), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(data)
+    else:
+        with open(COOKIE_FILE, "w") as f:
+            f.write(data)
 
 
 def load_cookies_from_disk():
@@ -603,9 +617,11 @@ def pick_folder_dialog(initial=""):
         "print(p or '')\n"
     )
     try:
-        flags = 0x08000000 if sys.platform == "win32" else 0
+        kwargs = {}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = 0x08000000
         out = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                             text=True, timeout=180, creationflags=flags)
+                             text=True, timeout=180, **kwargs)
         return out.stdout.strip()
     except Exception:
         return ""
@@ -684,6 +700,9 @@ class CloudManager:
 
     def rename_local(self, path, new_name):
         try:
+            od = self.config.get("output_dir", "")
+            if od:
+                _assert_inside(path, od)
             old = Path(path)
             if old.is_dir():
                 new = old.parent / new_name
@@ -701,6 +720,9 @@ class CloudManager:
 
     def delete_local(self, path):
         try:
+            od = self.config.get("output_dir", "")
+            if od:
+                _assert_inside(path, od)
             p = Path(path)
             if p.is_dir():
                 shutil.rmtree(p, onerror=_force_remove)
@@ -750,6 +772,8 @@ class CloudManager:
             return {"error": "No local folder is set — pick one first"}
         try:
             safe = re.sub(r'[<>:"/\\|?*]', '-', name).strip().rstrip('.')
+            if '..' in safe or '/' in safe or '\\' in safe:
+                return {"error": "Invalid folder name"}
             if not safe:
                 return {"error": "Invalid folder name"}
             target = Path(base) / safe
@@ -763,6 +787,10 @@ class CloudManager:
     def merge_preview(self, src_path, dst_path):
         """Dry run: what would move from src into dst, and which files collide."""
         try:
+            od = self.config.get("output_dir", "")
+            if od:
+                _assert_inside(src_path, od)
+                _assert_inside(dst_path, od)
             src, dst = Path(src_path), Path(dst_path)
             if not src.is_dir():
                 return {"error": "Source folder not found"}
@@ -801,6 +829,10 @@ class CloudManager:
         """Apply per-file operations. ops: [{rel, action}] where action is
         move | overwrite | keepboth | skip. Never deletes the source folder."""
         try:
+            od = self.config.get("output_dir", "")
+            if od:
+                _assert_inside(src_path, od)
+                _assert_inside(dst_path, od)
             src, dst = Path(src_path), Path(dst_path)
             if not src.is_dir() or not dst.is_dir():
                 return {"error": "Folder not found"}

@@ -90,7 +90,13 @@ class TemplateStore:
 
     def delete(self, filename: str) -> dict:
         """Delete a template file from disk."""
+        if '..' in filename or '/' in filename or '\\' in filename:
+            return {"ok": False, "error": "Invalid filename"}
         filepath = TPL_DIR / filename
+        try:
+            filepath.resolve().relative_to(TPL_DIR.resolve())
+        except ValueError:
+            return {"ok": False, "error": "Invalid filename"}
         if not filepath.is_file():
             return {"ok": False, "error": f"File not found: {filename}"}
         filepath.unlink()

@@ -103,8 +103,7 @@ body.tool-walls {
   --text-2: #8B8D94;
   --text-3: #5d5f66;
 }
-body.tool-walls[data-theme="light"],
-body.tool-walls [data-theme="light"] {
+[data-theme="light"] body.tool-walls {
   --bg: #eef1f4;
   --surface: #ffffff;
   --surface-raised: #f6f8fa;
@@ -125,8 +124,8 @@ body.tool-home {
   --text-2: #9aa5b1;   /* was --muted */
   --text-3: #6b7684;   /* was --soft */
 }
-body.tool-home[data-theme="light"],
-body.tool-home [data-theme="light"] {
+[data-theme="light"] body.tool-home,
+body.tool-home[data-theme="light"] {
   --bg: #ffffff;
   --surface: #eef1f4;
   --card-bg: #ffffff;
