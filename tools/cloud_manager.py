@@ -121,7 +121,16 @@ class EkahauAPI:
                               headers={"csrftoken": self.csrf_token,
                                        "Accept": "application/json, text/plain, */*",
                                        "Content-Type": "application/json"}, timeout=30)
-        r.raise_for_status()
+        if not r.ok:
+            # Include a snippet of the server's response body so the caller can
+            # see what Ekahau actually complained about (500s often carry a
+            # useful message that raise_for_status() would otherwise hide).
+            body = (r.text or "").strip()
+            snippet = body[:300] + ("…" if len(body) > 300 else "") if body else "no response body"
+            raise requests.HTTPError(
+                f"{r.status_code} {r.reason} on {method} {path} — {snippet}",
+                response=r,
+            )
         return r
 
     def get_sites(self):     return self.get("/site-management-api/v1/sites").json()
@@ -129,20 +138,25 @@ class EkahauAPI:
     def get_dataset_listing(self):  return self.get("/site-management-api/v1/datasetListing").json()
 
     def rename_site(self, sid, name):
-        return self._write("PUT", f"/site-management-api/v1/sites/{sid}", {"name": name}).json()
+        r = self._write("PUT", f"/site-management-api/v1/sites/{sid}", {"name": name})
+        return r.json() if (r.text or "").strip() else {"ok": True}
 
     def create_site(self, name):
-        return self._write("POST", "/site-management-api/v1/sites", {"name": name}).json()
+        r = self._write("POST", "/site-management-api/v1/sites", {"name": name})
+        return r.json() if (r.text or "").strip() else {"ok": True}
 
     def delete_sites(self, ids):
-        return self._write("DELETE", "/site-management-api/v1/sites", ids).json()
+        r = self._write("DELETE", "/site-management-api/v1/sites", ids)
+        return r.json() if (r.text or "").strip() else {"ok": True}
 
     def rename_project(self, pid, name):
         proj = self.get(f"{API_BASE}/{pid}").json()
         proj["name"] = name
         proj["title"] = name
         proj["status"] = "UPDATED"
-        return self._write("PUT", f"{API_BASE}/{pid}/batch/update", {"project": proj}).json()
+        r = self._write("PUT", f"{API_BASE}/{pid}/batch/update", {"project": proj})
+        # batch/update sometimes returns 204 No Content or an empty body on success
+        return r.json() if (r.text or "").strip() else {"ok": True}
 
     def get_dataset(self, dataset_id):
         return self.get(f"/site-management-api/v1/datasets/{dataset_id}").json()
@@ -556,21 +570,70 @@ def build_matches(cloud_items, local_items):
 
 
 def build_sites_data(api, output_dir):
+    sites = api.get_sites()
+
+    # Build a name→id map from sites (some Ekahau responses only give us
+    # siteName on dataset listings, so we need a fallback).
+    site_id_by_name = {}
+    for s in sites:
+        sid = s.get("siteId") or s.get("id")
+        if sid:
+            site_id_by_name[s.get("name", "")] = sid
+
+    # Map dataset id → site id via the dataset listing endpoint.
+    dataset_to_site = {}
+    try:
+        for entry in api.get_dataset_listing():
+            eid = entry.get("id")
+            sid = entry.get("siteId") or site_id_by_name.get(entry.get("siteName") or "")
+            if eid and sid:
+                dataset_to_site[eid] = sid
+    except Exception:
+        pass
+
+    # Group projects by site id, with real name + size for each dataset.
+    site_datasets = {}
+    try:
+        for pr in api.get_projects():
+            pid = pr.get("id")
+            if not pid:
+                continue
+            sid = dataset_to_site.get(pid)
+            if not sid:
+                continue
+            proj = {
+                "id": pid,
+                "name": pr.get("name") or pr.get("title") or "Untitled",
+                "size": int((pr.get("statistics") or {}).get("size", 0) or 0),
+            }
+            site_datasets.setdefault(sid, []).append(proj)
+    except Exception:
+        pass
+
     cloud = []
-    for s in api.get_sites():
-        pc = len(s.get("datasets", []))
-        cloud.append({"id": s.get("siteId") or s.get("id"), "name": s["name"],
-                      "code": extract_site_code(s["name"]), "meta": f"{pc} proj" if pc else ""})
+    for s in sites:
+        sid = s.get("siteId") or s.get("id")
+        datasets = site_datasets.get(sid, [])
+        pc = len(datasets)
+        total_size = sum(d["size"] for d in datasets)
+        # Real cloud meta — showing the true cloud count/size next to the local
+        # count/size is what lets users spot content-level mismatches (same
+        # code prefix, different files).
+        if pc:
+            meta = f"{pc} esx · {human_size(total_size)}" if total_size else f"{pc} esx"
+        else:
+            meta = "empty"
+        cloud.append({"id": sid, "name": s["name"],
+                      "code": extract_site_code(s["name"]), "meta": meta,
+                      "datasets": [{"name": d["name"], "id": d["id"], "size": d["size"]} for d in datasets]})
+
     local = []
     for f in get_local_folders(output_dir):
         inv = folder_inventory(Path(f["path"]))
         local.append({"path": f["path"], "name": f["name"], "code": f["code"], "isDir": True,
                       "meta": f'{f["esxCount"]} esx · {human_size(f["totalSize"])}',
                       "hasSource": inv["srcCount"] > 0, "src": inv})
-    result = build_matches(cloud, local)
-    for entry in result["matched"]:
-        entry["cloud"]["meta"] = entry["local"].get("meta", "")
-    return result
+    return build_matches(cloud, local)
 
 
 def build_projects_data(api, output_dir):
@@ -656,6 +719,31 @@ class CloudManager:
         except Exception as e:
             return {"error": str(e)}
         return {"ok": True}
+
+    def reveal_in_explorer(self, path):
+        try:
+            od = self.config.get("output_dir", "")
+            if od:
+                _assert_inside(path, od)
+            p = Path(path)
+            if not p.exists():
+                return {"error": "Path not found"}
+            if sys.platform == "win32":
+                if p.is_dir():
+                    os.startfile(str(p))
+                else:
+                    subprocess.Popen(["explorer", "/select,", str(p)])
+            elif sys.platform == "darwin":
+                if p.is_dir():
+                    subprocess.Popen(["open", str(p)])
+                else:
+                    subprocess.Popen(["open", "-R", str(p)])
+            else:
+                target = str(p) if p.is_dir() else str(p.parent)
+                subprocess.Popen(["xdg-open", target])
+            return {"ok": True}
+        except Exception as e:
+            return {"error": str(e)}
 
     def get_data(self, kind):
         if not self._ensure():

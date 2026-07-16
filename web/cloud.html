@@ -81,7 +81,7 @@
       </div>
     </div>
     <div class="topbar-center">
-      <h1><span>WD</span> Cloud Manager <span class="ver">v3.6</span></h1>
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.7</span></h1>
     </div>
     <div class="topbar-right">
       <button class="settings-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
@@ -105,6 +105,12 @@
     </div>
     <div class="dash-card orphans" data-filter="orphans" onclick="setFilter('orphans')">
       <div class="number" id="dOrphans">-</div><div class="label">Orphans</div>
+    </div>
+    <div class="dash-card cloud-only" data-filter="orphans-cloud" onclick="setFilter('orphans-cloud')">
+      <div class="number" id="dCloudOnly">-</div><div class="label">Cloud Only</div>
+    </div>
+    <div class="dash-card local-only" data-filter="orphans-local" onclick="setFilter('orphans-local')">
+      <div class="number" id="dLocalOnly">-</div><div class="label">Local Only</div>
     </div>
     <div class="dash-card matched" data-filter="synced" onclick="setFilter('synced')">
       <div class="number" id="dSynced">-</div><div class="label">Synced</div>
@@ -181,7 +187,7 @@
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal">
-    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.6</span></h3>
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.7</span></h3>
     <div class="about-body">
       Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
       <br><br>

@@ -3,6 +3,10 @@
 // Local short aliases for the escape helpers used heavily in template literals
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
+// Path-safe attr escape: normalizes Windows backslashes to forward slashes so
+// they survive JS string parsing inside onclick="...(...)" attributes.
+// Python's pathlib accepts either separator, so this is safe end-to-end.
+function p(s) { return a(String(s == null ? '' : s).replace(/\\/g, '/')); }
 
 let currentTab = 'sites';       // 'sites' | 'projects'
 let data = null;                // current tab's data
@@ -31,6 +35,7 @@ const API_MAP = {
   pick_folder: ['pick_folder', []],
   upload_project: ['upload_project', ['path', 'siteId']],
   assign_to_site: ['assign_to_site', ['siteId', 'datasetId']],
+  reveal_in_explorer: ['reveal_in_explorer', ['path']],
 };
 async function pyApi(method, ...args) {
   const entry = API_MAP[method];
@@ -199,6 +204,8 @@ function updateDashboard() {
   document.getElementById('dAll').textContent = s.matched + s.cloudOnly + s.localOnly;
   document.getElementById('dMismatches').textContent = s.mismatches;
   document.getElementById('dOrphans').textContent = s.cloudOnly + s.localOnly;
+  document.getElementById('dCloudOnly').textContent = s.cloudOnly;
+  document.getElementById('dLocalOnly').textContent = s.localOnly;
   document.getElementById('dSynced').textContent = s.matched - s.mismatches;
   const isProj = currentTab === 'projects';
   const uCard = document.getElementById('dUnassignedCard');
@@ -281,8 +288,8 @@ function renderEsxRow(en, stripe) {
     const c = pair.cloud;
     if (status === 'mismatch') {
       cloudInfo = `<span class="tree-cloud" title="Cloud project: ${a(c.name)}">&#8596; ${e(c.name)}</span>
-        <button class="sync-btn" title="Cloud name → local file" onclick="syncRow('to-local','${a(c.id)}','${a(c.name)}','${a(item.path)}')">&#8594;</button>
-        <button class="sync-btn" title="Local name → cloud project" onclick="syncRow('to-cloud','${a(c.id)}','${a(item.name)}','${a(item.path)}')">&#8592;</button>`;
+        <button class="sync-btn" title="Cloud name → local file" onclick="syncRow('to-local','${a(c.id)}','${a(c.name)}','${p(item.path)}')">&#8594;</button>
+        <button class="sync-btn" title="Local name → cloud project" onclick="syncRow('to-cloud','${a(c.id)}','${a(item.name)}','${p(item.path)}')">&#8592;</button>`;
     } else {
       cloudInfo = `<span class="tree-cloud ok" title="Matched cloud project">&#10003; in cloud</span>`;
     }
@@ -294,8 +301,8 @@ function renderEsxRow(en, stripe) {
     <span class="pair-meta">${e(item.meta)}</span>
     <span class="grow"></span>
     ${cloudInfo}
-    <button class="icon-btn" title="Rename .esx file" onclick="startRename('local','${a(item.path)}','${a(item.name)}')">&#9998;</button>
-    <button class="icon-btn del" title="Delete .esx file" onclick="startDelete('local','${a(item.path)}','${a(item.name)}',false)">&#128465;</button>
+    <button class="icon-btn" title="Rename .esx file" onclick="startRename('local','${p(item.path)}','${a(item.name)}')">&#9998;</button>
+    <button class="icon-btn del" title="Delete .esx file" onclick="startDelete('local','${p(item.path)}','${a(item.name)}',false)">&#128465;</button>
   </div>`;
 }
 
@@ -305,9 +312,13 @@ function renderLedger(hit) {
   const showSynced = activeFilter === 'all' || activeFilter === 'synced';
   const showMis = activeFilter === 'all' || activeFilter === 'mismatches';
   const showOrph = activeFilter === 'all' || activeFilter === 'orphans';
+  const showOrphCloud = activeFilter === 'orphans-cloud';
+  const showOrphLocal = activeFilter === 'orphans-local';
   const showUnassigned = activeFilter === 'unassigned';
   const pass = (st, row) => {
     if (showUnassigned) return row && row.cloud && !row.cloud.hasSite;
+    if (showOrphCloud) return st === 'orphan' && row && row.cloud && !row.local;
+    if (showOrphLocal) return st === 'orphan' && row && row.local && !row.cloud;
     return (st === 'synced' && showSynced) || (st === 'mismatch' && showMis) || (st === 'orphan' && showOrph);
   };
 
@@ -341,8 +352,8 @@ function gutCell(r) {
   if (r.status === 'mismatch') {
     const c = r.cloud, l = r.local;
     return `<div class="lr-gut mis">
-      <button class="gut-arrow" title="Apply cloud name onto the local folder" onclick="syncRow('to-local','${a(c.id)}','${a(c.name)}','${a(l.path)}')">&#10145;</button>
-      <button class="gut-arrow" title="Apply local name onto the cloud site" onclick="syncRow('to-cloud','${a(c.id)}','${a(l.name)}','${a(l.path)}')">&#11013;</button>
+      <button class="gut-arrow" title="Apply cloud name onto the local folder" onclick="syncRow('to-local','${a(c.id)}','${a(c.name)}','${p(l.path)}')">&#10145;</button>
+      <button class="gut-arrow" title="Apply local name onto the cloud site" onclick="syncRow('to-cloud','${a(c.id)}','${a(l.name)}','${p(l.path)}')">&#11013;</button>
     </div>`;
   }
   if (r.status === 'synced') {
@@ -359,7 +370,7 @@ function gutCell(r) {
   if (currentTab === 'sites') {
     return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Create a cloud site from this folder" onclick="createFromLocal('${a(r.local.name)}')">&#11013;</button></div>`;
   }
-  return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${a(r.local.path)}','${a(r.local.name)}')">&#11013;</button></div>`;
+  return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${p(r.local.path)}','${a(r.local.name)}')">&#11013;</button></div>`;
 }
 function cloudCell(r, localCodes) {
   const isSites = currentTab === 'sites';
@@ -367,15 +378,19 @@ function cloudCell(r, localCodes) {
     if (isSites) {
       return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Create a cloud site from this folder" onclick="createFromLocal('${a(r.local.name)}')">+ Cloud site</button></div>`;
     }
-    return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${a(r.local.path)}','${a(r.local.name)}')">+ Upload</button></div>`;
+    return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${p(r.local.path)}','${a(r.local.name)}')">+ Upload</button></div>`;
   }
   const c = r.cloud, isMis = r.status === 'mismatch', thing = isSites ? 'cloud site' : 'cloud project';
   const nameHtml = (isMis ? charDiff(c.name, r.local.name).a : e(c.name)) + (isSites ? '' : '.esx');
   const dup = r.status === 'orphan' && c.code && localCodes.has(c.code);
+  const dsCount = (c.datasets && c.datasets.length) || 0;
+  const cloudPeek = isSites
+    ? `<button class="src-badge${dsCount ? ' hasrc' : ''}" title="${dsCount ? dsCount + ' project' + (dsCount > 1 ? 's' : '') : 'No projects yet'} — click to view" onclick="event.stopPropagation();openCloudPeek('${a(c.id)}','${a(c.name)}')">&#128065;</button>`
+    : '';
   return `<div class="lr-cell cloud${dup ? ' dup' : ''}"${dup ? ` title="A local ${isSites ? 'folder' : '.esx'} shares code ${a(c.code)} — likely the same place"` : ''}>
     <input type="checkbox" class="rowchk" data-k="${e(r.key)}" ${selected.has(r.key) ? 'checked' : ''}>
     <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(c.meta || '')}</span>
-    <span class="cell-actions">
+    <span class="cell-actions">${cloudPeek}
       ${!isSites ? `<button class="icon-btn" title="Move to a site" onclick="startMoveToSite('${a(c.id)}','${a(c.name)}')">&#8618;</button>` : ''}
       <button class="icon-btn" title="Rename ${thing}" onclick="startRename('cloud','${a(c.id)}','${a(c.name)}')">&#9998;</button>
       <button class="icon-btn del" title="Delete ${thing}" onclick="startDelete('cloud','${a(c.id)}','${a(c.name)}',false)">&#128465;</button>
@@ -396,22 +411,27 @@ function localCell(r, cloudCodes) {
   const flagged = l.name.charAt(0) === '!';
   const srcUI = hasContents ? previewBadge(l) : '';
   const flagBtn = isSites
-    ? `<button class="icon-btn${flagged ? ' flagged' : ''}" title="${flagged ? 'Un-flag (remove the ! prefix)' : 'Flag this folder for review — adds a ! prefix so it sorts to the top here and in Explorer'}" onclick="flagReview('${a(l.path)}','${a(l.name)}')">${flagged ? '&#9873;' : '&#9872;'}</button>`
+    ? `<button class="icon-btn${flagged ? ' flagged' : ''}" title="${flagged ? 'Un-flag (remove the ! prefix)' : 'Flag this folder for review — adds a ! prefix so it sorts to the top here and in Explorer'}" onclick="flagReview('${p(l.path)}','${a(l.name)}')">${flagged ? '&#9873;' : '&#9872;'}</button>`
     : '';
+  const revealBtn = `<button class="icon-btn" title="Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}" onclick="revealInExplorer('${p(l.path)}')">&#128193;</button>`;
   return `<div class="lr-cell local${dup ? ' dup' : ''}"${dup ? ` title="A cloud ${isSites ? 'site' : 'project'} shares code ${a(l.code)} — likely the same place"` : ''}>
     <input type="checkbox" class="rowchk" data-k="${e(r.key)}" ${selected.has(r.key) ? 'checked' : ''}>
     <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(l.meta || '')}</span>
-    <span class="cell-actions">${srcUI}${flagBtn}
-      ${isSites ? `<button class="icon-btn" title="Merge this folder's files into another folder…" onclick="startMerge('${a(l.path)}','${a(l.name)}')">&#8649;</button>` : ''}
-      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('local','${a(l.path)}','${a(l.name)}')">&#9998;</button>
-      <button class="icon-btn del" title="Delete ${thing}${isSites ? ' and contents' : ''}" onclick="startDelete('local','${a(l.path)}','${a(l.name)}',${l.isDir})">&#128465;</button>
+    <span class="cell-actions">${srcUI}${revealBtn}${flagBtn}
+      ${isSites ? `<button class="icon-btn" title="Merge this folder's files into another folder…" onclick="startMerge('${p(l.path)}','${a(l.name)}')">&#8649;</button>` : ''}
+      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('local','${p(l.path)}','${a(l.name)}')">&#9998;</button>
+      <button class="icon-btn del" title="Delete ${thing}${isSites ? ' and contents' : ''}" onclick="startDelete('local','${p(l.path)}','${a(l.name)}',${l.isDir})">&#128465;</button>
     </span></div>`;
 }
 // ── Source-file (non-.esx) helpers: badge, peek, review-flag ──
 function localByPath(path) {
+  // Compare with backslashes normalized to forward slashes — the onclick-safe
+  // path (via p()) uses forward slashes while backend paths use backslashes on Windows.
+  const norm = s => String(s || '').replace(/\\/g, '/');
+  const target = norm(path);
   let item = null;
-  (data.matched || []).forEach(p => { if (p.local && p.local.path === path) item = p.local; });
-  (data.localOnly || []).forEach(f => { if (f.path === path) item = f; });
+  (data.matched || []).forEach(pr => { if (pr.local && norm(pr.local.path) === target) item = pr.local; });
+  (data.localOnly || []).forEach(f => { if (norm(f.path) === target) item = f; });
   return item;
 }
 function previewBadge(l) {
@@ -428,34 +448,111 @@ function previewBadge(l) {
   } else {
     tip = `${s.esx} Ekahau .esx file${s.esx > 1 ? 's' : ''} — click to view contents`;
   }
-  return `<button class="${cls}" title="${a(tip)}" onclick="event.stopPropagation();openPeek('${a(l.path)}')">&#128065;</button>`;
+  return `<button class="${cls}" title="${a(tip)}" onclick="event.stopPropagation();openPeek('${p(l.path)}')">&#128065;</button>`;
+}
+function peekFileRow(f, typeClass) {
+  const when = f.mtime ? new Date(f.mtime * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  const rel = f.rel || f.name;
+  // Split rel into subpath + name (handle both / and \)
+  const parts = String(rel).replace(/\\/g, '/').split('/');
+  const nm = parts.pop();
+  const sub = parts.join('/');
+  return `<div class="peek-row">
+    <span class="peek-type ${typeClass}">${e(ext).slice(0, 4)}</span>
+    <div class="peek-info">
+      <div class="peek-file">${e(nm)}</div>
+      ${sub ? `<div class="peek-sub">${e(sub)}/</div>` : ''}
+    </div>
+    <div class="peek-meta">
+      <div class="peek-date">${e(when)}</div>
+      <div class="peek-size">${e(f.sizeH)}</div>
+    </div>
+  </div>`;
+}
+function peekSection(label, typeClass, files) {
+  if (!files.length) return '';
+  const rows = files.map(f => peekFileRow(f, typeClass)).join('');
+  return `<div class="peek-section ${typeClass}">
+    <div class="peek-sec-head">
+      <span class="peek-sec-name">${e(label)}</span>
+      <span class="peek-sec-count">${files.length}</span>
+    </div>
+    <div class="peek-list">${rows}</div>
+  </div>`;
 }
 function openPeek(path) {
   const l = localByPath(path);
   if (!l || !l.src) { toast('No file details available', 'info'); return; }
   const s = l.src, files = s.files || [];
-  const groups = [
-    ['Ekahau projects (.esx)', files.filter(f => f.type === 'esx')],
-    ['Floor plans', files.filter(f => f.type === 'plan')],
-    ['Images', files.filter(f => f.type === 'image')],
-    ['Other files', files.filter(f => f.type === 'other')],
-  ];
-  let body = s.srcCount
-    ? `<p class="peek-sum"><b>${s.srcCount}</b> source file${s.srcCount > 1 ? 's' : ''} (${e(s.srcSizeH)}) here are <b>not on Ekahau Cloud</b> — this folder is their only home.</p>`
-    : `<p class="peek-sum">This folder holds only Ekahau <b>.esx</b> files (also backed up to the cloud).</p>`;
-  groups.forEach(([label, arr]) => {
-    if (!arr.length) return;
-    body += `<div class="peek-group">${label} (${arr.length})</div><div class="peek-list">`;
-    arr.forEach(f => {
-      const when = f.mtime ? new Date(f.mtime * 1000).toLocaleString() : '';
-      body += `<div class="peek-row"><span class="pk-name">${e(f.rel || f.name)}</span><span class="pk-date">${e(when)}</span><span class="pk-size">${e(f.sizeH)}</span></div>`;
-    });
-    body += `</div>`;
-  });
+  const byType = {
+    esx: files.filter(f => f.type === 'esx'),
+    plan: files.filter(f => f.type === 'plan'),
+    image: files.filter(f => f.type === 'image'),
+    other: files.filter(f => f.type === 'other'),
+  };
+  const stats = `<div class="peek-stats">
+    <span class="peek-stat esx"><span class="dot"></span><b>${byType.esx.length}</b> .esx</span>
+    <span class="peek-stat plan"><span class="dot"></span><b>${byType.plan.length}</b> plans</span>
+    <span class="peek-stat image"><span class="dot"></span><b>${byType.image.length}</b> images</span>
+    <span class="peek-stat other"><span class="dot"></span><b>${byType.other.length}</b> other</span>
+  </div>`;
+  const note = s.srcCount
+    ? `<div class="peek-note"><b>${s.srcCount}</b> source file${s.srcCount > 1 ? 's' : ''} (${e(s.srcSizeH)}) here are <b>not on Ekahau Cloud</b> — this folder is their only home.</div>`
+    : `<div class="peek-note">This folder holds only Ekahau <b>.esx</b> files (also backed up to the cloud).</div>`;
+  let body = `<div class="peek-hero">${stats}${note}</div>`;
+  body += peekSection('Ekahau Projects', 'esx', byType.esx);
+  body += peekSection('Floor Plans', 'plan', byType.plan);
+  body += peekSection('Images', 'image', byType.image);
+  body += peekSection('Other Files', 'other', byType.other);
   if (s.total > files.length) body += `<div class="peek-more">…and ${s.total - files.length} more</div>`;
-  document.getElementById('peekTitle').innerHTML = `Inside "${e(l.name)}"`;
+  document.getElementById('peekTitle').innerHTML = `<span class="peek-title-icon">&#128193;</span>${e(l.name)}<span class="peek-title-sub">Local folder</span>`;
   document.getElementById('peekBody').innerHTML = body;
   showModal('peekModal');
+}
+function openCloudPeek(siteId, siteName) {
+  let datasets = [];
+  (data.matched || []).forEach(pr => { if (pr.cloud && pr.cloud.id === siteId) datasets = pr.cloud.datasets || []; });
+  (data.cloudOnly || []).forEach(c => { if (c.id === siteId) datasets = c.datasets || []; });
+  const stats = `<div class="peek-stats">
+    <span class="peek-stat esx"><span class="dot"></span><b>${datasets.length}</b> project${datasets.length !== 1 ? 's' : ''}</span>
+  </div>`;
+  let body = `<div class="peek-hero">${stats}`;
+  if (datasets.length) {
+    body += `<div class="peek-note">Hosted on <b>Ekahau Cloud</b> — file sizes and timestamps aren't provided by the cloud API.</div>`;
+    body += `</div>`;
+    const fmtSize = b => !b ? '' : b < 1024 ? b + ' B' : b < 1048576 ? (b/1024).toFixed(1) + ' KB' : (b/1048576).toFixed(1) + ' MB';
+    const rows = datasets.map(d => `<div class="peek-row">
+      <span class="peek-type esx">esx</span>
+      <div class="peek-info"><div class="peek-file">${e(d.name)}.esx</div></div>
+      <div class="peek-meta">
+        <div class="peek-date">cloud</div>
+        <div class="peek-size">${e(fmtSize(d.size))}</div>
+      </div>
+    </div>`).join('');
+    body += `<div class="peek-section esx">
+      <div class="peek-sec-head">
+        <span class="peek-sec-name">Cloud Projects</span>
+        <span class="peek-sec-count">${datasets.length}</span>
+      </div>
+      <div class="peek-list">${rows}</div>
+    </div>`;
+  } else {
+    body += `<div class="peek-note">This site exists on <b>Ekahau Cloud</b> but has no projects uploaded to it yet.</div>`;
+    body += `</div>`;
+    body += `<div class="peek-empty">
+      <div class="peek-empty-icon">&#128230;</div>
+      <div class="peek-empty-title">No projects yet</div>
+      <div class="peek-empty-sub">Upload a matching local <code>.esx</code> from the right side to populate this site.</div>
+    </div>`;
+  }
+  document.getElementById('peekTitle').innerHTML = `<span class="peek-title-icon">&#9729;</span>${e(siteName)}<span class="peek-title-sub">Ekahau Cloud site</span>`;
+  document.getElementById('peekBody').innerHTML = body;
+  showModal('peekModal');
+}
+async function revealInExplorer(path) {
+  const r = await pyApi('reveal_in_explorer', path);
+  if (r.error) toast(r.error, 'error');
 }
 // ── Compare: side-by-side contents of the selected local folders ──
 function selectedLocalFolders() {
@@ -535,7 +632,7 @@ function renderMergeDests() {
   let h = list.length ? '' : `<div class="peek-more">No other folders to merge into.</div>`;
   list.forEach(f => {
     const same = code && f.code === code;
-    h += `<div class="peek-row pick" onclick="chooseMergeDest('${a(f.path)}')">
+    h += `<div class="peek-row pick" onclick="chooseMergeDest('${p(f.path)}')">
       <span class="pk-name">${same ? '<b class="amber">★</b> ' : ''}${e(f.name)}</span>
       <span class="pk-size">${e(f.meta || '')}</span></div>`;
   });
