@@ -49,7 +49,7 @@ The suite currently includes five tools:
 <td width="20%" align="center">
   <div style="font-size:80px;line-height:1;">📋</div>
   <b>Report</b><br>
-  <sub>v1.3</sub><br>
+  <sub>v2.0</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><sub>▶ Try live</sub></a>
 </td>
 </tr>
@@ -104,13 +104,17 @@ Feet-and-inches ↔ decimal ↔ meters converter for Ekahau scale calibration. P
 
 ### Report
 
-Drop an `.esx` and get an installer-ready handoff document. The first report — **Directional Antenna Installation** — pulls every AP's mount type, mounting height, azimuth (with compass bearing), tilt, and antenna model straight out of the project, and lays out a floor-plan overview with a marker + direction arrow on each AP. Print → Save as PDF, hand to the installer. **Available live in your browser** at [weirdave.github.io/WD-Wireless-Tools/report](https://weirdave.github.io/WD-Wireless-Tools/report/).
+Drop an `.esx` and get installer-ready handoff documents. Built on a plug-in **report registry** — each report type is a small object with its own sidebar options and renderer. Two reports ship today:
+
+- **Directional Antenna Installation (`AP Placement`)** — per-AP mount, azimuth (with compass), tilt, mounting height, antenna model; floor-plan overview with SVG marker + direction arrow on every AP.
+- **Bill of Materials** — AP quantities grouped by vendor + model, antenna quantities grouped by antenna type; totals and an "external antennas only" filter for procurement handoff.
+
+**Available live in your browser** at [weirdave.github.io/WD-Wireless-Tools/report](https://weirdave.github.io/WD-Wireless-Tools/report/).
 
 - Parses `.esx` in the browser (JSZip) — nothing leaves your machine
-- Floor plan overview with SVG marker + directional arrow per AP
-- AP table with vendor, model, mount, height, azimuth, tilt, antenna
-- Metric with imperial alongside, compass abbreviations, antenna spec legend — all togglable
-- Print-optimized CSS: page-breaks per floor, backgrounds forced white, sidebar hidden
+- Adding a new report type is one entry in the `REPORTS` registry in `report.js`
+- Cover page with an insertable/persistable logo, per-report doc name in header + filename
+- Print-optimized CSS: page-breaks per section, backgrounds forced white, sidebar hidden
 
 ---
 

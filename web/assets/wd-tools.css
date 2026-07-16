@@ -2098,6 +2098,12 @@ body.tool-report {
 .rep-radio input, .rep-check input { accent-color: var(--teal); }
 .rep-radio.disabled, .rep-check.disabled { color: var(--text-3); cursor: not-allowed; }
 .rep-radio em { color: var(--text-3); font-style: normal; margin-left: 4px; font-size: 11px; }
+.rep-picker-list { display: flex; flex-direction: column; gap: 2px; }
+.rep-radio-desc {
+  margin: -2px 0 6px 26px; font-size: 11px; color: var(--text-3); line-height: 1.4;
+}
+.rep-bom-total td { border-top: 2px solid #d5d5d7 !important; padding-top: 8px !important; }
+[data-theme="dark"] .rep-bom-total td { border-top-color: var(--border) !important; }
 .rep-check.small { font-size: 12px; padding: 3px 4px; }
 .rep-ap-list { max-height: 320px; overflow-y: auto; padding-right: 4px; }
 .rep-sidebar-actions {

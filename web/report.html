@@ -32,7 +32,7 @@
     </div>
   </div>
   <div class="header-center">
-    <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v1.3</span></h1>
+    <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v2.0</span></h1>
   </div>
   <div class="header-actions">
     <button class="wd-nav theme-toggle-btn" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
@@ -42,7 +42,7 @@
 <!-- ── Drop Zone ── -->
 <div id="dropzone" class="dropzone report-dropzone">
   <div class="dropzone-emoji">&#128203;</div>
-  <p class="dropzone-ver">v1.3</p>
+  <p class="dropzone-ver">v2.0</p>
   <p class="dropzone-sub">Installer-facing reports from your .esx</p>
   <div class="dropzone-divider"></div>
   <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
@@ -78,7 +78,7 @@
       <span id="fileBadge" class="file-badge" onclick="loadNewFile()" title="Click to open another .esx"></span>
     </div>
     <div class="report-toolbar-center">
-      <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v1.3</span></h1>
+      <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v2.0</span></h1>
     </div>
     <div class="header-actions">
       <button class="btn btn-secondary" onclick="loadNewFile()" title="Open another .esx">&#128193; Open another…</button>
@@ -93,14 +93,7 @@
     <aside class="report-sidebar noprint">
       <div class="rep-section">
         <div class="rep-section-head">Report type</div>
-        <label class="rep-radio">
-          <input type="radio" name="reportType" value="antenna" checked onchange="renderReport()">
-          <span>Directional Antenna Installation</span>
-        </label>
-        <label class="rep-radio disabled" title="Coming soon">
-          <input type="radio" name="reportType" value="inventory" disabled>
-          <span>AP Inventory <em>(soon)</em></span>
-        </label>
+        <div id="reportPickerList" class="rep-picker-list"></div>
       </div>
 
       <div class="rep-section">
@@ -116,25 +109,8 @@
         <div id="logoPreview" class="rep-logo-preview"></div>
       </div>
 
-      <div class="rep-section">
-        <div class="rep-section-head">Include</div>
-        <label class="rep-check">
-          <input type="checkbox" id="optOverview" checked onchange="renderReport()">
-          <span>Floor plan overview (all APs)</span>
-        </label>
-        <label class="rep-check">
-          <input type="checkbox" id="optSpecs" checked onchange="renderReport()">
-          <span>Antenna specs (gain, beam width)</span>
-        </label>
-        <label class="rep-check">
-          <input type="checkbox" id="optImperial" checked onchange="renderReport()">
-          <span>Show feet alongside meters</span>
-        </label>
-        <label class="rep-check">
-          <input type="checkbox" id="optCompass" checked onchange="renderReport()">
-          <span>Compass abbreviations (N, ENE, …)</span>
-        </label>
-      </div>
+      <!-- Per-report options render into this slot from JS based on the picker. -->
+      <div class="rep-section" id="reportOptsSlot"></div>
 
       <div class="rep-section">
         <div class="rep-section-head">APs</div>
