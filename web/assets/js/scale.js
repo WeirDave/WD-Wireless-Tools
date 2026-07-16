@@ -177,24 +177,24 @@
 
   var els = {};
   ['impInput', 'metInput', 'impErr', 'metErr',
-   'outDecFt', 'outTotalIn', 'outFtIn',
-   'outDecM', 'outTotalMM', 'outMmm'].forEach(function (id) {
+   'outDecFt', 'outTotalIn',
+   'outDecM', 'outTotalMM'].forEach(function (id) {
     els[id] = document.getElementById(id);
   });
 
   function clearOutputs() {
-    ['outDecFt', 'outTotalIn', 'outFtIn', 'outDecM', 'outTotalMM', 'outMmm']
+    ['outDecFt', 'outTotalIn', 'outDecM', 'outTotalMM']
       .forEach(function (id) { els[id].textContent = '—'; });
   }
 
+  // Ekahau's scale field only accepts xx.xx, so every output stops at 2 dp.
+  // trim() strips trailing zeros so "163.47" doesn't become "163.470".
   function renderFromInches(inches) {
     var mm = inches * MM_PER_INCH;
-    els.outDecFt.textContent = trim(inches / IN_PER_FT, 4);
-    els.outTotalIn.textContent = trim(inches, 3);
-    els.outFtIn.textContent = formatFeetInches(inches);
-    els.outDecM.textContent = trim(mm / 1000, 4);
-    els.outTotalMM.textContent = trim(mm, 1);
-    els.outMmm.textContent = formatMetersMM(mm);
+    els.outDecFt.textContent = trim(inches / IN_PER_FT, 2);
+    els.outTotalIn.textContent = trim(inches, 2);
+    els.outDecM.textContent = trim(mm / 1000, 2);
+    els.outTotalMM.textContent = trim(mm, 2);
   }
 
   function onImp() {
@@ -211,7 +211,7 @@
     renderFromInches(inches);
     // Mirror into metric input as decimal meters, without triggering its handler
     var mm = inches * MM_PER_INCH;
-    els.metInput.value = trim(mm / 1000, 4);
+    els.metInput.value = trim(mm / 1000, 2);
     els.metErr.textContent = '';
   }
 
@@ -229,7 +229,7 @@
     var inches = mm / MM_PER_INCH;
     renderFromInches(inches);
     // Mirror into imperial input as decimal feet
-    els.impInput.value = trim(inches / IN_PER_FT, 4);
+    els.impInput.value = trim(inches / IN_PER_FT, 2);
     els.impErr.textContent = '';
   }
 

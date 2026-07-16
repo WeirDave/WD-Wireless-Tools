@@ -43,7 +43,7 @@ The suite currently includes four tools:
 <td width="25%" align="center">
   <div style="font-size:96px;line-height:1;">📏</div>
   <b>Scale</b><br>
-  <sub>v1.0</sub><br>
+  <sub>v1.1</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><sub>▶ Try live</sub></a>
 </td>
 </tr>
