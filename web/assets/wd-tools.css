@@ -2234,3 +2234,106 @@ body.tool-report {
   .report-body { grid-template-columns: 1fr; }
   .report-sidebar { border-right: none; border-bottom: 1px solid var(--border); }
 }
+
+/* WD Report v1.2 — cover page, logo controls, tighter print spacing */
+
+/* Sidebar logo controls */
+.rep-logo-row { display: flex; gap: 6px; margin: 8px 0 6px; }
+.rep-logo-btn { font-size: 12px; padding: 5px 10px; }
+.rep-logo-preview {
+  margin-top: 4px;
+  padding: 10px; min-height: 8px;
+  background: var(--bg); border: 1px dashed var(--border); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+}
+.rep-logo-preview:empty { display: none; }
+.rep-logo-preview img {
+  max-width: 100%; max-height: 90px; display: block;
+  background: #fff; padding: 4px; border-radius: 4px;
+}
+
+/* Cover page — full-page block on print, big card on screen */
+.rep-cover {
+  max-width: 960px; margin: 0 auto 18px;
+  background: #fff; color: #111;
+  padding: 60px 48px; border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+  min-height: 720px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center;
+}
+[data-theme="dark"] .rep-cover { background: #1a222c; color: var(--text); }
+.rep-cover-logo-wrap { margin-bottom: 40px; }
+.rep-cover-logo {
+  max-width: 380px; max-height: 220px; display: block;
+  background: #fff; padding: 8px; border-radius: 6px;
+}
+.rep-cover-brand {
+  color: var(--teal); font-size: 14px; font-weight: 700;
+  letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 14px;
+}
+.rep-cover-title {
+  font-size: 30px; font-weight: 700; margin: 0 0 34px;
+  line-height: 1.3; max-width: 640px;
+}
+.rep-cover-stats {
+  display: flex; gap: 60px; margin-bottom: 28px;
+}
+.rep-cover-stat {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.rep-cover-stat b {
+  font-size: 40px; font-weight: 700; color: #111; line-height: 1;
+}
+[data-theme="dark"] .rep-cover-stat b { color: var(--text); }
+.rep-cover-stat span {
+  font-size: 11px; letter-spacing: 0.6px; text-transform: uppercase; color: #666;
+}
+[data-theme="dark"] .rep-cover-stat span { color: var(--text-2); }
+.rep-cover-date {
+  font-size: 12px; color: #666;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid #eee; min-width: 200px;
+}
+[data-theme="dark"] .rep-cover-date { color: var(--text-2); border-top-color: var(--border); }
+
+/* ── Print overrides: tighter margins, cover full page, kill whitespace ── */
+@media print {
+  @page { margin: 0.35in; }
+
+  /* Tighten every top-level section — the old 12px padding stacked into
+     visible gaps between the header, floor section, and legend. */
+  .rep-doc-head, .rep-floor-section, .rep-legend, .rep-doc-foot {
+    padding: 4px 0 !important;
+    margin: 0 0 6px !important;
+  }
+  .rep-doc-head { padding-bottom: 8px !important; }
+
+  /* Cover page: fills a whole sheet, then hard-breaks to the next. */
+  .rep-cover {
+    background: #fff !important; color: #111 !important;
+    box-shadow: none !important; border-radius: 0 !important;
+    max-width: none !important; margin: 0 !important;
+    padding: 40px 20px !important;
+    min-height: 90vh !important;
+    page-break-after: always;
+  }
+  .rep-cover-stat b { color: #111 !important; }
+  .rep-cover-stat span { color: #666 !important; }
+  .rep-cover-date { color: #666 !important; border-top-color: #eee !important; }
+
+  /* If cover is present, the first floor section should NOT force a page
+     break — the cover already broke. Otherwise (inline header), keep the
+     page-break-before override so the first floor stays with the header. */
+  .rep-cover + .rep-floor-section { page-break-before: auto; }
+
+  /* Trim the AP-table row padding and floor-title spacing that were adding
+     gaps in the middle of the printed page. */
+  .rep-floor-title { margin: 0 0 8px !important; padding-bottom: 4px !important; }
+  .rep-ap-table th, .rep-ap-table td { padding: 4px 6px !important; }
+
+  /* The doc footer at the bottom often gets orphaned onto its own page.
+     Zero its outer margin so it stays with the legend/table above. */
+  .rep-doc-foot { margin-top: 0 !important; padding: 6px 0 !important; }
+}
