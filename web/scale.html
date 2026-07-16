@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Scale</title>
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+</head>
+<body class="tool-scale">
+
+<div class="topbar scale-topbar">
+  <div class="topbar-left">
+    <div class="menu-wrap">
+      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'scaleMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <div id="scaleMenu" class="main-menu">
+        <div class="menu-section">&#9656; Navigation</div>
+        <a class="menu-item" href="/">&#8962; Home</a>
+        <a class="menu-item" href="/walls">· Quick Walls</a>
+        <a class="menu-item" href="/cloud">· Cloud Manager</a>
+        <a class="menu-item" href="/organizer">· Squirrel</a>
+        <a class="menu-item active" href="/scale">· Scale</a>
+      </div>
+    </div>
+  </div>
+  <div class="topbar-center">
+    <h1><span class="scale-brand-icon">&#128207;</span> <span>WD</span> Scale <span class="ver">v1.0</span></h1>
+  </div>
+  <div class="topbar-right">
+    <button class="settings-btn" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
+  </div>
+</div>
+
+<div class="scale-wrap">
+  <div class="scale-hero">
+    <div class="scale-hero-title">Scale &amp; unit converter</div>
+    <div class="scale-hero-sub">Type a measurement from a floor plan on either side — the other side updates live. Paste anything: <code>536'4"</code>, <code>4'&#160;6-1/2"</code>, <code>536.333'</code>, <code>12m&#160;500mm</code>, <code>163475mm</code>.</div>
+  </div>
+
+  <div class="scale-grid">
+
+    <!-- IMPERIAL panel -->
+    <div class="scale-panel imperial">
+      <div class="scale-panel-head">
+        <span class="scale-panel-badge">IMPERIAL</span>
+        <span class="scale-panel-title">Feet &amp; inches</span>
+      </div>
+      <label class="scale-input-label" for="impInput">Input</label>
+      <input type="text" id="impInput" class="scale-input" placeholder="e.g. 536'4&quot; or 4' 6-1/2&quot;" autocomplete="off" spellcheck="false">
+      <div class="scale-error" id="impErr"></div>
+
+      <div class="scale-outputs">
+        <div class="scale-out">
+          <div class="scale-out-label">Decimal feet</div>
+          <div class="scale-out-row">
+            <div class="scale-out-val" id="outDecFt">&mdash;</div>
+            <button class="scale-copy" data-target="outDecFt" title="Copy">&#9112;</button>
+          </div>
+        </div>
+        <div class="scale-out">
+          <div class="scale-out-label">Total inches</div>
+          <div class="scale-out-row">
+            <div class="scale-out-val" id="outTotalIn">&mdash;</div>
+            <button class="scale-copy" data-target="outTotalIn" title="Copy">&#9112;</button>
+          </div>
+        </div>
+        <div class="scale-out">
+          <div class="scale-out-label">Feet &amp; inches</div>
+          <div class="scale-out-row">
+            <div class="scale-out-val" id="outFtIn">&mdash;</div>
+            <button class="scale-copy" data-target="outFtIn" title="Copy">&#9112;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Middle divider -->
+    <div class="scale-swap" aria-hidden="true">
+      <div class="scale-swap-line"></div>
+      <div class="scale-swap-icon">&#8646;</div>
+      <div class="scale-swap-line"></div>
+    </div>
+
+    <!-- METRIC panel -->
+    <div class="scale-panel metric">
+      <div class="scale-panel-head">
+        <span class="scale-panel-badge">METRIC</span>
+        <span class="scale-panel-title">Meters &amp; millimeters</span>
+      </div>
+      <label class="scale-input-label" for="metInput">Input</label>
+      <input type="text" id="metInput" class="scale-input" placeholder="e.g. 12m 500mm or 163475mm" autocomplete="off" spellcheck="false">
+      <div class="scale-error" id="metErr"></div>
+
+      <div class="scale-outputs">
+        <div class="scale-out">
+          <div class="scale-out-label">Decimal meters</div>
+          <div class="scale-out-row">
+            <div class="scale-out-val" id="outDecM">&mdash;</div>
+            <button class="scale-copy" data-target="outDecM" title="Copy">&#9112;</button>
+          </div>
+        </div>
+        <div class="scale-out">
+          <div class="scale-out-label">Total millimeters</div>
+          <div class="scale-out-row">
+            <div class="scale-out-val" id="outTotalMM" >&mdash;</div>
+            <button class="scale-copy" data-target="outTotalMM" title="Copy">&#9112;</button>
+          </div>
+        </div>
+        <div class="scale-out">
+          <div class="scale-out-label">Meters &amp; mm</div>
+          <div class="scale-out-row">
+            <div class="scale-out-val" id="outMmm">&mdash;</div>
+            <button class="scale-copy" data-target="outMmm" title="Copy">&#9112;</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scale-tips">
+    <div class="scale-tips-head">Accepted formats</div>
+    <div class="scale-tips-grid">
+      <div><b>Imperial</b>
+        <ul>
+          <li><code>536'4"</code> &mdash; feet + inches</li>
+          <li><code>4' 6-1/2"</code> or <code>4' 6 1/2"</code> &mdash; fractional inches</li>
+          <li><code>536.333'</code> &mdash; decimal feet</li>
+          <li><code>6436"</code> &mdash; inches only</li>
+          <li><code>536</code> &mdash; a bare number means feet</li>
+        </ul>
+      </div>
+      <div><b>Metric</b>
+        <ul>
+          <li><code>12m 500mm</code> &mdash; meters + mm</li>
+          <li><code>163.475m</code> or <code>163.475</code> &mdash; decimal meters</li>
+          <li><code>163475mm</code> &mdash; millimeters only</li>
+          <li><code>1250cm</code> &mdash; centimeters</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/scale.js"></script>
+</body>
+</html>

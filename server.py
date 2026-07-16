@@ -64,6 +64,11 @@ def organizer():
     return send_from_directory(WEB, "organizer.html")
 
 
+@app.route("/scale")
+def scale():
+    return send_from_directory(WEB, "scale.html")
+
+
 @app.route("/guide")
 def guide():
     return send_from_directory(WEB, "guide.html")

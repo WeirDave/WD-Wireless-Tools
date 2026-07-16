@@ -20,25 +20,31 @@
 
 **WD Wireless Tools** is a lightweight, browser-based toolkit for wireless engineers who use [Ekahau](https://www.ekahau.com/). It runs a tiny local Flask server and opens in your default browser — no installers, no Electron, no cloud dependency. **Quick Walls also runs live in a browser** at [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — no install at all.
 
-The suite currently includes three tools:
+The suite currently includes four tools:
 
 <table>
 <tr>
-<td width="33%" align="center">
-  <img src="images/WD Cloud Manager - Transparent v4.0.png" alt="Cloud Manager" width="200"><br>
+<td width="25%" align="center">
+  <img src="images/WD Cloud Manager - Transparent v4.0.png" alt="Cloud Manager" width="180"><br>
   <b>Cloud Manager</b><br>
   <sub>v3.11</sub>
 </td>
-<td width="33%" align="center">
-  <img src="images/WD Quick Walls v7.0.png" alt="Quick Walls" width="200"><br>
+<td width="25%" align="center">
+  <img src="images/WD Quick Walls v7.0.png" alt="Quick Walls" width="180"><br>
   <b>Quick Walls</b><br>
   <sub>v7.17</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><sub>▶ Try live</sub></a>
 </td>
-<td width="33%" align="center">
-  <img src="images/WD Squirrel - Transparent v13.png" alt="Squirrel" width="200"><br>
+<td width="25%" align="center">
+  <img src="images/WD Squirrel - Transparent v13.png" alt="Squirrel" width="180"><br>
   <b>Squirrel</b><br>
   <sub>v1.8</sub>
+</td>
+<td width="25%" align="center">
+  <div style="font-size:96px;line-height:1;">📏</div>
+  <b>Scale</b><br>
+  <sub>v1.0</sub><br>
+  <a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><sub>▶ Try live</sub></a>
 </td>
 </tr>
 </table>
@@ -79,6 +85,16 @@ Your Ekahau file organizer. Point Squirrel at a folder and it will scan for loos
 - Create new project folders with proper naming
 - Configurable folder structure and naming rules
 - Drag-and-drop-style batch organization
+
+### Scale
+
+Feet-and-inches ↔ decimal ↔ meters converter for Ekahau scale calibration. Paste `536'4"` from a floor plan and the tool spits out `536.333'`, `6436"`, `163.475 m`, and `163475 mm` — copy any of them with one click. **Available live in your browser** at [weirdave.github.io/WD-Wireless-Tools/scale](https://weirdave.github.io/WD-Wireless-Tools/scale/).
+
+- Bidirectional (type on either side, both update)
+- Handles architectural fractions (`4' 6-1/2"`, `4' 6 1/2"`, `1/2"`)
+- Accepts a bare number (interpreted as feet on the imperial side, meters on the metric)
+- Copy-to-clipboard on every output
+- Pure client-side — no backend, works offline
 
 ---
 
