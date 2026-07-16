@@ -1358,7 +1358,7 @@ body.tool-cloud .toolbar input.search:focus {
   width: 500px; height: 273px; margin-bottom: 28px;
   background-size: contain; background-repeat: no-repeat;
   background-position: center;
-  background-image: url(/assets/quick-walls-v1-560x852.png);
+  background-image: url(quick-walls-v1-560x852.png);
 }
 .dropzone-title {
   font-family: var(--mono); font-size: 22px; font-weight: 700;
