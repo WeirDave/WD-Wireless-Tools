@@ -44,16 +44,39 @@ jobs:
           cp templates/*.json "$BUILD/templates/" 2>/dev/null || true
 
           # 4) Quick Walls: copy the desktop HTML, inject WD_HOSTED flag, and
-          #    rewrite absolute /assets/ → ../assets/ so it works under the
-          #    project-pages path prefix.
+          #    rewrite absolute paths so the tool works under the project-pages
+          #    subpath (/WD-Wireless-Tools/walls/). The order matters: longer,
+          #    more specific hrefs rewrite before the bare "/" catch-all.
           cp web/walls.html "$BUILD/walls/index.html"
           sed -i 's|<head>|<head>\n<script>window.WD_HOSTED = true;</script>|' "$BUILD/walls/index.html"
-          sed -i 's|href="/assets/|href="../assets/|g; s|src="/assets/|src="../assets/|g' "$BUILD/walls/index.html"
+          sed -i \
+            -e 's|href="/assets/|href="../assets/|g' \
+            -e 's|src="/assets/|src="../assets/|g' \
+            -e 's|href="/walls"|href="./"|g' \
+            -e 's|href="/cloud"|href="../cloud/"|g' \
+            -e 's|href="/organizer"|href="../organizer/"|g' \
+            -e 's|href="/guide"|href="../guide.html"|g' \
+            -e 's|href="/"|href="../"|g' \
+            "$BUILD/walls/index.html"
 
           # 5) Landing + stub pages from the hand-authored templates.
           cp web/pages/hosted-index.html "$BUILD/index.html"
           cp web/pages/hosted-cloud-stub.html "$BUILD/cloud/index.html"
           cp web/pages/hosted-organizer-stub.html "$BUILD/organizer/index.html"
+
+          # 6) Rewrite absolute nav links in the guide pages (which live at
+          #    the root of the hosted site — /guide.html, /guide-cloud.html,
+          #    /guide-organizer.html). Each guide has a back-link and a
+          #    "part of the suite" link that need to become relative.
+          for g in "$BUILD"/guide*.html; do
+            [ -f "$g" ] || continue
+            sed -i \
+              -e 's|href="/walls"|href="walls/"|g' \
+              -e 's|href="/cloud"|href="cloud/"|g' \
+              -e 's|href="/organizer"|href="organizer/"|g' \
+              -e 's|href="/"|href="./"|g' \
+              "$g"
+          done
 
           # Sanity: show the resulting tree so failed builds are easy to diagnose.
           echo "--- Built tree ---"
