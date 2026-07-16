@@ -55,6 +55,8 @@
       document.getElementById('workspace').classList.add('active');
       document.getElementById('fileBadge').textContent = fileName;
       document.getElementById('fileBadge').style.display = 'inline';
+      // Drives the default filename in the browser's Save-as-PDF dialog.
+      document.title = reportDocTitle();
       renderApFilter();
       renderReport();
     } catch (err) {
@@ -180,9 +182,25 @@
     host.innerHTML = renderAntennaReport(visibleAps, opts);
   };
 
-  function projectName() {
-    // Best-effort — the file name is the most reliable label. Strip .esx.
-    return fileName.replace(/\.esx$/i, '');
+  // Extract the SITE name from an .esx filename by stripping ".esx" and, if the
+  // filename ends with " - {short project suffix}" (e.g. "EXT PD", "Baseline
+  // Survey", "Cleanroom PD", "Remediation"), that suffix too. Conservative:
+  // only strips if the trailing piece has no comma and is under 30 chars, so
+  // legitimate address parts like "WA 98014" are preserved.
+  function siteName() {
+    var stem = fileName.replace(/\.esx$/i, '');
+    var i = stem.lastIndexOf(' - ');
+    if (i > 0) {
+      var suffix = stem.slice(i + 3);
+      if (suffix.length <= 30 && suffix.indexOf(',') === -1) {
+        return stem.slice(0, i);
+      }
+    }
+    return stem;
+  }
+
+  function reportDocTitle() {
+    return 'Report - AP Placement - ' + siteName();
   }
 
   function renderAntennaReport(aps, opts) {
@@ -190,8 +208,8 @@
     var dateStr = today.toISOString().slice(0, 10);
 
     var head = '<header class="rep-doc-head">'
-      + '<div class="rep-doc-brand"><span class="rep-brand-icon">&#128203;</span> Directional Antenna Installation Report</div>'
-      + '<h1 class="rep-doc-title">' + WD.esc(projectName()) + '</h1>'
+      + '<div class="rep-doc-brand"><span class="rep-brand-icon">&#128203;</span> Report &middot; AP Placement</div>'
+      + '<h1 class="rep-doc-title">' + WD.esc(siteName()) + '</h1>'
       + '<div class="rep-doc-meta">'
       + '<span><b>APs:</b> ' + aps.length + '</span>'
       + '<span><b>Floor plans:</b> ' + proj.floorPlans.length + '</span>'

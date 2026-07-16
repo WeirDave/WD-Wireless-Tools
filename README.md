@@ -49,7 +49,7 @@ The suite currently includes five tools:
 <td width="20%" align="center">
   <div style="font-size:80px;line-height:1;">📋</div>
   <b>Report</b><br>
-  <sub>v1.0</sub><br>
+  <sub>v1.1</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><sub>▶ Try live</sub></a>
 </td>
 </tr>
