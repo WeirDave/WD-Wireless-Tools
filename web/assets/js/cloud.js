@@ -39,6 +39,7 @@ const API_MAP = {
   upload_project: ['upload_project', ['path', 'siteId']],
   assign_to_site: ['assign_to_site', ['siteId', 'datasetId']],
   reveal_in_explorer: ['reveal_in_explorer', ['path']],
+  get_duplicates: ['get_duplicates', []],
 };
 async function pyApi(method, ...args) {
   const entry = API_MAP[method];
