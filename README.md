@@ -18,7 +18,7 @@
 
 ## What is this?
 
-**WD Wireless Tools** is a lightweight, browser-based toolkit for wireless engineers who use [Ekahau](https://www.ekahau.com/). It runs a tiny local Flask server and opens in your default browser — no installers, no Electron, no cloud dependency.
+**WD Wireless Tools** is a lightweight, browser-based toolkit for wireless engineers who use [Ekahau](https://www.ekahau.com/). It runs a tiny local Flask server and opens in your default browser — no installers, no Electron, no cloud dependency. **Quick Walls also runs live in a browser** at [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — no install at all.
 
 The suite currently includes three tools:
 
@@ -32,7 +32,8 @@ The suite currently includes three tools:
 <td width="33%" align="center">
   <img src="images/WD Quick Walls v7.0.png" alt="Quick Walls" width="200"><br>
   <b>Quick Walls</b><br>
-  <sub>v7.17</sub>
+  <sub>v7.17</sub><br>
+  <a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><sub>▶ Try live</sub></a>
 </td>
 <td width="33%" align="center">
   <img src="images/WD Squirrel - Transparent v13.png" alt="Squirrel" width="200"><br>
@@ -50,22 +51,25 @@ The suite currently includes three tools:
 
 Sync and manage your Ekahau Cloud sites and projects against your local `.esx` files. Browse your cloud inventory alongside your local folder, match files to sites, rename and delete in bulk, upload new projects, and move datasets between sites — all from one table view.
 
-- Side-by-side cloud vs. local file view
-- Rename, delete, and reorganize projects and sites
+- Side-by-side cloud vs. local file view with character-level name diffs
+- **Duplicates tab** — clusters near-duplicate files across cloud and local, marks newest and largest, one-click cleanup
+- **≈ badge** on rows that belong to a duplicate cluster — click to jump to the tab
+- Rename, delete, and reorganize projects and sites in bulk
 - Upload `.esx` files directly to Ekahau Cloud
+- Show in Explorer/Finder button on every local row
 - Merge preview before combining projects
 - Dark / light theme support
 
 ### Quick Walls
 
-Open an `.esx` file, remap every wall type in your project using a fast, visual editor. Apply wall-type templates to standardize across projects, or save your own custom presets.
+Open an `.esx` file, remap every wall type in your project using a fast, visual editor. Apply wall-type templates to standardize across projects, or save your own custom presets. **Available live in your browser** at [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — the hosted build uses `localStorage` for template persistence instead of the desktop template folder.
 
 - Client-side `.esx` parsing (nothing leaves your machine)
 - Visual wall-type grid with color-coded attenuation values
 - Save / load wall-type templates (JSON)
 - Auto-apply default templates on file open
-- Undo support and Ekahau-defaults reset
-- Template store with "Recommended by WD" presets
+- Keyboard shortcuts `[1]`–`[9]` mapped straight into the Ekahau wall picker
+- Template store with "Recommended by WD" and Ekahau factory presets
 
 ### Squirrel
 
@@ -80,12 +84,20 @@ Your Ekahau file organizer. Point Squirrel at a folder and it will scan for loos
 
 ## Quick Start
 
-### Prerequisites
+### Just want to try Quick Walls?
+
+Open [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — no install, no login, no Python. Drop an `.esx` file, edit walls, save the result. Your file never leaves your machine (JSZip parses it locally in the browser).
+
+### Full suite — desktop install
+
+The full suite (Cloud Manager + Quick Walls + Squirrel) needs Python because Cloud Manager and Squirrel access your file system and Ekahau Cloud session.
+
+**Prerequisites:**
 
 - **Python 3.10+** — [python.org/downloads](https://www.python.org/downloads/)
 - A modern web browser (Chrome, Edge, Firefox, Safari)
 
-### Run it
+**Run it:**
 
 **Windows** — double-click `run.bat`
 
@@ -114,26 +126,37 @@ WD Wireless Tools/
 ├── requirements.txt          # Python dependencies
 │
 ├── tools/
-│   ├── cloud_manager.py      # Ekahau Cloud API integration
+│   ├── cloud_manager.py      # Ekahau Cloud API integration + duplicates detection
 │   ├── template_store.py     # Wall-type template persistence
 │   └── folder_organizer.py   # Squirrel file scanning + sorting
 │
-├── web/
-│   ├── home.html             # Suite landing page
+├── web/                      # Desktop app source (single source of truth)
+│   ├── home.html             # Suite landing page (desktop)
 │   ├── cloud.html            # Cloud Manager UI
-│   ├── walls.html            # Quick Walls UI
+│   ├── walls.html            # Quick Walls UI (also served on GitHub Pages)
 │   ├── organizer.html        # Squirrel UI
 │   ├── guide*.html           # Built-in help pages
+│   ├── pages/                # Hosted-only page templates (used by pages.yml)
+│   │   ├── hosted-index.html         # Public landing page
+│   │   ├── hosted-cloud-stub.html    # "Desktop only" page for /cloud/
+│   │   └── hosted-organizer-stub.html # "Desktop only" page for /organizer/
 │   └── assets/
 │       ├── wd-tools.css      # Shared stylesheet
 │       └── js/
 │           ├── wd-shared.js  # Shared utilities (theme, toast, modal, escape)
 │           ├── cloud.js      # Cloud Manager page logic
-│           ├── walls.js      # Quick Walls page logic
+│           ├── walls.js      # Quick Walls page logic (with HOSTED runtime flag)
 │           └── organizer.js  # Squirrel page logic
 │
-├── templates/                # Wall-type template presets (JSON)
-└── images/                   # Logos and branding assets
+├── templates/                # Wall-type template presets (JSON) — bundled into hosted build
+├── images/                   # Logos and branding assets
+│
+├── docs/
+│   └── releases/             # Hand-authored release notes (published to GitHub Releases)
+│
+└── .github/workflows/
+    ├── release.yml           # On tag push: zip source + publish GitHub Release
+    └── pages.yml             # On push to main: build + deploy hosted site to GitHub Pages
 ```
 
 ---
