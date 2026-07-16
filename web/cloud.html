@@ -72,6 +72,7 @@
           <div class="menu-section">&#9656; Tools</div>
           <button class="menu-item" onclick="closeMainMenu();openSettings()">· Settings</button>
           <button class="menu-item" onclick="closeMainMenu();pickFolder()">· Change Local Folder</button>
+          <button class="menu-item" onclick="closeMainMenu();openNotMatchManager()">· Manage Not-a-Match</button>
           <button class="menu-item" onclick="closeMainMenu();refreshData()">· Refresh</button>
           <div class="menu-sep"></div>
           <div class="menu-section">&#9656; Help &amp; Support</div>
@@ -81,7 +82,7 @@
       </div>
     </div>
     <div class="topbar-center">
-      <h1><span>WD</span> Cloud Manager <span class="ver">v3.10</span></h1>
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.11</span></h1>
     </div>
     <div class="topbar-right">
       <button class="settings-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
@@ -197,10 +198,22 @@
   </div>
 </div>
 
+<!-- Not-a-Match Manager Modal -->
+<div class="modal-overlay" id="notMatchModal">
+  <div class="modal notmatch">
+    <h3>&#8800; Not-a-Match pairs</h3>
+    <p class="sub">Pairs you've explicitly declared different — these two won't be auto-matched even if their names look similar.</p>
+    <div id="nmBody" class="nm-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('notMatchModal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal">
-    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.10</span></h3>
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.11</span></h3>
     <div class="about-body">
       Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
       <br><br>

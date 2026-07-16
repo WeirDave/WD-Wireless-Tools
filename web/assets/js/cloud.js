@@ -40,6 +40,9 @@ const API_MAP = {
   assign_to_site: ['assign_to_site', ['siteId', 'datasetId']],
   reveal_in_explorer: ['reveal_in_explorer', ['path']],
   get_duplicates: ['get_duplicates', []],
+  mark_not_match: ['mark_not_match', ['cloudId', 'localPath', 'cloudName', 'localName']],
+  unmark_not_match: ['unmark_not_match', ['cloudId', 'localPath']],
+  list_not_matches: ['list_not_matches', []],
 };
 async function pyApi(method, ...args) {
   const entry = API_MAP[method];
@@ -647,6 +650,7 @@ function gutCell(r) {
     return `<div class="lr-gut mis">
       <button class="gut-arrow" title="Apply cloud name onto the local folder" onclick="syncRow('to-local','${a(c.id)}','${a(c.name)}','${p(l.path)}')">&#10145;</button>
       <button class="gut-arrow" title="Apply local name onto the cloud site" onclick="syncRow('to-cloud','${a(c.id)}','${a(l.name)}','${p(l.path)}')">&#11013;</button>
+      <button class="gut-arrow nomatch" title="Not a match — never pair these two again" onclick="markNotMatch('${a(c.id)}','${p(l.path)}','${a(c.name)}','${a(l.name)}')">&#8800;</button>
     </div>`;
   }
   if (r.status === 'synced') {
@@ -894,6 +898,58 @@ async function flagReview(path, name) {
     toast(flagged ? 'Un-flagged' : 'Flagged for review (!)', 'success');
     refreshData();
   } catch (e) { toast('Flag failed: ' + e.message, 'error'); }
+}
+
+// ── Not-a-match: user says "these two should never be paired" ──
+async function markNotMatch(cloudId, localPath, cloudName, localName) {
+  if (!confirm(`Mark as NOT a match?\n\nCloud:  ${cloudName}\nLocal:  ${localName}\n\nThey'll be split into orphans and never auto-paired again. You can undo this from the menu → Manage Not-a-Match.`)) return;
+  try {
+    const r = await pyApi('mark_not_match', cloudId, localPath, cloudName, localName);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Marked as not a match', 'success');
+    refreshData();
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+async function openNotMatchManager() {
+  const r = await pyApi('list_not_matches');
+  if (r && r.error) { toast(r.error, 'error'); return; }
+  const pairs = (r && r.pairs) || [];
+  const body = document.getElementById('nmBody');
+  if (!pairs.length) {
+    body.innerHTML = `<div class="peek-empty" style="padding:24px 0">
+      <div class="peek-empty-icon">&#8800;</div>
+      <div class="peek-empty-title">No not-a-match pairs</div>
+      <div class="peek-empty-sub">Click the &ne; button on a mismatched row to add one.</div>
+    </div>`;
+  } else {
+    const rows = pairs.map(pr => {
+      const when = pr.addedAt ? new Date(pr.addedAt * 1000).toLocaleDateString() : '';
+      return `<div class="nm-row">
+        <div class="nm-cells">
+          <div class="nm-cell cloud"><span class="nm-tag">CLOUD</span>${e(pr.cloudName || pr.cloudId)}</div>
+          <div class="nm-sep">&#8800;</div>
+          <div class="nm-cell local"><span class="nm-tag">LOCAL</span>${e(pr.localName || pr.localPath)}</div>
+        </div>
+        <div class="nm-meta">${e(when)}</div>
+        <button class="btn btn-secondary nm-undo" title="Un-mark — let matching consider this pair again"
+                onclick="undoNotMatch('${a(pr.cloudId)}','${p(pr.localPath)}')">Un-mark</button>
+      </div>`;
+    }).join('');
+    body.innerHTML = `<div class="nm-list">${rows}</div>
+      <div class="nm-foot">Stored in <code>${e(r.file || '')}</code></div>`;
+  }
+  showModal('notMatchModal');
+}
+
+async function undoNotMatch(cloudId, localPath) {
+  try {
+    const r = await pyApi('unmark_not_match', cloudId, localPath);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Un-marked', 'success');
+    openNotMatchManager();
+    refreshData();
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
 }
 
 // ── Merge folder → folder (targeted consolidation) ──

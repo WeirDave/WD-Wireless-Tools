@@ -27,6 +27,7 @@ API_BASE = "/projectapi/v1/projects"
 CONFIG_DIR = Path.home() / ".wd_wireless_tools"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 COOKIE_FILE = CONFIG_DIR / "cookies.json"
+NOT_MATCH_FILE = CONFIG_DIR / "not_matches.json"
 
 
 def _assert_inside(path, root):
@@ -76,6 +77,37 @@ def load_cookies_from_disk():
         except Exception:
             pass
     return None, None
+
+
+# ── not-a-match persistence ───────────────────────────────────────────
+# User-declared "these two are NOT the same project." Stored per-user so
+# decisions carry across sessions and folder rescans. Pair identity is the
+# stable (cloud_id, local_path) tuple — cloud ids are Ekahau UUIDs that
+# survive renames, and local paths are stable until the user moves the file.
+def _nm_pair_key(cloud_id, local_path):
+    return f"{cloud_id or ''}||{(local_path or '').replace(chr(92), '/').lower()}"
+
+
+def load_not_matches():
+    if NOT_MATCH_FILE.exists():
+        try:
+            with open(NOT_MATCH_FILE) as f:
+                data = json.load(f) or {}
+            pairs = data.get("pairs", []) or []
+            return [p for p in pairs if p.get("cloudId") and p.get("localPath")]
+        except Exception:
+            pass
+    return []
+
+
+def save_not_matches(pairs):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(NOT_MATCH_FILE, "w") as f:
+        json.dump({"pairs": pairs}, f, indent=2)
+
+
+def not_matches_set():
+    return {_nm_pair_key(p["cloudId"], p["localPath"]) for p in load_not_matches()}
 
 
 # ── Ekahau Cloud API client ───────────────────────────────────────────
@@ -498,13 +530,20 @@ def get_local_esx_files(output_dir):
     return out
 
 
-def build_matches(cloud_items, local_items):
+def build_matches(cloud_items, local_items, excluded=None):
     # Three global passes so stronger evidence always wins: every cloud project
     # gets first crack at an EXACT-name local file, then a site-CODE match, then
     # a fuzzy match on the leftovers. This prevents an early cloud project from
     # greedily "stealing" a local .esx (via a weak fuzzy hit) that another cloud
     # project matches exactly or by code — the old single-pass bug that could
     # push a code-matched project (e.g. BALB01) into "cloud only".
+    excluded = excluded or set()
+
+    def _blocked(c, l):
+        cid = c.get("id") or ""
+        lp = l.get("path") or ""
+        return _nm_pair_key(cid, lp) in excluded
+
     matched = []
     unmatched_local = list(local_items)
 
@@ -520,7 +559,7 @@ def build_matches(cloud_items, local_items):
     for c in cloud_items:
         cn = c["name"].strip()
         hit = next((i for i, l in enumerate(unmatched_local)
-                    if cn == l["name"].strip()), None)
+                    if cn == l["name"].strip() and not _blocked(c, l)), None)
         if hit is not None:
             _take(c, hit, "exact", 3.0)
         else:
@@ -533,6 +572,8 @@ def build_matches(cloud_items, local_items):
         best, best_score = None, 0
         if cloud_code:
             for i, l in enumerate(unmatched_local):
+                if _blocked(c, l):
+                    continue
                 if discriminators_conflict(c["name"], l["name"]):
                     continue
                 lcode = l.get("code") or extract_site_code(l["name"])
@@ -550,6 +591,8 @@ def build_matches(cloud_items, local_items):
     for c in still:
         best, best_score = None, 0
         for i, l in enumerate(unmatched_local):
+            if _blocked(c, l):
+                continue
             if discriminators_conflict(c["name"], l["name"]):
                 continue
             sim = fuzzy_similarity(c["name"], l["name"])
@@ -637,7 +680,7 @@ def build_sites_data(api, output_dir):
         local.append({"path": f["path"], "name": f["name"], "code": f["code"], "isDir": True,
                       "meta": f'{f["esxCount"]} esx · {human_size(f["totalSize"])}',
                       "hasSource": inv["srcCount"] > 0, "src": inv})
-    return build_matches(cloud, local)
+    return build_matches(cloud, local, not_matches_set())
 
 
 def build_projects_data(api, output_dir):
@@ -671,7 +714,7 @@ def build_projects_data(api, output_dir):
               "isDir": False, "folder": f["folder"],
               "meta": f'{human_size(f["size"])} · {f["folder"]}'}
              for f in get_local_esx_files(output_dir)]
-    return build_matches(cloud, local)
+    return build_matches(cloud, local, not_matches_set())
 
 
 # ── Duplicate detection ────────────────────────────────────────────────
@@ -1143,3 +1186,31 @@ class CloudManager:
             save_config(self.config)
             return {"path": path}
         return {"path": None}
+
+    def mark_not_match(self, cloud_id, local_path, cloud_name="", local_name=""):
+        if not cloud_id or not local_path:
+            return {"error": "cloudId and localPath are required"}
+        pairs = load_not_matches()
+        target = _nm_pair_key(cloud_id, local_path)
+        if any(_nm_pair_key(p["cloudId"], p["localPath"]) == target for p in pairs):
+            return {"ok": True, "already": True}
+        pairs.append({
+            "cloudId": cloud_id, "localPath": local_path,
+            "cloudName": cloud_name, "localName": local_name,
+            "addedAt": int(time.time()),
+        })
+        save_not_matches(pairs)
+        return {"ok": True, "count": len(pairs)}
+
+    def unmark_not_match(self, cloud_id, local_path):
+        if not cloud_id or not local_path:
+            return {"error": "cloudId and localPath are required"}
+        pairs = load_not_matches()
+        target = _nm_pair_key(cloud_id, local_path)
+        kept = [p for p in pairs if _nm_pair_key(p["cloudId"], p["localPath"]) != target]
+        save_not_matches(kept)
+        return {"ok": True, "count": len(kept), "removed": len(pairs) - len(kept)}
+
+    def list_not_matches(self):
+        return {"ok": True, "pairs": load_not_matches(),
+                "file": str(NOT_MATCH_FILE)}

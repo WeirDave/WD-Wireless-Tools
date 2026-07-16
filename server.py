@@ -153,6 +153,10 @@ CLOUD_ACTIONS = {
     "pick_folder": lambda d: cm.pick_folder(),
     "reveal_in_explorer": lambda d: cm.reveal_in_explorer(d["path"]),
     "get_duplicates": lambda d: cm.get_duplicates(),
+    "mark_not_match": lambda d: cm.mark_not_match(d.get("cloudId"), d.get("localPath"),
+                                                    d.get("cloudName", ""), d.get("localName", "")),
+    "unmark_not_match": lambda d: cm.unmark_not_match(d.get("cloudId"), d.get("localPath")),
+    "list_not_matches": lambda d: cm.list_not_matches(),
 }
 
 
