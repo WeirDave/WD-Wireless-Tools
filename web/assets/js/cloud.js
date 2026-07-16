@@ -868,13 +868,32 @@ function startRename(side, idOrPath, name) {
 async function confirmRename() {
   const n = document.getElementById('renameInput').value.trim();
   if (!n || !renameTarget) { closeModal('renameModal'); return; }
+  const btn = document.getElementById('renameBtn');
+  // Guard: if the button is already in-flight, ignore the click entirely.
+  // Prevents rapid double-clicks from firing two concurrent PUTs to Ekahau
+  // (which can race and confuse the API even when the first one succeeds).
+  if (btn && btn.dataset.busy === '1') return;
+  const orig = btn ? btn.textContent : null;
+  if (btn) {
+    btn.dataset.busy = '1';
+    btn.disabled = true;
+    btn.textContent = 'Renaming…';
+  }
   try {
     let r;
     if (renameTarget.side === 'cloud') r = await pyApi('rename_cloud', currentTab, renameTarget.idOrPath, n);
     else r = await pyApi('rename_local', renameTarget.idOrPath, n);
     if (r && r.error) { toast(r.error, 'error'); return; }
     toast('Renamed', 'success'); closeModal('renameModal'); refreshData();
-  } catch (err) { toast(err.message, 'error'); }
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.dataset.busy = '';
+      btn.disabled = false;
+      if (orig != null) btn.textContent = orig;
+    }
+  }
 }
 
 /* ── Delete ── */

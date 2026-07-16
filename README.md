@@ -24,7 +24,7 @@ The suite currently includes three tools:
 <td width="33%" align="center">
   <img src="images/WD Cloud Manager - Transparent v4.0.png" alt="Cloud Manager" width="200"><br>
   <b>Cloud Manager</b><br>
-  <sub>v3.7</sub>
+  <sub>v3.8</sub>
 </td>
 <td width="33%" align="center">
   <img src="images/WD Quick Walls v7.0.png" alt="Quick Walls" width="200"><br>
