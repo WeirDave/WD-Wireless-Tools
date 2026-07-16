@@ -32,7 +32,7 @@
     </div>
   </div>
   <div class="header-center">
-    <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v1.2</span></h1>
+    <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v1.3</span></h1>
   </div>
   <div class="header-actions">
     <button class="wd-nav theme-toggle-btn" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
@@ -42,7 +42,7 @@
 <!-- ── Drop Zone ── -->
 <div id="dropzone" class="dropzone report-dropzone">
   <div class="dropzone-emoji">&#128203;</div>
-  <p class="dropzone-ver">v1.2</p>
+  <p class="dropzone-ver">v1.3</p>
   <p class="dropzone-sub">Installer-facing reports from your .esx</p>
   <div class="dropzone-divider"></div>
   <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
@@ -78,9 +78,10 @@
       <span id="fileBadge" class="file-badge" onclick="loadNewFile()" title="Click to open another .esx"></span>
     </div>
     <div class="report-toolbar-center">
-      <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v1.2</span></h1>
+      <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v1.3</span></h1>
     </div>
     <div class="header-actions">
+      <button class="btn btn-secondary" onclick="loadNewFile()" title="Open another .esx">&#128193; Open another…</button>
       <button class="btn btn-blue" onclick="window.print()" title="Print or Save as PDF">&#128424; Print / Save PDF</button>
       <button class="wd-nav theme-toggle-btn" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
     </div>
@@ -138,6 +139,10 @@
       <div class="rep-section">
         <div class="rep-section-head">APs</div>
         <div class="rep-ap-list" id="apFilterList"></div>
+      </div>
+
+      <div class="rep-sidebar-actions">
+        <button class="btn btn-secondary rep-open-btn" onclick="loadNewFile()">&#128193; Open another .esx</button>
       </div>
 
       <div class="rep-foot">
