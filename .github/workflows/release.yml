@@ -38,5 +38,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.TAG }}
-          generate_release_notes: true
+          # Prefer hand-authored narrative notes at docs/releases/vX.Y.Z.md.
+          # If the file is missing, the release is still created (with a
+          # blank body) — safer than failing the workflow.
+          body_path: docs/releases/${{ env.TAG }}.md
+          fail_on_unmatched_files: false
           files: ${{ env.ZIPNAME }}

@@ -81,7 +81,7 @@
       </div>
     </div>
     <div class="topbar-center">
-      <h1><span>WD</span> Cloud Manager <span class="ver">v3.8</span></h1>
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.9</span></h1>
     </div>
     <div class="topbar-right">
       <button class="settings-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
@@ -94,6 +94,7 @@
   <div class="tabs">
     <div class="tab active" id="tabSites" onclick="switchTab('sites')">Sites</div>
     <div class="tab" id="tabProjects" onclick="switchTab('projects')">Project Files</div>
+    <div class="tab" id="tabDuplicates" onclick="switchTab('duplicates')">Duplicates</div>
   </div>
 
   <div class="dashboard">
@@ -117,6 +118,18 @@
     </div>
     <div class="dash-card unassigned" data-filter="unassigned" onclick="setFilter('unassigned')" id="dUnassignedCard" style="display:none;">
       <div class="number" id="dUnassigned">-</div><div class="label">No Site</div>
+    </div>
+    <div class="dash-card dup-all" data-filter="dup-all" onclick="setFilter('dup-all')" id="dDupAllCard" style="display:none;">
+      <div class="number" id="dDupAll">-</div><div class="label">Clusters</div>
+    </div>
+    <div class="dash-card dup-mixed" data-filter="dup-mixed" onclick="setFilter('dup-mixed')" id="dDupMixedCard" style="display:none;">
+      <div class="number" id="dDupMixed">-</div><div class="label">Mixed</div>
+    </div>
+    <div class="dash-card dup-local" data-filter="dup-local" onclick="setFilter('dup-local')" id="dDupLocalCard" style="display:none;">
+      <div class="number" id="dDupLocal">-</div><div class="label">Local Only</div>
+    </div>
+    <div class="dash-card dup-cloud" data-filter="dup-cloud" onclick="setFilter('dup-cloud')" id="dDupCloudCard" style="display:none;">
+      <div class="number" id="dDupCloud">-</div><div class="label">Cloud Only</div>
     </div>
   </div>
 
@@ -187,7 +200,7 @@
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal">
-    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.8</span></h3>
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.9</span></h3>
     <div class="about-body">
       Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
       <br><br>

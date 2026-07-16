@@ -152,6 +152,7 @@ CLOUD_ACTIONS = {
     "merge_execute": lambda d: cm.merge_execute(d["src"], d["dst"], d.get("ops", [])),
     "pick_folder": lambda d: cm.pick_folder(),
     "reveal_in_explorer": lambda d: cm.reveal_in_explorer(d["path"]),
+    "get_duplicates": lambda d: cm.get_duplicates(),
 }
 
 

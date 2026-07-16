@@ -486,8 +486,12 @@ def get_local_esx_files(output_dir):
             if not d.is_dir() or d.name.startswith(".") or d.name.lower() in _SKIP_DIRS:
                 continue
             for f in sorted(d.glob("*.esx"), key=lambda x: x.name.lower()):
+                try:
+                    mtime = int(f.stat().st_mtime)
+                except OSError:
+                    mtime = 0
                 out.append({"name": f.stem, "folder": d.name,
-                            "size": _esx_size(f), "path": str(f)})
+                            "size": _esx_size(f), "path": str(f), "mtime": mtime})
         except OSError:
             continue
     out.sort(key=lambda x: x["name"].lower())
@@ -670,6 +674,157 @@ def build_projects_data(api, output_dir):
     return build_matches(cloud, local)
 
 
+# ── Duplicate detection ────────────────────────────────────────────────
+def _dup_key(name):
+    """Normalize a project/file name so near-duplicates cluster together.
+    Strips .esx, lowercases, replaces punctuation with spaces, collapses runs.
+    Deterministic — no fuzzy matching. Used only to group like-named files."""
+    stem = (name or "").lower()
+    if stem.endswith(".esx"):
+        stem = stem[:-4]
+    stem = re.sub(r"[-_.,;:!?/\\()\[\]{}]+", " ", stem)
+    return re.sub(r"\s+", " ", stem).strip()
+
+
+def _parse_cloud_mtime(pr):
+    """Best-effort extraction of a modification timestamp from a project dict.
+    Returns unix seconds (int) or 0. Ekahau uses ISO strings on various keys."""
+    from datetime import datetime
+    for key in ("modifiedAt", "updatedAt", "lastModifiedAt", "modified", "createdAt"):
+        v = pr.get(key)
+        if not v:
+            continue
+        try:
+            # Handle trailing Z (UTC) and fractional seconds.
+            s = str(v).replace("Z", "+00:00")
+            return int(datetime.fromisoformat(s).timestamp())
+        except (ValueError, TypeError):
+            continue
+    return 0
+
+
+def build_duplicates_data(api, output_dir):
+    """Cluster cloud projects + local .esx files by normalized name.
+    Only clusters with 2+ items are returned. Each item carries side, size,
+    mtime, location, and a `matched` flag (true if it's currently paired in
+    the Sites/Projects view — helps identify the "canonical" copy)."""
+    # Cloud side — join projects with dataset listing for site name context.
+    dataset_site = {}
+    try:
+        for entry in api.get_dataset_listing():
+            eid = entry.get("id")
+            sname = entry.get("siteName")
+            if eid and sname:
+                dataset_site[eid] = sname
+    except Exception:
+        pass
+
+    cloud_items = []
+    try:
+        for pr in api.get_projects():
+            pid = pr.get("id")
+            if not pid:
+                continue
+            name = pr.get("name") or pr.get("title") or "Untitled"
+            size = int((pr.get("statistics") or {}).get("size", 0) or 0)
+            cloud_items.append({
+                "side": "cloud",
+                "id": pid,
+                "name": name,
+                "size": size,
+                "mtime": _parse_cloud_mtime(pr),
+                "location": dataset_site.get(pid, ""),
+                "hasSite": bool(dataset_site.get(pid)),
+            })
+    except Exception:
+        pass
+
+    # Local side.
+    local_items = []
+    for f in get_local_esx_files(output_dir):
+        local_items.append({
+            "side": "local",
+            "path": f["path"],
+            "name": f["name"],
+            "size": int(f.get("size", 0) or 0),
+            "mtime": int(f.get("mtime", 0) or 0),
+            "location": f["folder"],
+        })
+
+    # Determine which items are currently "matched" in the Projects view so we
+    # can flag them. Uses the same matcher the main UI uses.
+    matched_cloud_ids = set()
+    matched_local_paths = set()
+    try:
+        cloud_for_match = [{"id": c["id"], "name": c["name"],
+                            "code": extract_site_code(c["name"]),
+                            "hasSite": c["hasSite"]}
+                           for c in cloud_items]
+        local_for_match = [{"path": l["path"], "name": l["name"],
+                            "code": extract_site_code(l["name"]),
+                            "isDir": False, "folder": l["location"]}
+                           for l in local_items]
+        m = build_matches(cloud_for_match, local_for_match)
+        for entry in m["matched"]:
+            if entry["cloud"].get("id"):
+                matched_cloud_ids.add(entry["cloud"]["id"])
+            if entry["local"].get("path"):
+                matched_local_paths.add(entry["local"]["path"])
+    except Exception:
+        pass
+
+    for c in cloud_items:
+        c["matched"] = c["id"] in matched_cloud_ids
+    for l in local_items:
+        l["matched"] = l["path"] in matched_local_paths
+
+    # Group into clusters by normalized key.
+    clusters_by_key = {}
+    for item in cloud_items + local_items:
+        key = _dup_key(item["name"])
+        if not key:
+            continue
+        clusters_by_key.setdefault(key, []).append(item)
+
+    clusters = []
+    for key, items in clusters_by_key.items():
+        if len(items) < 2:
+            continue
+        cloud_count = sum(1 for i in items if i["side"] == "cloud")
+        local_count = sum(1 for i in items if i["side"] == "local")
+        shape = "mixed" if cloud_count and local_count else (
+            "cloud-only" if cloud_count else "local-only")
+        newest = max(items, key=lambda i: i["mtime"])
+        largest = max(items, key=lambda i: i["size"])
+        # Stable id per item for UI cross-reference
+        def _iid(i):
+            return i.get("id") or i.get("path") or ""
+        clusters.append({
+            "key": key,
+            "displayName": items[0]["name"],  # sample; UI shows all names
+            "items": items,
+            "sides": {"cloud": cloud_count, "local": local_count},
+            "shape": shape,
+            "newestId": _iid(newest),
+            "largestId": _iid(largest),
+        })
+
+    # Sort clusters: mixed first (most actionable), then by size desc.
+    shape_rank = {"mixed": 0, "local-only": 1, "cloud-only": 2}
+    clusters.sort(key=lambda c: (shape_rank.get(c["shape"], 9),
+                                  -sum(i["size"] for i in c["items"])))
+
+    return {
+        "clusters": clusters,
+        "summary": {
+            "total": len(clusters),
+            "mixed": sum(1 for c in clusters if c["shape"] == "mixed"),
+            "localOnly": sum(1 for c in clusters if c["shape"] == "local-only"),
+            "cloudOnly": sum(1 for c in clusters if c["shape"] == "cloud-only"),
+        },
+    }
+
+
 # ── folder picker (native dialog via a short-lived subprocess) ─────────
 def pick_folder_dialog(initial=""):
     code = (
@@ -751,6 +906,15 @@ class CloudManager:
         try:
             od = self.config.get("output_dir", "")
             return build_projects_data(self.api, od) if kind == "projects" else build_sites_data(self.api, od)
+        except Exception as e:
+            return {"error": str(e)}
+
+    def get_duplicates(self):
+        if not self._ensure():
+            return {"error": "Not connected"}
+        try:
+            od = self.config.get("output_dir", "")
+            return build_duplicates_data(self.api, od)
         except Exception as e:
             return {"error": str(e)}
 

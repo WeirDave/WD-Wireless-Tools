@@ -8,8 +8,11 @@ function a(s) { return WD.escAttr(s); }
 // Python's pathlib accepts either separator, so this is safe end-to-end.
 function p(s) { return a(String(s == null ? '' : s).replace(/\\/g, '/')); }
 
-let currentTab = 'sites';       // 'sites' | 'projects'
+let currentTab = 'sites';       // 'sites' | 'projects' | 'duplicates'
 let data = null;                // current tab's data
+let dupData = null;             // duplicates payload (Duplicates tab)
+let dupIndex = new Map();       // id-or-path → cluster key (for ≈ badges)
+let dupHighlightKey = null;     // set when jumpToCluster kicks over; drives auto-scroll
 let activeFilter = 'all';
 let filterUnassigned = false;   // column-level "no site / no folder" toggle
 let renameTarget = null;
@@ -161,6 +164,7 @@ function switchTab(kind) {
   currentTab = kind;
   document.getElementById('tabSites').classList.toggle('active', kind === 'sites');
   document.getElementById('tabProjects').classList.toggle('active', kind === 'projects');
+  document.getElementById('tabDuplicates').classList.toggle('active', kind === 'duplicates');
   document.getElementById('addNewBtn').style.display = kind === 'sites' ? '' : 'none';
   document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
   refreshData();
@@ -173,9 +177,17 @@ function refreshData(silent) {
     document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">Loading…</div>';
   }
   const tab = currentTab;
-  pyApi('get_data', tab)
-    .then(d => onData(tab, JSON.stringify(d)))
-    .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
+  if (tab === 'duplicates') {
+    pyApi('get_duplicates')
+      .then(d => onDuplicates(tab, JSON.stringify(d)))
+      .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
+  } else {
+    pyApi('get_data', tab)
+      .then(d => onData(tab, JSON.stringify(d)))
+      .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
+    // In parallel, fetch duplicates data for the ≈ badge cross-reference.
+    refreshDupIndex();
+  }
 }
 
 function onData(kind, jsonStr) {
@@ -191,6 +203,22 @@ function onData(kind, jsonStr) {
   updateDashboard(); renderRows();
 }
 
+function onDuplicates(kind, jsonStr) {
+  if (kind !== currentTab) return;
+  let d;
+  try { d = JSON.parse(jsonStr); }
+  catch (err) { toast('Bad data payload', 'error'); return; }
+  if (d.error) {
+    document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">' + e(d.error) + '</div>';
+    toast(d.error, 'error'); return;
+  }
+  dupData = d;
+  // Also refresh the shared dupIndex (used by ≈ badges on other tabs).
+  buildDupIndexFromData(d);
+  updateDashboard();
+  renderDuplicates();
+}
+
 function indexRowData() {
   rowData = {};
   (data.matched || []).forEach(p => {
@@ -200,17 +228,39 @@ function indexRowData() {
   (data.localOnly || []).forEach(f => { rowData['l:' + f.path] = { kind: 'local', path: f.path, name: f.name, isDir: f.isDir }; });
 }
 function updateDashboard() {
-  const s = data.summary;
-  document.getElementById('dAll').textContent = s.matched + s.cloudOnly + s.localOnly;
-  document.getElementById('dMismatches').textContent = s.mismatches;
-  document.getElementById('dOrphans').textContent = s.cloudOnly + s.localOnly;
-  document.getElementById('dCloudOnly').textContent = s.cloudOnly;
-  document.getElementById('dLocalOnly').textContent = s.localOnly;
-  document.getElementById('dSynced').textContent = s.matched - s.mismatches;
+  const isDup = currentTab === 'duplicates';
   const isProj = currentTab === 'projects';
+  // Standard match/orphan cards visible only on Sites/Projects tabs.
+  const stdCards = ['allcard', 'mismatches', 'orphans', 'cloud-only', 'local-only', 'matched'];
+  stdCards.forEach(cls => {
+    document.querySelectorAll('.dash-card.' + cls).forEach(el => {
+      el.style.display = isDup ? 'none' : '';
+    });
+  });
+  // Duplicate cards visible only on Duplicates tab.
+  ['dDupAllCard', 'dDupMixedCard', 'dDupLocalCard', 'dDupCloudCard'].forEach(id => {
+    document.getElementById(id).style.display = isDup ? '' : 'none';
+  });
+
+  if (isDup) {
+    const s = (dupData && dupData.summary) || { total: 0, mixed: 0, localOnly: 0, cloudOnly: 0 };
+    document.getElementById('dDupAll').textContent = s.total;
+    document.getElementById('dDupMixed').textContent = s.mixed;
+    document.getElementById('dDupLocal').textContent = s.localOnly;
+    document.getElementById('dDupCloud').textContent = s.cloudOnly;
+  } else if (data && data.summary) {
+    const s = data.summary;
+    document.getElementById('dAll').textContent = s.matched + s.cloudOnly + s.localOnly;
+    document.getElementById('dMismatches').textContent = s.mismatches;
+    document.getElementById('dOrphans').textContent = s.cloudOnly + s.localOnly;
+    document.getElementById('dCloudOnly').textContent = s.cloudOnly;
+    document.getElementById('dLocalOnly').textContent = s.localOnly;
+    document.getElementById('dSynced').textContent = s.matched - s.mismatches;
+  }
+
   const uCard = document.getElementById('dUnassignedCard');
   uCard.style.display = isProj ? '' : 'none';
-  if (isProj) {
+  if (isProj && data) {
     let noSite = 0;
     (data.matched || []).forEach(p => { if (p.cloud && !p.cloud.hasSite) noSite++; });
     (data.cloudOnly || []).forEach(c => { if (!c.hasSite) noSite++; });
@@ -254,6 +304,7 @@ function charDiff(a, b) {
 
 /* ── Render ── */
 function renderRows() {
+  if (currentTab === 'duplicates') { renderDuplicates(); return; }
   lastChkIndex = null;
   const el = document.getElementById('rowsContainer');
   const q = document.getElementById('searchBox').value.toLowerCase();
@@ -263,6 +314,247 @@ function renderRows() {
   if (legend) legend.style.display = 'none';
   el.innerHTML = renderLedger(hit);
   updateBulkBar(); refreshSelAll();
+}
+
+/* ── Duplicates: index (for ≈ badges on Sites/Projects) ── */
+function refreshDupIndex() {
+  // Fire-and-forget parallel fetch. Populates dupIndex so cell renderers can
+  // stamp a ≈ hint on any row that appears in a duplicate cluster.
+  pyApi('get_duplicates')
+    .then(d => {
+      if (!d || d.error) return;
+      buildDupIndexFromData(d);
+      // Re-render the current ledger so newly-known badges appear.
+      if (currentTab !== 'duplicates') renderRows();
+    })
+    .catch(() => {});
+}
+
+function buildDupIndexFromData(d) {
+  dupIndex = new Map();
+  (d.clusters || []).forEach(cl => {
+    cl.items.forEach(item => {
+      const k = item.id || item.path;
+      if (k) dupIndex.set(k, cl.key);
+    });
+  });
+}
+
+function dupHintFor(idOrPath) {
+  if (!idOrPath) return '';
+  const key = dupIndex.get(idOrPath);
+  if (!key) return '';
+  return ` <span class="dup-hint" title="Part of a duplicate cluster — click to inspect" onclick="event.stopPropagation();jumpToCluster('${a(key)}')">&#8776;</span>`;
+}
+
+function jumpToCluster(clusterKey) {
+  dupHighlightKey = clusterKey;
+  if (currentTab === 'duplicates') {
+    // Already here — just scroll + pulse.
+    scrollToCluster(clusterKey);
+  } else {
+    switchTab('duplicates');
+    // renderDuplicates() will honor dupHighlightKey after data loads.
+  }
+}
+
+function scrollToCluster(key) {
+  const el = document.querySelector(`.dup-cluster[data-key="${cssEscape(key)}"]`);
+  if (!el) return;
+  el.classList.add('expanded');
+  el.classList.add('dup-highlight');
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => el.classList.remove('dup-highlight'), 1500);
+}
+function cssEscape(s) {
+  return String(s).replace(/["\\]/g, '\\$&');
+}
+
+/* ── Duplicates: render ── */
+function renderDuplicates() {
+  const el = document.getElementById('rowsContainer');
+  const legend = document.querySelector('.col-legend');
+  if (legend) legend.style.display = 'none';
+
+  const clusters = (dupData && dupData.clusters) || [];
+  // Apply active filter (dup-mixed / dup-local / dup-cloud / dup-all/all).
+  let filtered = clusters;
+  if (activeFilter === 'dup-mixed')      filtered = clusters.filter(c => c.shape === 'mixed');
+  else if (activeFilter === 'dup-local') filtered = clusters.filter(c => c.shape === 'local-only');
+  else if (activeFilter === 'dup-cloud') filtered = clusters.filter(c => c.shape === 'cloud-only');
+
+  // Apply search box (matches any item name in the cluster).
+  const q = (document.getElementById('searchBox').value || '').toLowerCase();
+  if (q) {
+    filtered = filtered.filter(c => c.items.some(i => (i.name || '').toLowerCase().includes(q))
+                                  || (c.key || '').includes(q));
+  }
+
+  if (!filtered.length) {
+    el.innerHTML = `<div class="dup-empty">
+      <div class="dup-empty-icon">&#128193;</div>
+      <div class="dup-empty-title">${clusters.length ? 'No duplicates match this filter' : 'No duplicates found'}</div>
+      <div class="dup-empty-sub">${clusters.length
+        ? 'Clear the search or pick a different filter to see other clusters.'
+        : 'Every project has a unique normalized name across the cloud and your local folder. Nice.'}</div>
+    </div>`;
+    return;
+  }
+
+  let h = '<div class="dup-container">';
+  filtered.forEach(cl => h += renderCluster(cl));
+  h += '</div>';
+  el.innerHTML = h;
+
+  // If we arrived here via jumpToCluster, scroll to and pulse the target.
+  if (dupHighlightKey) {
+    const target = dupHighlightKey;
+    dupHighlightKey = null;
+    requestAnimationFrame(() => scrollToCluster(target));
+  }
+}
+
+function renderCluster(cl) {
+  const kAttr = a(cl.key);
+  const shapeLabel = cl.shape === 'mixed' ? 'Mixed' : cl.shape === 'local-only' ? 'Local only' : 'Cloud only';
+  let h = `<div class="dup-cluster expanded" data-key="${kAttr}">`;
+  h += `<div class="dup-head" onclick="toggleCluster('${kAttr}')">`;
+  h += `<span class="dup-chevron">&#9656;</span>`;
+  h += `<span class="dup-title">${e(cl.displayName)}</span>`;
+  h += `<span class="dup-shape ${cl.shape}">${shapeLabel}</span>`;
+  h += `<span class="dup-counts">`;
+  if (cl.sides.cloud) h += `<span class="dup-count-pill">&#9729; <b>${cl.sides.cloud}</b> cloud</span>`;
+  if (cl.sides.local) h += `<span class="dup-count-pill">&#128187; <b>${cl.sides.local}</b> local</span>`;
+  h += `</span></div>`;
+
+  h += `<div class="dup-body">`;
+  h += `<div class="dup-actions-bar">`;
+  h += `<button class="btn btn-sec btn-sm" onclick="dupKeep('${kAttr}','newest')">Keep newest — delete rest</button>`;
+  h += `<button class="btn btn-sec btn-sm" onclick="dupKeep('${kAttr}','largest')">Keep largest — delete rest</button>`;
+  h += `<span class="spacer"></span>`;
+  h += `<span class="manual-count" id="dupManual-${kAttr}">0 selected</span>`;
+  h += `<button class="btn btn-red btn-sm" onclick="dupDeleteChecked('${kAttr}')">Delete checked</button>`;
+  h += `</div>`;
+
+  h += `<div class="dup-items">`;
+  cl.items.forEach((it, idx) => {
+    const iid = it.id || it.path;
+    const isNewest = iid === cl.newestId;
+    const isLargest = iid === cl.largestId;
+    const rowCls = ['dup-item'];
+    if (isNewest) rowCls.push('is-newest');
+    if (isLargest) rowCls.push('is-largest');
+    const dateStr = it.mtime ? fmtRelDate(it.mtime) : '—';
+    const sizeStr = fmtBytes(it.size);
+    const sideIcon = it.side === 'cloud' ? '&#9729;' : '&#128187;';
+    const sideCls = it.side === 'cloud' ? 'cloud' : 'local';
+
+    h += `<div class="${rowCls.join(' ')}" data-iid="${a(iid)}">`;
+    h += `<input type="checkbox" class="dup-item-check" onchange="dupChkChanged('${kAttr}')">`;
+    h += `<span class="dup-item-side ${sideCls}">${sideIcon}</span>`;
+    h += `<div>
+      <div class="dup-item-name">${e(it.name)}${it.matched ? '<span class="dup-pill matched">matched</span>' : ''}</div>
+      <div class="dup-item-loc">${e(it.location || (it.side === 'cloud' ? '(no site)' : ''))}</div>
+    </div>`;
+    h += `<div class="dup-item-size">${e(sizeStr)}${isLargest ? '<span class="dup-pill largest">largest</span>' : ''}</div>`;
+    h += `<div class="dup-item-date">${e(dateStr)}${isNewest ? '<span class="dup-pill newest">newest</span>' : ''}</div>`;
+    h += `<div class="dup-item-actions">`;
+    if (it.side === 'local') {
+      h += `<button class="icon-btn" title="Show in Explorer/Finder" onclick="revealInExplorer('${p(it.path)}')">&#128193;</button>`;
+      h += `<button class="icon-btn" title="View folder contents" onclick="openPeek('${p(it.path)}')">&#128065;</button>`;
+    } else {
+      h += `<button class="icon-btn" title="View site contents" onclick="openCloudPeek('${a(it.id)}','${a(it.location)}')">&#128065;</button>`;
+    }
+    h += `<button class="icon-btn del" title="Delete" onclick="dupDeleteOne('${kAttr}','${a(iid)}')">&#128465;</button>`;
+    h += `</div>`;
+    h += `</div>`;
+  });
+  h += `</div></div></div>`;
+  return h;
+}
+
+function toggleCluster(key) {
+  const el = document.querySelector(`.dup-cluster[data-key="${cssEscape(key)}"]`);
+  if (el) el.classList.toggle('expanded');
+}
+function dupChkChanged(key) {
+  const el = document.querySelector(`.dup-cluster[data-key="${cssEscape(key)}"]`);
+  if (!el) return;
+  const n = el.querySelectorAll('.dup-item-check:checked').length;
+  const c = el.querySelector('.manual-count');
+  if (c) c.textContent = `${n} selected`;
+}
+
+/* ── Duplicates: actions (delete-based cleanup) ── */
+function _findCluster(key) {
+  return ((dupData && dupData.clusters) || []).find(c => c.key === key);
+}
+
+async function _bulkDeleteItems(items, clusterKey) {
+  if (!items.length) return;
+  const lines = items.map(it => `• [${it.side}] ${it.name} (${fmtBytes(it.size)})`).join('\n');
+  if (!confirm(`Delete these ${items.length} file${items.length !== 1 ? 's' : ''}?\n\n${lines}\n\nThis is permanent.`)) return;
+  let ok = 0, fail = 0;
+  for (const it of items) {
+    try {
+      const r = it.side === 'cloud'
+        ? await pyApi('delete_cloud', 'projects', it.id)
+        : await pyApi('delete_local', it.path);
+      if (r && r.error) { fail++; toast(r.error, 'error'); }
+      else ok++;
+    } catch (err) { fail++; toast(err.message, 'error'); }
+  }
+  toast(`Deleted ${ok}${fail ? ` — ${fail} failed` : ''}`, fail ? 'error' : 'success');
+  refreshData();
+}
+
+function dupKeep(key, mode) {
+  const cl = _findCluster(key);
+  if (!cl) return;
+  const keeperId = mode === 'newest' ? cl.newestId : cl.largestId;
+  const toDelete = cl.items.filter(it => (it.id || it.path) !== keeperId);
+  _bulkDeleteItems(toDelete, key);
+}
+function dupDeleteChecked(key) {
+  const el = document.querySelector(`.dup-cluster[data-key="${cssEscape(key)}"]`);
+  if (!el) return;
+  const cl = _findCluster(key);
+  if (!cl) return;
+  const checkedIids = new Set();
+  el.querySelectorAll('.dup-item-check:checked').forEach(cb => {
+    const row = cb.closest('.dup-item');
+    if (row) checkedIids.add(row.dataset.iid);
+  });
+  if (!checkedIids.size) { toast('No files checked in this cluster', 'info'); return; }
+  const toDelete = cl.items.filter(it => checkedIids.has(it.id || it.path));
+  _bulkDeleteItems(toDelete, key);
+}
+function dupDeleteOne(key, iid) {
+  const cl = _findCluster(key);
+  if (!cl) return;
+  const it = cl.items.find(i => (i.id || i.path) === iid);
+  if (it) _bulkDeleteItems([it], key);
+}
+
+/* ── Duplicates: formatting helpers ── */
+function fmtBytes(b) {
+  if (!b) return '0 B';
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  if (b < 1073741824) return (b/1048576).toFixed(1) + ' MB';
+  return (b/1073741824).toFixed(2) + ' GB';
+}
+function fmtRelDate(ts) {
+  if (!ts) return '—';
+  const now = Math.floor(Date.now() / 1000);
+  const diff = now - ts;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + ' min ago';
+  if (diff < 86400) return Math.floor(diff/3600) + ' hr ago';
+  if (diff < 604800) return Math.floor(diff/86400) + ' days ago';
+  // Older than a week — show absolute date
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function chip(code) { return ''; }
@@ -381,7 +673,7 @@ function cloudCell(r, localCodes) {
     return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${p(r.local.path)}','${a(r.local.name)}')">+ Upload</button></div>`;
   }
   const c = r.cloud, isMis = r.status === 'mismatch', thing = isSites ? 'cloud site' : 'cloud project';
-  const nameHtml = (isMis ? charDiff(c.name, r.local.name).a : e(c.name)) + (isSites ? '' : '.esx');
+  const nameHtml = (isMis ? charDiff(c.name, r.local.name).a : e(c.name)) + (isSites ? '' : '.esx') + dupHintFor(c.id);
   const dup = r.status === 'orphan' && c.code && localCodes.has(c.code);
   const dsCount = (c.datasets && c.datasets.length) || 0;
   const cloudPeek = isSites
@@ -404,7 +696,7 @@ function localCell(r, cloudCodes) {
       : `<div class="lr-cell local empty"></div>`;
   }
   const l = r.local, isMis = r.status === 'mismatch', thing = isSites ? 'local folder' : '.esx file';
-  const nameHtml = (isMis ? charDiff(r.cloud.name, l.name).b : e(l.name)) + (l.isDir ? '' : '.esx');
+  const nameHtml = (isMis ? charDiff(r.cloud.name, l.name).b : e(l.name)) + (l.isDir ? '' : '.esx') + dupHintFor(l.path);
   const dup = r.status === 'orphan' && l.code && cloudCodes.has(l.code);
   const hasSrc = isSites && l.hasSource;
   const hasContents = isSites && l.src && l.src.total > 0;
