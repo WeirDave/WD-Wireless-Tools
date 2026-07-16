@@ -69,6 +69,11 @@ def scale():
     return send_from_directory(WEB, "scale.html")
 
 
+@app.route("/report")
+def report():
+    return send_from_directory(WEB, "report.html")
+
+
 @app.route("/guide")
 def guide():
     return send_from_directory(WEB, "guide.html")

@@ -29,7 +29,7 @@ jobs:
           set -e
           BUILD=docs-build
           rm -rf "$BUILD"
-          mkdir -p "$BUILD/walls" "$BUILD/cloud" "$BUILD/organizer" "$BUILD/scale" "$BUILD/templates"
+          mkdir -p "$BUILD/walls" "$BUILD/cloud" "$BUILD/organizer" "$BUILD/scale" "$BUILD/report" "$BUILD/templates"
 
           # 1) Shared assets (CSS, JS, images) — served identically to desktop.
           cp -r web/assets "$BUILD/assets"
@@ -56,6 +56,7 @@ jobs:
             -e 's|href="/cloud"|href="../cloud/"|g' \
             -e 's|href="/organizer"|href="../organizer/"|g' \
             -e 's|href="/scale"|href="../scale/"|g' \
+            -e 's|href="/report"|href="../report/"|g' \
             -e 's|href="/guide"|href="../guide.html"|g' \
             -e 's|href="/"|href="../"|g' \
             "$BUILD/walls/index.html"
@@ -70,9 +71,25 @@ jobs:
             -e 's|href="/cloud"|href="../cloud/"|g' \
             -e 's|href="/organizer"|href="../organizer/"|g' \
             -e 's|href="/scale"|href="./"|g' \
+            -e 's|href="/report"|href="../report/"|g' \
             -e 's|href="/guide"|href="../guide.html"|g' \
             -e 's|href="/"|href="../"|g' \
             "$BUILD/scale/index.html"
+
+          # 5b) Report: same treatment — pure client-side, runs live.
+          cp web/report.html "$BUILD/report/index.html"
+          sed -i 's|<head>|<head>\n<script>window.WD_HOSTED = true;</script>|' "$BUILD/report/index.html"
+          sed -i \
+            -e 's|href="/assets/|href="../assets/|g' \
+            -e 's|src="/assets/|src="../assets/|g' \
+            -e 's|href="/walls"|href="../walls/"|g' \
+            -e 's|href="/cloud"|href="../cloud/"|g' \
+            -e 's|href="/organizer"|href="../organizer/"|g' \
+            -e 's|href="/scale"|href="../scale/"|g' \
+            -e 's|href="/report"|href="./"|g' \
+            -e 's|href="/guide"|href="../guide.html"|g' \
+            -e 's|href="/"|href="../"|g' \
+            "$BUILD/report/index.html"
 
           # 5) Landing + stub pages from the hand-authored templates.
           cp web/pages/hosted-index.html "$BUILD/index.html"
@@ -90,6 +107,7 @@ jobs:
               -e 's|href="/cloud"|href="cloud/"|g' \
               -e 's|href="/organizer"|href="organizer/"|g' \
               -e 's|href="/scale"|href="scale/"|g' \
+              -e 's|href="/report"|href="report/"|g' \
               -e 's|href="/"|href="./"|g' \
               "$g"
           done

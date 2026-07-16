@@ -20,31 +20,37 @@
 
 **WD Wireless Tools** is a lightweight, browser-based toolkit for wireless engineers who use [Ekahau](https://www.ekahau.com/). It runs a tiny local Flask server and opens in your default browser — no installers, no Electron, no cloud dependency. **Quick Walls also runs live in a browser** at [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — no install at all.
 
-The suite currently includes four tools:
+The suite currently includes five tools:
 
 <table>
 <tr>
-<td width="25%" align="center">
-  <img src="images/WD Cloud Manager - Transparent v4.0.png" alt="Cloud Manager" width="180"><br>
+<td width="20%" align="center">
+  <img src="images/WD Cloud Manager - Transparent v4.0.png" alt="Cloud Manager" width="150"><br>
   <b>Cloud Manager</b><br>
   <sub>v3.11</sub>
 </td>
-<td width="25%" align="center">
-  <img src="images/WD Quick Walls v7.0.png" alt="Quick Walls" width="180"><br>
+<td width="20%" align="center">
+  <img src="images/WD Quick Walls v7.0.png" alt="Quick Walls" width="150"><br>
   <b>Quick Walls</b><br>
   <sub>v7.17</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><sub>▶ Try live</sub></a>
 </td>
-<td width="25%" align="center">
-  <img src="images/WD Squirrel - Transparent v13.png" alt="Squirrel" width="180"><br>
+<td width="20%" align="center">
+  <img src="images/WD Squirrel - Transparent v13.png" alt="Squirrel" width="150"><br>
   <b>Squirrel</b><br>
   <sub>v1.8</sub>
 </td>
-<td width="25%" align="center">
-  <div style="font-size:96px;line-height:1;">📏</div>
+<td width="20%" align="center">
+  <div style="font-size:80px;line-height:1;">📏</div>
   <b>Scale</b><br>
   <sub>v1.1</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><sub>▶ Try live</sub></a>
+</td>
+<td width="20%" align="center">
+  <div style="font-size:80px;line-height:1;">📋</div>
+  <b>Report</b><br>
+  <sub>v1.0</sub><br>
+  <a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><sub>▶ Try live</sub></a>
 </td>
 </tr>
 </table>
@@ -95,6 +101,16 @@ Feet-and-inches ↔ decimal ↔ meters converter for Ekahau scale calibration. P
 - Accepts a bare number (interpreted as feet on the imperial side, meters on the metric)
 - Copy-to-clipboard on every output
 - Pure client-side — no backend, works offline
+
+### Report
+
+Drop an `.esx` and get an installer-ready handoff document. The first report — **Directional Antenna Installation** — pulls every AP's mount type, mounting height, azimuth (with compass bearing), tilt, and antenna model straight out of the project, and lays out a floor-plan overview with a marker + direction arrow on each AP. Print → Save as PDF, hand to the installer. **Available live in your browser** at [weirdave.github.io/WD-Wireless-Tools/report](https://weirdave.github.io/WD-Wireless-Tools/report/).
+
+- Parses `.esx` in the browser (JSZip) — nothing leaves your machine
+- Floor plan overview with SVG marker + directional arrow per AP
+- AP table with vendor, model, mount, height, azimuth, tilt, antenna
+- Metric with imperial alongside, compass abbreviations, antenna spec legend — all togglable
+- Print-optimized CSS: page-breaks per floor, backgrounds forced white, sidebar hidden
 
 ---
 

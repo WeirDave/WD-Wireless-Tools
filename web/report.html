@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Report</title>
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+</head>
+<body class="tool-report">
+
+<!-- ── Landing Topbar (only visible when nothing is loaded) ── -->
+<div id="dzTopbar" class="dz-topbar" onclick="event.stopPropagation()">
+  <div class="header-left">
+    <div class="help-menu-wrap">
+      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'dzMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <div id="dzMenu" class="help-menu" style="left:0; right:auto;">
+        <div class="menu-section">&#9656; Navigation</div>
+        <a class="help-menu-item" href="/">&#8962; Home</a>
+        <a class="help-menu-item" href="/walls">· Quick Walls</a>
+        <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+        <a class="help-menu-item" href="/organizer">· Squirrel</a>
+        <a class="help-menu-item" href="/scale">· Scale</a>
+        <a class="help-menu-item active" href="/report">· Report</a>
+      </div>
+    </div>
+  </div>
+  <div class="header-center">
+    <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v1.0</span></h1>
+  </div>
+  <div class="header-actions">
+    <button class="wd-nav theme-toggle-btn" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
+  </div>
+</div>
+
+<!-- ── Drop Zone ── -->
+<div id="dropzone" class="dropzone report-dropzone">
+  <div class="dropzone-emoji">&#128203;</div>
+  <p class="dropzone-ver">v1.0</p>
+  <p class="dropzone-sub">Installer-facing reports from your .esx</p>
+  <div class="dropzone-divider"></div>
+  <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
+  <ul class="dropzone-steps">
+    <li data-step="1."><strong>Drop</strong> an Ekahau project file (.esx)</li>
+    <li data-step="2."><strong>Choose</strong> a report type from the sidebar</li>
+    <li data-step="3."><strong>Print</strong> to PDF and hand off to your installers</li>
+  </ul>
+</div>
+<input type="file" id="fileInput" accept=".esx" style="display:none">
+
+<!-- ── Report Workspace ── -->
+<div id="workspace" class="report-workspace">
+
+  <!-- Non-printing top toolbar -->
+  <div class="report-toolbar noprint">
+    <div class="header-left">
+      <div class="help-menu-wrap">
+        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'wsMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <div id="wsMenu" class="help-menu" style="left:0; right:auto;">
+          <div class="menu-section">&#9656; Navigation</div>
+          <a class="help-menu-item" href="/">&#8962; Home</a>
+          <a class="help-menu-item" href="/walls">· Quick Walls</a>
+          <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+          <a class="help-menu-item" href="/organizer">· Squirrel</a>
+          <a class="help-menu-item" href="/scale">· Scale</a>
+          <a class="help-menu-item active" href="/report">· Report</a>
+          <div class="help-menu-sep"></div>
+          <div class="menu-section">&#9656; Tools</div>
+          <button class="help-menu-item" onclick="loadNewFile()">· Open Another File</button>
+        </div>
+      </div>
+      <span id="fileBadge" class="file-badge" onclick="loadNewFile()" title="Click to open another .esx"></span>
+    </div>
+    <div class="report-toolbar-center">
+      <h1><span class="report-brand-icon">&#128203;</span> <span>WD</span> Report <span class="ver">v1.0</span></h1>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-blue" onclick="window.print()" title="Print or Save as PDF">&#128424; Print / Save PDF</button>
+      <button class="wd-nav theme-toggle-btn" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
+    </div>
+  </div>
+
+  <div class="report-body">
+
+    <!-- Sidebar (non-printing) -->
+    <aside class="report-sidebar noprint">
+      <div class="rep-section">
+        <div class="rep-section-head">Report type</div>
+        <label class="rep-radio">
+          <input type="radio" name="reportType" value="antenna" checked onchange="renderReport()">
+          <span>Directional Antenna Installation</span>
+        </label>
+        <label class="rep-radio disabled" title="Coming soon">
+          <input type="radio" name="reportType" value="inventory" disabled>
+          <span>AP Inventory <em>(soon)</em></span>
+        </label>
+      </div>
+
+      <div class="rep-section">
+        <div class="rep-section-head">Include</div>
+        <label class="rep-check">
+          <input type="checkbox" id="optOverview" checked onchange="renderReport()">
+          <span>Floor plan overview (all APs)</span>
+        </label>
+        <label class="rep-check">
+          <input type="checkbox" id="optSpecs" checked onchange="renderReport()">
+          <span>Antenna specs (gain, beam width)</span>
+        </label>
+        <label class="rep-check">
+          <input type="checkbox" id="optImperial" checked onchange="renderReport()">
+          <span>Show feet alongside meters</span>
+        </label>
+        <label class="rep-check">
+          <input type="checkbox" id="optCompass" checked onchange="renderReport()">
+          <span>Compass abbreviations (N, ENE, …)</span>
+        </label>
+      </div>
+
+      <div class="rep-section">
+        <div class="rep-section-head">APs</div>
+        <div class="rep-ap-list" id="apFilterList"></div>
+      </div>
+
+      <div class="rep-foot">
+        Nothing leaves your machine — the .esx is parsed locally.
+      </div>
+    </aside>
+
+    <!-- Report canvas (this is what prints) -->
+    <main class="report-canvas" id="reportCanvas">
+      <div class="rep-empty">Choose a report type on the left to render.</div>
+    </main>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/report.js"></script>
+</body>
+</html>
