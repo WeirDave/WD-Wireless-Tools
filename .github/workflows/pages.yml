@@ -1,0 +1,76 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - 'templates/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build hosted site
+        run: |
+          set -e
+          BUILD=docs-build
+          rm -rf "$BUILD"
+          mkdir -p "$BUILD/walls" "$BUILD/cloud" "$BUILD/organizer" "$BUILD/templates"
+
+          # 1) Shared assets (CSS, JS, images) — served identically to desktop.
+          cp -r web/assets "$BUILD/assets"
+
+          # 2) Static help pages (all client-side).
+          for f in web/guide*.html; do
+            [ -f "$f" ] && cp "$f" "$BUILD/"
+          done
+
+          # 3) Seed templates: bundle the JSON files so hosted Quick Walls has
+          #    "Recommended by WD" and "Ekahau Defaults" out of the box.
+          cp templates/*.json "$BUILD/templates/" 2>/dev/null || true
+
+          # 4) Quick Walls: copy the desktop HTML, inject WD_HOSTED flag, and
+          #    rewrite absolute /assets/ → ../assets/ so it works under the
+          #    project-pages path prefix.
+          cp web/walls.html "$BUILD/walls/index.html"
+          sed -i 's|<head>|<head>\n<script>window.WD_HOSTED = true;</script>|' "$BUILD/walls/index.html"
+          sed -i 's|href="/assets/|href="../assets/|g; s|src="/assets/|src="../assets/|g' "$BUILD/walls/index.html"
+
+          # 5) Landing + stub pages from the hand-authored templates.
+          cp web/pages/hosted-index.html "$BUILD/index.html"
+          cp web/pages/hosted-cloud-stub.html "$BUILD/cloud/index.html"
+          cp web/pages/hosted-organizer-stub.html "$BUILD/organizer/index.html"
+
+          # Sanity: show the resulting tree so failed builds are easy to diagnose.
+          echo "--- Built tree ---"
+          find "$BUILD" -maxdepth 3 -type f | sort
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

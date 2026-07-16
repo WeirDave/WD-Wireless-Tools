@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Wireless Tools — Ekahau workflow tools for wireless engineers</title>
+<meta name="description" content="A suite of Ekahau workflow tools — Cloud Manager, Quick Walls, Squirrel. Try Quick Walls live in your browser, or download the full desktop suite.">
+<meta property="og:title" content="WD Wireless Tools">
+<meta property="og:description" content="Ekahau workflow tools. Try Quick Walls in your browser or download the full desktop suite.">
+<meta property="og:image" content="assets/wireless-tools-v6-720x553.png">
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('wd-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  })();
+</script>
+<link rel="stylesheet" href="assets/wd-tools.css">
+<style>
+  /* Hosted-landing-specific tweaks */
+  .hosted-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 10px; margin-left: 8px;
+    border-radius: 999px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    vertical-align: middle;
+  }
+  .hosted-pill.live { background: rgba(95,169,112,0.18); color: #5fa970; }
+  .hosted-pill.desktop { background: rgba(240,184,95,0.18); color: #f0b85f; }
+  .hosted-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .hosted-pill.live .dot { animation: livePulse 1.6s ease-in-out infinite; }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  .version-chip {
+    position: absolute; top: 14px; left: 14px;
+    padding: 4px 12px; border-radius: 999px;
+    background: rgba(107,179,224,0.14); color: #6bb3e0;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.3px;
+    font-family: var(--mono, ui-monospace, monospace);
+  }
+  .card .open-btn.download::before { content: "\2b73  "; }
+  .foot-cta {
+    margin-top: 24px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  }
+  .foot-cta .btn-hero {
+    padding: 10px 22px; border-radius: 8px;
+    background: #1e77ac; color: #fff; text-decoration: none;
+    font-size: 14px; font-weight: 600; letter-spacing: 0.2px;
+    border: 1px solid rgba(255,255,255,0.15);
+    transition: background 0.15s, transform 0.1s;
+  }
+  .foot-cta .btn-hero:hover { background: #2588c2; transform: translateY(-1px); }
+  .foot-cta .btn-hero.secondary { background: transparent; color: var(--text-2); }
+  .foot-cta .btn-hero.secondary:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+</style>
+</head>
+<body class="tool-home">
+  <span class="version-chip">Live · v1.4.0</span>
+  <div class="topbar">
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+      <span class="ico" id="themeIco">🌙</span><span id="themeTxt">Dark</span>
+    </button>
+  </div>
+
+  <div class="wrap">
+    <div class="suite-badge"><img src="assets/wireless-tools-v6-720x553.png" alt="WD Wireless Tools"></div>
+    <div class="tagline">A suite of Ekahau workflow tools</div>
+
+    <div class="cards">
+      <a class="card blue" href="cloud/">
+        <div class="logo-well"><img src="assets/cloud-manager-v4-560x822.png" alt="WD Cloud Manager"></div>
+        <h2><span>Cloud</span> Manager <span class="hosted-pill desktop"><span class="dot"></span>Desktop</span></h2>
+        <p>Sync and manage your Ekahau Cloud sites and projects against your local files — match, rename, and clean up in bulk.</p>
+        <span class="open-btn download">Download the suite →</span>
+      </a>
+
+      <a class="card green" href="walls/">
+        <div class="logo-well"><img src="assets/quick-walls-v7-560x852.png" alt="WD Quick Walls"></div>
+        <h2><span>Quick</span> Walls <span class="hosted-pill live"><span class="dot"></span>Live in browser</span></h2>
+        <p>Open an .esx, remap wall types with hotkeys, tidy up your wall segments, and save it back — right here in your browser. No install.</p>
+        <span class="open-btn">Try it now →</span>
+      </a>
+
+      <a class="card amber" href="organizer/">
+        <div class="logo-well"><img src="assets/wd-squirrel-v13-transparent.png" alt="WD Squirrel" class="logo-constrained"></div>
+        <h2><span>WD</span> Squirrel <span class="hosted-pill desktop"><span class="dot"></span>Desktop</span></h2>
+        <p>Stash your Ekahau files — sort loose files into organized subfolders, create new project folders with the right structure.</p>
+        <span class="open-btn download">Download the suite →</span>
+      </a>
+    </div>
+
+    <div class="foot"><b>WD Wireless Tools</b> · Quick Walls runs live in your browser. Cloud Manager and Squirrel are part of the desktop suite.</div>
+
+    <div class="foot-cta">
+      <a class="btn-hero" href="https://github.com/WeirDave/WD-Wireless-Tools/releases/latest">Download the full suite</a>
+      <a class="btn-hero secondary" href="https://github.com/WeirDave/WD-Wireless-Tools">View on GitHub</a>
+    </div>
+  </div>
+
+<script src="assets/js/wd-shared.js"></script>
+</body>
+</html>

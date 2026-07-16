@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Squirrel — desktop suite required</title>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem('wd-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  })();
+</script>
+<link rel="stylesheet" href="../assets/wd-tools.css">
+<style>
+  body.tool-stub { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 40px 20px; }
+  .stub-card {
+    max-width: 520px; text-align: center;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 40px 32px;
+  }
+  .stub-logo { width: 180px; margin: 0 auto 20px; }
+  .stub-logo img { width: 100%; height: auto; }
+  .stub-title { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+  .stub-title span { color: #6bb3e0; }
+  .stub-ver { font-size: 12px; color: var(--text-3); font-family: var(--mono, ui-monospace, monospace); margin-bottom: 18px; }
+  .stub-desc { font-size: 14px; color: var(--text-2); line-height: 1.55; margin-bottom: 20px; }
+  .stub-callout {
+    background: rgba(240,184,95,0.10); border: 1px solid rgba(240,184,95,0.30);
+    border-radius: 8px; padding: 14px 16px; margin-bottom: 24px;
+    font-size: 13px; color: var(--text); text-align: left;
+  }
+  .stub-callout b { color: #f0b85f; }
+  .stub-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .stub-btn {
+    padding: 10px 22px; border-radius: 8px;
+    background: #1e77ac; color: #fff; text-decoration: none;
+    font-size: 14px; font-weight: 600;
+    border: 1px solid rgba(255,255,255,0.15);
+    transition: background 0.15s;
+  }
+  .stub-btn:hover { background: #2588c2; }
+  .stub-btn.ghost { background: transparent; color: var(--text-2); }
+  .stub-btn.ghost:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+</style>
+</head>
+<body class="tool-stub">
+  <div class="stub-card">
+    <div class="stub-logo"><img src="../assets/wd-squirrel-v13-transparent.png" alt="WD Squirrel"></div>
+    <div class="stub-title"><span>WD</span> Squirrel</div>
+    <div class="stub-ver">v1.8 · desktop suite</div>
+    <div class="stub-desc">Your Ekahau file organizer — sort loose files into <code>images/</code>, <code>floorplans/</code>, and <code>reports/</code>, and create new project folders with the right structure.</div>
+    <div class="stub-callout">
+      <b>Desktop only.</b> Squirrel needs to move real files on your disk, which browsers can't do from a sandboxed page. Grab the full suite below — it runs locally on Windows or macOS with a single double-click.
+    </div>
+    <div class="stub-actions">
+      <a class="stub-btn" href="https://github.com/WeirDave/WD-Wireless-Tools/releases/latest">Download the suite</a>
+      <a class="stub-btn ghost" href="../">← Back to landing</a>
+    </div>
+  </div>
+</body>
+</html>

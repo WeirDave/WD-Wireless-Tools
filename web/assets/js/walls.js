@@ -514,15 +514,67 @@ async function saveEsx() {
   }
 }
 
-// ── Templates (server-backed) ──
+// ── Templates (server-backed on desktop; localStorage-backed when hosted) ──
 
 let _tplCache = [];
 
+// window.WD_HOSTED is set by the GitHub Pages build (see .github/workflows/pages.yml).
+// It swaps the server round-trip for a localStorage-backed shim so the tool works
+// standalone in someone else's browser with zero install.
+const HOSTED = typeof window !== 'undefined' && !!window.WD_HOSTED;
+
 async function tplApi(action, data = {}) {
+  if (HOSTED) return _hostedTplApi(action, data);
   const r = await fetch(`/api/templates/${action}`, {
     method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)
   });
   return r.json();
+}
+
+async function _hostedTplApi(action, data) {
+  const KEY = 'wd-hosted-templates';
+  const loadAll = () => {
+    try { return JSON.parse(localStorage.getItem(KEY)) || []; }
+    catch (e) { return []; }
+  };
+  const saveAll = ts => localStorage.setItem(KEY, JSON.stringify(ts));
+
+  if (action === 'scan') {
+    let ts = loadAll();
+    if (!ts.length) {
+      // First run — seed with "Recommended by WD" so users see something useful.
+      try {
+        const r = await fetch('../templates/Recommended%20by%20WD_walltemplate.json');
+        if (r.ok) { ts = [await r.json()]; saveAll(ts); }
+      } catch (e) { /* seed is best-effort */ }
+    }
+    return { ok: true, templates: ts };
+  }
+  if (action === 'defaults') {
+    try {
+      const r = await fetch('../templates/ekahau_defaults.json');
+      const d = await r.json();
+      return { ok: true, wallTypes: d.wallTypes || d };
+    } catch (e) { return { ok: false, error: 'Could not load Ekahau defaults' }; }
+  }
+  if (action === 'save') {
+    const ts = loadAll();
+    const rec = { name: data.name, wallTypes: data.wallTypes,
+                  created: new Date().toISOString() };
+    const i = ts.findIndex(t => t.name === data.name);
+    if (i >= 0) ts[i] = rec; else ts.push(rec);
+    saveAll(ts);
+    return { ok: true };
+  }
+  if (action === 'delete') {
+    const ts = loadAll().filter(t => t.name !== data.name);
+    saveAll(ts);
+    return { ok: true };
+  }
+  if (action === 'get_folder') {
+    return { ok: true, folder: 'browser localStorage (hosted)', exists: true };
+  }
+  return { ok: false, error: 'unknown action: ' + action };
 }
 
 async function loadTemplatesFromServer() {

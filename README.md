@@ -5,11 +5,14 @@
 <h3 align="center">A suite of Ekahau workflow tools</h3>
 
 <p align="center">
+  <a href="https://weirdave.github.io/WD-Wireless-Tools/"><img src="https://img.shields.io/badge/live%20demo-Quick%20Walls-5fa970?style=flat-square&logo=githubpages&logoColor=white" alt="Live Demo"></a>
   <a href="https://github.com/WeirDave/WD-Wireless-Tools/releases/latest"><img src="https://img.shields.io/github/v/release/WeirDave/WD-Wireless-Tools?style=flat-square&color=1e77ac" alt="Latest Release"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-informational?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/github/license/WeirDave/WD-Wireless-Tools?style=flat-square" alt="License">
 </p>
+
+> **Try Quick Walls live** → [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — no install, runs entirely in your browser.
 
 ---
 
@@ -29,7 +32,7 @@ The suite currently includes three tools:
 <td width="33%" align="center">
   <img src="images/WD Quick Walls v7.0.png" alt="Quick Walls" width="200"><br>
   <b>Quick Walls</b><br>
-  <sub>v7.16</sub>
+  <sub>v7.17</sub>
 </td>
 <td width="33%" align="center">
   <img src="images/WD Squirrel - Transparent v13.png" alt="Squirrel" width="200"><br>
