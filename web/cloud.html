@@ -84,7 +84,7 @@
       </div>
     </div>
     <div class="topbar-center">
-      <h1><span>WD</span> Cloud Manager <span class="ver">v3.18</span></h1>
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.19</span></h1>
     </div>
     <div class="topbar-right">
       <button class="settings-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
@@ -97,7 +97,7 @@
   <div class="tabs">
     <div class="tab active" id="tabSites" onclick="switchTab('sites')">Sites</div>
     <div class="tab" id="tabProjects" onclick="switchTab('projects')">Project Files</div>
-    <div class="tab" id="tabDuplicates" onclick="switchTab('duplicates')">Duplicates</div>
+    <div class="tab" id="tabDuplicates" onclick="switchTab('duplicates')" title="Files with the same normalized name — spot accidental copies">Duplicate Projects</div>
   </div>
 
   <div class="dashboard">
@@ -146,7 +146,7 @@
     <button class="btn btn-secondary bulk-btn" id="compareBtn" style="display:none" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
     <button class="btn btn-red bulk-btn" id="bulkDeleteBtn" style="display:none" onclick="bulkDelete()">Delete selected</button>
     <span class="spacer"></span>
-    <span class="owner-toggle" id="ownerToggle" role="group" aria-label="Filter by owner">
+    <span class="owner-toggle" id="ownerToggle" role="group" aria-label="Filter by owner" style="display:none">
       <span class="owner-toggle-label">Owner:</span>
       <button class="owner-btn" data-owner="all"    onclick="setOwnerFilterUI('all')">All</button>
       <button class="owner-btn" data-owner="mine"   onclick="setOwnerFilterUI('mine')">Mine</button>
@@ -221,7 +221,7 @@
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal">
-    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.18</span></h3>
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.19</span></h3>
     <div class="about-body">
       Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
       <br><br>

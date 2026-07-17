@@ -98,6 +98,10 @@ function goToDashboard(email) {
   document.getElementById('appScreen').style.display = 'flex';
   document.getElementById('userEmail').textContent = email || 'Connected';
   syncOwnerToggle();
+  // Ensure the owner filter's initial visibility matches currentTab
+  // (starts on 'sites' — the toggle should be hidden until Projects).
+  const ownerEl = document.getElementById('ownerToggle');
+  if (ownerEl) ownerEl.style.display = (currentTab === 'projects') ? '' : 'none';
   refreshData();
   if (liveWanted()) startLive();
 }
@@ -408,7 +412,20 @@ function renderDuplicates() {
     return;
   }
 
-  let h = '<div class="dup-container">';
+  let h = `<div class="dup-explain">
+    <div class="dup-explain-title">What am I looking at?</div>
+    <div class="dup-explain-body">
+      Files (cloud projects or local <code>.esx</code>) that share a normalized name with at least one other file.
+      Punctuation, spacing, and case are ignored when comparing — so <code>SNAN2-3030-Baseline</code> clusters with <code>SNAN2 3030 Baseline</code>.
+      Use this to spot accidental duplicates you can consolidate.
+    </div>
+    <div class="dup-explain-legend">
+      <span class="dup-explain-tag mixed">Mixed</span> — same name exists on <b>both</b> cloud and local (usually a normal pair — safe to ignore unless the sizes differ) &nbsp;·&nbsp;
+      <span class="dup-explain-tag local-only">Local only</span> — same file saved in <b>multiple local folders</b> (real duplicate — merge or delete one) &nbsp;·&nbsp;
+      <span class="dup-explain-tag cloud-only">Cloud only</span> — same project uploaded to Ekahau <b>more than once</b> (real duplicate — pick one and delete the extras)
+    </div>
+  </div>
+  <div class="dup-container">`;
   filtered.forEach(cl => h += renderCluster(cl));
   h += '</div>';
   el.innerHTML = h;
