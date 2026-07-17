@@ -1104,21 +1104,30 @@ body.tool-cloud .toolbar input.search:focus {
 .ledger-row.stripe { background: var(--stripe); }
 .ledger-row:hover { background: var(--row-hover); }
 
-/* A-Z section header — a slim divider bar between alphabetic groups. */
+/* A-Z section header — a solid divider band with the letter on BOTH the
+   cloud (left) and local (right) columns. Fully opaque so the sticky
+   header doesn't look translucent as rows scroll under it. */
 .ledger-group-head {
   position: sticky; top: 36px; z-index: 3;
-  padding: 4px 12px;
-  font-size: 11px; font-weight: 800; letter-spacing: 2px;
+  display: flex; align-items: center;
+  background: var(--surface);
+  border-top: 2px solid var(--teal, #14b8a6);
+  border-bottom: 1px solid var(--border);
+  padding: 0;
+}
+.ledger-group-head .glh-letter {
+  flex: 1; padding: 6px 14px;
+  font-size: 18px; font-weight: 900; letter-spacing: 3px;
   text-transform: uppercase;
-  background: linear-gradient(90deg, rgba(20,184,166,0.14) 0%, rgba(20,184,166,0.04) 40%, transparent 100%);
-  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
   color: var(--teal, #14b8a6);
+  background: rgba(20,184,166,0.10);
 }
-.ledger-group-head > span {
-  display: inline-block; min-width: 18px;
+.ledger-group-head .glh-letter.local { text-align: right; }
+.ledger-group-head .glh-gap {
+  flex: 0 0 140px;  /* matches .lr-gut width so letters line up with columns */
 }
-[data-theme="light"] .ledger-group-head {
-  background: linear-gradient(90deg, rgba(20,184,166,0.18) 0%, rgba(20,184,166,0.06) 40%, transparent 100%);
+[data-theme="light"] .ledger-group-head .glh-letter {
+  background: rgba(20,184,166,0.14);
 }
 .lr-cell {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px;

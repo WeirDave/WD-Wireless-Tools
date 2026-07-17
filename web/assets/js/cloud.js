@@ -665,7 +665,13 @@ function renderLedger(hit) {
   visible.forEach(r => {
     const g = groupOf(r.sort);
     if (g !== lastGroup) {
-      h += `<div class="ledger-group-head" role="separator" aria-label="Section ${e(g)}"><span>${e(g)}</span></div>`;
+      // Letter appears on both the cloud (left) and local (right) columns so
+      // the section is labeled regardless of which side you're scanning.
+      h += `<div class="ledger-group-head" role="separator" aria-label="Section ${e(g)}">`
+         +   `<span class="glh-letter cloud">${e(g)}</span>`
+         +   `<span class="glh-gap"></span>`
+         +   `<span class="glh-letter local">${e(g)}</span>`
+         + `</div>`;
       lastGroup = g;
       z = 0; // reset stripe alternation per section so it stays readable
     }
