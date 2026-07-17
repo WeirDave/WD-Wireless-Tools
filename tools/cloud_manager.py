@@ -344,12 +344,101 @@ def _street_number(name):
     return m.group(1) if m else None
 
 
+# Survey-phase tokens. When both names carry a phase token AND the phases
+# differ, the two projects can't be the same file — a Baseline can never be a
+# Cleanroom-PD, etc. Order matters: the first matching token wins, so put more
+# specific tokens (e.g. "cleanroom") before generic ones. "PD" is intentionally
+# excluded — it's ambiguous ("Predictive Design" as a phase, but also appears as
+# a suffix on room-scoped surveys like "Cleanroom - PD").
+_SURVEY_PHASE_TOKENS = [
+    ("baseline",     "baseline"),
+    ("remediation",  "remediation"),
+    ("cleanroom",    "cleanroom"),
+    ("predictive",   "predictive"),
+    ("post-install", "postinstall"),
+    ("postinstall",  "postinstall"),
+    ("post_install", "postinstall"),
+    ("pre-install",  "preinstall"),
+    ("preinstall",   "preinstall"),
+    ("as-built",     "asbuilt"),
+    ("asbuilt",      "asbuilt"),
+    ("as-ran",       "asran"),
+    ("asran",        "asran"),
+    ("validation",   "validation"),
+    ("tvr",          "validation"),
+]
+
+
+def _survey_phase(name):
+    n = name.lower()
+    for token, phase in _SURVEY_PHASE_TOKENS:
+        if re.search(r"(?<![A-Za-z0-9])" + re.escape(token) + r"(?![A-Za-z0-9])", n):
+            return phase
+    return None
+
+
 def discriminators_conflict(a, b):
     ba, bb = _building_token(a), _building_token(b)
     if ba and bb and ba != bb:
         return True
     sa, sb = _street_number(a), _street_number(b)
     if sa and sb and sa != sb:
+        return True
+    pa, pb = _survey_phase(a), _survey_phase(b)
+    if pa and pb and pa != pb:
+        return True
+    return False
+
+
+# Size threshold for the metadata discriminator. Below this both sides are
+# treated as "too small to compare" (Ekahau template stubs are ~500KB).
+_SIZE_FLOOR_BYTES = 500_000
+# Ratio above which two .esx files can't be the same project. A same-project
+# cloud/local pair usually stays within ~2x (edits, versioning). 5x is the
+# threshold where "clearly different content" starts.
+_SIZE_RATIO_CUTOFF = 5.0
+# Date-gap threshold. Same-project mtimes can legitimately drift by months
+# (old cloud snapshot, recent local edit). Only very large gaps — >5 years —
+# suggest two different projects that happened to share names or codes.
+_MTIME_GAP_SECS = 5 * 365 * 24 * 3600  # ≈ 5 years
+
+
+def _size_conflict(cloud_item, local_item):
+    """True when both sides have a measurable size AND they differ by more
+    than _SIZE_RATIO_CUTOFF. Works regardless of file-naming convention —
+    the universal signal for users whose files aren't tagged with survey phases."""
+    cs = int(cloud_item.get("size") or 0)
+    ls = int(local_item.get("size") or 0)
+    if cs < _SIZE_FLOOR_BYTES or ls < _SIZE_FLOOR_BYTES:
+        return False
+    hi, lo = (cs, ls) if cs >= ls else (ls, cs)
+    return (hi / lo) > _SIZE_RATIO_CUTOFF
+
+
+def _mtime_conflict(cloud_item, local_item):
+    """True when both sides have a modification timestamp AND they're more
+    than _MTIME_GAP_SECS apart. Complements size — a small template file that
+    survives the size floor can still be caught here when the timestamps
+    diverge by years."""
+    cm = int(cloud_item.get("mtime") or 0)
+    lm = int(local_item.get("mtime") or 0)
+    if cm <= 0 or lm <= 0:
+        return False
+    return abs(cm - lm) > _MTIME_GAP_SECS
+
+
+def pair_conflicts(c, l):
+    """A cloud item and a local item can't be the same project when ANY of:
+    (name) building/street/phase discriminators disagree,
+    (size) file sizes differ by more than an order of magnitude, or
+    (date) modification times are years apart.
+    Name-based checks are convention-specific; size + date are universal and
+    work on generic names like 'Building 1' where heuristics have nothing to grip."""
+    if discriminators_conflict(c["name"], l["name"]):
+        return True
+    if _size_conflict(c, l):
+        return True
+    if _mtime_conflict(c, l):
         return True
     return False
 
@@ -574,7 +663,7 @@ def build_matches(cloud_items, local_items, excluded=None):
             for i, l in enumerate(unmatched_local):
                 if _blocked(c, l):
                     continue
-                if discriminators_conflict(c["name"], l["name"]):
+                if pair_conflicts(c, l):
                     continue
                 lcode = l.get("code") or extract_site_code(l["name"])
                 if lcode and lcode == cloud_code:
@@ -593,7 +682,7 @@ def build_matches(cloud_items, local_items, excluded=None):
         for i, l in enumerate(unmatched_local):
             if _blocked(c, l):
                 continue
-            if discriminators_conflict(c["name"], l["name"]):
+            if pair_conflicts(c, l):
                 continue
             sim = fuzzy_similarity(c["name"], l["name"])
             if sim > 0.5 and sim > best_score:
@@ -700,8 +789,10 @@ def build_projects_data(api, output_dir):
         name = pr.get("name") or pr.get("title") or "Untitled"
         pid = pr.get("id")
         # File size — nested under statistics.size (confirmed from API)
-        size = (pr.get("statistics") or {}).get("size", 0)
+        size = int((pr.get("statistics") or {}).get("size", 0) or 0)
         size_str = human_size(size) if size else ""
+        # Modification time — ISO string on one of several keys.
+        mtime = _parse_cloud_mtime(pr)
         # Site name from our mapping
         site_name = dataset_site.get(pid, "")
         # Build meta to match local side: "size · site"
@@ -709,9 +800,11 @@ def build_projects_data(api, output_dir):
         meta = " · ".join(parts) if parts else "project"
         cloud.append({"id": pid, "name": name,
                       "code": extract_site_code(name), "meta": meta,
+                      "size": size, "mtime": mtime,
                       "hasSite": bool(site_name)})
     local = [{"path": f["path"], "name": f["name"], "code": extract_site_code(f["name"]),
               "isDir": False, "folder": f["folder"],
+              "size": int(f.get("size") or 0), "mtime": int(f.get("mtime") or 0),
               "meta": f'{human_size(f["size"])} · {f["folder"]}'}
              for f in get_local_esx_files(output_dir)]
     return build_matches(cloud, local, not_matches_set())
