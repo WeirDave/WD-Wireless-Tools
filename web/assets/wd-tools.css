@@ -1188,7 +1188,7 @@ body.tool-cloud .toolbar input.search:focus {
   color: var(--blue); background: rgba(30,119,172,0.12);
 }
 .ledger-group-head .glh-letter.local {
-  color: var(--green); background: rgba(95,171,79,0.14); text-align: right;
+  color: var(--green); background: rgba(95,171,79,0.14);
 }
 .ledger-group-head .glh-gap {
   flex: 0 0 140px;  /* matches .lr-gut width so letters line up with columns */
