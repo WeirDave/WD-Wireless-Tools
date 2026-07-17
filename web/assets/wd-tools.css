@@ -2098,9 +2098,23 @@ body.tool-report {
 .rep-radio input, .rep-check input { accent-color: var(--teal); }
 .rep-radio.disabled, .rep-check.disabled { color: var(--text-3); cursor: not-allowed; }
 .rep-radio em { color: var(--text-3); font-style: normal; margin-left: 4px; font-size: 11px; }
-.rep-picker-list { display: flex; flex-direction: column; gap: 2px; }
+.rep-picker-list { display: flex; flex-direction: column; gap: 6px; }
 .rep-radio-desc {
   margin: -2px 0 6px 26px; font-size: 11px; color: var(--text-3); line-height: 1.4;
+}
+.rep-select {
+  width: 100%; padding: 8px 10px; font-size: 13px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+}
+.rep-select:focus { border-color: var(--blue); outline: none; }
+.rep-select option { background: var(--bg); color: var(--text); }
+.rep-picker-desc {
+  font-size: 11px; color: var(--text-3); line-height: 1.4; margin-top: 2px;
+}
+.rep-section-note {
+  font-size: 11px; color: var(--text-3); line-height: 1.4;
+  margin: -4px 0 10px 0; font-style: italic;
 }
 .rep-bom-total td { border-top: 2px solid #d5d5d7 !important; padding-top: 8px !important; }
 [data-theme="dark"] .rep-bom-total td { border-top-color: var(--border) !important; }

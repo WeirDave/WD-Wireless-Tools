@@ -207,28 +207,30 @@
   };
   updateLogoPreview();
 
-  // ── Report picker (radios) + dynamic per-report options ──
+  // ── Report picker (dropdown) + dynamic per-report options ──
   function renderReportPicker() {
     var host = document.getElementById('reportPickerList');
     if (!host) return;
-    var html = '';
-    Object.keys(REPORTS).forEach(function (id) {
+    var opts = Object.keys(REPORTS).map(function (id) {
       var r = REPORTS[id];
-      html += '<label class="rep-radio">'
-        + '<input type="radio" name="reportType" value="' + WD.escAttr(id) + '" '
-        + (id === currentReportId ? 'checked' : '') + ' onchange="selectReport(this.value)">'
-        + '<span>' + WD.esc(r.label) + '</span></label>';
-      if (r.description) {
-        html += '<div class="rep-radio-desc">' + WD.esc(r.description) + '</div>';
-      }
-    });
-    host.innerHTML = html;
+      return '<option value="' + WD.escAttr(id) + '"'
+        + (id === currentReportId ? ' selected' : '') + '>'
+        + WD.esc(r.label) + '</option>';
+    }).join('');
+    var r = currentReport();
+    var desc = r.description
+      ? '<div class="rep-picker-desc">' + WD.esc(r.description) + '</div>'
+      : '';
+    host.innerHTML = '<select class="rep-select" id="reportSelect" '
+      + 'onchange="selectReport(this.value)" aria-label="Report type">'
+      + opts + '</select>' + desc;
   }
 
   window.selectReport = function (id) {
     if (!REPORTS[id]) return;
     currentReportId = id;
     currentOpts = {};   // reset — each report has its own set of option ids
+    renderReportPicker();  // refresh the description under the select
     renderReport();
   };
 
@@ -457,7 +459,16 @@
 
   // ═══════════════════════════════════════════════════════════════════
   //  REPORT 2: Bill of Materials (BOM)
+  //  Internal/integrated antennas ship with the AP and are never
+  //  purchased separately — they are excluded from the antennas list.
   // ═══════════════════════════════════════════════════════════════════
+  function isExternalAntenna(a) {
+    // External if apCoupling explicitly says so (EXTERNAL_ANTENNA,
+    // DIRECT_ATTACH, etc.). Missing/INTEGRATED/INTERNAL → internal.
+    if (!a || !a.apCoupling) return false;
+    return /EXTERNAL|DIRECT_ATTACH/i.test(a.apCoupling);
+  }
+
   function renderBomReport(aps, opts, ctx) {
     var head = opts.cover ? ctx.cover(aps, ctx.dateStr) : ctx.inlineHeader(aps, ctx.dateStr);
 
@@ -468,9 +479,9 @@
       apCounts[key] = (apCounts[key] || 0) + 1;
     });
 
-    // Antenna counts: one antenna per AP (union of distinct antennaTypeIds
-    // across the AP's radios — a dual-band AP with two different antennas
-    // counts once per antenna, not once per radio).
+    // External antenna counts: one antenna per AP (union of distinct
+    // antennaTypeIds across the AP's radios — a dual-band AP with two
+    // different external antennas counts once per antenna, not per radio).
     var antCounts = {};
     aps.forEach(function (ap) {
       var seen = {};
@@ -478,11 +489,9 @@
         .forEach(function (r) { if (r.antennaTypeId) seen[r.antennaTypeId] = true; });
       Object.keys(seen).forEach(function (id) {
         var a = proj.antennas[id];
-        if (!opts.externalOnly ? true
-            : a && a.apCoupling && /EXTERNAL/i.test(a.apCoupling)) {
-          var name = a ? a.name : 'Unknown antenna';
-          antCounts[name] = (antCounts[name] || 0) + 1;
-        }
+        if (!isExternalAntenna(a)) return;
+        var name = a ? a.name : 'Unknown antenna';
+        antCounts[name] = (antCounts[name] || 0) + 1;
       });
     });
 
@@ -515,14 +524,20 @@
       +   '<td colspan="2"><b>Total access points</b></td></tr></tfoot></table>'
       + '</section>';
 
-    var antHead = opts.externalOnly ? 'Antennas (external only)' : 'Antennas';
+    var antEmpty = '<tr><td colspan="2" class="rep-empty-small">'
+      + 'No external antennas — all APs use integrated antennas that ship with the unit.'
+      + '</td></tr>';
     var antSection = '<section class="rep-floor-section">'
-      + '<h2 class="rep-floor-title">' + antHead + '</h2>'
+      + '<h2 class="rep-floor-title">External Antennas</h2>'
+      + '<div class="rep-section-note">Integrated antennas are omitted — they are not procured separately.</div>'
       + '<table class="rep-ap-table"><thead><tr>'
       +   '<th class="rep-num">Qty</th><th>Antenna</th></tr></thead>'
-      + '<tbody>' + (antRows || '<tr><td colspan="2" class="rep-empty-small">No antennas match this filter.</td></tr>') + '</tbody>'
-      + '<tfoot><tr class="rep-bom-total"><td class="rep-num"><b>' + antTotal + '</b></td>'
-      +   '<td><b>Total antennas</b></td></tr></tfoot></table>'
+      + '<tbody>' + (antRows || antEmpty) + '</tbody>'
+      + (antRows
+          ? '<tfoot><tr class="rep-bom-total"><td class="rep-num"><b>' + antTotal + '</b></td>'
+            + '<td><b>Total external antennas</b></td></tr></tfoot>'
+          : '')
+      + '</table>'
       + '</section>';
 
     return head + apSection + antSection
@@ -550,12 +565,10 @@
     bom: {
       id: 'bom',
       label: 'Bill of Materials',
-      description: 'AP + antenna counts for procurement handoff.',
+      description: 'AP counts + external antennas for procurement handoff.',
       docName: 'Bill of Materials',
       coverBrand: 'Report · Bill of Materials',
-      sidebar: [
-        { id: 'externalOnly', label: 'External antennas only', default: false },
-      ],
+      sidebar: [],
       render: renderBomReport,
     },
   };

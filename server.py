@@ -9,6 +9,7 @@ tiny local Flask server and opens your default browser to it.
 
 No pywebview, no WebView2 — so none of the desktop-window headaches.
 """
+import os
 import sys
 import threading
 import time
@@ -28,7 +29,7 @@ app = Flask(__name__, static_folder=None)
 cm = CloudManager()
 fo = FolderOrganizer()
 ts = TemplateStore()
-PORT = 8765
+PORT = int(os.environ.get("PORT") or 8765)
 
 
 # Local dev tool — never let the browser cache pages/assets, so edits always
