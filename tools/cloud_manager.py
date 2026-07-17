@@ -793,6 +793,11 @@ def build_projects_data(api, output_dir):
         size_str = human_size(size) if size else ""
         # Modification time — ISO string on one of several keys.
         mtime = _parse_cloud_mtime(pr)
+        # Owner / last editor — nested under history.createdBy / history.modifiedBy.
+        # This is the same "Owner" surfaced in the Ekahau Cloud Share dialog.
+        history = pr.get("history") or {}
+        owner = (history.get("createdBy") or "").strip().lower()
+        modified_by = (history.get("modifiedBy") or "").strip().lower()
         # Site name from our mapping
         site_name = dataset_site.get(pid, "")
         # Build meta to match local side: "size · site"
@@ -801,6 +806,7 @@ def build_projects_data(api, output_dir):
         cloud.append({"id": pid, "name": name,
                       "code": extract_site_code(name), "meta": meta,
                       "size": size, "mtime": mtime,
+                      "owner": owner, "modifiedBy": modified_by,
                       "hasSite": bool(site_name)})
     local = [{"path": f["path"], "name": f["name"], "code": extract_site_code(f["name"]),
               "isDir": False, "folder": f["folder"],
@@ -1041,7 +1047,11 @@ class CloudManager:
             return {"error": "Not connected"}
         try:
             od = self.config.get("output_dir", "")
-            return build_projects_data(self.api, od) if kind == "projects" else build_sites_data(self.api, od)
+            data = build_projects_data(self.api, od) if kind == "projects" else build_sites_data(self.api, od)
+            # Stamp the current user's email so the frontend can split
+            # "mine" from "someone else's" cloud projects.
+            data["currentUser"] = (self.api.user_email or "").strip().lower()
+            return data
         except Exception as e:
             return {"error": str(e)}
 

@@ -617,6 +617,17 @@ function renderLedger(hit) {
     if (showOrphLocal) return st === 'orphan' && row && row.local && !row.cloud;
     return (st === 'synced' && showSynced) || (st === 'mismatch' && showMis) || (st === 'orphan' && showOrph);
   };
+  // Owner filter (Project Files tab only — Sites don't have per-file owners).
+  const own = ownerFilter();
+  const me = ((data && data.currentUser) || '').toLowerCase();
+  const passOwner = (row) => {
+    if (isSites || own === 'all' || !me) return true;
+    if (!row.cloud) return true;  // local-only rows are always mine
+    const o = (row.cloud.owner || '').toLowerCase();
+    if (own === 'mine')   return !o || o === me;
+    if (own === 'others') return o && o !== me;
+    return true;
+  };
 
   const rows = [];
   (data.matched || []).forEach(p => rows.push({
@@ -630,15 +641,26 @@ function renderLedger(hit) {
   const localCodes = new Set(rows.map(r => r.local && r.local.code).filter(Boolean));
 
   const visible = rows
-    .filter(r => pass(r.status, r) && (hit(r.cloud && r.cloud.name) || hit(r.local && r.local.name)))
+    .filter(r => pass(r.status, r) && passOwner(r) && (hit(r.cloud && r.cloud.name) || hit(r.local && r.local.name)))
     .sort((x, y) => x.sort.localeCompare(y.sort, undefined, { sensitivity: 'base' }));
   const nCloud = visible.filter(r => r.cloud).length, nLocal = visible.filter(r => r.local).length;
 
   let h = `<div class="ledger">`;
   h += `<div class="ledger-head"><div class="lh-cell cloud">${isSites ? 'Cloud Sites' : 'Cloud Projects'} (${nCloud})</div><div class="lh-gut"></div><div class="lh-cell local">${isSites ? 'Local Folders' : 'Local .esx'} (${nLocal})</div></div>`;
   if (!visible.length) { h += `<div class="empty-msg">Nothing here for this filter.</div></div>`; return h; }
+  const groupOf = (s) => {
+    const ch = String(s || '').trim().charAt(0).toUpperCase();
+    return (ch >= 'A' && ch <= 'Z') ? ch : '#';
+  };
   let z = 0;
+  let lastGroup = null;
   visible.forEach(r => {
+    const g = groupOf(r.sort);
+    if (g !== lastGroup) {
+      h += `<div class="ledger-group-head" role="separator" aria-label="Section ${e(g)}"><span>${e(g)}</span></div>`;
+      lastGroup = g;
+      z = 0; // reset stripe alternation per section so it stays readable
+    }
     h += `<div class="ledger-row ${r.status}${(z++ % 2) ? ' stripe' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>`;
   });
   h += `</div>`;
@@ -678,7 +700,12 @@ function cloudCell(r, localCodes) {
     return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${p(r.local.path)}','${a(r.local.name)}')">+ Upload</button></div>`;
   }
   const c = r.cloud, isMis = r.status === 'mismatch', thing = isSites ? 'cloud site' : 'cloud project';
-  const nameHtml = (isMis ? charDiff(c.name, r.local.name).a : e(c.name)) + (isSites ? '' : '.esx') + dupHintFor(c.id);
+  const me = ((data && data.currentUser) || '').toLowerCase();
+  const owner = (c.owner || '').toLowerCase();
+  const ownerHtml = (!isSites && owner)
+    ? ` <span class="owner-tag${owner !== me ? ' other' : ''}" title="Owner (from Ekahau history.createdBy)">(${e(owner)})</span>`
+    : '';
+  const nameHtml = (isMis ? charDiff(c.name, r.local.name).a : e(c.name)) + (isSites ? '' : '.esx') + ownerHtml + dupHintFor(c.id);
   const dup = r.status === 'orphan' && c.code && localCodes.has(c.code);
   const dsCount = (c.datasets && c.datasets.length) || 0;
   const cloudPeek = isSites
@@ -1086,17 +1113,30 @@ function openAbout() { showModal('aboutModal'); }
 function openSettings() {
   const cur = mergeRule();
   document.querySelectorAll('input[name="setrule"]').forEach(r => { r.checked = (r.value === cur); });
+  const own = ownerFilter();
+  document.querySelectorAll('input[name="setowner"]').forEach(r => { r.checked = (r.value === own); });
   document.getElementById('setLiveInterval').value = String(liveMs());
   showModal('settingsModal');
 }
 function saveSettings() {
   const v = (document.querySelector('input[name="setrule"]:checked') || {}).value || 'ask';
   setMergeRule(v);
+  const own = (document.querySelector('input[name="setowner"]:checked') || {}).value || 'all';
+  setOwnerFilter(own);
   const ms = document.getElementById('setLiveInterval').value;
   try { localStorage.setItem('wd-live-ms', ms); } catch (e) {}
   restartLive();
+  renderRows();
   toast('Settings saved', 'success');
   closeModal('settingsModal');
+}
+
+// ── Ownership filter (persisted): 'all' | 'mine' | 'others' ──
+function ownerFilter() {
+  try { return localStorage.getItem('wd-owner-filter') || 'all'; } catch (e) { return 'all'; }
+}
+function setOwnerFilter(v) {
+  try { localStorage.setItem('wd-owner-filter', v); } catch (e) {}
 }
 
 /* ── Bulk selection ── */

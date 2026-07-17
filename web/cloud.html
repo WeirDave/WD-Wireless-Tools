@@ -84,7 +84,7 @@
       </div>
     </div>
     <div class="topbar-center">
-      <h1><span>WD</span> Cloud Manager <span class="ver">v3.12</span></h1>
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.13</span></h1>
     </div>
     <div class="topbar-right">
       <button class="settings-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
@@ -215,7 +215,7 @@
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal">
-    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.12</span></h3>
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.13</span></h3>
     <div class="about-body">
       Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
       <br><br>
@@ -282,6 +282,12 @@
       <label><input type="radio" name="setrule" value="newer"> Keep newer (by timestamp)</label>
       <label><input type="radio" name="setrule" value="both"> Keep both — the newer keeps its name, the older gets a date stamp</label>
       <label><input type="radio" name="setrule" value="skip"> Skip existing files</label>
+    </div>
+    <div class="set-group" style="margin-top:14px;">
+      <div class="set-label">Show cloud projects by owner (Project Files tab):</div>
+      <label><input type="radio" name="setowner" value="all"> All files</label>
+      <label><input type="radio" name="setowner" value="mine"> Only files I created</label>
+      <label><input type="radio" name="setowner" value="others"> Only files created by others</label>
     </div>
     <div class="set-group" style="margin-top:14px;">
       <div class="set-label">Live auto-refresh interval:</div>
