@@ -407,19 +407,20 @@ body.tool-cloud #liveBtn.live-on::before {
 }
 
 /* Icon-only button — for utility actions (settings gear, close, etc.).
-   Small square with just the glyph — deliberately doesn't look like a
-   primary action button. */
+   Small square with an inverted fill so it's clearly visible in both
+   themes: dark button on light backgrounds, light button on dark
+   backgrounds. Distinct from color-variant buttons because it has no
+   hue — it reads as "utility," not "action." */
 .btn-icon-only {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; padding: 0;
-  background: transparent; color: var(--text-2);
-  border: 1px solid var(--border); border-radius: 4px;
+  background: var(--text); color: var(--surface);
+  border: 1px solid var(--text); border-radius: 4px;
   font-size: 15px; cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 .btn-icon-only:hover {
-  background: var(--surface-hover); color: var(--text);
-  border-color: var(--text-3);
+  background: var(--text-2); border-color: var(--text-2);
 }
 
 /* Quick Walls buttons — slightly different base */
