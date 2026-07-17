@@ -71,8 +71,8 @@
   --surface-raised: #f6f8fa;
   --surface-hover: #eaeef2;
   --text: #111827;
-  --text-2: #6b7280;
-  --text-3: #9ca3af;
+  --text-2: #4b5563;   /* darker medium grey — the old #6b7280 was borderline */
+  --text-3: #6b7280;   /* was #9ca3af — failed WCAG AA on white */
   --border: #dfe2e6;
 
   --stripe: #eef1f5;
@@ -111,8 +111,8 @@ body.tool-walls {
   --surface-hover: #eaeef2;
   --border: #dfe2e6;
   --text: #1b2330;
-  --text-2: #6b7684;
-  --text-3: #9aa5b1;
+  --text-2: #4b5563;   /* was #6b7684 */
+  --text-3: #6b7684;   /* was #9aa5b1 — failed WCAG AA on white */
 }
 
 /* Home uses a radial gradient background — variables mapped from its original tokens */
@@ -133,8 +133,8 @@ body.tool-home[data-theme="light"] {
   --card-hover: #f6f8fa;
   --border: #e2e6ea;
   --text: #2b3440;
-  --text-2: #6b7684;
-  --text-3: #9aa5b1;
+  --text-2: #4b5563;   /* was #6b7684 */
+  --text-3: #6b7684;   /* was #9aa5b1 — failed WCAG AA on white */
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1106,12 +1106,13 @@ body.tool-cloud .toolbar input.search:focus {
 
 /* A-Z section header — a solid divider band with the letter on BOTH the
    cloud (left) and local (right) columns. Fully opaque so the sticky
-   header doesn't look translucent as rows scroll under it. */
+   header doesn't look translucent as rows scroll under it. Letters carry
+   the same blue/green coding as the column heads for visual consistency. */
 .ledger-group-head {
   position: sticky; top: 36px; z-index: 3;
   display: flex; align-items: center;
   background: var(--surface);
-  border-top: 2px solid var(--teal, #14b8a6);
+  border-top: 2px solid var(--border);
   border-bottom: 1px solid var(--border);
   padding: 0;
 }
@@ -1119,15 +1120,21 @@ body.tool-cloud .toolbar input.search:focus {
   flex: 1; padding: 6px 14px;
   font-size: 18px; font-weight: 900; letter-spacing: 3px;
   text-transform: uppercase;
-  color: var(--teal, #14b8a6);
-  background: rgba(20,184,166,0.10);
 }
-.ledger-group-head .glh-letter.local { text-align: right; }
+.ledger-group-head .glh-letter.cloud {
+  color: var(--blue); background: rgba(30,119,172,0.12);
+}
+.ledger-group-head .glh-letter.local {
+  color: var(--green); background: rgba(95,171,79,0.14); text-align: right;
+}
 .ledger-group-head .glh-gap {
   flex: 0 0 140px;  /* matches .lr-gut width so letters line up with columns */
 }
-[data-theme="light"] .ledger-group-head .glh-letter {
-  background: rgba(20,184,166,0.14);
+[data-theme="light"] .ledger-group-head .glh-letter.cloud {
+  background: rgba(30,119,172,0.10);
+}
+[data-theme="light"] .ledger-group-head .glh-letter.local {
+  background: rgba(95,171,79,0.12);
 }
 .lr-cell {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px;
