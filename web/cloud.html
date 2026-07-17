@@ -84,7 +84,7 @@
       </div>
     </div>
     <div class="topbar-center">
-      <h1><span>WD</span> Cloud Manager <span class="ver">v3.15</span></h1>
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.16</span></h1>
     </div>
     <div class="topbar-right">
       <button class="settings-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
@@ -153,9 +153,9 @@
       <button class="owner-btn" data-owner="others" onclick="setOwnerFilterUI('others')">Others</button>
     </span>
     <button class="btn btn-blue" id="addNewBtn" onclick="showModal('createModal')">+ New Site</button>
-    <button class="btn btn-blue" onclick="openSettings()" title="Settings">&#9881;</button>
-    <button class="btn btn-secondary" id="liveBtn" onclick="toggleLive()" title="Live: auto-refresh from Ekahau Cloud (pauses while selecting or a dialog is open)">Live</button>
-    <button class="btn btn-blue" onclick="refreshData()">Refresh</button>
+    <button class="btn" id="liveBtn" onclick="toggleLive()" title="Live: auto-refresh from Ekahau Cloud (pauses while selecting or a dialog is open)">Live</button>
+    <button class="btn btn-secondary" onclick="refreshData()">Refresh</button>
+    <button class="btn-icon-only" onclick="openSettings()" title="Settings" aria-label="Settings">&#9881;</button>
   </div>
 
   <div class="col-legend">
@@ -221,7 +221,7 @@
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal">
-    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.15</span></h3>
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.16</span></h3>
     <div class="about-body">
       Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
       <br><br>

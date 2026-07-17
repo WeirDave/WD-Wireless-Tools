@@ -227,15 +227,31 @@ mark {
 .header .file-badge:hover,
 .report-toolbar .file-badge:hover { background: rgba(107,179,224,0.22); }
 .header-actions { display: flex; gap: 8px; align-items: center; }
+/* Header sizing — applies to every .btn variant in the header actions so
+   spacing is consistent, but does NOT set background/color, so color
+   variants (.btn-blue, .btn-green, .btn-red) keep their identity. */
 .header-actions .btn {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
   font-size: 13px; font-weight: 600; padding: 8px 16px;
-  background: rgba(255,255,255,0.08); color: #cbd5e1;
-  border: 1px solid rgba(255,255,255,0.15); border-radius: 5px;
+  border-radius: 5px;
 }
-.header-actions .btn:hover {
+/* .btn-secondary in the header uses the translucent-white style.
+   Color variants (.btn-blue etc.) inherit from the base .btn rules and
+   render solid, so they read as primary/action buttons. */
+.header-actions .btn-secondary {
+  background: rgba(255,255,255,0.08); color: #cbd5e1;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+.header-actions .btn-secondary:hover {
   background: rgba(255,255,255,0.15); color: #fff;
   border-color: rgba(255,255,255,0.3);
+}
+[data-theme="light"] .header-actions .btn-secondary {
+  background: var(--surface-raised); color: var(--text);
+  border-color: var(--border);
+}
+[data-theme="light"] .header-actions .btn-secondary:hover {
+  background: var(--surface-hover); border-color: var(--text-3);
 }
 .header-actions .btn-primary {
   background: var(--blue); color: #fff; border-color: var(--blue);
@@ -358,7 +374,53 @@ body.tool-walls .hamburger-btn {
 body.tool-cloud .btn {
   padding: 4px 10px; border-radius: 3px; font-size: 12px; font-weight: 500;
 }
-body.tool-cloud .btn.live-on { background: var(--green); color: #fff; }
+/* Give .btn-secondary a visible outline on Cloud so it doesn't look like a
+   flat label. Contrasts with the solid blue/green primary buttons. */
+body.tool-cloud .btn-secondary {
+  background: transparent; color: var(--text);
+  border: 1px solid var(--border);
+}
+body.tool-cloud .btn-secondary:hover {
+  background: var(--surface-hover); border-color: var(--text-3);
+}
+
+/* Live toggle — reads as a pill switch, not another action button.
+   Off: outlined with a dim grey dot. On: green fill with a solid white dot. */
+body.tool-cloud #liveBtn {
+  background: transparent; color: var(--text-2);
+  border: 1px solid var(--border);
+  padding-left: 8px;
+}
+body.tool-cloud #liveBtn::before {
+  content: ''; display: inline-block;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--text-3);
+  margin-right: 6px; vertical-align: middle;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+body.tool-cloud #liveBtn:hover { color: var(--text); border-color: var(--text-3); }
+body.tool-cloud #liveBtn.live-on {
+  background: var(--green); color: #fff; border-color: var(--green);
+}
+body.tool-cloud #liveBtn.live-on::before {
+  background: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.6);
+}
+
+/* Icon-only button — for utility actions (settings gear, close, etc.).
+   Small square with just the glyph — deliberately doesn't look like a
+   primary action button. */
+.btn-icon-only {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0;
+  background: transparent; color: var(--text-2);
+  border: 1px solid var(--border); border-radius: 4px;
+  font-size: 15px; cursor: pointer;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.btn-icon-only:hover {
+  background: var(--surface-hover); color: var(--text);
+  border-color: var(--text-3);
+}
 
 /* Quick Walls buttons — slightly different base */
 body.tool-walls .btn {
@@ -1148,27 +1210,31 @@ body.tool-cloud .toolbar input.search:focus {
 .owner-tag.other { color: var(--orange, #d97706); }
 [data-theme="dark"] .owner-tag.other { color: #f59e0b; }
 
-/* Toolbar three-way owner filter */
+/* Toolbar three-way owner filter — deliberately uses --purple so the active
+   state can't be confused with tabs (blue), Live/Sync (teal/green), Delete
+   (red), or the "other owner" tag (amber). Purple isn't used anywhere else
+   in the palette. */
 .owner-toggle {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 6px; margin-right: 4px;
-  border: 1px solid var(--border); border-radius: 5px;
-  background: var(--surface);
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px; margin-right: 4px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface-raised);
 }
 .owner-toggle-label {
   font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
-  text-transform: uppercase; color: var(--text-3);
-  padding: 0 4px 0 2px;
+  text-transform: uppercase; color: var(--text-2);
+  padding: 0 6px 0 4px;
 }
 .owner-btn {
-  padding: 4px 9px; font-size: 12px; font-weight: 600;
+  padding: 4px 10px; font-size: 12px; font-weight: 600;
   background: transparent; color: var(--text-2);
-  border: none; border-radius: 3px; cursor: pointer;
+  border: none; border-radius: 4px; cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
-.owner-btn:hover { background: var(--row-hover); color: var(--text); }
+.owner-btn:hover:not(.active) { background: var(--surface-hover); color: var(--text); }
 .owner-btn.active {
-  background: var(--teal, #14b8a6); color: #fff;
+  background: var(--purple); color: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
 }
 .lr-cell .cell-meta {
   flex: 0 0 auto; color: var(--text-2); font-size: 10px;
