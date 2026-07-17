@@ -612,11 +612,42 @@ def get_local_esx_files(output_dir):
                 except OSError:
                     mtime = 0
                 out.append({"name": f.stem, "folder": d.name,
-                            "size": _esx_size(f), "path": str(f), "mtime": mtime})
+                            "size": _esx_size(f), "path": str(f), "mtime": mtime,
+                            "owner": _esx_author(f, mtime)})
         except OSError:
             continue
     out.sort(key=lambda x: x["name"].lower())
     return out
+
+
+# In-memory cache: {path: (mtime, author_str)}. Keyed by mtime so a .esx that
+# gets re-saved (mtime changes) is re-parsed the next time we look. A cold
+# scan of ~150 files is ~9s; the warm scan drops to <100ms.
+_ESX_AUTHOR_CACHE = {}
+
+
+def _esx_author(path, mtime):
+    """Read project.history.createdBy from a .esx's project.json.
+    Returns the raw value (email or display-name, whichever the .esx has),
+    lowercased and stripped. Empty string on any error. Cached by mtime."""
+    key = str(path)
+    hit = _ESX_AUTHOR_CACHE.get(key)
+    if hit and hit[0] == mtime:
+        return hit[1]
+    author = ""
+    try:
+        import zipfile
+        with zipfile.ZipFile(path) as z:
+            if "project.json" in z.namelist():
+                with z.open("project.json") as pj:
+                    data = json.load(pj)
+                proj = (data or {}).get("project") or {}
+                history = proj.get("history") or {}
+                author = (history.get("createdBy") or "").strip().lower()
+    except Exception:
+        author = ""
+    _ESX_AUTHOR_CACHE[key] = (mtime, author)
+    return author
 
 
 def build_matches(cloud_items, local_items, excluded=None):
@@ -811,6 +842,7 @@ def build_projects_data(api, output_dir):
     local = [{"path": f["path"], "name": f["name"], "code": extract_site_code(f["name"]),
               "isDir": False, "folder": f["folder"],
               "size": int(f.get("size") or 0), "mtime": int(f.get("mtime") or 0),
+              "owner": f.get("owner") or "",
               "meta": f'{human_size(f["size"])} · {f["folder"]}'}
              for f in get_local_esx_files(output_dir)]
     return build_matches(cloud, local, not_matches_set())

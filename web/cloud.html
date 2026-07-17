@@ -84,7 +84,7 @@
       </div>
     </div>
     <div class="topbar-center">
-      <h1><span>WD</span> Cloud Manager <span class="ver">v3.13</span></h1>
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.14</span></h1>
     </div>
     <div class="topbar-right">
       <button class="settings-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle light / dark">🌙</button>
@@ -146,6 +146,12 @@
     <button class="btn btn-secondary bulk-btn" id="compareBtn" style="display:none" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
     <button class="btn btn-red bulk-btn" id="bulkDeleteBtn" style="display:none" onclick="bulkDelete()">Delete selected</button>
     <span class="spacer"></span>
+    <span class="owner-toggle" id="ownerToggle" role="group" aria-label="Filter by owner">
+      <span class="owner-toggle-label">Owner:</span>
+      <button class="owner-btn" data-owner="all"    onclick="setOwnerFilterUI('all')">All</button>
+      <button class="owner-btn" data-owner="mine"   onclick="setOwnerFilterUI('mine')">Mine</button>
+      <button class="owner-btn" data-owner="others" onclick="setOwnerFilterUI('others')">Others</button>
+    </span>
     <button class="btn btn-blue" id="addNewBtn" onclick="showModal('createModal')">+ New Site</button>
     <button class="btn btn-blue" onclick="openSettings()" title="Settings">&#9881;</button>
     <button class="btn btn-secondary" id="liveBtn" onclick="toggleLive()" title="Live: auto-refresh from Ekahau Cloud (pauses while selecting or a dialog is open)">Live</button>
@@ -215,7 +221,7 @@
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal">
-    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.13</span></h3>
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.14</span></h3>
     <div class="about-body">
       Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
       <br><br>
@@ -282,12 +288,6 @@
       <label><input type="radio" name="setrule" value="newer"> Keep newer (by timestamp)</label>
       <label><input type="radio" name="setrule" value="both"> Keep both — the newer keeps its name, the older gets a date stamp</label>
       <label><input type="radio" name="setrule" value="skip"> Skip existing files</label>
-    </div>
-    <div class="set-group" style="margin-top:14px;">
-      <div class="set-label">Show cloud projects by owner (Project Files tab):</div>
-      <label><input type="radio" name="setowner" value="all"> All files</label>
-      <label><input type="radio" name="setowner" value="mine"> Only files I created</label>
-      <label><input type="radio" name="setowner" value="others"> Only files created by others</label>
     </div>
     <div class="set-group" style="margin-top:14px;">
       <div class="set-label">Live auto-refresh interval:</div>

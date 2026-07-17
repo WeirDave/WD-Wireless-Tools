@@ -97,6 +97,7 @@ function goToDashboard(email) {
   document.getElementById('setupScreen').style.display = 'none';
   document.getElementById('appScreen').style.display = 'flex';
   document.getElementById('userEmail').textContent = email || 'Connected';
+  syncOwnerToggle();
   refreshData();
   if (liveWanted()) startLive();
 }
@@ -170,6 +171,8 @@ function switchTab(kind) {
   document.getElementById('tabProjects').classList.toggle('active', kind === 'projects');
   document.getElementById('tabDuplicates').classList.toggle('active', kind === 'duplicates');
   document.getElementById('addNewBtn').style.display = kind === 'sites' ? '' : 'none';
+  const ownerEl = document.getElementById('ownerToggle');
+  if (ownerEl) ownerEl.style.display = (kind === 'projects') ? '' : 'none';
   document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
   refreshData();
 }
@@ -622,10 +625,15 @@ function renderLedger(hit) {
   const me = ((data && data.currentUser) || '').toLowerCase();
   const passOwner = (row) => {
     if (isSites || own === 'all' || !me) return true;
-    if (!row.cloud) return true;  // local-only rows are always mine
-    const o = (row.cloud.owner || '').toLowerCase();
-    if (own === 'mine')   return !o || o === me;
-    if (own === 'others') return o && o !== me;
+    // A row is "mine" if EITHER side is mine (or unknown); "others" if EITHER
+    // side is explicitly someone else's email. This surfaces cross-owner pairs
+    // (e.g. my local + Andrew's cloud) in the "others" filter too.
+    const co = (row.cloud && row.cloud.owner || '').toLowerCase();
+    const lo = (row.local && row.local.owner || '').toLowerCase();
+    const otherCloud = co && co.indexOf('@') > -1 && co !== me;
+    const otherLocal = lo && lo.indexOf('@') > -1 && lo !== me;
+    if (own === 'mine')   return !otherCloud && !otherLocal;
+    if (own === 'others') return otherCloud || otherLocal;
     return true;
   };
 
@@ -728,7 +736,15 @@ function localCell(r, cloudCodes) {
       : `<div class="lr-cell local empty"></div>`;
   }
   const l = r.local, isMis = r.status === 'mismatch', thing = isSites ? 'local folder' : '.esx file';
-  const nameHtml = (isMis ? charDiff(r.cloud.name, l.name).b : e(l.name)) + (l.isDir ? '' : '.esx') + dupHintFor(l.path);
+  const me = ((data && data.currentUser) || '').toLowerCase();
+  const owner = (l.owner || '').toLowerCase();
+  // "Mine" if the owner is either my email OR a non-email string (display name)
+  // that no cloud owner would ever match — we assume local display names are mine.
+  const localIsOther = owner && owner.indexOf('@') > -1 && owner !== me;
+  const ownerHtml = (!isSites && owner)
+    ? ` <span class="owner-tag${localIsOther ? ' other' : ''}" title="Author (from project.history.createdBy)">(${e(owner)})</span>`
+    : '';
+  const nameHtml = (isMis ? charDiff(r.cloud.name, l.name).b : e(l.name)) + (l.isDir ? '' : '.esx') + ownerHtml + dupHintFor(l.path);
   const dup = r.status === 'orphan' && l.code && cloudCodes.has(l.code);
   const hasSrc = isSites && l.hasSource;
   const hasContents = isSites && l.src && l.src.total > 0;
@@ -1113,20 +1129,15 @@ function openAbout() { showModal('aboutModal'); }
 function openSettings() {
   const cur = mergeRule();
   document.querySelectorAll('input[name="setrule"]').forEach(r => { r.checked = (r.value === cur); });
-  const own = ownerFilter();
-  document.querySelectorAll('input[name="setowner"]').forEach(r => { r.checked = (r.value === own); });
   document.getElementById('setLiveInterval').value = String(liveMs());
   showModal('settingsModal');
 }
 function saveSettings() {
   const v = (document.querySelector('input[name="setrule"]:checked') || {}).value || 'ask';
   setMergeRule(v);
-  const own = (document.querySelector('input[name="setowner"]:checked') || {}).value || 'all';
-  setOwnerFilter(own);
   const ms = document.getElementById('setLiveInterval').value;
   try { localStorage.setItem('wd-live-ms', ms); } catch (e) {}
   restartLive();
-  renderRows();
   toast('Settings saved', 'success');
   closeModal('settingsModal');
 }
@@ -1137,6 +1148,19 @@ function ownerFilter() {
 }
 function setOwnerFilter(v) {
   try { localStorage.setItem('wd-owner-filter', v); } catch (e) {}
+}
+// Toolbar three-way toggle. Applies the filter, syncs the active-button
+// highlight, re-renders. Called from onclick on the toolbar buttons.
+function setOwnerFilterUI(v) {
+  setOwnerFilter(v);
+  syncOwnerToggle();
+  renderRows();
+}
+function syncOwnerToggle() {
+  const cur = ownerFilter();
+  document.querySelectorAll('#ownerToggle .owner-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.owner === cur);
+  });
 }
 
 /* ── Bulk selection ── */
