@@ -485,11 +485,14 @@ function renderCluster(cl) {
     h += `<div class="dup-item-actions">`;
     if (it.side === 'local') {
       h += `<button class="icon-btn" title="Show in Explorer/Finder" onclick="revealInExplorer('${p(it.path)}')">&#128193;</button>`;
-      h += `<button class="icon-btn" title="View folder contents" onclick="openPeek('${p(it.path)}')">&#128065;</button>`;
     } else {
       h += `<button class="icon-btn" title="View site contents" onclick="openCloudPeek('${a(it.id)}','${a(it.location)}')">&#128065;</button>`;
     }
-    h += `<button class="icon-btn del" title="Delete" onclick="dupDeleteOne('${kAttr}','${a(iid)}')">&#128465;</button>`;
+    // Delete needs backslash normalization when iid is a local path — a raw
+    // Windows path in a JS-string onclick lets \U, \f, etc. be swallowed as
+    // JS escape codes, corrupting the value dupDeleteOne receives.
+    const iidAttr = it.side === 'local' ? p(iid) : a(iid);
+    h += `<button class="icon-btn del" title="Delete" onclick="dupDeleteOne('${kAttr}','${iidAttr}')">&#128465;</button>`;
     h += `</div>`;
     h += `</div>`;
   });
@@ -556,8 +559,13 @@ function dupDeleteChecked(key) {
 function dupDeleteOne(key, iid) {
   const cl = _findCluster(key);
   if (!cl) return;
-  const it = cl.items.find(i => (i.id || i.path) === iid);
+  // Normalize both sides — the onclick passes a forward-slash path for local
+  // items, while cl.items[].path from the backend uses backslashes on Windows.
+  const norm = s => String(s || '').replace(/\\/g, '/').toLowerCase();
+  const target = norm(iid);
+  const it = cl.items.find(i => norm(i.id || i.path) === target);
   if (it) _bulkDeleteItems([it], key);
+  else toast('Could not locate that item', 'error');
 }
 
 /* ── Duplicates: formatting helpers ── */
