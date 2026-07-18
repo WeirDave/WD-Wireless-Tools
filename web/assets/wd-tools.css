@@ -1843,10 +1843,10 @@ body.tool-cloud .toolbar input.search:focus {
   align-items: center; justify-content: center;
 }
 .dropzone-logo {
-  width: 500px; height: 273px; margin-bottom: 28px;
+  width: 300px; height: 300px; margin-bottom: 28px;
   background-size: contain; background-repeat: no-repeat;
   background-position: center;
-  background-image: url(quick-walls-v1-560x852.png);
+  background-image: url(quick-walls-v8.0-560x560.png);
 }
 .dropzone-title {
   font-family: var(--mono); font-size: 22px; font-weight: 700;
@@ -2381,7 +2381,10 @@ body.tool-scale {
 }
 
 .scale-topbar { padding: 10px 20px; border-bottom: 1px solid var(--border); }
-.scale-brand-icon { font-size: 18px; margin-right: 4px; }
+.tool-brand-icon {
+  width: 26px; height: 26px; margin-right: 5px;
+  object-fit: contain; vertical-align: middle;
+}
 
 .scale-wrap {
   max-width: 1100px; margin: 0 auto;
@@ -2544,12 +2547,13 @@ body.tool-report {
 /* Teal color tokens (only used by Report) */
 :root { --teal: #0d9488; --teal-dark: #0f766e; }
 
-/* Landing dropzone reuses .dropzone from Quick Walls; we just override the
-   accent color and add a big emoji since there's no logo asset yet. */
+/* Landing dropzone reuses .dropzone from Quick Walls. */
 .report-dropzone { border-color: var(--teal); }
 .report-dropzone:hover { border-color: var(--teal); }
-.dropzone-emoji { font-size: 96px; line-height: 1; margin-bottom: 8px; }
-.report-brand-icon { font-size: 20px; margin-right: 4px; }
+.dropzone-brand-logo {
+  width: 180px; height: 180px; object-fit: contain;
+  display: block; margin: 0 auto 8px;
+}
 
 /* Workspace layout */
 .report-workspace { display: none; }
@@ -2658,6 +2662,10 @@ body.tool-report {
 .rep-doc-brand {
   color: var(--teal); font-size: 12px; font-weight: 700;
   letter-spacing: 0.6px; text-transform: uppercase; margin-bottom: 6px;
+}
+.rep-brand-icon {
+  width: 22px; height: 22px; object-fit: contain;
+  vertical-align: middle; margin-right: 5px;
 }
 .rep-doc-title {
   font-size: 22px; font-weight: 700; margin: 0 0 10px; line-height: 1.3;

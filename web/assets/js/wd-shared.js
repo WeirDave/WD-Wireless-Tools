@@ -17,6 +17,18 @@
     WD.syncThemeUI();
   };
 
+  WD.syncFavicon = function () {
+    var dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
+    document.querySelectorAll('link[rel~="icon"]').forEach(function (link) {
+      var href = link.getAttribute('href');
+      if (!href) return;
+      link.setAttribute('href', href.replace(
+        /wd-wireless-tools-v8\.0-(?:white-)?(multi-size\.ico|32x32\.png)(?=([?#]|$))/,
+        'wd-wireless-tools-v8.0-' + (dark ? 'white-' : '') + '$1'
+      ));
+    });
+  };
+
   WD.syncThemeUI = function () {
     var dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
     var icoTxt = dark ? '\u{1F319}' : '☀️';
@@ -36,6 +48,7 @@
     document.querySelectorAll('.theme-toggle-btn').forEach(function (b) {
       b.textContent = icoTxt;
     });
+    WD.syncFavicon();
   };
 
   /* ── HTML / attribute escaping ── */

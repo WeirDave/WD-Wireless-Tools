@@ -276,7 +276,7 @@
     var floorLabel = proj.floorPlans.length === 1 ? 'Floor plan' : 'Floor plans';
     return '<section class="rep-cover">'
       + logo
-      + '<div class="rep-cover-brand"><span class="rep-brand-icon">&#128203;</span> ' + WD.esc(r.coverBrand) + '</div>'
+      + '<div class="rep-cover-brand"><img class="rep-brand-icon" src="../assets/report-v8.0-560x560.png" alt=""> ' + WD.esc(r.coverBrand) + '</div>'
       + '<h1 class="rep-cover-title">' + WD.esc(siteName()) + '</h1>'
       + '<div class="rep-cover-stats">'
       +   '<div class="rep-cover-stat"><b>' + aps.length + '</b><span>Access points</span></div>'
@@ -287,7 +287,7 @@
   }
   function renderInlineHeader(aps, dateStr, r) {
     return '<header class="rep-doc-head">'
-      + '<div class="rep-doc-brand"><span class="rep-brand-icon">&#128203;</span> ' + WD.esc(r.coverBrand) + '</div>'
+      + '<div class="rep-doc-brand"><img class="rep-brand-icon" src="../assets/report-v8.0-560x560.png" alt=""> ' + WD.esc(r.coverBrand) + '</div>'
       + '<h1 class="rep-doc-title">' + WD.esc(siteName()) + '</h1>'
       + '<div class="rep-doc-meta">'
       + '<span><b>APs:</b> ' + aps.length + '</span>'

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/WD Wireless Tools - Transparent v6.0.png" alt="WD Wireless Tools" width="400">
+  <img src="web/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Wireless Tools" width="300">
 </p>
 
 <h3 align="center">A suite of Ekahau workflow tools</h3>
@@ -25,29 +25,29 @@ The suite currently includes five tools:
 <table>
 <tr>
 <td width="20%" align="center">
-  <img src="images/WD Cloud Manager - Transparent v4.0.png" alt="Cloud Manager" width="150"><br>
+  <img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="150"><br>
   <b>Cloud Manager</b><br>
   <sub>v3.11</sub>
 </td>
 <td width="20%" align="center">
-  <img src="images/WD Quick Walls v7.0.png" alt="Quick Walls" width="150"><br>
+  <img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="150"><br>
   <b>Quick Walls</b><br>
   <sub>v7.17</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><sub>▶ Try live</sub></a>
 </td>
 <td width="20%" align="center">
-  <img src="images/WD Squirrel - Transparent v13.png" alt="Squirrel" width="150"><br>
+  <img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="150"><br>
   <b>Squirrel</b><br>
   <sub>v1.8</sub>
 </td>
 <td width="20%" align="center">
-  <div style="font-size:80px;line-height:1;">📏</div>
+  <img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="150"><br>
   <b>Scale</b><br>
   <sub>v1.1</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><sub>▶ Try live</sub></a>
 </td>
 <td width="20%" align="center">
-  <div style="font-size:80px;line-height:1;">📋</div>
+  <img src="web/assets/report-v8.0-560x560.png" alt="Report" width="150"><br>
   <b>Report</b><br>
   <sub>v2.0</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><sub>▶ Try live</sub></a>
