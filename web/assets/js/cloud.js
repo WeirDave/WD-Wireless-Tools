@@ -507,6 +507,8 @@ function renderCluster(cl) {
     const iid = it.id || it.path;
     const isNewest = iid === cl.newestId;
     const isLargest = iid === cl.largestId;
+    const sideCls = it.side === 'cloud' ? 'cloud' : 'local';
+    const sideIcon = it.side === 'cloud' ? '&#9729;' : '&#128187;';
     const rowCls = ['dup-item', 'side-' + sideCls];
     if (isNewest) rowCls.push('is-newest');
     if (isLargest) rowCls.push('is-largest');
@@ -515,8 +517,6 @@ function renderCluster(cl) {
     else rowCls.push('is-extra');
     const dateStr = it.mtime ? fmtRelDate(it.mtime) : '—';
     const sizeStr = fmtBytes(it.size);
-    const sideIcon = it.side === 'cloud' ? '&#9729;' : '&#128187;';
-    const sideCls = it.side === 'cloud' ? 'cloud' : 'local';
 
     h += `<div class="${rowCls.join(' ')}" data-iid="${a(iid)}">`;
     h += `<input type="checkbox" class="dup-item-check" onchange="dupChkChanged('${kAttr}')">`;
