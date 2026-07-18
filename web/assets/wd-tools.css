@@ -136,6 +136,15 @@ body.tool-home[data-theme="light"] {
   --text-2: #4b5563;   /* was #6b7684 */
   --text-3: #6b7684;   /* was #9aa5b1 — failed WCAG AA on white */
 }
+/* Squirrel, Scale, Quick Walls: match the home page's pure-white workspace
+   in light mode so the card hover reads the same. Base light-mode --bg is
+   #f0f1f3 (a light grey) which makes cards feel like they sit on a tinted
+   backdrop; home uses pure white and the cards blend seamlessly. */
+[data-theme="light"] body.tool-organizer,
+[data-theme="light"] body.tool-scale,
+[data-theme="light"] body.tool-walls {
+  --bg: #ffffff;
+}
 
 /* ══════════════════════════════════════════════════════════════════
    BASE
@@ -158,12 +167,30 @@ mark {
 /* ══════════════════════════════════════════════════════════════════
    TOPBAR (navy bar — shared by Cloud Manager, Folder Organizer)
    ══════════════════════════════════════════════════════════════════ */
+/* Every tool's top header — .topbar / .header / .dz-topbar / .report-toolbar
+   — shares this baseline so they render at the exact same height regardless
+   of what's placed inside. Individual header classes override colors/borders. */
+.topbar, .header, .dz-topbar, .report-toolbar {
+  min-height: 56px;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
 .topbar {
   background: var(--navy); color: white;
-  padding: 5px 12px;
   display: flex; align-items: center;
   flex-shrink: 0;
 }
+[data-theme="light"] .topbar {
+  /* 20% #0668D9 blue wash over surface — visibly blue, not grey. */
+  background:
+    linear-gradient(rgba(6,104,217,0.20), rgba(6,104,217,0.20)),
+    var(--surface);
+  color: var(--text);
+}
+[data-theme="light"] .topbar h1 .ver { color: var(--text-2); }
+[data-theme="light"] .topbar-right { color: var(--text-2); }
+[data-theme="light"] .topbar-right a.homelink { color: var(--text-2); }
+[data-theme="light"] .topbar-right a.homelink:hover { color: var(--text); }
 /* Equal-width flanks so the .topbar-center title is TRUE center regardless
    of how wide the hamburger / user-email / folder buttons grow. */
 .topbar-left { flex: 1; display: flex; align-items: center; gap: 10px; justify-content: flex-start; }
@@ -209,11 +236,17 @@ mark {
 
 /* Quick Walls header bar */
 .header {
-  padding: 10px 16px;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   background: #0e1b26; color: white;
   position: sticky; top: 0; z-index: 50; flex-shrink: 0;
 }
+[data-theme="light"] .header {
+  background: var(--head-bg);   /* toned-down navy for light mode */
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+[data-theme="light"] .header h1, [data-theme="light"] .header h1 .ver { color: var(--text); }
+[data-theme="light"] .header h1 .ver { color: var(--text-2); }
 .header-left { display: flex; align-items: center; gap: 12px; }
 .header h1, .dz-topbar h1 {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
@@ -236,8 +269,8 @@ mark {
    variants (.btn-blue, .btn-green, .btn-red) keep their identity. */
 .header-actions .btn {
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  font-size: 13px; font-weight: 600; padding: 8px 16px;
-  border-radius: 5px;
+  font-size: 13px; font-weight: 600; padding: 8px 18px;
+  border-radius: 999px;
 }
 /* .btn-secondary in the header uses the translucent-white style.
    Color variants (.btn-blue etc.) inherit from the base .btn rules and
@@ -283,6 +316,9 @@ mark {
   display: block; height: 2px; background: #cbd5e1; border-radius: 1px;
 }
 .hamburger-btn:hover { background: rgba(255,255,255,0.10); }
+[data-theme="light"] .hamburger-btn { border-color: var(--border); }
+[data-theme="light"] .hamburger-btn span { background: var(--text); }
+[data-theme="light"] .hamburger-btn:hover { background: var(--surface-hover); }
 
 /* Quick Walls uses a slightly larger hamburger */
 body.tool-walls .hamburger-btn {
@@ -341,9 +377,20 @@ body.tool-walls .hamburger-btn {
    ══════════════════════════════════════════════════════════════════ */
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 9px 20px; border-radius: 8px; border: none;
+  padding: 9px 20px; border-radius: 999px; border: none;
   font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: background 0.12s; white-space: nowrap;
+  transition: transform .12s ease, box-shadow .12s ease, background 0.12s ease;
+  white-space: nowrap;
+}
+/* Same "3D" hover the cards use — small lift + subtle shadow. Color darkening
+   from each variant (.btn-blue:hover, .btn-primary:hover, etc.) stacks on top. */
+.btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.22);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0,0,0,.18);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--green); color: #fff; }
@@ -369,14 +416,14 @@ body.tool-walls .hamburger-btn {
 .btn-icon {
   width: 28px; height: 28px; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  border-radius: 4px;
+  border-radius: 50%;
 }
 .btn-reset-defaults { color: #d97706; border-color: rgba(217,119,6,0.4); }
 .btn-reset-defaults:hover { background: rgba(217,119,6,0.1); border-color: #d97706; }
 
-/* Cloud Manager uses compact toolbar buttons */
+/* Cloud Manager uses compact toolbar buttons — keep pill shape suite-wide. */
 body.tool-cloud .btn {
-  padding: 4px 10px; border-radius: 3px; font-size: 12px; font-weight: 500;
+  padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 500;
 }
 /* Give .btn-secondary a visible outline on Cloud so it doesn't look like a
    flat label. Contrasts with the solid blue/green primary buttons. */
@@ -419,7 +466,7 @@ body.tool-cloud #liveBtn.live-on::before {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; padding: 0;
   background: var(--text); color: var(--surface);
-  border: 1px solid var(--text); border-radius: 4px;
+  border: 1px solid var(--text); border-radius: 50%;
   font-size: 15px; cursor: pointer;
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
@@ -430,7 +477,7 @@ body.tool-cloud #liveBtn.live-on::before {
 /* Quick Walls buttons — slightly different base */
 body.tool-walls .btn {
   font-family: var(--sans); font-size: 13px; font-weight: 600;
-  padding: 8px 16px; border: 1px solid var(--border); border-radius: 5px;
+  padding: 8px 18px; border: 1px solid var(--border); border-radius: 999px;
   background: var(--surface-raised); color: var(--text-2);
 }
 body.tool-walls .btn:hover {
@@ -733,7 +780,7 @@ body.tool-home .topbar {
   transform: translateY(-4px);
   box-shadow: 0 16px 40px rgba(0,0,0,.28);
   border-color: var(--blue);
-  background: var(--card-hover, var(--surface-hover));
+  background: var(--surface-raised);   /* unified with every other card type */
 }
 .logo-well {
   height: 150px; width: 100%;
@@ -751,7 +798,7 @@ body.tool-home .topbar {
 .card .open-btn {
   background: var(--blue); color: #fff;
   font-size: 13px; font-weight: 600;
-  padding: 9px 22px; border-radius: 8px; letter-spacing: .3px;
+  padding: 9px 24px; border-radius: 999px; letter-spacing: .3px;
 }
 .card:hover .open-btn { background: var(--blue-dark); }
 
@@ -809,7 +856,7 @@ body.tool-home .topbar {
 .login-status { font-size: 14px; font-weight: 500; }
 .login-detail { font-size: 12px; color: #9aa0a6; margin-top: 5px; }
 .login-btn {
-  width: 100%; padding: 9px; border-radius: 6px; border: none;
+  width: 100%; padding: 10px; border-radius: 999px; border: none;
   background: var(--blue); color: white;
   font-size: 13px; font-weight: 600; cursor: pointer; margin-top: 10px;
 }
@@ -836,6 +883,7 @@ body.tool-home .topbar {
   background: var(--navy); padding: 6px 12px 0;
   flex-shrink: 0; gap: 5px;
 }
+[data-theme="light"] .tabs { background: var(--head-bg); }
 .tab {
   padding: 6px 20px 7px; font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
   color: #cbd5e1; cursor: pointer;
@@ -853,6 +901,19 @@ body.tool-home .topbar {
   color: #fff; font-weight: 800; border-color: transparent;
   border-bottom: none; padding-bottom: 8px;
   box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+}
+/* Light-mode tab styling — dark text on light surface, visible borders */
+[data-theme="light"] .tab {
+  color: var(--text-2);
+  background: var(--surface);
+  border-color: var(--border);
+}
+[data-theme="light"] .tab:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+[data-theme="light"] .tab.active {
+  color: #fff;   /* stays white — active tabs use solid blue/green/amber fills */
 }
 #tabSites.active { background: var(--blue); border-top-color: #bfe3f5; }
 #tabProjects.active { background: var(--green); border-top-color: #d3efc6; }
@@ -881,12 +942,30 @@ body.tool-cloud .dup-toolbar-btn {
 .dash-card {
   flex: 1; min-width: 110px; padding: 6px 10px;
   border-radius: 4px; cursor: pointer;
-  transition: all 0.12s;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .15s ease;
   background: var(--surface); border: 1px solid var(--border);
   border-left: 3px solid transparent;
 }
 .dash-card.allcard { flex: 0 0 auto; min-width: 70px; }
-.dash-card:hover { background: var(--bg); }
+/* Same hover language as home cards — lift + big shadow + variant-color
+   border. The color-per-variant is applied below via .allcard, .matched,
+   .mismatches, etc. */
+.dash-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0,0,0,.28);
+  background: var(--surface-raised);   /* same lighter tint the home cards use */
+}
+.dash-card.allcard:hover     { border-color: var(--text-3); }
+.dash-card.matched:hover     { border-color: var(--green); }
+.dash-card.mismatches:hover  { border-color: var(--amber); }
+.dash-card.orphans:hover     { border-color: var(--red); }
+.dash-card.unassigned:hover  { border-color: var(--slate); }
+.dash-card.cloud-only:hover  { border-color: #6bb3e0; }
+.dash-card.local-only:hover  { border-color: #b48ce8; }
+.dash-card.dup-all:hover     { border-color: var(--amber); }
+.dash-card.dup-mixed:hover   { border-color: #6bb3e0; }
+.dash-card.dup-local:hover   { border-color: #b48ce8; }
+.dash-card.dup-cloud:hover   { border-color: #7dd6c6; }
 .dash-card.active { box-shadow: 0 0 0 1.5px var(--text); }
 .dash-card .number {
   font-size: 22px; font-weight: 700; line-height: 1; color: var(--text);
@@ -942,17 +1021,15 @@ body.tool-cloud .dup-toolbar-btn {
   100% { box-shadow: 0 0 0 12px rgba(240,184,95,0); }
 }
 
-/* Cluster header + .dup-explain both layer the SAME rgba(217,119,6,0.08)
-   amber wash on TOP of the same --surface base. This gives the orange
-   translucent feel Dave liked from v1.8.21, but guarantees pixel-match
-   between the two elements because they both share the same underlying
-   surface color regardless of where they sit in the DOM. */
+/* Cluster header — #0668D9 blue wash at 10% over --surface. Same layering
+   trick as .dup-explain (which stays amber) so the header sits on a
+   consistent underlying color regardless of DOM position. */
 .dup-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   cursor: pointer; user-select: none;
   background:
-    linear-gradient(rgba(217,119,6,0.10), rgba(217,119,6,0.10)),
+    linear-gradient(rgba(6,104,217,0.10), rgba(6,104,217,0.10)),
     var(--surface);
   border-bottom: 1px solid var(--border);
 }
@@ -990,7 +1067,7 @@ body.tool-cloud .dup-toolbar-btn {
   font-size: 12px;
 }
 .dup-actions-bar .btn-sm {
-  padding: 5px 12px; font-size: 12px; border-radius: 5px;
+  padding: 5px 14px; font-size: 12px; border-radius: 999px;
 }
 .dup-actions-bar .spacer { flex: 1; }
 .dup-actions-bar .manual-count { color: var(--text-2); font-size: 11px; }
@@ -998,7 +1075,9 @@ body.tool-cloud .dup-toolbar-btn {
 .dup-items { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .dup-item {
   display: grid;
-  grid-template-columns: 30px 24px 1fr auto auto auto auto;
+  /* Fixed widths for size (90 px) and date (105 px) so they right-align
+     uniformly across every row and always have room for "Nov 22, 2026". */
+  grid-template-columns: 30px 24px 1fr 90px 105px auto;
   border-radius: 6px;
   gap: 12px; align-items: center;
   padding: 8px 16px;
@@ -1032,8 +1111,6 @@ body.tool-cloud .dup-toolbar-btn {
   font-variant-numeric: tabular-nums; text-align: right;
   white-space: nowrap;
 }
-.dup-item.is-largest .dup-item-size { color: #6bb3e0; font-weight: 700; }
-.dup-item.is-newest .dup-item-date { color: #5fa970; font-weight: 700; }
 
 /* Fade items already paired via Sites/Projects — the "normal" copies.
    Only the NAME + LOCATION fade. Size / date / owner stay at full opacity
@@ -1062,7 +1139,7 @@ body.tool-cloud .dup-toolbar-btn {
    Same --surface bg as matched rows; only the outline + bold name +
    amber side icon distinguish them. */
 .dup-item.is-extra {
-  box-shadow: inset 0 0 0 3px var(--amber);
+  box-shadow: inset 0 0 0 2px var(--amber);
 }
 .dup-item.is-extra .dup-item-name {
   font-weight: 700; color: var(--text);
@@ -1750,14 +1827,22 @@ body.tool-cloud .toolbar input.search:focus {
   align-items: center; gap: 6px; padding: 8px 14px 8px 20px;
   border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface); min-height: 42px;
-  transition: background 0.1s; position: relative;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .15s ease;
+  position: relative;
 }
 .hotkey-swatch {
   position: absolute; left: 0; top: 0; bottom: 0;
   width: 8px; border-radius: 6px 0 0 6px;
 }
 .hotkey-slot:last-child { border-bottom: 1px solid var(--border); }
-.hotkey-slot:hover { background: var(--surface-raised); }
+/* Same home-card hover: lift + shadow + border color match. --slot-color is
+   set inline from each assigned wall type's swatch color. */
+.hotkey-slot:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0,0,0,.28);
+  border-color: var(--slot-color, var(--text-3));
+  background: var(--surface-raised);
+}
 .hotkey-slot.dragover { background: var(--accent-dim); }
 .hotkey-num {
   font-family: var(--mono); font-size: 13px; font-weight: 700;
@@ -1798,9 +1883,17 @@ body.tool-walls .toolbar {
   padding: 9px 12px 9px 26px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); cursor: grab;
-  transition: all 0.15s; position: relative;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .15s ease;
+  position: relative;
 }
-.wall-card:hover { background: var(--surface-raised); border-color: var(--text-3); }
+/* Same hover language as home cards. --wall-color is set inline on each
+   card from its swatch color, so the hover border extends the swatch. */
+.wall-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0,0,0,.28);
+  border-color: var(--wall-color, var(--text-3));
+  background: var(--surface-raised);   /* same lighter tint the home cards use */
+}
 .wall-card.dragging { opacity: 0.3; }
 .wall-swatch {
   position: absolute; left: 0; top: 0; bottom: 0;
@@ -1814,6 +1907,15 @@ body.tool-walls .toolbar {
   color: #F0C050; background: rgba(240,192,80,0.12);
   padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
 }
+/* Yellow #F0C050 fails contrast on white — swap to --amber-dark in light mode
+   across every keybind/number use on Quick Walls. Kept in dark mode where
+   it reads fine on dark surfaces. */
+[data-theme="light"] .wall-keybind-badge {
+  color: var(--amber-dark); background: rgba(217,119,6,0.14);
+}
+[data-theme="light"] .dropzone-steps li::before { color: var(--amber-dark); }
+[data-theme="light"] .hotkey-num { color: var(--amber-dark); }
+[data-theme="light"] .keybind-option .num { color: var(--amber-dark); }
 .wall-meta {
   font-family: var(--mono); font-size: 11px; color: var(--text-2);
   margin-top: 2px; display: flex; gap: 12px; flex-wrap: wrap;
@@ -1881,10 +1983,16 @@ body.tool-walls .toolbar {
 /* Landing topbar (dropzone state) */
 .dz-topbar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 50;
-  padding: 10px 16px;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   background: #0e1b26; color: white;
 }
+[data-theme="light"] .dz-topbar {
+  background: var(--head-bg);   /* toned-down navy for light mode */
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+[data-theme="light"] .dz-topbar h1, [data-theme="light"] .dz-topbar h1 .ver { color: var(--text); }
+[data-theme="light"] .dz-topbar h1 .ver { color: var(--text-2); }
 .header-center { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none; }
 .header-center h1 { pointer-events: auto; }
 
@@ -2111,12 +2219,19 @@ body.tool-organizer .theme-btn:hover { background: rgba(255,255,255,0.15); color
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; padding: 28px 24px; text-align: center;
   display: flex; flex-direction: column; align-items: center;
-  transition: border-color 0.15s, transform 0.12s;
+  /* Same hover language as home cards: lift + big shadow + variant-color border. */
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .15s ease;
 }
-.pick-card:hover { transform: translateY(-2px); }
-.pick-card.organize { border-top: 3px solid var(--green); }
+.pick-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0,0,0,.28);
+  background: var(--surface-raised);   /* same lighter tint the home cards use */
+}
+/* Persistent top-flare removed — matches home cards' "clean until hover"
+   pattern (Dave: hover on pick-card / scale-panel didn't look like the
+   home cards because uneven border widths broke the effect). Accent color
+   still shows on hover via border-color, plus the icon + button color. */
 .pick-card.organize:hover { border-color: var(--green); }
-.pick-card.create { border-top: 3px solid var(--blue); }
 .pick-card.create:hover { border-color: var(--blue); }
 .pick-card-icon { font-size: 36px; margin-bottom: 12px; }
 .pick-card-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
@@ -2212,9 +2327,19 @@ body.tool-scale {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 14px; padding: 20px 22px;
   display: flex; flex-direction: column;
+  /* Same hover treatment as the home cards — lift, big shadow, tinted border,
+     background wash. Purple for Imperial, blue for Metric (matches the badge
+     accent already on each panel). */
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease, background .15s ease;
 }
-.scale-panel.imperial { border-top: 3px solid var(--purple); }
-.scale-panel.metric   { border-top: 3px solid var(--blue); }
+.scale-panel:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(0,0,0,.28);
+  background: var(--surface-raised);   /* same lighter tint the home cards use */
+}
+/* Persistent top-flare removed — same reason as .pick-card above. */
+.scale-panel.imperial:hover { border-color: var(--purple); }
+.scale-panel.metric:hover { border-color: var(--blue); }
 
 .scale-panel-head {
   display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
@@ -2347,14 +2472,17 @@ body.tool-report {
 
 .report-toolbar {
   display: flex; align-items: center; gap: 12px;
-  padding: 8px 16px; border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   background: var(--surface);
+}
+[data-theme="light"] .report-toolbar {
+  background: var(--head-bg);   /* match other headers in light mode */
 }
 .report-toolbar .header-left { display: flex; align-items: center; gap: 10px; }
 .report-toolbar-center { flex: 1; text-align: center; }
-.report-toolbar-center h1 { margin: 0; font-size: 18px; font-weight: 700; }
+.report-toolbar-center h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.2px; }
 .report-toolbar-center h1 span:first-of-type { color: var(--teal); }
-.report-toolbar .ver { font-weight: 400; color: var(--text-2); font-size: 12px; margin-left: 6px; }
+.report-toolbar .ver { font-weight: 500; color: var(--text-2); font-size: 14px; margin-left: 6px; }
 .report-toolbar .header-actions { display: flex; align-items: center; gap: 8px; }
 
 .report-body {

@@ -19,16 +19,22 @@
 
   WD.syncThemeUI = function () {
     var dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
-    var ico = document.getElementById('themeIco');
-    var txt = document.getElementById('themeTxt');
-    if (ico) ico.textContent = dark ? '\u{1F319}' : '☀️';
-    if (txt) txt.textContent = dark ? 'Dark' : 'Light';
-    var toggle = document.getElementById('themeToggle');
-    if (toggle && !ico) toggle.textContent = dark ? '\u{1F319}' : '☀️';
+    var icoTxt = dark ? '\u{1F319}' : '☀️';
+    var lblTxt = dark ? 'Dark' : 'Light';
+    // Pill-style .theme-toggle — every page uses this now; may appear more
+    // than once per page (landing dropzone + workspace toolbar on Report/Walls).
+    document.querySelectorAll('.theme-toggle').forEach(function (el) {
+      var ico = el.querySelector('.ico');
+      var txt = el.querySelector('.txt');
+      if (ico) ico.textContent = icoTxt;
+      if (txt) txt.textContent = lblTxt;
+      if (!ico && !txt) el.textContent = icoTxt + ' ' + lblTxt;
+    });
+    // Legacy variants — kept for any page that hasn't been converted yet.
     var btn = document.getElementById('themeBtn');
-    if (btn) btn.textContent = dark ? '\u{1F319} Dark' : '☀️ Light';
+    if (btn) btn.textContent = icoTxt + ' ' + lblTxt;
     document.querySelectorAll('.theme-toggle-btn').forEach(function (b) {
-      b.textContent = dark ? '\u{1F319}' : '☀️';
+      b.textContent = icoTxt;
     });
   };
 

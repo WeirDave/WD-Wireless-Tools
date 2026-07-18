@@ -131,6 +131,7 @@ function renderHotkeyPanel() {
     if (wt) {
       html += `
         <div class="hotkey-slot"
+             style="--slot-color:${wt.color || '#666'}"
              ondragover="onSlotDragOver(event, ${n})"
              ondragleave="onSlotDragLeave(event)"
              ondrop="onSlotDrop(event, ${n})">
@@ -175,6 +176,7 @@ function renderList() {
 
     html += `
       <div class="wall-card" draggable="true"
+           style="--wall-color:${wt.color || '#666'}"
            ondragstart="onCardDragStart(event, ${i})"
            ondragend="onCardDragEnd(event)">
         <div class="wall-swatch" style="background:${wt.color || '#666'}"></div>

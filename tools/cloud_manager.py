@@ -862,14 +862,20 @@ def _dup_key(name):
 
 def _parse_cloud_mtime(pr):
     """Best-effort extraction of a modification timestamp from a project dict.
-    Returns unix seconds (int) or 0. Ekahau uses ISO strings on various keys."""
+    Returns unix seconds (int) or 0. Ekahau nests the real dates inside
+    pr["history"]{modifiedAt, createdAt}; older/other endpoints may return
+    them flat. Try both."""
     from datetime import datetime
-    for key in ("modifiedAt", "updatedAt", "lastModifiedAt", "modified", "createdAt"):
-        v = pr.get(key)
+    history = pr.get("history") or {}
+    candidates = [
+        history.get("modifiedAt"), history.get("createdAt"),
+        pr.get("modifiedAt"), pr.get("updatedAt"),
+        pr.get("lastModifiedAt"), pr.get("modified"), pr.get("createdAt"),
+    ]
+    for v in candidates:
         if not v:
             continue
         try:
-            # Handle trailing Z (UTC) and fractional seconds.
             s = str(v).replace("Z", "+00:00")
             return int(datetime.fromisoformat(s).timestamp())
         except (ValueError, TypeError):

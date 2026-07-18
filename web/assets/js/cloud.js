@@ -431,7 +431,7 @@ function renderDuplicates() {
     <div class="dup-explain-title">What am I looking at?</div>
     <div class="dup-explain-body">
       Clusters of files that share a <b>normalized name</b> <span class="dup-explain-hint">(punctuation, spacing, and case ignored — so <code>SNAN2-3030-Baseline</code> matches <code>SNAN2 3030 Baseline</code>)</span> AND have <b>at least one extra copy beyond the normal cloud↔local pair</b>.
-      Within each cluster, <b>faded</b> items are already paired; <b>amber-outlined</b> items are the extras worth deleting or merging.
+      Every row is bookended in <b style="color:var(--blue)">blue</b> (cloud) or <b style="color:var(--green)">green</b> (local). Rows tagged <span class="dup-pill matched">matched</span> are the cloud↔local pair you should keep. Rows with an <b style="color:var(--amber)">amber outline</b> are the extras — those are the ones to delete or merge.
     </div>
     <div class="dup-explain-legend">
       <span class="dup-explain-tag mixed">Mixed</span> — matched pair PLUS at least one extra copy on one side &nbsp;·&nbsp;
@@ -501,13 +501,9 @@ function renderCluster(cl) {
   h += `<div class="dup-items">`;
   cl.items.forEach((it, idx) => {
     const iid = it.id || it.path;
-    const isNewest = iid === cl.newestId;
-    const isLargest = iid === cl.largestId;
     const sideCls = it.side === 'cloud' ? 'cloud' : 'local';
     const sideIcon = it.side === 'cloud' ? '&#9729;' : '&#128187;';
     const rowCls = ['dup-item', 'side-' + sideCls];
-    if (isNewest) rowCls.push('is-newest');
-    if (isLargest) rowCls.push('is-largest');
     // Fade items already paired in Sites/Projects — outline the "extras."
     if (it.matched) rowCls.push('is-matched');
     else rowCls.push('is-extra');
@@ -517,16 +513,18 @@ function renderCluster(cl) {
     h += `<div class="${rowCls.join(' ')}" data-iid="${a(iid)}">`;
     h += `<input type="checkbox" class="dup-item-check" onchange="dupChkChanged('${kAttr}')">`;
     h += `<span class="dup-item-side ${sideCls}">${sideIcon}</span>`;
-    // Location + owner on the sub-line so cloud items with "(no site)" still
-    // carry enough context (owner email) to judge whether they're safe to delete.
+    // Location + owner on the sub-line. Only the "matched" pill remains
+    // (largest/newest removed — they were redundant with the sortable
+    // size and date columns to their right).
     const loc = it.location || (it.side === 'cloud' ? '(no site)' : '');
     const owner = it.owner ? `<span class="dup-item-owner">· ${e(it.owner)}</span>` : '';
+    const matchedPill = it.matched ? '<span class="dup-pill matched">matched</span>' : '';
     h += `<div>
-      <div class="dup-item-name">${e(it.name)}${it.matched ? '<span class="dup-pill matched">matched</span>' : ''}</div>
+      <div class="dup-item-name">${e(it.name)}${matchedPill}</div>
       <div class="dup-item-loc">${e(loc)} ${owner}</div>
     </div>`;
-    h += `<div class="dup-item-size">${e(sizeStr)}${isLargest ? '<span class="dup-pill largest">largest</span>' : ''}</div>`;
-    h += `<div class="dup-item-date">${e(dateStr)}${isNewest ? '<span class="dup-pill newest">newest</span>' : ''}</div>`;
+    h += `<div class="dup-item-size">${e(sizeStr)}</div>`;
+    h += `<div class="dup-item-date">${e(dateStr)}</div>`;
     h += `<div class="dup-item-actions">`;
     if (it.side === 'local') {
       h += `<button class="icon-btn" title="Show in Explorer/Finder" onclick="revealInExplorer('${p(it.path)}')">&#128193;</button>`;
