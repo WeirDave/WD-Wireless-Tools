@@ -415,12 +415,27 @@ function renderDuplicates() {
     return;
   }
 
+  // Count all unmatched extras across all currently-filtered clusters so we
+  // can offer a one-click global cleanup. Only counts items that would be
+  // deleted — matched items are never touched.
+  const totalExtras = filtered.reduce(
+    (n, cl) => n + cl.items.filter(i => !i.matched).length, 0);
+  const extrasBtn = totalExtras > 0
+    ? `<button class="btn btn-amber btn-sm" onclick="dupDeleteAllExtras()"
+         title="Deletes every unmatched item across all visible clusters. Matched pairs stay intact.">
+         &#128465; Delete all ${totalExtras} extras (keep every pair)
+       </button>`
+    : '';
+
   let h = `<div class="dup-explain">
     <div class="dup-explain-title">What am I looking at?</div>
     <div class="dup-explain-body">
       Clusters of files that share a normalized name AND have <b>at least one extra copy beyond the normal cloud↔local pair</b>.
       Normal 1-on-each-side pairs are hidden — they're already visible on the Projects tab.
       Within each cluster, <b>faded</b> items are already paired; <b>bold + amber</b> items are the extras worth deleting or merging.
+    </div>
+    <div class="dup-explain-actions">
+      ${extrasBtn}
     </div>
     <div class="dup-explain-legend">
       <span class="dup-explain-tag mixed">Mixed</span> — matched pair PLUS at least one extra copy on one side &nbsp;·&nbsp;
@@ -505,9 +520,13 @@ function renderCluster(cl) {
     h += `<div class="${rowCls.join(' ')}" data-iid="${a(iid)}">`;
     h += `<input type="checkbox" class="dup-item-check" onchange="dupChkChanged('${kAttr}')">`;
     h += `<span class="dup-item-side ${sideCls}">${sideIcon}</span>`;
+    // Location + owner on the sub-line so cloud items with "(no site)" still
+    // carry enough context (owner email) to judge whether they're safe to delete.
+    const loc = it.location || (it.side === 'cloud' ? '(no site)' : '');
+    const owner = it.owner ? `<span class="dup-item-owner">· ${e(it.owner)}</span>` : '';
     h += `<div>
       <div class="dup-item-name">${e(it.name)}${it.matched ? '<span class="dup-pill matched">matched</span>' : ''}</div>
-      <div class="dup-item-loc">${e(it.location || (it.side === 'cloud' ? '(no site)' : ''))}</div>
+      <div class="dup-item-loc">${e(loc)} ${owner}</div>
     </div>`;
     h += `<div class="dup-item-size">${e(sizeStr)}${isLargest ? '<span class="dup-pill largest">largest</span>' : ''}</div>`;
     h += `<div class="dup-item-date">${e(dateStr)}${isNewest ? '<span class="dup-pill newest">newest</span>' : ''}</div>`;
@@ -627,6 +646,17 @@ function dupDeleteExtras(key) {
   const toDelete = cl.items.filter(it => !it.matched);
   if (!toDelete.length) { toast('No unmatched extras in this cluster', 'info'); return; }
   _bulkDeleteItems(toDelete, key);
+}
+// Same logic, but ACROSS every rendered cluster in one click. Only touches
+// unmatched items so every matched cloud↔local pair stays intact.
+function dupDeleteAllExtras() {
+  const clusters = (dupData && dupData.clusters) || [];
+  const toDelete = [];
+  clusters.forEach(cl => {
+    cl.items.forEach(it => { if (!it.matched) toDelete.push(it); });
+  });
+  if (!toDelete.length) { toast('No unmatched extras across any cluster', 'info'); return; }
+  _bulkDeleteItems(toDelete, null);
 }
 function dupDeleteChecked(key) {
   const el = document.querySelector(`.dup-cluster[data-key="${cssEscape(key)}"]`);

@@ -921,9 +921,15 @@ body.tool-home .topbar {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   cursor: pointer; user-select: none;
-  border-bottom: 1px solid transparent;
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--border);
+  border-left: 4px solid var(--amber);
 }
-.dup-cluster.expanded .dup-head { border-bottom-color: var(--border); }
+.dup-head:hover { background: var(--surface-hover); }
+[data-theme="light"] .dup-head {
+  background: rgba(217,119,6,0.06);
+}
+[data-theme="light"] .dup-head:hover { background: rgba(217,119,6,0.10); }
 .dup-chevron { color: var(--text-3); font-size: 12px; transition: transform 0.15s; }
 .dup-cluster.expanded .dup-chevron { transform: rotate(90deg); }
 .dup-title {
@@ -998,15 +1004,12 @@ body.tool-home .topbar {
 .dup-item.is-newest .dup-item-date { color: #5fa970; font-weight: 700; }
 
 /* Fade items already paired via Sites/Projects — the "normal" copies.
-   Bold + amber-tint the ones that AREN'T paired — those are the extras
-   the user probably wants to remove. */
+   Only the NAME + LOCATION fade. Size / date / owner stay at full opacity
+   because those are the fields you need to READ to judge whether the
+   extra is safe to delete. */
 .dup-item.is-matched .dup-item-name,
 .dup-item.is-matched .dup-item-loc {
   opacity: 0.55;
-}
-.dup-item.is-matched .dup-item-size,
-.dup-item.is-matched .dup-item-date {
-  opacity: 0.65;
 }
 .dup-item.is-extra { background: rgba(217,119,6,0.05); }
 .dup-item.is-extra .dup-item-name {
@@ -1090,8 +1093,15 @@ body.tool-home .topbar {
   padding: 1px 5px; border-radius: 3px;
   background: var(--surface-hover); color: var(--text);
 }
+.dup-explain-actions {
+  margin: 8px 0 6px; display: flex; gap: 8px;
+}
+.dup-explain-actions:empty { display: none; }
 .dup-explain-legend {
   font-size: 12px; color: var(--text-2); line-height: 1.6;
+}
+.dup-item-owner {
+  color: var(--text-3); font-size: 11px; margin-left: 4px;
 }
 .dup-explain-tag {
   display: inline-block; padding: 1px 7px;

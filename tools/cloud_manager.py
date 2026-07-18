@@ -901,6 +901,8 @@ def build_duplicates_data(api, output_dir):
                 continue
             name = pr.get("name") or pr.get("title") or "Untitled"
             size = int((pr.get("statistics") or {}).get("size", 0) or 0)
+            history = pr.get("history") or {}
+            owner = (history.get("createdBy") or "").strip().lower()
             cloud_items.append({
                 "side": "cloud",
                 "id": pid,
@@ -909,6 +911,7 @@ def build_duplicates_data(api, output_dir):
                 "mtime": _parse_cloud_mtime(pr),
                 "location": dataset_site.get(pid, ""),
                 "hasSite": bool(dataset_site.get(pid)),
+                "owner": owner,
             })
     except Exception:
         pass
@@ -923,6 +926,7 @@ def build_duplicates_data(api, output_dir):
             "size": int(f.get("size", 0) or 0),
             "mtime": int(f.get("mtime", 0) or 0),
             "location": f["folder"],
+            "owner": f.get("owner") or "",
         })
 
     # Determine which items are currently "matched" in the Projects view so we
