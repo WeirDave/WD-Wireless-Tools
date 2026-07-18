@@ -110,7 +110,10 @@ function goToDashboard(email) {
 function liveMs() { try { return parseInt(localStorage.getItem('wd-live-ms')) || 30000; } catch (e) { return 30000; } }
 let liveTimer = null;
 let liveCountdown = 0;
-function liveWanted() { try { return localStorage.getItem('wd-live') === 'on'; } catch (e) { return false; } }
+// Live is default-ON. A user who explicitly toggled it off has 'off' stored;
+// anything else (never set, or 'on') → on. Multi-user cloud environments
+// mean stale data is worse than a periodic refetch — hence default-on.
+function liveWanted() { try { return localStorage.getItem('wd-live') !== 'off'; } catch (e) { return true; } }
 function applyLiveUI() {
   const b = document.getElementById('liveBtn');
   if (!b) return;
