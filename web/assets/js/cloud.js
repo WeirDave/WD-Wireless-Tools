@@ -431,7 +431,6 @@ function renderDuplicates() {
     <div class="dup-explain-title">What am I looking at?</div>
     <div class="dup-explain-body">
       Clusters of files that share a <b>normalized name</b> <span class="dup-explain-hint">(punctuation, spacing, and case ignored — so <code>SNAN2-3030-Baseline</code> matches <code>SNAN2 3030 Baseline</code>)</span> AND have <b>at least one extra copy beyond the normal cloud↔local pair</b>.
-      Normal 1-on-each-side pairs are hidden — they're already visible on the Projects tab.
       Within each cluster, <b>faded</b> items are already paired; <b>amber-outlined</b> items are the extras worth deleting or merging.
     </div>
     <div class="dup-explain-legend">

@@ -935,19 +935,19 @@ body.tool-cloud .dup-toolbar-btn {
   100% { box-shadow: 0 0 0 12px rgba(240,184,95,0); }
 }
 
-/* Cluster header — same amber wash as the "What am I looking at?" info
-   panel so the two elements share one visual language. No border-left
-   tip; regular text color. */
+/* Cluster header uses the SOLID --amber-bg token so it renders IDENTICALLY
+   to the .dup-explain info panel. Both elements sit on different underlying
+   surfaces (cluster head → --surface, info panel → app background), so a
+   transparent rgba amber wash composites to different final colors on each.
+   A solid palette token is the only way to guarantee color parity. */
 .dup-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   cursor: pointer; user-select: none;
-  background: rgba(217,119,6,0.08);
+  background: var(--amber-bg);
   border-bottom: 1px solid var(--border);
 }
-.dup-head:hover { background: rgba(217,119,6,0.14); }
-[data-theme="light"] .dup-head { background: rgba(217,119,6,0.10); }
-[data-theme="light"] .dup-head:hover { background: rgba(217,119,6,0.16); }
+.dup-head:hover { filter: brightness(1.15); }
 .dup-head .dup-title { color: var(--text); font-weight: 700; }
 .dup-chevron { color: var(--text-3); font-size: 12px; transition: transform 0.15s; }
 .dup-cluster.expanded .dup-chevron { transform: rotate(90deg); }
@@ -1114,7 +1114,7 @@ body.tool-cloud .dup-toolbar-btn {
 /* Duplicates view — explanation banner at the top */
 .dup-explain {
   margin: 12px 16px 8px; padding: 14px 20px;
-  background: rgba(217,119,6,0.08);
+  background: var(--amber-bg);   /* solid — same as .dup-head so they match exactly */
   border: 1px solid rgba(217,119,6,0.35);
   border-radius: 6px; color: var(--text);
   text-align: center;   /* center every line of the banner */
