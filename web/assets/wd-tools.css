@@ -869,7 +869,7 @@ body.tool-home .topbar {
    so it reads as the primary action on this page. */
 body.tool-cloud .toolbar { position: relative; }
 body.tool-cloud .dup-toolbar-btn {
-  position: absolute; left: 50%; transform: translateX(-50%);
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   padding: 8px 24px;
   font-size: 14px; font-weight: 700;
   white-space: nowrap;
@@ -935,20 +935,19 @@ body.tool-cloud .dup-toolbar-btn {
   100% { box-shadow: 0 0 0 12px rgba(240,184,95,0); }
 }
 
-/* Cluster header — purple background only. No border-left tip; the card
-   is the header. Regular text color. */
+/* Cluster header — same amber wash as the "What am I looking at?" info
+   panel so the two elements share one visual language. No border-left
+   tip; regular text color. */
 .dup-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   cursor: pointer; user-select: none;
-  background: rgba(139,92,246,0.14);
+  background: rgba(217,119,6,0.08);
   border-bottom: 1px solid var(--border);
 }
-.dup-head:hover { background: rgba(139,92,246,0.22); }
-[data-theme="light"] .dup-head {
-  background: rgba(139,92,246,0.16);
-}
-[data-theme="light"] .dup-head:hover { background: rgba(139,92,246,0.24); }
+.dup-head:hover { background: rgba(217,119,6,0.14); }
+[data-theme="light"] .dup-head { background: rgba(217,119,6,0.10); }
+[data-theme="light"] .dup-head:hover { background: rgba(217,119,6,0.16); }
 .dup-head .dup-title { color: var(--text); font-weight: 700; }
 .dup-chevron { color: var(--text-3); font-size: 12px; transition: transform 0.15s; }
 .dup-cluster.expanded .dup-chevron { transform: rotate(90deg); }
@@ -1031,21 +1030,20 @@ body.tool-cloud .dup-toolbar-btn {
 .dup-item.is-matched .dup-item-loc {
   opacity: 0.55;
 }
-/* Color each row by SIDE — using colored TIPS on the left and right
-   edges instead of a background tint. Cleaner look; no muddy blending
-   with the amber outline used on extras. Cloud=blue tips, Local=green
-   tips. */
+/* Color each row by SIDE — wide colored TIPS on the left and right
+   edges. Cloud=blue tips, Local=green tips. 8 px so they read as
+   proper bookends. */
 .dup-item.side-cloud {
-  border-left: 4px solid var(--blue);
-  border-right: 4px solid var(--blue);
+  border-left: 8px solid var(--blue);
+  border-right: 8px solid var(--blue);
 }
 .dup-item.side-local {
-  border-left: 4px solid var(--green);
-  border-right: 4px solid var(--green);
+  border-left: 8px solid var(--green);
+  border-right: 8px solid var(--green);
 }
 /* Compensate the base padding so the row content still lines up now
-   that the borders take 4 px on each side. */
-.dup-item.side-cloud, .dup-item.side-local { padding-left: 12px; padding-right: 12px; }
+   that the borders take 8 px on each side. */
+.dup-item.side-cloud, .dup-item.side-local { padding-left: 8px; padding-right: 8px; }
 
 /* Extras stand out via an inset amber outline that layers ON TOP of the
    side tint — the row keeps its side identity AND advertises "look at me."
@@ -1117,7 +1115,7 @@ body.tool-cloud .dup-toolbar-btn {
 .dup-explain {
   margin: 12px 16px 8px; padding: 14px 20px;
   background: rgba(217,119,6,0.08);
-  border: 1px solid rgba(217,119,6,0.35); border-left-width: 4px;
+  border: 1px solid rgba(217,119,6,0.35);
   border-radius: 6px; color: var(--text);
   text-align: center;   /* center every line of the banner */
 }
