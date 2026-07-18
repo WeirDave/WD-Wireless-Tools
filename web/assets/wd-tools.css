@@ -863,14 +863,18 @@ body.tool-home .topbar {
   padding: 8px 12px; display: flex; gap: 8px; align-items: stretch;
   flex-shrink: 0; background: var(--surface);
 }
-/* Duplicates "Delete all N extras" — centered in the toolbar row between
-   the search-side elements and the owner-toggle/Live/etc, sandwiched by
-   two spacers. Only rendered on the Duplicates tab. */
-.dup-toolbar-btn {
-  padding: 5px 14px;
-  font-size: 12px; font-weight: 700;
+/* Duplicates "Delete all N extras" — absolute-positioned to the true
+   center of the toolbar so it's dead-center regardless of how wide the
+   left/right flanks of the toolbar grow. Larger padding + bumped font
+   so it reads as the primary action on this page. */
+body.tool-cloud .toolbar { position: relative; }
+body.tool-cloud .dup-toolbar-btn {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  padding: 8px 24px;
+  font-size: 14px; font-weight: 700;
   white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  box-shadow: 0 2px 6px rgba(217,119,6,0.35);
+  z-index: 1;
 }
 .dup-toolbar-btn #dupDeleteAllToolbarCount { font-weight: 800; }
 .dash-card {
@@ -931,18 +935,26 @@ body.tool-home .topbar {
   100% { box-shadow: 0 0 0 12px rgba(240,184,95,0); }
 }
 
+/* Cluster header uses PURPLE — the only color on this page not already
+   claimed by rows (blue/green), extras (amber), or the tab (amber). Reads
+   distinctly as "section start" without collision. */
 .dup-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   cursor: pointer; user-select: none;
-  background: var(--head-bg);   /* navy (dark) / light-blue-grey (light) — same token as the ledger head */
+  background: rgba(139,92,246,0.14);
   border-bottom: 1px solid var(--border);
-  border-left: 4px solid var(--slate, #5d5b60);
+  border-left: 4px solid var(--purple);
 }
-.dup-head:hover { filter: brightness(1.08); }
+.dup-head:hover { background: rgba(139,92,246,0.22); }
 [data-theme="light"] .dup-head {
-  background: #e5eaf0;   /* slightly darker than --head-bg for stronger contrast against white rows */
+  background: rgba(139,92,246,0.16);
 }
+[data-theme="light"] .dup-head:hover { background: rgba(139,92,246,0.24); }
+/* Higher specificity than the base .dup-title rule further down so the
+   purple wins the cascade. */
+.dup-head .dup-title { color: var(--purple); font-weight: 700; }
+[data-theme="light"] .dup-head .dup-title { color: var(--purple-dark); }
 .dup-chevron { color: var(--text-3); font-size: 12px; transition: transform 0.15s; }
 .dup-cluster.expanded .dup-chevron { transform: rotate(90deg); }
 .dup-title {
@@ -1106,19 +1118,24 @@ body.tool-home .topbar {
 
 /* Duplicates view — explanation banner at the top */
 .dup-explain {
-  margin: 12px 16px 8px; padding: 12px 14px;
+  margin: 12px 16px 8px; padding: 14px 20px;
   background: rgba(217,119,6,0.08);
   border: 1px solid rgba(217,119,6,0.35); border-left-width: 4px;
   border-radius: 6px; color: var(--text);
+  text-align: center;   /* center every line of the banner */
 }
 .dup-explain-title {
   font-size: 12px; font-weight: 800; letter-spacing: 0.5px;
   text-transform: uppercase; color: var(--amber);
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .dup-explain-body {
-  font-size: 13px; line-height: 1.5; color: var(--text);
-  margin-bottom: 8px;
+  font-size: 13px; line-height: 1.6; color: var(--text);
+  margin-bottom: 10px;
+  max-width: 900px; margin-left: auto; margin-right: auto;
+}
+.dup-explain-hint {
+  color: var(--text-2); font-weight: 400; font-style: italic;
 }
 .dup-explain-body code {
   font-family: var(--mono); font-size: 12px;
