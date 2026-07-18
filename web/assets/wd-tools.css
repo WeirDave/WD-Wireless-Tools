@@ -870,8 +870,9 @@ body.tool-home .topbar {
 body.tool-cloud .toolbar { position: relative; }
 body.tool-cloud .dup-toolbar-btn {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  padding: 8px 24px;
-  font-size: 14px; font-weight: 700;
+  padding: 5px 18px;                    /* fit inside the compact toolbar height */
+  font-size: 13px; font-weight: 700;
+  line-height: 1.2;
   white-space: nowrap;
   box-shadow: 0 2px 6px rgba(217,119,6,0.35);
   z-index: 1;
@@ -941,18 +942,18 @@ body.tool-cloud .dup-toolbar-btn {
   100% { box-shadow: 0 0 0 12px rgba(240,184,95,0); }
 }
 
-/* Cluster header + .dup-explain both use --dup-panel — a solid ORANGE-tinted
-   background token defined per theme. Solid = pixel-identical between the
-   two elements regardless of what they sit on. Warmer (more orange) than
-   --amber-bg was, matching the tab and button hue. */
-:root { --dup-panel: #3a2510; }
-[data-theme="light"] { --dup-panel: #fde4bd; }
-
+/* Cluster header + .dup-explain both layer the SAME rgba(217,119,6,0.08)
+   amber wash on TOP of the same --surface base. This gives the orange
+   translucent feel Dave liked from v1.8.21, but guarantees pixel-match
+   between the two elements because they both share the same underlying
+   surface color regardless of where they sit in the DOM. */
 .dup-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   cursor: pointer; user-select: none;
-  background: var(--dup-panel);
+  background:
+    linear-gradient(rgba(217,119,6,0.10), rgba(217,119,6,0.10)),
+    var(--surface);
   border-bottom: 1px solid var(--border);
 }
 .dup-head:hover { filter: brightness(1.15); }
@@ -1053,12 +1054,15 @@ body.tool-cloud .dup-toolbar-btn {
    that the borders take 8 px on each side. */
 .dup-item.side-cloud, .dup-item.side-local { padding-left: 8px; padding-right: 8px; }
 
-/* Extras stand out via an inset amber outline that layers ON TOP of the
-   side tint — the row keeps its side identity AND advertises "look at me."
-   Uses box-shadow inset instead of border so no layout shift, no
-   compensating padding needed. */
+/* Extras stand out via a stronger amber outline + a subtle amber wash
+   over the row's --surface base. The wash gives visual weight against the
+   white rows of matched pairs; the outline gives a clear "attention" border.
+   Blue/green bookends still identify the side. */
 .dup-item.is-extra {
-  box-shadow: inset 0 0 0 2px var(--amber);
+  box-shadow: inset 0 0 0 3px var(--amber);
+  background:
+    linear-gradient(rgba(217,119,6,0.10), rgba(217,119,6,0.10)),
+    var(--surface);
 }
 .dup-item.is-extra .dup-item-name {
   font-weight: 700; color: var(--text);
@@ -1122,7 +1126,11 @@ body.tool-cloud .dup-toolbar-btn {
 /* Duplicates view — explanation banner at the top */
 .dup-explain {
   margin: 12px 16px 8px; padding: 14px 20px;
-  background: var(--dup-panel);   /* same token as .dup-head → pixel-identical */
+  /* Same layered background as .dup-head — amber wash over --surface base,
+     so both elements composite to the exact same final color. */
+  background:
+    linear-gradient(rgba(217,119,6,0.10), rgba(217,119,6,0.10)),
+    var(--surface);
   border: 1px solid rgba(217,119,6,0.35);
   border-radius: 6px; color: var(--text);
   text-align: center;
