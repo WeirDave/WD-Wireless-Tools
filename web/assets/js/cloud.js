@@ -415,27 +415,28 @@ function renderDuplicates() {
     return;
   }
 
-  // Count all unmatched extras across all currently-filtered clusters so we
-  // can offer a one-click global cleanup. Only counts items that would be
-  // deleted — matched items are never touched.
+  // Count all unmatched extras across all currently-filtered clusters so the
+  // dedicated action strip below the toolbar can offer a one-click cleanup.
   const totalExtras = filtered.reduce(
     (n, cl) => n + cl.items.filter(i => !i.matched).length, 0);
-  const extrasBtn = totalExtras > 0
-    ? `<button class="btn btn-amber btn-sm" onclick="dupDeleteAllExtras()"
-         title="Deletes every unmatched item across all visible clusters. Matched pairs stay intact.">
-         &#128465; Delete all ${totalExtras} extras (keep every pair)
-       </button>`
+  const actionsStrip = totalExtras > 0
+    ? `<div class="dup-actions-strip">
+         <div class="dup-actions-strip-label">
+           <b>${totalExtras}</b> extra${totalExtras === 1 ? '' : 's'} across <b>${filtered.length}</b> cluster${filtered.length === 1 ? '' : 's'} — matched pairs will not be touched.
+         </div>
+         <button class="btn btn-amber" onclick="dupDeleteAllExtras()"
+                 title="Deletes every unmatched item across all clusters. Matched pairs stay intact.">
+           &#128465; Delete all ${totalExtras} extra${totalExtras === 1 ? '' : 's'}
+         </button>
+       </div>`
     : '';
 
-  let h = `<div class="dup-explain">
+  let h = actionsStrip + `<div class="dup-explain">
     <div class="dup-explain-title">What am I looking at?</div>
     <div class="dup-explain-body">
       Clusters of files that share a normalized name AND have <b>at least one extra copy beyond the normal cloud↔local pair</b>.
       Normal 1-on-each-side pairs are hidden — they're already visible on the Projects tab.
       Within each cluster, <b>faded</b> items are already paired; <b>bold + amber</b> items are the extras worth deleting or merging.
-    </div>
-    <div class="dup-explain-actions">
-      ${extrasBtn}
     </div>
     <div class="dup-explain-legend">
       <span class="dup-explain-tag mixed">Mixed</span> — matched pair PLUS at least one extra copy on one side &nbsp;·&nbsp;
@@ -506,10 +507,10 @@ function renderCluster(cl) {
     const iid = it.id || it.path;
     const isNewest = iid === cl.newestId;
     const isLargest = iid === cl.largestId;
-    const rowCls = ['dup-item'];
+    const rowCls = ['dup-item', 'side-' + sideCls];
     if (isNewest) rowCls.push('is-newest');
     if (isLargest) rowCls.push('is-largest');
-    // Fade items already paired in Sites/Projects — bold the "extras."
+    // Fade items already paired in Sites/Projects — outline the "extras."
     if (it.matched) rowCls.push('is-matched');
     else rowCls.push('is-extra');
     const dateStr = it.mtime ? fmtRelDate(it.mtime) : '—';

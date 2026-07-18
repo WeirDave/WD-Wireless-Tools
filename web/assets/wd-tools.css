@@ -161,16 +161,20 @@ mark {
 .topbar {
   background: var(--navy); color: white;
   padding: 5px 12px;
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex; align-items: center;
   flex-shrink: 0;
 }
-.topbar-left { display: flex; align-items: center; gap: 10px; }
+/* Equal-width flanks so the .topbar-center title is TRUE center regardless
+   of how wide the hamburger / user-email / folder buttons grow. */
+.topbar-left { flex: 1; display: flex; align-items: center; gap: 10px; justify-content: flex-start; }
+.topbar-center { flex: 0 0 auto; text-align: center; }
 .topbar h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.2px; }
 .topbar h1 span { color: #6bb3e0; }
 .topbar h1 .ver { color: #9aa0a6; font-weight: 500; font-size: 14px; margin-left: 6px; }
 .topbar-right {
-  display: flex; align-items: center; gap: 10px;
+  flex: 1; display: flex; align-items: center; gap: 10px;
   font-size: 11px; color: #9aa0a6;
+  justify-content: flex-end;
 }
 .topbar-right .dot {
   width: 6px; height: 6px; border-radius: 50%;
@@ -856,8 +860,31 @@ body.tool-home .topbar {
 
 /* ── Dashboard cards ── */
 .dashboard {
-  padding: 8px 12px; display: flex; gap: 8px;
+  padding: 8px 12px; display: flex; gap: 8px; align-items: stretch;
   flex-shrink: 0; background: var(--surface);
+}
+/* Duplicates cleanup strip — a dedicated row that sits between the toolbar
+   and the clusters ONLY on the Duplicates tab. Lives inside #rowsContainer,
+   rendered by renderDuplicates(). Distinct from the filter cards above
+   (which stay untouched) so the button doesn't interrupt filter flow. */
+.dup-actions-strip {
+  display: flex; align-items: center; gap: 16px;
+  margin: 10px 16px 8px;
+  padding: 12px 16px;
+  background: var(--surface-raised);
+  border: 1px solid var(--amber); border-left-width: 4px;
+  border-radius: 8px;
+}
+.dup-actions-strip-label {
+  flex: 1; font-size: 13px; color: var(--text-2); line-height: 1.4;
+}
+.dup-actions-strip-label b { color: var(--text); font-weight: 700; }
+.dup-actions-strip .btn {
+  padding: 8px 18px; font-size: 13px; font-weight: 700;
+  white-space: nowrap;
+}
+[data-theme="light"] .dup-actions-strip {
+  background: rgba(217,119,6,0.06);
 }
 .dash-card {
   flex: 1; min-width: 110px; padding: 6px 10px;
@@ -921,15 +948,14 @@ body.tool-home .topbar {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   cursor: pointer; user-select: none;
-  background: var(--surface-raised);
+  background: var(--head-bg);   /* navy (dark) / light-blue-grey (light) — same token as the ledger head */
   border-bottom: 1px solid var(--border);
-  border-left: 4px solid var(--amber);
+  border-left: 4px solid var(--slate, #5d5b60);
 }
-.dup-head:hover { background: var(--surface-hover); }
+.dup-head:hover { filter: brightness(1.08); }
 [data-theme="light"] .dup-head {
-  background: rgba(217,119,6,0.06);
+  background: #e5eaf0;   /* slightly darker than --head-bg for stronger contrast against white rows */
 }
-[data-theme="light"] .dup-head:hover { background: rgba(217,119,6,0.10); }
 .dup-chevron { color: var(--text-3); font-size: 12px; transition: transform 0.15s; }
 .dup-cluster.expanded .dup-chevron { transform: rotate(90deg); }
 .dup-title {
@@ -1011,14 +1037,30 @@ body.tool-home .topbar {
 .dup-item.is-matched .dup-item-loc {
   opacity: 0.55;
 }
-.dup-item.is-extra { background: rgba(217,119,6,0.05); }
+/* Color each row by SIDE — mirrors the blue/green identity from the
+   Sites/Projects column headers so it's instantly clear which side of the
+   pair each row lives on. Subtle tint; doesn't compete with the amber
+   outline used for extras below. */
+.dup-item.side-cloud { background: rgba(30,119,172,0.06); }
+.dup-item.side-local { background: rgba(95,171,79,0.06); }
+[data-theme="light"] .dup-item.side-cloud { background: rgba(30,119,172,0.09); }
+[data-theme="light"] .dup-item.side-local { background: rgba(95,171,79,0.09); }
+.dup-item.side-cloud:hover { background: rgba(30,119,172,0.13); }
+.dup-item.side-local:hover { background: rgba(95,171,79,0.13); }
+
+/* Extras stand out via an inset amber outline that layers ON TOP of the
+   side tint — the row keeps its side identity AND advertises "look at me."
+   Uses box-shadow inset instead of border so no layout shift, no
+   compensating padding needed. */
+.dup-item.is-extra {
+  box-shadow: inset 0 0 0 2px var(--amber);
+}
 .dup-item.is-extra .dup-item-name {
   font-weight: 700; color: var(--text);
 }
 .dup-item.is-extra .dup-item-side {
   color: var(--amber);
 }
-[data-theme="light"] .dup-item.is-extra { background: rgba(217,119,6,0.07); }
 
 /* Cross-cluster bulk action bar — appears at the top of the Duplicates
    view whenever any dup-item checkbox is checked. Lets users select and
