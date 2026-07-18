@@ -915,7 +915,13 @@ body.tool-cloud .dup-toolbar-btn {
 /* ══════════════════════════════════════════════════════════════════
    Duplicates tab — cluster cards
    ══════════════════════════════════════════════════════════════════ */
-.dup-container { padding: 12px 16px; overflow-y: auto; }
+/* The clusters area sits on --surface so the gap BETWEEN clusters looks
+   like the "white workspace" other tabs (Sites/Projects) show, not the
+   app's outer --bg grey. */
+.dup-container {
+  padding: 12px 16px; overflow-y: auto;
+  background: var(--surface);
+}
 .dup-empty { text-align: center; padding: 60px 20px; color: var(--text-2); }
 .dup-empty-icon { font-size: 56px; margin-bottom: 12px; opacity: 0.5; }
 .dup-empty-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
@@ -935,16 +941,18 @@ body.tool-cloud .dup-toolbar-btn {
   100% { box-shadow: 0 0 0 12px rgba(240,184,95,0); }
 }
 
-/* Cluster header uses the SOLID --amber-bg token so it renders IDENTICALLY
-   to the .dup-explain info panel. Both elements sit on different underlying
-   surfaces (cluster head → --surface, info panel → app background), so a
-   transparent rgba amber wash composites to different final colors on each.
-   A solid palette token is the only way to guarantee color parity. */
+/* Cluster header + .dup-explain both use --dup-panel — a solid ORANGE-tinted
+   background token defined per theme. Solid = pixel-identical between the
+   two elements regardless of what they sit on. Warmer (more orange) than
+   --amber-bg was, matching the tab and button hue. */
+:root { --dup-panel: #3a2510; }
+[data-theme="light"] { --dup-panel: #fde4bd; }
+
 .dup-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   cursor: pointer; user-select: none;
-  background: var(--amber-bg);
+  background: var(--dup-panel);
   border-bottom: 1px solid var(--border);
 }
 .dup-head:hover { filter: brightness(1.15); }
@@ -986,17 +994,17 @@ body.tool-cloud .dup-toolbar-btn {
 .dup-actions-bar .spacer { flex: 1; }
 .dup-actions-bar .manual-count { color: var(--text-2); font-size: 11px; }
 
-.dup-items { padding: 4px 0; }
+.dup-items { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .dup-item {
   display: grid;
   grid-template-columns: 30px 24px 1fr auto auto auto auto;
+  border-radius: 6px;
   gap: 12px; align-items: center;
   padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
   transition: background 0.1s;
+  background: var(--surface);
 }
-.dup-item:last-child { border-bottom: none; }
-.dup-item:hover { background: var(--row-hover); }
+.dup-item:hover { filter: brightness(1.08); }
 .dup-item-check { justify-self: center; }
 .dup-item-side {
   font-size: 16px; text-align: center;
@@ -1114,10 +1122,10 @@ body.tool-cloud .dup-toolbar-btn {
 /* Duplicates view — explanation banner at the top */
 .dup-explain {
   margin: 12px 16px 8px; padding: 14px 20px;
-  background: var(--amber-bg);   /* solid — same as .dup-head so they match exactly */
+  background: var(--dup-panel);   /* same token as .dup-head → pixel-identical */
   border: 1px solid rgba(217,119,6,0.35);
   border-radius: 6px; color: var(--text);
-  text-align: center;   /* center every line of the banner */
+  text-align: center;
 }
 .dup-explain-title {
   font-size: 12px; font-weight: 800; letter-spacing: 0.5px;
