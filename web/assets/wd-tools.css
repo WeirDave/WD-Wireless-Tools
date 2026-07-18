@@ -863,29 +863,16 @@ body.tool-home .topbar {
   padding: 8px 12px; display: flex; gap: 8px; align-items: stretch;
   flex-shrink: 0; background: var(--surface);
 }
-/* Duplicates cleanup strip — a dedicated row that sits between the toolbar
-   and the clusters ONLY on the Duplicates tab. Lives inside #rowsContainer,
-   rendered by renderDuplicates(). Distinct from the filter cards above
-   (which stay untouched) so the button doesn't interrupt filter flow. */
-.dup-actions-strip {
-  display: flex; align-items: center; gap: 16px;
-  margin: 10px 16px 8px;
-  padding: 12px 16px;
-  background: var(--surface-raised);
-  border: 1px solid var(--amber); border-left-width: 4px;
-  border-radius: 8px;
-}
-.dup-actions-strip-label {
-  flex: 1; font-size: 13px; color: var(--text-2); line-height: 1.4;
-}
-.dup-actions-strip-label b { color: var(--text); font-weight: 700; }
-.dup-actions-strip .btn {
-  padding: 8px 18px; font-size: 13px; font-weight: 700;
+/* Duplicates "Delete all N extras" — centered in the toolbar row between
+   the search-side elements and the owner-toggle/Live/etc, sandwiched by
+   two spacers. Only rendered on the Duplicates tab. */
+.dup-toolbar-btn {
+  padding: 5px 14px;
+  font-size: 12px; font-weight: 700;
   white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
 }
-[data-theme="light"] .dup-actions-strip {
-  background: rgba(217,119,6,0.06);
-}
+.dup-toolbar-btn #dupDeleteAllToolbarCount { font-weight: 800; }
 .dash-card {
   flex: 1; min-width: 110px; padding: 6px 10px;
   border-radius: 4px; cursor: pointer;
@@ -1037,16 +1024,19 @@ body.tool-home .topbar {
 .dup-item.is-matched .dup-item-loc {
   opacity: 0.55;
 }
-/* Color each row by SIDE — mirrors the blue/green identity from the
-   Sites/Projects column headers so it's instantly clear which side of the
-   pair each row lives on. Subtle tint; doesn't compete with the amber
-   outline used for extras below. */
-.dup-item.side-cloud { background: rgba(30,119,172,0.06); }
-.dup-item.side-local { background: rgba(95,171,79,0.06); }
-[data-theme="light"] .dup-item.side-cloud { background: rgba(30,119,172,0.09); }
-[data-theme="light"] .dup-item.side-local { background: rgba(95,171,79,0.09); }
-.dup-item.side-cloud:hover { background: rgba(30,119,172,0.13); }
-.dup-item.side-local:hover { background: rgba(95,171,79,0.13); }
+/* Color each row by SIDE — uses the SAME blue/green tints as the
+   Project Files section headers (see .glh-letter.cloud / .local) so the
+   two pages share one visual language. Values match exactly. */
+.dup-item.side-cloud { background: rgba(30,119,172,0.12); }
+.dup-item.side-local { background: rgba(95,171,79,0.14); }
+/* Light mode gets a stronger tint — 0.09 was too washed out on white
+   (Dave: "the blue looks like the grey that's in the header"). */
+[data-theme="light"] .dup-item.side-cloud { background: rgba(30,119,172,0.20); }
+[data-theme="light"] .dup-item.side-local { background: rgba(95,171,79,0.22); }
+.dup-item.side-cloud:hover { background: rgba(30,119,172,0.20); }
+.dup-item.side-local:hover { background: rgba(95,171,79,0.22); }
+[data-theme="light"] .dup-item.side-cloud:hover { background: rgba(30,119,172,0.28); }
+[data-theme="light"] .dup-item.side-local:hover { background: rgba(95,171,79,0.30); }
 
 /* Extras stand out via an inset amber outline that layers ON TOP of the
    side tint — the row keeps its side identity AND advertises "look at me."

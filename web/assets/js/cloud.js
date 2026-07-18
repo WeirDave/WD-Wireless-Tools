@@ -180,6 +180,9 @@ function switchTab(kind) {
   document.getElementById('addNewBtn').style.display = kind === 'sites' ? '' : 'none';
   const ownerEl = document.getElementById('ownerToggle');
   if (ownerEl) ownerEl.style.display = (kind === 'projects') ? '' : 'none';
+  // Toolbar-centered "Delete all N extras" only makes sense on Duplicates.
+  const dupTbBtn = document.getElementById('dupDeleteAllToolbarBtn');
+  if (dupTbBtn && kind !== 'duplicates') dupTbBtn.style.display = 'none';
   document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
   refreshData();
 }
@@ -416,22 +419,15 @@ function renderDuplicates() {
   }
 
   // Count all unmatched extras across all currently-filtered clusters so the
-  // dedicated action strip below the toolbar can offer a one-click cleanup.
+  // toolbar-centered "Delete all N extras" button can label its count.
   const totalExtras = filtered.reduce(
     (n, cl) => n + cl.items.filter(i => !i.matched).length, 0);
-  const actionsStrip = totalExtras > 0
-    ? `<div class="dup-actions-strip">
-         <div class="dup-actions-strip-label">
-           <b>${totalExtras}</b> extra${totalExtras === 1 ? '' : 's'} across <b>${filtered.length}</b> cluster${filtered.length === 1 ? '' : 's'} — matched pairs will not be touched.
-         </div>
-         <button class="btn btn-amber" onclick="dupDeleteAllExtras()"
-                 title="Deletes every unmatched item across all clusters. Matched pairs stay intact.">
-           &#128465; Delete all ${totalExtras} extra${totalExtras === 1 ? '' : 's'}
-         </button>
-       </div>`
-    : '';
+  const tbBtn = document.getElementById('dupDeleteAllToolbarBtn');
+  const tbCount = document.getElementById('dupDeleteAllToolbarCount');
+  if (tbBtn) tbBtn.style.display = totalExtras > 0 ? '' : 'none';
+  if (tbCount) tbCount.textContent = totalExtras;
 
-  let h = actionsStrip + `<div class="dup-explain">
+  let h = `<div class="dup-explain">
     <div class="dup-explain-title">What am I looking at?</div>
     <div class="dup-explain-body">
       Clusters of files that share a normalized name AND have <b>at least one extra copy beyond the normal cloud↔local pair</b>.
@@ -489,6 +485,9 @@ function renderCluster(cl) {
   const extraCount = cl.items.length - matchedCount;
   const hasPair = matchedCount >= 2 && extraCount >= 1;  // pair + at least one extra
   const allExtras = matchedCount === 0;
+  h += `<span class="manual-count" id="dupManual-${kAttr}">0 selected</span>`;
+  h += `<span class="spacer"></span>`;
+  // All action buttons on the right — consistent with the rest of the page.
   if (cl.shape !== 'mixed' && allExtras) {
     // Pure single-side duplicate — safe to offer aggressive picks.
     h += `<button class="btn btn-sec btn-sm" onclick="dupKeep('${kAttr}','newest')">Keep newest — delete rest</button>`;
@@ -497,8 +496,6 @@ function renderCluster(cl) {
     // Mixed cluster with a real pair — pair-preserving action only.
     h += `<button class="btn btn-amber btn-sm" onclick="dupDeleteExtras('${kAttr}')" title="Deletes only the ${extraCount} unmatched extra${extraCount !== 1 ? 's' : ''} — the matched cloud↔local pair stays intact.">&#128465; Delete ${extraCount} extra${extraCount !== 1 ? 's' : ''} (keep the pair)</button>`;
   }
-  h += `<span class="spacer"></span>`;
-  h += `<span class="manual-count" id="dupManual-${kAttr}">0 selected</span>`;
   h += `<button class="btn btn-red btn-sm" onclick="dupDeleteChecked('${kAttr}')">Delete checked</button>`;
   h += `</div>`;
 
