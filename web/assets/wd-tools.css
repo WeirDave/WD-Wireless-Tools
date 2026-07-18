@@ -935,26 +935,21 @@ body.tool-cloud .dup-toolbar-btn {
   100% { box-shadow: 0 0 0 12px rgba(240,184,95,0); }
 }
 
-/* Cluster header uses PURPLE — the only color on this page not already
-   claimed by rows (blue/green), extras (amber), or the tab (amber). Reads
-   distinctly as "section start" without collision. */
+/* Cluster header — purple background only. No border-left tip; the card
+   is the header. Regular text color. */
 .dup-head {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 16px;
   cursor: pointer; user-select: none;
   background: rgba(139,92,246,0.14);
   border-bottom: 1px solid var(--border);
-  border-left: 4px solid var(--purple);
 }
 .dup-head:hover { background: rgba(139,92,246,0.22); }
 [data-theme="light"] .dup-head {
   background: rgba(139,92,246,0.16);
 }
 [data-theme="light"] .dup-head:hover { background: rgba(139,92,246,0.24); }
-/* Higher specificity than the base .dup-title rule further down so the
-   purple wins the cascade. */
-.dup-head .dup-title { color: var(--purple); font-weight: 700; }
-[data-theme="light"] .dup-head .dup-title { color: var(--purple-dark); }
+.dup-head .dup-title { color: var(--text); font-weight: 700; }
 .dup-chevron { color: var(--text-3); font-size: 12px; transition: transform 0.15s; }
 .dup-cluster.expanded .dup-chevron { transform: rotate(90deg); }
 .dup-title {
@@ -1036,19 +1031,21 @@ body.tool-cloud .dup-toolbar-btn {
 .dup-item.is-matched .dup-item-loc {
   opacity: 0.55;
 }
-/* Color each row by SIDE — uses the SAME blue/green tints as the
-   Project Files section headers (see .glh-letter.cloud / .local) so the
-   two pages share one visual language. Values match exactly. */
-.dup-item.side-cloud { background: rgba(30,119,172,0.12); }
-.dup-item.side-local { background: rgba(95,171,79,0.14); }
-/* Light mode gets a stronger tint — 0.09 was too washed out on white
-   (Dave: "the blue looks like the grey that's in the header"). */
-[data-theme="light"] .dup-item.side-cloud { background: rgba(30,119,172,0.20); }
-[data-theme="light"] .dup-item.side-local { background: rgba(95,171,79,0.22); }
-.dup-item.side-cloud:hover { background: rgba(30,119,172,0.20); }
-.dup-item.side-local:hover { background: rgba(95,171,79,0.22); }
-[data-theme="light"] .dup-item.side-cloud:hover { background: rgba(30,119,172,0.28); }
-[data-theme="light"] .dup-item.side-local:hover { background: rgba(95,171,79,0.30); }
+/* Color each row by SIDE — using colored TIPS on the left and right
+   edges instead of a background tint. Cleaner look; no muddy blending
+   with the amber outline used on extras. Cloud=blue tips, Local=green
+   tips. */
+.dup-item.side-cloud {
+  border-left: 4px solid var(--blue);
+  border-right: 4px solid var(--blue);
+}
+.dup-item.side-local {
+  border-left: 4px solid var(--green);
+  border-right: 4px solid var(--green);
+}
+/* Compensate the base padding so the row content still lines up now
+   that the borders take 4 px on each side. */
+.dup-item.side-cloud, .dup-item.side-local { padding-left: 12px; padding-right: 12px; }
 
 /* Extras stand out via an inset amber outline that layers ON TOP of the
    side tint — the row keeps its side identity AND advertises "look at me."
