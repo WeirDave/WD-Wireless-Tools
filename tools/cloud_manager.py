@@ -966,6 +966,12 @@ def build_duplicates_data(api, output_dir):
             continue
         cloud_count = sum(1 for i in items if i["side"] == "cloud")
         local_count = sum(1 for i in items if i["side"] == "local")
+        # A 1-cloud + 1-local cluster where BOTH sides are matched is just a
+        # normal pair (already visible on Projects tab). Hide it so the
+        # Duplicates view only surfaces clusters with actual duplicates —
+        # unmatched extras or multiple copies on the same side.
+        if cloud_count == 1 and local_count == 1 and all(i.get("matched") for i in items):
+            continue
         shape = "mixed" if cloud_count and local_count else (
             "cloud-only" if cloud_count else "local-only")
         newest = max(items, key=lambda i: i["mtime"])

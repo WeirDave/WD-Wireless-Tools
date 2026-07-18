@@ -415,14 +415,14 @@ function renderDuplicates() {
   let h = `<div class="dup-explain">
     <div class="dup-explain-title">What am I looking at?</div>
     <div class="dup-explain-body">
-      Files (cloud projects or local <code>.esx</code>) that share a normalized name with at least one other file.
-      Punctuation, spacing, and case are ignored when comparing — so <code>SNAN2-3030-Baseline</code> clusters with <code>SNAN2 3030 Baseline</code>.
-      Items <b>faded</b> in each cluster are already paired in Sites/Projects — the <b>bold</b> ones are the extras worth investigating.
+      Clusters of files that share a normalized name AND have <b>at least one extra copy beyond the normal cloud↔local pair</b>.
+      Normal 1-on-each-side pairs are hidden — they're already visible on the Projects tab.
+      Within each cluster, <b>faded</b> items are already paired; <b>bold + amber</b> items are the extras worth deleting or merging.
     </div>
     <div class="dup-explain-legend">
-      <span class="dup-explain-tag mixed">Mixed</span> — same name on <b>both</b> cloud and local &nbsp;·&nbsp;
-      <span class="dup-explain-tag local-only">Local only</span> — saved in <b>multiple local folders</b> &nbsp;·&nbsp;
-      <span class="dup-explain-tag cloud-only">Cloud only</span> — uploaded to Ekahau <b>more than once</b>
+      <span class="dup-explain-tag mixed">Mixed</span> — matched pair PLUS at least one extra copy on one side &nbsp;·&nbsp;
+      <span class="dup-explain-tag local-only">Local only</span> — same file saved in <b>multiple local folders</b> &nbsp;·&nbsp;
+      <span class="dup-explain-tag cloud-only">Cloud only</span> — same project uploaded to Ekahau <b>more than once</b>
     </div>
   </div>
   <div id="dupBulkBar" class="dup-bulk-bar" style="display:none;">
@@ -460,8 +460,24 @@ function renderCluster(cl) {
 
   h += `<div class="dup-body">`;
   h += `<div class="dup-actions-bar">`;
-  h += `<button class="btn btn-sec btn-sm" onclick="dupKeep('${kAttr}','newest')">Keep newest — delete rest</button>`;
-  h += `<button class="btn btn-sec btn-sm" onclick="dupKeep('${kAttr}','largest')">Keep largest — delete rest</button>`;
+  // Action buttons depend on cluster shape:
+  //   - Local-only / Cloud-only: every item is a candidate → "Keep newest / largest" is safe.
+  //   - Mixed WITH a matched pair: aggressive "Keep..." would break the pair. Offer
+  //     "Delete extras (keep the pair)" instead — it only removes unmatched items.
+  //   - Mixed with NO matches (rare — content drift or discriminator conflict):
+  //     user needs to pick manually; only per-item + Delete-checked are shown.
+  const matchedCount = cl.items.filter(i => i.matched).length;
+  const extraCount = cl.items.length - matchedCount;
+  const hasPair = matchedCount >= 2 && extraCount >= 1;  // pair + at least one extra
+  const allExtras = matchedCount === 0;
+  if (cl.shape !== 'mixed' && allExtras) {
+    // Pure single-side duplicate — safe to offer aggressive picks.
+    h += `<button class="btn btn-sec btn-sm" onclick="dupKeep('${kAttr}','newest')">Keep newest — delete rest</button>`;
+    h += `<button class="btn btn-sec btn-sm" onclick="dupKeep('${kAttr}','largest')">Keep largest — delete rest</button>`;
+  } else if (hasPair) {
+    // Mixed cluster with a real pair — pair-preserving action only.
+    h += `<button class="btn btn-amber btn-sm" onclick="dupDeleteExtras('${kAttr}')" title="Deletes only the ${extraCount} unmatched extra${extraCount !== 1 ? 's' : ''} — the matched cloud↔local pair stays intact.">&#128465; Delete ${extraCount} extra${extraCount !== 1 ? 's' : ''} (keep the pair)</button>`;
+  }
   h += `<span class="spacer"></span>`;
   h += `<span class="manual-count" id="dupManual-${kAttr}">0 selected</span>`;
   h += `<button class="btn btn-red btn-sm" onclick="dupDeleteChecked('${kAttr}')">Delete checked</button>`;
@@ -597,6 +613,16 @@ function dupKeep(key, mode) {
   if (!cl) return;
   const keeperId = mode === 'newest' ? cl.newestId : cl.largestId;
   const toDelete = cl.items.filter(it => (it.id || it.path) !== keeperId);
+  _bulkDeleteItems(toDelete, key);
+}
+// Pair-preserving cleanup: delete only items that AREN'T part of a
+// Sites/Projects matched pair. Safe default for Mixed clusters that
+// contain a normal pair plus extras.
+function dupDeleteExtras(key) {
+  const cl = _findCluster(key);
+  if (!cl) return;
+  const toDelete = cl.items.filter(it => !it.matched);
+  if (!toDelete.length) { toast('No unmatched extras in this cluster', 'info'); return; }
   _bulkDeleteItems(toDelete, key);
 }
 function dupDeleteChecked(key) {
