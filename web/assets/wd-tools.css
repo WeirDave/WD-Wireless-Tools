@@ -997,6 +997,48 @@ body.tool-home .topbar {
 .dup-item.is-largest .dup-item-size { color: #6bb3e0; font-weight: 700; }
 .dup-item.is-newest .dup-item-date { color: #5fa970; font-weight: 700; }
 
+/* Fade items already paired via Sites/Projects — the "normal" copies.
+   Bold + amber-tint the ones that AREN'T paired — those are the extras
+   the user probably wants to remove. */
+.dup-item.is-matched .dup-item-name,
+.dup-item.is-matched .dup-item-loc {
+  opacity: 0.55;
+}
+.dup-item.is-matched .dup-item-size,
+.dup-item.is-matched .dup-item-date {
+  opacity: 0.65;
+}
+.dup-item.is-extra { background: rgba(217,119,6,0.05); }
+.dup-item.is-extra .dup-item-name {
+  font-weight: 700; color: var(--text);
+}
+.dup-item.is-extra .dup-item-side {
+  color: var(--amber);
+}
+[data-theme="light"] .dup-item.is-extra { background: rgba(217,119,6,0.07); }
+
+/* Cross-cluster bulk action bar — appears at the top of the Duplicates
+   view whenever any dup-item checkbox is checked. Lets users select and
+   delete across clusters without walking each cluster's own button. */
+.dup-bulk-bar {
+  display: flex; align-items: center; gap: 12px;
+  margin: 8px 16px; padding: 8px 14px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border); border-left: 4px solid var(--amber);
+  border-radius: 6px;
+  position: sticky; top: 4px; z-index: 4;
+}
+.dup-bulk-bar .spacer { flex: 1; }
+.dup-bulk-selall {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text); cursor: pointer;
+  font-weight: 600;
+}
+.dup-bulk-selall input { cursor: pointer; }
+.dup-bulk-count {
+  font-size: 12px; color: var(--text-2); font-weight: 600;
+}
+
 .dup-pill {
   padding: 2px 7px; border-radius: 999px;
   font-size: 9px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;

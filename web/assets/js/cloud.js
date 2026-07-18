@@ -417,18 +417,25 @@ function renderDuplicates() {
     <div class="dup-explain-body">
       Files (cloud projects or local <code>.esx</code>) that share a normalized name with at least one other file.
       Punctuation, spacing, and case are ignored when comparing — so <code>SNAN2-3030-Baseline</code> clusters with <code>SNAN2 3030 Baseline</code>.
-      Use this to spot accidental duplicates you can consolidate.
+      Items <b>faded</b> in each cluster are already paired in Sites/Projects — the <b>bold</b> ones are the extras worth investigating.
     </div>
     <div class="dup-explain-legend">
-      <span class="dup-explain-tag mixed">Mixed</span> — same name exists on <b>both</b> cloud and local (usually a normal pair — safe to ignore unless the sizes differ) &nbsp;·&nbsp;
-      <span class="dup-explain-tag local-only">Local only</span> — same file saved in <b>multiple local folders</b> (real duplicate — merge or delete one) &nbsp;·&nbsp;
-      <span class="dup-explain-tag cloud-only">Cloud only</span> — same project uploaded to Ekahau <b>more than once</b> (real duplicate — pick one and delete the extras)
+      <span class="dup-explain-tag mixed">Mixed</span> — same name on <b>both</b> cloud and local &nbsp;·&nbsp;
+      <span class="dup-explain-tag local-only">Local only</span> — saved in <b>multiple local folders</b> &nbsp;·&nbsp;
+      <span class="dup-explain-tag cloud-only">Cloud only</span> — uploaded to Ekahau <b>more than once</b>
     </div>
+  </div>
+  <div id="dupBulkBar" class="dup-bulk-bar" style="display:none;">
+    <label class="dup-bulk-selall"><input type="checkbox" id="dupBulkSelAll" onchange="dupBulkSelectAll(this.checked)"> Select all across clusters</label>
+    <span class="spacer"></span>
+    <span id="dupBulkCount" class="dup-bulk-count">0 selected</span>
+    <button class="btn btn-red btn-sm" onclick="dupBulkDelete()">Delete checked</button>
   </div>
   <div class="dup-container">`;
   filtered.forEach(cl => h += renderCluster(cl));
   h += '</div>';
   el.innerHTML = h;
+  updateDupBulkBar();
 
   // If we arrived here via jumpToCluster, scroll to and pulse the target.
   if (dupHighlightKey) {
@@ -468,6 +475,9 @@ function renderCluster(cl) {
     const rowCls = ['dup-item'];
     if (isNewest) rowCls.push('is-newest');
     if (isLargest) rowCls.push('is-largest');
+    // Fade items already paired in Sites/Projects — bold the "extras."
+    if (it.matched) rowCls.push('is-matched');
+    else rowCls.push('is-extra');
     const dateStr = it.mtime ? fmtRelDate(it.mtime) : '—';
     const sizeStr = fmtBytes(it.size);
     const sideIcon = it.side === 'cloud' ? '&#9729;' : '&#128187;';
@@ -510,6 +520,53 @@ function dupChkChanged(key) {
   const n = el.querySelectorAll('.dup-item-check:checked').length;
   const c = el.querySelector('.manual-count');
   if (c) c.textContent = `${n} selected`;
+  updateDupBulkBar();
+}
+
+// Cross-cluster bulk selection — a checked item in any cluster surfaces the
+// "Delete checked" bar at the top of the Duplicates view so users can
+// operate across clusters without having to hit each cluster's own button.
+function updateDupBulkBar() {
+  const bar = document.getElementById('dupBulkBar');
+  if (!bar) return;
+  const all = document.querySelectorAll('.dup-item-check');
+  const checked = document.querySelectorAll('.dup-item-check:checked');
+  bar.style.display = checked.length ? '' : 'none';
+  const cnt = document.getElementById('dupBulkCount');
+  if (cnt) cnt.textContent = `${checked.length} selected across ${new Set(Array.from(checked).map(cb => cb.closest('.dup-cluster')?.dataset.key)).size} cluster${checked.length === 1 ? '' : 's'}`;
+  const selAll = document.getElementById('dupBulkSelAll');
+  if (selAll) selAll.checked = all.length > 0 && all.length === checked.length;
+}
+
+function dupBulkSelectAll(on) {
+  document.querySelectorAll('.dup-item-check').forEach(cb => { cb.checked = !!on; });
+  // Refresh each cluster's manual-count too
+  document.querySelectorAll('.dup-cluster').forEach(el => {
+    const n = el.querySelectorAll('.dup-item-check:checked').length;
+    const c = el.querySelector('.manual-count');
+    if (c) c.textContent = `${n} selected`;
+  });
+  updateDupBulkBar();
+}
+
+function dupBulkDelete() {
+  // Gather checked items across every cluster.
+  const items = [];
+  document.querySelectorAll('.dup-cluster').forEach(el => {
+    const key = el.dataset.key;
+    const cl = _findCluster(key);
+    if (!cl) return;
+    const norm = s => String(s || '').replace(/\\/g, '/').toLowerCase();
+    el.querySelectorAll('.dup-item-check:checked').forEach(cb => {
+      const row = cb.closest('.dup-item');
+      if (!row) return;
+      const iid = norm(row.dataset.iid);
+      const it = cl.items.find(i => norm(i.id || i.path) === iid);
+      if (it) items.push(it);
+    });
+  });
+  if (!items.length) { toast('No items checked', 'info'); return; }
+  _bulkDeleteItems(items, null);
 }
 
 /* ── Duplicates: actions (delete-based cleanup) ── */
