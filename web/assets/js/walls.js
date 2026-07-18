@@ -193,7 +193,7 @@ function renderList() {
           </div>
         </div>
         <div class="wall-actions">
-          <button class="btn btn-sm" onclick="showKeybindMenu(event, ${i})" title="Assign shortcut">#</button>
+          <button class="btn btn-icon btn-sm" onclick="showKeybindMenu(event, ${i})" title="Assign shortcut">#</button>
           <button class="btn btn-icon btn-sm" onclick="openEditModal(${i})" title="Edit">&#9998;</button>
           <button class="btn btn-icon btn-sm btn-danger" onclick="deleteWall(${i})" title="Delete">&times;</button>
         </div>

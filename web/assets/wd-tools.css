@@ -18,6 +18,10 @@
   --red: #dc2626;   --red-dark: #b91c1c;
   --purple: #8b5cf6; --purple-dark: #7c3aed;
   --slate: #5d5b60; --navy: #0e1b26;
+  /* Nav-blue is the accent-blue used on outlines / accents throughout the
+     suite — the theme-toggle border, button borders, filename button, etc.
+     Same value in both themes. */
+  --nav-blue: #0668D9;
 
   /* Semantic surface / text (dark default) */
   color-scheme: dark;
@@ -211,14 +215,28 @@ mark {
 .topbar-right a.homelink:hover { color: #cbd5e1; }
 
 /* Settings / theme buttons in topbar */
+/* Cloud Manager header "📁 Folder" (Local Folder picker) + legacy .theme-btn.
+   Sized to match .theme-toggle exactly so both sit as visually-identical
+   pills in the topbar. */
 .settings-btn,
 .theme-btn {
-  background: none; border: 1px solid rgba(255,255,255,0.15);
-  color: #9aa0a6; padding: 2px 8px; border-radius: 3px;
-  font-size: 10px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--nav-blue); border-radius: 999px;
+  padding: 6px 12px 6px 10px; font-size: 12px; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease, color .12s ease, border-color .12s ease;
 }
 .settings-btn:hover,
-.theme-btn:hover { background: rgba(255,255,255,0.08); }
+.theme-btn:hover {
+  background: var(--surface-hover); color: var(--nav-blue);
+  border-color: var(--nav-blue);
+  transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,.22);
+}
+.settings-btn:active,
+.theme-btn:active {
+  transform: translateY(0); box-shadow: 0 2px 6px rgba(0,0,0,.18);
+}
 
 /* Quick Walls nav pills (top-right of dropzone) */
 .wd-nav {
@@ -254,15 +272,29 @@ mark {
 }
 .header h1 span, .dz-topbar h1 span { color: #6bb3e0; }
 .header h1 .ver, .dz-topbar h1 .ver { color: #9aa0a6; font-weight: 500; font-size: 14px; margin-left: 6px; }
+/* Filename button — the loaded .esx / project filename in the Walls and
+   Report headers. Styled to read as a clickable pill (title + navy border
+   + 3D lift on hover) so it's obviously interactive, not just a label. */
 .header .file-badge,
 .report-toolbar .file-badge {
-  font-family: var(--mono); font-size: 12px; color: #6bb3e0;
-  background: rgba(107,179,224,0.12); padding: 4px 10px;
-  border-radius: 4px; display: none; cursor: pointer;
-  transition: background 0.15s;
+  font-family: var(--mono); font-size: 12px; color: var(--text);
+  background: var(--surface-raised);
+  padding: 6px 14px;
+  border: 1px solid var(--nav-blue); border-radius: 999px;
+  display: none; cursor: pointer; font-weight: 600;
+  transition: transform .12s ease, box-shadow .12s ease, background .15s ease, color .15s ease, border-color .15s ease;
 }
 .header .file-badge:hover,
-.report-toolbar .file-badge:hover { background: rgba(107,179,224,0.22); }
+.report-toolbar .file-badge:hover {
+  background: var(--surface-hover); color: var(--nav-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.22);
+}
+.header .file-badge:active,
+.report-toolbar .file-badge:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0,0,0,.18);
+}
 .header-actions { display: flex; gap: 8px; align-items: center; }
 /* Header sizing — applies to every .btn variant in the header actions so
    spacing is consistent, but does NOT set background/color, so color
@@ -277,18 +309,18 @@ mark {
    render solid, so they read as primary/action buttons. */
 .header-actions .btn-secondary {
   background: rgba(255,255,255,0.08); color: #cbd5e1;
-  border: 1px solid rgba(255,255,255,0.15);
+  border: 1px solid var(--nav-blue);
 }
 .header-actions .btn-secondary:hover {
   background: rgba(255,255,255,0.15); color: #fff;
-  border-color: rgba(255,255,255,0.3);
+  border-color: var(--nav-blue);
 }
 [data-theme="light"] .header-actions .btn-secondary {
   background: var(--surface-raised); color: var(--text);
-  border-color: var(--border);
+  border-color: var(--nav-blue);
 }
 [data-theme="light"] .header-actions .btn-secondary:hover {
-  background: var(--surface-hover); border-color: var(--text-3);
+  background: var(--surface-hover); border-color: var(--nav-blue);
 }
 .header-actions .btn-primary {
   background: var(--blue); color: #fff; border-color: var(--blue);
@@ -376,10 +408,11 @@ body.tool-walls .hamburger-btn {
    BUTTONS (shared)
    ══════════════════════════════════════════════════════════════════ */
 .btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 9px 20px; border-radius: 999px; border: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 20px; border-radius: 999px;
+  border: 1px solid var(--nav-blue);
   font-size: 13px; font-weight: 600; cursor: pointer;
-  transition: transform .12s ease, box-shadow .12s ease, background 0.12s ease;
+  transition: transform .12s ease, box-shadow .12s ease, background 0.12s ease, border-color .12s ease;
   white-space: nowrap;
 }
 /* Same "3D" hover the cards use — small lift + subtle shadow. Color darkening
@@ -393,17 +426,20 @@ body.tool-walls .hamburger-btn {
   box-shadow: 0 2px 6px rgba(0,0,0,.18);
 }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--green); color: #fff; }
-.btn-primary:hover { background: var(--green-dark); }
+/* Filled color variants: border-color follows the fill so a mismatched rim
+   doesn't fight the fill. Outlined variants (secondary/sec/ghost) keep the
+   navy accent from base .btn — that's how they read as "outlined." */
+.btn-primary { background: var(--green); color: #fff; border-color: var(--green); }
+.btn-primary:hover { background: var(--green-dark); border-color: var(--green-dark); }
 .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn-blue { background: var(--blue); color: white; }
-.btn-blue:hover { background: var(--blue-dark); }
-.btn-green { background: var(--green); color: white; }
-.btn-green:hover { background: var(--green-dark); }
-.btn-red { background: var(--red); color: white; }
-.btn-red:hover { background: var(--red-dark); }
-.btn-amber { background: var(--amber); color: #fff; }
-.btn-amber:hover { background: var(--amber-dark); }
+.btn-blue { background: var(--blue); color: white; border-color: var(--blue); }
+.btn-blue:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
+.btn-green { background: var(--green); color: white; border-color: var(--green); }
+.btn-green:hover { background: var(--green-dark); border-color: var(--green-dark); }
+.btn-red { background: var(--red); color: white; border-color: var(--red); }
+.btn-red:hover { background: var(--red-dark); border-color: var(--red-dark); }
+.btn-amber { background: var(--amber); color: #fff; border-color: var(--amber); }
+.btn-amber:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
 .btn-secondary { background: var(--btn-sec); color: var(--text); }
 .btn-secondary:hover { background: var(--btn-sec-h); }
 .btn-sec { background: var(--btn-sec); color: var(--text); }
@@ -414,9 +450,15 @@ body.tool-walls .hamburger-btn {
 .btn-ghost:hover { background: var(--bg); }
 .btn-sm { padding: 4px 10px; font-size: 11px; }
 .btn-icon {
-  width: 28px; height: 28px; padding: 0;
+  width: 26px; height: 26px; padding: 0;
   display: flex; align-items: center; justify-content: center;
   border-radius: 50%;
+}
+/* On Walls, body.tool-walls .btn's padding (0,2,1) would otherwise stretch
+   .btn-icon into a pill. Explicitly hold the square shape so it stays a
+   circle — same 26×26 as Cloud's .icon-btn. */
+body.tool-walls .btn.btn-icon {
+  width: 26px; height: 26px; padding: 0; border-radius: 50%;
 }
 .btn-reset-defaults { color: #d97706; border-color: rgba(217,119,6,0.4); }
 .btn-reset-defaults:hover { background: rgba(217,119,6,0.1); border-color: #d97706; }
@@ -429,17 +471,17 @@ body.tool-cloud .btn {
    flat label. Contrasts with the solid blue/green primary buttons. */
 body.tool-cloud .btn-secondary {
   background: transparent; color: var(--text);
-  border: 1px solid var(--border);
+  border: 1px solid var(--nav-blue);
 }
 body.tool-cloud .btn-secondary:hover {
-  background: var(--surface-hover); border-color: var(--text-3);
+  background: var(--surface-hover); border-color: var(--nav-blue);
 }
 
 /* Live toggle — reads as a pill switch, not another action button.
    Off: outlined with a dim grey dot. On: green fill with a solid white dot. */
 body.tool-cloud #liveBtn {
   background: transparent; color: var(--text-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--nav-blue);
   padding-left: 8px;
 }
 body.tool-cloud #liveBtn::before {
@@ -477,29 +519,48 @@ body.tool-cloud #liveBtn.live-on::before {
 /* Quick Walls buttons — slightly different base */
 body.tool-walls .btn {
   font-family: var(--sans); font-size: 13px; font-weight: 600;
-  padding: 8px 18px; border: 1px solid var(--border); border-radius: 999px;
+  padding: 8px 18px;
+  border: 1px solid var(--nav-blue); border-radius: 999px;
   background: var(--surface-raised); color: var(--text-2);
 }
 body.tool-walls .btn:hover {
-  background: var(--surface-hover); color: var(--text);
-  border-color: var(--text-3);
+  background: var(--surface-hover); color: var(--nav-blue);
+  border-color: var(--nav-blue);
 }
+/* Quick Walls "Apply" and "Save .esx" — outlined blue rather than solid
+   blue fill. Dave felt the solid fill was too shouty next to the theme-
+   toggle pill; outlined blue reads as "primary action" without dominating. */
 body.tool-walls .btn-primary {
-  background: var(--blue); color: #fff; border-color: var(--blue);
+  background: transparent; color: var(--nav-blue);
+  border-color: var(--nav-blue);
 }
-body.tool-walls .btn-primary:hover { background: #1e77ac; }
+body.tool-walls .btn-primary:hover {
+  background: rgba(6, 104, 217, 0.10);
+  color: var(--nav-blue); border-color: var(--nav-blue);
+}
+body.tool-walls .btn-primary:disabled {
+  color: var(--text-3); border-color: var(--border);
+}
 body.tool-walls .btn-sm { padding: 6px 12px; font-size: 12px; }
 
 /* Icon buttons (Cloud Manager row actions) */
+/* Small circular row-action buttons — matches Walls .btn-icon at 50% radius
+   so a Cloud row action and a Walls modal × read as the same control type. */
 .icon-btn {
-  width: 26px; height: 24px; border-radius: 3px;
-  border: 1px solid var(--border); background: var(--surface);
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid var(--nav-blue); background: var(--surface);
   cursor: pointer; font-size: 13px;
   display: inline-flex; align-items: center; justify-content: center;
   color: var(--text-2); padding: 0;
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease, color .12s ease, border-color .12s ease;
 }
-.icon-btn:hover { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
-.icon-btn.del:hover { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+.icon-btn:hover {
+  background: var(--blue-bg); border-color: var(--nav-blue); color: var(--nav-blue);
+  transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.22);
+}
+.icon-btn.del:hover {
+  background: var(--red-bg); border-color: var(--red); color: var(--red);
+}
 .icon-btn.flagged { color: var(--amber); }
 
 /* Row-level action containers */
@@ -747,16 +808,25 @@ body.tool-home .topbar {
 }
 .theme-toggle {
   display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
-  background: var(--card-bg, var(--surface)); border: 1px solid var(--border);
+  background: var(--card-bg, var(--surface));
+  border: 1px solid var(--nav-blue);
   color: var(--text-2); border-radius: 999px;
   padding: 6px 12px 6px 10px; font-size: 12px; font-weight: 600;
-  transition: background .15s ease, border-color .15s ease, color .15s ease;
+  transition: transform .12s ease, box-shadow .12s ease, background .15s ease, border-color .15s ease, color .15s ease;
 }
 .theme-toggle:hover {
   background: var(--card-hover, var(--surface-hover));
-  color: var(--text); border-color: var(--blue);
+  color: var(--nav-blue); border-color: var(--nav-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,.22);
 }
-.theme-toggle .ico { font-size: 14px; line-height: 1; }
+.theme-toggle:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0,0,0,.18);
+}
+.theme-toggle .ico,
+.settings-btn .ico,
+.theme-btn .ico { font-size: 14px; line-height: 1; }
 
 /* Home layout */
 .wrap {
@@ -1520,14 +1590,29 @@ body.tool-cloud .toolbar input.search:focus {
 }
 
 /* Source badge, review flag */
+/* Peek/eye button on Sites & Projects rows — matches the 26×26 navy circle
+   pattern used elsewhere (Cloud .icon-btn, Walls .btn.btn-icon). The
+   .hasrc variant swaps to amber to signal "has source files not on cloud". */
 .src-badge {
-  flex: 0 0 auto; background: transparent; border: none;
-  cursor: pointer; padding: 0 5px; font-size: 13px;
-  line-height: 1; color: var(--text-2);
+  flex: 0 0 auto;
+  width: 26px; height: 26px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px solid var(--nav-blue);
+  border-radius: 50%;
+  cursor: pointer; font-size: 13px; line-height: 1;
+  color: var(--text-2);
+  transition: transform .12s ease, box-shadow .12s ease, background .12s ease, color .12s ease, border-color .12s ease;
 }
-.src-badge:hover { color: var(--blue); }
-.src-badge.hasrc { color: var(--amber); }
-.src-badge.hasrc:hover { color: var(--amber); filter: brightness(1.15); }
+.src-badge:hover {
+  color: var(--nav-blue); background: var(--blue-bg);
+  border-color: var(--nav-blue);
+  transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,.22);
+}
+.src-badge.hasrc { color: var(--amber); border-color: var(--amber); }
+.src-badge.hasrc:hover {
+  color: var(--amber); border-color: var(--amber);
+  background: var(--amber-bg); filter: brightness(1.15);
+}
 
 /* Not-a-Match manager modal */
 .modal.notmatch { width: 780px; max-width: 94vw; max-height: 82vh; display: flex; flex-direction: column; }
