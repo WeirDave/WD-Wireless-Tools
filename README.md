@@ -152,6 +152,88 @@ The server starts on `http://localhost:8765` and opens your browser automaticall
 
 ---
 
+## First run — what to expect
+
+### After you launch `run.bat` / `run.command`
+
+1. A terminal window opens and prints `WD Wireless Tools  →  http://localhost:8765/`.
+2. Your default browser opens automatically to the suite landing page.
+3. **Leave the terminal window open** — closing it stops the server. Minimize it if it's in the way.
+
+### Cloud Manager — first-time setup
+
+Cloud Manager needs two things before it can do anything useful:
+
+1. **You must be logged into Ekahau Cloud in Chrome, Edge, or Firefox.** Cloud Manager reads your session cookie from your browser via `browser_cookie3`. **Safari is not supported**, and Private/Incognito windows won't work either. If you're not logged in, click **Log in to Ekahau Cloud** on the login screen — a browser tab opens, log in there, then return to Cloud Manager.
+2. **Pick your local Ekahau folder** — the parent folder that contains your project subfolders (each with `.esx` files inside).
+
+Both settings are remembered. Next launch skips straight to the main view.
+
+### Quick Walls / Scale / Report — no setup
+
+These three run entirely in your browser. Drop an `.esx` (Quick Walls / Report) or type a measurement (Scale) and go.
+
+### Squirrel — pick a folder
+
+Point Squirrel at any folder that contains loose Ekahau projects. It scans and shows you what needs organizing before any files move.
+
+### Where does data live?
+
+- **Wall templates** — `templates/` inside the tool folder. Custom templates you save appear here.
+- **Cloud Manager settings** — `~/.wd_wireless_tools/` in your home directory (same location on Windows and macOS).
+- **Ekahau `.esx` files never leave your machine.** Quick Walls and Report parse them in the browser via JSZip. Cloud Manager only ever touches the files you point at, on your local disk and your own Ekahau Cloud tenant.
+- **No telemetry.**
+
+---
+
+## Troubleshooting
+
+### `python is not recognized as an internal or external command`
+
+Python isn't installed, or wasn't added to your PATH. Grab it from [python.org/downloads](https://www.python.org/downloads/) — during install, **check the box "Add Python to PATH"** on the first screen of the installer. Close and re-open the terminal, then re-run `run.bat`.
+
+### macOS: "run.command can't be opened because Apple cannot check it for malicious software"
+
+Gatekeeper blocks downloaded scripts by default. Right-click `run.command` → **Open** → **Open** in the confirmation dialog. Only needed the first time.
+
+### Windows: "Windows protected your PC" (SmartScreen)
+
+SmartScreen blocks downloaded batch files. Click **More info** → **Run anyway**. Only needed the first time.
+
+### Cloud Manager stuck on "Checking for an active session..."
+
+`browser_cookie3` couldn't find your Ekahau Cloud login. Fixes in order:
+
+- Log into `https://cloud.ekahau.com` in Chrome, Edge, or Firefox — a normal window, not Incognito/Private.
+- If you use Safari, Brave, or Arc, log in via one of the three supported browsers instead.
+- Close and re-open all browser windows for that browser (some browsers hold the cookie file open in a way that blocks reads), then click **Log in to Ekahau Cloud** again.
+
+### "Port 8765 is already in use"
+
+Another copy of the tool is already running, or another program grabbed that port. Either close the existing instance, or set a different port before launching:
+
+```bash
+# Windows (cmd)
+set PORT=8766 && run.bat
+
+# macOS
+PORT=8766 bash run.command
+```
+
+### Browser didn't open automatically
+
+Open [http://localhost:8765](http://localhost:8765) manually. Some corporate desktops disable auto-launch.
+
+### How to update
+
+Download the newest release from [Releases](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest), extract to a fresh folder, then copy your `templates/` folder over if you have custom wall-type templates. No uninstaller, no migration step.
+
+### How to uninstall
+
+Delete the folder. The only data outside it is the small Cloud Manager settings folder at `~/.wd_wireless_tools/` — delete that if you want a fully clean slate.
+
+---
+
 ## Project Structure
 
 ```
