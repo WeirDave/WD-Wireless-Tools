@@ -130,7 +130,10 @@ The full suite (Cloud Manager + Quick Walls + Squirrel) needs Python because Clo
 
 **1. Install Python 3.10 or newer**
 
-Grab it from [python.org/downloads](https://www.python.org/downloads/). During install, **check the box "Add Python to PATH"** — it's on the first screen. Skip this and `run.bat` won't be able to find Python.
+Grab it from [python.org/downloads](https://www.python.org/downloads/).
+
+- **Windows** — during install, **check the box "Add Python to PATH"** on the first screen of the installer. It's off by default. Skip it and `run.bat` won't find Python.
+- **macOS** — the installer wires `python3` up automatically. No checkbox to worry about.
 
 **2. Download the suite**
 
