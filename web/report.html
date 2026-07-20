@@ -59,11 +59,13 @@
 </div>
 <input type="file" id="fileInput" accept=".esx" style="display:none">
 
-<!-- ── Report Workspace ── -->
+<!-- ── Staged Workspace ── After a file drops, we walk the user through
+     three stages: pick template → configure options → review & print.
+     The stepper header + a single stage container swap contents. -->
 <div id="workspace" class="report-workspace">
 
-  <!-- Non-printing top toolbar -->
-  <div class="report-toolbar noprint">
+  <!-- Slim wizard topbar (menu, brand, file badge, theme, jump to home) -->
+  <div class="report-wiz-topbar noprint">
     <div class="header-left">
       <div class="help-menu-wrap">
         <button class="hamburger-btn" onclick="WD.toggleMenu(event,'wsMenu')" title="Menu"><span></span><span></span><span></span></button>
@@ -86,27 +88,56 @@
       <h1><img class="tool-brand-icon" src="/assets/report-v8.0-560x560.png" alt=""> <span>WD</span> Report <span class="ver">v2.1</span></h1>
     </div>
     <div class="header-actions">
-      <button class="btn btn-secondary" onclick="loadNewFile()" title="Open another .esx">&#128193; Open another…</button>
-      <button class="btn btn-blue" onclick="window.print()" title="Print or Save as PDF">&#128424; Print / Save PDF</button>
       <button class="theme-toggle" onclick="toggleTheme()">
         <span class="ico">🌙</span><span class="txt">Dark</span>
       </button>
     </div>
   </div>
 
-  <div class="report-body">
+  <!-- Stepper — clickable pills. Rendered/highlighted by JS. -->
+  <nav class="rep-stepper noprint" id="stepper" aria-label="Report stages">
+    <button type="button" class="rep-step" data-stage="template" onclick="goStage('template')">
+      <span class="rep-step-num">1</span><span class="rep-step-label">Template</span>
+    </button>
+    <span class="rep-step-line"></span>
+    <button type="button" class="rep-step" data-stage="configure" onclick="goStage('configure')">
+      <span class="rep-step-num">2</span><span class="rep-step-label">Configure</span>
+    </button>
+    <span class="rep-step-line"></span>
+    <button type="button" class="rep-step" data-stage="review" onclick="goStage('review')">
+      <span class="rep-step-num">3</span><span class="rep-step-label">Review &amp; Print</span>
+    </button>
+  </nav>
 
-    <!-- Sidebar (non-printing) -->
-    <aside class="report-sidebar noprint">
-      <div class="rep-section">
-        <div class="rep-section-head">Report type</div>
-        <div id="reportPickerList" class="rep-picker-list"></div>
-      </div>
+  <!-- ─── STAGE 2 · Template gallery ─── -->
+  <section class="rep-stage noprint" id="stageTemplate">
+    <div class="rep-stage-head">
+      <h2 class="rep-stage-title">Choose a report template</h2>
+      <p class="rep-stage-sub" id="templateStageSub"></p>
+    </div>
+    <div class="rep-template-gallery" id="templateGallery"></div>
+    <div class="rep-stage-nav">
+      <button class="btn btn-secondary" onclick="loadNewFile()">&#128193; Change file</button>
+      <span class="rep-stage-nav-spacer"></span>
+    </div>
+  </section>
 
-      <div class="rep-section">
-        <div class="rep-section-head">Cover page</div>
+  <!-- ─── STAGE 3 · Configure ─── -->
+  <section class="rep-stage noprint" id="stageConfigure" hidden>
+    <div class="rep-stage-head">
+      <h2 class="rep-stage-title" id="configStageTitle">Configure report</h2>
+      <p class="rep-stage-sub" id="configStageSub"></p>
+    </div>
+
+    <div class="rep-config-grid">
+      <!-- Cover page -->
+      <div class="rep-config-card">
+        <div class="rep-config-card-head">
+          <span class="rep-config-icon">🖼️</span>
+          <span>Cover page</span>
+        </div>
         <label class="rep-check">
-          <input type="checkbox" id="optCover" checked onchange="renderReport()">
+          <input type="checkbox" id="optCover" checked onchange="markConfigDirty()">
           <span>Include cover page</span>
         </label>
         <div class="rep-logo-row">
@@ -116,28 +147,55 @@
         <div id="logoPreview" class="rep-logo-preview"></div>
       </div>
 
-      <!-- Per-report options render into this slot from JS based on the picker. -->
-      <div class="rep-section" id="reportOptsSlot"></div>
+      <!-- Per-report options render into this slot from JS. -->
+      <div class="rep-config-card" id="reportOptsSlot"></div>
+    </div>
 
-      <div class="rep-section">
-        <div class="rep-section-head">APs</div>
-        <div class="rep-ap-list" id="apFilterList"></div>
+    <!-- APs (full-width — group-by pills + search + collapsible groups) -->
+    <div class="rep-config-card rep-config-wide">
+      <div class="rep-config-card-head">
+        <span class="rep-config-icon">📡</span>
+        <span>APs to include</span>
+        <span class="rep-ap-count" id="apCount"></span>
+        <span class="rep-config-head-actions">
+          <button class="btn btn-secondary btn-sm" onclick="toggleAllAps(true)">Select all</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleAllAps(false)">None</button>
+        </span>
       </div>
-
-      <div class="rep-sidebar-actions">
-        <button class="btn btn-secondary rep-open-btn" onclick="loadNewFile()">&#128193; Open another .esx</button>
+      <div class="rep-ap-controls">
+        <div class="rep-groupby-pills" role="tablist" aria-label="Group APs by">
+          <span class="rep-groupby-label">Group by</span>
+          <button class="rep-groupby-pill active" data-group="none"   onclick="setGroupBy('none')">None</button>
+          <button class="rep-groupby-pill"        data-group="color"  onclick="setGroupBy('color')">Color</button>
+          <button class="rep-groupby-pill"        data-group="floor"  onclick="setGroupBy('floor')">Floor</button>
+          <button class="rep-groupby-pill"        data-group="building" onclick="setGroupBy('building')">Building</button>
+          <button class="rep-groupby-pill"        data-group="model"  onclick="setGroupBy('model')">Model</button>
+        </div>
+        <input type="text" class="rep-ap-search" id="apSearch"
+               placeholder="🔍 Filter by name…" oninput="setApSearch(this.value)">
       </div>
+      <div id="apFilterList"></div>
+    </div>
 
-      <div class="rep-foot">
-        Nothing leaves your machine — the .esx is parsed locally.
-      </div>
-    </aside>
+    <div class="rep-stage-nav">
+      <button class="btn btn-secondary" onclick="goStage('template')">&larr; Change template</button>
+      <span class="rep-stage-nav-spacer"></span>
+      <button class="btn btn-blue" onclick="goStage('review')">Generate report &rarr;</button>
+    </div>
+  </section>
 
-    <!-- Report canvas (this is what prints) -->
+  <!-- ─── STAGE 4 · Review & print ─── -->
+  <section class="rep-stage rep-stage-review" id="stageReview" hidden>
+    <div class="rep-review-bar noprint">
+      <button class="btn btn-secondary" onclick="goStage('configure')">&larr; Back to configure</button>
+      <span class="rep-stage-nav-spacer"></span>
+      <button class="btn btn-secondary" onclick="loadNewFile()">&#128193; Open another…</button>
+      <button class="btn btn-blue" onclick="window.print()">&#128424; Print / Save PDF</button>
+    </div>
     <main class="report-canvas" id="reportCanvas">
-      <div class="rep-empty">Choose a report type on the left to render.</div>
+      <div class="rep-empty">Report will render here.</div>
     </main>
-  </div>
+  </section>
 </div>
 
 <div id="toasts" class="toasts"></div>

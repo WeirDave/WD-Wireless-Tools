@@ -146,7 +146,14 @@ Save it somewhere permanent — Desktop or Documents is fine — and extract the
 - **Windows** — open the extracted folder and double-click **`run.bat`**.
 - **macOS** — open the extracted folder and double-click **`run.command`**. On first launch macOS may block it — right-click → **Open** → **Open** to bypass Gatekeeper.
 
-A terminal window opens, installs the three Python dependencies on first run (~30 seconds), starts the local server, and opens your browser to `http://localhost:8675`. **Keep the terminal window open** — closing it stops the server.
+A terminal window opens, installs the four Python dependencies on first run (~30 seconds), starts the local server, and opens your browser to `http://localhost:8675`. You'll see:
+
+```
+WD Wireless Tools  →  http://localhost:8675/
+Ready. Press CTRL+C to quit.
+```
+
+**Keep the terminal window open** — closing it stops the server.
 
 **Manual (advanced)**:
 ```bash
@@ -287,7 +294,8 @@ WD Wireless Tools/
 
 | Package | Purpose |
 |---------|---------|
-| [Flask](https://flask.palletsprojects.com/) | Local web server and API routing |
+| [Flask](https://flask.palletsprojects.com/) | Web framework — API routing, file serving |
+| [Waitress](https://docs.pylonsproject.org/projects/waitress/) | Production-grade pure-Python WSGI server (replaces Flask's dev server) |
 | [Requests](https://docs.python-requests.org/) | Ekahau Cloud API calls |
 | [browser-cookie3](https://github.com/borisbabic/browser_cookie3) | Session auth for Ekahau Cloud |
 

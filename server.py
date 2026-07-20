@@ -200,9 +200,19 @@ def _open_browser():
 
 
 def main():
-    print(f"\n  WD Wireless Tools  →  http://localhost:{PORT}/\n")
+    print(f"\n  WD Wireless Tools  →  http://localhost:{PORT}/")
+    print("  Ready. Press CTRL+C to quit.\n")
     threading.Thread(target=_open_browser, daemon=True).start()
-    app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)
+    # Use Waitress (production-grade pure-Python WSGI) instead of Flask's dev
+    # server so end users don't see the scary "do not use in production"
+    # warning. Waitress ships with the same simplicity and adds no config.
+    try:
+        from waitress import serve
+        serve(app, host="127.0.0.1", port=PORT, threads=8, _quiet=True)
+    except ImportError:
+        # Very old install without waitress — fall back to Flask's dev server.
+        print("  (waitress not installed — falling back to Flask dev server)\n")
+        app.run(host="127.0.0.1", port=PORT, debug=False, threaded=True)
 
 
 if __name__ == "__main__":
