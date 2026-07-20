@@ -17,10 +17,36 @@
     WD.syncThemeUI();
   };
 
-  // Favicon color/white swap is now driven by the BROWSER's color scheme via
-  // <link rel="icon" media="(prefers-color-scheme: dark|light)"> in the HTML,
-  // not the app's theme toggle. Kept as a no-op so callers don't break.
-  WD.syncFavicon = function () {};
+  // Favicon color/white swap keyed to the BROWSER's color scheme (not the
+  // app's data-theme toggle). Firefox ignores media="" on <link rel=icon>,
+  // so we can't just use HTML media queries — this JS runs everywhere.
+  //
+  // Element-replace (not just href mutation) is deliberate: some browsers
+  // cache favicons aggressively and won't re-fetch on a plain href change.
+  WD.syncFavicon = function () {
+    if (!window.matchMedia) return;
+    var dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.querySelectorAll('link[rel~="icon"]').forEach(function (link) {
+      if ((link.getAttribute('rel') || '').indexOf('apple-touch-icon') !== -1) return;
+      var href = link.getAttribute('href');
+      if (!href) return;
+      var next = href.replace(
+        /wd-wireless-tools-v8\.0-(?:white-)?(multi-size\.ico|32x32\.png|192x192\.png)(?=(?:[?#]|$))/,
+        'wd-wireless-tools-v8.0-' + (dark ? 'white-' : '') + '$1'
+      );
+      if (next === href) return;
+      var replacement = link.cloneNode(false);
+      replacement.setAttribute('href', next);
+      link.parentNode.replaceChild(replacement, link);
+    });
+  };
+
+  // Live-update when the user switches Windows/macOS/browser color scheme.
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) mq.addEventListener('change', WD.syncFavicon);
+    else if (mq.addListener) mq.addListener(WD.syncFavicon); // Safari < 14
+  }
 
   WD.syncThemeUI = function () {
     var dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
@@ -130,6 +156,7 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     WD.syncThemeUI();
+    WD.syncFavicon();
   });
 
   /* ── Expose ── */
