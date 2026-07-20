@@ -95,6 +95,14 @@ def assets(fn):
     return send_from_directory(WEB / "assets", fn)
 
 
+@app.route("/favicon.ico")
+def favicon():
+    # Browsers, RSS readers, and bots request /favicon.ico by convention even
+    # though every page has explicit <link rel="icon"> tags. Serve the same
+    # multi-size .ico here so the direct hit doesn't 404 in server logs.
+    return send_from_directory(WEB, "favicon.ico", mimetype="image/vnd.microsoft.icon")
+
+
 # ── Folder Organizer API ─────────────────────────────────────────────
 ORGANIZER_ACTIONS = {
     "pick_folder":  lambda d: fo.pick_folder(),
