@@ -146,7 +146,7 @@ Save it somewhere permanent — Desktop or Documents is fine — and extract the
 - **Windows** — open the extracted folder and double-click **`run.bat`**.
 - **macOS** — open the extracted folder and double-click **`run.command`**. On first launch macOS may block it — right-click → **Open** → **Open** to bypass Gatekeeper.
 
-A terminal window opens, installs the three Python dependencies on first run (~30 seconds), starts the local server, and opens your browser to `http://localhost:8765`. **Keep the terminal window open** — closing it stops the server.
+A terminal window opens, installs the three Python dependencies on first run (~30 seconds), starts the local server, and opens your browser to `http://localhost:8675`. **Keep the terminal window open** — closing it stops the server.
 
 **Manual (advanced)**:
 ```bash
@@ -160,7 +160,7 @@ python server.py
 
 ### After you launch `run.bat` / `run.command`
 
-1. A terminal window opens and prints `WD Wireless Tools  →  http://localhost:8765/`.
+1. A terminal window opens and prints `WD Wireless Tools  →  http://localhost:8675/`.
 2. Your default browser opens automatically to the suite landing page.
 3. **Leave the terminal window open** — closing it stops the server. Minimize it if it's in the way.
 
@@ -212,21 +212,21 @@ SmartScreen blocks downloaded batch files. Click **More info** → **Run anyway*
 - If you use Safari, Brave, or Arc, log in via one of the three supported browsers instead.
 - Close and re-open all browser windows for that browser (some browsers hold the cookie file open in a way that blocks reads), then click **Log in to Ekahau Cloud** again.
 
-### "Port 8765 is already in use"
+### "Port 8675 is already in use"
 
 Another copy of the tool is already running, or another program grabbed that port. Either close the existing instance, or set a different port before launching:
 
 ```bash
 # Windows (cmd)
-set PORT=8766 && run.bat
+set PORT=8676 && run.bat
 
 # macOS
-PORT=8766 bash run.command
+PORT=8676 bash run.command
 ```
 
 ### Browser didn't open automatically
 
-Open [http://localhost:8765](http://localhost:8765) manually. Some corporate desktops disable auto-launch.
+Open [http://localhost:8675](http://localhost:8675) manually. Some corporate desktops disable auto-launch.
 
 ### How to update
 

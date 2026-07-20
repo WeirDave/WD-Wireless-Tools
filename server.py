@@ -29,7 +29,7 @@ app = Flask(__name__, static_folder=None)
 cm = CloudManager()
 fo = FolderOrganizer()
 ts = TemplateStore()
-PORT = int(os.environ.get("PORT") or 8765)
+PORT = int(os.environ.get("PORT") or 8675)
 
 
 # Local dev tool — never let the browser cache pages/assets, so edits always

@@ -6,10 +6,10 @@ _Read this first when picking up the project in a new chat. See also **`BACKLOG.
 **WD Wireless Tools** — a local, browser-based suite of Ekahau WiFi-survey workflow tools that David (dpaine@anduril.com) built. It runs as a small Flask server on his Windows machine and opens in his browser. Distributed via the Ekahau Slack community. Two tools + a launcher home page.
 
 - **Location:** `C:\WD Wireless Tools\`
-- **Run:** `python server.py` (or `run.bat`) → serves on `http://127.0.0.1:8765/` and opens the browser.
+- **Run:** `python server.py` (or `run.bat`) → serves on `http://127.0.0.1:8675/` and opens the browser.
 
 ## Architecture
-- `server.py` — Flask server, port 8765. Routes: `/` (home.html), `/cloud` (cloud.html), `/walls` (walls.html), `/organizer` (organizer.html), `/assets/<fn>`, `POST /api/cloud/<action>` → `CloudManager`, `POST /api/organizer/<action>` → `FolderOrganizer`. Serves files fresh from disk each request. **Has an `@app.after_request` no-cache header** so the browser always gets the current file.
+- `server.py` — Flask server, port 8675. Routes: `/` (home.html), `/cloud` (cloud.html), `/walls` (walls.html), `/organizer` (organizer.html), `/assets/<fn>`, `POST /api/cloud/<action>` → `CloudManager`, `POST /api/organizer/<action>` → `FolderOrganizer`. Serves files fresh from disk each request. **Has an `@app.after_request` no-cache header** so the browser always gets the current file.
 - `tools/cloud_manager.py` — Cloud Manager backend. `EkahauAPI` (undocumented cloud API via `browser_cookie3` session cookies), matching helpers, `CloudManager` class, folder scanning, merge logic, folder inventory.
 - `tools/folder_organizer.py` — Folder Organizer backend. `FolderOrganizer` class: scan (dry-run preview), execute (apply moves), get/set/reset config for editable type mapping. Config stored in `~/.wd_wireless_tools/organizer_config.json`.
 - `web/home.html` — launcher (three tool cards: Cloud Manager, Quick Walls, Folder Organizer). 3-column responsive grid.
