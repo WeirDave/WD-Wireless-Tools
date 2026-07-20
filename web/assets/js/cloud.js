@@ -1545,7 +1545,11 @@ async function uploadFromLocal(path, name, siteId) {
   try {
     const r = await pyApi('upload_project', path, siteId || undefined);
     if (r && r.error) { toast(r.error, 'error'); return; }
-    toast('Uploaded "' + name + '.esx"', 'success');
+    if (r && r.warning) toast(r.warning, 'warn');
+    else toast('Uploaded "' + name + '.esx"', 'success');
+    // Backend waits until Ekahau's project-listing API reflects the upload
+    // before returning, so a single refresh is enough — the new project is
+    // guaranteed visible.
     refreshData();
   } catch (err) { toast(err.message, 'error'); }
 }

@@ -1183,32 +1183,46 @@ class CloudManager:
             return {"error": str(e)}
 
     def upload_project(self, esx_path, site_id=None):
-        """Upload .esx to cloud. If site_id given, auto-assign to that site."""
+        """Upload .esx to cloud. If site_id given, auto-assign to that site.
+
+        Waits (poll-until-visible, up to ~6s) for Ekahau's project-listing API
+        to reflect the new upload before returning. This lets callers refresh
+        the UI immediately on success without racing the cloud's propagation.
+        """
         if not self._ensure():
             return {"error": "Not connected"}
         try:
-            # Snapshot project IDs before upload so we can find the new one
-            before_ids = {p["id"] for p in self.api.get_projects()} if site_id else set()
+            # Snapshot project IDs BEFORE upload so we can identify the new one.
+            before_ids = {p["id"] for p in self.api.get_projects()}
 
             result = self.api.upload_project(esx_path)
             if isinstance(result, dict) and result.get("error"):
                 return result
 
-            # Auto-assign to site if requested
-            if site_id:
-                # Brief pause — cloud may take a moment to register the new project
-                time.sleep(1.5)
+            # Poll the project listing until the new project appears or we
+            # give up. Ekahau usually takes 1-2s but occasionally longer.
+            new_id = None
+            for _ in range(12):        # 12 * 0.5s = 6s max
+                time.sleep(0.5)
                 after = self.api.get_projects()
-                new_ids = [p["id"] for p in after if p["id"] not in before_ids]
-                if new_ids:
-                    assign_r = self.api.assign_to_site(site_id, new_ids[0])
-                    return {"ok": True, "assigned": True, "siteId": site_id,
-                            "datasetId": new_ids[0]}
-                else:
-                    return {"ok": True, "uploaded": True,
-                            "warning": "Uploaded but could not find new project to assign"}
+                candidates = [p["id"] for p in after if p["id"] not in before_ids]
+                if candidates:
+                    new_id = candidates[0]
+                    break
 
-            return {"ok": True, "uploaded": True}
+            # Auto-assign to site if requested.
+            if site_id and new_id:
+                self.api.assign_to_site(site_id, new_id)
+                return {"ok": True, "assigned": True, "siteId": site_id,
+                        "datasetId": new_id}
+
+            if not new_id:
+                # Upload succeeded but the listing never reflected it in
+                # time. Return anyway — a subsequent refresh will pick it up.
+                return {"ok": True, "uploaded": True,
+                        "warning": "Uploaded but not yet visible in cloud listing — may take another moment to appear."}
+
+            return {"ok": True, "uploaded": True, "datasetId": new_id}
         except Exception as e:
             return {"error": str(e)}
 
