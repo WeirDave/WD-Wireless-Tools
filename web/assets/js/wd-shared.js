@@ -17,17 +17,10 @@
     WD.syncThemeUI();
   };
 
-  WD.syncFavicon = function () {
-    var dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
-    document.querySelectorAll('link[rel~="icon"]').forEach(function (link) {
-      var href = link.getAttribute('href');
-      if (!href) return;
-      link.setAttribute('href', href.replace(
-        /wd-wireless-tools-v8\.0-(?:white-)?(multi-size\.ico|32x32\.png)(?=([?#]|$))/,
-        'wd-wireless-tools-v8.0-' + (dark ? 'white-' : '') + '$1'
-      ));
-    });
-  };
+  // Favicon color/white swap is now driven by the BROWSER's color scheme via
+  // <link rel="icon" media="(prefers-color-scheme: dark|light)"> in the HTML,
+  // not the app's theme toggle. Kept as a no-op so callers don't break.
+  WD.syncFavicon = function () {};
 
   WD.syncThemeUI = function () {
     var dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
