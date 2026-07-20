@@ -19,6 +19,69 @@
     --surface: #f7f8fa;
     --border: #e2e5e9;
   }
+  [data-theme="dark"] {
+    --text: #e7ebf0;
+    --text-muted: #9aa5b1;
+    --bg: #0f1620;
+    --surface: #18212c;
+    --border: #273240;
+  }
+  [data-theme="dark"] body { background: var(--bg); color: var(--text); }
+  [data-theme="dark"] .content { color: var(--text); }
+  [data-theme="dark"] .subtitle { color: var(--text-muted); }
+  [data-theme="dark"] .topbar .back-link { color: rgba(255,255,255,0.6); }
+  [data-theme="dark"] .topbar .back-link:hover { color: #fff; }
+
+  /* Headings — the original uses --navy (near-black), invisible on dark. */
+  [data-theme="dark"] h2 { color: var(--text); border-bottom-color: var(--green); }
+  [data-theme="dark"] h3 { color: var(--text); }
+
+  /* Inline code and preformatted blocks. */
+  [data-theme="dark"] code {
+    background: rgba(255,255,255,0.06); color: #a7d3ef;
+    border-color: rgba(255,255,255,0.10);
+  }
+  [data-theme="dark"] pre { background: #0b1620; color: #d6e0ea; border-color: rgba(255,255,255,0.10); }
+
+  /* <kbd> — was blank-on-blank in dark mode because both bg and text were
+     hardcoded light-mode values. */
+  [data-theme="dark"] kbd {
+    background: var(--surface-raised, #252830);
+    border-color: rgba(255,255,255,0.18);
+    color: var(--text);
+  }
+
+  /* Step cards. */
+  [data-theme="dark"] .step-card {
+    background: var(--surface); border-color: var(--border);
+  }
+  [data-theme="dark"] .step-card .step-desc { color: var(--text-muted); }
+  [data-theme="dark"] .step-card .step-title { color: var(--text); }
+
+  /* Tip / warning callouts — hardcoded pastel backgrounds in light mode.
+     Swap for tinted dark-surface variants that still read as "green/amber". */
+  [data-theme="dark"] .tip-box {
+    background: rgba(95,171,79,0.08); border-color: rgba(95,171,79,0.30);
+    color: var(--text);
+  }
+  [data-theme="dark"] .tip-box strong { color: #7ec06f; }
+  [data-theme="dark"] .warning-box, [data-theme="dark"] .note {
+    background: rgba(217,119,6,0.08); border-color: rgba(217,119,6,0.30);
+    color: var(--text);
+  }
+  [data-theme="dark"] .warning-box strong, [data-theme="dark"] .note strong { color: #e0a63a; }
+
+  /* Tables. */
+  [data-theme="dark"] table { border-color: var(--border); }
+  [data-theme="dark"] th { background: #0b1620; color: #fff; }
+  [data-theme="dark"] td { border-color: var(--border); color: var(--text); }
+  [data-theme="dark"] tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
+
+  /* Footer + link colors. */
+  [data-theme="dark"] .footer { color: var(--text-muted); border-color: var(--border); }
+  [data-theme="dark"] .footer a, [data-theme="dark"] a { color: #6bb3e0; }
+
+
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -214,6 +277,9 @@
     .topbar { padding: 12px 18px; }
   }
 </style>
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
 </head>
 <body>
 
@@ -302,16 +368,30 @@
     <strong>Note:</strong> Applying a template replaces all wall types in the current project. If you have unsaved changes, save your <code>.esx</code> first.
   </div>
 
-  <h2>Editing Wall Types</h2>
-  <p>Click the <kbd>✎</kbd> button on any wall type card to open the editor. You can change:</p>
+  <h2>Adding &amp; Editing Wall Types</h2>
+  <p>Click <strong>+ Add Wall Type</strong> to create one, or the <kbd>✎</kbd> button on an existing card to edit. Each wall type stores:</p>
+
+  <h3>Name</h3>
+  <p>Descriptive label shown in Ekahau's wall picker and on your floor plan (e.g. <em>Concrete, Heavy</em> or <em>Interior Office</em>). Match your organization's conventions so the same material has the same name across projects.</p>
+
+  <h3>Color</h3>
+  <p>The color Ekahau uses to render walls of this type on the floor plan. Pick something distinct — a well-chosen palette makes it easy to eyeball what's what during a survey. The WD-recommended template uses green for Elevator Shafts and orange for Steel Fire/Exit Doors because Ekahau's own defaults use grey for both.</p>
+
+  <h3>Thickness</h3>
+  <p>Real-world thickness of the wall. Ekahau stores this internally in meters, but Quick Walls lets you enter it in either <strong>inches</strong> or <strong>meters</strong> — flip the <kbd>in</kbd> / <kbd>m</kbd> pill next to the label. Your preference is remembered across sessions and auto-detects to imperial on US locales.</p>
+  <p>The value matters because Ekahau's simulation combines thickness with the attenuation numbers below to model signal loss. A 6-inch concrete wall attenuates differently from a 3-inch concrete wall even if the material is the same.</p>
+
+  <h3>Keyboard shortcut</h3>
+  <p>Bind the wall type to <kbd>1</kbd>–<kbd>9</kbd> so you can press that key inside Ekahau while drawing to switch to this wall type instantly. Shortcuts are persisted in the <code>.esx</code> file itself, so they travel with the project.</p>
+
+  <h3>Propagation Properties (per band)</h3>
+  <p>How radio waves interact with this wall at each of the three Wi-Fi bands (2.4 GHz, 5 GHz, 6 GHz):</p>
   <ul>
-    <li><strong>Name</strong> — the display name shown in Ekahau's wall picker</li>
-    <li><strong>Color</strong> — the color used to render walls on the floor plan</li>
-    <li><strong>Thickness</strong> — wall thickness in meters</li>
-    <li><strong>Attenuation</strong> — signal loss per band (2.4 GHz, 5 GHz, 6 GHz)</li>
-    <li><strong>Reflection Coefficient</strong> — how much signal bounces off the wall</li>
-    <li><strong>Diffraction Coefficient</strong> — how signal bends around the wall edge</li>
+    <li><strong>Attenuation</strong> — signal loss (dB) as a wave passes through the wall. Higher = more loss. This is the number that matters most for coverage modeling.</li>
+    <li><strong>Reflection coefficient</strong> — fraction of the signal that bounces back off the wall (0–1). Metal walls have high reflection; drywall barely reflects.</li>
+    <li><strong>Diffraction coefficient</strong> — how much the signal bends around the edges of the wall. Small angles matter for indoor coverage — this is why signals get around corners.</li>
   </ul>
+  <p>All three values match Ekahau's own wall-type schema exactly, so a wall type saved from Quick Walls behaves identically to one authored in Ekahau AI Pro. If in doubt, start from one of the <strong>Recommended by WD</strong> presets — they're calibrated against Ekahau's factory values with the color-legibility tweaks noted above.</p>
 
   <h2>Saving Your Work</h2>
   <p>Click <strong>Save .esx</strong> in the template bar to write your changes into a copy of the project file. A system file dialog lets you choose the name and location. The original file is never modified — you always save a new copy.</p>
@@ -329,7 +409,7 @@
 
   <div class="footer">
     <p>WD Quick Walls — part of the <a href="/">WD Wireless Tools</a> suite.</p>
-    <p>Built by <a href="https://weirdave.com" target="_blank">David Paine</a> — weirdave.com</p>
+    <p>Built by <a href="https://weirdave.com" target="_blank">R David Paine III</a> — weirdave.com</p>
   </div>
 
 </div>

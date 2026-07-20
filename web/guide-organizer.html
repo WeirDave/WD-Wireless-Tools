@@ -19,6 +19,69 @@
     --surface: #f7f8fa;
     --border: #e2e5e9;
   }
+  [data-theme="dark"] {
+    --text: #e7ebf0;
+    --text-muted: #9aa5b1;
+    --bg: #0f1620;
+    --surface: #18212c;
+    --border: #273240;
+  }
+  [data-theme="dark"] body { background: var(--bg); color: var(--text); }
+  [data-theme="dark"] .content { color: var(--text); }
+  [data-theme="dark"] .subtitle { color: var(--text-muted); }
+  [data-theme="dark"] .topbar .back-link { color: rgba(255,255,255,0.6); }
+  [data-theme="dark"] .topbar .back-link:hover { color: #fff; }
+
+  /* Headings — the original uses --navy (near-black), invisible on dark. */
+  [data-theme="dark"] h2 { color: var(--text); border-bottom-color: var(--green); }
+  [data-theme="dark"] h3 { color: var(--text); }
+
+  /* Inline code and preformatted blocks. */
+  [data-theme="dark"] code {
+    background: rgba(255,255,255,0.06); color: #a7d3ef;
+    border-color: rgba(255,255,255,0.10);
+  }
+  [data-theme="dark"] pre { background: #0b1620; color: #d6e0ea; border-color: rgba(255,255,255,0.10); }
+
+  /* <kbd> — was blank-on-blank in dark mode because both bg and text were
+     hardcoded light-mode values. */
+  [data-theme="dark"] kbd {
+    background: var(--surface-raised, #252830);
+    border-color: rgba(255,255,255,0.18);
+    color: var(--text);
+  }
+
+  /* Step cards. */
+  [data-theme="dark"] .step-card {
+    background: var(--surface); border-color: var(--border);
+  }
+  [data-theme="dark"] .step-card .step-desc { color: var(--text-muted); }
+  [data-theme="dark"] .step-card .step-title { color: var(--text); }
+
+  /* Tip / warning callouts — hardcoded pastel backgrounds in light mode.
+     Swap for tinted dark-surface variants that still read as "green/amber". */
+  [data-theme="dark"] .tip-box {
+    background: rgba(95,171,79,0.08); border-color: rgba(95,171,79,0.30);
+    color: var(--text);
+  }
+  [data-theme="dark"] .tip-box strong { color: #7ec06f; }
+  [data-theme="dark"] .warning-box, [data-theme="dark"] .note {
+    background: rgba(217,119,6,0.08); border-color: rgba(217,119,6,0.30);
+    color: var(--text);
+  }
+  [data-theme="dark"] .warning-box strong, [data-theme="dark"] .note strong { color: #e0a63a; }
+
+  /* Tables. */
+  [data-theme="dark"] table { border-color: var(--border); }
+  [data-theme="dark"] th { background: #0b1620; color: #fff; }
+  [data-theme="dark"] td { border-color: var(--border); color: var(--text); }
+  [data-theme="dark"] tr:nth-child(even) td { background: rgba(255,255,255,0.03); }
+
+  /* Footer + link colors. */
+  [data-theme="dark"] .footer { color: var(--text-muted); border-color: var(--border); }
+  [data-theme="dark"] .footer a, [data-theme="dark"] a { color: #6bb3e0; }
+
+
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -214,6 +277,9 @@
     .topbar { padding: 12px 18px; }
   }
 </style>
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
 </head>
 <body>
 
@@ -341,7 +407,7 @@
 
   <div class="footer">
     <p>WD Squirrel — part of the <a href="/">WD Wireless Tools</a> suite.</p>
-    <p>Built by <a href="https://weirdave.com" target="_blank">David Paine</a> — weirdave.com</p>
+    <p>Built by <a href="https://weirdave.com" target="_blank">R David Paine III</a> — weirdave.com</p>
   </div>
 
 </div>

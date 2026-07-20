@@ -11,6 +11,61 @@ function safeColor(c) {
   return /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : '#666';
 }
 
+// ── Unit preference (thickness display) ──
+// Ekahau's .esx schema always stores thickness in meters; we let the user
+// enter it in inches or meters based on their local unit preference.
+// Default: imperial for US locales, metric otherwise. Persisted in localStorage.
+const M_TO_IN = 39.3700787;
+function detectDefaultUnits() {
+  try {
+    const lang = (navigator.language || 'en-US').toLowerCase();
+    // US, Liberia, and Myanmar are the imperial holdouts. For our wireless-
+    // engineer audience, US locale is the practical trigger.
+    return lang.startsWith('en-us') ? 'imperial' : 'metric';
+  } catch (e) { return 'metric'; }
+}
+function wallUnits() {
+  try { return localStorage.getItem('wd-walls-units') || detectDefaultUnits(); }
+  catch (e) { return detectDefaultUnits(); }
+}
+function mToDisplay(m) {
+  return wallUnits() === 'imperial' ? (m * M_TO_IN) : m;
+}
+function displayToM(v) {
+  const n = parseFloat(v);
+  if (!Number.isFinite(n)) return 0.1;
+  return wallUnits() === 'imperial' ? (n / M_TO_IN) : n;
+}
+// Called by the unit-toggle buttons in the modal.
+window.setWallUnits = function (units) {
+  if (units !== 'imperial' && units !== 'metric') return;
+  // If the modal is open, convert the currently-shown value to the new unit
+  // BEFORE persisting the preference so the field stays in sync.
+  const inp = document.getElementById('fThickness');
+  const isOpen = document.getElementById('modal')?.classList.contains('active');
+  let currentMeters = null;
+  if (isOpen && inp) currentMeters = displayToM(inp.value);   // in OLD units
+  try { localStorage.setItem('wd-walls-units', units); } catch (e) {}
+  syncUnitToggleUI();
+  if (isOpen && inp && currentMeters != null) {
+    inp.value = fmtThickness(mToDisplay(currentMeters));
+  }
+  renderList();  // wall-card meta strip shows thickness — refresh
+};
+function syncUnitToggleUI() {
+  const u = wallUnits();
+  document.querySelectorAll('.unit-btn').forEach(b => {
+    const on = (u === 'imperial' && b.dataset.unit === 'in') ||
+               (u === 'metric'   && b.dataset.unit === 'm');
+    b.classList.toggle('active', on);
+  });
+}
+function fmtThickness(n) {
+  if (!Number.isFinite(n)) return '';
+  return wallUnits() === 'imperial' ? n.toFixed(2) : n.toFixed(3);
+}
+function unitLabel() { return wallUnits() === 'imperial' ? 'in' : 'm'; }
+
 // ── State ──
 let esxZip = null;
 let wallTypes = [];
@@ -197,12 +252,13 @@ function renderList() {
             <span><span class="label">2.4:</span> ${esc(att2)}</span>
             <span><span class="label">5:</span> ${esc(att5)}</span>
             <span><span class="label">6:</span> ${esc(att6)}</span>
-            <span><span class="label">thick:</span> ${esc(wt.thickness)}m</span>
+            <span><span class="label">thick:</span> ${esc(fmtThickness(mToDisplay(parseFloat(wt.thickness) || 0)))}${unitLabel()}</span>
           </div>
         </div>
         <div class="wall-actions">
           <button class="btn btn-icon btn-sm" onclick="showKeybindMenu(event, ${i})" title="Assign shortcut">#</button>
           <button class="btn btn-icon btn-sm" onclick="openEditModal(${i})" title="Edit">&#9998;</button>
+          <button class="btn btn-icon btn-sm" onclick="cloneWall(${i})" title="Clone — duplicate as a new wall type to tweak"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="8"/><rect x="5.5" y="4.5" width="7" height="8"/></svg></button>
           <button class="btn btn-icon btn-sm btn-danger" onclick="deleteWall(${i})" title="Delete">&times;</button>
         </div>
       </div>`;
@@ -330,7 +386,8 @@ function openAddModal() {
   document.getElementById('modalSaveBtn').textContent = 'Add';
   document.getElementById('fName').value = '';
   document.getElementById('fColor').value = '#808080';
-  document.getElementById('fThickness').value = '0.1';
+  document.getElementById('fThickness').value = fmtThickness(mToDisplay(0.1));
+  syncUnitToggleUI();
   document.getElementById('fTwoAtt').value = '30';
   document.getElementById('fTwoRef').value = '0.1111';
   document.getElementById('fTwoDif').value = '11';
@@ -345,6 +402,44 @@ function openAddModal() {
   document.getElementById('fName').focus();
 }
 
+// Clone an existing wall type: opens the modal in Add mode (editingIndex
+// stays -1 so save creates a new entry) but with every field pre-filled
+// from the source. Name gets " (Copy)" appended, keybind cleared so it
+// can't collide with the source's shortcut.
+function cloneWall(sourceIndex) {
+  const src = wallTypes[sourceIndex];
+  if (!src) return;
+  editingIndex = -1;
+  document.getElementById('modalTitle').textContent = 'Clone Wall Type';
+  document.getElementById('modalSaveBtn').textContent = 'Add';
+  document.getElementById('fName').value = (src.name || '') + ' (Copy)';
+  document.getElementById('fColor').value = src.color || '#808080';
+  document.getElementById('fThickness').value = fmtThickness(mToDisplay(parseFloat(src.thickness) || 0));
+  syncUnitToggleUI();
+
+  const bands = src.propagationProperties || [];
+  const getBand = (name) => bands.find(b => b.band === name) || {};
+  const two = getBand('TWO');
+  const five = getBand('FIVE');
+  const six = getBand('SIX');
+  document.getElementById('fTwoAtt').value  = two.attenuationFactor    ?? 0;
+  document.getElementById('fTwoRef').value  = two.reflectionCoefficient ?? 0;
+  document.getElementById('fTwoDif').value  = two.diffractionCoefficient?? 0;
+  document.getElementById('fFiveAtt').value = five.attenuationFactor    ?? 0;
+  document.getElementById('fFiveRef').value = five.reflectionCoefficient ?? 0;
+  document.getElementById('fFiveDif').value = five.diffractionCoefficient?? 0;
+  document.getElementById('fSixAtt').value  = six.attenuationFactor    ?? 0;
+  document.getElementById('fSixRef').value  = six.reflectionCoefficient ?? 0;
+  document.getElementById('fSixDif').value  = six.diffractionCoefficient?? 0;
+
+  // Clear keybind — a clone shouldn't inherit the source's [1]-[9] slot.
+  populateKeybindSelect(null);
+  document.getElementById('modal').classList.add('active');
+  document.getElementById('fName').focus();
+  // Select the appended " (Copy)" text so the user can immediately type over it.
+  document.getElementById('fName').setSelectionRange(0, 999);
+}
+
 function openEditModal(i) {
   editingIndex = i;
   const wt = wallTypes[i];
@@ -352,7 +447,8 @@ function openEditModal(i) {
   document.getElementById('modalSaveBtn').textContent = 'Save';
   document.getElementById('fName').value = wt.name;
   document.getElementById('fColor').value = wt.color || '#808080';
-  document.getElementById('fThickness').value = wt.thickness;
+  document.getElementById('fThickness').value = fmtThickness(mToDisplay(parseFloat(wt.thickness) || 0));
+  syncUnitToggleUI();
 
   const bands = wt.propagationProperties || [];
   const getBand = (name) => bands.find(b => b.band === name) || {};
@@ -406,7 +502,7 @@ function saveWallType() {
     name: name,
     key: existing.key || name.replace(/[^a-zA-Z0-9]/g, ''),
     color: document.getElementById('fColor').value,
-    thickness: parseFloat(document.getElementById('fThickness').value) || 0.1,
+    thickness: displayToM(document.getElementById('fThickness').value),
     lowerEdge: existing.lowerEdge ?? 0.0,
     id: existing.id || crypto.randomUUID(),
     status: existing.status || 'CREATED',

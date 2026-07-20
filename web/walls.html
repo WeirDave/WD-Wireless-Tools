@@ -26,11 +26,11 @@
       <div id="dzMenu" class="help-menu" style="left:0; right:auto;">
         <div class="menu-section">&#9656; Navigation</div>
         <a class="help-menu-item" href="/">&#8962; Home</a>
-        <a class="help-menu-item active" href="/walls">· Quick Walls</a>
         <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
-        <a class="help-menu-item" href="/organizer">· Squirrel</a>
-        <a class="help-menu-item" href="/scale">· Scale</a>
+        <a class="help-menu-item active" href="/walls">· Quick Walls</a>
         <a class="help-menu-item" href="/report">· Report</a>
+        <a class="help-menu-item" href="/scale">· Scale</a>
+        <a class="help-menu-item" href="/organizer">· Squirrel</a>
         <div class="help-menu-sep"></div>
         <div class="menu-section">&#9656; Help &amp; Support</div>
         <a class="help-menu-item" href="/guide" target="_blank">· User Guide</a>
@@ -38,7 +38,7 @@
     </div>
   </div>
   <div class="header-center">
-    <h1><span>WD</span> Quick Walls <span class="ver">v7.17</span></h1>
+    <h1><span>WD</span> Quick Walls <span class="ver">v7.18</span></h1>
   </div>
   <div class="header-actions">
     <button class="theme-toggle" onclick="toggleTheme()">
@@ -50,7 +50,7 @@
 <!-- ── Drop Zone ── -->
 <div id="dropzone" class="dropzone">
   <div id="dropzoneLogo" class="dropzone-logo"></div>
-  <p class="dropzone-ver">v7.17</p>
+  <p class="dropzone-ver">v7.18</p>
   <p class="dropzone-sub">Ekahau Workflow Optimization Utility</p>
   <div class="dropzone-divider"></div>
   <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
@@ -73,11 +73,11 @@
         <div id="helpMenu" class="help-menu" style="left:0; right:auto;">
           <div class="menu-section">&#9656; Navigation</div>
           <a class="help-menu-item" href="/">&#8962; Home</a>
-          <a class="help-menu-item active" href="/walls">· Quick Walls</a>
           <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+          <a class="help-menu-item active" href="/walls">· Quick Walls</a>
+          <a class="help-menu-item" href="/report">· Report</a>
+          <a class="help-menu-item" href="/scale">· Scale</a>
           <a class="help-menu-item" href="/organizer">· Squirrel</a>
-        <a class="help-menu-item" href="/scale">· Scale</a>
-        <a class="help-menu-item" href="/report">· Report</a>
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Tools</div>
           <button class="help-menu-item" onclick="loadNewFile()">· Open Another File</button>
@@ -90,7 +90,7 @@
       <span id="fileBadge" class="file-badge" onclick="loadNewFile()" title="Click to open another file"></span>
     </div>
     <div class="header-center">
-      <h1><span>WD</span> Quick Walls <span class="ver">v7.17</span></h1>
+      <h1><span>WD</span> Quick Walls <span class="ver">v7.18</span></h1>
     </div>
     <div class="header-actions">
       <button class="theme-toggle" onclick="toggleTheme()">
@@ -147,35 +147,48 @@
 
 <!-- ── Add/Edit Modal ── -->
 <div id="modal" class="modal-overlay" onclick="if(event.target===this)closeModal()">
-  <div class="modal">
+  <div class="modal modal-wall-edit">
     <div class="modal-header">
       <h3 id="modalTitle">Add Wall Type</h3>
       <button class="btn btn-icon btn-sm" onclick="closeModal()">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="field-row-3">
+      <!-- Top row: 4 balanced cells — Name (wide) / Color / Thickness / Keyboard.
+           Each cell has its label, input, and description stacked vertically. -->
+      <div class="field-row-4">
         <div class="field">
           <label>Name</label>
           <input type="text" id="fName" placeholder="e.g. Concrete, Heavy">
+          <div class="field-desc">Descriptive label shown in Ekahau and on your floor plan.</div>
         </div>
-        <div class="field">
+        <div class="field field-color">
           <label>Color</label>
           <input type="color" id="fColor" value="#808080">
+          <div class="field-desc">Distinct color for the plan view — pick something that stands out.</div>
         </div>
-      </div>
-      <div class="field">
-        <label>Thickness (m)</label>
-        <input type="number" id="fThickness" step="0.001" min="0" value="0.1">
-      </div>
-      <div class="field">
-        <label>Keyboard Shortcut</label>
-        <select id="fKeybind">
-          <option value="">None</option>
-        </select>
+        <div class="field">
+          <label>
+            <span>Thickness</span>
+            <span class="unit-toggle" role="group" aria-label="Unit for thickness">
+              <button type="button" class="unit-btn" data-unit="in" onclick="setWallUnits('imperial')">in</button>
+              <button type="button" class="unit-btn" data-unit="m"  onclick="setWallUnits('metric')">m</button>
+            </span>
+          </label>
+          <input type="number" id="fThickness" step="0.001" min="0" value="0.1">
+          <div class="field-desc">Real-world wall thickness. Ekahau uses this with attenuation to model signal loss. <a href="/scale" target="_blank" rel="noopener">Convert units →</a></div>
+        </div>
+        <div class="field">
+          <label>Keyboard Shortcut</label>
+          <select id="fKeybind">
+            <option value="">None</option>
+          </select>
+          <div class="field-desc">Bind to <code>[1]</code>-<code>[9]</code> so you can quickly pick this wall type while drawing.</div>
+        </div>
       </div>
 
       <div class="band-section">
         <h4>Propagation Properties</h4>
+        <p class="section-desc">How radio waves interact with this wall at each Wi-Fi band. Higher <b>attenuation</b> = more signal loss through the wall. Values match Ekahau's own wall-type schema. <a href="/guide" target="_blank">See guide →</a></p>
         <div class="band-header">
           <span>Band</span>
           <span>Atten.</span>
