@@ -89,6 +89,26 @@
       .replace(/>/g, '&gt;');
   };
 
+  /* Escape for use inside a JS string literal that's inside an HTML
+     attribute — e.g. onclick="fn('${escJsStr(x)}')". The HTML entity
+     decoder runs before the JS engine parses the attribute value, so
+     escAttr's &#39; would be decoded back to ' and break out of the
+     string. escJsStr uses backslash-escapes (which HTML preserves as
+     literal) and then HTML-escapes the two remaining chars that could
+     break the surrounding attribute (& and "). */
+  WD.escJsStr = function (s) {
+    if (s == null) return '';
+    var js = String(s)
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/</g, '\\x3c')
+      .replace(/\r/g, '\\r')
+      .replace(/\n/g, '\\n');
+    return js
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;');
+  };
+
   /* ── Toast ── */
 
   WD.toast = function (msg, type) {
@@ -168,5 +188,10 @@
   window.toast = WD.toast;
   window.showModal = WD.showModal;
   window.closeModal = WD.closeModal;
+  // Escape aliases exposed globally so per-tool JS files (organizer.js etc.)
+  // can use them without redefining. cloud.js still defines its own local
+  // versions for tighter binding inside its template literals.
   window.esc = WD.esc;
+  window.escAttr = WD.escAttr;
+  window.escJsStr = WD.escJsStr;
 })();

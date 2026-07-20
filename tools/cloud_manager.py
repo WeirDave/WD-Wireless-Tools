@@ -1149,12 +1149,20 @@ class CloudManager:
             od = self.config.get("output_dir", "")
             if od:
                 _assert_inside(path, od)
+            # Reject new_name values that contain path separators or ..
+            # segments — otherwise a crafted rename escapes output_dir.
+            if not new_name or new_name in (".", ".."):
+                return {"error": "Invalid name"}
+            if "/" in new_name or "\\" in new_name or ".." in Path(new_name).parts:
+                return {"error": "Name cannot contain path separators or '..'"}
             old = Path(path)
             if old.is_dir():
                 new = old.parent / new_name
             else:
                 nn = new_name if new_name.lower().endswith(".esx") else new_name + ".esx"
                 new = old.parent / nn
+            # Belt-and-suspenders — the target must still resolve inside old.parent.
+            _assert_inside(new, old.parent)
             same = new.exists() and old.exists() and (
                 str(old) == str(new) or os.path.samefile(str(old), str(new)))
             if new.exists() and not same:
@@ -1210,11 +1218,18 @@ class CloudManager:
                     new_id = candidates[0]
                     break
 
-            # Auto-assign to site if requested.
+            # Auto-assign to site if requested. Wrap in its own try so a
+            # transient assign failure doesn't report the (successful) upload
+            # as failed — otherwise the user retries and duplicate-uploads.
             if site_id and new_id:
-                self.api.assign_to_site(site_id, new_id)
-                return {"ok": True, "assigned": True, "siteId": site_id,
-                        "datasetId": new_id}
+                try:
+                    self.api.assign_to_site(site_id, new_id)
+                    return {"ok": True, "assigned": True, "siteId": site_id,
+                            "datasetId": new_id}
+                except Exception as e:
+                    return {"ok": True, "uploaded": True, "datasetId": new_id,
+                            "assignError": str(e),
+                            "warning": f"Uploaded but couldn't assign to site: {e}"}
 
             if not new_id:
                 # Upload succeeded but the listing never reflected it in
@@ -1312,6 +1327,14 @@ class CloudManager:
                 if not s.is_file():
                     continue
                 d = dst / rel
+                # Guard against traversal via `rel` — a crafted "../../foo"
+                # would otherwise move files outside src/dst dirs.
+                try:
+                    _assert_inside(s, src)
+                    _assert_inside(d, dst)
+                except ValueError as e:
+                    errors.append(f"{rel}: {e}")
+                    continue
                 try:
                     d.parent.mkdir(parents=True, exist_ok=True)
                     if not d.exists():

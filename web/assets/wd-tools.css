@@ -342,10 +342,10 @@ mark {
    ══════════════════════════════════════════════════════════════════ */
 .menu-wrap { position: relative; }
 .hamburger-btn {
-  display: flex; flex-direction: column; justify-content: center; gap: 3px;
-  width: 28px; height: 22px; background: none;
-  border: 1px solid rgba(255,255,255,0.18); border-radius: 4px;
-  cursor: pointer; padding: 0 6px;
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  width: 34px; height: 28px; background: none;
+  border: 1px solid rgba(255,255,255,0.18); border-radius: 5px;
+  cursor: pointer; padding: 0 7px;
 }
 .hamburger-btn span {
   display: block; height: 2px; background: #cbd5e1; border-radius: 1px;
@@ -355,10 +355,8 @@ mark {
 [data-theme="light"] .hamburger-btn span { background: var(--text); }
 [data-theme="light"] .hamburger-btn:hover { background: var(--surface-hover); }
 
-/* Quick Walls uses a slightly larger hamburger */
-body.tool-walls .hamburger-btn {
-  gap: 4px; width: 34px; height: 28px; border-radius: 5px; padding: 0 7px;
-}
+/* Base .hamburger-btn now uses this larger sizing across every tool — the
+   old per-tool override was redundant. */
 
 /* Main dropdown menu */
 .main-menu {

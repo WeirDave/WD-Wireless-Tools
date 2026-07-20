@@ -75,7 +75,7 @@ function renderPreview() {
   for (const site of d.sites) {
     const moveCount = site.moves.length;
     const stayCount = site.staying.length;
-    html += `<div class="site-group" data-site="${esc(site.folder)}">`;
+    html += `<div class="site-group" data-site="${escAttr(site.folder)}">`;
     html += `<div class="site-header" onclick="this.parentElement.classList.toggle('collapsed')">`;
     html += `<div><span class="site-name">${esc(site.folder)}</span>`;
     if (moveCount) html += `<span class="site-badge">${moveCount} move${moveCount !== 1 ? 's' : ''}</span>`;
@@ -94,15 +94,15 @@ function renderPreview() {
     html += '<div class="site-body">';
     if (moveCount > 0) {
       html += '<table class="file-table"><thead><tr>';
-      html += '<th class="chk"><input type="checkbox" checked onchange="toggleSite(this, \'' + esc(site.folder) + '\')"></th>';
+      html += '<th class="chk"><input type="checkbox" checked onchange="toggleSite(this, \'' + escJsStr(site.folder) + '\')"></th>';
       html += '<th>File</th><th class="col-dest">Destination</th><th class="col-size" style="text-align:right">Size</th>';
       html += '</tr></thead><tbody>';
       for (const m of site.moves) {
         const id = site.folder + '::' + m.name;
         html += `<tr>`;
-        html += `<td class="chk"><input type="checkbox" checked data-site="${esc(site.folder)}" data-file="${esc(m.name)}" data-id="${esc(id)}"></td>`;
+        html += `<td class="chk"><input type="checkbox" checked data-site="${escAttr(site.folder)}" data-file="${escAttr(m.name)}" data-id="${escAttr(id)}"></td>`;
         html += `<td><span class="file-ext">${esc(m.ext)}</span>${esc(m.name)}</td>`;
-        html += `<td><select class="dest-select dest-${m.target}" data-site="${esc(site.folder)}" data-file="${esc(m.name)}" data-original="${m.target}" onchange="onDestChange(this)">`;
+        html += `<td><select class="dest-select dest-${m.target}" data-site="${escAttr(site.folder)}" data-file="${escAttr(m.name)}" data-original="${m.target}" onchange="onDestChange(this)">`;
         for (const opt of ['images', 'floorplans', 'reports']) {
           html += `<option value="${opt}"${opt === m.target ? ' selected' : ''}>\\${opt}</option>`;
         }

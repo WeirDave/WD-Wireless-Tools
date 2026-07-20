@@ -3,10 +3,17 @@
 // Local short aliases for the escape helpers used heavily in template literals
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
+// j() / pj() — safe for a value dropped inside a JS single-quoted string
+// that's inside an HTML attribute, e.g. onclick="fn('${j(name)}')". Uses
+// backslash-escapes so ' \ < newlines survive HTML entity decoding.
+function j(s) { return WD.escJsStr(s); }
 // Path-safe attr escape: normalizes Windows backslashes to forward slashes so
 // they survive JS string parsing inside onclick="...(...)" attributes.
 // Python's pathlib accepts either separator, so this is safe end-to-end.
 function p(s) { return a(String(s == null ? '' : s).replace(/\\/g, '/')); }
+// Path + JS-string safe — the JS-string variant of p() for use in
+// onclick="fn('${pj(path)}')".
+function pj(s) { return j(String(s == null ? '' : s).replace(/\\/g, '/')); }
 
 let currentTab = 'sites';       // 'sites' | 'projects' | 'duplicates'
 let data = null;                // current tab's data
@@ -361,7 +368,7 @@ function dupHintFor(idOrPath) {
   if (!idOrPath) return '';
   const key = dupIndex.get(idOrPath);
   if (!key) return '';
-  return ` <span class="dup-hint" title="Part of a duplicate cluster — click to inspect" onclick="event.stopPropagation();jumpToCluster('${a(key)}')">&#8776;</span>`;
+  return ` <span class="dup-hint" title="Part of a duplicate cluster — click to inspect" onclick="event.stopPropagation();jumpToCluster('${j(key)}')">&#8776;</span>`;
 }
 
 function jumpToCluster(clusterKey) {
@@ -460,7 +467,7 @@ function renderDuplicates() {
 }
 
 function renderCluster(cl) {
-  const kAttr = a(cl.key);
+  const kAttr = j(cl.key);
   const shapeLabel = cl.shape === 'mixed' ? 'Mixed' : cl.shape === 'local-only' ? 'Local only' : 'Cloud only';
   let h = `<div class="dup-cluster expanded" data-key="${kAttr}">`;
   h += `<div class="dup-head" onclick="toggleCluster('${kAttr}')">`;
@@ -527,14 +534,14 @@ function renderCluster(cl) {
     h += `<div class="dup-item-date">${e(dateStr)}</div>`;
     h += `<div class="dup-item-actions">`;
     if (it.side === 'local') {
-      h += `<button class="icon-btn" title="Show in Explorer/Finder" onclick="revealInExplorer('${p(it.path)}')">&#128193;</button>`;
+      h += `<button class="icon-btn" title="Show in Explorer/Finder" onclick="revealInExplorer('${pj(it.path)}')">&#128193;</button>`;
     } else {
-      h += `<button class="icon-btn" title="View site contents" onclick="openCloudPeek('${a(it.id)}','${a(it.location)}')">&#128065;</button>`;
+      h += `<button class="icon-btn" title="View site contents" onclick="openCloudPeek('${j(it.id)}','${j(it.location)}')">&#128065;</button>`;
     }
     // Delete needs backslash normalization when iid is a local path — a raw
     // Windows path in a JS-string onclick lets \U, \f, etc. be swallowed as
     // JS escape codes, corrupting the value dupDeleteOne receives.
-    const iidAttr = it.side === 'local' ? p(iid) : a(iid);
+    const iidAttr = it.side === 'local' ? pj(iid) : j(iid);
     h += `<button class="icon-btn del" title="Delete" onclick="dupDeleteOne('${kAttr}','${iidAttr}')">&#128465;</button>`;
     h += `</div>`;
     h += `</div>`;
@@ -723,8 +730,8 @@ function renderEsxRow(en, stripe) {
     const c = pair.cloud;
     if (status === 'mismatch') {
       cloudInfo = `<span class="tree-cloud" title="Cloud project: ${a(c.name)}">&#8596; ${e(c.name)}</span>
-        <button class="sync-btn" title="Cloud name → local file" onclick="syncRow('to-local','${a(c.id)}','${a(c.name)}','${p(item.path)}')">&#8594;</button>
-        <button class="sync-btn" title="Local name → cloud project" onclick="syncRow('to-cloud','${a(c.id)}','${a(item.name)}','${p(item.path)}')">&#8592;</button>`;
+        <button class="sync-btn" title="Cloud name → local file" onclick="syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(item.path)}')">&#8594;</button>
+        <button class="sync-btn" title="Local name → cloud project" onclick="syncRow('to-cloud','${j(c.id)}','${j(item.name)}','${pj(item.path)}')">&#8592;</button>`;
     } else {
       cloudInfo = `<span class="tree-cloud ok" title="Matched cloud project">&#10003; in cloud</span>`;
     }
@@ -736,8 +743,8 @@ function renderEsxRow(en, stripe) {
     <span class="pair-meta">${e(item.meta)}</span>
     <span class="grow"></span>
     ${cloudInfo}
-    <button class="icon-btn" title="Rename .esx file" onclick="startRename('local','${p(item.path)}','${a(item.name)}')">&#9998;</button>
-    <button class="icon-btn del" title="Delete .esx file" onclick="startDelete('local','${p(item.path)}','${a(item.name)}',false)">&#128465;</button>
+    <button class="icon-btn" title="Rename .esx file" onclick="startRename('local','${pj(item.path)}','${j(item.name)}')">&#9998;</button>
+    <button class="icon-btn del" title="Delete .esx file" onclick="startDelete('local','${pj(item.path)}','${j(item.name)}',false)">&#128465;</button>
   </div>`;
 }
 
@@ -820,9 +827,9 @@ function gutCell(r) {
   if (r.status === 'mismatch') {
     const c = r.cloud, l = r.local;
     return `<div class="lr-gut mis">
-      <button class="gut-arrow" title="Apply cloud name onto the local folder" onclick="syncRow('to-local','${a(c.id)}','${a(c.name)}','${p(l.path)}')">&#10145;</button>
-      <button class="gut-arrow" title="Apply local name onto the cloud site" onclick="syncRow('to-cloud','${a(c.id)}','${a(l.name)}','${p(l.path)}')">&#11013;</button>
-      <button class="gut-arrow nomatch" title="Not a match — never pair these two again" onclick="markNotMatch('${a(c.id)}','${p(l.path)}','${a(c.name)}','${a(l.name)}')">&#8800;</button>
+      <button class="gut-arrow" title="Apply cloud name onto the local folder" onclick="syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}')">&#10145;</button>
+      <button class="gut-arrow" title="Apply local name onto the cloud site" onclick="syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}')">&#11013;</button>
+      <button class="gut-arrow nomatch" title="Not a match — never pair these two again" onclick="markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')">&#8800;</button>
     </div>`;
   }
   if (r.status === 'synced') {
@@ -830,24 +837,24 @@ function gutCell(r) {
   }
   if (r.cloud) {
     const act = currentTab === 'sites'
-      ? `onclick="createLocalFolder('${a(r.cloud.name)}')"` : '';
+      ? `onclick="createLocalFolder('${j(r.cloud.name)}')"` : '';
     const title = currentTab === 'sites' ? 'Create the matching local folder →' : 'Cloud only';
     return currentTab === 'sites'
       ? `<div class="lr-gut orph"><button class="gut-arrow orphan" title="${title}" ${act}>&#10145;</button></div>`
       : `<div class="lr-gut orph"><span class="gut-glyph" title="${title}">&#10145;</span></div>`;
   }
   if (currentTab === 'sites') {
-    return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Create a cloud site from this folder" onclick="createFromLocal('${a(r.local.name)}')">&#11013;</button></div>`;
+    return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Create a cloud site from this folder" onclick="createFromLocal('${j(r.local.name)}')">&#11013;</button></div>`;
   }
-  return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${p(r.local.path)}','${a(r.local.name)}')">&#11013;</button></div>`;
+  return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${pj(r.local.path)}','${j(r.local.name)}')">&#11013;</button></div>`;
 }
 function cloudCell(r, localCodes) {
   const isSites = currentTab === 'sites';
   if (!r.cloud) {
     if (isSites) {
-      return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Create a cloud site from this folder" onclick="createFromLocal('${a(r.local.name)}')">+ Cloud site</button></div>`;
+      return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Create a cloud site from this folder" onclick="createFromLocal('${j(r.local.name)}')">+ Cloud site</button></div>`;
     }
-    return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${p(r.local.path)}','${a(r.local.name)}')">+ Upload</button></div>`;
+    return `<div class="lr-cell cloud empty"><button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${pj(r.local.path)}','${j(r.local.name)}')">+ Upload</button></div>`;
   }
   const c = r.cloud, isMis = r.status === 'mismatch', thing = isSites ? 'cloud site' : 'cloud project';
   const me = ((data && data.currentUser) || '').toLowerCase();
@@ -859,22 +866,22 @@ function cloudCell(r, localCodes) {
   const dup = r.status === 'orphan' && c.code && localCodes.has(c.code);
   const dsCount = (c.datasets && c.datasets.length) || 0;
   const cloudPeek = isSites
-    ? `<button class="src-badge${dsCount ? ' hasrc' : ''}" title="${dsCount ? dsCount + ' project' + (dsCount > 1 ? 's' : '') : 'No projects yet'} — click to view" onclick="event.stopPropagation();openCloudPeek('${a(c.id)}','${a(c.name)}')">&#128065;</button>`
+    ? `<button class="src-badge${dsCount ? ' hasrc' : ''}" title="${dsCount ? dsCount + ' project' + (dsCount > 1 ? 's' : '') : 'No projects yet'} — click to view" onclick="event.stopPropagation();openCloudPeek('${j(c.id)}','${j(c.name)}')">&#128065;</button>`
     : '';
   return `<div class="lr-cell cloud${dup ? ' dup' : ''}"${dup ? ` title="A local ${isSites ? 'folder' : '.esx'} shares code ${a(c.code)} — likely the same place"` : ''}>
     <input type="checkbox" class="rowchk" data-k="${e(r.key)}" ${selected.has(r.key) ? 'checked' : ''}>
     <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(c.meta || '')}</span>
     <span class="cell-actions">${cloudPeek}
-      ${!isSites ? `<button class="icon-btn" title="Move to a site" onclick="startMoveToSite('${a(c.id)}','${a(c.name)}')">&#8618;</button>` : ''}
-      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('cloud','${a(c.id)}','${a(c.name)}')">&#9998;</button>
-      <button class="icon-btn del" title="Delete ${thing}" onclick="startDelete('cloud','${a(c.id)}','${a(c.name)}',false)">&#128465;</button>
+      ${!isSites ? `<button class="icon-btn" title="Move to a site" onclick="startMoveToSite('${j(c.id)}','${j(c.name)}')">&#8618;</button>` : ''}
+      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('cloud','${j(c.id)}','${j(c.name)}')">&#9998;</button>
+      <button class="icon-btn del" title="Delete ${thing}" onclick="startDelete('cloud','${j(c.id)}','${j(c.name)}',false)">&#128465;</button>
     </span></div>`;
 }
 function localCell(r, cloudCodes) {
   const isSites = currentTab === 'sites';
   if (!r.local) {
     return isSites
-      ? `<div class="lr-cell local empty"><button class="ghost-add" title="Create a matching local folder" onclick="createLocalFolder('${a(r.cloud.name)}')">+ Local folder</button></div>`
+      ? `<div class="lr-cell local empty"><button class="ghost-add" title="Create a matching local folder" onclick="createLocalFolder('${j(r.cloud.name)}')">+ Local folder</button></div>`
       : `<div class="lr-cell local empty"></div>`;
   }
   const l = r.local, isMis = r.status === 'mismatch', thing = isSites ? 'local folder' : '.esx file';
@@ -893,16 +900,16 @@ function localCell(r, cloudCodes) {
   const flagged = l.name.charAt(0) === '!';
   const srcUI = hasContents ? previewBadge(l) : '';
   const flagBtn = isSites
-    ? `<button class="icon-btn${flagged ? ' flagged' : ''}" title="${flagged ? 'Un-flag (remove the ! prefix)' : 'Flag this folder for review — adds a ! prefix so it sorts to the top here and in Explorer'}" onclick="flagReview('${p(l.path)}','${a(l.name)}')">${flagged ? '&#9873;' : '&#9872;'}</button>`
+    ? `<button class="icon-btn${flagged ? ' flagged' : ''}" title="${flagged ? 'Un-flag (remove the ! prefix)' : 'Flag this folder for review — adds a ! prefix so it sorts to the top here and in Explorer'}" onclick="flagReview('${pj(l.path)}','${j(l.name)}')">${flagged ? '&#9873;' : '&#9872;'}</button>`
     : '';
-  const revealBtn = `<button class="icon-btn" title="Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}" onclick="revealInExplorer('${p(l.path)}')">&#128193;</button>`;
+  const revealBtn = `<button class="icon-btn" title="Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}" onclick="revealInExplorer('${pj(l.path)}')">&#128193;</button>`;
   return `<div class="lr-cell local${dup ? ' dup' : ''}"${dup ? ` title="A cloud ${isSites ? 'site' : 'project'} shares code ${a(l.code)} — likely the same place"` : ''}>
     <input type="checkbox" class="rowchk" data-k="${e(r.key)}" ${selected.has(r.key) ? 'checked' : ''}>
     <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(l.meta || '')}</span>
     <span class="cell-actions">${srcUI}${revealBtn}${flagBtn}
-      ${isSites ? `<button class="icon-btn" title="Merge this folder's files into another folder…" onclick="startMerge('${p(l.path)}','${a(l.name)}')">&#8649;</button>` : ''}
-      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('local','${p(l.path)}','${a(l.name)}')">&#9998;</button>
-      <button class="icon-btn del" title="Delete ${thing}${isSites ? ' and contents' : ''}" onclick="startDelete('local','${p(l.path)}','${a(l.name)}',${l.isDir})">&#128465;</button>
+      ${isSites ? `<button class="icon-btn" title="Merge this folder's files into another folder…" onclick="startMerge('${pj(l.path)}','${j(l.name)}')">&#8649;</button>` : ''}
+      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('local','${pj(l.path)}','${j(l.name)}')">&#9998;</button>
+      <button class="icon-btn del" title="Delete ${thing}${isSites ? ' and contents' : ''}" onclick="startDelete('local','${pj(l.path)}','${j(l.name)}',${l.isDir})">&#128465;</button>
     </span></div>`;
 }
 // ── Source-file (non-.esx) helpers: badge, peek, review-flag ──
@@ -930,7 +937,7 @@ function previewBadge(l) {
   } else {
     tip = `${s.esx} Ekahau .esx file${s.esx > 1 ? 's' : ''} — click to view contents`;
   }
-  return `<button class="${cls}" title="${a(tip)}" onclick="event.stopPropagation();openPeek('${p(l.path)}')">&#128065;</button>`;
+  return `<button class="${cls}" title="${a(tip)}" onclick="event.stopPropagation();openPeek('${pj(l.path)}')">&#128065;</button>`;
 }
 function peekFileRow(f, typeClass) {
   const when = f.mtime ? new Date(f.mtime * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
@@ -1118,7 +1125,7 @@ async function openNotMatchManager() {
         </div>
         <div class="nm-meta">${e(when)}</div>
         <button class="btn btn-secondary nm-undo" title="Un-mark — let matching consider this pair again"
-                onclick="undoNotMatch('${a(pr.cloudId)}','${p(pr.localPath)}')">Un-mark</button>
+                onclick="undoNotMatch('${j(pr.cloudId)}','${pj(pr.localPath)}')">Un-mark</button>
       </div>`;
     }).join('');
     body.innerHTML = `<div class="nm-list">${rows}</div>
@@ -1166,7 +1173,7 @@ function renderMergeDests() {
   let h = list.length ? '' : `<div class="peek-more">No other folders to merge into.</div>`;
   list.forEach(f => {
     const same = code && f.code === code;
-    h += `<div class="peek-row pick" onclick="chooseMergeDest('${p(f.path)}')">
+    h += `<div class="peek-row pick" onclick="chooseMergeDest('${pj(f.path)}')">
       <span class="pk-name">${same ? '<b class="amber">★</b> ' : ''}${e(f.name)}</span>
       <span class="pk-size">${e(f.meta || '')}</span></div>`;
   });
@@ -1266,6 +1273,14 @@ async function confirmMerge() {
 // ── Main hamburger menu ──
 function toggleMainMenu(ev) {
   WD.toggleMenu(ev, 'mainMenu');
+}
+// Menu items in cloud.html chain closeMainMenu() with the action so the
+// menu dismisses on click. Without this the first ReferenceError kills the
+// whole handler and none of Settings / Change Local Folder / Manage Not-
+// a-Match / Refresh / About fire from the menu.
+function closeMainMenu() {
+  var m = document.getElementById('mainMenu');
+  if (m) m.classList.remove('open');
 }
 function openAbout() { showModal('aboutModal'); }
 function openSettings() {

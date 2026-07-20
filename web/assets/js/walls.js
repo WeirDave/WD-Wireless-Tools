@@ -3,6 +3,14 @@
 // Alias for backward compat with ~40 call sites
 const showToast = WD.toast;
 
+// Validate a CSS hex-color string (3/4/6/8 hex digits). Falls back to #666
+// if the value from the .esx isn't a well-formed color — prevents a crafted
+// wallTypes.json from breaking out of style="" attributes with e.g.
+//    red" onmouseover="alert(1)
+function safeColor(c) {
+  return /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : '#666';
+}
+
 // ── State ──
 let esxZip = null;
 let wallTypes = [];
@@ -131,11 +139,11 @@ function renderHotkeyPanel() {
     if (wt) {
       html += `
         <div class="hotkey-slot"
-             style="--slot-color:${wt.color || '#666'}"
+             style="--slot-color:${safeColor(wt.color)}"
              ondragover="onSlotDragOver(event, ${n})"
              ondragleave="onSlotDragLeave(event)"
              ondrop="onSlotDrop(event, ${n})">
-          <span class="hotkey-swatch" style="background:${wt.color || '#666'}"></span>
+          <span class="hotkey-swatch" style="background:${safeColor(wt.color)}"></span>
           <div class="hotkey-num">${n}</div>
           <div class="hotkey-name">${esc(wt.name)}</div>
           <button class="hotkey-clear" onclick="clearKeybind(${n})" title="Remove shortcut">&times;</button>
@@ -176,20 +184,20 @@ function renderList() {
 
     html += `
       <div class="wall-card" draggable="true"
-           style="--wall-color:${wt.color || '#666'}"
+           style="--wall-color:${safeColor(wt.color)}"
            ondragstart="onCardDragStart(event, ${i})"
            ondragend="onCardDragEnd(event)">
-        <div class="wall-swatch" style="background:${wt.color || '#666'}"></div>
+        <div class="wall-swatch" style="background:${safeColor(wt.color)}"></div>
         <div class="wall-info">
           <div class="wall-name-row">
             <span class="wall-name">${esc(wt.name)}</span>
             ${kbBadge}
           </div>
           <div class="wall-meta">
-            <span><span class="label">2.4:</span> ${att2}</span>
-            <span><span class="label">5:</span> ${att5}</span>
-            <span><span class="label">6:</span> ${att6}</span>
-            <span><span class="label">thick:</span> ${wt.thickness}m</span>
+            <span><span class="label">2.4:</span> ${esc(att2)}</span>
+            <span><span class="label">5:</span> ${esc(att5)}</span>
+            <span><span class="label">6:</span> ${esc(att6)}</span>
+            <span><span class="label">thick:</span> ${esc(wt.thickness)}m</span>
           </div>
         </div>
         <div class="wall-actions">
