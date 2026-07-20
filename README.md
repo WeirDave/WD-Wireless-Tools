@@ -128,27 +128,28 @@ Open [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-
 
 The full suite (Cloud Manager + Quick Walls + Squirrel) needs Python because Cloud Manager and Squirrel access your file system and Ekahau Cloud session.
 
-**Prerequisites:**
+**1. Install Python 3.10 or newer**
 
-- **Python 3.10+** — [python.org/downloads](https://www.python.org/downloads/)
-- A modern web browser (Chrome, Edge, Firefox, Safari)
+Grab it from [python.org/downloads](https://www.python.org/downloads/). During install, **check the box "Add Python to PATH"** — it's on the first screen. Skip this and `run.bat` won't be able to find Python.
 
-**Run it:**
+**2. Download the suite**
 
-**Windows** — double-click `run.bat`
+Go to the [latest release page](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest). Under **Assets**, click **`WD-Wireless-Tools-vX.X.X.zip`** (the version-numbered one — *not* "Source code (zip)", which is GitHub's auto-generated variant).
 
-**macOS** — double-click `run.command` (or from Terminal):
-```bash
-bash run.command
-```
+Save it somewhere permanent — Desktop or Documents is fine — and extract the ZIP. You'll get a folder named `WD-Wireless-Tools-vX.X.X/` with everything inside.
 
-**Manual**:
+**3. Launch it**
+
+- **Windows** — open the extracted folder and double-click **`run.bat`**.
+- **macOS** — open the extracted folder and double-click **`run.command`**. On first launch macOS may block it — right-click → **Open** → **Open** to bypass Gatekeeper.
+
+A terminal window opens, installs the three Python dependencies on first run (~30 seconds), starts the local server, and opens your browser to `http://localhost:8765`. **Keep the terminal window open** — closing it stops the server.
+
+**Manual (advanced)**:
 ```bash
 pip install -r requirements.txt
 python server.py
 ```
-
-The server starts on `http://localhost:8765` and opens your browser automatically.
 
 ---
 
