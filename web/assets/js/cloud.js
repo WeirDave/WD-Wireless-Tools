@@ -1366,16 +1366,33 @@ function clearSelection() {
 function updateBulkBar() {
   const n = selected.size;
   document.getElementById('selCount').textContent = n ? n + ' selected' : '';
-  // Show buttons whose action makes sense on this tab — always, regardless
-  // of what's actually selected. The action itself validates the selection
-  // and toasts if it can't proceed. Keeps the toolbar stable so the user
-  // never wonders "why did the button disappear?".
-  document.getElementById('bulkSyncTo').style.display = '';
-  document.getElementById('bulkSyncFrom').style.display = '';
-  document.getElementById('bulkDeleteBtn').style.display = '';
-  document.getElementById('compareBtn').style.display = currentTab === 'sites' ? '' : 'none';
-  const mb = document.getElementById('bulkMoveBtn');
-  if (mb) mb.style.display = currentTab === 'projects' ? '' : 'none';
+  // Buttons always visible on the tabs they apply to (stable toolbar), but
+  // *disabled* when they can't act on the current selection. This avoids
+  // the misleading "select some matched rows first" toast on a screen where
+  // rows clearly ARE selected — the greyed-out state tells you which buttons
+  // apply to what you've picked.
+  let pairCount = 0, deletableCount = 0, movableCount = 0, localFolderCount = 0;
+  selected.forEach(k => {
+    const d = rowData[k]; if (!d) return;
+    if (d.kind === 'pair') { pairCount++; localFolderCount++; }
+    if (d.kind === 'cloud' || d.kind === 'local') deletableCount++;
+    if (d.kind === 'local') localFolderCount++;
+    if (currentTab === 'projects' && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir))) {
+      movableCount++;
+    }
+  });
+  const setBtn = (id, tabVisible, enabled, disabledTitle) => {
+    const el = document.getElementById(id); if (!el) return;
+    el.style.display = tabVisible ? '' : 'none';
+    el.disabled = !enabled;
+    el.classList.toggle('is-disabled', !enabled);
+    if (!enabled && disabledTitle) el.dataset.disabledTitle = disabledTitle;
+  };
+  setBtn('bulkSyncTo', true, pairCount > 0, 'Sync only works on matched (paired) rows');
+  setBtn('bulkSyncFrom', true, pairCount > 0, 'Sync only works on matched (paired) rows');
+  setBtn('bulkDeleteBtn', true, deletableCount > 0, 'Bulk delete only works on cloud-only or local-only rows');
+  setBtn('compareBtn', currentTab === 'sites', localFolderCount >= 2, 'Select 2+ local folders to compare');
+  setBtn('bulkMoveBtn', currentTab === 'projects', movableCount > 0, 'Select cloud projects or local .esx files first');
 }
 async function bulkSync(dir) {
   const pairs = [...selected].map(k => rowData[k]).filter(d => d && d.kind === 'pair');
