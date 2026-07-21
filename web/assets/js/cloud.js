@@ -1371,7 +1371,7 @@ function updateBulkBar() {
   // the misleading "select some matched rows first" toast on a screen where
   // rows clearly ARE selected — the greyed-out state tells you which buttons
   // apply to what you've picked.
-  let pairCount = 0, deletableCount = 0, movableCount = 0, localFolderCount = 0;
+  let pairCount = 0, deletableCount = 0, movableCount = 0, localFolderCount = 0, uploadableCount = 0;
   selected.forEach(k => {
     const d = rowData[k]; if (!d) return;
     if (d.kind === 'pair') { pairCount++; localFolderCount++; }
@@ -1380,23 +1380,47 @@ function updateBulkBar() {
     if (currentTab === 'projects' && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir))) {
       movableCount++;
     }
+    // Sync ← (to-cloud) also handles bulk-upload of local-only .esx files.
+    // On the Sites tab a "local only" row is a folder → no upload semantics.
+    if (currentTab === 'projects' && d.kind === 'local' && !d.isDir) uploadableCount++;
   });
-  const setBtn = (id, tabVisible, enabled, disabledTitle) => {
+  const setBtn = (id, tabVisible, enabled, disabledTitle, tooltip) => {
     const el = document.getElementById(id); if (!el) return;
     el.style.display = tabVisible ? '' : 'none';
     el.disabled = !enabled;
     el.classList.toggle('is-disabled', !enabled);
     if (!enabled && disabledTitle) el.dataset.disabledTitle = disabledTitle;
+    if (tooltip) el.title = tooltip;
   };
-  setBtn('bulkSyncTo', true, pairCount > 0, 'Sync only works on matched (paired) rows');
-  setBtn('bulkSyncFrom', true, pairCount > 0, 'Sync only works on matched (paired) rows');
+  const syncFromTip = currentTab === 'projects'
+    ? 'Push local → cloud: renames matched cloud projects to the local name, and uploads local-only .esx files to Ekahau Cloud'
+    : 'Copy local names onto matched cloud';
+  setBtn('bulkSyncTo', true, pairCount > 0, 'Sync only works on matched (paired) rows', 'Copy cloud names onto matched local');
+  setBtn('bulkSyncFrom', true, pairCount + uploadableCount > 0, 'Sync ← needs matched rows or local-only .esx files', syncFromTip);
   setBtn('bulkDeleteBtn', true, deletableCount > 0, 'Bulk delete only works on cloud-only or local-only rows');
   setBtn('compareBtn', currentTab === 'sites', localFolderCount >= 2, 'Select 2+ local folders to compare');
   setBtn('bulkMoveBtn', currentTab === 'projects', movableCount > 0, 'Select cloud projects or local .esx files first');
 }
 async function bulkSync(dir) {
-  const pairs = [...selected].map(k => rowData[k]).filter(d => d && d.kind === 'pair');
-  if (!pairs.length) { toast('Select some matched rows first', 'info'); return; }
+  const items = [...selected].map(k => rowData[k]).filter(Boolean);
+  const pairs = items.filter(d => d.kind === 'pair');
+  // to-cloud direction (Sync ←) additionally uploads local-only .esx files
+  // on the Project Files tab. Same semantics — "push local → cloud".
+  const uploads = (dir === 'to-cloud' && currentTab === 'projects')
+    ? items.filter(d => d.kind === 'local' && !d.isDir)
+    : [];
+  if (!pairs.length && !uploads.length) {
+    toast(dir === 'to-cloud'
+      ? 'Select matched rows or local-only .esx files first'
+      : 'Select some matched rows first', 'info');
+    return;
+  }
+  if (uploads.length) {
+    const msg = uploads.length === 1
+      ? `Upload "${uploads[0].name}.esx" to Ekahau Cloud?`
+      : `Upload ${uploads.length} local .esx files to Ekahau Cloud?`;
+    if (!confirm(msg)) return;
+  }
   let ok = 0, fail = 0;
   for (const d of pairs) {
     try {
@@ -1406,7 +1430,14 @@ async function bulkSync(dir) {
       if (r && r.error) fail++; else ok++;
     } catch (e) { fail++; }
   }
-  toast(`Synced ${ok}${fail ? ' · ' + fail + ' failed' : ''}`, fail ? 'error' : 'success');
+  for (const d of uploads) {
+    try {
+      const r = await pyApi('upload_project', d.path, undefined);
+      if (r && r.error) fail++; else ok++;
+    } catch (e) { fail++; }
+  }
+  const label = uploads.length && !pairs.length ? 'Uploaded' : 'Synced';
+  toast(`${label} ${ok}${fail ? ' · ' + fail + ' failed' : ''}`, fail ? 'error' : 'success');
   clearSelection(); refreshData();
 }
 function bulkDelete() {
