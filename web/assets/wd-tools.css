@@ -1784,6 +1784,9 @@ body.tool-cloud .toolbar input.search:focus {
   transition: background 0.1s;
 }
 .peek-row:hover { background: var(--row-hover); }
+.progress-icon { flex: 0 0 auto; width: 20px; text-align: center; font-size: 14px; font-variant-emoji: text; }
+.progress-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+.progress-detail { flex: 0 0 auto; color: var(--text-2); font-size: 11px; overflow-wrap: anywhere; max-width: 40%; }
 .peek-type {
   flex: 0 0 auto;
   display: inline-flex; align-items: center; justify-content: center;

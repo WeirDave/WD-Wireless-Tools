@@ -87,7 +87,7 @@
       </div>
     </div>
     <div class="topbar-center">
-      <h1><span>WD</span> Cloud Manager <span class="ver">v3.45</span></h1>
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.46</span></h1>
     </div>
     <div class="topbar-right">
       <span class="dot"></span>
@@ -232,7 +232,7 @@
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal">
-    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.45</span></h3>
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.46</span></h3>
     <div class="about-body">
       Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
       <br><br>
@@ -351,6 +351,19 @@
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('moveToSiteModal')">Cancel</button>
       <button class="btn btn-blue" onclick="confirmMoveToSite()">Move</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk-operation progress -->
+<div class="modal-overlay" id="progressModal">
+  <div class="modal peek">
+    <h3 id="progressTitle">Working…</h3>
+    <p class="sub" id="progressSummary">0 of 0</p>
+    <div class="peek-list" id="progressList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="progressCancelBtn" onclick="cancelBulkProgress()">Stop after current</button>
+      <button class="btn btn-blue" id="progressCloseBtn" onclick="closeModal('progressModal')" style="display:none;">Close</button>
     </div>
   </div>
 </div>

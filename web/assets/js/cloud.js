@@ -1410,18 +1410,50 @@ function updateBulkBar() {
   setBtn('compareBtn', currentTab === 'sites', localFolderCount >= 2, 'Select 2+ local folders to compare');
   setBtn('bulkMoveBtn', currentTab === 'projects', movableCount > 0, 'Select cloud projects or local .esx files first');
 }
+/* ── Bulk progress modal ─────────────────────────────────────────────
+ * Shown for any bulk operation that touches multiple rows sequentially
+ * (rename, upload, download). Each row starts as ⏸ pending, becomes ⏳
+ * while it's the current file, ends as ✅ success or ❌ failure with a
+ * short error message inline. User can hit "Stop after current" to end
+ * the loop cleanly without cancelling the in-flight request. */
+let _bulkAbort = false;
+function openBulkProgress(title, items) {
+  _bulkAbort = false;
+  const rows = items.map((it, i) =>
+    `<div class="peek-row" data-i="${i}">
+       <span class="progress-icon">⏸</span>
+       <span class="progress-name">${e(it.label)}</span>
+       <span class="progress-detail" data-detail></span>
+     </div>`).join('');
+  document.getElementById('progressTitle').textContent = title;
+  document.getElementById('progressSummary').textContent = `0 of ${items.length}`;
+  document.getElementById('progressList').innerHTML = rows;
+  document.getElementById('progressCancelBtn').style.display = items.length > 1 ? '' : 'none';
+  document.getElementById('progressCloseBtn').style.display = 'none';
+  showModal('progressModal');
+}
+function updateBulkProgress(i, state, detail, done, total, failed) {
+  const row = document.querySelector(`#progressList .peek-row[data-i="${i}"]`);
+  if (row) {
+    const icon = { running: '⏳', ok: '✅', fail: '❌' }[state] || '⏸';
+    row.querySelector('.progress-icon').textContent = icon;
+    if (detail) row.querySelector('[data-detail]').textContent = detail;
+  }
+  document.getElementById('progressSummary').textContent =
+    `${done} of ${total}${failed ? ` · ${failed} failed` : ''}`;
+}
+function finishBulkProgress() {
+  document.getElementById('progressCancelBtn').style.display = 'none';
+  document.getElementById('progressCloseBtn').style.display = '';
+}
+function cancelBulkProgress() { _bulkAbort = true; }
+
 async function bulkSync(dir) {
   const items = [...selected].map(k => rowData[k]).filter(Boolean);
   const pairs = items.filter(d => d.kind === 'pair');
-  // to-cloud direction (Sync ←) additionally uploads local-only .esx files
-  // on the Project Files tab. Same semantics — "push local → cloud".
   const uploads = (dir === 'to-cloud' && currentTab === 'projects')
     ? items.filter(d => d.kind === 'local' && !d.isDir)
     : [];
-  // to-local direction (Sync →) additionally downloads cloud-only projects
-  // on the Project Files tab. Each project lands in a folder named after
-  // itself under output_dir — same one-folder-per-site convention Ekahau AI
-  // Pro uses. User can consolidate later via Move to site.
   const downloads = (dir === 'to-local' && currentTab === 'projects')
     ? items.filter(d => d.kind === 'cloud')
     : [];
@@ -1443,34 +1475,54 @@ async function bulkSync(dir) {
       : `Download ${downloads.length} projects from Ekahau Cloud? Each will land in its own folder.`;
     if (!confirm(msg)) return;
   }
+
+  // Build a flat plan across all three sub-loops so the progress modal
+  // sees them as one queue with per-item labels.
+  const plan = [
+    ...pairs.map(d => ({ kind: 'pair', d, label: (dir === 'to-local' ? d.cloudName : d.localName) + ' (rename)' })),
+    ...uploads.map(d => ({ kind: 'upload', d, label: d.name + '.esx' })),
+    ...downloads.map(d => ({ kind: 'download', d, label: d.name })),
+  ];
+  const title = plan.length === 1 ? 'Working…'
+    : downloads.length && !pairs.length && !uploads.length ? `Downloading ${plan.length} projects`
+    : uploads.length && !pairs.length && !downloads.length ? `Uploading ${plan.length} .esx files`
+    : `Syncing ${plan.length} items`;
+  if (plan.length > 1) openBulkProgress(title, plan);
+
   let ok = 0, fail = 0;
-  for (const d of pairs) {
+  for (let i = 0; i < plan.length; i++) {
+    if (_bulkAbort) break;
+    const step = plan[i];
+    if (plan.length > 1) updateBulkProgress(i, 'running', '', ok + fail, plan.length, fail);
     try {
       let r;
-      if (dir === 'to-local') r = await pyApi('rename_local', d.localPath, d.cloudName);
-      else r = await pyApi('rename_cloud', currentTab, d.cloudId, d.localName);
-      if (r && r.error) fail++; else ok++;
-    } catch (e) { fail++; }
+      if (step.kind === 'pair') {
+        r = (dir === 'to-local')
+          ? await pyApi('rename_local', step.d.localPath, step.d.cloudName)
+          : await pyApi('rename_cloud', currentTab, step.d.cloudId, step.d.localName);
+      } else if (step.kind === 'upload') {
+        r = await pyApi('upload_project', step.d.path, undefined);
+      } else {
+        r = await pyApi('download_project', step.d.id, step.d.name);
+      }
+      if (r && r.error) { fail++; if (plan.length > 1) updateBulkProgress(i, 'fail', r.error, ok + fail, plan.length, fail); }
+      else { ok++; if (plan.length > 1) updateBulkProgress(i, 'ok', '', ok + fail, plan.length, fail); }
+    } catch (err) {
+      fail++;
+      if (plan.length > 1) updateBulkProgress(i, 'fail', err.message || 'failed', ok + fail, plan.length, fail);
+    }
   }
-  for (const d of uploads) {
-    try {
-      const r = await pyApi('upload_project', d.path, undefined);
-      if (r && r.error) fail++; else ok++;
-    } catch (e) { fail++; }
-  }
-  for (const d of downloads) {
-    try {
-      // Folder name = project name so each download creates its own site
-      // folder. Backend sanitizes and creates the folder if needed.
-      const r = await pyApi('download_project', d.id, d.name);
-      if (r && r.error) { fail++; toast(d.name + ': ' + r.error, 'error'); }
-      else ok++;
-    } catch (e) { fail++; }
-  }
+
   const label = (downloads.length && !pairs.length && !uploads.length) ? 'Downloaded'
               : (uploads.length && !pairs.length && !downloads.length) ? 'Uploaded'
               : 'Synced';
-  toast(`${label} ${ok}${fail ? ' · ' + fail + ' failed' : ''}`, fail ? 'error' : 'success');
+  if (plan.length > 1) {
+    finishBulkProgress();
+    document.getElementById('progressSummary').textContent =
+      `${label} ${ok} of ${plan.length}${fail ? ` · ${fail} failed` : ''}${_bulkAbort ? ' · stopped' : ''}`;
+  } else {
+    toast(`${label} ${ok}${fail ? ' · ' + fail + ' failed' : ''}`, fail ? 'error' : 'success');
+  }
   clearSelection(); refreshData();
 }
 function bulkDelete() {
