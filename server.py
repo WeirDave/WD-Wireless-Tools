@@ -167,6 +167,7 @@ CLOUD_ACTIONS = {
     "rename_local": lambda d: cm.rename_local(d["path"], d["name"]),
     "delete_local": lambda d: cm.delete_local(d["path"]),
     "create_local_folder": lambda d: cm.create_local_folder(d["name"]),
+    "move_local_to_site": lambda d: cm.move_local_to_site(d["path"], d["folder"]),
     "merge_preview": lambda d: cm.merge_preview(d["src"], d["dst"]),
     "merge_execute": lambda d: cm.merge_execute(d["src"], d["dst"], d.get("ops", [])),
     "pick_folder": lambda d: cm.pick_folder(),

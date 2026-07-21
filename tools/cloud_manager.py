@@ -1259,6 +1259,39 @@ class CloudManager:
         except Exception as e:
             return {"error": str(e)}
 
+    def move_local_to_site(self, esx_path, dest_folder_name):
+        """Move a local .esx file into a site folder under output_dir.
+
+        Creates the destination folder if it doesn't exist. Refuses if a file
+        with the same name is already there (caller can rename first).
+        """
+        base = self.config.get("output_dir", "")
+        if not base:
+            return {"error": "No local folder is set — pick one first"}
+        try:
+            _assert_inside(esx_path, base)
+            safe = re.sub(r'[<>:"/\\|?*]', '-', dest_folder_name or '').strip().rstrip('.')
+            if not safe or '..' in safe or '/' in safe or '\\' in safe:
+                return {"error": "Invalid site folder name"}
+            src = Path(esx_path)
+            if not src.exists() or not src.is_file():
+                return {"error": "Source .esx not found"}
+            dest_dir = Path(base) / safe
+            if not dest_dir.exists():
+                dest_dir.mkdir(parents=True)
+            elif not dest_dir.is_dir():
+                return {"error": "Destination is not a folder"}
+            _assert_inside(dest_dir, base)
+            target = dest_dir / src.name
+            if target.exists():
+                if target.resolve() == src.resolve():
+                    return {"ok": True, "newPath": str(target), "unchanged": True}
+                return {"error": f"'{src.name}' already exists in {safe}"}
+            shutil.move(str(src), str(target))
+            return {"ok": True, "newPath": str(target)}
+        except Exception as e:
+            return {"error": str(e)}
+
     def merge_preview(self, src_path, dst_path):
         """Dry run: what would move from src into dst, and which files collide."""
         try:

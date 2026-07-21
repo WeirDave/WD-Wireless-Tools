@@ -87,7 +87,7 @@
       </div>
     </div>
     <div class="topbar-center">
-      <h1><span>WD</span> Cloud Manager <span class="ver">v3.41</span></h1>
+      <h1><span>WD</span> Cloud Manager <span class="ver">v3.42</span></h1>
     </div>
     <div class="topbar-right">
       <span class="dot"></span>
@@ -146,10 +146,11 @@
     <button class="clear-search" onclick="clearSearch()" title="Clear search">&#215;</button>
     <label class="selall"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> All</label>
     <span class="selcount" id="selCount"></span>
-    <button class="btn btn-secondary bulk-btn" id="bulkSyncTo" style="display:none" onclick="bulkSync('to-local')" title="Copy cloud names onto matched local">Sync &#8594;</button>
-    <button class="btn btn-secondary bulk-btn" id="bulkSyncFrom" style="display:none" onclick="bulkSync('to-cloud')" title="Copy local names onto matched cloud">Sync &#8592;</button>
-    <button class="btn btn-secondary bulk-btn" id="compareBtn" style="display:none" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
-    <button class="btn btn-red bulk-btn" id="bulkDeleteBtn" style="display:none" onclick="bulkDelete()">Delete selected</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkSyncTo" onclick="bulkSync('to-local')" title="Copy cloud names onto matched local (for selected matched rows)">Sync &#8594;</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkSyncFrom" onclick="bulkSync('to-cloud')" title="Copy local names onto matched cloud (for selected matched rows)">Sync &#8592;</button>
+    <button class="btn btn-secondary bulk-btn" id="compareBtn" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
+    <button class="btn btn-blue bulk-btn" id="bulkMoveBtn" onclick="bulkMoveToSite()" title="Move all selected to a site">Move to site…</button>
+    <button class="btn btn-red bulk-btn" id="bulkDeleteBtn" onclick="bulkDelete()">Delete selected</button>
     <span class="spacer"></span>
     <button class="btn btn-amber dup-toolbar-btn" id="dupDeleteAllToolbarBtn"
             onclick="dupDeleteAllExtras()" style="display:none;"
@@ -231,7 +232,7 @@
 <!-- About Modal -->
 <div class="modal-overlay" id="aboutModal">
   <div class="modal">
-    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.41</span></h3>
+    <h3>WD Cloud Manager <span style="font-weight:400;color:var(--text-2);font-size:12px;">v3.42</span></h3>
     <div class="about-body">
       Reconcile your Ekahau Cloud sites and projects against your local <b>.esx</b> files — match, rename, sync, merge, and clean up in bulk.
       <br><br>

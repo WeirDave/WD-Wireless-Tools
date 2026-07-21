@@ -38,6 +38,7 @@ const API_MAP = {
   delete_cloud: ['delete_cloud', ['kind', 'id']],
   create_site: ['create_site', ['name']],
   create_local_folder: ['create_local_folder', ['name']],
+  move_local_to_site: ['move_local_to_site', ['path', 'folder']],
   rename_local: ['rename_local', ['path', 'name']],
   delete_local: ['delete_local', ['path']],
   merge_preview: ['merge_preview', ['src', 'dst']],
@@ -1365,17 +1366,16 @@ function clearSelection() {
 function updateBulkBar() {
   const n = selected.size;
   document.getElementById('selCount').textContent = n ? n + ' selected' : '';
-  let anyPair = false, anyDeletable = false, localFolderCount = 0;
-  selected.forEach(k => {
-    const d = rowData[k]; if (!d) return;
-    if (d.kind === 'pair') { anyPair = true; localFolderCount++; }
-    if (d.kind === 'cloud' || d.kind === 'local') anyDeletable = true;
-    if (d.kind === 'local') localFolderCount++;
-  });
-  document.getElementById('bulkSyncTo').style.display = anyPair ? '' : 'none';
-  document.getElementById('bulkSyncFrom').style.display = anyPair ? '' : 'none';
-  document.getElementById('bulkDeleteBtn').style.display = anyDeletable ? '' : 'none';
-  document.getElementById('compareBtn').style.display = (currentTab === 'sites' && localFolderCount >= 2) ? '' : 'none';
+  // Show buttons whose action makes sense on this tab — always, regardless
+  // of what's actually selected. The action itself validates the selection
+  // and toasts if it can't proceed. Keeps the toolbar stable so the user
+  // never wonders "why did the button disappear?".
+  document.getElementById('bulkSyncTo').style.display = '';
+  document.getElementById('bulkSyncFrom').style.display = '';
+  document.getElementById('bulkDeleteBtn').style.display = '';
+  document.getElementById('compareBtn').style.display = currentTab === 'sites' ? '' : 'none';
+  const mb = document.getElementById('bulkMoveBtn');
+  if (mb) mb.style.display = currentTab === 'projects' ? '' : 'none';
 }
 async function bulkSync(dir) {
   const pairs = [...selected].map(k => rowData[k]).filter(d => d && d.kind === 'pair');
@@ -1407,6 +1407,10 @@ function bulkDelete() {
 }
 
 document.getElementById('searchBox').addEventListener('input', renderRows);
+// Delegated handler — row checkboxes are re-rendered on every data refresh,
+// so binding on the container survives all rerenders. Fires updateBulkBar
+// (and shift-range selection) on every individual click.
+document.getElementById('rowsContainer').addEventListener('click', onRowChkClick);
 function clearSearch() {
   const sb = document.getElementById('searchBox');
   if (sb.value) { sb.value = ''; renderRows(); }
@@ -1587,23 +1591,55 @@ async function createLocalFolder(name) {
 }
 
 /* ── Move to Site ── */
-let _moveToSiteProjectId = null;
+// _moveToSiteTargets: [{kind: 'cloud', id, name}] or [{kind: 'local', path, name}]
+// _moveToSiteSites: {id, name, localFolder} — hydrated from get_data('sites')
+let _moveToSiteTargets = [];
+let _moveToSiteSites = [];
 async function startMoveToSite(projectId, projectName) {
-  _moveToSiteProjectId = projectId;
+  _moveToSiteTargets = [{ kind: 'cloud', id: projectId, name: projectName }];
   document.getElementById('moveToSiteLabel').textContent = 'Project: ' + projectName;
+  await _openMoveToSitePicker();
+}
+async function bulkMoveToSite() {
+  const targets = [...selected].map(k => rowData[k]).filter(d => d && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir)))
+    .map(d => d.kind === 'cloud'
+      ? { kind: 'cloud', id: d.id, name: d.name }
+      : { kind: 'local', path: d.path, name: d.name });
+  if (!targets.length) { toast('Select cloud projects or local .esx files first', 'info'); return; }
+  _moveToSiteTargets = targets;
+  const nCloud = targets.filter(t => t.kind === 'cloud').length;
+  const nLocal = targets.filter(t => t.kind === 'local').length;
+  const parts = [];
+  if (nCloud) parts.push(nCloud + ' cloud project' + (nCloud > 1 ? 's' : ''));
+  if (nLocal) parts.push(nLocal + ' local .esx file' + (nLocal > 1 ? 's' : ''));
+  document.getElementById('moveToSiteLabel').textContent = 'Moving: ' + parts.join(' + ');
+  await _openMoveToSitePicker();
+}
+async function _openMoveToSitePicker() {
   const sel = document.getElementById('moveToSiteSelect');
   sel.innerHTML = '<option value="">Loading sites…</option>';
+  document.getElementById('moveToSiteNewName').style.display = 'none';
   showModal('moveToSiteModal');
   try {
     const d = await pyApi('get_data', 'sites');
+    // Union of cloud sites + local-only folder sites, deduped by name.
+    // Each option carries: cloud id (or empty) + local folder name (or empty).
+    const rows = [];
+    (d.matched || []).forEach(p => rows.push({
+      id: p.cloud.id, name: p.cloud.name, localFolder: p.local && p.local.name || '',
+    }));
+    (d.cloudOnly || []).forEach(s => rows.push({ id: s.id, name: s.name, localFolder: '' }));
+    (d.localOnly || []).forEach(f => rows.push({ id: '', name: f.name, localFolder: f.name }));
+    rows.sort((x,y) => (x.name||'').localeCompare(y.name||''));
+    _moveToSiteSites = rows;
     let html = '<option value="">— Select a site —</option>';
-    const sites = (d.matched || []).map(p => p.cloud).concat(d.cloudOnly || []);
-    sites.sort((x,y) => (x.name||'').localeCompare(y.name||''));
-    sites.forEach(s => { html += '<option value="' + a(s.id) + '">' + e(s.name) + '</option>'; });
+    rows.forEach((s, i) => {
+      const tag = !s.id ? ' (local only)' : (!s.localFolder ? ' (cloud only)' : '');
+      html += '<option value="i:' + i + '">' + e(s.name) + tag + '</option>';
+    });
     html += '<option value="__new__">+ Create new site…</option>';
     sel.innerHTML = html;
   } catch (err) { toast('Could not load sites', 'error'); }
-  document.getElementById('moveToSiteNewName').style.display = 'none';
 }
 function toggleNewSiteInput() {
   const sel = document.getElementById('moveToSiteSelect');
@@ -1613,24 +1649,57 @@ function toggleNewSiteInput() {
 }
 async function confirmMoveToSite() {
   const sel = document.getElementById('moveToSiteSelect');
-  let siteId = sel.value;
-  if (siteId === '__new__') {
+  const v = sel.value;
+  if (!v) { toast('Select a site', 'error'); return; }
+  let site = null;                    // { id, name, localFolder }
+  if (v === '__new__') {
     const newName = document.getElementById('moveToSiteNewName').value.trim();
     if (!newName) { toast('Enter a site name', 'error'); return; }
-    try {
-      const r = await pyApi('create_site', newName);
-      if (r && r.error) { toast(r.error, 'error'); return; }
-      siteId = r.id || r.siteId;
-    } catch (err) { toast(err.message, 'error'); return; }
+    // Only create a cloud site if we have any cloud targets — local-only
+    // moves just need a folder on disk, which move_local_to_site creates.
+    const needsCloud = _moveToSiteTargets.some(t => t.kind === 'cloud');
+    if (needsCloud) {
+      try {
+        const r = await pyApi('create_site', newName);
+        if (r && r.error) { toast(r.error, 'error'); return; }
+        site = { id: r.id || r.siteId, name: newName, localFolder: newName };
+      } catch (err) { toast(err.message, 'error'); return; }
+    } else {
+      site = { id: '', name: newName, localFolder: newName };
+    }
+  } else if (v.startsWith('i:')) {
+    site = _moveToSiteSites[parseInt(v.slice(2), 10)];
   }
-  if (!siteId) { toast('Select a site', 'error'); return; }
-  try {
-    const r = await pyApi('assign_to_site', siteId, _moveToSiteProjectId);
-    if (r && r.error) { toast(r.error, 'error'); return; }
-    toast('Moved to site', 'success');
-    closeModal('moveToSiteModal');
-    refreshData();
-  } catch (err) { toast(err.message, 'error'); }
+  if (!site) { toast('Select a site', 'error'); return; }
+  // Validate we can service every target with this site pick.
+  const needsCloudSiteId = _moveToSiteTargets.some(t => t.kind === 'cloud');
+  const needsLocalFolder = _moveToSiteTargets.some(t => t.kind === 'local');
+  if (needsCloudSiteId && !site.id) {
+    toast('This site has no cloud counterpart — cloud projects can\'t be assigned to it', 'error'); return;
+  }
+  // For local moves we need a folder name. If the site has no local folder
+  // yet (cloud-only site), fall back to the site name so the folder gets
+  // created by move_local_to_site on first move.
+  const destFolder = site.localFolder || site.name;
+  if (needsLocalFolder && !destFolder) { toast('Site has no folder name', 'error'); return; }
+
+  let ok = 0, fail = 0;
+  for (const t of _moveToSiteTargets) {
+    try {
+      let r;
+      if (t.kind === 'cloud') {
+        r = await pyApi('assign_to_site', site.id, t.id);
+      } else {
+        r = await pyApi('move_local_to_site', t.path, destFolder);
+      }
+      if (r && r.error) { fail++; toast(t.name + ': ' + r.error, 'error'); }
+      else ok++;
+    } catch (err) { fail++; }
+  }
+  if (ok) toast(`Moved ${ok}${fail ? ' · ' + fail + ' failed' : ''} to ${site.name}`, fail ? 'error' : 'success');
+  closeModal('moveToSiteModal');
+  clearSelection();
+  refreshData();
 }
 
 // ── Init ──
