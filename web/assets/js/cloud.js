@@ -45,6 +45,7 @@ const API_MAP = {
   merge_execute: ['merge_execute', ['src', 'dst', 'ops']],
   pick_folder: ['pick_folder', []],
   upload_project: ['upload_project', ['path', 'siteId']],
+  download_project: ['download_project', ['projectId', 'folder']],
   assign_to_site: ['assign_to_site', ['siteId', 'datasetId']],
   reveal_in_explorer: ['reveal_in_explorer', ['path']],
   get_duplicates: ['get_duplicates', []],
@@ -1371,7 +1372,7 @@ function updateBulkBar() {
   // the misleading "select some matched rows first" toast on a screen where
   // rows clearly ARE selected — the greyed-out state tells you which buttons
   // apply to what you've picked.
-  let pairCount = 0, deletableCount = 0, movableCount = 0, localFolderCount = 0, uploadableCount = 0;
+  let pairCount = 0, deletableCount = 0, movableCount = 0, localFolderCount = 0, uploadableCount = 0, downloadableCount = 0;
   selected.forEach(k => {
     const d = rowData[k]; if (!d) return;
     if (d.kind === 'pair') { pairCount++; localFolderCount++; }
@@ -1383,6 +1384,11 @@ function updateBulkBar() {
     // Sync ← (to-cloud) also handles bulk-upload of local-only .esx files.
     // On the Sites tab a "local only" row is a folder → no upload semantics.
     if (currentTab === 'projects' && d.kind === 'local' && !d.isDir) uploadableCount++;
+    // Sync → (to-local) also downloads cloud-only projects on the Projects
+    // tab (reverse-engineered flow: batch endpoint + imageFiles + client-side
+    // ZIP assembly). Doesn't apply on Sites tab — cloud-only sites just get
+    // a matching empty local folder via the per-row red arrow.
+    if (currentTab === 'projects' && d.kind === 'cloud') downloadableCount++;
   });
   const setBtn = (id, tabVisible, enabled, disabledTitle, tooltip) => {
     const el = document.getElementById(id); if (!el) return;
@@ -1395,7 +1401,10 @@ function updateBulkBar() {
   const syncFromTip = currentTab === 'projects'
     ? 'Push local → cloud: renames matched cloud projects to the local name, and uploads local-only .esx files to Ekahau Cloud'
     : 'Copy local names onto matched cloud';
-  setBtn('bulkSyncTo', true, pairCount > 0, 'Sync only works on matched (paired) rows', 'Copy cloud names onto matched local');
+  const syncToTip = currentTab === 'projects'
+    ? 'Pull cloud → local: renames matched local files to the cloud name, and downloads cloud-only projects as .esx files'
+    : 'Copy cloud names onto matched local';
+  setBtn('bulkSyncTo', true, pairCount + downloadableCount > 0, 'Sync → needs matched rows or cloud-only projects', syncToTip);
   setBtn('bulkSyncFrom', true, pairCount + uploadableCount > 0, 'Sync ← needs matched rows or local-only .esx files', syncFromTip);
   setBtn('bulkDeleteBtn', true, deletableCount > 0, 'Bulk delete only works on cloud-only or local-only rows');
   setBtn('compareBtn', currentTab === 'sites', localFolderCount >= 2, 'Select 2+ local folders to compare');
@@ -1409,16 +1418,29 @@ async function bulkSync(dir) {
   const uploads = (dir === 'to-cloud' && currentTab === 'projects')
     ? items.filter(d => d.kind === 'local' && !d.isDir)
     : [];
-  if (!pairs.length && !uploads.length) {
+  // to-local direction (Sync →) additionally downloads cloud-only projects
+  // on the Project Files tab. Each project lands in a folder named after
+  // itself under output_dir — same one-folder-per-site convention Ekahau AI
+  // Pro uses. User can consolidate later via Move to site.
+  const downloads = (dir === 'to-local' && currentTab === 'projects')
+    ? items.filter(d => d.kind === 'cloud')
+    : [];
+  if (!pairs.length && !uploads.length && !downloads.length) {
     toast(dir === 'to-cloud'
       ? 'Select matched rows or local-only .esx files first'
-      : 'Select some matched rows first', 'info');
+      : 'Select matched rows or cloud-only projects first', 'info');
     return;
   }
   if (uploads.length) {
     const msg = uploads.length === 1
       ? `Upload "${uploads[0].name}.esx" to Ekahau Cloud?`
       : `Upload ${uploads.length} local .esx files to Ekahau Cloud?`;
+    if (!confirm(msg)) return;
+  }
+  if (downloads.length) {
+    const msg = downloads.length === 1
+      ? `Download "${downloads[0].name}" from Ekahau Cloud? It will land in a folder named after the project.`
+      : `Download ${downloads.length} projects from Ekahau Cloud? Each will land in its own folder.`;
     if (!confirm(msg)) return;
   }
   let ok = 0, fail = 0;
@@ -1436,7 +1458,18 @@ async function bulkSync(dir) {
       if (r && r.error) fail++; else ok++;
     } catch (e) { fail++; }
   }
-  const label = uploads.length && !pairs.length ? 'Uploaded' : 'Synced';
+  for (const d of downloads) {
+    try {
+      // Folder name = project name so each download creates its own site
+      // folder. Backend sanitizes and creates the folder if needed.
+      const r = await pyApi('download_project', d.id, d.name);
+      if (r && r.error) { fail++; toast(d.name + ': ' + r.error, 'error'); }
+      else ok++;
+    } catch (e) { fail++; }
+  }
+  const label = (downloads.length && !pairs.length && !uploads.length) ? 'Downloaded'
+              : (uploads.length && !pairs.length && !downloads.length) ? 'Uploaded'
+              : 'Synced';
   toast(`${label} ${ok}${fail ? ' · ' + fail + ' failed' : ''}`, fail ? 'error' : 'success');
   clearSelection(); refreshData();
 }

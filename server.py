@@ -163,6 +163,7 @@ CLOUD_ACTIONS = {
     "delete_cloud": lambda d: cm.delete_cloud(d["kind"], d["id"]),
     "create_site": lambda d: cm.create_site(d["name"]),
     "upload_project": lambda d: cm.upload_project(d["path"], d.get("siteId")),
+    "download_project": lambda d: cm.download_project(d["projectId"], d["folder"]),
     "assign_to_site": lambda d: cm.assign_to_site(d["siteId"], d["datasetId"]),
     "rename_local": lambda d: cm.rename_local(d["path"], d["name"]),
     "delete_local": lambda d: cm.delete_local(d["path"]),

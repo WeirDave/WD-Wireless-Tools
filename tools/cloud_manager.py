@@ -224,6 +224,64 @@ class EkahauAPI:
         except Exception:
             return {"ok": True, "status": r.status_code}
 
+    def download_project(self, project_id, progress_cb=None):
+        """Download a cloud project as .esx bytes.
+
+        Mirrors the client-side flow Ekahau's browser worker uses (see HAR
+        capture in capture_download.js analysis):
+          1. GET /projectapi/v1/projects/{id}/batch (no poTypes) → JSON blob
+             with a top-level key per entity type ("project", "buildings",
+             "floorPlans", "accessPoints", "images", "wallSegments", ...).
+          2. For each entry in images[], GET /imageFiles/{imageId}?redirect=true
+             which 302s to a presigned S3 URL; requests follows the redirect
+             automatically and returns the raw bytes.
+          3. Assemble a ZIP with: `version` file (b"2.0"), one file per
+             top-level batch key named `{key}.json` shaped `{"key": value}`,
+             plus one `image-{imageId}` entry per floor plan image.
+
+        Returns {"esx": bytes, "name": str} or {"error": str}.
+        """
+        import io as _io
+        import zipfile as _zip
+
+        try:
+            if progress_cb: progress_cb("batch", None)
+            batch = self.get(f"{API_BASE}/{project_id}/batch").json()
+        except Exception as e:
+            return {"error": f"Could not fetch project data: {e}"}
+
+        proj_name = ((batch.get("project") or {}).get("name")
+                     or (batch.get("project") or {}).get("title")
+                     or f"project-{project_id}")
+
+        buf = _io.BytesIO()
+        with _zip.ZipFile(buf, "w", _zip.ZIP_DEFLATED) as zf:
+            zf.writestr("version", "2.0")
+            # One JSON entry per top-level batch key, shape {"key": value}
+            # — matches what Ekahau's own client writes so AI Pro reads it back
+            # byte-for-byte. Verified against a reference .esx download.
+            for key, value in batch.items():
+                zf.writestr(f"{key}.json", json.dumps({key: value}, ensure_ascii=False))
+
+            # Fetch each floor plan image and store as image-{uuid} (no ext).
+            for i, img in enumerate(batch.get("images") or []):
+                image_id = img.get("id")
+                if not image_id:
+                    continue
+                if progress_cb: progress_cb("image", (i, image_id))
+                try:
+                    r = self.http.get(
+                        f"{EKAHAU_URL}{API_BASE}/{project_id}/imageFiles/{image_id}?redirect=true",
+                        allow_redirects=True, timeout=180,
+                    )
+                    r.raise_for_status()
+                    zf.writestr(f"image-{image_id}", r.content)
+                except Exception as e:
+                    return {"error": f"Failed fetching image {image_id}: {e}"}
+
+        if progress_cb: progress_cb("done", None)
+        return {"esx": buf.getvalue(), "name": proj_name}
+
     def upload_project(self, esx_path, progress_cb=None):
         """Upload a local .esx file to Ekahau Cloud (3-step presigned flow).
 
@@ -1256,6 +1314,48 @@ class CloudManager:
                 return {"error": "A folder with that name already exists"}
             target.mkdir(parents=True)
             return {"ok": True, "path": str(target)}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def download_project(self, project_id, dest_folder_name):
+        """Download a cloud project as an .esx file into a site folder.
+
+        Uses the reverse-engineered batch + imageFiles flow from EkahauAPI
+        (see capture_download.js). Refuses to overwrite an existing file
+        of the same name — the caller can rename the cloud project first.
+        """
+        base = self.config.get("output_dir", "")
+        if not base:
+            return {"error": "No local folder is set — pick one first"}
+        if not self._ensure():
+            return {"error": "Not connected"}
+        try:
+            safe_folder = re.sub(r'[<>:"/\\|?*]', '-', dest_folder_name or '').strip().rstrip('.')
+            if not safe_folder or '..' in safe_folder or '/' in safe_folder or '\\' in safe_folder:
+                return {"error": "Invalid site folder name"}
+            dest_dir = Path(base) / safe_folder
+            if not dest_dir.exists():
+                dest_dir.mkdir(parents=True)
+            elif not dest_dir.is_dir():
+                return {"error": "Destination is not a folder"}
+            _assert_inside(dest_dir, base)
+
+            result = self.api.download_project(project_id)
+            if isinstance(result, dict) and result.get("error"):
+                return result
+            esx_bytes = result["esx"]
+            proj_name = result["name"]
+            # Sanitize the .esx filename the same way we sanitize folders.
+            safe_name = re.sub(r'[<>:"/\\|?*]', '-', proj_name).strip().rstrip('.')
+            if not safe_name.lower().endswith(".esx"):
+                safe_name += ".esx"
+            target = dest_dir / safe_name
+            if target.exists():
+                return {"error": f"'{safe_name}' already exists in {safe_folder}"}
+            _assert_inside(target, dest_dir)
+            with open(target, "wb") as f:
+                f.write(esx_bytes)
+            return {"ok": True, "path": str(target), "name": proj_name}
         except Exception as e:
             return {"error": str(e)}
 
