@@ -224,20 +224,13 @@ class EkahauAPI:
         except Exception:
             return {"ok": True, "status": r.status_code}
 
-    def download_project(self, project_id, progress_cb=None):
+    def download_project(self, project_id):
         """Download a cloud project as .esx bytes.
 
-        Mirrors the client-side flow Ekahau's browser worker uses (see HAR
-        capture in capture_download.js analysis):
-          1. GET /projectapi/v1/projects/{id}/batch (no poTypes) → JSON blob
-             with a top-level key per entity type ("project", "buildings",
-             "floorPlans", "accessPoints", "images", "wallSegments", ...).
-          2. For each entry in images[], GET /imageFiles/{imageId}?redirect=true
-             which 302s to a presigned S3 URL; requests follows the redirect
-             automatically and returns the raw bytes.
-          3. Assemble a ZIP with: `version` file (b"2.0"), one file per
-             top-level batch key named `{key}.json` shaped `{"key": value}`,
-             plus one `image-{imageId}` entry per floor plan image.
+        Ekahau's web UI builds the .esx client-side in a worker; there's no
+        server endpoint that hands out a finished file. We reproduce that
+        flow: batch → per-image S3 fetch → ZIP assembly. Verified byte-equal
+        to a reference .esx from their UI.
 
         Returns {"esx": bytes, "name": str} or {"error": str}.
         """
@@ -245,7 +238,6 @@ class EkahauAPI:
         import zipfile as _zip
 
         try:
-            if progress_cb: progress_cb("batch", None)
             batch = self.get(f"{API_BASE}/{project_id}/batch").json()
         except Exception as e:
             return {"error": f"Could not fetch project data: {e}"}
@@ -257,18 +249,12 @@ class EkahauAPI:
         buf = _io.BytesIO()
         with _zip.ZipFile(buf, "w", _zip.ZIP_DEFLATED) as zf:
             zf.writestr("version", "2.0")
-            # One JSON entry per top-level batch key, shape {"key": value}
-            # — matches what Ekahau's own client writes so AI Pro reads it back
-            # byte-for-byte. Verified against a reference .esx download.
             for key, value in batch.items():
                 zf.writestr(f"{key}.json", json.dumps({key: value}, ensure_ascii=False))
-
-            # Fetch each floor plan image and store as image-{uuid} (no ext).
-            for i, img in enumerate(batch.get("images") or []):
+            for img in batch.get("images") or []:
                 image_id = img.get("id")
                 if not image_id:
                     continue
-                if progress_cb: progress_cb("image", (i, image_id))
                 try:
                     r = self.http.get(
                         f"{EKAHAU_URL}{API_BASE}/{project_id}/imageFiles/{image_id}?redirect=true",
@@ -279,7 +265,6 @@ class EkahauAPI:
                 except Exception as e:
                     return {"error": f"Failed fetching image {image_id}: {e}"}
 
-        if progress_cb: progress_cb("done", None)
         return {"esx": buf.getvalue(), "name": proj_name}
 
     def upload_project(self, esx_path, progress_cb=None):
