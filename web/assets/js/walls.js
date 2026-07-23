@@ -72,6 +72,12 @@ let wallTypes = [];
 let fileName = '';
 let _originalIdMap = {};
 
+// Exposed for walls-swap.js (Visual Swap modal reads the loaded .esx + palette,
+// and writes back into the same JSZip so saveEsx() picks up the changes).
+Object.defineProperty(window, 'esxZip',    { get: () => esxZip });
+Object.defineProperty(window, 'wallTypes', { get: () => wallTypes });
+Object.defineProperty(window, 'fileName',  { get: () => fileName });
+
 function preserveId(wt) {
   return _originalIdMap[wt.key] || wt.id || crypto.randomUUID();
 }

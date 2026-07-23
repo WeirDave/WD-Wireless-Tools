@@ -38,7 +38,7 @@
     </div>
   </div>
   <div class="header-center">
-    <h1><span>WD</span> Quick Walls <span class="ver">v7.18</span></h1>
+    <h1><span>WD</span> Quick Walls <span class="ver">v7.26</span></h1>
   </div>
   <div class="header-actions">
     <button class="theme-toggle" onclick="toggleTheme()">
@@ -50,7 +50,7 @@
 <!-- ── Drop Zone ── -->
 <div id="dropzone" class="dropzone">
   <div id="dropzoneLogo" class="dropzone-logo"></div>
-  <p class="dropzone-ver">v7.18</p>
+  <p class="dropzone-ver">v7.26</p>
   <p class="dropzone-sub">Ekahau Workflow Optimization Utility</p>
   <div class="dropzone-divider"></div>
   <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
@@ -90,7 +90,7 @@
       <span id="fileBadge" class="file-badge" onclick="loadNewFile()" title="Click to open another file"></span>
     </div>
     <div class="header-center">
-      <h1><span>WD</span> Quick Walls <span class="ver">v7.18</span></h1>
+      <h1><span>WD</span> Quick Walls <span class="ver">v7.26</span></h1>
     </div>
     <div class="header-actions">
       <button class="theme-toggle" onclick="toggleTheme()">
@@ -137,6 +137,7 @@
           <div class="toolbar-left">
             <span id="wallCount" class="wall-count"></span>
             <button class="btn" onclick="openAddModal()">+ Add Wall Type</button>
+            <button class="btn btn-visual-swap" onclick="openSwapModal()" title="Bulk swap walls on the floor plan — draw a box, pick a new type"><span class="swap-ico">&#x1F5BC;</span> Visual Swap</button>
           </div>
         </div>
         <div id="wallList" class="wall-list"></div>
@@ -318,9 +319,132 @@
   </div>
 </div>
 
+<!-- ── Visual Swap Modal (full screen) ── -->
+<div id="swapModal" class="swap-modal">
+  <div class="swap-topbar header">
+    <div class="swap-topbar-left">
+      <span id="swapFileBadge" class="file-badge" title="Currently-loaded .esx"></span>
+    </div>
+    <div class="swap-topbar-center">
+      <h1><span>WD</span> Visual Wall Swap <span class="ver">v7.26</span></h1>
+    </div>
+    <div class="swap-topbar-right">
+      <button class="btn btn-primary" onclick="saveEsx()" title="Save the .esx to disk (same as Quick Walls' Save button)">Save .esx</button>
+      <button class="btn" onclick="closeSwapModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- Narrow footer strip — floor picker, wall counts, and zoom %, centered.
+       Keeps the header clean while still surfacing the context. -->
+  <div class="swap-floorbar">
+    <label class="swap-floor-picker">
+      <span class="swap-floor-label">Floor</span>
+      <select id="swapFloorSelect" onchange="onSwapFloorChange()"></select>
+    </label>
+    <span class="swap-floorbar-sep"></span>
+    <div class="swap-status" id="swapStatus"></div>
+    <span class="swap-floorbar-sep"></span>
+    <div class="swap-status" id="swapZoomLabel">100%</div>
+  </div>
+
+  <div class="swap-body">
+    <!-- Left rail: tools -->
+    <div class="swap-toolrail">
+      <button class="swap-tool active" data-tool="marquee" onclick="setSwapTool('marquee')" title="Marquee — drag a box to select walls">
+        <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="14" height="14" stroke-dasharray="2 2"/></svg>
+      </button>
+      <button class="swap-tool" data-tool="click" onclick="setSwapTool('click')" title="Click — toggle individual walls">
+        <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l5 12 2-5 5-2z" fill="currentColor"/></svg>
+      </button>
+      <button class="swap-tool" data-tool="pan" onclick="setSwapTool('pan')" title="Pan — drag to move (or hold Space)">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V5.5a1.5 1.5 0 013 0V12"/><path d="M11 12V4.5a1.5 1.5 0 013 0V12"/><path d="M14 12V5.5a1.5 1.5 0 013 0V13"/><path d="M17 13v-2a1.5 1.5 0 013 0v5.5A5.5 5.5 0 0114.5 22h-2c-2 0-3.5-1-4.7-2.3l-3.7-4.2a1.6 1.6 0 012.2-2.3l2.2 1.8"/></svg>
+      </button>
+      <div class="swap-tool-sep"></div>
+      <button class="swap-tool" onclick="zoomFit()" title="Zoom to fit">
+        <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/></svg>
+      </button>
+      <button class="swap-tool" onclick="zoomIn()" title="Zoom in">
+        <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="5"/><path d="M13 13l4 4M7 9h4M9 7v4"/></svg>
+      </button>
+      <button class="swap-tool" onclick="zoomOut()" title="Zoom out">
+        <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="9" r="5"/><path d="M13 13l4 4M7 9h4"/></svg>
+      </button>
+      <div class="swap-tool-sep"></div>
+      <button class="swap-tool" onclick="clearSwapSelection()" title="Clear selection (Esc)">
+        <svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M5 5l10 10M15 5L5 15"/></svg>
+      </button>
+    </div>
+
+    <!-- Canvas area -->
+    <div class="swap-canvas-wrap" id="swapCanvasWrap">
+      <canvas id="swapCanvas"></canvas>
+      <div class="swap-canvas-empty" id="swapCanvasEmpty">Loading floor plan…</div>
+    </div>
+
+    <!-- Right sidebar -->
+    <div class="swap-sidebar">
+      <div class="swap-panel">
+        <div class="swap-panel-header">Wall types on this floor</div>
+        <div class="swap-panel-body" id="swapLegend">
+          <div class="swap-empty">No walls loaded yet.</div>
+        </div>
+      </div>
+
+      <div class="swap-panel swap-panel-selection">
+        <div class="swap-panel-header">
+          <span>Selected</span>
+          <span class="swap-sel-count" id="swapSelCount">0</span>
+        </div>
+        <div class="swap-panel-body">
+          <div id="swapSelBreakdown" class="swap-sel-breakdown">
+            <div class="swap-empty">Drag a marquee to select walls, or click walls with the arrow tool.</div>
+          </div>
+          <div class="swap-swap-row">
+            <label class="swap-swap-label">Change to</label>
+            <select id="swapTargetType" class="swap-target-select" onchange="onSwapTargetChange()"></select>
+            <button class="btn btn-primary" id="swapApplyBtn" onclick="applySelectionSwap()" disabled>Swap</button>
+          </div>
+          <button class="btn btn-swap-delete" id="swapDeleteBtn" onclick="deleteSelectedWalls()" disabled title="Remove the selected walls from the project entirely">
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l1 9.5h6L12 4"/></svg>
+            Delete selected
+          </button>
+        </div>
+      </div>
+
+      <div class="swap-panel">
+        <div class="swap-panel-header">Quick swap by type</div>
+        <div class="swap-panel-body">
+          <p class="swap-panel-hint">Skip the selection — replace every wall of one type with another, no drawing required.</p>
+          <div class="swap-quick-row">
+            <label>From</label>
+            <select id="swapFromType" class="swap-target-select"></select>
+          </div>
+          <div class="swap-quick-row">
+            <label>To</label>
+            <select id="swapToType" class="swap-target-select"></select>
+          </div>
+          <div class="swap-quick-row">
+            <label>Scope</label>
+            <select id="swapScope" class="swap-target-select">
+              <option value="floor">This floor only</option>
+              <option value="project" selected>Whole project</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" style="width:100%" onclick="applyQuickSwap()">Swap all</button>
+        </div>
+      </div>
+
+      <div class="swap-footer-hint">
+        Changes stay in memory until you press <strong>Save .esx</strong> (top right) or close and save from Quick Walls.
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="toast"></div>
 
 <script src="/assets/js/wd-shared.js"></script>
 <script src="/assets/js/walls.js"></script>
+<script src="/assets/js/walls-swap.js"></script>
 </body>
 </html>
