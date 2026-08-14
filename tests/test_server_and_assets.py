@@ -252,19 +252,16 @@ bulkSync('to-local').then(async () => {
 
     def test_branding_sources_separate_current_and_legacy_artwork(self):
         image_root = ROOT / "images"
-        current = [path for path in image_root.iterdir() if path.is_file()]
-        self.assertTrue(current)
-        self.assertTrue(all("-v8.0-" in path.name for path in current))
+        self.assertFalse(
+            [path for path in image_root.iterdir() if path.is_file()],
+            "Current branding belongs in web/assets; do not duplicate it in images/",
+        )
         self.assertTrue((image_root / "legacy" / "brand-concepts").is_dir())
         self.assertTrue((image_root / "legacy" / "previous-branding").is_dir())
 
         deployed = list((ROOT / "web" / "assets").glob("*v8.0*"))
         self.assertTrue(deployed)
-        for asset in deployed:
-            with self.subTest(asset=asset.name):
-                source = image_root / asset.name
-                self.assertTrue(source.is_file())
-                self.assertEqual(source.read_bytes(), asset.read_bytes())
+        self.assertTrue(any(path.name == "wd-wireless-tools-v8.0-720x720.png" for path in deployed))
 
     def test_report_template_cards_have_distinct_accent_colors(self):
         css = (ROOT / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")

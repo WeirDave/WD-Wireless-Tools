@@ -1,361 +1,272 @@
-<p align="center">
-  <img src="web/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Wireless Tools" width="300">
-</p>
+<div align="center">
 
-<h3 align="center">A suite of Ekahau workflow tools</h3>
+<img src="web/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Wireless Tools" width="170">
 
-<p align="center">
-  <a href="https://weirdave.github.io/WD-Wireless-Tools/"><img src="https://img.shields.io/badge/live%20demo-Quick%20Walls-5fa970?style=flat-square&logo=githubpages&logoColor=white" alt="Live Demo"></a>
-  <a href="https://github.com/WeirDave/WD-Wireless-Tools/releases/latest"><img src="https://img.shields.io/github/v/release/WeirDave/WD-Wireless-Tools?style=flat-square&color=1e77ac" alt="Latest Release"></a>
-  <a href="https://github.com/WeirDave/WD-Wireless-Tools/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/WeirDave/WD-Wireless-Tools/tests.yml?branch=main&style=flat-square&label=Windows%20%2B%20macOS" alt="Windows and macOS tests"></a>
-  <a href="docs/USER_MANUAL.md"><img src="https://img.shields.io/badge/docs-user%20manual-6b7280?style=flat-square" alt="User Manual"></a>
-  <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-informational?style=flat-square" alt="Platform">
-  <img src="https://img.shields.io/github/license/WeirDave/WD-Wireless-Tools?style=flat-square" alt="License">
-</p>
+# WD Wireless Tools
 
-> **Try Quick Walls live** → [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — no install, runs entirely in your browser.
+**A suite of Ekahau workflow tools.**
 
----
+Five focused utilities for organizing projects, managing Ekahau Cloud, editing walls,
+converting scale, and building installer-ready reports.
 
-## What is this?
+[![Latest Release](https://img.shields.io/github/v/release/WeirDave/WD-Wireless-Tools?style=for-the-badge&color=1e77ac)](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest)
+[![Tests](https://img.shields.io/github/actions/workflow/status/WeirDave/WD-Wireless-Tools/tests.yml?branch=main&style=for-the-badge&label=Windows%20%2B%20macOS)](https://github.com/WeirDave/WD-Wireless-Tools/actions/workflows/tests.yml)
+[![License](https://img.shields.io/github/license/WeirDave/WD-Wireless-Tools?style=for-the-badge)](LICENSE)
 
-**WD Wireless Tools** is a lightweight, browser-based toolkit for wireless engineers who use [Ekahau](https://www.ekahau.com/). It runs a tiny local Flask server and opens in your default browser — no installers, no Electron, no cloud dependency. **Quick Walls also runs live in a browser** at [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — no install at all.
+![Local First](https://img.shields.io/badge/local--first-private-5fa970?style=flat-square)
+![No Telemetry](https://img.shields.io/badge/telemetry-none-5fa970?style=flat-square)
+![Python](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white)
+![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-6b7280?style=flat-square)
 
-The suite currently includes five tools:
+### [→ Launch the browser tools](https://weirdave.github.io/WD-Wireless-Tools/)
+
+[Read the User Manual](docs/USER_MANUAL.md) · [Download the Full Suite](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) · [Report an Issue](https://github.com/WeirDave/WD-Wireless-Tools/issues)
+
+</div>
 
 <table>
 <tr>
-<td width="20%" align="center">
-  <img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="150"><br>
-  <b>Cloud Manager</b><br>
-  <sub>v4.13.7</sub>
-</td>
-<td width="20%" align="center">
-  <img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="150"><br>
-  <b>Quick Walls</b><br>
-  <sub>v7.38</sub><br>
-  <a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><sub>▶ Try live</sub></a>
-</td>
-<td width="20%" align="center">
-  <img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="150"><br>
-  <b>Squirrel</b><br>
-  <sub>v1.25.1</sub>
-</td>
-<td width="20%" align="center">
-  <img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="150"><br>
-  <b>Scale</b><br>
-  <sub>v1.5</sub><br>
-  <a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><sub>▶ Try live</sub></a>
-</td>
-<td width="20%" align="center">
-  <img src="web/assets/report-v8.0-560x560.png" alt="Report" width="150"><br>
-  <b>Report</b><br>
-  <sub>v2.21</sub><br>
-  <a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><sub>▶ Try live</sub></a>
-</td>
+<td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.13.7 · Desktop</sub></td>
+<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"></a><br><b>Quick Walls</b><br><sub>v7.38 · Desktop + Web</sub></td>
+<td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.25.1 · Desktop</sub></td>
+<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"></a><br><b>Scale</b><br><sub>v1.5 · Desktop + Web</sub></td>
+<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"></a><br><b>Report</b><br><sub>v2.21 · Desktop + Web</sub></td>
 </tr>
 </table>
 
 ---
 
-## The Tools
+## Table of Contents
+
+- [What WD Wireless Tools Does](#what-wd-wireless-tools-does)
+- [Five Tools, One Workflow](#five-tools-one-workflow)
+- [Quick Start](#quick-start)
+- [Privacy and Local-First Design](#privacy-and-local-first-design)
+- [First Run](#first-run)
+- [Troubleshooting](#troubleshooting)
+- [Project Structure](#project-structure)
+- [Help and Support](#help-and-support)
+
+---
+
+## What WD Wireless Tools Does
+
+WD Wireless Tools removes the repetitive work around an Ekahau project. It gives wireless engineers a fast local workspace for cloud and file organization, wall remapping, scale conversion, and field-ready reporting—without turning those jobs into another subscription or another place to upload client data.
+
+The full suite runs from a tiny local Flask server and opens in your normal browser. Quick Walls, Scale, and Report are also available as hosted, client-side tools for jobs that do not need desktop file-system or Ekahau Cloud access.
+
+> **The important distinction:** the interface is browser-based, but your working data stays local. The hosted tools process files in your browser; Cloud Manager contacts Ekahau Cloud only when you direct it to operate on your own tenant.
+
+## Five Tools, One Workflow
 
 ### Cloud Manager
 
-Sync and manage your Ekahau Cloud sites and projects against your local `.esx` files. Browse your cloud inventory alongside your local folder, match files to sites, rename and delete in bulk, upload new projects, and move datasets between sites — all from one table view.
+Compare Ekahau Cloud projects with local `.esx` files, find duplicates, and manage project movement from a single table view.
 
-- Side-by-side cloud vs. local file view with character-level name diffs
-- **Duplicates tab** — clusters near-duplicate files across cloud and local, marks newest and largest, one-click cleanup
-- **≈ badge** on rows that belong to a duplicate cluster — click to jump to the tab
-- Rename, delete, and reorganize projects and sites in bulk
-- Upload `.esx` files directly to Ekahau Cloud
-- Show in Explorer/Finder button on every local row
-- Merge preview before combining projects
-- Dark / light theme support
+- Side-by-side cloud and local inventory with character-level name differences
+- Duplicate clustering with newest/largest indicators and focused cleanup
+- Bulk upload, download, rename, move, and delete operations with previews
+- Direct access to local files in Explorer or Finder
+- Encrypted local Cloud-session cache backed by the operating-system credential vault
+
+Cloud Manager's `EkahauAPI` client implements the reverse-engineered upload/download flows required to reproduce the web application's presigned upload and client-side `.esx` assembly behavior.
 
 ### Quick Walls
 
-Open an `.esx` file, remap every wall type in your project using a fast, visual editor. Apply wall-type templates to standardize across projects, or save your own custom presets. **Available live in your browser** at [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — the hosted build uses `localStorage` for template persistence instead of the desktop template folder.
+Open an `.esx`, visually remap every wall type, apply reusable templates, and save the updated project.
 
-- Client-side `.esx` parsing (nothing leaves your machine)
-- Visual wall-type grid with color-coded attenuation values
-- Save / load wall-type templates (JSON)
-- Auto-apply default templates on file open
-- Keyboard shortcuts `[1]`–`[9]` mapped straight into the Ekahau wall picker
-- Template store with "WD Template" and Ekahau factory presets
+- Local, client-side `.esx` parsing with JSZip
+- Color-coded wall types and attenuation values
+- Ekahau factory presets plus custom JSON templates
+- Default-template auto-apply and `[1]`–`[9]` keyboard shortcuts
+- [Runs directly in the browser](https://weirdave.github.io/WD-Wireless-Tools/walls/)
 
 ### Squirrel
 
-Your Ekahau file organizer. Point Squirrel at a folder and it will scan for loose `.esx` files, show you what needs organizing, and sort them into clean project subfolders.
+Turn loose project files into a predictable folder structure after reviewing the proposed result.
 
-- Scan a directory tree for `.esx` files
-- Create new project folders with proper naming
-- Configurable folder structure and naming rules
-- Drag-and-drop-style batch organization
+- Recursive `.esx` discovery and project classification
+- Configurable naming and folder rules
+- Image, floor-plan, and report organization
+- Duplicate detection and supported-operation undo
 
 ### Scale
 
-Feet-and-inches ↔ decimal ↔ meters converter for Ekahau scale calibration. Paste `536'4"` from a floor plan and the tool spits out `536.333'`, `6436"`, `163.475 m`, and `163475 mm` — copy any of them with one click. **Available live in your browser** at [weirdave.github.io/WD-Wireless-Tools/scale](https://weirdave.github.io/WD-Wireless-Tools/scale/).
+Convert architectural measurements between feet-and-inches, decimal feet, inches, meters, and millimeters.
 
-- Bidirectional (type on either side, both update)
-- Handles architectural fractions (`4' 6-1/2"`, `4' 6 1/2"`, `1/2"`)
-- Accepts a bare number (interpreted as feet on the imperial side, meters on the metric)
-- Copy-to-clipboard on every output
-- Pure client-side — no backend, works offline
+- Bidirectional conversion with synchronized results
+- Architectural fractions such as `4' 6-1/2"`, `4' 6 1/2"`, and `1/2"`
+- One-click copying for every output
+- Pure client-side operation, including the [hosted version](https://weirdave.github.io/WD-Wireless-Tools/scale/)
 
 ### Report
 
-Drop an `.esx` and get installer-ready handoff documents. Built on a plug-in **report registry** — each report type is a small object with its own sidebar options and renderer. Seven report formats are available today, with an eighth in development:
+Transform an `.esx` project into print-ready, installer-facing documents. Seven report formats are available today:
 
-- **Directional Antenna Installation (`AP Placement`)** — per-AP mount, azimuth (with compass), tilt, mounting height, antenna model; floor-plan overview with SVG marker + direction arrow on every AP.
-- **Predictive Design** — installation-oriented floor-plan overviews for directional and omnidirectional AP placement.
-- **Site Summary** — project, floor, radio-band, AP-model, and antenna summaries.
-- **Interference** — detected-device summaries, floor maps, channel details, and methodology.
-- **Bill of Materials** — AP quantities grouped by vendor + model, antenna quantities grouped by antenna type; totals and an "external antennas only" filter for procurement handoff.
-- **Antenna Aim Sheet** — compact aiming tables, floor mini-maps, and installer sign-off fields.
-- **Change / Audit Report (coming soon)** — planned before-and-after project comparisons with added, removed, and moved APs.
-- **Coverage Cell Boundary** — advisory cell diagrams, signal thresholds, and per-AP sizing tables.
+- **Directional Antenna Installation / AP Placement**
+- **Predictive Design / AP Placement**
+- **Site Summary Sheet**
+- **Interference / Rogue Devices**
+- **Bill of Materials**
+- **Antenna Aim Sheet**
+- **Coverage Cell Boundary**
 
-**AP marker labels.** Markers on the floor-plan overview and the `#` column of the AP table use each AP's own name from the `.esx` — not an invented row number. When a name ends with an "AP" designator (e.g. `SITE1-B1-01-01-AP42`), the marker shows just the trailing part (`42`) so map + table cross-reference at a glance. When it doesn't (MAC addresses, free-form labels), the full name is shown. Every report that draws markers exposes a **Short number labels on the plan** sidebar toggle — turn it off to force full names.
-
-**Available live in your browser** at [weirdave.github.io/WD-Wireless-Tools/report](https://weirdave.github.io/WD-Wireless-Tools/report/).
-
-- Parses `.esx` in the browser (JSZip) — nothing leaves your machine
-- Adding a new report type is one entry in the `REPORTS` registry in `report.js`
-- Cover page with an insertable/persistable logo, per-report doc name in header + filename
-- Print-optimized CSS: page-breaks per section, backgrounds forced white, sidebar hidden
+The **Change / Audit Report (coming soon)** is visible in the gallery but is not selectable yet. Every available report supports its own options and print-optimized renderer through the shared report registry. Try it in the [hosted Report tool](https://weirdave.github.io/WD-Wireless-Tools/report/).
 
 ---
 
 ## Quick Start
 
-For complete instructions for every tool, see the [User Manual](docs/USER_MANUAL.md).
+### Try the browser tools
 
-### Just want to try Quick Walls?
+Open the [hosted tool suite](https://weirdave.github.io/WD-Wireless-Tools/) to use Quick Walls, Scale, or Report immediately. There is no installation or login. Cloud Manager and Squirrel remain desktop-only because they need Ekahau Cloud or local file-system access.
 
-Open [weirdave.github.io/WD-Wireless-Tools/walls](https://weirdave.github.io/WD-Wireless-Tools/walls/) — no install, no login, no Python. Drop an `.esx` file, edit walls, save the result. Your file never leaves your machine (JSZip parses it locally in the browser).
+### Install the complete desktop suite
 
-### Full suite — desktop install
+1. Install [Python 3.10 or newer](https://www.python.org/downloads/). On Windows, enable **Add Python to PATH** during installation.
+2. Open the [latest release](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) and download the versioned `WD-Wireless-Tools-vX.X.X.zip` asset—not GitHub's automatic “Source code” archive.
+3. Extract the ZIP to a permanent folder.
+4. Double-click `run.bat` on Windows or `run.command` on macOS.
 
-The full suite needs Python because Cloud Manager and Squirrel access your file system and Ekahau Cloud session. Quick Walls, Scale, and Report also run independently in the browser.
+The launcher installs missing dependencies, starts the local service, and opens `http://localhost:8675`. Keep its terminal window open while using the suite.
 
-**1. Install Python 3.10 or newer**
+For detailed, task-by-task instructions, see the **[WD Wireless Tools User Manual](docs/USER_MANUAL.md)**.
 
-Grab it from [python.org/downloads](https://www.python.org/downloads/).
+### Manual launch
 
-- **Windows** — during install, **check the box "Add Python to PATH"** on the first screen of the installer. It's off by default. Skip it and `run.bat` won't find Python.
-- **macOS** — the installer wires `python3` up automatically. No checkbox to worry about.
-
-**2. Download the suite**
-
-Go to the [latest release page](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest). Under **Assets**, click **`WD-Wireless-Tools-vX.X.X.zip`** (the version-numbered one — *not* "Source code (zip)", which is GitHub's auto-generated variant).
-
-Save it somewhere permanent — Desktop or Documents is fine — and extract the ZIP. You'll get a folder named `WD-Wireless-Tools-vX.X.X/` with everything inside.
-
-**3. Launch it**
-
-- **Windows** — open the extracted folder and double-click **`run.bat`**.
-- **macOS** — open the extracted folder and double-click **`run.command`**. On first launch macOS may block it — right-click → **Open** → **Open** to bypass Gatekeeper.
-
-A terminal window opens, installs the Python dependencies on first run (~30 seconds), starts the local server, and opens your browser to `http://localhost:8675`. You'll see a startup banner like this:
-
+```bash
+pip install -r requirements.txt
+python server.py
 ```
-WIRELESS TOOLS  v2.0.1
+
+The startup banner identifies the installed suite version:
+
+```text
+WIRELESS TOOLS  v2.0.2
 A suite of Ekahau workflow tools.
 
 Local suite: http://localhost:8675/
 Press CTRL+C in this window to stop WD Wireless Tools.
 ```
 
-**Keep the terminal window open** — closing it stops the server.
-
-**Manual (advanced)**:
-```bash
-pip install -r requirements.txt
-python server.py
-```
-
 ---
 
-## First run — what to expect
+## Privacy and Local-First Design
 
-### After you launch `run.bat` / `run.command`
+- Quick Walls and Report parse `.esx` archives locally in your browser with JSZip.
+- Scale performs every calculation in the browser.
+- Squirrel accesses only the local folder you select.
+- Cloud Manager connects only to the Ekahau Cloud account and local folder you select.
+- Saved Cloud-session data is encrypted; its key lives separately in Windows Credential Manager or macOS Keychain.
+- There is no telemetry.
 
-1. A terminal window opens and prints the suite version and local address: `http://localhost:8675/`.
-2. Your default browser opens automatically to the suite landing page.
-3. **Leave the terminal window open** — closing it stops the server. Minimize it if it's in the way.
+No hosted WD Wireless Tools service receives your survey files. As with any production workflow, keep backups and review previews before bulk file or Cloud operations.
 
-### Cloud Manager — first-time setup
+## First Run
 
-Cloud Manager needs two things before it can do anything useful:
+### Cloud Manager
 
-1. **You must be logged into Ekahau Cloud in Chrome, Edge, or Firefox.** Cloud Manager reads your session cookie from your browser via `browser_cookie3`. **Safari is not supported**, and Private/Incognito windows won't work either. If you're not logged in, click **Log in to Ekahau Cloud** on the login screen — a browser tab opens, log in there, then return to Cloud Manager.
-2. **Pick your local Ekahau folder** — the parent folder that contains your project subfolders (each with `.esx` files inside).
+Sign into Ekahau Cloud in a normal Chrome, Edge, or Firefox window, then choose the parent folder containing your local Ekahau projects. Safari, Private, and Incognito sessions are not supported for session discovery. Your selections are remembered locally.
 
-Both settings are remembered. The Cloud session cache is encrypted, with its
-encryption key kept in Windows Credential Manager or macOS Keychain. Next
-launch skips straight to the main view.
+### Quick Walls, Scale, and Report
 
-### Quick Walls / Scale / Report — no setup
+No setup is required. Drop an `.esx` into Quick Walls or Report, or type a measurement in Scale.
 
-These three run entirely in your browser. Drop an `.esx` (Quick Walls / Report) or type a measurement (Scale) and go.
+### Squirrel
 
-### Squirrel — pick a folder
+Choose a folder containing loose project files. Squirrel shows the proposed organization before moving anything.
 
-Point Squirrel at any folder that contains loose Ekahau projects. It scans and shows you what needs organizing before any files move.
+### Local data locations
 
-### Where does data live?
-
-- **Wall templates** — `templates/` inside the tool folder. Custom templates you save appear here.
-- **Cloud Manager settings** — `~/.wd_wireless_tools/` in your home directory (same location on Windows and macOS). The saved Cloud session is encrypted; its key is stored separately in the operating system's credential vault.
-- **Ekahau `.esx` files never leave your machine.** Quick Walls and Report parse them in the browser via JSZip. Cloud Manager only ever touches the files you point at, on your local disk and your own Ekahau Cloud tenant.
-- **No telemetry.**
-
----
+- Custom desktop wall templates: `templates/`
+- Cloud Manager settings: `~/.wd_wireless_tools/`
+- Hosted Quick Walls templates: the browser's local storage
 
 ## Troubleshooting
 
-### `python is not recognized as an internal or external command`
+### Python is not recognized
 
-Python isn't installed, or wasn't added to your PATH. Grab it from [python.org/downloads](https://www.python.org/downloads/) — during install, **check the box "Add Python to PATH"** on the first screen of the installer. Close and re-open the terminal, then re-run `run.bat`.
+Install Python 3.10 or newer and enable **Add Python to PATH** on Windows. Reopen the terminal afterward.
 
-### macOS: "run.command can't be opened because Apple cannot check it for malicious software"
+### macOS blocks `run.command`
 
-Gatekeeper blocks downloaded scripts by default. Right-click `run.command` → **Open** → **Open** in the confirmation dialog. Only needed the first time.
+Right-click `run.command`, choose **Open**, then confirm **Open**. This is normally required only once.
 
-### Windows: "Windows protected your PC" (SmartScreen)
+### Cloud Manager cannot find a session
 
-SmartScreen blocks downloaded batch files. Click **More info** → **Run anyway**. Only needed the first time.
+Confirm that you are signed into `https://cloud.ekahau.com` in a normal Chrome, Edge, or Firefox window. Close and reopen the browser if its cookie database is locked.
 
-### Cloud Manager stuck on "Checking for an active session..."
+### Port 8675 is already in use
 
-`browser_cookie3` couldn't find your Ekahau Cloud login. Fixes in order:
+Close the other running instance, or choose another port:
 
-- Log into `https://cloud.ekahau.com` in Chrome, Edge, or Firefox — a normal window, not Incognito/Private.
-- If you use Safari, Brave, or Arc, log in via one of the three supported browsers instead.
-- Close and re-open all browser windows for that browser (some browsers hold the cookie file open in a way that blocks reads), then click **Log in to Ekahau Cloud** again.
-
-### "Port 8675 is already in use"
-
-Another copy of the tool is already running, or another program grabbed that port. Either close the existing instance, or set a different port before launching:
+```bat
+set PORT=8676 && run.bat
+```
 
 ```bash
-# Windows (cmd)
-set PORT=8676 && run.bat
-
-# macOS
 PORT=8676 bash run.command
 ```
 
-### Browser didn't open automatically
+### Browser does not open automatically
 
-Open [http://localhost:8675](http://localhost:8675) manually. Some corporate desktops disable auto-launch.
-
-### How to update
-
-Download the newest release from [Releases](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest), extract to a fresh folder, then copy your `templates/` folder over if you have custom wall-type templates. No uninstaller, no migration step.
-
-### How to uninstall
-
-Choose **Menu → Forget Cloud Login** first, then delete the tool folder. The
-only other data is the small Cloud Manager settings folder at
-`~/.wd_wireless_tools/` — delete that if you want a fully clean slate.
-
----
+Open [http://localhost:8675](http://localhost:8675) manually while the launcher terminal remains open.
 
 ## Project Structure
 
-The key tracked files and directories are:
-
-```
-WD Wireless Tools/
-├── server.py                 # Flask server — routes + API dispatch
+```text
+WD-Wireless-Tools/
+├── server.py                 # Local Flask/Waitress service and API routes
 ├── run.bat                   # Windows launcher
 ├── run.command               # macOS launcher
 ├── requirements.txt          # Python dependencies
-├── LICENSE                   # MIT license
 ├── BACKLOG.md                # Unfinished product work only
-│
 ├── tools/
-│   ├── cloud_manager.py      # Cloud API client, including reverse-engineered upload/download flows
-│   ├── template_store.py     # Wall-type template persistence
-│   └── folder_organizer.py   # Squirrel file scanning + sorting
-│
-├── web/                      # Desktop app source (single source of truth)
-│   ├── home.html             # Suite landing page (desktop)
-│   ├── cloud.html            # Cloud Manager UI
-│   ├── walls.html            # Quick Walls UI (also served on GitHub Pages)
-│   ├── organizer.html        # Squirrel UI
-│   ├── scale.html            # Scale converter UI (also served on GitHub Pages)
-│   ├── report.html           # Report UI (also served on GitHub Pages)
-│   ├── guide*.html           # Built-in help pages
-│   ├── pages/                # Hosted-only page templates (used by pages.yml)
-│   │   ├── hosted-index.html         # Public landing page
-│   │   ├── hosted-cloud-stub.html    # "Desktop only" page for /cloud/
-│   │   └── hosted-organizer-stub.html # "Desktop only" page for /organizer/
-│   └── assets/
-│       ├── wd-tools.css      # Shared stylesheet
-│       ├── versions.json     # Suite and component versions
-│       ├── lib/              # Vendored browser libraries (JSZip, PDF.js, Mammoth)
-│       └── js/
-│           ├── wd-shared.js  # Shared utilities (theme, toast, modal, escape)
-│           ├── cloud.js      # Cloud Manager page logic
-│           ├── walls.js      # Quick Walls page logic (with HOSTED runtime flag)
-│           ├── walls-swap.js # Wall-swap workflow logic
-│           ├── organizer.js  # Squirrel page logic
-│           ├── scale.js      # Measurement conversion logic
-│           └── report.js     # Report registry, ESX parsing, and renderers
-│
-├── templates/                # Wall-type template presets (JSON) — bundled into hosted build
-├── images/                   # Current v8 branding source assets
-│   └── legacy/              # Superseded branding and concept artwork (not in release ZIPs)
-│
+│   ├── cloud_manager.py      # Cloud client and reverse-engineered upload/download flows
+│   ├── template_store.py     # Wall-template persistence
+│   └── folder_organizer.py   # Squirrel scanning and organization
+├── web/                      # Application source and hosted page templates
+│   ├── assets/
+│   │   ├── versions.json     # Suite and component versions
+│   │   ├── lib/              # Vendored browser libraries
+│   │   └── js/
+│   │       ├── wd-shared.js  # Shared UI utilities
+│   │       ├── walls-swap.js # Wall-remapping workflow
+│   │       └── ...           # Tool-specific application code
+│   └── pages/                # GitHub Pages landing/stub templates
+├── templates/                # Bundled wall-type templates
+├── images/
+│   └── legacy/               # Historical artwork; excluded from releases
 ├── docs/
-│   └── USER_MANUAL.md        # Complete installation and tool-usage manual
+│   └── USER_MANUAL.md        # Complete user documentation
 ├── scripts/
 │   ├── build_release.py      # Allowlisted release ZIP builder
-│   └── make_test_projects.py # Generates fictional ESX fixtures for manual testing
-├── tests/                     # Python, server, asset, and JavaScript safety tests
-│
-└── .github/workflows/
-    ├── release.yml           # On tag push: build ZIP + generate GitHub release notes
-    ├── tests.yml             # Windows/macOS safety and compatibility matrix
-    └── pages.yml             # Manual build + deploy of the hosted GitHub Pages site
+│   └── make_test_projects.py # Fictional ESX fixture generator
+├── tests/                    # Python, server, asset, and JavaScript safety tests
+└── .github/workflows/        # Tests, releases, and Pages deployment
 ```
 
-The reverse-engineered Ekahau Cloud transport and project-management calls are implemented in the `EkahauAPI` class in `tools/cloud_manager.py`. The local `.claude/` directory is development-tool configuration—not application code—and is intentionally excluded because it can contain machine-specific paths and permissions.
+The local `.claude/` directory is development-tool configuration, not application code. It is intentionally excluded because it may contain machine-specific paths and permissions.
 
----
+## Help and Support
 
-## Dependencies
+- Start with the [User Manual](docs/USER_MANUAL.md) or the guide built into each tool.
+- Search existing [GitHub issues](https://github.com/WeirDave/WD-Wireless-Tools/issues).
+- For a reproducible bug or focused feature request, [open an issue](https://github.com/WeirDave/WD-Wireless-Tools/issues/new) with the tool version, operating system, expected result, and actual result.
+- Never attach client `.esx` files, credentials, session data, or other confidential material to a public issue.
 
-| Package | Purpose |
-|---------|---------|
-| [Flask](https://flask.palletsprojects.com/) | Web framework — API routing, file serving |
-| [Waitress](https://docs.pylonsproject.org/projects/waitress/) | Production-grade pure-Python WSGI server (replaces Flask's dev server) |
-| [Requests](https://docs.python-requests.org/) | Ekahau Cloud API calls |
-| [browser-cookie3](https://github.com/borisbabic/browser_cookie3) | Session auth for Ekahau Cloud |
-| [Cryptography](https://cryptography.io/) | Authenticated encryption for the saved Cloud session |
-| [Keyring](https://keyring.readthedocs.io/) | Windows Credential Manager / macOS Keychain integration |
-
-All `.esx` file handling is done **client-side with JSZip** — your survey files never leave your machine.
-
----
-
-## Contributing
-
-This is a personal toolset, but if you're a wireless engineer with ideas or bugs, open an issue or a PR. Keep it simple.
-
----
+Contributions are welcome when they keep the tools focused, understandable, and safe for real wireless work.
 
 ## License
 
-MIT © R David Paine III — see [LICENSE](LICENSE) for details.
+Released under the [MIT License](LICENSE). © R David Paine III.
 
 ---
 
-<p align="center">
-  <sub>Built for wireless engineers, by a wireless engineer.</sub><br>
-  <sub>Made with signal strength and caffeine by <a href="https://github.com/WeirDave">WeirDave</a></sub>
-</p>
+<div align="center">
+
+**Built for wireless engineers, by a wireless engineer.**
+
+Made with signal strength and caffeine by [WeirDave](https://github.com/WeirDave).
+
+</div>
