@@ -250,15 +250,8 @@ bulkSync('to-local').then(async () => {
             with self.subTest(script=script.name):
                 self.assertNotIn(b"\x00", script.read_bytes())
 
-    def test_branding_sources_separate_current_and_legacy_artwork(self):
-        image_root = ROOT / "images"
-        self.assertFalse(
-            [path for path in image_root.iterdir() if path.is_file()],
-            "Current branding belongs in web/assets; do not duplicate it in images/",
-        )
-        self.assertTrue((image_root / "legacy" / "brand-concepts").is_dir())
-        self.assertTrue((image_root / "legacy" / "previous-branding").is_dir())
-
+    def test_current_branding_lives_only_with_runtime_assets(self):
+        self.assertFalse((ROOT / "images").exists())
         deployed = list((ROOT / "web" / "assets").glob("*v8.0*"))
         self.assertTrue(deployed)
         self.assertTrue(any(path.name == "wd-wireless-tools-v8.0-720x720.png" for path in deployed))
@@ -288,7 +281,7 @@ bulkSync('to-local').then(async () => {
                 self.assertIn("web/assets/lib/jszip.min.js", names)
                 self.assertNotIn("PROJECT_MEMORY.md", names)
                 self.assertFalse(any(name.startswith("docs/releases/") for name in names))
-                self.assertFalse(any(name.startswith("images/legacy/") for name in names))
+                self.assertFalse(any(name.startswith("images/") for name in names))
                 self.assertFalse(any("__pycache__" in name for name in names))
                 mode = archive.getinfo("run.command").external_attr >> 16
                 self.assertTrue(mode & stat.S_IXUSR)
