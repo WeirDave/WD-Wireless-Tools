@@ -35,6 +35,8 @@ def iter_release_files():
             if not path.is_file():
                 continue
             relative = path.relative_to(ROOT)
+            if relative.parts[:2] == ("images", "legacy"):
+                continue
             if "__pycache__" in relative.parts or path.suffix in EXCLUDED_SUFFIXES:
                 continue
             yield path, relative

@@ -307,7 +307,8 @@ WD Wireless Tools/
 │           └── report.js     # Report registry, ESX parsing, and renderers
 │
 ├── templates/                # Wall-type template presets (JSON) — bundled into hosted build
-├── images/                   # Logos and branding assets
+├── images/                   # Current v8 branding source assets
+│   └── legacy/              # Superseded branding and concept artwork (not in release ZIPs)
 │
 ├── docs/
 │   └── USER_MANUAL.md        # Complete installation and tool-usage manual
