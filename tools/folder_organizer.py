@@ -121,7 +121,7 @@ DEFAULT_CONFIG = {
     ],
 
     "json_report_keywords": [
-        "waxframe", "checkpoint", "assessment", "report",
+        "checkpoint", "assessment", "report",
     ],
 
 
