@@ -223,6 +223,15 @@ bulkSync('to-local').then(async () => {
         self.assertIn(f"v{versions['cloud']} · desktop suite", cloud_stub)
         self.assertIn(f"v{versions['squirrel']} · desktop suite", squirrel_stub)
 
+    def test_backlog_contains_only_current_unfinished_work(self):
+        backlog = (ROOT / "BACKLOG.md").read_text(encoding="utf-8")
+        self.assertIn("bulk merge many folders into one", backlog)
+        self.assertIn("manual External override", backlog)
+        self.assertIn("Change / Audit report", backlog)
+        self.assertNotIn("Recently shipped", backlog)
+        self.assertNotIn("Process reminders", backlog)
+        self.assertNotIn("PROJECT_MEMORY", backlog)
+
     def test_html_references_existing_local_assets(self):
         asset_pattern = re.compile(r'''(?:src|href)=["'](/assets/[^"'?#]+)''')
         pages = list((ROOT / "web").glob("*.html"))

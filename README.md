@@ -275,6 +275,7 @@ WD Wireless Tools/
 ├── run.command               # macOS launcher
 ├── requirements.txt          # Python dependencies
 ├── LICENSE                   # MIT license
+├── BACKLOG.md                # Unfinished product work only
 │
 ├── tools/
 │   ├── cloud_manager.py      # Cloud API client, including reverse-engineered upload/download flows
