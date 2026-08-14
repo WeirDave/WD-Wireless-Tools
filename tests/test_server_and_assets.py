@@ -209,6 +209,7 @@ bulkSync('to-local').then(async () => {
                 self.assertIn(f"v{versions[tool]}", readme)
         self.assertIn("Seven report formats are available today", readme)
         self.assertIn("Change / Audit Report (coming soon)", readme)
+        self.assertIn("[User Manual](docs/USER_MANUAL.md)", readme)
         for documented_path in (
             "versions.json", "walls-swap.js", "make_test_projects.py", "tests/",
         ):
@@ -259,8 +260,10 @@ bulkSync('to-local').then(async () => {
             with zipfile.ZipFile(archive_path) as archive:
                 names = set(archive.namelist())
                 self.assertIn("LICENSE", names)
+                self.assertIn("docs/USER_MANUAL.md", names)
                 self.assertIn("web/assets/lib/jszip.min.js", names)
                 self.assertNotIn("PROJECT_MEMORY.md", names)
+                self.assertFalse(any(name.startswith("docs/releases/") for name in names))
                 self.assertFalse(any("__pycache__" in name for name in names))
                 mode = archive.getinfo("run.command").external_attr >> 16
                 self.assertTrue(mode & stat.S_IXUSR)

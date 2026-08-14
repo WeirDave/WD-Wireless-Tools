@@ -34,6 +34,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: WD Wireless Tools ${{ env.TAG }}
-          body_path: docs/releases/${{ env.TAG }}.md
+          generate_release_notes: true
           fail_on_unmatched_files: false
           files: ${{ env.ZIPNAME }}

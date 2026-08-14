@@ -16,7 +16,7 @@ ROOT_FILES = (
     "README.md",
     "LICENSE",
 )
-ROOT_DIRECTORIES = ("tools", "web", "templates", "images")
+ROOT_DIRECTORIES = ("tools", "web", "templates", "images", "docs")
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 
 
