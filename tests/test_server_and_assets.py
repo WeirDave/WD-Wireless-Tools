@@ -111,6 +111,55 @@ if (result.length !== 1 || result[0].kind !== 'pair') process.exit(1);
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_cloud_tree_top_level_site_side_selections_normalize_to_one_sync_pair(self):
+        # Same as test_cloud_tree_side_selections_normalize_to_one_sync_pair,
+        # but for a top-level matched SITE row's independent s-c:/s-l:
+        # checkboxes rather than a nested project row's ct-c:/ct-l: ones —
+        # selecting either side of a matched site must resolve back to the
+        # single p:<cloudId> pair record so a bulk Sync push renames the
+        # whole site, not just files inside it.
+        script = ROOT / "web" / "assets" / "js" / "cloud.js"
+        node_program = r"""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const start = source.indexOf('function selectedSyncItems()');
+const end = source.indexOf('\nasync function bulkSync', start);
+if (start < 0 || end < 0) throw new Error('selectedSyncItems not found');
+let selected = new Set(['s-c:cloud-1', 's-l:C:/sites/one']);
+let rowData = {
+  'p:cloud-1': {kind:'pair', cloudId:'cloud-1', localPath:'C:/sites/one'},
+  's-c:cloud-1': {kind:'cloud', id:'cloud-1'},
+  's-l:C:/sites/one': {kind:'local', path:'C:/sites/one', isDir:true}
+};
+eval(source.slice(start, end));
+const result = selectedSyncItems();
+if (result.length !== 1 || result[0].kind !== 'pair') process.exit(1);
+"""
+        result = subprocess.run(
+            ["node", "-e", node_program, str(script)],
+            capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_cloud_tree_select_all_reaches_top_level_site_rows(self):
+        # toggleSelectAll() used to explicitly skip every non-"ct"-prefixed
+        # checkbox on the Sites tab, which meant "Select All" silently only
+        # grabbed nested project files and never the site rows themselves.
+        script = ROOT / "web" / "assets" / "js" / "cloud.js"
+        node_program = r"""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+if (source.includes(`!k.startsWith('ct')`)) process.exit(1);
+if (!source.includes('function selectAllSide(side)')) process.exit(2);
+"""
+        result = subprocess.run(
+            ["node", "-e", node_program, str(script)],
+            capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
     def test_cloud_tree_orphans_are_eligible_for_bulk_transfer(self):
         script = ROOT / "web" / "assets" / "js" / "cloud.js"
         node_program = r"""
