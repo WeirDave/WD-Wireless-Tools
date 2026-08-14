@@ -209,6 +209,11 @@ bulkSync('to-local').then(async () => {
                 self.assertIn(f"v{versions[tool]}", readme)
         self.assertIn("Seven report formats are available today", readme)
         self.assertIn("Change / Audit Report (coming soon)", readme)
+        for documented_path in (
+            "versions.json", "walls-swap.js", "make_test_projects.py", "tests/",
+        ):
+            with self.subTest(documented_path=documented_path):
+                self.assertIn(documented_path, readme)
 
         cloud_stub = (ROOT / "web" / "pages" / "hosted-cloud-stub.html").read_text(encoding="utf-8")
         squirrel_stub = (ROOT / "web" / "pages" / "hosted-organizer-stub.html").read_text(encoding="utf-8")
