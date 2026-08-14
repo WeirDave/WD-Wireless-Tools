@@ -66,6 +66,10 @@ Cloud Manager compares Ekahau Cloud projects with local `.esx` files and provide
 
 Cloud Manager stores an encrypted copy of the active Cloud session locally. The encryption key is stored separately in Windows Credential Manager or macOS Keychain.
 
+### Technical implementation note
+
+Cloud Manager's `EkahauAPI` client in `tools/cloud_manager.py` includes reverse-engineered request flows needed for operations that the Ekahau web application performs from the browser, including the presigned upload sequence and client-side `.esx` download assembly. These calls are product code; local `.claude/` files are only development-tool configuration and are not required to run the suite.
+
 ## Quick Walls
 
 Quick Walls edits wall types inside an Ekahau `.esx` project.
