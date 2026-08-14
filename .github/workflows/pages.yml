@@ -1,0 +1,111 @@
+name: Deploy Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build hosted site
+        run: |
+          set -e
+          BUILD=docs-build
+          rm -rf "$BUILD"
+          mkdir -p "$BUILD/walls" "$BUILD/cloud" "$BUILD/organizer" "$BUILD/scale" "$BUILD/report" "$BUILD/templates"
+
+          cp -r web/assets "$BUILD/assets"
+
+          for f in web/guide*.html; do
+            [ -f "$f" ] && cp "$f" "$BUILD/"
+          done
+
+          cp templates/*.json "$BUILD/templates/" 2>/dev/null || true
+
+          cp web/walls.html "$BUILD/walls/index.html"
+          sed -i 's|<head>|<head>\n<script>window.WD_HOSTED = true;</script>|' "$BUILD/walls/index.html"
+          sed -i \
+            -e 's|href="/assets/|href="../assets/|g' \
+            -e 's|src="/assets/|src="../assets/|g' \
+            -e 's|href="/walls"|href="./"|g' \
+            -e 's|href="/cloud"|href="../cloud/"|g' \
+            -e 's|href="/organizer"|href="../organizer/"|g' \
+            -e 's|href="/scale"|href="../scale/"|g' \
+            -e 's|href="/report"|href="../report/"|g' \
+            -e 's|href="/guide"|href="../guide.html"|g' \
+            -e 's|href="/"|href="../"|g' \
+            "$BUILD/walls/index.html"
+
+          cp web/scale.html "$BUILD/scale/index.html"
+          sed -i 's|<head>|<head>\n<script>window.WD_HOSTED = true;</script>|' "$BUILD/scale/index.html"
+          sed -i \
+            -e 's|href="/assets/|href="../assets/|g' \
+            -e 's|src="/assets/|src="../assets/|g' \
+            -e 's|href="/walls"|href="../walls/"|g' \
+            -e 's|href="/cloud"|href="../cloud/"|g' \
+            -e 's|href="/organizer"|href="../organizer/"|g' \
+            -e 's|href="/scale"|href="./"|g' \
+            -e 's|href="/report"|href="../report/"|g' \
+            -e 's|href="/guide"|href="../guide.html"|g' \
+            -e 's|href="/"|href="../"|g' \
+            "$BUILD/scale/index.html"
+
+          cp web/report.html "$BUILD/report/index.html"
+          sed -i 's|<head>|<head>\n<script>window.WD_HOSTED = true;</script>|' "$BUILD/report/index.html"
+          sed -i \
+            -e 's|href="/assets/|href="../assets/|g' \
+            -e 's|src="/assets/|src="../assets/|g' \
+            -e 's|href="/walls"|href="../walls/"|g' \
+            -e 's|href="/cloud"|href="../cloud/"|g' \
+            -e 's|href="/organizer"|href="../organizer/"|g' \
+            -e 's|href="/scale"|href="../scale/"|g' \
+            -e 's|href="/report"|href="./"|g' \
+            -e 's|href="/guide"|href="../guide.html"|g' \
+            -e 's|href="/"|href="../"|g' \
+            "$BUILD/report/index.html"
+
+          cp web/pages/hosted-index.html "$BUILD/index.html"
+          cp web/pages/hosted-cloud-stub.html "$BUILD/cloud/index.html"
+          cp web/pages/hosted-organizer-stub.html "$BUILD/organizer/index.html"
+
+          for g in "$BUILD"/guide*.html; do
+            [ -f "$g" ] || continue
+            sed -i \
+              -e 's|href="/walls"|href="walls/"|g' \
+              -e 's|href="/cloud"|href="cloud/"|g' \
+              -e 's|href="/organizer"|href="organizer/"|g' \
+              -e 's|href="/scale"|href="scale/"|g' \
+              -e 's|href="/report"|href="report/"|g' \
+              -e 's|href="/"|href="./"|g' \
+              "$g"
+          done
+
+          echo "--- Built tree ---"
+          find "$BUILD" -maxdepth 3 -type f | sort
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs-build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

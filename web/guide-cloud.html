@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Cloud Manager — User Guide</title>
+<link rel="icon" href="assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/wd-wireless-tools-v8.0-180x180.png">
+<link rel="stylesheet" href="assets/wd-tools.css">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+</head>
+<body class="tool-guide">
+
+<div class="topbar guide-topbar">
+  <h1><span>WD</span> Cloud Manager — User Guide</h1>
+  <a class="back-link" href="/cloud">Back to Cloud Manager</a>
+</div>
+
+<div class="content guide-content">
+
+  <div class="hero">
+    <h2>WD Cloud Manager</h2>
+    <p class="subtitle">Manage Ekahau cloud sites and local project folders side by side. Sync, merge, and organize your wireless survey projects.</p>
+  </div>
+
+  <h2>Getting Started</h2>
+
+  <div class="step-grid">
+    <div class="step-card">
+      <div class="step-num">Step 1</div>
+      <div class="step-title">Log In</div>
+      <div class="step-desc">Click <strong>Log In</strong> to authenticate with Ekahau Cloud. Your browser will open to complete the login flow.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 2</div>
+      <div class="step-title">Set Local Folder</div>
+      <div class="step-desc">Open <strong>Settings</strong> and set your local folder path — where your <code>.esx</code> project files are stored on disk.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 3</div>
+      <div class="step-title">Browse</div>
+      <div class="step-desc">The <strong>Sites</strong> tab shows the ledger view — cloud sites on the left, local folders on the right.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 4</div>
+      <div class="step-title">Manage</div>
+      <div class="step-desc">Rename, delete, create, or merge projects directly from the ledger. Changes sync immediately.</div>
+    </div>
+  </div>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> After logging in, Cloud Manager remembers your session in an encrypted cache protected by Windows Credential Manager or macOS Keychain. Use <strong>Menu → Forget Cloud Login</strong> to remove it from this computer.
+  </div>
+
+  <h2>The Ledger View</h2>
+  <p>The main interface is a two-column ledger that shows your <strong>Cloud Sites</strong> on the left and <strong>Local Folders</strong> on the right. This makes it easy to see what exists in each location at a glance and spot projects that are only on one side.</p>
+
+  <ul>
+    <li><strong>Cloud Sites (left)</strong> — projects stored in Ekahau Cloud, pulled from your account.</li>
+    <li><strong>Local Folders (right)</strong> — <code>.esx</code> files found in your configured local folder path.</li>
+    <li>Sites that exist in both locations are shown on the same row when names match.</li>
+    <li>Sites that only exist on one side appear with an empty cell on the other side.</li>
+  </ul>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> The ledger auto-refreshes on a configurable interval (see Settings). You can also manually refresh by clicking the refresh button in the toolbar.
+  </div>
+
+  <h2>The Sites Tree</h2>
+  <p>Each site (or local-only folder) is a collapsible group, like a folder in Windows Explorer. Click the <strong>&#9656;</strong> next to a site's name to expand it and see the individual projects inside — still shown in the same cloud-left / local-right layout, just indented under their site. Sites start expanded so you can scan a large scope at a glance; click the chevron again to collapse a site you don't need right now.</p>
+  <p>Cloud projects that don't belong to any site at all can't nest under a folder, so they're listed together at the very bottom under <strong>Orphan Projects</strong>. Use the &#8618; button on an orphan row to move it into a site.</p>
+
+  <h2>How Matching Works</h2>
+  <p>Every Ekahau project has a hidden ID stamped inside its <code>.esx</code> file when it's first created. That ID sticks with the project through every edit, rename, upload, and download. When we see the same hidden ID on your computer AND in Ekahau Cloud, we know it's the same project — no guessing.</p>
+  <p>For projects where we can't check IDs (created locally and never uploaded, or two files with unrelated histories), we fall back to name-based matching. Exact same name is very reliable. Same site code + similar name is likely. Only similar names is a guess, and we say so.</p>
+
+  <h3>The five ways WD pairs two files</h3>
+  <p>Every paired row has a small badge in the middle gutter — hover to see the plain-English reason.</p>
+  <table>
+    <tr><th class="guide-col-badge">Badge</th><th>What it means</th></tr>
+    <tr><td><strong>&#9733; You matched</strong></td><td>You linked these manually using the &#128279; Link button. Overrides everything else. Click the badge to unlink.</td></tr>
+    <tr><td><strong>&#10003; Same file</strong></td><td>Same hidden project ID inside both files — proven, not guessed. This is one project stored in two places.</td></tr>
+    <tr><td><strong>&#10003; Name matches</strong></td><td>Filenames are identical but no hidden-ID link. Very likely the same project, not proven.</td></tr>
+    <tr><td><strong>~ Same site</strong></td><td>Same site code (like <code>CLMB2</code>) plus similar names. Probably the same project.</td></tr>
+    <tr><td><strong>? Similar name</strong></td><td>Some words in common. Our best guess — worth a look before syncing.</td></tr>
+  </table>
+
+  <h3>What about file size?</h3>
+  <p>Cloud files and local files store the same content very differently. Ekahau Cloud stores <code>.esx</code> files uncompressed (bigger), while your computer compresses them (smaller). A cloud file that's 6&times; larger than your local copy is usually still the same project. That's why we <strong>don't use size for matching</strong>, and we don't show it on file rows — it confuses more than it helps. Size is still shown in the folder-peek popup and Duplicates tab, where you're comparing files of the same kind.</p>
+
+  <h3>What about dates?</h3>
+  <p>The date shown next to each file is when someone last edited the project inside Ekahau, <em>not</em> when the file was copied to your computer. Two copies with the same date and time are the same version. Different dates just mean someone kept working on one copy after the other. Because the date comes from inside the file, copying / OneDrive sync / renaming don't reset it.</p>
+
+  <h3>Held Back — pairs WD didn't auto-match</h3>
+  <p>Sometimes two files look related (same site code, overlapping words) but a hard difference stops WD from pairing them automatically — a different building number (Bldg 3 vs Bldg 5), a different street number, or a different survey phase (Baseline vs Cleanroom). Those pairs land in a <strong>Held Back</strong> section at the bottom of the ledger with the reason spelled out and two buttons:</p>
+  <ul>
+    <li><strong>Link anyway</strong> — if you know WD is being over-cautious, this pairs them and remembers your decision forever.</li>
+    <li><strong>Not a match</strong> — if WD was right to hold them back, this tells it to never suggest the pair again.</li>
+  </ul>
+
+  <h3>When we get it wrong</h3>
+  <ul>
+    <li><strong>Pair we missed?</strong> Click the &#128279; button on either orphan file → pick the counterpart from the list. WD remembers this forever.</li>
+    <li><strong>Pair we shouldn't have made?</strong> Click the &ne; button on the mismatched pair. WD will never suggest them again.</li>
+    <li><strong>Held back but you know better?</strong> Click <strong>Link anyway</strong> on the held-back row.</li>
+  </ul>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> Click the <strong>&#9432; How matching works</strong> chip next to the search box in the app for a shorter in-app version of this section.
+  </div>
+
+  <h2>Tabs</h2>
+
+  <table>
+    <tr><th>Tab</th><th>Purpose</th></tr>
+    <tr><td><strong>Sites</strong></td><td>The main ledger view — cloud vs. local side by side. This is where you manage, rename, delete, create, and merge projects.</td></tr>
+    <tr><td><strong>Project Files</strong></td><td>Browse the individual files within a selected project. Useful for inspecting floor plans, images, and survey data inside an <code>.esx</code> archive.</td></tr>
+  </table>
+
+  <h2>Managing Sites</h2>
+  <p>Right-click a site or use the action buttons on any row in the ledger to manage it.</p>
+
+  <h3>Create</h3>
+  <p>Create a new empty site on the cloud side, or a new project folder on the local side. The new entry appears in the ledger immediately.</p>
+
+  <h3>Rename</h3>
+  <p>Rename a cloud site or local folder directly from the ledger. The change takes effect on the cloud or filesystem right away.</p>
+
+  <h3>Delete</h3>
+  <p>Remove a cloud site or local folder. You will be prompted to confirm before anything is deleted.</p>
+
+  <div class="warning-box">
+    <strong>Note:</strong> Deleting a cloud site removes it from Ekahau Cloud permanently. Deleting a local folder moves it to the system recycle bin when possible.
+  </div>
+
+  <h2>Merging Projects</h2>
+  <p>The merge feature lets you compare a cloud site against a local project and sync differences between them.</p>
+
+  <ol>
+    <li>Select a row where both a cloud site and a local folder exist.</li>
+    <li>Click <strong>Merge</strong> to open the merge preview.</li>
+    <li>The preview shows what has changed — added, modified, or removed files on each side.</li>
+    <li>Choose which direction to sync: cloud to local, local to cloud, or resolve conflicts individually.</li>
+    <li>Confirm the merge to apply the changes.</li>
+  </ol>
+
+  <h3>Conflict Resolution</h3>
+  <p>When a file has been modified on both the cloud and local side since the last sync, a conflict is flagged. You choose which version to keep — cloud, local, or skip the file entirely.</p>
+
+  <div class="warning-box">
+    <strong>Note:</strong> Always review the merge preview before confirming. Merging overwrites files on the target side with the selected version.
+  </div>
+
+  <h2>Settings</h2>
+  <p>Open the <strong>Settings</strong> panel from the toolbar to configure Cloud Manager.</p>
+
+  <table>
+    <tr><th>Setting</th><th>Description</th></tr>
+    <tr><td><strong>Local Folder Path</strong></td><td>The directory on your machine where local <code>.esx</code> project files are stored. Cloud Manager scans this folder to populate the right side of the ledger.</td></tr>
+    <tr><td><strong>Auto-Refresh Interval</strong></td><td>How often the ledger re-fetches cloud sites and re-scans local folders (in seconds). Set to <code>0</code> to disable auto-refresh.</td></tr>
+  </table>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> Point the local folder path to the same directory Ekahau AI Pro uses for saving projects. That way the ledger always reflects what Ekahau sees.
+  </div>
+
+  <h2>Keyboard Shortcuts &amp; Tips</h2>
+
+  <table>
+    <tr><th>Shortcut / Action</th><th>What it does</th></tr>
+    <tr><td><kbd>F5</kbd></td><td>Refresh the ledger (re-fetch cloud sites and re-scan local folder)</td></tr>
+    <tr><td><kbd>Delete</kbd></td><td>Delete the selected site or folder (with confirmation)</td></tr>
+    <tr><td><kbd>F2</kbd></td><td>Rename the selected site or folder</td></tr>
+    <tr><td>Double-click a row</td><td>Open the merge preview for that project (if both sides exist)</td></tr>
+    <tr><td>Click column header</td><td>Sort the ledger by that column</td></tr>
+  </table>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> Use consistent naming between cloud and local projects. Cloud Manager matches entries by name, so <code>Site-Alpha</code> in the cloud pairs with <code>Site-Alpha.esx</code> locally.
+  </div>
+
+  <div class="footer">
+    <p>WD Cloud Manager — part of the <a href="/">WD Wireless Tools</a> suite.</p>
+    <p>Built by <a href="https://weirdave.com" target="_blank">WD Wireless Tools</a> — weirdave.com</p>
+  </div>
+
+</div>
+
+</body>
+</html>

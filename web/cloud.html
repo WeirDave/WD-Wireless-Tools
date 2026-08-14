@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Cloud Manager</title>
+<link rel="icon" href="/assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/wd-wireless-tools-v8.0-180x180.png">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+</head>
+<body class="tool-cloud">
+
+<div id="loginScreen">
+  <a class="home-btn screen-home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+  <div class="brand-card"><img src="/assets/cloud-manager-v8.0-560x560.png" alt="WD Cloud Manager" class="brand-logo-img"></div>
+  <div class="login-sub">Site &amp; Project Management</div>
+  <div class="login-card">
+    <div id="authChecking">
+      <div class="big-spin"></div>
+      <div class="login-status">Checking for an active session...</div>
+    </div>
+    <div id="authLogin" hidden>
+      <div class="cloud-login-emoji">&#9729;</div>
+      <div class="login-status cloud-login-status-tight">Connect to Ekahau Cloud</div>
+      <div class="login-detail cloud-login-detail-tight">Log in with your browser — we'll pick up your session automatically.</div>
+      <button class="login-btn" onclick="openEkahauLogin()">Log in to Ekahau Cloud</button>
+    </div>
+    <div id="authWaiting" hidden>
+      <div class="big-spin"></div>
+      <div class="login-status">Waiting for you to log in...</div>
+      <div class="login-detail">Your browser should have opened. Log in to Ekahau Cloud, then come back here.</div>
+    </div>
+  </div>
+</div>
+
+<div id="setupScreen" hidden>
+  <a class="home-btn screen-home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+  <div>
+    <div class="brand-card"><img src="/assets/cloud-manager-v8.0-560x560.png" alt="WD Cloud Manager" class="brand-logo-img"></div>
+    <div class="login-sub cloud-login-sub-tight">Connected to Ekahau Cloud</div>
+    <div class="cloud-setup-connected">&#10003; Logged in as <span id="setupEmail"></span></div>
+    <div class="login-card">
+      <div class="cloud-login-emoji">&#128193;</div>
+      <div class="login-status cloud-login-status-tight">Where are your Ekahau project files?</div>
+      <div class="login-detail cloud-login-detail-tight">Select the folder that contains your site folders (each with .esx files inside).</div>
+      <button class="login-btn" onclick="setupPickFolder()">Choose Folder</button>
+      <div id="setupFolderPath" class="cloud-setup-folder-path" hidden></div>
+      <button class="login-btn cloud-setup-continue-btn" id="setupContinueBtn" hidden onclick="setupContinue()">Continue</button>
+      <button class="login-btn secondary" onclick="setupSkip()">Skip for now</button>
+    </div>
+  </div>
+</div>
+
+<div id="appScreen">
+  <div class="topbar">
+    <div class="topbar-left">
+      <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+      <div class="menu-wrap">
+        <button class="hamburger-btn" onclick="toggleMainMenu(event)" title="Menu"><span></span><span></span><span></span></button>
+        <div id="mainMenu" class="main-menu">
+          <div class="menu-section">&#9656; Navigation</div>
+          <a class="menu-item" href="/">&#8962; Home</a>
+          <a class="menu-item active" href="/cloud">· Cloud Manager</a>
+          <a class="menu-item" href="/walls">· Quick Walls</a>
+          <a class="menu-item" href="/report">· Report</a>
+          <a class="menu-item" href="/scale">· Scale</a>
+          <a class="menu-item" href="/squirrel">· Squirrel</a>
+          <div class="menu-sep"></div>
+          <div class="menu-section">&#9656; Tools</div>
+          <button class="menu-item" onclick="closeMainMenu();openSettings()">· Settings</button>
+          <button class="menu-item" onclick="closeMainMenu();pickFolder()">· Change Local Folder</button>
+          <button class="menu-item" onclick="closeMainMenu();openNotMatchManager()">· Manage Not-a-Match</button>
+          <button class="menu-item" onclick="closeMainMenu();refreshData()">· Refresh</button>
+          <button class="menu-item" onclick="closeMainMenu();forgetCloudLogin()">· Forget Cloud Login</button>
+          <div class="menu-sep"></div>
+          <div class="menu-section">&#9656; Help &amp; Support</div>
+          <a class="menu-item" href="/guide-cloud" target="_blank">· User Guide</a>
+          <button class="menu-item" type="button" onclick="closeMainMenu();WD.openAbout()">· About &amp; Updates</button>
+        </div>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <h1><span>WD</span> Cloud Manager <span class="ver" data-ver="cloud">v&hellip;</span></h1>
+    </div>
+    <div class="topbar-right">
+      <span class="dot"></span>
+      <span id="userEmail">Connected</span>
+      <button class="settings-btn" onclick="pickFolder()" title="Open Local Folder — choose which local folder the tool scans"><span class="ico">&#128193;</span><span class="txt">Folder</span></button>
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+        <span class="ico" id="themeIco">&#127769;</span><span class="txt" id="themeTxt">Dark</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab-group active" id="tabFilesGroup">
+      <span class="tab-group-label" id="tabFiles" onclick="switchTab(lastFilesKind())">Files</span>
+      <span class="view-toggle" role="group" aria-label="View mode">
+        <button class="view-btn" id="viewTreeBtn" onclick="switchTab('sites')" title="Grouped by site, with each site's projects nested underneath">Tree</button>
+        <button class="view-btn" id="viewFlatBtn" onclick="switchTab('projects')" title="Every project in one flat list, no site grouping">Flat</button>
+      </span>
+    </div>
+    <div class="tab" id="tabDuplicates" onclick="switchTab('duplicates')" title="Files with the same normalized name — spot accidental copies">Duplicate Projects</div>
+  </div>
+
+  <div class="dashboard">
+    <div class="dash-card allcard" data-filter="all" onclick="setFilter('all')">
+      <div class="number" id="dAll">-</div><div class="label">All</div>
+    </div>
+    <div class="dash-card cloud-only" data-filter="orphans-cloud" onclick="setFilter('orphans-cloud')">
+      <div class="number" id="dCloudOnly">-</div><div class="label">Cloud Only</div>
+    </div>
+    <div class="dash-card type-design" data-filter="type-design" onclick="setFilter('type-design')" id="dTypeDesignCard" hidden>
+      <div class="number" id="dTypeDesign">-</div><div class="label">Design</div>
+    </div>
+    <div class="dash-card type-hybrid" data-filter="type-hybrid" onclick="setFilter('type-hybrid')" id="dTypeHybridCard" hidden>
+      <div class="number" id="dTypeHybrid">-</div><div class="label">Hybrid</div>
+    </div>
+    <div class="dash-card local-only" data-filter="orphans-local" onclick="setFilter('orphans-local')">
+      <div class="number" id="dLocalOnly">-</div><div class="label">Local Only</div>
+    </div>
+    <div class="dash-card type-measured" data-filter="type-measured" onclick="setFilter('type-measured')" id="dTypeMeasuredCard" hidden>
+      <div class="number" id="dTypeMeasured">-</div><div class="label">Measured</div>
+    </div>
+    <div class="dash-card mismatches" data-filter="mismatches" onclick="setFilter('mismatches')">
+      <div class="number" id="dMismatches">-</div><div class="label">Mismatches</div>
+    </div>
+    <div class="dash-card name-matches" data-filter="name-matches" onclick="setFilter('name-matches')" id="dNameMatchesCard" hidden>
+      <div class="number" id="dNameMatches">-</div><div class="label">Name Matches</div>
+    </div>
+    <div class="dash-card unassigned" data-filter="unassigned" onclick="setFilter('unassigned')" id="dUnassignedCard" hidden>
+      <div class="number" id="dUnassigned">-</div><div class="label">No Site</div>
+    </div>
+    <div class="dash-card orphans" data-filter="orphans" onclick="setFilter('orphans')">
+      <div class="number" id="dOrphans">-</div><div class="label">Orphans</div>
+    </div>
+    <div class="dash-card external" data-filter="external" onclick="setFilter('external')" id="dExternalCard" hidden>
+      <div class="number" id="dExternal">-</div><div class="label">External</div>
+    </div>
+    <div class="dash-card dup-all" data-filter="dup-all" onclick="setFilter('dup-all')" id="dDupAllCard" hidden>
+      <div class="number" id="dDupAll">-</div><div class="label">Clusters</div>
+    </div>
+    <div class="dash-card dup-cloud" data-filter="dup-cloud" onclick="setFilter('dup-cloud')" id="dDupCloudCard" hidden>
+      <div class="number" id="dDupCloud">-</div><div class="label">Cloud-Only Clusters</div>
+    </div>
+    <div class="dash-card dup-local" data-filter="dup-local" onclick="setFilter('dup-local')" id="dDupLocalCard" hidden>
+      <div class="number" id="dDupLocal">-</div><div class="label">Local-Only Clusters</div>
+    </div>
+    <div class="dash-card dup-mixed" data-filter="dup-mixed" onclick="setFilter('dup-mixed')" id="dDupMixedCard" hidden>
+      <div class="number" id="dDupMixed">-</div><div class="label">Mixed Clusters</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" class="search" id="searchBox" placeholder="Search...">
+    <button class="clear-search" onclick="clearSearch()" title="Clear search">&#215;</button>
+    <button class="btn-info-chip" id="matchHelpChip" onclick="openMatchHelp()" title="How does WD decide two files are the same project?">&#9432; How matching works</button>
+    <label class="selall"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> All</label>
+    <span class="selcount" id="selCount"></span>
+    <button class="btn btn-secondary" id="expandAllBtn" onclick="expandAllSites()" title="Expand every site" hidden>Expand All</button>
+    <button class="btn btn-secondary" id="collapseAllBtn" onclick="collapseAllSites()" title="Collapse every site" hidden>Collapse All</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkSyncTo" onclick="bulkSync('to-local')" title="Copy cloud names onto matched local (for selected matched rows)">Sync &#8594;</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkSyncFrom" onclick="bulkSync('to-cloud')" title="Copy local names onto matched cloud (for selected matched rows)">Sync &#8592;</button>
+    <button class="btn btn-secondary bulk-btn" id="compareBtn" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
+    <button class="btn btn-blue bulk-btn" id="bulkMoveBtn" onclick="bulkMoveToSite()" title="Move all selected to a site">Move to site&hellip;</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkVerifyBtn" onclick="bulkVerifyNameMatches()" title="For selected 'Name matches' pairs: download cloud copy, overwrite local, so the pair upgrades to 'Same file'. Pairs where local is newer than cloud are skipped automatically.">Verify pairs</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkShareBtn" onclick="openBulkShare()" title="Share all selected cloud projects with people or your Sharing Group in one action">Share&hellip;</button>
+    <button class="btn btn-red bulk-btn" id="bulkDeleteBtn" onclick="bulkDelete()">Delete selected</button>
+    <span class="spacer"></span>
+    <button class="btn btn-amber dup-toolbar-btn" id="dupDeleteAllToolbarBtn"
+            onclick="dupDeleteAllExtras()" hidden
+            title="Deletes every unmatched item across all clusters. Matched pairs stay intact.">
+      &#128465; Delete all <span id="dupDeleteAllToolbarCount">0</span> extras
+    </button>
+    <span class="spacer"></span>
+    <span class="owner-toggle" id="ownerToggle" role="group" aria-label="Filter by owner" hidden>
+      <span class="owner-toggle-label">Owner:</span>
+      <button class="owner-btn" data-owner="all"    onclick="setOwnerFilterUI('all')">All</button>
+      <button class="owner-btn" data-owner="mine"   onclick="setOwnerFilterUI('mine')">Mine</button>
+      <button class="owner-btn" data-owner="others" onclick="setOwnerFilterUI('others')">Others</button>
+    </span>
+    <button class="btn btn-blue" id="addNewBtn" onclick="showModal('createModal')">+ New Site</button>
+    <button class="btn" id="liveBtn" onclick="toggleLive()" title="Live: auto-refresh from Ekahau Cloud (pauses while selecting or a dialog is open)">Live</button>
+    <button class="btn-icon-only" onclick="openSettings()" title="Settings" aria-label="Settings">&#9881;</button>
+  </div>
+
+  <div class="jump-nav" id="jumpNav" aria-label="Jump to letter"></div>
+
+  <div class="col-legend">
+    <span></span>
+    <span id="legCloud">Cloud Site</span>
+    <span>Sync</span>
+    <span id="legLocal">Local Folder</span>
+  </div>
+
+  <div class="rows-container" id="rowsContainer">
+    <div class="empty-msg">Loading...</div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="renameModal">
+  <div class="modal">
+    <h3 id="renameTitle">Rename</h3>
+    <p class="sub" id="renameSub"></p>
+    <input type="text" id="renameInput">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('renameModal')">Cancel</button>
+      <button class="btn btn-blue" id="renameBtn" onclick="confirmRename()">Rename</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h3 id="deleteTitle">Delete</h3>
+    <p class="sub" id="deleteSub"></p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
+      <button class="btn btn-red" id="deleteBtn" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="peekModal">
+  <div class="modal peek">
+    <h3 id="peekTitle">Folder contents</h3>
+    <div class="peek-body" id="peekBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('peekModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="notMatchModal">
+  <div class="modal notmatch">
+    <h3>&#8800; Not-a-Match pairs</h3>
+    <p class="sub">Pairs you've explicitly declared different — these two won't be auto-matched even if their names look similar.</p>
+    <div id="nmBody" class="nm-body"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('notMatchModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="compareModal">
+  <div class="modal compare">
+    <h3 id="compareTitle">Compare</h3>
+    <p class="sub">Files highlighted <b class="amber">amber</b> appear in more than one of these folders — likely the same file or different versions. Scroll sideways to see more folders.</p>
+    <div class="cmp-wrap" id="compareBody"></div>
+    <div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('compareModal')">Close</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mergeDestModal">
+  <div class="modal peek">
+    <h3 id="mergeDestTitle">Merge into&hellip;</h3>
+    <input type="text" id="mergeDestSearch" placeholder="Filter folders&hellip;" oninput="renderMergeDests()">
+    <p class="sub">Pick the folder to move this one's files into. <b class="amber">&#9733;</b> marks folders that share the same site code.</p>
+    <div class="peek-list" id="mergeDestList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('mergeDestModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="mergeModal">
+  <div class="modal peek merge-modal">
+    <h3 id="mergeTitle">Merge</h3>
+    <p class="sub" id="mergeSummary"></p>
+    <div id="mergeConflictWrap" hidden>
+      <div class="merge-rule">
+        <span>When a file already exists:</span>
+        <label><input type="radio" name="mrule" value="newer"> Keep newer</label>
+        <label><input type="radio" name="mrule" value="both" title="Keep both files — the newer keeps the clean name, the older gets a date stamp"> Keep both (date-stamp older)</label>
+        <label><input type="radio" name="mrule" value="skip"> Skip</label>
+      </div>
+      <label class="merge-remember"><input type="checkbox" id="mergeRemember"> Don't ask again — save this as my default (change later in Settings)</label>
+    </div>
+    <div class="peek-list" id="mergeFileList"></div>
+    <label class="merge-cleanup"><input type="checkbox" id="mergeDeleteSrc" checked> Delete the source folder afterward if it ends up empty</label>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('mergeModal')">Cancel</button>
+      <button class="btn btn-blue" id="mergeBtn" onclick="confirmMerge()">Merge</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h3>Settings</h3>
+
+    <section class="set-section">
+      <div class="set-section-head">Merging folders</div>
+      <p class="set-section-desc">When a file already exists in the destination:</p>
+      <label class="set-radio"><input type="radio" name="setrule" value="ask"><span>Ask me each time</span></label>
+      <label class="set-radio"><input type="radio" name="setrule" value="newer"><span>Keep newer (by timestamp)</span></label>
+      <label class="set-radio"><input type="radio" name="setrule" value="both"><span>Keep both — the newer keeps its name, the older gets a date stamp</span></label>
+      <label class="set-radio"><input type="radio" name="setrule" value="skip"><span>Skip existing files</span></label>
+    </section>
+
+    <section class="set-section">
+      <div class="set-section-head">Live auto-refresh</div>
+      <p class="set-section-desc">How often the app checks Ekahau Cloud + your local folder for changes:</p>
+      <select id="setLiveInterval" class="set-select">
+        <option value="15000">Every 15 seconds</option>
+        <option value="30000">Every 30 seconds (default)</option>
+        <option value="60000">Every 60 seconds</option>
+      </select>
+    </section>
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('settingsModal')">Cancel</button>
+      <button class="btn btn-blue" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="createModal">
+  <div class="modal">
+    <h3>Create New Site</h3>
+    <input type="text" id="newSiteName" placeholder="Site name">
+    <div class="cloud-create-checkboxes">
+      <label class="cloud-create-check-label">
+        <input type="checkbox" id="createCloud" checked class="cloud-create-check-blue"> Cloud
+      </label>
+      <label class="cloud-create-check-label">
+        <input type="checkbox" id="createLocal" checked class="cloud-create-check-green"> Local Folder
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('createModal')">Cancel</button>
+      <button class="btn btn-blue" onclick="createSite()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="moveToSiteModal">
+  <div class="modal file-op">
+    <h3 id="moveToSiteTitle">Move to Site</h3>
+    <p class="sub" id="moveToSiteLabel">Confirm what's moving and where — then click Move.</p>
+
+    <label class="mv-section-label">Moving</label>
+    <div class="mv-source-card" id="moveToSiteSource">
+      <div class="mv-source-item">
+        <span class="mv-source-icon">·</span>
+        <span class="mv-source-name">&mdash;</span>
+        <span class="mv-source-badge">&mdash;</span>
+      </div>
+    </div>
+
+    <label class="mv-section-label mv-into-label">Into site</label>
+    <div class="mv-ta" data-idx="global">
+      <input type="text" class="mv-ta-input" data-idx="global"
+             placeholder="Type to search sites, or pick from the list&hellip;"
+             autocomplete="off"
+             onfocus="_taShow(this)" oninput="_taFilter(this)"
+             onblur="_taBlur(this)" onkeydown="_taKey(event, this)">
+      <button type="button" class="mv-ta-clear" data-idx="global" onclick="_taClear('global')" title="Clear selection" tabindex="-1">&times;</button>
+      <div class="mv-ta-list" hidden></div>
+    </div>
+
+    <label class="mv-section-label">Will land at</label>
+    <div class="mv-dest-preview empty" id="moveToSitePreview">Pick a destination site to see the final path.</div>
+
+    <div class="modal-actions cloud-modal-actions-tight">
+      <button class="btn btn-secondary" onclick="closeModal('moveToSiteModal')">Cancel</button>
+      <button class="btn btn-blue" onclick="confirmMoveToSite()">Move</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="shareModal">
+  <div class="modal share-modal">
+    <h3 id="shareModalTitle">Manage Sharing</h3>
+    <p class="sub" id="shareSub">Loading&hellip;</p>
+    <div id="shareList" class="share-list"></div>
+    <div id="shareGroupSlot" class="share-group-slot" hidden></div>
+    <div class="share-add">
+      <label class="share-add-label">Share with someone</label>
+      <div class="share-add-row">
+        <input type="email" id="shareEmail" placeholder="email@company.com"
+               autocomplete="off" onkeydown="if(event.key==='Enter')_shareAdd()">
+        <select id="shareRole" title="Hover each option for a description of the role">
+          <option value="READ_USER" title="Read-only access with option to create a copy">View only</option>
+          <option value="WRITE_USER" title="Collaborative access without sharing privileges">Edit rights</option>
+          <option value="WRITE_SHARE_USER" title="Complete control over project and settings">Full access</option>
+        </select>
+        <button class="btn btn-blue" onclick="_shareAdd()">Add</button>
+      </div>
+      <div class="share-add-note">
+        External emails (outside your Ekahau org) always come in as View
+        only — Ekahau limits write access to org members.
+      </div>
+    </div>
+    <div id="shareDangerSlot" class="share-danger-slot" hidden></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('shareModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="syncGroupModal">
+  <div class="modal share-modal">
+    <h3 id="syncGroupTitle">Sync group shares</h3>
+    <p class="sub" id="syncGroupSub">Loading&hellip;</p>
+    <div class="sync-group-toolbar">
+      <button class="btn btn-secondary sync-group-quickbtn" onclick="_syncGroupToggleAll(true)">Select all</button>
+      <button class="btn btn-secondary sync-group-quickbtn" onclick="_syncGroupToggleAll(false)">Select none</button>
+      <span class="sync-group-count" id="syncGroupCount"></span>
+    </div>
+    <div id="syncGroupList" class="share-list"></div>
+    <div class="sync-group-note">
+      Everything you check gets an OFF-then-ON group-share toggle, which pushes the current group members to that project. Anything you uncheck is left as-is. You can still individually toggle the group off on any specific project later via that project's share modal.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal('syncGroupModal')">Cancel</button>
+      <button class="btn btn-blue" id="syncGroupApplyBtn" onclick="_syncGroupApply()">Sync selected</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="matchHelpModal">
+  <div class="modal match-help">
+    <h3>How matching works</h3>
+    <p>Every Ekahau project has a hidden ID stamped inside its <code>.esx</code> file when it's first created. That ID sticks with the project through every edit, rename, upload, and download. When we see the same hidden ID on your computer AND in Ekahau Cloud, we know it's the same project — no guessing.</p>
+
+    <p>For projects where we can't check IDs (created locally and never uploaded, or two files with unrelated histories), we fall back to name-based matching. Exact same name is very reliable. Same site code + similar name is likely. Only similar names is a guess, and we say so.</p>
+
+    <h4>The five ways WD pairs two files</h4>
+    <div class="mh-badges">
+      <div class="mh-badge-row">
+        <span class="match-badge mb-manual">&#9733; You matched</span>
+        <span class="mh-badge-desc">You linked these manually. Overrides everything else.</span>
+      </div>
+      <div class="mh-badge-row">
+        <span class="match-badge mb-id">&#10003; Same file</span>
+        <span class="mh-badge-desc">Same hidden project ID inside both .esx files. Definitive — this is one project, in two places.</span>
+      </div>
+      <div class="mh-badge-row">
+        <span class="match-badge mb-exact">&#10003; Name matches</span>
+        <span class="mh-badge-desc">Filenames are identical but no hidden-ID link. Very likely the same project, not proven.</span>
+      </div>
+      <div class="mh-badge-row">
+        <span class="match-badge mb-code">~ Same site</span>
+        <span class="mh-badge-desc">Same site code (like CLMB2) plus similar name. Probably the same.</span>
+      </div>
+      <div class="mh-badge-row">
+        <span class="match-badge mb-fuzzy">? Similar name</span>
+        <span class="mh-badge-desc">Some words in common. Our best guess — look before syncing.</span>
+      </div>
+    </div>
+
+    <h4>What about file size?</h4>
+    <p>Cloud files and local files store the same content very differently. Cloud stores it uncompressed (bigger), your computer compresses it (smaller). A cloud file that's 6&times; larger than your local copy is usually still the same project. That's why we don't use size for matching, and we don't show it on file rows — it confuses more than it helps. (Size is still shown in the folder-peek popup and Duplicates tab, where you're comparing files of the same kind.)</p>
+
+    <h4>What about dates?</h4>
+    <p>The date shown is when someone last edited the project inside Ekahau, not when the file was copied to your computer. Two copies with the same date and time are the same version. Different dates just mean someone kept working on one copy after the other.</p>
+
+    <h4>When we get it wrong</h4>
+    <ul>
+      <li><b>Pair we missed?</b> Click the &#128279; button on either orphan file &rarr; pick the counterpart. WD remembers this forever.</li>
+      <li><b>Pair we shouldn't have made?</b> Click the &ne; button on the mismatched pair. WD will never suggest them again.</li>
+      <li><b>Held back but you know better?</b> Click <b>Link anyway</b> on the held-back row.</li>
+    </ul>
+
+    <div class="modal-actions cloud-modal-actions-loose">
+      <button class="btn btn-blue" onclick="closeModal('matchHelpModal')">Got it</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="linkPickerModal">
+  <div class="modal file-op">
+    <h3 id="linkPickerTitle">Link to another file</h3>
+    <p class="sub" id="linkPickerSub">Pick the counterpart you want to link to. This overrides all auto-matching.</p>
+    <div class="lp-source" id="linkPickerSource"></div>
+    <input type="text" id="linkPickerSearch" class="cloud-lp-search" placeholder="Search candidates&hellip;" autocomplete="off"
+           oninput="_lpFilter(this.value)">
+    <div class="lp-list" id="linkPickerList"></div>
+    <div class="lp-empty" id="linkPickerEmpty" hidden>
+      No candidates match — try a different search or clear the box.
+    </div>
+    <div class="modal-actions cloud-modal-actions-tight">
+      <button class="btn btn-secondary" onclick="closeModal('linkPickerModal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="workingModal">
+  <div class="modal file-op">
+    <h3 id="workingTitle">Working&hellip;</h3>
+    <p class="sub" id="workingSubtitle">Please wait — this can take a few seconds for large projects.</p>
+    <div class="progress-wrap">
+      <div class="progress-track">
+        <div class="progress-fill indeterminate" id="workingProgressFill"></div>
+      </div>
+      <div class="progress-label">
+        <span class="stage" id="workingStage">Preparing&hellip;</span>
+        <span class="pct" id="workingPct">&mdash;</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="opsDeck" class="ops-deck" data-state="hidden" aria-live="polite">
+  <div class="ops-deck-header" onclick="_deckToggle()" title="Click to expand or collapse">
+    <span class="ops-deck-badge" id="opsDeckBadge">&#9672;</span>
+    <span class="ops-deck-summary" id="opsDeckSummary">No operations</span>
+    <span class="ops-deck-spacer"></span>
+    <button class="ops-deck-btn" id="opsDeckClearBtn" onclick="event.stopPropagation();_deckClearDone()" title="Clear completed operations">Clear done</button>
+    <button class="ops-deck-caret" id="opsDeckCaret" title="Expand / collapse">&#9650;</button>
+    <button class="ops-deck-btn ops-deck-hide" onclick="event.stopPropagation();_deckHide()" title="Hide the deck (reappears on next operation)">&times;</button>
+  </div>
+  <div class="ops-deck-body" id="opsDeckBody">
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/cloud.js"></script>
+</body>
+</html>

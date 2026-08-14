@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Squirrel</title>
+<link rel="icon" href="/assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/wd-wireless-tools-v8.0-180x180.png">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+</head>
+<body class="tool-organizer">
+<div class="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+      <div class="menu-wrap">
+        <button class="hamburger-btn" id="menuBtn" title="Menu"><span></span><span></span><span></span></button>
+        <div class="main-menu" id="mainMenu">
+          <div class="menu-section">&#9656; Navigation</div>
+          <a class="menu-item" href="/">&#8962; Home</a>
+          <a class="menu-item" href="/cloud">· Cloud Manager</a>
+          <a class="menu-item" href="/walls">· Quick Walls</a>
+          <a class="menu-item" href="/report">· Report</a>
+          <a class="menu-item" href="/scale">· Scale</a>
+          <a class="menu-item active" href="/squirrel">· Squirrel</a>
+          <div class="menu-sep"></div>
+          <div class="menu-section">&#9656; Tools</div>
+          <button class="menu-item" onclick="showSettings()">· Settings — Type Mapping</button>
+          <button class="menu-item" onclick="pickFolder()">· Change Folder…</button>
+          <button class="menu-item" onclick="showCreateFolder()">· Create Project Folder</button>
+          <button class="menu-item" onclick="showExtractFloorplans()">· Extract Floorplans…</button>
+          <button class="menu-item" onclick="showAcornNotes()">· Acorn Notes…</button>
+          <button class="menu-item" onclick="doScan()" id="menuRescan">· Rescan</button>
+          <button class="menu-item" onclick="doUndo()" id="menuUndo" hidden>· ↶ Undo last organize</button>
+          <div class="menu-sep"></div>
+          <div class="menu-section">&#9656; Help &amp; Support</div>
+          <a class="menu-item" href="/guide-squirrel" target="_blank">· User Guide</a>
+          <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+        </div>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <h1><span>WD</span> Squirrel <span class="ver" data-ver="squirrel">v&hellip;</span></h1>
+    </div>
+    <div class="topbar-right">
+      <button class="theme-toggle" onclick="toggleTheme()">
+        <span class="ico">🌙</span><span class="txt">Dark</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="content" id="content">
+    <div id="loadingScreen" class="pick-screen">
+      <div class="pick-icon"><img src="/assets/squirrel-v8.0-560x560.png" alt="WD Squirrel"></div>
+      <div class="big-spin"></div>
+    </div>
+
+    <div id="pickScreen" class="pick-screen" hidden>
+      <div class="pick-icon"><img src="/assets/squirrel-v8.0-560x560.png" alt="WD Squirrel"></div>
+      <div class="pick-title">Stash your Ekahau files</div>
+      <div class="pick-sub">Organize existing project files or create new project folders with the right structure.</div>
+      <div class="pick-cards">
+        <div class="pick-card organize" onclick="pickFolder()">
+          <div class="pick-card-icon">&#128194;</div>
+          <div class="pick-card-title">Organize Files</div>
+          <div class="pick-card-desc">Select a folder with Ekahau site folders. Squirrel sorts loose files into <b>images/</b>, <b>floorplans/</b>, and <b>reports/</b> subfolders. <code>.esx</code> files stay in the root.</div>
+          <button class="btn btn-primary" onclick="event.stopPropagation(); pickFolder()">Select Folder…</button>
+          <div id="lastFolderHint" class="pick-card-last-folder" hidden>
+            <span>Last: <code id="lastFolderPath"></code></span>
+            <button type="button" class="pick-settings-link" onclick="event.stopPropagation(); continueLastFolder()">or continue with this folder &rarr;</button>
+          </div>
+        </div>
+        <div class="pick-card create" onclick="showCreateFolder()">
+          <div class="pick-card-icon">&#128193;</div>
+          <div class="pick-card-title">Create Project Folder</div>
+          <div class="pick-card-desc">Create a new project folder and pick which subfolders it should contain — the defaults are <b>images</b>, <b>floorplans</b>, and <b>reports</b>, plus any custom destinations you've defined.</div>
+          <button class="btn btn-blue" onclick="event.stopPropagation(); showCreateFolder()">Create Folder…</button>
+        </div>
+        <div class="pick-card extract" onclick="showExtractFloorplans()">
+          <div class="pick-card-icon">&#128441;</div>
+          <div class="pick-card-title">Extract Floorplans</div>
+          <div class="pick-card-desc">Pick an <code>.esx</code> and pull the floorplan images out as standalone files. Defaults to a <b>floorplans/</b> folder next to the <code>.esx</code>.</div>
+          <button class="btn btn-amber" onclick="event.stopPropagation(); showExtractFloorplans()">Select .esx…</button>
+        </div>
+        <div class="pick-card rename" onclick="showBulkRename()">
+          <div class="pick-card-icon">&#9999;&#65039;</div>
+          <div class="pick-card-title">Bulk Rename</div>
+          <div class="pick-card-desc">Pick a folder and clean up filenames already in place — remove/replace text, adjust case and separators, and add your own prefix or suffix (with a <code>{folder}</code> token). See exactly what changes before you apply it.</div>
+          <button class="btn btn-rose" onclick="event.stopPropagation(); showBulkRename()">Select Folder…</button>
+        </div>
+        <div class="pick-card acorn" onclick="showAcornNotes()">
+          <div class="pick-card-icon">&#127792;</div>
+          <div class="pick-card-title">Acorn Notes</div>
+          <div class="pick-card-desc">Pick an <code>.esx</code> and stash a quick info note next to it — floor plan names, for now. Extract Floorplans keeps this note in sync automatically too.</div>
+          <button class="btn btn-teal" onclick="event.stopPropagation(); showAcornNotes()">Select .esx…</button>
+        </div>
+      </div>
+      <div class="pick-settings-hint">
+        <span>Want to rename destinations or add custom ones (route <code>.csv</code> to <code>raw-data/</code>)?</span>
+        <button type="button" class="pick-settings-link" onclick="showSettings()">&#9881; Open Settings&hellip;</button>
+      </div>
+    </div>
+
+    <div id="previewScreen" hidden>
+      <div class="sticky-header">
+        <div class="toolbar">
+          <button class="btn btn-sec" onclick="pickFolder()">Change Folder</button>
+          <div class="root-path" id="rootPath"></div>
+          <button class="btn btn-blue" onclick="showCreateFolder()">&#128193; New Folder</button>
+          <button class="btn btn-sec" onclick="doScan()">↻ Rescan</button>
+          <button class="btn btn-sec" onclick="showSettings()" title="Rename destinations, add custom destinations, set rename patterns">&#9881; Settings</button>
+        </div>
+
+        <div id="orgConfirmCard" class="org-confirm-card">
+          <div id="orgConfirmText" class="org-confirm-text"></div>
+          <div class="org-confirm-actions">
+            <button class="btn btn-sec" id="detailsToggleBtn" onclick="toggleDetails()">Show File Details</button>
+            <button class="btn btn-primary" onclick="doExecute()">Organize All Files</button>
+          </div>
+        </div>
+
+        <div id="orgSuggestBanner"></div>
+
+        <div id="orgDetailsHint" class="org-details-hint">File details are hidden. Click <b>Show File Details</b> above to review each file's destination before organizing — or just click <b>Organize All Files</b> to proceed with the defaults.</div>
+
+        <div id="orgDetailsToolbar" hidden>
+          <div class="summary-bar" id="summaryBar"></div>
+          <div class="toolbar action-bar org-action-bar">
+            <span id="bulkDestLabel" class="org-bulk-label" hidden>Move checked to:</span>
+            <span id="bulkDestRow" class="org-bulk-dest-row" hidden></span>
+            <span class="org-spacer"></span>
+            <button class="btn btn-sec" onclick="toggleAll(true)">Check All</button>
+            <button class="btn btn-sec" onclick="toggleAll(false)">Uncheck All</button>
+            <button class="btn btn-sec" id="advancedToggleBtn" onclick="toggleAdvanced()" title="Show duplicate/unreferenced detection, per-file destination overrides, and rename-rule details">Advanced</button>
+            <button class="btn btn-primary" onclick="doExecute()">Apply Moves</button>
+          </div>
+          <div id="orgDestHint" class="org-dest-hint" hidden>
+            <span>Files route to the destinations above based on their extension.</span>
+            <button type="button" class="org-dest-hint-link" onclick="showSettings()">Rename destinations or add a new one&hellip;</button>
+          </div>
+        </div>
+      </div>
+      <div id="siteList" hidden></div>
+    </div>
+
+    <div id="execScreen" hidden class="pick-screen">
+      <div class="big-spin"></div>
+      <div class="pick-title">Organizing files…</div>
+      <div class="pick-sub">Moving files into their subfolders. This won't take long.</div>
+    </div>
+
+    <div id="resultScreen" hidden></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal modal-organizer-settings">
+    <h2>Type Mapping Settings</h2>
+    <p class="org-modal-desc">Controls how Organize sorts loose files by extension or filename keyword. <code>.esx</code> files always stay put — everything else here decides which of the three subfolders below a file lands in.</p>
+
+    <div class="org-fields-grid">
+      <div class="org-field">
+        <label>Image extensions</label>
+        <textarea id="cfgImages"></textarea>
+        <div class="hint">Comma-separated, e.g. .png, .jpg, .jpeg</div>
+      </div>
+
+      <div class="org-field">
+        <label>Floor plan extensions</label>
+        <textarea id="cfgPlans"></textarea>
+      </div>
+
+      <div class="org-field">
+        <label>Report extensions</label>
+        <textarea id="cfgReports"></textarea>
+      </div>
+
+      <div class="org-field">
+        <label>PDF → Reports keywords</label>
+        <textarea id="cfgPdfKw"></textarea>
+        <div class="hint">PDFs with these words in the filename go to reports/ — others go to floorplans/</div>
+      </div>
+
+      <div class="org-field">
+        <label>JSON → Reports keywords</label>
+        <textarea id="cfgJsonKw"></textarea>
+        <div class="hint">JSON files with these words go to reports/ — others stay in the root</div>
+      </div>
+
+      <div class="org-field">
+        <label>Folders to skip</label>
+        <textarea id="cfgSkip"></textarea>
+      </div>
+    </div>
+
+    <div class="org-settings-columns">
+      <div class="org-settings-col">
+        <div class="org-settings-section">
+          <div class="org-settings-section-head">Destination folder names</div>
+          <div class="hint org-settings-section-hint">Rename the three managed subfolders. New names apply on the next organize. Existing folders on disk are not renamed unless you click Migrate.</div>
+          <div class="org-subname-row">
+            <span class="org-subname-key">Images</span>
+            <input type="text" id="cfgSubImages" class="org-subname-input" placeholder="images">
+          </div>
+          <div class="org-subname-row">
+            <span class="org-subname-key">Floor plans</span>
+            <input type="text" id="cfgSubPlans" class="org-subname-input" placeholder="floorplans">
+          </div>
+          <div class="org-subname-row">
+            <span class="org-subname-key">Reports</span>
+            <input type="text" id="cfgSubReports" class="org-subname-input" placeholder="reports">
+          </div>
+          <div class="org-migrate-row">
+            <button class="btn btn-sec btn-sm" onclick="migrateSubfolders()">Migrate existing folders&hellip;</button>
+            <span class="hint-inline">Renames every matching subfolder across every site under the current root. Skips if the target already exists.</span>
+          </div>
+        </div>
+
+        <div class="org-settings-section">
+          <div class="org-settings-section-head">Create Folder naming template</div>
+          <div class="hint org-settings-section-hint">
+            Optional. When set, Create Project Folder shows one input box per token below instead of a single free-form name field, then builds the folder name from your template. Leave blank to keep the plain free-form input.
+          </div>
+          <div class="org-token-legend">
+            <div class="org-token-legend-row"><code>{code}</code><span>Site code — a short internal ID, e.g. a project or job number</span></div>
+            <div class="org-token-legend-row"><code>{name}</code><span>Site name — the client, company, or location name</span></div>
+            <div class="org-token-legend-row"><code>{city}</code><span>City</span></div>
+            <div class="org-token-legend-row"><code>{state}</code><span>State</span></div>
+            <div class="org-token-legend-row"><code>{zip}</code><span>ZIP code</span></div>
+            <div class="org-token-legend-row"><code>{date}</code><span>Today's date — filled in automatically, not asked for</span></div>
+          </div>
+          <div class="hint org-settings-section-hint org-token-examples">
+            <div><code>{code} - {name}, {city}, {state} {zip}</code> → <span class="org-token-example-result">AB123 - Example Corp, Anytown, CA 90210</span></div>
+            <div><code>{name} ({date})</code> → <span class="org-token-example-result">Example Corp (2026-08-06)</span></div>
+          </div>
+          <input type="text" id="cfgCreateTemplate" class="org-subname-input" placeholder="Leave blank for free-form">
+        </div>
+      </div>
+
+      <div class="org-settings-col">
+        <div class="org-settings-section">
+          <div class="org-settings-section-head">Custom destinations</div>
+          <div class="hint org-settings-section-hint">
+            Add your own destination subfolders alongside the built-in three.
+            Each destination routes files by extension (like the built-ins) and can
+            optionally claim PDFs or JSONs whose filenames contain specific keywords.
+            A custom extension takes precedence over a built-in one — routing
+            <code>.csv</code> to a new <code>raw-data</code> folder overrides the
+            default <code>reports</code> mapping.
+          </div>
+          <div id="cfgCustomDestList" class="org-custom-dest-list"></div>
+          <button type="button" class="btn btn-sec btn-sm" onclick="addCustomDestination()">+ Add destination</button>
+        </div>
+        <div class="org-settings-col-filler"><img src="/assets/squirrel-v8.0-560x560.png" alt=""></div>
+      </div>
+    </div>
+
+    <div class="hint org-settings-section-hint">Bulk rename patterns moved to their own tool — <button type="button" class="pick-settings-link" onclick="closeModal('settingsModal');showBulkRename()">open Bulk Rename&hellip;</button></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="resetConfig()">Reset Defaults</button>
+      <button class="btn btn-sec" onclick="closeModal('settingsModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveConfig()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="createFolderModal">
+  <div class="modal modal-create-folder">
+    <h2>&#128193; Create Project Folder</h2>
+    <p class="org-modal-desc">Creates a new site folder inside your selected root and pre-builds the subfolders you check below.</p>
+    <label class="org-first-label">Root folder</label>
+    <div class="org-root-row">
+      <div id="createFolderRoot" class="org-root-path"></div>
+      <button class="btn btn-sec org-browse-btn" onclick="pickRootForCreate()">Browse…</button>
+    </div>
+    <div class="org-bulk-toggle-row">
+      <label class="org-bulk-toggle">
+        <input type="checkbox" id="bulkCreateToggle" onchange="toggleBulkCreate()">
+        Create multiple folders at once
+      </label>
+      <span class="hint org-bulk-toggle-hint">For several folders at the same site — e.g. one per building.</span>
+    </div>
+    <label class="org-later-label" id="newFolderLabel">Folder name</label>
+    <div class="org-folder-mode-toggle" id="newFolderModeToggle">
+      <button type="button" class="org-folder-mode-btn active" id="folderModeNewBtn" onclick="setFolderMode('new')">+ New folder</button>
+      <button type="button" class="org-folder-mode-btn" id="folderModeExistingBtn" onclick="setFolderMode('existing')">Existing folder</button>
+    </div>
+    <input type="text" id="newFolderName" class="org-folder-input" autocomplete="off" placeholder="e.g. SITE1 - 100 Example Ave, Anytown, CA 90210">
+    <select id="existingFolderSelect" class="org-folder-input" hidden>
+      <option value="">Select a folder&hellip;</option>
+    </select>
+    <div id="newFolderStatus" class="org-folder-status" hidden></div>
+    <div id="newFolderTokenFields" class="org-token-fields" hidden></div>
+    <div id="bulkVaryRow" class="org-token-row org-bulk-vary-row" hidden>
+      <label class="org-token-label">Which field varies per folder?</label>
+      <select id="bulkVaryToken" class="org-folder-input"></select>
+    </div>
+    <div id="bulkImportRow" class="org-bulk-import-row" hidden>
+      <button type="button" class="btn btn-sec btn-sm" onclick="document.getElementById('bulkImportFile').click()">&#128194; Import from file&hellip;</button>
+      <input type="file" id="bulkImportFile" accept=".txt,.docx,.pdf" hidden onchange="handleBulkImportFile(this)">
+      <span class="hint org-bulk-import-hint">.txt, .docx, or .pdf — each line becomes one folder</span>
+    </div>
+    <textarea id="bulkNamesInput" class="org-folder-input org-bulk-textarea" rows="5" hidden placeholder="One per line"></textarea>
+    <div id="newFolderPreview" class="org-token-preview" hidden></div>
+    <div id="bulkPreview" class="org-bulk-preview" hidden></div>
+
+    <label class="org-later-label">Subfolders to create</label>
+    <div id="newFolderSubs" class="org-sub-picker"></div>
+    <button type="button" class="btn btn-sec btn-sm org-sub-add-btn" onclick="addAdHocSubfolder()">+ Add subfolder</button>
+    <div class="hint org-sub-picker-hint">
+      Uncheck any you don't need, or rename a field — edits here apply to this project only. To change the defaults for every new project, use
+      <button type="button" class="pick-settings-link" onclick="closeModal('createFolderModal');showSettings()">Settings</button>.
+    </div>
+
+    <div class="modal-actions modal-actions-spaced">
+      <button class="btn btn-sec" onclick="closeModal('createFolderModal')">Cancel</button>
+      <button class="btn btn-primary" id="createFolderBtn" onclick="doCreateFolder()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="extractModal">
+  <div class="modal modal-extract-floorplans">
+    <h2>&#128441; Extract Floorplans</h2>
+    <p class="org-modal-desc">Pulls each selected floor's floorplan image out of the <code>.esx</code> and writes it as a standalone image file (the file's name is the floor's name).</p>
+    <label class="org-first-label">Source <code>.esx</code></label>
+    <div class="org-root-row">
+      <div id="extractSourceLabel" class="org-root-path"></div>
+      <button class="btn btn-sec org-browse-btn" onclick="pickExtractSource()">Browse…</button>
+    </div>
+    <label class="org-later-label">Output folder</label>
+    <div class="org-root-row">
+      <div id="extractOutLabel" class="org-root-path"></div>
+      <button class="btn btn-sec org-browse-btn" onclick="pickExtractOutput()">Browse…</button>
+    </div>
+    <div class="hint org-extract-out-hint">Defaults to a <code>floorplans/</code> folder next to the <code>.esx</code>. Created if it doesn't exist.</div>
+
+    <label class="org-later-label">Floors to extract</label>
+    <div id="extractFloorList" class="org-sub-picker org-extract-list">
+      <div class="org-extract-empty">Pick an <code>.esx</code> to list its floors.</div>
+    </div>
+    <div class="org-extract-actions-row">
+      <button type="button" class="btn btn-sec btn-sm" onclick="toggleExtractAll(true)">Check All</button>
+      <button type="button" class="btn btn-sec btn-sm" onclick="toggleExtractAll(false)">Uncheck All</button>
+    </div>
+
+    <div class="modal-actions modal-actions-spaced">
+      <button class="btn btn-sec" onclick="closeModal('extractModal')">Cancel</button>
+      <button class="btn btn-primary" id="extractBtn" onclick="doExtract()" disabled>Extract</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="acornModal">
+  <div class="modal modal-acorn">
+    <h2>&#127792; Acorn Notes</h2>
+    <p class="org-modal-desc">Stashes a small text note next to the <code>.esx</code> with facts about the project — for now, just the floor plan names as Ekahau has them. Runs independently of Extract Floorplans, which also keeps this note in sync automatically.</p>
+    <label class="org-first-label">Source <code>.esx</code></label>
+    <div class="org-root-row">
+      <div id="acornSourceLabel" class="org-root-path"></div>
+      <button class="btn btn-sec org-browse-btn" onclick="pickAcornSource()">Browse…</button>
+    </div>
+
+    <label class="org-later-label">Floor plans found</label>
+    <div id="acornFloorList" class="org-sub-picker org-extract-list">
+      <div class="org-extract-empty">Pick an <code>.esx</code> to list its floors.</div>
+    </div>
+
+    <div class="modal-actions modal-actions-spaced">
+      <button class="btn btn-sec" onclick="closeModal('acornModal')">Cancel</button>
+      <button class="btn btn-primary" id="acornBtn" onclick="doSaveAcorn()" disabled>Save Acorn.txt</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="bulkRenameModal">
+  <div class="modal modal-bulk-rename">
+    <h2>&#9999;&#65039; Bulk Rename</h2>
+    <p class="org-modal-desc">Renames files already sitting in your site folders — this doesn't move anything. These are the same rules Organize applies automatically when it moves files in, so saving here keeps both in sync.</p>
+
+    <label class="org-first-label">Folder</label>
+    <div class="org-root-row">
+      <div id="bulkRenameRootLabel" class="org-root-path"><span class="org-root-hint">Click Browse… to pick a folder</span></div>
+      <button class="btn btn-sec org-browse-btn" onclick="pickBulkRenameRoot()">Browse…</button>
+    </div>
+
+    <div class="org-settings-section">
+      <div class="org-settings-section-head">Remove</div>
+      <div class="org-rename-fields">
+        <div>
+          <label>From the start (regex)</label>
+          <input type="text" id="brStripPrefix" placeholder="e.g. IMG_|DSC_" oninput="updateBulkRenamePreview()">
+        </div>
+        <div>
+          <label>From the end (regex)</label>
+          <input type="text" id="brStripSuffix" placeholder="e.g.  \(copy\)| - edited" oninput="updateBulkRenamePreview()">
+        </div>
+      </div>
+    </div>
+
+    <div class="org-settings-section">
+      <div class="org-settings-section-head">Replace</div>
+      <label>Find (regex) / Replace with</label>
+      <div class="org-regex-row">
+        <input type="text" id="brRegexFrom" placeholder="find (regex)" oninput="updateBulkRenamePreview()">
+        <input type="text" id="brRegexTo" placeholder="replace" oninput="updateBulkRenamePreview()">
+      </div>
+    </div>
+
+    <div class="org-settings-section">
+      <div class="org-settings-section-head">Case &amp; separator</div>
+      <div class="org-rename-fields">
+        <div>
+          <label>Filename case</label>
+          <select id="brCase" onchange="updateBulkRenamePreview();_updateBulkRenameExample()">
+            <option value="">Leave as-is</option>
+            <option value="lower">lowercase</option>
+            <option value="upper">UPPERCASE</option>
+            <option value="title">Title Case</option>
+            <option value="sentence">Sentence case</option>
+          </select>
+        </div>
+        <div>
+          <label>Word separator</label>
+          <select id="brSeparator" onchange="updateBulkRenamePreview();_updateBulkRenameExample()">
+            <option value="">Leave as-is</option>
+            <option value="underscore">Underscores (my_file_name.jpg)</option>
+            <option value="hyphen">Hyphens (my-file-name.jpg)</option>
+            <option value="space">Spaces (my file name.jpg)</option>
+            <option value="spaced_hyphen">Spaced dash (my - file - name.jpg)</option>
+          </select>
+        </div>
+      </div>
+      <div class="hint">Also cleans up doubled-up spaces/underscores/hyphens, like <code>my__file  name.jpg</code>.</div>
+    </div>
+
+    <div class="org-settings-section">
+      <div class="org-settings-section-head">Add <span class="hint-inline">(literal text — use <code>{folder}</code> anywhere to insert the containing folder's name)</span></div>
+      <div class="org-rename-fields">
+        <div>
+          <label>Prefix</label>
+          <div class="org-token-row">
+            <input type="text" id="brPrefix" placeholder="e.g. {folder} - PD v1.0_" oninput="updateBulkRenamePreview();_updateBulkRenameExample()">
+            <button type="button" class="btn btn-sec btn-token" onclick="_bulkRenameInsertToken('brPrefix')">+{folder}</button>
+          </div>
+        </div>
+        <div>
+          <label>Suffix</label>
+          <div class="org-token-row">
+            <input type="text" id="brSuffix" placeholder="e.g.  - Baseline Survey" oninput="updateBulkRenamePreview();_updateBulkRenameExample()">
+            <button type="button" class="btn btn-sec btn-token" onclick="_bulkRenameInsertToken('brSuffix')">+{folder}</button>
+          </div>
+        </div>
+      </div>
+      <div class="org-rename-example">Example: <code>photo.jpg</code> in <code>Springfield CA/</code> → <code id="brRenameExample">photo.jpg</code></div>
+    </div>
+
+    <div class="hint">Extensions are never touched. Leave everything off to just preview — nothing changes until you click Rename below.</div>
+
+    <label class="org-later-label">Files that will change <span id="bulkRenameCount" class="hint-inline"></span></label>
+    <div id="bulkRenamePreviewList" class="org-sub-picker org-extract-list">
+      <div class="org-extract-empty">Pick a folder above to preview.</div>
+    </div>
+
+    <div class="modal-actions modal-actions-spaced">
+      <button class="btn btn-sec" onclick="closeModal('bulkRenameModal')">Cancel</button>
+      <button class="btn btn-primary" id="bulkRenameApplyBtn" onclick="doBulkRename()" disabled>Rename Files</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/organizer.js"></script>
+</body>
+</html>

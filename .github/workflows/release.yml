@@ -1,0 +1,39 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests.yml
+
+  release:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build source zip
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          ZIPNAME="WD-Wireless-Tools-${TAG}.zip"
+
+          python scripts/build_release.py \
+            --version "${TAG#v}" \
+            --output "$ZIPNAME"
+
+          echo "ZIPNAME=$ZIPNAME" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: WD Wireless Tools ${{ env.TAG }}
+          body_path: docs/releases/${{ env.TAG }}.md
+          fail_on_unmatched_files: false
+          files: ${{ env.ZIPNAME }}
