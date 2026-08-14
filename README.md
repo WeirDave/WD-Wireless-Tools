@@ -8,6 +8,7 @@
   <a href="https://weirdave.github.io/WD-Wireless-Tools/"><img src="https://img.shields.io/badge/live%20demo-Quick%20Walls-5fa970?style=flat-square&logo=githubpages&logoColor=white" alt="Live Demo"></a>
   <a href="https://github.com/WeirDave/WD-Wireless-Tools/releases/latest"><img src="https://img.shields.io/github/v/release/WeirDave/WD-Wireless-Tools?style=flat-square&color=1e77ac" alt="Latest Release"></a>
   <a href="https://github.com/WeirDave/WD-Wireless-Tools/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/WeirDave/WD-Wireless-Tools/tests.yml?branch=main&style=flat-square&label=Windows%20%2B%20macOS" alt="Windows and macOS tests"></a>
+  <a href="docs/USER_MANUAL.md"><img src="https://img.shields.io/badge/docs-user%20manual-6b7280?style=flat-square" alt="User Manual"></a>
   <img src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-informational?style=flat-square" alt="Platform">
   <img src="https://img.shields.io/github/license/WeirDave/WD-Wireless-Tools?style=flat-square" alt="License">
@@ -128,6 +129,8 @@ Drop an `.esx` and get installer-ready handoff documents. Built on a plug-in **r
 ---
 
 ## Quick Start
+
+For complete instructions for every tool, see the [User Manual](docs/USER_MANUAL.md).
 
 ### Just want to try Quick Walls?
 
@@ -307,14 +310,14 @@ WD Wireless Tools/
 ├── images/                   # Logos and branding assets
 │
 ├── docs/
-│   └── releases/             # Hand-authored release notes (published to GitHub Releases)
+│   └── USER_MANUAL.md        # Complete installation and tool-usage manual
 ├── scripts/
 │   ├── build_release.py      # Allowlisted release ZIP builder
 │   └── make_test_projects.py # Generates fictional ESX fixtures for manual testing
 ├── tests/                     # Python, server, asset, and JavaScript safety tests
 │
 └── .github/workflows/
-    ├── release.yml           # On tag push: zip source + publish GitHub Release
+    ├── release.yml           # On tag push: build ZIP + generate GitHub release notes
     ├── tests.yml             # Windows/macOS safety and compatibility matrix
     └── pages.yml             # Manual build + deploy of the hosted GitHub Pages site
 ```
