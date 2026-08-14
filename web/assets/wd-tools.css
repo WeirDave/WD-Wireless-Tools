@@ -4446,10 +4446,10 @@ body.tool-report {
   --card-accent-hover: var(--red-dark);
 }
 .rep-template-card.tpl-coverage {
-  --card-accent: var(--orange);
-  --card-tint: rgba(234,124,26,0.10);
-  --card-shadow: rgba(234,124,26,0.28);
-  --card-accent-hover: #c86910;
+  --card-accent: #0891b2;
+  --card-tint: rgba(8,145,178,0.10);
+  --card-shadow: rgba(8,145,178,0.28);
+  --card-accent-hover: #0e7490;
 }
 
 .rep-template-card:hover:not(.is-coming-soon) {

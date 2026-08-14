@@ -218,6 +218,17 @@ bulkSync('to-local').then(async () => {
             with self.subTest(script=script.name):
                 self.assertNotIn(b"\x00", script.read_bytes())
 
+    def test_report_template_cards_have_distinct_accent_colors(self):
+        css = (ROOT / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
+        accents = re.findall(
+            r"\.rep-template-card\.tpl-([\w-]+)\s*\{[^}]*"
+            r"--card-accent:\s*([^;]+);",
+            css,
+        )
+        self.assertEqual(len(accents), 8)
+        values = [value.strip().lower() for _, value in accents]
+        self.assertEqual(len(values), len(set(values)), accents)
+
     def test_release_builder_includes_required_files_and_launcher_permissions(self):
         version = json.loads(
             (ROOT / "web" / "assets" / "versions.json").read_text(encoding="utf-8")

@@ -50,7 +50,7 @@ The suite currently includes five tools:
 <td width="20%" align="center">
   <img src="web/assets/report-v8.0-560x560.png" alt="Report" width="150"><br>
   <b>Report</b><br>
-  <sub>v2.20</sub><br>
+  <sub>v2.21</sub><br>
   <a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><sub>▶ Try live</sub></a>
 </td>
 </tr>
