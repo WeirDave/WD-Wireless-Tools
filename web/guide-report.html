@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Report — User Guide</title>
+<link rel="icon" href="assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/wd-wireless-tools-v8.0-180x180.png">
+<link rel="stylesheet" href="assets/wd-tools.css">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+</head>
+<body class="tool-guide">
+
+<div class="topbar guide-topbar">
+  <h1><span>WD</span> Report — User Guide</h1>
+  <a class="back-link" href="/report">Back to Report</a>
+</div>
+
+<div class="content guide-content">
+
+  <div class="hero">
+    <h2>WD Report</h2>
+    <p class="subtitle">Turn an Ekahau <code>.esx</code> into installer-facing PDF reports — antenna azimuths, tilts, mount heights, floor-plan markers. Drop, print, done.</p>
+  </div>
+
+  <h2>Quick Start</h2>
+
+  <div class="step-grid">
+    <div class="step-card">
+      <div class="step-num">Step 1</div>
+      <div class="step-title">Drop</div>
+      <div class="step-desc">Drop an <code>.esx</code> file onto the drop zone or click to browse. Everything runs in your browser — the file never leaves your machine.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 2</div>
+      <div class="step-title">Choose</div>
+      <div class="step-desc">Pick a report template — Directional Antenna Installation, Antenna Aim Sheet, Site Summary, Bill of Materials, or others.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 3</div>
+      <div class="step-title">Configure</div>
+      <div class="step-desc">Tick the sections you want, filter the AP list, upload your logo. Options are report-specific.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">Step 4</div>
+      <div class="step-title">Print</div>
+      <div class="step-desc">Hit <strong>Print / Save PDF</strong>. The page is print-optimized — clean margins, hidden toolbars, page-breaks at section boundaries.</div>
+    </div>
+  </div>
+
+  <h2>Reports That Ship Today</h2>
+
+  <ul>
+    <li><strong>Directional Antenna Installation (AP Placement)</strong> — one section per floor: a floor-plan overview with a marker + direction cone per AP, followed by a per-AP table with mount, height, azimuth (with compass), tilt, and antenna model. Ends with an antenna specs reference.</li>
+    <li><strong>Antenna Aim Sheet</strong> — one flat table for a clipboard: every directional AP with azimuth, tilt, mount height, floor. Compact mini-maps below the table give an at-a-glance sanity check per floor. Optional sign-off columns turn the sheet into an as-built.</li>
+    <li><strong>Site Summary Sheet</strong> — one-page executive overview: AP + floor + building counts, radio band breakdown, top AP models, antennas in use.</li>
+    <li><strong>Bill of Materials</strong> — AP quantities grouped by vendor and model, antenna quantities grouped by antenna type, with an "external antennas only" filter for procurement handoff.</li>
+    <li><strong>Interference / Rogue Devices</strong> — iPhone / Android / MiFi hotspots and wide-channel rogue Wi-Fi picked up during the survey, scored by severity and mapped by floor.</li>
+  </ul>
+
+  <h2 id="marker-labels">AP Marker Labels</h2>
+  <p>Markers on the floor-plan overview and the <strong>#</strong> column of every AP table use each AP's own name from the <code>.esx</code> — never an invented row number. That way marker "42" on the plan and row "42" in the table are always the <em>same</em> AP, and both cross-reference back to whatever you called that AP in Ekahau.</p>
+
+  <h3>How the label is chosen</h3>
+  <table>
+    <tr><th class="guide-col-badge">Your AP name looks like…</th><th>Marker / <strong>#</strong> shows</th></tr>
+    <tr><td><code>SITE1-B1-01-01-AP42</code></td><td><strong>42</strong> — the trailing "AP" designator is detected and shortened.</td></tr>
+    <tr><td><code>AP-07a</code></td><td><strong>07a</strong> — same rule, works with letter suffixes too.</td></tr>
+    <tr><td><code>Conference-Room-Alpha</code></td><td><strong>Conference-Room-Alpha</strong> — no "APnn" suffix, so the full name is used.</td></tr>
+    <tr><td><code>00:11:22:33:44:55</code></td><td><strong>00:11:22:33:44:55</strong> — same story. The label text scales down automatically so long names still fit on the marker.</td></tr>
+  </table>
+
+  <h3>The sidebar toggle</h3>
+  <p>Reports that draw floor-plan markers expose a <strong>Short number labels on the plan</strong> option in the sidebar. On by default. Turn it off to force the full AP name onto every marker regardless of naming pattern — useful when your names look like "APnn" but the digits aren't the identifier you actually care about (e.g. building/floor-encoded schemes where the whole name matters).</p>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> Every floor's overview has a small legend line under it that spells out which mode is active — a quick reference for whoever's reading the printed PDF.
+  </div>
+
+  <h2>AP Filter &amp; Grouping</h2>
+  <p>The <strong>APs to include</strong> card on the Configure stage lets you filter down to the APs you actually want in the report. Search by name, toggle individual APs, or group by:</p>
+  <ul>
+    <li><strong>None</strong> — flat alphabetical list.</li>
+    <li><strong>Color</strong> — use the color labels you assigned in Ekahau (great for zones or phases).</li>
+    <li><strong>Floor</strong> — one collapsible group per floor plan.</li>
+    <li><strong>Building</strong> — one group per building for multi-building sites.</li>
+    <li><strong>Model</strong> — one group per vendor + model combination — handy for procurement.</li>
+  </ul>
+
+  <p>Two report-level filters also gate which APs are eligible in the first place:</p>
+  <ul>
+    <li><strong>Include directional APs</strong> — APs whose antenna type has a specific azimuth. On by default.</li>
+    <li><strong>Include omni APs</strong> — APs with only omni antennas. Off by default on the aim/placement reports because the sheet is about aiming; turn it on to include ceiling omnis with a placeholder in the azimuth cell.</li>
+  </ul>
+
+  <h2>Cover Page &amp; Logo</h2>
+  <p>Every report can prepend a cover page with your logo, the site name (pulled from the <code>.esx</code> file name), the AP count, and the date. Upload a logo once — it's cached in your browser (via <code>localStorage</code>) and persists across reports and sessions until you clear it.</p>
+
+  <h2>Printing to PDF</h2>
+  <p>Hit <strong>Print / Save PDF</strong> on the Review stage. The stylesheet forces:</p>
+  <ul>
+    <li>Backgrounds and colors on (so your logo and marker cones actually print).</li>
+    <li>Sidebar, header, and navigation hidden.</li>
+    <li>Page breaks between sections — floors don't get sliced in half.</li>
+    <li>Table headers repeat on each printed page.</li>
+  </ul>
+  <p>The output file name is auto-filled as <code>Report - &lt;report doc name&gt; - &lt;site name&gt;.pdf</code>.</p>
+
+  <div class="tip-box">
+    <strong>Tip:</strong> If your browser's print dialog defaults to "Save as PDF" but strips backgrounds, look for <em>More settings → Background graphics</em> and turn it on. Without it, the cover and marker cones print blank.
+  </div>
+
+  <div class="footer">
+    <p>WD Report — part of the <a href="/">WD Wireless Tools</a> suite.</p>
+    <p>Built by <a href="https://weirdave.com" target="_blank">WD Wireless Tools</a> — weirdave.com</p>
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Claude Code worktrees + dev tooling
+.claude/
+
+# Atomic-write temp files (created by edit tools when sync races)
+*.tmp.*
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ekahau project files (user data — never commit)
+*.esx
+
+# Sensitive session/cookie data
+*.cookies
+*.session
+cookies.json
+cookies.enc
+
+# Scratch/working files — never commit (may contain personal/sensitive docs)
+tmp/
+
+# AI-handoff notes — internal working notes, not for the public repo
+PROJECT_MEMORY.md
+
+# Transient sentinel — server.py drops this before exiting on Restart Now;
+# run.bat / run.command detect it and relaunch. If the file exists on disk
+# outside a restart, it was left behind by an aborted cycle — safe to delete.
+.restart_requested

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Report</title>
+<link rel="icon" href="/assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/wd-wireless-tools-v8.0-180x180.png">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<script src="/assets/lib/jszip.min.js"></script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+</head>
+<body class="tool-report">
+
+<div id="dzTopbar" class="dz-topbar" onclick="event.stopPropagation()">
+  <div class="header-left">
+    <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+    <div class="help-menu-wrap">
+      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'dzMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <div id="dzMenu" class="help-menu">
+        <div class="menu-section">&#9656; Navigation</div>
+        <a class="help-menu-item" href="/">&#8962; Home</a>
+        <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+        <a class="help-menu-item" href="/walls">· Quick Walls</a>
+        <a class="help-menu-item active" href="/report">· Report</a>
+        <a class="help-menu-item" href="/scale">· Scale</a>
+        <a class="help-menu-item" href="/squirrel">· Squirrel</a>
+        <div class="help-menu-sep"></div>
+        <div class="menu-section">&#9656; Help</div>
+        <a class="help-menu-item" href="/guide-report" target="_blank">· User Guide</a>
+        <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+      </div>
+    </div>
+  </div>
+  <div class="header-center">
+    <h1><span>WD</span> Report <span class="ver" data-ver="report">v&hellip;</span></h1>
+  </div>
+  <div class="header-actions">
+    <button class="theme-toggle" onclick="toggleTheme()">
+      <span class="ico">🌙</span><span class="txt">Dark</span>
+    </button>
+  </div>
+</div>
+
+<div id="dropzone" class="dropzone report-dropzone">
+  <img class="dropzone-brand-logo" src="/assets/report-v8.0-560x560.png" alt="WD Report">
+  <p class="dropzone-ver" data-ver="report">v&hellip;</p>
+  <p class="dropzone-sub">Installer-facing reports from your .esx</p>
+  <p class="dropzone-desc">Turns an Ekahau project into a polished, print-ready PDF — antenna azimuths, tilts, mount heights, and floor-plan markers laid out automatically. Pick a template, configure what's included, print. No manual screenshotting or reformatting.</p>
+  <div class="dropzone-divider"></div>
+  <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
+  <ul class="dropzone-steps">
+    <li data-step="1."><strong>Drop</strong> an Ekahau project file (.esx)</li>
+    <li data-step="2."><strong>Choose</strong> a report type from the sidebar</li>
+    <li data-step="3."><strong>Print</strong> to PDF and hand off to your installers</li>
+  </ul>
+</div>
+<input type="file" id="fileInput" accept=".esx" hidden>
+
+<div id="workspace" class="report-workspace">
+
+  <div class="report-wiz-topbar noprint">
+    <div class="header-left">
+      <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+      <div class="help-menu-wrap">
+        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'wsMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <div id="wsMenu" class="help-menu">
+          <div class="menu-section">&#9656; Navigation</div>
+          <a class="help-menu-item" href="/">&#8962; Home</a>
+          <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+          <a class="help-menu-item" href="/walls">· Quick Walls</a>
+          <a class="help-menu-item active" href="/report">· Report</a>
+          <a class="help-menu-item" href="/scale">· Scale</a>
+          <a class="help-menu-item" href="/squirrel">· Squirrel</a>
+          <div class="help-menu-sep"></div>
+          <div class="menu-section">&#9656; Tools</div>
+          <button class="help-menu-item" onclick="loadNewFile()">· Open Another File</button>
+          <div class="help-menu-sep"></div>
+          <div class="menu-section">&#9656; Help</div>
+          <a class="help-menu-item" href="/guide-report" target="_blank">· User Guide</a>
+          <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+        </div>
+      </div>
+      <span id="fileBadge" class="file-badge" onclick="loadNewFile()" title="Click to open another .esx"></span>
+    </div>
+    <div class="report-toolbar-center">
+      <h1><span>WD</span> Report <span class="ver" data-ver="report">v&hellip;</span></h1>
+    </div>
+    <div class="header-actions">
+      <button class="theme-toggle" onclick="toggleTheme()">
+        <span class="ico">🌙</span><span class="txt">Dark</span>
+      </button>
+    </div>
+  </div>
+
+  <nav class="rep-stepper noprint" id="stepper" aria-label="Report stages">
+    <button type="button" class="rep-step" data-stage="template" onclick="goStage('template')">
+      <span class="rep-step-num">1</span><span class="rep-step-label">Template</span>
+    </button>
+    <span class="rep-step-line"></span>
+    <button type="button" class="rep-step" data-stage="configure" onclick="goStage('configure')">
+      <span class="rep-step-num">2</span><span class="rep-step-label">Configure</span>
+    </button>
+    <span class="rep-step-line"></span>
+    <button type="button" class="rep-step" data-stage="review" onclick="goStage('review')">
+      <span class="rep-step-num">3</span><span class="rep-step-label">Review &amp; Print</span>
+    </button>
+  </nav>
+
+  <section class="rep-stage noprint" id="stageTemplate">
+    <div class="rep-stage-head">
+      <h2 class="rep-stage-title">Choose a report template</h2>
+      <p class="rep-stage-sub" id="templateStageSub"></p>
+    </div>
+    <div class="rep-template-gallery" id="templateGallery"></div>
+    <div class="rep-stage-nav">
+      <button class="btn btn-secondary" onclick="loadNewFile()">&#128193; Change file</button>
+      <span class="rep-stage-nav-spacer"></span>
+    </div>
+  </section>
+
+  <section class="rep-stage noprint" id="stageConfigure" hidden>
+    <div class="rep-stage-head">
+      <h2 class="rep-stage-title" id="configStageTitle">Configure report</h2>
+      <p class="rep-stage-sub" id="configStageSub"></p>
+    </div>
+
+    <div class="rep-config-grid">
+      <div class="rep-config-card">
+        <div class="rep-config-card-head">
+          <span class="rep-config-icon">🖼️</span>
+          <span>Cover page</span>
+        </div>
+        <label class="rep-check">
+          <input type="checkbox" id="optCover" checked onchange="markConfigDirty()">
+          <span>Include cover page</span>
+        </label>
+        <div class="rep-logo-row">
+          <button class="btn btn-secondary rep-logo-btn" onclick="pickLogo()">Upload logo…</button>
+          <button class="btn btn-secondary rep-logo-btn" onclick="clearLogo()" id="logoClearBtn" hidden>Remove</button>
+        </div>
+        <div id="logoPreview" class="rep-logo-preview"></div>
+      </div>
+
+      <div class="rep-config-card" id="reportOptsSlot"></div>
+    </div>
+
+    <div class="rep-config-card rep-config-wide" id="apFilterCard">
+      <div class="rep-config-card-head">
+        <span class="rep-config-icon">📡</span>
+        <span>APs to include</span>
+        <span class="rep-ap-count" id="apCount"></span>
+        <span class="rep-config-head-actions">
+          <button class="btn btn-secondary btn-sm" onclick="toggleAllAps(true)">Select all</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleAllAps(false)">None</button>
+        </span>
+      </div>
+      <div class="rep-ap-controls">
+        <div class="rep-groupby-pills" role="tablist" aria-label="Group APs by">
+          <span class="rep-groupby-label">Group by</span>
+          <button class="rep-groupby-pill active" data-group="none"   onclick="setGroupBy('none')">None</button>
+          <button class="rep-groupby-pill"        data-group="color"  onclick="setGroupBy('color')">Color</button>
+          <button class="rep-groupby-pill"        data-group="floor"  onclick="setGroupBy('floor')">Floor</button>
+          <button class="rep-groupby-pill"        data-group="building" onclick="setGroupBy('building')">Building</button>
+          <button class="rep-groupby-pill"        data-group="model"  onclick="setGroupBy('model')">Model</button>
+        </div>
+        <input type="text" class="rep-ap-search" id="apSearch"
+               placeholder="🔍 Filter by name…" oninput="setApSearch(this.value)">
+      </div>
+      <div id="apFilterList"></div>
+    </div>
+
+    <div class="rep-stage-nav">
+      <button class="btn btn-secondary" onclick="goStage('template')">&larr; Change template</button>
+      <span class="rep-stage-nav-spacer"></span>
+      <button class="btn btn-blue" onclick="goStage('review')">Generate report &rarr;</button>
+    </div>
+  </section>
+
+  <section class="rep-stage rep-stage-review" id="stageReview" hidden>
+    <div class="rep-review-bar noprint">
+      <button class="btn btn-secondary" onclick="goStage('configure')">&larr; Back to configure</button>
+      <span class="rep-stage-nav-spacer"></span>
+      <button class="btn btn-secondary" onclick="loadNewFile()">&#128193; Open another…</button>
+      <button class="btn btn-blue" onclick="window.print()">&#128424; Print / Save PDF</button>
+    </div>
+    <main class="report-canvas" id="reportCanvas">
+      <div class="rep-empty">Report will render here.</div>
+    </main>
+  </section>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/report.js"></script>
+</body>
+</html>
