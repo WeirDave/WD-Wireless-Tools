@@ -241,6 +241,22 @@ bulkSync('to-local').then(async () => {
             with self.subTest(script=script.name):
                 self.assertNotIn(b"\x00", script.read_bytes())
 
+    def test_branding_sources_separate_current_and_legacy_artwork(self):
+        image_root = ROOT / "images"
+        current = [path for path in image_root.iterdir() if path.is_file()]
+        self.assertTrue(current)
+        self.assertTrue(all("-v8.0-" in path.name for path in current))
+        self.assertTrue((image_root / "legacy" / "brand-concepts").is_dir())
+        self.assertTrue((image_root / "legacy" / "previous-branding").is_dir())
+
+        deployed = list((ROOT / "web" / "assets").glob("*v8.0*"))
+        self.assertTrue(deployed)
+        for asset in deployed:
+            with self.subTest(asset=asset.name):
+                source = image_root / asset.name
+                self.assertTrue(source.is_file())
+                self.assertEqual(source.read_bytes(), asset.read_bytes())
+
     def test_report_template_cards_have_distinct_accent_colors(self):
         css = (ROOT / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
         accents = re.findall(
@@ -266,6 +282,7 @@ bulkSync('to-local').then(async () => {
                 self.assertIn("web/assets/lib/jszip.min.js", names)
                 self.assertNotIn("PROJECT_MEMORY.md", names)
                 self.assertFalse(any(name.startswith("docs/releases/") for name in names))
+                self.assertFalse(any(name.startswith("images/legacy/") for name in names))
                 self.assertFalse(any("__pycache__" in name for name in names))
                 mode = archive.getinfo("run.command").external_attr >> 16
                 self.assertTrue(mode & stat.S_IXUSR)

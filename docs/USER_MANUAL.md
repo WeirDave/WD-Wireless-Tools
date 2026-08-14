@@ -70,6 +70,8 @@ Cloud Manager stores an encrypted copy of the active Cloud session locally. The 
 
 Cloud Manager's `EkahauAPI` client in `tools/cloud_manager.py` includes reverse-engineered request flows needed for operations that the Ekahau web application performs from the browser, including the presigned upload sequence and client-side `.esx` download assembly. These calls are product code; local `.claude/` files are only development-tool configuration and are not required to run the suite.
 
+Current branding source files are stored directly in `images/`. Superseded artwork and concept boards are retained under `images/legacy/` for project history and are excluded from downloadable release ZIPs.
+
 ## Quick Walls
 
 Quick Walls edits wall types inside an Ekahau `.esx` project.
