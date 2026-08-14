@@ -235,8 +235,6 @@ WD-Wireless-Tools/
 │   │       └── ...           # Tool-specific application code
 │   └── pages/                # GitHub Pages landing/stub templates
 ├── templates/                # Bundled wall-type templates
-├── images/
-│   └── legacy/               # Historical artwork; excluded from releases
 ├── docs/
 │   └── USER_MANUAL.md        # Complete user documentation
 ├── scripts/
