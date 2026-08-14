@@ -105,7 +105,7 @@ Feet-and-inches ↔ decimal ↔ meters converter for Ekahau scale calibration. P
 
 ### Report
 
-Drop an `.esx` and get installer-ready handoff documents. Built on a plug-in **report registry** — each report type is a small object with its own sidebar options and renderer. Eight report formats ship today:
+Drop an `.esx` and get installer-ready handoff documents. Built on a plug-in **report registry** — each report type is a small object with its own sidebar options and renderer. Seven report formats are available today, with an eighth in development:
 
 - **Directional Antenna Installation (`AP Placement`)** — per-AP mount, azimuth (with compass), tilt, mounting height, antenna model; floor-plan overview with SVG marker + direction arrow on every AP.
 - **Predictive Design** — installation-oriented floor-plan overviews for directional and omnidirectional AP placement.
@@ -113,7 +113,7 @@ Drop an `.esx` and get installer-ready handoff documents. Built on a plug-in **r
 - **Interference** — detected-device summaries, floor maps, channel details, and methodology.
 - **Bill of Materials** — AP quantities grouped by vendor + model, antenna quantities grouped by antenna type; totals and an "external antennas only" filter for procurement handoff.
 - **Antenna Aim Sheet** — compact aiming tables, floor mini-maps, and installer sign-off fields.
-- **Change Report** — before-and-after project comparisons with added, removed, and moved APs.
+- **Change / Audit Report (coming soon)** — planned before-and-after project comparisons with added, removed, and moved APs.
 - **Coverage Cell Boundary** — advisory cell diagrams, signal thresholds, and per-AP sizing tables.
 
 **AP marker labels.** Markers on the floor-plan overview and the `#` column of the AP table use each AP's own name from the `.esx` — not an invented row number. When a name ends with an "AP" designator (e.g. `SITE1-B1-01-01-AP42`), the marker shows just the trailing part (`42`) so map + table cross-reference at a glance. When it doesn't (MAC addresses, free-form labels), the full name is shown. Every report that draws markers exposes a **Short number labels on the plan** sidebar toggle — turn it off to force full names.
@@ -155,11 +155,14 @@ Save it somewhere permanent — Desktop or Documents is fine — and extract the
 - **Windows** — open the extracted folder and double-click **`run.bat`**.
 - **macOS** — open the extracted folder and double-click **`run.command`**. On first launch macOS may block it — right-click → **Open** → **Open** to bypass Gatekeeper.
 
-A terminal window opens, installs the Python dependencies on first run (~30 seconds), starts the local server, and opens your browser to `http://localhost:8675`. You'll see:
+A terminal window opens, installs the Python dependencies on first run (~30 seconds), starts the local server, and opens your browser to `http://localhost:8675`. You'll see a startup banner like this:
 
 ```
-WD Wireless Tools  →  http://localhost:8675/
-Ready. Press CTRL+C to quit.
+WIRELESS TOOLS  v2.0.1
+A suite of Ekahau workflow tools.
+
+Local suite: http://localhost:8675/
+Press CTRL+C in this window to stop WD Wireless Tools.
 ```
 
 **Keep the terminal window open** — closing it stops the server.
@@ -176,7 +179,7 @@ python server.py
 
 ### After you launch `run.bat` / `run.command`
 
-1. A terminal window opens and prints `WD Wireless Tools  →  http://localhost:8675/`.
+1. A terminal window opens and prints the suite version and local address: `http://localhost:8675/`.
 2. Your default browser opens automatically to the suite landing page.
 3. **Leave the terminal window open** — closing it stops the server. Minimize it if it's in the way.
 
@@ -278,6 +281,8 @@ WD Wireless Tools/
 │   ├── cloud.html            # Cloud Manager UI
 │   ├── walls.html            # Quick Walls UI (also served on GitHub Pages)
 │   ├── organizer.html        # Squirrel UI
+│   ├── scale.html             # Scale converter UI (also served on GitHub Pages)
+│   ├── report.html            # Report UI (also served on GitHub Pages)
 │   ├── guide*.html           # Built-in help pages
 │   ├── pages/                # Hosted-only page templates (used by pages.yml)
 │   │   ├── hosted-index.html         # Public landing page
@@ -289,17 +294,22 @@ WD Wireless Tools/
 │           ├── wd-shared.js  # Shared utilities (theme, toast, modal, escape)
 │           ├── cloud.js      # Cloud Manager page logic
 │           ├── walls.js      # Quick Walls page logic (with HOSTED runtime flag)
-│           └── organizer.js  # Squirrel page logic
+│           ├── organizer.js  # Squirrel page logic
+│           ├── scale.js      # Measurement conversion logic
+│           └── report.js     # Report registry, ESX parsing, and renderers
 │
 ├── templates/                # Wall-type template presets (JSON) — bundled into hosted build
 ├── images/                   # Logos and branding assets
 │
 ├── docs/
 │   └── releases/             # Hand-authored release notes (published to GitHub Releases)
+├── scripts/
+│   └── build_release.py      # Allowlisted release ZIP builder
 │
 └── .github/workflows/
     ├── release.yml           # On tag push: zip source + publish GitHub Release
-    └── pages.yml             # On push to main: build + deploy hosted site to GitHub Pages
+    ├── tests.yml             # Windows/macOS safety and compatibility matrix
+    └── pages.yml             # Manual build + deploy of the hosted GitHub Pages site
 ```
 
 ---

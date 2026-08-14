@@ -200,6 +200,21 @@ bulkSync('to-local').then(async () => {
             with self.subTest(tool=key):
                 self.assertRegex(value, r"^\d+(?:\.\d+)+$")
 
+    def test_public_documentation_uses_current_versions_and_report_status(self):
+        versions = json.loads((ROOT / "web" / "assets" / "versions.json").read_text(encoding="utf-8"))
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn(f"WIRELESS TOOLS  v{versions['suite']}", readme)
+        for tool in ("cloud", "walls", "report", "scale", "squirrel"):
+            with self.subTest(tool=tool):
+                self.assertIn(f"v{versions[tool]}", readme)
+        self.assertIn("Seven report formats are available today", readme)
+        self.assertIn("Change / Audit Report (coming soon)", readme)
+
+        cloud_stub = (ROOT / "web" / "pages" / "hosted-cloud-stub.html").read_text(encoding="utf-8")
+        squirrel_stub = (ROOT / "web" / "pages" / "hosted-organizer-stub.html").read_text(encoding="utf-8")
+        self.assertIn(f"v{versions['cloud']} · desktop suite", cloud_stub)
+        self.assertIn(f"v{versions['squirrel']} · desktop suite", squirrel_stub)
+
     def test_html_references_existing_local_assets(self):
         asset_pattern = re.compile(r'''(?:src|href)=["'](/assets/[^"'?#]+)''')
         pages = list((ROOT / "web").glob("*.html"))
