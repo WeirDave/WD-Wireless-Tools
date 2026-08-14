@@ -263,6 +263,8 @@ only other data is the small Cloud Manager settings folder at
 
 ## Project Structure
 
+The key tracked files and directories are:
+
 ```
 WD Wireless Tools/
 ├── server.py                 # Flask server — routes + API dispatch
@@ -281,8 +283,8 @@ WD Wireless Tools/
 │   ├── cloud.html            # Cloud Manager UI
 │   ├── walls.html            # Quick Walls UI (also served on GitHub Pages)
 │   ├── organizer.html        # Squirrel UI
-│   ├── scale.html             # Scale converter UI (also served on GitHub Pages)
-│   ├── report.html            # Report UI (also served on GitHub Pages)
+│   ├── scale.html            # Scale converter UI (also served on GitHub Pages)
+│   ├── report.html           # Report UI (also served on GitHub Pages)
 │   ├── guide*.html           # Built-in help pages
 │   ├── pages/                # Hosted-only page templates (used by pages.yml)
 │   │   ├── hosted-index.html         # Public landing page
@@ -290,10 +292,13 @@ WD Wireless Tools/
 │   │   └── hosted-organizer-stub.html # "Desktop only" page for /organizer/
 │   └── assets/
 │       ├── wd-tools.css      # Shared stylesheet
+│       ├── versions.json     # Suite and component versions
+│       ├── lib/              # Vendored browser libraries (JSZip, PDF.js, Mammoth)
 │       └── js/
 │           ├── wd-shared.js  # Shared utilities (theme, toast, modal, escape)
 │           ├── cloud.js      # Cloud Manager page logic
 │           ├── walls.js      # Quick Walls page logic (with HOSTED runtime flag)
+│           ├── walls-swap.js # Wall-swap workflow logic
 │           ├── organizer.js  # Squirrel page logic
 │           ├── scale.js      # Measurement conversion logic
 │           └── report.js     # Report registry, ESX parsing, and renderers
@@ -304,7 +309,9 @@ WD Wireless Tools/
 ├── docs/
 │   └── releases/             # Hand-authored release notes (published to GitHub Releases)
 ├── scripts/
-│   └── build_release.py      # Allowlisted release ZIP builder
+│   ├── build_release.py      # Allowlisted release ZIP builder
+│   └── make_test_projects.py # Generates fictional ESX fixtures for manual testing
+├── tests/                     # Python, server, asset, and JavaScript safety tests
 │
 └── .github/workflows/
     ├── release.yml           # On tag push: zip source + publish GitHub Release
