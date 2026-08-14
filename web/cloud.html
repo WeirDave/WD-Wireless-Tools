@@ -163,6 +163,8 @@
     <button class="clear-search" onclick="clearSearch()" title="Clear search">&#215;</button>
     <button class="btn-info-chip" id="matchHelpChip" onclick="openMatchHelp()" title="How does WD decide two files are the same project?">&#9432; How matching works</button>
     <label class="selall"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> All</label>
+    <button class="btn btn-secondary" onclick="selectAllSide('cloud')" title="Select every cloud site/project, local side untouched">Select cloud</button>
+    <button class="btn btn-secondary" onclick="selectAllSide('local')" title="Select every local folder/file, cloud side untouched">Select local</button>
     <span class="selcount" id="selCount"></span>
     <button class="btn btn-secondary" id="expandAllBtn" onclick="expandAllSites()" title="Expand every site" hidden>Expand All</button>
     <button class="btn btn-secondary" id="collapseAllBtn" onclick="collapseAllSites()" title="Collapse every site" hidden>Collapse All</button>
@@ -224,6 +226,21 @@
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
       <button class="btn btn-red" id="deleteBtn" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Second gate for any cloud deletion — Ekahau Cloud deletes can't be undone,
+     so this requires typing DELETE before the button even enables. -->
+<div class="modal-overlay" id="cloudDeleteConfirmModal">
+  <div class="modal">
+    <h3>&#9888; This deletes from Ekahau Cloud</h3>
+    <p class="sub" id="cloudDeleteConfirmSub"></p>
+    <p class="sub">This cannot be undone. Type <b>DELETE</b> below to confirm.</p>
+    <input type="text" id="cloudDeleteConfirmInput" placeholder="Type DELETE to confirm" autocomplete="off" oninput="_updateCloudDeleteConfirmBtn()">
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="_cancelCloudDeleteStage2()">Cancel</button>
+      <button class="btn btn-red" id="cloudDeleteConfirmBtn" disabled onclick="_confirmCloudDeleteStage2()">Permanently delete</button>
     </div>
   </div>
 </div>
