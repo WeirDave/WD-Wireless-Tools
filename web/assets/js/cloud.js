@@ -669,6 +669,20 @@ function indexRowData() {
       siteName: p.cloud.siteName || '',
       entityKind: 'sites',
     };
+    // Independent per-side entries — same pattern as the ct-c:/ct-l: keys
+    // nested project rows already use — so a matched site's cloud side and
+    // local side can be selected (and bulk deleted) independently instead
+    // of only as a single all-or-nothing pair.
+    rowData['s-c:' + p.cloud.id] = {
+      kind: 'cloud', id: p.cloud.id, name: p.cloud.name,
+      cloudOwner: (p.cloud.owner || ''),
+      siteName: p.cloud.siteName || '',
+      entityKind: 'sites',
+    };
+    rowData['s-l:' + p.local.path] = {
+      kind: 'local', path: p.local.path, name: p.local.name, isDir: true,
+      entityKind: 'sites',
+    };
   });
   (data.cloudOnly || []).forEach(s => {
     rowData['c:' + s.id] = {
@@ -1476,7 +1490,11 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
   (data.matched || []).forEach(p => rows.push({
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'sites',
     matchType: p.matchType,
-    cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
+    cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || ''),
+    // Independent per-side checkboxes (see indexRowData's s-c:/s-l: entries)
+    // so "select all local" can grab a whole site's local folder without
+    // also grabbing its cloud counterpart, and vice versa.
+    cloudCheckKey: 's-c:' + p.cloud.id, localCheckKey: 's-l:' + p.local.path,
   }));
   (data.cloudOnly || []).forEach(s => rows.push({ status: 'orphan', key: 'c:' + s.id, kind: 'sites', cloud: s, local: null, sort: s.name || '' }));
   (data.localOnly || []).forEach(f => rows.push({ status: 'orphan', key: 'l:' + f.path, kind: 'sites', cloud: null, local: f, sort: f.name || '' }));
@@ -3353,11 +3371,18 @@ function saveSettings() {
   closeModal('settingsModal');
 }
 
+// Deliberately in-memory only, NOT persisted to localStorage. It used to
+// survive across page loads/sessions, which meant switching to Mine/Others
+// once silently stuck it there forever with no obvious reminder — that's
+// exactly what made a fully-populated Sites tab look like it only had 3
+// sites on a different machine. Every fresh load now starts at "all";
+// switching mid-session still works normally.
+let _ownerFilterState = 'all';
 function ownerFilter() {
-  try { return localStorage.getItem('wd-owner-filter') || 'all'; } catch (e) { return 'all'; }
+  return _ownerFilterState;
 }
 function setOwnerFilter(v) {
-  try { localStorage.setItem('wd-owner-filter', v); } catch (e) {}
+  _ownerFilterState = v;
 }
 
 function setOwnerFilterUI(v) {
@@ -3397,13 +3422,30 @@ function onRowChkClick(ev) {
 }
 function toggleSelectAll() {
   const on = document.getElementById('selAll').checked;
+  // Every rendered .rowchk carries a key rowData actually understands
+  // (site-level and nested-file rows alike, each side independently since
+  // the s-c:/s-l:/ct-c:/ct-l: split) — "All" means all of them, full stop.
   document.querySelectorAll('.rowchk').forEach(b => {
     const k = b.dataset.k || '';
-
-    if (currentTab === 'sites' && !k.startsWith('ct')) return;
     b.checked = on;
     if (on) selected.add(k); else selected.delete(k);
   });
+  updateBulkBar();
+}
+// Replaces the current selection with just one side — every cloud site AND
+// cloud project, or every local folder AND local file, across the whole
+// tree — so pushing a renamed-everything-locally naming convention up to
+// the cloud (or vice versa) is a two-click "select side, then Sync" instead
+// of hand-picking rows one at a time.
+function selectAllSide(side) {
+  document.querySelectorAll('.rowchk').forEach(b => {
+    const k = b.dataset.k || '';
+    const d = rowData[k];
+    const on = !!(d && d.kind === side);
+    b.checked = on;
+    if (on) selected.add(k); else selected.delete(k);
+  });
+  const sa = document.getElementById('selAll'); if (sa) sa.checked = false;
   updateBulkBar();
 }
 function refreshSelAll() {
@@ -3531,6 +3573,14 @@ function selectedSyncItems() {
         .filter(([rk]) => rk.startsWith('ct:'))
         .map(([, rd]) => rd)
         .find(rd => rd.kind === 'pair' && rd.localPath === localPath) || d;
+    } else if (k.startsWith('s-c:')) {
+      d = rowData['p:' + k.slice('s-c:'.length)] || d;
+    } else if (k.startsWith('s-l:')) {
+      const localPath = d.path;
+      d = Object.entries(rowData)
+        .filter(([rk]) => rk.startsWith('p:'))
+        .map(([, rd]) => rd)
+        .find(rd => rd.kind === 'pair' && rd.localPath === localPath) || d;
     }
     const identity = d.kind === 'pair' ? `pair:${d.cloudId}`
       : d.kind === 'cloud' ? `cloud:${d.id}` : `local:${d.path}`;
@@ -3631,7 +3681,7 @@ function bulkDelete() {
     }
   }
   if (!items.length) {
-    toast('Nothing to delete. On the Sites tab, bulk delete only applies to cloud-only or local-only rows.', 'info');
+    toast('Nothing to delete. Select a cloud or local checkbox on one or more rows first.', 'info');
     return;
   }
   const nCloud = items.filter(d => d.kind === 'cloud').length;
@@ -3754,50 +3804,109 @@ function startDelete(side, idOrPath, name, isDir, kind) {
   document.getElementById('deleteSub').innerHTML = warn;
   showModal('deleteModal');
 }
+// ── Cloud-delete second confirmation ──
+// Local deletes stay one confirm, same as always — the cloud copy (if any)
+// is untouched, so it's recoverable by re-downloading. Cloud deletes are
+// not recoverable, so ANY cloud deletion (single or bulk) gets a second,
+// harder-to-click-through gate: restate exactly what's being destroyed and
+// require literally typing DELETE before the button even enables.
+let _pendingCloudDelete = null;
+function _updateCloudDeleteConfirmBtn() {
+  const ok = (document.getElementById('cloudDeleteConfirmInput').value || '').trim().toUpperCase() === 'DELETE';
+  document.getElementById('cloudDeleteConfirmBtn').disabled = !ok;
+}
+function _cancelCloudDeleteStage2() {
+  _pendingCloudDelete = null;
+  document.getElementById('cloudDeleteConfirmInput').value = '';
+  document.getElementById('cloudDeleteConfirmBtn').disabled = true;
+  closeModal('cloudDeleteConfirmModal');
+}
+function _confirmCloudDeleteStage2() {
+  const fn = _pendingCloudDelete;
+  _pendingCloudDelete = null;
+  document.getElementById('cloudDeleteConfirmInput').value = '';
+  document.getElementById('cloudDeleteConfirmBtn').disabled = true;
+  closeModal('cloudDeleteConfirmModal');
+  if (fn) fn();
+}
+function _requireCloudDeleteConfirm(summaryHtml, runFn) {
+  _pendingCloudDelete = runFn;
+  document.getElementById('cloudDeleteConfirmSub').innerHTML = summaryHtml;
+  document.getElementById('cloudDeleteConfirmInput').value = '';
+  document.getElementById('cloudDeleteConfirmBtn').disabled = true;
+  showModal('cloudDeleteConfirmModal');
+  document.getElementById('cloudDeleteConfirmInput').focus();
+}
+
 async function confirmDelete() {
   if (!deleteTarget) { closeModal('deleteModal'); return; }
   closeModal('deleteModal');
 
   if (deleteTarget.bulk) {
     const items = deleteTarget.bulk;
-    clearSelection();
-
-    for (const d of items) {
-      const label = d.kind === 'cloud'
-        ? `Deleting cloud "${d.name || d.id}"`
-        : `Deleting local "${d.name || d.path}"`;
-      opEnqueue({
-        title: label,
-        type: 'delete', pollBackend: false, undoable: false,
-        run: async () => {
-          const kind = d.context || currentTab;
-          const r = d.kind === 'cloud'
-            ? await pyApi('delete_cloud', kind, d.id)
-            : await pyApi('delete_local', d.path);
-          if (r && r.error) throw new Error(r.error);
-          _scheduleOpRefresh();
-          return r;
-        },
-      });
+    const runBulk = () => {
+      clearSelection();
+      for (const d of items) {
+        const label = d.kind === 'cloud'
+          ? `Deleting cloud "${d.name || d.id}"`
+          : `Deleting local "${d.name || d.path}"`;
+        opEnqueue({
+          title: label,
+          type: 'delete', pollBackend: false, undoable: false,
+          run: async () => {
+            const kind = d.context || currentTab;
+            const r = d.kind === 'cloud'
+              ? await pyApi('delete_cloud', kind, d.id)
+              : await pyApi('delete_local', d.path);
+            if (r && r.error) throw new Error(r.error);
+            _scheduleOpRefresh();
+            return r;
+          },
+        });
+      }
+    };
+    const cloudItems = items.filter(d => d.kind === 'cloud');
+    if (cloudItems.length) {
+      const nCloudSite = cloudItems.filter(d => (d.context || currentTab) === 'sites').length;
+      const nCloudProject = cloudItems.length - nCloudSite;
+      const bits = [];
+      if (nCloudSite) bits.push(`<b>${nCloudSite}</b> whole site${nCloudSite === 1 ? '' : 's'} — every project inside ${nCloudSite === 1 ? 'it' : 'them'} goes too`);
+      if (nCloudProject) bits.push(`<b>${nCloudProject}</b> project${nCloudProject === 1 ? '' : 's'}`);
+      const summary = `You're about to permanently delete ${bits.join(' and ')} from Ekahau Cloud. `
+        + `Once this runs, none of it will exist on the cloud anymore — for anyone. Local copies (if any) are not touched.`;
+      _requireCloudDeleteConfirm(summary, runBulk);
+    } else {
+      runBulk();
     }
     return;
   }
   const single = deleteTarget;
-  const label = single.side === 'cloud'
-    ? `Deleting cloud ${(single.kind || currentTab) === 'sites' ? 'site' : 'project'}`
-    : 'Deleting local file';
-  opEnqueue({
-    title: label,
-    type: 'delete', pollBackend: false, undoable: false,
-    run: async () => {
-      const r = single.side === 'cloud'
-        ? await pyApi('delete_cloud', single.kind || currentTab, single.idOrPath)
-        : await pyApi('delete_local', single.idOrPath);
-      if (r && r.error) throw new Error(r.error);
-      _scheduleOpRefresh();
-      return r;
-    },
-  });
+  const runSingle = () => {
+    const label = single.side === 'cloud'
+      ? `Deleting cloud ${(single.kind || currentTab) === 'sites' ? 'site' : 'project'}`
+      : 'Deleting local file';
+    opEnqueue({
+      title: label,
+      type: 'delete', pollBackend: false, undoable: false,
+      run: async () => {
+        const r = single.side === 'cloud'
+          ? await pyApi('delete_cloud', single.kind || currentTab, single.idOrPath)
+          : await pyApi('delete_local', single.idOrPath);
+        if (r && r.error) throw new Error(r.error);
+        _scheduleOpRefresh();
+        return r;
+      },
+    });
+  };
+  if (single.side === 'cloud') {
+    const isSite = (single.kind || currentTab) === 'sites';
+    const summary = isSite
+      ? `You're about to permanently delete this <b>whole site</b> from Ekahau Cloud — every project inside it goes too. Once this runs, none of it will exist on the cloud anymore. Local copies (if any) are not touched.`
+      : `You're about to permanently delete this <b>project</b> from Ekahau Cloud. Once this runs, it will not exist on the cloud anymore. Local copies (if any) are not touched.`;
+    _requireCloudDeleteConfirm(summary, runSingle);
+  } else {
+    runSingle();
+  }
 }
 
 async function createSite() {
