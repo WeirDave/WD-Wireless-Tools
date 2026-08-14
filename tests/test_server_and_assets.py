@@ -210,6 +210,8 @@ bulkSync('to-local').then(async () => {
         self.assertIn("Seven report formats are available today", readme)
         self.assertIn("Change / Audit Report (coming soon)", readme)
         self.assertIn("[User Manual](docs/USER_MANUAL.md)", readme)
+        self.assertIn("reverse-engineered upload/download flows", readme)
+        self.assertIn("development-tool configuration", readme)
         for documented_path in (
             "versions.json", "walls-swap.js", "make_test_projects.py", "tests/",
         ):

@@ -277,7 +277,7 @@ WD Wireless Tools/
 ├── LICENSE                   # MIT license
 │
 ├── tools/
-│   ├── cloud_manager.py      # Ekahau Cloud API integration + duplicates detection
+│   ├── cloud_manager.py      # Cloud API client, including reverse-engineered upload/download flows
 │   ├── template_store.py     # Wall-type template persistence
 │   └── folder_organizer.py   # Squirrel file scanning + sorting
 │
@@ -321,6 +321,8 @@ WD Wireless Tools/
     ├── tests.yml             # Windows/macOS safety and compatibility matrix
     └── pages.yml             # Manual build + deploy of the hosted GitHub Pages site
 ```
+
+The reverse-engineered Ekahau Cloud transport and project-management calls are implemented in the `EkahauAPI` class in `tools/cloud_manager.py`. The local `.claude/` directory is development-tool configuration—not application code—and is intentionally excluded because it can contain machine-specific paths and permissions.
 
 ---
 
