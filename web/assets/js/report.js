@@ -788,28 +788,19 @@
     document.getElementById('gridCellCount').textContent =
       _gridCols * _gridRows + ' cells, ' + aps.length + ' APs on this floor';
 
-    var aspect = W / H;
-    var container = document.getElementById('gridPreviewContainer');
-    var maxW = (container.offsetWidth || 600) - 24;
-    var maxH = (container.offsetHeight || 400) - 24;
-    var dispW, dispH;
-    if (aspect > maxW / maxH) {
-      dispW = maxW; dispH = maxW / aspect;
-    } else {
-      dispH = maxH; dispW = maxH * aspect;
-    }
+    var vw = 1000, vh = 1000 * (H / W);
 
-    var bx = _cropBox.x * dispW, by = _cropBox.y * dispH;
-    var bw = _cropBox.w * dispW, bh = _cropBox.h * dispH;
+    var bx = _cropBox.x * vw, by = _cropBox.y * vh;
+    var bw = _cropBox.w * vw, bh = _cropBox.h * vh;
 
     var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + dispW + ' ' + dispH + '" '
-      + 'style="width:' + dispW + 'px;height:' + dispH + 'px;max-width:100%" '
-      + 'id="gridSvg" data-dw="' + dispW + '" data-dh="' + dispH + '">';
-    svg += '<image href="' + WD.escAttr(url) + '" width="' + dispW + '" height="' + dispH + '" />';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + vw + ' ' + vh + '" '
+      + 'style="width:100%;height:100%;object-fit:contain" '
+      + 'id="gridSvg" data-dw="' + vw + '" data-dh="' + vh + '">';
+    svg += '<image href="' + WD.escAttr(url) + '" width="' + vw + '" height="' + vh + '" />';
 
     // dim area outside crop box
-    svg += '<path d="M0,0 H' + dispW + ' V' + dispH + ' H0 Z '
+    svg += '<path d="M0,0 H' + vw + ' V' + vh + ' H0 Z '
       + 'M' + bx + ',' + by + ' V' + (by + bh) + ' H' + (bx + bw) + ' V' + by + ' Z" '
       + 'fill="rgba(0,0,0,0.45)" fill-rule="evenodd" pointer-events="none"/>';
 
@@ -838,7 +829,7 @@
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord;
       if (!c) return;
-      var px = c.x / W * dispW, py = c.y / H * dispH;
+      var px = c.x / W * vw, py = c.y / H * vh;
       svg += '<circle cx="' + px + '" cy="' + py + '" r="3" fill="rgba(239,68,68,0.8)" stroke="#fff" stroke-width="0.5" pointer-events="none"/>';
     });
 
@@ -878,21 +869,35 @@
     }
   }
 
+  function getSvgScale(svgEl) {
+    var dw = parseFloat(svgEl.getAttribute('data-dw'));
+    var dh = parseFloat(svgEl.getAttribute('data-dh'));
+    var rect = svgEl.getBoundingClientRect();
+    var imgAspect = dw / dh;
+    var boxAspect = rect.width / rect.height;
+    var renderedW, renderedH;
+    if (imgAspect > boxAspect) {
+      renderedW = rect.width;
+      renderedH = rect.width / imgAspect;
+    } else {
+      renderedH = rect.height;
+      renderedW = rect.height * imgAspect;
+    }
+    return { dw: dw, dh: dh, scaleX: dw / renderedW, scaleY: dh / renderedH };
+  }
+
   function startCropDrag(e) {
     e.preventDefault();
     e.stopPropagation();
     var edge = e.target.getAttribute('data-edge');
     var svgEl = document.getElementById('gridSvg');
-    var rect = svgEl.getBoundingClientRect();
-    var dw = parseFloat(svgEl.getAttribute('data-dw'));
-    var dh = parseFloat(svgEl.getAttribute('data-dh'));
-    var scaleX = dw / rect.width, scaleY = dh / rect.height;
+    var s = getSvgScale(svgEl);
 
     _dragState = {
       edge: edge,
       startX: e.clientX, startY: e.clientY,
       origBox: { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h },
-      rect: rect, scaleX: scaleX, scaleY: scaleY, dw: dw, dh: dh
+      scaleX: s.scaleX, scaleY: s.scaleY, dw: s.dw, dh: s.dh
     };
 
     document.addEventListener('mousemove', onCropDrag);
