@@ -659,6 +659,7 @@
         var gc = (currentOpts.segCols || '') + '';
         var gr = (currentOpts.segRows || '') + '';
         var gridLabel = (gc && gr) ? gc + ' × ' + gr : 'Auto';
+        if (currentOpts.cropBox) gridLabel += ' (cropped)';
         html += '<div class="rep-check with-desc">'
           + '<span class="rep-check-body">'
           +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
@@ -709,6 +710,8 @@
   // ── Grid configuration modal ──
 
   var _gridCols = 0, _gridRows = 0, _gridFloorIdx = 0;
+  var _cropBox = { x: 0, y: 0, w: 1, h: 1 };
+  var _dragState = null;
 
   window.openGridConfig = function () {
     var modal = document.getElementById('gridConfigModal');
@@ -721,6 +724,9 @@
     var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
     _gridCols = (currentOpts.segCols > 0) ? currentOpts.segCols : auto.cols;
     _gridRows = (currentOpts.segRows > 0) ? currentOpts.segRows : auto.rows;
+    _cropBox = currentOpts.cropBox
+      ? { x: currentOpts.cropBox.x, y: currentOpts.cropBox.y, w: currentOpts.cropBox.w, h: currentOpts.cropBox.h }
+      : { x: 0, y: 0, w: 1, h: 1 };
 
     var sel = document.getElementById('gridFloorSelect');
     sel.innerHTML = '';
@@ -750,6 +756,7 @@
     var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
     _gridCols = auto.cols;
     _gridRows = auto.rows;
+    _cropBox = { x: 0, y: 0, w: 1, h: 1 };
     updateGridPreview();
   };
 
@@ -760,6 +767,11 @@
 
   window.adjustGridRows = function (delta) {
     _gridRows = Math.max(1, Math.min(20, _gridRows + delta));
+    updateGridPreview();
+  };
+
+  window.resetCropBox = function () {
+    _cropBox = { x: 0, y: 0, w: 1, h: 1 };
     updateGridPreview();
   };
 
@@ -778,8 +790,8 @@
 
     var aspect = W / H;
     var container = document.getElementById('gridPreviewContainer');
-    var maxW = container.offsetWidth || 600;
-    var maxH = 400;
+    var maxW = (container.offsetWidth || 600) - 24;
+    var maxH = (container.offsetHeight || 400) - 24;
     var dispW, dispH;
     if (aspect > maxW / maxH) {
       dispW = maxW; dispH = maxW / aspect;
@@ -787,41 +799,172 @@
       dispH = maxH; dispW = maxH * aspect;
     }
 
+    var bx = _cropBox.x * dispW, by = _cropBox.y * dispH;
+    var bw = _cropBox.w * dispW, bh = _cropBox.h * dispH;
+
     var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + dispW + ' ' + dispH + '" '
-      + 'style="width:' + dispW + 'px;height:' + dispH + 'px;max-width:100%">';
+      + 'style="width:' + dispW + 'px;height:' + dispH + 'px;max-width:100%" '
+      + 'id="gridSvg" data-dw="' + dispW + '" data-dh="' + dispH + '">';
     svg += '<image href="' + WD.escAttr(url) + '" width="' + dispW + '" height="' + dispH + '" />';
 
-    var cw = dispW / _gridCols, ch = dispH / _gridRows;
+    // dim area outside crop box
+    svg += '<path d="M0,0 H' + dispW + ' V' + dispH + ' H0 Z '
+      + 'M' + bx + ',' + by + ' V' + (by + bh) + ' H' + (bx + bw) + ' V' + by + ' Z" '
+      + 'fill="rgba(0,0,0,0.45)" fill-rule="evenodd" pointer-events="none"/>';
+
+    // grid lines inside crop box
+    var cw = bw / _gridCols, ch = bh / _gridRows;
     for (var ci = 1; ci < _gridCols; ci++) {
-      svg += '<line x1="' + (ci * cw) + '" y1="0" x2="' + (ci * cw) + '" y2="' + dispH + '" stroke="rgba(59,130,246,0.7)" stroke-width="1.5" stroke-dasharray="6,3"/>';
+      var lx = bx + ci * cw;
+      svg += '<line x1="' + lx + '" y1="' + by + '" x2="' + lx + '" y2="' + (by + bh) + '" stroke="rgba(59,130,246,0.7)" stroke-width="1.5" stroke-dasharray="6,3" pointer-events="none"/>';
     }
     for (var ri = 1; ri < _gridRows; ri++) {
-      svg += '<line x1="0" y1="' + (ri * ch) + '" x2="' + dispW + '" y2="' + (ri * ch) + '" stroke="rgba(59,130,246,0.7)" stroke-width="1.5" stroke-dasharray="6,3"/>';
+      var ly = by + ri * ch;
+      svg += '<line x1="' + bx + '" y1="' + ly + '" x2="' + (bx + bw) + '" y2="' + ly + '" stroke="rgba(59,130,246,0.7)" stroke-width="1.5" stroke-dasharray="6,3" pointer-events="none"/>';
     }
+
+    // cell labels inside crop box
     for (var ri2 = 0; ri2 < _gridRows; ri2++) {
       for (var ci2 = 0; ci2 < _gridCols; ci2++) {
         var lbl = (ci2 < 26 ? letters[ci2] : 'C' + (ci2 + 1)) + (ri2 + 1);
-        var cx = ci2 * cw + cw / 2, cy = ri2 * ch + ch / 2;
+        var cx = bx + ci2 * cw + cw / 2, cy = by + ri2 * ch + ch / 2;
         svg += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central" '
-          + 'fill="rgba(59,130,246,0.5)" font-size="' + Math.max(10, Math.min(24, cw * 0.3)) + '" font-weight="700">' + lbl + '</text>';
+          + 'fill="rgba(59,130,246,0.5)" font-size="' + Math.max(10, Math.min(24, cw * 0.3)) + '" font-weight="700" pointer-events="none">' + lbl + '</text>';
       }
     }
 
+    // AP dots
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord;
       if (!c) return;
       var px = c.x / W * dispW, py = c.y / H * dispH;
-      svg += '<circle cx="' + px + '" cy="' + py + '" r="3" fill="rgba(239,68,68,0.8)" stroke="#fff" stroke-width="0.5"/>';
+      svg += '<circle cx="' + px + '" cy="' + py + '" r="3" fill="rgba(239,68,68,0.8)" stroke="#fff" stroke-width="0.5" pointer-events="none"/>';
     });
+
+    // crop box border
+    svg += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh
+      + '" fill="none" stroke="#3b82f6" stroke-width="2" pointer-events="none"/>';
+
+    // drag handles — edges
+    var ht = 6;
+    svg += '<rect class="crop-handle" data-edge="left" x="' + (bx - ht / 2) + '" y="' + (by + ht) + '" width="' + ht + '" height="' + (bh - ht * 2) + '" fill="transparent" cursor="ew-resize"/>';
+    svg += '<rect class="crop-handle" data-edge="right" x="' + (bx + bw - ht / 2) + '" y="' + (by + ht) + '" width="' + ht + '" height="' + (bh - ht * 2) + '" fill="transparent" cursor="ew-resize"/>';
+    svg += '<rect class="crop-handle" data-edge="top" x="' + (bx + ht) + '" y="' + (by - ht / 2) + '" width="' + (bw - ht * 2) + '" height="' + ht + '" fill="transparent" cursor="ns-resize"/>';
+    svg += '<rect class="crop-handle" data-edge="bottom" x="' + (bx + ht) + '" y="' + (by + bh - ht / 2) + '" width="' + (bw - ht * 2) + '" height="' + ht + '" fill="transparent" cursor="ns-resize"/>';
+
+    // drag handles — corners
+    var cs = 10;
+    svg += '<rect class="crop-handle" data-edge="tl" x="' + (bx - cs / 2) + '" y="' + (by - cs / 2) + '" width="' + cs + '" height="' + cs + '" fill="#3b82f6" rx="2" cursor="nwse-resize"/>';
+    svg += '<rect class="crop-handle" data-edge="tr" x="' + (bx + bw - cs / 2) + '" y="' + (by - cs / 2) + '" width="' + cs + '" height="' + cs + '" fill="#3b82f6" rx="2" cursor="nesw-resize"/>';
+    svg += '<rect class="crop-handle" data-edge="bl" x="' + (bx - cs / 2) + '" y="' + (by + bh - cs / 2) + '" width="' + cs + '" height="' + cs + '" fill="#3b82f6" rx="2" cursor="nesw-resize"/>';
+    svg += '<rect class="crop-handle" data-edge="br" x="' + (bx + bw - cs / 2) + '" y="' + (by + bh - cs / 2) + '" width="' + cs + '" height="' + cs + '" fill="#3b82f6" rx="2" cursor="nwse-resize"/>';
+
+    // full-box drag area (inside the crop box, behind handles)
+    svg += '<rect data-edge="move" x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh
+      + '" fill="transparent" cursor="move"/>';
 
     svg += '</svg>';
     document.getElementById('gridPreviewImage').innerHTML = svg;
+    bindCropHandles();
+  }
+
+  function bindCropHandles() {
+    var svgEl = document.getElementById('gridSvg');
+    if (!svgEl) return;
+    var handles = svgEl.querySelectorAll('[data-edge]');
+    for (var i = 0; i < handles.length; i++) {
+      handles[i].addEventListener('mousedown', startCropDrag);
+    }
+  }
+
+  function startCropDrag(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var edge = e.target.getAttribute('data-edge');
+    var svgEl = document.getElementById('gridSvg');
+    var rect = svgEl.getBoundingClientRect();
+    var dw = parseFloat(svgEl.getAttribute('data-dw'));
+    var dh = parseFloat(svgEl.getAttribute('data-dh'));
+    var scaleX = dw / rect.width, scaleY = dh / rect.height;
+
+    _dragState = {
+      edge: edge,
+      startX: e.clientX, startY: e.clientY,
+      origBox: { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h },
+      rect: rect, scaleX: scaleX, scaleY: scaleY, dw: dw, dh: dh
+    };
+
+    document.addEventListener('mousemove', onCropDrag);
+    document.addEventListener('mouseup', endCropDrag);
+  }
+
+  function onCropDrag(e) {
+    if (!_dragState) return;
+    var ds = _dragState;
+    var dx = (e.clientX - ds.startX) * ds.scaleX / ds.dw;
+    var dy = (e.clientY - ds.startY) * ds.scaleY / ds.dh;
+    var ob = ds.origBox;
+    var minSize = 0.05;
+
+    var nx = ob.x, ny = ob.y, nw = ob.w, nh = ob.h;
+
+    switch (ds.edge) {
+      case 'left':
+        nx = Math.max(0, Math.min(ob.x + ob.w - minSize, ob.x + dx));
+        nw = ob.w - (nx - ob.x);
+        break;
+      case 'right':
+        nw = Math.max(minSize, Math.min(1 - ob.x, ob.w + dx));
+        break;
+      case 'top':
+        ny = Math.max(0, Math.min(ob.y + ob.h - minSize, ob.y + dy));
+        nh = ob.h - (ny - ob.y);
+        break;
+      case 'bottom':
+        nh = Math.max(minSize, Math.min(1 - ob.y, ob.h + dy));
+        break;
+      case 'tl':
+        nx = Math.max(0, Math.min(ob.x + ob.w - minSize, ob.x + dx));
+        nw = ob.w - (nx - ob.x);
+        ny = Math.max(0, Math.min(ob.y + ob.h - minSize, ob.y + dy));
+        nh = ob.h - (ny - ob.y);
+        break;
+      case 'tr':
+        nw = Math.max(minSize, Math.min(1 - ob.x, ob.w + dx));
+        ny = Math.max(0, Math.min(ob.y + ob.h - minSize, ob.y + dy));
+        nh = ob.h - (ny - ob.y);
+        break;
+      case 'bl':
+        nx = Math.max(0, Math.min(ob.x + ob.w - minSize, ob.x + dx));
+        nw = ob.w - (nx - ob.x);
+        nh = Math.max(minSize, Math.min(1 - ob.y, ob.h + dy));
+        break;
+      case 'br':
+        nw = Math.max(minSize, Math.min(1 - ob.x, ob.w + dx));
+        nh = Math.max(minSize, Math.min(1 - ob.y, ob.h + dy));
+        break;
+      case 'move':
+        nx = Math.max(0, Math.min(1 - ob.w, ob.x + dx));
+        ny = Math.max(0, Math.min(1 - ob.h, ob.y + dy));
+        break;
+    }
+
+    _cropBox = { x: nx, y: ny, w: nw, h: nh };
+    updateGridPreview();
+  }
+
+  function endCropDrag() {
+    _dragState = null;
+    document.removeEventListener('mousemove', onCropDrag);
+    document.removeEventListener('mouseup', endCropDrag);
   }
 
   window.applyGridConfig = function () {
     currentOpts.segCols = _gridCols;
     currentOpts.segRows = _gridRows;
+    var isFullImage = _cropBox.x < 0.001 && _cropBox.y < 0.001 && _cropBox.w > 0.999 && _cropBox.h > 0.999;
+    currentOpts.cropBox = isFullImage ? null : { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h };
     configureDirty = true;
     document.getElementById('gridConfigModal').hidden = true;
     renderReportOpts();
@@ -833,10 +976,14 @@
     var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
     _gridCols = auto.cols;
     _gridRows = auto.rows;
+    _cropBox = { x: 0, y: 0, w: 1, h: 1 };
     updateGridPreview();
   };
 
   window.closeGridConfig = function () {
+    _dragState = null;
+    document.removeEventListener('mousemove', onCropDrag);
+    document.removeEventListener('mouseup', endCropDrag);
     document.getElementById('gridConfigModal').hidden = true;
   };
 
@@ -1036,18 +1183,22 @@
 
   function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid) {
     var cols = grid.cols, rows = grid.rows;
-    var cw = W / cols, ch = H / rows;
+    var cb = opts.cropBox || { x: 0, y: 0, w: 1, h: 1 };
+    var ox = cb.x * W, oy = cb.y * H;
+    var rw = cb.w * W, rh = cb.h * H;
+    var cw = rw / cols, ch = rh / rows;
 
     var cells = [];
     for (var ri = 0; ri < rows; ri++) {
       for (var ci = 0; ci < cols; ci++) {
-        cells.push({ col: ci, row: ri, x0: ci * cw, y0: ri * ch, x1: (ci + 1) * cw, y1: (ri + 1) * ch, aps: [] });
+        cells.push({ col: ci, row: ri, x0: ox + ci * cw, y0: oy + ri * ch, x1: ox + (ci + 1) * cw, y1: oy + (ri + 1) * ch, aps: [] });
       }
     }
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord; if (!c) return;
-      var ci = Math.min(cols - 1, Math.max(0, Math.floor(c.x / cw)));
-      var ri = Math.min(rows - 1, Math.max(0, Math.floor(c.y / ch)));
+      if (c.x < ox || c.x > ox + rw || c.y < oy || c.y > oy + rh) return;
+      var ci = Math.min(cols - 1, Math.max(0, Math.floor((c.x - ox) / cw)));
+      var ri = Math.min(rows - 1, Math.max(0, Math.floor((c.y - oy) / ch)));
       cells[ri * cols + ci].aps.push(ap);
     });
 
