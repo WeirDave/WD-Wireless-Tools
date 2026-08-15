@@ -6342,8 +6342,8 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
 .grid-modal-overlay[hidden] { display: none; }
 .grid-modal {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; width: 100%; max-width: 720px;
-  display: flex; flex-direction: column; max-height: 90vh;
+  border-radius: 12px; width: 92vw; max-width: 1400px;
+  display: flex; flex-direction: column; height: 90vh;
   box-shadow: 0 8px 32px rgba(0,0,0,.4);
 }
 .grid-modal-header {
@@ -6351,7 +6351,7 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
   padding: 14px 18px; border-bottom: 1px solid var(--border);
 }
 .grid-modal-header h3 { margin: 0; font-size: 16px; }
-.grid-modal-body { padding: 16px 18px; overflow-y: auto; }
+.grid-modal-body { padding: 16px 18px; overflow-y: auto; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .grid-controls {
   display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
   margin-bottom: 12px;
@@ -6362,9 +6362,9 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
 .grid-spinner { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 .grid-spin-val { min-width: 24px; text-align: center; font-weight: 700; font-size: 15px; color: var(--text); }
 .grid-cell-count { font-size: 12px; color: var(--text-3); }
-.grid-preview-container { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 12px; overflow: hidden; }
-.grid-preview-image { display: flex; align-items: center; justify-content: center; }
-.grid-preview-image svg { max-width: 100%; height: auto; }
+.grid-preview-container { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; padding: 12px; overflow: hidden; position: relative; }
+.grid-preview-image { display: flex; align-items: center; justify-content: center; position: relative; }
+.grid-preview-image svg { max-width: 100%; height: auto; user-select: none; }
 .grid-modal-footer {
   display: flex; align-items: center; padding: 12px 18px;
   border-top: 1px solid var(--border);
