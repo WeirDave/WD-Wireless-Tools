@@ -20,4 +20,8 @@ IF EXIST "%~dp0.restart_requested" (
     del "%~dp0.restart_requested" >nul 2>&1
     GOTO start
 )
-pause
+
+echo.
+set /p "AGAIN=Server stopped. Start again? (Y/N): "
+if /i "%AGAIN%"=="Y" GOTO start
+if /i "%AGAIN%"=="yes" GOTO start

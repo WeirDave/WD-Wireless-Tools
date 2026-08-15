@@ -1,0 +1,6 @@
+Site_ID,Site_Name,Address,City,State,Region,Deprecated_Names
+SITE-001,Downtown Office,123 Main St,Springfield,IL,Central,Old Downtown;Main St Office
+SITE-002,North Campus,456 University Ave,Springfield,IL,North,
+SITE-003,Airport Terminal,789 Aviation Blvd,Capital City,IL,East,Airport Site;Terminal Bldg
+SITE-004,Warehouse District,1010 Industrial Pkwy,Springfield,IL,West,
+SITE-005,City Hall Annex,200 Government Plaza,Capital City,IL,East,

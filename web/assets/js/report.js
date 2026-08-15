@@ -122,7 +122,7 @@
       document.getElementById('workspace').classList.add('active');
       var badge = document.getElementById('fileBadge');
       badge.textContent = fileName;
-      badge.hidden = false;
+      badge.style.display = 'inline-block';
 
       var sub = proj.accessPoints.length + ' APs across '
         + proj.floorPlans.length + ' floor plan'
@@ -512,61 +512,113 @@
   };
   updateLogoPreview();
 
+  var REPORT_CATEGORIES = [
+    { key: 'install', label: 'Installation & Placement',
+      ids: ['antenna', 'predictive', 'aim', 'location'] },
+    { key: 'analysis', label: 'Site Analysis',
+      ids: ['summary', 'coverage', 'interference', 'bom'] },
+    { key: 'audit', label: 'Audit & Change',
+      ids: ['audit'] },
+  ];
+
+  var expandedTemplateId = null;
+
   function renderTemplateGallery() {
     var host = document.getElementById('templateGallery');
     if (!host) return;
     var html = '';
-    Object.keys(REPORTS).forEach(function (id) {
-      var r = REPORTS[id];
-      var isSoon = r.status === 'coming-soon';
-      var isSelected = templateConfirmed && id === currentReportId;
-      var pill = isSoon
-        ? '<span class="rep-template-pill soon">Coming soon</span>'
-        : (isSelected
-          ? '<span class="rep-template-pill selected">✓ Selected</span>'
-          : '<span class="rep-template-pill available">Available</span>');
+    REPORT_CATEGORIES.forEach(function (cat) {
+      var catReports = cat.ids.filter(function (id) { return REPORTS[id]; });
+      if (!catReports.length) return;
+      html += '<div class="rep-cat-group">'
+        + '<h3 class="rep-cat-heading">' + WD.esc(cat.label) + '</h3>'
+        + '<div class="rep-cat-list">';
+      catReports.forEach(function (id) {
+        var r = REPORTS[id];
+        var isSoon = r.status === 'coming-soon';
+        var isSelected = templateConfirmed && id === currentReportId;
+        var isExpanded = expandedTemplateId === id;
+        var pill = isSoon
+          ? '<span class="rep-template-pill soon">Coming soon</span>'
+          : (isSelected
+            ? '<span class="rep-template-pill selected">Selected</span>'
+            : '<span class="rep-template-pill available">Available</span>');
 
-      var sections = (r.sections || []).map(function (s) {
-        return '<li class="rep-template-section">'
-          + '<span class="rep-template-section-icon">' + WD.esc(s.icon || '·') + '</span>'
-          + '<span class="rep-template-section-body">'
-          +   '<b>' + WD.esc(s.title) + '</b>'
-          +   '<span>' + WD.esc(s.description || '') + '</span>'
-          + '</span></li>';
-      }).join('');
+        var sections = (r.sections || []).map(function (s) {
+          return '<li class="rep-template-section">'
+            + '<span class="rep-template-section-icon">' + WD.esc(s.icon || '·') + '</span>'
+            + '<span class="rep-template-section-body">'
+            +   '<b>' + WD.esc(s.title) + '</b>'
+            +   '<span>' + WD.esc(s.description || '') + '</span>'
+            + '</span></li>';
+        }).join('');
 
-      var bestFor = r.bestFor
-        ? '<div class="rep-template-best-for"><b>Best for:</b> ' + WD.esc(r.bestFor) + '</div>'
-        : '';
+        var bestFor = r.bestFor
+          ? '<div class="rep-template-best-for"><b>Best for:</b> ' + WD.esc(r.bestFor) + '</div>'
+          : '';
 
-      var cta = isSoon
-        ? '<div class="rep-template-soon-note">In progress — check back soon</div>'
-        : '<div class="rep-template-cta"><button type="button" class="btn btn-blue" '
-          + 'onclick="selectReport(\'' + WD.escJsStr(id) + '\')">'
-          + (isSelected ? 'Continue with this template →' : 'Use this template →')
-          + '</button></div>';
+        var cta = isSoon
+          ? '<div class="rep-template-soon-note">In progress — check back soon</div>'
+          : '<div class="rep-template-cta"><button type="button" class="btn btn-blue" '
+            + 'onclick="event.stopPropagation();selectReport(\'' + WD.escJsStr(id) + '\')">'
+            + (isSelected ? 'Continue with this template' : 'Use this template')
+            + '</button></div>';
 
-      html += '<div class="rep-template-card tpl-' + WD.escAttr(id)
-        + (isSoon ? ' is-coming-soon' : '')
-        + (isSelected ? ' is-selected' : '')
-        + '"' + (isSoon ? '' : ' onclick="if(event.target.tagName!==\'BUTTON\')selectReport(\'' + WD.escJsStr(id) + '\')"')
-        + '>'
-        +   '<div class="rep-template-card-top">'
-        +     '<div class="rep-template-preview">' + (r.preview || '') + '</div>'
-        +     '<div class="rep-template-titles">'
-        +       pill
-        +       '<h3 class="rep-template-title">' + WD.esc(r.label) + '</h3>'
-        +       '<p class="rep-template-subtitle">' + WD.esc(r.description || '') + '</p>'
-        +     '</div>'
-        +   '</div>'
-        +   (sections ? '<div class="rep-template-sections-head">What\'s inside</div>'
-          + '<ul class="rep-template-sections">' + sections + '</ul>' : '')
-        +   bestFor
-        +   cta
-        + '</div>';
+        var detailToggle = '<button type="button" class="rep-template-expand" onclick="event.stopPropagation();toggleTemplateDetail(\'' + WD.escJsStr(id) + '\')">'
+          + (isExpanded ? '▾ Less' : '▸ Details') + '</button>';
+
+        html += '<div class="rep-template-card tpl-' + WD.escAttr(id)
+          + (isSoon ? ' is-coming-soon' : '')
+          + (isSelected ? ' is-selected' : '')
+          + (isExpanded ? ' is-expanded' : '')
+          + '"' + (isSoon ? '' : ' onclick="selectReport(\'' + WD.escJsStr(id) + '\')"')
+          + '>'
+          +   '<div class="rep-template-card-top">'
+          +     '<div class="rep-template-preview">' + (r.preview || '') + '</div>'
+          +     '<div class="rep-template-titles">'
+          +       pill
+          +       '<h3 class="rep-template-title">' + WD.esc(r.label) + '</h3>'
+          +       '<p class="rep-template-subtitle">' + WD.esc(r.description || '') + '</p>'
+          +     '</div>'
+          +     '<div class="rep-template-actions">'
+          +       detailToggle
+          +     '</div>'
+          +   '</div>'
+          +   '<div class="rep-template-detail"' + (isExpanded ? '' : ' hidden') + '>'
+          +     (sections ? '<div class="rep-template-sections-head">What\'s inside</div>'
+            + '<ul class="rep-template-sections">' + sections + '</ul>' : '')
+          +     bestFor
+          +     cta
+          +   '</div>'
+          + '</div>';
+      });
+      html += '</div></div>';
     });
+
+    var uncategorized = Object.keys(REPORTS).filter(function (id) {
+      return !REPORT_CATEGORIES.some(function (cat) { return cat.ids.indexOf(id) !== -1; });
+    });
+    if (uncategorized.length) {
+      html += '<div class="rep-cat-group"><h3 class="rep-cat-heading">Other</h3><div class="rep-cat-list">';
+      uncategorized.forEach(function (id) {
+        var r = REPORTS[id];
+        html += '<div class="rep-template-card tpl-' + WD.escAttr(id) + '" onclick="selectReport(\'' + WD.escJsStr(id) + '\')">'
+          + '<div class="rep-template-card-top"><div class="rep-template-preview">' + (r.preview || '') + '</div>'
+          + '<div class="rep-template-titles"><span class="rep-template-pill available">Available</span>'
+          + '<h3 class="rep-template-title">' + WD.esc(r.label) + '</h3>'
+          + '<p class="rep-template-subtitle">' + WD.esc(r.description || '') + '</p>'
+          + '</div></div></div>';
+      });
+      html += '</div></div>';
+    }
+
     host.innerHTML = html;
   }
+
+  window.toggleTemplateDetail = function (id) {
+    expandedTemplateId = expandedTemplateId === id ? null : id;
+    renderTemplateGallery();
+  };
 
   window.selectReport = function (id) {
     if (!REPORTS[id]) return;
@@ -600,27 +652,192 @@
       + '<span>' + WD.esc(r.docName) + ' options</span></div>';
     r.sidebar.forEach(function (opt) {
       var disabled = typeof opt.disabledWhen === 'function' ? !!opt.disabledWhen(proj) : false;
-      var checked = (opt.id in currentOpts) ? currentOpts[opt.id] : !!opt.default;
       var desc = opt.description || '';
       var reason = disabled && opt.disabledReason ? opt.disabledReason(proj) : '';
       if (reason) desc = (desc ? desc + ' ' : '') + '— ' + reason;
-      html += '<label class="rep-check with-desc' + (disabled ? ' is-disabled' : '') + '"'
-        + (disabled ? ' title="' + WD.escAttr(reason || 'Not available for this project') + '"' : '') + '>'
-        + '<input type="checkbox" data-opt-id="' + WD.escAttr(opt.id) + '" '
-        + (checked ? 'checked' : '') + (disabled ? ' disabled' : '')
-        + ' onchange="setOpt(this)">'
-        + '<span class="rep-check-body">'
-        +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
-        +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
-        + '</span></label>';
+      if (opt.type === 'grid-button') {
+        var gc = (currentOpts.segCols || '') + '';
+        var gr = (currentOpts.segRows || '') + '';
+        var gridLabel = (gc && gr) ? gc + ' × ' + gr : 'Auto';
+        html += '<div class="rep-check with-desc">'
+          + '<span class="rep-check-body">'
+          +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
+          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+          + '</span>'
+          + '<button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto;white-space:nowrap" '
+          + 'onclick="openGridConfig()">' + gridLabel + '</button>'
+          + '</div>';
+      } else if (opt.type === 'number') {
+        var numVal = (opt.id in currentOpts) ? currentOpts[opt.id] : (opt.default || '');
+        html += '<div class="rep-check with-desc' + (disabled ? ' is-disabled' : '') + '">'
+          + '<span class="rep-check-body">'
+          +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
+          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+          + '</span>'
+          + '<input type="number" id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" data-opt-type="number" '
+          + 'value="' + WD.escAttr(String(numVal)) + '" min="' + (opt.min || 1) + '" max="' + (opt.max || 20) + '" '
+          + 'style="width:60px;margin-left:auto" '
+          + (disabled ? 'disabled' : '')
+          + ' onchange="setOpt(this)" oninput="setOpt(this)">'
+          + '</div>';
+      } else {
+        var checked = (opt.id in currentOpts) ? currentOpts[opt.id] : !!opt.default;
+        html += '<label class="rep-check with-desc' + (disabled ? ' is-disabled' : '') + '"'
+          + (disabled ? ' title="' + WD.escAttr(reason || 'Not available for this project') + '"' : '') + '>'
+          + '<input type="checkbox" data-opt-id="' + WD.escAttr(opt.id) + '" '
+          + (checked ? 'checked' : '') + (disabled ? ' disabled' : '')
+          + ' onchange="setOpt(this)">'
+          + '<span class="rep-check-body">'
+          +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
+          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+          + '</span></label>';
+      }
     });
     host.innerHTML = html;
   }
   window.setOpt = function (cb) {
     var id = cb.getAttribute('data-opt-id');
-    currentOpts[id] = cb.checked;
+    if (cb.getAttribute('data-opt-type') === 'number') {
+      currentOpts[id] = cb.value === '' ? '' : parseInt(cb.value, 10);
+    } else {
+      currentOpts[id] = cb.checked;
+    }
     configureDirty = true;
     if (id === 'inclOmni' || id === 'inclDirectional') renderApFilter();
+  };
+
+  // ── Grid configuration modal ──
+
+  var _gridCols = 0, _gridRows = 0, _gridFloorIdx = 0;
+
+  window.openGridConfig = function () {
+    var modal = document.getElementById('gridConfigModal');
+    if (!modal) return;
+    var fps = proj.floorPlans || [];
+    if (!fps.length) { alert('No floor plans in this project.'); return; }
+    _gridFloorIdx = 0;
+    var fp = fps[0];
+    var aps = filterApsForFloor(fp);
+    var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
+    _gridCols = (currentOpts.segCols > 0) ? currentOpts.segCols : auto.cols;
+    _gridRows = (currentOpts.segRows > 0) ? currentOpts.segRows : auto.rows;
+
+    var sel = document.getElementById('gridFloorSelect');
+    sel.innerHTML = '';
+    fps.forEach(function (f, i) {
+      var opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = f.name || ('Floor ' + (i + 1));
+      sel.appendChild(opt);
+    });
+    sel.value = '0';
+
+    updateGridPreview();
+    modal.hidden = false;
+  };
+
+  function filterApsForFloor(fp) {
+    return (proj.accessPoints || []).filter(function (ap) {
+      return ap.location && ap.location.floorPlanId === fp.id;
+    });
+  }
+
+  window.gridFloorChanged = function (sel) {
+    _gridFloorIdx = parseInt(sel.value, 10) || 0;
+    var fp = proj.floorPlans[_gridFloorIdx];
+    if (!fp) return;
+    var aps = filterApsForFloor(fp);
+    var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
+    _gridCols = auto.cols;
+    _gridRows = auto.rows;
+    updateGridPreview();
+  };
+
+  window.adjustGridCols = function (delta) {
+    _gridCols = Math.max(1, Math.min(20, _gridCols + delta));
+    updateGridPreview();
+  };
+
+  window.adjustGridRows = function (delta) {
+    _gridRows = Math.max(1, Math.min(20, _gridRows + delta));
+    updateGridPreview();
+  };
+
+  function updateGridPreview() {
+    var fp = proj.floorPlans[_gridFloorIdx];
+    if (!fp) return;
+    var imgId = fp.bitmapImageId || fp.imageId;
+    var url = proj.imageUrls[imgId] || '';
+    var W = fp.width, H = fp.height;
+    var aps = filterApsForFloor(fp);
+
+    document.getElementById('gridColsVal').textContent = _gridCols;
+    document.getElementById('gridRowsVal').textContent = _gridRows;
+    document.getElementById('gridCellCount').textContent =
+      _gridCols * _gridRows + ' cells, ' + aps.length + ' APs on this floor';
+
+    var aspect = W / H;
+    var container = document.getElementById('gridPreviewContainer');
+    var maxW = container.offsetWidth || 600;
+    var maxH = 400;
+    var dispW, dispH;
+    if (aspect > maxW / maxH) {
+      dispW = maxW; dispH = maxW / aspect;
+    } else {
+      dispH = maxH; dispW = maxH * aspect;
+    }
+
+    var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + dispW + ' ' + dispH + '" '
+      + 'style="width:' + dispW + 'px;height:' + dispH + 'px;max-width:100%">';
+    svg += '<image href="' + WD.escAttr(url) + '" width="' + dispW + '" height="' + dispH + '" />';
+
+    var cw = dispW / _gridCols, ch = dispH / _gridRows;
+    for (var ci = 1; ci < _gridCols; ci++) {
+      svg += '<line x1="' + (ci * cw) + '" y1="0" x2="' + (ci * cw) + '" y2="' + dispH + '" stroke="rgba(59,130,246,0.7)" stroke-width="1.5" stroke-dasharray="6,3"/>';
+    }
+    for (var ri = 1; ri < _gridRows; ri++) {
+      svg += '<line x1="0" y1="' + (ri * ch) + '" x2="' + dispW + '" y2="' + (ri * ch) + '" stroke="rgba(59,130,246,0.7)" stroke-width="1.5" stroke-dasharray="6,3"/>';
+    }
+    for (var ri2 = 0; ri2 < _gridRows; ri2++) {
+      for (var ci2 = 0; ci2 < _gridCols; ci2++) {
+        var lbl = (ci2 < 26 ? letters[ci2] : 'C' + (ci2 + 1)) + (ri2 + 1);
+        var cx = ci2 * cw + cw / 2, cy = ri2 * ch + ch / 2;
+        svg += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central" '
+          + 'fill="rgba(59,130,246,0.5)" font-size="' + Math.max(10, Math.min(24, cw * 0.3)) + '" font-weight="700">' + lbl + '</text>';
+      }
+    }
+
+    aps.forEach(function (ap) {
+      var c = ap.location && ap.location.coord;
+      if (!c) return;
+      var px = c.x / W * dispW, py = c.y / H * dispH;
+      svg += '<circle cx="' + px + '" cy="' + py + '" r="3" fill="rgba(239,68,68,0.8)" stroke="#fff" stroke-width="0.5"/>';
+    });
+
+    svg += '</svg>';
+    document.getElementById('gridPreviewImage').innerHTML = svg;
+  }
+
+  window.applyGridConfig = function () {
+    currentOpts.segCols = _gridCols;
+    currentOpts.segRows = _gridRows;
+    configureDirty = true;
+    document.getElementById('gridConfigModal').hidden = true;
+    renderReportOpts();
+  };
+
+  window.resetGridToAuto = function () {
+    var fp = proj.floorPlans[_gridFloorIdx];
+    var aps = filterApsForFloor(fp);
+    var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
+    _gridCols = auto.cols;
+    _gridRows = auto.rows;
+    updateGridPreview();
+  };
+
+  window.closeGridConfig = function () {
+    document.getElementById('gridConfigModal').hidden = true;
   };
 
   function currentReport() { return REPORTS[currentReportId] || REPORTS[DEFAULT_REPORT_ID]; }
@@ -740,6 +957,7 @@
 
   function buildAntennaMarkers(aps, scaleW, scaleH, opts, ctx) {
     var markers = '';
+    var minDim = Math.min(scaleW, scaleH);
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord; if (!c) return;
       var r = ctx.primaryRadio(ap.id);
@@ -748,14 +966,18 @@
       var cls = isDirectional ? 'rep-mark rep-mark--dir' : 'rep-mark rep-mark--omni';
       markers += '<g class="' + cls + '" transform="translate(' + c.x + ',' + c.y + ')">';
       if (isDirectional) {
-        var len = Math.min(scaleW, scaleH) * 0.06;
+        var len = minDim * 0.06;
         markers += '<g transform="rotate(' + dir + ')">'
           + '<path class="rep-mark-cone" d="M 0 0 L ' + (-len * 0.35) + ' ' + (-len) + ' L ' + (len * 0.35) + ' ' + (-len) + ' Z"/></g>';
       }
       var label = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
-      var labelFont = Math.min(scaleW, scaleH) * 0.02 * Math.min(1, 3 / Math.max(3, label.length));
-      markers += '<circle class="rep-mark-dot" r="' + (Math.min(scaleW, scaleH) * 0.015) + '"/>'
-        + '<text class="rep-mark-label" y="4" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
+      var labelFont = minDim * 0.02 * Math.min(1, 3 / Math.max(3, label.length));
+      var padX = minDim * 0.006;
+      var boxW = Math.max(minDim * 0.03, label.length * labelFont * 0.65) + padX * 2;
+      var boxH = minDim * 0.028;
+      var cornerR = minDim * 0.005;
+      markers += '<rect class="rep-mark-dot" x="' + (-boxW / 2) + '" y="' + (-boxH / 2) + '" width="' + boxW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
+        + '<text class="rep-mark-label" y="' + (labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
     });
     return markers;
   }
@@ -773,7 +995,7 @@
     var W = fp.width || 1, H = fp.height || 1;
 
     if (opts.segmented) {
-      var grid = computeAntennaGrid(W, H, aps);
+      var grid = computeAntennaGrid(W, H, aps, opts);
       if (grid.cols * grid.rows > 1) return renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid);
     }
 
@@ -792,7 +1014,10 @@
 
 
 
-  function computeAntennaGrid(W, H, aps) {
+  function computeAntennaGrid(W, H, aps, opts) {
+    var userCols = parseInt(opts && opts.segCols, 10);
+    var userRows = parseInt(opts && opts.segRows, 10);
+    if (userCols > 0 && userRows > 0) return { cols: userCols, rows: userRows };
     var areaSqFt = W * H * 10.7639;
     var byDensity = Math.ceil(aps.length / 14) || 1;
     var bySize = Math.ceil(areaSqFt / 120000) || 1;
@@ -1718,6 +1943,7 @@
     var tickLen = Math.min(W, H) * 0.05;
     var dotR = Math.min(W, H) * 0.014;
 
+    var minDim = Math.min(W, H);
     var markers = '';
     floorAps.forEach(function (ap) {
       var c = ap.location && ap.location.coord; if (!c) return;
@@ -1731,9 +1957,13 @@
           + '</g>';
       }
       var label = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
-      var labelFont = Math.min(W, H) * 0.022 * Math.min(1, 3 / Math.max(3, label.length));
-      markers += '<circle class="rep-aim-dot" r="' + dotR + '"/>'
-        + '<text class="rep-aim-num" y="4" text-anchor="middle" font-size="' + labelFont + '">'
+      var labelFont = minDim * 0.022 * Math.min(1, 3 / Math.max(3, label.length));
+      var padX = minDim * 0.006;
+      var boxW = Math.max(minDim * 0.03, label.length * labelFont * 0.65) + padX * 2;
+      var boxH = minDim * 0.028;
+      var cornerR = minDim * 0.005;
+      markers += '<rect class="rep-aim-dot" x="' + (-boxW / 2) + '" y="' + (-boxH / 2) + '" width="' + boxW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
+        + '<text class="rep-aim-num" y="' + (labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">'
         + WD.esc(label) + '</text></g>';
     });
 
@@ -1886,10 +2116,16 @@
         ringsSvg += '<circle class="rep-cov-ring" cx="' + c.x + '" cy="' + c.y + '" r="' + rFair   + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-opacity="0.55" stroke-dasharray="' + (minDim * 0.008) + ' ' + (minDim * 0.005) + '"/>';
         ringsSvg += '<circle class="rep-cov-ring" cx="' + c.x + '" cy="' + c.y + '" r="' + rWeak   + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-opacity="0.35" stroke-dasharray="' + (minDim * 0.003) + ' ' + (minDim * 0.006) + '"/>';
       }
+      var covLabel = String(indexById[ap.id] || '');
+      var covFont = minDim * 0.022;
+      var covPadX = minDim * 0.006;
+      var covBoxW = Math.max(minDim * 0.03, covLabel.length * covFont * 0.65) + covPadX * 2;
+      var covBoxH = minDim * 0.028;
+      var covCornerR = minDim * 0.005;
       pinsSvg += '<g class="rep-cov-mark" transform="translate(' + c.x + ',' + c.y + ')">';
-      pinsSvg += '<circle class="rep-cov-dot" r="' + (minDim * 0.014) + '" fill="' + color + '" stroke="#fff" stroke-width="' + (minDim * 0.003) + '"/>';
+      pinsSvg += '<rect class="rep-cov-dot" x="' + (-covBoxW / 2) + '" y="' + (-covBoxH / 2) + '" width="' + covBoxW + '" height="' + covBoxH + '" rx="' + covCornerR + '" ry="' + covCornerR + '" fill="' + color + '" stroke="#fff" stroke-width="' + (minDim * 0.003) + '"/>';
       if (showLabels) {
-        pinsSvg += '<text class="rep-cov-num" y="' + (minDim * 0.008) + '" text-anchor="middle" font-size="' + (minDim * 0.022) + '" fill="#fff" font-weight="700">' + (indexById[ap.id] || '') + '</text>';
+        pinsSvg += '<text class="rep-cov-num" y="' + (covFont * 0.35) + '" text-anchor="middle" font-size="' + covFont + '" fill="#fff" font-weight="700">' + covLabel + '</text>';
       }
       pinsSvg += '</g>';
     });
@@ -2067,6 +2303,233 @@
     var overlays = host.querySelectorAll('.rep-overview-plan[data-crop-src]');
     for (var i = 0; i < overlays.length; i++) autocropOverlay(overlays[i]);
   }
+
+  function renderApLocationReport(aps, opts, ctx) {
+    var head = opts.cover
+      ? ctx.cover(aps.length, ctx.dateStr, 'Access points')
+      : ctx.inlineHeader(aps.length, ctx.dateStr, 'Access points');
+
+    var byFloor = {};
+    aps.forEach(function (ap) {
+      var fp = ctx.floorPlanForAp(ap);
+      var key = fp ? fp.id : '_none';
+      (byFloor[key] = byFloor[key] || []).push(ap);
+    });
+
+    var floorOrder = proj.floorPlans.slice().sort(function (a, b) {
+      return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+    });
+    if (byFloor['_none']) floorOrder.push({ id: '_none', name: '(No floor plan)' });
+
+    var sections = '';
+    floorOrder.forEach(function (fp) {
+      var floorAps = byFloor[fp.id];
+      if (!floorAps || !floorAps.length) return;
+      var sorted = floorAps.slice().sort(function (a, b) {
+        return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+      });
+      var out = '<section class="rep-floor-section">'
+        + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
+      if (fp.id !== '_none') {
+        out += renderApLocationOverview(fp, sorted, opts, ctx);
+      }
+      out += renderApLocationTable(sorted, fp, opts, ctx);
+      out += '</section>';
+      sections += out;
+    });
+
+    var audit = opts.nameAudit ? renderApNameAudit(aps, ctx) : '';
+
+    return head + sections + audit
+      + '<footer class="rep-doc-foot">Generated by WD Report · WD Wireless Tools</footer>';
+  }
+
+  function renderApLocationOverview(fp, aps, opts, ctx) {
+    var imgId = fp.bitmapImageId || fp.imageId;
+    var url = proj.imageUrls[imgId];
+    if (!url) return '<div class="rep-empty-small">Floor plan image not available.</div>';
+    var W = fp.width || 1, H = fp.height || 1;
+
+    if (opts.segmented) {
+      var grid = computeAntennaGrid(W, H, aps, opts);
+      if (grid.cols * grid.rows > 1) return renderApLocationSegmented(url, W, H, aps, opts, ctx, grid);
+    }
+
+    var markers = buildApLocationMarkers(aps, W, H, opts);
+    return '<div class="rep-overview">'
+      + '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
+      +   '<img src="' + url + '" alt="Floor plan">'
+      +   '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + markers + '</svg>'
+      + '</div>'
+      + '<div class="rep-overview-key">AP positions from .esx design data. Labels show ' + (opts.shortLabels === false ? 'full AP name' : 'short designator from AP name') + '.</div>'
+      + '</div>';
+  }
+
+  function buildApLocationMarkers(aps, W, H, opts) {
+    var markers = '';
+    var minDim = Math.min(W, H);
+    aps.forEach(function (ap) {
+      var c = ap.location && ap.location.coord; if (!c) return;
+      var label = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
+      var labelFont = minDim * 0.018 * Math.min(1, 4 / Math.max(4, label.length));
+      var padX = minDim * 0.005;
+      var boxW = Math.max(minDim * 0.025, label.length * labelFont * 0.65) + padX * 2;
+      var boxH = minDim * 0.024;
+      var cornerR = minDim * 0.004;
+      markers += '<g class="rep-mark rep-mark--loc" transform="translate(' + c.x + ',' + c.y + ')">'
+        + '<rect class="rep-mark-dot" x="' + (-boxW / 2) + '" y="' + (-boxH / 2) + '" width="' + boxW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
+        + '<text class="rep-mark-label" y="' + (labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
+    });
+    return markers;
+  }
+
+  function renderApLocationSegmented(url, W, H, aps, opts, ctx, grid) {
+    var cols = grid.cols, rows = grid.rows;
+    var cw = W / cols, ch = H / rows;
+    var cells = [];
+    for (var ri = 0; ri < rows; ri++) {
+      for (var ci = 0; ci < cols; ci++) {
+        cells.push({ col: ci, row: ri, x0: ci * cw, y0: ri * ch, x1: (ci + 1) * cw, y1: (ri + 1) * ch, aps: [] });
+      }
+    }
+    aps.forEach(function (ap) {
+      var c = ap.location && ap.location.coord; if (!c) return;
+      var ci = Math.min(cols - 1, Math.max(0, Math.floor(c.x / cw)));
+      var ri = Math.min(rows - 1, Math.max(0, Math.floor(c.y / ch)));
+      cells[ri * cols + ci].aps.push(ap);
+    });
+    var nonEmpty = cells.filter(function (cell) { return cell.aps.length; });
+    var emptyLabels = cells.filter(function (cell) { return !cell.aps.length; })
+      .map(function (cell) { return segCellLabel(cell.col, cell.row); });
+
+    var out = '<div class="rep-seg-note">Floor plan split into ' + nonEmpty.length + ' section' + (nonEmpty.length === 1 ? '' : 's')
+      + ' (' + cols + '&times;' + rows + ' grid) so AP labels stay legible.'
+      + (emptyLabels.length ? ' No APs in section' + (emptyLabels.length === 1 ? '' : 's') + ' ' + emptyLabels.join(', ') + ' — skipped.' : '')
+      + '</div>';
+    out += renderAntennaGridIndex(url, W, H, nonEmpty);
+    nonEmpty.forEach(function (cell) {
+      var label = segCellLabel(cell.col, cell.row);
+      var cW = cell.x1 - cell.x0, cH = cell.y1 - cell.y0;
+      var markers = buildApLocationMarkers(cell.aps, W, H, opts);
+      out += '<div class="rep-overview rep-seg-cell">'
+        + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell)
+        +   '<h3 class="rep-seg-cell-title">Section ' + WD.esc(label)
+        +     ' <span class="rep-seg-cell-count">— ' + cell.aps.length + ' AP' + (cell.aps.length === 1 ? '' : 's') + '</span></h3>'
+        + '</div>'
+        + '<div class="rep-overview-plan" data-seg="1" data-orig-w="' + W + '" data-orig-h="' + H
+        +   '" data-seg-x0="' + cell.x0 + '" data-seg-y0="' + cell.y0 + '" data-seg-x1="' + cell.x1 + '" data-seg-y1="' + cell.y1
+        +   '" style="--w:' + cW + ';--h:' + cH + '">'
+        +   '<img src="' + url + '" alt="Floor plan section ' + WD.escAttr(label) + '">'
+        +   '<svg viewBox="' + cell.x0 + ' ' + cell.y0 + ' ' + cW + ' ' + cH + '" preserveAspectRatio="none">' + markers + '</svg>'
+        + '</div>'
+        + '</div>';
+    });
+    return out;
+  }
+
+  function renderApLocationTable(aps, fp, opts, ctx) {
+    var rows = '';
+    aps.forEach(function (ap) {
+      var lbl = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
+      var floorName = fp ? (fp.name || '—') : '—';
+      var bf = fp && proj.buildingFloors[fp.id];
+      var buildingName = bf && proj.buildings[bf.buildingId]
+        ? proj.buildings[bf.buildingId].name || '—' : '—';
+      var r = ctx.primaryRadio(ap.id);
+      var ant = r && proj.antennas[r.antennaTypeId] ? proj.antennas[r.antennaTypeId] : null;
+      var nameIssue = '';
+      if (opts.nameAudit) {
+        if (!ap.name || !ap.name.trim()) nameIssue = 'Missing name';
+        else if (/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i.test(ap.name.trim())) nameIssue = 'MAC address as name';
+        else if (/^AP\s*\d*$/i.test(ap.name.trim())) nameIssue = 'Generic name';
+      }
+      rows += '<tr' + (nameIssue ? ' class="rep-loc-warn-row"' : '') + '>'
+        + '<td class="rep-num">' + WD.esc(lbl) + '</td>'
+        + '<td class="rep-name">' + WD.esc(ap.name || '(unnamed)') + '</td>'
+        + '<td>' + WD.esc(ap.vendor || '—') + '</td>'
+        + '<td>' + WD.esc(ap.model || '—') + '</td>'
+        + '<td>' + WD.esc(floorName) + '</td>'
+        + '<td>' + WD.esc(buildingName) + '</td>'
+        + (opts.nameAudit ? '<td class="rep-loc-warn">' + WD.esc(nameIssue) + '</td>' : '')
+        + '</tr>';
+    });
+
+    return '<table class="rep-ap-table rep-loc-table">'
+      + '<thead><tr>'
+      + '<th class="rep-num">#</th><th>AP name</th><th>Vendor</th><th>Model</th>'
+      + '<th>Floor</th><th>Building</th>'
+      + (opts.nameAudit ? '<th>Naming issue</th>' : '')
+      + '</tr></thead>'
+      + '<tbody>' + rows + '</tbody></table>';
+  }
+
+  function renderApNameAudit(aps, ctx) {
+    var issues = [];
+    aps.forEach(function (ap) {
+      var name = (ap.name || '').trim();
+      var issue = '';
+      if (!name) issue = 'Missing name';
+      else if (/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i.test(name)) issue = 'MAC address as name';
+      else if (/^AP\s*\d*$/i.test(name)) issue = 'Generic name (e.g. "AP1")';
+      if (issue) {
+        var fp = ctx.floorPlanForAp(ap);
+        issues.push({ name: name || '(unnamed)', issue: issue, floor: fp ? fp.name : '—' });
+      }
+    });
+    if (!issues.length) {
+      return '<section class="rep-floor-section">'
+        + '<h2 class="rep-floor-title">Naming audit</h2>'
+        + '<div class="rep-seg-note" style="color:var(--green)">All ' + aps.length + ' APs have proper names — no issues detected.</div>'
+        + '</section>';
+    }
+    var rows = issues.map(function (i) {
+      return '<tr><td class="rep-name">' + WD.esc(i.name) + '</td>'
+        + '<td>' + WD.esc(i.floor) + '</td>'
+        + '<td class="rep-loc-warn">' + WD.esc(i.issue) + '</td></tr>';
+    }).join('');
+    return '<section class="rep-floor-section">'
+      + '<h2 class="rep-floor-title">Naming audit</h2>'
+      + '<div class="rep-seg-note">' + issues.length + ' AP' + (issues.length === 1 ? '' : 's') + ' with naming issues found.</div>'
+      + '<table class="rep-ap-table"><thead><tr><th>AP name</th><th>Floor</th><th>Issue</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table>'
+      + '</section>';
+  }
+
+  var PREVIEW_LOCATION = ''
+    + '<svg viewBox="0 0 92 116" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+    +   '<rect x="4" y="4" width="84" height="108" rx="3" fill="#ffffff" stroke="#2563eb" stroke-width="0.8"/>'
+    +   '<rect x="10" y="12" width="50" height="4" rx="1" fill="#2563eb"/>'
+    +   '<rect x="10" y="20" width="70" height="2" rx="1" fill="#c8d4e0"/>'
+    +   '<rect x="10" y="30" width="72" height="38" rx="2" fill="#eef2f7" stroke="#d5dee7" stroke-width="0.5"/>'
+    +   '<g fill="#2563eb">'
+    +     '<rect x="17" y="40" width="10" height="5" rx="1.5"/>'
+    +     '<rect x="33" y="36" width="8" height="5" rx="1.5"/>'
+    +     '<rect x="47" y="44" width="12" height="5" rx="1.5"/>'
+    +     '<rect x="63" y="38" width="9" height="5" rx="1.5"/>'
+    +     '<rect x="25" y="54" width="11" height="5" rx="1.5"/>'
+    +     '<rect x="50" y="56" width="10" height="5" rx="1.5"/>'
+    +   '</g>'
+    +   '<g fill="#fff" font-size="3.5" text-anchor="middle" font-weight="700">'
+    +     '<text x="22" y="44.5">42</text><text x="37" y="40.5">07</text>'
+    +     '<text x="53" y="48.5">128</text><text x="67.5" y="42.5">15</text>'
+    +     '<text x="30.5" y="58.5">03</text><text x="55" y="60.5">91</text>'
+    +   '</g>'
+    +   '<rect x="10" y="74" width="72" height="3" rx="0.5" fill="#2563eb" opacity="0.55"/>'
+    +   '<rect x="10" y="80" width="30" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="42" y="80" width="20" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="64" y="80" width="18" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="10" y="84" width="30" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="42" y="84" width="20" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="64" y="84" width="18" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="10" y="88" width="30" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="42" y="88" width="20" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="64" y="88" width="18" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="10" y="92" width="30" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="42" y="92" width="20" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="64" y="92" width="18" height="1.5" rx="0.3" fill="#c8d4e0"/>'
+    +   '<rect x="10" y="100" width="72" height="6" rx="1" fill="#eef7ee" stroke="#22c55e" stroke-width="0.3"/>'
+    +   '<text x="46" y="104.5" text-anchor="middle" font-size="3" fill="#16a34a">All names OK</text>'
+    + '</svg>';
 
   var PREVIEW_ANTENNA = ''
     + '<svg viewBox="0 0 92 116" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
@@ -2391,6 +2854,8 @@
           description: 'When your AP names end with an "AP" designator (e.g. "…AP42"), show just the "42" on markers and in the # column. Turn off to always show the full AP name — safer when APs are named by MAC or free-form text.' },
         { id: 'segmented', label: 'Split large floor plans into zoomed sections', default: false,
           description: 'For very large buildings, break each floor plan overview into a grid of zoomed-in, lettered/numbered sections (with a locator map) so AP markers stay readable. Sections with no APs are skipped.' },
+        { id: '_gridConfig', type: 'grid-button', label: 'Configure grid…',
+          description: 'Choose how many rows and columns the segmented grid uses, with a live preview on your actual floor plan.' },
       ],
       render: renderAntennaReport,
       postRender: applyAntennaSegmentCrop,
@@ -2423,6 +2888,8 @@
           description: 'When your AP names end with an "AP" designator (e.g. "…AP42"), show just the "42" on markers. Turn off to always show the full AP name — safer when APs are named by MAC or free-form text.' },
         { id: 'segmented', label: 'Split large floor plans into zoomed sections', default: true,
           description: 'Breaks each floor plan into a grid of zoomed-in, lettered/numbered sections (with a locator map) so AP markers stay pinpoint-legible. On by default here since exact placement is the point of this report — turn off to force one full-page image per floor regardless of size.' },
+        { id: '_gridConfig', type: 'grid-button', label: 'Configure grid…',
+          description: 'Choose how many rows and columns the segmented grid uses, with a live preview on your actual floor plan.' },
       ],
       render: renderPredictiveReport,
       postRender: applyAntennaSegmentCrop,
@@ -2618,6 +3085,41 @@
           description: 'Omni APs produce broadly circular cells and are usually the primary content of this report.' },
       ],
       render: renderCoverageReport,
+    },
+    location: {
+      id: 'location',
+      label: 'AP Location Map',
+      description: 'Floor plan with every AP position labeled, plus a copyable AP name table. Use as a placement reference or naming audit.',
+      docName: 'AP Location',
+      coverBrand: 'Report · AP Location',
+      status: 'ready',
+      preview: PREVIEW_LOCATION,
+      bestFor: 'Handing legacy AP positions to architects for drafted floor plans, auditing AP naming conventions, and correlating AP names to physical locations.',
+      sections: [
+        { icon: '📄', title: 'Cover page',
+          description: 'Site name, AP + floor-plan counts, your logo, date.' },
+        { icon: '🗺️', title: 'Scalable floor plan per floor',
+          description: 'Every AP plotted with a labeled rounded marker. Large floors split into zoomed sections so labels stay legible.' },
+        { icon: '📋', title: 'AP name table',
+          description: 'Per-floor table of AP names, vendor, model, floor, and building — designed for copy/paste into spreadsheets.' },
+        { icon: '🔍', title: 'Naming audit',
+          description: 'Highlights APs with missing names, MAC addresses used as names, or generic "AP1"-style names that need renaming.' },
+      ],
+      sidebar: [
+        { id: 'shortLabels', label: 'Short number labels on the plan', default: true,
+          description: 'When your AP names end with an "AP" designator (e.g. "…AP42"), show just the "42" on markers. Turn off to always show the full AP name.' },
+        { id: 'nameAudit', label: 'Include naming audit', default: true,
+          description: 'Adds a column flagging APs with missing, MAC-address, or generic names. Also adds a summary section at the end.' },
+        { id: 'segmented', label: 'Split large floor plans into zoomed sections', default: true,
+          description: 'Breaks each floor plan into a grid of zoomed-in sections so AP labels stay readable at any scale.' },
+        { id: '_gridConfig', type: 'grid-button', label: 'Configure grid…',
+          description: 'Choose how many rows and columns the segmented grid uses, with a live preview on your actual floor plan.' },
+        { id: 'inclDirectional', label: 'Include directional APs', default: true },
+        { id: 'inclOmni', label: 'Include omni APs', default: true,
+          description: 'This report is about location, not aiming — omni APs are on by default so every AP shows.' },
+      ],
+      render: renderApLocationReport,
+      postRender: applyAntennaSegmentCrop,
     },
   };
 
