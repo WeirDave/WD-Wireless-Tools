@@ -1109,6 +1109,12 @@ body.tool-walls .btn-sm { padding: 6px 12px; font-size: 12px; }
 
 .modal p.sub { font-size: 12px; color: var(--text-2); margin-bottom: 12px; line-height: 1.4; }
 
+.modal .confirm-body { font-size: 13px; color: var(--text); line-height: 1.5; overflow-wrap: anywhere; }
+.modal .confirm-body ul { margin: 0 0 10px; padding-left: 20px; }
+.modal .confirm-body li { margin-bottom: 6px; }
+.modal .confirm-body li:last-child { margin-bottom: 0; }
+.modal .confirm-body p.sub { margin: 10px 0 0; }
+
 .modal label {
   display: block; font-size: 12px; font-weight: 600; color: var(--text-2);
   margin-bottom: 4px; margin-top: 14px;

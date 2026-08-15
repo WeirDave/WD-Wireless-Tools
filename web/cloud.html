@@ -245,6 +245,22 @@
   </div>
 </div>
 
+<!-- Generic styled stand-in for window.confirm() -- the native browser
+     dialog can't be styled, doesn't wrap long summaries cleanly, and gives
+     no visual context once dismissed. Used for bulk-action previews like
+     Sync where the user needs to actually read a multi-part breakdown
+     before committing. -->
+<div class="modal-overlay" id="confirmActionModal">
+  <div class="modal">
+    <h3 id="confirmActionTitle">Confirm</h3>
+    <div class="sub confirm-body" id="confirmActionBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="_resolveConfirmAction(false)">Cancel</button>
+      <button class="btn btn-blue" id="confirmActionOkBtn" onclick="_resolveConfirmAction(true)">Continue</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="peekModal">
   <div class="modal peek">
     <h3 id="peekTitle">Folder contents</h3>

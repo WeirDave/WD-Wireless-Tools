@@ -3635,64 +3635,80 @@ async function bulkSync(dir) {
     return n + kids.length;
   }, 0);
   const parts = [];
-  if (pairs.length) parts.push(`rename ${pairs.length} matched item${pairs.length === 1 ? '' : 's'}`);
-  if (uploads.length) parts.push(`upload ${uploads.length} local .esx file${uploads.length === 1 ? '' : 's'} to Ekahau Cloud`);
-  if (downloads.length) parts.push(`download ${downloads.length} cloud project${downloads.length === 1 ? '' : 's'}`);
+  if (pairs.length) parts.push(`Rename <b>${pairs.length}</b> matched item${pairs.length === 1 ? '' : 's'}`);
+  if (uploads.length) parts.push(`Upload <b>${uploads.length}</b> local .esx file${uploads.length === 1 ? '' : 's'} to Ekahau Cloud`);
+  if (downloads.length) parts.push(`Download <b>${downloads.length}</b> cloud project${downloads.length === 1 ? '' : 's'}`);
   if (siteCreates.length) {
     const noun = dir === 'to-cloud' ? 'cloud site' : 'local folder';
     const fileNote = createdFileCount
-      ? ` and move ${createdFileCount} file${createdFileCount === 1 ? '' : 's'} into ${siteCreates.length === 1 ? 'it' : 'them'}`
+      ? ` and move <b>${createdFileCount}</b> file${createdFileCount === 1 ? '' : 's'} into ${siteCreates.length === 1 ? 'it' : 'them'}`
       : '';
-    parts.push(`create ${siteCreates.length} new ${noun}${siteCreates.length === 1 ? '' : 's'}${fileNote}`);
+    parts.push(`Create <b>${siteCreates.length}</b> new ${noun}${siteCreates.length === 1 ? '' : 's'}${fileNote}`);
   }
-  let msg = `This will ${parts.join(', ')}.`;
+  let body = `<ul>${parts.map(t => `<li>${t}</li>`).join('')}</ul>`;
   if (stillSkipped.length) {
-    msg += `\n\n${stillSkipped.length} selected item${stillSkipped.length === 1 ? '' : 's'} will be skipped (already in sync, or nothing to do in this direction).`;
+    body += `<p class="sub">${stillSkipped.length} selected item${stillSkipped.length === 1 ? '' : 's'} will be skipped (already in sync, or nothing to do in this direction).</p>`;
   }
-  msg += '\n\nContinue?';
-  if (!confirm(msg)) return;
+  const ok = await showConfirmModal('Sync selected items?', body, 'Sync');
+  if (!ok) return;
   clearSelection();
 
-  if (pairs.length) {
-    let ok = 0, fail = 0, firstErr = '';
-    for (const d of pairs) {
-      try {
+  // Every step below fires through opEnqueue so it lands as a card in the
+  // bottom-right ops deck immediately -- a silent `await` loop here means
+  // the user has zero indication anything is happening until the whole
+  // batch finishes and the screen suddenly changes underneath them, which
+  // for a bulk cloud operation is a real data-loss risk, not just a UX
+  // nitpick.
+  for (const d of pairs) {
+    const label = dir === 'to-local'
+      ? `Renaming local to "${d.cloudName}"`
+      : `Renaming cloud to "${d.localName}"`;
+    opEnqueue({
+      title: label,
+      type: 'rename', pollBackend: false, undoable: false,
+      run: async () => {
         const r = (dir === 'to-local')
           ? await pyApi('rename_local', d.localPath, d.cloudName)
           : await pyApi('rename_cloud', d.entityKind || currentTab, d.cloudId, d.localName);
-        if (r && r.error) { fail++; firstErr = firstErr || r.error; }
-        else ok++;
-      } catch (err) { fail++; firstErr = firstErr || (err.message || 'failed'); }
-    }
-    if (fail === 0) toast(`Renamed ${ok} file${ok === 1 ? '' : 's'}`, 'success');
-    else if (ok === 0) toast(`Rename failed: ${firstErr}`, 'error');
-    else toast(`Renamed ${ok} · ${fail} failed (${firstErr})`, 'error');
-    _scheduleOpRefresh();
+        if (r && r.error) throw new Error(r.error);
+        _scheduleOpRefresh();
+        return r;
+      },
+    });
   }
 
-  // Create the missing sites/folders first (sequential — each is a real
-  // Ekahau Cloud write), then feed whatever was inside them into the same
-  // uploads/downloads arrays everything else already selected goes through.
+  // Create the missing sites/folders first (sequential -- each is a real
+  // Ekahau Cloud write, and later creates' file-move targets depend on the
+  // id/path the previous create returned), then feed whatever was inside
+  // them into the same uploads/downloads arrays everything else already
+  // selected goes through.
   for (const d of siteCreates) {
+    const label = dir === 'to-cloud' ? `Creating cloud site "${d.name}"` : `Creating local folder "${d.name}"`;
+    const { promise } = opEnqueue({
+      title: label,
+      type: 'create', pollBackend: false, undoable: false,
+      run: async () => {
+        const r = dir === 'to-cloud'
+          ? await pyApi('create_site', d.name)
+          : await pyApi('create_local_folder', d.name);
+        if (r && r.error) throw new Error(r.error);
+        return r;
+      },
+    });
     try {
+      const r = await promise;
       if (dir === 'to-cloud') {
-        const r = await pyApi('create_site', d.name);
-        if (r && r.error) { toast(`Couldn't create cloud site "${d.name}": ${r.error}`, 'error'); continue; }
         const newSiteId = r.id || r.siteId;
         (d.children.localOnly || []).forEach(f => {
           uploads.push({ path: f.path, name: f.name, siteId: newSiteId });
         });
-        toast(`Created cloud site "${d.name}"`, 'success');
       } else {
-        const r = await pyApi('create_local_folder', d.name);
-        if (r && r.error) { toast(`Couldn't create local folder "${d.name}": ${r.error}`, 'error'); continue; }
         const folderName = String(r.path || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || d.name;
         (d.children.cloudOnly || []).forEach(c => {
           downloads.push({ id: c.id, name: c.name, siteName: folderName });
         });
-        toast(`Created local folder "${d.name}"`, 'success');
       }
-    } catch (err) { toast(`Couldn't create "${d.name}": ${err.message || 'failed'}`, 'error'); }
+    } catch (err) {  }
   }
 
   for (const d of uploads) {
@@ -3896,6 +3912,28 @@ function _requireCloudDeleteConfirm(summaryHtml, runFn) {
   document.getElementById('cloudDeleteConfirmBtn').disabled = true;
   showModal('cloudDeleteConfirmModal');
   document.getElementById('cloudDeleteConfirmInput').focus();
+}
+
+// ── Styled stand-in for window.confirm() ──
+// The native dialog can't be styled, doesn't wrap a multi-part bulk-action
+// summary cleanly, and vanishes with no trace once dismissed. Bulk actions
+// (Sync) that need the user to actually read a breakdown before committing
+// use this instead: showConfirmModal(title, bodyHtml, confirmLabel) -> Promise<boolean>.
+let _pendingConfirmAction = null;
+function showConfirmModal(title, bodyHtml, confirmLabel) {
+  return new Promise(resolve => {
+    _pendingConfirmAction = resolve;
+    document.getElementById('confirmActionTitle').textContent = title;
+    document.getElementById('confirmActionBody').innerHTML = bodyHtml;
+    document.getElementById('confirmActionOkBtn').textContent = confirmLabel || 'Continue';
+    showModal('confirmActionModal');
+  });
+}
+function _resolveConfirmAction(result) {
+  const resolve = _pendingConfirmAction;
+  _pendingConfirmAction = null;
+  closeModal('confirmActionModal');
+  if (resolve) resolve(result);
 }
 
 async function confirmDelete() {

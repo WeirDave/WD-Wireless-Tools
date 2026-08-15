@@ -183,7 +183,7 @@ let currentTab = 'sites';
 let selected = new Set(['ct:cloud-1']);
 let enqueued = [];
 let apiCall = null;
-const confirm = () => true;
+function showConfirmModal() { return Promise.resolve(true); }
 function clearSelection() { selected.clear(); }
 function opEnqueue(spec) { enqueued.push(spec); }
 async function pyApi(...args) { apiCall = args; return {}; }
@@ -236,9 +236,15 @@ let currentTab = 'sites';
 let selected = new Set(['l:C:/sites/NewSite']);
 let enqueued = [];
 let apiCalls = [];
-const confirm = () => true;
+function showConfirmModal() { return Promise.resolve(true); }
 function clearSelection() { selected.clear(); }
-function opEnqueue(spec) { enqueued.push(spec); }
+// Mirrors the real opEnqueue's contract: it fires spec.run() immediately
+// and returns {id, promise} -- bulkSync now awaits that promise for the
+// site-create step to learn the new site's id before queuing its uploads.
+function opEnqueue(spec) {
+  enqueued.push(spec);
+  return { id: 'op-x', promise: spec.run('op-x', { aborted: false }) };
+}
 async function pyApi(...args) { apiCalls.push(args); if (args[0] === 'create_site') return {id: 'new-site-1'}; return {}; }
 function toast() {}
 function _scheduleOpRefresh() {}
@@ -247,8 +253,9 @@ eval(source.slice(syncStart, syncEnd));
 indexRowData();
 bulkSync('to-cloud').then(async () => {
   if (apiCalls[0][0] !== 'create_site' || apiCalls[0][1] !== 'NewSite') process.exit(1);
-  if (enqueued.length !== 2) process.exit(2);
-  await enqueued[0].run('op-1');
+  // 1 create-site op + 2 upload ops, each now enqueued as its own progress
+  // card instead of running silently.
+  if (enqueued.length !== 3) process.exit(2);
   if (apiCalls[1][0] !== 'upload_project' || apiCalls[1][1] !== 'C:/sites/NewSite/a.esx' || apiCalls[1][2] !== 'new-site-1') process.exit(3);
 }).catch(err => { console.error(err); process.exit(4); });
 """
