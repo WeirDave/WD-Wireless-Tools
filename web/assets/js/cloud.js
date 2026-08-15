@@ -690,11 +690,21 @@ function indexRowData() {
       cloudOwner: (s.owner || ''),
 
       siteName: s.siteName || '',
+      // Carried so bulk Sync can create the missing local folder AND move
+      // every cloud project already sitting under this site in one shot.
+      children: s.children,
     };
   });
-  (data.localOnly || []).forEach(f => { rowData['l:' + f.path] = { kind: 'local', path: f.path, name: f.name, isDir: f.isDir }; });
+  (data.localOnly || []).forEach(f => {
+    rowData['l:' + f.path] = {
+      kind: 'local', path: f.path, name: f.name, isDir: f.isDir,
+      // Same idea in the other direction: create the missing cloud site
+      // and upload every local .esx already sitting in this folder.
+      children: f.children,
+    };
+  });
 
-  const indexChildren = (children, parentSite) => {
+  const indexChildren = (children, parentSite, parentSiteId) => {
     if (!children) return;
     (children.matched || []).forEach(p => {
 
@@ -730,12 +740,16 @@ function indexRowData() {
       rowData['ct:' + l.path] = {
         kind: 'local', path: l.path, name: l.name, isDir: !!l.isDir,
         entityKind: 'projects',
+        // Lets a plain (non-site-creating) upload of this file auto-assign
+        // to the site whose folder it's already sitting in, instead of
+        // landing as a fresh unassigned cloud project every time.
+        parentSiteId: parentSiteId || null,
       };
     });
   };
-  (data.matched || []).forEach(p => indexChildren(p.cloud && p.cloud.children, p.cloud.name));
-  (data.cloudOnly || []).forEach(s => indexChildren(s.children, s.name));
-  (data.localOnly || []).forEach(f => indexChildren(f.children, f.name));
+  (data.matched || []).forEach(p => indexChildren(p.cloud && p.cloud.children, p.cloud.name, p.cloud.id));
+  (data.cloudOnly || []).forEach(s => indexChildren(s.children, s.name, s.id));
+  (data.localOnly || []).forEach(f => indexChildren(f.children, f.name, null));
 }
 
 function _passOwnerForCounts(cloudObj, localObj) {
@@ -3598,24 +3612,45 @@ async function bulkSync(dir) {
   const downloads = dir === 'to-local'
     ? items.filter(d => isProjectSyncItem(d) && d.kind === 'cloud')
     : [];
-  if (!pairs.length && !uploads.length && !downloads.length) {
+  const handled = new Set([...pairs, ...uploads, ...downloads]);
+  // Whole-site creates: a selected local-only folder (to-cloud) or
+  // cloud-only site (to-local) with no counterpart at all. Sync creates the
+  // missing site/folder AND moves every file already inside it in the same
+  // action, so "select one side, Sync" reaches real parity instead of
+  // silently skipping whole sites.
+  const wantKind = dir === 'to-cloud' ? 'local' : 'cloud';
+  const siteCreates = items.filter(d => !handled.has(d) && d.kind === wantKind && d.children);
+  const creating = new Set(siteCreates);
+  const stillSkipped = items.filter(d => !handled.has(d) && !creating.has(d));
+
+  if (!pairs.length && !uploads.length && !downloads.length && !siteCreates.length) {
     toast(dir === 'to-cloud'
       ? 'Select matched rows or local-only .esx files first'
       : 'Select matched rows or cloud-only projects first', 'info');
     return;
   }
-  if (uploads.length) {
-    const msg = uploads.length === 1
-      ? `Upload "${uploads[0].name}.esx" to Ekahau Cloud?`
-      : `Upload ${uploads.length} local .esx files to Ekahau Cloud?`;
-    if (!confirm(msg)) return;
+
+  const createdFileCount = siteCreates.reduce((n, d) => {
+    const kids = dir === 'to-cloud' ? (d.children.localOnly || []) : (d.children.cloudOnly || []);
+    return n + kids.length;
+  }, 0);
+  const parts = [];
+  if (pairs.length) parts.push(`rename ${pairs.length} matched item${pairs.length === 1 ? '' : 's'}`);
+  if (uploads.length) parts.push(`upload ${uploads.length} local .esx file${uploads.length === 1 ? '' : 's'} to Ekahau Cloud`);
+  if (downloads.length) parts.push(`download ${downloads.length} cloud project${downloads.length === 1 ? '' : 's'}`);
+  if (siteCreates.length) {
+    const noun = dir === 'to-cloud' ? 'cloud site' : 'local folder';
+    const fileNote = createdFileCount
+      ? ` and move ${createdFileCount} file${createdFileCount === 1 ? '' : 's'} into ${siteCreates.length === 1 ? 'it' : 'them'}`
+      : '';
+    parts.push(`create ${siteCreates.length} new ${noun}${siteCreates.length === 1 ? '' : 's'}${fileNote}`);
   }
-  if (downloads.length) {
-    const msg = downloads.length === 1
-      ? `Download "${downloads[0].name}" from Ekahau Cloud? It will land in a folder named after the project.`
-      : `Download ${downloads.length} projects from Ekahau Cloud? Each will land in its own folder.`;
-    if (!confirm(msg)) return;
+  let msg = `This will ${parts.join(', ')}.`;
+  if (stillSkipped.length) {
+    msg += `\n\n${stillSkipped.length} selected item${stillSkipped.length === 1 ? '' : 's'} will be skipped (already in sync, or nothing to do in this direction).`;
   }
+  msg += '\n\nContinue?';
+  if (!confirm(msg)) return;
   clearSelection();
 
   if (pairs.length) {
@@ -3635,14 +3670,39 @@ async function bulkSync(dir) {
     _scheduleOpRefresh();
   }
 
+  // Create the missing sites/folders first (sequential — each is a real
+  // Ekahau Cloud write), then feed whatever was inside them into the same
+  // uploads/downloads arrays everything else already selected goes through.
+  for (const d of siteCreates) {
+    try {
+      if (dir === 'to-cloud') {
+        const r = await pyApi('create_site', d.name);
+        if (r && r.error) { toast(`Couldn't create cloud site "${d.name}": ${r.error}`, 'error'); continue; }
+        const newSiteId = r.id || r.siteId;
+        (d.children.localOnly || []).forEach(f => {
+          uploads.push({ path: f.path, name: f.name, siteId: newSiteId });
+        });
+        toast(`Created cloud site "${d.name}"`, 'success');
+      } else {
+        const r = await pyApi('create_local_folder', d.name);
+        if (r && r.error) { toast(`Couldn't create local folder "${d.name}": ${r.error}`, 'error'); continue; }
+        const folderName = String(r.path || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || d.name;
+        (d.children.cloudOnly || []).forEach(c => {
+          downloads.push({ id: c.id, name: c.name, siteName: folderName });
+        });
+        toast(`Created local folder "${d.name}"`, 'success');
+      }
+    } catch (err) { toast(`Couldn't create "${d.name}": ${err.message || 'failed'}`, 'error'); }
+  }
+
   for (const d of uploads) {
     opEnqueue({
       title: `Uploading "${d.name}.esx"`,
       type: 'upload', pollBackend: true,
 
       undoable: false,
-      retryFn: async (newId) => pyApi('upload_project', d.path, undefined, newId),
-      run: async (opId) => pyApi('upload_project', d.path, undefined, opId),
+      retryFn: async (newId) => pyApi('upload_project', d.path, d.siteId || d.parentSiteId || undefined, newId),
+      run: async (opId) => pyApi('upload_project', d.path, d.siteId || d.parentSiteId || undefined, opId),
     });
   }
   for (const d of downloads) {

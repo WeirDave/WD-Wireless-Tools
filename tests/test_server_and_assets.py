@@ -205,6 +205,59 @@ bulkSync('to-local').then(async () => {
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_bulk_sync_creates_missing_cloud_site_and_uploads_its_files(self):
+        # A local-only site folder ("select local" + Sync <-) used to be
+        # silently dropped by bulk Sync -- no cloud site existed for it, and
+        # bulk Sync only ever renamed matched pairs or moved individual
+        # project files. It should instead create the missing cloud site
+        # and upload every .esx already in the folder to it in one action.
+        script = ROOT / "web" / "assets" / "js" / "cloud.js"
+        node_program = r"""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const indexStart = source.indexOf('function indexRowData');
+const indexEnd = source.indexOf('\nfunction _passOwnerForCounts', indexStart);
+const syncStart = source.indexOf('function isProjectSyncItem');
+const syncEnd = source.indexOf('\nfunction bulkDelete', syncStart);
+if ([indexStart, indexEnd, syncStart, syncEnd].some(i => i < 0)) throw new Error('sync helpers not found');
+let data = {
+  matched: [], cloudOnly: [],
+  localOnly: [{
+    path: 'C:/sites/NewSite', name: 'NewSite', isDir: true,
+    children: { matched: [], cloudOnly: [], localOnly: [
+      {path: 'C:/sites/NewSite/a.esx', name: 'a', isDir: false},
+      {path: 'C:/sites/NewSite/b.esx', name: 'b', isDir: false},
+    ] }
+  }]
+};
+let rowData = {};
+let currentTab = 'sites';
+let selected = new Set(['l:C:/sites/NewSite']);
+let enqueued = [];
+let apiCalls = [];
+const confirm = () => true;
+function clearSelection() { selected.clear(); }
+function opEnqueue(spec) { enqueued.push(spec); }
+async function pyApi(...args) { apiCalls.push(args); if (args[0] === 'create_site') return {id: 'new-site-1'}; return {}; }
+function toast() {}
+function _scheduleOpRefresh() {}
+eval(source.slice(indexStart, indexEnd));
+eval(source.slice(syncStart, syncEnd));
+indexRowData();
+bulkSync('to-cloud').then(async () => {
+  if (apiCalls[0][0] !== 'create_site' || apiCalls[0][1] !== 'NewSite') process.exit(1);
+  if (enqueued.length !== 2) process.exit(2);
+  await enqueued[0].run('op-1');
+  if (apiCalls[1][0] !== 'upload_project' || apiCalls[1][1] !== 'C:/sites/NewSite/a.esx' || apiCalls[1][2] !== 'new-site-1') process.exit(3);
+}).catch(err => { console.error(err); process.exit(4); });
+"""
+        result = subprocess.run(
+            ["node", "-e", node_program, str(script)],
+            capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_restart_accepts_a_legitimate_local_request(self):
         with patch.object(server.threading, "Thread") as thread:
             response = self.client.post(
