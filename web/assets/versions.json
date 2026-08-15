@@ -1,8 +1,8 @@
 {
-  "suite": "2.0.5",
-  "cloud": "4.16.0",
+  "suite": "2.0.7",
+  "cloud": "4.16.1",
   "walls": "7.38",
   "report": "2.21",
   "scale": "1.5",
-  "squirrel": "1.25.1"
+  "squirrel": "1.26.0"
 }
