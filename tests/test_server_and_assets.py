@@ -372,7 +372,7 @@ bulkSync('to-cloud').then(async () => {
             r"--card-accent:\s*([^;]+);",
             css,
         )
-        self.assertEqual(len(accents), 8)
+        self.assertEqual(len(accents), 9)
         values = [value.strip().lower() for _, value in accents]
         self.assertEqual(len(values), len(set(values)), accents)
 

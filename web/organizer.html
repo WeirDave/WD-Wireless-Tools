@@ -32,11 +32,12 @@
           <a class="menu-item active" href="/squirrel">· Squirrel</a>
           <div class="menu-sep"></div>
           <div class="menu-section">&#9656; Tools</div>
-          <button class="menu-item" onclick="showSettings()">· Settings — Type Mapping</button>
+          <a class="menu-item" href="/settings#organizer">· Suite Settings</a>
           <button class="menu-item" onclick="pickFolder()">· Change Folder…</button>
           <button class="menu-item" onclick="showCreateFolder()">· Create Project Folder</button>
           <button class="menu-item" onclick="showExtractFloorplans()">· Extract Floorplans…</button>
           <button class="menu-item" onclick="showAcornNotes()">· Acorn Notes…</button>
+          <a class="menu-item" href="/rename" target="_blank">· Site Rename…</a>
           <button class="menu-item" onclick="doScan()" id="menuRescan">· Rescan</button>
           <button class="menu-item" onclick="doUndo()" id="menuUndo" hidden>· ↶ Undo last organize</button>
           <div class="menu-sep"></div>
@@ -95,6 +96,12 @@
           <div class="pick-card-desc">Pick a folder and clean up filenames already in place — remove/replace text, adjust case and separators, and add your own prefix or suffix (with a <code>{folder}</code> token). See exactly what changes before you apply it.</div>
           <button class="btn btn-rose" onclick="event.stopPropagation(); showBulkRename()">Select Folder…</button>
         </div>
+        <a class="pick-card site-rename" href="/rename" target="_blank">
+          <div class="pick-card-icon">&#128209;</div>
+          <div class="pick-card-title">Site Rename</div>
+          <div class="pick-card-desc">Load a CSV site directory, match folders to sites, and rename everything to a consistent naming scheme with dynamic tokens. Opens in a new tab.</div>
+          <span class="btn btn-purple">Open Site Rename &rarr;</span>
+        </a>
         <div class="pick-card acorn" onclick="showAcornNotes()">
           <div class="pick-card-icon">&#127792;</div>
           <div class="pick-card-title">Acorn Notes</div>

@@ -20,7 +20,9 @@ from pathlib import Path
 
 import requests
 
-from tools.folder_organizer import _load_config as _load_organizer_config
+from tools.settings import get_destinations as _get_suite_destinations
+from tools.settings import load_settings as _load_suite_settings
+from tools.settings import update_settings as _update_suite_settings
 
 try:
     import browser_cookie3
@@ -59,6 +61,10 @@ def _assert_inside(path, root):
 
 
 def load_config():
+    unified = CONFIG_DIR / "settings.json"
+    if unified.exists():
+        s = _load_suite_settings(_path=unified)
+        return {"output_dir": s.get("global", {}).get("output_dir", "")}
     cfg = {"output_dir": ""}
     if CONFIG_FILE.exists():
         try:
@@ -70,6 +76,11 @@ def load_config():
 
 
 def save_config(cfg):
+    unified = CONFIG_DIR / "settings.json"
+    if unified.exists():
+        _update_suite_settings({"global": {"output_dir": cfg.get("output_dir", "")}},
+                               _path=unified)
+        return
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
         json.dump(cfg, f, indent=2)
@@ -2032,11 +2043,11 @@ class CloudManager:
             target.mkdir(parents=True)
 
 
-            cfg = _load_organizer_config()
-            subfolders = cfg.get("subfolders", ["images", "floorplans", "reports"])
-            for sf in subfolders:
-                (target / sf).mkdir(exist_ok=True)
-            return {"ok": True, "path": str(target), "subfolders": subfolders}
+            destinations = _get_suite_destinations()
+            subfolder_names = [d["name"] for d in destinations]
+            for name in subfolder_names:
+                (target / name).mkdir(exist_ok=True)
+            return {"ok": True, "path": str(target), "subfolders": subfolder_names}
         except Exception as e:
             return {"error": str(e)}
 
@@ -2069,9 +2080,8 @@ class CloudManager:
             if is_new_folder:
 
 
-                cfg = _load_organizer_config()
-                for sf in cfg.get("subfolders", ["images", "floorplans", "reports"]):
-                    (dest_dir / sf).mkdir(exist_ok=True)
+                for d in _get_suite_destinations():
+                    (dest_dir / d["name"]).mkdir(exist_ok=True)
 
             result = self.api.download_project(project_id, progress_cb=progress_cb)
             if isinstance(result, dict) and result.get("error"):

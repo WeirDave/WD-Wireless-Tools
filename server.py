@@ -25,11 +25,14 @@ WEB = HERE / "web"
 sys.path.insert(0, str(HERE))
 from tools.cloud_manager import CloudManager
 from tools.folder_organizer import FolderOrganizer
+from tools.site_rename import SiteRenameManager
 from tools.template_store import TemplateStore
+from tools import settings as suite_settings
 
 app = Flask(__name__, static_folder=None)
 cm = CloudManager()
 fo = FolderOrganizer()
+sr = SiteRenameManager()
 ts = TemplateStore()
 PORT = int(os.environ.get("PORT") or 8675)
 API_REQUEST_HEADER = "X-WD-Wireless-Tools"
@@ -47,6 +50,13 @@ def _load_startup_versions():
 _STARTUP_VERSIONS = _load_startup_versions()
 _STARTED_AT = datetime.now(timezone.utc).isoformat()
 fo.app_version = _STARTUP_VERSIONS.get("squirrel", "")
+sr.app_version = _STARTUP_VERSIONS.get("squirrel", "")
+
+if not suite_settings.SETTINGS_FILE.exists() and (
+    suite_settings.LEGACY_ORGANIZER_CONFIG.exists()
+    or suite_settings.LEGACY_CLOUD_CONFIG.exists()
+):
+    suite_settings.migrate_legacy()
 
 
 _progress_lock = threading.Lock()
@@ -144,6 +154,21 @@ def report():
     return send_from_directory(WEB, "report.html")
 
 
+@app.route("/rename")
+def site_rename():
+    return send_from_directory(WEB, "site-rename.html")
+
+
+@app.route("/setup")
+def setup():
+    return send_from_directory(WEB, "setup.html")
+
+
+@app.route("/settings")
+def settings_page():
+    return send_from_directory(WEB, "settings.html")
+
+
 @app.route("/guide")
 def guide():
     return send_from_directory(WEB, "guide.html")
@@ -221,6 +246,42 @@ def api_organizer(action):
         return jsonify({"error": str(e)}), 500
 
 
+SITE_RENAME_ACTIONS = {
+    "pick_folder":          lambda d: sr.pick_folder(),
+    "load_directory":       lambda d: sr.load_directory(d["csv_text"], d.get("column_map", {})),
+    "get_directory":        lambda d: sr.get_directory(),
+    "get_token_list":       lambda d: sr.get_token_list(),
+    "match_folders":        lambda d: sr.match_folders(d["root"]),
+    "preview_folder_rename": lambda d: sr.preview_folder_rename(
+                                d["root"], d["format"], d.get("separator", " - ")),
+    "execute_folder_rename": lambda d: sr.execute_folder_rename(d["root"], d["renames"]),
+    "preview_file_rename":  lambda d: sr.preview_file_rename(
+                                d["root"], d["format"], d.get("separator", " - ")),
+    "execute_file_rename":  lambda d: sr.execute_file_rename(d["root"], d["renames"]),
+    "gap_report":           lambda d: sr.gap_report(d["root"]),
+    "undo_last":            lambda d: sr.undo_last(d["type"]),
+    "save_profile":         lambda d: sr.save_profile(
+                                d["name"], d.get("folder_format", ""),
+                                d.get("file_format", ""), d.get("separator", " - ")),
+    "delete_profile":       lambda d: sr.delete_profile(d["name"]),
+    "list_profiles":        lambda d: sr.list_profiles(),
+}
+
+
+@app.route("/api/site-rename/<action>", methods=["POST"])
+def api_site_rename(action):
+    fn = SITE_RENAME_ACTIONS.get(action)
+    if not fn:
+        return jsonify({"error": f"unknown action: {action}"}), 404
+    try:
+        data = request.get_json(silent=True) or {}
+        return jsonify(fn(data))
+    except KeyError as e:
+        return jsonify({"error": f"missing field: {e}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 TEMPLATE_ACTIONS = {
     "get_folder":   lambda d: ts.get_folder(),
     "scan":         lambda d: ts.scan(),
@@ -233,6 +294,33 @@ TEMPLATE_ACTIONS = {
 @app.route("/api/templates/<action>", methods=["POST"])
 def api_templates(action):
     fn = TEMPLATE_ACTIONS.get(action)
+    if not fn:
+        return jsonify({"error": f"unknown action: {action}"}), 404
+    try:
+        data = request.get_json(silent=True) or {}
+        return jsonify(fn(data))
+    except KeyError as e:
+        return jsonify({"error": f"missing field: {e}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+SETTINGS_ACTIONS = {
+    "get":              lambda d: {"ok": True, "settings": suite_settings.load_settings()},
+    "update":           lambda d: {"ok": True, "settings": suite_settings.update_settings(d.get("patch", {}))},
+    "needs_setup":      lambda d: {"ok": True, "needed": suite_settings.needs_setup()},
+    "complete_setup":   lambda d: {"ok": True, "settings": suite_settings.update_settings(
+                            {"setup_complete": True, **(d.get("patch", {}))})},
+    "reset_setup":      lambda d: {"ok": True, "settings": suite_settings.update_settings(
+                            {"setup_complete": False})},
+    "get_destinations": lambda d: {"ok": True, "destinations": [
+                            dict(d) for d in suite_settings.get_destinations()]},
+}
+
+
+@app.route("/api/settings/<action>", methods=["POST"])
+def api_settings(action):
+    fn = SETTINGS_ACTIONS.get(action)
     if not fn:
         return jsonify({"error": f"unknown action: {action}"}), 404
     try:

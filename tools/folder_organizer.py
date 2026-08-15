@@ -492,8 +492,30 @@ def _human_size(n: int) -> str:
     return f"{n / (1024 * 1024 * 1024):.2f} GB"
 
 
+_GLOBAL_KEYS = {"subfolders", "subfolder_names", "custom_destinations"}
+
+
 def _load_config():
-    """Load saved organizer config, falling back to defaults."""
+    """Load saved organizer config, falling back to defaults.
+
+    Prefers the unified settings.json when it exists, assembling the
+    same flat dict shape callers have always expected.  Uses CONFIG_DIR
+    (not an imported constant) so test patches are honored.
+    """
+    unified = CONFIG_DIR / "settings.json"
+    if unified.exists():
+        from tools.settings import load_settings
+        s = load_settings(_path=unified)
+        cfg = dict(DEFAULT_CONFIG)
+        g = s.get("global", {})
+        o = s.get("organizer", {})
+        cfg.update(o)
+        for key in _GLOBAL_KEYS:
+            if key in g:
+                cfg[key] = g[key]
+        cfg["rename"] = _migrate_rename_cfg(cfg.get("rename"))
+        return cfg
+
     cfg = dict(DEFAULT_CONFIG)
     if ORGANIZER_CONFIG.exists():
         try:
@@ -507,6 +529,25 @@ def _load_config():
 
 
 def _save_config(cfg):
+    """Save organizer config.
+
+    Routes through unified settings.json when it exists, splitting keys
+    into global vs organizer sections.  Falls back to the legacy file.
+    """
+    unified = CONFIG_DIR / "settings.json"
+    if unified.exists():
+        from tools.settings import update_settings
+        global_patch = {}
+        org_patch = {}
+        for key, val in cfg.items():
+            if key in _GLOBAL_KEYS:
+                global_patch[key] = val
+            elif key in DEFAULT_CONFIG:
+                org_patch[key] = val
+        update_settings({"global": global_patch, "organizer": org_patch},
+                        _path=unified)
+        return
+
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(ORGANIZER_CONFIG, "w") as f:
         json.dump(cfg, f, indent=2)

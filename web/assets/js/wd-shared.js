@@ -553,12 +553,28 @@
     document.body.classList.remove('wd-has-update-banner');
   }
 
+  WD.api = function (action, body) {
+    return fetch('/api/' + action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json(); });
+  };
+
+  WD.checkSetup = function () {
+    if (window.location.pathname === '/setup') return;
+    WD.api('settings/needs_setup').then(function (r) {
+      if (r && r.needed) window.location.href = '/setup';
+    }).catch(function () {});
+  };
+
   document.addEventListener('DOMContentLoaded', function () {
     WD.syncThemeUI();
     WD.syncFavicon();
     WD.applyVersions();
     WD.checkServerVersion();
     WD.checkForUpdates({ force: false });
+    WD.checkSetup();
   });
 
   window.WD = WD;

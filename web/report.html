@@ -32,6 +32,9 @@
         <a class="help-menu-item" href="/scale">· Scale</a>
         <a class="help-menu-item" href="/squirrel">· Squirrel</a>
         <div class="help-menu-sep"></div>
+        <div class="menu-section">&#9656; Tools</div>
+        <a class="help-menu-item" href="/settings#report">· Suite Settings</a>
+        <div class="help-menu-sep"></div>
         <div class="menu-section">&#9656; Help</div>
         <a class="help-menu-item" href="/guide-report" target="_blank">· User Guide</a>
         <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
@@ -81,6 +84,7 @@
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Tools</div>
           <button class="help-menu-item" onclick="loadNewFile()">· Open Another File</button>
+          <a class="help-menu-item" href="/settings#report">· Suite Settings</a>
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Help</div>
           <a class="help-menu-item" href="/guide-report" target="_blank">· User Guide</a>
@@ -194,6 +198,47 @@
       <div class="rep-empty">Report will render here.</div>
     </main>
   </section>
+</div>
+
+<div id="gridConfigModal" class="grid-modal-overlay" hidden>
+  <div class="grid-modal">
+    <div class="grid-modal-header">
+      <h3>Configure Grid</h3>
+      <button class="btn-icon" onclick="closeGridConfig()" title="Close">&times;</button>
+    </div>
+    <div class="grid-modal-body">
+      <div class="grid-controls">
+        <label>Floor plan
+          <select id="gridFloorSelect" onchange="gridFloorChanged(this)"></select>
+        </label>
+        <div class="grid-spinners">
+          <div class="grid-spinner">
+            <span>Columns</span>
+            <button class="btn btn-secondary btn-sm" onclick="adjustGridCols(-1)">&minus;</button>
+            <span id="gridColsVal" class="grid-spin-val">3</span>
+            <button class="btn btn-secondary btn-sm" onclick="adjustGridCols(1)">+</button>
+          </div>
+          <div class="grid-spinner">
+            <span>Rows</span>
+            <button class="btn btn-secondary btn-sm" onclick="adjustGridRows(-1)">&minus;</button>
+            <span id="gridRowsVal" class="grid-spin-val">3</span>
+            <button class="btn btn-secondary btn-sm" onclick="adjustGridRows(1)">+</button>
+          </div>
+        </div>
+        <div id="gridCellCount" class="grid-cell-count"></div>
+      </div>
+      <div id="gridPreviewContainer" class="grid-preview-container">
+        <div id="gridPreviewImage" class="grid-preview-image"></div>
+      </div>
+    </div>
+    <div class="grid-modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="resetGridToAuto()">Reset to Auto</button>
+      <div style="margin-left:auto;display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="closeGridConfig()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="applyGridConfig()">Apply</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div id="toasts" class="toasts"></div>
