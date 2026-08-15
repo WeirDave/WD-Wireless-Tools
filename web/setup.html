@@ -38,6 +38,7 @@
 .setup-input-row input[type="text"]:focus { border-color: var(--border-focus); outline: none; }
 .setup-input-row .btn { font-size: 15px; padding: 10px 20px; }
 .setup-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 36px; }
+.setup-actions.centered { justify-content: center; }
 .setup-actions .btn { min-width: 120px; font-size: 16px; padding: 12px 24px; }
 .setup-skip { background: transparent; color: var(--text-2); border-color: var(--border); }
 .setup-skip:hover { color: var(--text); border-color: var(--border-strong); }
@@ -98,7 +99,7 @@
     <div class="setup-logo"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Wireless Tools"></div>
     <div class="setup-title">Welcome to WD Wireless Tools</div>
     <div class="setup-sub">Let's set up a few things before you start. This only takes a minute — you can always change these later in Settings.</div>
-    <div class="setup-actions" style="justify-content: center;">
+    <div class="setup-actions centered">
       <button class="btn btn-blue" onclick="goStep('folder')">Get Started</button>
     </div>
   </div>

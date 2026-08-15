@@ -665,7 +665,7 @@
           +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
           +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
           + '</span>'
-          + '<button type="button" class="btn btn-secondary btn-sm" style="margin-left:auto;white-space:nowrap" '
+          + '<button type="button" class="btn btn-secondary btn-sm rep-btn-right" '
           + 'onclick="openGridConfig()">' + gridLabel + '</button>'
           + '</div>';
       } else if (opt.type === 'number') {
@@ -677,7 +677,7 @@
           + '</span>'
           + '<input type="number" id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" data-opt-type="number" '
           + 'value="' + WD.escAttr(String(numVal)) + '" min="' + (opt.min || 1) + '" max="' + (opt.max || 20) + '" '
-          + 'style="width:60px;margin-left:auto" '
+          + 'class="rep-input-sm" '
           + (disabled ? 'disabled' : '')
           + ' onchange="setOpt(this)" oninput="setOpt(this)">'
           + '</div>';
@@ -795,7 +795,7 @@
 
     var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + vw + ' ' + vh + '" '
-      + 'style="width:100%;height:100%;object-fit:contain" '
+      + 'class="grid-svg-fill" '
       + 'id="gridSvg" data-dw="' + vw + '" data-dh="' + vh + '">';
     svg += '<image href="' + WD.escAttr(url) + '" width="' + vw + '" height="' + vh + '" />';
 
@@ -2651,7 +2651,7 @@
     if (!issues.length) {
       return '<section class="rep-floor-section">'
         + '<h2 class="rep-floor-title">Naming audit</h2>'
-        + '<div class="rep-seg-note" style="color:var(--green)">All ' + aps.length + ' APs have proper names — no issues detected.</div>'
+        + '<div class="rep-seg-note rep-seg-note--ok">All ' + aps.length + ' APs have proper names — no issues detected.</div>'
         + '</section>';
     }
     var rows = issues.map(function (i) {

@@ -194,7 +194,7 @@
       html += '</tr>';
     }
     if (_csvRows.length > 10) {
-      html += '<tr><td colspan="' + _csvHeaders.length + '" style="text-align:center;opacity:.6">… ' +
+      html += '<tr><td colspan="' + _csvHeaders.length + '" class="table-ellipsis">… ' +
         (_csvRows.length - 10) + ' more rows</td></tr>';
     }
     html += '</tbody></table>';
