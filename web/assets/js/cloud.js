@@ -3699,13 +3699,19 @@ async function bulkSync(dir) {
       const r = await promise;
       if (dir === 'to-cloud') {
         const newSiteId = r.id || r.siteId;
+        const alreadyQueued = new Set(uploads.map(x => x.path));
         (d.children.localOnly || []).forEach(f => {
-          uploads.push({ path: f.path, name: f.name, siteId: newSiteId });
+          if (!alreadyQueued.has(f.path)) {
+            uploads.push({ path: f.path, name: f.name, siteId: newSiteId });
+          }
         });
       } else {
         const folderName = String(r.path || '').replace(/\\/g, '/').split('/').filter(Boolean).pop() || d.name;
+        const alreadyQueued = new Set(downloads.map(x => x.id));
         (d.children.cloudOnly || []).forEach(c => {
-          downloads.push({ id: c.id, name: c.name, siteName: folderName });
+          if (!alreadyQueued.has(c.id)) {
+            downloads.push({ id: c.id, name: c.name, siteName: folderName });
+          }
         });
       }
     } catch (err) {  }
