@@ -772,7 +772,7 @@
 
   window.resetCropBox = function () {
     _cropBox = { x: 0, y: 0, w: 1, h: 1 };
-    updateGridPreview();
+    rebalanceGridForCrop();
   };
 
   function updateGridPreview() {
@@ -960,9 +960,25 @@
   }
 
   function endCropDrag() {
+    var edge = _dragState && _dragState.edge;
     _dragState = null;
     document.removeEventListener('mousemove', onCropDrag);
     document.removeEventListener('mouseup', endCropDrag);
+    if (edge && edge !== 'move') rebalanceGridForCrop();
+  }
+
+  function rebalanceGridForCrop() {
+    var fp = proj.floorPlans[_gridFloorIdx];
+    var cropW = _cropBox.w * fp.width;
+    var cropH = _cropBox.h * fp.height;
+    if (cropW <= 0 || cropH <= 0) return;
+    var totalCells = _gridCols * _gridRows;
+    var aspect = cropW / cropH;
+    var newCols = Math.max(1, Math.round(Math.sqrt(totalCells * aspect)));
+    var newRows = Math.max(1, Math.round(totalCells / newCols));
+    _gridCols = newCols;
+    _gridRows = newRows;
+    updateGridPreview();
   }
 
   window.applyGridConfig = function () {
