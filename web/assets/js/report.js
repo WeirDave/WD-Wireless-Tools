@@ -837,15 +837,15 @@
     svg += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh
       + '" fill="none" stroke="#3b82f6" stroke-width="2" pointer-events="none"/>';
 
-    // drag handles — edges
-    var ht = 6;
-    svg += '<rect class="crop-handle" data-edge="left" x="' + (bx - ht / 2) + '" y="' + (by + ht) + '" width="' + ht + '" height="' + (bh - ht * 2) + '" fill="transparent" cursor="ew-resize"/>';
-    svg += '<rect class="crop-handle" data-edge="right" x="' + (bx + bw - ht / 2) + '" y="' + (by + ht) + '" width="' + ht + '" height="' + (bh - ht * 2) + '" fill="transparent" cursor="ew-resize"/>';
-    svg += '<rect class="crop-handle" data-edge="top" x="' + (bx + ht) + '" y="' + (by - ht / 2) + '" width="' + (bw - ht * 2) + '" height="' + ht + '" fill="transparent" cursor="ns-resize"/>';
-    svg += '<rect class="crop-handle" data-edge="bottom" x="' + (bx + ht) + '" y="' + (by + bh - ht / 2) + '" width="' + (bw - ht * 2) + '" height="' + ht + '" fill="transparent" cursor="ns-resize"/>';
+    // drag handles — edges (wide hit areas for easy grabbing)
+    var ht = 20;
+    var cs = 18;
+    svg += '<rect class="crop-handle" data-edge="left" x="' + (bx - ht / 2) + '" y="' + (by + cs) + '" width="' + ht + '" height="' + (bh - cs * 2) + '" fill="transparent" cursor="ew-resize"/>';
+    svg += '<rect class="crop-handle" data-edge="right" x="' + (bx + bw - ht / 2) + '" y="' + (by + cs) + '" width="' + ht + '" height="' + (bh - cs * 2) + '" fill="transparent" cursor="ew-resize"/>';
+    svg += '<rect class="crop-handle" data-edge="top" x="' + (bx + cs) + '" y="' + (by - ht / 2) + '" width="' + (bw - cs * 2) + '" height="' + ht + '" fill="transparent" cursor="ns-resize"/>';
+    svg += '<rect class="crop-handle" data-edge="bottom" x="' + (bx + cs) + '" y="' + (by + bh - ht / 2) + '" width="' + (bw - cs * 2) + '" height="' + ht + '" fill="transparent" cursor="ns-resize"/>';
 
-    // drag handles — corners
-    var cs = 10;
+    // drag handles — corners (visible blue squares)
     svg += '<rect class="crop-handle" data-edge="tl" x="' + (bx - cs / 2) + '" y="' + (by - cs / 2) + '" width="' + cs + '" height="' + cs + '" fill="#3b82f6" rx="2" cursor="nwse-resize"/>';
     svg += '<rect class="crop-handle" data-edge="tr" x="' + (bx + bw - cs / 2) + '" y="' + (by - cs / 2) + '" width="' + cs + '" height="' + cs + '" fill="#3b82f6" rx="2" cursor="nesw-resize"/>';
     svg += '<rect class="crop-handle" data-edge="bl" x="' + (bx - cs / 2) + '" y="' + (by + bh - cs / 2) + '" width="' + cs + '" height="' + cs + '" fill="#3b82f6" rx="2" cursor="nesw-resize"/>';
