@@ -5,7 +5,7 @@ Serves a WD-branded home page plus both tools (Cloud Manager, Quick Walls) as
 browser pages, and exposes Cloud Manager's operations as JSON endpoints. Runs a
 tiny local Flask server and opens your default browser to it.
 
-    python server.py      (or just double-click run.bat)
+    python server.py      (or just double-click "WD Wireless Tools Start.bat")
 
 No pywebview, no WebView2 — so none of the desktop-window headaches.
 """

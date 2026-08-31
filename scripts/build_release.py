@@ -10,8 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ROOT_FILES = (
     "server.py",
-    "run.bat",
-    "run.command",
+    "WD Wireless Tools Start.bat",
+    "WD Wireless Tools Start.command",
     "requirements.txt",
     "README.md",
     "LICENSE",
@@ -56,7 +56,7 @@ def build_release(version: str, output: Path) -> None:
         for source, relative in iter_release_files():
             info = zipfile.ZipInfo.from_file(source, relative.as_posix())
             info.create_system = 3
-            permissions = 0o755 if relative.as_posix() == "run.command" else 0o644
+            permissions = 0o755 if relative.as_posix() == "WD Wireless Tools Start.command" else 0o644
             info.external_attr = (stat.S_IFREG | permissions) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
             with source.open("rb") as handle:

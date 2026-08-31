@@ -392,7 +392,7 @@ bulkSync('to-cloud').then(async () => {
                 self.assertFalse(any(name.startswith("docs/releases/") for name in names))
                 self.assertFalse(any(name.startswith("images/") for name in names))
                 self.assertFalse(any("__pycache__" in name for name in names))
-                mode = archive.getinfo("run.command").external_attr >> 16
+                mode = archive.getinfo("WD Wireless Tools Start.command").external_attr >> 16
                 self.assertTrue(mode & stat.S_IXUSR)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
