@@ -46,6 +46,6 @@ tmp/
 PROJECT_MEMORY.md
 
 # Transient sentinel — server.py drops this before exiting on Restart Now;
-# run.bat / run.command detect it and relaunch. If the file exists on disk
+# the launcher scripts detect it and relaunch. If the file exists on disk
 # outside a restart, it was left behind by an aborted cycle — safe to delete.
 .restart_requested

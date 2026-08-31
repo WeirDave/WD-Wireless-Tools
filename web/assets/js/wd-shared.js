@@ -244,7 +244,7 @@
         var pollDelay = 400;
         (function poll() {
           if (Date.now() > deadline) {
-            _restartFailed('Server didn\'t come back. If you launched it without run.bat, close and reopen the app manually.');
+            _restartFailed('Server didn\'t come back. If you launched it without "WD Wireless Tools Start.bat", close and reopen the app manually.');
             return;
           }
           fetch('/api/version', { cache: 'no-store' })

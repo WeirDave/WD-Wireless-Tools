@@ -126,7 +126,7 @@ Open the [hosted tool suite](https://weirdave.github.io/WD-Wireless-Tools/) to u
 1. Install [Python 3.10 or newer](https://www.python.org/downloads/). On Windows, enable **Add Python to PATH** during installation.
 2. Open the [latest release](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) and download the versioned `WD-Wireless-Tools-vX.X.X.zip` asset—not GitHub's automatic “Source code” archive.
 3. Extract the ZIP to a permanent folder.
-4. Double-click `run.bat` on Windows or `run.command` on macOS.
+4. Double-click `WD Wireless Tools Start.bat` on Windows or `WD Wireless Tools Start.command` on macOS.
 
 The launcher installs missing dependencies, starts the local service, and opens `http://localhost:8675`. Keep its terminal window open while using the suite.
 
@@ -142,7 +142,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.1.2
+WIRELESS TOOLS  v2.1.3
 A suite of Ekahau workflow tools.
 
 Local suite: http://localhost:8675/
@@ -188,9 +188,9 @@ Choose a folder containing loose project files. Squirrel shows the proposed orga
 
 Install Python 3.10 or newer and enable **Add Python to PATH** on Windows. Reopen the terminal afterward.
 
-### macOS blocks `run.command`
+### macOS blocks `WD Wireless Tools Start.command`
 
-Right-click `run.command`, choose **Open**, then confirm **Open**. This is normally required only once.
+Right-click `WD Wireless Tools Start.command`, choose **Open**, then confirm **Open**. This is normally required only once.
 
 ### Cloud Manager cannot find a session
 
@@ -201,11 +201,11 @@ Confirm that you are signed into `https://cloud.ekahau.com` in a normal Chrome, 
 Close the other running instance, or choose another port:
 
 ```bat
-set PORT=8676 && run.bat
+set PORT=8676 && "WD Wireless Tools Start.bat"
 ```
 
 ```bash
-PORT=8676 bash run.command
+PORT=8676 bash "WD Wireless Tools Start.command"
 ```
 
 ### Browser does not open automatically
@@ -216,32 +216,32 @@ Open [http://localhost:8675](http://localhost:8675) manually while the launcher 
 
 ```text
 WD-Wireless-Tools/
-├── server.py                 # Local Flask/Waitress service and API routes
-├── run.bat                   # Windows launcher
-├── run.command               # macOS launcher
-├── requirements.txt          # Python dependencies
-├── BACKLOG.md                # Unfinished product work only
+├── server.py                          # Local Flask/Waitress service and API routes
+├── WD Wireless Tools Start.bat        # Windows launcher
+├── WD Wireless Tools Start.command    # macOS launcher
+├── requirements.txt                   # Python dependencies
+├── BACKLOG.md                         # Unfinished product work only
 ├── tools/
-│   ├── cloud_manager.py      # Cloud client and reverse-engineered upload/download flows
-│   ├── template_store.py     # Wall-template persistence
-│   └── folder_organizer.py   # Squirrel scanning and organization
-├── web/                      # Application source and hosted page templates
+│   ├── cloud_manager.py               # Cloud client and reverse-engineered upload/download flows
+│   ├── template_store.py              # Wall-template persistence
+│   └── folder_organizer.py            # Squirrel scanning and organization
+├── web/                               # Application source and hosted page templates
 │   ├── assets/
-│   │   ├── versions.json     # Suite and component versions
-│   │   ├── lib/              # Vendored browser libraries
+│   │   ├── versions.json              # Suite and component versions
+│   │   ├── lib/                       # Vendored browser libraries
 │   │   └── js/
-│   │       ├── wd-shared.js  # Shared UI utilities
-│   │       ├── walls-swap.js # Wall-remapping workflow
-│   │       └── ...           # Tool-specific application code
-│   └── pages/                # GitHub Pages landing/stub templates
-├── templates/                # Bundled wall-type templates
+│   │       ├── wd-shared.js           # Shared UI utilities
+│   │       ├── walls-swap.js          # Wall-remapping workflow
+│   │       └── ...                    # Tool-specific application code
+│   └── pages/                         # GitHub Pages landing/stub templates
+├── templates/                         # Bundled wall-type templates
 ├── docs/
-│   └── USER_MANUAL.md        # Complete user documentation
+│   └── USER_MANUAL.md                 # Complete user documentation
 ├── scripts/
-│   ├── build_release.py      # Allowlisted release ZIP builder
-│   └── make_test_projects.py # Fictional ESX fixture generator
-├── tests/                    # Python, server, asset, and JavaScript safety tests
-└── .github/workflows/        # Tests, releases, and Pages deployment
+│   ├── build_release.py               # Allowlisted release ZIP builder
+│   └── make_test_projects.py          # Fictional ESX fixture generator
+├── tests/                             # Python, server, asset, and JavaScript safety tests
+└── .github/workflows/                 # Tests, releases, and Pages deployment
 ```
 
 The local `.claude/` directory is development-tool configuration, not application code. It is intentionally excluded because it may contain machine-specific paths and permissions.
