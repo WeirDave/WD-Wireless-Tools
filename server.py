@@ -25,14 +25,14 @@ WEB = HERE / "web"
 sys.path.insert(0, str(HERE))
 from tools.cloud_manager import CloudManager
 from tools.folder_organizer import FolderOrganizer
-from tools.site_rename import SiteRenameManager
+from tools.rename_manager import RenameManager
 from tools.template_store import TemplateStore
 from tools import settings as suite_settings
 
 app = Flask(__name__, static_folder=None)
 cm = CloudManager()
 fo = FolderOrganizer()
-sr = SiteRenameManager()
+rm = RenameManager()
 ts = TemplateStore()
 PORT = int(os.environ.get("PORT") or 8675)
 API_REQUEST_HEADER = "X-WD-Wireless-Tools"
@@ -50,7 +50,7 @@ def _load_startup_versions():
 _STARTUP_VERSIONS = _load_startup_versions()
 _STARTED_AT = datetime.now(timezone.utc).isoformat()
 fo.app_version = _STARTUP_VERSIONS.get("squirrel", "")
-sr.app_version = _STARTUP_VERSIONS.get("squirrel", "")
+rm.app_version = _STARTUP_VERSIONS.get("squirrel", "")
 
 if not suite_settings.SETTINGS_FILE.exists() and (
     suite_settings.LEGACY_ORGANIZER_CONFIG.exists()
@@ -154,9 +154,11 @@ def report():
     return send_from_directory(WEB, "report.html")
 
 
+
 @app.route("/rename")
-def site_rename():
-    return send_from_directory(WEB, "site-rename.html")
+@app.route("/squirrel/rename")
+def squirrel_rename():
+    return send_from_directory(WEB, "rename.html")
 
 
 @app.route("/setup")
@@ -196,7 +198,10 @@ def guide_report():
 
 @app.route("/assets/<path:fn>")
 def assets(fn):
-    return send_from_directory(WEB / "assets", fn)
+    resp = send_from_directory(WEB / "assets", fn)
+    if fn.endswith((".js", ".css")):
+        resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 @app.route("/favicon.ico")
@@ -246,31 +251,44 @@ def api_organizer(action):
         return jsonify({"error": str(e)}), 500
 
 
-SITE_RENAME_ACTIONS = {
-    "pick_folder":          lambda d: sr.pick_folder(),
-    "load_directory":       lambda d: sr.load_directory(d["csv_text"], d.get("column_map", {})),
-    "get_directory":        lambda d: sr.get_directory(),
-    "get_token_list":       lambda d: sr.get_token_list(),
-    "match_folders":        lambda d: sr.match_folders(d["root"]),
-    "preview_folder_rename": lambda d: sr.preview_folder_rename(
+
+RENAME_ACTIONS = {
+    "pick_folder":          lambda d: rm.pick_folder(),
+    "get_default_root":     lambda d: rm.get_default_root(),
+    "load_directory":       lambda d: rm.load_directory(d["csv_text"], d.get("column_map", {})),
+    "get_directory":        lambda d: rm.get_directory(),
+    "get_tokens":           lambda d: rm.get_tokens(),
+    "match_folders":        lambda d: rm.match_folders(d["root"]),
+    "preview_folder_rename": lambda d: rm.preview_folder_rename(
+                                d["root"], d["format"], d.get("separator", " - "),
+                                d.get("manual_values")),
+    "execute_folder_rename": lambda d: rm.execute_folder_rename(d["root"], d["renames"]),
+    "preview_file_rename":  lambda d: rm.preview_file_rename(
                                 d["root"], d["format"], d.get("separator", " - ")),
-    "execute_folder_rename": lambda d: sr.execute_folder_rename(d["root"], d["renames"]),
-    "preview_file_rename":  lambda d: sr.preview_file_rename(
-                                d["root"], d["format"], d.get("separator", " - ")),
-    "execute_file_rename":  lambda d: sr.execute_file_rename(d["root"], d["renames"]),
-    "gap_report":           lambda d: sr.gap_report(d["root"]),
-    "undo_last":            lambda d: sr.undo_last(d["type"]),
-    "save_profile":         lambda d: sr.save_profile(
+    "execute_file_rename":  lambda d: rm.execute_file_rename(d["root"], d["renames"]),
+    "detect_rename_style":  lambda d: rm.detect_rename_style(d.get("root")),
+    "preview_bulk_rename":  lambda d: rm.preview_bulk_rename(
+                                d.get("root"), d.get("rules"),
+                                skip=set(d.get("skip", [])),
+                                subfolder_names=d.get("subfolder_names", [])),
+    "execute_bulk_rename":  lambda d: rm.execute_bulk_rename(d.get("items")),
+    "gap_report":           lambda d: rm.gap_report(d["root"]),
+    "undo_last":            lambda d: rm.undo_last(d["type"]),
+    "save_profile":         lambda d: rm.save_profile(
                                 d["name"], d.get("folder_format", ""),
-                                d.get("file_format", ""), d.get("separator", " - ")),
-    "delete_profile":       lambda d: sr.delete_profile(d["name"]),
-    "list_profiles":        lambda d: sr.list_profiles(),
+                                d.get("file_format", ""), d.get("separator", " - "),
+                                d.get("file_rules")),
+    "delete_profile":       lambda d: rm.delete_profile(d["name"]),
+    "list_profiles":        lambda d: rm.list_profiles(),
+    "generate_csv_template": lambda d: rm.generate_csv_template(d.get("format", "")),
+    "prefill_from_folders": lambda d: rm.prefill_from_folders(
+                                d["root"], d.get("format", "")),
 }
 
 
-@app.route("/api/site-rename/<action>", methods=["POST"])
-def api_site_rename(action):
-    fn = SITE_RENAME_ACTIONS.get(action)
+@app.route("/api/rename/<action>", methods=["POST"])
+def api_rename(action):
+    fn = RENAME_ACTIONS.get(action)
     if not fn:
         return jsonify({"error": f"unknown action: {action}"}), 404
     try:

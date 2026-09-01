@@ -38,6 +38,8 @@
         <div class="menu-section">&#9656; Help</div>
         <a class="help-menu-item" href="/guide-report" target="_blank">· User Guide</a>
         <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+        <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <a class="help-menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug</a>
       </div>
     </div>
   </div>
@@ -236,7 +238,8 @@
       <button class="btn btn-secondary btn-sm" onclick="resetCropBox()">Reset Crop</button>
       <div class="grid-modal-actions">
         <button class="btn btn-secondary btn-sm" onclick="closeGridConfig()">Cancel</button>
-        <button class="btn btn-primary btn-sm" onclick="applyGridConfig()">Apply</button>
+        <button class="btn btn-secondary btn-sm" onclick="applyGridConfig(true)">Apply to All Floors</button>
+        <button class="btn btn-primary btn-sm" onclick="applyGridConfig(false)">Apply</button>
       </div>
     </div>
   </div>
