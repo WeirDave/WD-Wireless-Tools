@@ -326,8 +326,13 @@
       return;
     }
 
-    var inclDirectional = ('inclDirectional' in currentOpts) ? currentOpts.inclDirectional : true;
-    var inclOmni        = ('inclOmni'        in currentOpts) ? currentOpts.inclOmni        : false;
+    var r = currentReport();
+    var sidebarDefaults = {};
+    (r.sidebar || []).forEach(function (o) { sidebarDefaults[o.id] = !!o.default; });
+    var inclDirectional = ('inclDirectional' in currentOpts) ? currentOpts.inclDirectional
+      : ('inclDirectional' in sidebarDefaults) ? sidebarDefaults.inclDirectional : true;
+    var inclOmni = ('inclOmni' in currentOpts) ? currentOpts.inclOmni
+      : ('inclOmni' in sidebarDefaults) ? sidebarDefaults.inclOmni : false;
     var eligible = proj.accessPoints.filter(function (ap) {
       var omni = apIsOmniOnly(ap);
       if (omni && !inclOmni) return false;
@@ -1057,8 +1062,8 @@
     }
 
     var opts = collectOpts();
-    var inclDirectional = ('inclDirectional' in currentOpts) ? currentOpts.inclDirectional : true;
-    var inclOmni        = ('inclOmni'        in currentOpts) ? currentOpts.inclOmni        : false;
+    var inclDirectional = ('inclDirectional' in opts) ? opts.inclDirectional : true;
+    var inclOmni        = ('inclOmni'        in opts) ? opts.inclOmni        : false;
     var aps = proj.accessPoints.filter(function (a) {
       if (apDisabled.has(a.id)) return false;
       var omni = apIsOmniOnly(a);
