@@ -25,21 +25,22 @@ re-discovered (or re-explained) each new chat.
    -q -r requirements.txt && /tmp/venv/bin/python -m unittest discover -s
    tests -v`.
 4. Commit and push to `main` directly (no PR needed for routine work).
-5. Tag the release and push the tag:
+5. Create the GitHub release with hand-written notes, matching the
+   WaxFrame Pro style (H1 = one-line summary, `## What changed` with
+   bullets, `## Verified`, `## Files changed`):
    ```powershell
    git tag -a vX.Y.Z -m "vX.Y.Z"
    git push origin vX.Y.Z
+   gh release create vX.Y.Z --title "WD Wireless Tools vX.Y.Z" --notes "..."
    ```
-   The release workflow (`.github/workflows/release.yml`) validates that
-   the tag exactly matches `versions.json`'s `"suite"` value
-   (`scripts/build_release.py` raises if they don't match) — so the
-   version bump commit MUST land before the tag is pushed.
+   The release workflow (`.github/workflows/release.yml`) triggers on
+   `release: [published]`, runs tests, builds the ZIP via
+   `scripts/build_release.py`, and uploads it as a release asset.
+   `build_release.py` raises if the tag doesn't match `versions.json`'s
+   `"suite"` value — so the version bump commit MUST land before the
+   tag is pushed.
    Note: tag pushes work from local sessions but are blocked from
    Claude Code **cloud** sessions (claude.ai web).
-6. No hand-written release notes file needed — `release.yml` uses
-   `generate_release_notes: true` (GitHub auto-generates from commits).
-   The old `docs/releases/vX.Y.Z.md`-per-tag convention was removed when
-   this repo did a clean history reset at v2.0.0.
 
 ## Known gotchas
 
