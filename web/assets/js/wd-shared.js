@@ -577,6 +577,88 @@
     WD.checkSetup();
   });
 
+  WD.copyDiagnostics = function () {
+    var versionsUrl = _scriptSrc ? _scriptSrc.replace(/js\/wd-shared\.js.*$/, 'versions.json') : '/assets/versions.json';
+    fetch(versionsUrl, { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (versions) {
+        var lines = [];
+        lines.push('WD Wireless Tools v' + (versions.suite || 'unknown'));
+        Object.keys(versions).forEach(function (k) {
+          if (k !== 'suite') lines.push('  ' + k + ' : v' + versions[k]);
+        });
+        lines.push('Browser    : ' + navigator.userAgent);
+        lines.push('Platform   : ' + (navigator.platform || 'unknown'));
+        lines.push('Screen     : ' + screen.width + 'x' + screen.height);
+        lines.push('Viewport   : ' + window.innerWidth + 'x' + window.innerHeight);
+        lines.push('Running    : ' + (location.protocol === 'file:' ? 'Local file' : location.origin));
+        lines.push('Page       : ' + location.pathname);
+        var text = lines.join('\n');
+        navigator.clipboard.writeText(text).then(function () {
+          WD.toast('Diagnostics copied to clipboard');
+        }).catch(function () {
+          WD.toast('Copy failed — open dev tools console and try again', 'error');
+        });
+      })
+      .catch(function () {
+        var fallback = [
+          'WD Wireless Tools',
+          'Browser    : ' + navigator.userAgent,
+          'Platform   : ' + (navigator.platform || 'unknown'),
+          'Running    : ' + location.origin,
+          'Page       : ' + location.pathname,
+        ].join('\n');
+        navigator.clipboard.writeText(fallback).then(function () {
+          WD.toast('Basic diagnostics copied (version file unavailable)');
+        });
+      });
+  };
+
+  function checkServerVersion() {
+    fetch('/api/version', { cache: 'no-store' }).then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (info) {
+      if (!info) return;
+      var existing = document.getElementById('wdStaleBanner');
+      if (!info.restartReady) { if (existing) existing.remove(); return; }
+      if (existing) return;
+      var b = document.createElement('div');
+      b.id = 'wdStaleBanner';
+      b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
+        + 'display:flex;align-items:center;gap:10px;padding:8px 16px;'
+        + 'background:#b45309;color:#fff;font:13px/1.4 system-ui,sans-serif;';
+      b.innerHTML = '<span style="font-size:16px">⚠</span>'
+        + '<span id="wdStaleMsg"><b>Server is running v' + WD.esc(info.version)
+        + '</b> but v' + WD.esc(info.onDiskVersion)
+        + ' is on disk. Click <b>Restart</b> to load it.</span>'
+        + '<button type="button" id="wdStaleRestart" style="margin-left:auto;'
+        + 'padding:4px 12px;border:1px solid rgba(255,255,255,.5);border-radius:4px;'
+        + 'background:transparent;color:#fff;cursor:pointer;font:inherit">Restart now</button>'
+        + '<button type="button" style="background:none;border:none;color:#fff;'
+        + 'cursor:pointer;font-size:18px;padding:0 4px" title="Dismiss">&times;</button>';
+      b.querySelector('[title="Dismiss"]').onclick = function () { b.remove(); };
+      b.querySelector('#wdStaleRestart').onclick = function () {
+        var btn = b.querySelector('#wdStaleRestart');
+        var msg = b.querySelector('#wdStaleMsg');
+        btn.disabled = true; btn.textContent = 'Restarting…';
+        msg.innerHTML = '<b>Restarting server…</b> Page will reload when ready.';
+        var oldStarted = info.startedAt;
+        fetch('/api/restart', { method: 'POST' }).catch(function () {});
+        var deadline = Date.now() + 20000;
+        (function poll() {
+          if (Date.now() > deadline) { msg.innerHTML = '<b>Server did not restart.</b> Close and reopen manually.'; return; }
+          fetch('/api/version', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
+            if (j && j.startedAt && j.startedAt !== oldStarted) setTimeout(function () { location.reload(); }, 200);
+            else setTimeout(poll, 500);
+          }).catch(function () { setTimeout(poll, 700); });
+        })();
+      };
+      document.body.prepend(b);
+    }).catch(function () {});
+  }
+  checkServerVersion();
+  setInterval(checkServerVersion, 30000);
+
   window.WD = WD;
 
   window.toggleTheme = WD.toggleTheme;
