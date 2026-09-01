@@ -1144,13 +1144,17 @@
           + '<path class="rep-mark-cone" d="M 0 0 L ' + (-len * 0.35) + ' ' + (-len) + ' L ' + (len * 0.35) + ' ' + (-len) + ' Z"/></g>';
       }
       var label = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
+      var dotSize = minDim * 0.018;
       var labelFont = minDim * 0.02 * Math.min(1, 3 / Math.max(3, label.length));
       var padX = minDim * 0.006;
-      var boxW = Math.max(minDim * 0.03, label.length * labelFont * 0.65) + padX * 2;
-      var boxH = minDim * 0.028;
+      var pillW = Math.max(minDim * 0.03, label.length * labelFont * 0.65) + padX * 2;
+      var pillH = minDim * 0.028;
       var cornerR = minDim * 0.005;
-      markers += '<rect class="rep-mark-dot" x="' + (-boxW / 2) + '" y="' + (-boxH / 2) + '" width="' + boxW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
-        + '<text class="rep-mark-label" y="' + (labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
+      var pillY = dotSize / 2 + minDim * 0.008;
+      var dotR = dotSize * 0.25;
+      markers += '<rect class="rep-mark-dot" x="' + (-dotSize / 2) + '" y="' + (-dotSize / 2) + '" width="' + dotSize + '" height="' + dotSize + '" rx="' + dotR + '" ry="' + dotR + '"/>'
+        + '<rect class="rep-mark-pill" x="' + (-pillW / 2) + '" y="' + pillY + '" width="' + pillW + '" height="' + pillH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
+        + '<text class="rep-mark-label" y="' + (pillY + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
     });
     return markers;
   }
