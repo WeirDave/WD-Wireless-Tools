@@ -636,6 +636,7 @@
     configureDirty = true;
     renderTemplateGallery();
     renderReportOpts();
+    renderApFilter();
     goStage('configure');
   };
 
@@ -664,7 +665,7 @@
         var gc = (currentOpts.segCols || '') + '';
         var gr = (currentOpts.segRows || '') + '';
         var gridLabel = (gc && gr) ? gc + ' × ' + gr : 'Auto';
-        if (currentOpts.cropBox) gridLabel += ' (cropped)';
+        if (currentOpts.cropBoxes && Object.keys(currentOpts.cropBoxes).length) gridLabel += ' (cropped)';
         html += '<div class="rep-check with-desc">'
           + '<span class="rep-check-body">'
           +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
@@ -716,6 +717,7 @@
 
   var _gridCols = 0, _gridRows = 0, _gridFloorIdx = 0;
   var _cropBox = { x: 0, y: 0, w: 1, h: 1 };
+  var _cropBoxes = {};
   var _dragState = null;
 
   window.openGridConfig = function () {
@@ -729,9 +731,13 @@
     var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
     _gridCols = (currentOpts.segCols > 0) ? currentOpts.segCols : auto.cols;
     _gridRows = (currentOpts.segRows > 0) ? currentOpts.segRows : auto.rows;
-    _cropBox = currentOpts.cropBox
-      ? { x: currentOpts.cropBox.x, y: currentOpts.cropBox.y, w: currentOpts.cropBox.w, h: currentOpts.cropBox.h }
-      : { x: 0, y: 0, w: 1, h: 1 };
+    _cropBoxes = {};
+    var saved = currentOpts.cropBoxes || {};
+    (proj.floorPlans || []).forEach(function (f) {
+      if (saved[f.id]) _cropBoxes[f.id] = { x: saved[f.id].x, y: saved[f.id].y, w: saved[f.id].w, h: saved[f.id].h };
+    });
+    var fc = _cropBoxes[fp.id];
+    _cropBox = fc ? { x: fc.x, y: fc.y, w: fc.w, h: fc.h } : { x: 0, y: 0, w: 1, h: 1 };
 
     var sel = document.getElementById('gridFloorSelect');
     sel.innerHTML = '';
@@ -754,7 +760,16 @@
   }
 
   window.gridFloorChanged = function (sel) {
+    var oldFp = proj.floorPlans[_gridFloorIdx];
+    if (oldFp) {
+      var full = _cropBox.x < 0.001 && _cropBox.y < 0.001 && _cropBox.w > 0.999 && _cropBox.h > 0.999;
+      if (full) delete _cropBoxes[oldFp.id];
+      else _cropBoxes[oldFp.id] = { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h };
+    }
     _gridFloorIdx = parseInt(sel.value, 10) || 0;
+    var newFp = proj.floorPlans[_gridFloorIdx];
+    var fc = newFp && _cropBoxes[newFp.id];
+    _cropBox = fc ? { x: fc.x, y: fc.y, w: fc.w, h: fc.h } : { x: 0, y: 0, w: 1, h: 1 };
     updateGridPreview();
   };
 
@@ -979,11 +994,24 @@
     updateGridPreview();
   }
 
-  window.applyGridConfig = function () {
+  window.applyGridConfig = function (allFloors) {
     currentOpts.segCols = _gridCols;
     currentOpts.segRows = _gridRows;
-    var isFullImage = _cropBox.x < 0.001 && _cropBox.y < 0.001 && _cropBox.w > 0.999 && _cropBox.h > 0.999;
-    currentOpts.cropBox = isFullImage ? null : { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h };
+    var curFp = proj.floorPlans[_gridFloorIdx];
+    var full = _cropBox.x < 0.001 && _cropBox.y < 0.001 && _cropBox.w > 0.999 && _cropBox.h > 0.999;
+    var crop = full ? null : { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h };
+    if (allFloors) {
+      _cropBoxes = {};
+      if (crop) {
+        (proj.floorPlans || []).forEach(function (f) {
+          _cropBoxes[f.id] = { x: crop.x, y: crop.y, w: crop.w, h: crop.h };
+        });
+      }
+    } else if (curFp) {
+      if (crop) _cropBoxes[curFp.id] = crop;
+      else delete _cropBoxes[curFp.id];
+    }
+    currentOpts.cropBoxes = Object.keys(_cropBoxes).length ? _cropBoxes : null;
     configureDirty = true;
     document.getElementById('gridConfigModal').hidden = true;
     renderReportOpts();
@@ -996,6 +1024,7 @@
     _gridCols = auto.cols;
     _gridRows = auto.rows;
     _cropBox = { x: 0, y: 0, w: 1, h: 1 };
+    if (fp) delete _cropBoxes[fp.id];
     updateGridPreview();
   };
 
@@ -1016,6 +1045,9 @@
     (r.sidebar || []).forEach(function (o) {
       opts[o.id] = (o.id in currentOpts) ? currentOpts[o.id] : !!o.default;
     });
+    if (currentOpts.segCols > 0) opts.segCols = currentOpts.segCols;
+    if (currentOpts.segRows > 0) opts.segRows = currentOpts.segRows;
+    if (currentOpts.cropBoxes) opts.cropBoxes = currentOpts.cropBoxes;
     return opts;
   }
 
@@ -1064,6 +1096,10 @@
       if (!omni && !inclDirectional) return false;
       return true;
     });
+    if (!aps.length && !r.noApFilter) {
+      host.innerHTML = '<div class="rep-empty">No APs selected — check the AP filter panel.</div>';
+      return;
+    }
     var today = new Date();
     var dateStr = today.toISOString().slice(0, 10);
     var ctx = {
@@ -1176,7 +1212,10 @@
 
     if (opts.segmented) {
       var grid = computeAntennaGrid(W, H, aps, opts);
-      if (grid.cols * grid.rows > 1) return renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml);
+      if (grid.cols * grid.rows > 1) {
+        opts.cropBox = (opts.cropBoxes && opts.cropBoxes[fp.id]) || null;
+        return renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml);
+      }
     }
 
     var markers = buildAntennaMarkers(aps, W, H, opts, ctx);
@@ -3219,9 +3258,10 @@
           description: 'Breaks each floor plan into a grid of zoomed-in sections so AP labels stay readable at any scale.' },
         { id: '_gridConfig', type: 'grid-button', label: 'Configure grid…',
           description: 'Choose how many rows and columns the segmented grid uses, with a live preview on your actual floor plan.' },
-        { id: 'inclDirectional', label: 'Include directional APs', default: true },
+        { id: 'inclDirectional', label: 'Include directional APs', default: true,
+          description: 'All AP types are on by default so every AP appears on the placement map.' },
         { id: 'inclOmni', label: 'Include omni APs', default: true,
-          description: 'This report is about location, not aiming — omni APs are on by default so every AP shows.' },
+          description: 'All AP types are on by default so every AP appears on the placement map.' },
       ],
       render: renderApLocationReport,
       postRender: applyAntennaSegmentCrop,
