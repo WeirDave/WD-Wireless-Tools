@@ -70,6 +70,21 @@ DEFAULTS = {
         "merge_rule": "ask",
         "live_interval_ms": 30000,
     },
+    "rename": {
+        "folder_format": "",
+        "file_format": "",
+        "separator": " - ",
+        "file_rules": {
+            "strip_prefix": "",
+            "strip_suffix": "",
+            "regex_from": "",
+            "regex_to": "",
+            "separator": "",
+            "case": "",
+            "prefix": "",
+            "suffix": "",
+        },
+    },
     "report": {},
     "walls": {},
 }
@@ -84,6 +99,39 @@ def _deep_merge(base, override):
         else:
             result[k] = v
     return result
+
+
+_CREATE_TOKEN_MIGRATION = {
+    "{code}": "{site_code}",
+    "{name}": "{site_name}",
+}
+
+
+def _migrate_settings(settings):
+    """In-place migration of legacy keys to current schema."""
+    org = settings.get("organizer", {})
+    rn_section = settings.setdefault("rename", copy.deepcopy(DEFAULTS["rename"]))
+
+    old_rename = org.get("rename")
+    if old_rename and isinstance(old_rename, dict):
+        has_rules = any(old_rename.get(k) for k in (
+            "strip_prefix", "strip_suffix", "regex_from",
+            "separator", "case", "prefix", "suffix"))
+        current_rules = rn_section.get("file_rules", {})
+        current_has = any(current_rules.get(k) for k in (
+            "strip_prefix", "strip_suffix", "regex_from",
+            "separator", "case", "prefix", "suffix"))
+        if has_rules and not current_has:
+            rn_section["file_rules"] = {
+                **DEFAULTS["rename"]["file_rules"], **old_rename}
+
+    tmpl = org.get("create_folder_template", "")
+    if tmpl:
+        for old_tok, new_tok in _CREATE_TOKEN_MIGRATION.items():
+            tmpl = tmpl.replace(old_tok, new_tok)
+        org["create_folder_template"] = tmpl
+
+    return settings
 
 
 def load_settings(_path=None):
@@ -101,7 +149,7 @@ def load_settings(_path=None):
             settings = _deep_merge(settings, saved)
         except Exception:
             pass
-    return settings
+    return _migrate_settings(settings)
 
 
 def save_settings(settings, _path=None):

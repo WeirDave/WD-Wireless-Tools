@@ -5,12 +5,13 @@ Serves a WD-branded home page plus both tools (Cloud Manager, Quick Walls) as
 browser pages, and exposes Cloud Manager's operations as JSON endpoints. Runs a
 tiny local Flask server and opens your default browser to it.
 
-    python server.py      (or just double-click "WD Wireless Tools Start.bat")
+    python server.py      (or just double-click "Start WD Wireless Tools.bat")
 
 No pywebview, no WebView2 — so none of the desktop-window headaches.
 """
 import json
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -457,36 +458,67 @@ def api_version():
     })
 
 
-RESTART_MARKER = HERE / ".restart_requested"
+LAUNCHER_SCRIPT_WIN = "Start WD Wireless Tools.bat"
+LAUNCHER_SCRIPT_MAC = "Start WD Wireless Tools.command"
 
 
-def _restart_after_response():
-    """Drop the sentinel file the launcher watches, then exit hard so the
-    launcher's loop relaunches us. Runs in a background thread so the
-    /api/restart HTTP response has a moment to flush to the browser
-    before Waitress gets torn down. os._exit skips atexit handlers —
-    deliberate, we want the socket released fast so the next process
-    can bind the same port without a TIME_WAIT gap."""
+def _close_old_launcher_window(pid: int) -> None:
+    """Kill the old cmd.exe launcher window so a restart doesn't leave a dead
+    'Press any key' console behind.  Only acts on a PID positively identified
+    as the launcher: a cmd.exe whose command line names our .bat file."""
+    if os.name != "nt" or pid <= 0:
+        return
+    script = (
+        f"$p = Get-CimInstance Win32_Process -Filter \"ProcessId={pid}\" -ErrorAction SilentlyContinue; "
+        f"if ($p -and $p.Name -eq 'cmd.exe' -and $p.CommandLine -like '*{LAUNCHER_SCRIPT_WIN}*') {{ "
+        f"Stop-Process -Id {pid} -Force -ErrorAction SilentlyContinue }}"
+    )
     try:
-        RESTART_MARKER.write_text("1", encoding="ascii")
-    except Exception:
-
-
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            timeout=10, capture_output=True, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
         pass
+
+
+def _restart_in_new_console():
+    """Spawn a fresh launcher in a new console window, wait for this process to
+    exit, then close the old launcher window.  Mirrors the LensLedger pattern
+    so every restart gives a clean terminal instead of appending to the old one.
+    Runs in a background thread so the HTTP response flushes first."""
+    install_root = HERE
+    old_window_pid = os.getppid()
+
     time.sleep(0.3)
+
+    if os.name == "nt":
+        bat = install_root / LAUNCHER_SCRIPT_WIN
+        if bat.is_file():
+            subprocess.Popen(
+                ["cmd.exe", "/c", str(bat)],
+                cwd=str(install_root),
+                close_fds=True,
+                creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+            )
+            time.sleep(0.5)
+            _close_old_launcher_window(old_window_pid)
+    else:
+        sh = install_root / LAUNCHER_SCRIPT_MAC
+        if sh.is_file():
+            subprocess.Popen(
+                ["open", "-a", "Terminal", str(sh)],
+                cwd=str(install_root),
+            )
+
     os._exit(0)
 
 
 @app.route("/api/restart", methods=["POST"])
 def api_restart():
-    """Restart the server in place. The stale-server banner uses this so a
-    pinned browser tab can recover from a code/build mismatch without the
-    user hunting for the terminal window. Same URL, same port — relies on
-    the launcher's loop, which is why closing the launcher's console (or
-    starting the server via an unwrapped `python server.py`) means the
-    restart hits an exit with no relaunch. That's intentional: the ONLY
-    path we support for restart is through the launcher."""
-    threading.Thread(target=_restart_after_response, daemon=True).start()
+    """Restart the server by opening a fresh launcher console and closing the
+    old one, so the terminal is clean after every restart."""
+    threading.Thread(target=_restart_in_new_console, daemon=True).start()
     return jsonify({"ok": True, "message": "restarting"})
 
 

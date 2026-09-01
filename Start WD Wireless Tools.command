@@ -12,12 +12,7 @@ python3 -c "import flask, waitress, requests, browser_cookie3, cryptography, key
 
 lsof -ti tcp:8675 -sTCP:LISTEN 2>/dev/null | xargs -r kill -9 2>/dev/null
 
-while true; do
-    rm -f "$(dirname "$0")/.restart_requested"
-    python3 server.py
-    if [ -f "$(dirname "$0")/.restart_requested" ]; then
-        rm -f "$(dirname "$0")/.restart_requested"
-        continue
-    fi
-    break
-done
+python3 server.py
+
+echo
+echo "WD Wireless Tools has closed."

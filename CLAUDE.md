@@ -25,25 +25,17 @@ re-discovered (or re-explained) each new chat.
    -q -r requirements.txt && /tmp/venv/bin/python -m unittest discover -s
    tests -v`.
 4. Commit and push to `main` directly (no PR needed for routine work).
-5. **Tag pushes are blocked from Claude Code cloud sessions** — confirmed
-   this is NOT a GitHub permissions problem (the installed GitHub App
-   already has full read/write on code/contents; no branch or tag
-   protection rules exist on this repo). It's a boundary on Claude's side:
-   cloud sessions can push branches/commits but not create tags. So:
-   give the user this exact snippet to run from their own machine — it's
-   the one step that can't be automated from here:
-
+5. Tag the release and push the tag:
    ```powershell
-   cd "<repo folder>"
-   git pull origin main
-   git tag -a vX.Y.Z origin/main -m "vX.Y.Z"
+   git tag -a vX.Y.Z -m "vX.Y.Z"
    git push origin vX.Y.Z
    ```
-
    The release workflow (`.github/workflows/release.yml`) validates that
    the tag exactly matches `versions.json`'s `"suite"` value
    (`scripts/build_release.py` raises if they don't match) — so the
    version bump commit MUST land before the tag is pushed.
+   Note: tag pushes work from local sessions but are blocked from
+   Claude Code **cloud** sessions (claude.ai web).
 6. No hand-written release notes file needed — `release.yml` uses
    `generate_release_notes: true` (GitHub auto-generates from commits).
    The old `docs/releases/vX.Y.Z.md`-per-tag convention was removed when

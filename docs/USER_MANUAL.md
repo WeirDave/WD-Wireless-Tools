@@ -74,11 +74,11 @@ You do not need Python to use the [hosted browser tools](https://weirdave.github
 1. Open the [latest GitHub release](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest).
 2. Under **Assets**, download `WD-Wireless-Tools-vX.X.X.zip`. Do not choose GitHub's automatically generated “Source code” archives.
 3. Extract the ZIP to a permanent folder.
-4. On Windows, double-click `WD Wireless Tools Start.bat`. On macOS, double-click `WD Wireless Tools Start.command`.
+4. On Windows, double-click `Start WD Wireless Tools.bat`. On macOS, double-click `Start WD Wireless Tools.command`.
 
 The launcher installs any missing Python packages on first run, starts the local service, and opens [http://localhost:8675](http://localhost:8675). Keep the terminal window open while using the suite.
 
-> **macOS first launch:** if Gatekeeper blocks `WD Wireless Tools Start.command`, right-click the file, choose **Open**, and confirm **Open** once more.
+> **macOS first launch:** if Gatekeeper blocks `Start WD Wireless Tools.command`, right-click the file, choose **Open**, and confirm **Open** once more.
 
 ### Launch manually
 
@@ -281,18 +281,18 @@ Choose **More info → Run anyway** after confirming that you downloaded the ass
 
 ### macOS cannot verify the launcher
 
-Right-click `WD Wireless Tools Start.command`, select **Open**, and confirm **Open**. This is normally needed only on first launch.
+Right-click `Start WD Wireless Tools.command`, select **Open**, and confirm **Open**. This is normally needed only on first launch.
 
 ### Port 8675 is already in use
 
 Another copy may already be running. Close it, or choose another port:
 
 ```bat
-set PORT=8676 && "WD Wireless Tools Start.bat"
+set PORT=8676 && "Start WD Wireless Tools.bat"
 ```
 
 ```bash
-PORT=8676 bash "WD Wireless Tools Start.command"
+PORT=8676 bash "Start WD Wireless Tools.command"
 ```
 
 ### Cloud Manager cannot find a session
