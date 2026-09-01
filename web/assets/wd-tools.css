@@ -4031,6 +4031,8 @@ body.tool-organizer .topbar-right { justify-content: flex-end; flex: 1; }
 .rn-manual-fields .org-token-label { font-size: 12px; color: var(--text-2); font-family: var(--mono); min-width: 100px; }
 .rn-st-unmatched { opacity: .5; }
 .rn-st-already_correct .org-rename-new { color: var(--text-3); }
+.rn-st-collision .org-rename-new { color: var(--amber); }
+.rn-st-collision .org-rename-warn { color: var(--red); font-weight: 600; }
 
 .pick-card-icon { font-size: 36px; margin-bottom: 12px; }
 
@@ -4979,7 +4981,7 @@ body.tool-report {
 
 .rep-key-swatch.dir { background: var(--rose); }
 
-.rep-key-swatch.omni { background: var(--purple); }
+.rep-key-swatch.omni { background: var(--rose); }
 
 .rep-ap-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 
@@ -5542,7 +5544,10 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-ap-group-swatch--empty { background: transparent; }
 .rep-mark--dir .rep-mark-cone { fill: var(--rose); fill-opacity: 0.35; stroke: var(--rose); stroke-width: 1; }
 .rep-mark--dir .rep-mark-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
-.rep-mark--omni .rep-mark-dot { fill: var(--purple); stroke: #fff; stroke-width: 1.5; }
+.rep-mark--omni .rep-mark-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
+.rep-mark--dir .rep-mark-pill { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
+.rep-mark--omni .rep-mark-pill { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
+.rep-mark--loc .rep-mark-pill { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
 .rep-mark-label { fill: #fff; font-weight: 700; overflow: visible; }
 .rep-mark--loc .rep-mark-dot { fill: #2563eb; stroke: #fff; stroke-width: 1.5; }
 .rep-loc-table .rep-name { user-select: all; }
@@ -6399,6 +6404,20 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
    Site Rename tool
    ═══════════════════════════════════════════════════════════════ */
 .tool-rename .sr-workspace { padding: 0 16px 32px; }
+.sr-hero { padding-top: 16px !important; margin-bottom: 4px; }
+.sr-hero .pick-icon { margin-bottom: 12px; }
+.sr-hero .pick-icon img { max-height: 120px; }
+.sr-hero .pick-title { font-size: 24px; margin-bottom: 6px; }
+.sr-hero .pick-sub { font-size: 14px; margin-bottom: 12px; max-width: 540px; }
+.sr-hero .pick-sub code { background: var(--surface-2); padding: 1px 5px; border-radius: 3px; font-size: 13px; }
+.sr-section-head {
+  font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+  color: var(--text-3); margin-top: 12px; margin-bottom: 2px;
+}
+.sr-token-hint {
+  font-size: 12px; color: var(--text-3); margin: 4px 0 2px;
+}
+.sr-token-hint code { background: var(--surface-2); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
 .sr-toolbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 0; border-bottom: 1px solid var(--border);
