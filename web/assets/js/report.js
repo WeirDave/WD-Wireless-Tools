@@ -1280,7 +1280,7 @@
   function renderAntennaSegmentCell(url, W, H, cell, opts, ctx) {
     var cW = cell.x1 - cell.x0, cH = cell.y1 - cell.y0;
     var label = segCellLabel(cell.col, cell.row);
-    var markers = buildAntennaMarkers(cell.aps, W, H, opts, ctx);
+    var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx);
     return '<div class="rep-overview rep-seg-cell">'
       + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell)
       +   '<h3 class="rep-seg-cell-title">Section ' + WD.esc(label)
