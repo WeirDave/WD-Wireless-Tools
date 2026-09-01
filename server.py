@@ -49,6 +49,16 @@ def _load_startup_versions():
 
 _STARTUP_VERSIONS = _load_startup_versions()
 _STARTED_AT = datetime.now(timezone.utc).isoformat()
+
+
+def _on_disk_suite_version():
+    """Read suite version from versions.json on disk, bypassing the frozen
+    _STARTUP_VERSIONS — detects when files changed since the server started."""
+    try:
+        with (WEB / "assets" / "versions.json").open("r", encoding="utf-8") as f:
+            return json.load(f).get("suite", "")
+    except Exception:
+        return None
 fo.app_version = _STARTUP_VERSIONS.get("squirrel", "")
 rm.app_version = _STARTUP_VERSIONS.get("squirrel", "")
 
@@ -433,12 +443,16 @@ def api_cloud(action):
 @app.route("/api/version", methods=["GET"])
 def api_version():
     """Startup snapshot of versions.json + process metadata. The frontend
-    compares this to a fresh fetch of /assets/versions.json and shows a
-    banner if they diverge (meaning the user pulled new code but the
-    Python process is still running the old build)."""
+    polls this and shows a stale-code banner when the on-disk version
+    differs from the running version (meaning code changed since startup)."""
+    on_disk = _on_disk_suite_version()
+    startup = _STARTUP_VERSIONS.get("suite", "")
     return jsonify({
+        "version": startup,
         "versions": _STARTUP_VERSIONS,
         "startedAt": _STARTED_AT,
+        "onDiskVersion": on_disk,
+        "restartReady": bool(on_disk and on_disk != startup),
         "pid": os.getpid(),
     })
 
