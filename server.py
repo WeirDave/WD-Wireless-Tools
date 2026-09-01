@@ -1,9 +1,10 @@
 """
 WD Wireless Tools — local suite server.
 
-Serves a WD-branded home page plus both tools (Cloud Manager, Quick Walls) as
-browser pages, and exposes Cloud Manager's operations as JSON endpoints. Runs a
-tiny local Flask server and opens your default browser to it.
+Serves the suite home page and all five tools (Cloud Manager, Quick Walls,
+Report, Scale, Squirrel) as browser pages, plus supporting pages (Settings,
+Setup, Rename). Exposes Cloud Manager and Squirrel operations as JSON
+endpoints. Runs a tiny local Flask server and opens your default browser to it.
 
     python server.py      (or just double-click "Start WD Wireless Tools.bat")
 

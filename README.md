@@ -103,7 +103,7 @@ Convert architectural measurements between feet-and-inches, decimal feet, inches
 
 Transform an `.esx` project into print-ready, installer-facing documents. Seven report formats are available today:
 
-- **Directional Antenna Installation / AP Placement**
+- **AP Installation**
 - **Predictive Design / AP Placement**
 - **Site Summary Sheet**
 - **Interference / Rogue Devices**
@@ -224,7 +224,9 @@ WD-Wireless-Tools/
 ├── tools/
 │   ├── cloud_manager.py               # Cloud client and reverse-engineered upload/download flows
 │   ├── template_store.py              # Wall-template persistence
-│   └── folder_organizer.py            # Squirrel scanning and organization
+│   ├── folder_organizer.py            # Squirrel scanning and organization
+│   ├── rename_manager.py              # Bulk rename operations
+│   └── settings.py                    # Suite-wide settings and migration
 ├── web/                               # Application source and hosted page templates
 │   ├── assets/
 │   │   ├── versions.json              # Suite and component versions

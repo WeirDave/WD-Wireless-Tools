@@ -4,7 +4,7 @@ Only unfinished product work belongs here. Completed work is tracked by Git hist
 
 Priorities: **P1** = blocking · **P2** = wanted · **P3** = future enhancement.
 
-Last reviewed against v2.0.2.
+Last reviewed against v2.2.0.
 
 ## P2 — Cloud Manager: bulk merge many folders into one
 
