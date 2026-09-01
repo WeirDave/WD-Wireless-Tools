@@ -214,7 +214,7 @@ Report turns an Ekahau `.esx` project into print-ready handoff documentation.
 
 ### Available report templates
 
-- Directional Antenna Installation / AP Placement
+- AP Installation
 - Predictive Design / AP Placement
 - Site Summary Sheet
 - Interference / Rogue Devices
