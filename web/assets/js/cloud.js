@@ -822,6 +822,7 @@ function updateDashboard() {
 
     const ownerVisible = currentTab === 'sites' ? _siteOwnedVisible : _passOwnerForCounts;
     let matched = 0, mismatches = 0, cloudOnly = 0, localOnly = 0, nameMatches = 0;
+    let staleCount = 0;
     let externalCount = 0;
 
     const typeCount = { Design: 0, Measured: 0, Hybrid: 0 };
@@ -840,6 +841,7 @@ function updateDashboard() {
       if (!kids) return;
       (kids.matched || []).forEach(p => {
         if (p.matchType === 'exact') nameMatches++;
+        if (p.staleness) staleCount++;
         bumpType(p.cloud, p.local);
       });
       (kids.cloudOnly || []).forEach(c => { bumpType(c, null); });
@@ -855,6 +857,7 @@ function updateDashboard() {
         walkKids((p.cloud && p.cloud.children) || (p.local && p.local.children));
       } else {
         if (p.matchType === 'exact') nameMatches++;
+        if (p.staleness) staleCount++;
         bumpType(p.cloud, p.local);
       }
     });
@@ -874,6 +877,9 @@ function updateDashboard() {
     });
     document.getElementById('dAll').textContent = matched + cloudOnly + localOnly;
     document.getElementById('dMismatches').textContent = mismatches;
+    document.getElementById('dStale').textContent = staleCount;
+    const dStaleCard = document.getElementById('dStaleCard');
+    if (dStaleCard) dStaleCard.hidden = isDup || staleCount === 0;
     document.getElementById('dNameMatches').textContent = nameMatches;
 
 
@@ -1369,14 +1375,15 @@ function toggleFolder(fn) {
 function renderLedger(hit) {
   const isSites = currentTab === 'sites';
 
-  const showSynced = activeFilter === 'all';
-  const showMis = activeFilter === 'all' || activeFilter === 'mismatches';
+  const showSynced = activeFilter === 'all' || activeFilter === 'stale';
+  const showMis = activeFilter === 'all' || activeFilter === 'mismatches' || activeFilter === 'stale';
   const showOrph = activeFilter === 'all' || activeFilter === 'orphans';
   const showOrphCloud = activeFilter === 'orphans-cloud';
   const showOrphLocal = activeFilter === 'orphans-local';
   const showUnassigned = activeFilter === 'unassigned';
   const showNameMatches = activeFilter === 'name-matches';
   const showExternal = activeFilter === 'external';
+  const showStale = activeFilter === 'stale';
 
   const typeFilter = /^type-(design|measured|hybrid)$/.test(activeFilter)
     ? activeFilter.slice(5).replace(/^./, c => c.toUpperCase())
@@ -1389,13 +1396,14 @@ function renderLedger(hit) {
   };
   const directIsNameMatch = (row) =>
     !!(row && row.cloud && row.local && row.matchType === 'exact');
+  const directIsStale = (row) => !!(row && row.staleness);
 
   const anyChildMatches = (row, predicate) => {
     const kids = (row && row.cloud && row.cloud.children)
               || (row && row.local && row.local.children) || null;
     if (!kids) return false;
     const check = (arr) => (arr || []).some(p => predicate({
-      cloud: p.cloud, local: p.local, matchType: p.matchType,
+      cloud: p.cloud, local: p.local, matchType: p.matchType, staleness: p.staleness,
     }));
     return check(kids.matched) || check(kids.cloudOnly) || check(kids.localOnly);
   };
@@ -1408,8 +1416,14 @@ function renderLedger(hit) {
     if (!hasKids(row)) return directIsNameMatch(row);
     return anyChildMatches(row, directIsNameMatch);
   };
+  const rowIsStale = (row) => {
+    if (directIsStale(row)) return true;
+    if (!hasKids(row)) return false;
+    return anyChildMatches(row, directIsStale);
+  };
   const pass = (st, row) => {
     if (typeFilter) return rowMatchesType(row);
+    if (showStale) return rowIsStale(row);
     if (showNameMatches) return rowIsNameMatch(row);
     if (showUnassigned) return row && row.cloud && !row.cloud.hasSite;
     if (showExternal) {
@@ -1436,7 +1450,7 @@ function renderLedger(hit) {
   const rows = [];
   (data.matched || []).forEach(p => rows.push({
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'projects',
-    matchType: p.matchType,
+    matchType: p.matchType, staleness: p.staleness || null,
     cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
   }));
   (data.cloudOnly || []).forEach(s => rows.push({ status: 'orphan', key: 'c:' + s.id, kind: 'projects', cloud: s, local: null, sort: s.name || '' }));
@@ -1503,11 +1517,8 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
   const rows = [];
   (data.matched || []).forEach(p => rows.push({
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'sites',
-    matchType: p.matchType,
+    matchType: p.matchType, staleness: p.staleness || null,
     cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || ''),
-    // Independent per-side checkboxes (see indexRowData's s-c:/s-l: entries)
-    // so "select all local" can grab a whole site's local folder without
-    // also grabbing its cloud counterpart, and vice versa.
     cloudCheckKey: 's-c:' + p.cloud.id, localCheckKey: 's-l:' + p.local.path,
   }));
   (data.cloudOnly || []).forEach(s => rows.push({ status: 'orphan', key: 'c:' + s.id, kind: 'sites', cloud: s, local: null, sort: s.name || '' }));
@@ -1785,7 +1796,7 @@ function _visibleSiteRowsForBatch() {
 function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteName, passFilter) {
   const rows = [];
   (children.matched || []).forEach(p => rows.push({
-    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
+    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, staleness: p.staleness || null, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
   }));
   (children.cloudOnly || []).forEach(c => rows.push({ status: 'orphan', cloud: c, local: null, sort: c.name || '' }));
   (children.localOnly || []).forEach(l => rows.push({ status: 'orphan', cloud: null, local: l, sort: l.name || '' }));
@@ -1850,12 +1861,20 @@ const MATCH_BADGE_SPEC_SITE_EXACT = {
   title: 'Both sites share the same name. Sites don\'t have a stronger identity to compare (folders have no internal ID), so this is as matched as a site pair gets.',
 };
 
+function stalenessBadgeHtml(r) {
+  const s = r.staleness;
+  if (!s) return '';
+  if (s === 'cloud_newer') return '<span class="stale-badge stale-cloud" title="Cloud copy was edited more recently than local — download to get the latest">⬇ Cloud newer</span>';
+  if (s === 'local_newer') return '<span class="stale-badge stale-local" title="Local copy was edited more recently than cloud — upload to push your changes">⬆ Local newer</span>';
+  return '';
+}
+
 function gutCell(r) {
   const kind = r.kind || currentTab;
   if (r.status === 'mismatch') {
     const c = r.cloud, l = r.local;
     return `<div class="lr-gut mis">
-      ${matchBadgeHtml(r, kind)}
+      ${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}
       <button class="gut-arrow" title="Apply cloud name onto the local folder" onclick="syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')">&#10145;</button>
       <button class="gut-arrow" title="Apply local name onto the cloud site" onclick="syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')">&#11013;</button>
       <button class="gut-arrow nomatch" title="Not a match — never pair these two again" onclick="markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')">&#8800;</button>
@@ -1867,7 +1886,7 @@ function gutCell(r) {
     const verifyBtn = isNameMatch
       ? `<button class="gut-arrow verify-btn" title="Download cloud copy and overwrite local — makes them byte-identical so the badge upgrades to Same file" onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}')">&#8681;</button>`
       : '';
-    return `<div class="lr-gut ok">${matchBadgeHtml(r, kind)}${verifyBtn}</div>`;
+    return `<div class="lr-gut ok">${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}${verifyBtn}</div>`;
   }
   if (r.cloud) {
 
