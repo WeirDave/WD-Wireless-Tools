@@ -760,12 +760,7 @@
   }
 
   window.gridFloorChanged = function (sel) {
-    var oldFp = proj.floorPlans[_gridFloorIdx];
-    if (oldFp) {
-      var full = _cropBox.x < 0.001 && _cropBox.y < 0.001 && _cropBox.w > 0.999 && _cropBox.h > 0.999;
-      if (full) delete _cropBoxes[oldFp.id];
-      else _cropBoxes[oldFp.id] = { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h };
-    }
+    saveCurrentFloorCrop();
     _gridFloorIdx = parseInt(sel.value, 10) || 0;
     var newFp = proj.floorPlans[_gridFloorIdx];
     var fc = newFp && _cropBoxes[newFp.id];
@@ -994,23 +989,36 @@
     updateGridPreview();
   }
 
-  window.applyGridConfig = function (allFloors) {
-    currentOpts.segCols = _gridCols;
-    currentOpts.segRows = _gridRows;
+  function saveCurrentFloorCrop() {
     var curFp = proj.floorPlans[_gridFloorIdx];
+    if (!curFp) return;
     var full = _cropBox.x < 0.001 && _cropBox.y < 0.001 && _cropBox.w > 0.999 && _cropBox.h > 0.999;
-    var crop = full ? null : { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h };
+    if (full) delete _cropBoxes[curFp.id];
+    else _cropBoxes[curFp.id] = { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h };
+  }
+
+  window.applyGridFloor = function (allFloors) {
     if (allFloors) {
+      var full = _cropBox.x < 0.001 && _cropBox.y < 0.001 && _cropBox.w > 0.999 && _cropBox.h > 0.999;
+      var crop = full ? null : { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h };
       _cropBoxes = {};
       if (crop) {
         (proj.floorPlans || []).forEach(function (f) {
           _cropBoxes[f.id] = { x: crop.x, y: crop.y, w: crop.w, h: crop.h };
         });
       }
-    } else if (curFp) {
-      if (crop) _cropBoxes[curFp.id] = crop;
-      else delete _cropBoxes[curFp.id];
+      showToast('Crop applied to all ' + proj.floorPlans.length + ' floors.');
+    } else {
+      saveCurrentFloorCrop();
+      var name = (proj.floorPlans[_gridFloorIdx] || {}).name || 'Floor';
+      showToast('Crop applied to ' + name + '.');
     }
+  };
+
+  window.doneGridConfig = function () {
+    saveCurrentFloorCrop();
+    currentOpts.segCols = _gridCols;
+    currentOpts.segRows = _gridRows;
     currentOpts.cropBoxes = Object.keys(_cropBoxes).length ? _cropBoxes : null;
     configureDirty = true;
     document.getElementById('gridConfigModal').hidden = true;
