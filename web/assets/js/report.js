@@ -1205,6 +1205,8 @@
     var markers = '';
     var minDim = Math.min(scaleW, scaleH);
     var edgeMargin = minDim * 0.06;
+    var sw = minDim * 0.0025;
+    var coneSw = sw * 0.67;
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord; if (!c) return;
       var r = ctx ? ctx.primaryRadio(ap.id) : null;
@@ -1218,7 +1220,7 @@
         var len = minDim * 0.06;
         var coneFill = apColor ? ' fill="' + WD.escAttr(apColor) + '" fill-opacity="0.35" stroke="' + WD.escAttr(apColor) + '"' : '';
         markers += '<g transform="rotate(' + dir + ')">'
-          + '<path class="rep-mark-cone" d="M 0 0 L ' + (-len * 0.35) + ' ' + (-len) + ' L ' + (len * 0.35) + ' ' + (-len) + ' Z"' + coneFill + '/></g>';
+          + '<path class="rep-mark-cone" d="M 0 0 L ' + (-len * 0.35) + ' ' + (-len) + ' L ' + (len * 0.35) + ' ' + (-len) + ' Z" stroke-width="' + coneSw + '"' + coneFill + '/></g>';
       }
       var label = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
       var dotSize = minDim * 0.018;
@@ -1232,6 +1234,12 @@
       var labelAbove = false;
       var labelAnchor = 'middle';
       var pillXOff = -pillW / 2;
+      if (isDirectional && dir != null) {
+        var normDir = ((dir % 360) + 360) % 360;
+        if (normDir > 90 && normDir < 270) labelAbove = true;
+        if (normDir > 180 && normDir < 360) pillXOff = 0;
+        else if (normDir > 0 && normDir < 180) pillXOff = -pillW;
+      }
       if (cellBounds) {
         var nearBottom = (cellBounds.y1 - c.y) < edgeMargin;
         var nearTop = (c.y - cellBounds.y0) < edgeMargin;
@@ -1244,8 +1252,8 @@
       var pillY = labelAbove ? -(dotSize / 2 + gap + pillH) : dotSize / 2 + gap;
       var textX = pillXOff + pillW / 2;
       var dotFill = apColor ? ' fill="' + WD.escAttr(apColor) + '"' : '';
-      markers += '<rect class="rep-mark-dot" x="' + (-dotSize / 2) + '" y="' + (-dotSize / 2) + '" width="' + dotSize + '" height="' + dotSize + '" rx="' + dotR + '" ry="' + dotR + '"' + dotFill + '/>'
-        + '<rect class="rep-mark-pill" x="' + pillXOff + '" y="' + pillY + '" width="' + pillW + '" height="' + pillH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
+      markers += '<rect class="rep-mark-dot" x="' + (-dotSize / 2) + '" y="' + (-dotSize / 2) + '" width="' + dotSize + '" height="' + dotSize + '" rx="' + dotR + '" ry="' + dotR + '" stroke-width="' + sw + '"' + dotFill + '/>'
+        + '<rect class="rep-mark-pill" x="' + pillXOff + '" y="' + pillY + '" width="' + pillW + '" height="' + pillH + '" rx="' + cornerR + '" ry="' + cornerR + '" stroke-width="' + sw + '"/>'
         + '<text class="rep-mark-label" x="' + textX + '" y="' + (pillY + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
     });
     return markers;
