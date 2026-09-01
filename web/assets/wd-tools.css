@@ -5596,14 +5596,14 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-overview-plan { aspect-ratio: var(--w) / var(--h); }
 .rep-ap-group-swatch { background: var(--swatch); }
 .rep-ap-group-swatch--empty { background: transparent; }
-.rep-mark--dir .rep-mark-cone { fill: var(--rose); fill-opacity: 0.35; stroke: var(--rose); stroke-width: 1; }
-.rep-mark--dir .rep-mark-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
-.rep-mark--omni .rep-mark-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
-.rep-mark--dir .rep-mark-pill { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
-.rep-mark--omni .rep-mark-pill { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
-.rep-mark--loc .rep-mark-pill { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
+.rep-mark--dir .rep-mark-cone { fill: var(--rose); fill-opacity: 0.35; stroke: var(--rose); }
+.rep-mark--dir .rep-mark-dot,
+.rep-mark--omni .rep-mark-dot,
+.rep-mark--loc .rep-mark-dot { fill: var(--rose); stroke: #fff; }
+.rep-mark--dir .rep-mark-pill,
+.rep-mark--omni .rep-mark-pill,
+.rep-mark--loc .rep-mark-pill { fill: var(--rose); stroke: #fff; }
 .rep-mark-label { fill: #fff; font-weight: 700; overflow: visible; }
-.rep-mark--loc .rep-mark-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
 .rep-loc-table .rep-name { user-select: all; }
 .rep-loc-warn { color: var(--amber, #d97706); font-size: 12px; }
 .rep-loc-warn-row { background: rgba(217, 119, 6, 0.06); }
