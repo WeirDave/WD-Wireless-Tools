@@ -83,6 +83,8 @@
           <div class="menu-section">&#9656; Help &amp; Support</div>
           <a class="menu-item" href="/guide-cloud" target="_blank">· User Guide</a>
           <button class="menu-item" type="button" onclick="closeMainMenu();WD.openAbout()">· About &amp; Updates</button>
+          <button class="menu-item" type="button" onclick="closeMainMenu();WD.copyDiagnostics()">· Copy Diagnostics</button>
+          <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug</a>
         </div>
       </div>
     </div>
@@ -131,6 +133,9 @@
     </div>
     <div class="dash-card mismatches" data-filter="mismatches" onclick="setFilter('mismatches')">
       <div class="number" id="dMismatches">-</div><div class="label">Mismatches</div>
+    </div>
+    <div class="dash-card stale" data-filter="stale" onclick="setFilter('stale')" id="dStaleCard" hidden>
+      <div class="number" id="dStale">-</div><div class="label">Out of Sync</div>
     </div>
     <div class="dash-card name-matches" data-filter="name-matches" onclick="setFilter('name-matches')" id="dNameMatchesCard" hidden>
       <div class="number" id="dNameMatches">-</div><div class="label">Name Matches</div>
@@ -495,6 +500,8 @@
 
     <h4>What about dates?</h4>
     <p>The date shown is when someone last edited the project inside Ekahau, not when the file was copied to your computer. Two copies with the same date and time are the same version. Different dates just mean someone kept working on one copy after the other.</p>
+
+    <p>When a matched pair has different edit dates, you'll see a badge: <span class="stale-badge stale-cloud">&#11015; Cloud newer</span> means the cloud copy was edited after the local one (download to get the latest), and <span class="stale-badge stale-local">&#11014; Local newer</span> means you have edits locally that haven't been uploaded yet.</p>
 
     <h4>When we get it wrong</h4>
     <ul>

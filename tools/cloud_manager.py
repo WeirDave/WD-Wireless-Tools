@@ -1120,12 +1120,26 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
     held_back = []
     unmatched_local = list(local_items)
 
+    _STALE_TOLERANCE_S = 60
+
+    def _staleness(c, l):
+        cm = c.get("mtime") or 0
+        lm = l.get("mtime") or 0
+        if not cm or not lm:
+            return None
+        if cm > lm + _STALE_TOLERANCE_S:
+            return "cloud_newer"
+        if lm > cm + _STALE_TOLERANCE_S:
+            return "local_newer"
+        return None
+
     def _take(c, idx, mtype, score=1.0):
         l = unmatched_local.pop(idx)
         disp = score - 2.0 if mtype == "code" else score
         matched.append({"cloud": c, "local": l, "matchType": mtype,
                         "score": round(min(disp, 1.0), 2),
-                        "namesDiffer": c["name"].strip() != l["name"].strip()})
+                        "namesDiffer": c["name"].strip() != l["name"].strip(),
+                        "staleness": _staleness(c, l)})
 
     def _norm_path(p):
         return (p or "").replace(chr(92), "/").lower()
