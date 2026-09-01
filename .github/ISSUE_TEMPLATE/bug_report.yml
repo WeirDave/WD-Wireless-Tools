@@ -1,0 +1,78 @@
+name: Bug report
+description: Something broke or behaved unexpectedly in WD Wireless Tools.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please describe what happened and include your environment details.
+
+        > Found a **security** problem? Don't open a public issue — use [private vulnerability reporting](https://github.com/WeirDave/WD-Wireless-Tools/security/advisories/new) instead.
+
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: Describe the problem in your own words.
+      placeholder: "When I uploaded an .esx file to Quick Walls, ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps that get the problem to happen again.
+      placeholder: |
+        1. Open WD Wireless Tools and go to Quick Walls
+        2. Upload an .esx file
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected to happen
+      placeholder: "The wall types should load and be editable."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: tool
+    attributes:
+      label: Which tool
+      description: Which tool in the suite were you using?
+      options:
+        - Cloud Manager
+        - Quick Walls
+        - Report
+        - Scale
+        - Squirrel (File Organizer)
+        - Home / Suite Settings
+        - Hosted web version
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Use the Copy Diagnostics button in the app menu to capture your environment info and paste it below.
+      options:
+        - label: I copied diagnostic info from the app
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Paste the diagnostic info copied from the app, or fill in manually.
+      render: shell
+      placeholder: |
+        WD Wireless Tools v2.x.x
+        Browser  : Chrome 128
+        OS       : Windows 11
+        Running  : Local server / GitHub Pages
+    validations:
+      required: true

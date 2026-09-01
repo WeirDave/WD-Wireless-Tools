@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Squirrel — Rename</title>
+<link rel="icon" href="/assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/wd-wireless-tools-v8.0-180x180.png">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+</head>
+<body class="tool-rename">
+<div class="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+      <div class="menu-wrap">
+        <button class="hamburger-btn" id="menuBtn" title="Menu"><span></span><span></span><span></span></button>
+        <div class="main-menu" id="mainMenu">
+          <div class="menu-section">&#9656; Navigation</div>
+          <a class="menu-item" href="/">&#8962; Home</a>
+          <a class="menu-item" href="/cloud">· Cloud Manager</a>
+          <a class="menu-item" href="/walls">· Quick Walls</a>
+          <a class="menu-item" href="/report">· Report</a>
+          <a class="menu-item" href="/scale">· Scale</a>
+          <a class="menu-item active" href="/squirrel">· Squirrel</a>
+          <div class="menu-sep"></div>
+          <div class="menu-section">&#9656; Tools</div>
+          <a class="menu-item" href="/squirrel">· Back to Squirrel</a>
+          <div class="menu-sep"></div>
+          <div class="menu-section">&#9656; Help &amp; Support</div>
+          <a class="menu-item" href="/guide-squirrel" target="_blank">· User Guide</a>
+          <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+          <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+          <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug</a>
+        </div>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <h1><span>WD</span> Squirrel — Rename <span class="ver" data-ver="squirrel">v&hellip;</span></h1>
+    </div>
+    <div class="topbar-right">
+      <button class="theme-toggle" onclick="toggleTheme()">
+        <span class="ico">🌙</span><span class="txt">Dark</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="sr-workspace">
+
+    <!-- Hero -->
+    <div class="pick-screen sr-hero">
+      <div class="pick-icon"><img src="/assets/squirrel-v8.0-560x560.png" alt="WD Squirrel"></div>
+      <div class="pick-title">Rename</div>
+      <div class="pick-sub">Standardize project folder and file names across all your sites. Load a CSV site directory to map tokens like <code>{site_code}</code> and <code>{city}</code> to real values, build a naming format, preview every change, then apply in one click.</div>
+    </div>
+
+    <!-- Project folder -->
+    <div class="sr-section-head">Project Folder</div>
+    <div class="sr-toolbar">
+      <div class="sr-toolbar-left">
+        <button class="btn btn-sec btn-sm" onclick="pickRenameRoot()">Browse…</button>
+        <span id="renameRootLabel" class="sr-folder-label"><span class="sr-hint">Click Browse… to pick a folder</span></span>
+      </div>
+      <div class="sr-toolbar-right">
+        <button class="btn btn-sec btn-sm" onclick="showRenameCsvModal()" title="Load a CSV file that maps site codes to names, cities, states, etc.">&#128196; Load CSV</button>
+        <button class="btn btn-sec btn-sm" onclick="showRenameGapReport()" title="Show which folders don't match any site in the loaded CSV">&#128202; Gap Report</button>
+        <button class="btn btn-sec btn-sm" onclick="showRenameProfiles()" title="Save or load a named set of format strings and rules">&#128221; Profiles</button>
+        <button class="btn btn-sec btn-sm" onclick="showRenameCsvHelper()" title="Generate a blank CSV template from your format string, or pre-fill one from existing folder names">&#128295; CSV Helper</button>
+        <span id="renameCsvStatus" class="sr-hint" hidden></span>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="sr-tabs" id="renameTabs">
+      <button class="sr-tab active" data-tab="folders" onclick="switchRenameTab('folders')">Folder Convention</button>
+      <button class="sr-tab" data-tab="files" onclick="switchRenameTab('files')">File Convention</button>
+      <button class="sr-tab" data-tab="rules" onclick="switchRenameTab('rules')">File Cleanup Rules</button>
+    </div>
+
+    <!-- Folder Convention tab -->
+    <div id="renameTabFolders" class="rn-tab-content">
+      <div class="sr-format-section">
+        <div class="sr-format-row">
+          <label>Format:</label>
+          <input type="text" id="rnFolderFormat" class="sr-format-input" placeholder="e.g. {site_code} - {site_name} - {city} {state}" oninput="updateRenamePreview()">
+        </div>
+        <div class="sr-token-hint">Click a token to insert it at the cursor. Type any literal text (spaces, dashes, parentheses) between tokens.</div>
+        <div class="sr-tokens" id="rnFolderTokenBar"></div>
+      </div>
+      <div id="rnFolderManualFields" class="rn-manual-fields" hidden></div>
+    </div>
+
+    <!-- File Convention tab (token-based) -->
+    <div id="renameTabFiles" class="rn-tab-content" hidden>
+      <div class="sr-format-section">
+        <div class="sr-format-row">
+          <label>Format:</label>
+          <input type="text" id="rnFileFormat" class="sr-format-input" placeholder="e.g. {site_code} - {original}" oninput="updateRenamePreview()">
+        </div>
+        <div class="sr-token-hint">Click a token to insert it. <code>{original}</code> keeps the existing filename; <code>{index}</code> adds a number per file.</div>
+        <div class="sr-tokens" id="rnFileTokenBar"></div>
+      </div>
+    </div>
+
+    <!-- File Cleanup Rules tab -->
+    <div id="renameTabRules" class="rn-tab-content" hidden>
+      <div class="org-settings-section">
+        <div class="org-settings-section-head">Remove</div>
+        <div class="org-rename-fields">
+          <div>
+            <label>From the start (regex)</label>
+            <input type="text" id="brStripPrefix" placeholder="e.g. IMG_|DSC_" oninput="updateRenamePreview()">
+          </div>
+          <div>
+            <label>From the end (regex)</label>
+            <input type="text" id="brStripSuffix" placeholder="e.g.  \(copy\)| - edited" oninput="updateRenamePreview()">
+          </div>
+        </div>
+      </div>
+      <div class="org-settings-section">
+        <div class="org-settings-section-head">Replace</div>
+        <label>Find (regex) / Replace with</label>
+        <div class="org-regex-row">
+          <input type="text" id="brRegexFrom" placeholder="find (regex)" oninput="updateRenamePreview()">
+          <input type="text" id="brRegexTo" placeholder="replace" oninput="updateRenamePreview()">
+        </div>
+      </div>
+      <div class="org-settings-section">
+        <div class="org-settings-section-head">Case &amp; separator</div>
+        <div class="org-rename-fields">
+          <div>
+            <label>Filename case</label>
+            <select id="brCase" onchange="updateRenamePreview()">
+              <option value="">Leave as-is</option>
+              <option value="lower">lowercase</option>
+              <option value="upper">UPPERCASE</option>
+              <option value="title">Title Case</option>
+              <option value="sentence">Sentence case</option>
+            </select>
+          </div>
+          <div>
+            <label>Word separator</label>
+            <select id="brSeparator" onchange="updateRenamePreview()">
+              <option value="">Leave as-is</option>
+              <option value="underscore">Underscores (my_file_name.jpg)</option>
+              <option value="hyphen">Hyphens (my-file-name.jpg)</option>
+              <option value="space">Spaces (my file name.jpg)</option>
+              <option value="spaced_hyphen">Spaced dash (my - file - name.jpg)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="org-settings-section">
+        <div class="org-settings-section-head">Add <span class="hint-inline">(use <code>{folder}</code> for the containing folder's name)</span></div>
+        <div class="org-rename-fields">
+          <div>
+            <label>Prefix</label>
+            <div class="org-token-row">
+              <input type="text" id="brPrefix" placeholder="e.g. {folder} - PD v1.0_" oninput="updateRenamePreview()">
+              <button type="button" class="btn btn-sec btn-token" onclick="_renameInsertToken('brPrefix')">+{folder}</button>
+            </div>
+          </div>
+          <div>
+            <label>Suffix</label>
+            <div class="org-token-row">
+              <input type="text" id="brSuffix" placeholder="e.g.  - Baseline Survey" oninput="updateRenamePreview()">
+              <button type="button" class="btn btn-sec btn-token" onclick="_renameInsertToken('brSuffix')">+{folder}</button>
+            </div>
+          </div>
+        </div>
+        <div class="org-rename-example">Example: <code>photo.jpg</code> in <code>Springfield CA/</code> → <code id="brRenameExample">photo.jpg</code></div>
+      </div>
+      <div class="hint">Extensions are never touched. These are the same rules Organize applies automatically.</div>
+    </div>
+
+    <!-- Preview -->
+    <div class="sr-preview">
+      <div class="sr-preview-header">
+        <h3>Preview</h3>
+        <span id="renamePreviewCount" class="sr-preview-stats"></span>
+      </div>
+      <div id="renamePreviewList" class="org-sub-picker org-extract-list">
+        <div class="org-extract-empty">Load a CSV site directory and enter a format above to see a live preview of every rename.</div>
+      </div>
+    </div>
+
+    <!-- Action bar -->
+    <div class="sr-preview-actions">
+      <a class="btn btn-sec" href="/squirrel">&#8592; Squirrel</a>
+      <button class="btn btn-sec" onclick="renameUndo()" id="renameUndoBtn" hidden>&#8630; Undo</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-primary sr-execute-btn" id="renameApplyBtn" onclick="doRename()" disabled>Apply Rename</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- CSV Load modal -->
+<div class="modal-overlay" id="renameCsvModal">
+  <div class="modal sr-csv-modal">
+    <h2>&#128196; Load CSV Site Directory</h2>
+    <p class="org-modal-desc">Load a CSV with site information. Each row becomes a site; column values populate tokens for renaming.</p>
+    <div id="renameCsvDropZone" class="sr-csv-drop">
+      <div>Drop a <code>.csv</code> file here or click to browse</div>
+      <input type="file" id="renameCsvFileInput" accept=".csv" hidden>
+    </div>
+    <div id="renameCsvPreview" hidden>
+      <div id="renameCsvPreviewWrap" class="sr-table-wrap sr-table-wrap--preview"></div>
+      <div class="sr-column-map">
+        <div class="sr-map-row">
+          <label>Primary ID column (for matching):</label>
+          <select id="rnMapPrimary"></select>
+        </div>
+        <div class="sr-map-row">
+          <label>Address column (optional):</label>
+          <select id="rnMapAddress"><option value="">(none)</option></select>
+        </div>
+        <div class="sr-map-row">
+          <label>Deprecated names column (optional):</label>
+          <select id="rnMapDeprecated"><option value="">(none)</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions modal-actions-spaced">
+      <button class="btn btn-sec" onclick="closeModal('renameCsvModal')">Cancel</button>
+      <button class="btn btn-primary" id="renameCsvLoadBtn" onclick="doLoadRenameCsv()" disabled>Load Directory</button>
+    </div>
+  </div>
+</div>
+
+<!-- Gap Report modal -->
+<div class="modal-overlay" id="renameGapModal">
+  <div class="modal sr-gap-modal">
+    <h2>&#128202; Gap Report</h2>
+    <div id="renameGapBody"><div class="org-extract-empty">Loading…</div></div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="closeModal('renameGapModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Profiles modal -->
+<div class="modal-overlay" id="renameProfilesModal">
+  <div class="modal sr-profiles-modal">
+    <h2>&#128221; Rename Profiles</h2>
+    <div id="renameProfilesList"></div>
+    <div class="sr-profile-save">
+      <h3>Save Current Settings as Profile</h3>
+      <div class="org-root-row">
+        <input type="text" id="renameProfileNameInput" class="org-folder-input flex-1" placeholder="Profile name">
+        <button class="btn btn-primary" onclick="doSaveRenameProfile()">Save</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="closeModal('renameProfilesModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- CSV Helper modal -->
+<div class="modal-overlay" id="renameCsvHelperModal">
+  <div class="modal sr-csv-modal">
+    <h2>&#128295; CSV Helper</h2>
+    <p class="org-modal-desc">Generate a CSV template matching your format string, or pre-fill one from existing folders.</p>
+    <div class="sr-csv-helper-row">
+      <button class="btn btn-blue" onclick="doCsvHelperTemplate()">&#128196; Generate Template</button>
+      <button class="btn btn-amber" onclick="doCsvHelperPrefill()">&#128194; Build from Existing Folders</button>
+    </div>
+    <div id="csvHelperResult" hidden>
+      <label class="org-later-label">Generated CSV</label>
+      <textarea id="csvHelperOutput" class="org-folder-input org-folder-input--mono" rows="10" readonly></textarea>
+      <div class="mt-8">
+        <button class="btn btn-sec btn-sm" onclick="copyCsvHelper()">Copy to Clipboard</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sec" onclick="closeModal('renameCsvHelperModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/rename.js"></script>
+</body>
+</html>

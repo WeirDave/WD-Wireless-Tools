@@ -18,6 +18,12 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+from tools.rename_manager import (
+    apply_file_rules as _apply_file_rules,
+    migrate_rename_cfg as _migrate_rename_cfg_impl,
+    _split_ext,
+)
+
 CONFIG_DIR = Path.home() / ".wd_wireless_tools"
 ORGANIZER_CONFIG = CONFIG_DIR / "organizer_config.json"
 UNDO_DIR = CONFIG_DIR / "organizer_undo"
@@ -162,129 +168,18 @@ DEFAULT_CONFIG = {
 }
 
 
-_SEPARATOR_CHARS = {"underscore": "_", "hyphen": "-", "space": " ", "spaced_hyphen": " - "}
-
-
 def _migrate_rename_cfg(rn: dict) -> dict:
-    """Translate rename keys from older releases to their current equivalents
-    so configs saved by earlier versions still work:
-      pre-v1.34: lowercase / add_site_code / collapse_spaces
-      v1.34:     prepend_parent (bool prefix of the parent folder's name)
-    """
+    """Delegate to rename_manager.migrate_rename_cfg, falling back to
+    DEFAULT_CONFIG["rename"] for non-dict input."""
     if not isinstance(rn, dict):
         return dict(DEFAULT_CONFIG["rename"])
-    rn = dict(rn)
-
-    if "case" not in rn and rn.pop("lowercase", False):
-        rn["case"] = "lower"
-    rn.pop("lowercase", None)
-    if "prepend_parent" not in rn and "add_site_code" in rn:
-        rn["prepend_parent"] = rn.get("add_site_code", False)
-    rn.pop("add_site_code", None)
-    if "separator" not in rn and rn.pop("collapse_spaces", False):
-        rn["separator"] = "underscore"
-    rn.pop("collapse_spaces", None)
-
-    if "prefix" not in rn and rn.pop("prepend_parent", False):
-        rn["prefix"] = "{folder}_"
-    rn.pop("prepend_parent", None)
-
-    return {**DEFAULT_CONFIG["rename"], **rn}
-
-
-def _title_case(stem: str) -> str:
-    """Capitalize the first letter of each word, leaving the rest of each
-    word's casing untouched (so acronyms like 'SITE1' aren't mangled)."""
-    return re.sub(r"[A-Za-z]+", lambda m: m.group(0)[0].upper() + m.group(0)[1:], stem)
-
-
-def _sentence_case(stem: str) -> str:
-    """Lowercase the whole stem, then capitalize its first letter."""
-    lowered = stem.lower()
-    m = re.search(r"[a-z]", lowered)
-    if not m:
-        return lowered
-    i = m.start()
-    return lowered[:i] + lowered[i].upper() + lowered[i + 1:]
-
-
-def _expand_folder_token(text: str, folder_label: str) -> str:
-    """Replace the {folder} placeholder in a prefix/suffix field with the
-    file's containing folder name."""
-    return (text or "").replace("{folder}", folder_label.strip())
+    result = _migrate_rename_cfg_impl(rn)
+    return {**DEFAULT_CONFIG["rename"], **result}
 
 
 def _apply_rename(original_name: str, folder_label: str, cfg: dict) -> str:
-    """Compute the target filename after applying the configured rename rules.
-
-    Order: strip_prefix -> strip_suffix -> regex -> separator -> case -> prefix/suffix.
-    Prefix/suffix are literal text (with an optional {folder} token) wrapped
-    around the transformed stem last, so free-typed text like "PD v1.0" is
-    never mangled by the case/separator rules meant for the original name.
-    Extension is preserved untouched (only the stem is transformed).
-    """
-    r = (cfg.get("rename") or {})
-    if not any((r.get("strip_prefix"), r.get("strip_suffix"), r.get("regex_from"),
-                r.get("separator"), r.get("case"), r.get("prefix"), r.get("suffix"))):
-        return original_name
-
-    stem, ext = _split_ext(original_name)
-
-
-    strip = r.get("strip_prefix") or ""
-    if strip:
-        try:
-            stem = re.sub(r"^(?:" + strip + ")", "", stem)
-        except re.error:
-            pass
-
-
-    strip_end = r.get("strip_suffix") or ""
-    if strip_end:
-        try:
-            stem = re.sub(r"(?:" + strip_end + ")$", "", stem)
-        except re.error:
-            pass
-
-
-    rf = r.get("regex_from") or ""
-    rt = r.get("regex_to") or ""
-    if rf:
-        try:
-            stem = re.sub(rf, rt, stem)
-        except re.error:
-            pass
-
-
-    sep = _SEPARATOR_CHARS.get(r.get("separator") or "")
-    if sep is not None:
-        stem = re.sub(r"[\s_-]+", sep, stem).strip(sep)
-
-
-    case = r.get("case") or ""
-    if case == "lower":
-        stem = stem.lower()
-    elif case == "upper":
-        stem = stem.upper()
-    elif case == "title":
-        stem = _title_case(stem)
-    elif case == "sentence":
-        stem = _sentence_case(stem)
-
-
-    prefix = _expand_folder_token(r.get("prefix"), folder_label)
-    suffix = _expand_folder_token(r.get("suffix"), folder_label)
-    stem = prefix + stem + suffix
-
-
-    stem = stem or _split_ext(original_name)[0]
-    return stem + ext
-
-
-def _split_ext(name: str) -> tuple[str, str]:
-    """Split a filename into (stem, ext). Handles hidden files ('.esx' → ('.esx', ''))."""
-    p = Path(name)
-    return p.stem, p.suffix
+    """Delegate to rename_manager.apply_file_rules."""
+    return _apply_file_rules(original_name, folder_label, cfg)
 
 
 _ESX_SUMMARY_CACHE: dict[tuple[str, int, float], dict] = {}

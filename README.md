@@ -126,7 +126,7 @@ Open the [hosted tool suite](https://weirdave.github.io/WD-Wireless-Tools/) to u
 1. Install [Python 3.10 or newer](https://www.python.org/downloads/). On Windows, enable **Add Python to PATH** during installation.
 2. Open the [latest release](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) and download the versioned `WD-Wireless-Tools-vX.X.X.zip` asset—not GitHub's automatic “Source code” archive.
 3. Extract the ZIP to a permanent folder.
-4. Double-click `WD Wireless Tools Start.bat` on Windows or `WD Wireless Tools Start.command` on macOS.
+4. Double-click `Start WD Wireless Tools.bat` on Windows or `Start WD Wireless Tools.command` on macOS.
 
 The launcher installs missing dependencies, starts the local service, and opens `http://localhost:8675`. Keep its terminal window open while using the suite.
 
@@ -142,7 +142,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.1.11
+WIRELESS TOOLS  v2.2.0
 A suite of Ekahau workflow tools.
 
 Local suite: http://localhost:8675/
@@ -188,9 +188,9 @@ Choose a folder containing loose project files. Squirrel shows the proposed orga
 
 Install Python 3.10 or newer and enable **Add Python to PATH** on Windows. Reopen the terminal afterward.
 
-### macOS blocks `WD Wireless Tools Start.command`
+### macOS blocks `Start WD Wireless Tools.command`
 
-Right-click `WD Wireless Tools Start.command`, choose **Open**, then confirm **Open**. This is normally required only once.
+Right-click `Start WD Wireless Tools.command`, choose **Open**, then confirm **Open**. This is normally required only once.
 
 ### Cloud Manager cannot find a session
 
@@ -201,11 +201,11 @@ Confirm that you are signed into `https://cloud.ekahau.com` in a normal Chrome, 
 Close the other running instance, or choose another port:
 
 ```bat
-set PORT=8676 && "WD Wireless Tools Start.bat"
+set PORT=8676 && "Start WD Wireless Tools.bat"
 ```
 
 ```bash
-PORT=8676 bash "WD Wireless Tools Start.command"
+PORT=8676 bash "Start WD Wireless Tools.command"
 ```
 
 ### Browser does not open automatically
@@ -217,8 +217,8 @@ Open [http://localhost:8675](http://localhost:8675) manually while the launcher 
 ```text
 WD-Wireless-Tools/
 ├── server.py                          # Local Flask/Waitress service and API routes
-├── WD Wireless Tools Start.bat        # Windows launcher
-├── WD Wireless Tools Start.command    # macOS launcher
+├── Start WD Wireless Tools.bat        # Windows launcher
+├── Start WD Wireless Tools.command    # macOS launcher
 ├── requirements.txt                   # Python dependencies
 ├── BACKLOG.md                         # Unfinished product work only
 ├── tools/

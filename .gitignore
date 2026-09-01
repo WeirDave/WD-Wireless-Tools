@@ -45,7 +45,3 @@ tmp/
 # AI-handoff notes — internal working notes, not for the public repo
 PROJECT_MEMORY.md
 
-# Transient sentinel — server.py drops this before exiting on Restart Now;
-# the launcher scripts detect it and relaunch. If the file exists on disk
-# outside a restart, it was left behind by an aborted cycle — safe to delete.
-.restart_requested

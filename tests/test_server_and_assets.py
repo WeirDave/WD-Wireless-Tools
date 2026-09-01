@@ -30,6 +30,7 @@ class ServerAndAssetTests(unittest.TestCase):
 
     def test_public_routes_load(self):
         for route in ("/", "/cloud", "/walls", "/squirrel", "/scale", "/report",
+                      "/rename", "/squirrel/rename",
                       "/guide", "/guide-cloud", "/guide-squirrel", "/api/version"):
             with self.subTest(route=route):
                 response = self.client.get(route)
@@ -51,7 +52,7 @@ class ServerAndAssetTests(unittest.TestCase):
                     response.close()
 
     def test_unknown_api_actions_are_rejected(self):
-        for route in ("/api/cloud/not_real", "/api/organizer/not_real", "/api/templates/not_real"):
+        for route in ("/api/cloud/not_real", "/api/organizer/not_real", "/api/templates/not_real", "/api/rename/not_real"):
             with self.subTest(route=route):
                 response = self.client.post(route, json={}, headers=self._api_headers())
                 self.assertEqual(response.status_code, 404)
@@ -273,14 +274,14 @@ bulkSync('to-cloud').then(async () => {
             )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.get_json()["ok"])
-        thread.assert_called_once_with(target=server._restart_after_response, daemon=True)
+        thread.assert_called_once_with(target=server._restart_in_new_console, daemon=True)
         thread.return_value.start.assert_called_once_with()
 
     def test_cross_origin_posts_are_rejected_before_actions_run(self):
         routes = (
             ("/api/cloud/forget_login", server.cm, "forget_login"),
             ("/api/organizer/reset_config", server.fo, "reset_config"),
-            ("/api/restart", server, "_restart_after_response"),
+            ("/api/restart", server, "_restart_in_new_console"),
         )
         forged_headers = (
             {"Origin": "https://malicious.example"},
@@ -392,7 +393,7 @@ bulkSync('to-cloud').then(async () => {
                 self.assertFalse(any(name.startswith("docs/releases/") for name in names))
                 self.assertFalse(any(name.startswith("images/") for name in names))
                 self.assertFalse(any("__pycache__" in name for name in names))
-                mode = archive.getinfo("WD Wireless Tools Start.command").external_attr >> 16
+                mode = archive.getinfo("Start WD Wireless Tools.command").external_attr >> 16
                 self.assertTrue(mode & stat.S_IXUSR)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")

@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: "\U0001F4D6 User Manual"
+    url: https://github.com/WeirDave/WD-Wireless-Tools/blob/main/docs/USER_MANUAL.md
+    about: Read the full user manual for all five tools in the suite.
+
+  - name: "\U0001F512 Report a security vulnerability"
+    url: https://github.com/WeirDave/WD-Wireless-Tools/security/advisories/new
+    about: Don't open a public issue for security problems. Use private vulnerability reporting so the fix lands before disclosure.
