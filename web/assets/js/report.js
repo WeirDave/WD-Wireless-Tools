@@ -755,13 +755,6 @@
 
   window.gridFloorChanged = function (sel) {
     _gridFloorIdx = parseInt(sel.value, 10) || 0;
-    var fp = proj.floorPlans[_gridFloorIdx];
-    if (!fp) return;
-    var aps = filterApsForFloor(fp);
-    var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
-    _gridCols = auto.cols;
-    _gridRows = auto.rows;
-    _cropBox = { x: 0, y: 0, w: 1, h: 1 };
     updateGridPreview();
   };
 
@@ -1133,12 +1126,13 @@
     var minDim = Math.min(scaleW, scaleH);
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord; if (!c) return;
-      var r = ctx.primaryRadio(ap.id);
-      var dir = r ? r.antennaDirection : null;
-      var isDirectional = radioIsDirectional(r);
-      var cls = isDirectional ? 'rep-mark rep-mark--dir' : 'rep-mark rep-mark--omni';
+      var r = ctx ? ctx.primaryRadio(ap.id) : null;
+      var isDirectional = ctx ? radioIsDirectional(r) : false;
+      var cls = !ctx ? 'rep-mark rep-mark--loc'
+        : isDirectional ? 'rep-mark rep-mark--dir' : 'rep-mark rep-mark--omni';
       markers += '<g class="' + cls + '" transform="translate(' + c.x + ',' + c.y + ')">';
       if (isDirectional) {
+        var dir = r ? r.antennaDirection : null;
         var len = minDim * 0.06;
         markers += '<g transform="rotate(' + dir + ')">'
           + '<path class="rep-mark-cone" d="M 0 0 L ' + (-len * 0.35) + ' ' + (-len) + ' L ' + (len * 0.35) + ' ' + (-len) + ' Z"/></g>';
@@ -1165,15 +1159,24 @@
       : 'Labels: trailing "APnn" from each AP name (e.g. "42" for "…AP42"). Names without that suffix show the full name.';
   }
 
-  function renderAntennaOverview(fp, aps, opts, ctx) {
+  function antennaKeyHtml(opts) {
+    return '<span class="rep-key-swatch dir"></span> Directional antenna &nbsp;·&nbsp; <span class="rep-key-swatch omni"></span> Omni / ceiling &nbsp;·&nbsp; ' + WD.esc(antennaLabelHint(opts));
+  }
+
+  function locationKeyHtml(opts) {
+    return 'AP positions from .esx design data. Labels show ' + (opts.shortLabels === false ? 'full AP name' : 'short designator from AP name') + '.';
+  }
+
+  function renderAntennaOverview(fp, aps, opts, ctx, keyHtml) {
     var imgId = fp.bitmapImageId || fp.imageId;
     var url = proj.imageUrls[imgId];
     if (!url) return '<div class="rep-empty-small">Floor plan image not available.</div>';
     var W = fp.width || 1, H = fp.height || 1;
+    if (!keyHtml) keyHtml = antennaKeyHtml(opts);
 
     if (opts.segmented) {
       var grid = computeAntennaGrid(W, H, aps, opts);
-      if (grid.cols * grid.rows > 1) return renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid);
+      if (grid.cols * grid.rows > 1) return renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml);
     }
 
     var markers = buildAntennaMarkers(aps, W, H, opts, ctx);
@@ -1182,7 +1185,7 @@
       +   '<img src="' + url + '" alt="Floor plan">'
       +   '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + markers + '</svg>'
       + '</div>'
-      + '<div class="rep-overview-key"><span class="rep-key-swatch dir"></span> Directional antenna &nbsp;·&nbsp; <span class="rep-key-swatch omni"></span> Omni / ceiling &nbsp;·&nbsp; ' + WD.esc(antennaLabelHint(opts)) + '</div>'
+      + '<div class="rep-overview-key">' + keyHtml + '</div>'
       + '</div>';
   }
 
@@ -1211,7 +1214,7 @@
     return letter + (row + 1);
   }
 
-  function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid) {
+  function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml) {
     var cols = grid.cols, rows = grid.rows;
     var cb = opts.cropBox || { x: 0, y: 0, w: 1, h: 1 };
     var ox = cb.x * W, oy = cb.y * H;
@@ -1237,12 +1240,12 @@
       .map(function (cell) { return segCellLabel(cell.col, cell.row); });
 
     var out = '<div class="rep-seg-note">Floor plan split into ' + nonEmpty.length + ' section' + (nonEmpty.length === 1 ? '' : 's')
-      + ' (' + cols + '&times;' + rows + ' grid) so AP markers stay legible on this large floor plan.'
+      + ' (' + cols + '&times;' + rows + ' grid) so AP markers stay legible.'
       + (emptyLabels.length ? ' No APs in section' + (emptyLabels.length === 1 ? '' : 's') + ' ' + emptyLabels.join(', ') + ' — skipped.' : '')
       + '</div>';
     out += renderAntennaGridIndex(url, W, H, nonEmpty);
     nonEmpty.forEach(function (cell) {
-      out += renderAntennaSegmentCell(url, W, H, cell, opts, ctx);
+      out += renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml);
     });
     return out;
   }
@@ -1281,7 +1284,7 @@
       + '</div>';
   }
 
-  function renderAntennaSegmentCell(url, W, H, cell, opts, ctx) {
+  function renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml) {
     var cW = cell.x1 - cell.x0, cH = cell.y1 - cell.y0;
     var label = segCellLabel(cell.col, cell.row);
     var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx);
@@ -1296,7 +1299,7 @@
       +   '<img src="' + url + '" alt="Floor plan section ' + WD.escAttr(label) + '">'
       +   '<svg viewBox="' + cell.x0 + ' ' + cell.y0 + ' ' + cW + ' ' + cH + '" preserveAspectRatio="none">' + markers + '</svg>'
       + '</div>'
-      + '<div class="rep-overview-key"><span class="rep-key-swatch dir"></span> Directional antenna &nbsp;·&nbsp; <span class="rep-key-swatch omni"></span> Omni / ceiling &nbsp;·&nbsp; ' + WD.esc(antennaLabelHint(opts)) + '</div>'
+      + (keyHtml ? '<div class="rep-overview-key">' + keyHtml + '</div>' : '')
       + '</div>';
   }
 
@@ -2526,86 +2529,7 @@
   }
 
   function renderApLocationOverview(fp, aps, opts, ctx) {
-    var imgId = fp.bitmapImageId || fp.imageId;
-    var url = proj.imageUrls[imgId];
-    if (!url) return '<div class="rep-empty-small">Floor plan image not available.</div>';
-    var W = fp.width || 1, H = fp.height || 1;
-
-    if (opts.segmented) {
-      var grid = computeAntennaGrid(W, H, aps, opts);
-      if (grid.cols * grid.rows > 1) return renderApLocationSegmented(url, W, H, aps, opts, ctx, grid);
-    }
-
-    var markers = buildApLocationMarkers(aps, W, H, opts);
-    return '<div class="rep-overview">'
-      + '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
-      +   '<img src="' + url + '" alt="Floor plan">'
-      +   '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + markers + '</svg>'
-      + '</div>'
-      + '<div class="rep-overview-key">AP positions from .esx design data. Labels show ' + (opts.shortLabels === false ? 'full AP name' : 'short designator from AP name') + '.</div>'
-      + '</div>';
-  }
-
-  function buildApLocationMarkers(aps, W, H, opts) {
-    var markers = '';
-    var minDim = Math.min(W, H);
-    aps.forEach(function (ap) {
-      var c = ap.location && ap.location.coord; if (!c) return;
-      var label = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
-      var labelFont = minDim * 0.018 * Math.min(1, 4 / Math.max(4, label.length));
-      var padX = minDim * 0.005;
-      var boxW = Math.max(minDim * 0.025, label.length * labelFont * 0.65) + padX * 2;
-      var boxH = minDim * 0.024;
-      var cornerR = minDim * 0.004;
-      markers += '<g class="rep-mark rep-mark--loc" transform="translate(' + c.x + ',' + c.y + ')">'
-        + '<rect class="rep-mark-dot" x="' + (-boxW / 2) + '" y="' + (-boxH / 2) + '" width="' + boxW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
-        + '<text class="rep-mark-label" y="' + (labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
-    });
-    return markers;
-  }
-
-  function renderApLocationSegmented(url, W, H, aps, opts, ctx, grid) {
-    var cols = grid.cols, rows = grid.rows;
-    var cw = W / cols, ch = H / rows;
-    var cells = [];
-    for (var ri = 0; ri < rows; ri++) {
-      for (var ci = 0; ci < cols; ci++) {
-        cells.push({ col: ci, row: ri, x0: ci * cw, y0: ri * ch, x1: (ci + 1) * cw, y1: (ri + 1) * ch, aps: [] });
-      }
-    }
-    aps.forEach(function (ap) {
-      var c = ap.location && ap.location.coord; if (!c) return;
-      var ci = Math.min(cols - 1, Math.max(0, Math.floor(c.x / cw)));
-      var ri = Math.min(rows - 1, Math.max(0, Math.floor(c.y / ch)));
-      cells[ri * cols + ci].aps.push(ap);
-    });
-    var nonEmpty = cells.filter(function (cell) { return cell.aps.length; });
-    var emptyLabels = cells.filter(function (cell) { return !cell.aps.length; })
-      .map(function (cell) { return segCellLabel(cell.col, cell.row); });
-
-    var out = '<div class="rep-seg-note">Floor plan split into ' + nonEmpty.length + ' section' + (nonEmpty.length === 1 ? '' : 's')
-      + ' (' + cols + '&times;' + rows + ' grid) so AP labels stay legible.'
-      + (emptyLabels.length ? ' No APs in section' + (emptyLabels.length === 1 ? '' : 's') + ' ' + emptyLabels.join(', ') + ' — skipped.' : '')
-      + '</div>';
-    out += renderAntennaGridIndex(url, W, H, nonEmpty);
-    nonEmpty.forEach(function (cell) {
-      var label = segCellLabel(cell.col, cell.row);
-      var cW = cell.x1 - cell.x0, cH = cell.y1 - cell.y0;
-      var markers = buildApLocationMarkers(cell.aps, W, H, opts);
-      out += '<div class="rep-overview rep-seg-cell">'
-        + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell)
-        +   '<h3 class="rep-seg-cell-title">Section ' + WD.esc(label)
-        +     ' <span class="rep-seg-cell-count">— ' + cell.aps.length + ' AP' + (cell.aps.length === 1 ? '' : 's') + '</span></h3>'
-        + '</div>'
-        + '<div class="rep-overview-plan" data-seg="1" data-orig-w="' + W + '" data-orig-h="' + H
-        +   '" data-seg-x0="' + cell.x0 + '" data-seg-y0="' + cell.y0 + '" data-seg-x1="' + cell.x1 + '" data-seg-y1="' + cell.y1
-        +   '" style="--w:' + cW + ';--h:' + cH + '">'
-        +   '<img src="' + url + '" alt="Floor plan section ' + WD.escAttr(label) + '">'
-        +   '<svg viewBox="' + cell.x0 + ' ' + cell.y0 + ' ' + cW + ' ' + cH + '" preserveAspectRatio="none">' + markers + '</svg>'
-        + '</div>'
-        + '</div>';
-    });
-    return out;
+    return renderAntennaOverview(fp, aps, opts, null, locationKeyHtml(opts));
   }
 
   function renderApLocationTable(aps, fp, opts, ctx) {

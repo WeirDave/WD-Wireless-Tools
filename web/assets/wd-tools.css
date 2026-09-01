@@ -5549,7 +5549,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-mark--omni .rep-mark-pill { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
 .rep-mark--loc .rep-mark-pill { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
 .rep-mark-label { fill: #fff; font-weight: 700; overflow: visible; }
-.rep-mark--loc .rep-mark-dot { fill: #2563eb; stroke: #fff; stroke-width: 1.5; }
+.rep-mark--loc .rep-mark-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
 .rep-loc-table .rep-name { user-select: all; }
 .rep-loc-warn { color: var(--amber, #d97706); font-size: 12px; }
 .rep-loc-warn-row { background: rgba(217, 119, 6, 0.06); }
@@ -6385,7 +6385,8 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
   margin-bottom: 12px;
 }
 .grid-controls label { font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
-.grid-controls select { font-size: 13px; background: var(--input-bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+.grid-controls select { font-size: 13px; background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; }
+.grid-controls select option { background: var(--bg); color: var(--text); }
 .grid-spinners { display: flex; gap: 16px; }
 .grid-spinner { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 .grid-spin-val { min-width: 24px; text-align: center; font-weight: 700; font-size: 15px; color: var(--text); }
