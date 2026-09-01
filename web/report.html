@@ -209,36 +209,54 @@
       <button class="btn-icon" onclick="closeGridConfig()" title="Close">&times;</button>
     </div>
     <div class="grid-modal-body">
-      <div class="grid-controls">
-        <label>Floor plan
-          <select id="gridFloorSelect" onchange="gridFloorChanged(this)"></select>
-        </label>
-        <div class="grid-spinners">
-          <div class="grid-spinner">
-            <span>Columns</span>
-            <button class="btn btn-secondary btn-sm" onclick="adjustGridCols(-1)">&minus;</button>
-            <span id="gridColsVal" class="grid-spin-val">3</span>
-            <button class="btn btn-secondary btn-sm" onclick="adjustGridCols(1)">+</button>
+      <div class="grid-modal-main">
+        <div class="grid-controls">
+          <label>Floor plan:
+            <select id="gridFloorSelect" onchange="gridFloorChanged(this)"></select>
+          </label>
+          <div class="grid-spinners">
+            <div class="grid-spinner">
+              <span>Columns:</span>
+              <button class="btn btn-secondary btn-sm" onclick="adjustGridCols(-1)">&minus;</button>
+              <span id="gridColsVal" class="grid-spin-val">3</span>
+              <button class="btn btn-secondary btn-sm" onclick="adjustGridCols(1)">+</button>
+            </div>
+            <div class="grid-spinner">
+              <span>Rows:</span>
+              <button class="btn btn-secondary btn-sm" onclick="adjustGridRows(-1)">&minus;</button>
+              <span id="gridRowsVal" class="grid-spin-val">3</span>
+              <button class="btn btn-secondary btn-sm" onclick="adjustGridRows(1)">+</button>
+            </div>
           </div>
-          <div class="grid-spinner">
-            <span>Rows</span>
-            <button class="btn btn-secondary btn-sm" onclick="adjustGridRows(-1)">&minus;</button>
-            <span id="gridRowsVal" class="grid-spin-val">3</span>
-            <button class="btn btn-secondary btn-sm" onclick="adjustGridRows(1)">+</button>
-          </div>
+          <div id="gridCellCount" class="grid-cell-count"></div>
         </div>
-        <div id="gridCellCount" class="grid-cell-count"></div>
+        <div id="gridPreviewContainer" class="grid-preview-container">
+          <div id="gridPreviewImage" class="grid-preview-image"></div>
+        </div>
       </div>
-      <div id="gridPreviewContainer" class="grid-preview-container">
-        <div id="gridPreviewImage" class="grid-preview-image"></div>
+      <div class="grid-modal-help">
+        <h4>Steps</h4>
+        <dl>
+          <dt>1. Position the grid</dt>
+          <dd>Drag the blue box over the building area. Drag corners or edges to resize it.</dd>
+          <dt>2. Fine-tune (optional)</dt>
+          <dd>Scroll to zoom in for precise placement. Drag outside the blue box to pan the canvas. Adjust columns &amp; rows with +/&minus; if needed &mdash; auto-calculated by default.</dd>
+          <dt>3. Apply</dt>
+          <dd>Click <strong>Apply</strong> to save this floor&rsquo;s grid.</dd>
+          <dt>4. Additional floors</dt>
+          <dd>Click <strong>Apply to All Floors</strong> to copy the grid position to every floor. Then switch floors with the dropdown and adjust the grid on each floor if the images aren&rsquo;t aligned.</dd>
+          <dt>5. Finish</dt>
+          <dd>Click <strong>Done</strong> to apply and close.</dd>
+        </dl>
       </div>
     </div>
     <div class="grid-modal-footer">
       <button class="btn btn-secondary btn-sm" onclick="resetGridToAuto()">Reset to Auto</button>
-      <button class="btn btn-secondary btn-sm" onclick="resetCropBox()">Reset Crop</button>
+      <button class="btn btn-secondary btn-sm" onclick="resetCropBox()">Reset Grid</button>
+      <button class="btn btn-secondary btn-sm" onclick="resetGridZoom()">Reset Zoom</button>
       <div class="grid-modal-actions">
         <button class="btn btn-secondary btn-sm" onclick="closeGridConfig()">Cancel</button>
-        <button class="btn btn-secondary btn-sm" onclick="applyGridFloor(true)">Apply to All Floors</button>
+        <button class="btn btn-secondary btn-sm" onclick="applyGridFloor(true)" title="Copies this crop position to every floor plan. If floors use different image positions, check each floor afterward and adjust.">Apply to All Floors</button>
         <button class="btn btn-secondary btn-sm" onclick="applyGridFloor(false)">Apply</button>
         <button class="btn btn-primary btn-sm" onclick="doneGridConfig()">Done</button>
       </div>
