@@ -4943,13 +4943,16 @@ body.tool-report {
 [data-theme="dark"] .rep-seg-note { color: var(--text-2); background: #0f1620; border-color: var(--border); }
 .rep-seg-note--ok { color: var(--green); }
 
-.rep-seg-index .rep-overview-plan { max-width: 420px; margin: 0 auto; }
+.rep-seg-index { page-break-before: always; break-before: page; }
+.rep-seg-index .rep-overview-plan { max-width: 100%; margin: 0 auto; }
 
-.rep-grid-cell { fill: none; stroke: #d97706; }
+.rep-grid-cell { fill: rgba(217,119,6,0.08); stroke: #d97706; }
+.rep-grid-cell--empty { fill: none; stroke: #d97706; opacity: 0.35; stroke-dasharray: 8 4; }
 
 .rep-grid-label {
   fill: #d97706; font-weight: 700; paint-order: stroke; stroke: #fff; stroke-width: 3px;
 }
+.rep-grid-label--empty { opacity: 0.35; }
 
 .rep-seg-cell { page-break-inside: avoid; break-inside: avoid; margin-top: 22px; }
 

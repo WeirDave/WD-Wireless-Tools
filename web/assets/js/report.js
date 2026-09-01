@@ -1165,9 +1165,10 @@
     return out + '</section>';
   }
 
-  function buildAntennaMarkers(aps, scaleW, scaleH, opts, ctx) {
+  function buildAntennaMarkers(aps, scaleW, scaleH, opts, ctx, cellBounds) {
     var markers = '';
     var minDim = Math.min(scaleW, scaleH);
+    var edgeMargin = minDim * 0.06;
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord; if (!c) return;
       var r = ctx ? ctx.primaryRadio(ap.id) : null;
@@ -1188,11 +1189,25 @@
       var pillW = Math.max(minDim * 0.03, label.length * labelFont * 0.65) + padX * 2;
       var pillH = minDim * 0.028;
       var cornerR = minDim * 0.005;
-      var pillY = dotSize / 2 + minDim * 0.008;
       var dotR = dotSize * 0.25;
+      var gap = minDim * 0.008;
+      var labelAbove = false;
+      var labelAnchor = 'middle';
+      var pillXOff = -pillW / 2;
+      if (cellBounds) {
+        var nearBottom = (cellBounds.y1 - c.y) < edgeMargin;
+        var nearTop = (c.y - cellBounds.y0) < edgeMargin;
+        var nearRight = (cellBounds.x1 - c.x) < edgeMargin + pillW / 2;
+        var nearLeft = (c.x - cellBounds.x0) < edgeMargin + pillW / 2;
+        if (nearBottom && !nearTop) labelAbove = true;
+        if (nearRight && !nearLeft) { labelAnchor = 'end'; pillXOff = -pillW; }
+        else if (nearLeft && !nearRight) { labelAnchor = 'start'; pillXOff = 0; }
+      }
+      var pillY = labelAbove ? -(dotSize / 2 + gap + pillH) : dotSize / 2 + gap;
+      var textX = pillXOff + pillW / 2;
       markers += '<rect class="rep-mark-dot" x="' + (-dotSize / 2) + '" y="' + (-dotSize / 2) + '" width="' + dotSize + '" height="' + dotSize + '" rx="' + dotR + '" ry="' + dotR + '"/>'
-        + '<rect class="rep-mark-pill" x="' + (-pillW / 2) + '" y="' + pillY + '" width="' + pillW + '" height="' + pillH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
-        + '<text class="rep-mark-label" y="' + (pillY + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
+        + '<rect class="rep-mark-pill" x="' + pillXOff + '" y="' + pillY + '" width="' + pillW + '" height="' + pillH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
+        + '<text class="rep-mark-label" x="' + textX + '" y="' + (pillY + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
     });
     return markers;
   }
@@ -1290,31 +1305,43 @@
       + ' (' + cols + '&times;' + rows + ' grid) so AP markers stay legible.'
       + (emptyLabels.length ? ' No APs in section' + (emptyLabels.length === 1 ? '' : 's') + ' ' + emptyLabels.join(', ') + ' — skipped.' : '')
       + '</div>';
-    out += renderAntennaGridIndex(url, W, H, nonEmpty);
+    out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb);
     nonEmpty.forEach(function (cell) {
       out += renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml);
     });
     return out;
   }
 
-  function renderAntennaGridIndex(url, W, H, nonEmptyCells) {
-    var lw = Math.min(W, H) * 0.003;
+  function renderAntennaGridIndex(url, W, H, allCells, nonEmptyCells, cb) {
+    var gx = cb.x * W, gy = cb.y * H, gw = cb.w * W, gh = cb.h * H;
+    var margin = Math.min(gw, gh) * 0.02;
+    var vx = Math.max(0, gx - margin), vy = Math.max(0, gy - margin);
+    var vW = Math.min(W - vx, gw + margin * 2), vH = Math.min(H - vy, gh + margin * 2);
+
+    var nonEmptySet = {};
+    nonEmptyCells.forEach(function (cell) { nonEmptySet[cell.col + ',' + cell.row] = true; });
+
+    var lw = Math.min(gw, gh) * 0.004;
     var lines = '';
-    nonEmptyCells.forEach(function (cell) {
+    allCells.forEach(function (cell) {
+      var hasAps = nonEmptySet[cell.col + ',' + cell.row];
       lines += '<rect x="' + cell.x0 + '" y="' + cell.y0 + '" width="' + (cell.x1 - cell.x0) + '" height="' + (cell.y1 - cell.y0)
-        + '" class="rep-grid-cell" stroke-width="' + lw + '"/>';
+        + '" class="rep-grid-cell' + (hasAps ? '' : ' rep-grid-cell--empty') + '" stroke-width="' + lw + '"/>';
     });
     var labels = '';
-    var fontSize = Math.min(W, H) * 0.028;
-    nonEmptyCells.forEach(function (cell) {
+    var fontSize = Math.min(gw / (allCells.length > 0 ? Math.sqrt(allCells.length) : 1), gh / (allCells.length > 0 ? Math.sqrt(allCells.length) : 1)) * 0.4;
+    allCells.forEach(function (cell) {
       var cx = (cell.x0 + cell.x1) / 2, cy = (cell.y0 + cell.y1) / 2;
-      labels += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" class="rep-grid-label" font-size="' + fontSize + '">'
+      var hasAps = nonEmptySet[cell.col + ',' + cell.row];
+      labels += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" class="rep-grid-label' + (hasAps ? '' : ' rep-grid-label--empty') + '" font-size="' + fontSize + '">'
         + segCellLabel(cell.col, cell.row) + '</text>';
     });
     return '<div class="rep-overview rep-seg-index">'
-      + '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
+      + '<div class="rep-overview-plan" data-seg="1" data-orig-w="' + W + '" data-orig-h="' + H
+      +   '" data-seg-x0="' + vx + '" data-seg-y0="' + vy + '" data-seg-x1="' + (vx + vW) + '" data-seg-y1="' + (vy + vH)
+      +   '" style="--w:' + vW + ';--h:' + vH + '">'
       +   '<img src="' + url + '" alt="Floor plan section index">'
-      +   '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + lines + labels + '</svg>'
+      +   '<svg viewBox="' + vx + ' ' + vy + ' ' + vW + ' ' + vH + '" preserveAspectRatio="none">' + lines + labels + '</svg>'
       + '</div>'
       + '<div class="rep-overview-key">Section index — each labeled cell is detailed on its own page below.</div>'
       + '</div>';
@@ -1333,18 +1360,22 @@
 
   function renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml) {
     var cW = cell.x1 - cell.x0, cH = cell.y1 - cell.y0;
+    var bleed = Math.min(cW, cH) * 0.03;
+    var vx = Math.max(0, cell.x0 - bleed), vy = Math.max(0, cell.y0 - bleed);
+    var vx2 = Math.min(W, cell.x1 + bleed), vy2 = Math.min(H, cell.y1 + bleed);
+    var vW = vx2 - vx, vH = vy2 - vy;
     var label = segCellLabel(cell.col, cell.row);
-    var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx);
+    var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx, cell);
     return '<div class="rep-overview rep-seg-cell">'
       + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell)
       +   '<h3 class="rep-seg-cell-title">Section ' + WD.esc(label)
       +     ' <span class="rep-seg-cell-count">— ' + cell.aps.length + ' AP' + (cell.aps.length === 1 ? '' : 's') + '</span></h3>'
       + '</div>'
       + '<div class="rep-overview-plan" data-seg="1" data-orig-w="' + W + '" data-orig-h="' + H
-      +   '" data-seg-x0="' + cell.x0 + '" data-seg-y0="' + cell.y0 + '" data-seg-x1="' + cell.x1 + '" data-seg-y1="' + cell.y1
-      +   '" style="--w:' + cW + ';--h:' + cH + '">'
+      +   '" data-seg-x0="' + vx + '" data-seg-y0="' + vy + '" data-seg-x1="' + vx2 + '" data-seg-y1="' + vy2
+      +   '" style="--w:' + vW + ';--h:' + vH + '">'
       +   '<img src="' + url + '" alt="Floor plan section ' + WD.escAttr(label) + '">'
-      +   '<svg viewBox="' + cell.x0 + ' ' + cell.y0 + ' ' + cW + ' ' + cH + '" preserveAspectRatio="none">' + markers + '</svg>'
+      +   '<svg viewBox="' + vx + ' ' + vy + ' ' + vW + ' ' + vH + '" preserveAspectRatio="none">' + markers + '</svg>'
       + '</div>'
       + (keyHtml ? '<div class="rep-overview-key">' + keyHtml + '</div>' : '')
       + '</div>';
@@ -3260,7 +3291,7 @@
       sidebar: [
         { id: 'shortLabels', label: 'Short number labels on the plan', default: true,
           description: 'When your AP names end with an "AP" designator (e.g. "…AP42"), show just the "42" on markers. Turn off to always show the full AP name.' },
-        { id: 'nameAudit', label: 'Include naming audit', default: true,
+        { id: 'nameAudit', label: 'Include naming audit', default: false,
           description: 'Adds a column flagging APs with missing, MAC-address, or generic names. Also adds a summary section at the end.' },
         { id: 'segmented', label: 'Split large floor plans into zoomed sections', default: true,
           description: 'Breaks each floor plan into a grid of zoomed-in sections so AP labels stay readable at any scale.' },
