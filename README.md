@@ -27,7 +27,7 @@ converting scale, and building installer-ready reports.
 <table>
 <tr>
 <td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.17.0 · Desktop</sub></td>
-<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"></a><br><b>Quick Walls</b><br><sub>v7.40 · Desktop + Web</sub></td>
+<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"></a><br><b>Quick Walls</b><br><sub>v7.41 · Desktop + Web</sub></td>
 <td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.26.0 · Desktop</sub></td>
 <td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"></a><br><b>Scale</b><br><sub>v1.5 · Desktop + Web</sub></td>
 <td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"></a><br><b>Report</b><br><sub>v2.31.1 · Desktop + Web</sub></td>
@@ -179,7 +179,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.8.2
+WIRELESS TOOLS  v2.9.0
 A suite of Ekahau workflow tools.
 
 Local suite: http://localhost:8675/
