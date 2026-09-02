@@ -5429,7 +5429,9 @@ body.swap-resizing * { cursor: col-resize !important; user-select: none !importa
 .swap-panel-foldable > .swap-panel-header:hover { background: var(--surface-hover); }
 
 .swap-fold-chevron {
-  font-size: 10px;
+  font-size: 15px;
+  width: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
   color: var(--text-2);
   transition: transform 0.12s;
   flex: 0 0 auto;
@@ -5590,13 +5592,20 @@ body.swap-resizing * { cursor: col-resize !important; user-select: none !importa
   border-bottom: 1px solid var(--border);
 }
 
+/* Chevrons were a 14px glyph with no padding — too small to hit comfortably
+   when you are working down the tree. Now a proper 26px target. */
 .swap-sel-group-chevron {
   background: none; border: 0; padding: 0;
-  width: 14px; flex: 0 0 auto;
-  color: var(--text-2); font-size: 11px; line-height: 1;
+  width: 26px; height: 26px;
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 4px;
+  color: var(--text-2); font-size: 16px; line-height: 1;
   cursor: pointer;
-  transition: transform 0.12s;
+  transition: transform 0.12s, background 0.12s, color 0.12s;
 }
+
+.swap-sel-group-chevron:hover { background: var(--surface-hover); color: var(--text); }
 
 .swap-sel-group.is-collapsed .swap-sel-group-chevron { transform: rotate(-90deg); }
 
@@ -5605,8 +5614,24 @@ body.swap-resizing * { cursor: col-resize !important; user-select: none !importa
   accent-color: var(--green);
   cursor: pointer;
   flex: 0 0 auto;
-  width: 14px; height: 14px; margin: 0;
+  width: 16px; height: 16px; margin: 0;
 }
+
+.swap-collapse-all {
+  margin-left: auto; margin-right: 8px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  border-radius: 4px;
+  padding: 3px 9px;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.swap-collapse-all:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.swap-collapse-all:disabled { opacity: 0.35; cursor: not-allowed; }
 
 .swap-sel-group-count {
   color: var(--text-2);
@@ -5621,8 +5646,8 @@ body.swap-resizing * { cursor: col-resize !important; user-select: none !importa
 .swap-sel-group.is-collapsed .swap-sel-group-body { display: none; }
 
 .swap-seg-row {
-  display: flex; align-items: center; gap: 6px;
-  padding: 0 8px 0 28px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 8px 0 30px;
   font-size: 12px;
   color: var(--text-2);
 }
@@ -5642,7 +5667,7 @@ body.swap-resizing * { cursor: col-resize !important; user-select: none !importa
   flex: 1 1 auto; min-width: 0;
   display: flex; align-items: center; gap: 6px;
   background: none; border: 0;
-  padding: 4px 0;
+  padding: 7px 0;
   font: inherit; color: inherit; text-align: left;
   cursor: pointer;
 }

@@ -370,6 +370,8 @@
       <div class="swap-panel swap-panel-selection">
         <div class="swap-panel-header">
           <span>Selected</span>
+          <button type="button" class="swap-collapse-all" id="swapCollapseAllBtn"
+                  onclick="toggleAllSwapGroups()" disabled title="Collapse every wall type">Collapse all</button>
           <span class="swap-sel-count" id="swapSelCount" title="Checked / caught by the selection">0</span>
         </div>
         <div class="swap-panel-body">
@@ -378,7 +380,7 @@
             <div class="swap-empty">Drag a marquee to select walls, or click a wall on the plan. Everything you catch starts checked — uncheck what you don’t want to change.</div>
           </div>
           <label class="swap-numbers-toggle" title="Draw each selected segment's number on the plan. Off by default — pointing at a wall is usually quicker than reading its number.">
-            <input type="checkbox" id="swapShowNumbers" onchange="toggleSwapNumbers(this)"> Show segment numbers on the plan
+            <input type="checkbox" id="swapShowNumbers" onchange="toggleSwapNumbers(this)"> Number the selected segments on the plan
           </label>
           <div class="swap-swap-row">
             <label class="swap-swap-label" for="swapTargetType">Change checked to</label>
