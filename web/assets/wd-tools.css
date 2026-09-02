@@ -5082,9 +5082,11 @@ body.tool-report {
 [data-theme="dark"] .rep-cover-meta { color: var(--text-2); }
 [data-theme="dark"] .rep-cover-meta b { color: var(--text); }
 
+.rep-toc-subtitle { font-size: 13px; color: #666; margin: 0 0 12px; font-style: italic; }
+[data-theme="dark"] .rep-toc-subtitle { color: var(--text-2); }
 .rep-toc-list { columns: 2; column-gap: 2em; list-style: decimal; padding-left: 1.5em; margin: 8px 0; }
-.rep-toc-list li { break-inside: avoid; padding: 4px 0; font-size: 13px; }
-.rep-toc-detail { color: #888; font-size: 12px; }
+.rep-toc-list li { break-inside: avoid; padding: 6px 0; font-size: 13px; }
+.rep-toc-detail { display: block; color: #888; font-size: 11px; line-height: 1.5; margin-top: 2px; }
 [data-theme="dark"] .rep-toc-detail { color: var(--text-3); }
 
 .rep-subtotal { font-weight: 600; text-align: right !important; padding: 8px !important;
@@ -5749,12 +5751,14 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .report-canvas {
     background: #fff !important;
     padding: 0 !important; overflow: visible !important;
+    width: 100% !important; max-width: 100% !important; min-width: 0 !important;
   }
 
   .rep-doc-head, .rep-floor-section, .rep-legend, .rep-doc-foot {
     background: #fff !important; color: #111 !important;
     box-shadow: none !important; border-radius: 0 !important;
-    max-width: none !important;
+    width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+    box-sizing: border-box !important;
     padding: 4px 0 !important; margin: 0 0 6px !important;
   }
   .rep-doc-head { padding-bottom: 8px !important; page-break-inside: avoid; }
@@ -5768,14 +5772,18 @@ body.wd-has-stale-banner { padding-top: 52px; }
 
   .rep-overview-plan {
     border-color: #ddd !important; background: #fafafa !important;
-    max-height: 88vh; overflow: hidden;
+    overflow: hidden;
+    width: var(--print-w, 100%) !important;
+    height: var(--print-h, auto) !important;
+    max-width: 100% !important;
+    aspect-ratio: auto !important; border: none !important;
+    margin-left: auto !important; margin-right: auto !important;
   }
-  .rep-overview-plan img { max-height: 88vh; width: auto; max-width: 100%; object-fit: contain; }
-  .rep-seg-index .rep-overview-plan { max-height: 82vh; }
-  .rep-seg-index .rep-overview-plan img { max-height: 82vh; }
+  .rep-overview-plan[data-seg="1"] img { width: 100% !important; height: 100% !important; }
+  .rep-overview-plan:not([data-seg="1"]) img { width: 100%; height: auto; }
   .rep-overview-key { color: #555 !important; page-break-before: avoid; }
 
-  .rep-seg-index { page-break-before: auto; break-before: auto; page-break-inside: avoid; break-inside: avoid; }
+  .rep-seg-index { page-break-before: auto; break-before: auto; }
   .rep-seg-cell { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; }
 
   .rep-aim-map-section { page-break-inside: avoid; }
@@ -5786,9 +5794,22 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-doc-meta { color: #555 !important; }
   .rep-doc-meta b { color: #111 !important; }
 
+  .rep-ap-table {
+    width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+    table-layout: fixed !important; font-size: 8pt !important;
+  }
+  .rep-loc-table { page-break-before: always; break-before: page; }
+  .rep-loc-table col { width: var(--print-col-w, auto) !important; }
   .rep-ap-table th { color: #555 !important; border-bottom-color: #d5d5d7 !important; }
   .rep-ap-table td { border-bottom-color: #e5e5e7 !important; color: #111 !important; }
-  .rep-ap-table th, .rep-ap-table td { padding: 4px 6px !important; }
+  .rep-ap-table th, .rep-ap-table td {
+    min-width: 0 !important; max-width: none !important;
+    padding: 3px 2px !important;
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+  }
+  .rep-ap-table td.rep-num, .rep-ap-table th.rep-num { width: 0.3in !important; }
+  .rep-nowrap, .rep-ap-table td.rep-az { white-space: normal !important; }
   .rep-ap-table .rep-alt { color: #888 !important; }
 
   .rep-cover {
@@ -5813,8 +5834,10 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-toc { page-break-inside: avoid; }
   .rep-toc + .rep-floor-section { page-break-before: auto; }
   .rep-summary-hero + .rep-floor-section:not(.rep-summary-hero) { page-break-before: auto; }
+  .rep-toc-subtitle { color: #555 !important; }
   .rep-toc-detail { color: #888 !important; }
   .rep-toc-list li { color: #111 !important; }
+  .rep-toc-list { columns: 1; }
 
   .rep-summary-hero { page-break-inside: avoid; }
 
