@@ -1297,7 +1297,7 @@
     evHandlers.touchmove   = onTouchMove;
     evHandlers.touchend    = onTouchEnd;
     evHandlers.keydown   = onKeyDown;
-    evHandlers.keyup     = onKeyUp;
+    evHandlers.spaceOff  = WD.PanZoom.onChange(onSpaceChange);
     evHandlers.resize    = () => { reflowSidebarWidth(); resizeCanvas(); };
     evHandlers.railClick = (e) => {
       const btn = e.target.closest('.swap-tool');
@@ -1314,7 +1314,6 @@
     c.addEventListener('touchend', evHandlers.touchend);
     c.addEventListener('touchcancel', evHandlers.touchend);
     window.addEventListener('keydown', evHandlers.keydown);
-    window.addEventListener('keyup', evHandlers.keyup);
     window.addEventListener('resize', evHandlers.resize);
     const rail = document.querySelector('.swap-toolrail');
     if (rail) rail.addEventListener('click', evHandlers.railClick);
@@ -1345,7 +1344,7 @@
     c.removeEventListener('touchend', evHandlers.touchend);
     c.removeEventListener('touchcancel', evHandlers.touchend);
     window.removeEventListener('keydown', evHandlers.keydown);
-    window.removeEventListener('keyup', evHandlers.keyup);
+    if (evHandlers.spaceOff) { evHandlers.spaceOff(); evHandlers.spaceOff = null; }
     window.removeEventListener('resize', evHandlers.resize);
     const rail = document.querySelector('.swap-toolrail');
     if (rail && evHandlers.railClick) rail.removeEventListener('click', evHandlers.railClick);
@@ -1368,6 +1367,7 @@
   // reverts mid-drag over the canvas.
   function startPan(p) {
     state.isPanning = true;
+    state.panViaSpace = state.spaceHeld;
     state.dragStart = { ...p, viewX: state.view.x, viewY: state.view.y };
     const wrap = $('swapCanvasWrap');
     if (wrap) wrap.classList.add('pan-active');
@@ -1612,13 +1612,6 @@
       }
       return;
     }
-    if (e.key === ' ') {
-      e.preventDefault();
-      if (!state.spaceHeld) {
-        state.spaceHeld = true;
-        canvas().style.cursor = idleCursor();
-      }
-    }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
       e.preventDefault();
       if (e.shiftKey) swapRedo(); else swapUndo();
@@ -1641,12 +1634,12 @@
     if (e.key === 'h' || e.key === 'H') setSwapTool('pan');
   }
 
-  function onKeyUp(e) {
-    if (e.key === ' ') {
-      e.preventDefault();
-      state.spaceHeld = false;
-      if (!state.isPanning) canvas().style.cursor = idleCursor();
-    }
+  // Space is tracked by WD.PanZoom so that Report and Quick Walls agree on what
+  // counts as a pan, and so that typing a space into a name box stays typing.
+  function onSpaceChange(isHeld) {
+    state.spaceHeld = isHeld;
+    if (!isHeld && state.isPanning && state.panViaSpace) { endPan(); render(); return; }
+    if (!state.isPanning) canvas().style.cursor = idleCursor();
   }
 
   window.applySelectionSwap = function () {
