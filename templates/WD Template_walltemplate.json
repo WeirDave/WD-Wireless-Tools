@@ -649,6 +649,35 @@
       "status": "CREATED"
     },
     {
+      "name": "Warehouse Rack Wall - 12ft",
+      "key": "WarehouseRackWall12ft",
+      "color": "#CC66FF",
+      "propagationProperties": [
+        {
+          "band": "FIVE",
+          "attenuationFactor": 45.71,
+          "reflectionCoefficient": 0.25,
+          "diffractionCoefficient": 11
+        },
+        {
+          "band": "SIX",
+          "attenuationFactor": 50,
+          "reflectionCoefficient": 0.25,
+          "diffractionCoefficient": 11
+        },
+        {
+          "band": "TWO",
+          "attenuationFactor": 45.71,
+          "reflectionCoefficient": 0.25,
+          "diffractionCoefficient": 11
+        }
+      ],
+      "thickness": 0.35,
+      "lowerEdge": 0,
+      "id": "c3a6e4b2-1d5f-4c93-ae70-4f8b9d1c2a35",
+      "status": "CREATED"
+    },
+    {
       "name": "Warehouse Rack Wall - 16ft",
       "key": "WarehouseRackWall16ft",
       "color": "#FF66FF",
