@@ -19,6 +19,10 @@
     excluded: new Set(),
     collapsedTypes: new Set(),
     hoverSegId: null,
+    hoverGroupKey: null,
+    segOrdinal: new Map(),
+    showNumbers: false,
+    renderQueued: false,
     metersPerUnit: 0,
 
     view: { x: 0, y: 0, scale: 1 },
@@ -31,6 +35,8 @@
     isPanning: false,
     spaceHeld: false,
     touch: null,
+    pressStart: null,
+    pressMoved: false,
 
     segGeom: [],
   };
@@ -112,6 +118,11 @@
 
   function segmentTypeId(seg) {
     return seg.wallTypeId || seg.wallType || null;
+  }
+
+  function colorOf(seg) {
+    const wt = typeById(seg.typeId);
+    return wt ? safeColor(wt.color) : '#888';
   }
 
   window.openSwapModal = async function () {
@@ -394,6 +405,7 @@
     state.excluded.clear();
     state.collapsedTypes.clear();
     state.hoverSegId = null;
+    state.hoverGroupKey = null;
   }
 
   function segLengthFt(g) {
@@ -437,6 +449,10 @@
       gr.checked = gr.segs.filter(x => !state.excluded.has(x.id)).length;
     });
     groups.sort((a, b) => b.segs.length - a.segs.length || a.name.localeCompare(b.name));
+    // Remember each segment's position in its group so the canvas can label it
+    // with the same number the panel shows.
+    state.segOrdinal = new Map();
+    groups.forEach(gr => gr.segs.forEach((g, i) => state.segOrdinal.set(g.id, i + 1)));
     return groups;
   }
 
@@ -456,21 +472,29 @@
       const collapsed = state.collapsedTypes.has(gr.key);
       const rows = gr.segs.map((g, i) => {
         const len = segLengthLabel(g);
-        return '<label class="swap-seg-row" '
-          + 'onmouseenter="swapHoverSeg(\'' + escJsStr(g.id) + '\',1)" '
-          + 'onmouseleave="swapHoverSeg(\'' + escJsStr(g.id) + '\',0)">'
+        const jid = escJsStr(g.id);
+        return '<div class="swap-seg-row" data-seg-id="' + esc(g.id) + '" '
+          + 'onmouseenter="swapHoverSeg(\'' + jid + '\',1)" '
+          + 'onmouseleave="swapHoverSeg(\'' + jid + '\',0)">'
           + '<input type="checkbox" data-seg-id="' + esc(g.id) + '"'
           + (state.excluded.has(g.id) ? '' : ' checked')
-          + ' onchange="toggleSwapSeg(this)">'
-          + '<span class="swap-seg-name">Segment ' + (i + 1) + '</span>'
-          + (len ? '<span class="swap-seg-len">' + esc(len) + '</span>' : '')
-          + '</label>';
+          + ' onchange="toggleSwapSeg(this)" '
+          + 'title="Include this segment in the swap">'
+          + '<button type="button" class="swap-seg-locate" '
+          +   'onclick="locateSwapSeg(\'' + jid + '\')" '
+          +   'title="Find this one on the plan">'
+          +   '<span class="swap-seg-name">Segment ' + (i + 1) + '</span>'
+          +   (len ? '<span class="swap-seg-len">' + esc(len) + '</span>' : '')
+          + '</button>'
+          + '</div>';
       }).join('');
       const parentAttrs = gr.checked === gr.segs.length ? ' checked'
         : (gr.checked === 0 ? '' : ' data-indeterminate="1"');
       return '<div class="swap-sel-group' + (collapsed ? ' is-collapsed' : '') + '" '
         + 'data-group-key="' + esc(gr.key) + '">'
-        + '<div class="swap-sel-group-head">'
+        + '<div class="swap-sel-group-head" '
+        +   'onmouseenter="swapHoverGroup(\'' + escJsStr(gr.key) + '\',1)" '
+        +   'onmouseleave="swapHoverGroup(\'' + escJsStr(gr.key) + '\',0)">'
         +   '<button type="button" class="swap-sel-group-chevron" '
         +     'onclick="toggleSwapGroupCollapse(\'' + escJsStr(gr.key) + '\')" '
         +     'title="Show the individual segments">▾</button>'
@@ -581,11 +605,81 @@
   };
 
   window.swapHoverSeg = function (id, on) {
-    const next = on ? id : null;
-    if (state.hoverSegId === next) return;
-    state.hoverSegId = next;
+    setHoverSeg(on ? id : null, false);
+  };
+
+  window.swapHoverGroup = function (key, on) {
+    const next = on ? key : null;
+    if (state.hoverGroupKey === next) return;
+    state.hoverGroupKey = next;
+    requestRender();
+  };
+
+  // `fromCanvas` decides which way the highlight travels: pointing at the plan
+  // brings the matching row into view, pointing at a row only paints the plan.
+  function setHoverSeg(id, fromCanvas) {
+    if (state.hoverSegId === id) return;
+    state.hoverSegId = id;
+    if (fromCanvas) syncHoverRow(id);
+    requestRender();
+  }
+
+  // Canvas -> panel. This is what removes the need to read a number off the
+  // map: point at the wall and its row lights up and scrolls into view.
+  function syncHoverRow(id) {
+    const host = $('swapSelBreakdown');
+    if (!host) return;
+    host.querySelectorAll('.is-hovered').forEach(el => el.classList.remove('is-hovered'));
+    if (!id) return;
+    const row = host.querySelector('.swap-seg-row[data-seg-id="' + CSS.escape(id) + '"]');
+    if (row && row.offsetParent) {
+      row.classList.add('is-hovered');
+      row.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    // Collapsed group (or a wall that is not in the selection yet) — fall back
+    // to flagging the type it belongs to.
+    const g = segGeomById(id);
+    if (!g) return;
+    const grp = host.querySelector('.swap-sel-group[data-group-key="'
+      + CSS.escape(groupKeyOf(g)) + '"]');
+    if (grp) { grp.classList.add('is-hovered'); grp.scrollIntoView({ block: 'nearest' }); }
+  }
+
+  // Panel -> canvas. Only moves the view when the segment is actually off
+  // screen, so clicking a row you can already see does not jump the plan.
+  window.locateSwapSeg = function (id) {
+    const g = segGeomById(id);
+    if (!g) return;
+    const c = canvas();
+    const w = c.clientWidth, h = c.clientHeight;
+    const pts = [[g.x1, g.y1], [g.x2, g.y2]].map(([wx, wy]) => ({
+      x: wx * state.view.scale + state.view.x,
+      y: wy * state.view.scale + state.view.y,
+    }));
+    const pad = 30;
+    const offScreen = pts.some(pt =>
+      pt.x < pad || pt.x > w - pad || pt.y < pad || pt.y > h - pad);
+    if (offScreen) {
+      const midX = (g.x1 + g.x2) / 2, midY = (g.y1 + g.y2) / 2;
+      state.view.x = w / 2 - midX * state.view.scale;
+      state.view.y = h / 2 - midY * state.view.scale;
+      updateStatus();
+    }
+    setHoverSeg(id, false);
     render();
   };
+
+  window.toggleSwapNumbers = function (cb) {
+    state.showNumbers = !!cb.checked;
+    render();
+  };
+
+  function requestRender() {
+    if (state.renderQueued) return;
+    state.renderQueued = true;
+    requestAnimationFrame(() => { state.renderQueued = false; render(); });
+  }
 
   function updateStatus() {
     const floor = state.floors.find(f => f.id === state.currentFloorId);
@@ -753,10 +847,6 @@
       g.lineTo(seg.x2, seg.y2);
       g.stroke();
     };
-    const colorOf = (seg) => {
-      const wt = typeById(seg.typeId);
-      return wt ? safeColor(wt.color) : '#888';
-    };
 
     // Pass 1 — walls the marquee never touched.
     for (const seg of state.segGeom) {
@@ -790,23 +880,28 @@
       stroke(seg);
     }
 
-    // Pass 4 — the row the pointer is over in the sidebar.
-    if (state.hoverSegId) {
-      const hov = state.segGeom.find(x => x.id === state.hoverSegId);
-      if (hov) {
+    // Pass 4 — whatever is being pointed at: one segment (hovered on the plan
+    // or in the panel) or every member of a hovered wall-type group.
+    const hi = highlightIds();
+    if (hi.size) {
+      for (const seg of state.segGeom) {
+        if (!hi.has(seg.id)) continue;
         g.strokeStyle = '#0ea5e9';
         g.lineWidth = selWidth + 8 / state.view.scale;
         g.globalAlpha = 0.55;
-        stroke(hov);
+        stroke(seg);
         g.globalAlpha = 1;
-        g.strokeStyle = colorOf(hov);
+        g.strokeStyle = colorOf(seg);
         g.lineWidth = selWidth;
-        stroke(hov);
+        stroke(seg);
       }
     }
     g.restore();
 
-    if (state.isDragging && state.tool === 'marquee' && state.dragStart && state.dragCurrent) {
+    drawSegmentNumbers(hi);
+
+    if (state.isDragging && state.pressMoved && state.tool === 'marquee'
+        && state.dragStart && state.dragCurrent) {
       const x = Math.min(state.dragStart.x, state.dragCurrent.x);
       const y = Math.min(state.dragStart.y, state.dragCurrent.y);
       const rw = Math.abs(state.dragCurrent.x - state.dragStart.x);
@@ -819,6 +914,79 @@
       g.strokeRect(x, y, rw, rh);
       g.setLineDash([]);
     }
+  }
+
+  function highlightIds() {
+    const out = new Set();
+    if (state.hoverSegId) out.add(state.hoverSegId);
+    if (state.hoverGroupKey) {
+      state.selected.forEach(id => {
+        const seg = segGeomById(id);
+        if (seg && groupKeyOf(seg) === state.hoverGroupKey) out.add(id);
+      });
+    }
+    return out;
+  }
+
+  // Optional, off by default. Numbers are drawn in screen space so they stay
+  // legible at any zoom, and only for the current selection — labelling every
+  // wall on a CAD import would be unreadable soup.
+  const NUMBERS_MIN_ZOOM = 1.5;
+
+  function drawSegmentNumbers(hi) {
+    if (!state.showNumbers || !state.selected.size) return;
+    if (currentZoom() < NUMBERS_MIN_ZOOM) return;
+    const g = ctx();
+    g.save();
+    g.font = '600 11px ' + (getComputedStyle(document.body).getPropertyValue('--mono') || 'monospace');
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    state.selected.forEach(id => {
+      const seg = segGeomById(id);
+      if (!seg) return;
+      const num = state.segOrdinal.get(id);
+      if (!num) return;
+      const x = ((seg.x1 + seg.x2) / 2) * state.view.scale + state.view.x;
+      const y = ((seg.y1 + seg.y2) / 2) * state.view.scale + state.view.y;
+      const label = String(num);
+      const w = Math.max(16, g.measureText(label).width + 10);
+      g.globalAlpha = state.excluded.has(id) ? 0.45 : 1;
+      // Ordinals restart per wall type, so three different segments on one wall
+      // can all read "2". Tint the pill with the type colour to disambiguate —
+      // the number alone is not enough to identify a segment.
+      const pill = hi.has(id) ? '#0ea5e9' : colorOf(seg);
+      g.fillStyle = pill;
+      roundRect(g, x - w / 2, y - 8, w, 16, 8);
+      g.fill();
+      g.strokeStyle = 'rgba(0,0,0,0.35)';
+      g.lineWidth = 1;
+      g.stroke();
+      g.fillStyle = readableOn(pill);
+      g.fillText(label, x, y);
+      g.globalAlpha = 1;
+    });
+    g.restore();
+  }
+
+  // Pick black or white text for a pill of the given fill, so a pale wall-type
+  // colour does not produce white-on-white.
+  function readableOn(hex) {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
+    if (!m) return '#ffffff';
+    const v = parseInt(m[1], 16);
+    const r = (v >> 16) & 255, gg = (v >> 8) & 255, b = v & 255;
+    // Rec. 601 luma is plenty for a two-way choice.
+    return (0.299 * r + 0.587 * gg + 0.114 * b) > 150 ? '#10161f' : '#ffffff';
+  }
+
+  function roundRect(g, x, y, w, h, r) {
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
   }
 
   function segmentInRect(seg, rx1, ry1, rx2, ry2) {
@@ -877,6 +1045,11 @@
     evHandlers.mouseup   = onMouseUp;
     evHandlers.wheel     = onWheel;
     evHandlers.contextmenu = (ev) => ev.preventDefault();
+    evHandlers.mouseleave = () => {
+      if (state.isPanning || state.isDragging) return;
+      setHoverSeg(null, true);
+      canvas().style.cursor = idleCursor();
+    };
     evHandlers.touchstart  = onTouchStart;
     evHandlers.touchmove   = onTouchMove;
     evHandlers.touchend    = onTouchEnd;
@@ -892,6 +1065,7 @@
     window.addEventListener('mouseup', evHandlers.mouseup);
     c.addEventListener('wheel', evHandlers.wheel, { passive: false });
     c.addEventListener('contextmenu', evHandlers.contextmenu);
+    c.addEventListener('mouseleave', evHandlers.mouseleave);
     c.addEventListener('touchstart', evHandlers.touchstart, { passive: false });
     c.addEventListener('touchmove', evHandlers.touchmove, { passive: false });
     c.addEventListener('touchend', evHandlers.touchend);
@@ -915,6 +1089,7 @@
     window.removeEventListener('mouseup', evHandlers.mouseup);
     c.removeEventListener('wheel', evHandlers.wheel);
     c.removeEventListener('contextmenu', evHandlers.contextmenu);
+    c.removeEventListener('mouseleave', evHandlers.mouseleave);
     c.removeEventListener('touchstart', evHandlers.touchstart);
     c.removeEventListener('touchmove', evHandlers.touchmove);
     c.removeEventListener('touchend', evHandlers.touchend);
@@ -965,33 +1140,38 @@
       e.preventDefault();
       return;
     }
-    if (state.tool === 'click') {
-      const w = screenToWorld(p.x, p.y);
-      const tol = 6 / state.view.scale;
-      const hit = pickSegmentAt(w.x, w.y, tol);
-      if (hit) {
-        if (state.selected.has(hit.id)) {
-          state.selected.delete(hit.id);
-          state.excluded.delete(hit.id);
-        } else {
-          addToSelection([hit.id]);
-        }
-        renderSelection();
-        render();
-      } else if (!e.shiftKey) {
-        clearSelectionState();
-        renderSelection();
-        render();
-      }
+    state.pressStart = p;
+    state.pressMoved = false;
+    if (state.tool === 'marquee') {
+      state.isDragging = true;
+      state.dragStart = p;
+      state.dragCurrent = p;
+    }
+  }
+
+  const HIT_TOL_PX = 8;
+
+  function hitAt(p) {
+    const w = screenToWorld(p.x, p.y);
+    return pickSegmentAt(w.x, w.y, HIT_TOL_PX / state.view.scale);
+  }
+
+  // A plain click on a wall toggles that wall's checkbox — the whole point of
+  // the exercise, since pointing at the thing you can see beats reading a
+  // number off it. A wall that is not in the selection joins it, checked.
+  function clickSegment(hit, shiftKey) {
+    if (!hit) {
+      if (!shiftKey) { clearSelectionState(); renderSelection(); render(); }
       return;
     }
-    state.isDragging = true;
-    state.dragStart = p;
-    state.dragCurrent = p;
-    if (!e.shiftKey) {
-      clearSelectionState();
-      renderSelection();
+    if (state.selected.has(hit.id)) {
+      if (state.excluded.has(hit.id)) state.excluded.delete(hit.id);
+      else state.excluded.add(hit.id);
+    } else {
+      addToSelection([hit.id]);
     }
+    renderSelection();
+    syncHoverRow(hit.id);
     render();
   }
 
@@ -1003,9 +1183,21 @@
       render();
       return;
     }
+    if (state.pressStart && !state.pressMoved) {
+      const moved = Math.hypot(p.x - state.pressStart.x, p.y - state.pressStart.y);
+      if (moved > 4) state.pressMoved = true;
+    }
     if (state.isDragging) {
       state.dragCurrent = p;
       render();
+      return;
+    }
+    // Idle: identify the wall under the pointer and light up its row.
+    const hit = hitAt(p);
+    const id = hit ? hit.id : null;
+    if (id !== state.hoverSegId) {
+      setHoverSeg(id, true);
+      canvas().style.cursor = id ? 'pointer' : idleCursor();
     }
   }
 
@@ -1014,18 +1206,29 @@
       endPan();
       return;
     }
+    const wasDrag = state.pressMoved;
+    const press = state.pressStart;
+    state.pressStart = null;
+    state.pressMoved = false;
+
     if (state.isDragging) {
       state.isDragging = false;
-      const s = state.dragStart, c = state.dragCurrent;
-      const w1 = screenToWorld(s.x, s.y);
-      const w2 = screenToWorld(c.x, c.y);
-      const picked = state.segGeom.filter(seg => segmentInRect(seg, w1.x, w1.y, w2.x, w2.y));
-      addToSelection(picked.map(seg => seg.id));
+      const a = state.dragStart, b = state.dragCurrent;
       state.dragStart = null;
       state.dragCurrent = null;
-      renderSelection();
-      render();
+      if (wasDrag && a && b) {
+        if (!e.shiftKey) clearSelectionState();
+        const w1 = screenToWorld(a.x, a.y);
+        const w2 = screenToWorld(b.x, b.y);
+        addToSelection(state.segGeom
+          .filter(seg => segmentInRect(seg, w1.x, w1.y, w2.x, w2.y))
+          .map(seg => seg.id));
+        renderSelection();
+        render();
+        return;
+      }
     }
+    if (!wasDrag && press) clickSegment(hitAt(press), e.shiftKey);
   }
 
   function touchPoints(e) {
@@ -1114,19 +1317,7 @@
     if (t.mode === 'tap') {
       if (!t.moved && t.start) {
         const w = screenToWorld(t.start.x, t.start.y);
-        const hit = pickSegmentAt(w.x, w.y, 14 / state.view.scale);
-        if (hit) {
-          if (state.selected.has(hit.id)) {
-            state.selected.delete(hit.id);
-            state.excluded.delete(hit.id);
-          } else {
-            addToSelection([hit.id]);
-          }
-        } else {
-          clearSelectionState();
-        }
-        renderSelection();
-        render();
+        clickSegment(pickSegmentAt(w.x, w.y, 14 / state.view.scale), false);
       }
       return;
     }
@@ -1299,6 +1490,13 @@
     getView: () => ({ ...state.view }),
     getFitScale: () => state.fitScale,
     getZoom: () => currentZoom(),
+    getHover: () => ({ seg: state.hoverSegId, group: state.hoverGroupKey }),
+    getHighlighted: () => [...highlightIds()],
+    getOrdinal: (id) => state.segOrdinal.get(id) || null,
+    hitAtWorld: (wx, wy) => {
+      const hit = pickSegmentAt(wx, wy, HIT_TOL_PX / state.view.scale);
+      return hit ? hit.id : null;
+    },
     getTool: () => state.tool,
     getIsPanning: () => state.isPanning,
     getSelected: () => [...state.selected],

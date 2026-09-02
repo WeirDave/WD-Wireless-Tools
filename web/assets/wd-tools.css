@@ -5509,13 +5509,30 @@ body.tool-report {
 
 .swap-seg-row {
   display: flex; align-items: center; gap: 6px;
-  padding: 4px 8px 4px 28px;
+  padding: 0 8px 0 28px;
   font-size: 12px;
   color: var(--text-2);
-  cursor: pointer;
 }
 
-.swap-seg-row:hover { background: var(--surface-hover); color: var(--text); }
+/* `.is-hovered` is driven from the canvas: pointing at a wall on the plan
+   flags its row here, which is what makes segment numbers unnecessary. */
+.swap-seg-row:hover,
+.swap-seg-row.is-hovered { background: var(--surface-hover); color: var(--text); }
+
+.swap-seg-row.is-hovered { box-shadow: inset 2px 0 0 var(--blue); }
+
+.swap-sel-group.is-hovered { border-color: var(--blue); }
+
+/* The label half of the row is its own button: the checkbox includes or
+   excludes the segment, the label finds it on the plan. */
+.swap-seg-locate {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
+  background: none; border: 0;
+  padding: 4px 0;
+  font: inherit; color: inherit; text-align: left;
+  cursor: pointer;
+}
 
 .swap-seg-name { flex: 1 1 auto; min-width: 0; }
 
@@ -5526,7 +5543,19 @@ body.tool-report {
   flex: 0 0 auto;
 }
 
-.swap-seg-row:hover .swap-seg-len { color: var(--text-2); }
+.swap-seg-row:hover .swap-seg-len,
+.swap-seg-row.is-hovered .swap-seg-len { color: var(--text-2); }
+
+.swap-sel-hint { margin: 0 0 6px; }
+
+.swap-numbers-toggle {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 6px;
+  font-size: 11px; color: var(--text-2);
+  cursor: pointer;
+}
+
+.swap-numbers-toggle input { accent-color: var(--green); margin: 0; cursor: pointer; }
 
 .swap-sel-count.is-partial { background: var(--green); }
 
