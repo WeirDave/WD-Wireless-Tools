@@ -503,6 +503,7 @@
     if (!total) {
       el.innerHTML = '<div class="swap-empty">Drag a marquee to select walls, or click walls with the arrow tool. Everything you catch starts checked — uncheck what you don’t want to change.</div>';
       refreshSelectionMeta();
+      updateCollapseAllButton();
       return;
     }
 
@@ -553,6 +554,7 @@
     syncIndeterminate();
     el.scrollTop = scrollTop;
     refreshSelectionMeta();
+    updateCollapseAllButton();
   }
 
   // `indeterminate` is a property, not an attribute — it cannot be set in markup.
@@ -636,12 +638,41 @@
     render();
   };
 
+  function allGroupKeys() {
+    const keys = new Set();
+    state.selected.forEach(id => {
+      const g = segGeomById(id);
+      if (g) keys.add(groupKeyOf(g));
+    });
+    return [...keys];
+  }
+
+  window.toggleAllSwapGroups = function () {
+    const keys = allGroupKeys();
+    if (!keys.length) return;
+    const anyOpen = keys.some(k => !state.collapsedTypes.has(k));
+    if (anyOpen) keys.forEach(k => state.collapsedTypes.add(k));
+    else state.collapsedTypes.clear();
+    renderSelection();
+  };
+
+  function updateCollapseAllButton() {
+    const btn = $('swapCollapseAllBtn');
+    if (!btn) return;
+    const keys = allGroupKeys();
+    btn.disabled = !keys.length;
+    const anyOpen = keys.some(k => !state.collapsedTypes.has(k));
+    btn.textContent = anyOpen ? 'Collapse all' : 'Expand all';
+    btn.title = anyOpen ? 'Collapse every wall type' : 'Expand every wall type';
+  }
+
   window.toggleSwapGroupCollapse = function (key) {
     if (state.collapsedTypes.has(key)) state.collapsedTypes.delete(key);
     else state.collapsedTypes.add(key);
     const host = document.querySelector('#swapSelBreakdown .swap-sel-group[data-group-key="'
       + CSS.escape(key) + '"]');
     if (host) host.classList.toggle('is-collapsed', state.collapsedTypes.has(key));
+    updateCollapseAllButton();
   };
 
   window.swapHoverSeg = function (id, on) {
@@ -880,6 +911,9 @@
     const baseWidth = baseScreenPx / state.view.scale;
     const selWidth  = selScreenPx  / state.view.scale;
 
+    const hi = highlightIds();
+    const dim = hi.size ? 0.18 : 1;
+
     g.lineCap = 'round';
     const stroke = (seg) => {
       g.beginPath();
@@ -889,19 +923,21 @@
     };
 
     // Pass 1 — walls the marquee never touched.
+    g.globalAlpha = dim;
     for (const seg of state.segGeom) {
       if (state.selected.has(seg.id)) continue;
       g.strokeStyle = colorOf(seg);
       g.lineWidth = baseWidth;
       stroke(seg);
     }
+    g.globalAlpha = 1;
 
     // Pass 2 — in the selection but unchecked. Dimmed and dashed, so what you
     // culled stays visible (and re-checkable) without reading as targeted.
     g.setLineDash([6 / state.view.scale, 5 / state.view.scale]);
     for (const seg of state.segGeom) {
       if (!state.selected.has(seg.id) || !state.excluded.has(seg.id)) continue;
-      g.globalAlpha = 0.4;
+      g.globalAlpha = 0.4 * dim;
       g.strokeStyle = colorOf(seg);
       g.lineWidth = baseWidth;
       stroke(seg);
@@ -910,8 +946,10 @@
     g.setLineDash([]);
 
     // Pass 3 — still checked: this is exactly what the Swap button will change.
+    g.globalAlpha = dim;
     for (const seg of state.segGeom) {
       if (!state.selected.has(seg.id) || state.excluded.has(seg.id)) continue;
+      if (hi.has(seg.id)) continue;
       g.strokeStyle = '#ffffff';
       g.lineWidth = selWidth + 4 / state.view.scale;
       stroke(seg);
@@ -919,21 +957,36 @@
       g.lineWidth = selWidth;
       stroke(seg);
     }
+    g.globalAlpha = 1;
 
     // Pass 4 — whatever is being pointed at: one segment (hovered on the plan
-    // or in the panel) or every member of a hovered wall-type group.
-    const hi = highlightIds();
+    // or in the panel) or every member of a hovered wall-type group. Everything
+    // else is dimmed above, so this reads as a spotlight rather than an outline.
     if (hi.size) {
+      const px = (v) => v / state.view.scale;
       for (const seg of state.segGeom) {
         if (!hi.has(seg.id)) continue;
-        g.strokeStyle = '#0ea5e9';
-        g.lineWidth = selWidth + 8 / state.view.scale;
-        g.globalAlpha = 0.55;
+        g.strokeStyle = '#ffffff';
+        g.lineWidth = selWidth + px(20);
+        g.globalAlpha = 0.85;
         stroke(seg);
         g.globalAlpha = 1;
-        g.strokeStyle = colorOf(seg);
-        g.lineWidth = selWidth;
+        g.strokeStyle = '#0ea5e9';
+        g.lineWidth = selWidth + px(12);
         stroke(seg);
+        g.strokeStyle = colorOf(seg);
+        g.lineWidth = selWidth + px(2);
+        stroke(seg);
+        // End caps make a short segment findable even on a busy wall run.
+        g.fillStyle = '#0ea5e9';
+        [[seg.x1, seg.y1], [seg.x2, seg.y2]].forEach(([cx, cy]) => {
+          g.beginPath();
+          g.arc(cx, cy, px(5), 0, Math.PI * 2);
+          g.fill();
+          g.strokeStyle = '#ffffff';
+          g.lineWidth = px(1.5);
+          g.stroke();
+        });
       }
     }
     g.restore();
@@ -971,35 +1024,54 @@
   // Optional, off by default. Numbers are drawn in screen space so they stay
   // legible at any zoom, and only for the current selection — labelling every
   // wall on a CAD import would be unreadable soup.
-  const NUMBERS_MIN_ZOOM = 1.5;
-
   function drawSegmentNumbers(hi) {
     if (!state.showNumbers || !state.selected.size) return;
-    if (currentZoom() < NUMBERS_MIN_ZOOM) return;
     const g = ctx();
+    const c = canvas();
+    const viewW = c.clientWidth, viewH = c.clientHeight;
     g.save();
     g.font = '600 11px ' + (getComputedStyle(document.body).getPropertyValue('--mono') || 'monospace');
     g.textAlign = 'center';
     g.textBaseline = 'middle';
+
+    // Draw the biggest segments first so that when labels are too dense to all
+    // fit, the ones that survive are the ones worth reading.
+    const ordered = [];
     state.selected.forEach(id => {
       const seg = segGeomById(id);
-      if (!seg) return;
-      const num = state.segOrdinal.get(id);
-      if (!num) return;
+      if (seg && state.segOrdinal.get(id)) ordered.push(seg);
+    });
+    ordered.sort((a, b) => Math.hypot(b.x2 - b.x1, b.y2 - b.y1)
+                         - Math.hypot(a.x2 - a.x1, a.y2 - a.y1));
+
+    const placed = [];
+    const overlaps = (r) => placed.some(q =>
+      r.x < q.x + q.w && r.x + r.w > q.x && r.y < q.y + q.h && r.y + r.h > q.y);
+
+    ordered.forEach(seg => {
+      const num = state.segOrdinal.get(seg.id);
       const x = ((seg.x1 + seg.x2) / 2) * state.view.scale + state.view.x;
       const y = ((seg.y1 + seg.y2) / 2) * state.view.scale + state.view.y;
+      if (x < -40 || y < -40 || x > viewW + 40 || y > viewH + 40) return;
       const label = String(num);
-      const w = Math.max(16, g.measureText(label).width + 10);
-      g.globalAlpha = state.excluded.has(id) ? 0.45 : 1;
+      const w = Math.max(18, g.measureText(label).width + 12);
+      const rect = { x: x - w / 2, y: y - 9, w, h: 18 };
+      // A hovered label always wins its space; the rest yield to whatever was
+      // placed first.
+      const forced = hi.has(seg.id);
+      if (!forced && overlaps(rect)) return;
+      placed.push(rect);
+
+      g.globalAlpha = state.excluded.has(seg.id) ? 0.5 : 1;
       // Ordinals restart per wall type, so three different segments on one wall
       // can all read "2". Tint the pill with the type colour to disambiguate —
       // the number alone is not enough to identify a segment.
-      const pill = hi.has(id) ? '#0ea5e9' : colorOf(seg);
+      const pill = forced ? '#0ea5e9' : colorOf(seg);
       g.fillStyle = pill;
-      roundRect(g, x - w / 2, y - 8, w, 16, 8);
+      roundRect(g, rect.x, rect.y, rect.w, rect.h, 9);
       g.fill();
-      g.strokeStyle = 'rgba(0,0,0,0.35)';
-      g.lineWidth = 1;
+      g.strokeStyle = forced ? '#ffffff' : 'rgba(0,0,0,0.45)';
+      g.lineWidth = forced ? 2 : 1;
       g.stroke();
       g.fillStyle = readableOn(pill);
       g.fillText(label, x, y);
