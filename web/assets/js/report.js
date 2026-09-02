@@ -35,6 +35,61 @@
   var savedLogo = null;
   try { savedLogo = localStorage.getItem('wd-report-logo') || null; } catch (e) {}
 
+  // ── Remembered report details ──
+  // Client, author, project ref and revision are the same on every report for
+  // a given job, but currentOpts is wiped whenever the report type changes
+  // (see selectReport), so they had to be retyped every single time. These
+  // four persist across reports and sessions; they are still ordinary text
+  // fields, so editing one just updates what is remembered.
+  var PERSISTED_OPT_IDS = ['clientName', 'preparedBy', 'projectRef', 'revision'];
+  var PERSISTED_OPTS_KEY = 'wd-report-details';
+
+  function loadPersistedOpts() {
+    try {
+      var raw = localStorage.getItem(PERSISTED_OPTS_KEY);
+      if (!raw) return {};
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return {};
+      var clean = {};
+      PERSISTED_OPT_IDS.forEach(function (id) {
+        if (typeof parsed[id] === 'string') clean[id] = parsed[id];
+      });
+      return clean;
+    } catch (e) { return {}; }
+  }
+
+  var persistedOpts = loadPersistedOpts();
+
+  function savePersistedOpt(id, value) {
+    if (PERSISTED_OPT_IDS.indexOf(id) === -1) return;
+    persistedOpts[id] = value;
+    try {
+      // Drop empties so a cleared field stops being remembered rather than
+      // being remembered as blank.
+      var out = {};
+      PERSISTED_OPT_IDS.forEach(function (k) {
+        if (persistedOpts[k]) out[k] = persistedOpts[k];
+      });
+      if (Object.keys(out).length) localStorage.setItem(PERSISTED_OPTS_KEY, JSON.stringify(out));
+      else localStorage.removeItem(PERSISTED_OPTS_KEY);
+    } catch (e) {}
+  }
+
+  function seedPersistedOpts() {
+    PERSISTED_OPT_IDS.forEach(function (id) {
+      if (!(id in currentOpts) && persistedOpts[id]) currentOpts[id] = persistedOpts[id];
+    });
+  }
+
+  window.forgetReportDetails = function () {
+    persistedOpts = {};
+    try { localStorage.removeItem(PERSISTED_OPTS_KEY); } catch (e) {}
+    PERSISTED_OPT_IDS.forEach(function (id) { delete currentOpts[id]; });
+    configureDirty = true;
+    renderReportOpts();
+    if (window.WD && WD.toast) WD.toast('Saved report details cleared', 'success');
+  };
+
   var STAGE_ORDER = ['template', 'configure', 'review'];
   var STAGE_ELS = {};
 
@@ -291,6 +346,18 @@
     });
     if (byFloor['_none']) order.push({ id: '_none', name: '(No floor plan)' });
     return order;
+  }
+
+  // Ekahau records the storey number on buildingFloors, not on the floor plan
+  // itself, and plenty of projects never set it. Returns null when there is no
+  // usable number so callers can fall back to the plain section label.
+  function floorNumberFor(fp) {
+    if (!fp || fp.id === '_none') return null;
+    var bf = proj.buildingFloors && proj.buildingFloors[fp.id];
+    var raw = bf ? bf.floorNumber : null;
+    if (raw === null || raw === undefined || raw === '') return null;
+    var n = Number(raw);
+    return isFinite(n) ? n : null;
   }
 
   function floorPlanImageUrl(fp) {
@@ -714,6 +781,7 @@
   function renderReportOpts() {
     var host = document.getElementById('reportOptsSlot');
     if (!host) return;
+    seedPersistedOpts();
     var r = currentReport();
     var apCard = document.getElementById('apFilterCard');
     if (apCard) apCard.hidden = !!r.noApFilter;
@@ -783,6 +851,19 @@
           + '</span></label>';
       }
     });
+
+    // Only shown once something is actually remembered, so the panel stays
+    // quiet until the behaviour is visible to the user.
+    var remembered = PERSISTED_OPT_IDS.filter(function (id) {
+      return persistedOpts[id] && (r.sidebar || []).some(function (o) { return o.id === id; });
+    });
+    if (remembered.length) {
+      html += '<div class="rep-remembered">'
+        + 'Client, author, reference and revision carry over to your next report. '
+        + '<button type="button" class="rep-remembered-clear" onclick="forgetReportDetails()">Forget these</button>'
+        + '</div>';
+    }
+
     host.innerHTML = html;
   }
   window.setOpt = function (cb) {
@@ -792,6 +873,7 @@
       currentOpts[id] = cb.value === '' ? '' : parseInt(cb.value, 10);
     } else if (optType === 'text') {
       currentOpts[id] = cb.value;
+      savePersistedOpt(id, cb.value);
     } else {
       currentOpts[id] = cb.checked;
     }
@@ -890,7 +972,7 @@
     var bx = _cropBox.x * vw, by = _cropBox.y * vh;
     var bw = _cropBox.w * vw, bh = _cropBox.h * vh;
 
-    var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    var gridFloorNum = floorNumberFor(fp);
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + vw + ' ' + vh + '" '
       + 'class="grid-svg-fill" '
       + 'id="gridSvg" data-dw="' + vw + '" data-dh="' + vh + '">';
@@ -913,12 +995,14 @@
     }
 
     // cell labels inside crop box
+    var previewLabelLen = segCellLabel(_gridCols - 1, _gridRows - 1, gridFloorNum).length;
+    var previewFont = Math.max(10, Math.min(24, cw * 0.3, cw * 0.85 / (0.6 * previewLabelLen)));
     for (var ri2 = 0; ri2 < _gridRows; ri2++) {
       for (var ci2 = 0; ci2 < _gridCols; ci2++) {
-        var lbl = (ci2 < 26 ? letters[ci2] : 'C' + (ci2 + 1)) + (ri2 + 1);
+        var lbl = segCellLabel(ci2, ri2, gridFloorNum);
         var cx = bx + ci2 * cw + cw / 2, cy = by + ri2 * ch + ch / 2;
         svg += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central" '
-          + 'fill="rgba(59,130,246,0.5)" font-size="' + Math.max(10, Math.min(24, cw * 0.3)) + '" font-weight="700" pointer-events="none">' + lbl + '</text>';
+          + 'fill="rgba(59,130,246,0.5)" font-size="' + previewFont + '" font-weight="700" pointer-events="none">' + lbl + '</text>';
       }
     }
 
@@ -1384,6 +1468,7 @@
       if (grid.cols * grid.rows > 1) {
         opts.cropBox = (opts.cropBoxes && opts.cropBoxes[fp.id]) || null;
         opts.floorName = fp.name || 'Floor plan';
+        opts.floorNumber = floorNumberFor(fp);
         return renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml);
       }
     }
@@ -1417,10 +1502,14 @@
     return { cols: cols, rows: rows };
   }
 
-  function segCellLabel(col, row) {
+  // Section labels repeat on every floor (there is an A1 on each one), so when
+  // the project knows the storey number it goes in front: 2-A1. Printed pages
+  // get handed round on site, and the label has to say where it belongs.
+  function segCellLabel(col, row, floorNum) {
     var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     var letter = col < 26 ? letters[col] : ('C' + (col + 1));
-    return letter + (row + 1);
+    var cell = letter + (row + 1);
+    return (floorNum === null || floorNum === undefined) ? cell : (floorNum + '-' + cell);
   }
 
   function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml) {
@@ -1446,20 +1535,20 @@
 
     var nonEmpty = cells.filter(function (cell) { return cell.aps.length; });
     var emptyLabels = cells.filter(function (cell) { return !cell.aps.length; })
-      .map(function (cell) { return segCellLabel(cell.col, cell.row); });
+      .map(function (cell) { return segCellLabel(cell.col, cell.row, opts.floorNumber); });
 
     var out = '<div class="rep-seg-note">Floor plan split into ' + nonEmpty.length + ' section' + (nonEmpty.length === 1 ? '' : 's')
       + ' (' + cols + '&times;' + rows + ' grid) so AP markers stay legible.'
       + (emptyLabels.length ? ' No APs in section' + (emptyLabels.length === 1 ? '' : 's') + ' ' + emptyLabels.join(', ') + ' — skipped.' : '')
       + '</div>';
-    out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb);
+    out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb, opts.floorNumber);
     nonEmpty.forEach(function (cell) {
       out += renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml);
     });
     return out;
   }
 
-  function renderAntennaGridIndex(url, W, H, allCells, nonEmptyCells, cb) {
+  function renderAntennaGridIndex(url, W, H, allCells, nonEmptyCells, cb, floorNum) {
     var gx = cb.x * W, gy = cb.y * H, gw = cb.w * W, gh = cb.h * H;
     var margin = Math.min(gw, gh) * 0.02;
     var vx = Math.max(0, gx - margin), vy = Math.max(0, gy - margin);
@@ -1488,11 +1577,21 @@
     });
     var labels = '';
     var fontSize = Math.min(gw / (allCells.length > 0 ? Math.sqrt(allCells.length) : 1), gh / (allCells.length > 0 ? Math.sqrt(allCells.length) : 1)) * 0.4;
+    // A floor-numbered label is two or three characters longer, so cap the size
+    // at what actually fits across a cell. One size for every cell, picked from
+    // the longest label, keeps the index looking like a grid rather than a
+    // ransom note. Short labels never reach the cap, so unnumbered projects
+    // print exactly as they did before.
+    var cellW = allCells.length ? (allCells[0].x1 - allCells[0].x0) : gw;
+    var maxLabelLen = allCells.reduce(function (m, cell) {
+      return Math.max(m, segCellLabel(cell.col, cell.row, floorNum).length);
+    }, 1);
+    fontSize = Math.min(fontSize, cellW * 0.85 / (0.6 * maxLabelLen));
     allCells.forEach(function (cell) {
       var cx = (cell.x0 + cell.x1) / 2, cy = (cell.y0 + cell.y1) / 2;
       var hasAps = nonEmptySet[cell.col + ',' + cell.row];
       labels += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" class="rep-grid-label' + (hasAps ? '' : ' rep-grid-label--empty') + '" font-size="' + fontSize + '">'
-        + segCellLabel(cell.col, cell.row) + '</text>';
+        + segCellLabel(cell.col, cell.row, floorNum) + '</text>';
     });
     return '<div class="rep-overview rep-seg-index">'
       + '<div class="rep-overview-plan" data-seg="1" data-orig-w="' + W + '" data-orig-h="' + H
@@ -1526,7 +1625,7 @@
     var vx = Math.max(0, cell.x0 - bleed), vy = Math.max(0, cell.y0 - bleed);
     var vx2 = Math.min(W, cell.x1 + bleed), vy2 = Math.min(H, cell.y1 + bleed);
     var vW = vx2 - vx, vH = vy2 - vy;
-    var label = segCellLabel(cell.col, cell.row);
+    var label = segCellLabel(cell.col, cell.row, opts.floorNumber);
     var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx, cell);
     return '<div class="rep-overview rep-seg-cell">'
       + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell, opts.cropBox)
