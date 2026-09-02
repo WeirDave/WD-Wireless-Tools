@@ -270,6 +270,25 @@ class GitUpdateTests(unittest.TestCase):
         with self.assertRaises(updater.UpdateError):
             updater.git_update(self.root)
 
+    def test_already_current_does_not_check_anything_out(self):
+        """Detaching HEAD to land on the commit it already points at changes
+        nothing but looks alarming in a healthy clone."""
+        calls = []
+
+        def fake_run(args, cwd, check=True):
+            calls.append(args)
+            if args[0] == "tag":
+                return type("P", (), {"stdout": "v2.5.0\n", "returncode": 0})()
+            return type("P", (), {"stdout": "", "returncode": 0})()
+
+        with patch.object(updater, "rescue_dirty_templates", return_value=[]),              patch.object(updater, "_dirty_paths", return_value=[]),              patch.object(updater, "_run_git", side_effect=fake_run):
+            result = updater.git_update(self.root)   # tree is v2.5.0
+
+        self.assertFalse(result["changed"])
+        self.assertEqual(result["newVersion"], "2.5.0")
+        self.assertEqual([c for c in calls if "checkout" in c], [],
+                         "no checkout should run when already current")
+
     def test_checks_out_the_highest_release_tag(self):
         calls = []
 

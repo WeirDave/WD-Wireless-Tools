@@ -429,6 +429,16 @@ def git_update(root: Path | None = None, channel: str = "release", log=None,
         if not tag:
             raise UpdateError("No release tags found on the remote.")
         target = label = tag
+        # Nothing newer: return without checking anything out. Skipping this
+        # would detach HEAD from a branch to land on the commit it already
+        # points at — no change, but alarming in an otherwise healthy clone.
+        if cmp_version(tag, before) <= 0:
+            say(f"Already on the newest release (v{before}).")
+            return {
+                "ok": True, "mode": "git", "channel": channel,
+                "previousVersion": before, "newVersion": before,
+                "target": label, "rescuedTemplates": rescued, "changed": False,
+            }
 
     say(f"Checking out {label}…")
     _run_git(["-c", "advice.detachedHead=false", "checkout", "--force", target], root)
