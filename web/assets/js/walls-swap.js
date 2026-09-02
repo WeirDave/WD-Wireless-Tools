@@ -23,6 +23,8 @@
     segOrdinal: new Map(),
     showNumbers: false,
     renderQueued: false,
+    history: [],
+    historyIndex: -1,
     metersPerUnit: 0,
 
     view: { x: 0, y: 0, scale: 1 },
@@ -120,6 +122,41 @@
     return seg.wallTypeId || seg.wallType || null;
   }
 
+  // --- pure history core (sliced out and unit-tested under Node) ---
+  function setSegmentType(seg, typeId) {
+    if ('wallTypeId' in seg) seg.wallTypeId = typeId;
+    else if ('wallType' in seg) seg.wallType = typeId;
+    else seg.wallTypeId = typeId;
+  }
+
+  // changes: [{ id, from, to }]. Returns how many segments it actually touched.
+  function applyTypeChanges(segments, changes) {
+    const byId = new Map();
+    segments.forEach(seg => byId.set(seg.id, seg));
+    let hits = 0;
+    changes.forEach(c => {
+      const seg = byId.get(c.id);
+      if (!seg) return;
+      setSegmentType(seg, c.to);
+      hits++;
+    });
+    return hits;
+  }
+
+  function invertTypeChanges(changes) {
+    return changes.map(c => ({ id: c.id, from: c.to, to: c.from }));
+  }
+
+  // Deletes remember where each segment sat so an undo puts it back in place
+  // rather than appending it to the end of the file.
+  function restoreRemoved(segments, removed) {
+    const out = segments.slice();
+    removed.slice().sort((a, b) => a.index - b.index)
+      .forEach(r => out.splice(Math.min(r.index, out.length), 0, r.seg));
+    return out;
+  }
+  // --- end pure history core ---
+
   function colorOf(seg) {
     const wt = typeById(seg.typeId);
     return wt ? safeColor(wt.color) : '#888';
@@ -180,6 +217,9 @@
     state.dragCurrent = null;
     state.touch = null;
     state.spaceHeld = false;
+    state.history = [];
+    state.historyIndex = -1;
+    dismissUndoToast();
     const wrap = $('swapCanvasWrap');
     if (wrap) wrap.classList.remove('pan-active');
     clearSelectionState();
@@ -1036,6 +1076,137 @@
     return best;
   }
 
+  // The checkbox tree needs room on a dense floor, so the panel is draggable
+  // like Paint Shop Pro's. Width is a view preference, not project data, so it
+  // lives in localStorage — and unlike a hidden filter it is plainly visible,
+  // which is why persisting it here is safe.
+  const SIDEBAR_KEY = 'wd.walls.swapSidebarWidth';
+  const SIDEBAR_MIN = 260;
+  const SIDEBAR_DEFAULT = 320;
+
+  function sidebarMax() {
+    const body = document.querySelector('.swap-body');
+    const w = body ? body.clientWidth : window.innerWidth;
+    // Always leave the plan at least half the room.
+    return Math.max(SIDEBAR_MIN, Math.round(w * 0.6));
+  }
+
+  function readStoredSidebarWidth() {
+    try {
+      const raw = localStorage.getItem(SIDEBAR_KEY);
+      const v = raw == null ? NaN : parseInt(raw, 10);
+      return Number.isFinite(v) ? v : null;
+    } catch (e) { return null; }
+  }
+
+  // The width the user asked for is kept separately from the width currently
+  // applied. Opening the modal before layout settles clamps the applied value
+  // to the minimum; re-clamping from that instead of from the preference would
+  // silently shrink the panel for good.
+  let _sidebarPref = SIDEBAR_DEFAULT;
+
+  function applySidebarWidth(px, persist) {
+    const el = $('swapSidebar');
+    if (!el) return;
+    _sidebarPref = Math.max(SIDEBAR_MIN, Math.round(px));
+    if (persist) {
+      try { localStorage.setItem(SIDEBAR_KEY, String(_sidebarPref)); } catch (e) { /* private mode */ }
+    }
+    reflowSidebarWidth();
+  }
+
+  // Re-derive the applied width from the preference and the room available now.
+  function reflowSidebarWidth() {
+    const el = $('swapSidebar');
+    if (!el) return;
+    const w = Math.max(SIDEBAR_MIN, Math.min(sidebarMax(), _sidebarPref));
+    if (el.style.width !== w + 'px') el.style.width = w + 'px';
+    resizeCanvas();
+  }
+
+  function initSidebarWidth() {
+    _sidebarPref = readStoredSidebarWidth() || SIDEBAR_DEFAULT;
+    reflowSidebarWidth();
+    // The body can still be mid-layout on open, which would clamp the panel to
+    // its minimum; take the width again once there is real room.
+    requestAnimationFrame(reflowSidebarWidth);
+    setTimeout(reflowSidebarWidth, 80);
+  }
+
+  function installSplitter() {
+    const sp = $('swapSplitter');
+    if (!sp || sp._bound) return;
+    sp._bound = true;
+    let dragging = false;
+    const widthFor = (clientX) => {
+      const body = document.querySelector('.swap-body');
+      const rect = body.getBoundingClientRect();
+      return rect.right - clientX;
+    };
+    const move = (ev) => {
+      if (!dragging) return;
+      ev.preventDefault();
+      const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
+      applySidebarWidth(widthFor(x), false);
+    };
+    const up = () => {
+      if (!dragging) return;
+      dragging = false;
+      document.body.classList.remove('swap-resizing');
+      applySidebarWidth(_sidebarPref, true);
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+      window.removeEventListener('touchmove', move);
+      window.removeEventListener('touchend', up);
+    };
+    const down = (ev) => {
+      dragging = true;
+      document.body.classList.add('swap-resizing');
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+      window.addEventListener('touchmove', move, { passive: false });
+      window.addEventListener('touchend', up);
+      ev.preventDefault();
+    };
+    sp.addEventListener('mousedown', down);
+    sp.addEventListener('touchstart', down, { passive: false });
+    sp.addEventListener('dblclick', () => applySidebarWidth(SIDEBAR_DEFAULT, true));
+    sp.addEventListener('keydown', (ev) => {
+      if (ev.key === 'ArrowLeft')  { applySidebarWidth(_sidebarPref + 24, true); ev.preventDefault(); }
+      if (ev.key === 'ArrowRight') { applySidebarWidth(_sidebarPref - 24, true); ev.preventDefault(); }
+    });
+  }
+
+  // Collapsible side panels, Paint Shop Pro style — folding Quick Swap away is
+  // how you give the selection tree the whole column on a dense floor.
+  const FOLD_KEY = 'wd.walls.swapFolded';
+
+  function readFolded() {
+    try {
+      const raw = localStorage.getItem(FOLD_KEY);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch (e) { return new Set(); }
+  }
+
+  function writeFolded(set) {
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify([...set])); } catch (e) { /* private mode */ }
+  }
+
+  function applyFolded() {
+    const folded = readFolded();
+    document.querySelectorAll('.swap-panel-foldable').forEach(el => {
+      el.classList.toggle('is-folded', folded.has(el.dataset.fold));
+    });
+    resizeCanvas();
+  }
+
+  window.toggleSwapPanel = function (key) {
+    const folded = readFolded();
+    if (folded.has(key)) folded.delete(key); else folded.add(key);
+    writeFolded(folded);
+    applyFolded();
+  };
+
   const evHandlers = {};
 
   function installEventListeners() {
@@ -1055,7 +1226,7 @@
     evHandlers.touchend    = onTouchEnd;
     evHandlers.keydown   = onKeyDown;
     evHandlers.keyup     = onKeyUp;
-    evHandlers.resize    = resizeCanvas;
+    evHandlers.resize    = () => { reflowSidebarWidth(); resizeCanvas(); };
     evHandlers.railClick = (e) => {
       const btn = e.target.closest('.swap-tool');
       if (btn) btn.blur();
@@ -1078,7 +1249,14 @@
     if (typeof ResizeObserver === 'function') {
       evHandlers.ro = new ResizeObserver(() => resizeCanvas());
       evHandlers.ro.observe($('swapCanvasWrap'));
+      evHandlers.roBody = new ResizeObserver(() => reflowSidebarWidth());
+      const body = document.querySelector('.swap-body');
+      if (body) evHandlers.roBody.observe(body);
     }
+    installSplitter();
+    initSidebarWidth();
+    applyFolded();
+    updateHistoryButtons();
     setSwapTool(state.tool);
   }
 
@@ -1100,6 +1278,7 @@
     const rail = document.querySelector('.swap-toolrail');
     if (rail && evHandlers.railClick) rail.removeEventListener('click', evHandlers.railClick);
     if (evHandlers.ro) { evHandlers.ro.disconnect(); evHandlers.ro = null; }
+    if (evHandlers.roBody) { evHandlers.roBody.disconnect(); evHandlers.roBody = null; }
   }
 
   function canvasPoint(e) {
@@ -1368,6 +1547,16 @@
         canvas().style.cursor = idleCursor();
       }
     }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      if (e.shiftKey) swapRedo(); else swapUndo();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+      e.preventDefault();
+      swapRedo();
+      return;
+    }
     if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       addToSelection(state.segGeom.map(g => g.id));
@@ -1397,21 +1586,23 @@
     const target = typeById(targetId);
     if (!target) { toast('Target wall type not found'); return; }
 
-    let n = 0;
+    const before = selectionSnapshot();
+    const changes = [];
     for (const seg of state.segments) {
       if (doomed.has(seg.id) && segmentTypeId(seg) !== targetId) {
-        if ('wallTypeId' in seg) seg.wallTypeId = targetId;
-        else if ('wallType' in seg) seg.wallType = targetId;
-        else seg.wallTypeId = targetId;
-        n++;
+        changes.push({ id: seg.id, from: segmentTypeId(seg), to: targetId });
       }
     }
-    state.segGeom.forEach(g => {
-      if (doomed.has(g.id)) g.typeId = targetId;
-    });
+    if (!changes.length) { toast(`Already ${target.name} — nothing to change`); return; }
+
+    const n = applyTypeChanges(state.segments, changes);
+    refreshGeomTypes();
+
+    const label = `Swap ${n} wall${n === 1 ? '' : 's'} → ${target.name}`;
+    pushHistory({ kind: 'type', label, changes, before, after: selectionSnapshot() });
 
     writeSegmentsBack();
-    toast(`Swapped ${n} wall${n === 1 ? '' : 's'} → ${target.name}`, 'success');
+    undoToast(`Swapped ${n} wall${n === 1 ? '' : 's'} → ${target.name}`);
 
     renderLegend();
     renderSelection();
@@ -1428,23 +1619,24 @@
     const target = typeById(toId);
     if (!target) { toast('Target wall type not found'); return; }
 
-    let n = 0;
+    const before = selectionSnapshot();
+    const changes = [];
     for (const seg of state.segments) {
       if (segmentTypeId(seg) !== fromId) continue;
       if (scope === 'floor' && segmentFloorId(seg) !== state.currentFloorId) continue;
-      if ('wallTypeId' in seg) seg.wallTypeId = toId;
-      else if ('wallType' in seg) seg.wallType = toId;
-      else seg.wallTypeId = toId;
-      n++;
+      changes.push({ id: seg.id, from: fromId, to: toId });
     }
+    if (!changes.length) { toast('No walls of that type in scope'); return; }
 
-    state.segGeom.forEach(g => {
-      if (g.typeId === fromId) g.typeId = toId;
-    });
+    const n = applyTypeChanges(state.segments, changes);
+    refreshGeomTypes();
+
+    const scopeLbl = scope === 'floor' ? 'on this floor' : 'across the project';
+    const label = `Swap all ${n} ${typeById(fromId)?.name || 'wall'} → ${target.name} ${scopeLbl}`;
+    pushHistory({ kind: 'type', label, changes, before, after: selectionSnapshot() });
 
     writeSegmentsBack();
-    const scopeLbl = scope === 'floor' ? 'on this floor' : 'across the project';
-    toast(`Swapped ${n} wall${n === 1 ? '' : 's'} → ${target.name} ${scopeLbl}`, 'success');
+    undoToast(`Swapped ${n} wall${n === 1 ? '' : 's'} → ${target.name} ${scopeLbl}`);
     renderLegend();
     renderSelection();
     render();
@@ -1456,19 +1648,23 @@
     if (!n) { toast('Nothing checked'); return; }
     if (!confirm(`Delete ${n} wall${n === 1 ? '' : 's'} from the project? Nothing is written to disk until you press Save the *.esx.`)) return;
 
-    state.segments = state.segments.filter(s => !doomed.has(s.id));
-
-    state.segmentsByFloor.clear();
-    state.segments.forEach(s => {
-      const fid = segmentFloorId(s);
-      if (!fid) return;
-      if (!state.segmentsByFloor.has(fid)) state.segmentsByFloor.set(fid, []);
-      state.segmentsByFloor.get(fid).push(s);
+    const before = selectionSnapshot();
+    // Keep the original index so an undo puts each wall back where it was.
+    const removed = [];
+    state.segments.forEach((seg, index) => {
+      if (doomed.has(seg.id)) removed.push({ index, seg });
     });
+
+    state.segments = state.segments.filter(seg => !doomed.has(seg.id));
+    rebuildFloorIndex();
     state.segGeom = state.segGeom.filter(g => !doomed.has(g.id));
 
     doomed.forEach(id => { state.selected.delete(id); state.excluded.delete(id); });
     pruneExcluded();
+
+    const label = `Delete ${n} wall${n === 1 ? '' : 's'}`;
+    pushHistory({ kind: 'delete', label, removed, before, after: selectionSnapshot() });
+
     writeSegmentsBack();
     populateFloorSelect();
     $('swapFloorSelect').value = state.currentFloorId;
@@ -1476,7 +1672,153 @@
     renderSelection();
     updateStatus();
     render();
-    toast(`Deleted ${n} wall${n === 1 ? '' : 's'}`, 'success');
+    undoToast(`Deleted ${n} wall${n === 1 ? '' : 's'}`);
+  };
+
+  const HISTORY_LIMIT = 50;
+
+  function selectionSnapshot() {
+    return { selected: [...state.selected], excluded: [...state.excluded] };
+  }
+
+  function restoreSelection(snap) {
+    if (!snap) return;
+    state.selected = new Set(snap.selected);
+    state.excluded = new Set(snap.excluded);
+    pruneExcluded();
+  }
+
+  function pushHistory(entry) {
+    // Anything redoable is discarded the moment a new edit lands.
+    state.history.length = state.historyIndex + 1;
+    state.history.push(entry);
+    if (state.history.length > HISTORY_LIMIT) state.history.shift();
+    state.historyIndex = state.history.length - 1;
+    updateHistoryButtons();
+  }
+
+  function canUndo() { return state.historyIndex >= 0; }
+  function canRedo() { return state.historyIndex < state.history.length - 1; }
+
+  function rebuildFloorIndex() {
+    state.segmentsByFloor.clear();
+    state.segments.forEach(seg => {
+      const fid = segmentFloorId(seg);
+      if (!fid) return;
+      if (!state.segmentsByFloor.has(fid)) state.segmentsByFloor.set(fid, []);
+      state.segmentsByFloor.get(fid).push(seg);
+    });
+  }
+
+  // Re-derive the on-screen geometry for the current floor from state.segments,
+  // which is the source of truth an undo has just rewritten.
+  function refreshGeomTypes() {
+    const byId = new Map();
+    state.segments.forEach(seg => byId.set(seg.id, seg));
+    state.segGeom.forEach(g => {
+      const seg = byId.get(g.id);
+      if (seg) g.typeId = segmentTypeId(seg);
+    });
+  }
+
+  function rebuildGeomForCurrentFloor() {
+    const floorSegs = state.segmentsByFloor.get(state.currentFloorId) || [];
+    state.segGeom = [];
+    floorSegs.forEach(seg => {
+      const ep = segmentEndpoints(seg);
+      if (!ep) return;
+      state.segGeom.push({
+        id: seg.id,
+        typeId: segmentTypeId(seg),
+        x1: ep.x1, y1: ep.y1, x2: ep.x2, y2: ep.y2,
+      });
+    });
+  }
+
+  function afterHistoryStep() {
+    writeSegmentsBack();
+    populateFloorSelect();
+    const fsel = $('swapFloorSelect');
+    if (fsel) fsel.value = state.currentFloorId;
+    renderLegend();
+    renderSelection();
+    updateStatus();
+    render();
+    updateHistoryButtons();
+  }
+
+  window.swapUndo = function () {
+    if (!canUndo()) { toast('Nothing to undo'); return; }
+    const entry = state.history[state.historyIndex];
+    if (entry.kind === 'type') {
+      applyTypeChanges(state.segments, invertTypeChanges(entry.changes));
+      refreshGeomTypes();
+    } else if (entry.kind === 'delete') {
+      state.segments = restoreRemoved(state.segments, entry.removed);
+      rebuildFloorIndex();
+      rebuildGeomForCurrentFloor();
+    }
+    restoreSelection(entry.before);
+    state.historyIndex--;
+    afterHistoryStep();
+    toast('Undid: ' + entry.label, 'success');
+  };
+
+  window.swapRedo = function () {
+    if (!canRedo()) { toast('Nothing to redo'); return; }
+    const entry = state.history[state.historyIndex + 1];
+    if (entry.kind === 'type') {
+      applyTypeChanges(state.segments, entry.changes);
+      refreshGeomTypes();
+    } else if (entry.kind === 'delete') {
+      const gone = new Set(entry.removed.map(r => r.seg.id));
+      state.segments = state.segments.filter(seg => !gone.has(seg.id));
+      rebuildFloorIndex();
+      rebuildGeomForCurrentFloor();
+    }
+    restoreSelection(entry.after);
+    state.historyIndex++;
+    afterHistoryStep();
+    toast('Redid: ' + entry.label, 'success');
+  };
+
+  function updateHistoryButtons() {
+    const u = $('swapUndoBtn'), r = $('swapRedoBtn');
+    if (u) {
+      u.disabled = !canUndo();
+      u.title = canUndo()
+        ? 'Undo: ' + state.history[state.historyIndex].label + '  (Ctrl+Z)'
+        : 'Nothing to undo  (Ctrl+Z)';
+    }
+    if (r) {
+      r.disabled = !canRedo();
+      r.title = canRedo()
+        ? 'Redo: ' + state.history[state.historyIndex + 1].label + '  (Ctrl+Y)'
+        : 'Nothing to redo  (Ctrl+Y)';
+    }
+  }
+
+  // A toast you can act on, so the fix for a mis-click is right where you are
+  // looking when you make it.
+  let _undoToastTimer = null;
+  function undoToast(msg) {
+    const el = $('swapUndoToast');
+    if (!el) { toast(msg, 'success'); return; }
+    $('swapUndoToastMsg').textContent = msg;
+    el.classList.add('visible');
+    clearTimeout(_undoToastTimer);
+    _undoToastTimer = setTimeout(() => el.classList.remove('visible'), 9000);
+  }
+
+  window.dismissUndoToast = function () {
+    const el = $('swapUndoToast');
+    if (el) el.classList.remove('visible');
+    clearTimeout(_undoToastTimer);
+  };
+
+  window.undoFromToast = function () {
+    dismissUndoToast();
+    swapUndo();
   };
 
   function writeSegmentsBack() {
@@ -1491,6 +1833,19 @@
     getFitScale: () => state.fitScale,
     getZoom: () => currentZoom(),
     getHover: () => ({ seg: state.hoverSegId, group: state.hoverGroupKey }),
+    getHistory: () => ({
+      labels: state.history.map(h => h.label),
+      index: state.historyIndex,
+      canUndo: canUndo(), canRedo: canRedo(),
+    }),
+    getSegTypes: () => state.segments.map(x => ({ id: x.id, type: segmentTypeId(x) })),
+    getSegmentCount: () => state.segments.length,
+    getSidebarPref: () => _sidebarPref,
+    getSidebarWidth: () => {
+      const el = $('swapSidebar');
+      return el ? Math.round(el.getBoundingClientRect().width) : 0;
+    },
+    setSidebarWidth: (px, persist) => applySidebarWidth(px, !!persist),
     getHighlighted: () => [...highlightIds()],
     getOrdinal: (id) => state.segOrdinal.get(id) || null,
     hitAtWorld: (wx, wy) => {
