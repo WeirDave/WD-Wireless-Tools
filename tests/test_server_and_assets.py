@@ -18,6 +18,31 @@ from server import API_REQUEST_HEADER, app
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# Cold Node startup is the slow path on the GitHub Windows runner, and the JS
+# unit tests below shell out to it several times per run. A 20s cap used to
+# guard these calls; it blew up on a CI runner during the v2.4.0 release, which
+# failed the tests gate, skipped the release job, and left the tag published
+# with no downloadable assets. 120s is loose enough that a slow cold start
+# never trips it and tight enough to still catch a genuine hang.
+NODE_TIMEOUT_S = 120
+
+
+def run_node(args):
+    """Run Node with the shared CI-safe timeout, failing clearly on a hang."""
+    try:
+        return subprocess.run(args, capture_output=True, text=True,
+                              timeout=NODE_TIMEOUT_S)
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(
+            f"node did not finish within the {NODE_TIMEOUT_S}s NODE_TIMEOUT_S "
+            f"limit while running {args[-1]}. This is a Node startup/exec "
+            f"timeout, not a failure of the code under test: a cold Node "
+            f"start on a slow CI runner is the usual cause. Re-run; if it "
+            f"recurs, raise NODE_TIMEOUT_S rather than treating it as a "
+            f"product bug."
+        ) from exc
+
+
 
 class ServerAndAssetTests(unittest.TestCase):
     def setUp(self):
@@ -105,10 +130,7 @@ eval(source.slice(start, end));
 const result = selectedSyncItems();
 if (result.length !== 1 || result[0].kind !== 'pair') process.exit(1);
 """
-        result = subprocess.run(
-            ["node", "-e", node_program, str(script)],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = run_node(["node", "-e", node_program, str(script)])
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
@@ -136,10 +158,7 @@ eval(source.slice(start, end));
 const result = selectedSyncItems();
 if (result.length !== 1 || result[0].kind !== 'pair') process.exit(1);
 """
-        result = subprocess.run(
-            ["node", "-e", node_program, str(script)],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = run_node(["node", "-e", node_program, str(script)])
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
@@ -154,10 +173,7 @@ const source = fs.readFileSync(process.argv[1], 'utf8');
 if (source.includes(`!k.startsWith('ct')`)) process.exit(1);
 if (!source.includes('function selectAllSide(side)')) process.exit(2);
 """
-        result = subprocess.run(
-            ["node", "-e", node_program, str(script)],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = run_node(["node", "-e", node_program, str(script)])
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
@@ -200,10 +216,7 @@ bulkSync('to-local').then(async () => {
   if (JSON.stringify(apiCall) !== JSON.stringify(['download_project', 'cloud-1', 'Sydney', 'op-1'])) process.exit(3);
 }).catch(err => { console.error(err); process.exit(4); });
 """
-        result = subprocess.run(
-            ["node", "-e", node_program, str(script)],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = run_node(["node", "-e", node_program, str(script)])
         self.assertEqual(result.returncode, 0, result.stderr)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
@@ -260,10 +273,7 @@ bulkSync('to-cloud').then(async () => {
   if (apiCalls[1][0] !== 'upload_project' || apiCalls[1][1] !== 'C:/sites/NewSite/a.esx' || apiCalls[1][2] !== 'new-site-1') process.exit(3);
 }).catch(err => { console.error(err); process.exit(4); });
 """
-        result = subprocess.run(
-            ["node", "-e", node_program, str(script)],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = run_node(["node", "-e", node_program, str(script)])
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_restart_accepts_a_legitimate_local_request(self):
@@ -366,10 +376,7 @@ assert(JSON.stringify(restored) === before, 'undo of a delete must restore origi
 const restored2 = restoreRemoved(afterDelete, [removed[1], removed[0]]);
 assert(JSON.stringify(restored2) === before, 'restore is independent of record order');
 """
-        result = subprocess.run(
-            ["node", "-e", node_program, str(script)],
-            capture_output=True, text=True, timeout=20,
-        )
+        result = run_node(["node", "-e", node_program, str(script)])
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_wall_swap_keeps_the_selection_after_applying_a_swap(self):
@@ -497,10 +504,7 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
         self.assertTrue(scripts)
         for script in scripts:
             with self.subTest(script=script.name):
-                result = subprocess.run(
-                    ["node", "--check", str(script)],
-                    capture_output=True, text=True, timeout=20,
-                )
+                result = run_node(["node", "--check", str(script)])
                 self.assertEqual(result.returncode, 0, result.stderr)
 
 
