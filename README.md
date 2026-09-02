@@ -27,10 +27,10 @@ converting scale, and building installer-ready reports.
 <table>
 <tr>
 <td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.17.0 · Desktop</sub></td>
-<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"></a><br><b>Quick Walls</b><br><sub>v7.39 · Desktop + Web</sub></td>
+<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"></a><br><b>Quick Walls</b><br><sub>v7.40 · Desktop + Web</sub></td>
 <td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.26.0 · Desktop</sub></td>
 <td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"></a><br><b>Scale</b><br><sub>v1.5 · Desktop + Web</sub></td>
-<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"></a><br><b>Report</b><br><sub>v2.30.0 · Desktop + Web</sub></td>
+<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"></a><br><b>Report</b><br><sub>v2.31.0 · Desktop + Web</sub></td>
 </tr>
 </table>
 
@@ -123,14 +123,44 @@ Open the [hosted tool suite](https://weirdave.github.io/WD-Wireless-Tools/) to u
 
 ### Install the complete desktop suite
 
-1. Install [Python 3.10 or newer](https://www.python.org/downloads/). On Windows, enable **Add Python to PATH** during installation.
-2. Open the [latest release](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) and download the versioned `WD-Wireless-Tools-vX.X.X.zip` asset—not GitHub's automatic “Source code” archive.
-3. Extract the ZIP to a permanent folder.
-4. Double-click `Start WD Wireless Tools.bat` on Windows or `Start WD Wireless Tools.command` on macOS.
+Install [Python 3.10 or newer](https://www.python.org/downloads/) first. On Windows, enable **Add Python to PATH** during installation.
+
+Then run one command. It installs the suite, or updates it if it is already there.
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://raw.githubusercontent.com/WeirDave/WD-Wireless-Tools/main/install.ps1 | iex
+```
+
+**macOS / Linux:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WeirDave/WD-Wireless-Tools/main/install.sh | bash
+```
+
+The installer uses git when it is available, so later updates are a fast incremental pull. Without git it falls back to the release ZIP, verifying its SHA-256 before installing. Either way it installs missing Python packages and offers to launch the suite.
+
+<details>
+<summary>Manual install from the ZIP</summary>
+
+1. Open the [latest release](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) and download the versioned `WD-Wireless-Tools-vX.X.X.zip` asset—not GitHub's automatic “Source code” archive.
+2. Extract the ZIP to a permanent folder.
+3. Double-click `Start WD Wireless Tools.bat` on Windows or `Start WD Wireless Tools.command` on macOS.
+
+</details>
 
 The launcher installs missing dependencies, starts the local service, and opens `http://localhost:8675`. Keep its terminal window open while using the suite.
 
 For detailed, task-by-task instructions, see the **[WD Wireless Tools User Manual](docs/USER_MANUAL.md)**.
+
+### Updating
+
+Open **Menu → About** and click **Update now**. The suite detects how it was installed and uses the right mechanism—a git pull for a cloned install, a verified ZIP download otherwise—then offers to restart into the new version. Progress is printed in the launcher terminal as it happens.
+
+Wall templates, settings, and your saved Cloud session live in `~/.wd_wireless_tools/`, outside the application folder, so an update never touches them.
+
+Re-running the install command above does the same thing from a terminal, which is useful on a machine where the suite will not start.
 
 ### Manual launch
 
@@ -142,7 +172,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.5.0
+WIRELESS TOOLS  v2.7.0
 A suite of Ekahau workflow tools.
 
 Local suite: http://localhost:8675/

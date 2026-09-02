@@ -258,6 +258,16 @@
   }
   function metersToFt(m) { return m * M_TO_FT; }
   function fmt(n, dp) { return Number(n).toFixed(dp).replace(/\.?0+$/, ''); }
+  function formatReadableDate(d) {
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  function freqToChannel(freqMHz) {
+    if (!freqMHz) return '—';
+    if (freqMHz >= 2412 && freqMHz <= 2484) return Math.round((freqMHz - 2407) / 5);
+    if (freqMHz >= 5170 && freqMHz <= 5885) return Math.round((freqMHz - 5000) / 5);
+    if (freqMHz >= 5955 && freqMHz <= 7115) return Math.round((freqMHz - 5950) / 5);
+    return freqMHz;
+  }
   function floorPlanForAp(ap) {
     if (!ap.location) return null;
     return proj.floorPlans.find(function (f) { return f.id === ap.location.floorPlanId; }) || null;
@@ -302,8 +312,9 @@
     return Object.keys(used);
   }
 
-  function renderAntennaTable(ids) {
+  function renderAntennaTable(ids, apCountMap) {
     if (!ids.length) return '';
+    var hasCount = apCountMap && Object.keys(apCountMap).length > 0;
     var rows = '';
     ids.forEach(function (id) {
       var a = proj.antennas[id]; if (!a) return;
@@ -313,9 +324,13 @@
       if (a.maxGain != null) bits.push(a.maxGain + ' dBi max gain');
       if (a.beamWidthHorizontal != null) bits.push(a.beamWidthHorizontal + '° h-beam');
       if (a.beamWidthVertical != null) bits.push(a.beamWidthVertical + '° v-beam');
-      rows += '<tr><td class="rep-name">' + WD.esc(a.name || id) + '</td><td>' + WD.esc(bits.join(' · ')) + '</td></tr>';
+      var countCell = hasCount
+        ? '<td class="rep-num">' + (apCountMap[id] || 0) + ' AP' + ((apCountMap[id] || 0) === 1 ? '' : 's') + '</td>'
+        : '';
+      rows += '<tr><td class="rep-name">' + WD.esc(a.name || id) + '</td><td>' + WD.esc(bits.join(' · ')) + '</td>' + countCell + '</tr>';
     });
-    return '<table class="rep-ap-table"><thead><tr><th>Antenna</th><th>Specs</th></tr></thead>'
+    var countHeader = hasCount ? '<th>Used by</th>' : '';
+    return '<table class="rep-ap-table"><thead><tr><th>Antenna</th><th>Specs</th>' + countHeader + '</tr></thead>'
       + '<tbody>' + rows + '</tbody></table>';
   }
 
@@ -730,6 +745,18 @@
           + '<button type="button" class="btn btn-secondary btn-sm rep-btn-right" '
           + 'onclick="openGridConfig()">' + gridLabel + '</button>'
           + '</div>';
+      } else if (opt.type === 'text') {
+        var textVal = (opt.id in currentOpts) ? (currentOpts[opt.id] || '') : (opt.default || '');
+        html += '<div class="rep-check with-desc">'
+          + '<span class="rep-check-body">'
+          +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
+          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+          + '</span>'
+          + '<input type="text" id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" data-opt-type="text" '
+          + 'value="' + WD.escAttr(textVal) + '" placeholder="' + WD.escAttr(opt.placeholder || '') + '" '
+          + 'class="rep-input-text" '
+          + 'onchange="setOpt(this)" oninput="setOpt(this)">'
+          + '</div>';
       } else if (opt.type === 'number') {
         var numVal = (opt.id in currentOpts) ? currentOpts[opt.id] : (opt.default || '');
         html += '<div class="rep-check with-desc' + (disabled ? ' is-disabled' : '') + '">'
@@ -760,8 +787,11 @@
   }
   window.setOpt = function (cb) {
     var id = cb.getAttribute('data-opt-id');
-    if (cb.getAttribute('data-opt-type') === 'number') {
+    var optType = cb.getAttribute('data-opt-type');
+    if (optType === 'number') {
       currentOpts[id] = cb.value === '' ? '' : parseInt(cb.value, 10);
+    } else if (optType === 'text') {
+      currentOpts[id] = cb.value;
     } else {
       currentOpts[id] = cb.checked;
     }
@@ -1179,7 +1209,11 @@
     opts.cover = coverEl ? coverEl.checked : true;
     var r = currentReport();
     (r.sidebar || []).forEach(function (o) {
-      opts[o.id] = (o.id in currentOpts) ? currentOpts[o.id] : !!o.default;
+      if (o.type === 'text') {
+        opts[o.id] = (o.id in currentOpts) ? (currentOpts[o.id] || '') : (o.default || '');
+      } else {
+        opts[o.id] = (o.id in currentOpts) ? currentOpts[o.id] : !!o.default;
+      }
     });
     if (currentOpts.segCols > 0) opts.segCols = currentOpts.segCols;
     if (currentOpts.segRows > 0) opts.segRows = currentOpts.segRows;
@@ -1187,20 +1221,31 @@
     return opts;
   }
 
-  function renderCover(count, dateStr, r, countLabel) {
+  function renderCover(count, dateStr, r, countLabel, opts, ctx) {
     var logo = savedLogo
       ? '<div class="rep-cover-logo-wrap"><img class="rep-cover-logo" src="' + savedLogo + '" alt="Logo"></div>'
       : '';
     var floorLabel = proj.floorPlans.length === 1 ? 'Floor plan' : 'Floor plans';
+    var meta = '';
+    if (opts) {
+      var metaRows = [];
+      if (opts.clientName) metaRows.push('<div><b>Client:</b> ' + WD.esc(opts.clientName) + '</div>');
+      if (opts.preparedBy) metaRows.push('<div><b>Prepared by:</b> ' + WD.esc(opts.preparedBy) + '</div>');
+      if (opts.projectRef) metaRows.push('<div><b>Project ref:</b> ' + WD.esc(opts.projectRef) + '</div>');
+      if (opts.revision)   metaRows.push('<div><b>Revision:</b> ' + WD.esc(opts.revision) + '</div>');
+      if (metaRows.length) meta = '<div class="rep-cover-meta">' + metaRows.join('') + '</div>';
+    }
+    var displayDate = (ctx && ctx.dateReadable) ? ctx.dateReadable : dateStr;
     return '<section class="rep-cover">'
       + logo
       + '<div class="rep-cover-brand"><img class="rep-brand-icon" src="../assets/report-v8.0-560x560.png" alt=""> ' + WD.esc(r.coverBrand) + '</div>'
       + '<h1 class="rep-cover-title">' + WD.esc(siteName()) + '</h1>'
+      + meta
       + '<div class="rep-cover-stats">'
       +   '<div class="rep-cover-stat"><b>' + count + '</b><span>' + WD.esc(countLabel || 'Access points') + '</span></div>'
       +   '<div class="rep-cover-stat"><b>' + proj.floorPlans.length + '</b><span>' + floorLabel + '</span></div>'
       + '</div>'
-      + '<div class="rep-cover-date">Generated ' + WD.esc(dateStr) + '</div>'
+      + '<div class="rep-cover-date">Generated ' + WD.esc(displayDate) + '</div>'
       + '</section>';
   }
   function renderInlineHeader(count, dateStr, r, countLabel) {
@@ -1238,12 +1283,14 @@
     }
     var today = new Date();
     var dateStr = today.toISOString().slice(0, 10);
+    var dateReadable = formatReadableDate(today);
     var ctx = {
       report: r,
       dateStr: dateStr,
+      dateReadable: dateReadable,
       proj: proj,
       savedLogo: savedLogo,
-      cover: function (count, ds, label) { return renderCover(count, ds, r, label); },
+      cover: function (count, ds, label, opts2, ctx2) { return renderCover(count, ds, r, label, opts2, ctx2); },
       inlineHeader: function (count, ds, label) { return renderInlineHeader(count, ds, r, label); },
       primaryRadio: primaryRadio,
       compass: compass, metersToFt: metersToFt, fmt: fmt,
@@ -1592,7 +1639,16 @@
 
   function renderAntennaLegend(aps, ctx) {
     var ids = collectUsedAntennas(aps, ctx);
-    var tbl = renderAntennaTable(ids);
+    var countMap = {};
+    if (aps && ctx) {
+      aps.forEach(function (ap) {
+        proj.radios.filter(function (x) { return x.accessPointId === ap.id; })
+          .forEach(function (x) {
+            if (x.antennaTypeId) countMap[x.antennaTypeId] = (countMap[x.antennaTypeId] || 0) + 1;
+          });
+      });
+    }
+    var tbl = renderAntennaTable(ids, countMap);
     if (!tbl) return '';
     return '<section class="rep-legend"><h2 class="rep-floor-title">Antennas in use</h2>' + tbl + '</section>';
   }
@@ -2586,9 +2642,125 @@
     for (var i = 0; i < overlays.length; i++) autocropOverlay(overlays[i]);
   }
 
+  function renderReportFooter(opts, ctx) {
+    var title = (ctx.report.docName || 'Report') + ' — ' + siteName();
+    var conf = opts.confidential
+      ? '<div class="rep-foot-conf">CONFIDENTIAL — Distribution restricted to project stakeholders</div>'
+      : '';
+    return '<footer class="rep-doc-foot">'
+      + '<div class="rep-foot-title">' + WD.esc(title) + '</div>'
+      + conf
+      + '</footer>';
+  }
+
+  function renderLocationTOC(byFloor, floorOrder, opts) {
+    var items = '';
+    floorOrder.forEach(function (fp) {
+      if (!byFloor[fp.id] || !byFloor[fp.id].length) return;
+      var apCount = byFloor[fp.id].length;
+      var detail = apCount + ' AP' + (apCount === 1 ? '' : 's');
+      if (opts.segmented && fp.id !== '_none') {
+        var W = fp.width || 1, H = fp.height || 1;
+        var grid = computeAntennaGrid(W, H, byFloor[fp.id], opts);
+        if (grid.cols * grid.rows > 1) {
+          detail += ', ' + (grid.cols * grid.rows) + ' grid sections';
+        }
+      }
+      items += '<li>' + WD.esc(fp.name || 'Floor plan') + ' <span class="rep-toc-detail">(' + detail + ')</span></li>';
+    });
+    return '<section class="rep-floor-section rep-toc">'
+      + '<h2 class="rep-floor-title">Contents</h2>'
+      + '<ol class="rep-toc-list">' + items + '</ol>'
+      + '</section>';
+  }
+
+  function renderLocationSummary(aps, ctx) {
+    var floorIds = {};
+    aps.forEach(function (ap) {
+      var fp = ctx.floorPlanForAp(ap);
+      floorIds[fp ? fp.id : '_none'] = true;
+    });
+    var floorCount = Object.keys(floorIds).length;
+    var buildingIds = {};
+    proj.floorPlans.forEach(function (fp) {
+      var bf = proj.buildingFloors[fp.id];
+      if (bf && bf.buildingId) buildingIds[bf.buildingId] = true;
+    });
+    var buildingCount = Object.keys(buildingIds).length;
+    var directional = aps.filter(function (ap) { return !apIsOmniOnly(ap); }).length;
+    var omni = aps.length - directional;
+    var antennaIds = collectUsedAntennas(aps, ctx);
+
+    var tiles = '';
+    tiles += '<div class="rep-hotspot-stat"><b>' + aps.length + '</b><span>Access points</span></div>';
+    tiles += '<div class="rep-hotspot-stat"><b>' + floorCount + '</b><span>Floor plans</span></div>';
+    if (buildingCount > 1) {
+      tiles += '<div class="rep-hotspot-stat"><b>' + buildingCount + '</b><span>Buildings</span></div>';
+    }
+    if (directional > 0 && omni > 0) {
+      tiles += '<div class="rep-hotspot-stat"><b>' + directional + '</b><span>Directional</span></div>';
+      tiles += '<div class="rep-hotspot-stat"><b>' + omni + '</b><span>Omni</span></div>';
+    }
+    tiles += '<div class="rep-hotspot-stat"><b>' + antennaIds.length + '</b><span>Antenna types</span></div>';
+
+    return '<section class="rep-floor-section rep-summary-hero">'
+      + '<h2 class="rep-floor-title">Project overview</h2>'
+      + '<div class="rep-hotspot-stats">' + tiles + '</div>'
+      + '</section>';
+  }
+
+  function renderFloorMatrix(byFloor, floorOrder, ctx) {
+    var rows = '';
+    var totalAps = 0, totalDir = 0, totalOmni = 0;
+    floorOrder.forEach(function (fp) {
+      var floorAps = byFloor[fp.id];
+      if (!floorAps || !floorAps.length) return;
+      var bf = proj.buildingFloors[fp.id];
+      var buildingName = bf && proj.buildings[bf.buildingId]
+        ? proj.buildings[bf.buildingId].name || '—' : '—';
+      var dir = floorAps.filter(function (ap) { return !apIsOmniOnly(ap); }).length;
+      var omni = floorAps.length - dir;
+      totalAps += floorAps.length;
+      totalDir += dir;
+      totalOmni += omni;
+      rows += '<tr>'
+        + '<td>' + WD.esc(fp.name || 'Floor plan') + '</td>'
+        + '<td>' + WD.esc(buildingName) + '</td>'
+        + '<td class="rep-num">' + floorAps.length + '</td>'
+        + '<td class="rep-num">' + dir + '</td>'
+        + '<td class="rep-num">' + omni + '</td>'
+        + '</tr>';
+    });
+    rows += '<tr class="rep-matrix-total">'
+      + '<td colspan="2"><b>Total</b></td>'
+      + '<td class="rep-num"><b>' + totalAps + '</b></td>'
+      + '<td class="rep-num"><b>' + totalDir + '</b></td>'
+      + '<td class="rep-num"><b>' + totalOmni + '</b></td>'
+      + '</tr>';
+    return '<section class="rep-floor-section">'
+      + '<h2 class="rep-floor-title">Floor summary</h2>'
+      + '<table class="rep-ap-table">'
+      + '<thead><tr><th>Floor</th><th>Building</th><th>APs</th><th>Directional</th><th>Omni</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table>'
+      + '</section>';
+  }
+
+  function renderSignOff() {
+    return '<section class="rep-floor-section rep-signoff">'
+      + '<h2 class="rep-floor-title">Approval</h2>'
+      + '<table class="rep-signoff-table">'
+      + '<thead><tr><th></th><th>Name</th><th>Signature</th><th>Date</th></tr></thead>'
+      + '<tbody>'
+      + '<tr><td class="rep-signoff-role">Prepared by</td><td class="rep-signoff-line"></td><td class="rep-signoff-line"></td><td class="rep-signoff-line"></td></tr>'
+      + '<tr><td class="rep-signoff-role">Reviewed by</td><td class="rep-signoff-line"></td><td class="rep-signoff-line"></td><td class="rep-signoff-line"></td></tr>'
+      + '<tr><td class="rep-signoff-role">Approved by</td><td class="rep-signoff-line"></td><td class="rep-signoff-line"></td><td class="rep-signoff-line"></td></tr>'
+      + '</tbody></table>'
+      + '</section>';
+  }
+
   function renderApLocationReport(aps, opts, ctx) {
     var head = opts.cover
-      ? ctx.cover(aps.length, ctx.dateStr, 'Access points')
+      ? ctx.cover(aps.length, ctx.dateStr, 'Access points', opts, ctx)
       : ctx.inlineHeader(aps.length, ctx.dateStr, 'Access points');
 
     var byFloor = groupApsByFloor(aps, ctx);
@@ -2614,10 +2786,15 @@
       floorIdx++;
     });
 
+    var toc = opts.cover ? renderLocationTOC(byFloor, floorOrder, opts) : '';
+    var summary = renderLocationSummary(aps, ctx);
+    var matrix = renderFloorMatrix(byFloor, floorOrder, ctx);
     var audit = opts.nameAudit ? renderApNameAudit(aps, ctx) : '';
     var legend = opts.specs ? renderAntennaLegend(aps, ctx) : '';
+    var signoff = opts.signOff !== false ? renderSignOff() : '';
+    var foot = renderReportFooter(opts, ctx);
 
-    return head + sections + audit + legend + REPORT_FOOTER;
+    return head + toc + summary + matrix + sections + audit + legend + signoff + foot;
   }
 
   function renderApLocationOverview(fp, aps, opts, ctx) {
@@ -2626,6 +2803,7 @@
 
   function renderApLocationTable(aps, fp, opts, ctx) {
     var showDir = aps.some(function (ap) { return !apIsOmniOnly(ap); });
+    var showCP = opts.showChannelPower !== false;
     var rows = '';
     aps.forEach(function (ap) {
       var lbl = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
@@ -2640,6 +2818,23 @@
         if (!ap.name || !ap.name.trim()) nameIssue = 'Missing name';
         else if (/^[0-9a-f]{2}(:[0-9a-f]{2}){5}$/i.test(ap.name.trim())) nameIssue = 'MAC address as name';
         else if (/^AP\s*\d*$/i.test(ap.name.trim())) nameIssue = 'Generic name';
+      }
+      var cpCells = '';
+      if (showCP) {
+        var radios = proj.radios.filter(function (x) { return x.accessPointId === ap.id; });
+        var txParts = [], chParts = [];
+        radios.forEach(function (rd) {
+          var txp = rd.transmitPower != null ? rd.transmitPower : 15;
+          var band = _covBandFromChannel(rd.channelByCenterFrequencyDefinedNarrowChannels);
+          var bandLabel = _covBandLabel(band);
+          txParts.push(txp + ' dBm');
+          var ch = rd.channelByCenterFrequencyDefinedNarrowChannels;
+          if (ch && ch.length) {
+            chParts.push(freqToChannel(ch[0]) + ' <span class="rep-alt">(' + bandLabel + ')</span>');
+          }
+        });
+        cpCells = '<td class="rep-nowrap">' + (txParts.length ? txParts.join(', ') : '—') + '</td>'
+          + '<td class="rep-nowrap">' + (chParts.length ? chParts.join(', ') : '—') + '</td>';
       }
       var dirCells = '';
       if (showDir) {
@@ -2671,6 +2866,7 @@
         + '<td>' + WD.esc(ap.model || '—') + '</td>'
         + '<td>' + WD.esc(floorName) + '</td>'
         + '<td>' + WD.esc(buildingName) + '</td>'
+        + cpCells
         + dirCells
         + (opts.nameAudit ? '<td class="rep-loc-warn">' + WD.esc(nameIssue) + '</td>' : '')
         + '</tr>';
@@ -2679,15 +2875,21 @@
     var dirHeaders = showDir
       ? '<th>Mount</th><th>Height</th><th>Azimuth</th><th>Tilt</th><th>Antenna</th>'
       : '';
+    var cpHeaders = showCP ? '<th>TX Power</th><th>Channel</th>' : '';
+    var colCount = 6 + (showCP ? 2 : 0) + (showDir ? 5 : 0) + (opts.nameAudit ? 1 : 0);
 
     return '<table class="rep-ap-table rep-loc-table">'
       + '<thead><tr>'
       + '<th class="rep-num">#</th><th>AP name</th><th>Vendor</th><th>Model</th>'
       + '<th>Floor</th><th>Building</th>'
+      + cpHeaders
       + dirHeaders
       + (opts.nameAudit ? '<th>Naming issue</th>' : '')
       + '</tr></thead>'
-      + '<tbody>' + rows + '</tbody></table>';
+      + '<tbody>' + rows + '</tbody>'
+      + '<tfoot><tr><td colspan="' + colCount + '" class="rep-subtotal">'
+      + aps.length + ' access point' + (aps.length === 1 ? '' : 's') + ' on this floor'
+      + '</td></tr></tfoot></table>';
   }
 
   function renderApNameAudit(aps, ctx) {
@@ -3256,17 +3458,35 @@
       bestFor: 'Installer handoff with placement maps, directional aiming detail, and AP naming verification — handles omni, directional, and mixed buildings in one report.',
       sections: [
         { icon: '📄', title: 'Cover page',
-          description: 'Site name, AP + floor-plan counts, your logo, date.' },
+          description: 'Site name, client, preparer, project ref, AP + floor-plan counts, your logo, date.' },
+        { icon: '📑', title: 'Table of contents & project overview',
+          description: 'Section listing, key stats, and a floor-by-floor AP summary matrix.' },
         { icon: '🗺️', title: 'Scalable floor plan per floor',
           description: 'Every AP plotted with a labeled rounded marker and directional arrows. Large floors split into zoomed sections so labels stay legible.' },
         { icon: '📋', title: 'Per-floor AP table',
-          description: 'AP names, vendor, model, floor, building. When directional APs exist, adds mount, height, azimuth, tilt, and antenna columns automatically.' },
+          description: 'AP names, vendor, model, floor, building, TX power, channel. When directional APs exist, adds mount, height, azimuth, tilt, and antenna columns.' },
         { icon: '📡', title: 'Antenna specs reference',
-          description: 'Gain and beam width for each antenna model used.' },
+          description: 'Gain, beam width, and AP usage count for each antenna model.' },
         { icon: '🔍', title: 'Naming audit',
           description: 'Highlights APs with missing names, MAC addresses used as names, or generic "AP1"-style names that need renaming.' },
+        { icon: '✍️', title: 'Sign-off block',
+          description: 'Prepared / Reviewed / Approved signature lines for formal handoff.' },
       ],
       sidebar: [
+        { id: 'clientName', type: 'text', label: 'Client / company', default: '',
+          placeholder: 'e.g. Acme Corp' },
+        { id: 'preparedBy', type: 'text', label: 'Prepared by', default: '',
+          placeholder: 'e.g. Jane Smith' },
+        { id: 'projectRef', type: 'text', label: 'Project reference', default: '',
+          placeholder: 'e.g. PO-2026-0042' },
+        { id: 'revision', type: 'text', label: 'Revision', default: '',
+          placeholder: 'e.g. Rev A' },
+        { id: 'showChannelPower', label: 'Show channel & TX power columns', default: true,
+          description: 'Adds per-radio TX power and channel columns to the AP table.' },
+        { id: 'signOff', label: 'Include sign-off / approval block', default: true,
+          description: 'Adds a Prepared / Reviewed / Approved signature table at the end.' },
+        { id: 'confidential', label: 'Confidentiality notice in footer', default: false,
+          description: 'Adds "CONFIDENTIAL" to the report footer.' },
         { id: 'shortLabels', label: 'Short number labels on the plan', default: true,
           description: 'When your AP names end with an "AP" designator (e.g. "…AP42"), show just the "42" on markers. Turn off to always show the full AP name.' },
         { id: 'specs',    label: 'Antenna specs reference', default: true,
