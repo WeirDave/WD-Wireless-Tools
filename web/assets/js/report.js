@@ -1299,7 +1299,9 @@
     host.innerHTML = r.render(aps, opts, ctx);
     document.title = reportDocTitle();
     if (typeof r.postRender === 'function') {
-      try { r.postRender(host, opts, ctx); } catch (e) { console.error('postRender', e); }
+      try {
+        Promise.resolve(r.postRender(host, opts, ctx)).catch(function (e) { console.error('postRender', e); });
+      } catch (e) { console.error('postRender', e); }
     }
   };
 
@@ -1543,6 +1545,9 @@
   }
 
   function cropAntennaSegment(overlayEl) {
+    sizeAntennaSegmentForPrint(overlayEl);
+    if (overlayEl._segCropPromise) return overlayEl._segCropPromise;
+    if (overlayEl.getAttribute('data-seg-cropped') === '1') return Promise.resolve();
     var img = overlayEl.querySelector('img');
     if (!img) return Promise.resolve();
     var W = parseFloat(overlayEl.getAttribute('data-orig-w'));
@@ -1553,19 +1558,19 @@
     var y1 = parseFloat(overlayEl.getAttribute('data-seg-y1'));
     if (!W || !H) return Promise.resolve();
 
-    return new Promise(function (resolve) {
+    overlayEl._segCropPromise = new Promise(function (resolve) {
       function ready() {
-        try { doCrop(); } catch (e) { console.error('segment crop', e); }
-        resolve();
+        try { doCrop(resolve); } catch (e) { console.error('segment crop', e); resolve(); }
       }
       if (img.complete && img.naturalWidth) ready();
       else { img.addEventListener('load', ready, {once: true});
              img.addEventListener('error', function () { resolve(); }, {once: true}); }
     });
+    return overlayEl._segCropPromise;
 
-    function doCrop() {
+    function doCrop(done) {
       var natW = img.naturalWidth, natH = img.naturalHeight;
-      if (!natW || !natH) return;
+      if (!natW || !natH) { done(); return; }
       var srcX = Math.max(0, Math.round(natW * x0 / W));
       var srcY = Math.max(0, Math.round(natH * y0 / H));
       var srcW = Math.min(natW - srcX, Math.max(1, Math.round(natW * (x1 - x0) / W)));
@@ -1576,17 +1581,57 @@
       c.height = Math.max(1, Math.round(srcH * outScale));
       c.getContext('2d').drawImage(img, srcX, srcY, srcW, srcH, 0, 0, c.width, c.height);
       c.toBlob(function (blob) {
-        if (!blob) return;
-        img.src = URL.createObjectURL(blob);
+        if (!blob) { done(); return; }
+        var croppedUrl = URL.createObjectURL(blob);
+        function settled() {
+          overlayEl.setAttribute('data-seg-cropped', '1');
+          done();
+        }
+        img.addEventListener('load', settled, {once: true});
+        img.addEventListener('error', settled, {once: true});
+        img.src = croppedUrl;
       }, 'image/jpeg', 0.9);
     }
   }
 
-  function applyAntennaSegmentCrop(host, opts) {
-    if (!opts.segmented) return;
-    var overlays = host.querySelectorAll('.rep-overview-plan[data-seg="1"]');
-    for (var i = 0; i < overlays.length; i++) cropAntennaSegment(overlays[i]);
+  function sizeAntennaSegmentForPrint(overlayEl) {
+    var x0 = parseFloat(overlayEl.getAttribute('data-seg-x0'));
+    var y0 = parseFloat(overlayEl.getAttribute('data-seg-y0'));
+    var x1 = parseFloat(overlayEl.getAttribute('data-seg-x1'));
+    var y1 = parseFloat(overlayEl.getAttribute('data-seg-y1'));
+    var ratio = (x1 - x0) / (y1 - y0);
+    if (!isFinite(ratio) || ratio <= 0) return;
+
+    // Fit both US Letter and A4 portrait after the page chrome around the map.
+    var maxWidthIn = 7.2;
+    var maxHeightIn = overlayEl.closest('.rep-seg-index') ? 8.15 : 7.9;
+    var widthIn = Math.min(maxWidthIn, maxHeightIn * ratio);
+    var heightIn = widthIn / ratio;
+    overlayEl.style.setProperty('--print-w', widthIn.toFixed(3) + 'in');
+    overlayEl.style.setProperty('--print-h', heightIn.toFixed(3) + 'in');
   }
+
+  function applyAntennaSegmentCrop(host, opts) {
+    if (!opts.segmented) return Promise.resolve();
+    var overlays = host.querySelectorAll('.rep-overview-plan[data-seg="1"]');
+    var pending = [];
+    for (var i = 0; i < overlays.length; i++) pending.push(cropAntennaSegment(overlays[i]));
+    return Promise.all(pending);
+  }
+
+  window.printReport = async function () {
+    var host = document.getElementById('reportCanvas');
+    await applyAntennaSegmentCrop(host, collectOpts());
+    var images = Array.prototype.slice.call(host.querySelectorAll('img'));
+    await Promise.all(images.map(function (img) {
+      if (img.complete) return Promise.resolve();
+      return new Promise(function (resolve) {
+        img.addEventListener('load', resolve, {once: true});
+        img.addEventListener('error', resolve, {once: true});
+      });
+    }));
+    window.print();
+  };
 
 
 
@@ -2658,19 +2703,31 @@
     floorOrder.forEach(function (fp) {
       if (!byFloor[fp.id] || !byFloor[fp.id].length) return;
       var apCount = byFloor[fp.id].length;
-      var detail = apCount + ' AP' + (apCount === 1 ? '' : 's');
+      var parts = [];
       if (opts.segmented && fp.id !== '_none') {
         var W = fp.width || 1, H = fp.height || 1;
         var grid = computeAntennaGrid(W, H, byFloor[fp.id], opts);
         if (grid.cols * grid.rows > 1) {
-          detail += ', ' + (grid.cols * grid.rows) + ' grid sections';
+          parts.push('Sectional grid overview');
+          parts.push((grid.cols * grid.rows) + ' detail sections with AP placement maps');
+        } else {
+          parts.push('Full floor plan with AP placements');
         }
+      } else {
+        parts.push('Floor plan with AP placements');
       }
-      items += '<li>' + WD.esc(fp.name || 'Floor plan') + ' <span class="rep-toc-detail">(' + detail + ')</span></li>';
+      parts.push('Installation table — ' + apCount + ' AP' + (apCount === 1 ? '' : 's'));
+      items += '<li><b>' + WD.esc(fp.name || 'Floor plan') + '</b>'
+        + '<div class="rep-toc-detail">' + parts.join('<br>') + '</div></li>';
     });
+    var extra = '';
+    if (opts.nameAudit) extra += '<li><b>AP name audit</b><div class="rep-toc-detail">Naming pattern analysis and outlier detection</div></li>';
+    if (opts.specs) extra += '<li><b>Antenna reference</b><div class="rep-toc-detail">Antenna models, specs, and usage counts</div></li>';
+    if (opts.signOff !== false) extra += '<li><b>Sign-off</b><div class="rep-toc-detail">Prepared / Reviewed / Approved</div></li>';
     return '<section class="rep-floor-section rep-toc">'
       + '<h2 class="rep-floor-title">Contents</h2>'
-      + '<ol class="rep-toc-list">' + items + '</ol>'
+      + '<p class="rep-toc-subtitle">Access point installation — sectional placement maps, installation details, and antenna reference for each floor.</p>'
+      + '<ol class="rep-toc-list">' + items + extra + '</ol>'
       + '</section>';
   }
 
@@ -2827,7 +2884,7 @@
           var txp = rd.transmitPower != null ? rd.transmitPower : 15;
           var band = _covBandFromChannel(rd.channelByCenterFrequencyDefinedNarrowChannels);
           var bandLabel = _covBandLabel(band);
-          txParts.push(txp + ' dBm');
+          txParts.push(ctx.fmt(txp, 1) + ' dBm');
           var ch = rd.channelByCenterFrequencyDefinedNarrowChannels;
           if (ch && ch.length) {
             chParts.push(freqToChannel(ch[0]) + ' <span class="rep-alt">(' + bandLabel + ')</span>');
@@ -2878,7 +2935,36 @@
     var cpHeaders = showCP ? '<th>TX Power</th><th>Channel</th>' : '';
     var colCount = 6 + (showCP ? 2 : 0) + (showDir ? 5 : 0) + (opts.nameAudit ? 1 : 0);
 
+    // Relative print widths. These are normalized below so optional columns
+    // still consume exactly 100% without making the whole PDF scale down.
+    var printCols = [
+      { key: 'num', weight: 4 },
+      { key: 'name', weight: 17 },
+      { key: 'vendor', weight: 7 },
+      { key: 'model', weight: 7 },
+      { key: 'floor', weight: 6 },
+      { key: 'building', weight: 14 },
+    ];
+    if (showCP) {
+      printCols.push({ key: 'tx', weight: 22 });
+      printCols.push({ key: 'channel', weight: 25 });
+    }
+    if (showDir) {
+      printCols.push({ key: 'mount', weight: 10 });
+      printCols.push({ key: 'height', weight: 9 });
+      printCols.push({ key: 'azimuth', weight: 8 });
+      printCols.push({ key: 'tilt', weight: 6 });
+      printCols.push({ key: 'antenna', weight: 14 });
+    }
+    if (opts.nameAudit) printCols.push({ key: 'audit', weight: 12 });
+    var printWeight = printCols.reduce(function (sum, col) { return sum + col.weight; }, 0);
+    var colgroup = '<colgroup>' + printCols.map(function (col) {
+      return '<col class="rep-col-' + col.key + '" style="--print-col-w:'
+        + (col.weight * 100 / printWeight).toFixed(2) + '%">';
+    }).join('') + '</colgroup>';
+
     return '<table class="rep-ap-table rep-loc-table">'
+      + colgroup
       + '<thead><tr>'
       + '<th class="rep-num">#</th><th>AP name</th><th>Vendor</th><th>Model</th>'
       + '<th>Floor</th><th>Building</th>'
