@@ -303,6 +303,101 @@ bulkSync('to-cloud').then(async () => {
         )
         self.assertEqual(response.status_code, 403)
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_wall_swap_undo_round_trips_type_changes_and_deletes(self):
+        # Visual Wall Swap edits walls in bulk, so an accidental swap has to be
+        # reversible. The pure history core is kept free of DOM/state so it can
+        # be exercised directly here.
+        script = ROOT / "web" / "assets" / "js" / "walls-swap.js"
+        node_program = r"""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+const start = source.indexOf('  // --- pure history core');
+const end = source.indexOf('  // --- end pure history core ---');
+if (start < 0 || end < 0) throw new Error('pure history core markers not found');
+eval(source.slice(start, end));
+
+function assert(cond, msg) { if (!cond) { console.error('FAIL: ' + msg); process.exit(1); } }
+
+// --- a swap, then its undo, must restore the exact original types ---
+const segments = [
+  {id: 'a', wallTypeId: 'wood'},
+  {id: 'b', wallTypeId: 'wood'},
+  {id: 'c', wallTypeId: 'concrete'},
+];
+const original = JSON.stringify(segments);
+const changes = [
+  {id: 'a', from: 'wood', to: 'rollup'},
+  {id: 'b', from: 'wood', to: 'rollup'},
+];
+assert(applyTypeChanges(segments, changes) === 2, 'swap should touch two segments');
+assert(segments[0].wallTypeId === 'rollup', 'a swapped');
+assert(segments[1].wallTypeId === 'rollup', 'b swapped');
+assert(segments[2].wallTypeId === 'concrete', 'c untouched by a targeted swap');
+
+applyTypeChanges(segments, invertTypeChanges(changes));
+assert(JSON.stringify(segments) === original, 'undo must restore the original types exactly');
+
+// redo, then undo again - the round trip has to be stable
+applyTypeChanges(segments, changes);
+applyTypeChanges(segments, invertTypeChanges(changes));
+assert(JSON.stringify(segments) === original, 'undo after redo must still restore the original');
+
+// --- segments that use the alternate `wallType` key ---
+const alt = [{id: 'x', wallType: 'wood'}];
+applyTypeChanges(alt, [{id: 'x', from: 'wood', to: 'rollup'}]);
+assert(alt[0].wallType === 'rollup', 'alternate wallType key is written');
+assert(alt[0].wallTypeId === undefined, 'alternate key must not gain a wallTypeId');
+
+// --- an id that no longer exists must not throw or invent a segment ---
+assert(applyTypeChanges(segments, [{id: 'gone', from: 'x', to: 'y'}]) === 0, 'missing id is skipped');
+assert(segments.length === 3, 'no segment invented');
+
+// --- undoing a delete restores position, not just presence ---
+const full = [{id:'a'},{id:'b'},{id:'c'},{id:'d'}];
+const before = JSON.stringify(full);
+const removed = [{index: 1, seg: full[1]}, {index: 3, seg: full[3]}];
+const afterDelete = full.filter(s => s.id !== 'b' && s.id !== 'd');
+assert(afterDelete.length === 2, 'two removed');
+const restored = restoreRemoved(afterDelete, removed);
+assert(JSON.stringify(restored) === before, 'undo of a delete must restore original order');
+
+// out-of-order removal records must still restore correctly
+const restored2 = restoreRemoved(afterDelete, [removed[1], removed[0]]);
+assert(JSON.stringify(restored2) === before, 'restore is independent of record order');
+"""
+        result = subprocess.run(
+            ["node", "-e", node_program, str(script)],
+            capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_wall_swap_keeps_the_selection_after_applying_a_swap(self):
+        # Regression guard. Getting a wall type wrong and immediately
+        # re-swapping the same segments to the right one is the recovery path
+        # the user relies on, so applySelectionSwap must not clear the
+        # selection. See the note above the function body.
+        source = (ROOT / "web" / "assets" / "js" / "walls-swap.js").read_text(encoding="utf-8")
+        start = source.index("window.applySelectionSwap = function ()")
+        end = source.index("window.applyQuickSwap = function ()", start)
+        body = source[start:end]
+        self.assertNotIn("clearSelectionState()", body)
+        self.assertNotIn("state.selected.clear()", body)
+        # and it must record an undo entry
+        self.assertIn("pushHistory(", body)
+
+    def test_wall_swap_records_undo_history_for_every_destructive_action(self):
+        source = (ROOT / "web" / "assets" / "js" / "walls-swap.js").read_text(encoding="utf-8")
+        for fn, nxt in (
+            ("window.applySelectionSwap = function ()", "window.applyQuickSwap = function ()"),
+            ("window.applyQuickSwap = function ()", "window.deleteSelectedWalls = function ()"),
+            ("window.deleteSelectedWalls = function ()", "function writeSegmentsBack()"),
+        ):
+            with self.subTest(operation=fn):
+                start = source.index(fn)
+                body = source[start:source.index(nxt, start)]
+                self.assertIn("pushHistory(", body)
+
     def test_versions_manifest_has_every_tool(self):
         versions = json.loads((ROOT / "web" / "assets" / "versions.json").read_text(encoding="utf-8"))
         self.assertEqual(set(versions), {"suite", "cloud", "walls", "report", "scale", "squirrel"})
