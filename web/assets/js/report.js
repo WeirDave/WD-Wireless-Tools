@@ -888,6 +888,7 @@
   var _cropBoxes = {};
   var _dragState = null;
   var _gridZoom = 1, _gridPanX = 0, _gridPanY = 0;
+  var _spaceUnsub = null;
   var _panState = null;
 
   window.openGridConfig = function () {
@@ -1072,15 +1073,42 @@
     }, { passive: false });
 
     container.addEventListener('mousedown', function (e) {
-      if (e.button !== 0) return;
-      var hit = e.target.closest('[data-edge]');
-      if (hit) return;
+      // Space, middle-drag and right-drag pan over anything, crop handles
+      // included -- that is what makes them a modifier rather than a mode.
+      // Plain left-drag still pans the empty parts of the map as it always has.
+      var forced = WD.PanZoom.isPanGesture(e);
+      if (!forced) {
+        if (e.button !== 0) return;
+        if (e.target.closest('[data-edge]')) return;
+      }
       e.preventDefault();
-      container.classList.add('pan-active');
-      _panState = { startX: e.clientX, startY: e.clientY, origPX: _gridPanX, origPY: _gridPanY };
-      document.addEventListener('mousemove', onGridPan);
-      document.addEventListener('mouseup', endGridPan);
+      startGridPan(e);
     });
+
+    // Right-drag pans, so the context menu would only ever land mid-gesture.
+    container.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+    // Held Space shows the open hand before the drag starts, and letting go
+    // mid-drag drops the map where it is instead of leaving it stuck to the
+    // pointer.
+    _spaceUnsub = WD.PanZoom.onChange(function (isHeld) {
+      var el = document.getElementById('gridPreviewContainer');
+      if (!el) return;
+      el.classList.toggle('space-pan', isHeld);
+      if (!isHeld && _panState && _panState.viaSpace) endGridPan();
+    });
+  }
+
+  function startGridPan(e) {
+    var container = document.getElementById('gridPreviewContainer');
+    if (container) container.classList.add('pan-active');
+    _panState = {
+      startX: e.clientX, startY: e.clientY,
+      origPX: _gridPanX, origPY: _gridPanY,
+      viaSpace: WD.PanZoom.isHeld(),
+    };
+    document.addEventListener('mousemove', onGridPan);
+    document.addEventListener('mouseup', endGridPan);
   }
 
   window.resetGridZoom = function () {
@@ -1103,6 +1131,18 @@
     if (container) container.classList.remove('pan-active');
     document.removeEventListener('mousemove', onGridPan);
     document.removeEventListener('mouseup', endGridPan);
+  }
+
+  // Closing the modal hands Space back to the page; without this the key would
+  // stay swallowed for the rest of the session.
+  function releaseGridPanKeys() {
+    if (_spaceUnsub) { _spaceUnsub(); _spaceUnsub = null; }
+    var container = document.getElementById('gridPreviewContainer');
+    if (container) {
+      container.classList.remove('space-pan', 'pan-active');
+      container._zoomBound = false;
+    }
+    endGridPan();
   }
 
   function bindCropHandles() {
@@ -1132,6 +1172,10 @@
   }
 
   function startCropDrag(e) {
+    // Space makes the whole map a pan surface. These handles stop propagation,
+    // so unless they stand down here the gesture dies on them: the container
+    // never sees the mousedown and nothing pans.
+    if (WD.PanZoom.isHeld()) return;
     e.preventDefault();
     e.stopPropagation();
     var edge = e.target.getAttribute('data-edge');
@@ -1261,6 +1305,7 @@
     currentOpts.segRows = _gridRows;
     currentOpts.cropBoxes = Object.keys(_cropBoxes).length ? _cropBoxes : null;
     configureDirty = true;
+    releaseGridPanKeys();
     document.getElementById('gridConfigModal').hidden = true;
     renderReportOpts();
   };
@@ -1280,6 +1325,7 @@
     _dragState = null;
     document.removeEventListener('mousemove', onCropDrag);
     document.removeEventListener('mouseup', endCropDrag);
+    releaseGridPanKeys();
     document.getElementById('gridConfigModal').hidden = true;
   };
 

@@ -1018,6 +1018,90 @@
   checkServerVersion();
   setInterval(checkServerVersion, 30000);
 
+  // ── Space-to-pan, shared by every pannable canvas ─────────────────────────
+  // Ekahau pans on hold-Space-and-drag, and that is the reflex the user brings
+  // to this suite, so Quick Walls and Report have to answer to the same key.
+  // The state lives here rather than in each tool because a held Space is a
+  // property of the window, not of one canvas: the keyup can land anywhere,
+  // including on a page element the canvas never sees.
+  WD.PanZoom = (function () {
+    var held = false;
+    var subs = [];
+
+    // Space belongs to whatever the user is typing into. Report has Client and
+    // Prepared by, Quick Walls has the wall-type and template name boxes; in
+    // any of them Space must produce a space, not grab the canvas.
+    function isTypingTarget(el) {
+      if (!el) return false;
+      if (el.isContentEditable) return true;
+      var tag = el.tagName;
+      if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (tag !== 'INPUT') return false;
+      // Checkboxes, radios and buttons are activated by Space, but they are not
+      // text entry -- swallowing it there is what stops a focused checkbox from
+      // toggling every time you reach for the pan.
+      var t = (el.type || 'text').toLowerCase();
+      return t !== 'checkbox' && t !== 'radio' && t !== 'button' && t !== 'submit' && t !== 'reset';
+    }
+
+    function notify() {
+      for (var i = 0; i < subs.length; i++) {
+        try { subs[i](held); } catch (e) {}
+      }
+    }
+
+    function setHeld(next) {
+      if (held === next) return;
+      held = next;
+      notify();
+    }
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== ' ' && e.key !== 'Spacebar') return;
+      if (e.repeat) { if (subs.length) e.preventDefault(); return; }
+      if (isTypingTarget(e.target)) return;
+      if (!subs.length) return;      // nothing on this page pans; leave Space alone
+      // Swallowed so the page does not scroll and a focused button does not fire.
+      e.preventDefault();
+      setHeld(true);
+    });
+
+    document.addEventListener('keyup', function (e) {
+      if (e.key !== ' ' && e.key !== 'Spacebar') return;
+      if (!held) return;
+      e.preventDefault();
+      setHeld(false);
+    });
+
+    // A Space held while the window loses focus never delivers its keyup, which
+    // would otherwise leave the canvas stuck in pan mode until the next press.
+    window.addEventListener('blur', function () { setHeld(false); });
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) setHeld(false);
+    });
+
+    return {
+      isHeld: function () { return held; },
+      isTypingTarget: isTypingTarget,
+      // Registering makes this page one that cares about Space; returns an
+      // unsubscribe so a closed modal stops claiming the key.
+      onChange: function (fn) {
+        subs.push(fn);
+        return function () {
+          var i = subs.indexOf(fn);
+          if (i >= 0) subs.splice(i, 1);
+          if (!subs.length) setHeld(false);
+        };
+      },
+      // True when a mousedown should pan rather than do the tool's own job:
+      // Space held, middle button, or right button -- the three ways Ekahau
+      // lets you grab the map without changing tool.
+      isPanGesture: function (e) {
+        return held || e.button === 1 || e.button === 2;
+      },
+    };
+  })();
+
   window.WD = WD;
 
   window.toggleTheme = WD.toggleTheme;

@@ -6825,6 +6825,10 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
 .grid-cell-count { font-size: 12px; color: var(--text-3); }
 .grid-zoom-hint { font-size: 11px; color: var(--text-3); margin-top: 4px; }
 .grid-preview-container { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; padding: 12px; overflow: hidden; position: relative; cursor: grab; }
+/* Space held: the whole map is grabbable, crop handles included, so the resize
+   cursors those handles carry must not contradict what a drag will now do.
+   Ordered before .pan-active so the closed hand still wins during the drag. */
+.grid-preview-container.space-pan, .grid-preview-container.space-pan * { cursor: grab !important; }
 .grid-preview-container.pan-active, .grid-preview-container.pan-active * { cursor: grabbing !important; }
 .grid-preview-image { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; position: relative; }
 .grid-preview-image svg { max-width: 100%; max-height: 100%; user-select: none; }
