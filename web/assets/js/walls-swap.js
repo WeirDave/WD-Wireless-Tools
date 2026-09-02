@@ -11,10 +11,18 @@
     loadedImage: null,
     imgW: 0, imgH: 0,
 
+    // `selected` is the working set the marquee/click/legend produced.
+    // `excluded` is what the user has since unchecked out of it. Everything
+    // that acts on a selection goes through targetIds() = selected - excluded,
+    // so a fresh marquee hit always arrives checked.
     selected: new Set(),
+    excluded: new Set(),
+    collapsedTypes: new Set(),
+    hoverSegId: null,
+    metersPerUnit: 0,
 
     view: { x: 0, y: 0, scale: 1 },
-    fitScale: 1,
+    fitScale: 0,
 
     tool: 'marquee',
     isDragging: false,
@@ -22,6 +30,7 @@
     dragCurrent: null,
     isPanning: false,
     spaceHeld: false,
+    touch: null,
 
     segGeom: [],
   };
@@ -152,7 +161,17 @@
     state.imageBlobs.forEach(url => URL.revokeObjectURL(url));
     state.imageBlobs.clear();
     state.loadedImage = null;
-    state.selected.clear();
+    // A drag or touch in flight when the modal closes would otherwise leave
+    // these latched for the next open.
+    state.isPanning = false;
+    state.isDragging = false;
+    state.dragStart = null;
+    state.dragCurrent = null;
+    state.touch = null;
+    state.spaceHeld = false;
+    const wrap = $('swapCanvasWrap');
+    if (wrap) wrap.classList.remove('pan-active');
+    clearSelectionState();
   };
 
   async function loadEsxData(zip) {
@@ -168,6 +187,7 @@
           imageId: f.imageId || f.image?.id || f.image,
           w: f.width || 0,
           h: f.height || 0,
+          metersPerUnit: f.metersPerUnit || 0,
         });
       });
     }
@@ -236,9 +256,11 @@
 
   async function switchFloor(floorId) {
     state.currentFloorId = floorId;
-    state.selected.clear();
+    state.fitScale = 0;
+    clearSelectionState();
     const floor = state.floors.find(f => f.id === floorId);
     if (!floor) return;
+    state.metersPerUnit = floor.metersPerUnit || 0;
 
     $('swapCanvasEmpty').textContent = 'Loading floor plan…';
     $('swapCanvasEmpty').style.display = 'flex';
@@ -264,7 +286,14 @@
     state.imgH = floor.h || (img ? img.naturalHeight : 800);
 
     resizeCanvas();
-    zoomFit();
+    if (!zoomFit()) {
+      // rAF normally lands the moment layout settles, but it is throttled in a
+      // background tab — the timeout is the backstop so the plan is never left
+      // unfitted.
+      const retry = () => { if (state.fitScale > 0) return; resizeCanvas(); zoomFit(); };
+      requestAnimationFrame(retry);
+      setTimeout(retry, 80);
+    }
     renderLegend();
     renderSelection();
     updateStatus();
@@ -327,41 +356,236 @@
     `).join('');
   }
 
+  const M_TO_FT = 3.28084;
+  const NO_TYPE = '__notype__';
+
+  function segGeomById(id) {
+    return state.segGeom.find(g => g.id === id) || null;
+  }
+
+  // The set that actually gets swapped/deleted: everything the marquee caught
+  // minus whatever the user has unchecked since.
+  function targetIds() {
+    const out = [];
+    state.selected.forEach(id => { if (!state.excluded.has(id)) out.push(id); });
+    return out;
+  }
+
+  function targetCount() {
+    let n = 0;
+    state.selected.forEach(id => { if (!state.excluded.has(id)) n++; });
+    return n;
+  }
+
+  // Anything unchecked but no longer in the selection is meaningless — drop it
+  // so a stale exclusion can't silently spare a segment in a later marquee.
+  function pruneExcluded() {
+    state.excluded.forEach(id => { if (!state.selected.has(id)) state.excluded.delete(id); });
+  }
+
+  // Segments enter the selection checked, always. Re-marqueeing over something
+  // you previously unchecked re-checks it.
+  function addToSelection(ids) {
+    ids.forEach(id => { state.selected.add(id); state.excluded.delete(id); });
+  }
+
+  function clearSelectionState() {
+    state.selected.clear();
+    state.excluded.clear();
+    state.collapsedTypes.clear();
+    state.hoverSegId = null;
+  }
+
+  function segLengthFt(g) {
+    if (!state.metersPerUnit) return null;
+    const px = Math.hypot(g.x2 - g.x1, g.y2 - g.y1);
+    return px * state.metersPerUnit * M_TO_FT;
+  }
+
+  function segLengthLabel(g) {
+    const ft = segLengthFt(g);
+    if (!Number.isFinite(ft) || ft <= 0) return '';
+    return (ft < 10 ? ft.toFixed(1) : Math.round(ft)) + ' ft';
+  }
+
+  function groupKeyOf(g) {
+    return g.typeId || NO_TYPE;
+  }
+
+  // Group the current selection by wall type, longest segment first inside each
+  // group — a 14 ft bay door sorts above the 3 ft man doors it is mixed in with.
+  function selectionGroups() {
+    const map = new Map();
+    state.selected.forEach(id => {
+      const g = segGeomById(id);
+      if (!g) return;
+      const key = groupKeyOf(g);
+      if (!map.has(key)) {
+        const wt = typeById(g.typeId);
+        map.set(key, {
+          key,
+          name: wt?.name || '(deleted wall type)',
+          color: wt ? safeColor(wt.color) : '#888',
+          segs: [],
+        });
+      }
+      map.get(key).segs.push(g);
+    });
+    const groups = [...map.values()];
+    groups.forEach(gr => {
+      gr.segs.sort((a, b) => (segLengthFt(b) || 0) - (segLengthFt(a) || 0));
+      gr.checked = gr.segs.filter(x => !state.excluded.has(x.id)).length;
+    });
+    groups.sort((a, b) => b.segs.length - a.segs.length || a.name.localeCompare(b.name));
+    return groups;
+  }
+
   function renderSelection() {
     const el = $('swapSelBreakdown');
-    const countEl = $('swapSelCount');
-    countEl.textContent = state.selected.size;
+    const total = state.selected.size;
 
-    if (!state.selected.size) {
-      el.innerHTML = '<div class="swap-empty">Drag a marquee to select walls, or click walls with the arrow tool.</div>';
-      $('swapApplyBtn').disabled = true;
-      $('swapDeleteBtn').disabled = true;
+    if (!total) {
+      el.innerHTML = '<div class="swap-empty">Drag a marquee to select walls, or click walls with the arrow tool. Everything you catch starts checked — uncheck what you don’t want to change.</div>';
+      refreshSelectionMeta();
       return;
     }
 
-    const counts = new Map();
-    state.selected.forEach(id => {
-      const g = state.segGeom.find(x => x.id === id);
-      if (!g) return;
-      counts.set(g.typeId, (counts.get(g.typeId) || 0) + 1);
-    });
-    const rows = [];
-    counts.forEach((count, typeId) => {
-      const wt = typeById(typeId);
-      rows.push({ name: wt?.name || '(unknown)', color: wt ? safeColor(wt.color) : '#888', count });
-    });
-    rows.sort((a, b) => b.count - a.count);
-    el.innerHTML = rows.map(r => `
-      <div class="swap-sel-row">
-        <span class="swap-legend-swatch" style="--swap-swatch:${r.color}"></span>
-        <span class="swap-legend-name">${esc(r.name)}</span>
-        <span class="swap-legend-count">${r.count}</span>
-      </div>
-    `).join('');
+    const scrollTop = el.scrollTop;
+    const groups = selectionGroups();
+    el.innerHTML = groups.map(gr => {
+      const collapsed = state.collapsedTypes.has(gr.key);
+      const rows = gr.segs.map((g, i) => {
+        const len = segLengthLabel(g);
+        return '<label class="swap-seg-row" '
+          + 'onmouseenter="swapHoverSeg(\'' + escJsStr(g.id) + '\',1)" '
+          + 'onmouseleave="swapHoverSeg(\'' + escJsStr(g.id) + '\',0)">'
+          + '<input type="checkbox" data-seg-id="' + esc(g.id) + '"'
+          + (state.excluded.has(g.id) ? '' : ' checked')
+          + ' onchange="toggleSwapSeg(this)">'
+          + '<span class="swap-seg-name">Segment ' + (i + 1) + '</span>'
+          + (len ? '<span class="swap-seg-len">' + esc(len) + '</span>' : '')
+          + '</label>';
+      }).join('');
+      const parentAttrs = gr.checked === gr.segs.length ? ' checked'
+        : (gr.checked === 0 ? '' : ' data-indeterminate="1"');
+      return '<div class="swap-sel-group' + (collapsed ? ' is-collapsed' : '') + '" '
+        + 'data-group-key="' + esc(gr.key) + '">'
+        + '<div class="swap-sel-group-head">'
+        +   '<button type="button" class="swap-sel-group-chevron" '
+        +     'onclick="toggleSwapGroupCollapse(\'' + escJsStr(gr.key) + '\')" '
+        +     'title="Show the individual segments">▾</button>'
+        +   '<input type="checkbox" class="swap-sel-group-check" '
+        +     'data-group-key="' + esc(gr.key) + '"' + parentAttrs
+        +     ' onchange="toggleSwapGroup(this)" '
+        +     'title="Check or uncheck every ' + esc(gr.name) + ' in the selection">'
+        +   '<span class="swap-legend-swatch" style="--swap-swatch:' + gr.color + '"></span>'
+        +   '<span class="swap-legend-name">' + esc(gr.name) + '</span>'
+        +   '<span class="swap-sel-group-count">' + gr.checked + ' of ' + gr.segs.length + '</span>'
+        + '</div>'
+        + '<div class="swap-sel-group-body">' + rows + '</div>'
+        + '</div>';
+    }).join('');
 
-    $('swapApplyBtn').disabled = !$('swapTargetType').value;
-    $('swapDeleteBtn').disabled = false;
+    syncIndeterminate();
+    el.scrollTop = scrollTop;
+    refreshSelectionMeta();
   }
+
+  // `indeterminate` is a property, not an attribute — it cannot be set in markup.
+  function syncIndeterminate() {
+    document.querySelectorAll('#swapSelBreakdown .swap-sel-group-check').forEach(cb => {
+      cb.indeterminate = cb.getAttribute('data-indeterminate') === '1';
+    });
+  }
+
+  // The blast radius goes on the buttons themselves, so it is unambiguous
+  // before you commit.
+  function updateActionButtons() {
+    const n = targetCount();
+    const applyBtn = $('swapApplyBtn');
+    const delBtn = $('swapDeleteBtn');
+    const noun = 'segment' + (n === 1 ? '' : 's');
+    applyBtn.textContent = n ? 'Swap ' + n + ' ' + noun : 'Swap';
+    applyBtn.disabled = !n || !$('swapTargetType').value;
+    delBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" '
+      + 'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
+      + '<path d="M2.5 4h11M6 4V2.5h4V4M4 4l1 9.5h6L12 4"/></svg>'
+      + (n ? 'Delete ' + n + ' ' + noun : 'Delete selected');
+    delBtn.disabled = !n;
+  }
+
+  function refreshSelectionMeta() {
+    const countEl = $('swapSelCount');
+    const total = state.selected.size;
+    const checked = targetCount();
+    countEl.textContent = (checked === total) ? String(total) : (checked + ' / ' + total);
+    countEl.classList.toggle('is-partial', checked !== total);
+    updateActionButtons();
+  }
+
+  function refreshGroupHead(key) {
+    const host = document.querySelector('#swapSelBreakdown .swap-sel-group[data-group-key="'
+      + CSS.escape(key) + '"]');
+    if (!host) return;
+    let total = 0, checked = 0;
+    state.selected.forEach(id => {
+      const g = segGeomById(id);
+      if (!g || groupKeyOf(g) !== key) return;
+      total++;
+      if (!state.excluded.has(id)) checked++;
+    });
+    const countEl = host.querySelector('.swap-sel-group-count');
+    if (countEl) countEl.textContent = checked + ' of ' + total;
+    const parent = host.querySelector('.swap-sel-group-check');
+    if (parent) {
+      parent.checked = total > 0 && checked === total;
+      parent.indeterminate = checked > 0 && checked < total;
+    }
+  }
+
+  // Row toggles patch the DOM in place rather than re-rendering the panel — a
+  // full rebuild would re-sort groups and scroll away from what you are doing.
+  window.toggleSwapSeg = function (cb) {
+    const id = cb.getAttribute('data-seg-id');
+    if (cb.checked) state.excluded.delete(id); else state.excluded.add(id);
+    const g = segGeomById(id);
+    if (g) refreshGroupHead(groupKeyOf(g));
+    refreshSelectionMeta();
+    render();
+  };
+
+  window.toggleSwapGroup = function (cb) {
+    const key = cb.getAttribute('data-group-key');
+    const on = cb.checked;
+    state.selected.forEach(id => {
+      const g = segGeomById(id);
+      if (!g || groupKeyOf(g) !== key) return;
+      if (on) state.excluded.delete(id); else state.excluded.add(id);
+    });
+    const host = document.querySelector('#swapSelBreakdown .swap-sel-group[data-group-key="'
+      + CSS.escape(key) + '"]');
+    if (host) {
+      host.querySelectorAll('.swap-seg-row input[type="checkbox"]').forEach(c => { c.checked = on; });
+    }
+    refreshGroupHead(key);
+    refreshSelectionMeta();
+    render();
+  };
+
+  window.toggleSwapGroupCollapse = function (key) {
+    if (state.collapsedTypes.has(key)) state.collapsedTypes.delete(key);
+    else state.collapsedTypes.add(key);
+    const host = document.querySelector('#swapSelBreakdown .swap-sel-group[data-group-key="'
+      + CSS.escape(key) + '"]');
+    if (host) host.classList.toggle('is-collapsed', state.collapsedTypes.has(key));
+  };
+
+  window.swapHoverSeg = function (id, on) {
+    const next = on ? id : null;
+    if (state.hoverSegId === next) return;
+    state.hoverSegId = next;
+    render();
+  };
 
   function updateStatus() {
     const floor = state.floors.find(f => f.id === state.currentFloorId);
@@ -371,7 +595,8 @@
       ? ' (' + ((state.segmentsByFloor.get(state.currentFloorId) || []).length - segCount) + ' skipped — unreadable geometry)'
       : '';
     $('swapStatus').textContent = `${segCount} walls on this floor · ${total} total in project${missing}`;
-    const pct = state.fitScale > 0 ? Math.round((state.view.scale / state.fitScale) * 100) : 100;
+    const pct = (state.fitScale > 0 && state.view.scale > 0)
+      ? Math.round((state.view.scale / state.fitScale) * 100) : 100;
     $('swapZoomLabel').textContent = pct + '%';
   }
 
@@ -381,7 +606,7 @@
   };
 
   window.onSwapTargetChange = function () {
-    $('swapApplyBtn').disabled = !$('swapTargetType').value || !state.selected.size;
+    updateActionButtons();
   };
 
   window.setSwapTool = function (tool) {
@@ -389,21 +614,18 @@
     document.querySelectorAll('.swap-tool[data-tool]').forEach(b => {
       b.classList.toggle('active', b.dataset.tool === tool);
     });
-    const c = canvas();
-    c.style.cursor = tool === 'pan' ? 'grab' : (tool === 'click' ? 'pointer' : 'crosshair');
+    canvas().style.cursor = idleCursor();
   };
 
   window.clearSwapSelection = function () {
-    state.selected.clear();
+    clearSelectionState();
     renderSelection();
     render();
   };
 
   window.selectAllOfType = function (typeId) {
     if (!typeId) return;
-    state.segGeom.forEach(g => {
-      if (g.typeId === typeId) state.selected.add(g.id);
-    });
+    addToSelection(state.segGeom.filter(g => g.typeId === typeId).map(g => g.id));
     renderSelection();
     render();
   };
@@ -419,35 +641,68 @@
     c.style.width = w + 'px';
     c.style.height = h + 'px';
     ctx().setTransform(dpr, 0, 0, dpr, 0, 0);
+    // Self-heal: if we never got a valid fit (modal opened before layout, or a
+    // hidden tab), take the first resize that gives us real dimensions.
+    if (state.fitScale <= 0 && w > 0 && h > 0) { zoomFit(); return; }
     render();
   }
 
   window.zoomFit = function () {
     const wrap = $('swapCanvasWrap');
     const w = wrap.clientWidth, h = wrap.clientHeight;
-    if (!state.imgW || !state.imgH) return;
+    if (!state.imgW || !state.imgH) return false;
     const pad = 40;
-    const sx = (w - pad) / state.imgW;
-    const sy = (h - pad) / state.imgH;
-    state.view.scale = Math.min(sx, sy);
-    state.fitScale = state.view.scale;
-    state.view.x = (w - state.imgW * state.view.scale) / 2;
-    state.view.y = (h - state.imgH * state.view.scale) / 2;
+    const scale = Math.min((w - pad) / state.imgW, (h - pad) / state.imgH);
+    // The modal's flex layout can still be settling on the first call, which
+    // yields a zero (or negative) scale and paints the plan as a speck in the
+    // corner. Leave the view alone and let the caller retry next frame.
+    if (!Number.isFinite(scale) || scale <= 0) return false;
+    state.view.scale = scale;
+    state.fitScale = scale;
+    state.view.x = (w - state.imgW * scale) / 2;
+    state.view.y = (h - state.imgH * scale) / 2;
     updateStatus();
     render();
+    return true;
   };
 
-  window.zoomIn  = function () { zoomAt(1.25, null); };
-  window.zoomOut = function () { zoomAt(0.8,  null); };
+  // Same numbers the Report tool's grid preview uses.
+  const ZOOM_MIN = 1, ZOOM_MAX = 8, ZOOM_STEP = 0.15;
 
-  function zoomAt(factor, anchor) {
-    const c = canvas();
-    const rect = c.getBoundingClientRect();
+  window.zoomIn  = function () { zoomStep(+1, null); };
+  window.zoomOut = function () { zoomStep(-1, null); };
+
+  function currentZoom() {
+    return state.fitScale > 0 ? state.view.scale / state.fitScale : 1;
+  }
+
+  function clampZoom(z) {
+    let out = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+    // Reports snaps anything within 1% of the floor back to an exact fit, so
+    // you can never end up almost-but-not-quite zoomed out.
+    if (out <= 1.01) out = 1;
+    return out;
+  }
+
+  // direction: +1 zooms in, -1 zooms out. anchor is a canvas-space point (the
+  // pointer, or the centre for the toolbar buttons).
+  function zoomStep(direction, anchor) {
+    if (!(state.fitScale > 0)) return;
+    const zoom = currentZoom();
+    applyZoom(clampZoom(zoom + direction * ZOOM_STEP * zoom), anchor);
+  }
+
+  function applyZoom(newZoom, anchor) {
+    if (!(state.fitScale > 0)) return;
+    // At the floor Reports drops the pan entirely and returns to the centred
+    // view, rather than leaving a fit-sized image parked off to one side.
+    if (newZoom === ZOOM_MIN) { zoomFit(); return; }
+    const rect = canvas().getBoundingClientRect();
     const ax = anchor ? anchor.x : rect.width / 2;
     const ay = anchor ? anchor.y : rect.height / 2;
     const worldX = (ax - state.view.x) / state.view.scale;
     const worldY = (ay - state.view.y) / state.view.scale;
-    const newScale = Math.max(0.02, Math.min(50, state.view.scale * factor));
+    const newScale = state.fitScale * newZoom;
     state.view.scale = newScale;
     state.view.x = ax - worldX * newScale;
     state.view.y = ay - worldY * newScale;
@@ -492,31 +747,62 @@
     const selWidth  = selScreenPx  / state.view.scale;
 
     g.lineCap = 'round';
+    const stroke = (seg) => {
+      g.beginPath();
+      g.moveTo(seg.x1, seg.y1);
+      g.lineTo(seg.x2, seg.y2);
+      g.stroke();
+    };
+    const colorOf = (seg) => {
+      const wt = typeById(seg.typeId);
+      return wt ? safeColor(wt.color) : '#888';
+    };
+
+    // Pass 1 — walls the marquee never touched.
     for (const seg of state.segGeom) {
       if (state.selected.has(seg.id)) continue;
-      const wt = typeById(seg.typeId);
-      g.strokeStyle = wt ? safeColor(wt.color) : '#888';
+      g.strokeStyle = colorOf(seg);
       g.lineWidth = baseWidth;
-      g.beginPath();
-      g.moveTo(seg.x1, seg.y1);
-      g.lineTo(seg.x2, seg.y2);
-      g.stroke();
+      stroke(seg);
     }
+
+    // Pass 2 — in the selection but unchecked. Dimmed and dashed, so what you
+    // culled stays visible (and re-checkable) without reading as targeted.
+    g.setLineDash([6 / state.view.scale, 5 / state.view.scale]);
     for (const seg of state.segGeom) {
-      if (!state.selected.has(seg.id)) continue;
-      const wt = typeById(seg.typeId);
+      if (!state.selected.has(seg.id) || !state.excluded.has(seg.id)) continue;
+      g.globalAlpha = 0.4;
+      g.strokeStyle = colorOf(seg);
+      g.lineWidth = baseWidth;
+      stroke(seg);
+      g.globalAlpha = 1;
+    }
+    g.setLineDash([]);
+
+    // Pass 3 — still checked: this is exactly what the Swap button will change.
+    for (const seg of state.segGeom) {
+      if (!state.selected.has(seg.id) || state.excluded.has(seg.id)) continue;
       g.strokeStyle = '#ffffff';
       g.lineWidth = selWidth + 4 / state.view.scale;
-      g.beginPath();
-      g.moveTo(seg.x1, seg.y1);
-      g.lineTo(seg.x2, seg.y2);
-      g.stroke();
-      g.strokeStyle = wt ? safeColor(wt.color) : '#888';
+      stroke(seg);
+      g.strokeStyle = colorOf(seg);
       g.lineWidth = selWidth;
-      g.beginPath();
-      g.moveTo(seg.x1, seg.y1);
-      g.lineTo(seg.x2, seg.y2);
-      g.stroke();
+      stroke(seg);
+    }
+
+    // Pass 4 — the row the pointer is over in the sidebar.
+    if (state.hoverSegId) {
+      const hov = state.segGeom.find(x => x.id === state.hoverSegId);
+      if (hov) {
+        g.strokeStyle = '#0ea5e9';
+        g.lineWidth = selWidth + 8 / state.view.scale;
+        g.globalAlpha = 0.55;
+        stroke(hov);
+        g.globalAlpha = 1;
+        g.strokeStyle = colorOf(hov);
+        g.lineWidth = selWidth;
+        stroke(hov);
+      }
     }
     g.restore();
 
@@ -590,6 +876,10 @@
     evHandlers.mousemove = onMouseMove;
     evHandlers.mouseup   = onMouseUp;
     evHandlers.wheel     = onWheel;
+    evHandlers.contextmenu = (ev) => ev.preventDefault();
+    evHandlers.touchstart  = onTouchStart;
+    evHandlers.touchmove   = onTouchMove;
+    evHandlers.touchend    = onTouchEnd;
     evHandlers.keydown   = onKeyDown;
     evHandlers.keyup     = onKeyUp;
     evHandlers.resize    = resizeCanvas;
@@ -601,11 +891,20 @@
     window.addEventListener('mousemove', evHandlers.mousemove);
     window.addEventListener('mouseup', evHandlers.mouseup);
     c.addEventListener('wheel', evHandlers.wheel, { passive: false });
+    c.addEventListener('contextmenu', evHandlers.contextmenu);
+    c.addEventListener('touchstart', evHandlers.touchstart, { passive: false });
+    c.addEventListener('touchmove', evHandlers.touchmove, { passive: false });
+    c.addEventListener('touchend', evHandlers.touchend);
+    c.addEventListener('touchcancel', evHandlers.touchend);
     window.addEventListener('keydown', evHandlers.keydown);
     window.addEventListener('keyup', evHandlers.keyup);
     window.addEventListener('resize', evHandlers.resize);
     const rail = document.querySelector('.swap-toolrail');
     if (rail) rail.addEventListener('click', evHandlers.railClick);
+    if (typeof ResizeObserver === 'function') {
+      evHandlers.ro = new ResizeObserver(() => resizeCanvas());
+      evHandlers.ro.observe($('swapCanvasWrap'));
+    }
     setSwapTool(state.tool);
   }
 
@@ -615,11 +914,17 @@
     window.removeEventListener('mousemove', evHandlers.mousemove);
     window.removeEventListener('mouseup', evHandlers.mouseup);
     c.removeEventListener('wheel', evHandlers.wheel);
+    c.removeEventListener('contextmenu', evHandlers.contextmenu);
+    c.removeEventListener('touchstart', evHandlers.touchstart);
+    c.removeEventListener('touchmove', evHandlers.touchmove);
+    c.removeEventListener('touchend', evHandlers.touchend);
+    c.removeEventListener('touchcancel', evHandlers.touchend);
     window.removeEventListener('keydown', evHandlers.keydown);
     window.removeEventListener('keyup', evHandlers.keyup);
     window.removeEventListener('resize', evHandlers.resize);
     const rail = document.querySelector('.swap-toolrail');
     if (rail && evHandlers.railClick) rail.removeEventListener('click', evHandlers.railClick);
+    if (evHandlers.ro) { evHandlers.ro.disconnect(); evHandlers.ro = null; }
   }
 
   function canvasPoint(e) {
@@ -627,13 +932,36 @@
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
+  function idleCursor() {
+    if (state.tool === 'pan' || state.spaceHeld) return 'grab';
+    return state.tool === 'click' ? 'pointer' : 'crosshair';
+  }
+
+  // Reports flags the whole preview container while a drag is in flight and
+  // forces `grabbing` on every descendant; do the same so the cursor never
+  // reverts mid-drag over the canvas.
+  function startPan(p) {
+    state.isPanning = true;
+    state.dragStart = { ...p, viewX: state.view.x, viewY: state.view.y };
+    const wrap = $('swapCanvasWrap');
+    if (wrap) wrap.classList.add('pan-active');
+  }
+
+  function endPan() {
+    state.isPanning = false;
+    state.dragStart = null;
+    const wrap = $('swapCanvasWrap');
+    if (wrap) wrap.classList.remove('pan-active');
+    canvas().style.cursor = idleCursor();
+  }
+
   function onMouseDown(e) {
     const p = canvasPoint(e);
-    const middleBtn = e.button === 1;
-    if (middleBtn || state.spaceHeld || state.tool === 'pan') {
-      state.isPanning = true;
-      state.dragStart = { ...p, viewX: state.view.x, viewY: state.view.y };
-      canvas().style.cursor = 'grabbing';
+    // Right- and middle-drag pan from any tool. Right-drag is the CAD/Ekahau
+    // reflex, and unlike Space+drag or the H tool it needs no mode change.
+    const panBtn = e.button === 1 || e.button === 2;
+    if (panBtn || state.spaceHeld || state.tool === 'pan') {
+      startPan(p);
       e.preventDefault();
       return;
     }
@@ -642,12 +970,16 @@
       const tol = 6 / state.view.scale;
       const hit = pickSegmentAt(w.x, w.y, tol);
       if (hit) {
-        if (state.selected.has(hit.id)) state.selected.delete(hit.id);
-        else state.selected.add(hit.id);
+        if (state.selected.has(hit.id)) {
+          state.selected.delete(hit.id);
+          state.excluded.delete(hit.id);
+        } else {
+          addToSelection([hit.id]);
+        }
         renderSelection();
         render();
       } else if (!e.shiftKey) {
-        state.selected.clear();
+        clearSelectionState();
         renderSelection();
         render();
       }
@@ -657,7 +989,7 @@
     state.dragStart = p;
     state.dragCurrent = p;
     if (!e.shiftKey) {
-      state.selected.clear();
+      clearSelectionState();
       renderSelection();
     }
     render();
@@ -679,9 +1011,7 @@
 
   function onMouseUp(e) {
     if (state.isPanning) {
-      state.isPanning = false;
-      state.dragStart = null;
-      canvas().style.cursor = state.tool === 'pan' ? 'grab' : (state.tool === 'click' ? 'pointer' : 'crosshair');
+      endPan();
       return;
     }
     if (state.isDragging) {
@@ -690,7 +1020,126 @@
       const w1 = screenToWorld(s.x, s.y);
       const w2 = screenToWorld(c.x, c.y);
       const picked = state.segGeom.filter(seg => segmentInRect(seg, w1.x, w1.y, w2.x, w2.y));
-      picked.forEach(seg => state.selected.add(seg.id));
+      addToSelection(picked.map(seg => seg.id));
+      state.dragStart = null;
+      state.dragCurrent = null;
+      renderSelection();
+      render();
+    }
+  }
+
+  function touchPoints(e) {
+    const rect = canvas().getBoundingClientRect();
+    return [...e.touches].map(t => ({ x: t.clientX - rect.left, y: t.clientY - rect.top }));
+  }
+
+  function onTouchStart(e) {
+    const pts = touchPoints(e);
+    if (pts.length >= 2) {
+      e.preventDefault();
+      state.isDragging = false;
+      state.isPanning = false;
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      state.touch = {
+        mode: 'pinch',
+        mid,
+        dist: Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)),
+        world: screenToWorld(mid.x, mid.y),
+        scale: state.view.scale,
+      };
+      render();
+      return;
+    }
+    if (pts.length !== 1) return;
+    e.preventDefault();
+    const p = pts[0];
+    if (state.tool === 'pan' || state.spaceHeld) {
+      state.touch = { mode: 'pan' };
+      startPan(p);
+      return;
+    }
+    if (state.tool === 'click') {
+      state.touch = { mode: 'tap', start: p };
+      return;
+    }
+    state.touch = { mode: 'marquee' };
+    state.isDragging = true;
+    state.dragStart = p;
+    state.dragCurrent = p;
+    clearSelectionState();
+    renderSelection();
+    render();
+  }
+
+  function onTouchMove(e) {
+    if (!state.touch) return;
+    const pts = touchPoints(e);
+    if (state.touch.mode === 'pinch' && pts.length >= 2) {
+      e.preventDefault();
+      const t = state.touch;
+      const mid = { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 };
+      const dist = Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+      // Pan and zoom fall out of one equation: keep the world point that was
+      // under the initial midpoint pinned under the current midpoint.
+      const zoom = clampZoom((t.scale / state.fitScale) * (dist / t.dist));
+      const scale = state.fitScale * zoom;
+      state.view.scale = scale;
+      state.view.x = mid.x - t.world.x * scale;
+      state.view.y = mid.y - t.world.y * scale;
+      updateStatus();
+      render();
+      return;
+    }
+    if (pts.length !== 1) return;
+    e.preventDefault();
+    const p = pts[0];
+    if (state.touch.mode === 'pan' && state.dragStart) {
+      state.view.x = state.dragStart.viewX + (p.x - state.dragStart.x);
+      state.view.y = state.dragStart.viewY + (p.y - state.dragStart.y);
+      render();
+    } else if (state.touch.mode === 'marquee' && state.isDragging) {
+      state.dragCurrent = p;
+      render();
+    } else if (state.touch.mode === 'tap') {
+      state.touch.moved = true;
+    }
+  }
+
+  function onTouchEnd(e) {
+    const t = state.touch;
+    if (!t) return;
+    if (e.touches.length > 0) return;
+    state.touch = null;
+    if (t.mode === 'pinch' || t.mode === 'pan') { endPan(); return; }
+    if (t.mode === 'tap') {
+      if (!t.moved && t.start) {
+        const w = screenToWorld(t.start.x, t.start.y);
+        const hit = pickSegmentAt(w.x, w.y, 14 / state.view.scale);
+        if (hit) {
+          if (state.selected.has(hit.id)) {
+            state.selected.delete(hit.id);
+            state.excluded.delete(hit.id);
+          } else {
+            addToSelection([hit.id]);
+          }
+        } else {
+          clearSelectionState();
+        }
+        renderSelection();
+        render();
+      }
+      return;
+    }
+    if (t.mode === 'marquee' && state.isDragging) {
+      state.isDragging = false;
+      const a = state.dragStart, b = state.dragCurrent;
+      if (a && b) {
+        const w1 = screenToWorld(a.x, a.y);
+        const w2 = screenToWorld(b.x, b.y);
+        addToSelection(state.segGeom
+          .filter(seg => segmentInRect(seg, w1.x, w1.y, w2.x, w2.y))
+          .map(seg => seg.id));
+      }
       state.dragStart = null;
       state.dragCurrent = null;
       renderSelection();
@@ -700,15 +1149,20 @@
 
   function onWheel(e) {
     e.preventDefault();
-    const p = canvasPoint(e);
-    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
-    zoomAt(factor, p);
+    zoomStep(e.deltaY > 0 ? -1 : +1, canvasPoint(e));
+  }
+
+  function isFormFocused() {
+    const el = document.activeElement;
+    if (!el) return false;
+    const tag = el.tagName;
+    return tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
   }
 
   function onKeyDown(e) {
     if (e.key === 'Escape') {
       if (state.selected.size) {
-        state.selected.clear();
+        clearSelectionState();
         renderSelection();
         render();
       } else {
@@ -720,15 +1174,16 @@
       e.preventDefault();
       if (!state.spaceHeld) {
         state.spaceHeld = true;
-        canvas().style.cursor = 'grab';
+        canvas().style.cursor = idleCursor();
       }
     }
     if ((e.key === 'a' || e.key === 'A') && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      state.segGeom.forEach(g => state.selected.add(g.id));
+      addToSelection(state.segGeom.map(g => g.id));
       renderSelection();
       render();
     }
+    if (isFormFocused()) return;
     if (e.key === 'm' || e.key === 'M') setSwapTool('marquee');
     if (e.key === 'v' || e.key === 'V') setSwapTool('click');
     if (e.key === 'h' || e.key === 'H') setSwapTool('pan');
@@ -738,31 +1193,30 @@
     if (e.key === ' ') {
       e.preventDefault();
       state.spaceHeld = false;
-      canvas().style.cursor = state.tool === 'pan' ? 'grab' : (state.tool === 'click' ? 'pointer' : 'crosshair');
+      if (!state.isPanning) canvas().style.cursor = idleCursor();
     }
   }
 
   window.applySelectionSwap = function () {
     const targetId = $('swapTargetType').value;
     if (!targetId) { toast('Pick a target wall type'); return; }
-    if (!state.selected.size) { toast('Nothing selected'); return; }
+    const doomed = new Set(targetIds());
+    if (!doomed.size) { toast('Nothing checked'); return; }
 
     const target = typeById(targetId);
     if (!target) { toast('Target wall type not found'); return; }
 
     let n = 0;
-    const changed = [];
     for (const seg of state.segments) {
-      if (state.selected.has(seg.id) && segmentTypeId(seg) !== targetId) {
+      if (doomed.has(seg.id) && segmentTypeId(seg) !== targetId) {
         if ('wallTypeId' in seg) seg.wallTypeId = targetId;
         else if ('wallType' in seg) seg.wallType = targetId;
         else seg.wallTypeId = targetId;
         n++;
-        changed.push(seg.id);
       }
     }
     state.segGeom.forEach(g => {
-      if (state.selected.has(g.id)) g.typeId = targetId;
+      if (doomed.has(g.id)) g.typeId = targetId;
     });
 
     writeSegmentsBack();
@@ -806,11 +1260,11 @@
   };
 
   window.deleteSelectedWalls = function () {
-    if (!state.selected.size) { toast('Nothing selected'); return; }
-    const n = state.selected.size;
+    const doomed = new Set(targetIds());
+    const n = doomed.size;
+    if (!n) { toast('Nothing checked'); return; }
     if (!confirm(`Delete ${n} wall${n === 1 ? '' : 's'} from the project? Nothing is written to disk until you press Save the *.esx.`)) return;
 
-    const doomed = state.selected;
     state.segments = state.segments.filter(s => !doomed.has(s.id));
 
     state.segmentsByFloor.clear();
@@ -822,7 +1276,8 @@
     });
     state.segGeom = state.segGeom.filter(g => !doomed.has(g.id));
 
-    state.selected.clear();
+    doomed.forEach(id => { state.selected.delete(id); state.excluded.delete(id); });
+    pruneExcluded();
     writeSegmentsBack();
     populateFloorSelect();
     $('swapFloorSelect').value = state.currentFloorId;
@@ -843,8 +1298,22 @@
   window.__wallsSwap = {
     getView: () => ({ ...state.view }),
     getFitScale: () => state.fitScale,
+    getZoom: () => currentZoom(),
     getTool: () => state.tool,
     getIsPanning: () => state.isPanning,
+    getSelected: () => [...state.selected],
+    getExcluded: () => [...state.excluded],
+    getTargetIds: () => targetIds(),
+    getGroups: () => selectionGroups().map(g => ({
+      key: g.key, name: g.name, total: g.segs.length, checked: g.checked,
+      lengths: g.segs.map(x => segLengthLabel(x)),
+    })),
+    selectAll: () => { addToSelection(state.segGeom.map(g => g.id)); renderSelection(); render(); },
+    marqueeWorld: (x1, y1, x2, y2) => {
+      addToSelection(state.segGeom
+        .filter(seg => segmentInRect(seg, x1, y1, x2, y2)).map(seg => seg.id));
+      renderSelection(); render();
+    },
     logEvents: (on) => {
       if (on) {
         console.log('[Visual Swap] event logging ON');
