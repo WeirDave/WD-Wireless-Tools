@@ -6981,3 +6981,14 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
 .wd-update-facts li::before {
   content: '\2022'; position: absolute; left: 2px; opacity: 0.7;
 }
+
+/* Remembered report details (Client / Prepared by / Project ref / Revision) */
+.rep-remembered {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 11px; color: var(--text-3); line-height: 1.5;
+}
+.rep-remembered-clear {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--blue); font: inherit; text-decoration: underline;
+}
+.rep-remembered-clear:hover { color: var(--border-focus); }
