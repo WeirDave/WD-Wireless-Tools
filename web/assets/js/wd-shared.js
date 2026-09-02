@@ -346,6 +346,7 @@
             '</button>' +
             '<div class="wd-about-updateResult" role="status" aria-live="polite"></div>' +
           '</div>' +
+          '<div class="wd-update-panel" hidden></div>' +
           '<div class="wd-about-section">' +
             '<div class="wd-about-sectionTitle">Links</div>' +
             '<div class="wd-about-links">' +
@@ -405,15 +406,371 @@
       el.className = 'wd-about-updateResult is-newer';
       el.innerHTML =
         '<span class="wd-about-updateIcon">&#8681;</span> ' +
-        'New release: <b>v' + WD.esc(state.latestVersion) + '</b> ' +
-        '<a class="wd-about-updateLink" href="' + WD.escAttr(state.latestUrl) + '" target="_blank" rel="noopener">Download &rarr;</a>';
+        'New release: <b>v' + WD.esc(state.latestVersion) + '</b>';
+      var panel = modal.querySelector('.wd-update-panel');
+      if (panel) WD.Updater.mount(panel, state);
     } else {
       el.className = 'wd-about-updateResult is-current';
       el.innerHTML =
         '<span class="wd-about-updateIcon">&#10003;</span> ' +
         'You’re on the latest release (v' + WD.esc(state.localVersion || state.latestVersion || '?') + ').';
+      WD.Updater.unmount();
     }
   }
+
+  // ---- WD.Updater ---------------------------------------------------------
+  // Self-contained update UI. Portable across the app family: it renders into
+  // whatever element you hand mount(), talks only to the endpoints in config,
+  // and knows nothing about the About modal that currently hosts it. To reuse
+  // in another app, copy this block plus tools/updater.py and edit `config`.
+  //
+  // The app knows whether this is a git or ZIP install, so it leads with the
+  // one action that fits and files the rest under "Other ways". Asking a user
+  // to choose between `git pull` and a ZIP on every update would be more
+  // friction than the manual download this replaces. The alternatives open on
+  // their own when the primary path fails — that's when a choice is useful.
+  WD.Updater = (function () {
+    var config = {
+      repo: WD_REPO,
+      releasesUrl: WD_RELEASES_URL,
+      bootstrapCommand:
+        'irm https://raw.githubusercontent.com/' + WD_REPO + '/main/install.ps1 | iex',
+      endpoints: {
+        status: '/api/update/status',
+        run: '/api/update',
+        version: '/api/version',
+        restart: '/api/restart'
+      }
+    };
+
+    var host = null;        // element we render into
+    var state = null;       // {localVersion, latestVersion, latestUrl}
+    var info = null;        // /api/update/status .install
+    var infoTried = false;
+
+    function esc(s) { return WD.esc(s); }
+    function escAttr(s) { return WD.escAttr(s); }
+
+    function fetchInfo() {
+      if (infoTried) return Promise.resolve(info);
+      infoTried = true;
+      return fetch(config.endpoints.status, { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { info = j && j.install ? j.install : null; return info; })
+        .catch(function () { return null; });
+    }
+
+    function render(html) {
+      if (host) host.innerHTML = '<div class="wd-update-body' +
+        (html.cls ? ' ' + html.cls : '') + '">' + html.body + '</div>';
+    }
+
+    function stepsHtml(steps) {
+      if (!steps || !steps.length) return '';
+      return '<ul class="wd-update-steps">' +
+        steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') +
+        '</ul>';
+    }
+
+    // Conversion is a one-time, in-place adoption of the install by git. It is
+    // gated behind an explicit confirm because it rewrites the folder's
+    // tracked files, even though a backup is taken first and user data lives
+    // outside the tree.
+    function convertLabel() {
+      if (info && info.gitInstall && info.gitInstall.needed) {
+        return 'Switch to git updates (installs Git first)';
+      }
+      return 'Switch to git updates';
+    }
+
+    function alternativesHtml(open) {
+      var canConvert = info && info.canConvertToGit;
+      var gitNote = '';
+      if (canConvert && info.gitInstall && info.gitInstall.needed) {
+        gitNote = '<span class="wd-update-altNote">' + esc(info.gitInstall.message) + '</span>';
+      }
+      return '' +
+        '<details class="wd-update-alts"' + (open ? ' open' : '') + '>' +
+          '<summary>Other ways to update</summary>' +
+          '<div class="wd-update-altBody">' +
+            (canConvert
+              ? '<div class="wd-update-alt">' +
+                  '<button class="btn btn-sm wd-update-convertBtn" type="button">' +
+                    esc(convertLabel()) +
+                  '</button>' +
+                  '<span class="wd-update-altNote">One-time change. Future updates ' +
+                  'become a fast pull instead of a full download.</span>' +
+                  gitNote +
+                '</div>'
+              : '') +
+            '<div class="wd-update-alt">' +
+              '<div class="wd-update-altNote">Run from PowerShell — installs or ' +
+              'updates anywhere, including a machine without this folder:</div>' +
+              '<div class="wd-update-cmdRow">' +
+                '<code class="wd-update-cmd">' + esc(config.bootstrapCommand) + '</code>' +
+                '<button class="btn btn-sm wd-update-copyBtn" type="button">Copy</button>' +
+              '</div>' +
+            '</div>' +
+            '<div class="wd-update-alt">' +
+              '<a class="wd-about-updateLink" href="' + escAttr(config.releasesUrl) + '" ' +
+                'target="_blank" rel="noopener">Download the ZIP manually &rarr;</a>' +
+            '</div>' +
+          '</div>' +
+        '</details>';
+    }
+
+    function primaryLabel() {
+      if (info && info.method === 'zip') return 'Download and install update';
+      return 'Update now';
+    }
+
+    function wire() {
+      if (!host) return;
+      var go = host.querySelector('.wd-update-goBtn');
+      if (go) go.addEventListener('click', function () { run(null); });
+
+      var conv = host.querySelector('.wd-update-convertBtn');
+      if (conv) conv.addEventListener('click', showConvertConfirm);
+
+      var confirmBtn = host.querySelector('.wd-update-convertConfirm');
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', function () {
+          run('convert', { installGit: true });
+        });
+      }
+      var cancel = host.querySelector('.wd-update-convertCancel');
+      if (cancel) cancel.addEventListener('click', function () { showPrimary(); });
+
+      var restart = host.querySelector('.wd-update-restartBtn');
+      if (restart) restart.addEventListener('click', function () { doRestart(restart); });
+
+      var copy = host.querySelector('.wd-update-copyBtn');
+      if (copy) {
+        copy.addEventListener('click', function () {
+          var done = function () {
+            copy.textContent = 'Copied';
+            setTimeout(function () { copy.textContent = 'Copy'; }, 1600);
+          };
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(config.bootstrapCommand).then(done, function () {});
+          } else {
+            var ta = document.createElement('textarea');
+            ta.value = config.bootstrapCommand;
+            document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); done(); } catch (e) {}
+            document.body.removeChild(ta);
+          }
+        });
+      }
+    }
+
+    function showConvertConfirm() {
+      var needsGit = info && info.gitInstall && info.gitInstall.needed;
+      render({
+        cls: 'is-confirm',
+        body:
+          '<div class="wd-update-headline">Switch this install to git updates?</div>' +
+          '<ul class="wd-update-facts">' +
+            (needsGit ? '<li>Git will be installed first (about a minute).</li>' : '') +
+            '<li>This folder becomes a tracked checkout of ' + esc(config.repo) + '.</li>' +
+            '<li>You stay on the version you have now — this doesn’t update you.</li>' +
+            '<li>A dated backup of the folder is made first.</li>' +
+            '<li>Your settings and templates are untouched — they live outside ' +
+              'this folder.</li>' +
+          '</ul>' +
+          '<div class="wd-update-primaryRow">' +
+            '<button class="btn btn-primary wd-update-convertConfirm" type="button">' +
+              (needsGit ? 'Install Git and switch' : 'Switch to git updates') +
+            '</button>' +
+            '<button class="btn btn-sm wd-update-convertCancel" type="button">Cancel</button>' +
+          '</div>'
+      });
+      wire();
+    }
+
+    function showPrimary() {
+      if (!host || !state) return;
+
+      if (!info) {
+        // No server behind this page, or the endpoint is unavailable.
+        render({ body:
+          '<a class="btn btn-primary" href="' +
+            escAttr(state.latestUrl || config.releasesUrl) + '" target="_blank" ' +
+            'rel="noopener">Get v' + esc(state.latestVersion) + ' &rarr;</a>' });
+        return;
+      }
+
+      if (info.method === 'dev') {
+        render({ body:
+          '<div class="wd-update-note">This is a development checkout — update it ' +
+          'with git so your work isn’t checked out from under you.</div>' });
+        return;
+      }
+
+      if (info.method === 'manual') {
+        render({ body:
+          '<div class="wd-update-note">' + esc(info.reason) + '</div>' +
+          alternativesHtml(true) });
+        wire();
+        return;
+      }
+
+      render({ body:
+        '<div class="wd-update-primaryRow">' +
+          '<button class="btn btn-primary wd-update-goBtn" type="button">' +
+            esc(primaryLabel()) +
+          '</button>' +
+          '<span class="wd-update-target">v' +
+            esc(state.localVersion || info.currentVersion) +
+            ' &rarr; v' + esc(state.latestVersion) + '</span>' +
+        '</div>' +
+        '<div class="wd-update-note">' + esc(info.reason) + '</div>' +
+        alternativesHtml(false) });
+      wire();
+    }
+
+    function run(mode, opts) {
+      opts = opts || {};
+      render({ cls: 'is-busy', body:
+        '<div class="wd-update-primaryRow">' +
+          '<span class="wd-about-checkSpinner" aria-hidden="true"></span>' +
+          '<b>' + (mode === 'convert' ? 'Switching to git updates…' : 'Updating…') + '</b>' +
+        '</div>' +
+        '<div class="wd-update-note">Progress is also printed in the terminal ' +
+        'window the app is running in.</div>' });
+
+      fetch(config.endpoints.run, {
+        method: 'POST',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+        body: JSON.stringify({ mode: mode || null, installGit: !!opts.installGit })
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (res) {
+          if (!res || !res.ok) throw res || {};
+          infoTried = false;   // install type may have changed
+          renderDone(res, mode);
+        })
+        .catch(function (res) { renderFailed(res || {}); });
+    }
+
+    function renderDone(res, mode) {
+      try { localStorage.removeItem(WD_UPDATE_CACHE_KEY); } catch (e) {}
+      _removeUpdateBanner();
+
+      if (mode === 'convert') {
+        render({ cls: 'is-done', body:
+          '<div class="wd-update-headline"><span class="wd-update-tick">&#10003;</span> ' +
+            'This install now updates through git.</div>' +
+          '<div class="wd-update-note">You’re still on v' + esc(res.newVersion || '') +
+            '. Updates from here are an incremental pull.</div>' +
+          (res.backup ? '<div class="wd-update-note">Backup: ' + esc(res.backup) +
+            '</div>' : '') +
+          stepsHtml(res.steps) });
+        return;
+      }
+
+      if (res.changed === false) {
+        render({ cls: 'is-done', body:
+          '<div class="wd-update-headline">Already up to date (v' +
+            esc(res.newVersion || '') + ').</div>' + stepsHtml(res.steps) });
+        return;
+      }
+
+      var from = res.previousVersion || (state && state.localVersion) || '';
+      var to = res.newVersion || (state && state.latestVersion) || '';
+      render({ cls: 'is-done', body:
+        '<div class="wd-update-headline">' +
+          '<span class="wd-update-tick">&#10003;</span> Updated' +
+          (from && to ? ' <b>v' + esc(from) + '</b> &rarr; <b>v' + esc(to) + '</b>' : '') +
+        '</div>' +
+        (res.rescuedTemplates && res.rescuedTemplates.length
+          ? '<div class="wd-update-note">Your edits to ' +
+            esc(res.rescuedTemplates.join(', ')) + ' were kept as personal copies.</div>'
+          : '') +
+        (res.backup ? '<div class="wd-update-note">Previous copy saved to ' +
+          esc(res.backup) + '</div>' : '') +
+        stepsHtml(res.steps) +
+        '<div class="wd-update-primaryRow">' +
+          '<button class="btn btn-primary wd-update-restartBtn" type="button">' +
+            'Restart to finish</button>' +
+          '<span class="wd-update-target">The new version loads after the restart.</span>' +
+        '</div>' });
+      wire();
+    }
+
+    function renderFailed(res) {
+      var msg = res.error || 'The update could not be completed.';
+      var was = (state && state.localVersion) || (info && info.currentVersion) || '';
+      render({ cls: 'is-error', body:
+        '<div class="wd-update-headline">' +
+          '<span class="wd-update-warn">&#9888;</span> Update didn’t complete</div>' +
+        '<div class="wd-update-note">' + esc(msg) + '</div>' +
+        '<div class="wd-update-note">Nothing was left half-installed' +
+          (was ? ' — you’re still on v' + esc(was) + '.' : '.') + '</div>' +
+        stepsHtml(res.steps) +
+        alternativesHtml(true) });
+      wire();
+    }
+
+    function doRestart(btn) {
+      btn.disabled = true;
+      btn.textContent = 'Restarting…';
+      var oldStartedAt = '';
+      fetch(config.endpoints.version, { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { oldStartedAt = (j && j.startedAt) || ''; })
+        .catch(function () {})
+        .then(function () {
+          return fetch(config.endpoints.restart, {
+            method: 'POST', cache: 'no-store',
+            headers: { 'X-WD-Wireless-Tools': '1' }
+          }).catch(function () {});
+        })
+        .then(function () {
+          var deadline = Date.now() + 30000;
+          (function poll() {
+            if (Date.now() > deadline) {
+              btn.disabled = false;
+              btn.textContent = 'Try restart again';
+              return;
+            }
+            fetch(config.endpoints.version, { cache: 'no-store' })
+              .then(function (r) { return r.ok ? r.json() : null; })
+              .then(function (j) {
+                if (j && j.startedAt && j.startedAt !== oldStartedAt) {
+                  setTimeout(function () { window.location.reload(); }, 200);
+                } else { setTimeout(poll, 500); }
+              })
+              .catch(function () { setTimeout(poll, 700); });
+          })();
+        });
+    }
+
+    function mount(el, updateState) {
+      host = el;
+      state = updateState;
+      if (!host) return;
+      host.hidden = false;
+      host.innerHTML = '<div class="wd-update-loading">Checking this install…</div>';
+      fetchInfo().then(showPrimary);
+    }
+
+    function unmount() {
+      if (host) { host.hidden = true; host.innerHTML = ''; }
+      host = null;
+    }
+
+    return {
+      config: config,
+      mount: mount,
+      unmount: unmount,
+      run: run
+    };
+  })();
+
+  // Kept for callers that used the old entry point.
+  WD.runUpdate = function (mode) { WD.Updater.run(mode); };
 
   function _renderUpdateError(state) {
     var modal = document.getElementById(WD_ABOUT_ID);
@@ -530,16 +887,18 @@
       '<span class="wd-update-icon">&#8681;</span>' +
       '<span class="wd-update-msg">' +
         '<b>Update available: v' + WD.esc(state.latestVersion) + '</b>' +
-        '<span class="wd-update-detail"> &middot; You’re running v' + WD.esc(state.localVersion || '?') + '. ' +
-        '<a href="#" class="wd-update-openAbout">Open About</a></span>' +
+        '<span class="wd-update-detail"> &middot; You’re running v' + WD.esc(state.localVersion || '?') + '.' +
+        '</span>' +
       '</span>' +
-      '<a class="wd-update-download" href="' + WD.escAttr(state.latestUrl) + '" target="_blank" rel="noopener">Download</a>' +
+      '<button class="wd-update-download" type="button">Update</button>' +
       '<button class="wd-update-close" type="button" title="Dismiss until next release">&times;</button>';
     b.querySelector('.wd-update-close').addEventListener('click', function () {
       try { localStorage.setItem(WD_UPDATE_DISMISS_KEY, state.latestVersion); } catch (e) {}
       _removeUpdateBanner();
     });
-    b.querySelector('.wd-update-openAbout').addEventListener('click', function (e) {
+    // Opens the About panel rather than linking out to GitHub — the panel is
+    // where the install is detected and the update actually runs.
+    b.querySelector('.wd-update-download').addEventListener('click', function (e) {
       e.preventDefault();
       WD.openAbout();
     });

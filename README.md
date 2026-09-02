@@ -139,7 +139,14 @@ irm https://raw.githubusercontent.com/WeirDave/WD-Wireless-Tools/main/install.ps
 curl -fsSL https://raw.githubusercontent.com/WeirDave/WD-Wireless-Tools/main/install.sh | bash
 ```
 
-The installer uses git when it is available, so later updates are a fast incremental pull. Without git it falls back to the release ZIP, verifying its SHA-256 before installing. Either way it installs missing Python packages and offers to launch the suite.
+On a fresh install it asks which method you want:
+
+| Method | What it means |
+| --- | --- |
+| **Git** | The folder is a tracked checkout. Updates take seconds because only what changed is downloaded. If git isn't installed, the installer offers to install it first with `winget` — usually under a minute. |
+| **ZIP** | No dependencies. Each update re-downloads the whole app and verifies its SHA-256. |
+
+Pick either — you can switch later from **Menu → About** without reinstalling. Skip the prompt with `-Method git` or `-Method zip` (`--method` on macOS/Linux). Either way the installer adds missing Python packages and offers to launch the suite.
 
 <details>
 <summary>Manual install from the ZIP</summary>
@@ -172,7 +179,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.7.0
+WIRELESS TOOLS  v2.8.0
 A suite of Ekahau workflow tools.
 
 Local suite: http://localhost:8675/

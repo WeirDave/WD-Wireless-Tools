@@ -42,6 +42,65 @@ re-discovered (or re-explained) each new chat.
    Note: tag pushes work from local sessions but are blocked from
    Claude Code **cloud** sessions (claude.ai web).
 
+## Updating (in-app) — how it fits together
+
+- `tools/updater.py` is the whole mechanism. `detect_install()` decides which
+  of git / ZIP / convert / manual / dev applies, and the About panel leads with
+  that single action instead of asking the user to choose. `/api/update/status`
+  (GET) and `/api/update` (POST) in `server.py` are the only entry points; the
+  UI lives in `_showUpdatePanel()` and friends in `web/assets/js/wd-shared.js`.
+- **User data must never live in the install tree**, or updates break. Wall
+  templates moved to `~/.wd_wireless_tools/templates/` for exactly this reason
+  — `templates/WD Template_walltemplate.json` is git-tracked *and* was
+  user-writable, so a customized copy made `git pull` abort with "local changes
+  would be overwritten" and the user could never update again. Shipped
+  templates stay in `templates/` as read-only built-ins; user files shadow them
+  by filename; deleting a built-in writes a tombstone in `hidden.json`. If you
+  add any new user-writable state, put it under `~/.wd_wireless_tools/`.
+- `is_dev_checkout()` blocks auto-update on a maintainer's clone (detected by
+  `.github` / `tests` / `scripts` / `BACKLOG.md` / `CLAUDE.md`, none of which
+  ship in a release ZIP). Without it, clicking Update in your own working copy
+  would check out a release tag over in-progress work and detach HEAD.
+- `release.yml` publishes `<asset>.sha256` alongside the ZIP. The ZIP updater
+  and both install scripts refuse to install a mismatched download, so don't
+  drop that step.
+- `install.ps1` / `install.sh` are dual-role: piped through `iex`/`bash` they
+  bootstrap a fresh install; run from inside an install folder they update it.
+  Both are in `build_release.py`'s payload, so ZIP users get them too. A fresh
+  interactive install asks git-vs-ZIP; an existing install keeps whatever it
+  already uses and is never asked again.
+- Missing git is **not** a dead end on Windows: `winget install Git.Git` runs as
+  part of the flow (`install_git()` / `Install-Git`), with `--scope user` tried
+  first to dodge the admin prompt. Every failure mode — no winget, no network,
+  blocked by policy — falls back to ZIP with the reason shown. macOS is
+  supported by this repo but git is only *described* there (`xcode-select`,
+  Homebrew), never auto-installed.
+- `convert_to_git()` deliberately checks out the tag matching the version
+  already installed, not the newest one. Converting and updating are separate
+  decisions; doing both at once would silently ship new code to someone who
+  only clicked "switch". It backs up first and is gated behind a confirm step
+  in the UI.
+
+## Porting the updater to the other apps
+
+`tools/updater.py` and the `WD.Updater` block in `wd-shared.js` are written to
+move to LensLedger / Subscription Wizard by copying two files and editing one
+config block each — nothing below `CONFIG` names this app.
+
+- Python: edit the `CONFIG = AppConfig(...)` literal (repo, version file path
+  and key, asset name template, payload files/dirs, user-data dir,
+  `rescuable_globs`). A test asserts `CONFIG.payload_*` stays in step with
+  `build_release.py`; write the equivalent for the target repo.
+- JS: edit `WD.Updater.config` (repo, bootstrap command, endpoint paths), then
+  call `WD.Updater.mount(el, state)` from wherever that app shows version info.
+- Server: copy the `/api/update` and `/api/update/status` routes.
+- `rescue_dirty_templates()` still imports `tools.template_store` directly —
+  that is the one WD-specific seam left. Generalize it if the target app has
+  its own user-editable-but-tracked files; delete the call if it has none.
+- **WaxFrame is the exception**: it is a `file://` app with no server, so it
+  cannot have the in-app button at all. Its path stays the standalone
+  `Update-WaxFrame.ps1`, which is where this design came from.
+
 ## Known gotchas
 
 - **Owner filter (Mine/Others/All)** in Cloud Manager used to persist to
