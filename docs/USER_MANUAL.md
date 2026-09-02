@@ -255,12 +255,51 @@ The hosted site has no server-side file-processing service. Files opened by the 
 
 ### Update
 
-1. Download the newest versioned ZIP from [GitHub Releases](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest).
-2. Extract it into a fresh folder.
-3. Copy custom files from `templates/` into the new folder if you use desktop wall templates.
-4. Start the new version and confirm the version shown on the home page.
+Open **Menu → About**. If a newer release exists, the panel shows the version you are on, the version available, and an **Update now** button.
 
-Keeping the old extracted folder until the new version passes your normal workflow provides a simple rollback.
+1. Click **Update now**. Progress appears in the panel and in the launcher terminal window.
+2. When it finishes, the panel reports the change—for example `Updated v2.5.0 → v2.6.0`.
+3. Click **Restart to finish**. The suite restarts in a fresh terminal window and reloads on the new version.
+
+The suite chooses the mechanism for you based on how it was installed:
+
+| Install | What happens |
+| --- | --- |
+| Cloned with git | Fetches and checks out the newest release tag. Fast, and the previous version stays available in git. |
+| Installed from a ZIP | Downloads the release asset, verifies its SHA-256, copies the current folder to a dated `.previous-vX.X.X` backup, then installs. |
+
+**Other ways to update** in the same panel covers the rest: switching a ZIP install over to git updates, copying the PowerShell command, or downloading the ZIP by hand. These open on their own if an update fails, along with a plain-language explanation of what went wrong.
+
+#### Switching a ZIP install to git updates
+
+If you installed from a ZIP, **Menu → About → Other ways to update → Switch to git updates** converts the folder in place. You do not need to reinstall or move anything.
+
+The button shows exactly what will happen before you confirm:
+
+- The folder becomes a tracked checkout of the repository.
+- **You stay on the version you have now.** Converting and updating are separate steps, so switching never changes your code out from under you. Use **Update now** afterwards when you want the newer version.
+- A dated backup of the folder is made first.
+- Settings and templates are untouched — they live outside the folder.
+
+Files you added yourself that aren't part of the app (a stray `.esx`, your own notes) are left alone.
+
+On Windows, if git isn't installed the button reads **Switch to git updates (installs Git first)** and installs it with `winget` as part of the same step. If that can't work — no `winget` on older Windows 10 builds, no network, or a policy that blocks installs — the panel says so plainly and you stay on the ZIP method, which keeps working. On macOS the panel points you at `xcode-select --install` or `brew install git` rather than installing anything itself.
+
+You can also update from a terminal, which is the right approach if the suite will not start:
+
+```powershell
+irm https://raw.githubusercontent.com/WeirDave/WD-Wireless-Tools/main/install.ps1 | iex
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/WeirDave/WD-Wireless-Tools/main/install.sh | bash
+```
+
+#### What updating never touches
+
+Wall templates, suite settings, Squirrel configuration, and your saved Cloud session live in `~/.wd_wireless_tools/`, outside the application folder. Updates replace only the application itself.
+
+If you customized a wall template that ships with the suite, your edited copy is preserved automatically as a personal template the first time you update, and the panel tells you it did so. Personal templates always take precedence over the shipped ones; **Reset to built-in** in Quick Walls restores the shipped version.
 
 ### Uninstall
 

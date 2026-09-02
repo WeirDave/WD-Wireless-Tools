@@ -30,6 +30,7 @@ from tools.folder_organizer import FolderOrganizer
 from tools.rename_manager import RenameManager
 from tools.template_store import TemplateStore
 from tools import settings as suite_settings
+from tools import updater
 
 app = Flask(__name__, static_folder=None)
 cm = CloudManager()
@@ -317,6 +318,7 @@ TEMPLATE_ACTIONS = {
     "scan":         lambda d: ts.scan(),
     "save":         lambda d: ts.save(d["name"], d["wallTypes"]),
     "delete":       lambda d: ts.delete(d["filename"]),
+    "reset":        lambda d: ts.reset(d["filename"]),
     "defaults":     lambda d: ts.get_defaults(),
 }
 
@@ -457,6 +459,77 @@ def api_version():
         "restartReady": bool(on_disk and on_disk != startup),
         "pid": os.getpid(),
     })
+
+
+@app.route("/api/update/status", methods=["GET"])
+def api_update_status():
+    """What this install is and whether a newer release exists.
+
+    The frontend uses `method` to decide which single action to offer, rather
+    than making the user choose between git and ZIP.  A network failure here
+    is not an error state: the install info is still useful, so the release
+    lookup degrades to `latest: null` with a reason.
+    """
+    info = updater.detect_install()
+    payload = {"install": info, "latest": None, "updateAvailable": False}
+    try:
+        release = updater.fetch_latest_release()
+        current = info.get("currentVersion") or ""
+        payload["latest"] = {
+            "tag": release["tag"],
+            "version": release["version"],
+            "url": release["url"],
+            "notes": release["notes"][:4000],
+        }
+        payload["updateAvailable"] = updater.cmp_version(release["version"], current) > 0
+    except updater.UpdateError as e:
+        payload["latestError"] = str(e)
+    return jsonify(payload)
+
+
+@app.route("/api/update", methods=["POST"])
+def api_update():
+    """Run the update.  Steps are echoed to the launcher console as they
+    happen, so the terminal window doubles as a progress log, and returned
+    together so the page can show what was done."""
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode")
+    channel = data.get("channel") or "release"
+    install_git = bool(data.get("installGit"))
+    if mode not in (None, "git", "zip", "convert"):
+        return jsonify({"ok": False, "error": f"unknown update mode: {mode}"}), 400
+
+    steps = []
+
+    def say(message):
+        steps.append(message)
+        print(f"  [update] {message}", flush=True)
+
+    print("\n=== WD Wireless Tools: update requested ===", flush=True)
+    try:
+        result = updater.perform_update(mode=mode, channel=channel, log=say,
+                                        install_git_if_missing=install_git)
+    except updater.UpdateError as e:
+        print(f"  [update] FAILED: {e}", flush=True)
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "steps": steps,
+            "install": updater.detect_install(),
+            "releasesUrl": updater.GITHUB_RELEASES_URL,
+        }), 200
+    except Exception as e:
+        print(f"  [update] FAILED: {e}", flush=True)
+        return jsonify({
+            "ok": False,
+            "error": f"Unexpected error during update: {e}",
+            "steps": steps,
+            "releasesUrl": updater.GITHUB_RELEASES_URL,
+        }), 200
+
+    result["steps"] = steps
+    print("=== update complete ===\n", flush=True)
+    return jsonify(result)
 
 
 LAUNCHER_SCRIPT_WIN = "Start WD Wireless Tools.bat"

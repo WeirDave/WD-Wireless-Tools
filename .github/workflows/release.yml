@@ -51,13 +51,19 @@ jobs:
             --version "$version" \
             --output "$asset"
 
+          # The in-app updater and install.ps1/install.sh refuse to install a
+          # ZIP whose hash does not match this manifest.
+          sha256sum "$asset" | awk '{print $1"  "$2}' > "$asset.sha256"
+          cat "$asset.sha256"
+
           echo "asset=$asset" >> "$GITHUB_OUTPUT"
 
-      - name: Upload release asset
+      - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           gh release upload "$RELEASE_TAG" \
             "${{ steps.package.outputs.asset }}" \
+            "${{ steps.package.outputs.asset }}.sha256" \
             --clobber

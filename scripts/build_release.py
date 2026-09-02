@@ -15,6 +15,8 @@ ROOT_FILES = (
     "requirements.txt",
     "README.md",
     "LICENSE",
+    "install.ps1",
+    "install.sh",
 )
 ROOT_DIRECTORIES = ("tools", "web", "templates", "docs")
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
@@ -56,7 +58,11 @@ def build_release(version: str, output: Path) -> None:
         for source, relative in iter_release_files():
             info = zipfile.ZipInfo.from_file(source, relative.as_posix())
             info.create_system = 3
-            permissions = 0o755 if relative.as_posix() == "Start WD Wireless Tools.command" else 0o644
+            executable = relative.as_posix() in (
+                "Start WD Wireless Tools.command",
+                "install.sh",
+            )
+            permissions = 0o755 if executable else 0o644
             info.external_attr = (stat.S_IFREG | permissions) << 16
             info.compress_type = zipfile.ZIP_DEFLATED
             with source.open("rb") as handle:
