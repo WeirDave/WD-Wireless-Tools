@@ -972,7 +972,7 @@
     var bx = _cropBox.x * vw, by = _cropBox.y * vh;
     var bw = _cropBox.w * vw, bh = _cropBox.h * vh;
 
-    var gridFloorNum = floorNumberFor(fp);
+    var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + vw + ' ' + vh + '" '
       + 'class="grid-svg-fill" '
       + 'id="gridSvg" data-dw="' + vw + '" data-dh="' + vh + '">';
@@ -995,14 +995,12 @@
     }
 
     // cell labels inside crop box
-    var previewLabelLen = segCellLabel(_gridCols - 1, _gridRows - 1, gridFloorNum).length;
-    var previewFont = Math.max(10, Math.min(24, cw * 0.3, cw * 0.85 / (0.6 * previewLabelLen)));
     for (var ri2 = 0; ri2 < _gridRows; ri2++) {
       for (var ci2 = 0; ci2 < _gridCols; ci2++) {
-        var lbl = segCellLabel(ci2, ri2, gridFloorNum);
+        var lbl = (ci2 < 26 ? letters[ci2] : 'C' + (ci2 + 1)) + (ri2 + 1);
         var cx = bx + ci2 * cw + cw / 2, cy = by + ri2 * ch + ch / 2;
         svg += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central" '
-          + 'fill="rgba(59,130,246,0.5)" font-size="' + previewFont + '" font-weight="700" pointer-events="none">' + lbl + '</text>';
+          + 'fill="rgba(59,130,246,0.5)" font-size="' + Math.max(10, Math.min(24, cw * 0.3)) + '" font-weight="700" pointer-events="none">' + lbl + '</text>';
       }
     }
 
@@ -1502,14 +1500,10 @@
     return { cols: cols, rows: rows };
   }
 
-  // Section labels repeat on every floor (there is an A1 on each one), so when
-  // the project knows the storey number it goes in front: 2-A1. Printed pages
-  // get handed round on site, and the label has to say where it belongs.
-  function segCellLabel(col, row, floorNum) {
+  function segCellLabel(col, row) {
     var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     var letter = col < 26 ? letters[col] : ('C' + (col + 1));
-    var cell = letter + (row + 1);
-    return (floorNum === null || floorNum === undefined) ? cell : (floorNum + '-' + cell);
+    return letter + (row + 1);
   }
 
   function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml) {
@@ -1535,20 +1529,28 @@
 
     var nonEmpty = cells.filter(function (cell) { return cell.aps.length; });
     var emptyLabels = cells.filter(function (cell) { return !cell.aps.length; })
-      .map(function (cell) { return segCellLabel(cell.col, cell.row, opts.floorNumber); });
+      .map(function (cell) { return segCellLabel(cell.col, cell.row); });
 
     var out = '<div class="rep-seg-note">Floor plan split into ' + nonEmpty.length + ' section' + (nonEmpty.length === 1 ? '' : 's')
       + ' (' + cols + '&times;' + rows + ' grid) so AP markers stay legible.'
       + (emptyLabels.length ? ' No APs in section' + (emptyLabels.length === 1 ? '' : 's') + ' ' + emptyLabels.join(', ') + ' — skipped.' : '')
       + '</div>';
-    out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb, opts.floorNumber);
+    out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb, segFloorHeading(opts));
     nonEmpty.forEach(function (cell) {
       out += renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml);
     });
     return out;
   }
 
-  function renderAntennaGridIndex(url, W, H, allCells, nonEmptyCells, cb, floorNum) {
+  // What the grid overview page calls the floor. The storey number is what an
+  // installer is told to go to, so it wins; a project that never set one still
+  // gets the plan's own name rather than an unlabelled page.
+  function segFloorHeading(opts) {
+    if (opts.floorNumber !== null && opts.floorNumber !== undefined) return 'Floor ' + opts.floorNumber;
+    return opts.floorName || '';
+  }
+
+  function renderAntennaGridIndex(url, W, H, allCells, nonEmptyCells, cb, floorHeading) {
     var gx = cb.x * W, gy = cb.y * H, gw = cb.w * W, gh = cb.h * H;
     var margin = Math.min(gw, gh) * 0.02;
     var vx = Math.max(0, gx - margin), vy = Math.max(0, gy - margin);
@@ -1577,23 +1579,14 @@
     });
     var labels = '';
     var fontSize = Math.min(gw / (allCells.length > 0 ? Math.sqrt(allCells.length) : 1), gh / (allCells.length > 0 ? Math.sqrt(allCells.length) : 1)) * 0.4;
-    // A floor-numbered label is two or three characters longer, so cap the size
-    // at what actually fits across a cell. One size for every cell, picked from
-    // the longest label, keeps the index looking like a grid rather than a
-    // ransom note. Short labels never reach the cap, so unnumbered projects
-    // print exactly as they did before.
-    var cellW = allCells.length ? (allCells[0].x1 - allCells[0].x0) : gw;
-    var maxLabelLen = allCells.reduce(function (m, cell) {
-      return Math.max(m, segCellLabel(cell.col, cell.row, floorNum).length);
-    }, 1);
-    fontSize = Math.min(fontSize, cellW * 0.85 / (0.6 * maxLabelLen));
     allCells.forEach(function (cell) {
       var cx = (cell.x0 + cell.x1) / 2, cy = (cell.y0 + cell.y1) / 2;
       var hasAps = nonEmptySet[cell.col + ',' + cell.row];
       labels += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" class="rep-grid-label' + (hasAps ? '' : ' rep-grid-label--empty') + '" font-size="' + fontSize + '">'
-        + segCellLabel(cell.col, cell.row, floorNum) + '</text>';
+        + segCellLabel(cell.col, cell.row) + '</text>';
     });
     return '<div class="rep-overview rep-seg-index">'
+      + (floorHeading ? '<div class="rep-seg-floor">' + WD.esc(floorHeading) + '</div>' : '')
       + '<div class="rep-overview-plan" data-seg="1" data-orig-w="' + W + '" data-orig-h="' + H
       +   '" data-seg-x0="' + vx + '" data-seg-y0="' + vy + '" data-seg-x1="' + (vx + vW) + '" data-seg-y1="' + (vy + vH)
       +   '" style="--w:' + vW + ';--h:' + vH + '">'
@@ -1625,7 +1618,7 @@
     var vx = Math.max(0, cell.x0 - bleed), vy = Math.max(0, cell.y0 - bleed);
     var vx2 = Math.min(W, cell.x1 + bleed), vy2 = Math.min(H, cell.y1 + bleed);
     var vW = vx2 - vx, vH = vy2 - vy;
-    var label = segCellLabel(cell.col, cell.row, opts.floorNumber);
+    var label = segCellLabel(cell.col, cell.row);
     var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx, cell);
     return '<div class="rep-overview rep-seg-cell">'
       + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell, opts.cropBox)
@@ -1703,7 +1696,9 @@
 
     // Fit both US Letter and A4 portrait after the page chrome around the map.
     var maxWidthIn = 7.2;
-    var maxHeightIn = overlayEl.closest('.rep-seg-index') ? 8.15 : 7.9;
+    // The index page now carries the large floor header above the map, so it
+    // has about 0.6in less to work with than it used to.
+    var maxHeightIn = overlayEl.closest('.rep-seg-index') ? 7.55 : 7.9;
     var widthIn = Math.min(maxWidthIn, maxHeightIn * ratio);
     var heightIn = widthIn / ratio;
     overlayEl.style.setProperty('--print-w', widthIn.toFixed(3) + 'in');

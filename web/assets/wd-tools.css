@@ -4971,6 +4971,18 @@ body.tool-report {
 .rep-seg-index { page-break-before: always; break-before: page; }
 .rep-seg-index .rep-overview-plan { max-width: 100%; margin: 0 auto; }
 
+/* "Floor 1" over the section grid. On screen the index starts its own page, and
+   in print the grid is what gets separated from the rest and carried round the
+   building - either way this is the only thing on it that says which storey it
+   is, so it is sized to be read at arm's length rather than studied. */
+.rep-seg-floor {
+  font-size: 30px; font-weight: 800; line-height: 1.2;
+  margin: 0 0 12px; padding-bottom: 8px;
+  border-bottom: 3px solid var(--rose);
+  color: #111;
+}
+[data-theme="dark"] .rep-seg-floor { color: var(--text); }
+
 .rep-grid-cell { fill: rgba(217,119,6,0.08); stroke: #d97706; }
 .rep-grid-cell--empty { fill: none; stroke: #d97706; opacity: 0.35; stroke-dasharray: 8 4; }
 
@@ -6039,6 +6051,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-overview-plan[data-seg="1"] img { width: 100% !important; height: 100% !important; }
   .rep-overview-plan:not([data-seg="1"]) img { width: 100%; height: auto; }
   .rep-overview-key { color: #555 !important; page-break-before: avoid; }
+  .rep-seg-floor { color: #111 !important; page-break-after: avoid; break-after: avoid; }
 
   .rep-seg-index { page-break-before: auto; break-before: auto; }
   .rep-seg-cell { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; }
