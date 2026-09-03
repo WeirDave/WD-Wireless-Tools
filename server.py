@@ -11,6 +11,8 @@ endpoints. Runs a tiny local Flask server and opens your default browser to it.
 No pywebview, no WebView2 — so none of the desktop-window headaches.
 """
 import json
+import shutil
+import tempfile
 import os
 import subprocess
 import sys
@@ -18,9 +20,10 @@ import threading
 import time
 import webbrowser
 from datetime import datetime, timezone
+from urllib.parse import quote
 from pathlib import Path
 
-from flask import Flask, request, jsonify, send_from_directory, redirect, send_file
+from flask import Flask, request, jsonify, send_from_directory, redirect, send_file, make_response
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"
@@ -32,6 +35,7 @@ from tools.template_store import TemplateStore
 from tools import report_store
 from tools import settings as suite_settings
 from tools import updater
+from tools import esx_trimmer
 
 app = Flask(__name__, static_folder=None)
 cm = CloudManager()
@@ -168,6 +172,11 @@ def report():
     return send_from_directory(WEB, "report.html")
 
 
+@app.route("/plantrim")
+def plantrim():
+    return send_from_directory(WEB, "plantrim.html")
+
+
 
 @app.route("/rename")
 @app.route("/squirrel/rename")
@@ -223,6 +232,57 @@ def favicon():
 
 
     return send_from_directory(WEB, "favicon.ico", mimetype="image/vnd.microsoft.icon")
+
+
+# PlanTrim posts the .esx itself rather than a path: the page is a drop zone
+# like Quick Walls and Report, and a dropped file has no filesystem path. The
+# bytes land in a temp file, the trimmer works on that, and the caller gets
+# either a JSON report (analyze) or the trimmed archive (trim). The user's own
+# file is never opened for writing.
+@app.route("/api/plantrim/<action>", methods=["POST"])
+def api_plantrim(action):
+    if action not in ("analyze", "trim"):
+        return jsonify({"error": f"unknown action: {action}"}), 404
+
+    blob = request.get_data(cache=False)
+    if not blob:
+        return jsonify({"error": "no file received"}), 400
+
+    name = request.args.get("name") or "project.esx"
+    stem = Path(name).stem or "project"
+    margin = request.args.get("margin", type=int) or esx_trimmer.DEFAULT_MARGIN
+
+    tmpdir = tempfile.mkdtemp(prefix="wd-plantrim-")
+    try:
+        src = Path(tmpdir) / "in.esx"
+        src.write_bytes(blob)
+        if action == "analyze":
+            return jsonify(esx_trimmer.api_analyze(str(src), margin))
+
+        dest = Path(tmpdir) / "out.esx"
+        result = esx_trimmer.api_trim_to(str(src), str(dest), margin)
+        if not result.get("ok"):
+            return jsonify(result), 400
+
+        payload = dest.read_bytes()
+        response = make_response(payload)
+        response.headers["Content-Type"] = "application/octet-stream"
+        response.headers["Content-Disposition"] = (
+            f'attachment; filename="{stem} (trimmed).esx"'
+        )
+        # The report rides along in a header so the page can show the numbers
+        # without a second round trip carrying the whole archive again.
+        response.headers["X-PlanTrim-Report"] = quote(json.dumps({
+            "trimmedCount": result["trimmedCount"],
+            "floorCount": result["floorCount"],
+            "bytesBefore": result["bytesBefore"],
+            "bytesAfter": result["bytesAfter"],
+        }))
+        return response
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 ORGANIZER_ACTIONS = {

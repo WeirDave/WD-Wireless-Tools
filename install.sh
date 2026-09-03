@@ -314,7 +314,7 @@ fi
 step "Checking Python dependencies…"
 PY="python3"
 command -v python3 >/dev/null 2>&1 || PY="python"
-if ! "$PY" -c 'import flask, waitress, requests, browser_cookie3, cryptography, keyring' 2>/dev/null; then
+if ! "$PY" -c 'import flask, waitress, requests, browser_cookie3, cryptography, keyring, PIL' 2>/dev/null; then
   echo "  Installing missing packages…"
   "$PY" -m pip install -q -r "$TARGET/requirements.txt" \
     || warn "  Some packages failed to install. Run the launcher to see details."

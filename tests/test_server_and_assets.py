@@ -407,7 +407,7 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
 
     def test_versions_manifest_has_every_tool(self):
         versions = json.loads((ROOT / "web" / "assets" / "versions.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(versions), {"suite", "cloud", "walls", "report", "scale", "squirrel"})
+        self.assertEqual(set(versions), {"suite", "cloud", "walls", "report", "scale", "squirrel", "plantrim"})
         for key, value in versions.items():
             with self.subTest(tool=key):
                 self.assertRegex(value, r"^\d+(?:\.\d+)+$")
@@ -416,7 +416,7 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
         versions = json.loads((ROOT / "web" / "assets" / "versions.json").read_text(encoding="utf-8"))
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn(f"WIRELESS TOOLS  v{versions['suite']}", readme)
-        for tool in ("cloud", "walls", "report", "scale", "squirrel"):
+        for tool in ("cloud", "walls", "report", "scale", "squirrel", "plantrim"):
             with self.subTest(tool=tool):
                 self.assertIn(f"v{versions[tool]}", readme)
         self.assertIn("Seven report formats are available today", readme)

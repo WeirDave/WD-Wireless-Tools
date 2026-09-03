@@ -39,9 +39,11 @@ touched; ``metersPerUnit`` is asserted byte-identical after the rewrite and
 aborts the whole file if it ever moves, because scale drift silently ruins
 every attenuation calculation downstream.
 
-Pillow is imported lazily.  It is not in requirements.txt on purpose: adding a
-hard dependency to every fresh install to serve one optional tool is a bad
-trade on a locked-down machine.
+Pillow ships in requirements.txt, so a normal install already has it, and the
+installers' dependency probe checks for it.  It is still imported lazily: both
+install scripts treat a pip failure as a warning and carry on, so on a machine
+where the wheel will not install the rest of the suite keeps working and only
+this tool has to explain itself.
 """
 from __future__ import annotations
 
@@ -586,3 +588,62 @@ def _run(source: Path, dest: Path | None, margin: int, dry_run: bool) -> TrimRep
     report.bytes_after = Path(dest).stat().st_size
     report.written = True
     return report
+
+
+# ---------------------------------------------------------------------------
+# Web API — thin JSON wrappers used by /api/plantrim/<action>.
+#
+# Everything above is a plain library; nothing below it changes behaviour, it
+# only shapes results for the browser and keeps server.py free of file dialogs.
+# ---------------------------------------------------------------------------
+
+def _floor_json(f: FloorResult) -> dict:
+    saved = None
+    if f.old_size and f.new_size:
+        before = f.old_size[0] * f.old_size[1]
+        after = f.new_size[0] * f.new_size[1]
+        saved = round((1 - after / before) * 100) if before else 0
+    return {
+        "id": f.floor_id,
+        "name": f.name,
+        "action": f.action,
+        "reason": f.reason,
+        "oldSize": list(f.old_size) if f.old_size else None,
+        "newSize": list(f.new_size) if f.new_size else None,
+        "offset": list(f.offset) if f.offset else None,
+        "areaSavedPct": saved,
+    }
+
+
+def _report_json(report: TrimReport, dest: Path | None = None) -> dict:
+    return {
+        "ok": True,
+        "source": str(report.source),
+        "sourceName": report.source.name,
+        "dest": str(dest) if dest else None,
+        "floors": [_floor_json(f) for f in report.floors],
+        "trimmedCount": report.trimmed_count,
+        "floorCount": len(report.floors),
+        "bytesBefore": report.bytes_before,
+        "bytesAfter": report.bytes_after,
+        "written": report.written,
+        "summary": report.summary(),
+    }
+
+
+def api_analyze(path: str, margin: int = DEFAULT_MARGIN) -> dict:
+    try:
+        return _report_json(analyze(Path(path), margin=int(margin)))
+    except TrimError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def api_trim_to(path: str, dest: str, margin: int = DEFAULT_MARGIN) -> dict:
+    """Trim *path* into an explicit *dest*, for the upload/download flow."""
+    try:
+        report = trim(Path(path), Path(dest), margin=int(margin))
+        return _report_json(report, dest=Path(dest))
+    except TrimError as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception as exc:  # pragma: no cover - surfaced to the UI
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}

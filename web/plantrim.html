@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD PlanTrim</title>
+<link rel="icon" href="/assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/wd-wireless-tools-v8.0-180x180.png">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+</head>
+<body class="tool-plantrim">
+
+<div id="dzTopbar" class="dz-topbar" onclick="event.stopPropagation()">
+  <div class="header-left">
+    <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+    <div class="help-menu-wrap">
+      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'dzMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <div id="dzMenu" class="help-menu">
+        <div class="menu-section">&#9656; Navigation</div>
+        <a class="help-menu-item" href="/">&#8962; Home</a>
+        <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+        <a class="help-menu-item" href="/walls">· Quick Walls</a>
+        <a class="help-menu-item" href="/report">· Report</a>
+        <a class="help-menu-item" href="/scale">· Scale</a>
+        <a class="help-menu-item active" href="/plantrim">· PlanTrim</a>
+        <a class="help-menu-item" href="/squirrel">· Squirrel</a>
+        <div class="help-menu-sep"></div>
+        <div class="menu-section">&#9656; Tools</div>
+        <a class="help-menu-item" href="/settings">· Suite Settings</a>
+        <div class="help-menu-sep"></div>
+        <div class="menu-section">&#9656; Help &amp; Support</div>
+        <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+        <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <a class="help-menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug</a>
+      </div>
+    </div>
+  </div>
+  <div class="header-center">
+    <h1><span>WD</span> PlanTrim <span class="ver" data-ver="plantrim">v&hellip;</span></h1>
+  </div>
+  <div class="header-actions">
+    <button class="theme-toggle" onclick="WD.toggleTheme()">
+      <span class="ico">🌙</span><span class="txt">Dark</span>
+    </button>
+  </div>
+</div>
+
+<div id="dropzone" class="dropzone">
+  <div id="dropzoneLogo" class="dropzone-logo"></div>
+  <p class="dropzone-ver" data-ver="plantrim">v&hellip;</p>
+  <p class="dropzone-sub">Ekahau Workflow Optimization Utility</p>
+  <p class="dropzone-desc">Crops the empty canvas off a CAD import — a 10000&times;7500 page with the building using a fifth of it becomes a page the size of the building. Every access point, wall, area and reference point moves with the crop, so the project still opens correctly in Ekahau.</p>
+  <div class="dropzone-divider"></div>
+  <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
+  <ul class="dropzone-steps">
+    <li data-step="1."><strong>Open</strong> an Ekahau project file (.esx)</li>
+    <li data-step="2."><strong>Review</strong> what would be cropped, floor by floor</li>
+    <li data-step="3."><strong>Save</strong> the trimmed .esx and reload in Ekahau</li>
+  </ul>
+</div>
+<input type="file" id="fileInput" accept=".esx" hidden>
+
+<div id="editor" class="editor pt-editor">
+  <div class="header">
+    <div class="header-left">
+      <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+      <div class="help-menu-wrap">
+        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'helpMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <div id="helpMenu" class="help-menu">
+          <div class="menu-section">&#9656; Navigation</div>
+          <a class="help-menu-item" href="/">&#8962; Home</a>
+          <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+          <a class="help-menu-item" href="/walls">· Quick Walls</a>
+          <a class="help-menu-item" href="/report">· Report</a>
+          <a class="help-menu-item" href="/scale">· Scale</a>
+          <a class="help-menu-item active" href="/plantrim">· PlanTrim</a>
+          <a class="help-menu-item" href="/squirrel">· Squirrel</a>
+          <div class="help-menu-sep"></div>
+          <div class="menu-section">&#9656; Help &amp; Support</div>
+          <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+          <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        </div>
+      </div>
+      <span id="fileBadge" class="file-badge"></span>
+    </div>
+    <div class="header-center">
+      <h1><span>WD</span> PlanTrim <span class="ver" data-ver="plantrim">v&hellip;</span></h1>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-sec" onclick="ptLoadNewFile()">Open another</button>
+      <button class="btn btn-primary" id="ptSaveBtn" onclick="ptTrim()" disabled>Save trimmed .esx</button>
+    </div>
+  </div>
+
+  <div class="pt-wrap">
+    <div class="pt-card">
+      <div class="pt-step">What PlanTrim would do</div>
+      <div id="ptFloors" class="pt-floors"></div>
+      <div class="pt-note" id="ptSizeNote"></div>
+    </div>
+
+    <div class="pt-result" id="ptResult" hidden></div>
+
+    <p class="pt-footer-hint">
+      Nothing is written until you press <strong>Save trimmed .esx</strong>. Your original file is
+      never modified — you get a new copy to download.
+    </p>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/plantrim.js"></script>
+</body>
+</html>
