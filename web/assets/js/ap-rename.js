@@ -579,6 +579,10 @@
 
   window.arManualClick = function (apId) {
     if (!isManual()) return;
+    // The click that ends a pan lands on whatever was under the cursor. If the
+    // pan started on a marker, that is this one — ignore it. The flag has to
+    // outlive mouseup, because click fires after it.
+    if (_zoom.suppressClick) { _zoom.suppressClick = false; return; }
     var at = manualIndex(apId);
     manualSnapshot();
     if (at === -1) {
@@ -594,8 +598,18 @@
 
   window.arManualUndo = function () {
     if (!S.manualUndo.length) { toast('Nothing to undo'); return; }
+    var before = S.manualOrder.length;
     S.manualOrder = S.manualUndo.pop();
     updateAll();
+    // Name the number that came free, so a run of undos is followable without
+    // reading the panel between each one.
+    var settings = getSettings();
+    var freed = getStartNum(settings) + S.manualOrder.length;
+    if (S.manualOrder.length < before) {
+      toast('Released ' + freed + ' — next up again');
+    } else {
+      toast('Undo — next is ' + freed);
+    }
   };
 
   window.arManualClear = function () {
@@ -1088,7 +1102,8 @@
   });
 
   /* ── zoom & pan ─────────────────────────────────────────────────── */
-  var _zoom = { scale: 1, tx: 0, ty: 0, dragging: false, sx: 0, sy: 0, stx: 0, sty: 0 };
+  var _zoom = { scale: 1, tx: 0, ty: 0, dragging: false, sx: 0, sy: 0, stx: 0, sty: 0,
+               btn: -1, moved: false, suppressClick: false };
   var MIN_ZOOM = 0.5, MAX_ZOOM = 8;
 
   // Ctrl+Z steps back one click. Numbering a floor is a long run of clicks and
@@ -1136,9 +1151,25 @@
     $('arZoomLbl').textContent = Math.round(_zoom.scale * 100) + '%';
   }, { passive: false });
 
+  // A press becomes a drag only once it travels this far. Below it the gesture
+  // is a click. 6px clears ordinary hand tremor and the shake of pressing a
+  // stiff mouse button, while a deliberate pan moves tens of pixels — so a
+  // spurious undo mid-run, which would silently drop a number, cannot happen,
+  // and a real click never feels dead.
+  var DRAG_SLOP = 6;
+
+  // The plan owns the right button, so the browser menu must not appear over
+  // it — the same suppression Quick Walls does for its right-drag pan.
+  planWrap.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
   planWrap.addEventListener('mousedown', function (e) {
-    if (e.button !== 0) return;
+    // Left drags the plan, right drags it too (matching Quick Walls and
+    // Report). Which button it was decides what a *non*-drag means on release.
+    if (e.button !== 0 && e.button !== 2) return;
     _zoom.dragging = true;
+    _zoom.btn = e.button;
+    _zoom.moved = false;
+    _zoom.suppressClick = false;
     _zoom.sx = e.clientX; _zoom.sy = e.clientY;
     _zoom.stx = _zoom.tx; _zoom.sty = _zoom.ty;
     planWrap.style.cursor = 'grabbing';
@@ -1147,19 +1178,41 @@
 
   window.addEventListener('mousemove', function (e) {
     if (!_zoom.dragging) return;
-    _zoom.tx = _zoom.stx + (e.clientX - _zoom.sx);
-    _zoom.ty = _zoom.sty + (e.clientY - _zoom.sy);
+    var dx = e.clientX - _zoom.sx, dy = e.clientY - _zoom.sy;
+    if (!_zoom.moved && Math.abs(dx) + Math.abs(dy) > DRAG_SLOP) _zoom.moved = true;
+    if (!_zoom.moved) return;   // hold still until it is clearly a drag
+    _zoom.tx = _zoom.stx + dx;
+    _zoom.ty = _zoom.sty + dy;
     applyTransform();
   });
 
-  window.addEventListener('mouseup', function () {
-    if (_zoom.dragging) {
-      _zoom.dragging = false;
-      planWrap.style.cursor = '';
-    }
+  window.addEventListener('mouseup', function (e) {
+    if (!_zoom.dragging) return;
+    var wasDrag = _zoom.moved;
+    var btn = _zoom.btn;
+    _zoom.dragging = false;
+    _zoom.moved = false;
+    // click fires after mouseup, so the decision has to be parked here.
+    _zoom.suppressClick = wasDrag;
+    planWrap.style.cursor = '';
+    // Right-click with no travel is undo — it keeps the hand on the mouse
+    // through a long numbering run instead of reaching for the keyboard.
+    if (!wasDrag && btn === 2 && isManual()) arManualUndo();
   });
 
   window.arResetZoom = resetZoom;
+
+  // Diagnostics hook, same shape as Quick Walls' __wallsSwap.
+  window.__apLabeler = {
+    state: function () {
+      return {
+        order: S.manualOrder.slice(),
+        undoDepth: S.manualUndo.length,
+        undoLengths: S.manualUndo.map(function (a) { return a.length; }),
+        drag: { btn: _zoom.btn, moved: _zoom.moved, suppressClick: _zoom.suppressClick }
+      };
+    }
+  };
 
   /* ── init ───────────────────────────────────────────────────────── */
   loadPresets();
