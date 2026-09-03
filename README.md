@@ -6,8 +6,8 @@
 
 **A suite of Ekahau workflow tools.**
 
-Five focused utilities for organizing projects, managing Ekahau Cloud, editing walls,
-converting scale, and building installer-ready reports.
+Seven focused utilities for organizing projects, managing Ekahau Cloud, editing walls,
+converting scale, building installer-ready reports, trimming floor plans, and labeling access points.
 
 [![Latest Release](https://img.shields.io/github/v/release/WeirDave/WD-Wireless-Tools?style=for-the-badge&color=1e77ac)](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest)
 [![Tests](https://img.shields.io/github/actions/workflow/status/WeirDave/WD-Wireless-Tools/tests.yml?branch=main&style=for-the-badge&label=Windows%20%2B%20macOS)](https://github.com/WeirDave/WD-Wireless-Tools/actions/workflows/tests.yml)
@@ -32,6 +32,7 @@ converting scale, and building installer-ready reports.
 <td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"></a><br><b>Scale</b><br><sub>v1.5 · Desktop + Web</sub></td>
 <td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"></a><br><b>Report</b><br><sub>v2.36.0 · Desktop + Web</sub></td>
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v1.0 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -40,7 +41,7 @@ converting scale, and building installer-ready reports.
 ## Table of Contents
 
 - [What WD Wireless Tools Does](#what-wd-wireless-tools-does)
-- [Five Tools, One Workflow](#five-tools-one-workflow)
+- [Seven Tools, One Workflow](#seven-tools-one-workflow)
 - [Quick Start](#quick-start)
 - [Privacy and Local-First Design](#privacy-and-local-first-design)
 - [First Run](#first-run)
@@ -58,7 +59,7 @@ The full suite runs from a tiny local Flask server and opens in your normal brow
 
 > **The important distinction:** the interface is browser-based, but your working data stays local. The hosted tools process files in your browser; Cloud Manager contacts Ekahau Cloud only when you direct it to operate on your own tenant.
 
-## Five Tools, One Workflow
+## Seven Tools, One Workflow
 
 ### Cloud Manager
 
@@ -114,13 +115,33 @@ Transform an `.esx` project into print-ready, installer-facing documents. Seven 
 
 The **Change / Audit Report (coming soon)** is visible in the gallery but is not selectable yet. Every available report supports its own options and print-optimized renderer through the shared report registry. Try it in the [hosted Report tool](https://weirdave.github.io/WD-Wireless-Tools/report/).
 
+### PlanTrim
+
+Crop the empty canvas off a CAD-imported floor plan and rebase every object's coordinates to match.
+
+- Detects the bounding box of all placed objects (APs, walls, areas, notes)
+- Trims the floor-plan image to the used region
+- Rebases coordinates so objects stay in the right place on the smaller canvas
+- Downloads a cleaned `.esx` ready for design work
+
+### AP Labeler
+
+See your access points on the floor plan, pick a spatial ordering, set a naming pattern, and download a labeled `.esx`.
+
+- Visual floor-plan viewer with zoom and pan
+- Seven spatial orderings: snake, row by row (L→R / R→L), column by column (T→B / B→T), clockwise, counter-clockwise
+- Structured naming with CLLI, building, floor (auto from ESX), suite, and AP tag fields
+- Freeform naming with custom text and number as prefix or suffix
+- MAC address naming with hex incrementing and configurable format
+- Live preview of generated names overlaid on the floor plan
+
 ---
 
 ## Quick Start
 
 ### Try the browser tools
 
-Open the [hosted tool suite](https://weirdave.github.io/WD-Wireless-Tools/) to use Quick Walls, Scale, or Report immediately. There is no installation or login. Cloud Manager and Squirrel remain desktop-only because they need Ekahau Cloud or local file-system access.
+Open the [hosted tool suite](https://weirdave.github.io/WD-Wireless-Tools/) to use Quick Walls, Scale, or Report immediately. There is no installation or login. Cloud Manager, Squirrel, PlanTrim, and AP Labeler remain desktop-only because they need local file-system access or server-side processing.
 
 ### Install the complete desktop suite
 
@@ -180,7 +201,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.19.0
+WIRELESS TOOLS  v2.20.0
 A suite of Ekahau workflow tools.
 
 Local suite: http://localhost:8675/
@@ -191,7 +212,7 @@ Press CTRL+C in this window to stop WD Wireless Tools.
 
 ## Privacy and Local-First Design
 
-- Quick Walls and Report parse `.esx` archives locally in your browser with JSZip.
+- Quick Walls, Report, PlanTrim, and AP Labeler parse `.esx` archives locally in your browser with JSZip.
 - Scale performs every calculation in the browser.
 - Squirrel accesses only the local folder you select.
 - Cloud Manager connects only to the Ekahau Cloud account and local folder you select.

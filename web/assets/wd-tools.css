@@ -27,6 +27,7 @@
   --purple: #8b5cf6; --purple-dark: #7c3aed;
   --teal: #0d9488;  --teal-dark: #0f766e;
   --rose: #9F1B58;  --rose-dark: #7A1544;
+  --indigo: #6366f1; --indigo-dark: #4f46e5;
   --orange: #ea7c1a;
   --slate: #5d5b60; --navy: #0e1b26;
 
@@ -1561,6 +1562,16 @@ body.tool-home .topbar {
 [data-theme="light"] .card.rose:hover { background: rgba( 159,27,88, 0.14); }
 
 .card.rose:hover .open-btn { background: var(--rose-dark); }
+
+.card.indigo h2 span { color: var(--indigo); }
+
+.card.indigo .open-btn { background: var(--indigo); }
+
+.card.indigo:hover { border-color: var(--indigo); background: rgba( 99, 102, 241, 0.20); }
+
+[data-theme="light"] .card.indigo:hover { background: rgba( 99, 102, 241, 0.14); }
+
+.card.indigo:hover .open-btn { background: var(--indigo-dark); }
 
 .foot { margin-top: 20px; color: var(--text-3); font-size: 12px; }
 
@@ -7296,6 +7307,22 @@ body.pt-busy { cursor: progress; }
 }
 
 body.tool-plantrim .dropzone-logo { background-image: url(plantrim-v1.0-560x480.png); }
+
+/* ── AP Labeler header & dropzone ───────────────────────────── */
+body.tool-aprename .header h1,
+body.tool-aprename .dz-topbar h1 { color: var(--indigo); }
+body.tool-aprename .header,
+body.tool-aprename .dz-topbar { background: linear-gradient(rgba(99,102,241,0.18), rgba(99,102,241,0.18)), var(--navy); }
+[data-theme="light"] body.tool-aprename .header,
+[data-theme="light"] body.tool-aprename .dz-topbar { background: linear-gradient(rgba(99,102,241,0.14), rgba(99,102,241,0.14)), var(--head-bg); }
+body.tool-aprename .header-actions .btn-primary { background: var(--indigo); border-color: var(--indigo); }
+body.tool-aprename .header-actions .btn-primary:hover { background: var(--indigo-dark); border-color: var(--indigo-dark); }
+
+body.tool-aprename .dropzone .ext { color: var(--indigo); }
+body.tool-aprename .dropzone-cta  { border-color: var(--indigo); }
+body.tool-aprename .dropzone:hover .dropzone-cta,
+body.tool-aprename .dropzone.dragover .dropzone-cta { border-color: var(--indigo); background: rgba(99,102,241,0.18); }
+body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x560.png); }
 
 body.tool-plantrim .dropzone:hover .dropzone-cta,
 body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-accent); }
