@@ -13,7 +13,9 @@
     currentFloor: null,
     sorted: [],
     preview: [],
-    presets: []
+    presets: [],
+    manualOrder: [],   // ap ids, in the order they were clicked
+    manualUndo: []     // snapshots of manualOrder, newest last
   };
 
   function $(id) { return document.getElementById(id); }
@@ -161,6 +163,35 @@
 
   /* ── presets (localStorage) ────────────────────────────────────── */
   var PRESET_KEY = 'wd-ar-presets';
+
+  // Naming defaults live with the other suite settings under
+  // ~/.wd_wireless_tools rather than in localStorage, so they follow the
+  // install rather than the browser profile. Presets stay local - they are a
+  // per-person scratchpad, not a machine default.
+  function apiSettings(action, body) {
+    return fetch('/api/settings/' + action, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json(); });
+  }
+
+  function loadDefaults() {
+    return apiSettings('get').then(function (res) {
+      var d = res && res.ok && res.settings && res.settings.aprename;
+      if (d && d.defaults) applySettings(d.defaults);
+      updateAll();
+    }).catch(function () { /* offline or older server: keep the built-ins */ });
+  }
+
+  window.arSaveDefaults = function () {
+    var s = getSettings();
+    delete s.macAddr;   // a specific radio's MAC is not a default
+    apiSettings('update', { patch: { aprename: { defaults: s } } }).then(function (res) {
+      if (res && res.ok) toast('Saved as defaults', 'success');
+      else toast('Could not save defaults', 'error');
+    }).catch(function () { toast('Could not save defaults', 'error'); });
+  };
 
   function loadPresets() {
     try { S.presets = JSON.parse(localStorage.getItem(PRESET_KEY)) || []; }
@@ -318,6 +349,8 @@
       return JSZip.loadAsync(buf);
     }).then(function (zip) {
       S.zip = zip;
+      S.manualOrder = [];
+      S.manualUndo = [];
       return parseEsx(zip);
     }).then(function () {
       if (!S.floors.length) {
@@ -511,8 +544,89 @@
       case 'clockwise':  return sortRadial(sorted, true);
       case 'counter-clockwise': return sortRadial(sorted, false);
       case 'by-color':   return sortByColorGroup(sorted);
+      case 'manual':     return sortManual(sorted);
     }
     return sorted;
+  }
+
+  /* ── manual click numbering ──────────────────────────────────────
+     The number an AP gets is its position in S.manualOrder, which is
+     append-on-click. Unnumbered APs are deliberately left out of the sorted
+     list: everything downstream numbers whatever it is handed, so excluding
+     them is what keeps an unclicked AP at its original name. */
+  function sortManual(aps) {
+    var rank = {};
+    S.manualOrder.forEach(function (id, i) { rank[id] = i; });
+    return aps.filter(function (ap) { return rank[ap.id] !== undefined; })
+              .sort(function (a, b) { return rank[a.id] - rank[b.id]; });
+  }
+
+  function isManual() {
+    var el = $('arOrder');
+    return !!el && el.value === 'manual';
+  }
+
+  function manualIndex(apId) {
+    return S.manualOrder.indexOf(apId);
+  }
+
+  // Snapshots rather than inverse operations: the state being undone is a
+  // short array of ids, so copying it is simpler and safer than replaying.
+  function manualSnapshot() {
+    S.manualUndo.push(S.manualOrder.slice());
+    if (S.manualUndo.length > 200) S.manualUndo.shift();
+  }
+
+  window.arManualClick = function (apId) {
+    if (!isManual()) return;
+    var at = manualIndex(apId);
+    manualSnapshot();
+    if (at === -1) {
+      S.manualOrder.push(apId);
+    } else {
+      // Re-clicking a numbered AP takes it out and shifts the rest down. One
+      // rule covers both "I clicked the wrong one" and "drop this from the
+      // middle of the run", and the renumber is visible immediately.
+      S.manualOrder.splice(at, 1);
+    }
+    updateAll();
+  };
+
+  window.arManualUndo = function () {
+    if (!S.manualUndo.length) { toast('Nothing to undo'); return; }
+    S.manualOrder = S.manualUndo.pop();
+    updateAll();
+  };
+
+  window.arManualClear = function () {
+    if (!S.manualOrder.length) return;
+    if (!confirm('Clear all ' + S.manualOrder.length + ' manual numbers?')) return;
+    manualSnapshot();
+    S.manualOrder = [];
+    updateAll();
+  };
+
+  // How many manually numbered APs sit on a floor — used for the running
+  // offset when numbering continues across floors.
+  function manualCountForFloor(fpId) {
+    var ids = {};
+    getFloorAPs(fpId).forEach(function (ap) { ids[ap.id] = 1; });
+    return S.manualOrder.filter(function (id) { return ids[id]; }).length;
+  }
+
+  function updateManualPanel() {
+    var panel = $('arManualPanel');
+    if (!panel) return;
+    var on = isManual();
+    panel.hidden = !on;
+    if (!on) return;
+    var placed = 0;
+    S.floors.forEach(function (f) { placed += getFloorAPs(f.id).length; });
+    var settings = getSettings();
+    $('arManualNext').textContent = String(getStartNum(settings) + S.manualOrder.length);
+    $('arManualCount').textContent = S.manualOrder.length + ' of ' + placed + ' numbered';
+    $('arManualUndo').disabled = !S.manualUndo.length;
+    $('arManualClear').disabled = !S.manualOrder.length;
   }
 
   function sortByColorGroup(aps) {
@@ -672,10 +786,20 @@
       if (settings.perFloor) num = start;
       var floorAPs = getFloorAPs(floor.id);
       var sorted = sortAPs(floorAPs, settings.order);
+      var numbered = {};
       sorted.forEach(function (ap) {
         var newName = generateName(settings, floor, num);
+        numbered[ap.id] = 1;
         allItems.push({ ap: ap, oldName: ap.name, newName: newName, floorId: floor.id });
         num++;
+      });
+      // In manual mode sortAPs only returns the clicked APs, so the rest are
+      // listed unchanged rather than silently vanishing from the preview.
+      floorAPs.forEach(function (ap) {
+        if (!numbered[ap.id]) {
+          allItems.push({ ap: ap, oldName: ap.name, newName: ap.name,
+                          floorId: floor.id, unnumbered: true });
+        }
       });
     });
 
@@ -689,6 +813,7 @@
   }
 
   function updateSpacingVisibility() {
+    updateManualPanel();
     var order = $('arOrder').value;
     var show = order === 'row-ltr' || order === 'row-rtl' ||
                order === 'col-ttb' || order === 'col-btt';
@@ -760,6 +885,7 @@
     if (!floor || !floor.width || !floor.height) return;
 
     var settings = getSettings();
+    var manual = settings.order === 'manual';
     renderGuideLines(box, floor, settings.order);
     var floorAPs = getFloorAPs(S.currentFloor);
     var sorted = sortAPs(floorAPs, settings.order);
@@ -770,8 +896,31 @@
     if (!settings.perFloor) {
       for (var fi = 0; fi < S.floors.length; fi++) {
         if (S.floors[fi].id === S.currentFloor) break;
-        offset += floorAPCount(S.floors[fi].id);
+        offset += manual ? manualCountForFloor(S.floors[fi].id)
+                         : floorAPCount(S.floors[fi].id);
       }
+    }
+
+    // Manual mode still draws the APs nobody has clicked yet — you cannot pick
+    // the next one if it is not on the plan.
+    if (manual) {
+      var clicked = {};
+      sorted.forEach(function (ap) { clicked[ap.id] = 1; });
+      floorAPs.forEach(function (ap) {
+        if (clicked[ap.id]) return;
+        var m = document.createElement('div');
+        m.className = 'ar-marker is-unnumbered is-clickable';
+        m.style.left = (ap.x / floor.width * 100) + '%';
+        m.style.top  = (ap.y / floor.height * 100) + '%';
+        m.textContent = '\u2013';
+        m.setAttribute('data-ap-id', ap.id);
+        m.onclick = function (e) { e.stopPropagation(); arManualClick(ap.id); };
+        var t = document.createElement('span');
+        t.className = 'ar-tip';
+        t.textContent = ap.name + ' \u2014 click to number';
+        m.appendChild(t);
+        box.appendChild(m);
+      });
     }
 
     sorted.forEach(function (ap, idx) {
@@ -781,7 +930,11 @@
       var newName = generateName(settings, floor, num);
 
       var marker = document.createElement('div');
-      marker.className = 'ar-marker';
+      marker.className = 'ar-marker' + (manual ? ' is-clickable' : '') +
+        (manual && idx === sorted.length - 1 ? ' is-last' : '');
+      if (manual) {
+        marker.onclick = function (e) { e.stopPropagation(); arManualClick(ap.id); };
+      }
       marker.style.left = (fracX * 100) + '%';
       marker.style.top  = (fracY * 100) + '%';
       marker.textContent = String(idx + 1);
@@ -798,7 +951,8 @@
 
       var tip = document.createElement('span');
       tip.className = 'ar-tip';
-      tip.textContent = ap.name + ' → ' + newName;
+      tip.textContent = ap.name + ' → ' + newName +
+        (manual ? '  (click to remove)' : '');
       marker.appendChild(tip);
 
       box.appendChild(marker);
@@ -814,6 +968,15 @@
     } else {
       items = allItems;
     }
+    if ($('arOrder').value === 'manual') {
+      items = items.slice().sort(function (a, b) {
+        var ra = manualIndex(a.ap.id), rb = manualIndex(b.ap.id);
+        if (ra === -1 && rb === -1) return 0;
+        if (ra === -1) return 1;
+        if (rb === -1) return -1;
+        return ra - rb;
+      });
+    }
     var changed = items.filter(function (it) { return it.oldName !== it.newName; }).length;
     $('arPreviewHead').textContent = 'Preview (' + items.length + ' APs, ' + changed + ' labeled)';
 
@@ -823,16 +986,22 @@
       return;
     }
     var html = '';
+    var manual = $('arOrder').value === 'manual';
     items.forEach(function (it, i) {
       var isDiff = it.oldName !== it.newName;
+      // In manual mode the left column is the assigned position, so an
+      // unclicked AP reads as "-" rather than borrowing a row number.
+      var seq = manual ? (it.unnumbered ? '\u2013' : String(manualIndex(it.ap.id) + 1))
+                       : String(i + 1);
       var swatch = '';
       var rc = resolveColor(it.ap.color);
       if (rc) {
         var border = needsDarkText(rc) ? '1px solid rgba(0,0,0,.2)' : 'none';
         swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + rc + ';border:' + border + ';vertical-align:middle;margin-right:4px"></span>';
       }
-      html += '<tr class="' + (isDiff ? 'changed' : '') + '">' +
-        '<td class="ar-num">' + (i + 1) + '</td>' +
+      html += '<tr class="' + (isDiff ? 'changed' : '') +
+        (it.unnumbered ? ' unnumbered' : '') + '">' +
+        '<td class="ar-num">' + seq + '</td>' +
         '<td>' + swatch + esc(it.oldName || '—') + '</td>' +
         '<td class="ar-arrow">→</td>' +
         '<td class="ar-new">' + esc(it.newName) + '</td>' +
@@ -922,6 +1091,20 @@
   var _zoom = { scale: 1, tx: 0, ty: 0, dragging: false, sx: 0, sy: 0, stx: 0, sty: 0 };
   var MIN_ZOOM = 0.5, MAX_ZOOM = 8;
 
+  // Ctrl+Z steps back one click. Numbering a floor is a long run of clicks and
+  // a misclick part-way through is certain, so this is bound globally rather
+  // than only while the plan has focus.
+  document.addEventListener('keydown', function (e) {
+    if (!(e.ctrlKey || e.metaKey)) return;
+    var k = String(e.key || '').toLowerCase();
+    if (k !== 'z' && k !== 'y') return;
+    var t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (!isManual()) return;
+    e.preventDefault();
+    if (k === 'z') arManualUndo();
+  });
+
   function applyTransform() {
     var box = $('arPlanBox');
     box.style.transform = 'translate(' + _zoom.tx + 'px,' + _zoom.ty + 'px) scale(' + _zoom.scale + ')';
@@ -980,6 +1163,7 @@
 
   /* ── init ───────────────────────────────────────────────────────── */
   loadPresets();
+  loadDefaults();
 
   window.__aprename = {
     loadFile: loadFile,
