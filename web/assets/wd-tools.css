@@ -5060,6 +5060,11 @@ body.tool-report {
 
 .rep-key-swatch.omni { background: var(--rose); }
 
+/* Several swatches in a row when the project colour-codes its APs. An inline
+   background from the report overrides the brand fallback above. */
+.rep-key-swatch + .rep-key-swatch { margin-left: -1px; }
+.rep-key-more { font-size: 10px; color: var(--text-3); margin: 0 4px 0 2px; vertical-align: middle; }
+
 .rep-ap-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 
 .rep-ap-table th, .rep-ap-table td {

@@ -1028,20 +1028,31 @@
     var held = false;
     var subs = [];
 
-    // Space belongs to whatever the user is typing into. Report has Client and
-    // Prepared by, Quick Walls has the wall-type and template name boxes; in
-    // any of them Space must produce a space, not grab the canvas.
+    // Space belongs to the focused control whenever the control already means
+    // something by it. Text boxes and selects are the obvious cases -- Report
+    // has Client and Prepared by, Quick Walls has the wall-type and template
+    // name boxes -- but a checkbox, a radio and a <summary> are toggled by
+    // Space too, and taking that away from a keyboard user to serve a mouse
+    // gesture is a straight accessibility regression.
+    //
+    // Buttons are the deliberate exception. Their Space is an activation, they
+    // hold focus after a click, and a toolbar button quietly eating the pan is
+    // exactly the failure this guard exists to prevent.
+    var SPACE_IS_NATIVE_ROLE = { checkbox: 1, radio: 1, switch: 1, menuitemcheckbox: 1, menuitemradio: 1 };
+    var SPACE_IS_ACTIVATION_TYPE = { button: 1, submit: 1, reset: 1, file: 1, image: 1 };
+
     function isTypingTarget(el) {
       if (!el) return false;
       if (el.isContentEditable) return true;
+      var role = (el.getAttribute && el.getAttribute('role') || '').toLowerCase();
+      if (SPACE_IS_NATIVE_ROLE[role]) return true;
+      if (role === 'button') return false;
       var tag = el.tagName;
-      if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'SUMMARY') return true;
+      if (tag === 'BUTTON') return false;
       if (tag !== 'INPUT') return false;
-      // Checkboxes, radios and buttons are activated by Space, but they are not
-      // text entry -- swallowing it there is what stops a focused checkbox from
-      // toggling every time you reach for the pan.
       var t = (el.type || 'text').toLowerCase();
-      return t !== 'checkbox' && t !== 'radio' && t !== 'button' && t !== 'submit' && t !== 'reset';
+      return !SPACE_IS_ACTIVATION_TYPE[t];
     }
 
     function notify() {
