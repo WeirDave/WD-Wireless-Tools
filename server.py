@@ -36,6 +36,7 @@ from tools import report_store
 from tools import settings as suite_settings
 from tools import updater
 from tools import esx_trimmer
+from tools import reveal as reveal_tool
 
 app = Flask(__name__, static_folder=None)
 cm = CloudManager()
@@ -244,6 +245,57 @@ def favicon():
 # bytes land in a temp file, the trimmer works on that, and the caller gets
 # either a JSON report (analyze) or the trimmed archive (trim). The user's own
 # file is never opened for writing.
+# Quick Walls opens projects by drag and drop, and a dropped file gives the
+# browser no filesystem path - so "open the folder this came from" needs the
+# server to have opened it. "Open from disk" uses the native picker here and the
+# path is kept server-side only: /api/walls/reveal takes no arguments at all, so
+# the browser can never hand a path to a command line.
+_WALLS_PROJECT = {"path": None}
+
+
+@app.route("/api/walls/<action>", methods=["POST"])
+def api_walls(action):
+    try:
+        if action == "pick":
+            from tools.folder_organizer import _tk_dialog
+            code = (
+                "import tkinter as tk\n"
+                "from tkinter import filedialog\n"
+                "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
+                "p = filedialog.askopenfilename(title='Open an Ekahau project (.esx)', filetypes=[('Ekahau project', '*.esx'), ('All files', '*.*')])\n"
+                "print(p or '')\n"
+            )
+            chosen = _tk_dialog(code)
+            if not chosen:
+                return jsonify({"ok": False, "error": "No file selected"})
+            path = Path(chosen)
+            if not path.is_file():
+                return jsonify({"ok": False, "error": "That file could not be opened"})
+            _WALLS_PROJECT["path"] = str(path)
+            return jsonify({"ok": True, "name": path.name, "dir": str(path.parent)})
+
+        if action == "read":
+            path = _WALLS_PROJECT.get("path")
+            if not path or not Path(path).is_file():
+                return jsonify({"error": "no project opened from disk"}), 404
+            return send_file(path, mimetype="application/octet-stream")
+
+        if action == "reveal":
+            path = _WALLS_PROJECT.get("path")
+            if not path:
+                return jsonify({"ok": False, "error": "no source folder known"})
+            # Cosmetic by design: a failure here never means the save failed.
+            return jsonify(reveal_tool.reveal(path))
+
+        if action == "forget":
+            _WALLS_PROJECT["path"] = None
+            return jsonify({"ok": True})
+
+        return jsonify({"error": "unknown action: " + action}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/plantrim/<action>", methods=["POST"])
 def api_plantrim(action):
     if action not in ("analyze", "trim"):

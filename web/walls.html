@@ -62,6 +62,8 @@
   <p class="dropzone-desc">Edits an Ekahau project's wall types in bulk — set attenuation, color, and thickness once per type, bind each to a number key, then reuse the whole set as a template on future projects instead of rebuilding wall types by hand every time.</p>
   <div class="dropzone-divider"></div>
   <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
+  <button type="button" class="dropzone-open-disk" onclick="event.stopPropagation(); openFromDisk()"
+          title="Open through a file dialog so Quick Walls can show you this folder again after you save">Open from disk…</button>
   <ul class="dropzone-steps">
     <li data-step="1."><strong>Open</strong> an Ekahau project file (.esx)</li>
     <li data-step="2."><strong>Edit</strong> wall types, assign keyboard shortcuts [1]-[9]</li>

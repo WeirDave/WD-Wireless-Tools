@@ -7373,3 +7373,19 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 }
 
 .pt-footer-hint strong { color: var(--text-2); }
+
+
+/* Quick Walls: opening through the file dialog is what lets the app show you
+   the source folder again after a save - a dropped file carries no path. */
+.dropzone-open-disk {
+  margin-top: 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dropzone-open-disk:hover { background: var(--surface-hover); color: var(--text); }

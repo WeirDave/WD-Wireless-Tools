@@ -1821,20 +1821,10 @@ class CloudManager:
             p = Path(path)
             if not p.exists():
                 return {"error": "Path not found"}
-            if sys.platform == "win32":
-                if p.is_dir():
-                    os.startfile(str(p))
-                else:
-                    subprocess.Popen(["explorer", "/select,", str(p)])
-            elif sys.platform == "darwin":
-                if p.is_dir():
-                    subprocess.Popen(["open", str(p)])
-                else:
-                    subprocess.Popen(["open", "-R", str(p)])
-            else:
-                target = str(p) if p.is_dir() else str(p.parent)
-                subprocess.Popen(["xdg-open", target])
-            return {"ok": True}
+            # One implementation, in tools/reveal.py - it also carries the
+            # fix for Explorer needing /select,<path> as a single argument.
+            from tools.reveal import reveal as _reveal
+            return _reveal(p)
         except Exception as e:
             return {"error": str(e)}
 
