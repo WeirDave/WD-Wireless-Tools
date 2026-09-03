@@ -926,7 +926,7 @@
         m.className = 'ar-marker is-unnumbered is-clickable';
         m.style.left = (ap.x / floor.width * 100) + '%';
         m.style.top  = (ap.y / floor.height * 100) + '%';
-        m.textContent = '\u2013';
+        m.textContent = '+';
         m.setAttribute('data-ap-id', ap.id);
         m.onclick = function (e) { e.stopPropagation(); arManualClick(ap.id); };
         var t = document.createElement('span');
