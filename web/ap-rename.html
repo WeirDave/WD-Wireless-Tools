@@ -38,8 +38,13 @@
    ordinary click can never renumber anything by accident. */
 .tool-aprename .ar-marker.is-clickable { cursor:pointer; }
 .tool-aprename .ar-marker.is-clickable:hover { transform:translate(-50%,-50%) scale(1.18); }
-.tool-aprename .ar-marker.is-unnumbered { background:transparent; color:var(--text-2,#9aa); border-style:dashed; border-color:rgba(255,255,255,.55); box-shadow:none; font-weight:600; }
-[data-theme="light"] .tool-aprename .ar-marker.is-unnumbered { border-color:rgba(0,0,0,.4); color:#555; background:rgba(255,255,255,.75); }
+/* An unnumbered marker sits on the floor plan image, which is white paper in
+   both app themes - so it is styled against the paper, not against the app
+   chrome. A translucent white border here was invisible on every CAD drawing.
+   Opaque white fill plus a dashed indigo ring and a dark hairline reads on a
+   white plan and on a dark one, with no theme fork. */
+.tool-aprename .ar-marker.is-unnumbered { background:#fff; color:var(--indigo,#6366f1); border:2px dashed var(--indigo,#6366f1); box-shadow:0 0 0 1px rgba(0,0,0,.35), 0 1px 4px rgba(0,0,0,.45); font-weight:800; font-size:13px; }
+.tool-aprename .ar-marker.is-unnumbered:hover { background:var(--indigo,#6366f1); color:#fff; border-style:solid; }
 .tool-aprename .ar-marker.is-last { box-shadow:0 0 0 3px rgba(99,102,241,.55),0 1px 4px rgba(0,0,0,.5); }
 
 .tool-aprename .ar-manual { margin-top:8px; padding:8px; border:1px solid var(--indigo,#6366f1); border-radius:5px; background:hsla(239,84%,67%,.08); }
