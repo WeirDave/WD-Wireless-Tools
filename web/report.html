@@ -247,12 +247,29 @@
         </div>
         <div class="rep-set-field">
           <label for="set-revision">Revision</label>
-          <input type="text" id="set-revision" class="rep-input-text" placeholder="e.g. Rev A">
+          <input type="text" id="set-revision" class="rep-input-text"
+                 placeholder="e.g. v2.0, Rev B, 3" oninput="renderFilenamePreview()">
         </div>
+        <div class="rep-set-hint">Free-form &mdash; <code>v2.0</code>, <code>Rev B</code> and
+          <code>3</code> all work.</div>
+      </div>
+
+      <div class="rep-set-group">
+        <h4 class="rep-set-group-title">Saved file name</h4>
+        <label class="rep-set-check">
+          <input type="checkbox" id="set-includeRevision" checked onchange="renderFilenamePreview()">
+          <span>Include the revision in the file name</span>
+        </label>
+        <div class="rep-set-name-preview" id="setNamePreview"></div>
+      </div>
+
+      <div class="rep-set-nowarn" id="setNoServer" hidden>
+        No local server is answering, so these settings cannot be saved from this
+        page. Open Report from the WD Wireless Tools app.
       </div>
     </div>
     <div class="grid-modal-footer">
-      <span class="rep-set-footnote">Stored in this browser on this machine.</span>
+      <span class="rep-set-footnote">Stored on this machine, alongside your wall templates.</span>
       <button class="btn btn-secondary" onclick="closeReportSettings()">Cancel</button>
       <button class="btn btn-blue" onclick="saveReportSettings()">Save settings</button>
     </div>
