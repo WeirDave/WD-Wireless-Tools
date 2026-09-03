@@ -5916,13 +5916,40 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-ap-group-swatch { background: var(--swatch); }
 .rep-ap-group-swatch--empty { background: transparent; }
 .rep-mark--dir .rep-mark-cone { fill: var(--rose); fill-opacity: 0.35; stroke: var(--rose); }
+/* The marker carries the AP's own Ekahau colour when the project sets one.
+   A CSS `fill` beats the presentation attribute the renderer writes, so the
+   brand fallback has to stand aside for markers that already have one --
+   without that, ap.color was read, emitted, and then silently painted over. */
 .rep-mark--dir .rep-mark-dot,
 .rep-mark--omni .rep-mark-dot,
-.rep-mark--loc .rep-mark-dot { fill: var(--rose); stroke: #fff; }
+.rep-mark--loc .rep-mark-dot { stroke: #fff; }
+.rep-mark--dir .rep-mark-dot:not([fill]),
+.rep-mark--omni .rep-mark-dot:not([fill]),
+.rep-mark--loc .rep-mark-dot:not([fill]) { fill: var(--rose); }
 .rep-mark--dir .rep-mark-pill,
 .rep-mark--omni .rep-mark-pill,
 .rep-mark--loc .rep-mark-pill { fill: var(--rose); stroke: #fff; }
 .rep-mark-label { fill: #fff; font-weight: 700; overflow: visible; }
+/* Second line of a label -- model, channel, mount height. Lighter than the name
+   so the name still reads first at arm's length. */
+.rep-mark-sub { fill: #fff; font-weight: 500; opacity: 0.85; overflow: visible; }
+/* Drawn only when a label had to step away from its AP to find clear space. */
+.rep-mark-lead { stroke: var(--rose); opacity: 0.75; }
+.rep-mark--dir .rep-mark-lead, .rep-mark--omni .rep-mark-lead { stroke: var(--rose); }
+
+/* ── AP Placement Map ──────────────────────────────────────────────────────
+   One floor per page. The plan is the page, so the heading is compact and
+   everything else stays out of the way. */
+.rep-placement-page + .rep-placement-page { page-break-before: always; break-before: page; }
+
+.rep-placement-head {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+}
+.rep-placement-sub {
+  font-size: 13px; font-weight: 500; color: var(--text-2); letter-spacing: 0;
+}
+[data-theme="dark"] .rep-placement-sub { color: var(--text-2); }
+
 .rep-loc-table .rep-name { user-select: all; }
 .rep-loc-warn { color: var(--amber, #d97706); font-size: 12px; }
 .rep-loc-warn-row { background: rgba(217, 119, 6, 0.06); }
@@ -6063,6 +6090,9 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-overview-plan:not([data-seg="1"]) img { width: 100%; height: auto; }
   .rep-overview-key { color: #555 !important; page-break-before: avoid; }
   .rep-seg-floor { color: #111 !important; page-break-after: avoid; break-after: avoid; }
+  .rep-placement-page { page-break-before: always; break-before: page; }
+  .rep-doc-head + .rep-placement-page, .rep-cover + .rep-placement-page { page-break-before: auto; }
+  .rep-placement-sub { color: #555 !important; }
 
   .rep-seg-index { page-break-before: auto; break-before: auto; }
   .rep-seg-cell { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; }
