@@ -405,6 +405,44 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
                 body = source[start:source.index(nxt, start)]
                 self.assertIn("pushHistory(", body)
 
+    def test_every_navigation_menu_lists_every_tool(self):
+        # The drop-zone menus were kept current as tools were added but the
+        # menus shown after a project loads were not, so PlanTrim and the AP
+        # Labeler disappeared the moment you opened a file. Menus are generated
+        # from one list now; this keeps them from drifting apart again.
+        tools = {
+            "/cloud": "Cloud Manager",
+            "/walls": "Quick Walls",
+            "/report": "Report",
+            "/scale": "Scale",
+            "/plantrim": "PlanTrim",
+            "/aprename": "AP Labeler",
+            "/squirrel": "Squirrel",
+        }
+        pages = sorted((ROOT / "web").glob("*.html"))
+        checked = 0
+        for page in pages:
+            html = page.read_text(encoding="utf-8")
+            menus = re.findall(
+                r'<div class="menu-section">[^<]*Navigation</div>(.*?)'
+                r'(?:<div class="(?:help-menu-sep|menu-sep)")',
+                html, re.S)
+            for index, block in enumerate(menus):
+                hrefs = set(re.findall(r'href="(/[a-z0-9\-/]*)"', block))
+                for route, name in tools.items():
+                    with self.subTest(page=page.name, menu=index, tool=name):
+                        self.assertIn(route, hrefs)
+                checked += 1
+        self.assertGreaterEqual(checked, 10, "expected to find the suite nav menus")
+
+    def test_home_page_offers_every_tool(self):
+        home = (ROOT / "web" / "home.html").read_text(encoding="utf-8")
+        cards = set(re.findall(r'<a class="card[^"]*" href="(/[a-z0-9\-]*)"', home))
+        for route in ("/cloud", "/walls", "/report", "/scale",
+                      "/plantrim", "/aprename", "/squirrel"):
+            with self.subTest(tool=route):
+                self.assertIn(route, cards)
+
     def test_versions_manifest_has_every_tool(self):
         versions = json.loads((ROOT / "web" / "assets" / "versions.json").read_text(encoding="utf-8"))
         self.assertEqual(set(versions), {"suite", "cloud", "walls", "report", "scale", "squirrel", "plantrim", "aprename"})
