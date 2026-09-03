@@ -1152,101 +1152,38 @@
   // like Paint Shop Pro's. Width is a view preference, not project data, so it
   // lives in localStorage — and unlike a hidden filter it is plainly visible,
   // which is why persisting it here is safe.
+  // The splitter itself lives in wd-shared.js so Visual Wall Swap and the AP
+  // Labeler share one implementation rather than two copies that drift.
   const SIDEBAR_KEY = 'wd.walls.swapSidebarWidth';
   const SIDEBAR_MIN = 260;
   const SIDEBAR_DEFAULT = 320;
+  let _splitter = null;
 
-  function sidebarMax() {
-    const body = document.querySelector('.swap-body');
-    const w = body ? body.clientWidth : window.innerWidth;
-    // Always leave the plan at least half the room.
-    return Math.max(SIDEBAR_MIN, Math.round(w * 0.6));
+  function reflowSidebarWidth() {
+    if (_splitter) _splitter.reflow();
   }
-
-  function readStoredSidebarWidth() {
-    try {
-      const raw = localStorage.getItem(SIDEBAR_KEY);
-      const v = raw == null ? NaN : parseInt(raw, 10);
-      return Number.isFinite(v) ? v : null;
-    } catch (e) { return null; }
-  }
-
-  // The width the user asked for is kept separately from the width currently
-  // applied. Opening the modal before layout settles clamps the applied value
-  // to the minimum; re-clamping from that instead of from the preference would
-  // silently shrink the panel for good.
-  let _sidebarPref = SIDEBAR_DEFAULT;
 
   function applySidebarWidth(px, persist) {
-    const el = $('swapSidebar');
-    if (!el) return;
-    _sidebarPref = Math.max(SIDEBAR_MIN, Math.round(px));
-    if (persist) {
-      try { localStorage.setItem(SIDEBAR_KEY, String(_sidebarPref)); } catch (e) { /* private mode */ }
-    }
-    reflowSidebarWidth();
-  }
-
-  // Re-derive the applied width from the preference and the room available now.
-  function reflowSidebarWidth() {
-    const el = $('swapSidebar');
-    if (!el) return;
-    const w = Math.max(SIDEBAR_MIN, Math.min(sidebarMax(), _sidebarPref));
-    if (el.style.width !== w + 'px') el.style.width = w + 'px';
-    resizeCanvas();
-  }
-
-  function initSidebarWidth() {
-    _sidebarPref = readStoredSidebarWidth() || SIDEBAR_DEFAULT;
-    reflowSidebarWidth();
-    // The body can still be mid-layout on open, which would clamp the panel to
-    // its minimum; take the width again once there is real room.
-    requestAnimationFrame(reflowSidebarWidth);
-    setTimeout(reflowSidebarWidth, 80);
+    if (_splitter) _splitter.set(px, persist);
   }
 
   function installSplitter() {
-    const sp = $('swapSplitter');
-    if (!sp || sp._bound) return;
-    sp._bound = true;
-    let dragging = false;
-    const widthFor = (clientX) => {
-      const body = document.querySelector('.swap-body');
-      const rect = body.getBoundingClientRect();
-      return rect.right - clientX;
-    };
-    const move = (ev) => {
-      if (!dragging) return;
-      ev.preventDefault();
-      const x = ev.touches ? ev.touches[0].clientX : ev.clientX;
-      applySidebarWidth(widthFor(x), false);
-    };
-    const up = () => {
-      if (!dragging) return;
-      dragging = false;
-      document.body.classList.remove('swap-resizing');
-      applySidebarWidth(_sidebarPref, true);
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      window.removeEventListener('touchmove', move);
-      window.removeEventListener('touchend', up);
-    };
-    const down = (ev) => {
-      dragging = true;
-      document.body.classList.add('swap-resizing');
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', up);
-      window.addEventListener('touchmove', move, { passive: false });
-      window.addEventListener('touchend', up);
-      ev.preventDefault();
-    };
-    sp.addEventListener('mousedown', down);
-    sp.addEventListener('touchstart', down, { passive: false });
-    sp.addEventListener('dblclick', () => applySidebarWidth(SIDEBAR_DEFAULT, true));
-    sp.addEventListener('keydown', (ev) => {
-      if (ev.key === 'ArrowLeft')  { applySidebarWidth(_sidebarPref + 24, true); ev.preventDefault(); }
-      if (ev.key === 'ArrowRight') { applySidebarWidth(_sidebarPref - 24, true); ev.preventDefault(); }
+    _splitter = WD.mountSplitter({
+      splitter: 'swapSplitter',
+      panel: 'swapSidebar',
+      container: '.swap-body',
+      key: SIDEBAR_KEY,
+      min: SIDEBAR_MIN,
+      def: SIDEBAR_DEFAULT,
+      maxRatio: 0.6,
+      onResize: resizeCanvas,
     });
+  }
+
+  function initSidebarWidth() {
+    // mountSplitter already reads the stored width and reflows; kept as a
+    // named step so the call site still reads in order.
+    reflowSidebarWidth();
   }
 
   // Collapsible side panels, Paint Shop Pro style — folding Quick Swap away is
@@ -1905,7 +1842,7 @@
     }),
     getSegTypes: () => state.segments.map(x => ({ id: x.id, type: segmentTypeId(x) })),
     getSegmentCount: () => state.segments.length,
-    getSidebarPref: () => _sidebarPref,
+    getSidebarPref: () => (_splitter ? _splitter.get() : SIDEBAR_DEFAULT),
     getSidebarWidth: () => {
       const el = $('swapSidebar');
       return el ? Math.round(el.getBoundingClientRect().width) : 0;

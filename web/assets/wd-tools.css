@@ -5406,7 +5406,8 @@ body.tool-report {
 
 .swap-splitter:hover,
 .swap-splitter:focus-visible,
-body.swap-resizing .swap-splitter {
+body.swap-resizing .swap-splitter,
+body.wd-resizing .swap-splitter {
   opacity: 1;
   background: var(--blue);
   outline: none;
@@ -5414,8 +5415,10 @@ body.swap-resizing .swap-splitter {
 
 /* While dragging, keep the cursor consistent and stop the canvas swallowing
    the pointer or selecting text. */
-body.swap-resizing,
-body.swap-resizing * { cursor: col-resize !important; user-select: none !important; }
+/* `wd-resizing` is set by the shared splitter in wd-shared.js; the older
+   `swap-resizing` name is kept so nothing depending on it breaks. */
+body.swap-resizing, body.wd-resizing,
+body.swap-resizing *, body.wd-resizing * { cursor: col-resize !important; user-select: none !important; }
 
 .swap-panel {
   background: var(--surface-raised);
