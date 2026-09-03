@@ -177,6 +177,11 @@ def plantrim():
     return send_from_directory(WEB, "plantrim.html")
 
 
+@app.route("/aprename")
+def aprename():
+    return send_from_directory(WEB, "ap-rename.html")
+
+
 
 @app.route("/rename")
 @app.route("/squirrel/rename")
