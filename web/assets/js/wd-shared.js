@@ -1121,6 +1121,109 @@
   window.closeModal = WD.closeModal;
   window.esc = WD.esc;
   window.escAttr = WD.escAttr;
+  /* ── resizable side panel ────────────────────────────────────────
+     Lifted out of Visual Wall Swap so the AP Labeler uses the same thing
+     rather than a second copy. Behaviour is unchanged from what shipped
+     there: drag the splitter, double-click to reset, arrow keys nudge, the
+     width persists per key, and the applied width is always re-derived from
+     the remembered preference rather than read back out of the DOM — opening
+     a panel before layout settles otherwise clamps it to the minimum and it
+     never recovers.
+
+     mount({ splitter, panel, container, key, min, def, maxRatio, onResize })
+     returns { reflow, set, get }. */
+  WD.mountSplitter = function (opts) {
+    var splitter = typeof opts.splitter === 'string'
+      ? document.getElementById(opts.splitter) : opts.splitter;
+    var panel = typeof opts.panel === 'string'
+      ? document.getElementById(opts.panel) : opts.panel;
+    var container = typeof opts.container === 'string'
+      ? document.querySelector(opts.container) : opts.container;
+    if (!splitter || !panel || !container) return null;
+
+    var KEY = opts.key;
+    var MIN = opts.min || 260;
+    var DEF = opts.def || 320;
+    var RATIO = opts.maxRatio || 0.6;
+    var onResize = opts.onResize || function () {};
+    var pref = DEF;
+
+    function maxWidth() {
+      var w = container.clientWidth || window.innerWidth;
+      return Math.max(MIN, Math.round(w * RATIO));
+    }
+
+    function stored() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        var v = raw == null ? NaN : parseInt(raw, 10);
+        return isFinite(v) ? v : null;
+      } catch (e) { return null; }
+    }
+
+    function reflow() {
+      var w = Math.max(MIN, Math.min(maxWidth(), pref));
+      if (panel.style.width !== w + 'px') panel.style.width = w + 'px';
+      onResize(w);
+    }
+
+    function set(px, persist) {
+      pref = Math.max(MIN, Math.round(px));
+      if (persist) {
+        try { localStorage.setItem(KEY, String(pref)); } catch (e) { /* private mode */ }
+      }
+      reflow();
+    }
+
+    if (!splitter._wdBound) {
+      splitter._wdBound = true;
+      var dragging = false;
+      var widthFor = function (clientX) {
+        return container.getBoundingClientRect().right - clientX;
+      };
+      var move = function (ev) {
+        if (!dragging) return;
+        ev.preventDefault();
+        set(widthFor(ev.touches ? ev.touches[0].clientX : ev.clientX), false);
+      };
+      var up = function () {
+        if (!dragging) return;
+        dragging = false;
+        document.body.classList.remove('wd-resizing');
+        set(pref, true);
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        window.removeEventListener('touchmove', move);
+        window.removeEventListener('touchend', up);
+      };
+      var down = function (ev) {
+        dragging = true;
+        document.body.classList.add('wd-resizing');
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+        window.addEventListener('touchmove', move, { passive: false });
+        window.addEventListener('touchend', up);
+        ev.preventDefault();
+      };
+      splitter.addEventListener('mousedown', down);
+      splitter.addEventListener('touchstart', down, { passive: false });
+      splitter.addEventListener('dblclick', function () { set(DEF, true); });
+      splitter.addEventListener('keydown', function (ev) {
+        if (ev.key === 'ArrowLeft')  { set(pref + 24, true); ev.preventDefault(); }
+        if (ev.key === 'ArrowRight') { set(pref - 24, true); ev.preventDefault(); }
+      });
+      window.addEventListener('resize', reflow);
+    }
+
+    pref = stored() || DEF;
+    reflow();
+    // The container can still be mid-layout on first paint.
+    requestAnimationFrame(reflow);
+    setTimeout(reflow, 80);
+
+    return { reflow: reflow, set: set, get: function () { return pref; } };
+  };
+
   window.escJsStr = WD.escJsStr;
   window.safeColor = WD.safeColor;
   window.wdOpenAbout = WD.openAbout;

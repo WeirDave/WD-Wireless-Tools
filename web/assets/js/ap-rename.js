@@ -973,6 +973,40 @@
     });
   }
 
+  /* The structured pattern gives every AP on a floor the same leading
+     segments - FTCL3-01-00-01- - so the only thing that differs row to row is
+     the tail. Hoisting that stem out of the rows is what makes the diff
+     readable in a narrow panel instead of wrapping onto two lines.
+
+     The stem is only taken at a separator boundary, so a name is never cut
+     mid-segment, and only when it leaves something behind on every row. */
+  function commonStem(names) {
+    if (names.length < 2) return '';
+    var first = names[0];
+    var i = 0;
+    while (i < first.length) {
+      var ch = first[i];
+      var all = true;
+      for (var k = 1; k < names.length; k++) {
+        if (names[k][i] !== ch) { all = false; break; }
+      }
+      if (!all) break;
+      i++;
+    }
+    var prefix = first.slice(0, i);
+    // back up to the last separator so segments stay whole
+    var cut = Math.max(prefix.lastIndexOf('-'), prefix.lastIndexOf('_'),
+                       prefix.lastIndexOf('.'), prefix.lastIndexOf(' '));
+    if (cut < 0) return '';
+    var stem = prefix.slice(0, cut + 1);
+    if (stem.length < 4) return '';
+    // every row must keep a non-empty remainder, or the table says nothing
+    for (var j = 0; j < names.length; j++) {
+      if (names[j].length <= stem.length) return '';
+    }
+    return stem;
+  }
+
   function renderPreviewTable(allItems) {
     var items;
     if (S.currentFloor === '__unplaced') {
@@ -994,6 +1028,21 @@
     var changed = items.filter(function (it) { return it.oldName !== it.newName; }).length;
     $('arPreviewHead').textContent = 'Preview (' + items.length + ' APs, ' + changed + ' labeled)';
 
+    // Work out what every row shares, per column, and show it once.
+    var stemOld = commonStem(items.map(function (it) { return it.oldName || ''; }));
+    var stemNew = commonStem(items.map(function (it) { return it.newName || ''; }));
+    var stemEl = $('arStem');
+    if (stemEl) {
+      if (stemOld || stemNew) {
+        stemEl.hidden = false;
+        stemEl.innerHTML = 'all: <b>' + esc(stemOld || '—') + '</b>' +
+          '<span class="ar-stem-arrow">→</span><b>' + esc(stemNew || '—') + '</b>';
+      } else {
+        stemEl.hidden = true;
+        stemEl.innerHTML = '';
+      }
+    }
+
     var body = $('arPreviewBody');
     if (!items.length) {
       body.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text-2,#666)">No access points on this floor</td></tr>';
@@ -1013,12 +1062,18 @@
         var border = needsDarkText(rc) ? '1px solid rgba(0,0,0,.2)' : 'none';
         swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + rc + ';border:' + border + ';vertical-align:middle;margin-right:4px"></span>';
       }
+      // The stem is already on screen above the table; rows carry the tail
+      // only, with the full name on hover for anything ambiguous.
+      var curTxt = it.oldName || '—';
+      var newTxt = it.newName || '';
+      var curShown = (stemOld && curTxt.indexOf(stemOld) === 0) ? curTxt.slice(stemOld.length) : curTxt;
+      var newShown = (stemNew && newTxt.indexOf(stemNew) === 0) ? newTxt.slice(stemNew.length) : newTxt;
       html += '<tr class="' + (isDiff ? 'changed' : '') +
         (it.unnumbered ? ' unnumbered' : '') + '">' +
         '<td class="ar-num">' + seq + '</td>' +
-        '<td>' + swatch + esc(it.oldName || '—') + '</td>' +
+        '<td class="ar-cur" title="' + esc(curTxt) + '">' + swatch + esc(curShown) + '</td>' +
         '<td class="ar-arrow">→</td>' +
-        '<td class="ar-new">' + esc(it.newName) + '</td>' +
+        '<td class="ar-new" title="' + esc(newTxt) + '">' + esc(newShown) + '</td>' +
         '</tr>';
     });
     body.innerHTML = html;
@@ -1201,6 +1256,20 @@
   });
 
   window.arResetZoom = resetZoom;
+
+  // Same splitter Visual Wall Swap uses — one implementation, lifted into
+  // wd-shared.js rather than copied.
+  if (WD.mountSplitter) {
+    WD.mountSplitter({
+      splitter: 'arSplitter',
+      panel: 'arSidebar',
+      container: '.ar-split',
+      key: 'wd.aprename.sidebarWidth',
+      min: 300,
+      def: 340,
+      maxRatio: 0.6
+    });
+  }
 
   // Diagnostics hook, same shape as Quick Walls' __wallsSwap.
   window.__apLabeler = {

@@ -60,6 +60,24 @@
 .tool-aprename .ar-marker:hover .ar-tip { display:block; }
 [data-theme="light"] .tool-aprename .ar-marker .ar-tip { background:#fff; color:#222; box-shadow:0 2px 8px rgba(0,0,0,.15); }
 
+.tool-aprename .ar-splitter { flex:0 0 auto; width:6px; cursor:col-resize; background:var(--border,#333); opacity:.5; transition:opacity .12s, background .12s; }
+.tool-aprename .ar-splitter:hover, .tool-aprename .ar-splitter:focus-visible, body.wd-resizing .tool-aprename .ar-splitter { opacity:1; background:var(--indigo,#6366f1); outline:none; }
+body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select:none !important; }
+
+/* The preview is a diff, so it has to be scannable. Names never wrap
+   mid-token; the shared leading segments are hoisted into a stem line above
+   the table and dropped from every row, which is what turns a two-line wrap
+   into "AP003 -> AP01". */
+.tool-aprename .ar-stem { display:flex; align-items:baseline; gap:6px; font-family:var(--mono,monospace); font-size:11px; color:var(--text-2,#888); padding:4px 8px; border:1px solid var(--border,#333); border-bottom:none; border-radius:4px 4px 0 0; background:var(--bg-3,#252538); overflow-wrap:anywhere; }
+[data-theme="light"] .tool-aprename .ar-stem { background:var(--bg-3,#eee); }
+.tool-aprename .ar-stem b { color:var(--text,#ddd); font-weight:600; }
+[data-theme="light"] .tool-aprename .ar-stem b { color:#222; }
+.tool-aprename .ar-stem .ar-stem-arrow { color:var(--indigo,#6366f1); }
+.tool-aprename .ar-preview td.ar-cur, .tool-aprename .ar-preview td.ar-new { white-space:nowrap; font-family:var(--mono,monospace); max-width:0; overflow:hidden; text-overflow:ellipsis; }
+.tool-aprename .ar-preview td.ar-new { color:var(--indigo,#6366f1); font-weight:600; }
+[data-theme="light"] .tool-aprename .ar-preview td.ar-new { color:#4338ca; }
+.tool-aprename .ar-preview .ar-stem-mute { color:var(--text-3,#666); font-weight:400; }
+
 .tool-aprename .ar-sidebar { width:340px; min-width:280px; overflow-y:auto; border-left:1px solid var(--border,#333); padding:12px 14px; display:flex; flex-direction:column; gap:12px; background:var(--bg-2,#181828); }
 [data-theme="light"] .tool-aprename .ar-sidebar { background:var(--bg-2,#f4f4f8); }
 .tool-aprename .ar-group   { display:flex; flex-direction:column; gap:5px; }
@@ -215,6 +233,9 @@
           <button onclick="arResetZoom()" title="Reset zoom">Reset</button>
         </div>
       </div>
+      <div class="ar-splitter" id="arSplitter" title="Drag to resize — double-click to reset"
+           role="separator" aria-orientation="vertical" tabindex="0"></div>
+
       <div class="ar-sidebar" id="arSidebar">
 
         <div class="ar-group">
@@ -435,6 +456,7 @@
 
         <div class="ar-preview-wrap">
           <div class="ar-preview-head" id="arPreviewHead">Preview</div>
+          <div class="ar-stem" id="arStem" hidden></div>
           <div class="ar-preview" id="arPreview">
             <table>
               <thead><tr><th class="ar-num">#</th><th>Current</th><th class="ar-arrow"></th><th>New</th></tr></thead>
