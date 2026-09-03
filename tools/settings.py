@@ -96,7 +96,12 @@ DEFAULTS = {
         # filename -- but not everyone names files that way, hence the switch.
         "include_revision_in_filename": True,
     },
-    "walls": {},
+    "walls": {
+        # Opening a project from disk lets Quick Walls show you the folder it
+        # came from after a save, which is otherwise hard to find again. Not
+        # everyone wants a window appearing, so it is a switch.
+        "reveal_source_after_save": True,
+    },
 }
 
 

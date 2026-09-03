@@ -70,9 +70,15 @@ dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover
 dropzone.addEventListener('drop', e => {
   e.preventDefault();
   dropzone.classList.remove('dragover');
+  // Dropped and browsed files carry no path, so any folder the server was
+  // remembering no longer describes this project.
+  _openedFromDisk = false;
   if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
 });
-fileInput.addEventListener('change', e => { if (e.target.files.length) loadFile(e.target.files[0]); });
+fileInput.addEventListener('change', e => {
+  _openedFromDisk = false;
+  if (e.target.files.length) loadFile(e.target.files[0]);
+});
 
 function loadNewFile() {
   fileInput.value = '';
@@ -628,10 +634,62 @@ async function saveEsx() {
   const result = await nativeSave(blob, defaultName, 'Ekahau Project File', { 'application/octet-stream': ['.esx'] });
   if (result === 'saved') {
     showToast('Saved ' + defaultName, 'success');
+    revealSourceFolder();
   } else if (result === 'downloaded') {
     showToast('Downloading ' + defaultName + ' — check your browser downloads', 'success');
+    revealSourceFolder();
   }
 }
+
+/* A dropped file gives the browser no path, so the folder can only be shown
+   when the project was opened through "Open from disk" and the server knows
+   where it came from. Failing to open a window never means the save failed, so
+   nothing here surfaces an error. */
+let _openedFromDisk = false;
+
+async function revealSourceFolder() {
+  if (!_openedFromDisk) return;
+  try {
+    const s = await fetch('/api/settings/get', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: '{}',
+    }).then(r => r.json());
+    const walls = (s && s.settings && s.settings.walls) || {};
+    if (walls.reveal_source_after_save === false) return;
+    await fetch('/api/walls/reveal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: '{}',
+    });
+  } catch (e) {
+    /* cosmetic - the save already succeeded */
+  }
+}
+
+async function openFromDisk() {
+  try {
+    const res = await fetch('/api/walls/pick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: '{}',
+    }).then(r => r.json());
+    if (!res || !res.ok) {
+      if (res && res.error && res.error !== 'No file selected') showToast(res.error, 'error');
+      return;
+    }
+    const blob = await fetch('/api/walls/read', {
+      method: 'POST',
+      headers: { 'X-WD-Wireless-Tools': '1' },
+    }).then(r => r.blob());
+    _openedFromDisk = true;
+    await loadFile(new File([blob], res.name));
+    showToast('Opened from ' + res.dir, 'success');
+  } catch (e) {
+    showToast('Could not open that project: ' + e, 'error');
+  }
+}
+window.openFromDisk = openFromDisk;
 
 let _tplCache = [];
 
