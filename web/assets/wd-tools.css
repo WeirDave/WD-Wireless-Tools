@@ -6882,6 +6882,32 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
 
 .rep-set-footnote { flex: 1 1 auto; font-size: 11px; color: var(--text-3); }
 
+.rep-set-hint { font-size: 11px; color: var(--text-3); margin: -4px 0 0 152px; line-height: 1.5; }
+.rep-set-hint code, .rep-set-name-preview code {
+  font-family: var(--mono, ui-monospace, monospace); font-size: 11px;
+  background: var(--surface-2); padding: 1px 4px; border-radius: 3px;
+}
+
+.rep-set-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); cursor: pointer; }
+.rep-set-check input { width: 15px; height: 15px; accent-color: var(--blue); cursor: pointer; }
+
+/* Both spellings of the name, side by side, so the switch settles the question
+   by being looked at rather than described. */
+.rep-set-name-preview { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.rep-set-name-row { display: flex; align-items: baseline; gap: 10px; opacity: 0.45; }
+.rep-set-name-row.is-active { opacity: 1; }
+.rep-set-name-tag {
+  flex: 0 0 92px; font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.4px; color: var(--text-3);
+}
+.rep-set-name-row code { word-break: break-all; }
+
+.rep-set-nowarn {
+  margin-top: 16px; padding: 10px 12px; border-radius: 6px;
+  background: var(--amber-bg); color: var(--amber-dark);
+  font-size: 11px; line-height: 1.6;
+}
+
 /* Where a value came from. A prefilled field that has quietly drifted from the
    saved default is the confusing case, so the two states are labelled rather
    than left to be inferred. */

@@ -20,7 +20,7 @@ import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, request, jsonify, send_from_directory, redirect
+from flask import Flask, request, jsonify, send_from_directory, redirect, send_file
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"
@@ -29,6 +29,7 @@ from tools.cloud_manager import CloudManager
 from tools.folder_organizer import FolderOrganizer
 from tools.rename_manager import RenameManager
 from tools.template_store import TemplateStore
+from tools import report_store
 from tools import settings as suite_settings
 from tools import updater
 
@@ -348,6 +349,36 @@ SETTINGS_ACTIONS = {
     "get_destinations": lambda d: {"ok": True, "destinations": [
                             dict(d) for d in suite_settings.get_destinations()]},
 }
+
+
+@app.route("/api/report/cover", methods=["GET"])
+def api_report_cover_get():
+    """Serve the stored cover image.
+
+    The page asks for it with the ?v= token from cover_info so a replaced image
+    is picked up immediately instead of being served from cache.
+    """
+    path = report_store.cover_path()
+    if not path:
+        return jsonify({"error": "no cover image"}), 404
+    return send_file(str(path), max_age=0)
+
+
+@app.route("/api/report/cover", methods=["POST", "DELETE"])
+def api_report_cover_write():
+    if request.method == "DELETE":
+        return jsonify(report_store.delete_cover())
+    upload = request.files.get("file")
+    if upload is None:
+        return jsonify({"ok": False, "error": "No file was received."}), 400
+    data = upload.read()
+    result = report_store.save_cover(data, upload.filename or "")
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
+@app.route("/api/report/cover/info", methods=["GET"])
+def api_report_cover_info():
+    return jsonify(report_store.cover_info())
 
 
 @app.route("/api/settings/<action>", methods=["POST"])

@@ -85,7 +85,17 @@ DEFAULTS = {
             "suffix": "",
         },
     },
-    "report": {},
+    "report": {
+        # Defaults every report starts from. An individual report may diverge
+        # from these without changing them.
+        "client_name": "",
+        "prepared_by": "",
+        "project_ref": "",
+        "revision": "",
+        # The revision is a version number, so it earns a place in the saved
+        # filename -- but not everyone names files that way, hence the switch.
+        "include_revision_in_filename": True,
+    },
     "walls": {},
 }
 
