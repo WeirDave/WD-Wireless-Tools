@@ -2282,7 +2282,11 @@
       floorName: fp.name || 'Floor plan',
     });
     var count = sorted.length + ' AP' + (sorted.length === 1 ? '' : 's');
-    var out = '<section class="rep-floor-section rep-placement-page" data-floor-idx="' + (floorIdx % 5) + '">';
+    var fid = WD.escAttr(fp.id);
+    var out = '<section class="rep-floor-section rep-placement-page" data-floor-idx="' + (floorIdx % 5) + '"'
+      + ' data-floor-id="' + fid + '">'
+      + orientPickerHtml(fp.id, opts)
+      + '<div class="rep-placement-sheet">';
     if (heading) {
       out += '<div class="rep-seg-floor rep-placement-head">' + WD.esc(heading)
         + '<span class="rep-placement-sub">' + WD.esc((fp.name || '') + ' · ' + count) + '</span></div>';
@@ -2292,8 +2296,44 @@
     out += (fp.id !== '_none')
       ? renderAntennaOverview(fp, sorted, opts, ctx, placementKeyHtml(opts, sorted))
       : '<div class="rep-empty-small">No floor plan assigned to these APs.</div>';
-    return out + '</section>';
+    out += renderReportFooter(opts, ctx);
+    return out + '</div></section>';
   }
+
+  function floorOrientMode(fpId, opts) {
+    var map = opts && opts.pageOrient;
+    return (map && map[fpId]) || 'auto';
+  }
+
+  function orientPickerHtml(fpId, opts) {
+    var mode = floorOrientMode(fpId, opts);
+    var btn = function (val, label) {
+      return '<button type="button" class="rep-orient-btn' + (mode === val ? ' is-on' : '') + '"'
+        + ' onclick="setFloorOrient(\'' + WD.escJsStr(fpId) + '\',\'' + val + '\')">' + label + '</button>';
+    };
+    return '<div class="rep-orient noprint" data-for="' + WD.escAttr(fpId) + '">'
+      + '<span class="rep-orient-label">Page</span>'
+      + btn('auto', 'Auto') + btn('portrait', 'Portrait') + btn('landscape', 'Landscape')
+      + '<span class="rep-orient-now"></span></div>';
+  }
+
+  window.setFloorOrient = function (fpId, mode) {
+    if (!currentOpts.pageOrient) currentOpts.pageOrient = {};
+    currentOpts.pageOrient[fpId] = mode;
+    var host = document.getElementById('reportCanvas');
+    if (!host) return;
+    var picker = host.querySelector('.rep-orient[data-for="' + fpId + '"]');
+    if (picker) {
+      var btns = picker.querySelectorAll('.rep-orient-btn');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].classList.toggle('is-on', btns[i].textContent.toLowerCase() === mode);
+      }
+    }
+    // Sizing is the only thing orientation changes, so recompute rather than
+    // rebuilding the report and losing the reader's scroll position.
+    sizePlacementPlansForPrint(host, currentOpts);
+    configureDirty = true;
+  };
 
   function placementKeyHtml(opts, aps) {
     var bits = [keySwatch('omni', aps) + ' Access point'];
@@ -2315,26 +2355,83 @@
       idx++;
     });
     if (!sections) sections = '<div class="rep-empty-small">No APs with a position on a floor plan.</div>';
-    return head + sections + renderReportFooter(opts, ctx);
+    return head + sections;
   }
 
   // A full-page plan has no segment cropping to size it, so without this the
   // image keeps its own aspect and a tall floor runs onto a second sheet.
-  function sizePlacementPlansForPrint(host) {
-    var plans = host.querySelectorAll('.rep-placement-page .rep-overview-plan:not([data-seg="1"])');
-    for (var i = 0; i < plans.length; i++) {
-      var el = plans[i];
-      var w = parseFloat(el.style.getPropertyValue('--w'));
-      var h = parseFloat(el.style.getPropertyValue('--h'));
-      if (!(w > 0 && h > 0)) continue;
-      var ratio = w / h;
-      // Letter and A4 portrait, less the page margins, the floor header and the
-      // key line underneath.
-      var maxWidthIn = 7.2;
-      var maxHeightIn = 8.3;
-      var widthIn = Math.min(maxWidthIn, maxHeightIn * ratio);
-      el.style.setProperty('--print-w', widthIn.toFixed(3) + 'in');
-      el.style.setProperty('--print-h', (widthIn / ratio).toFixed(3) + 'in');
+  // The printable area, in inches, of a portrait sheet after the @page margins.
+  // Letter is 8.5x11 and A4 is 8.27x11.7, so the narrower width and the shorter
+  // height keep one report correct on either.
+  // A4 is the narrower of the two (8.27in) and Letter the shorter (11in), so
+  // taking the width from A4 and the height from Letter keeps one report
+  // correct on either without a second layout.
+  var SHEET_W_IN = 7.45;
+  var SHEET_H_IN = 10.0;
+  // What the floor header and the key line cost, off whichever edge runs
+  // vertically. Measured from a printed page rather than estimated: at 1.15in
+  // the key was landing on a sheet of its own.
+  var SHEET_CHROME_IN = 1.5;
+  // A turned sheet has to earn it. Below this much extra scale the reader is
+  // rotating paper for nothing.
+  var ROTATE_GAIN = 1.15;
+
+  // The aspect that matters is the one on screen. A plan that PlanTrim has
+  // cropped is a different shape from the canvas it came out of, and the image
+  // is the thing that got cropped, so measure that and fall back to the stored
+  // dimensions only when it has not loaded.
+  function planAspect(el) {
+    var img = el.querySelector('img');
+    if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
+      return img.naturalWidth / img.naturalHeight;
+    }
+    var w = parseFloat(el.style.getPropertyValue('--w'));
+    var h = parseFloat(el.style.getPropertyValue('--h'));
+    return (w > 0 && h > 0) ? w / h : 0;
+  }
+
+  function sizePlacementPlansForPrint(host, opts) {
+    var pages = host.querySelectorAll('.rep-placement-page');
+    for (var i = 0; i < pages.length; i++) {
+      var page = pages[i];
+      var el = page.querySelector('.rep-overview-plan:not([data-seg="1"])');
+      if (!el) continue;
+      var ratio = planAspect(el);
+      if (!(ratio > 0)) continue;
+
+      // Two ways the plan can sit on the sheet. Compare the scale each gives it
+      // rather than the aspect ratio alone, so the decision is about how big the
+      // map actually prints.
+      var upW = SHEET_W_IN, upH = SHEET_H_IN - SHEET_CHROME_IN;
+      var rotW = SHEET_H_IN, rotH = SHEET_W_IN - SHEET_CHROME_IN;
+      var upright = Math.min(upW / ratio, upH);        // printed height, upright
+      var turned = Math.min(rotW / ratio, rotH);       // printed height, turned
+      var wants = turned > upright * ROTATE_GAIN;
+
+      var mode = floorOrientMode(page.getAttribute('data-floor-id'), opts || {});
+      var rotate = mode === 'landscape' ? true : mode === 'portrait' ? false : wants;
+
+      var boxW = rotate ? rotW : upW;
+      var boxH = rotate ? rotH : upH;
+      var hIn = Math.min(boxH, boxW / ratio);
+      var wIn = hIn * ratio;
+
+      // The page itself turns, via a named @page rule. Rotating the content
+      // instead was tried and rejected: it does print the map larger, but it
+      // leaves half the sheet blank and every label lying on its side.
+      page.classList.toggle('is-landscape', rotate);
+      el.style.setProperty('--print-w', wIn.toFixed(3) + 'in');
+      el.style.setProperty('--print-h', hIn.toFixed(3) + 'in');
+      // Named pages are a Chromium feature. Where they are not honoured the
+      // sheet stays portrait, so the map has to be able to fall back to fitting
+      // the width it actually gets rather than overflowing the one it asked
+      // for. The ratio drives the height so it stays undistorted either way.
+      el.style.setProperty('--print-ratio', ratio.toFixed(4));
+
+      var now = page.querySelector('.rep-orient-now');
+      if (now) {
+        now.textContent = (mode === 'auto' ? 'auto \u2192 ' : '') + (rotate ? 'landscape' : 'portrait');
+      }
     }
   }
 
@@ -4079,7 +4176,7 @@
       ],
       render: renderPlacementReport,
       postRender: function (host, opts) {
-        sizePlacementPlansForPrint(host);
+        sizePlacementPlansForPrint(host, opts);
         if (opts.segmented) applyAntennaSegmentCrop.apply(null, arguments);
       },
     },

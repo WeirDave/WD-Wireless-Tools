@@ -5950,6 +5950,23 @@ body.wd-has-stale-banner { padding-top: 52px; }
    everything else stays out of the way. */
 .rep-placement-page + .rep-placement-page { page-break-before: always; break-before: page; }
 
+/* Per-floor orientation control. Screen only -- it sits above the sheet it
+   governs so the choice is made looking at the page it changes. */
+.rep-orient {
+  display: flex; align-items: center; gap: 6px;
+  margin: 0 0 8px; font-size: 11px; color: var(--text-3);
+}
+.rep-orient-label { text-transform: uppercase; letter-spacing: 0.4px; font-weight: 600; }
+.rep-orient-btn {
+  background: transparent; border: 1px solid var(--border); color: var(--text-2);
+  border-radius: 4px; padding: 2px 9px; font: inherit; cursor: pointer;
+}
+.rep-orient-btn:hover { background: var(--surface-hover); color: var(--text); }
+.rep-orient-btn.is-on { background: var(--blue); border-color: var(--blue); color: #fff; }
+.rep-orient-now { margin-left: 4px; font-style: italic; }
+
+
+
 .rep-placement-head {
   display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
 }
@@ -6098,7 +6115,24 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-overview-plan:not([data-seg="1"]) img { width: 100%; height: auto; }
   .rep-overview-key { color: #555 !important; page-break-before: avoid; }
   .rep-seg-floor { color: #111 !important; page-break-after: avoid; break-after: avoid; }
-  .rep-placement-page { page-break-before: always; break-before: page; }
+  .rep-orient { display: none !important; }
+
+  /* Orientation per floor. A named page is a Chromium feature; where it is not
+     honoured the sheet stays portrait and the rule below keeps the map inside
+     the width it actually got instead of overflowing the width it asked for. */
+  @page placementPortrait { size: Letter portrait; }
+  @page placementLandscape { size: Letter landscape; }
+  .rep-placement-page { page: placementPortrait; }
+  .rep-placement-page.is-landscape { page: placementLandscape; }
+  .rep-placement-page .rep-overview-plan:not([data-seg="1"]) {
+    max-width: 100% !important;
+    height: auto !important;
+    aspect-ratio: var(--print-ratio, auto);
+  }
+  /* A floor is one sheet. Without this the map can fill the page and leave the
+     key stranded on the next one. */
+  .rep-placement-page { page-break-before: always; break-before: page;
+                        page-break-inside: avoid; break-inside: avoid; }
   .rep-doc-head + .rep-placement-page, .rep-cover + .rep-placement-page { page-break-before: auto; }
   .rep-placement-sub { color: #555 !important; }
 
