@@ -1011,7 +1011,7 @@
 
   var REPORT_CATEGORIES = [
     { key: 'install', label: 'Installation & Placement',
-      ids: ['antenna', 'predictive', 'aim', 'location'] },
+      ids: ['placement', 'antenna', 'predictive', 'aim', 'location'] },
     { key: 'analysis', label: 'Site Analysis',
       ids: ['summary', 'coverage', 'interference', 'bom'] },
     { key: 'audit', label: 'Audit & Change',
@@ -1792,60 +1792,158 @@
     }
   };
 
+  // Label text is composable so one report can show just the name while another
+  // carries the detail an installer needs without a second lookup.
+  function apMarkerLabel(ap, opts, ctx) {
+    var main = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
+    var extra = [];
+    if (opts.labelModel && ap.model) extra.push(ap.model);
+    if (opts.labelRadio && ctx) {
+      var r = ctx.primaryRadio(ap.id);
+      var ch = r && r.channelByCenterFrequencyDefinedNarrowChannels;
+      if (ch && ch.length) extra.push('ch ' + ch.join('+'));
+      if (r && typeof r.transmitPower === 'number') extra.push(fmt(r.transmitPower, 0) + ' dBm');
+    }
+    if (opts.labelHeight && ctx) {
+      var rh = ctx.primaryRadio(ap.id);
+      if (rh && typeof rh.antennaHeight === 'number') extra.push(fmt(rh.antennaHeight, 1) + ' m');
+    }
+    return { main: main, sub: extra.join(' · ') };
+  }
+
   function buildAntennaMarkers(aps, scaleW, scaleH, opts, ctx, cellBounds) {
-    var markers = '';
     var minDim = Math.min(scaleW, scaleH);
     var edgeMargin = minDim * 0.06;
     var sw = minDim * 0.0025;
     var coneSw = sw * 0.67;
-    aps.forEach(function (ap) {
-      var c = ap.location && ap.location.coord; if (!c) return;
+    var dotSize = minDim * 0.018;
+    var pillH = minDim * 0.028;
+    var gap = minDim * 0.008;
+    var cornerR = minDim * 0.005;
+    var dotR = dotSize * 0.25;
+    var padX = minDim * 0.006;
+    var showCones = opts.showCones !== false;
+
+    // Reading order keeps placement deterministic: the same project renders the
+    // same way every time, and the top-left AP gets first claim on its space.
+    var ordered = aps.filter(function (ap) { return ap.location && ap.location.coord; })
+      .slice()
+      .sort(function (a, b) {
+        var d = a.location.coord.y - b.location.coord.y;
+        return d !== 0 ? d : a.location.coord.x - b.location.coord.x;
+      });
+
+    // Labels already placed, in plan units. A label is never dropped -- on an
+    // installer's map an unlabelled AP is worse than a crowded one -- so when
+    // every near position is taken the pill moves further out and a leader line
+    // is drawn back to the dot.
+    var placed = [];
+    function collides(r) {
+      return placed.some(function (q) {
+        return r.x < q.x + q.w && r.x + r.w > q.x && r.y < q.y + q.h && r.y + r.h > q.y;
+      });
+    }
+
+    var markers = '';
+    ordered.forEach(function (ap) {
+      var c = ap.location.coord;
       var r = ctx ? ctx.primaryRadio(ap.id) : null;
       var isDirectional = ctx ? radioIsDirectional(r) : false;
       var cls = !ctx ? 'rep-mark rep-mark--loc'
         : isDirectional ? 'rep-mark rep-mark--dir' : 'rep-mark rep-mark--omni';
-      markers += '<g class="' + cls + '" transform="translate(' + c.x + ',' + c.y + ')">';
       var apColor = ap.color || '';
-      if (isDirectional) {
-        var dir = r ? r.antennaDirection : null;
+      var dir = (isDirectional && r) ? r.antennaDirection : null;
+
+      var parts = apMarkerLabel(ap, opts, ctx);
+      var label = parts.main;
+      var sub = parts.sub;
+      // The old rule shrank the type in proportion to the name, which put a
+      // ten-character AP name at roughly 3pt on a printed page -- unreadable,
+      // and on this report the name is the whole point. Shrink only to a floor
+      // that still prints legibly, and let the pill grow instead; crowding is
+      // what the placement search below is for.
+      // Whatever is being drawn -- a whole floor or one zoomed cell -- prints
+      // about 7.2in across, so a floor of 1.35% of the long edge lands near 7pt
+      // on paper. Anything smaller than that is not worth printing.
+      var legibleFloor = Math.max(scaleW, scaleH) * 0.0135;
+      var labelFont = Math.max(legibleFloor,
+                               minDim * 0.02 * Math.min(1, 4 / Math.max(4, label.length)));
+      var subFont = labelFont * 0.72;
+      var textW = Math.max(label.length * labelFont * 0.62, sub.length * subFont * 0.6);
+      var pillW = Math.max(minDim * 0.03, textW) + padX * 2;
+      var boxH = sub ? pillH + subFont * 1.25 : pillH;
+
+      // The preferred side still follows the antenna and the page edge; the
+      // fallbacks fan out from there.
+      var preferAbove = false, preferSide = 0;
+      if (dir != null) {
+        var norm = ((dir % 360) + 360) % 360;
+        if (norm > 90 && norm < 270) preferAbove = true;
+        if (norm > 180 && norm < 360) preferSide = 1;
+        else if (norm > 0 && norm < 180) preferSide = -1;
+      }
+      if (cellBounds) {
+        if ((cellBounds.y1 - c.y) < edgeMargin && (c.y - cellBounds.y0) >= edgeMargin) preferAbove = true;
+        if ((cellBounds.x1 - c.x) < edgeMargin + pillW / 2) preferSide = -1;
+        else if ((c.x - cellBounds.x0) < edgeMargin + pillW / 2) preferSide = 1;
+      }
+
+      var near = dotSize / 2 + gap;
+      var cands = [];
+      function push(dx, dy, lead) { cands.push({ x: dx, y: dy, lead: !!lead }); }
+      var vFirst = preferAbove ? -(near + boxH) : near;
+      var vSecond = preferAbove ? near : -(near + boxH);
+      var hFirst = preferSide >= 0 ? 0 : -pillW;
+      push(-pillW / 2 + hFirst * 0.5, vFirst);
+      push(-pillW / 2 + hFirst * 0.5, vSecond);
+      push(near, -boxH / 2);
+      push(-(near + pillW), -boxH / 2);
+      push(near * 0.6, vFirst);
+      push(-(pillW + near * 0.6), vFirst);
+      push(near * 0.6, vSecond);
+      push(-(pillW + near * 0.6), vSecond);
+      // Further out, with a leader line so the pill still reads as this AP's.
+      var far = near + boxH * 1.1;
+      push(-pillW / 2, preferAbove ? -(far + boxH) : far, true);
+      push(far, -boxH / 2, true);
+      push(-(far + pillW), -boxH / 2, true);
+      push(-pillW / 2, preferAbove ? far : -(far + boxH), true);
+
+      var chosen = null;
+      for (var i = 0; i < cands.length; i++) {
+        var rect = { x: c.x + cands[i].x, y: c.y + cands[i].y, w: pillW, h: boxH };
+        if (!collides(rect)) { chosen = cands[i]; placed.push(rect); break; }
+      }
+      if (!chosen) {
+        // Everything is taken. Place it anyway at the preferred spot with a
+        // leader line; a doubled-up label beats a missing one.
+        chosen = { x: -pillW / 2, y: vFirst, lead: true };
+        placed.push({ x: c.x + chosen.x, y: c.y + chosen.y, w: pillW, h: boxH });
+      }
+      // The dot's own footprint is reserved so later labels do not sit on it.
+      placed.push({ x: c.x - dotSize / 2, y: c.y - dotSize / 2, w: dotSize, h: dotSize });
+
+      markers += '<g class="' + cls + '" transform="translate(' + c.x + ',' + c.y + ')">';
+      if (isDirectional && showCones) {
         var len = minDim * 0.06;
         var coneFill = apColor ? ' fill="' + WD.escAttr(apColor) + '" fill-opacity="0.35" stroke="' + WD.escAttr(apColor) + '"' : '';
         markers += '<g transform="rotate(' + dir + ')">'
           + '<path class="rep-mark-cone" d="M 0 0 L ' + (-len * 0.35) + ' ' + (-len) + ' L ' + (len * 0.35) + ' ' + (-len) + ' Z" stroke-width="' + coneSw + '"' + coneFill + '/></g>';
       }
-      var label = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
-      var dotSize = minDim * 0.018;
-      var labelFont = minDim * 0.02 * Math.min(1, 3 / Math.max(3, label.length));
-      var padX = minDim * 0.006;
-      var pillW = Math.max(minDim * 0.03, label.length * labelFont * 0.65) + padX * 2;
-      var pillH = minDim * 0.028;
-      var cornerR = minDim * 0.005;
-      var dotR = dotSize * 0.25;
-      var gap = minDim * 0.008;
-      var labelAbove = false;
-      var labelAnchor = 'middle';
-      var pillXOff = -pillW / 2;
-      if (isDirectional && dir != null) {
-        var normDir = ((dir % 360) + 360) % 360;
-        if (normDir > 90 && normDir < 270) labelAbove = true;
-        if (normDir > 180 && normDir < 360) pillXOff = 0;
-        else if (normDir > 0 && normDir < 180) pillXOff = -pillW;
+      if (chosen.lead) {
+        var lx = chosen.x + pillW / 2;
+        var ly = chosen.y + (chosen.y > 0 ? 0 : boxH);
+        markers += '<line class="rep-mark-lead" x1="0" y1="0" x2="' + lx + '" y2="' + ly
+          + '" stroke-width="' + (sw * 0.9) + '"/>';
       }
-      if (cellBounds) {
-        var nearBottom = (cellBounds.y1 - c.y) < edgeMargin;
-        var nearTop = (c.y - cellBounds.y0) < edgeMargin;
-        var nearRight = (cellBounds.x1 - c.x) < edgeMargin + pillW / 2;
-        var nearLeft = (c.x - cellBounds.x0) < edgeMargin + pillW / 2;
-        if (nearBottom && !nearTop) labelAbove = true;
-        if (nearRight && !nearLeft) { labelAnchor = 'end'; pillXOff = -pillW; }
-        else if (nearLeft && !nearRight) { labelAnchor = 'start'; pillXOff = 0; }
-      }
-      var pillY = labelAbove ? -(dotSize / 2 + gap + pillH) : dotSize / 2 + gap;
-      var textX = pillXOff + pillW / 2;
       var dotFill = apColor ? ' fill="' + WD.escAttr(apColor) + '"' : '';
       markers += '<rect class="rep-mark-dot" x="' + (-dotSize / 2) + '" y="' + (-dotSize / 2) + '" width="' + dotSize + '" height="' + dotSize + '" rx="' + dotR + '" ry="' + dotR + '" stroke-width="' + sw + '"' + dotFill + '/>'
-        + '<rect class="rep-mark-pill" x="' + pillXOff + '" y="' + pillY + '" width="' + pillW + '" height="' + pillH + '" rx="' + cornerR + '" ry="' + cornerR + '" stroke-width="' + sw + '"/>'
-        + '<text class="rep-mark-label" x="' + textX + '" y="' + (pillY + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text></g>';
+        + '<rect class="rep-mark-pill" x="' + chosen.x + '" y="' + chosen.y + '" width="' + pillW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '" stroke-width="' + sw + '"/>'
+        + '<text class="rep-mark-label" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text>';
+      if (sub) {
+        markers += '<text class="rep-mark-sub" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH + subFont * 0.55) + '" text-anchor="middle" font-size="' + subFont + '">' + WD.esc(sub) + '</text>';
+      }
+      markers += '</g>';
     });
     return markers;
   }
@@ -2135,6 +2233,77 @@
 
 
 
+
+  // ── AP Placement Map ──────────────────────────────────────────────────────
+  // One floor, one page, the plan and the APs on it. Everything the other
+  // placement reports add -- section grids, aiming cones, tables, audits -- is
+  // deliberately absent unless asked for: this is the sheet that goes in a
+  // folder or on a wall, and it has to survive being printed and read at arm's
+  // length in a corridor.
+  function renderPlacementFloorSection(fp, aps, opts, ctx, floorIdx) {
+    var sorted = aps.slice().sort(function (a, b) {
+      return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+    });
+    var heading = fp.id === '_none' ? '' : segFloorHeading({
+      floorNumber: floorNumberFor(fp),
+      floorName: fp.name || 'Floor plan',
+    });
+    var count = sorted.length + ' AP' + (sorted.length === 1 ? '' : 's');
+    var out = '<section class="rep-floor-section rep-placement-page" data-floor-idx="' + (floorIdx % 5) + '">';
+    if (heading) {
+      out += '<div class="rep-seg-floor rep-placement-head">' + WD.esc(heading)
+        + '<span class="rep-placement-sub">' + WD.esc((fp.name || '') + ' · ' + count) + '</span></div>';
+    } else {
+      out += '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
+    }
+    out += (fp.id !== '_none')
+      ? renderAntennaOverview(fp, sorted, opts, ctx, placementKeyHtml(opts))
+      : '<div class="rep-empty-small">No floor plan assigned to these APs.</div>';
+    return out + '</section>';
+  }
+
+  function placementKeyHtml(opts) {
+    var bits = ['<span class="rep-key-swatch omni"></span> Access point'];
+    if (opts.showCones) bits.push('<span class="rep-key-swatch dir"></span> Directional, arrow shows aim');
+    return bits.join(' &nbsp;·&nbsp; ');
+  }
+
+  function renderPlacementReport(aps, opts, ctx) {
+    var head = opts.cover ? ctx.cover(aps.length, ctx.dateStr, 'Access points')
+                          : ctx.inlineHeader(aps.length, ctx.dateStr, 'Access points');
+    var byFloor = groupApsByFloor(aps, ctx);
+    var floorOrder = sortedFloorOrder(byFloor);
+    var sections = '';
+    var idx = 0;
+    floorOrder.forEach(function (fp) {
+      var floorAps = byFloor[fp.id];
+      if (!floorAps || !floorAps.length) return;
+      sections += renderPlacementFloorSection(fp, floorAps, opts, ctx, idx);
+      idx++;
+    });
+    if (!sections) sections = '<div class="rep-empty-small">No APs with a position on a floor plan.</div>';
+    return head + sections + renderReportFooter(opts, ctx);
+  }
+
+  // A full-page plan has no segment cropping to size it, so without this the
+  // image keeps its own aspect and a tall floor runs onto a second sheet.
+  function sizePlacementPlansForPrint(host) {
+    var plans = host.querySelectorAll('.rep-placement-page .rep-overview-plan:not([data-seg="1"])');
+    for (var i = 0; i < plans.length; i++) {
+      var el = plans[i];
+      var w = parseFloat(el.style.getPropertyValue('--w'));
+      var h = parseFloat(el.style.getPropertyValue('--h'));
+      if (!(w > 0 && h > 0)) continue;
+      var ratio = w / h;
+      // Letter and A4 portrait, less the page margins, the floor header and the
+      // key line underneath.
+      var maxWidthIn = 7.2;
+      var maxHeightIn = 8.3;
+      var widthIn = Math.min(maxWidthIn, maxHeightIn * ratio);
+      el.style.setProperty('--print-w', widthIn.toFixed(3) + 'in');
+      el.style.setProperty('--print-h', (widthIn / ratio).toFixed(3) + 'in');
+    }
+  }
 
   function renderPredictiveReport(aps, opts, ctx) {
     var head = opts.cover ? ctx.cover(aps.length, ctx.dateStr, 'APs to place')
@@ -3806,7 +3975,81 @@
     +   '<rect x="10" y="104" width="72" height="6" rx="1" fill="#f7e7ee"/>'
     + '</svg>';
 
+  var PREVIEW_PLACEMENT = ''
+    + '<svg viewBox="0 0 92 116" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+    +   '<rect x="4" y="4" width="84" height="108" rx="3" fill="#ffffff" stroke="#9F1B58" stroke-width="0.8"/>'
+    +   '<rect x="10" y="12" width="34" height="6" rx="1" fill="#9F1B58"/>'
+    +   '<rect x="10" y="21" width="72" height="1.5" rx="0.7" fill="#9F1B58" opacity="0.5"/>'
+    +   '<rect x="10" y="28" width="72" height="76" rx="2" fill="#eef2f7" stroke="#d5dee7" stroke-width="0.5"/>'
+    +   '<g fill="#9F1B58">'
+    +     '<rect x="20" y="40" width="3" height="3" rx="0.8"/><rect x="44" y="36" width="3" height="3" rx="0.8"/>'
+    +     '<rect x="66" y="44" width="3" height="3" rx="0.8"/><rect x="26" y="66" width="3" height="3" rx="0.8"/>'
+    +     '<rect x="50" y="72" width="3" height="3" rx="0.8"/><rect x="70" y="86" width="3" height="3" rx="0.8"/>'
+    +   '</g>'
+    +   '<g fill="#ffffff" stroke="#9F1B58" stroke-width="0.4">'
+    +     '<rect x="16" y="45" width="11" height="5" rx="1"/><rect x="40" y="41" width="11" height="5" rx="1"/>'
+    +     '<rect x="62" y="49" width="11" height="5" rx="1"/><rect x="22" y="71" width="11" height="5" rx="1"/>'
+    +     '<rect x="46" y="77" width="11" height="5" rx="1"/><rect x="66" y="91" width="11" height="5" rx="1"/>'
+    +   '</g>'
+    +   '<g fill="#9F1B58" font-size="3" text-anchor="middle">'
+    +     '<text x="21.5" y="48.8">101</text><text x="45.5" y="44.8">102</text>'
+    +     '<text x="67.5" y="52.8">103</text><text x="27.5" y="74.8">104</text>'
+    +     '<text x="51.5" y="80.8">105</text><text x="71.5" y="94.8">106</text>'
+    +   '</g>'
+    + '</svg>';
+
   var REPORTS = {
+    placement: {
+      id: 'placement',
+      label: 'AP Placement Map',
+      description: 'One page per floor: the floor plan, every AP at its real position, and its label. No tables, no aiming detail, no section grid \u2014 just the map.',
+      docName: 'AP Placement Map',
+      coverBrand: 'Report \u00b7 AP Placement Map',
+      status: 'ready',
+      preview: PREVIEW_PLACEMENT,
+      bestFor: 'The sheet that goes in the folder or on the wall \u2014 handing an installer where the APs go, or dropping a clean placement map into a design package.',
+      sections: [
+        { icon: '\ud83d\uddfa\ufe0f', title: 'One page per floor',
+          description: 'The full floor plan with every AP marked at its real position and labelled. The floor number is printed large at the top so a loose sheet still says where it belongs.' },
+        { icon: '\ud83c\udff7\ufe0f', title: 'Labels that stay readable',
+          description: 'Labels move around their AP to avoid each other, and step further out with a leader line when a floor is dense. No AP is ever left unlabelled.' },
+      ],
+      sidebar: [
+        { id: 'clientName', type: 'text', label: 'Client / company', default: '',
+          placeholder: 'e.g. Acme Corp' },
+        { id: 'preparedBy', type: 'text', label: 'Prepared by', default: '',
+          placeholder: 'e.g. Jane Smith' },
+        { id: 'projectRef', type: 'text', label: 'Project reference', default: '',
+          placeholder: 'e.g. PO-2026-0042' },
+        { id: 'revision', type: 'text', label: 'Revision', default: '',
+          placeholder: 'e.g. v2.0' },
+        { id: 'shortLabels', label: 'Short number labels on the plan', default: true,
+          description: 'When your AP names end with an "AP" designator (e.g. "\u2026AP42"), show just the "42". Turn off to print the full AP name.' },
+        { id: 'labelModel', label: 'Add the AP model to each label', default: false,
+          description: 'A second line under the name, e.g. "AP-515". Useful when a floor mixes hardware.' },
+        { id: 'labelRadio', label: 'Add channel & TX power to each label', default: false,
+          description: 'A second line under the name, e.g. "ch 36 \u00b7 15 dBm".' },
+        { id: 'labelHeight', label: 'Add mount height to each label', default: false,
+          description: 'A second line under the name, e.g. "3.0 m".' },
+        { id: 'showCones', label: 'Show aiming arrows on directional APs', default: false,
+          description: 'Off by default \u2014 this map is about where the APs go. The Antenna Aim Sheet covers aiming.' },
+        { id: 'inclDirectional', label: 'Include directional APs', default: true,
+          description: 'All AP types are on by default so nothing is missing from the map.' },
+        { id: 'inclOmni', label: 'Include omni APs', default: true,
+          description: 'All AP types are on by default so nothing is missing from the map.' },
+        { id: 'confidential', label: 'Confidentiality notice in footer', default: false,
+          description: 'Adds "CONFIDENTIAL" to the report footer.' },
+        { id: 'segmented', label: 'Split large floor plans into zoomed sections', default: false,
+          description: 'Off by default \u2014 one page per floor is the point of this report. Turn on for a very large plan where one page cannot hold readable labels.' },
+        { id: '_gridConfig', type: 'grid-button', label: 'Configure grid\u2026',
+          description: 'Only used when the split above is on.' },
+      ],
+      render: renderPlacementReport,
+      postRender: function (host, opts) {
+        sizePlacementPlansForPrint(host);
+        if (opts.segmented) applyAntennaSegmentCrop.apply(null, arguments);
+      },
+    },
     predictive: {
       id: 'predictive',
       label: 'Predictive Design / AP Placement',
