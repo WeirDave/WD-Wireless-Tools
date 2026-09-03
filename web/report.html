@@ -86,6 +86,7 @@
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Tools</div>
           <button class="help-menu-item" onclick="loadNewFile()">· Open Another File</button>
+          <button class="help-menu-item" onclick="openReportSettings()">· Report Settings</button>
           <a class="help-menu-item" href="/settings#report">· Suite Settings</a>
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Help</div>
@@ -127,6 +128,7 @@
     <div class="rep-template-gallery" id="templateGallery"></div>
     <div class="rep-stage-nav">
       <button class="btn btn-secondary" onclick="loadNewFile()">&#128193; Change file</button>
+      <button class="btn btn-secondary" onclick="openReportSettings()">&#9881; Report settings</button>
       <span class="rep-stage-nav-spacer"></span>
     </div>
   </section>
@@ -147,11 +149,10 @@
           <input type="checkbox" id="optCover" checked onchange="markConfigDirty()">
           <span>Include cover page</span>
         </label>
+        <div class="rep-cover-summary" id="coverSummary"></div>
         <div class="rep-logo-row">
-          <button class="btn btn-secondary rep-logo-btn" onclick="pickLogo()">Upload logo…</button>
-          <button class="btn btn-secondary rep-logo-btn" onclick="clearLogo()" id="logoClearBtn" hidden>Remove</button>
+          <button class="btn btn-secondary rep-logo-btn" onclick="openReportSettings()">Cover image &amp; defaults…</button>
         </div>
-        <div id="logoPreview" class="rep-logo-preview"></div>
       </div>
 
       <div class="rep-config-card" id="reportOptsSlot"></div>
@@ -200,6 +201,62 @@
       <div class="rep-empty">Report will render here.</div>
     </main>
   </section>
+</div>
+
+<div id="reportSettingsModal" class="grid-modal-overlay" hidden>
+  <div class="grid-modal rep-settings-modal">
+    <div class="grid-modal-header">
+      <h3>Report settings</h3>
+      <button class="btn-icon" onclick="closeReportSettings()" title="Close">&times;</button>
+    </div>
+    <div class="grid-modal-body rep-settings-body">
+      <p class="rep-set-intro">
+        These are the defaults every new report starts from. An individual report
+        can still say something different &mdash; changing a field while configuring
+        a report affects that report only and leaves these untouched.
+      </p>
+
+      <div class="rep-set-group">
+        <h4 class="rep-set-group-title">Cover image</h4>
+        <div class="rep-set-cover">
+          <div class="rep-set-cover-preview" id="setCoverPreview"></div>
+          <div class="rep-set-cover-side">
+            <div class="rep-set-cover-meta" id="setCoverMeta"></div>
+            <div class="rep-set-cover-actions">
+              <button class="btn btn-secondary btn-sm" onclick="pickCoverImage()">Choose image&hellip;</button>
+              <button class="btn btn-secondary btn-sm" id="setCoverRemove" onclick="removeCoverImage()" hidden>Remove</button>
+            </div>
+            <div class="rep-set-status" id="setCoverStatus" hidden></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="rep-set-group">
+        <h4 class="rep-set-group-title">Defaults for every report</h4>
+        <div class="rep-set-field">
+          <label for="set-clientName">Client / company</label>
+          <input type="text" id="set-clientName" class="rep-input-text" placeholder="e.g. Acme Corp">
+        </div>
+        <div class="rep-set-field">
+          <label for="set-preparedBy">Prepared by</label>
+          <input type="text" id="set-preparedBy" class="rep-input-text" placeholder="e.g. Jane Smith">
+        </div>
+        <div class="rep-set-field">
+          <label for="set-projectRef">Project reference</label>
+          <input type="text" id="set-projectRef" class="rep-input-text" placeholder="e.g. PO-2026-0042">
+        </div>
+        <div class="rep-set-field">
+          <label for="set-revision">Revision</label>
+          <input type="text" id="set-revision" class="rep-input-text" placeholder="e.g. Rev A">
+        </div>
+      </div>
+    </div>
+    <div class="grid-modal-footer">
+      <span class="rep-set-footnote">Stored in this browser on this machine.</span>
+      <button class="btn btn-secondary" onclick="closeReportSettings()">Cancel</button>
+      <button class="btn btn-blue" onclick="saveReportSettings()">Save settings</button>
+    </div>
+  </div>
 </div>
 
 <div id="gridConfigModal" class="grid-modal-overlay" hidden>

@@ -6839,6 +6839,77 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
   border-top: 1px solid var(--border);
 }
 
+/* ── Report settings ───────────────────────────────────────────────────────
+   Reuses the grid modal's frame, but this one is a form rather than a canvas,
+   so it is sized to its content instead of filling the screen. */
+.rep-settings-modal { max-width: 640px; height: auto; max-height: 90vh; }
+.rep-settings-body { display: block; overflow-y: auto; }
+
+.rep-set-intro {
+  margin: 0 0 16px; font-size: 12px; line-height: 1.6; color: var(--text-2);
+}
+
+.rep-set-group { margin-bottom: 20px; }
+.rep-set-group:last-child { margin-bottom: 0; }
+
+.rep-set-group-title {
+  margin: 0 0 10px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-3);
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+
+.rep-set-field { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.rep-set-field label { flex: 0 0 140px; font-size: 13px; color: var(--text-2); }
+.rep-set-field .rep-input-text { max-width: none; flex: 1 1 auto; }
+
+.rep-set-cover { display: flex; gap: 14px; align-items: flex-start; }
+
+.rep-set-cover-preview {
+  flex: 0 0 180px; min-height: 96px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 10px; background: var(--bg);
+  border: 1px dashed var(--border); border-radius: 6px;
+}
+.rep-set-cover-preview img { max-width: 100%; max-height: 120px; display: block; }
+
+.rep-set-cover-side { flex: 1 1 auto; min-width: 0; }
+.rep-set-cover-meta { font-size: 11px; color: var(--text-3); line-height: 1.5; margin-bottom: 10px; }
+.rep-set-cover-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.rep-set-status { margin-top: 10px; font-size: 11px; line-height: 1.5; color: var(--text-2); }
+.rep-set-status.is-ok { color: var(--green); }
+.rep-set-status.is-err { color: var(--red); }
+
+.rep-set-footnote { flex: 1 1 auto; font-size: 11px; color: var(--text-3); }
+
+/* Where a value came from. A prefilled field that has quietly drifted from the
+   saved default is the confusing case, so the two states are labelled rather
+   than left to be inferred. */
+.rep-set-state { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+
+.rep-set-badge {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+  padding: 1px 7px; border-radius: 9px; white-space: nowrap;
+}
+.rep-set-state[data-state="inherited"] .rep-set-badge { background: var(--surface-2); color: var(--text-3); }
+.rep-set-state[data-state="overridden"] .rep-set-badge { background: var(--amber-bg); color: var(--amber-dark); }
+.rep-set-state[data-state="unset"] .rep-set-badge { background: transparent; color: var(--text-3); padding-left: 0; }
+
+.rep-set-revert {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--blue); font: inherit; font-size: 10px; text-decoration: underline;
+}
+.rep-set-revert:hover { color: var(--border-focus); }
+
+/* The Cover page card shows what settings hold, without owning it. */
+.rep-cover-summary { display: flex; align-items: center; gap: 10px; margin: 6px 0 8px; }
+.rep-cover-thumb {
+  max-width: 96px; max-height: 48px; display: block;
+  border: 1px solid var(--border); border-radius: 4px; background: var(--bg); padding: 3px;
+}
+.rep-cover-thumb-meta { font-size: 11px; color: var(--text-3); line-height: 1.4; }
+.rep-cover-thumb-empty { font-size: 11px; color: var(--text-3); font-style: italic; }
+
 /* ═══════════════════════════════════════════════════════════════
    Site Rename tool
    ═══════════════════════════════════════════════════════════════ */

@@ -32,62 +32,379 @@
   var templateConfirmed = false;
   var configureDirty = true;
 
-  var savedLogo = null;
-  try { savedLogo = localStorage.getItem('wd-report-logo') || null; } catch (e) {}
+  // ── Report settings: organisation defaults, and per-report overrides ───────
+  // The company, the person preparing the work, the reference and the cover
+  // image are the same on every report a given outfit produces, so they belong
+  // in settings rather than being retyped. A single report still has to be able
+  // to say something different - a job for another client, a revision letter -
+  // and doing that must not quietly rewrite the default, which is why an
+  // override is tracked beside the default instead of on top of it.
+  var SETTINGS_KEY = 'wd-report-settings';
+  var LEGACY_DETAILS_KEY = 'wd-report-details';
+  var LEGACY_LOGO_KEY = 'wd-report-logo';
+  var SETTING_IDS = ['clientName', 'preparedBy', 'projectRef', 'revision'];
 
-  // ── Remembered report details ──
-  // Client, author, project ref and revision are the same on every report for
-  // a given job, but currentOpts is wiped whenever the report type changes
-  // (see selectReport), so they had to be retyped every single time. These
-  // four persist across reports and sessions; they are still ordinary text
-  // fields, so editing one just updates what is remembered.
-  var PERSISTED_OPT_IDS = ['clientName', 'preparedBy', 'projectRef', 'revision'];
-  var PERSISTED_OPTS_KEY = 'wd-report-details';
+  var reportSettings = {};
+  var optOverrides = {};   // id -> true once this report deliberately differs
+  var coverImage = null;   // { url, name, type, w, h, bytes } once loaded
 
-  function loadPersistedOpts() {
+  function loadSettings() {
+    var out = {};
+    var raw = null;
+    try { raw = localStorage.getItem(SETTINGS_KEY); } catch (e) {}
+    if (!raw) {
+      // v2.12.0 remembered the last values typed under a different key. They are
+      // the closest thing to a stated default, so they seed settings rather than
+      // being thrown away.
+      try { raw = localStorage.getItem(LEGACY_DETAILS_KEY); } catch (e) {}
+    }
+    if (!raw) return out;
     try {
-      var raw = localStorage.getItem(PERSISTED_OPTS_KEY);
-      if (!raw) return {};
       var parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return {};
-      var clean = {};
-      PERSISTED_OPT_IDS.forEach(function (id) {
-        if (typeof parsed[id] === 'string') clean[id] = parsed[id];
+      if (!parsed || typeof parsed !== 'object') return out;
+      SETTING_IDS.forEach(function (id) {
+        if (typeof parsed[id] === 'string' && parsed[id]) out[id] = parsed[id];
       });
-      return clean;
-    } catch (e) { return {}; }
-  }
-
-  var persistedOpts = loadPersistedOpts();
-
-  function savePersistedOpt(id, value) {
-    if (PERSISTED_OPT_IDS.indexOf(id) === -1) return;
-    persistedOpts[id] = value;
-    try {
-      // Drop empties so a cleared field stops being remembered rather than
-      // being remembered as blank.
-      var out = {};
-      PERSISTED_OPT_IDS.forEach(function (k) {
-        if (persistedOpts[k]) out[k] = persistedOpts[k];
-      });
-      if (Object.keys(out).length) localStorage.setItem(PERSISTED_OPTS_KEY, JSON.stringify(out));
-      else localStorage.removeItem(PERSISTED_OPTS_KEY);
     } catch (e) {}
+    return out;
   }
 
-  function seedPersistedOpts() {
-    PERSISTED_OPT_IDS.forEach(function (id) {
-      if (!(id in currentOpts) && persistedOpts[id]) currentOpts[id] = persistedOpts[id];
+  function saveSettings() {
+    try {
+      var out = {};
+      SETTING_IDS.forEach(function (id) { if (reportSettings[id]) out[id] = reportSettings[id]; });
+      if (Object.keys(out).length) localStorage.setItem(SETTINGS_KEY, JSON.stringify(out));
+      else localStorage.removeItem(SETTINGS_KEY);
+      try { localStorage.removeItem(LEGACY_DETAILS_KEY); } catch (e) {}
+      return true;
+    } catch (e) { return false; }
+  }
+
+  function settingDefault(id) { return reportSettings[id] || ''; }
+
+  // Seeds the fields this report has not deliberately changed. Called on every
+  // render so a settings edit shows up in an open Configure stage.
+  function seedSettingDefaults() {
+    SETTING_IDS.forEach(function (id) {
+      if (!optOverrides[id]) {
+        var d = settingDefault(id);
+        if (d) currentOpts[id] = d;
+        else delete currentOpts[id];
+      }
     });
   }
 
-  window.forgetReportDetails = function () {
-    persistedOpts = {};
-    try { localStorage.removeItem(PERSISTED_OPTS_KEY); } catch (e) {}
-    PERSISTED_OPT_IDS.forEach(function (id) { delete currentOpts[id]; });
+  // ── Cover image: IndexedDB, because it is a blob ──────────────────────────
+  // localStorage tops out around 5MB of *string*, so a base64 data URL costs a
+  // third more than the file and shares that budget with the text settings -
+  // one large cover image would evict them both. IndexedDB stores the Blob
+  // itself, under a much larger quota, and keeps the two apart.
+  var IDB_NAME = 'wd-report';
+  var IDB_STORE = 'assets';
+  var COVER_KEY = 'coverImage';
+  var COVER_MAX_EDGE = 1600;                       // plenty for a printed cover
+  var COVER_MAX_SOURCE_BYTES = 25 * 1024 * 1024;
+  var COVER_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/svg+xml'];
+
+  function idbOpen() {
+    return new Promise(function (resolve, reject) {
+      if (!window.indexedDB) { reject(new Error('This browser has no IndexedDB, so a cover image cannot be stored.')); return; }
+      var rq;
+      try { rq = indexedDB.open(IDB_NAME, 1); }
+      catch (e) { reject(new Error('Storage is blocked in this browser.')); return; }
+      rq.onupgradeneeded = function () {
+        var db = rq.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+      };
+      rq.onsuccess = function () { resolve(rq.result); };
+      rq.onerror = function () { reject(rq.error || new Error('Could not open storage.')); };
+      rq.onblocked = function () { reject(new Error('Storage is busy in another tab.')); };
+    });
+  }
+
+  function idbRun(mode, fn) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve, reject) {
+        var tx, store, out;
+        try {
+          tx = db.transaction(IDB_STORE, mode);
+          store = tx.objectStore(IDB_STORE);
+        } catch (e) { db.close(); reject(e); return; }
+        try { out = fn(store); } catch (e) { db.close(); reject(e); return; }
+        tx.oncomplete = function () { db.close(); resolve(out && out.result !== undefined ? out.result : undefined); };
+        tx.onerror = function () { db.close(); reject(tx.error || new Error('Storage write failed.')); };
+        // A quota failure aborts the transaction rather than throwing inline.
+        tx.onabort = function () {
+          db.close();
+          var err = tx.error;
+          reject(err && err.name === 'QuotaExceededError'
+            ? new Error('Not enough browser storage for that image. Try a smaller file.')
+            : (err || new Error('Storage write was aborted.')));
+        };
+      });
+    });
+  }
+
+  function idbGetCover() { return idbRun('readonly', function (s) { return s.get(COVER_KEY); }); }
+  function idbPutCover(rec) { return idbRun('readwrite', function (s) { s.put(rec, COVER_KEY); }); }
+  function idbDelCover() { return idbRun('readwrite', function (s) { s.delete(COVER_KEY); }); }
+
+  function humanBytes(n) {
+    if (!(n > 0)) return '0 KB';
+    if (n < 1024 * 1024) return Math.max(1, Math.round(n / 1024)) + ' KB';
+    return (n / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function readImageSize(blob) {
+    return new Promise(function (resolve) {
+      var url = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function () { resolve({ w: img.naturalWidth, h: img.naturalHeight, url: url, img: img }); };
+      img.onerror = function () { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }
+
+  // Shrinks anything bigger than a printed cover needs. SVG is left alone: it is
+  // already small and rasterising it would throw away the reason to use it.
+  function prepareCoverFile(file) {
+    if (COVER_TYPES.indexOf(file.type) === -1) {
+      return Promise.reject(new Error('That is a ' + (file.type || 'unknown') + ' file. Use PNG, JPEG, WebP, GIF or SVG.'));
+    }
+    if (file.size > COVER_MAX_SOURCE_BYTES) {
+      return Promise.reject(new Error('That image is ' + humanBytes(file.size) + '. Pick one under ' + humanBytes(COVER_MAX_SOURCE_BYTES) + '.'));
+    }
+    if (file.type === 'image/svg+xml') {
+      return Promise.resolve({ blob: file, type: file.type, name: file.name, w: 0, h: 0, bytes: file.size });
+    }
+    return readImageSize(file).then(function (info) {
+      if (!info) return Promise.reject(new Error('That file could not be read as an image.'));
+      var scale = Math.min(1, COVER_MAX_EDGE / Math.max(info.w, info.h));
+      if (scale >= 1) {
+        URL.revokeObjectURL(info.url);
+        return { blob: file, type: file.type, name: file.name, w: info.w, h: info.h, bytes: file.size };
+      }
+      var w = Math.max(1, Math.round(info.w * scale));
+      var h = Math.max(1, Math.round(info.h * scale));
+      var cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      cv.getContext('2d').drawImage(info.img, 0, 0, w, h);
+      URL.revokeObjectURL(info.url);
+      // PNG keeps transparency, which most logos rely on; everything else is
+      // photographic enough that JPEG is the smaller honest choice.
+      var outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+      return new Promise(function (resolve, reject) {
+        cv.toBlob(function (blob) {
+          if (!blob) { reject(new Error('The image could not be resized.')); return; }
+          resolve({ blob: blob, type: outType, name: file.name, w: w, h: h, bytes: blob.size });
+        }, outType, 0.88);
+      });
+    });
+  }
+
+  function setCoverFromRecord(rec) {
+    if (coverImage && coverImage.url) URL.revokeObjectURL(coverImage.url);
+    if (!rec || !rec.blob) { coverImage = null; return; }
+    coverImage = {
+      url: URL.createObjectURL(rec.blob),
+      name: rec.name || 'cover image',
+      type: rec.type || rec.blob.type,
+      w: rec.w || 0, h: rec.h || 0,
+      bytes: rec.bytes || rec.blob.size,
+    };
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    try {
+      var parts = String(dataUrl).split(',');
+      var meta = parts[0] || '';
+      var type = (meta.match(/data:([^;]+)/) || [])[1] || 'image/png';
+      if (meta.indexOf('base64') === -1) return null;
+      var bin = atob(parts[1] || '');
+      var arr = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      return new Blob([arr], { type: type });
+    } catch (e) { return null; }
+  }
+
+  // The old logo lived in localStorage as a base64 data URL. Moving it into
+  // IndexedDB and dropping the key hands that space back to the text settings.
+  function migrateLegacyLogo() {
+    var legacy = null;
+    try { legacy = localStorage.getItem(LEGACY_LOGO_KEY); } catch (e) {}
+    if (!legacy) return Promise.resolve(false);
+    var blob = dataUrlToBlob(legacy);
+    if (!blob) { try { localStorage.removeItem(LEGACY_LOGO_KEY); } catch (e) {} return Promise.resolve(false); }
+    return idbPutCover({ blob: blob, type: blob.type, name: 'logo', w: 0, h: 0, bytes: blob.size, savedAt: new Date().toISOString() })
+      .then(function () { try { localStorage.removeItem(LEGACY_LOGO_KEY); } catch (e) {} return true; })
+      .catch(function () { return false; });
+  }
+
+  function initReportSettings() {
+    reportSettings = loadSettings();
+    return migrateLegacyLogo()
+      .then(function () { return idbGetCover(); })
+      .then(function (rec) { setCoverFromRecord(rec); })
+      .catch(function () { coverImage = null; })
+      .then(function () {
+        renderCoverSummary();
+        if (typeof renderReportOpts === 'function') renderReportOpts();
+      });
+  }
+
+  // ── Settings panel ────────────────────────────────────────────────────────
+  function renderCoverSummary() {
+    var host = document.getElementById('coverSummary');
+    if (host) {
+      host.innerHTML = coverImage
+        ? '<img class="rep-cover-thumb" src="' + WD.escAttr(coverImage.url) + '" alt="Cover image">'
+          + '<span class="rep-cover-thumb-meta">' + WD.esc(coverImage.name)
+          + (coverImage.w ? ' · ' + coverImage.w + '×' + coverImage.h : '')
+          + ' · ' + humanBytes(coverImage.bytes) + '</span>'
+        : '<span class="rep-cover-thumb-empty">No cover image set</span>';
+    }
+    var prev = document.getElementById('setCoverPreview');
+    if (prev) {
+      prev.innerHTML = coverImage
+        ? '<img src="' + WD.escAttr(coverImage.url) + '" alt="Cover image">'
+        : '<span class="rep-cover-thumb-empty">No cover image set</span>';
+    }
+    var meta = document.getElementById('setCoverMeta');
+    if (meta) {
+      meta.textContent = coverImage
+        ? coverImage.name + (coverImage.w ? ' · ' + coverImage.w + '×' + coverImage.h + ' px' : '')
+          + ' · ' + humanBytes(coverImage.bytes)
+        : 'PNG, JPEG, WebP, GIF or SVG. Large images are scaled down to '
+          + COVER_MAX_EDGE + ' px on the long edge.';
+    }
+    var rm = document.getElementById('setCoverRemove');
+    if (rm) rm.hidden = !coverImage;
+  }
+
+  function setCoverStatus(msg, kind) {
+    var el = document.getElementById('setCoverStatus');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.className = 'rep-set-status' + (kind ? ' is-' + kind : '');
+    el.hidden = !msg;
+  }
+
+  window.openReportSettings = function () {
+    var modal = document.getElementById('reportSettingsModal');
+    if (!modal) return;
+    SETTING_IDS.forEach(function (id) {
+      var el = document.getElementById('set-' + id);
+      if (el) el.value = settingDefault(id);
+    });
+    setCoverStatus('');
+    renderCoverSummary();
+    modal.hidden = false;
+  };
+
+  window.closeReportSettings = function () {
+    var modal = document.getElementById('reportSettingsModal');
+    if (modal) modal.hidden = true;
+  };
+
+  window.saveReportSettings = function () {
+    SETTING_IDS.forEach(function (id) {
+      var el = document.getElementById('set-' + id);
+      var v = el ? el.value.trim() : '';
+      if (v) reportSettings[id] = v; else delete reportSettings[id];
+    });
+    var ok = saveSettings();
+    // A report already open keeps whatever it deliberately overrode and picks up
+    // the new default everywhere else.
     configureDirty = true;
     renderReportOpts();
-    if (window.WD && WD.toast) WD.toast('Saved report details cleared', 'success');
+    renderCoverSummary();
+    closeReportSettings();
+    showToast(ok ? 'Report settings saved' : 'Settings could not be saved (storage blocked)', ok ? 'success' : 'warn');
+  };
+
+  window.pickCoverImage = function () {
+    var picker = document.createElement('input');
+    picker.type = 'file';
+    picker.accept = COVER_TYPES.join(',');
+    picker.onchange = function () {
+      var f = picker.files && picker.files[0];
+      if (!f) return;
+      setCoverStatus('Processing ' + f.name + '…');
+      prepareCoverFile(f)
+        .then(function (prepped) {
+          return idbPutCover({
+            blob: prepped.blob, type: prepped.type, name: prepped.name,
+            w: prepped.w, h: prepped.h, bytes: prepped.bytes,
+            savedAt: new Date().toISOString(),
+          }).then(function () { return prepped; });
+        })
+        .then(function (prepped) {
+          setCoverFromRecord(prepped);
+          renderCoverSummary();
+          configureDirty = true;
+          var shrunk = prepped.bytes < f.size;
+          setCoverStatus('Saved' + (shrunk ? ' — scaled down from ' + humanBytes(f.size) + ' to ' + humanBytes(prepped.bytes) : ''), 'ok');
+        })
+        .catch(function (err) {
+          setCoverStatus(err && err.message ? err.message : 'That image could not be saved.', 'err');
+        });
+    };
+    picker.click();
+  };
+
+  window.removeCoverImage = function () {
+    idbDelCover()
+      .then(function () {
+        setCoverFromRecord(null);
+        renderCoverSummary();
+        configureDirty = true;
+        setCoverStatus('Cover image removed', 'ok');
+      })
+      .catch(function (err) {
+        setCoverStatus(err && err.message ? err.message : 'Could not remove the image.', 'err');
+      });
+  };
+
+  // Per-report override controls -------------------------------------------
+  function settingState(id) {
+    var def = settingDefault(id);
+    var val = (id in currentOpts) ? (currentOpts[id] || '') : '';
+    if (optOverrides[id] && val !== def) return 'overridden';
+    if (def) return 'inherited';
+    return 'unset';
+  }
+
+  function settingBadgeHtml(id) {
+    var state = settingState(id);
+    var label = state === 'overridden' ? 'Changed for this report'
+              : state === 'inherited' ? 'From settings'
+              : 'No default saved';
+    return '<span class="rep-set-state" data-state="' + state + '" data-for="' + WD.escAttr(id) + '">'
+      + '<span class="rep-set-badge">' + label + '</span>'
+      + (state === 'overridden'
+          ? '<button type="button" class="rep-set-revert" onclick="revertOptToDefault(\'' + WD.escJsStr(id) + '\')">Use default</button>'
+          : '')
+      + '</span>';
+  }
+
+  // Updated in place rather than by re-rendering, because these fields update on
+  // every keystroke and a re-render would take the caret with it.
+  function refreshSettingBadge(id) {
+    var host = document.querySelector('.rep-set-state[data-for="' + id + '"]');
+    if (!host) return;
+    var wrap = document.createElement('div');
+    wrap.innerHTML = settingBadgeHtml(id);
+    host.replaceWith(wrap.firstChild);
+  }
+
+  window.revertOptToDefault = function (id) {
+    delete optOverrides[id];
+    var def = settingDefault(id);
+    if (def) currentOpts[id] = def; else delete currentOpts[id];
+    var input = document.getElementById('opt-' + id);
+    if (input) input.value = def;
+    refreshSettingBadge(id);
+    configureDirty = true;
   };
 
   var STAGE_ORDER = ['template', 'configure', 'review'];
@@ -619,41 +936,7 @@
     renderApFilter();
   };
 
-  function updateLogoPreview() {
-    var host = document.getElementById('logoPreview');
-    var clr = document.getElementById('logoClearBtn');
-    if (savedLogo) {
-      host.innerHTML = '<img src="' + savedLogo + '" alt="Logo">';
-      clr.hidden = false;
-    } else {
-      host.innerHTML = ''; clr.hidden = true;
-    }
-  }
-  window.pickLogo = function () {
-    var picker = document.createElement('input');
-    picker.type = 'file';
-    picker.accept = 'image/png,image/jpeg,image/svg+xml,image/webp,image/gif';
-    picker.onchange = function () {
-      var f = picker.files && picker.files[0]; if (!f) return;
-      var reader = new FileReader();
-      reader.onload = function () {
-        savedLogo = String(reader.result || '');
-        try { localStorage.setItem('wd-report-logo', savedLogo); }
-        catch (e) { showToast('Logo saved for this session only (storage full)', 'warn'); }
-        updateLogoPreview();
-        configureDirty = true;
-      };
-      reader.readAsDataURL(f);
-    };
-    picker.click();
-  };
-  window.clearLogo = function () {
-    savedLogo = null;
-    try { localStorage.removeItem('wd-report-logo'); } catch (e) {}
-    updateLogoPreview();
-    configureDirty = true;
-  };
-  updateLogoPreview();
+  initReportSettings();
 
   var REPORT_CATEGORIES = [
     { key: 'install', label: 'Installation & Placement',
@@ -769,6 +1052,7 @@
     if (id !== currentReportId) {
       currentReportId = id;
       currentOpts = {};
+      optOverrides = {};
     }
     templateConfirmed = true;
     configureDirty = true;
@@ -781,7 +1065,7 @@
   function renderReportOpts() {
     var host = document.getElementById('reportOptsSlot');
     if (!host) return;
-    seedPersistedOpts();
+    seedSettingDefaults();
     var r = currentReport();
     var apCard = document.getElementById('apFilterCard');
     if (apCard) apCard.hidden = !!r.noApFilter;
@@ -815,10 +1099,12 @@
           + '</div>';
       } else if (opt.type === 'text') {
         var textVal = (opt.id in currentOpts) ? (currentOpts[opt.id] || '') : (opt.default || '');
+        var isSetting = SETTING_IDS.indexOf(opt.id) !== -1;
         html += '<div class="rep-check with-desc">'
           + '<span class="rep-check-body">'
           +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
           +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+          +   (isSetting ? settingBadgeHtml(opt.id) : '')
           + '</span>'
           + '<input type="text" id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" data-opt-type="text" '
           + 'value="' + WD.escAttr(textVal) + '" placeholder="' + WD.escAttr(opt.placeholder || '') + '" '
@@ -852,15 +1138,13 @@
       }
     });
 
-    // Only shown once something is actually remembered, so the panel stays
-    // quiet until the behaviour is visible to the user.
-    var remembered = PERSISTED_OPT_IDS.filter(function (id) {
-      return persistedOpts[id] && (r.sidebar || []).some(function (o) { return o.id === id; });
-    });
-    if (remembered.length) {
+    // Shown whenever this report has fields backed by settings, so the source
+    // of the values on screen is never a guess.
+    var hasSettingFields = (r.sidebar || []).some(function (o) { return SETTING_IDS.indexOf(o.id) !== -1; });
+    if (hasSettingFields) {
       html += '<div class="rep-remembered">'
-        + 'Client, author, reference and revision carry over to your next report. '
-        + '<button type="button" class="rep-remembered-clear" onclick="forgetReportDetails()">Forget these</button>'
+        + 'These come from your report settings. Changing one here affects this report only. '
+        + '<button type="button" class="rep-remembered-clear" onclick="openReportSettings()">Report settings…</button>'
         + '</div>';
     }
 
@@ -873,7 +1157,11 @@
       currentOpts[id] = cb.value === '' ? '' : parseInt(cb.value, 10);
     } else if (optType === 'text') {
       currentOpts[id] = cb.value;
-      savePersistedOpt(id, cb.value);
+      if (SETTING_IDS.indexOf(id) !== -1) {
+        if (cb.value === settingDefault(id)) delete optOverrides[id];
+        else optOverrides[id] = true;
+        refreshSettingBadge(id);
+      }
     } else {
       currentOpts[id] = cb.checked;
     }
@@ -1350,8 +1638,8 @@
   }
 
   function renderCover(count, dateStr, r, countLabel, opts, ctx) {
-    var logo = savedLogo
-      ? '<div class="rep-cover-logo-wrap"><img class="rep-cover-logo" src="' + savedLogo + '" alt="Logo"></div>'
+    var logo = (coverImage && coverImage.url)
+      ? '<div class="rep-cover-logo-wrap"><img class="rep-cover-logo" src="' + WD.escAttr(coverImage.url) + '" alt="Cover image"></div>'
       : '';
     var floorLabel = proj.floorPlans.length === 1 ? 'Floor plan' : 'Floor plans';
     var meta = '';
@@ -1417,7 +1705,7 @@
       dateStr: dateStr,
       dateReadable: dateReadable,
       proj: proj,
-      savedLogo: savedLogo,
+      coverImage: coverImage,
       cover: function (count, ds, label, opts2, ctx2) { return renderCover(count, ds, r, label, opts2, ctx2); },
       inlineHeader: function (count, ds, label) { return renderInlineHeader(count, ds, r, label); },
       primaryRadio: primaryRadio,
