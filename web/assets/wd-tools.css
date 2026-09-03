@@ -7131,3 +7131,180 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
   color: var(--blue); font: inherit; text-decoration: underline;
 }
 .rep-remembered-clear:hover { color: var(--border-focus); }
+
+/* ── WD PlanTrim ────────────────────────────────────────────────────────────
+   Crops empty canvas off Ekahau floor plans. Teal accent, so it reads as its
+   own tool alongside Quick Walls (green) and Report (rose). */
+body.tool-plantrim {
+  background: var(--bg); color: var(--text);
+  min-height: 100vh;
+}
+
+body.tool-plantrim .topbar h1 { color: var(--pt-accent); }
+
+body.tool-plantrim {
+  --pt-accent: #14b8a6;
+  --pt-accent-dim: rgba(20, 184, 166, 0.18);
+}
+
+[data-theme="light"] body.tool-plantrim { --pt-accent: #0d9488; }
+
+body.tool-plantrim .topbar {
+  background: linear-gradient(var(--pt-accent-dim), var(--pt-accent-dim)), var(--navy);
+}
+
+[data-theme="light"] body.tool-plantrim .topbar {
+  background: linear-gradient(rgba(13,148,136,0.12), rgba(13,148,136,0.12)), var(--head-bg);
+}
+
+.pt-topbar { padding: 10px 20px; border-bottom: 1px solid var(--border); }
+
+.pt-wrap { max-width: 900px; margin: 0 auto; padding: 28px 24px 60px; }
+
+.pt-intro {
+  color: var(--text-2); font-size: 14px; line-height: 1.6;
+  margin: 0 0 24px;
+}
+
+.pt-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.pt-step {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--text-2);
+  margin-bottom: 14px;
+}
+
+.pt-step-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--pt-accent); color: #05221f;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800;
+}
+
+.pt-pick-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+
+.pt-path {
+  flex: 1 1 260px; min-width: 0;
+  font-family: var(--mono); font-size: 12px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+
+.pt-path.has-path { color: var(--text); }
+
+/* one row per floor plan, so the blast radius is visible before committing */
+.pt-floors { display: flex; flex-direction: column; gap: 6px; }
+
+.pt-floor {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-raised);
+  font-size: 13px;
+}
+
+.pt-floor.is-trimmed { border-left: 3px solid var(--pt-accent); }
+.pt-floor.is-skipped { opacity: 0.75; }
+.pt-floor.is-refused { border-left: 3px solid var(--amber, #d97706); }
+
+.pt-badge {
+  flex: 0 0 auto;
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--border);
+}
+
+.pt-floor.is-trimmed .pt-badge { background: var(--pt-accent); color: #05221f; border-color: transparent; }
+
+.pt-floor-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+.pt-dims { font-family: var(--mono); font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.pt-arrow { color: var(--pt-accent); }
+
+.pt-saved {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  color: var(--pt-accent); white-space: nowrap;
+}
+
+.pt-reason { font-size: 12px; color: var(--text-3); flex: 1 1 200px; }
+
+.pt-note {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 12px; line-height: 1.6; color: var(--text-2);
+}
+
+.pt-note strong { color: var(--text); }
+
+.pt-empty { padding: 14px; text-align: center; color: var(--text-3); font-size: 13px; }
+.pt-empty.pt-bad { color: var(--red); }
+
+.pt-opt {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text-2);
+  cursor: pointer; margin-bottom: 12px;
+}
+
+.pt-opt input { accent-color: var(--pt-accent); width: 16px; height: 16px; cursor: pointer; }
+.pt-opt code { font-family: var(--mono); font-size: 12px; }
+
+.pt-danger {
+  border: 1px solid var(--red);
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--red);
+  border-radius: 6px;
+  padding: 9px 12px; margin-bottom: 12px;
+  font-size: 12px; line-height: 1.5;
+}
+
+.pt-go { width: 100%; }
+.pt-go.is-danger { background: var(--red); border-color: var(--red); }
+
+.pt-result {
+  margin-top: 14px; padding: 12px 14px;
+  border-radius: 6px; font-size: 13px; line-height: 1.6;
+  border: 1px solid var(--border); background: var(--surface-raised);
+}
+
+.pt-result.pt-good { border-color: var(--pt-accent); }
+.pt-result.pt-bad { border-color: var(--red); color: var(--red); }
+
+.pt-result-path {
+  font-family: var(--mono); font-size: 11px; color: var(--text-2);
+  overflow-wrap: anywhere; margin-top: 4px;
+}
+
+.pt-result-size { font-family: var(--mono); font-size: 11px; color: var(--text-3); margin-top: 4px; }
+.pt-result-next { margin-top: 8px; color: var(--text-2); }
+
+body.pt-busy { cursor: progress; }
+
+@media (max-width: 620px) {
+  .pt-wrap { padding: 20px 14px 40px; }
+  .pt-dims, .pt-saved { flex-basis: 100%; }
+}
+
+body.tool-plantrim .dropzone-logo { background-image: url(plantrim-v1.0-560x480.png); }
+
+body.tool-plantrim .dropzone:hover .dropzone-cta,
+body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-accent); }
+
+.pt-editor .pt-wrap { flex: 1; overflow: auto; max-width: 900px; margin: 0 auto; width: 100%; }
+
+.pt-footer-hint {
+  color: var(--text-3); font-size: 12px; line-height: 1.6;
+  text-align: center; margin: 18px 0 0;
+}
+
+.pt-footer-hint strong { color: var(--text-2); }

@@ -365,7 +365,7 @@ try {
 
   # ---- Dependencies ------------------------------------------------------------
   Write-Step 'Checking Python dependencies…'
-  $probe = 'import flask, waitress, requests, browser_cookie3, cryptography, keyring'
+  $probe = 'import flask, waitress, requests, browser_cookie3, cryptography, keyring, PIL'
   & python -c $probe *>$null
   if ($LASTEXITCODE -ne 0) {
     Write-Host '  Installing missing packages…'
