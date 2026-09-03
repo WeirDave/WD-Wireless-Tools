@@ -1954,15 +1954,48 @@
       : 'Labels: trailing "APnn" from each AP name (e.g. "42" for "…AP42"). Names without that suffix show the full name.';
   }
 
-  function antennaKeyHtml(opts) {
-    return '<span class="rep-key-swatch dir"></span> Directional antenna &nbsp;·&nbsp; <span class="rep-key-swatch omni"></span> Omni / ceiling &nbsp;·&nbsp; ' + WD.esc(antennaLabelHint(opts));
+  // Distinct marker colours in the order they first appear, plus whether any
+  // marker is falling back to the brand colour because its AP has none.
+  function markerColours(aps) {
+    var seen = {}, out = [], anyDefault = false;
+    (aps || []).forEach(function (ap) {
+      var raw = ap && ap.color;
+      if (!raw) { anyDefault = true; return; }
+      var c = WD.safeColor(raw);
+      if (!seen[c]) { seen[c] = 1; out.push(c); }
+    });
+    return { colours: out, anyDefault: anyDefault };
+  }
+
+  // One colour on the map means one swatch in that colour. Several means the
+  // legend shows all of them: a single swatch would be picking one AP's colour
+  // to stand for the rest, which is worse than the mismatch it replaced.
+  function keySwatch(cls, aps) {
+    var info = markerColours(aps);
+    var swatches = info.colours.slice(0, 6).map(function (c) {
+      return '<span class="rep-key-swatch ' + cls + '" style="background:' + WD.escAttr(c) + '"></span>';
+    });
+    if (info.anyDefault || !swatches.length) {
+      swatches.unshift('<span class="rep-key-swatch ' + cls + '"></span>');
+    }
+    var extra = info.colours.length - 6;
+    return swatches.join('') + (extra > 0 ? '<span class="rep-key-more">+' + extra + '</span>' : '');
+  }
+
+  function antennaKeyHtml(opts, aps, ctx) {
+    var dirAps = [], omniAps = [];
+    (aps || []).forEach(function (ap) {
+      if (ctx && radioIsDirectional(ctx.primaryRadio(ap.id))) dirAps.push(ap); else omniAps.push(ap);
+    });
+    return keySwatch('dir', dirAps) + ' Directional antenna &nbsp;·&nbsp; '
+      + keySwatch('omni', omniAps) + ' Omni / ceiling &nbsp;·&nbsp; ' + WD.esc(antennaLabelHint(opts));
   }
 
   function renderAntennaOverview(fp, aps, opts, ctx, keyHtml) {
     var url = floorPlanImageUrl(fp);
     if (!url) return '<div class="rep-empty-small">Floor plan image not available.</div>';
     var W = fp.width || 1, H = fp.height || 1;
-    if (!keyHtml) keyHtml = antennaKeyHtml(opts);
+    if (!keyHtml) keyHtml = antennaKeyHtml(opts, aps, ctx);
 
     if (opts.segmented) {
       var grid = computeAntennaGrid(W, H, aps, opts);
@@ -2257,14 +2290,14 @@
       out += '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
     }
     out += (fp.id !== '_none')
-      ? renderAntennaOverview(fp, sorted, opts, ctx, placementKeyHtml(opts))
+      ? renderAntennaOverview(fp, sorted, opts, ctx, placementKeyHtml(opts, sorted))
       : '<div class="rep-empty-small">No floor plan assigned to these APs.</div>';
     return out + '</section>';
   }
 
-  function placementKeyHtml(opts) {
-    var bits = ['<span class="rep-key-swatch omni"></span> Access point'];
-    if (opts.showCones) bits.push('<span class="rep-key-swatch dir"></span> Directional, arrow shows aim');
+  function placementKeyHtml(opts, aps) {
+    var bits = [keySwatch('omni', aps) + ' Access point'];
+    if (opts.showCones) bits.push(keySwatch('dir', aps) + ' Directional, arrow shows aim');
     return bits.join(' &nbsp;·&nbsp; ');
   }
 
