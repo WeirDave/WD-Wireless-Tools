@@ -62,6 +62,9 @@
   // and only when a real name actually matches that pattern, so it never
   // guesses at a name that came from somewhere else.
   var labelerPattern = null;
+  // Feet or metres. Stored with the rest of the suite settings rather than per
+  // report, because it describes how this person works, not this document.
+  var unitsPref = 'feet';
 
   function settingDefault(id) { return reportSettings[id] || ''; }
 
@@ -82,6 +85,8 @@
       applySettingsPayload(r.settings && r.settings.report);
       var ar = r.settings && r.settings.aprename;
       labelerPattern = (ar && ar.defaults) || null;
+      var u = r.settings && r.settings.report && r.settings.report.units;
+      if (u === 'feet' || u === 'meters') unitsPref = u;
     });
   }
 
@@ -729,6 +734,33 @@
     return dirs[Math.floor((norm + 11.25) / 22.5) % 16];
   }
   function metersToFt(m) { return m * M_TO_FT; }
+
+  /* Every length in an .esx is stored in metres - metersPerUnit is the only
+     scale the file carries - so metric leaks into the output unless something
+     converts it deliberately. The project file has no display-unit field of
+     its own (projectConfiguration.displayOptions carries one unrelated key),
+     so Ekahau keeps that preference in the application and the report cannot
+     read it. It is a setting here instead, defaulting to feet.
+
+     One unit, not two. These pages are read on a ladder, and "7.62 m (25 ft)"
+     is two numbers to scan where one will do. */
+  function fmtLength(meters, opts, digits) {
+    if (meters == null || isNaN(meters)) return '—';
+    // A foot is a small enough step that one decimal is plenty; a metre is
+    // three feet, so metric needs two to say the same thing. 3.048 m is
+    // "10 ft" or "3.05 m", never a bare "3 m".
+    if (unitsOf(opts) === 'meters') return fmt(meters, digits == null ? 2 : digits) + ' m';
+    return fmt(meters * M_TO_FT, digits == null ? 1 : digits) + ' ft';
+  }
+
+  function unitsOf(opts) {
+    opts = opts || {};
+    if (opts.units === 'meters' || opts.units === 'feet') return opts.units;
+    // Pre-2.32 reports carried a boolean "show both units" flag; anyone who
+    // had turned it off wanted metric only.
+    if (opts.imperial === false) return 'meters';
+    return 'feet';
+  }
   function fmt(n, dp) { return Number(n).toFixed(dp).replace(/\.?0+$/, ''); }
   function formatReadableDate(d) {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -1270,6 +1302,14 @@
       currentOpts[id] = cb.value === '' ? '' : parseInt(cb.value, 10);
     } else if (optType === 'select') {
       currentOpts[id] = cb.value;
+      if (id === 'units') {
+        unitsPref = cb.value;
+        // Best effort: a report still renders correctly if this never lands.
+        if (settingsAvailable) {
+          WD.api('settings/update', { patch: { report: { units: cb.value } } })
+            .catch(function () {});
+        }
+      }
     } else if (optType === 'text') {
       currentOpts[id] = cb.value;
       if (SETTING_IDS.indexOf(id) !== -1) {
@@ -1740,7 +1780,10 @@
     opts.cover = coverEl ? coverEl.checked : true;
     var r = currentReport();
     (r.sidebar || []).forEach(function (o) {
-      if (o.type === 'text' || o.type === 'select') {
+      if (o.id === 'units') {
+        // the remembered preference wins over the option's built-in default
+        opts.units = (o.id in currentOpts) ? currentOpts[o.id] : unitsPref;
+      } else if (o.type === 'text' || o.type === 'select') {
         opts[o.id] = (o.id in currentOpts) ? (currentOpts[o.id] || '') : (o.default || '');
       } else {
         opts[o.id] = (o.id in currentOpts) ? currentOpts[o.id] : !!o.default;
@@ -1825,6 +1868,7 @@
       inlineHeader: function (count, ds, label) { return renderInlineHeader(count, ds, r, label); },
       primaryRadio: primaryRadio,
       compass: compass, metersToFt: metersToFt, fmt: fmt,
+      fmtLength: fmtLength, unitsOf: unitsOf,
       floorPlanForAp: floorPlanForAp,
     };
     host.innerHTML = r.render(aps, opts, ctx);
@@ -1850,7 +1894,9 @@
     }
     if (opts.labelHeight && ctx) {
       var rh = ctx.primaryRadio(ap.id);
-      if (rh && typeof rh.antennaHeight === 'number') extra.push(fmt(rh.antennaHeight, 1) + ' m');
+      if (rh && typeof rh.antennaHeight === 'number') {
+        extra.push(fmtLength(rh.antennaHeight, opts, 1));
+      }
     }
     return { main: main, sub: extra.join(' · ') };
   }
@@ -3242,10 +3288,7 @@
       var tilt = r ? r.antennaTilt : null;
       var height = r ? r.antennaHeight : null;
 
-      var heightStr = height == null ? '—'
-        : (opts.imperial !== false
-            ? ctx.fmt(height, 2) + ' m &nbsp;<span class="rep-alt">(' + ctx.fmt(ctx.metersToFt(height), 2) + ' ft)</span>'
-            : ctx.fmt(height, 2) + ' m');
+      var heightStr = ctx.fmtLength(height, opts, 1);
       var azStr = dir == null ? '<span class="rep-alt">omni</span>'
         : (opts.compass !== false
             ? ctx.fmt(dir, 1) + '° <span class="rep-alt">(' + ctx.compass(dir) + ')</span>'
@@ -3884,10 +3927,7 @@
         var height = r ? r.antennaHeight : null;
         var mount = r ? r.antennaMounting : '—';
         var isOmni = apIsOmniOnly(ap);
-        var heightStr = height == null ? '—'
-          : (opts.imperial
-              ? ctx.fmt(height, 2) + ' m &nbsp;<span class="rep-alt">(' + ctx.fmt(ctx.metersToFt(height), 2) + ' ft)</span>'
-              : ctx.fmt(height, 2) + ' m');
+        var heightStr = ctx.fmtLength(height, opts, 1);
         var azStr = isOmni ? '<span class="rep-alt">Omni</span>'
           : dir == null ? '—'
           : (opts.compass
@@ -4546,8 +4586,12 @@
           description: 'Compact floor plan per floor below the table, with AP dots and direction ticks — sanity check before climbing a ladder.' },
         { id: 'signOff',  label: 'Sign-off columns (initials + date)', default: true,
           description: 'Right side of each row keeps two blank cells so the printed sheet doubles as an as-built.' },
-        { id: 'imperial', label: 'Show mount heights in both units', default: true,
-          description: 'Meters primary, feet in parentheses — e.g. "2.5 m (8\'2\")".' },
+        { id: 'units', type: 'select', label: 'Measurement units', default: 'feet',
+          options: [
+            { value: 'feet',   label: 'Feet' },
+            { value: 'meters', label: 'Metres' },
+          ],
+          description: 'Heights and distances are written in this unit. An .esx stores everything in metres, so this is a display choice; it does not change the project.' },
         { id: 'compass',  label: 'Show compass headings alongside azimuth', default: true,
           description: 'Azimuth shown as "137° (SE)" instead of just "137°".' },
         { id: 'inclDirectional', label: 'Include directional APs', default: true,
@@ -4659,8 +4703,12 @@
           description: 'Final table listing every antenna model with gain and beam width.',
           disabledWhen: function (p) { return !hasAnyBeamWidth(p); },
           disabledReason: function () { return 'No beam-width data in this project (all-integrated antennas).'; } },
-        { id: 'imperial', label: 'Show mount heights in both units', default: true,
-          description: 'Meters primary, feet in parentheses — e.g. "2.5 m (8\'2\")".' },
+        { id: 'units', type: 'select', label: 'Measurement units', default: 'feet',
+          options: [
+            { value: 'feet',   label: 'Feet' },
+            { value: 'meters', label: 'Metres' },
+          ],
+          description: 'Heights and distances are written in this unit. An .esx stores everything in metres, so this is a display choice; it does not change the project.' },
         { id: 'compass',  label: 'Show compass headings alongside azimuth', default: true,
           description: 'Azimuth shown as "137° (SE)" instead of just "137°".' },
         { id: 'nameAudit', label: 'Include naming audit', default: false,
