@@ -576,6 +576,65 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
                         "so Windows PowerShell 5.1 will fail to parse it",
                     )
 
+    # Fixed elements that may stay out of the print rules, and why. Anything
+    # position:fixed that is not here has to be hidden in print.
+    PRINT_CHROME_ALLOWED = {
+        ".toast": "lives inside .toasts / .toast-container, both hidden",
+        ".dz-topbar": "hidden by id, as #dzTopbar",
+        ".scale-copy-buffer": "Scale has nothing to print",
+        ".hotkey-sidebar": "Quick Walls has nothing to print",
+    }
+
+    def test_fixed_elements_do_not_print(self):
+        """Anything position:fixed repeats on every sheet in Chrome.
+
+        A fixed element is not simply visible on the printed page - the engine
+        paints it again on every sheet. That put a red "Server is running old
+        code" strip across every page of a report, and printing with Report
+        settings open put the dialog and its grey scrim over every map. Neither
+        shows on screen, and both land on a document that goes to a client.
+
+        So every fixed thing must be hidden in print or listed above with a
+        reason. Sticky is left out: it degrades to static when paginating.
+        """
+        css = (ROOT / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
+        lines = css.split("\n")
+        start = next(i for i, l in enumerate(lines) if l.startswith("@media print"))
+        depth, end = 0, len(lines) - 1
+        for i in range(start, len(lines)):
+            depth += lines[i].count("{") - lines[i].count("}")
+            if depth == 0 and i > start:
+                end = i
+                break
+        print_block = "\n".join(lines[start:end + 1])
+
+        hidden = set()
+        for m in re.finditer(r"([^{}]+)\{[^{}]*display:\s*none[^{}]*\}", print_block):
+            for sel in m.group(1).split(","):
+                sel = sel.strip().split()[-1] if sel.strip() else ""
+                if sel:
+                    hidden.add(sel)
+
+        offenders = []
+        for i, line in enumerate(lines[:start]):
+            if not re.search(r"position:\s*fixed", line):
+                continue
+            for j in range(i, -1, -1):
+                if "{" in lines[j]:
+                    for sel in lines[j].split("{")[0].split(","):
+                        sel = sel.strip()
+                        if not sel or sel.startswith("@"):
+                            continue
+                        if sel not in hidden and sel not in self.PRINT_CHROME_ALLOWED:
+                            offenders.append((sel, i + 1))
+                    break
+
+        self.assertEqual(
+            offenders, [],
+            "position:fixed and not hidden in print - Chrome repeats these on "
+            "every sheet of a printed report: " + repr(offenders),
+        )
+
     def test_javascript_files_have_no_nul_bytes(self):
         scripts = list((ROOT / "web" / "assets" / "js").glob("*.js"))
         self.assertTrue(scripts)
