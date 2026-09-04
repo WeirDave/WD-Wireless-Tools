@@ -57,6 +57,11 @@
   var optOverrides = {};        // id -> true once this report deliberately differs
   var coverImage = null;        // { url, name, bytes } once one is stored
   var settingsAvailable = false; // false when there is no server behind the page
+  // The AP Labeler stores the Structured naming pattern it last used. The
+  // label reference page uses it to say what each segment of a name means -
+  // and only when a real name actually matches that pattern, so it never
+  // guesses at a name that came from somewhere else.
+  var labelerPattern = null;
 
   function settingDefault(id) { return reportSettings[id] || ''; }
 
@@ -75,6 +80,8 @@
       if (!r || !r.ok) throw new Error('settings unavailable');
       settingsAvailable = true;
       applySettingsPayload(r.settings && r.settings.report);
+      var ar = r.settings && r.settings.aprename;
+      labelerPattern = (ar && ar.defaults) || null;
     });
   }
 
@@ -1201,6 +1208,22 @@
           + 'class="rep-input-text" '
           + 'onchange="setOpt(this)" oninput="setOpt(this)">'
           + '</div>';
+      } else if (opt.type === 'select') {
+        var selVal = (opt.id in currentOpts) ? currentOpts[opt.id] : (opt.default || '');
+        html += '<div class="rep-check with-desc">'
+          + '<span class="rep-check-body">'
+          +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
+          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+          + '</span>'
+          + '<select id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" '
+          + 'data-opt-type="select" class="rep-input-text" onchange="setOpt(this)">'
+          + (opt.options || []).map(function (o) {
+              return '<option value="' + WD.escAttr(o.value) + '"'
+                + (String(o.value) === String(selVal) ? ' selected' : '') + '>'
+                + WD.esc(o.label) + '</option>';
+            }).join('')
+          + '</select>'
+          + '</div>';
       } else if (opt.type === 'number') {
         var numVal = (opt.id in currentOpts) ? currentOpts[opt.id] : (opt.default || '');
         html += '<div class="rep-check with-desc' + (disabled ? ' is-disabled' : '') + '">'
@@ -1245,6 +1268,8 @@
     var optType = cb.getAttribute('data-opt-type');
     if (optType === 'number') {
       currentOpts[id] = cb.value === '' ? '' : parseInt(cb.value, 10);
+    } else if (optType === 'select') {
+      currentOpts[id] = cb.value;
     } else if (optType === 'text') {
       currentOpts[id] = cb.value;
       if (SETTING_IDS.indexOf(id) !== -1) {
@@ -1715,7 +1740,7 @@
     opts.cover = coverEl ? coverEl.checked : true;
     var r = currentReport();
     (r.sidebar || []).forEach(function (o) {
-      if (o.type === 'text') {
+      if (o.type === 'text' || o.type === 'select') {
         opts[o.id] = (o.id in currentOpts) ? (currentOpts[o.id] || '') : (o.default || '');
       } else {
         opts[o.id] = (o.id in currentOpts) ? currentOpts[o.id] : !!o.default;
@@ -2360,6 +2385,116 @@
     return bits.join(' &nbsp;·&nbsp; ');
   }
 
+  /* Split a structured AP name into labelled segments, but only when it
+     really is one. The Labeler builds Structured names as the non-empty parts
+     of CLLI / building / floor / suite / tag+number joined by its separator,
+     so the same shape is reconstructed here and the name is only annotated
+     when it matches: same separator, same segment count, the fixed segments
+     equal to what the Labeler saved, and a trailing tag+digits. Anything else
+     returns null and the breakdown is left out rather than guessed. */
+  function structuredSegments(name, pat) {
+    if (!name || !pat) return null;
+    var sep = pat.sepS || '-';
+    if (sep.length !== 1) return null;
+    var parts = String(name).split(sep);
+    var expect = [];
+    if (pat.clli)     expect.push({ label: 'CLLI',     value: pat.clli });
+    if (pat.building) expect.push({ label: 'Building', value: pat.building });
+    expect.push({ label: 'Floor', value: null });      // varies per floor
+    if (pat.suite)    expect.push({ label: 'Suite',    value: pat.suite });
+    expect.push({ label: 'AP', value: null });         // tag + number
+    if (parts.length !== expect.length) return null;
+
+    var tag = pat.apTag || '';
+    var out = [];
+    for (var i = 0; i < expect.length; i++) {
+      var seg = parts[i], e = expect[i];
+      if (e.value != null && seg !== e.value) return null;
+      if (e.label === 'Floor' && !/^[0-9A-Za-z]+$/.test(seg)) return null;
+      if (e.label === 'AP') {
+        var re = new RegExp('^' + tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\d+', 'i');
+        if (tag && !re.test(seg)) return null;
+        if (!tag && !/\d/.test(seg)) return null;
+      }
+      out.push({ label: e.label, value: seg });
+    }
+    return out;
+  }
+
+  // Compact markers are the reason this page exists: the plan shows "01" and
+  // the installer needs the name that goes with it.
+  function markersAreCompact(aps, opts) {
+    if (opts.shortLabels === false) return false;
+    return aps.some(function (ap) {
+      var full = apLabel(ap, 'full');
+      var short = apLabel(ap, 'short');
+      return short && full && short !== full;
+    });
+  }
+
+  function wantsNameKey(aps, opts) {
+    var mode = opts.nameKey || 'auto';
+    if (mode === 'never') return false;
+    if (mode === 'always') return true;
+    return markersAreCompact(aps, opts);
+  }
+
+  /* One page per floor, in the same order and with the same heading as the map
+     it belongs to. Names are never shortened or wrapped here - the installer
+     copies them onto a physical label - so the column is sized for the longest
+     name on the floor and the page scrolls to two columns rather than
+     squeezing one. */
+  function renderApNameKeySection(fp, aps, opts, ctx, floorIdx) {
+    var sorted = aps.slice().sort(function (a, b) {
+      return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+    });
+    var heading = fp.id === '_none' ? '' : segFloorHeading({
+      floorNumber: floorNumberFor(fp),
+      floorName: fp.name || 'Floor plan',
+    });
+    var count = sorted.length + ' AP' + (sorted.length === 1 ? '' : 's');
+
+    var sample = null;
+    for (var i = 0; i < sorted.length && !sample; i++) {
+      sample = structuredSegments(sorted[i].name, labelerPattern);
+    }
+    var scheme = '';
+    if (sample) {
+      scheme = '<div class="rep-key-scheme"><div class="rep-key-scheme-lbl">Naming scheme</div>'
+        + '<div class="rep-key-scheme-row">'
+        + sample.map(function (seg, k) {
+            return (k ? '<span class="rep-key-sep">-</span>' : '')
+              + '<span class="rep-key-seg"><b>' + WD.esc(seg.value) + '</b>'
+              + '<i>' + WD.esc(seg.label) + '</i></span>';
+          }).join('')
+        + '</div></div>';
+    }
+
+    var rows = sorted.map(function (ap) {
+      var num = apLabel(ap, 'short');
+      var full = apLabel(ap, 'full') || '(unnamed)';
+      return '<tr><td class="rep-key-num">' + WD.esc(num) + '</td>'
+        + '<td class="rep-key-name">' + WD.esc(full) + '</td></tr>';
+    }).join('');
+
+    var out = '<section class="rep-floor-section rep-key-page" data-floor-idx="'
+      + (floorIdx % 5) + '">';
+    if (heading) {
+      out += '<div class="rep-seg-floor rep-key-head">' + WD.esc(heading)
+        + '<span class="rep-placement-sub">' + WD.esc((fp.name || '') + ' \u00b7 ' + count)
+        + '</span></div>';
+    } else {
+      out += '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
+    }
+    out += '<p class="rep-key-intro">The plan shows the number. Write the full name on the label.</p>'
+      + scheme
+      + '<table class="rep-key-table"><thead><tr>'
+      + '<th class="rep-key-num">#</th><th>Full AP name</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table>'
+      + renderReportFooter(opts, ctx);
+    return out + '</section>';
+  }
+
   function renderPlacementReport(aps, opts, ctx) {
     var head = opts.cover ? ctx.cover(aps.length, ctx.dateStr, 'Access points')
                           : ctx.inlineHeader(aps.length, ctx.dateStr, 'Access points');
@@ -2373,6 +2508,18 @@
       sections += renderPlacementFloorSection(fp, floorAps, opts, ctx, idx);
       idx++;
     });
+    // The label reference follows the maps, one page per floor in the same
+    // order, so an installer working a floor finds its names right after its
+    // plan.
+    if (wantsNameKey(aps, opts)) {
+      var kidx = 0;
+      floorOrder.forEach(function (fp) {
+        var floorAps = byFloor[fp.id];
+        if (!floorAps || !floorAps.length) return;
+        sections += renderApNameKeySection(fp, floorAps, opts, ctx, kidx);
+        kidx++;
+      });
+    }
     if (!sections) sections = '<div class="rep-empty-small">No APs with a position on a floor plan.</div>';
     return head + sections;
   }
@@ -4206,6 +4353,13 @@
           placeholder: 'e.g. PO-2026-0042' },
         { id: 'revision', type: 'text', label: 'Revision', default: '',
           placeholder: 'e.g. v2.0' },
+        { id: 'nameKey', type: 'select', label: 'AP label reference pages', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when the plan shows numbers' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A page per floor listing each marker number against the full AP name, so the installer can write the label correctly.' },
         { id: 'shortLabels', label: 'Short number labels on the plan', default: true,
           description: 'When your AP names end with an "AP" designator (e.g. "\u2026AP42"), show just the "42". Turn off to print the full AP name.' },
         { id: 'labelModel', label: 'Add the AP model to each label', default: false,
