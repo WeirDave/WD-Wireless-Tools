@@ -153,6 +153,45 @@ def local_version(root: Path | None = None, cfg: AppConfig = CONFIG) -> str:
 
 # ===================================================================== git ==
 
+# Raw git output is written for people who use git. "You are not currently on
+# a branch. See git-pull(1) for details." tells an installer nothing and looks
+# like the app is broken, so known failures are translated and anything
+# unrecognised is reported as a plain sentence with the git text kept out of
+# the headline.
+_GIT_HINTS = (
+    ("not currently on a branch",
+     "This install sits on a specific release rather than following a branch, "
+     "which is normal. Use the Update button in About rather than git directly."),
+    ("could not resolve host",
+     "No connection to GitHub. Check the network and try again."),
+    ("unable to access",
+     "Could not reach GitHub. Check the network, or a proxy or firewall, and try again."),
+    ("would be overwritten",
+     "Some files in the install folder have been edited and an update would "
+     "overwrite them. Move or revert them, then update again."),
+    ("permission denied",
+     "The install folder is not writable. Close anything using it and try again."),
+    ("index.lock",
+     "Another git operation is still running in the install folder. "
+     "Wait a moment and try again."),
+    ("authentication failed",
+     "GitHub refused the connection. If this install came from a private copy, "
+     "sign in to git first."),
+    ("not a git repository",
+     "This folder is not a git install any more. Reinstall, or use the ZIP update."),
+)
+
+
+def _friendly_git_error(args, proc) -> str:
+    text = ((proc.stderr or "") + "\n" + (proc.stdout or "")).lower()
+    for needle, message in _GIT_HINTS:
+        if needle in text:
+            return message
+    verb = args[0] if args else "git"
+    return (f"The update could not finish (git {verb} failed). "
+            "Try again, and if it keeps failing use Copy Diagnostics from the menu.")
+
+
 def _run_git(args, cwd: Path, check: bool = True):
     try:
         proc = subprocess.run(
@@ -162,10 +201,9 @@ def _run_git(args, cwd: Path, check: bool = True):
     except FileNotFoundError:
         raise UpdateError("Git is not installed or not on PATH.")
     except subprocess.TimeoutExpired:
-        raise UpdateError(f"git {' '.join(args)} timed out.")
+        raise UpdateError("The update timed out talking to GitHub. Check the network and try again.")
     if check and proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout or "").strip().splitlines()
-        raise UpdateError(f"git {' '.join(args)} failed: {detail[-1] if detail else 'unknown error'}")
+        raise UpdateError(_friendly_git_error(args, proc))
     return proc
 
 
@@ -395,6 +433,18 @@ def rescue_dirty_templates(root: Path, cfg: AppConfig = CONFIG):
     return rescued
 
 
+def _ensure_origin(root: Path, cfg: AppConfig = CONFIG):
+    """A git install with no usable origin cannot update at all.
+
+    An install converted from a ZIP, or one whose remote was renamed, would
+    otherwise fail with git's own wording deep inside a fetch.
+    """
+    proc = _run_git(["remote", "get-url", "origin"], root, check=False)
+    if proc.returncode == 0 and (proc.stdout or "").strip():
+        return
+    _run_git(["remote", "add", "origin", cfg.clone_url], root, check=False)
+
+
 def git_update(root: Path | None = None, channel: str = "release", log=None,
                cfg: AppConfig = CONFIG):
     """Fetch and move to the newest release tag (or main on the dev channel)."""
@@ -418,6 +468,8 @@ def git_update(root: Path | None = None, channel: str = "release", log=None,
             f"{listed}. Revert or move them, then try again."
         )
 
+    # Repair the remote before reaching for it, not after.
+    _ensure_origin(root, cfg)
     say("Fetching from GitHub…")
     _run_git(["fetch", "--tags", "--prune", "origin"], root)
 
