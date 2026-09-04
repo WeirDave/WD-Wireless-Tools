@@ -6121,11 +6121,16 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-seg-floor { color: #111 !important; page-break-after: avoid; break-after: avoid; }
   .rep-orient { display: none !important; }
 
-  /* The app's own banners are chrome, not content. They are position:fixed, so
-     Chrome repeats them on every sheet - a red "Server is running old code"
-     strip across every page of a report going to a client. Found on a printed
-     page, not on screen. */
-  .wd-stale-banner, .wd-update-banner { display: none !important; }
+  /* The app's own furniture is chrome, not content, and none of it belongs on
+     a printed page. Anything position:fixed is worse than it sounds: Chrome
+     repeats it on every sheet, so a red "Server is running old code" strip, or
+     the settings dialog and the grey scrim behind it, lands on all of them.
+     Print with Report settings open and every page of the deliverable comes out
+     with the dialog across the map. None of this shows on screen, which is why
+     the list is kept deliberately wide. */
+  .wd-stale-banner, .wd-update-banner,
+  .modal-overlay, .grid-modal-overlay, .swap-modal, .swap-undo-toast,
+  .toast-container, .ops-deck, .screen-home-btn { display: none !important; }
 
   /* Orientation per floor. A named page is a Chromium feature; where it is not
      honoured the sheet stays portrait and the rule below keeps the map inside
