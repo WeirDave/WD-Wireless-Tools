@@ -32,7 +32,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"></a><br><b>Scale</b><br><sub>v1.5 · Desktop + Web</sub></td>
 <td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"></a><br><b>Report</b><br><sub>v2.42.0 · Desktop + Web</sub></td>
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.1 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v1.4 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v1.5 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -129,7 +129,7 @@ Crop the empty canvas off a CAD-imported floor plan and rebase every object's co
 See your access points on the floor plan, pick a spatial ordering, set a naming pattern, and download a labeled `.esx`.
 
 - Visual floor-plan viewer with zoom and pan
-- Seven spatial orderings: snake, row by row (L→R / R→L), column by column (T→B / B→T), clockwise, counter-clockwise
+- Spatial orderings: proximity (nearest AP, the default), snake (rows, alternating), row by row (L→R / R→L), column by column (T→B / B→T), clockwise, counter-clockwise, by color, and manual click order
 - Structured naming with CLLI, building, floor (auto from ESX), suite, and AP tag fields
 - Freeform naming with custom text and number as prefix or suffix
 - MAC address naming with hex incrementing and configurable format
@@ -201,7 +201,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.33.0
+WIRELESS TOOLS  v2.34.0
 A suite of Ekahau workflow tools.
 
 Local suite: http://localhost:8675/

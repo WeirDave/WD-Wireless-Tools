@@ -541,7 +541,8 @@
     switch (method) {
       case 'row-ltr':   return sortByRow(sorted, false);
       case 'row-rtl':   return sortByRow(sorted, true);
-      case 'row-snake':  return sortNearestNeighbor(sorted);
+      case 'proximity':  return sortProximity(sorted);
+      case 'row-snake':  return sortSnake(sorted);
       case 'col-ttb':    return sortByColumn(sorted, false);
       case 'col-btt':    return sortByColumn(sorted, true);
       case 'clockwise':  return sortRadial(sorted, true);
@@ -660,6 +661,154 @@
     keys.forEach(function (k) {
       var g = sortNearestNeighbor(groups[k]);
       for (var i = 0; i < g.length; i++) result.push(g[i]);
+    });
+    return result;
+  }
+
+  /* Proximity: walk to whichever AP is nearest, the way the snake game eats.
+
+     Two things make it usable rather than merely short. It always starts from
+     the AP closest to the top-left of the group, so the same project numbers
+     the same way every time instead of beginning wherever the topmost AP
+     happened to land. And the greedy walk is cleaned up afterwards, because
+     greedy strands outliers: it consumes a dense cluster, skips the AP just
+     outside it, and has to cross the whole building to collect it at the end.
+     On a real 29-AP floor that last hop was nearly three times the average.
+
+     The cleanup is 2-opt plus or-opt, which is heavy-handed for a travelling
+     salesman and completely free here - a floor has tens of APs, not
+     thousands, so a few full passes cost nothing and remove exactly the long
+     recrossing hops that make a sequence unfollowable. */
+  function sortProximity(aps) {
+    if (aps.length < 3) return sortNearestNeighbor(aps);
+    var tour = greedyWalk(aps, startCorner(aps));
+    tour = twoOpt(tour);
+    tour = orOpt(tour);
+    return tour;
+  }
+
+  function dist2(a, b) {
+    var dx = a.x - b.x, dy = a.y - b.y;
+    return dx * dx + dy * dy;
+  }
+  function dist(a, b) { return Math.sqrt(dist2(a, b)); }
+
+  // The AP nearest the top-left of the group's own bounding box, so the answer
+  // does not move when the plan has empty canvas around it.
+  function startCorner(aps) {
+    var minX = Infinity, minY = Infinity;
+    aps.forEach(function (a) {
+      if (a.x < minX) minX = a.x;
+      if (a.y < minY) minY = a.y;
+    });
+    var corner = { x: minX, y: minY };
+    var best = 0, bestD = Infinity;
+    for (var i = 0; i < aps.length; i++) {
+      var d = dist2(aps[i], corner);
+      // ties resolve the same way every time
+      if (d < bestD - 1e-9 ||
+          (Math.abs(d - bestD) <= 1e-9 && aps[i].y < aps[best].y)) {
+        bestD = d; best = i;
+      }
+    }
+    return best;
+  }
+
+  function greedyWalk(aps, startIdx) {
+    var remaining = aps.slice();
+    var result = [remaining.splice(startIdx, 1)[0]];
+    while (remaining.length) {
+      var last = result[result.length - 1];
+      var bestIdx = 0, bestDist = Infinity;
+      for (var i = 0; i < remaining.length; i++) {
+        var d = dist2(remaining[i], last);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+      result.push(remaining.splice(bestIdx, 1)[0]);
+    }
+    return result;
+  }
+
+  /* Reverse any run whose two end links cross. The first AP stays first - the
+     starting corner is a promise, not something to optimise away. */
+  function twoOpt(t) {
+    var n = t.length, improved = true, guard = 0;
+    while (improved && guard++ < 60) {
+      improved = false;
+      for (var i = 1; i < n - 2; i++) {
+        for (var k = i + 1; k < n - 1; k++) {
+          var before = dist(t[i - 1], t[i]) + dist(t[k], t[k + 1]);
+          var after = dist(t[i - 1], t[k]) + dist(t[i], t[k + 1]);
+          if (after < before - 1e-9) {
+            var seg = t.slice(i, k + 1).reverse();
+            t = t.slice(0, i).concat(seg, t.slice(k + 1));
+            improved = true;
+          }
+        }
+      }
+    }
+    return t;
+  }
+
+  /* Lift a run of one to three APs out and drop it where it costs least. This
+     is what actually rescues the stranded outlier: 2-opt can only reverse, so
+     an AP sitting on its own needs moving rather than flipping. */
+  function orOpt(t) {
+    var improved = true, guard = 0;
+    while (improved && guard++ < 60) {
+      improved = false;
+      for (var len = 1; len <= 3 && !improved; len++) {
+        // i starts at 1: the first AP is the chosen corner and stays put.
+        for (var i = 1; i + len <= t.length && !improved; i++) {
+          var seg = t.slice(i, i + len);
+          var rest = t.slice(0, i).concat(t.slice(i + len));
+          if (!rest.length) continue;
+          // Taking the run out closes the gap it leaves behind. Links inside
+          // the run survive the move, so they cancel and are left out.
+          var saved = 0;
+          if (i > 0) saved += dist(t[i - 1], seg[0]);
+          if (i + len < t.length) saved += dist(seg[len - 1], t[i + len]);
+          if (i > 0 && i + len < t.length) saved -= dist(t[i - 1], t[i + len]);
+
+          var bestGain = 1e-9, bestAt = -1, bestRev = false;
+          for (var j = 1; j <= rest.length; j++) {
+            for (var rev = 0; rev < 2; rev++) {
+              var piece = rev ? seg.slice().reverse() : seg;
+              var gain = saved - spliceCost(rest, j, piece);
+              if (gain > bestGain) { bestGain = gain; bestAt = j; bestRev = !!rev; }
+            }
+          }
+          if (bestAt >= 0) {
+            var moved = bestRev ? seg.slice().reverse() : seg;
+            t = rest.slice(0, bestAt).concat(moved, rest.slice(bestAt));
+            improved = true;
+          }
+        }
+      }
+    }
+    return t;
+  }
+
+  // What it costs to open `rest` at j and drop `piece` in.
+  function spliceCost(rest, j, piece) {
+    var prev = rest[j - 1], next = rest[j], add = 0;
+    if (prev) add += dist(prev, piece[0]);
+    if (next) add += dist(piece[piece.length - 1], next);
+    if (prev && next) add -= dist(prev, next);
+    return add;
+  }
+
+  /* A real snake: rows top to bottom, every other row reversed, so the walk
+     turns at the end of a row instead of flying back to the near edge. */
+  function sortSnake(aps) {
+    if (aps.length < 2) return aps.slice();
+    var sp = getSpacingUnits('y');
+    var rows = sp > 0 ? clusterByFixedSpacing(aps, 'y', sp) : clusterByAxis(aps, 'y');
+    rows.sort(function (a, b) { return avg(a, 'y') - avg(b, 'y'); });
+    var result = [];
+    rows.forEach(function (row, i) {
+      row.sort(function (a, b) { return i % 2 ? b.x - a.x : a.x - b.x; });
+      for (var j = 0; j < row.length; j++) result.push(row[j]);
     });
     return result;
   }
@@ -833,7 +982,8 @@
     updateManualPanel();
     var order = $('arOrder').value;
     var show = order === 'row-ltr' || order === 'row-rtl' ||
-               order === 'col-ttb' || order === 'col-btt';
+               order === 'col-ttb' || order === 'col-btt' ||
+               order === 'row-snake';
     $('arSpacingRow').hidden = !show;
   }
 
