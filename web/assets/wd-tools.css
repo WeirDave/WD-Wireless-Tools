@@ -6097,7 +6097,11 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-legend { page-break-inside: avoid; }
   .rep-doc-foot { page-break-inside: avoid; }
 
-  .rep-floor-section { page-break-before: always; padding-top: 0 !important; }
+  /* Padding above and below a section is space on screen, and a sheet the
+     content then has to fit around in print. The bottom 22px was enough on its
+     own to push the footer of a full-page map onto the next page. */
+  .rep-floor-section { page-break-before: always;
+                       padding-top: 0 !important; padding-bottom: 0 !important; }
   .rep-doc-head + .rep-floor-section, .rep-cover + .rep-floor-section { page-break-before: auto; }
   .rep-floor-title { margin: 0 0 8px !important; padding-bottom: 4px !important; page-break-after: avoid; }
   .rep-seg-note { page-break-after: avoid; }
@@ -6116,6 +6120,12 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-overview-key { color: #555 !important; page-break-before: avoid; }
   .rep-seg-floor { color: #111 !important; page-break-after: avoid; break-after: avoid; }
   .rep-orient { display: none !important; }
+
+  /* The app's own banners are chrome, not content. They are position:fixed, so
+     Chrome repeats them on every sheet - a red "Server is running old code"
+     strip across every page of a report going to a client. Found on a printed
+     page, not on screen. */
+  .wd-stale-banner, .wd-update-banner { display: none !important; }
 
   /* Orientation per floor. A named page is a Chromium feature; where it is not
      honoured the sheet stays portrait and the rule below keeps the map inside

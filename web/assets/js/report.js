@@ -2627,10 +2627,30 @@
   // correct on either without a second layout.
   var SHEET_W_IN = 7.45;
   var SHEET_H_IN = 10.0;
-  // What the floor header and the key line cost, off whichever edge runs
-  // vertically. Measured from a printed page rather than estimated: at 1.15in
-  // the key was landing on a sheet of its own.
+  /* What the floor header, the key line and the footer cost, off whichever edge
+     runs vertically. Measured off a printed page rather than estimated, because
+     estimating it is what went wrong twice.
+
+     At 1.15in the key landed on a sheet of its own. At 1.5in the key fitted but
+     the footer did not, and it went to a page of its own carrying nothing but
+     the running header - the map was taking every inch the estimate left, so
+     anything the estimate had missed had nowhere to go. Measuring a printed
+     landscape sheet: heading 0.64in, key 0.24in, footer with the
+     confidentiality line 0.57in, and the section's own bottom padding 0.23in,
+     which the old figure had not counted at all. That is 1.68in against 1.5in
+     allowed, and the 0.18in it overran by was the whole bug.
+
+     The padding is now dropped in print - it is wasted on a sheet - and this
+     figure carries slack on top of the 1.45in the furniture actually needs, so
+     a footer that wraps to a second line still has somewhere to go. */
   var SHEET_CHROME_IN = 1.5;
+  /* Held apart from the figure above on purpose. That one decides whether
+     turning the sheet is worth it, by comparing two scales against each other,
+     and it has been right about that since 2.28. This one is only about how
+     much room the map may actually take, and raising the shared figure to make
+     the map fit moved the rotate decision as a side effect - a floor that
+     should print landscape started printing portrait. */
+  var SHEET_SLACK_IN = 0.2;
   // A turned sheet has to earn it. Below this much extra scale the reader is
   // rotating paper for nothing.
   var ROTATE_GAIN = 1.15;
@@ -2671,7 +2691,7 @@
       var rotate = mode === 'landscape' ? true : mode === 'portrait' ? false : wants;
 
       var boxW = rotate ? rotW : upW;
-      var boxH = rotate ? rotH : upH;
+      var boxH = (rotate ? rotH : upH) - SHEET_SLACK_IN;
       var hIn = Math.min(boxH, boxW / ratio);
       var wIn = hIn * ratio;
 
