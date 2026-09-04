@@ -14,16 +14,16 @@ if errorlevel 1 (
     echo.
     echo  Python is not installed, and WD Wireless Tools needs it to run.
     echo.
-    echo  How to install Python:
+    echo  How to install Python
     echo.
-    echo    Option 1 - Download from python.org:
+    echo    Option 1 - Download from python.org
     echo      1. Go to https://www.python.org/downloads/
     echo      2. Click the big yellow "Download Python" button
     echo      3. Run the installer
     echo      4. IMPORTANT: On the first screen, tick "Add python.exe to PATH"
     echo      5. Click "Install Now"
     echo.
-    echo    Option 2 - Install from a terminal (PowerShell or Command Prompt):
+    echo    Option 2 - Install from a terminal
     echo      winget install --id Python.Python.3.12 -e
     echo.
     echo  After installing Python, close this window and double-click
@@ -45,10 +45,10 @@ if errorlevel 1 (
         echo.
         echo  Some packages failed to install.
         echo.
-        echo  Try running this command yourself in PowerShell or Command Prompt:
+        echo  Try running this command yourself in PowerShell or Command Prompt
         echo    python -m pip install -r "%~dp0requirements.txt"
         echo.
-        echo  If pip itself is missing, run:
+        echo  If pip itself is missing, run
         echo    python -m ensurepip --upgrade
         echo  then try the pip install command above again.
         echo.
@@ -61,7 +61,7 @@ if errorlevel 1 (
 )
 
 REM ---- Kill any stale instance on port 8675 -----------------------------------
-powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8675 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":8675 "') do taskkill /PID %%p /F >nul 2>&1
 
 REM ---- Launch -----------------------------------------------------------------
 python server.py
