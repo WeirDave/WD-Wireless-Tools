@@ -339,6 +339,9 @@
     $('dzTopbar').style.display = 'none';
     $('editor').classList.add('active');
     $('fileBadge').textContent = file.name;
+    $('fileBadge').style.display = 'inline-block';
+    // The badge truncates on a long project name, so the whole one lives here.
+    $('fileBadge').title = file.name + '  —  click to open another .esx';
     $('arNoPlan').textContent = 'Reading project…';
     $('arNoPlan').style.display = '';
     $('arPlanBox').hidden = true;
@@ -980,6 +983,13 @@
 
      The stem is only taken at a separator boundary, so a name is never cut
      mid-segment, and only when it leaves something behind on every row. */
+  // The stem alone reads as a fragment, so one real name is completed behind
+  // it - the shared part solid, the part that varies per AP dimmed.
+  function tailOf(full, stem) {
+    if (!full || !stem || full.indexOf(stem) !== 0) return '';
+    return full.slice(stem.length);
+  }
+
   function commonStem(names) {
     if (names.length < 2) return '';
     var first = names[0];
@@ -1031,12 +1041,31 @@
     // Work out what every row shares, per column, and show it once.
     var stemOld = commonStem(items.map(function (it) { return it.oldName || ''; }));
     var stemNew = commonStem(items.map(function (it) { return it.newName || ''; }));
+    /* The rows below show only what differs between them, so whatever was
+       hoisted out has to be stated here or it is nowhere on screen. That
+       hoisted part is exactly the part the naming pattern controls - the CLLI,
+       building, floor and suite - which made a working pattern look like it
+       had done nothing. Each side is named, and when the two differ that
+       difference is the change being made, so it is called out. */
     var stemEl = $('arStem');
     if (stemEl) {
       if (stemOld || stemNew) {
+        var sample = items[0] || {};
+        var changed = stemOld !== stemNew;
+        function side(key, stem, full, cls) {
+          var body = stem
+            ? '<span class="ar-stem-val">' + esc(stem) + '</span>'
+              + '<span class="ar-stem-tail">' + esc(tailOf(full, stem)) + '</span>'
+            : '<span class="ar-stem-none">nothing in common</span>';
+          return '<div class="ar-stem-line ' + cls + '">'
+            + '<span class="ar-stem-key">' + key + '</span>' + body + '</div>';
+        }
         stemEl.hidden = false;
-        stemEl.innerHTML = 'all: <b>' + esc(stemOld || '—') + '</b>' +
-          '<span class="ar-stem-arrow">→</span><b>' + esc(stemNew || '—') + '</b>';
+        stemEl.innerHTML =
+          '<div class="ar-stem-cap">Every name on this floor'
+          + (changed ? '<span class="ar-stem-chg">changing</span>' : '') + '</div>'
+          + side('Current', stemOld, sample.oldName || '', '')
+          + side('New', stemNew, sample.newName || '', 'is-new');
       } else {
         stemEl.hidden = true;
         stemEl.innerHTML = '';
