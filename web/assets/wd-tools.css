@@ -6158,10 +6158,43 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-ap-table th, .rep-ap-table td {
     min-width: 0 !important; max-width: none !important;
     padding: 3px 2px !important;
+    /* `overflow-wrap: anywhere` was breaking values at any character, so a
+       column narrower than its content did not overflow - it wrapped one or
+       two characters per line and drove the row hundreds of points tall.
+       Values now break only where a value legitimately can. */
     white-space: normal !important;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
+    word-break: normal;
   }
-  .rep-ap-table td.rep-num, .rep-ap-table th.rep-num { width: 0.3in !important; }
+  /* Headers are single words, so never split them - but clip rather than let
+     one bleed across its neighbour, which is what an over-narrow column does
+     under table-layout: fixed. */
+  .rep-ap-table th {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: clip !important;
+  }
+  /* Columns that may be abbreviated: one line, cut with an ellipsis. The full
+     value stays in the title attribute and, for the floor, in the heading
+     above the table. */
+  .rep-ap-table td.rep-ellip {
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+  /* The AP name is transcribed onto a physical label, so it is never cut. */
+  .rep-ap-table td.rep-name {
+    white-space: nowrap !important;
+    overflow: visible !important;
+  }
+  /* Wide enough for a duplicate label such as "05-001" without crowding the
+     AP name beside it. */
+  .rep-ap-table td.rep-num, .rep-ap-table th.rep-num {
+    width: 0.58in !important; white-space: nowrap !important;
+  }
+  /* Height reads as one value - "3.05 m (10 ft)" - so it stays on one line
+     rather than pushing every row to two. */
+  .rep-ap-table td.rep-nowrap-print { white-space: nowrap !important; }
   .rep-nowrap, .rep-ap-table td.rep-az { white-space: normal !important; }
   .rep-ap-table .rep-alt { color: #888 !important; }
 

@@ -662,8 +662,27 @@
   function apLabel(ap, mode) {
     var n = (ap && ap.name) || '';
     if (mode === 'full') return n;
-    var m = n.match(/AP[\-_\s]?(\d+[A-Za-z]?)\s*$/i);
-    return m ? m[1] : n;
+    // Ekahau appends "-001" when an AP is duplicated, so the number is not
+    // always the last thing in the name. Anchoring on end-of-string made
+    // FTCL3-01-00-01-AP05-001 fail to match and fall through to the whole
+    // name - in a column sized for two characters, and on the map marker.
+    var m = n.match(/AP[\-_\s]?(\d+[A-Za-z]?)(?:[\-_](\d+))?\s*$/i);
+    if (!m) return n;
+    return m[2] ? m[1] + '-' + m[2] : m[1];
+  }
+
+  /* A floor plan imported from CAD carries a generated name like
+     "4563 Denrose TF_Overall Plan background_2026-08-14". The full name
+     belongs in the floor heading, which has a whole line for it; repeating it
+     in a table cell sized for a few characters is what made rows explode. */
+  function shortFloorLabel(name) {
+    var s = String(name || '').trim();
+    if (!s) return '';
+    s = s.replace(/[_\s]*\d{4}-\d{2}-\d{2}\s*$/, '');   // trailing export date
+    var cut = s.indexOf('_');
+    if (cut > 2) s = s.slice(0, cut);
+    s = s.replace(/\s+/g, ' ').trim();
+    return s.length > 24 ? s.slice(0, 23) + '\u2026' : s;
   }
   function antennaIsDirectional(ant) {
     if (!ant) return false;
@@ -3660,6 +3679,25 @@
   function renderApLocationTable(aps, fp, opts, ctx) {
     var showDir = aps.some(function (ap) { return !apIsOmniOnly(ap); });
     var showCP = opts.showChannelPower !== false;
+
+    /* This table is rendered per floor and the floor name is already the
+       heading directly above it, so a Floor column repeats one value on every
+       row. With thirteen columns on a portrait sheet that repetition is not
+       free - it was the column whose long generated value collapsed the whole
+       table. The same goes for Building when a floor sits in one building.
+       Both are dropped when constant and stated once in the caption instead. */
+    var tableFloor = fp ? (fp.name || '—') : '—';
+    var buildingsSeen = {};
+    aps.forEach(function (ap) {
+      var b = fp && proj.buildingFloors[fp.id];
+      var nm = b && proj.buildings[b.buildingId] ? (proj.buildings[b.buildingId].name || '—') : '—';
+      buildingsSeen[nm] = 1;
+    });
+    var buildingNames = Object.keys(buildingsSeen);
+    var oneFloor = true;                       // one fp per table by construction
+    var oneBuilding = buildingNames.length <= 1;
+    var tableBuilding = buildingNames.length === 1 ? buildingNames[0] : '';
+
     var rows = '';
     aps.forEach(function (ap) {
       var lbl = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
@@ -3709,19 +3747,26 @@
               ? ctx.fmt(dir, 1) + '° <span class="rep-alt">(' + ctx.compass(dir) + ')</span>'
               : ctx.fmt(dir, 1) + '°');
         var tiltStr = isOmni ? '—' : (tilt == null ? '—' : ctx.fmt(tilt, 1) + '°');
-        dirCells = '<td>' + WD.esc(isOmni ? '—' : mount) + '</td>'
-          + '<td>' + (isOmni ? '—' : heightStr) + '</td>'
+        // Azimuth and tilt genuinely do not apply to an omni, but mount and
+        // height do - an omni still hangs at a height off a ceiling, and the
+        // installer needs both. These used to be blanked for omni APs purely
+        // because they sat in the directional branch.
+        dirCells = '<td>' + WD.esc(mount || '—') + '</td>'
+          + '<td class="rep-nowrap-print">' + heightStr + '</td>'
           + '<td class="rep-az">' + azStr + '</td>'
           + '<td>' + tiltStr + '</td>'
-          + '<td>' + WD.esc(ant ? ant.name : '—') + '</td>';
+          + '<td class="rep-ellip" title="' + WD.escAttr(ant ? ant.name : '') + '">'
+          + WD.esc(ant ? ant.name : '—') + '</td>';
       }
       rows += '<tr' + (nameIssue ? ' class="rep-loc-warn-row"' : '') + '>'
         + '<td class="rep-num">' + WD.esc(lbl) + '</td>'
         + '<td class="rep-name">' + WD.esc(ap.name || '(unnamed)') + '</td>'
-        + '<td>' + WD.esc(ap.vendor || '—') + '</td>'
-        + '<td>' + WD.esc(ap.model || '—') + '</td>'
-        + '<td>' + WD.esc(floorName) + '</td>'
-        + '<td>' + WD.esc(buildingName) + '</td>'
+        + '<td class="rep-ellip">' + WD.esc(ap.vendor || '—') + '</td>'
+        + '<td class="rep-ellip">' + WD.esc(ap.model || '—') + '</td>'
+        + (oneFloor ? '' : '<td class="rep-ellip" title="' + WD.escAttr(floorName) + '">'
+            + WD.esc(shortFloorLabel(floorName) || '—') + '</td>')
+        + (oneBuilding ? '' : '<td class="rep-ellip" title="' + WD.escAttr(buildingName) + '">'
+            + WD.esc(buildingName) + '</td>')
         + cpCells
         + dirCells
         + (opts.nameAudit ? '<td class="rep-loc-warn">' + WD.esc(nameIssue) + '</td>' : '')
@@ -3732,28 +3777,33 @@
       ? '<th>Mount</th><th>Height</th><th>Azimuth</th><th>Tilt</th><th>Antenna</th>'
       : '';
     var cpHeaders = showCP ? '<th>TX Power</th><th>Channel</th>' : '';
-    var colCount = 6 + (showCP ? 2 : 0) + (showDir ? 5 : 0) + (opts.nameAudit ? 1 : 0);
+    var colCount = 4 + (oneFloor ? 0 : 1) + (oneBuilding ? 0 : 1)
+      + (showCP ? 2 : 0) + (showDir ? 5 : 0) + (opts.nameAudit ? 1 : 0);
 
     // Relative print widths. These are normalized below so optional columns
     // still consume exactly 100% without making the whole PDF scale down.
+    // Weights are roughly the widest value each column has to hold. The AP
+    // name is the one column that must never be shortened - the installer
+    // copies it onto a label - so it gets the largest share and the columns
+    // that can be abbreviated give way to it.
     var printCols = [
-      { key: 'num', weight: 4 },
-      { key: 'name', weight: 17 },
-      { key: 'vendor', weight: 7 },
-      { key: 'model', weight: 7 },
-      { key: 'floor', weight: 6 },
-      { key: 'building', weight: 14 },
+      { key: 'num', weight: 9 },
+      { key: 'name', weight: 30 },
+      { key: 'vendor', weight: 12 },
+      { key: 'model', weight: 12 },
     ];
+    if (!oneFloor) printCols.push({ key: 'floor', weight: 16 });
+    if (!oneBuilding) printCols.push({ key: 'building', weight: 14 });
     if (showCP) {
-      printCols.push({ key: 'tx', weight: 22 });
-      printCols.push({ key: 'channel', weight: 25 });
+      printCols.push({ key: 'tx', weight: 20 });
+      printCols.push({ key: 'channel', weight: 22 });
     }
     if (showDir) {
-      printCols.push({ key: 'mount', weight: 10 });
-      printCols.push({ key: 'height', weight: 9 });
-      printCols.push({ key: 'azimuth', weight: 8 });
-      printCols.push({ key: 'tilt', weight: 6 });
-      printCols.push({ key: 'antenna', weight: 14 });
+      printCols.push({ key: 'mount', weight: 12 });
+      printCols.push({ key: 'height', weight: 17 });
+      printCols.push({ key: 'azimuth', weight: 12 });
+      printCols.push({ key: 'tilt', weight: 8 });
+      printCols.push({ key: 'antenna', weight: 20 });
     }
     if (opts.nameAudit) printCols.push({ key: 'audit', weight: 12 });
     var printWeight = printCols.reduce(function (sum, col) { return sum + col.weight; }, 0);
@@ -3766,7 +3816,8 @@
       + colgroup
       + '<thead><tr>'
       + '<th class="rep-num">#</th><th>AP name</th><th>Vendor</th><th>Model</th>'
-      + '<th>Floor</th><th>Building</th>'
+      + (oneFloor ? '' : '<th>Floor</th>')
+      + (oneBuilding ? '' : '<th>Building</th>')
       + cpHeaders
       + dirHeaders
       + (opts.nameAudit ? '<th>Naming issue</th>' : '')
@@ -3774,6 +3825,8 @@
       + '<tbody>' + rows + '</tbody>'
       + '<tfoot><tr><td colspan="' + colCount + '" class="rep-subtotal">'
       + aps.length + ' access point' + (aps.length === 1 ? '' : 's') + ' on this floor'
+      + (oneBuilding && tableBuilding && tableBuilding !== '—'
+          ? ' \u00b7 ' + WD.esc(tableBuilding) : '')
       + '</td></tr></tfoot></table>';
   }
 
