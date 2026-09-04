@@ -100,6 +100,64 @@ sha256_of() {
   fi
 }
 
+PY_MIN_MAJOR=3
+PY_MIN_MINOR=10
+
+# The interpreter the app will actually run under, checked before anything is
+# downloaded. Installing an app that cannot start, and then saying "Ready", is
+# worse than not installing it.
+find_python() {
+  PY_FOUND=""; PY_VER=""; PY_TOO_OLD=""
+  for c in python3 python; do
+    command -v "$c" >/dev/null 2>&1 || continue
+    code="$("$c" -c 'import sys;print(sys.version_info[0]*1000+sys.version_info[1])' 2>/dev/null)" || continue
+    case "$code" in ''|*[!0-9]*) continue ;; esac
+    maj=$(( code / 1000 )); min=$(( code % 1000 ))
+    if [ "$maj" -gt "$PY_MIN_MAJOR" ] || { [ "$maj" -eq "$PY_MIN_MAJOR" ] && [ "$min" -ge "$PY_MIN_MINOR" ]; }; then
+      PY_FOUND="$c"; PY_VER="$maj.$min"; return 0
+    fi
+    PY_TOO_OLD="$maj.$min"
+  done
+  return 1
+}
+
+# $1 is 1 when a missing Python should stop the run. An existing install is only
+# warned: the update itself runs fine without it.
+require_python() {
+  if find_python; then
+    ok "  Python $PY_VER found."
+    return 0
+  fi
+  echo
+  if [ -n "$PY_TOO_OLD" ]; then
+    err "Python $PY_TOO_OLD is too old. This needs Python $PY_MIN_MAJOR.$PY_MIN_MINOR or newer."
+  else
+    err "Python is not installed. This needs Python $PY_MIN_MAJOR.$PY_MIN_MINOR or newer."
+  fi
+  echo
+  # As with git on this platform, the routes are slow and intrusive, so a
+  # missing Python is explained rather than installed.
+  if [ "$(uname -s)" = "Darwin" ]; then
+    echo "  Install it with one of:"
+    echo "    brew install python@3.12"
+    echo "    xcode-select --install"
+  else
+    echo "  Install it with your package manager, for example:"
+    echo "    sudo apt install python3 python3-pip"
+  fi
+  echo "  or download it from https://www.python.org/downloads/"
+  echo
+  if [ "$1" -eq 1 ]; then
+    err "Stopping here rather than installing an app that cannot start."
+    echo "  Nothing has been installed. Run this again once Python is in place."
+    echo
+    return 1
+  fi
+  warn "  Updating anyway - the update itself does not need Python, but the"
+  warn "  app will not start until it is installed."
+  return 0
+}
+
 # ---- Resolve where we are working -------------------------------------------
 # $0 is "bash" (or a pipe) when curl'd through bash, which is how we tell a
 # bootstrap run from an in-folder update.
@@ -126,6 +184,10 @@ echo
 step "WD Wireless Tools"
 echo "  Folder:  $TARGET"
 [ -n "$CURRENT" ] && echo "  Version: v$CURRENT"
+echo
+
+step "Checking Python..."
+if [ "$EXISTING" -eq 1 ]; then require_python 0; else require_python 1 || exit 1; fi
 echo
 
 IS_GIT=0
@@ -312,8 +374,7 @@ fi
 
 # ---- Dependencies -------------------------------------------------------------
 step "Checking Python dependencies…"
-PY="python3"
-command -v python3 >/dev/null 2>&1 || PY="python"
+PY="${PY_FOUND:-python3}"
 if ! "$PY" -c 'import flask, waitress, requests, browser_cookie3, cryptography, keyring, PIL' 2>/dev/null; then
   echo "  Installing missing packages…"
   "$PY" -m pip install -q -r "$TARGET/requirements.txt" \

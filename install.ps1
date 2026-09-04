@@ -103,6 +103,159 @@ function Install-Git {
   return $true
 }
 
+# Python is the one thing the app cannot run without, and the one thing a new
+# machine is least likely to have. It is checked before anything is downloaded,
+# because the alternative - what this used to do - is a green "installed"
+# message in front of an app that will not start, with nothing saying why.
+$PythonMinMajor = 3
+$PythonMinMinor = 10
+$PythonWingetId = 'Python.Python.3.12'
+
+function Test-PythonStoreStub {
+  # Windows ships app-execution aliases for python and python3 that are not
+  # interpreters: running one opens the Microsoft Store and exits. On a machine
+  # with no real Python these are what "python" resolves to, which is why the
+  # old check passed and the app then would not start.
+  #
+  # They are zero-length reparse points under WindowsApps, so they can be
+  # recognised without being run - running one would pop the Store in the
+  # middle of an install.
+  param([string]$Source)
+  if (-not $Source) { return $false }
+  if ($Source -notmatch '\\WindowsApps\\') { return $false }
+  try { return ((Get-Item -LiteralPath $Source -Force).Length -eq 0) }
+  catch { return $true }
+}
+
+function Get-PythonInfo {
+  # The first interpreter that is real and new enough. A version that is too
+  # old is remembered so the message can say what was found rather than just
+  # what was wanted.
+  $candidates = @(
+    @{ Cmd = 'py';      Args = @('-3') },
+    @{ Cmd = 'python';  Args = @() },
+    @{ Cmd = 'python3'; Args = @() }
+  )
+  $tooOld = $null
+  $sawStub = $false
+  foreach ($c in $candidates) {
+    $found = Get-Command $c.Cmd -ErrorAction SilentlyContinue
+    if (-not $found) { continue }
+    if (Test-PythonStoreStub $found.Source) { $sawStub = $true; continue }
+
+    $argList = $c.Args + @('-c', 'import sys;print(sys.version_info[0]*1000+sys.version_info[1])')
+    # A candidate that is not an interpreter writes to stderr, and with
+    # $ErrorActionPreference = 'Stop' that alone is a terminating error - so a
+    # probe that was meant to rule a candidate out would abort the install.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $out = & $c.Cmd @argList 2>$null } catch { $out = $null }
+    finally { $ErrorActionPreference = $prevEap }
+    if ($LASTEXITCODE -ne 0 -or -not $out) { continue }
+    $code = ("$out" -split "`n")[0].Trim()
+    if ($code -notmatch '^\d+$') { continue }
+
+    $major = [int]([int]$code / 1000); $minor = [int]$code % 1000
+    $v = "$major.$minor"
+    if ($major -gt $PythonMinMajor -or
+        ($major -eq $PythonMinMajor -and $minor -ge $PythonMinMinor)) {
+      return @{ Ok = $true; Cmd = $c.Cmd; Version = $v; Source = $found.Source }
+    }
+    if (-not $tooOld -or [version]$v -gt [version]$tooOld) { $tooOld = $v }
+  }
+  return @{ Ok = $false; TooOld = $tooOld; SawStub = $sawStub }
+}
+
+function Install-Python {
+  # Same shape as Install-Git: offer it as a step rather than a dead end, and
+  # fall back with the reason printed when it cannot succeed.
+  if (-not (Test-Winget)) {
+    Write-Warn '  winget is not available to install it automatically'
+    Write-Warn '  (it ships with newer Windows 10 and 11).'
+    return $false
+  }
+
+  Write-Step "  Installing Python via winget ($PythonWingetId)..."
+  $common = @('install', '--id', $PythonWingetId, '-e',
+              '--accept-source-agreements', '--accept-package-agreements',
+              '--disable-interactivity')
+  & winget @common --scope user 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host '  Per-user install unavailable; trying the standard installer...'
+    & winget @common 2>&1 | Out-Null
+  }
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warn '  The Python install did not complete. This is often a corporate'
+    Write-Warn '  policy or a network restriction.'
+    return $false
+  }
+
+  Update-PathFromRegistry
+  $info = Get-PythonInfo
+  if (-not $info.Ok) {
+    Write-Warn '  Python installed but is not visible yet in this window.'
+    Write-Warn '  Close PowerShell, reopen it, and run this again.'
+    return $false
+  }
+  Write-Ok "  Python $($info.Version) installed."
+  return $true
+}
+
+function Show-PythonMissing {
+  param($Info, [bool]$Fatal)
+  Write-Host ''
+  if ($Info.TooOld) {
+    Write-Err "Python $($Info.TooOld) is too old. This needs Python $PythonMinMajor.$PythonMinMinor or newer."
+  } elseif ($Info.SawStub) {
+    Write-Err "Python is not installed. Windows has a placeholder called 'python'"
+    Write-Err "that only opens the Microsoft Store - that is not an interpreter."
+  } else {
+    Write-Err "Python is not installed. This needs Python $PythonMinMajor.$PythonMinMinor or newer."
+  }
+  Write-Host ''
+  Write-Host '  Get it from https://www.python.org/downloads/'
+  Write-Host '  On the first screen, tick "Add python.exe to PATH".'
+  Write-Host ''
+  Write-Host '  Or from a terminal:'
+  Write-Host "    winget install --id $PythonWingetId -e"
+  Write-Host ''
+  if ($Fatal) {
+    Write-Host '  Nothing has been installed. Run this again once Python is in place.'
+    Write-Host ''
+  }
+}
+
+function Confirm-Python {
+  # Returns $true when it is safe to carry on.
+  param([bool]$Fatal, [bool]$Interactive)
+
+  $info = Get-PythonInfo
+  if ($info.Ok) {
+    Write-Ok "  Python $($info.Version) found."
+    return $true
+  }
+
+  Show-PythonMissing -Info $info -Fatal:$false
+  if ($Interactive -and (Test-Winget)) {
+    $answer = Read-Host 'Install Python now with winget? [Y/n]'
+    if ($answer -eq '' -or $answer -match '^[Yy]') {
+      if (Install-Python) { return $true }
+    }
+  }
+
+  if ($Fatal) {
+    Write-Host ''
+    Write-Err 'Stopping here rather than installing an app that cannot start.'
+    Write-Host '  Nothing has been installed. Run this again once Python is in place.'
+    Write-Host ''
+    if ($Host.Name -eq 'ConsoleHost') { Read-Host 'Press Enter to close' | Out-Null }
+    return $false
+  }
+  Write-Warn '  Updating anyway - the update itself does not need Python, but the'
+  Write-Warn '  app will not start until it is installed.'
+  return $true
+}
+
 function Select-Method {
   # Only asked on a fresh install. An existing install keeps whatever it
   # already uses — the app detects that and shows one Update button.
@@ -226,6 +379,12 @@ if ($existing) {
 } else {
   $method = if ($hasGit) { 'git' } else { 'zip' }
 }
+
+# Before anything is downloaded. A fresh install stops on a missing Python -
+# there is no point writing an app that cannot start - while an existing install
+# is only warned, because the update itself runs fine without it.
+Write-Step 'Checking Python...'
+if (-not (Confirm-Python -Fatal:(-not $existing) -Interactive:$interactive)) { exit 1 }
 
 # Git chosen but missing: offer to install it rather than dead-ending. If that
 # cannot succeed (no winget, no network, blocked by policy), fall through to
@@ -365,11 +524,13 @@ try {
 
   # ---- Dependencies ------------------------------------------------------------
   Write-Step 'Checking Python dependencies…'
+  $py = (Get-PythonInfo).Cmd
+  if (-not $py) { $py = 'python' }
   $probe = 'import flask, waitress, requests, browser_cookie3, cryptography, keyring, PIL'
-  & python -c $probe *>$null
+  & $py -c $probe *>$null
   if ($LASTEXITCODE -ne 0) {
     Write-Host '  Installing missing packages…'
-    & python -m pip install -q -r (Join-Path $target 'requirements.txt')
+    & $py -m pip install -q -r (Join-Path $target 'requirements.txt')
     if ($LASTEXITCODE -ne 0) {
       Write-Warn '  Some packages failed to install. Run the launcher to see details.'
     }
