@@ -377,7 +377,7 @@ step "Checking Python dependencies…"
 PY="${PY_FOUND:-python3}"
 if ! "$PY" -c 'import flask, waitress, requests, browser_cookie3, cryptography, keyring, PIL' 2>/dev/null; then
   echo "  Installing missing packages…"
-  "$PY" -m pip install -q -r "$TARGET/requirements.txt" \
+  "$PY" -m pip install --disable-pip-version-check -q -r "$TARGET/requirements.txt" \
     || warn "  Some packages failed to install. Run the launcher to see details."
 else
   ok "  All dependencies present."

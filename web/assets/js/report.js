@@ -2069,15 +2069,20 @@
       if (chosen.lead) {
         var lx = chosen.x + pillW / 2;
         var ly = chosen.y + (chosen.y > 0 ? 0 : boxH);
+        var leadStroke = apColor ? ' stroke="' + WD.escAttr(apColor) + '"' : '';
         markers += '<line class="rep-mark-lead" x1="0" y1="0" x2="' + lx + '" y2="' + ly
-          + '" stroke-width="' + (sw * 0.9) + '"/>';
+          + '" stroke-width="' + (sw * 0.9) + '"' + leadStroke + '/>';
       }
       var dotFill = apColor ? ' fill="' + WD.escAttr(apColor) + '"' : '';
+      var pillFill = apColor ? ' fill="' + WD.escAttr(apColor) + '"' : '';
+      var darkText = apColor && WD.needsDarkText(apColor);
+      var labelFill = darkText ? ' style="fill:#111"' : '';
+      var subFill   = darkText ? ' style="fill:#333"' : '';
       markers += '<rect class="rep-mark-dot" x="' + (-dotSize / 2) + '" y="' + (-dotSize / 2) + '" width="' + dotSize + '" height="' + dotSize + '" rx="' + dotR + '" ry="' + dotR + '" stroke-width="' + sw + '"' + dotFill + '/>'
-        + '<rect class="rep-mark-pill" x="' + chosen.x + '" y="' + chosen.y + '" width="' + pillW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '" stroke-width="' + sw + '"/>'
-        + '<text class="rep-mark-label" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">' + WD.esc(label) + '</text>';
+        + '<rect class="rep-mark-pill" x="' + chosen.x + '" y="' + chosen.y + '" width="' + pillW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '" stroke-width="' + sw + '"' + pillFill + '/>'
+        + '<text class="rep-mark-label" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '"' + labelFill + '>' + WD.esc(label) + '</text>';
       if (sub) {
-        markers += '<text class="rep-mark-sub" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH + subFont * 0.55) + '" text-anchor="middle" font-size="' + subFont + '">' + WD.esc(sub) + '</text>';
+        markers += '<text class="rep-mark-sub" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH + subFont * 0.55) + '" text-anchor="middle" font-size="' + subFont + '"' + subFill + '>' + WD.esc(sub) + '</text>';
       }
       markers += '</g>';
     });
@@ -2240,7 +2245,7 @@
     });
     var dots = '';
     var dotR = Math.min(gw, gh) * 0.006;
-    var defaultDotColor = '#e11d48';
+    var defaultDotColor = '#78716c';
     allCells.forEach(function (cell) {
       if (!cell.aps) return;
       cell.aps.forEach(function (ap) {

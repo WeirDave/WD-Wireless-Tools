@@ -91,6 +91,16 @@
     return /^#[0-9a-fA-F]{3,8}$|^rgba?\([^)]+\)$|^hsla?\([^)]+\)$/.test(c) ? c : '#888';
   };
 
+  WD.needsDarkText = function (hex) {
+    if (!hex || typeof hex !== 'string') return false;
+    var h = hex.replace('#', '');
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    var r = parseInt(h.substr(0, 2), 16);
+    var g = parseInt(h.substr(2, 2), 16);
+    var b = parseInt(h.substr(4, 2), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 > 180;
+  };
+
   WD.toast = function (msg, type) {
     var container = document.getElementById('toasts');
     if (container) {

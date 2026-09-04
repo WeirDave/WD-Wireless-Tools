@@ -5056,9 +5056,9 @@ body.tool-report {
   vertical-align: middle; margin-right: 4px;
 }
 
-.rep-key-swatch.dir { background: var(--rose); }
+.rep-key-swatch.dir { background: #78716c; }
 
-.rep-key-swatch.omni { background: var(--rose); }
+.rep-key-swatch.omni { background: #78716c; }
 
 /* Several swatches in a row when the project colour-codes its APs. An inline
    background from the report overrides the brand fallback above. */
@@ -5923,27 +5923,33 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-overview-plan { aspect-ratio: var(--w) / var(--h); }
 .rep-ap-group-swatch { background: var(--swatch); }
 .rep-ap-group-swatch--empty { background: transparent; }
-.rep-mark--dir .rep-mark-cone { fill: var(--rose); fill-opacity: 0.35; stroke: var(--rose); }
 /* The marker carries the AP's own Ekahau colour when the project sets one.
    A CSS `fill` beats the presentation attribute the renderer writes, so the
    brand fallback has to stand aside for markers that already have one --
-   without that, ap.color was read, emitted, and then silently painted over. */
+   without that, ap.color was read, emitted, and then silently painted over.
+   Uncoloured APs get a neutral stone-gray so they don't look like an
+   intentional Ekahau colour pick. */
+.rep-mark--dir .rep-mark-cone:not([fill]) { fill: #78716c; fill-opacity: 0.35; stroke: #78716c; }
+.rep-mark--dir .rep-mark-cone { fill-opacity: 0.35; }
 .rep-mark--dir .rep-mark-dot,
 .rep-mark--omni .rep-mark-dot,
 .rep-mark--loc .rep-mark-dot { stroke: #fff; }
 .rep-mark--dir .rep-mark-dot:not([fill]),
 .rep-mark--omni .rep-mark-dot:not([fill]),
-.rep-mark--loc .rep-mark-dot:not([fill]) { fill: var(--rose); }
+.rep-mark--loc .rep-mark-dot:not([fill]) { fill: #78716c; }
 .rep-mark--dir .rep-mark-pill,
 .rep-mark--omni .rep-mark-pill,
-.rep-mark--loc .rep-mark-pill { fill: var(--rose); stroke: #fff; }
+.rep-mark--loc .rep-mark-pill { stroke: #fff; }
+.rep-mark--dir .rep-mark-pill:not([fill]),
+.rep-mark--omni .rep-mark-pill:not([fill]),
+.rep-mark--loc .rep-mark-pill:not([fill]) { fill: #78716c; }
 .rep-mark-label { fill: #fff; font-weight: 700; overflow: visible; }
 /* Second line of a label -- model, channel, mount height. Lighter than the name
    so the name still reads first at arm's length. */
 .rep-mark-sub { fill: #fff; font-weight: 500; opacity: 0.85; overflow: visible; }
 /* Drawn only when a label had to step away from its AP to find clear space. */
-.rep-mark-lead { stroke: var(--rose); opacity: 0.75; }
-.rep-mark--dir .rep-mark-lead, .rep-mark--omni .rep-mark-lead { stroke: var(--rose); }
+.rep-mark-lead:not([stroke]) { stroke: #78716c; opacity: 0.75; }
+.rep-mark-lead { opacity: 0.75; }
 
 /* ── AP Placement Map ──────────────────────────────────────────────────────
    One floor per page. The plan is the page, so the heading is compact and
