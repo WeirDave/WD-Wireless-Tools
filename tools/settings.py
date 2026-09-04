@@ -95,6 +95,11 @@ DEFAULTS = {
         # The revision is a version number, so it earns a place in the saved
         # filename -- but not everyone names files that way, hence the switch.
         "include_revision_in_filename": True,
+        # Feet or metres for heights and distances. An .esx stores everything
+        # in metres, so this is purely how the report is written; Ekahau keeps
+        # its own display preference in the application, not the project file,
+        # so it cannot be read from the .esx.
+        "units": "feet",
     },
     "walls": {
         # Opening a project from disk lets Quick Walls show you the folder it
