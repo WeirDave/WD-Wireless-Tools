@@ -201,11 +201,11 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.37.0
+WIRELESS TOOLS  v2.38.0
 A suite of Ekahau workflow tools.
 
-Local suite: http://localhost:8675/
-Press CTRL+C in this window to stop WD Wireless Tools.
+Open http://localhost:8675/ in your browser to get started.
+Press CTRL+C in this window to stop the server.
 ```
 
 ---

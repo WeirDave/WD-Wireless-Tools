@@ -530,7 +530,7 @@ try {
   & $py -c $probe *>$null
   if ($LASTEXITCODE -ne 0) {
     Write-Host '  Installing missing packages…'
-    & $py -m pip install -q -r (Join-Path $target 'requirements.txt')
+    & $py -m pip install --disable-pip-version-check -q -r (Join-Path $target 'requirements.txt')
     if ($LASTEXITCODE -ne 0) {
       Write-Warn '  Some packages failed to install. Run the launcher to see details.'
     }

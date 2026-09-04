@@ -777,8 +777,8 @@ def _print_banner():
         title,
         "A suite of Ekahau workflow tools.",
         "",
-        f"Local suite: http://localhost:{PORT}/",
-        "Press CTRL+C in this window to stop WD Wireless Tools.",
+        f"Open http://localhost:{PORT}/ in your browser to get started.",
+        "Press CTRL+C in this window to stop the server.",
     ]
     width = max([len(line) for line in lines] + [len(l) for l in logo]) + 4
     border = "=" * width
