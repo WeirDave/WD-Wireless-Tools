@@ -13,6 +13,7 @@
     currentFloor: null,
     sorted: [],
     preview: [],
+    byId: {},          // ap id -> its preview row, so one number serves every surface
     presets: [],
     manualOrder: [],   // ap ids, in the order they were clicked
     manualUndo: []     // snapshots of manualOrder, newest last
@@ -624,13 +625,6 @@
     updateAll();
   };
 
-  // How many manually numbered APs sit on a floor — used for the running
-  // offset when numbering continues across floors.
-  function manualCountForFloor(fpId) {
-    var ids = {};
-    getFloorAPs(fpId).forEach(function (ap) { ids[ap.id] = 1; });
-    return S.manualOrder.filter(function (id) { return ids[id]; }).length;
-  }
 
   function updateManualPanel() {
     var panel = $('arManualPanel');
@@ -956,7 +950,8 @@
       sorted.forEach(function (ap) {
         var newName = generateName(settings, floor, num);
         numbered[ap.id] = 1;
-        allItems.push({ ap: ap, oldName: ap.name, newName: newName, floorId: floor.id });
+        allItems.push({ ap: ap, oldName: ap.name, newName: newName,
+                        floorId: floor.id, num: num });
         num++;
       });
       // In manual mode sortAPs only returns the clicked APs, so the rest are
@@ -964,17 +959,20 @@
       floorAPs.forEach(function (ap) {
         if (!numbered[ap.id]) {
           allItems.push({ ap: ap, oldName: ap.name, newName: ap.name,
-                          floorId: floor.id, unnumbered: true });
+                          floorId: floor.id, unnumbered: true, num: null });
         }
       });
     });
 
     var unplaced = getFloorAPs('__unplaced');
     unplaced.forEach(function (ap) {
-      allItems.push({ ap: ap, oldName: ap.name, newName: ap.name, floorId: null });
+      allItems.push({ ap: ap, oldName: ap.name, newName: ap.name,
+                      floorId: null, num: null });
     });
 
     S.preview = allItems;
+    S.byId = {};
+    allItems.forEach(function (it) { S.byId[it.ap.id] = it; });
     return allItems;
   }
 
@@ -1058,16 +1056,6 @@
     var sorted = sortAPs(floorAPs, settings.order);
     S.sorted = sorted;
 
-    var start = getStartNum(settings);
-    var offset = start;
-    if (!settings.perFloor) {
-      for (var fi = 0; fi < S.floors.length; fi++) {
-        if (S.floors[fi].id === S.currentFloor) break;
-        offset += manual ? manualCountForFloor(S.floors[fi].id)
-                         : floorAPCount(S.floors[fi].id);
-      }
-    }
-
     // Manual mode still draws the APs nobody has clicked yet — you cannot pick
     // the next one if it is not on the plan.
     if (manual) {
@@ -1091,10 +1079,11 @@
     }
 
     sorted.forEach(function (ap, idx) {
-      var num = offset + idx;
+      var item = S.byId[ap.id] || {};
+      var num = item.num;
       var fracX = ap.x / floor.width;
       var fracY = ap.y / floor.height;
-      var newName = generateName(settings, floor, num);
+      var newName = item.newName || ap.name;
 
       var marker = document.createElement('div');
       marker.className = 'ar-marker' + (manual ? ' is-clickable' : '') +
@@ -1104,7 +1093,7 @@
       }
       marker.style.left = (fracX * 100) + '%';
       marker.style.top  = (fracY * 100) + '%';
-      marker.textContent = String(idx + 1);
+      marker.textContent = num == null ? '\u2013' : String(num);
       marker.setAttribute('data-ap-id', ap.id);
 
       var resolved = resolveColor(ap.color);
@@ -1233,8 +1222,7 @@
       var isDiff = it.oldName !== it.newName;
       // In manual mode the left column is the assigned position, so an
       // unclicked AP reads as "-" rather than borrowing a row number.
-      var seq = manual ? (it.unnumbered ? '\u2013' : String(manualIndex(it.ap.id) + 1))
-                       : String(i + 1);
+      var seq = it.num == null ? '\u2013' : String(it.num);
       var swatch = '';
       var rc = resolveColor(it.ap.color);
       if (rc) {

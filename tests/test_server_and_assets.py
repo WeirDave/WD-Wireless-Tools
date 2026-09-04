@@ -521,6 +521,34 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
         selected = re.findall(r'<option value="([^"]+)"[^>]*selected', select.group(1))
         self.assertEqual(len(selected), 1, "exactly one ordering may be preselected")
 
+    def test_ap_labeler_marker_number_comes_from_the_preview_row(self):
+        """The number on the plan and the number in the table must be one value.
+
+        They were computed separately: the table carried a running count across
+        floors while the marker drew its position within the current floor. With
+        "restart numbering each floor" turned off, floor two restarted at 1 on
+        the plan while its names continued, and a start number other than 1 was
+        ignored on the plan entirely. The fix was to record the number once, in
+        the pass that builds the names, and have every surface read it - so this
+        checks the marker still reads rather than recomputes.
+        """
+        js = (ROOT / "web" / "assets" / "js" / "ap-rename.js").read_text(encoding="utf-8")
+        body = re.search(r"function renderMarkers\(\) \{(.*?)\n  \}\n", js, re.S)
+        self.assertIsNotNone(body, "renderMarkers is gone or has been reshaped")
+        markers = body.group(1)
+
+        self.assertIn("S.byId[ap.id]", markers,
+                      "the marker should read the preview row, not rebuild the number")
+        self.assertNotIn("idx + 1", markers,
+                         "the marker is numbering by its position on the floor again")
+        self.assertNotRegex(markers, r"offset\s*\+=",
+                            "the running offset is being recomputed here again")
+
+        # and the number the names are built from is the one that gets recorded
+        preview = re.search(r"function generatePreview\(\) \{(.*?)\n  \}\n", js, re.S)
+        self.assertIsNotNone(preview)
+        self.assertIn("num: num", preview.group(1))
+
     def test_javascript_files_have_no_nul_bytes(self):
         scripts = list((ROOT / "web" / "assets" / "js").glob("*.js"))
         self.assertTrue(scripts)
