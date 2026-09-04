@@ -80,6 +80,9 @@
       $('dzTopbar').style.display = 'none';
       $('editor').classList.add('active');
       $('fileBadge').textContent = file.name;
+      $('fileBadge').style.display = 'inline-block';
+      // The badge truncates on a long project name, so the whole one lives here.
+      $('fileBadge').title = file.name + '  —  click to open another .esx';
       return analyze();
     }).catch(function (e) { toast('Could not read that file: ' + e, 'error'); });
   }

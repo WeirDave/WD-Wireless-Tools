@@ -19,6 +19,7 @@
     measurements: [],
     measuredRadios: [],
     surveys: [],
+    projectName: '',
   };
   var apDisabled = new Set();
   var currentReportId = DEFAULT_REPORT_ID;
@@ -333,6 +334,32 @@
       .join(' - ');
   }
 
+  /* The project segment of the file name.
+
+     It comes from the .esx file name first, and deliberately keeps the stem
+     whole - "LNBH1 - LGB-03 - 3435 E Conant St, Long Beach, CA 90806 - B20 -
+     PD" stays as it is. The report is about that file, so naming the file it
+     came from is the one answer that is never ambiguous, and it does not
+     depend on anyone having filled a field in.
+
+     project.json's own name is the fallback for the case where the file has
+     been renamed to something that says nothing ("final.esx", "Copy of...").
+     The typed Client / Company setting is the last resort, and when there is
+     nothing at all the segment drops out rather than leaving a dangling
+     separator. */
+  function projectName() {
+    var stem = fileSafe(String(fileName || '').replace(/[.]esx$/i, ''));
+    // Only a name that says nothing about the job defers to project.json -
+    // matched whole, so a real name that merely starts with one of these words
+    // is still used.
+    var generic = /^(untitled|copy|new|final|draft|test|temp|project|report)([ _-]*\d*)$/i;
+    if (stem && !generic.test(stem)) return stem;
+    var fromFile = fileSafe(proj.projectName || '');
+    if (fromFile) return fromFile;
+    if (stem) return stem;
+    return fileSafe(settingDefault('clientName') || '');
+  }
+
   function currentRevisionValue() {
     var v = ('revision' in currentOpts) ? currentOpts.revision : settingDefault('revision');
     return v || '';
@@ -340,8 +367,18 @@
 
   function reportDocTitle() {
     return buildDocTitle(currentReport().docName, currentRevisionValue(),
-                         siteName(), includeRevisionInName);
+                         projectName(), includeRevisionInName);
   }
+
+  /* The saved file name is whatever document.title says at the moment the
+     print dialog opens, so it has to be right whenever that can happen - not
+     only at the end of a successful render. It was set in one place, after the
+     report body was built, which left it stale or unwritten on every path that
+     returned early or never re-rendered. */
+  function syncDocTitle() {
+    try { document.title = reportDocTitle(); } catch (e) {}
+  }
+  window.syncDocTitle = syncDocTitle;
 
   // Shows both spellings at once so the effect of the switch is settled by
   // looking rather than by describing it.
@@ -355,7 +392,7 @@
     // The real project name once one is open, so the preview is the actual
     // file name rather than a shape.
     var site = '';
-    try { site = siteName() || ''; } catch (e) {}
+    try { site = projectName() || ''; } catch (e) {}
     if (!site) site = 'Project name';
     var on = buildDocTitle(docName, rev, site, true);
     var off = buildDocTitle(docName, rev, site, false);
@@ -514,6 +551,7 @@
     updateStepper();
     if (name === 'review') {
       if (configureDirty) renderReport();
+      syncDocTitle();
       configureDirty = false;
       window.scrollTo({ top: 0, behavior: 'auto' });
     }
@@ -578,6 +616,7 @@
       dropzone.hidden = true;
       document.getElementById('dzTopbar').hidden = true;
       document.getElementById('workspace').classList.add('active');
+      syncDocTitle();
       var badge = document.getElementById('fileBadge');
       badge.textContent = fileName;
       badge.style.display = 'inline-block';
@@ -642,6 +681,12 @@
         if (body && Array.isArray(body.surveys)) perSurveyArrays.push(body.surveys);
       } catch (e) {}
     }
+
+    // Only used when the .esx has been renamed to something that says nothing
+    // about the job, so a report never ends up named after "final.esx".
+    var pj = null;
+    try { pj = await readJson('project.json'); } catch (e) {}
+    proj.projectName = (pj && pj.project && (pj.project.name || pj.project.title)) || '';
 
     proj.accessPoints = (ap && ap.accessPoints) || [];
     proj.radios = (rad && rad.simulatedRadios) || [];
@@ -1836,6 +1881,7 @@
   window.renderReport = function () {
     var host = document.getElementById('reportCanvas');
     var r = currentReport();
+    syncDocTitle();
     if (!proj.accessPoints.length && !r.noApFilter) {
       host.innerHTML = '<div class="rep-empty">Drop an .esx to render a report.</div>';
       return;
@@ -2340,6 +2386,7 @@
   }
 
   window.printReport = async function () {
+    syncDocTitle();
     var host = document.getElementById('reportCanvas');
     await applyAntennaSegmentCrop(host, collectOpts());
     var images = Array.prototype.slice.call(host.querySelectorAll('img'));
