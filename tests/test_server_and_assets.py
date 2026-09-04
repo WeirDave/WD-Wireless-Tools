@@ -493,6 +493,34 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
                 with self.subTest(page=page.name, asset=asset_path):
                     self.assertTrue((ROOT / "web" / asset_path.lstrip("/")).is_file())
 
+    def test_ap_labeler_offers_every_ordering_it_implements(self):
+        """Every ordering in the dropdown has to be handled, and vice versa.
+
+        A mode listed but not implemented falls through sortAPs and silently
+        leaves the APs in file order, which reads as "the tool ignored me".
+        A mode implemented but not listed is unreachable. Both have happened
+        here before, so the two lists are compared rather than trusted.
+        """
+        html = (ROOT / "web" / "ap-rename.html").read_text(encoding="utf-8")
+        js = (ROOT / "web" / "assets" / "js" / "ap-rename.js").read_text(encoding="utf-8")
+
+        select = re.search(r'<select id="arOrder">(.*?)</select>', html, re.S)
+        self.assertIsNotNone(select, "the spatial ordering dropdown is gone")
+        offered = set(re.findall(r'<option value="([^"]+)"', select.group(1)))
+
+        body = re.search(r"function sortAPs\(aps, method\) \{(.*?)\n  \}", js, re.S)
+        self.assertIsNotNone(body, "sortAPs is gone or has been reshaped")
+        handled = set(re.findall(r"case '([^']+)':", body.group(1)))
+
+        self.assertTrue(offered, "no orderings at all")
+        self.assertEqual(offered, handled)
+
+    def test_ap_labeler_preselects_exactly_one_ordering(self):
+        html = (ROOT / "web" / "ap-rename.html").read_text(encoding="utf-8")
+        select = re.search(r'<select id="arOrder">(.*?)</select>', html, re.S)
+        selected = re.findall(r'<option value="([^"]+)"[^>]*selected', select.group(1))
+        self.assertEqual(len(selected), 1, "exactly one ordering may be preselected")
+
     def test_javascript_files_have_no_nul_bytes(self):
         scripts = list((ROOT / "web" / "assets" / "js").glob("*.js"))
         self.assertTrue(scripts)
