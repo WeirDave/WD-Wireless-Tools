@@ -1,4 +1,4 @@
-# install.ps1 — WD Wireless Tools installer and updater (Windows)
+﻿# install.ps1 — WD Wireless Tools installer and updater (Windows)
 #
 # Two ways to run it, same script:
 #

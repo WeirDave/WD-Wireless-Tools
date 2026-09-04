@@ -549,6 +549,33 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
         self.assertIsNotNone(preview)
         self.assertIn("num: num", preview.group(1))
 
+    def test_powershell_scripts_are_readable_by_windows_powershell(self):
+        """A .ps1 with non-ASCII in it needs a UTF-8 BOM to survive PS 5.1.
+
+        Windows PowerShell 5.1 - still the default shell on a new Windows box -
+        reads a BOM-less file as the system ANSI codepage. install.ps1 is full
+        of em-dashes and ellipses, so without a BOM every one of them became
+        mojibake and the file stopped parsing: nine syntax errors, and
+        "right-click -> Run with PowerShell" did nothing at all. The bootstrap
+        one-liner was unaffected, because Invoke-RestMethod decodes UTF-8 from
+        the response header, which is why this hid for so long - the path that
+        broke was the copy shipped inside the ZIP.
+        """
+        scripts = sorted(ROOT.glob("*.ps1"))
+        self.assertTrue(scripts, "no PowerShell scripts found")
+        for script in scripts:
+            with self.subTest(script=script.name):
+                raw = script.read_bytes()
+                body = raw[3:] if raw.startswith(b"\xef\xbb\xbf") else raw
+                try:
+                    body.decode("ascii")
+                except UnicodeDecodeError:
+                    self.assertTrue(
+                        raw.startswith(b"\xef\xbb\xbf"),
+                        f"{script.name} has non-ASCII characters but no UTF-8 BOM, "
+                        "so Windows PowerShell 5.1 will fail to parse it",
+                    )
+
     def test_javascript_files_have_no_nul_bytes(self):
         scripts = list((ROOT / "web" / "assets" / "js").glob("*.js"))
         self.assertTrue(scripts)
