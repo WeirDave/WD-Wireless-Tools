@@ -14,26 +14,26 @@
     sorted: [],
     preview: [],
     byId: {},          // ap id -> its preview row, so one number serves every surface
-    presets: [],
+    templates: [],
     manualOrder: [],   // ap ids, in the order they were clicked
-    manualUndo: []     // snapshots of manualOrder, newest last
+    manualUndo: [],    // snapshots of manualOrder, newest last
+    _showAllPreview: false
   };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return WD.esc(s); }
   function toast(m, k) { WD.toast(m, k); }
 
-  /* ── Ekahau color palette ────────────────────────────────────────── */
+  /* ── Ekahau color palette (10 selectable colors + CLEAR) ─────────── */
   var EKAHAU_COLORS = {
-    red:       '#FF0000', green:     '#00C853', white:     '#FFFFFF',
-    lightgray: '#BDBDBD', gray:      '#6D6D6D', darkgray:  '#424242',
-    black:     '#000000', pink:      '#FF80AB', orange:    '#FF8500',
-    yellow:    '#FFE600', magenta:   '#FF00FF', cyan:      '#00BCD4',
-    blue:      '#0068FF', lightbrown:'#D7A86E', darkbrown: '#795548'
+    yellow:  '#FFE600', orange: '#FF8500', red:     '#FF0000',
+    magenta: '#FF00FF', purple: '#C297FF', blue:    '#0068FF',
+    gray:    '#6B6B6B', green:  '#00FF00', brown:   '#C97700',
+    cyan:    '#00FFCE'
   };
   var COLOR_ORDER = [
-    'red','orange','yellow','green','cyan','blue','magenta','pink',
-    'white','lightgray','gray','darkgray','black','lightbrown','darkbrown'
+    'yellow','orange','red','magenta','purple','blue',
+    'gray','green','brown','cyan'
   ];
 
   function resolveColor(c) {
@@ -66,16 +66,39 @@
 
   /* ── naming mode ────────────────────────────────────────────────── */
   var _mode = 'structured';
+  var _scope = 'all';
+
+  /* ── segment builder model ──────────────────────────────────────── */
+  var _segments = [
+    { type: 'text', value: '' },
+    { type: 'text', value: '' },
+    { type: 'floor' },
+    { type: 'text', value: '' },
+    { type: 'counter', tag: 'AP', start: 1, digits: 3 }
+  ];
 
   window.arSetMode = function (m) {
     _mode = m;
     $('arStructuredFields').hidden = (m !== 'structured');
     $('arSimpleFields').hidden     = (m !== 'simple');
-    $('arFreeformFields').hidden   = (m !== 'freeform');
     $('arMacFields').hidden        = (m !== 'mac');
     document.querySelectorAll('.ar-mode-tab').forEach(function (t) {
       t.classList.toggle('active', t.getAttribute('data-mode') === m);
     });
+    updateAll();
+  };
+
+  window.arSetScope = function (s) {
+    _scope = s;
+    document.querySelectorAll('.ar-scope-tab').forEach(function (t) {
+      t.classList.toggle('active', t.getAttribute('data-scope') === s);
+    });
+    var desc = $('arScopeDesc');
+    if (desc) {
+      desc.textContent = s === 'perFloor'
+        ? 'Each floor restarts numbering independently.'
+        : 'One continuous sequence across the entire project.';
+    }
     updateAll();
   };
 
@@ -88,35 +111,179 @@
   }
 
   function buildStructuredName(floor, num) {
-    var sep    = $('arSepStructured').value;
-    var clli   = $('arClli').value;
-    var bldg   = $('arBuilding').value;
-    var floorV = $('arFloorAuto').checked ? getFloorNumber(floor) : $('arFloor').value;
-    var suite  = $('arSuite').value;
-    var tag    = $('arApTag').value;
-    var digits = parseInt($('arDigitsStructured').value, 10) || 3;
-
+    var sep = $('arSepStructured').value;
     var parts = [];
-    if (clli)   parts.push(clli);
-    if (bldg)   parts.push(bldg);
-    if (floorV) parts.push(floorV);
-    if (suite)  parts.push(suite);
-    if (tag)    parts.push(tag + padNum(num, digits));
-    else        parts.push(padNum(num, digits));
-
+    for (var i = 0; i < _segments.length; i++) {
+      var seg = _segments[i];
+      if (seg.type === 'text') {
+        if (seg.value) parts.push(seg.value);
+      } else if (seg.type === 'floor') {
+        parts.push(seg.value ? seg.value : getFloorNumber(floor));
+      } else if (seg.type === 'counter') {
+        var tag = seg.tag || '';
+        var digits = seg.digits || 3;
+        parts.push(tag + padNum(num, digits));
+      }
+    }
     return parts.join(sep);
   }
 
-  function buildFreeformName(num) {
-    var text   = $('arFreeText').value;
-    var pos    = $('arNumPos').value;
-    var sep    = $('arSepFree').value;
-    var digits = parseInt($('arDigitsFree').value, 10) || 3;
-    var numStr = padNum(num, digits);
+  /* ── segment builder UI ─────────────────────────────────────────── */
+  function renderSegments() {
+    var container = $('arSegments');
+    if (!container) return;
+    container.innerHTML = '';
+    _segments.forEach(function (seg, i) {
+      var row = document.createElement('div');
+      row.className = 'ar-seg-row';
+      row.setAttribute('draggable', 'true');
+      row.setAttribute('data-seg-idx', i);
 
-    if (!text) return numStr;
-    return pos === 'prefix' ? numStr + sep + text : text + sep + numStr;
+      var handle = document.createElement('span');
+      handle.className = 'ar-seg-handle';
+      handle.textContent = '≡';
+      row.appendChild(handle);
+
+      var badge = document.createElement('span');
+      badge.className = 'ar-seg-type';
+      if (seg.type === 'text')    { badge.classList.add('t-text'); badge.textContent = 'Text'; }
+      else if (seg.type === 'floor') { badge.classList.add('t-floor'); badge.textContent = 'Floor'; }
+      else                        { badge.classList.add('t-counter'); badge.textContent = 'AP #'; }
+      row.appendChild(badge);
+
+      if (seg.type === 'counter') {
+        var tagLbl = document.createElement('span');
+        tagLbl.className = 'ar-seg-lbl';
+        tagLbl.textContent = 'tag';
+        row.appendChild(tagLbl);
+        var tagIn = document.createElement('input');
+        tagIn.className = 'ar-seg-input ar-seg-input-bordered';
+        tagIn.style.flex = '0 0 36px';
+        tagIn.value = seg.tag || '';
+        tagIn.placeholder = 'AP';
+        tagIn.addEventListener('input', function () { seg.tag = this.value; updateAll(); });
+        row.appendChild(tagIn);
+        var startLbl = document.createElement('span');
+        startLbl.className = 'ar-seg-lbl';
+        startLbl.textContent = 'start';
+        row.appendChild(startLbl);
+        var startIn = document.createElement('input');
+        startIn.type = 'number';
+        startIn.className = 'ar-seg-input ar-seg-input-bordered';
+        startIn.style.flex = '0 0 40px';
+        startIn.style.textAlign = 'center';
+        startIn.value = seg.start || 1;
+        startIn.min = '0';
+        startIn.addEventListener('input', function () { seg.start = parseInt(this.value, 10) || 1; updateAll(); renderSegments(); });
+        row.appendChild(startIn);
+        var digLbl = document.createElement('span');
+        digLbl.className = 'ar-seg-lbl';
+        digLbl.textContent = 'zeros';
+        row.appendChild(digLbl);
+        var digIn = document.createElement('select');
+        digIn.className = 'ar-seg-input ar-seg-input-bordered';
+        digIn.style.flex = '0 0 40px';
+        var curZeros = (seg.digits || 3) - 1;
+        for (var d = 0; d <= 5; d++) {
+          var opt = document.createElement('option');
+          opt.value = d; opt.textContent = d;
+          if (d === curZeros) opt.selected = true;
+          digIn.appendChild(opt);
+        }
+        digIn.addEventListener('change', function () { seg.digits = (parseInt(this.value, 10) || 0) + 1; updateAll(); renderSegments(); });
+        row.appendChild(digIn);
+        var meta = document.createElement('span');
+        meta.className = 'ar-seg-meta';
+        meta.textContent = '→ ' + padNum(seg.start || 1, seg.digits || 3);
+        row.appendChild(meta);
+      } else if (seg.type === 'floor') {
+        var floorIn = document.createElement('input');
+        floorIn.className = 'ar-seg-input ar-seg-input-bordered';
+        floorIn.value = seg.value || '';
+        var curFloor = S.currentFloor ? S.floors.find(function (f) { return f.id === S.currentFloor; }) : S.floors[0];
+        var autoVal = getFloorNumber(curFloor || null);
+        floorIn.placeholder = autoVal;
+        floorIn.title = 'Auto-detected: ' + autoVal + '. Type a value to override.';
+        floorIn.addEventListener('input', function () { seg.value = this.value; updateAll(); });
+        row.appendChild(floorIn);
+        var floorHint = document.createElement('span');
+        floorHint.className = 'ar-seg-lbl';
+        floorHint.textContent = 'auto from .esx — type to override';
+        floorHint.style.flex = '1';
+        row.appendChild(floorHint);
+      } else {
+        var inp = document.createElement('input');
+        inp.className = 'ar-seg-input ar-seg-input-bordered';
+        inp.value = seg.value || '';
+        inp.placeholder = 'Label';
+        inp.addEventListener('input', function () { seg.value = this.value; updateAll(); });
+        row.appendChild(inp);
+      }
+
+      var rm = document.createElement('button');
+      rm.className = 'ar-seg-rm';
+      rm.type = 'button';
+      rm.innerHTML = '&times;';
+      rm.addEventListener('click', function () { _segments.splice(i, 1); renderSegments(); updateAll(); });
+      row.appendChild(rm);
+
+      // Drag reorder
+      row.addEventListener('dragstart', function (e) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(i));
+        row.style.opacity = '.4';
+      });
+      row.addEventListener('dragend', function () { row.style.opacity = ''; });
+      row.addEventListener('dragover', function (e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; });
+      row.addEventListener('drop', function (e) {
+        e.preventDefault();
+        var from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+        var to = i;
+        if (from === to) return;
+        var item = _segments.splice(from, 1)[0];
+        _segments.splice(to, 0, item);
+        renderSegments();
+        updateAll();
+      });
+
+      container.appendChild(row);
+    });
   }
+
+  // Add-segment menu
+  (function () {
+    var btn = $('arAddBtn');
+    var menu = $('arAddMenu');
+    if (!btn || !menu) return;
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      menu.hidden = !menu.hidden;
+    });
+    document.addEventListener('click', function () { menu.hidden = true; });
+    menu.querySelectorAll('.ar-add-item').forEach(function (item) {
+      item.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var t = item.getAttribute('data-type');
+        if (t === 'text')        _segments.push({ type: 'text', value: '' });
+        else if (t === 'floor')  _segments.push({ type: 'floor' });
+        else                     _segments.push({ type: 'counter', tag: 'AP', start: 1, digits: 3 });
+        menu.hidden = true;
+        renderSegments();
+        updateAll();
+      });
+    });
+  })();
+
+  // Scope tab clicks
+  (function () {
+    var tabs = $('arScopeTabs');
+    if (!tabs) return;
+    tabs.querySelectorAll('.ar-scope-tab').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        arSetScope(tab.getAttribute('data-scope'));
+      });
+    });
+  })();
 
   function parseMacHex(mac) {
     return mac.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
@@ -162,13 +329,7 @@
     return prefix + formatMac(incHex, format, octets, macCase);
   }
 
-  /* ── presets (localStorage) ────────────────────────────────────── */
-  var PRESET_KEY = 'wd-ar-presets';
-
-  // Naming defaults live with the other suite settings under
-  // ~/.wd_wireless_tools rather than in localStorage, so they follow the
-  // install rather than the browser profile. Presets stay local - they are a
-  // per-person scratchpad, not a machine default.
+  /* ── templates (server-side) & defaults ───────────────────────── */
   function apiSettings(action, body) {
     return fetch('/api/settings/' + action, {
       method: 'POST',
@@ -181,122 +342,127 @@
     return apiSettings('get').then(function (res) {
       var d = res && res.ok && res.settings && res.settings.aprename;
       if (d && d.defaults) applySettings(d.defaults);
+      if (d && d.templates) { S.templates = d.templates; renderTemplateSelect(); }
       updateAll();
     }).catch(function () { /* offline or older server: keep the built-ins */ });
   }
 
   window.arSaveDefaults = function () {
     var s = getSettings();
-    delete s.macAddr;   // a specific radio's MAC is not a default
+    delete s.macAddr;
     apiSettings('update', { patch: { aprename: { defaults: s } } }).then(function (res) {
       if (res && res.ok) toast('Saved as defaults', 'success');
       else toast('Could not save defaults', 'error');
     }).catch(function () { toast('Could not save defaults', 'error'); });
   };
 
-  function loadPresets() {
-    try { S.presets = JSON.parse(localStorage.getItem(PRESET_KEY)) || []; }
-    catch (e) { S.presets = []; }
-    renderPresetSelect();
-  }
-
-  function renderPresetSelect() {
-    var sel = $('arPresetSelect');
-    var html = '<option value="">— Load preset —</option>';
-    S.presets.forEach(function (p, i) {
-      html += '<option value="' + i + '">' + esc(p.name) + '</option>';
+  function renderTemplateSelect() {
+    var sel = $('arTemplateSelect');
+    if (!sel) return;
+    var html = '<option value="">— Load template —</option>';
+    S.templates.forEach(function (t, i) {
+      html += '<option value="' + i + '">' + esc(t.name) + '</option>';
     });
     sel.innerHTML = html;
   }
 
   function getSettings() {
     return {
-      mode:     _mode,
-      order:    $('arOrder').value,
-      prefix:   $('arPrefix').value,
-      sep:      $('arSep').value,
-      startNum: parseInt($('arStart').value, 10) || 1,
-      digits:   parseInt($('arDigits').value, 10) || 3,
-      perFloor: $('arPerFloor').checked,
-      clli:     $('arClli').value,
-      building: $('arBuilding').value,
-      floor:    $('arFloor').value,
-      floorAuto:$('arFloorAuto').checked,
-      suite:    $('arSuite').value,
-      apTag:    $('arApTag').value,
-      sepS:     $('arSepStructured').value,
-      startNumS:parseInt($('arStartStructured').value, 10) || 1,
-      digitsS:  parseInt($('arDigitsStructured').value, 10) || 3,
-      freeText: $('arFreeText').value,
-      numPos:   $('arNumPos').value,
-      sepFree:  $('arSepFree').value,
-      startNumF:parseInt($('arStartFree').value, 10) || 1,
-      digitsF:  parseInt($('arDigitsFree').value, 10) || 3,
-      macAddr:  $('arMacAddr').value,
-      macFormat:$('arMacFormat').value,
-      macOctets:parseInt($('arMacOctets').value, 10) || 3,
-      macCase:  $('arMacCase').value,
-      macPrefix:$('arMacPrefix').value,
-      spacing:  parseInt($('arSpacing').value, 10) || 0
+      mode:      _mode,
+      scope:     _scope,
+      order:     $('arOrder').value,
+      segments:  _segments.map(function (s) {
+        var o = { type: s.type };
+        if (s.type === 'text')    o.value = s.value || '';
+        if (s.type === 'floor' && s.value)  o.value = s.value;
+        if (s.type === 'counter') { o.tag = s.tag || ''; o.start = s.start || 1; o.digits = s.digits || 3; }
+        return o;
+      }),
+      sepS:      $('arSepStructured').value,
+      prefix:    $('arPrefix').value,
+      sep:       $('arSep').value,
+      startNum:  parseInt($('arStart').value, 10) || 1,
+      digits:    (parseInt($('arDigits').value, 10) || 0) + 1,
+      macAddr:   $('arMacAddr').value,
+      macFormat: $('arMacFormat').value,
+      macOctets: parseInt($('arMacOctets').value, 10) || 3,
+      macCase:   $('arMacCase').value,
+      macPrefix: $('arMacPrefix').value,
+      spacing:   parseInt($('arSpacing').value, 10) || 0
     };
   }
 
   function applySettings(s) {
     if (s.mode) arSetMode(s.mode);
-    if (s.order)    $('arOrder').value   = s.order;
-    if (s.prefix != null) $('arPrefix').value = s.prefix;
-    if (s.sep != null)    $('arSep').value    = s.sep;
-    if (s.startNum != null) $('arStart').value = s.startNum;
-    if (s.digits != null)   $('arDigits').value = s.digits;
-    $('arPerFloor').checked = s.perFloor !== false;
-    if (s.clli != null)     $('arClli').value = s.clli;
-    if (s.building != null) $('arBuilding').value = s.building;
-    if (s.floor != null)    $('arFloor').value = s.floor;
-    if (s.floorAuto != null) $('arFloorAuto').checked = s.floorAuto;
-    if (s.suite != null)    $('arSuite').value = s.suite;
-    if (s.apTag != null)    $('arApTag').value = s.apTag;
+    if (s.scope) arSetScope(s.scope);
+    if (s.order)     $('arOrder').value = s.order;
+    if (s.segments && Array.isArray(s.segments)) {
+      _segments = s.segments.map(function (o) {
+        if (o.type === 'text')    return { type: 'text', value: o.value || '' };
+        if (o.type === 'floor')   return { type: 'floor', value: o.value || '' };
+        if (o.type === 'counter') return { type: 'counter', tag: o.tag || '', start: o.start || 1, digits: o.digits || 3 };
+        return { type: 'text', value: '' };
+      });
+      renderSegments();
+    }
+    // Migrate old structured fields into segments
+    if (!s.segments && (s.clli != null || s.building != null || s.apTag != null)) {
+      _segments = [];
+      if (s.clli)     _segments.push({ type: 'text', value: s.clli });
+      if (s.building) _segments.push({ type: 'text', value: s.building });
+      if (s.floorAuto !== false) _segments.push({ type: 'floor' });
+      else if (s.floor) _segments.push({ type: 'text', value: s.floor });
+      if (s.suite)    _segments.push({ type: 'text', value: s.suite });
+      _segments.push({ type: 'counter', tag: s.apTag || 'AP', start: s.startNumS || 1, digits: s.digitsS || 3 });
+      renderSegments();
+    }
     if (s.sepS != null)     $('arSepStructured').value = s.sepS;
-    if (s.startNumS != null) $('arStartStructured').value = s.startNumS;
-    if (s.digitsS != null)   $('arDigitsStructured').value = s.digitsS;
-    if (s.freeText != null)  $('arFreeText').value = s.freeText;
-    if (s.numPos != null)    $('arNumPos').value = s.numPos;
-    if (s.sepFree != null)   $('arSepFree').value = s.sepFree;
-    if (s.startNumF != null) $('arStartFree').value = s.startNumF;
-    if (s.digitsF != null)   $('arDigitsFree').value = s.digitsF;
+    if (s.prefix != null)   $('arPrefix').value = s.prefix;
+    if (s.sep != null)      $('arSep').value = s.sep;
+    if (s.startNum != null) $('arStart').value = s.startNum;
+    if (s.digits != null)   $('arDigits').value = s.digits - 1;
     if (s.macAddr != null)   $('arMacAddr').value = s.macAddr;
     if (s.macFormat != null) $('arMacFormat').value = s.macFormat;
     if (s.macOctets != null) $('arMacOctets').value = s.macOctets;
     if (s.macCase != null)   $('arMacCase').value = s.macCase;
     if (s.macPrefix != null) $('arMacPrefix').value = s.macPrefix;
-    if (s.spacing)          $('arSpacing').value = s.spacing;
-    else                    $('arSpacing').value = '';
+    if (s.spacing)           $('arSpacing').value = s.spacing;
+    else                     $('arSpacing').value = '';
     updateAll();
   }
 
-  window.arSavePreset = function () {
-    var name = prompt('Preset name:');
+  function saveTemplatesServer() {
+    return apiSettings('update', { patch: { aprename: { templates: S.templates } } });
+  }
+
+  window.arSaveTemplate = function () {
+    var name = prompt('Template name:');
     if (!name || !name.trim()) return;
     name = name.trim();
     var existing = -1;
-    for (var i = 0; i < S.presets.length; i++) {
-      if (S.presets[i].name === name) { existing = i; break; }
+    for (var i = 0; i < S.templates.length; i++) {
+      if (S.templates[i].name === name) { existing = i; break; }
     }
     var entry = Object.assign({ name: name }, getSettings());
-    if (existing >= 0) S.presets[existing] = entry;
-    else S.presets.push(entry);
-    try { localStorage.setItem(PRESET_KEY, JSON.stringify(S.presets)); } catch (e) {}
-    renderPresetSelect();
-    toast('Preset “' + name + '” saved', 'success');
+    if (existing >= 0) S.templates[existing] = entry;
+    else S.templates.push(entry);
+    saveTemplatesServer().then(function (res) {
+      if (res && res.ok) toast('Template “' + name + '” saved', 'success');
+      else toast('Could not save template', 'error');
+    }).catch(function () { toast('Could not save template', 'error'); });
+    renderTemplateSelect();
   };
 
-  window.arDeletePreset = function () {
-    var idx = parseInt($('arPresetSelect').value, 10);
-    if (isNaN(idx) || !S.presets[idx]) return;
-    var name = S.presets[idx].name;
-    S.presets.splice(idx, 1);
-    try { localStorage.setItem(PRESET_KEY, JSON.stringify(S.presets)); } catch (e) {}
-    renderPresetSelect();
-    toast('Preset “' + name + '” deleted', 'success');
+  window.arDeleteTemplate = function () {
+    var idx = parseInt($('arTemplateSelect').value, 10);
+    if (isNaN(idx) || !S.templates[idx]) return;
+    var name = S.templates[idx].name;
+    S.templates.splice(idx, 1);
+    saveTemplatesServer().then(function (res) {
+      if (res && res.ok) toast('Template “' + name + '” deleted', 'success');
+      else toast('Could not delete template', 'error');
+    }).catch(function () { toast('Could not delete template', 'error'); });
+    renderTemplateSelect();
   };
 
   /* ── dropzone ──────────────────────────────────────────────────── */
@@ -548,7 +714,7 @@
       case 'col-btt':    return sortByColumn(sorted, true);
       case 'clockwise':  return sortRadial(sorted, true);
       case 'counter-clockwise': return sortRadial(sorted, false);
-      case 'by-color':   return sortByColorGroup(sorted);
+      // by-color reserved for a future scope feature
       case 'manual':     return sortManual(sorted);
     }
     return sorted;
@@ -924,15 +1090,18 @@
 
   function generateName(settings, floor, num) {
     if (settings.mode === 'structured') return buildStructuredName(floor, num);
-    if (settings.mode === 'freeform')   return buildFreeformName(num);
     if (settings.mode === 'mac')        return buildMacName(num);
     return settings.prefix + settings.sep + padNum(num, settings.digits);
   }
 
   function getStartNum(settings) {
-    if (settings.mode === 'structured') return settings.startNumS;
-    if (settings.mode === 'freeform')   return settings.startNumF;
-    if (settings.mode === 'mac')        return 1;
+    if (settings.mode === 'structured') {
+      for (var i = 0; i < _segments.length; i++) {
+        if (_segments[i].type === 'counter') return _segments[i].start || 1;
+      }
+      return 1;
+    }
+    if (settings.mode === 'mac') return 1;
     return settings.startNum;
   }
 
@@ -943,7 +1112,7 @@
     var num = start;
 
     S.floors.forEach(function (floor) {
-      if (settings.perFloor) num = start;
+      if (_scope === 'perFloor') num = start;
       var floorAPs = getFloorAPs(floor.id);
       var sorted = sortAPs(floorAPs, settings.order);
       var numbered = {};
@@ -988,31 +1157,12 @@
   /* ── render ────────────────────────────────────────────────────── */
   function updateAll() {
     updateSpacingVisibility();
-    updateExample();
     var items = generatePreview();
     renderMarkers();
     renderPreviewTable(items);
     updateDownloadBtn();
   }
 
-  function updateExample() {
-    var s = getSettings();
-    var ex = [];
-    if (s.mode === 'structured') {
-      var floor = S.currentFloor ? S.floors.find(function (f) { return f.id === S.currentFloor; }) : S.floors[0];
-      for (var i = 0; i < 3; i++) ex.push(buildStructuredName(floor || null, s.startNumS + i));
-      $('arExampleStructured').textContent = 'Example: ' + ex.join(', ');
-    } else if (s.mode === 'freeform') {
-      for (var j = 0; j < 3; j++) ex.push(buildFreeformName(s.startNumF + j));
-      $('arExampleFree').textContent = 'Example: ' + ex.join(', ');
-    } else if (s.mode === 'mac') {
-      for (var k = 0; k < 3; k++) ex.push(buildMacName(k + 1));
-      $('arExampleMac').textContent = 'Example: ' + ex.join(', ');
-    } else {
-      for (var m = 0; m < 3; m++) ex.push(s.prefix + s.sep + padNum(s.startNum + m, s.digits));
-      $('arExample').textContent = 'Example: ' + ex.join(', ');
-    }
-  }
 
   function renderGuideLines(box, floor, order) {
     var old = box.querySelectorAll('.ar-guide');
@@ -1093,7 +1243,9 @@
       }
       marker.style.left = (fracX * 100) + '%';
       marker.style.top  = (fracY * 100) + '%';
-      marker.textContent = num == null ? '\u2013' : String(num);
+      var numStr = num == null ? '\u2013' : String(num);
+      marker.textContent = numStr;
+      if (numStr.length >= 3) marker.classList.add('is-wide');
       marker.setAttribute('data-ap-id', ap.id);
 
       var resolved = resolveColor(ap.color);
@@ -1103,6 +1255,8 @@
           marker.style.color = '#111';
           marker.style.borderColor = 'rgba(0,0,0,.3)';
         }
+      } else {
+        marker.classList.add('is-clear');
       }
 
       var tip = document.createElement('span');
@@ -1122,8 +1276,7 @@
 
      The stem is only taken at a separator boundary, so a name is never cut
      mid-segment, and only when it leaves something behind on every row. */
-  // The stem alone reads as a fragment, so one real name is completed behind
-  // it - the shared part solid, the part that varies per AP dimmed.
+
   function tailOf(full, stem) {
     if (!full || !stem || full.indexOf(stem) !== 0) return '';
     return full.slice(stem.length);
@@ -1143,13 +1296,11 @@
       i++;
     }
     var prefix = first.slice(0, i);
-    // back up to the last separator so segments stay whole
     var cut = Math.max(prefix.lastIndexOf('-'), prefix.lastIndexOf('_'),
                        prefix.lastIndexOf('.'), prefix.lastIndexOf(' '));
     if (cut < 0) return '';
     var stem = prefix.slice(0, cut + 1);
     if (stem.length < 4) return '';
-    // every row must keep a non-empty remainder, or the table says nothing
     for (var j = 0; j < names.length; j++) {
       if (names[j].length <= stem.length) return '';
     }
@@ -1177,24 +1328,17 @@
     var changed = items.filter(function (it) { return it.oldName !== it.newName; }).length;
     $('arPreviewHead').textContent = 'Preview (' + items.length + ' APs, ' + changed + ' labeled)';
 
-    // Work out what every row shares, per column, and show it once.
     var stemOld = commonStem(items.map(function (it) { return it.oldName || ''; }));
     var stemNew = commonStem(items.map(function (it) { return it.newName || ''; }));
-    /* The rows below show only what differs between them, so whatever was
-       hoisted out has to be stated here or it is nowhere on screen. That
-       hoisted part is exactly the part the naming pattern controls - the CLLI,
-       building, floor and suite - which made a working pattern look like it
-       had done nothing. Each side is named, and when the two differ that
-       difference is the change being made, so it is called out. */
     var stemEl = $('arStem');
     if (stemEl) {
       if (stemOld || stemNew) {
         var sample = items[0] || {};
-        var changed = stemOld !== stemNew;
+        var stemChanged = stemOld !== stemNew;
         function side(key, stem, full, cls) {
           var body = stem
-            ? '<span class="ar-stem-val">' + esc(stem) + '</span>'
-              + '<span class="ar-stem-tail">' + esc(tailOf(full, stem)) + '</span>'
+            ? '<span class="ar-stem-body"><span class="ar-stem-val">' + esc(stem) + '</span>'
+              + '<span class="ar-stem-tail">' + esc(tailOf(full, stem)) + '</span></span>'
             : '<span class="ar-stem-none">nothing in common</span>';
           return '<div class="ar-stem-line ' + cls + '">'
             + '<span class="ar-stem-key">' + key + '</span>' + body + '</div>';
@@ -1202,7 +1346,7 @@
         stemEl.hidden = false;
         stemEl.innerHTML =
           '<div class="ar-stem-cap">Every name on this floor'
-          + (changed ? '<span class="ar-stem-chg">changing</span>' : '') + '</div>'
+          + (stemChanged ? '<span class="ar-stem-chg">changing</span>' : '') + '</div>'
           + side('Current', stemOld, sample.oldName || '', '')
           + side('New', stemNew, sample.newName || '', 'is-new');
       } else {
@@ -1218,7 +1362,11 @@
     }
     var html = '';
     var manual = $('arOrder').value === 'manual';
+    var PREVIEW_CAP = 5;
+    var showAll = S._showAllPreview;
+    var visCount = (showAll || items.length <= PREVIEW_CAP + 1) ? items.length : PREVIEW_CAP;
     items.forEach(function (it, i) {
+      if (i >= visCount) return;
       var isDiff = it.oldName !== it.newName;
       // In manual mode the left column is the assigned position, so an
       // unclicked AP reads as "-" rather than borrowing a row number.
@@ -1228,9 +1376,9 @@
       if (rc) {
         var border = needsDarkText(rc) ? '1px solid rgba(0,0,0,.2)' : 'none';
         swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + rc + ';border:' + border + ';vertical-align:middle;margin-right:4px"></span>';
+      } else {
+        swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #222;vertical-align:middle;margin-right:4px;box-sizing:border-box"></span>';
       }
-      // The stem is already on screen above the table; rows carry the tail
-      // only, with the full name on hover for anything ambiguous.
       var curTxt = it.oldName || '—';
       var newTxt = it.newName || '';
       var curShown = (stemOld && curTxt.indexOf(stemOld) === 0) ? curTxt.slice(stemOld.length) : curTxt;
@@ -1243,6 +1391,15 @@
         '<td class="ar-new" title="' + esc(newTxt) + '">' + esc(newShown) + '</td>' +
         '</tr>';
     });
+
+    if (visCount < items.length) {
+      html += '<tr><td colspan="4" style="text-align:center;padding:6px">'
+        + '<button type="button" class="ar-show-all-btn" onclick="window._arShowAll()">'
+        + 'Show all ' + items.length + ' (' + (items.length - visCount) + ' more)</button></td></tr>';
+    } else if (showAll && items.length > PREVIEW_CAP + 1) {
+      html += '<tr><td colspan="4" style="text-align:center;padding:6px">'
+        + '<button type="button" class="ar-show-all-btn" onclick="window._arShowAll()">Collapse</button></td></tr>';
+    }
     body.innerHTML = html;
   }
 
@@ -1250,6 +1407,11 @@
     var hasChanges = S.preview.some(function (it) { return it.oldName !== it.newName; });
     $('arDownloadBtn').disabled = !hasChanges;
   }
+
+  window._arShowAll = function () {
+    S._showAllPreview = !S._showAllPreview;
+    renderPreviewTable();
+  };
 
   /* ── download ──────────────────────────────────────────────────── */
   window.arDownload = function () {
@@ -1299,10 +1461,8 @@
   };
 
   /* ── control listeners ─────────────────────────────────────────── */
-  ['arOrder', 'arPrefix', 'arSep', 'arStart', 'arDigits', 'arPerFloor',
-   'arClli', 'arBuilding', 'arFloor', 'arFloorAuto', 'arSuite', 'arApTag',
-   'arSepStructured', 'arStartStructured', 'arDigitsStructured',
-   'arFreeText', 'arNumPos', 'arSepFree', 'arStartFree', 'arDigitsFree',
+  ['arOrder', 'arPrefix', 'arSep', 'arStart', 'arDigits',
+   'arSepStructured',
    'arMacAddr', 'arMacFormat', 'arMacOctets', 'arMacCase', 'arMacPrefix',
    'arSpacing'].forEach(function (id) {
     var el = $(id);
@@ -1311,16 +1471,11 @@
     if (el.tagName === 'INPUT') el.addEventListener('input', updateAll);
   });
 
-  $('arFloorAuto').addEventListener('change', function () {
-    $('arFloor').disabled = this.checked;
-  });
-  $('arFloor').disabled = $('arFloorAuto').checked;
-
-  $('arPresetSelect').addEventListener('change', function () {
+  $('arTemplateSelect').addEventListener('change', function () {
     var idx = parseInt(this.value, 10);
-    if (isNaN(idx) || !S.presets[idx]) return;
-    applySettings(S.presets[idx]);
-    toast('Loaded preset “' + S.presets[idx].name + '”', 'success');
+    if (isNaN(idx) || !S.templates[idx]) return;
+    applySettings(S.templates[idx]);
+    toast('Loaded template “' + S.templates[idx].name + '”', 'success');
   });
 
   /* ── zoom & pan ─────────────────────────────────────────────────── */
@@ -1451,7 +1606,7 @@
   };
 
   /* ── init ───────────────────────────────────────────────────────── */
-  loadPresets();
+  renderSegments();
   loadDefaults();
 
   window.__aprename = {
