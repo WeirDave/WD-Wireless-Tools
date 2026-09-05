@@ -7551,3 +7551,91 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   .rep-key-scheme-lbl, .rep-key-seg i { color: #666 !important; }
   .rep-key-seg b, .rep-key-sep { color: #111 !important; }
 }
+
+/* ── Compass Reference Page ────────────────────────────────────────── */
+.rep-compass-page { padding: 22px 28px; }
+.rep-compass-body {
+  display: flex; gap: 28px; align-items: flex-start;
+}
+.rep-compass-left {
+  flex: 0 0 260px; text-align: center;
+}
+.rep-compass-right { flex: 1; min-width: 0; }
+.rep-comp-rose { width: 260px; height: 260px; }
+.rep-comp-ring { fill: none; stroke: #333; stroke-width: 1.5; }
+.rep-comp-center { fill: #333; }
+.rep-comp-major { stroke: #333; stroke-width: 2; }
+.rep-comp-mid   { stroke: #555; stroke-width: 1.5; }
+.rep-comp-minor { stroke: #888; stroke-width: 1; }
+.rep-comp-fine  { stroke: #bbb; stroke-width: 0.5; }
+.rep-comp-cardinal {
+  font-size: 16px; font-weight: 700; fill: #222;
+  font-family: var(--sans);
+}
+.rep-comp-n { fill: #c0392b; }
+.rep-comp-intercard {
+  font-size: 11px; font-weight: 600; fill: #555;
+  font-family: var(--sans);
+}
+.rep-comp-deg {
+  font-size: 8px; fill: #888;
+  font-family: var(--mono);
+}
+.rep-comp-needle-n { fill: #c0392b; opacity: 0.85; }
+.rep-comp-needle-s { fill: #666; opacity: 0.6; }
+.rep-compass-caption {
+  font-size: 11px; color: var(--text-2); margin-top: 10px;
+  line-height: 1.5;
+}
+.rep-compass-sect { margin-bottom: 14px; }
+.rep-compass-sect h3 {
+  font-size: 13px; font-weight: 700; margin: 0 0 4px;
+  color: #222; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.rep-compass-sect p {
+  font-size: 12px; line-height: 1.55; margin: 0 0 6px; color: #333;
+}
+.rep-compass-sect ul {
+  font-size: 12px; line-height: 1.55; margin: 0 0 6px;
+  padding-left: 18px; color: #333;
+}
+.rep-compass-sect li { margin-bottom: 4px; }
+
+[data-theme="dark"] .rep-comp-ring { stroke: #8899aa; }
+[data-theme="dark"] .rep-comp-center { fill: #8899aa; }
+[data-theme="dark"] .rep-comp-major { stroke: #c0cdd8; }
+[data-theme="dark"] .rep-comp-mid   { stroke: #8899aa; }
+[data-theme="dark"] .rep-comp-minor { stroke: #667788; }
+[data-theme="dark"] .rep-comp-fine  { stroke: #445566; }
+[data-theme="dark"] .rep-comp-cardinal { fill: #dde4eb; }
+[data-theme="dark"] .rep-comp-n { fill: #ef5350; }
+[data-theme="dark"] .rep-comp-intercard { fill: #99aabb; }
+[data-theme="dark"] .rep-comp-deg { fill: #778899; }
+[data-theme="dark"] .rep-comp-needle-n { fill: #ef5350; }
+[data-theme="dark"] .rep-comp-needle-s { fill: #778899; }
+[data-theme="dark"] .rep-compass-sect h3 { color: #dde4eb; }
+[data-theme="dark"] .rep-compass-sect p,
+[data-theme="dark"] .rep-compass-sect ul { color: #b8c5d3; }
+
+@media print {
+  .rep-compass-page { page-break-before: always; break-before: page; }
+  .rep-compass-body { gap: 20px; }
+  .rep-compass-left { flex: 0 0 220px; }
+  .rep-comp-rose { width: 220px; height: 220px; }
+  .rep-compass-sect h3 { font-size: 10pt; color: #111 !important; }
+  .rep-compass-sect p,
+  .rep-compass-sect ul { font-size: 9pt; color: #222 !important; }
+  .rep-compass-caption { font-size: 8pt; color: #555 !important; }
+  .rep-comp-ring { stroke: #222 !important; }
+  .rep-comp-center { fill: #222 !important; }
+  .rep-comp-major { stroke: #222 !important; }
+  .rep-comp-mid { stroke: #444 !important; }
+  .rep-comp-minor { stroke: #777 !important; }
+  .rep-comp-fine { stroke: #aaa !important; }
+  .rep-comp-cardinal { fill: #111 !important; }
+  .rep-comp-n { fill: #b71c1c !important; }
+  .rep-comp-intercard { fill: #444 !important; }
+  .rep-comp-deg { fill: #666 !important; }
+  .rep-comp-needle-n { fill: #b71c1c !important; }
+  .rep-comp-needle-s { fill: #555 !important; }
+}

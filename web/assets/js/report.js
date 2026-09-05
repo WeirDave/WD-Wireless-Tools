@@ -2619,7 +2619,8 @@
       });
     }
     if (!sections) sections = '<div class="rep-empty-small">No APs with a position on a floor plan.</div>';
-    return head + sections;
+    var compassPage = wantsCompassRef(aps, opts) ? renderCompassReferencePage(opts, ctx) : '';
+    return head + sections + compassPage;
   }
 
   // A full-page plan has no segment cropping to size it, so without this the
@@ -3405,7 +3406,9 @@
       });
     }
 
-    return head + table + maps
+    var compassPage = wantsCompassRef(aps, opts) ? renderCompassReferencePage(opts, ctx) : '';
+
+    return head + table + maps + compassPage
       + REPORT_FOOTER;
   }
 
@@ -3766,6 +3769,158 @@
     for (var i = 0; i < overlays.length; i++) autocropOverlay(overlays[i]);
   }
 
+  /* ── Compass Reference Page ────────────────────────────────────────────
+     One printable page with a compass rose and practical guidance for
+     aligning directional APs to the azimuth values in the report. */
+  function renderCompassReferencePage(opts, ctx) {
+    var R = 140, cx = 160, cy = 160;
+
+    var ticks = '', labels = '';
+    for (var d = 0; d < 360; d += 5) {
+      var rad = d * Math.PI / 180;
+      var isMajor = d % 90 === 0;
+      var isMid   = d % 45 === 0 && !isMajor;
+      var isMinor = d % 15 === 0 && !isMajor && !isMid;
+      var inner = isMajor ? R - 22 : isMid ? R - 16 : isMinor ? R - 12 : R - 7;
+      var x1 = cx + inner * Math.sin(rad), y1 = cy - inner * Math.cos(rad);
+      var x2 = cx + R * Math.sin(rad),     y2 = cy - R * Math.cos(rad);
+      var cls = isMajor ? 'rep-comp-major' : isMid ? 'rep-comp-mid' : isMinor ? 'rep-comp-minor' : 'rep-comp-fine';
+      ticks += '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" class="' + cls + '"/>';
+    }
+
+    var cardinals = [
+      { deg:   0, lbl: 'N',   cls: 'rep-comp-n' },
+      { deg:  90, lbl: 'E',   cls: '' },
+      { deg: 180, lbl: 'S',   cls: '' },
+      { deg: 270, lbl: 'W',   cls: '' },
+    ];
+    var intercardinals = [
+      { deg:  45, lbl: 'NE' }, { deg: 135, lbl: 'SE' },
+      { deg: 225, lbl: 'SW' }, { deg: 315, lbl: 'NW' },
+    ];
+
+    cardinals.forEach(function (c) {
+      var rad = c.deg * Math.PI / 180;
+      var lr = R + 18;
+      var x = cx + lr * Math.sin(rad), y = cy - lr * Math.cos(rad);
+      labels += '<text x="' + x + '" y="' + y + '" class="rep-comp-cardinal ' + c.cls
+        + '" text-anchor="middle" dominant-baseline="central">' + c.lbl + '</text>';
+    });
+    intercardinals.forEach(function (c) {
+      var rad = c.deg * Math.PI / 180;
+      var lr = R + 16;
+      var x = cx + lr * Math.sin(rad), y = cy - lr * Math.cos(rad);
+      labels += '<text x="' + x + '" y="' + y + '" class="rep-comp-intercard"'
+        + ' text-anchor="middle" dominant-baseline="central">' + c.lbl + '</text>';
+    });
+
+    var degLabels = '';
+    for (var a = 0; a < 360; a += 30) {
+      var aRad = a * Math.PI / 180;
+      var lr2 = R - 32;
+      var dx = cx + lr2 * Math.sin(aRad), dy = cy - lr2 * Math.cos(aRad);
+      degLabels += '<text x="' + dx + '" y="' + dy + '" class="rep-comp-deg"'
+        + ' text-anchor="middle" dominant-baseline="central"'
+        + ' transform="rotate(' + a + ' ' + dx + ' ' + dy + ')">' + a + '°</text>';
+    }
+
+    var needle = '<polygon points="' + cx + ',' + (cy - R + 30) + ' '
+      + (cx - 6) + ',' + cy + ' ' + (cx + 6) + ',' + cy + '" class="rep-comp-needle-n"/>'
+      + '<polygon points="' + cx + ',' + (cy + R - 30) + ' '
+      + (cx - 6) + ',' + cy + ' ' + (cx + 6) + ',' + cy + '" class="rep-comp-needle-s"/>';
+
+    var svg = '<svg viewBox="0 0 320 320" class="rep-comp-rose"'
+      + ' xmlns="http://www.w3.org/2000/svg">'
+      + '<circle cx="' + cx + '" cy="' + cy + '" r="' + R + '" class="rep-comp-ring"/>'
+      + '<circle cx="' + cx + '" cy="' + cy + '" r="4" class="rep-comp-center"/>'
+      + ticks + degLabels + needle + labels
+      + '</svg>';
+
+    return '<section class="rep-floor-section rep-compass-page">'
+      + '<h2 class="rep-floor-title">Compass &amp; Antenna Alignment Reference</h2>'
+      + '<div class="rep-compass-body">'
+      +   '<div class="rep-compass-left">'
+      +     svg
+      +     '<p class="rep-compass-caption">Azimuth is measured clockwise from north (0°).<br>'
+      +     'The compass heading in your report (N, NE, E, etc.) is shorthand for the degree range.</p>'
+      +   '</div>'
+      +   '<div class="rep-compass-right">'
+      +     '<div class="rep-compass-sect">'
+      +       '<h3>Reading azimuth values in this report</h3>'
+      +       '<p>Each directional AP in the tables has an <b>azimuth</b> value — the compass bearing '
+      +       'the antenna\'s main beam should point toward, measured in degrees clockwise from north '
+      +       '(0° = north, 90° = east, 180° = south, 270° = west).</p>'
+      +       '<p>These azimuths are relative to the <b>floor plan\'s orientation</b>, where "up" '
+      +       'on the page is the plan\'s north. Plan north may not match the building\'s true north '
+      +       '— architects often rotate floor plans for readability. To find the offset: pick a straight '
+      +       'feature on the plan (a long wall, a corridor), measure its compass bearing in the real '
+      +       'building, and compare. Apply that offset to every azimuth.</p>'
+      +     '</div>'
+      +     '<div class="rep-compass-sect">'
+      +       '<h3>Internal-antenna APs</h3>'
+      +       '<p>Many modern APs (Cisco 9136, Aruba AP-367, Ruckus R770) have built-in directional '
+      +       'antennas — the AP body itself determines the beam direction.</p>'
+      +       '<ul>'
+      +         '<li>Check the AP\'s installation guide for the <b>antenna reference arrow</b> or '
+      +         'marking — this indicates the primary beam direction.</li>'
+      +         '<li>Wall-mount APs: rotate the body on the bracket so the reference arrow points '
+      +         'toward the azimuth bearing.</li>'
+      +         '<li>Ceiling-mount APs: align the reference mark with the intended azimuth. For '
+      +         'APs with no mark, the Ethernet port or LED bar is typically treated as the '
+      +         '0° reference in the design tool.</li>'
+      +         '<li>Even "omni" ceiling APs have a reference orientation — internal MIMO antenna '
+      +         'arrays are not perfectly symmetric, and the design plan assumes a specific '
+      +         'rotation.</li>'
+      +       '</ul>'
+      +     '</div>'
+      +     '<div class="rep-compass-sect">'
+      +       '<h3>External-antenna APs</h3>'
+      +       '<p>When the AP uses separate patch, panel, or sector antennas:</p>'
+      +       '<ul>'
+      +         '<li>Mount the AP body in any convenient orientation — only the <b>antenna face</b> '
+      +         'matters for beam direction.</li>'
+      +         '<li>Point the flat face (radiating side) of the antenna toward the azimuth bearing. '
+      +         'The cable connector side faces away from the target area.</li>'
+      +         '<li>Set the <b>down-tilt</b> to the tilt value in the report. A tilt of 0° '
+      +         'is horizontal; negative values angle the beam downward. Aim for the main lobe '
+      +         'to cross desk height (~1 m) at roughly the midpoint of the cell radius.</li>'
+      +         '<li>For MIMO with multiple external antennas, orient them at different angles '
+      +         '(e.g. one vertical, one at 45°) for polarization diversity — not all parallel.</li>'
+      +       '</ul>'
+      +     '</div>'
+      +     '<div class="rep-compass-sect">'
+      +       '<h3>Using a compass on site</h3>'
+      +       '<ul>'
+      +         '<li><b>Best technique for ceiling mounts:</b> take your compass bearing while '
+      +         'standing on the floor directly below the mount point (less metal interference), '
+      +         'identify a visible landmark in the target direction (a doorway, column, window), '
+      +         'then align the AP\'s reference arrow toward that landmark while on the ladder.</li>'
+      +         '<li><b>Metal interference:</b> steel beams, cable trays, and conduit near the '
+      +         'ceiling deflect a magnetic compass. Hold your compass at least 30 cm from metal '
+      +         'surfaces. If readings jump or spin, fall back to visual alignment against '
+      +         'known building features.</li>'
+      +         '<li><b>Phone compass apps:</b> calibrate first (figure-8 motion). Most apps '
+      +         'compensate for magnetic declination automatically — verify this in the app\'s '
+      +         'settings. Keep the phone away from magnetic cases and mounting hardware.</li>'
+      +         '<li><b>Physical compass:</b> reads magnetic north. The difference from true north '
+      +         '(declination) is 1–15° across the continental US — usually smaller than the '
+      +         'antenna beam width and can be ignored for indoor deployments.</li>'
+      +         '<li><b>Verify with the floor plan:</b> sight along the antenna toward a visible '
+      +         'landmark that you can also identify on the plan. If the landmark lines up, the '
+      +         'bearing is correct — this is more reliable than any compass reading indoors.</li>'
+      +       '</ul>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>'
+      + '</section>';
+  }
+
+  function wantsCompassRef(aps, opts) {
+    if (opts.compassRef === 'never') return false;
+    if (opts.compassRef === 'always') return true;
+    return aps.some(function (ap) { return !apIsOmniOnly(ap); });
+  }
+
   function renderReportFooter(opts, ctx) {
     var rev = (opts && opts.revision) ? ' — ' + opts.revision : '';
     var title = (ctx.report.docName || 'Report') + ' — ' + siteName() + rev;
@@ -3931,7 +4086,9 @@
     var signoff = opts.signOff !== false ? renderSignOff() : '';
     var foot = renderReportFooter(opts, ctx);
 
-    return head + toc + summary + matrix + sections + audit + legend + signoff + foot;
+    var compassPage = wantsCompassRef(aps, opts) ? renderCompassReferencePage(opts, ctx) : '';
+
+    return head + toc + summary + matrix + sections + audit + legend + compassPage + signoff + foot;
   }
 
   function renderApLocationOverview(fp, aps, opts, ctx) {
@@ -4492,6 +4649,13 @@
           description: 'Off by default \u2014 one page per floor is the point of this report. Turn on for a very large plan where one page cannot hold readable labels.' },
         { id: '_gridConfig', type: 'grid-button', label: 'Configure grid\u2026',
           description: 'Only used when the split above is on.' },
+        { id: 'compassRef', type: 'select', label: 'Compass reference page', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto \u2014 when directional APs exist' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A one-page compass rose with practical guidance for aligning directional antennas to the azimuth values in this report.' },
       ],
       render: renderPlacementReport,
       postRender: function (host, opts) {
@@ -4672,6 +4836,13 @@
           description: 'Adds omni-only APs with an "omni" placeholder in the azimuth cell. Off by default — this sheet is for aiming.' },
         { id: 'shortLabels',     label: 'Short number labels on the plan', default: true,
           description: 'When your AP names end with an "AP" designator (e.g. "…AP42"), show just the "42" on markers and in the # column. Turn off to always show the full AP name — safer when APs are named by MAC or free-form text.' },
+        { id: 'compassRef', type: 'select', label: 'Compass reference page', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when directional APs exist' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A one-page compass rose with practical guidance for aligning directional antennas to the azimuth values in this report.' },
       ],
       render: renderAimReport,
     },
@@ -4751,6 +4922,8 @@
           description: 'Gain, beam width, and AP usage count for each antenna model.' },
         { icon: '🔍', title: 'Naming audit',
           description: 'Highlights APs with missing names, MAC addresses used as names, or generic "AP1"-style names that need renaming.' },
+        { icon: '🧭', title: 'Compass reference',
+          description: 'Compass rose with practical guidance for aligning directional antennas to the azimuth values in the report — internal vs. external antennas, compass use, and floor plan orientation.' },
         { icon: '✍️', title: 'Sign-off block',
           description: 'Prepared / Reviewed / Approved signature lines for formal handoff.' },
       ],
@@ -4793,6 +4966,13 @@
           description: 'All AP types are on by default so every AP appears on the installation report.' },
         { id: 'inclOmni', label: 'Include omni APs', default: true,
           description: 'All AP types are on by default so every AP appears on the installation report.' },
+        { id: 'compassRef', type: 'select', label: 'Compass reference page', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when directional APs exist' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A one-page compass rose with practical guidance for aligning directional antennas to the azimuth values in this report.' },
       ],
       render: renderApLocationReport,
       postRender: applyAntennaSegmentCrop,
