@@ -12,6 +12,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 [![Latest Release](https://img.shields.io/github/v/release/WeirDave/WD-Wireless-Tools?style=for-the-badge&color=1e77ac)](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest)
 [![Tests](https://img.shields.io/github/actions/workflow/status/WeirDave/WD-Wireless-Tools/tests.yml?branch=main&style=for-the-badge&label=Windows%20%2B%20macOS)](https://github.com/WeirDave/WD-Wireless-Tools/actions/workflows/tests.yml)
 [![License](https://img.shields.io/github/license/WeirDave/WD-Wireless-Tools?style=for-the-badge)](LICENSE)
+[![Sponsor](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=for-the-badge)](https://github.com/sponsors/WeirDave)
 
 ![Local First](https://img.shields.io/badge/local--first-private-5fa970?style=flat-square)
 ![No Telemetry](https://img.shields.io/badge/telemetry-none-5fa970?style=flat-square)
