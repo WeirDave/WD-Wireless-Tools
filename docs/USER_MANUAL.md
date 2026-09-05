@@ -38,6 +38,8 @@
 - [Squirrel](#squirrel)
 - [Scale](#scale)
 - [Report](#report)
+- [AP Labeler](#ap-labeler)
+- [PlanTrim](#plantrim)
 - [Data, Privacy, and Security](#data-privacy-and-security)
 - [Update or Uninstall](#update-or-uninstall)
 - [Troubleshooting](#troubleshooting)
@@ -56,6 +58,8 @@ WD Wireless Tools is a local, browser-based suite for common Ekahau workflows. T
 | Organize loose project files | Squirrel | Desktop |
 | Convert architectural measurements | Scale | Desktop + Web |
 | Generate installer-ready documents | Report | Desktop + Web |
+| Label access points with a naming pattern | AP Labeler | Desktop |
+| Trim excess whitespace from floor plans | PlanTrim | Desktop |
 
 > **Before working on production files:** retain a backup and review every preview before a bulk rename, move, delete, or Cloud operation.
 
@@ -239,9 +243,53 @@ Open [Report on the web](https://weirdave.github.io/WD-Wireless-Tools/report/).
 
 ---
 
+## AP Labeler
+
+AP Labeler replaces Ekahau's default "Simulated AP-xxx" names with a structured naming pattern you define, then downloads a labeled `.esx` ready to open in Ekahau. Your original file is read but never modified.
+
+### Name pattern
+
+Choose one of three modes:
+
+- **Structured** — build a name from composable segments. Each segment is one of:
+  - **Text** — a fixed label (site code, building, department, wing).
+  - **Floor** — auto-detected from the `.esx` file. Leave the field empty to use the auto value, or type a custom override.
+  - **Counter** — a sequential number with a tag prefix (e.g. `AP`), a configurable start number, and 0–5 leading zeros.
+  
+  A global **Separator between segments** dropdown sets the character placed between each segment (dash, underscore, dot, space, or none). Add, remove, and reorder segments to match your site's naming convention.
+
+- **Simple** — prefix + separator + sequential number with configurable leading zeros and start number.
+- **MAC** — names derived from each AP's MAC address.
+
+### Scope
+
+- **All APs** — one continuous sequence across the entire project.
+- **Per Floor** — restart numbering on each floor.
+
+### Ordering
+
+Choose how APs are sequenced spatially: Nearest Neighbor, Zigzag Rows, Rows Left→Right, Rows Right→Left, Columns Top→Bottom, Columns Bottom→Top, Clockwise, Counter-clockwise, or Manual (click each AP on the floor plan in your preferred order).
+
+### Preview and download
+
+The preview table shows the first five current→new name mappings with a toggle to expand. Once satisfied, click **Download labeled .esx** to save the renamed file.
+
+### Templates
+
+Save and load naming patterns as templates. Templates are stored server-side in `~/.wd_wireless_tools/` and persist across sessions and machines.
+
+---
+
+## PlanTrim
+
+PlanTrim removes excess whitespace around floor plan images inside an `.esx` file, reducing file size and improving readability in Ekahau. Drop an `.esx` file, review the proposed crops per floor, and download the trimmed result. Coordinate-referenced objects (APs, walls, areas, survey routes) are shifted to match the cropped images.
+
+---
+
 ## Data, Privacy, and Security
 
 - Quick Walls and Report parse `.esx` files locally in the browser with JSZip.
+- AP Labeler and PlanTrim parse `.esx` files locally on the desktop server.
 - Scale performs its conversions locally.
 - The application contains no telemetry.
 - Squirrel and Cloud Manager access only folders you choose.

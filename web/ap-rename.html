@@ -43,6 +43,8 @@
    chrome. A translucent white border here was invisible on every CAD drawing.
    Opaque white fill plus a dashed indigo ring and a dark hairline reads on a
    white plan and on a dark one, with no theme fork. */
+.tool-aprename .ar-marker.is-clear { background:#fff; color:#111; border:2px solid #222; }
+.tool-aprename .ar-marker.is-clear:hover { background:#f0f0f0; }
 .tool-aprename .ar-marker.is-unnumbered { background:#fff; color:var(--indigo,#6366f1); border:2px dashed var(--indigo,#6366f1); box-shadow:0 0 0 1px rgba(0,0,0,.35), 0 1px 4px rgba(0,0,0,.45); font-weight:800; font-size:13px; }
 .tool-aprename .ar-marker.is-unnumbered:hover { background:var(--indigo,#6366f1); color:#fff; border-style:solid; }
 .tool-aprename .ar-marker.is-last { box-shadow:0 0 0 3px rgba(99,102,241,.55),0 1px 4px rgba(0,0,0,.5); }
@@ -59,6 +61,10 @@
 .tool-aprename .ar-marker .ar-tip { display:none; position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%); background:#1e1e2e; color:#eee; padding:4px 8px; border-radius:4px; white-space:nowrap; font-size:12px; font-weight:400; pointer-events:none; z-index:10; box-shadow:0 2px 8px rgba(0,0,0,.5); }
 .tool-aprename .ar-marker:hover .ar-tip { display:block; }
 [data-theme="light"] .tool-aprename .ar-marker .ar-tip { background:#fff; color:#222; box-shadow:0 2px 8px rgba(0,0,0,.15); }
+.tool-aprename .ar-marker.is-wide { width:auto; min-width:26px; border-radius:13px; padding:0 5px; font-size:9px; }
+.tool-aprename .ar-show-all-btn { background:var(--bg-2,#1e1e2e); color:var(--text-2,#aaa); border:1px solid var(--border,#444); border-radius:4px; padding:4px 12px; cursor:pointer; font-size:12px; }
+.tool-aprename .ar-show-all-btn:hover { background:var(--indigo,#6366f1); color:#fff; border-color:var(--indigo,#6366f1); }
+[data-theme="light"] .tool-aprename .ar-show-all-btn { background:#f5f5f5; color:#555; border-color:#ccc; }
 
 .tool-aprename .ar-splitter { flex:0 0 auto; width:6px; cursor:col-resize; background:var(--border,#333); opacity:.5; transition:opacity .12s, background .12s; }
 .tool-aprename .ar-splitter:hover, .tool-aprename .ar-splitter:focus-visible, body.wd-resizing .tool-aprename .ar-splitter { opacity:1; background:var(--indigo,#6366f1); outline:none; }
@@ -135,6 +141,63 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-auto-lbl input { margin:0; }
 .tool-aprename .ar-mac-input { font-family:var(--mono,'Consolas',monospace); letter-spacing:1px; }
 
+.tool-aprename .ar-section { display:flex; flex-direction:column; gap:8px; padding-bottom:10px; border-bottom:1px solid var(--border,#333); }
+.tool-aprename .ar-section-head { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-2,#888); }
+.tool-aprename .ar-section-num { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:4px; background:hsla(239,84%,67%,.12); color:var(--indigo,#6366f1); font-size:10px; font-weight:700; font-family:var(--mono,monospace); }
+
+.tool-aprename .ar-segments { display:flex; flex-direction:column; gap:5px; }
+.tool-aprename .ar-seg-row { display:flex; gap:5px; align-items:center; padding:5px 7px; background:var(--bg-3,#252538); border:1px solid var(--border,#444); border-radius:5px; }
+.tool-aprename .ar-seg-row:hover { border-color:hsla(239,84%,67%,.3); }
+[data-theme="light"] .tool-aprename .ar-seg-row { background:var(--bg-3,#f0f0f4); }
+.tool-aprename .ar-seg-handle { cursor:grab; color:var(--text-3,#555); font-size:13px; padding:0 2px; user-select:none; line-height:1; }
+.tool-aprename .ar-seg-handle:hover { color:var(--text-2,#888); }
+.tool-aprename .ar-seg-type { flex:0 0 auto; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; padding:2px 6px; border-radius:3px; white-space:nowrap; font-family:var(--mono,monospace); }
+.tool-aprename .ar-seg-type.t-text { background:var(--bg-2,#1a1a2e); color:var(--text-2,#888); }
+[data-theme="light"] .tool-aprename .ar-seg-type.t-text { background:#e4e4ed; color:#6b6b82; }
+.tool-aprename .ar-seg-type.t-floor { background:hsla(160,64%,52%,.12); color:#34d399; }
+[data-theme="light"] .tool-aprename .ar-seg-type.t-floor { background:hsla(160,96%,26%,.1); color:#059669; }
+.tool-aprename .ar-seg-type.t-counter { background:hsla(239,84%,67%,.12); color:var(--indigo,#6366f1); }
+[data-theme="light"] .tool-aprename .ar-seg-type.t-counter { background:hsla(239,84%,67%,.1); color:#4338ca; }
+.tool-aprename .ar-seg-input { flex:1; min-width:0; font-family:var(--mono,monospace); font-size:12px; font-weight:500; color:var(--text,#ddd); background:none; border:none; outline:none; padding:2px 0; }
+.tool-aprename .ar-seg-input::placeholder { color:var(--text-3,#555); }
+.tool-aprename .ar-seg-input[type="number"] { -moz-appearance:textfield; }
+.tool-aprename .ar-seg-input[type="number"]::-webkit-inner-spin-button,
+.tool-aprename .ar-seg-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
+[data-theme="light"] .tool-aprename .ar-seg-input { color:var(--text,#222); }
+.tool-aprename .ar-seg-input-bordered { background:var(--bg-2,#1e1e2e); border:1px solid var(--border,#444); border-radius:3px; padding:2px 5px; }
+.tool-aprename .ar-seg-input-bordered:focus { border-color:var(--indigo,#6366f1); }
+[data-theme="light"] .tool-aprename .ar-seg-input-bordered { background:var(--bg-2,#fff); }
+.tool-aprename .ar-seg-lbl { font-size:10px; color:var(--text-3,#666); white-space:nowrap; user-select:none; }
+.tool-aprename .ar-seg-meta { font-size:10px; color:var(--text-3,#555); white-space:nowrap; font-family:var(--mono,monospace); }
+.tool-aprename .ar-seg-rm { flex:0 0 auto; margin-left:auto; width:18px; height:18px; border-radius:3px; border:none; background:none; color:var(--text-3,#555); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:13px; padding:0; }
+.tool-aprename .ar-seg-rm:hover { background:hsla(0,86%,59%,.12); color:#f87171; }
+[data-theme="light"] .tool-aprename .ar-seg-rm:hover { background:hsla(0,72%,51%,.1); color:#dc2626; }
+.tool-aprename .ar-add-wrap { position:relative; }
+.tool-aprename .ar-add-btn { display:flex; align-items:center; gap:5px; width:100%; padding:6px 9px; border:1px dashed var(--border,#444); border-radius:5px; background:none; color:var(--text-3,#555); font-size:12px; font-family:inherit; font-weight:500; cursor:pointer; transition:all .12s; }
+.tool-aprename .ar-add-btn:hover { border-color:var(--indigo,#6366f1); color:var(--indigo,#6366f1); background:hsla(239,84%,67%,.06); }
+.tool-aprename .ar-add-menu { position:absolute; top:100%; left:0; right:0; margin-top:3px; background:var(--bg-3,#252538); border:1px solid var(--border,#444); border-radius:5px; box-shadow:0 6px 20px rgba(0,0,0,.4); z-index:10; overflow:hidden; }
+[data-theme="light"] .tool-aprename .ar-add-menu { background:#fff; box-shadow:0 6px 20px rgba(0,0,0,.12); }
+.tool-aprename .ar-add-item { display:flex; align-items:center; gap:7px; padding:7px 10px; border:none; background:none; color:var(--text,#ddd); font-family:inherit; font-size:12px; cursor:pointer; width:100%; text-align:left; }
+.tool-aprename .ar-add-item:hover { background:var(--bg-2,#1a1a2e); }
+[data-theme="light"] .tool-aprename .ar-add-item:hover { background:var(--bg-3,#f0f0f4); }
+.tool-aprename .ar-add-badge { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; padding:2px 6px; border-radius:3px; font-family:var(--mono,monospace); }
+.tool-aprename .ar-sep-row { display:flex; align-items:center; gap:8px; }
+.tool-aprename .ar-sep-input { width:auto; min-width:110px; padding:4px 6px; border:1px solid var(--border,#444); border-radius:4px; background:var(--bg-3,#252538); color:var(--text,#ddd); font-family:var(--mono,monospace); font-size:12px; box-sizing:border-box; }
+[data-theme="light"] .tool-aprename .ar-sep-input { background:var(--bg-3,#fff); color:var(--text,#222); }
+
+.tool-aprename .ar-scope-tabs { display:flex; gap:0; border:1px solid var(--border,#444); border-radius:4px; overflow:hidden; }
+.tool-aprename .ar-scope-tab { flex:1; padding:5px 10px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:var(--bg-3,#252538); color:var(--text-2,#888); transition:background .15s,color .15s; }
+.tool-aprename .ar-scope-tab.active { background:#fb923c; color:#fff; }
+.tool-aprename .ar-scope-tab:not(.active):hover { background:var(--bg-2,#2a2a3e); color:var(--text,#ddd); }
+[data-theme="light"] .tool-aprename .ar-scope-tab { background:var(--bg-3,#eee); color:var(--text-2,#666); }
+[data-theme="light"] .tool-aprename .ar-scope-tab.active { background:#ea580c; color:#fff; }
+.tool-aprename .ar-scope-desc { font-size:11px; color:var(--text-2,#888); line-height:1.5; }
+
+.tool-aprename .ar-templates-detail summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:4px; user-select:none; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); padding:6px 0; }
+.tool-aprename .ar-templates-detail summary::-webkit-details-marker { display:none; }
+.tool-aprename .ar-templates-arrow { display:inline-block; transition:transform .15s; font-size:10px; }
+.tool-aprename .ar-templates-detail[open] .ar-templates-arrow { transform:rotate(90deg); }
+
 .tool-aprename .ar-zoom-bar { position:absolute; bottom:8px; left:8px; display:flex; align-items:center; gap:6px; background:rgba(0,0,0,.6); border-radius:4px; padding:3px 8px; font-size:11px; color:#ccc; z-index:5; backdrop-filter:blur(4px); }
 .tool-aprename .ar-zoom-bar button { border:none; background:none; color:#aaa; font-size:11px; cursor:pointer; padding:2px 4px; }
 .tool-aprename .ar-zoom-bar button:hover { color:#fff; }
@@ -185,7 +248,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
   <div id="dropzoneLogo" class="dropzone-logo"></div>
   <p class="dropzone-ver" data-ver="aprename">v&hellip;</p>
   <p class="dropzone-sub">Visual Access-Point Labeling for Ekahau</p>
-  <p class="dropzone-desc">See your APs on the floor plan, pick a spatial ordering — row&hairsp;by&hairsp;row, clockwise, snake, left&hairsp;to&hairsp;right — set a naming pattern, and download a labeled <code>.esx</code>. Your original file is never modified.</p>
+  <p class="dropzone-desc">See your APs on the floor plan, pick a spatial ordering and naming pattern, and download a labeled <code>.esx</code> ready to open in Ekahau.</p>
   <div class="dropzone-divider"></div>
   <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
   <ul class="dropzone-steps">
@@ -248,28 +311,145 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 
       <div class="ar-sidebar" id="arSidebar">
 
-        <div class="ar-group">
-          <div class="ar-lbl">Naming Mode</div>
+        <!-- ═══ SECTION 1: NAME PATTERN ═══ -->
+        <div class="ar-section">
+          <div class="ar-section-head"><span class="ar-section-num">1</span> Name Pattern</div>
           <div class="ar-mode-tabs">
             <button class="ar-mode-tab active" data-mode="structured" onclick="arSetMode('structured')">Structured</button>
             <button class="ar-mode-tab" data-mode="simple" onclick="arSetMode('simple')">Simple</button>
-            <button class="ar-mode-tab" data-mode="freeform" onclick="arSetMode('freeform')">Freeform</button>
             <button class="ar-mode-tab" data-mode="mac" onclick="arSetMode('mac')">MAC</button>
+          </div>
+
+          <div id="arStructuredFields">
+            <div class="ar-segments" id="arSegments"></div>
+            <div class="ar-add-wrap" id="arAddWrap">
+              <button class="ar-add-btn" type="button" id="arAddBtn">+ Add segment</button>
+              <div class="ar-add-menu" id="arAddMenu" hidden>
+                <button class="ar-add-item" type="button" data-type="text">
+                  <span class="ar-add-badge ar-seg-type t-text">Text</span> Site, building, dept, wing
+                </button>
+                <button class="ar-add-item" type="button" data-type="floor">
+                  <span class="ar-add-badge ar-seg-type t-floor">Floor</span> Auto-detected from .esx
+                </button>
+                <button class="ar-add-item" type="button" data-type="counter">
+                  <span class="ar-add-badge ar-seg-type t-counter">AP #</span> Sequential number with tag
+                </button>
+              </div>
+            </div>
+            <div class="ar-sep-row">
+              <span class="ar-field-lbl">Separator between segments</span>
+              <select id="arSepStructured" class="ar-sep-input">
+                <option value="-">-  dash</option>
+                <option value="_">_  underscore</option>
+                <option value=".">. dot</option>
+                <option value=" ">space</option>
+                <option value="">none</option>
+              </select>
+            </div>
+            <!-- example moved to preview section -->
+          </div>
+
+          <div class="ar-group" id="arSimpleFields" hidden>
+            <div class="ar-row">
+              <div>
+                <div class="ar-field-lbl">Prefix</div>
+                <input type="text" id="arPrefix" value="AP">
+              </div>
+              <div style="flex:0 0 100px">
+                <div class="ar-field-lbl">Separator between segments</div>
+                <select id="arSep">
+                  <option value="-">-  dash</option>
+                  <option value="_">_  underscore</option>
+                  <option value=".">. dot</option>
+                  <option value=" ">space</option>
+                  <option value="">none</option>
+                </select>
+              </div>
+            </div>
+            <div class="ar-row">
+              <div>
+                <div class="ar-field-lbl">Start #</div>
+                <input type="number" id="arStart" value="1" min="0">
+              </div>
+              <div>
+                <div class="ar-field-lbl">Leading Zeros</div>
+                <select id="arDigits">
+                  <option value="0">0</option>
+                  <option value="1">1</option>
+                  <option value="2" selected>2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                </select>
+              </div>
+            </div>
+            <!-- example moved to preview section -->
+          </div>
+
+          <div class="ar-group" id="arMacFields" hidden>
+            <div>
+              <div class="ar-field-lbl">MAC Address</div>
+              <input type="text" id="arMacAddr" value="" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17" class="ar-mac-input">
+            </div>
+            <div class="ar-row">
+              <div>
+                <div class="ar-field-lbl">Format</div>
+                <select id="arMacFormat">
+                  <option value="colon" selected>AA:BB:CC (Colons)</option>
+                  <option value="dash">AA-BB-CC (Dashes)</option>
+                  <option value="dot">AABB.CCDD (Dots)</option>
+                  <option value="none">AABBCC (None)</option>
+                </select>
+              </div>
+            </div>
+            <div class="ar-row">
+              <div>
+                <div class="ar-field-lbl">Octets</div>
+                <select id="arMacOctets">
+                  <option value="6">Full (6 octets)</option>
+                  <option value="3" selected>Last 3</option>
+                  <option value="2">Last 2</option>
+                  <option value="1">Last 1</option>
+                </select>
+              </div>
+              <div>
+                <div class="ar-field-lbl">Case</div>
+                <select id="arMacCase">
+                  <option value="upper" selected>UPPER</option>
+                  <option value="lower">lower</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <div class="ar-field-lbl">Prefix (optional)</div>
+              <input type="text" id="arMacPrefix" value="AP-" placeholder="AP-">
+            </div>
+            <!-- example moved to preview section -->
           </div>
         </div>
 
-        <div class="ar-group">
-          <div class="ar-lbl">Spatial Ordering</div>
+        <!-- ═══ SECTION 2: SCOPE ═══ -->
+        <div class="ar-section">
+          <div class="ar-section-head"><span class="ar-section-num">2</span> Scope</div>
+          <div class="ar-scope-tabs" id="arScopeTabs">
+            <button class="ar-scope-tab active" data-scope="all">All APs</button>
+            <button class="ar-scope-tab" data-scope="perFloor">Per Floor</button>
+          </div>
+          <div class="ar-scope-desc" id="arScopeDesc">One continuous sequence across the entire project.</div>
+        </div>
+
+        <!-- ═══ SECTION 3: ORDERING ═══ -->
+        <div class="ar-section">
+          <div class="ar-section-head"><span class="ar-section-num">3</span> Ordering</div>
           <select id="arOrder">
-            <option value="proximity" selected>Proximity (nearest AP)</option>
-            <option value="row-snake">Snake (rows, alternating)</option>
-            <option value="row-ltr">Row by Row (L &rarr; R)</option>
-            <option value="row-rtl">Row by Row (R &rarr; L)</option>
-            <option value="col-ttb">Column by Column (T &rarr; B)</option>
-            <option value="col-btt">Column by Column (B &rarr; T)</option>
+            <option value="proximity" selected>Nearest Neighbor</option>
+            <option value="row-snake">Zigzag Rows</option>
+            <option value="row-ltr">Rows, Left &rarr; Right</option>
+            <option value="row-rtl">Rows, Right &rarr; Left</option>
+            <option value="col-ttb">Columns, Top &rarr; Bottom</option>
+            <option value="col-btt">Columns, Bottom &rarr; Top</option>
             <option value="clockwise">Clockwise</option>
             <option value="counter-clockwise">Counter-clockwise</option>
-            <option value="by-color">By Color</option>
             <option value="manual">Manual (click order)</option>
           </select>
 
@@ -295,175 +475,18 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
           </div>
         </div>
 
-        <div class="ar-group" id="arStructuredFields">
-          <div class="ar-lbl">Naming Pattern</div>
-          <div class="ar-row">
-            <div>
-              <div class="ar-field-lbl">CLLI</div>
-              <input type="text" id="arClli" value="" placeholder="MPLX3" maxlength="10">
-            </div>
-            <div style="flex:0 0 64px">
-              <div class="ar-field-lbl">Building</div>
-              <input type="text" id="arBuilding" value="" placeholder="20" maxlength="5">
-            </div>
-          </div>
-          <div class="ar-row">
-            <div>
-              <div class="ar-field-lbl">Floor</div>
-              <div style="display:flex;gap:4px;align-items:center">
-                <input type="text" id="arFloor" value="" placeholder="01" maxlength="5" style="flex:1">
-                <label class="ar-auto-lbl" title="Auto-detect floor number from Ekahau floor ordering">
-                  <input type="checkbox" id="arFloorAuto" checked> Auto
-                </label>
-              </div>
-            </div>
-            <div style="flex:0 0 80px">
-              <div class="ar-field-lbl">Suite</div>
-              <input type="text" id="arSuite" value="" placeholder="01" maxlength="5">
-            </div>
-          </div>
-          <div class="ar-row">
-            <div style="flex:0 0 64px">
-              <div class="ar-field-lbl">AP Tag</div>
-              <input type="text" id="arApTag" value="AP" maxlength="10">
-            </div>
-            <div>
-              <div class="ar-field-lbl">Start #</div>
-              <input type="number" id="arStartStructured" value="1" min="0">
-            </div>
-            <div>
-              <div class="ar-field-lbl">Digits</div>
-              <input type="number" id="arDigitsStructured" value="3" min="1" max="6">
-            </div>
-          </div>
-          <div class="ar-row">
-            <div>
-              <div class="ar-field-lbl">Separator</div>
-              <input type="text" id="arSepStructured" value="-" maxlength="3" style="width:48px">
-            </div>
-          </div>
-          <div class="ar-example" id="arExampleStructured">Example: MPLX3-20-01-01-AP001</div>
-        </div>
-
-        <div class="ar-group" id="arSimpleFields" hidden>
-          <div class="ar-lbl">Naming Pattern</div>
-          <div class="ar-row">
-            <div>
-              <div class="ar-field-lbl">Prefix</div>
-              <input type="text" id="arPrefix" value="AP">
-            </div>
-            <div style="flex:0 0 64px">
-              <div class="ar-field-lbl">Separator</div>
-              <input type="text" id="arSep" value="-">
-            </div>
-          </div>
-          <div class="ar-row">
-            <div>
-              <div class="ar-field-lbl">Start #</div>
-              <input type="number" id="arStart" value="1" min="0">
-            </div>
-            <div>
-              <div class="ar-field-lbl">Digits</div>
-              <input type="number" id="arDigits" value="3" min="1" max="6">
-            </div>
-          </div>
-          <div class="ar-example" id="arExample">Example: AP-001, AP-002, AP-003</div>
-        </div>
-
-        <div class="ar-group" id="arFreeformFields" hidden>
-          <div class="ar-lbl">Naming Pattern</div>
-          <div>
-            <div class="ar-field-lbl">Custom Text</div>
-            <input type="text" id="arFreeText" value="" placeholder="Lobby-WiFi">
-          </div>
-          <div class="ar-row">
-            <div>
-              <div class="ar-field-lbl">Number Position</div>
-              <select id="arNumPos">
-                <option value="suffix" selected>Number at End</option>
-                <option value="prefix">Number at Start</option>
-              </select>
-            </div>
-            <div style="flex:0 0 64px">
-              <div class="ar-field-lbl">Sep</div>
-              <input type="text" id="arSepFree" value="-" maxlength="3">
-            </div>
-          </div>
-          <div class="ar-row">
-            <div>
-              <div class="ar-field-lbl">Start #</div>
-              <input type="number" id="arStartFree" value="1" min="0">
-            </div>
-            <div>
-              <div class="ar-field-lbl">Digits</div>
-              <input type="number" id="arDigitsFree" value="3" min="1" max="6">
-            </div>
-          </div>
-          <div class="ar-example" id="arExampleFree">Example: Lobby-WiFi-001</div>
-        </div>
-
-        <div class="ar-group" id="arMacFields" hidden>
-          <div class="ar-lbl">MAC Address Pattern</div>
-          <div>
-            <div class="ar-field-lbl">MAC Address</div>
-            <input type="text" id="arMacAddr" value="" placeholder="AA:BB:CC:DD:EE:FF" maxlength="17" class="ar-mac-input">
-          </div>
-          <div class="ar-row">
-            <div>
-              <div class="ar-field-lbl">Format</div>
-              <select id="arMacFormat">
-                <option value="colon" selected>AA:BB:CC (Colons)</option>
-                <option value="dash">AA-BB-CC (Dashes)</option>
-                <option value="dot">AABB.CCDD (Dots)</option>
-                <option value="none">AABBCC (None)</option>
-              </select>
-            </div>
-          </div>
-          <div class="ar-row">
-            <div>
-              <div class="ar-field-lbl">Octets</div>
-              <select id="arMacOctets">
-                <option value="6">Full (6 octets)</option>
-                <option value="3" selected>Last 3</option>
-                <option value="2">Last 2</option>
-                <option value="1">Last 1</option>
-              </select>
-            </div>
-            <div>
-              <div class="ar-field-lbl">Case</div>
-              <select id="arMacCase">
-                <option value="upper" selected>UPPER</option>
-                <option value="lower">lower</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <div class="ar-field-lbl">Prefix (optional)</div>
-            <input type="text" id="arMacPrefix" value="AP-" placeholder="AP-">
-          </div>
-          <div class="ar-example" id="arExampleMac">Example: AP-DD:EE:FF</div>
-        </div>
-
-        <div class="ar-group">
-          <div class="ar-check-row">
-            <input type="checkbox" id="arPerFloor" checked>
-            <label for="arPerFloor">Restart numbering each floor</label>
-          </div>
-        </div>
-
-        <div class="ar-sep"></div>
-
-        <div class="ar-group">
-          <div class="ar-lbl">Presets</div>
-          <div class="ar-preset-bar">
-            <select id="arPresetSelect"><option value="">&#8212; Load preset &#8212;</option></select>
-            <button onclick="arSavePreset()" title="Save current settings as a preset">Save</button>
-            <button onclick="arDeletePreset()" title="Delete selected preset">Del</button>
+        <!-- ═══ TEMPLATES ═══ -->
+        <details class="ar-group ar-templates-detail">
+          <summary>
+            <span class="ar-templates-arrow">&#9656;</span> Templates &amp; Defaults
+          </summary>
+          <div class="ar-preset-bar" style="margin-top:6px">
+            <select id="arTemplateSelect"><option value="">&#8212; Load template &#8212;</option></select>
+            <button onclick="arSaveTemplate()" title="Save current settings as a template">Save</button>
+            <button onclick="arDeleteTemplate()" title="Delete selected template">Del</button>
             <button onclick="arSaveDefaults()" title="Remember these settings as the defaults for this install">Set default</button>
           </div>
-        </div>
-
-        <div class="ar-sep"></div>
+        </details>
 
         <div class="ar-preview-wrap">
           <div class="ar-preview-head" id="arPreviewHead">Preview</div>
