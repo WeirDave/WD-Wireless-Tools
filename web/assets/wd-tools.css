@@ -2477,6 +2477,24 @@ body.tool-cloud .toolbar input.search:focus {
   border-color: rgba(21, 128, 61, 0.35);
 }
 
+/* The actionable one is a button, so it has to read like one - the badge that
+   only reports a state and the badge that does something about it sit side by
+   side in the same table. */
+.stale-badge.is-action {
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .15s ease, border-color .15s ease, transform .12s ease;
+}
+.stale-badge.is-action:hover {
+  background: rgba(14, 165, 233, 0.34);
+  border-color: rgba(14, 165, 233, 0.75);
+  transform: translateY(-1px);
+}
+.stale-badge.is-action:active { transform: translateY(0); }
+.stale-badge.is-action:focus-visible {
+  outline: 2px solid var(--blue-soft); outline-offset: 1px;
+}
+
 [data-theme="light"] .stale-badge.stale-cloud { color: var(--blue-dark); }
 [data-theme="light"] .stale-badge.stale-local { color: var(--green-dark); }
 
