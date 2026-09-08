@@ -683,6 +683,43 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
                          "fmtLength is stripping trailing zeros again")
         self.assertIn("fmtFixed(", body)
 
+    def test_the_sync_buttons_and_the_sync_action_ask_the_same_question(self):
+        """A control that disagrees with the thing behind it is the pattern here.
+
+        Twice now: the "Cloud newer" badge that reported a state and had no
+        handler, and the Sync buttons that stayed dead when whole sites were
+        selected while bulkSync was perfectly willing to create them. Both
+        times the capability worked and the way in did not.
+
+        So the bar and the action read one description of what a Sync would do.
+        """
+        js = (ROOT / "web" / "assets" / "js" / "cloud.js").read_text(encoding="utf-8")
+        self.assertIn("function syncPlan(items, dir)", js)
+
+        for fn in ("updateBulkBar", "bulkSync"):
+            start = js.index("function " + fn + "(")
+            body = js[start:js.index("\n}\n", start)]
+            with self.subTest(caller=fn):
+                self.assertIn("syncPlan(", body,
+                              fn + " is working out what a Sync would do on its "
+                              "own again, so it can disagree with the other one")
+
+    def test_a_whole_site_counts_as_something_to_sync(self):
+        """Selecting a site with no counterpart has to enable its direction.
+
+        A site row is a directory, and the old count excluded directories and
+        anything outside the projects tab - two separate reasons a selected
+        site could never enable anything, on a tab where sites are all there is.
+        """
+        js = (ROOT / "web" / "assets" / "js" / "cloud.js").read_text(encoding="utf-8")
+        start = js.index("function syncPlan(items, dir)")
+        body = js[start:js.index("\n}\n", start)]
+        self.assertIn("d.kind === wantKind && d.children", body,
+                      "a site with no counterpart is what gets created on the "
+                      "other side; it has to be counted")
+        self.assertIn("total:", body,
+                      "the bar needs one number to enable on")
+
     def test_javascript_files_have_no_nul_bytes(self):
         scripts = list((ROOT / "web" / "assets" / "js").glob("*.js"))
         self.assertTrue(scripts)

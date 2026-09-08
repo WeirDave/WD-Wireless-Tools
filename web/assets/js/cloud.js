@@ -3626,9 +3626,8 @@ function updateBulkBar() {
     if (currentTab === 'projects' && d.kind === 'cloud') downloadableCount++;
   });
   const syncItems = selectedSyncItems();
-  const syncPairCount = syncItems.filter(d => d.kind === 'pair').length;
-  const syncUploadCount = syncItems.filter(d => isProjectSyncItem(d) && d.kind === 'local' && !d.isDir).length;
-  const syncDownloadCount = syncItems.filter(d => isProjectSyncItem(d) && d.kind === 'cloud').length;
+  const planToLocal = syncPlan(syncItems, 'to-local');
+  const planToCloud = syncPlan(syncItems, 'to-cloud');
   const setBtn = (id, tabVisible, enabled, disabledTitle, tooltip) => {
     const el = document.getElementById(id); if (!el) return;
     el.style.display = tabVisible ? '' : 'none';
@@ -3639,12 +3638,20 @@ function updateBulkBar() {
   };
   const syncFromTip = currentTab === 'projects'
     ? 'Push local → cloud: renames matched cloud projects to the local name, and uploads local-only .esx files to Ekahau Cloud'
-    : 'Copy local names onto matched cloud';
+    : 'Push local → cloud: renames matched cloud sites, and creates a cloud site for any local-only site, moving the .esx files inside it up with it';
   const syncToTip = currentTab === 'projects'
     ? 'Pull cloud → local: renames matched local files to the cloud name, and downloads cloud-only projects as .esx files'
-    : 'Copy cloud names onto matched local';
-  setBtn('bulkSyncTo', true, syncPairCount + syncDownloadCount > 0, 'Sync → needs matched rows or cloud-only projects', syncToTip);
-  setBtn('bulkSyncFrom', true, syncPairCount + syncUploadCount > 0, 'Sync ← needs matched rows or local-only .esx files', syncFromTip);
+    : 'Pull cloud → local: renames matched local folders, and creates a local folder for any cloud-only site, downloading the projects inside it';
+  setBtn('bulkSyncTo', true, planToLocal.total > 0,
+    currentTab === 'sites'
+      ? 'Sync → needs matched sites, or cloud-only sites to create locally'
+      : 'Sync → needs matched rows, cloud-only projects, or a cloud-only site',
+    syncToTip);
+  setBtn('bulkSyncFrom', true, planToCloud.total > 0,
+    currentTab === 'sites'
+      ? 'Sync ← needs matched sites, or local-only sites to create in the cloud'
+      : 'Sync ← needs matched rows, local-only .esx files, or a local-only site',
+    syncFromTip);
   setBtn('bulkVerifyBtn', true, verifyableCount > 0, 'Select one or more Name-matches pairs to verify (download cloud → overwrite local)');
   setBtn('bulkShareBtn', true, ownedCloudIds.size > 0,
     'Select one or more cloud projects you own — Ekahau only lets the owner add shares',
@@ -3660,6 +3667,36 @@ function updateBulkBar() {
 
 function isProjectSyncItem(d) {
   return !!d && (currentTab === 'projects' || d.entityKind === 'projects');
+}
+
+/* What a Sync in this direction would actually do, given a selection.
+
+   The bulk bar and the Sync action both ask this, because the last two faults
+   in this file were a control disagreeing with the thing behind it: the "Cloud
+   newer" badge that had no handler, and this one - selecting local sites left
+   both Sync buttons dead while bulkSync was perfectly willing to create them.
+   Two readings of one question is the bug, so there is one reading now. */
+function syncPlan(items, dir) {
+  const pairs = items.filter(d => d.kind === 'pair');
+  const uploads = dir === 'to-cloud'
+    ? items.filter(d => isProjectSyncItem(d) && d.kind === 'local' && !d.isDir)
+    : [];
+  const downloads = dir === 'to-local'
+    ? items.filter(d => isProjectSyncItem(d) && d.kind === 'cloud')
+    : [];
+  const handled = new Set([...pairs, ...uploads, ...downloads]);
+  // A whole site with no counterpart: create it on the other side and carry
+  // the files already inside it across in the same action. Selecting the site
+  // is enough - its children come with it.
+  const wantKind = dir === 'to-cloud' ? 'local' : 'cloud';
+  const siteCreates = items.filter(d => !handled.has(d) && d.kind === wantKind && d.children);
+  const creating = new Set(siteCreates);
+  const skipped = items.filter(d => !handled.has(d) && !creating.has(d));
+  return {
+    pairs: pairs, uploads: uploads, downloads: downloads,
+    siteCreates: siteCreates, skipped: skipped,
+    total: pairs.length + uploads.length + downloads.length + siteCreates.length,
+  };
 }
 
 function selectedSyncItems() {
@@ -3693,25 +3730,14 @@ function selectedSyncItems() {
 
 async function bulkSync(dir) {
   const items = selectedSyncItems();
-  const pairs = items.filter(d => d.kind === 'pair');
-  const uploads = dir === 'to-cloud'
-    ? items.filter(d => isProjectSyncItem(d) && d.kind === 'local' && !d.isDir)
-    : [];
-  const downloads = dir === 'to-local'
-    ? items.filter(d => isProjectSyncItem(d) && d.kind === 'cloud')
-    : [];
-  const handled = new Set([...pairs, ...uploads, ...downloads]);
-  // Whole-site creates: a selected local-only folder (to-cloud) or
-  // cloud-only site (to-local) with no counterpart at all. Sync creates the
-  // missing site/folder AND moves every file already inside it in the same
-  // action, so "select one side, Sync" reaches real parity instead of
-  // silently skipping whole sites.
-  const wantKind = dir === 'to-cloud' ? 'local' : 'cloud';
-  const siteCreates = items.filter(d => !handled.has(d) && d.kind === wantKind && d.children);
-  const creating = new Set(siteCreates);
-  const stillSkipped = items.filter(d => !handled.has(d) && !creating.has(d));
+  const plan = syncPlan(items, dir);
+  const pairs = plan.pairs;
+  const uploads = plan.uploads;
+  const downloads = plan.downloads;
+  const siteCreates = plan.siteCreates;
+  const stillSkipped = plan.skipped;
 
-  if (!pairs.length && !uploads.length && !downloads.length && !siteCreates.length) {
+  if (!plan.total) {
     toast(dir === 'to-cloud'
       ? 'Select matched rows or local-only .esx files first'
       : 'Select matched rows or cloud-only projects first', 'info');
