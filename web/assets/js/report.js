@@ -2542,7 +2542,48 @@
 
      Anything not listed stays portrait, which is the safe default - a page that
      fitted before this change still fits. */
+  // The printable width of a portrait sheet, in CSS pixels at 96 per inch.
+  // Same figure the plan sizing uses, expressed in the units a DOM measurement
+  // comes back in. Read through a function because SHEET_W_IN is declared
+  // further down the file: computing it here at load time would take the
+  // hoisted `undefined` and quietly give NaN, and every comparison against a
+  // NaN is false, so every table would have come out portrait and looked
+  // deliberate.
+  function portraitContentPx() { return SHEET_W_IN * 96; }
+  // Turning the paper costs the reader something, so a table has to be
+  // properly over the line rather than a few pixels over it.
+  var TABLE_TURN_MARGIN = 1.08;
+  // Used only when the table cannot be measured - a rough stand-in, not the
+  // rule.
   var WIDE_TABLE_COLUMNS = 9;
+
+  /* How wide the table wants to be, with nothing squeezing it.
+
+     Measuring it where it sits answers the wrong question: on screen the
+     report is about 900px across and a printed portrait sheet is about 715,
+     so a table that looks comfortable is not necessarily one that fits. What
+     matters is the width the content asks for, which is what max-content
+     reports, measured off-screen so the reader sees nothing. */
+  function naturalTableWidth(table) {
+    if (!table || !table.cloneNode) return 0;
+    var probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;left:-99999px;top:0;' +
+      'width:max-content;visibility:hidden;pointer-events:none';
+    var copy = table.cloneNode(true);
+    // The print stylesheet fixes the layout and sets column widths; neither
+    // says anything about what the text actually needs.
+    copy.style.tableLayout = 'auto';
+    copy.style.width = 'max-content';
+    var cg = copy.querySelector('colgroup');
+    if (cg) cg.remove();
+    probe.appendChild(copy);
+    document.body.appendChild(probe);
+    var w = 0;
+    try { w = copy.getBoundingClientRect().width || copy.scrollWidth || 0; }
+    catch (e) { w = 0; }
+    probe.remove();
+    return w;
+  }
 
   function autoOrientationFor(page) {
     var kind = page.getAttribute('data-page-kind') || '';
@@ -2550,8 +2591,14 @@
     if (kind === 'plan') return null;      // the plan pass below decides
 
     if (kind === 'table') {
-      // Columns, not pixels: the screen width of a table says nothing about
-      // how it prints, and this has to hold before the report is on paper.
+      var table = page.querySelector('table');
+      var natural = naturalTableWidth(table);
+      if (natural > 0) {
+        // Two narrow columns of short values want portrait however many rows
+        // they run to; thirteen columns of AP detail want the long edge.
+        return natural > portraitContentPx() * TABLE_TURN_MARGIN
+          ? 'landscape' : 'portrait';
+      }
       var head = page.querySelector('thead tr');
       var cols = head ? head.children.length : 0;
       return cols >= WIDE_TABLE_COLUMNS ? 'landscape' : 'portrait';
