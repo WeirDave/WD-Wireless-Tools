@@ -92,6 +92,10 @@ DEFAULTS = {
         "prepared_by": "",
         "project_ref": "",
         "revision": "",
+        # Per-page paper orientation, keyed by page ("cover", "loc-table",
+        # "placement:<floor id>"). Only pages someone has actually turned are
+        # stored; everything else decides for itself from its content.
+        "page_orient": {},
         # The revision is a version number, so it earns a place in the saved
         # filename -- but not everyone names files that way, hence the switch.
         "include_revision_in_filename": True,

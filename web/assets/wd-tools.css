@@ -6160,13 +6160,23 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .modal-overlay, .grid-modal-overlay, .swap-modal, .swap-undo-toast,
   .toast-container, .ops-deck, .screen-home-btn { display: none !important; }
 
-  /* Orientation per floor. A named page is a Chromium feature; where it is not
+  /* Orientation per page. A named page is a Chromium feature; where it is not
      honoured the sheet stays portrait and the rule below keeps the map inside
-     the width it actually got instead of overflowing the width it asked for. */
+     the width it actually got instead of overflowing the width it asked for.
+
+     Every page carries .rep-oriented, so any one of them can turn while the
+     rest stay as they are - a thirteen-column table landscape between two
+     upright maps, say. The placement selectors stay as they were so a report
+     rendered before this still prints the same way. */
   @page placementPortrait { size: Letter portrait; }
   @page placementLandscape { size: Letter landscape; }
-  .rep-placement-page { page: placementPortrait; }
-  .rep-placement-page.is-landscape { page: placementLandscape; }
+  .rep-placement-page, .rep-oriented { page: placementPortrait; }
+  .rep-placement-page.is-landscape, .rep-oriented.is-landscape { page: placementLandscape; }
+
+  /* The installation table's own sheet. It gets the same break behaviour the
+     bare table had, moved out to the section that now wraps it. */
+  .rep-loc-page { page-break-before: always; break-before: page; }
+  .rep-loc-page .rep-loc-table { page-break-before: auto; break-before: auto; }
   .rep-placement-page .rep-overview-plan:not([data-seg="1"]) {
     max-width: 100% !important;
     height: auto !important;
