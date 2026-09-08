@@ -37,6 +37,19 @@ PARTIAL_HEIGHT_NAME = re.compile(
     r"bin\b|pallet|display|fixture",
     re.I)
 
+# Deliberately full height, so never reported as missing one.
+#
+# A Framery pod is a sealed box: metal roof, metal floor, a footprint of a
+# square metre or two. Height-limiting it would let a ray from a ceiling AP
+# drop in over the top at no loss, which is the opposite of what its metal roof
+# does, and the question people ask of a pod is whether signal reaches someone
+# inside it. Over-attenuating two square metres of floor is the cheaper error.
+#
+# This is the opposite call from shelving on purpose: a long open-topped run
+# with a large footprint should be height-limited, a small sealed enclosure
+# should not.
+DELIBERATELY_FULL_HEIGHT = re.compile(r"framery", re.I)
+
 # A height stated in the type's own name - "Warehouse Rack Wall - 16ft".
 NAME_STATES_HEIGHT = re.compile(r"(\d+(?:\.\d+)?)\s*(ft|foot|feet|'|m)\b", re.I)
 
@@ -141,6 +154,8 @@ def audit_project(path: Path) -> ProjectReport:
             continue                       # already has a height
         if not PARTIAL_HEIGHT_NAME.search(name):
             continue                       # nothing about it says partial height
+        if DELIBERATELY_FULL_HEIGHT.search(name):
+            continue                       # sealed on top; see the note above
         thickness = float(w.get("thickness") or 0.0)
         suggested, why = _suggest_height(name)
         report.findings.append(Finding(
