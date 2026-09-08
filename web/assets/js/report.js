@@ -2122,6 +2122,40 @@
       });
     }
 
+    /* The edge of the map, which a placement has to respect as much as it
+       respects the other labels.
+
+       collides() only ever asked whether a label sat on another label or on a
+       dot. Nothing asked whether it was still on the plan. The search below
+       walks outwards in sixteen directions over three rings looking for clear
+       ground, so a tight group near an edge would find its first unoccupied
+       position off the side of the map - and the SVG clips at its viewBox, so
+       the label did not spill onto the sheet where someone would notice it. It
+       silently vanished, and an AP with no number on a drawing an installer
+       works from is the worst thing this renderer can produce.
+
+       Segmented maps already had these bounds and used them, but only to nudge
+       a preference. They are a constraint, not a preference, and on a
+       full-plan map there were no bounds at all. */
+    /* Inset by half a stroke. An SVG stroke straddles the shape's edge, so a
+       pill sitting exactly on the boundary still has half its outline outside
+       it and loses that hairline to the clip. */
+    var edgeInset = sw / 2;
+    var labelBounds = cellBounds
+      ? { x0: cellBounds.x0 + edgeInset, y0: cellBounds.y0 + edgeInset,
+          x1: cellBounds.x1 - edgeInset, y1: cellBounds.y1 - edgeInset }
+      : { x0: edgeInset, y0: edgeInset,
+          x1: scaleW - edgeInset, y1: scaleH - edgeInset };
+    function onPlan(r) {
+      return r.x >= labelBounds.x0 && r.y >= labelBounds.y0
+          && r.x + r.w <= labelBounds.x1 && r.y + r.h <= labelBounds.y1;
+    }
+    function pullOntoPlan(r) {
+      r.x = Math.min(Math.max(r.x, labelBounds.x0), labelBounds.x1 - r.w);
+      r.y = Math.min(Math.max(r.y, labelBounds.y0), labelBounds.y1 - r.h);
+      return r;
+    }
+
     var markers = '';
     ordered.forEach(function (ap) {
       var c = ap.location.coord;
@@ -2205,13 +2239,16 @@
       var chosen = null;
       for (var i = 0; i < cands.length; i++) {
         var rect = { x: c.x + cands[i].x, y: c.y + cands[i].y, w: pillW, h: boxH };
-        if (!collides(rect)) { chosen = cands[i]; placed.push(rect); break; }
+        if (onPlan(rect) && !collides(rect)) { chosen = cands[i]; placed.push(rect); break; }
       }
       if (!chosen) {
-        // Everything is taken. Place it anyway at the preferred spot with a
-        // leader line; a doubled-up label beats a missing one.
-        chosen = { x: -pillW / 2, y: vFirst, lead: true };
-        placed.push({ x: c.x + chosen.x, y: c.y + chosen.y, w: pillW, h: boxH });
+        /* Every clear position on the map is taken, so this one doubles up -
+           but it doubles up *on the map*. Off the edge is not a worse-looking
+           label, it is no label, which is the one outcome worth ruling out. */
+        var rect = pullOntoPlan({ x: c.x - pillW / 2, y: c.y + vFirst,
+                                  w: pillW, h: boxH });
+        chosen = { x: rect.x - c.x, y: rect.y - c.y, lead: true };
+        placed.push(rect);
       }
 
       markers += '<g class="' + cls + '" transform="translate(' + c.x + ',' + c.y + ')">';
