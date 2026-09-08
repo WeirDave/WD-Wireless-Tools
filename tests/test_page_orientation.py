@@ -75,6 +75,40 @@ class PageOrientationTests(unittest.TestCase):
         self.assertIn("page_orient", self.js)
         self.assertIn("page_orient", (ROOT / "tools" / "settings.py").read_text(encoding="utf-8"))
 
+    def test_a_table_is_turned_on_measured_width_not_a_column_count(self):
+        """Columns are a poor proxy for how wide a table prints.
+
+        The name page is two columns of short values and wants portrait however
+        many rows it runs to. An installation table with seven columns of AP
+        detail wants the long edge. A threshold on column count called the
+        second one portrait, because seven is fewer than nine - the widths were
+        189px and 774px against a 715px portrait sheet.
+        """
+        start = self.js.index("function autoOrientationFor(page)")
+        body = self.js[start:self.js.index("\n  }", start)]
+        self.assertIn("naturalTableWidth(table)", body)
+        self.assertIn("portraitContentPx()", body)
+
+    def test_the_printable_width_is_read_lazily(self):
+        """SHEET_W_IN is declared further down the file.
+
+        Computing the printable width at load time takes the hoisted undefined
+        and gives NaN, and every comparison against NaN is false - so every
+        table would have come out portrait and looked deliberate.
+        """
+        self.assertIn("function portraitContentPx() { return SHEET_W_IN * 96; }",
+                      self.js)
+        self.assertNotIn("var PORTRAIT_CONTENT_PX = SHEET_W_IN", self.js)
+
+    def test_a_name_page_decides_for_itself(self):
+        """Not inherited from the floor whose map it follows.
+
+        Floor 1's map prints landscape and its name page prints portrait in the
+        same document; keying the page separately is what allows that.
+        """
+        self.assertIn("'key:' + fp.id", self.js)
+        self.assertIn('data-page-kind="table"', self.js)
+
     def test_the_older_setter_name_still_works(self):
         """Anything still calling setFloorOrient must not break."""
         self.assertIn("window.setFloorOrient = window.setPageOrient", self.js)
