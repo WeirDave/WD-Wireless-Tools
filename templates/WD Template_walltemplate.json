@@ -28,6 +28,7 @@
       ],
       "thickness": 0.35,
       "lowerEdge": 0,
+      "upperEdge": 2.0,
       "id": "6d90e726-e724-40db-afed-539555b064e0",
       "status": "CREATED"
     },
@@ -57,6 +58,7 @@
       ],
       "thickness": 0.1,
       "lowerEdge": 0,
+      "upperEdge": 1.5,
       "id": "e12a2bab-d464-4853-bbac-a98033716d68",
       "status": "CREATED"
     },
@@ -381,6 +383,7 @@
       ],
       "thickness": 1,
       "lowerEdge": 0,
+      "upperEdge": 2.5,
       "id": "87b42c32-ad08-4234-86fd-43c83cf4343c",
       "status": "CREATED"
     },
@@ -410,6 +413,7 @@
       ],
       "thickness": 1.5,
       "lowerEdge": 0,
+      "upperEdge": 10.0,
       "id": "891a1f03-0e4a-4bbe-8535-1bee2caae2d7",
       "status": "CREATED",
       "keybindNumber": 7
@@ -674,6 +678,7 @@
       ],
       "thickness": 0.35,
       "lowerEdge": 0,
+      "upperEdge": 3.6576,
       "id": "c3a6e4b2-1d5f-4c93-ae70-4f8b9d1c2a35",
       "status": "CREATED"
     },
@@ -703,6 +708,7 @@
       ],
       "thickness": 0.35,
       "lowerEdge": 0,
+      "upperEdge": 4.8768,
       "id": "b2f5d3a1-0c4e-4b82-9d6f-3e7a8c0b1f24",
       "status": "CREATED"
     },
