@@ -104,6 +104,32 @@ config block each — nothing below `CONFIG` names this app.
 
 ## Known gotchas
 
+- **Per-page paper orientation depends on a Chromium-only feature, and the
+  invariant matters more than the feature.** Mixed orientation in one document
+  is done with named `@page` rules (`@page placementLandscape { size: Letter
+  landscape }`) in `web/assets/wd-tools.css`. Chromium implements named pages;
+  Firefox does not implement them at all. Where they are not honoured every
+  sheet takes the print dialog's orientation and the per-page choice is
+  discarded silently.
+
+  Verified by printing the same document with the `page:` declarations intact
+  and stripped: with them, each page gets the sheet it asked for; without them,
+  a page sized 7.667in wide for a landscape sheet lands on a portrait one.
+
+  **The invariant: layout and sheet must never disagree.** A document that is
+  uniformly landscape is fine. A page laid out for a sheet it will not get is
+  not - content sized for one orientation on a sheet of the other overflows and
+  is clipped at the margin, which is how APs went missing from an installer's
+  drawing. So where named pages are unavailable, pick **one** orientation for
+  the whole document - from the majority of pages, or from the widest content -
+  and lay every page out for that one. Degrading to a uniform document is
+  correct; delivering mixed orientation that the engine will not honour is not.
+
+  Related but separate: the clipping reported alongside this turned out to be
+  the label placer walking labels off the plan edge, fixed in v2.52.1 and
+  guarded by `tests/test_marker_bounds.py`. Don't assume an orientation report
+  and a clipping report are the same defect.
+
 - **Owner filter (Mine/Others/All)** in Cloud Manager used to persist to
   `localStorage` across page loads/sessions, which meant it could get
   silently stuck on "Mine" or "Others" on one machine while defaulting
