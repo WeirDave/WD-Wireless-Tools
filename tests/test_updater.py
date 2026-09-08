@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import tempfile
+import time
+from unittest import mock
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -398,6 +400,134 @@ class ConfigPortabilityTests(unittest.TestCase):
         self.assertEqual(set(updater.CONFIG.payload_files), files)
         self.assertEqual(set(updater.CONFIG.payload_dirs), dirs)
 
+
+
+class _Resp:
+    def __init__(self, status=200, headers=None, payload=None):
+        self.status_code = status
+        self.ok = 200 <= status < 300
+        self.headers = headers or {}
+        self._payload = payload or {
+            "tag_name": "v9.9.9", "html_url": "https://example.invalid/r",
+            "body": "notes", "assets": [],
+        }
+
+    def json(self):
+        return self._payload
+
+
+class ReleaseLookupCostTests(unittest.TestCase):
+    """How many requests one session spends on GitHub's sixty-an-hour.
+
+    The allowance is counted per IP address, not per person, so an office
+    behind one NAT shares it. Every /api/update/status used to be a fresh
+    request - one per page load on which About was opened - and so did every
+    update run, which is how a day of updating spends the hour and the next
+    single click reports a limit the person did not cause.
+    """
+
+    def setUp(self):
+        updater._RELEASE_CACHE.update(
+            {"at": 0.0, "data": None, "etag": None, "blocked_until": 0.0})
+
+    def tearDown(self):
+        self.setUp()
+
+    def test_repeated_checks_cost_one_request(self):
+        calls = []
+
+        def get(url, *a, **k):
+            calls.append(url)
+            return _Resp(headers={"ETag": '"abc"'})
+
+        with mock.patch("requests.get", get):
+            for _ in range(8):
+                updater.fetch_latest_release()
+        self.assertEqual(len(calls), 1,
+                         "eight checks should not be eight requests")
+
+    def test_a_recheck_sends_the_etag_so_github_can_answer_free(self):
+        """A 304 does not count against the allowance."""
+        seen = []
+
+        def get(url, headers=None, **k):
+            seen.append(dict(headers or {}))
+            if len(seen) == 1:
+                return _Resp(headers={"ETag": '"abc"'})
+            return _Resp(status=304, headers={"ETag": '"abc"'})
+
+        with mock.patch("requests.get", get):
+            first = updater.fetch_latest_release()
+            updater._RELEASE_CACHE["at"] = 0.0        # let the TTL lapse
+            again = updater.fetch_latest_release()
+
+        self.assertEqual(first, again)
+        self.assertNotIn("If-None-Match", seen[0])
+        self.assertEqual(seen[1].get("If-None-Match"), '"abc"',
+                         "the second request has to carry the ETag or the "
+                         "answer cannot be a free 304")
+
+    def test_being_limited_says_when_it_clears(self):
+        reset = int(time.time()) + 1800
+
+        def get(url, *a, **k):
+            return _Resp(status=403, headers={"X-RateLimit-Remaining": "0",
+                                              "X-RateLimit-Reset": str(reset)})
+
+        with mock.patch("requests.get", get):
+            with self.assertRaises(updater.UpdateError) as caught:
+                updater.fetch_latest_release()
+
+        msg = str(caught.exception)
+        self.assertIn("rate-limiting", msg)
+        self.assertIn(time.strftime("%H:%M", time.localtime(reset)), msg,
+                      "a limit the user can wait out should say until when")
+        self.assertIn("network address", msg,
+                      "it is shared per network, which is why it can happen "
+                      "to someone who did nothing")
+
+    def test_it_does_not_keep_asking_while_limited(self):
+        reset = int(time.time()) + 1800
+        calls = []
+
+        def get(url, *a, **k):
+            calls.append(url)
+            return _Resp(status=403, headers={"X-RateLimit-Remaining": "0",
+                                              "X-RateLimit-Reset": str(reset)})
+
+        with mock.patch("requests.get", get):
+            for _ in range(5):
+                with self.assertRaises(updater.UpdateError):
+                    updater.fetch_latest_release()
+        self.assertEqual(len(calls), 1,
+                         "spending a request to be told again that there are "
+                         "none left makes it worse")
+
+    def test_a_limit_does_not_hide_a_result_already_known(self):
+        def ok(url, *a, **k):
+            return _Resp(headers={"ETag": '"abc"'})
+
+        def limited(url, *a, **k):
+            return _Resp(status=429, headers={"X-RateLimit-Remaining": "0"})
+
+        with mock.patch("requests.get", ok):
+            known = updater.fetch_latest_release()
+        updater._RELEASE_CACHE["at"] = 0.0
+        with mock.patch("requests.get", limited):
+            still = updater.fetch_latest_release()
+        self.assertEqual(known, still,
+                         "the last known release is more use than an error")
+
+    def test_a_network_failure_falls_back_to_what_is_known(self):
+        with mock.patch("requests.get", lambda *a, **k: _Resp(headers={})):
+            known = updater.fetch_latest_release()
+        updater._RELEASE_CACHE["at"] = 0.0
+
+        def dead(*a, **k):
+            raise OSError("getaddrinfo failed")
+
+        with mock.patch("requests.get", dead):
+            self.assertEqual(updater.fetch_latest_release(), known)
 
 if __name__ == "__main__":
     unittest.main()
