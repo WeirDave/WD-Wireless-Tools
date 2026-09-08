@@ -7,6 +7,11 @@
 
   var esxZip = null;
   var fileName = '';
+  // The name of the folder the .esx was opened from, when that is knowable.
+  // Empty on a drag-and-drop or on the hosted build - a browser hands over a
+  // bare file name and nothing else - so everything downstream treats it as
+  // the best available answer rather than a required one.
+  var projectFolder = '';
   var proj = {
     accessPoints: [],
     radios: [],
@@ -339,30 +344,57 @@
       .join(' - ');
   }
 
-  /* The project segment of the file name.
+  /* Folder names that are where a file happens to sit rather than what the
+     job is called. Matched whole, so "Downloads" is rejected and "Downtown
+     Campus" is not. */
+  var GENERIC_FOLDER = new RegExp('^(' + [
+    'downloads?', 'desktop', 'documents', 'onedrive', 'dropbox', 'box',
+    'google ?drive', 'icloud ?drive', 'temp', 'tmp',
+    'new folder( \\(\\d+\\))?', 'esx', 'files?', 'projects?',
+    'surveys?', 'ekahau( projects)?', 'work', 'stuff', 'misc'
+  ].join('|') + ')$', 'i');
 
-     It comes from the .esx file name first, and deliberately keeps the stem
-     whole - "LNBH1 - LGB-03 - 3435 E Conant St, Long Beach, CA 90806 - B20 -
-     PD" stays as it is. The report is about that file, so naming the file it
-     came from is the one answer that is never ambiguous, and it does not
-     depend on anyone having filled a field in.
+  // The same test the file stem has always used: a name that says nothing
+  // about the job.
+  var GENERIC_STEM = /^(untitled|copy|new|final|draft|test|temp|project|report)([ _-]*\d*)$/i;
 
-     project.json's own name is the fallback for the case where the file has
-     been renamed to something that says nothing ("final.esx", "Copy of...").
-     The typed Client / Company setting is the last resort, and when there is
+  /* The project segment of the file name, and where it came from.
+
+     The folder comes first, because that is where the project name actually
+     lives in practice - a job is kept in a folder called "Silicone Plus -
+     Building 4 - 1200 Fake Rd" and the .esx inside it is called whatever the
+     site or the discipline is. Naming the report after the folder is what
+     someone would do by hand, and doing it by hand on every save is the thing
+     this replaces.
+
+     The stem is next and is kept whole - "LNBH1 - LGB-03 - 3435 E Conant St,
+     Long Beach, CA 90806 - B20 - PD" stays as it is. It is the answer whenever
+     the folder is unknown, which is every drag-and-drop and the whole hosted
+     build, because a browser file input hands over a bare name with no path.
+
+     project.json's own name catches a file renamed to something that says
+     nothing. The typed Client / Company setting is the last resort, and with
      nothing at all the segment drops out rather than leaving a dangling
-     separator. */
-  function projectName() {
+     separator behind. */
+  function projectNameSource() {
+    var folder = fileSafe(projectFolder || '');
+    if (folder && !GENERIC_FOLDER.test(folder)) {
+      return { name: folder, from: 'the folder it was opened from' };
+    }
     var stem = fileSafe(String(fileName || '').replace(/[.]esx$/i, ''));
-    // Only a name that says nothing about the job defers to project.json -
-    // matched whole, so a real name that merely starts with one of these words
-    // is still used.
-    var generic = /^(untitled|copy|new|final|draft|test|temp|project|report)([ _-]*\d*)$/i;
-    if (stem && !generic.test(stem)) return stem;
+    if (stem && !GENERIC_STEM.test(stem)) {
+      return { name: stem, from: 'the .esx file name' };
+    }
     var fromFile = fileSafe(proj.projectName || '');
-    if (fromFile) return fromFile;
-    if (stem) return stem;
-    return fileSafe(settingDefault('clientName') || '');
+    if (fromFile) return { name: fromFile, from: 'the name inside the project' };
+    if (stem) return { name: stem, from: 'the .esx file name' };
+    var client = fileSafe(settingDefault('clientName') || '');
+    if (client) return { name: client, from: 'the Client / company setting' };
+    return { name: '', from: '' };
+  }
+
+  function projectName() {
+    return projectNameSource().name;
   }
 
   function currentRevisionValue() {
@@ -396,9 +428,13 @@
     var rev = revEl ? revEl.value.trim() : settingDefault('revision');
     // The real project name once one is open, so the preview is the actual
     // file name rather than a shape.
-    var site = '';
-    try { site = projectName() || ''; } catch (e) {}
-    if (!site) site = 'Project name';
+    var site = '', from = '';
+    try {
+      var picked = projectNameSource();
+      site = picked.name || '';
+      from = picked.from || '';
+    } catch (e) {}
+    if (!site) { site = 'Project name'; from = ''; }
     var on = buildDocTitle(docName, rev, site, true);
     var off = buildDocTitle(docName, rev, site, false);
     var chk = document.getElementById('set-includeRevision');
@@ -409,7 +445,12 @@
       + '<code>' + WD.esc(on) + '.pdf</code></div>'
       + '<div class="rep-set-name-row' + (withRev ? '' : ' is-active') + '">'
       + '<span class="rep-set-name-tag">Without</span>'
-      + '<code>' + WD.esc(off) + '.pdf</code></div>';
+      + '<code>' + WD.esc(off) + '.pdf</code></div>'
+      // Which of the four sources supplied the last segment. Worth saying:
+      // the answer changes with how the file was opened, and that is not
+      // something anyone would guess from looking at the name.
+      + (from ? '<div class="rep-set-name-src">Project name taken from '
+                + WD.esc(from) + '.</div>' : '');
   }
   window.renderFilenamePreview = renderFilenamePreview;
 
@@ -591,7 +632,7 @@
 
   var dropzone = document.getElementById('dropzone');
   var fileInput = document.getElementById('fileInput');
-  dropzone.addEventListener('click', function () { fileInput.click(); });
+  dropzone.addEventListener('click', function () { window.loadNewFile(); });
   dropzone.addEventListener('dragover', function (e) { e.preventDefault(); dropzone.classList.add('dragover'); });
   dropzone.addEventListener('dragleave', function () { dropzone.classList.remove('dragover'); });
   dropzone.addEventListener('drop', function (e) {
@@ -602,9 +643,52 @@
   fileInput.addEventListener('change', function (e) {
     if (e.target.files.length) loadFile(e.target.files[0]);
   });
-  window.loadNewFile = function () { fileInput.value = ''; fileInput.click(); };
+  /* Opening from disk, in the one way that knows which folder the file is in.
 
-  async function loadFile(file) {
+     A browser file input cannot answer that - File carries a name and no path
+     - so on the desktop app the native picker runs instead and the bytes come
+     back through the server. Anything that fails or is unavailable falls
+     through to the plain input: the hosted build has no server at all, and a
+     cancelled picker must not leave the page doing nothing. */
+  async function openViaNativePicker() {
+    if (!settingsAvailable) return false;       // hosted build, no server
+    var picked;
+    try {
+      picked = await WD.api('organizer/pick_esx_file', {});
+    } catch (e) { return false; }
+    if (!picked || !picked.ok || !picked.path) return true;   // cancelled: done
+
+    var resp;
+    try {
+      resp = await fetch('/api/report/open_esx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+        body: JSON.stringify({ path: picked.path })
+      });
+    } catch (e) { return false; }
+    if (!resp.ok) {
+      var why = '';
+      try { why = (await resp.json()).error || ''; } catch (e) {}
+      showToast(why || 'That file could not be opened', 'error');
+      return true;
+    }
+    var dec = function (h) {
+      try { return decodeURIComponent(resp.headers.get(h) || ''); } catch (e) { return ''; }
+    };
+    var folder = dec('X-WD-Project-Folder');
+    var name = dec('X-WD-File-Name') || 'project.esx';
+    var blob = await resp.blob();
+    await loadFile(new File([blob], name), folder);
+    return true;
+  }
+
+  window.loadNewFile = async function () {
+    if (await openViaNativePicker()) return;
+    fileInput.value = '';
+    fileInput.click();
+  };
+
+  async function loadFile(file, folderName) {
     if (!file.name.toLowerCase().endsWith('.esx')) {
       showToast('Not an .esx file', 'error'); return;
     }
@@ -612,6 +696,9 @@
       var data = await file.arrayBuffer();
       esxZip = await JSZip.loadAsync(data);
       fileName = file.name;
+      // Only the native picker knows this. A drop or a plain file input leaves
+      // it empty and the .esx stem answers instead.
+      projectFolder = folderName || '';
       await parseEsx();
 
       templateConfirmed = false;

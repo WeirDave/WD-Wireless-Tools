@@ -498,6 +498,44 @@ def api_report_cover_info():
     return jsonify(report_store.cover_info())
 
 
+@app.route("/api/report/open_esx", methods=["POST"])
+def api_report_open_esx():
+    """Hand the Report page the bytes of an .esx the user picked themselves.
+
+    Report parses the archive in the browser, so it needs the contents; the
+    native picker gives back a path. Going through here is the only way the
+    page can learn which *folder* the project lives in, and the folder name is
+    what names the saved report - a browser file input hands over a bare file
+    name and nothing else, which is why the name was derived from the .esx stem
+    before this existed.
+
+    The path arrives from the client, so it is checked here rather than
+    trusted. A localhost tool that already reveals folders and downloads
+    projects wherever the user points it is not made safer by refusing to read
+    a file, but a stale or mistyped path should come back as a sentence rather
+    than a traceback.
+    """
+    data = request.get_json(silent=True) or {}
+    raw = (data.get("path") or "").strip()
+    if not raw:
+        return jsonify({"error": "No file was chosen."}), 400
+    try:
+        path = Path(raw).resolve(strict=True)
+    except (OSError, ValueError, RuntimeError):
+        return jsonify({"error": "That file could not be found any more."}), 404
+    if not path.is_file() or path.suffix.lower() != ".esx":
+        return jsonify({"error": "That is not an .esx project file."}), 400
+
+    response = send_file(path, mimetype="application/octet-stream",
+                         as_attachment=False, conditional=False)
+    # Headers are latin-1 only and these are real folder names - addresses,
+    # commas, the occasional accent - so they travel percent-encoded.
+    response.headers["X-WD-Project-Folder"] = quote(path.parent.name)
+    response.headers["X-WD-File-Name"] = quote(path.name)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/api/settings/<action>", methods=["POST"])
 def api_settings(action):
     fn = SETTINGS_ACTIONS.get(action)
