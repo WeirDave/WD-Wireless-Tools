@@ -20,6 +20,12 @@ ROOT_FILES = (
 )
 ROOT_DIRECTORIES = ("tools", "web", "templates", "docs")
 EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
+# Kept in the repository, kept out of the download. docs/releases holds the
+# reasoning behind shipped values - why a wall type is 30 dB and not 18 - which
+# is worth having under version control and is not worth 168 files of internal
+# changelog in a user's install folder. It was lost once by living only in a
+# backup, so it is tracked now and excluded here rather than simply absent.
+EXCLUDED_DIRECTORY_PARTS = {"releases"}
 
 
 def iter_release_files():
@@ -37,7 +43,9 @@ def iter_release_files():
             if not path.is_file():
                 continue
             relative = path.relative_to(ROOT)
-            if "__pycache__" in relative.parts or path.suffix in EXCLUDED_SUFFIXES:
+            if ("__pycache__" in relative.parts
+                    or EXCLUDED_DIRECTORY_PARTS & set(relative.parts)
+                    or path.suffix in EXCLUDED_SUFFIXES):
                 continue
             yield path, relative
 
