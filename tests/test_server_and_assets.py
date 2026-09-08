@@ -435,6 +435,42 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
                 checked += 1
         self.assertGreaterEqual(checked, 10, "expected to find the suite nav menus")
 
+    def test_every_page_carries_a_navigation_menu(self):
+        # The menu-completeness test above only checks menus that exist, so a
+        # page with no menu block at all passed it silently. Settings and the
+        # four guides shipped that way: once you landed on one, the only way
+        # back into the suite was the browser Back button (the guides did not
+        # even have a Home button, just a back-link to their own tool).
+        #
+        # setup.html is deliberately exempt. It is the first-run wizard, and
+        # WD.checkSetup() redirects to /setup whenever setup is incomplete --
+        # which is exactly when a user is on that page. A nav menu there would
+        # bounce straight back and look broken. It has its own way out
+        # ("Skip for now" per step, "Take Me to the Tools" at the end).
+        exempt = {"setup.html"}
+        missing = []
+        for page in sorted((ROOT / "web").glob("*.html")):
+            if page.name in exempt:
+                continue
+            html = page.read_text(encoding="utf-8")
+            if not re.search(r'<div class="menu-section">[^<]*Navigation</div>', html):
+                missing.append(page.name)
+        self.assertEqual(missing, [], f"pages with no navigation menu: {missing}")
+
+    def test_pages_with_a_menu_can_actually_open_it(self):
+        # A hamburger calls WD.toggleMenu, which lives in wd-shared.js. The
+        # guide pages never loaded that script, so adding a menu to them
+        # without the script would have rendered a button that silently did
+        # nothing -- the failure mode this repo keeps shipping.
+        broken = []
+        for page in sorted((ROOT / "web").glob("*.html")):
+            html = page.read_text(encoding="utf-8")
+            if "WD.toggleMenu(" not in html:
+                continue
+            if "assets/js/wd-shared.js" not in html:
+                broken.append(page.name)
+        self.assertEqual(broken, [], f"menu button without wd-shared.js: {broken}")
+
     def test_home_page_offers_every_tool(self):
         home = (ROOT / "web" / "home.html").read_text(encoding="utf-8")
         cards = set(re.findall(r'<a class="card[^"]*" href="(/[a-z0-9\-]*)"', home))

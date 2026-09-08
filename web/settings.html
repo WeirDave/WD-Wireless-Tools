@@ -127,6 +127,28 @@
 <div class="topbar">
   <div class="topbar-left">
     <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+    <div class="menu-wrap">
+      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'settingsMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <div id="settingsMenu" class="main-menu">
+        <div class="menu-section">&#9656; Navigation</div>
+        <a class="menu-item" href="/">⌂ Home</a>
+        <a class="menu-item" href="/cloud">· Cloud Manager</a>
+        <a class="menu-item" href="/walls">· Quick Walls</a>
+        <a class="menu-item" href="/report">· Report</a>
+        <a class="menu-item" href="/scale">· Scale</a>
+        <a class="menu-item" href="/plantrim">· PlanTrim</a>
+        <a class="menu-item" href="/aprename">· AP Labeler</a>
+        <a class="menu-item" href="/squirrel">· Squirrel</a>
+        <div class="menu-sep"></div>
+        <div class="menu-section">&#9656; Tools</div>
+        <a class="menu-item active" href="/settings">· Suite Settings</a>
+        <div class="menu-sep"></div>
+        <div class="menu-section">&#9656; Help</div>
+        <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+        <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug</a>
+      </div>
+    </div>
   </div>
   <div class="topbar-right">
     <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
