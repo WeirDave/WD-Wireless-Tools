@@ -276,19 +276,19 @@
       "propagationProperties": [
         {
           "band": "FIVE",
-          "attenuationFactor": 50.0,
+          "attenuationFactor": 83.33,
           "reflectionCoefficient": 0.405,
           "diffractionCoefficient": 11.0
         },
         {
           "band": "SIX",
-          "attenuationFactor": 50.0,
+          "attenuationFactor": 83.33,
           "reflectionCoefficient": 0.405,
           "diffractionCoefficient": 11.0
         },
         {
           "band": "TWO",
-          "attenuationFactor": 50.0,
+          "attenuationFactor": 83.33,
           "reflectionCoefficient": 0.405,
           "diffractionCoefficient": 11.0
         }
