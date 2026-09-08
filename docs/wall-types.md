@@ -16,121 +16,113 @@ a considered number should be written down here as well.
 
 ## Framery pods
 
-### Framery Walls — 30 dB, settled
-
-| | |
-|---|---|
-| Attenuation | 500 dB/m across 2.4, 5 and 6 GHz |
-| Thickness | 0.06 m (0.20 ft) → **30 dB effective** |
-| Reflection | 0.405 (steel panel) |
-| Height | **Auto — full height, deliberately** |
-| Colour | `#9C27B0` |
-
-Every current Framery pod — One Compact, One, Four, Six — uses identical
-exterior construction, verified against Framery's own tech-specs pages on
-2026-08-03: **powder-coated matt steel panels**, an acoustic core, and a
-sound-control laminated 4+4 mm glass door. Only size and weight differ, which
-is why one wall type covers the range.
-
-The 30 dB figure rests on three independent supports:
-
-- Framery's own **ISO 23351-1 Class A, 30 dB D<sub>S,A</sub>** speech reduction.
-  Acoustic and RF attenuation are not the same thing, but mass-loaded steel
-  construction reaching 30 dB acoustically typically lands in the 25–35 dB range
-  for Wi-Fi bands.
-- **Ekahau's own Elevator Shaft** type is 150 dB/m × 0.2 m = 30 dB — the closest
-  physical analogue in the stock library, a metal-lined enclosure.
-A third support originally given — a weighted perimeter of three steel sides at
-~35 dB plus a door at ~20 dB averaging ~31 dB — **no longer holds**, because the
-door has since been measured at 3 dB rather than 20. It is recorded here only so
-nobody re-derives 30 dB from it. The two supports above are unaffected: they are
-about steel, and the measurement went through the glass.
-
-That superseded figure is also why the split into two types matters. A single
-perimeter average was never the right shape for this object; it smeared a
-ten-to-one difference between the faces into one number.
-
-It arrived at 30 dB by correction, not first guess: v1.31.0 shipped 100 dB/m
-(~6 dB) and signal visibly bled through the pods; v1.31.1 raised it to 300 dB/m
-(~18 dB) on advice of 15–18 dB for 6 GHz; v1.32.4 raised it to 500 dB/m once
-the construction was confirmed as sheet steel rather than acoustic composite.
-
-### Framery Glass — 3 dB, measured
+### Framery Pod — 3 dB, measured on site
 
 | | |
 |---|---|
 | Attenuation | 50 dB/m across 2.4, 5 and 6 GHz |
 | Thickness | 0.06 m (0.20 ft) → **3 dB effective** |
-| Reflection | 0.6944 (Ekahau's own value for glazing) |
+| Reflection | 0.405 |
 | Height | **Auto — full height, deliberately** |
-| Colour | `#4FC3F7` |
+| Colour | `#9C27B0`, keyboard shortcut `[8]` |
+| Tracing | set Ekahau's predefined wall length to 3.28 ft (1 m) to follow a pod outline |
 
-**Measured on site with a NetAlly, September 2026: 2–3 dB through the closed
-pod.** Not inferred, not derived — read off the instrument with the door shut.
-This is stronger evidence than anything the earlier estimates had, and it is
-why the figure is so much lower than the number that preceded it.
+#### This is an effective enclosure value, not a material loss
 
-The thickness matches Framery Walls rather than the 8 mm pane, so the two draw
-as one continuous outline when tracing a pod. They differ in attenuation, which
-is the entire point, not in geometry.
+**Do not "correct" this back to 30 dB.** That has already happened once, and the
+reasoning for it lived only in a backup repository.
 
-#### Why the old ~20 dB figure was wrong
+Powder-coated sheet steel really is 30 dB or more as a *material*. The Framery
+pod as a *system* leaks far more than that implies — through the door seal, the
+ventilation, the cable pass-through, and the glass aperture. What Ekahau needs
+in a wall type is the loss a signal actually suffers crossing the enclosure, and
+that has now been measured rather than inferred.
 
-v1.32.4 put the door at 20–25 dB, citing WiFi Hotshots and Metro Wireless.
-Those sources measure **coated and low-E glass**. Framery's door is **uncoated**
-sound-control laminate, which is a different attenuation mechanism entirely: RF
-loss in glass is dominated by **conductive coatings**, not by lamination or
-thickness. A PVB acoustic interlayer does very little to RF; a low-E coating is
-a thin metal film and behaves like one. Uncoated laminate is low single digits,
-coated glass is 20–40 dB. The measurement lands exactly where the physics says
-it should.
+The 30 dB figure that stood until 2026-09-08 was reasoned from Framery's ISO
+23351-1 Class A acoustic rating of 30 dB D<sub>S,A</sub> plus Ekahau's Elevator
+Shaft analogue. Acoustic isolation and RF attenuation are not the same
+mechanism, and the inference was wrong by an order of magnitude.
 
-Do not re-derive the high number. It came from applying coated-glass data to
-uncoated glass.
+#### The measurements
 
-### Draw the pair separately, or the model is wrong in a way that looks fine
+Two pods, NetAlly, **2026-09-08**. Door shut for both readings, same building,
+same guest SSID, 5 GHz.
 
-**Panels on three faces, glass on the door.** This is not a nicety.
+| | Pod 1 | Pod 2 |
+|---|---|---|
+| Door orientation | facing the AP | facing away, pod cornered against a wall |
+| Distance to AP | ~20 ft (AP at 10 ft AFF) | ~27 ft (12 ft out, 24 ft to the side) |
+| Signal average | **−56 dBm** | **−61 dBm** |
+| Noise | −90 dBm | −90 dBm |
+| SNR | 34 dB | 29 dB |
 
-Ekahau cannot vary attenuation across the faces of one wall type — attenuation
-belongs to the type and a segment references exactly one — so the split is the
-only way to say that a pod has one face that is ten times less lossy than the
-others. Drawn correctly, the ray tracer finds the door path on its own, which is
-what physically happens and what the NetAlly measured.
+Five decibels apart, of which roughly three is the extra distance. So **door
+orientation costs about 2 dB**, and total effective enclosure loss sits in the
+**2–5 dB** range. The noise floor is identical in both, so nothing environmental
+is confusing the comparison.
 
-Draw all four faces as one uniform 30 dB perimeter and the model predicts a dead
-box. That is demonstrably wrong, and it is wrong in the worst way: it looks
-entirely plausible on a heat map.
+#### Why one type and not two
 
-### The limitation Ekahau cannot model, and what to do about it
+A previous version shipped `Framery Walls` at 30 dB and `Framery Glass` at 3 dB,
+on the reasoning that the faces are different materials and Ekahau cannot vary
+attenuation within one type.
 
-With the door measured at only 3 dB, this is now unambiguously the dominant
-real-world problem with a pod — not the walls.
+The measurements retire that. A pod with its glass **facing away** from the AP,
+cornered against a wall, still only lost about 2 dB more than one facing it —
+nothing like the ten-to-one difference a 30/3 split predicts. The enclosure
+leaks a couple of decibels whichever face you present, because reflected energy
+illuminates the glass aperture even with no line of sight to it. One type, one
+number, and no need to decide which face is which while tracing.
 
-Framery pods have powder-coated steel on the **roof and base** as well as the
-walls. Ekahau's wall model is 2D — vertical planes, no ceiling material — so
-**an AP mounted directly above a pod will always appear to cover its interior**,
-whatever the wall values say, because the simulation does not know there is a
-metal ceiling in the way.
+#### Where this value is valid, and where it is not
 
-This is why both Framery types are **full height** and are exempted from the
-partial-height audit in `tools/wall_audit.py`. Height-limiting them would let a
-ray from a ceiling AP drop in over the top at no loss at all — the opposite of
-what a steel roof does. Over-attenuating the square metre or two of floor the
-pod stands on is much the cheaper error.
+Validated in **open-plan layouts, with an AP within roughly 25 ft, and a
+reflective path to the glass door.**
 
-It is deliberately the opposite call from shelving: a long, open-topped run with
-a large footprint should be height-limited; a small sealed enclosure should not.
+**Not validated** where the glass faces a solid wall or a dead alcove. Every pod
+in the building measured was sited with APs facing the glass side, so there is
+no true no-path example in the data. A pod whose door faces into a corner with
+no reflective route back to an AP could plausibly be worse, and nothing here
+proves otherwise. Measure that case before trusting the model on it.
 
-**Signal budget.** Through a steel wall or through the glass door, usable
-coverage reaches roughly 2 m inside the pod. With an AP directly above,
-effectively nothing gets in. The fix is a wired drop or repositioning an AP for
-line-of-sight through a side or the door — not tuning power or channels.
+#### The limitation Ekahau cannot model, and what to do about it
 
-**Two things Ekahau's format cannot store**, so they are conventions rather than
-data: the *predefined wall length* of 3.28 ft (1 m) used when tracing a pod
-outline is an Ekahau UI setting, not a field in the `.esx`; and there is no
-description field on a wall type, which is the reason this document exists.
+**This is the most consequential thing on this page**, and a low wall value makes
+it more important rather than less: the map will now look even greener over pods
+than it did.
+
+Framery pods have powder-coated steel on the **roof and base**. Ekahau's wall
+model is 2D — vertical planes, no ceiling material — so **an AP mounted directly
+above a pod will always predict coverage it cannot deliver**, whatever the wall
+value says, because the simulation does not know there is a steel roof in the
+way.
+
+This is why the type is **full height** and is exempted from the partial-height
+audit in `tools/wall_audit.py`. Height-limiting it would let a ray from a ceiling
+AP drop in over the top at no loss at all, which is the opposite of what a steel
+roof does. Over-attenuating the square metre or two of floor the pod stands on is
+much the cheaper error, and it is deliberately the opposite call from shelving:
+a long open-topped run with a large footprint should be height-limited; a small
+sealed enclosure should not.
+
+The fix for a pod that will not cover is a wired drop, or repositioning an AP for
+a path in through the door — not tuning power or channels.
+
+#### Superseded values, recorded so they are not rebuilt
+
+| Version | Value | Why it changed |
+|---|---|---|
+| v1.31.0 | 100 dB/m (~6 dB) | signal visibly bled through the pods |
+| v1.31.1 | 300 dB/m (~18 dB) | advice of 15–18 dB for 6 GHz |
+| v1.32.4 | 500 dB/m (~30 dB) | construction confirmed as sheet steel; inferred from the acoustic rating |
+| v2.46.0 | split 30 dB / 4 dB | faces are different materials; glass figure derived, not measured |
+| v2.47.0 | split 30 dB / 3 dB | door measured at 2–3 dB |
+| **v2.48.0** | **one type, 3 dB** | **whole enclosure measured, both door orientations** |
+
+A note on the ~20 dB glass figure that appeared in v1.32.4's reasoning: it cited
+sources measuring **coated and low-E** glass, and Framery's door is **uncoated**
+sound-control laminate. RF loss in glass is dominated by conductive coatings,
+not by lamination or thickness. Do not re-derive from those sources.
 
 ---
 
