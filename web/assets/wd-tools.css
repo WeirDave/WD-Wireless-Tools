@@ -2480,6 +2480,10 @@ body.tool-cloud .toolbar input.search:focus {
 /* The actionable one is a button, so it has to read like one - the badge that
    only reports a state and the badge that does something about it sit side by
    side in the same table. */
+.rep-overview-note {
+  margin-top: 3px; font-size: 11px; opacity: 0.75; font-style: italic;
+}
+
 .stale-badge.is-action {
   cursor: pointer;
   font-family: inherit;

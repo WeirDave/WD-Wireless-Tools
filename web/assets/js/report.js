@@ -794,8 +794,8 @@
     // A foot is a small enough step that one decimal is plenty; a metre is
     // three feet, so metric needs two to say the same thing. 3.048 m is
     // "10 ft" or "3.05 m", never a bare "3 m".
-    if (unitsOf(opts) === 'meters') return fmt(meters, digits == null ? 2 : digits) + ' m';
-    return fmt(meters * M_TO_FT, digits == null ? 1 : digits) + ' ft';
+    if (unitsOf(opts) === 'meters') return fmtFixed(meters, digits == null ? 2 : digits) + ' m';
+    return fmtFixed(meters * M_TO_FT, digits == null ? 1 : digits) + ' ft';
   }
 
   function unitsOf(opts) {
@@ -807,6 +807,9 @@
     return 'feet';
   }
   function fmt(n, dp) { return Number(n).toFixed(dp).replace(/\.?0+$/, ''); }
+  // Same, but keeps the decimal it was asked for. A column of heights reads as
+  // a column when they all have one.
+  function fmtFixed(n, dp) { return Number(n).toFixed(dp); }
   function formatReadableDate(d) {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   }
@@ -1947,7 +1950,7 @@
     return { main: main, sub: extra.join(' · ') };
   }
 
-  function buildAntennaMarkers(aps, scaleW, scaleH, opts, ctx, cellBounds) {
+  function buildAntennaMarkers(aps, scaleW, scaleH, opts, ctx, cellBounds, stats) {
     var minDim = Math.min(scaleW, scaleH);
     var edgeMargin = minDim * 0.06;
     var sw = minDim * 0.0025;
@@ -1969,11 +1972,51 @@
         return d !== 0 ? d : a.location.coord.x - b.location.coord.x;
       });
 
+    /* What makes a pill wide is the second line, not the number: "42" is two
+       characters and "Catalyst 9166 · 9.8 ft" is twenty-two, so a pill carrying
+       model and height is about ten times the width of one carrying the number.
+       On an open floor that is fine. Where six APs sit within a pill's width of
+       each other it is not: there is no arrangement of six room-wide boxes that
+       leaves all six readable, so no amount of cleverness in the placement
+       search below can rescue it.
+
+       So in a crowded neighbourhood the marker keeps its number and drops the
+       rest. The number is what ties it to the AP table and to the name key
+       page, both of which carry the model and the height in full. The
+       reduction is counted and said under the map rather than done quietly. */
+    var crowdRadius = minDim * 0.075;
+    var crowded = {};
+    var reduced = 0;
+    aps.forEach(function (ap) {
+      if (!ap.location || !ap.location.coord) return;
+      var near = 0;
+      aps.forEach(function (other) {
+        if (other === ap || !other.location || !other.location.coord) return;
+        var dx = other.location.coord.x - ap.location.coord.x;
+        var dy = other.location.coord.y - ap.location.coord.y;
+        if (Math.sqrt(dx * dx + dy * dy) < crowdRadius) near++;
+      });
+      if (near >= 2) crowded[ap.id] = true;
+    });
+
     // Labels already placed, in plan units. A label is never dropped -- on an
     // installer's map an unlabelled AP is worse than a crowded one -- so when
     // every near position is taken the pill moves further out and a leader line
     // is drawn back to the dot.
     var placed = [];
+
+    /* Every dot's own square is reserved before any label is placed, not as
+       each marker is reached. Reserving them as we went meant a label could be
+       put down on ground where a later AP's dot was going to be drawn - legal
+       at the time, covered by the time the map was finished. In a tight group
+       that is what buried two of the numbers: the pills did not overlap each
+       other at all, they were behind dots. */
+    aps.forEach(function (ap) {
+      if (!ap.location || !ap.location.coord) return;
+      placed.push({ x: ap.location.coord.x - dotSize / 2,
+                    y: ap.location.coord.y - dotSize / 2,
+                    w: dotSize, h: dotSize });
+    });
     function collides(r) {
       return placed.some(function (q) {
         return r.x < q.x + q.w && r.x + r.w > q.x && r.y < q.y + q.h && r.y + r.h > q.y;
@@ -1993,6 +2036,7 @@
       var parts = apMarkerLabel(ap, opts, ctx);
       var label = parts.main;
       var sub = parts.sub;
+      if (sub && crowded[ap.id]) { sub = ''; reduced++; }
       // The old rule shrank the type in proportion to the name, which put a
       // ten-character AP name at roughly 3pt on a printed page -- unreadable,
       // and on this report the name is the whole point. Shrink only to a floor
@@ -2045,6 +2089,20 @@
       push(-(far + pillW), -boxH / 2, true);
       push(-pillW / 2, preferAbove ? far : -(far + boxH), true);
 
+      /* Rings of positions around the dot, widening. Overlapping two labels
+         makes both unreadable, so it is worth walking a long way out first -
+         a leader line costs a reader one glance, a covered label costs them the
+         AP. Sixteen angles over three rings is a few hundred rectangle tests
+         for a floor of this size, which is nothing. */
+      for (var ring = 1; ring <= 3; ring++) {
+        var rad = far + ring * (boxH * 1.6 + gap);
+        for (var a = 0; a < 16; a++) {
+          var ang = (a / 16) * Math.PI * 2 + (preferAbove ? Math.PI : 0);
+          push(Math.cos(ang) * rad - pillW / 2,
+               Math.sin(ang) * rad - boxH / 2, true);
+        }
+      }
+
       var chosen = null;
       for (var i = 0; i < cands.length; i++) {
         var rect = { x: c.x + cands[i].x, y: c.y + cands[i].y, w: pillW, h: boxH };
@@ -2056,8 +2114,6 @@
         chosen = { x: -pillW / 2, y: vFirst, lead: true };
         placed.push({ x: c.x + chosen.x, y: c.y + chosen.y, w: pillW, h: boxH });
       }
-      // The dot's own footprint is reserved so later labels do not sit on it.
-      placed.push({ x: c.x - dotSize / 2, y: c.y - dotSize / 2, w: dotSize, h: dotSize });
 
       markers += '<g class="' + cls + '" transform="translate(' + c.x + ',' + c.y + ')">';
       if (isDirectional && showCones) {
@@ -2086,6 +2142,7 @@
       }
       markers += '</g>';
     });
+    if (stats) stats.reduced = reduced;
     return markers;
   }
 
@@ -2148,13 +2205,22 @@
       }
     }
 
-    var markers = buildAntennaMarkers(aps, W, H, opts, ctx);
+    var stats = {};
+    var markers = buildAntennaMarkers(aps, W, H, opts, ctx, null, stats);
+    // Said out loud, next to the key, so nobody wonders why one marker carries
+    // a model and its neighbour does not.
+    var note = stats.reduced
+      ? '<div class="rep-overview-note">' + stats.reduced + ' marker'
+        + (stats.reduced === 1 ? '' : 's')
+        + ' in tight groups show the number only — model and mount height for '
+        + 'every AP are in the AP table.</div>'
+      : '';
     return '<div class="rep-overview">'
       + '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
       +   '<img src="' + url + '" alt="Floor plan">'
       +   '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + markers + '</svg>'
       + '</div>'
-      + '<div class="rep-overview-key">' + keyHtml + '</div>'
+      + '<div class="rep-overview-key">' + keyHtml + note + '</div>'
       + '</div>';
   }
 
