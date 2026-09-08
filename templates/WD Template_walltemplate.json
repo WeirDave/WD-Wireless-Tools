@@ -270,8 +270,8 @@
       "keybindNumber": 9
     },
     {
-      "name": "Framery Boxes",
-      "key": "FrameryBoxes",
+      "name": "Framery Walls",
+      "key": "FrameryWalls",
       "color": "#9C27B0",
       "propagationProperties": [
         {
@@ -298,6 +298,35 @@
       "id": "a7c9e1b2-6f4d-4b18-9d3e-2c8a7b6d1e42",
       "status": "CREATED",
       "keybindNumber": 8
+    },
+    {
+      "name": "Framery Glass",
+      "key": "FrameryGlass",
+      "color": "#4FC3F7",
+      "propagationProperties": [
+        {
+          "band": "FIVE",
+          "attenuationFactor": 333.33,
+          "reflectionCoefficient": 0.6944,
+          "diffractionCoefficient": 11.0
+        },
+        {
+          "band": "SIX",
+          "attenuationFactor": 416.67,
+          "reflectionCoefficient": 0.6944,
+          "diffractionCoefficient": 11.0
+        },
+        {
+          "band": "TWO",
+          "attenuationFactor": 250.0,
+          "reflectionCoefficient": 0.6944,
+          "diffractionCoefficient": 11.0
+        }
+      ],
+      "thickness": 0.012,
+      "lowerEdge": 0,
+      "id": "b8d1f3a4-27e6-4c59-8a71-3f4b9c2e6d15",
+      "status": "CREATED"
     },
     {
       "name": "Marble",

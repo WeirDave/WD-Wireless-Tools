@@ -29,6 +29,9 @@ PARTIAL_HEIGHT = re.compile(
 NO_HEIGHT_ON_PURPose = {
     "Warehouse Rack Wall": "name states no height and racking varies too much "
                            "to guess; the project audit reports it instead",
+    "Framery Walls": "a sealed pod with a metal roof and floor - height-limiting "
+                     "it would let a ceiling AP drop in over the top at no loss",
+    "Framery Glass": "the door of the same sealed pod; same reasoning",
 }
 
 FT = 0.3048
