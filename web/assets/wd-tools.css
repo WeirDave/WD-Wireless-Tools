@@ -7607,14 +7607,23 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 
 /* ── Compass Reference Page ────────────────────────────────────────── */
 .rep-compass-page { padding: 22px 28px; }
-.rep-compass-body {
-  display: flex; gap: 28px; align-items: flex-start;
-}
+/* The rose sits in the text rather than beside it.
+
+   It used to be one flex column of its own with the prose in a second column,
+   which cost the text about a third of the printable width for the whole
+   height of the page - and the ~5in of column below the rose was dead space
+   the prose could not reach. Narrow measure plus dead space ran the page over
+   by six lines onto a second sheet.
+
+   Floating it gives the text the full width of the sheet everywhere the rose
+   is not, which is most of the page. */
+.rep-compass-body { display: block; }
+.rep-compass-body::after { content: ''; display: block; clear: both; }
 .rep-compass-left {
-  flex: 0 0 260px; text-align: center;
+  float: left; width: 250px; margin: 0 22px 12px 0; text-align: center;
 }
-.rep-compass-right { flex: 1; min-width: 0; }
-.rep-comp-rose { width: 260px; height: 260px; }
+.rep-compass-right { min-width: 0; }
+.rep-comp-rose { width: 250px; height: 250px; }
 .rep-comp-ring { fill: none; stroke: #333; stroke-width: 1.5; }
 .rep-comp-center { fill: #333; }
 .rep-comp-major { stroke: #333; stroke-width: 2; }
@@ -7672,9 +7681,40 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 
 @media print {
   .rep-compass-page { page-break-before: always; break-before: page; }
-  .rep-compass-body { gap: 20px; }
-  .rep-compass-left { flex: 0 0 220px; }
-  .rep-comp-rose { width: 220px; height: 220px; }
+  .rep-compass-left { width: 210px; margin: 0 18px 10px 0; }
+  .rep-comp-rose { width: 210px; height: 210px; }
+  /* A heading stranded at the foot of a column with its list overleaf is the
+     same fault as the page break this whole change is about, one scale down. */
+  .rep-compass-sect { break-inside: avoid; page-break-inside: avoid; }
+
+  /* Turned onto the long edge the sheet is 10in wide, and one measure that
+     wide is unreadable - about 150 characters a line. Two columns put the line
+     length back roughly where portrait has it, and use the height the short
+     sheet does not have. A capped, centred single measure was tried first: it
+     read well and still needed two sheets, because a landscape sheet is 2.7in
+     shorter and the content has to go somewhere. */
+  .rep-compass-page.is-landscape .rep-compass-body { columns: 2; column-gap: 30px; }
+  /* Smaller than the portrait rose on purpose. A landscape sheet is short -
+     7.27in of printable height on A4, against 10in portrait - and the rose sits
+     at the head of a column where every point it takes is a point of text
+     pushed toward a second sheet. At 210px the page cleared Letter landscape by
+     5pt and would have run over on A4. */
+  .rep-compass-page.is-landscape .rep-compass-left {
+    float: none; margin: 0 auto 8px; break-inside: avoid;
+  }
+  .rep-compass-page.is-landscape .rep-comp-rose { width: 155px; height: 155px; }
+  .rep-compass-page.is-landscape .rep-compass-caption { font-size: 7.5pt; }
+  /* Two columns of half a landscape sheet is 1080pt of column against roughly
+     1000pt of content, so a section that refuses to split cannot be placed and
+     is thrown to a second sheet - which is the fault this whole change exists
+     to fix. Keeping a heading with the start of its list is enough; the list
+     itself may break. */
+  .rep-compass-page.is-landscape .rep-compass-sect {
+    break-inside: auto; page-break-inside: auto;
+  }
+  .rep-compass-page.is-landscape .rep-compass-sect h3 {
+    break-after: avoid; page-break-after: avoid;
+  }
   .rep-compass-sect h3 { font-size: 10pt; color: #111 !important; }
   .rep-compass-sect p,
   .rep-compass-sect ul { font-size: 9pt; color: #222 !important; }
