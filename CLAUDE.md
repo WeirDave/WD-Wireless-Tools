@@ -12,7 +12,8 @@ re-discovered (or re-explained) each new chat.
 2. **Also manually update these two places** — they quote versions in prose
    and are NOT auto-synced from versions.json:
    - `README.md` — the `WIRELESS TOOLS  vX.X.X` example banner, and the
-     Cloud Manager version badge in the tool table near the top.
+     version badge of **every tool you touched** in the table near the top
+     (not just Cloud Manager — the test checks all seven).
    - `web/pages/hosted-cloud-stub.html` — the `<div class="stub-ver">`
      line.
    A real test enforces this:
