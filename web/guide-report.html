@@ -15,6 +15,28 @@
 <body class="tool-guide">
 
 <div class="topbar guide-topbar">
+  <div class="menu-wrap">
+    <button class="hamburger-btn" onclick="WD.toggleMenu(event,'guideReportMenu')" title="Menu"><span></span><span></span><span></span></button>
+    <div id="guideReportMenu" class="main-menu">
+      <div class="menu-section">&#9656; Navigation</div>
+      <a class="menu-item" href="/">⌂ Home</a>
+      <a class="menu-item" href="/cloud">· Cloud Manager</a>
+      <a class="menu-item" href="/walls">· Quick Walls</a>
+      <a class="menu-item" href="/report">· Report</a>
+      <a class="menu-item" href="/scale">· Scale</a>
+      <a class="menu-item" href="/plantrim">· PlanTrim</a>
+      <a class="menu-item" href="/aprename">· AP Labeler</a>
+      <a class="menu-item" href="/squirrel">· Squirrel</a>
+      <div class="menu-sep"></div>
+      <div class="menu-section">&#9656; Tools</div>
+      <a class="menu-item" href="/settings">· Suite Settings</a>
+      <div class="menu-sep"></div>
+      <div class="menu-section">&#9656; Help</div>
+      <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+      <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+      <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug</a>
+    </div>
+  </div>
   <h1><span>WD</span> Report — User Guide</h1>
   <a class="back-link" href="/report">Back to Report</a>
 </div>
@@ -120,5 +142,6 @@
 
 </div>
 
+<script src="/assets/js/wd-shared.js"></script>
 </body>
 </html>
