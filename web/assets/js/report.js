@@ -77,7 +77,12 @@
       else delete reportSettings[id];
     });
     includeRevisionInName = rep.include_revision_in_filename !== false;
+    // A page turned on purpose should still be turned tomorrow.
+    if (rep.page_orient && typeof rep.page_orient === 'object') {
+      savedPageOrient = rep.page_orient;
+    }
   }
+  var savedPageOrient = {};
 
   function fetchSettings() {
     return WD.api('settings/get').then(function (r) {
@@ -1840,6 +1845,11 @@
     if (currentOpts.segCols > 0) opts.segCols = currentOpts.segCols;
     if (currentOpts.segRows > 0) opts.segRows = currentOpts.segRows;
     if (currentOpts.cropBoxes) opts.cropBoxes = currentOpts.cropBoxes;
+    // Whatever was saved, with anything changed this session on top.
+    if (!currentOpts.pageOrient) {
+      currentOpts.pageOrient = Object.assign({}, savedPageOrient);
+    }
+    opts.pageOrient = currentOpts.pageOrient;
     return opts;
   }
 
@@ -1921,6 +1931,8 @@
       floorPlanForAp: floorPlanForAp,
     };
     host.innerHTML = r.render(aps, opts, ctx);
+    // Every report, not only the one whose postRender happened to ask.
+    applyPageOrientation(host, opts);
     document.title = reportDocTitle();
     if (typeof r.postRender === 'function') {
       try {
@@ -2491,9 +2503,11 @@
     });
     var count = sorted.length + ' AP' + (sorted.length === 1 ? '' : 's');
     var fid = WD.escAttr(fp.id);
-    var out = '<section class="rep-floor-section rep-placement-page" data-floor-idx="' + (floorIdx % 5) + '"'
-      + ' data-floor-id="' + fid + '">'
-      + orientPickerHtml(fp.id, opts)
+    var out = '<section class="rep-floor-section rep-placement-page rep-oriented"'
+      + ' data-floor-idx="' + (floorIdx % 5) + '"'
+      + ' data-floor-id="' + fid + '"'
+      + ' data-page-key="placement:' + fid + '" data-page-kind="plan">'
+      + orientPickerHtml('placement:' + fp.id, opts)
       + '<div class="rep-placement-sheet">';
     if (heading) {
       out += '<div class="rep-seg-floor rep-placement-head">' + WD.esc(heading)
@@ -2508,16 +2522,48 @@
     return out + '</div></section>';
   }
 
-  function floorOrientMode(fpId, opts) {
+  /* Orientation belongs to a page, not to a floor.
+
+     It started on the placement map, keyed by floor id, because that was the
+     only page that could want turning. Every page can want it: a thirteen-
+     column table wants landscape on a sheet where the map beside it wants
+     portrait. So the key is now whatever identifies the page - "cover",
+     "loc-table", "key:<floor>", "placement:<floor>" - and the map is the same
+     map, which is why settings saved before this still load. */
+  function pageOrientMode(pageKey, opts) {
     var map = opts && opts.pageOrient;
-    return (map && map[fpId]) || 'auto';
+    return (map && map[pageKey]) || 'auto';
+  }
+  var floorOrientMode = pageOrientMode;   // the name the placement map used
+
+  /* What a page wants when nobody has said. Decided per page type, because the
+     question is different for each: a plan asks which way round it prints
+     bigger, a table asks whether its columns fit across a portrait sheet.
+
+     Anything not listed stays portrait, which is the safe default - a page that
+     fitted before this change still fits. */
+  var WIDE_TABLE_COLUMNS = 9;
+
+  function autoOrientationFor(page) {
+    var kind = page.getAttribute('data-page-kind') || '';
+
+    if (kind === 'plan') return null;      // the plan pass below decides
+
+    if (kind === 'table') {
+      // Columns, not pixels: the screen width of a table says nothing about
+      // how it prints, and this has to hold before the report is on paper.
+      var head = page.querySelector('thead tr');
+      var cols = head ? head.children.length : 0;
+      return cols >= WIDE_TABLE_COLUMNS ? 'landscape' : 'portrait';
+    }
+    return 'portrait';
   }
 
   function orientPickerHtml(fpId, opts) {
-    var mode = floorOrientMode(fpId, opts);
+    var mode = pageOrientMode(fpId, opts);
     var btn = function (val, label) {
       return '<button type="button" class="rep-orient-btn' + (mode === val ? ' is-on' : '') + '"'
-        + ' onclick="setFloorOrient(\'' + WD.escJsStr(fpId) + '\',\'' + val + '\')">' + label + '</button>';
+        + ' onclick="setPageOrient(\'' + WD.escJsStr(fpId) + '\',\'' + val + '\')">' + label + '</button>';
     };
     return '<div class="rep-orient noprint" data-for="' + WD.escAttr(fpId) + '">'
       + '<span class="rep-orient-label">Page</span>'
@@ -2525,7 +2571,7 @@
       + '<span class="rep-orient-now"></span></div>';
   }
 
-  window.setFloorOrient = function (fpId, mode) {
+  window.setPageOrient = function (fpId, mode) {
     if (!currentOpts.pageOrient) currentOpts.pageOrient = {};
     currentOpts.pageOrient[fpId] = mode;
     var host = document.getElementById('reportCanvas');
@@ -2540,8 +2586,35 @@
     // Sizing is the only thing orientation changes, so recompute rather than
     // rebuilding the report and losing the reader's scroll position.
     sizePlacementPlansForPrint(host, currentOpts);
+    applyPageOrientation(host, currentOpts);
+    persistPageOrient();
     configureDirty = true;
   };
+  window.setFloorOrient = window.setPageOrient;   // the older name
+
+  /* Kept with the rest of the report settings so a document that needed one
+     portrait page in a landscape run does not need setting up again next time.
+     Failing to save is not worth interrupting anyone over. */
+  function persistPageOrient() {
+    if (!settingsAvailable) return;
+    WD.api('settings/update', { report: { page_orient: currentOpts.pageOrient || {} } })
+      .catch(function () {});
+  }
+
+  /* Turn every page that has an opinion, then let the plan pass size the maps
+     inside whichever way round they ended up. */
+  function applyPageOrientation(host, opts) {
+    var pages = host.querySelectorAll('[data-page-key]');
+    for (var i = 0; i < pages.length; i++) {
+      var page = pages[i];
+      var mode = pageOrientMode(page.getAttribute('data-page-key'), opts || {});
+      var want = mode === 'auto' ? autoOrientationFor(page) : mode;
+      if (want === null) continue;         // a plan; sized separately
+      page.classList.toggle('is-landscape', want === 'landscape');
+      var now = page.querySelector('.rep-orient-now');
+      if (now) now.textContent = (mode === 'auto' ? 'auto \u2192 ' : '') + want;
+    }
+  }
 
   function placementKeyHtml(opts, aps) {
     var bits = [keySwatch('omni', aps) + ' Access point'];
@@ -2641,8 +2714,10 @@
         + '<td class="rep-key-name">' + WD.esc(full) + '</td></tr>';
     }).join('');
 
-    var out = '<section class="rep-floor-section rep-key-page" data-floor-idx="'
-      + (floorIdx % 5) + '">';
+    var out = '<section class="rep-floor-section rep-key-page rep-oriented"'
+      + ' data-page-key="key:' + WD.escAttr(fp.id) + '" data-page-kind="table"'
+      + ' data-floor-idx="' + (floorIdx % 5) + '">'
+      + orientPickerHtml('key:' + fp.id, opts);
     if (heading) {
       out += '<div class="rep-seg-floor rep-key-head">' + WD.esc(heading)
         + '<span class="rep-placement-sub">' + WD.esc((fp.name || '') + ' \u00b7 ' + count)
@@ -2759,7 +2834,7 @@
       var turned = Math.min(rotW / ratio, rotH);       // printed height, turned
       var wants = turned > upright * ROTATE_GAIN;
 
-      var mode = floorOrientMode(page.getAttribute('data-floor-id'), opts || {});
+      var mode = pageOrientMode(page.getAttribute('data-page-key'), opts || {});
       var rotate = mode === 'landscape' ? true : mode === 'portrait' ? false : wants;
 
       var boxW = rotate ? rotW : upW;
@@ -3902,7 +3977,9 @@
       + ticks + degLabels + needle + labels
       + '</svg>';
 
-    return '<section class="rep-floor-section rep-compass-page">'
+    return '<section class="rep-floor-section rep-compass-page rep-oriented"'
+      + ' data-page-key="compass" data-page-kind="page">'
+      + orientPickerHtml('compass', opts)
       + '<h2 class="rep-floor-title">Compass &amp; Antenna Alignment Reference</h2>'
       + '<div class="rep-compass-body">'
       +   '<div class="rep-compass-left">'
@@ -4294,7 +4371,14 @@
         + (col.weight * 100 / printWeight).toFixed(2) + '%">';
     }).join('') + '</colgroup>';
 
-    return '<table class="rep-ap-table rep-loc-table">'
+    // One key per floor. Sharing a single "loc-table" key meant turning one
+    // floor's table turned every other floor's too, which is the opposite of
+    // what per-page orientation is for.
+    var locKey = 'loc-table:' + ((fp && fp.id) || 'all');
+    return '<section class="rep-loc-page rep-oriented"'
+      + ' data-page-key="' + WD.escAttr(locKey) + '" data-page-kind="table">'
+      + orientPickerHtml(locKey, opts)
+      + '<table class="rep-ap-table rep-loc-table">'
       + colgroup
       + '<thead><tr>'
       + '<th class="rep-num">#</th><th>AP name</th><th>Vendor</th><th>Model</th>'
@@ -4309,7 +4393,7 @@
       + aps.length + ' access point' + (aps.length === 1 ? '' : 's') + ' on this floor'
       + (oneBuilding && tableBuilding && tableBuilding !== '—'
           ? ' \u00b7 ' + WD.esc(tableBuilding) : '')
-      + '</td></tr></tfoot></table>';
+      + '</td></tr></tfoot></table></section>';
   }
 
   function renderApNameAudit(aps, ctx) {
@@ -4725,6 +4809,7 @@
       ],
       render: renderPlacementReport,
       postRender: function (host, opts) {
+        applyPageOrientation(host, opts);
         sizePlacementPlansForPrint(host, opts);
         if (opts.segmented) applyAntennaSegmentCrop.apply(null, arguments);
       },
