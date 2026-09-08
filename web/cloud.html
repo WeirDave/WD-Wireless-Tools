@@ -503,7 +503,11 @@
     <h4>What about dates?</h4>
     <p>The date shown is when someone last edited the project inside Ekahau, not when the file was copied to your computer. Two copies with the same date and time are the same version. Different dates just mean someone kept working on one copy after the other.</p>
 
-    <p>When a matched pair has different edit dates, you'll see a badge: <span class="stale-badge stale-cloud">&#11015; Cloud newer</span> means the cloud copy was edited after the local one (download to get the latest), and <span class="stale-badge stale-local">&#11014; Local newer</span> means you have edits locally that haven't been uploaded yet.</p>
+    <p>When a matched pair has different edit dates, you'll see a badge. <span class="stale-badge stale-cloud is-action">&#11015; Cloud newer &middot; download</span> means the cloud copy was edited after your local one &mdash; click it to download the cloud copy over your local file. It shows you both dates first, and keeps your current file beside it as a <code>.previous-</code> copy, so you can go back.</p>
+
+    <p>On a pair we only guessed at &mdash; <span class="match-badge code">~ Same site</span> or <span class="match-badge fuzzy">? Similar name</span> &mdash; the badge reads <span class="stale-badge stale-cloud">&#11015; Cloud newer</span> with nothing to click. Overwriting a file on a guess about its name is how you lose the wrong project. Link the pair yourself with the &#128279; button to confirm it, and the download appears.</p>
+
+    <p><span class="stale-badge stale-local">&#11014; Local newer</span> means your local copy was edited more recently. There is nothing to click here: Ekahau's upload creates a new cloud project rather than replacing an existing one, so pushing your changes up would lose the project's sharing, tags and version history. Open the project in Ekahau and save it to the cloud from there.</p>
 
     <h4>When we get it wrong</h4>
     <ul>

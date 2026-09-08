@@ -27,7 +27,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 
 <table>
 <tr>
-<td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.17.1 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.18.0 · Desktop</sub></td>
 <td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"></a><br><b>Quick Walls</b><br><sub>v7.47 · Desktop + Web</sub></td>
 <td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.26.0 · Desktop</sub></td>
 <td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"></a><br><b>Scale</b><br><sub>v1.5 · Desktop + Web</sub></td>
@@ -202,7 +202,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.40.0
+WIRELESS TOOLS  v2.41.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.

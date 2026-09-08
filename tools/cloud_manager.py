@@ -2113,19 +2113,25 @@ class CloudManager:
             return {"error": str(e)}
 
     def verify_replace_local(self, project_id, local_path, progress_cb=None):
-        """Download the cloud project's current content and overwrite the
-        local .esx. Used by the Verify button on blue "Name matches" rows —
-        after replacement, both files share the same internal project.json.id
-        so the pair upgrades to green "Same file" on the next refresh.
+        """Download the cloud project's current content over the local .esx.
+
+        This is what "Cloud newer" means in practice: the cloud copy was edited
+        after the local one, and this brings the local file up to date. After it
+        runs both files carry the same internal project.json.id, so a pair that
+        matched only by name upgrades to "Same file" on the next refresh.
+
+        The previous local file is kept alongside as
+        "<name>.previous-<timestamp>.esx" - the same convention the updater uses
+        for an install - because this overwrites someone's work and an
+        atomic replace still leaves nothing to go back to.
 
         Safe direction only: refuses if local's internal modifiedAt is
-        meaningfully newer than cloud's — that case needs a destructive
-        delete+reupload flow that would also lose sharing/tags/versions,
-        and we haven't shipped that direction yet.
+        meaningfully newer than cloud's. Sending local up to an existing cloud
+        project is not implemented; the upload flow only creates new projects.
 
-        Returns {"ok": True, "path": ..., "newProjectId": ...} on success,
-        {"error": "local_newer", ...} when the safe direction doesn't apply,
-        or {"error": <msg>} on other failures."""
+        Returns {"ok": True, "path", "backup", "localMtime", "cloudMtime", ...}
+        on success, {"error": "local_newer", ...} when the safe direction does
+        not apply, or {"error": <msg>} on other failures."""
         if not self._ensure():
             return {"error": "Not connected"}
         base = self.config.get("output_dir", "")
@@ -2150,10 +2156,20 @@ class CloudManager:
 
 
         try:
-            proj = self.api.get(f"{API_BASE}/{project_id}").json()
+            resp = self.api.get(f"{API_BASE}/{project_id}")
+            if resp.status_code in (401, 403):
+                return {"error": "Ekahau Cloud sign-in has expired. "
+                                 "Sign in again in your browser, then reconnect."}
+            if resp.status_code == 404:
+                return {"error": "That project is no longer in Ekahau Cloud - "
+                                 "it may have been deleted or unshared. "
+                                 "Nothing was changed locally."}
+            proj = resp.json()
         except Exception as e:
-            return {"error": f"Cloud project lookup failed: {e}"}
+            return {"error": f"Could not reach Ekahau Cloud: {e}. "
+                             "Nothing was changed locally."}
         cloud_mtime = _parse_cloud_mtime(proj)
+        cloud_name = proj.get("name") or proj.get("title") or ""
 
 
         _NEWER_TOLERANCE_S = 60
@@ -2174,11 +2190,26 @@ class CloudManager:
         try:
             result = self.api.download_project(project_id, progress_cb=progress_cb)
         except Exception as e:
-            return {"error": f"Download failed: {e}"}
+            return {"error": f"Download failed: {e}. Nothing was changed locally."}
         if isinstance(result, dict) and result.get("error"):
             return result
         esx_bytes = result["esx"]
 
+
+        # Keep the copy being replaced. os.replace is atomic, so the file is
+        # never half-written - but atomic is not the same as recoverable, and
+        # this is the one operation here that destroys someone's work.
+        from datetime import datetime as _dtn
+        stamp = _dtn.now().strftime("%Y%m%d-%H%M%S")
+        backup = src.with_name(f"{src.stem}.previous-{stamp}{src.suffix}")
+        try:
+            if progress_cb:
+                progress_cb(stage="backup", current=88, total=100,
+                            message="Keeping a copy of the local file…")
+            shutil.copy2(src, backup)
+        except OSError as e:
+            return {"error": f"Could not back up the local file, so nothing was "
+                             f"replaced: {e}"}
 
         tmp = src.with_suffix(src.suffix + ".wd-verify.tmp")
         try:
@@ -2189,11 +2220,12 @@ class CloudManager:
                 f.write(esx_bytes)
             os.replace(tmp, src)
         except OSError as e:
-            try:
-                tmp.unlink()
-            except OSError:
-                pass
-            return {"error": f"Write failed: {e}"}
+            for leftover in (tmp, backup):
+                try:
+                    leftover.unlink()
+                except OSError:
+                    pass
+            return {"error": f"Write failed, local file untouched: {e}"}
 
 
         _ESX_META_CACHE.pop(str(src), None)
@@ -2207,8 +2239,13 @@ class CloudManager:
         return {
             "ok": True,
             "path": str(src),
+            "backup": str(backup),
             "newProjectId": new_meta.get("projectId"),
             "cloudProjectId": project_id,
+            "cloudName": cloud_name,
+            "localMtime": local_internal_mtime,
+            "cloudMtime": cloud_mtime,
+            "newLocalMtime": new_meta.get("internalMtime") or new_fs_mtime,
         }
 
 

@@ -1861,11 +1861,41 @@ const MATCH_BADGE_SPEC_SITE_EXACT = {
   title: 'Both sites share the same name. Sites don\'t have a stronger identity to compare (folders have no internal ID), so this is as matched as a site pair gets.',
 };
 
+/* Which pairings may be overwritten from the cloud.
+
+   An id match is proven - the same Ekahau project id is stamped inside both
+   .esx files - and a manual match is one the user made deliberately. A code or
+   fuzzy match is only our reading of the names, and overwriting a file on a
+   guess is how someone loses the wrong project, so those stay unactionable and
+   say so. Confirming such a pair by hand promotes it to manual, which is
+   actionable - the gate is something you can satisfy, not a wall. */
+const PULLABLE_MATCH_TYPES = new Set(['id', 'manual', 'exact']);
+
+function canPullFromCloud(r) {
+  return !!(r && r.cloud && r.local && (r.kind || currentTab) !== 'sites'
+            && PULLABLE_MATCH_TYPES.has(r.matchType));
+}
+
+/* The badge used to be the whole story: it said the cloud copy was newer and
+   then offered nothing to do about it. It is the thing being read, so it is
+   the thing to click. */
 function stalenessBadgeHtml(r) {
   const s = r.staleness;
   if (!s) return '';
-  if (s === 'cloud_newer') return '<span class="stale-badge stale-cloud" title="Cloud copy was edited more recently than local — download to get the latest">⬇ Cloud newer</span>';
-  if (s === 'local_newer') return '<span class="stale-badge stale-local" title="Local copy was edited more recently than cloud — upload to push your changes">⬆ Local newer</span>';
+
+  if (s === 'cloud_newer') {
+    if (canPullFromCloud(r)) {
+      return `<button class="stale-badge stale-cloud is-action" title="The cloud copy was edited more recently. Click to download it over your local file — your current copy is kept alongside it as a .previous- file." onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#11015; Cloud newer &middot; download</button>`;
+    }
+    return `<span class="stale-badge stale-cloud" title="The cloud copy was edited more recently. These two were paired on name similarity rather than a proven match, so downloading over your local file is not offered — it could overwrite a different project. Link them yourself with the &#128279; button to confirm the pair, and the download becomes available.">&#11015; Cloud newer</span>`;
+  }
+
+  if (s === 'local_newer') {
+    // Nothing behind this one anywhere in the app: Ekahau's upload only
+    // creates new cloud projects, it cannot replace the contents of an
+    // existing one. Saying so beats implying a button that does not exist.
+    return `<span class="stale-badge stale-local" title="Your local copy was edited more recently than the cloud one. This cannot be pushed up from here — Ekahau's upload creates a new project rather than replacing an existing one. Open the project in Ekahau and save it to the cloud from there.">&#11014; Local newer</span>`;
+  }
   return '';
 }
 
@@ -1883,8 +1913,8 @@ function gutCell(r) {
   if (r.status === 'synced') {
 
     const isNameMatch = r.matchType === 'exact' && r.cloud && r.local && kind !== 'sites';
-    const verifyBtn = isNameMatch
-      ? `<button class="gut-arrow verify-btn" title="Download cloud copy and overwrite local — makes them byte-identical so the badge upgrades to Same file" onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}')">&#8681;</button>`
+    const verifyBtn = (isNameMatch && !r.staleness)
+      ? `<button class="gut-arrow verify-btn" title="Download the cloud copy over your local file. These matched on name alone; this makes them byte-identical so the pair upgrades to Same file. Your current copy is kept alongside it." onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#8681;</button>`
       : '';
     return `<div class="lr-gut ok">${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}${verifyBtn}</div>`;
   }
@@ -3028,23 +3058,62 @@ async function _shareChangeRoleFromSelect(sel) {
   }
 }
 
-async function verifyReplaceLocal(cloudId, localPath, cloudName) {
-  if (!confirm(`Verify pair: "${cloudName}"\n\nDownload the cloud copy and overwrite the local file. They'll be byte-identical afterward and the pair will show as ✓ Same file.\n\nIf local is newer than cloud, this will be skipped — no data loss.`)) return;
+function staleWhen(ts) {
+  if (!ts) return 'date unknown';
+  return new Date(ts * 1000).toLocaleString(undefined,
+    { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+/* Download the cloud copy over the local file.
+
+   The confirm names the file and both edit times, because "are you sure" on
+   its own does not tell anyone whether they are about to lose something. Those
+   times are Ekahau's own, read from project.json inside each .esx - not the
+   file dates - so a copy, a restore or an antivirus touch cannot make the
+   local file look newer than it is. */
+async function verifyReplaceLocal(cloudId, localPath, cloudName, cloudMtime, localMtime) {
+  const fileName = String(localPath).split(/[\\/]/).pop() || localPath;
+  const lines = [
+    `Download the cloud copy of "${cloudName}" over your local file?`,
+    '',
+    `Local   ${fileName}`,
+    `        last edited ${staleWhen(localMtime)}`,
+    `Cloud   last edited ${staleWhen(cloudMtime)}`,
+    '',
+    'Your current local file is kept beside it as a .previous- copy, so this can be undone.',
+    'If your local copy turns out to be the newer one, nothing is changed.',
+  ];
+  if (!confirm(lines.join('\n'))) return;
+
   opEnqueue({
-    title: `Verifying "${cloudName}"`,
+    title: `Downloading "${cloudName}" over local`,
     type: 'verify', pollBackend: false, undoable: false,
     run: async () => {
       const r = await pyApi('verify_replace_local', cloudId, localPath);
       if (r && r.error) {
         _markVerifyFailed(cloudId, localPath);
         if (r.error === 'local_newer') {
-          throw new Error('Skipped — local is newer than cloud (' + (r.message || 'would lose local edits') + ')');
+          throw new Error('Not downloaded — your local copy is the newer one (' + (r.message || 'it would have been overwritten') + ')');
         }
         throw new Error(r.error);
       }
+      // The badge goes when the refresh re-reads both sides; clearing the
+      // stored row first means the answer to "did that work" is not waiting on
+      // a round trip to Ekahau.
+      _clearStaleness(cloudId);
       _scheduleOpRefresh();
+      const backup = (r && r.backup) ? String(r.backup).split(/[\\/]/).pop() : '';
+      if (backup) toast('Local file updated — previous copy kept as ' + backup, 'success');
       return r;
     },
+  });
+}
+window.verifyReplaceLocal = verifyReplaceLocal;
+
+function _clearStaleness(cloudId) {
+  Object.keys(rowData).forEach(k => {
+    const d = rowData[k];
+    if (d && d.cloudId === cloudId && d.staleness) d.staleness = null;
   });
 }
 
