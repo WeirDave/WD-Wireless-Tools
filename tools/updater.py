@@ -564,23 +564,88 @@ def convert_to_git(root: Path | None = None, log=None, install_git_if_missing: b
 
 # ================================================================== github ==
 
+# GitHub allows 60 API requests an hour to an unauthenticated caller, counted
+# per IP address. This function had no cache, so every /api/update/status - one
+# per page load on which About is opened - was a fresh request, and so was every
+# update run. A day of updating can spend the whole hour's allowance, and then
+# the next single click reports a rate limit the person did not cause.
+#
+# Per IP matters more than it sounds. An office behind one NAT shares the sixty,
+# so a handful of people trying the app for the first time can exhaust it
+# between them and all see it fail at once.
+#
+# Two things fix it. A short time-to-live means repeated checks inside a minute
+# ask nothing at all. Beyond that the request carries the previous ETag, and
+# GitHub answers 304 when nothing has changed - a 304 does not count against the
+# allowance, so staying current is free.
+_RELEASE_CACHE = {"at": 0.0, "data": None, "etag": None, "blocked_until": 0.0}
+_RELEASE_TTL_S = 60
+
+
+def _rate_limit_message(reset_epoch) -> str:
+    if not reset_epoch:
+        return ("GitHub is rate-limiting update checks from this network. "
+                "It clears within the hour; the app works normally meanwhile.")
+    from datetime import datetime as _d
+    when = _d.fromtimestamp(float(reset_epoch)).strftime("%H:%M")
+    return (f"GitHub is rate-limiting update checks from this network until "
+            f"{when}. This is counted per network address, so it can be someone "
+            f"else on the same connection. The app works normally meanwhile.")
+
+
 def fetch_latest_release(cfg: AppConfig = CONFIG):
     import requests
+    import time as _time
+
+    now = _time.time()
+    cached = _RELEASE_CACHE["data"]
+    if cached and (now - _RELEASE_CACHE["at"]) < _RELEASE_TTL_S:
+        return cached
+
+    # Do not spend a request to be told again that there are none left.
+    if now < _RELEASE_CACHE["blocked_until"]:
+        if cached:
+            return cached
+        raise UpdateError(_rate_limit_message(_RELEASE_CACHE["blocked_until"]))
+
+    headers = {"Accept": "application/vnd.github+json"}
+    if _RELEASE_CACHE["etag"] and cached:
+        headers["If-None-Match"] = _RELEASE_CACHE["etag"]
+
     try:
-        r = requests.get(cfg.api_latest,
-                         headers={"Accept": "application/vnd.github+json"},
-                         timeout=NET_TIMEOUT)
+        r = requests.get(cfg.api_latest, headers=headers, timeout=NET_TIMEOUT)
     except Exception as e:
+        if cached:
+            return cached
         raise UpdateError(f"Could not reach GitHub: {e}")
-    if r.status_code == 403 and r.headers.get("X-RateLimit-Remaining") == "0":
-        raise UpdateError("GitHub's API is rate-limited right now. Try again shortly.")
+
+    # Unchanged since last time, and free.
+    if r.status_code == 304 and cached:
+        _RELEASE_CACHE["at"] = now
+        return cached
+
+    limited = (r.status_code in (403, 429)
+               and r.headers.get("X-RateLimit-Remaining") == "0")
+    if limited:
+        reset = r.headers.get("X-RateLimit-Reset")
+        try:
+            _RELEASE_CACHE["blocked_until"] = float(reset) if reset else now + 900
+        except (TypeError, ValueError):
+            _RELEASE_CACHE["blocked_until"] = now + 900
+        if cached:
+            return cached
+        raise UpdateError(_rate_limit_message(reset))
+
     if not r.ok:
+        if cached:
+            return cached
         raise UpdateError(f"GitHub returned HTTP {r.status_code}.")
+
     data = r.json()
     tag = str(data.get("tag_name") or "")
     if not TAG_RE.match(tag):
         raise UpdateError(f"GitHub returned an unexpected release tag: {tag or '(none)'}")
-    return {
+    release = {
         "tag": tag,
         "version": tag.lstrip("v"),
         "url": data.get("html_url") or cfg.releases_url,
@@ -588,6 +653,10 @@ def fetch_latest_release(cfg: AppConfig = CONFIG):
         "assets": {a.get("name"): a.get("browser_download_url")
                    for a in (data.get("assets") or [])},
     }
+    _RELEASE_CACHE.update({"at": now, "data": release,
+                           "etag": r.headers.get("ETag"),
+                           "blocked_until": 0.0})
+    return release
 
 
 # ===================================================================== zip ==
