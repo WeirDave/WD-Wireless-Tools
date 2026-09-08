@@ -16,16 +16,27 @@ a considered number should be written down here as well.
 
 ## Framery pods
 
-### Framery Pod — 3 dB, measured on site
+### Framery Pod — 5 dB, from measurement, biased for safety
 
 | | |
 |---|---|
-| Attenuation | 50 dB/m across 2.4, 5 and 6 GHz |
-| Thickness | 0.06 m (0.20 ft) → **3 dB effective** |
+| Attenuation | 83.33 dB/m across 2.4, 5 and 6 GHz |
+| Thickness | 0.06 m (0.20 ft) → **5 dB effective** |
 | Reflection | 0.405 |
 | Height | **Auto — full height, deliberately** |
 | Colour | `#9C27B0`, keyboard shortcut `[8]` |
 | Tracing | set Ekahau's predefined wall length to 3.28 ft (1 m) to follow a pod outline |
+
+#### Why 5 dB when the measurements say 2–5
+
+5 dB is the **conservative end of the measured range**, chosen deliberately. It
+is not the midpoint and it is not a measurement in its own right — it is the
+worst case the instrument saw, taken as the design figure.
+
+The bias is the right way round. Overstating a pod's attenuation slightly means
+a design might add an access point that was not strictly needed. Understating it
+means someone ends up in a dead pod, which is the failure that generates
+tickets. When the two errors are that asymmetric, err high.
 
 #### This is an effective enclosure value, not a material loss
 
@@ -88,8 +99,18 @@ proves otherwise. Measure that case before trusting the model on it.
 #### The limitation Ekahau cannot model, and what to do about it
 
 **This is the most consequential thing on this page**, and a low wall value makes
-it more important rather than less: the map will now look even greener over pods
-than it did.
+it more important rather than less.
+
+**The design rule: never rely on an access point mounted directly above a pod.
+Place for lateral line-of-sight to the door.**
+
+That is a rule the designer applies, not a caveat about the model, because the
+model will not raise it. Two things compound here — Ekahau cannot represent the
+steel roof at all, and the wall value is now low — so a predictive heatmap will
+show strong coverage over and inside a pod that has an AP directly overhead
+delivering nothing into it. Nothing on the map will look wrong. There is no
+warning to notice and no colour to interpret; the plan simply has to be drawn
+so the situation never arises.
 
 Framery pods have powder-coated steel on the **roof and base**. Ekahau's wall
 model is 2D — vertical planes, no ceiling material — so **an AP mounted directly
@@ -117,7 +138,8 @@ a path in through the door — not tuning power or channels.
 | v1.32.4 | 500 dB/m (~30 dB) | construction confirmed as sheet steel; inferred from the acoustic rating |
 | v2.46.0 | split 30 dB / 4 dB | faces are different materials; glass figure derived, not measured |
 | v2.47.0 | split 30 dB / 3 dB | door measured at 2–3 dB |
-| **v2.48.0** | **one type, 3 dB** | **whole enclosure measured, both door orientations** |
+| v2.48.0 | one type, 3 dB | whole enclosure measured, both door orientations |
+| **v2.49.0** | **one type, 5 dB** | **conservative end of the measured 2–5 dB range, for design safety** |
 
 A note on the ~20 dB glass figure that appeared in v1.32.4's reasoning: it cited
 sources measuring **coated and low-E** glass, and Framery's door is **uncoated**
