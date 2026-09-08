@@ -635,6 +635,54 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
             "every sheet of a printed report: " + repr(offenders),
         )
 
+    def test_marker_dots_are_reserved_before_any_label_is_placed(self):
+        """Every dot's square must be claimed before the first label goes down.
+
+        Reserving them one at a time, as each marker was reached, let a label be
+        placed on ground where a later AP's dot had not been drawn yet - legal
+        when it was chosen, covered by the time the map finished. In a tight
+        group that buried two numbers while no two labels overlapped at all,
+        which is why measuring label-on-label collisions said everything was
+        fine.
+        """
+        js = (ROOT / "web" / "assets" / "js" / "report.js").read_text(encoding="utf-8")
+        start = js.index("function buildAntennaMarkers(")
+        body = js[start:js.index("\n  }\n", start)]
+
+        reserve = body.index("w: dotSize, h: dotSize")
+        loop = body.index("ordered.forEach(")
+        self.assertLess(reserve, loop,
+                        "dot footprints are being reserved inside the placement "
+                        "loop again, so a label can land where a later dot goes")
+
+    def test_crowded_markers_shed_the_second_line(self):
+        """The second line is what makes a pill room-wide.
+
+        "42" is two characters; "Catalyst 9166 · 9.8 ft" is twenty-two. Where
+        several APs sit within a pill's width of each other there is no
+        arrangement that leaves them all readable, so the number stays and the
+        rest goes to the AP table.
+        """
+        js = (ROOT / "web" / "assets" / "js" / "report.js").read_text(encoding="utf-8")
+        self.assertIn("if (sub && crowded[ap.id]) { sub = ''; reduced++; }", js)
+        self.assertIn("rep-overview-note", js,
+                      "a reduced label has to be accounted for on the page, "
+                      "not dropped quietly")
+
+    def test_lengths_keep_the_decimal_they_were_given(self):
+        """9.8 ft beside 10 ft reads as two different kinds of number.
+
+        fmt() strips trailing zeros, which is right for a gain and wrong for a
+        mounting height: 3.048 m came out "10 ft" while 3.0 m came out
+        "9.8 ft". Ekahau shows both to one decimal.
+        """
+        js = (ROOT / "web" / "assets" / "js" / "report.js").read_text(encoding="utf-8")
+        start = js.index("function fmtLength(")
+        body = js[start:js.index("\n  }", start)]
+        self.assertNotIn("fmt(", body.replace("fmtFixed(", ""),
+                         "fmtLength is stripping trailing zeros again")
+        self.assertIn("fmtFixed(", body)
+
     def test_javascript_files_have_no_nul_bytes(self):
         scripts = list((ROOT / "web" / "assets" / "js").glob("*.js"))
         self.assertTrue(scripts)
