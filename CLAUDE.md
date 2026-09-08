@@ -107,10 +107,30 @@ config block each — nothing below `CONFIG` names this app.
   `localStorage` across page loads/sessions, which meant it could get
   silently stuck on "Mine" or "Others" on one machine while defaulting
   correctly on another — this once looked like a data bug ("only 3 sites
-  show up") when it was actually a stale filter. Fixed: `ownerFilter()` in
-  `web/assets/js/cloud.js` is now in-memory only (`_ownerFilterState`),
-  always starts at `'all'` on a fresh load. Don't reintroduce persistence
-  here without a very visible indicator of the active filter.
+  show up") when it was actually a stale filter. It was then made in-memory
+  only, which cost a click on every load for anyone who really does work
+  mostly in their own projects.
+
+  Since v2.51.0 it is **two settings, not one**, and the split is what keeps
+  the old bug from coming back:
+
+  - **What the list opens on** is `cloud.default_owner_filter` in
+    `~/.wd_wireless_tools/settings.json` (Settings → Default view). It ships
+    as `"all"`, so nobody else's install changes behaviour. It is *not* in
+    `localStorage` — a per-browser copy is exactly how two machines came to
+    disagree about how many sites there were.
+  - **What is on screen now** is the toolbar Owner toggle, and it lasts until
+    the page is reloaded. Nothing in the toolbar writes to the settings file.
+
+  The condition attached to the old note still holds and is now enforced
+  rather than remembered: any filter narrower than All renders
+  `#ownerFilterNotice` above the list, in words, saying what is hidden and
+  whether it is the saved default or just this visit; an empty list names the
+  filter that emptied it; and a listing that comes back with no
+  `currentUser` turns the filter off and says why, because otherwise a saved
+  "Mine" would render an empty page indistinguishable from an empty cloud
+  account. `tests/test_cloud_owner_filter.py` drives all of that through the
+  real functions in Node — don't relax it.
 - The Sites tab tree (`renderSitesTree()` / `renderTreeChildren()` in
   `web/assets/js/cloud.js`) gives every row — top-level sites AND nested
   project files — independent cloud-side/local-side checkboxes

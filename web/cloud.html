@@ -209,6 +209,8 @@
     <span id="legLocal">Local Folder</span>
   </div>
 
+  <div class="owner-notice" id="ownerFilterNotice" role="status" hidden></div>
+
   <div class="rows-container" id="rowsContainer">
     <div class="empty-msg">Loading...</div>
   </div>
@@ -343,6 +345,15 @@
       <label class="set-radio"><input type="radio" name="setrule" value="newer"><span>Keep newer (by timestamp)</span></label>
       <label class="set-radio"><input type="radio" name="setrule" value="both"><span>Keep both — the newer keeps its name, the older gets a date stamp</span></label>
       <label class="set-radio"><input type="radio" name="setrule" value="skip"><span>Skip existing files</span></label>
+    </section>
+
+    <section class="set-section">
+      <div class="set-section-head">Default view</div>
+      <p class="set-section-desc">Which owners the Files list shows when Cloud Manager opens. The Owner buttons in the toolbar still change what you are looking at, but only until you reload &mdash; this is the one that sticks.</p>
+      <label class="set-radio"><input type="radio" name="setowner" value="all"><span>All &mdash; everything you can see, yours and other people&rsquo;s</span></label>
+      <label class="set-radio"><input type="radio" name="setowner" value="mine"><span>Mine &mdash; only projects and sites you own</span></label>
+      <label class="set-radio"><input type="radio" name="setowner" value="others"><span>Others &mdash; only projects and sites shared with you</span></label>
+      <p class="set-section-note">Anything other than All is shown in a banner above the list for as long as it is on, so a short list is never a mystery. If Ekahau Cloud does not say who owns a project, the filter turns itself off and tells you.</p>
     </section>
 
     <section class="set-section">

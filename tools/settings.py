@@ -69,6 +69,18 @@ DEFAULTS = {
     "cloud": {
         "merge_rule": "ask",
         "live_interval_ms": 30000,
+        # Which owner filter the Files list opens on: "all", "mine" or
+        # "others".  Only the *starting* point.  Clicking the toolbar toggle
+        # changes what is on screen until the page is reloaded and is not
+        # written here.
+        #
+        # That asymmetry is the whole point.  This filter used to persist
+        # whatever was last clicked, so one stray click left a machine stuck
+        # on "Mine" for good while another machine showed everything, and a
+        # full site list looked like three sites.  Choosing what to look at
+        # for a minute and choosing what to open on are different decisions,
+        # and only the second one is recorded.
+        "default_owner_filter": "all",
     },
     "rename": {
         "folder_format": "",

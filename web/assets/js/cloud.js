@@ -496,11 +496,14 @@ async function showApp(email) {
   }
   goToDashboard(email);
 }
-function goToDashboard(email) {
+async function goToDashboard(email) {
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('setupScreen').hidden = true;
   document.getElementById('appScreen').style.display = 'flex';
   document.getElementById('userEmail').textContent = email || 'Connected';
+  // Before the first listing is drawn, not after, or the page shows
+  // everything and then hides half of it a moment later.
+  await loadDefaultOwnerFilter();
   syncOwnerToggle();
   _syncTabUI(currentTab);
   refreshData();
@@ -581,6 +584,7 @@ function _syncTabUI(kind) {
   document.getElementById('collapseAllBtn').hidden = kind !== 'sites';
   const ownerEl = document.getElementById('ownerToggle');
   if (ownerEl) ownerEl.hidden = (kind === 'duplicates');
+  renderOwnerFilterNotice();
 
   const dupTbBtn = document.getElementById('dupDeleteAllToolbarBtn');
   if (dupTbBtn && kind !== 'duplicates') dupTbBtn.hidden = true;
@@ -637,6 +641,7 @@ function onData(kind, jsonStr) {
     toast(data.error, 'error'); return;
   }
   indexRowData();
+  reconcileOwnerFilterWithData();
   updateDashboard(); renderRows();
 }
 
@@ -1466,7 +1471,7 @@ function renderLedger(hit) {
 
   let h = `<div class="ledger">`;
   h += `<div class="ledger-head"><div class="lh-cell cloud">Cloud Projects (${nCloud})</div><div class="lh-gut"></div><div class="lh-cell local">Local .esx (${nLocal})</div></div>`;
-  if (!visible.length) { h += `<div class="empty-msg">Nothing here for this filter.</div></div>`; return h; }
+  if (!visible.length) { h += emptyLedgerMessage() + `</div>`; return h; }
   const groupOf = (s) => {
     const ch = String(s || '').trim().charAt(0).toUpperCase();
     return (ch >= 'A' && ch <= 'Z') ? ch : '#';
@@ -1589,7 +1594,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
   }
   const localPath = _outputDir ? ` <span class="lh-path">- ${e(_outputDir)}</span>` : '';
   h += `<div class="ledger-head"><div class="lh-cell cloud">Cloud Sites (${nCloud})</div><div class="lh-gut"></div><div class="lh-cell local"${_outputDir ? ` title="${a(_outputDir)}"` : ''}>Local Folders (${nLocal})${localPath}</div></div>`;
-  if (!visible.length && !orphans.length) { h += `<div class="empty-msg">Nothing here for this filter.</div></div>`; return h; }
+  if (!visible.length && !orphans.length) { h += emptyLedgerMessage() + `</div>`; return h; }
 
   const populatedLetters = new Set(visible.map(r => treeGroupOf(r.sort)));
   const _emitHeader = (g, isEmpty) => {
@@ -1730,6 +1735,23 @@ function toggleHeldBack() {
   const now = _heldBackOpen() ? '0' : '1';
   try { localStorage.setItem('wd-heldback-open', now); } catch (e) {}
   renderRows();
+}
+
+/* An empty list has to say what emptied it.
+
+   "Nothing here for this filter" is true and useless when the filter doing
+   the emptying is one the page applied by itself at startup: an account with
+   no projects of its own opens on Mine, sees nothing, and has no reason to
+   suspect a filter. Name it, and offer the way out. */
+function emptyLedgerMessage() {
+  const cur = ownerFilter();
+  if (cur === 'all') return '<div class="empty-msg">Nothing here for this filter.</div>';
+  return '<div class="empty-msg">Nothing here owned by '
+    + (cur === 'mine' ? 'you' : 'anyone else')
+    + ' — the owner filter is on <b>' + e(OWNER_FILTER_LABEL[cur]) + '</b>'
+    + (_ownerFilterOverridden ? '' : ', your saved default')
+    + '.<br><button class="btn btn-secondary own-empty-btn" '
+    + 'onclick="setOwnerFilterUI(\'all\')">Show all owners</button></div>';
 }
 
 function buildPassOwner(own, me) {
@@ -3461,43 +3483,180 @@ function openSettings() {
   const cur = mergeRule();
   document.querySelectorAll('input[name="setrule"]').forEach(r => { r.checked = (r.value === cur); });
   document.getElementById('setLiveInterval').value = String(liveMs());
+  const own = defaultOwnerFilter();
+  document.querySelectorAll('input[name="setowner"]').forEach(r => { r.checked = (r.value === own); });
   showModal('settingsModal');
 }
-function saveSettings() {
+async function saveSettings() {
   const v = (document.querySelector('input[name="setrule"]:checked') || {}).value || 'ask';
   setMergeRule(v);
   const ms = document.getElementById('setLiveInterval').value;
   try { localStorage.setItem('wd-live-ms', ms); } catch (e) {}
   restartLive();
-  toast('Settings saved', 'success');
+
+  // The one setting on this page that is not per-browser. It decides what the
+  // list opens on, so it belongs with the rest of the suite's settings rather
+  // than in whichever browser happened to set it - the old per-browser
+  // version of this filter is exactly how one machine ended up showing a
+  // different set of sites from another.
+  const own = (document.querySelector('input[name="setowner"]:checked') || {}).value || 'all';
+  const changed = own !== defaultOwnerFilter();
+  let failed = '';
+  if (changed) {
+    try {
+      const r = await WD.api('settings/update', { patch: { cloud: { default_owner_filter: own } } });
+      if (!r || !r.ok) throw new Error((r && r.error) || 'the settings file could not be written');
+      _ownerFilterDefault = own;
+      // Nothing was clicked in the toolbar, so what is on screen follows the
+      // new default rather than quietly becoming an override of it.
+      if (!_ownerFilterOverridden) {
+        setOwnerFilter(own);
+        syncOwnerToggle();
+        updateDashboard();
+        renderRows();
+      } else {
+        _ownerFilterOverridden = (ownerFilter() !== own);
+        renderOwnerFilterNotice();
+      }
+    } catch (err) { failed = err.message || String(err); }
+  }
+
   closeModal('settingsModal');
+  if (failed) toast('Saved, but the default owner view was not: ' + failed, 'error');
+  else toast('Settings saved', 'success');
 }
 
-// Deliberately in-memory only, NOT persisted to localStorage. It used to
-// survive across page loads/sessions, which meant switching to Mine/Others
-// once silently stuck it there forever with no obvious reminder — that's
-// exactly what made a fully-populated Sites tab look like it only had 3
-// sites on a different machine. Every fresh load now starts at "all";
-// switching mid-session still works normally.
-let _ownerFilterState = 'all';
+/* Which owner filter the Files list opens on, and which one is on screen.
+   They are two different things and this is the one place that keeps them
+   apart.
+
+   The list opens on whatever Settings says. Clicking the toolbar toggle
+   changes what is on screen and nothing else — reload and you are back on
+   the default. That asymmetry is deliberate, and it is what closed an old
+   bug: this filter used to persist whatever was last clicked, so a stray
+   click on "Mine" stuck one machine there permanently while another machine
+   still opened on everything. The symptom was a fully-populated Sites tab
+   that looked like it held three sites, and it read as missing data rather
+   than as a filter, because nothing on screen said a filter was on.
+
+   So the second half of the rule is that anything narrower than All says so,
+   on screen, for as long as it is on — see renderOwnerFilterNotice below.
+   Persisting this without that notice would rebuild the same trap. */
+const OWNER_FILTERS = ['all', 'mine', 'others'];
+const OWNER_FILTER_LABEL = { all: 'All', mine: 'Mine', others: 'Others' };
+
+let _ownerFilterDefault = 'all';      // what Settings says to open on
+let _ownerFilterState = 'all';        // what is on screen right now
+let _ownerFilterOverridden = false;   // moved off the default by hand
+let _ownerFilterForcedReason = '';    // why we put it back to All ourselves
+
+function _validOwnerFilter(v) {
+  return OWNER_FILTERS.indexOf(v) > -1 ? v : null;
+}
+
 function ownerFilter() {
   return _ownerFilterState;
 }
 function setOwnerFilter(v) {
-  _ownerFilterState = v;
+  _ownerFilterState = _validOwnerFilter(v) || 'all';
+}
+function defaultOwnerFilter() {
+  return _ownerFilterDefault;
+}
+
+/* Read the saved default once, before the first listing is drawn.
+
+   No server, or a settings file we cannot read, means All — showing
+   everything is the safe way to be wrong, and it is what this page did
+   before the setting existed. */
+function loadDefaultOwnerFilter() {
+  const apply = (v) => {
+    _ownerFilterDefault = _validOwnerFilter(v) || 'all';
+    _ownerFilterState = _ownerFilterDefault;
+    _ownerFilterOverridden = false;
+    _ownerFilterForcedReason = '';
+  };
+  if (!window.WD || !WD.api) { apply('all'); return Promise.resolve(); }
+  return WD.api('settings/get').then(r => {
+    apply(r && r.ok && r.settings && r.settings.cloud
+      && r.settings.cloud.default_owner_filter);
+  }).catch(() => { apply('all'); });
 }
 
 function setOwnerFilterUI(v) {
-  setOwnerFilter(v);
+  const want = _validOwnerFilter(v) || 'all';
+  setOwnerFilter(want);
+  _ownerFilterOverridden = (want !== _ownerFilterDefault);
+  _ownerFilterForcedReason = '';
   syncOwnerToggle();
   updateDashboard();
   renderRows();
 }
+
+/* Ekahau Cloud tells us who owns a project only when the listing comes back
+   with an account attached. Without one, "Mine" and "Others" cannot be
+   answered — every row would pass, or every row would fail, depending which
+   way the test happened to fall. Showing a filter that is not really
+   filtering is the worse of the two, so go back to All and say why.
+
+   This is the case that makes a saved default of "Mine" safe to ship: on a
+   listing with no owner information it turns itself off in the open, instead
+   of rendering an empty page that looks like an empty cloud account. */
+function reconcileOwnerFilterWithData() {
+  const cur = ownerFilter();
+  if (cur === 'all') { _ownerFilterForcedReason = ''; return; }
+  if (((data && data.currentUser) || '').trim()) { _ownerFilterForcedReason = ''; return; }
+  _ownerFilterForcedReason = 'Ekahau Cloud did not say which account these '
+    + 'projects belong to, so “' + OWNER_FILTER_LABEL[cur] + '” could not '
+    + 'be applied and everything is shown.';
+  setOwnerFilter('all');
+  _ownerFilterOverridden = false;
+  syncOwnerToggle();
+}
+
 function syncOwnerToggle() {
   const cur = ownerFilter();
   document.querySelectorAll('#ownerToggle .owner-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.owner === cur);
   });
+  renderOwnerFilterNotice();
+}
+
+/* The visible half of the bargain: a filter that hides rows has to be
+   readable without hunting for a highlighted button in the toolbar, and it
+   has to say whether it will still be on tomorrow. */
+function renderOwnerFilterNotice() {
+  const el = document.getElementById('ownerFilterNotice');
+  if (!el) return;
+  // Duplicates is a different list that this filter does not touch, so a
+  // banner about hidden sites would be describing something else entirely.
+  if (currentTab === 'duplicates') { el.hidden = true; return; }
+  const cur = ownerFilter();
+
+  if (cur === 'all') {
+    if (!_ownerFilterForcedReason) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.className = 'owner-notice is-info';
+    el.innerHTML = '<span class="own-note-icon">&#9432;</span>'
+      + '<span class="own-note-text">' + e(_ownerFilterForcedReason) + '</span>';
+    return;
+  }
+
+  const where = _ownerFilterOverridden
+    ? 'Just for this visit — reopening Cloud Manager goes back to “'
+      + OWNER_FILTER_LABEL[_ownerFilterDefault] + '”.'
+    : 'This is your saved default, so it will be on again next time. '
+      + 'Change it in Settings.';
+
+  el.hidden = false;
+  el.className = 'owner-notice';
+  el.innerHTML = '<span class="own-note-icon">&#128065;</span>'
+    + '<span class="own-note-text"><b>Owner filter: '
+    + e(OWNER_FILTER_LABEL[cur]) + '</b> — sites and projects owned by '
+    + (cur === 'mine' ? 'other people are hidden. ' : 'you are hidden. ')
+    + e(where) + '</span>'
+    + '<button class="btn btn-secondary own-note-btn" onclick="setOwnerFilterUI(\'all\')">'
+    + 'Show all owners</button>';
 }
 
 let lastChkIndex = null;
