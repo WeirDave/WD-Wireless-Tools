@@ -19,7 +19,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 ![Python](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-6b7280?style=flat-square)
 
-### [→ Launch the browser tools](https://weirdave.github.io/WD-Wireless-Tools/)
+### [→ Install the suite](https://weirdave.github.io/WD-Wireless-Tools/)
 
 [Read the User Manual](docs/USER_MANUAL.md) · [Download the Full Suite](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) · [Report an Issue](https://github.com/WeirDave/WD-Wireless-Tools/issues)
 
@@ -28,10 +28,10 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <table>
 <tr>
 <td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.22.0 · Desktop</sub></td>
-<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/walls/"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"></a><br><b>Quick Walls</b><br><sub>v7.53 · Desktop + Web</sub></td>
+<td width="20%" align="center"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"><br><b>Quick Walls</b><br><sub>v7.53 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.26.0 · Desktop</sub></td>
-<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/scale/"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"></a><br><b>Scale</b><br><sub>v1.5 · Desktop + Web</sub></td>
-<td width="20%" align="center"><a href="https://weirdave.github.io/WD-Wireless-Tools/report/"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"></a><br><b>Report</b><br><sub>v2.51.1 · Desktop + Web</sub></td>
+<td width="20%" align="center"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"><br><b>Scale</b><br><sub>v1.5 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.51.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.0 · Desktop</sub></td>
 </tr>
@@ -56,9 +56,9 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 
 WD Wireless Tools removes the repetitive work around an Ekahau project. It gives wireless engineers a fast local workspace for cloud and file organization, wall remapping, scale conversion, and field-ready reporting—without turning those jobs into another subscription or another place to upload client data.
 
-The full suite runs from a tiny local Flask server and opens in your normal browser. Quick Walls, Scale, and Report are also available as hosted, client-side tools for jobs that do not need desktop file-system or Ekahau Cloud access.
+The suite runs from a tiny local Flask server and opens in your normal browser. Every tool runs on your own machine.
 
-> **The important distinction:** the interface is browser-based, but your working data stays local. The hosted tools process files in your browser; Cloud Manager contacts Ekahau Cloud only when you direct it to operate on your own tenant.
+> **The important distinction:** the interface is browser-based, but nothing leaves your machine. Files are read and written locally; Cloud Manager contacts Ekahau Cloud only when you direct it to operate on your own tenant.
 
 ## Seven Tools, One Workflow
 
@@ -82,7 +82,6 @@ Open an `.esx`, visually remap every wall type, apply reusable templates, and sa
 - Color-coded wall types and attenuation values
 - Ekahau factory presets plus custom JSON templates
 - Default-template auto-apply and `[1]`–`[9]` keyboard shortcuts
-- [Runs directly in the browser](https://weirdave.github.io/WD-Wireless-Tools/walls/)
 
 ### Squirrel
 
@@ -100,7 +99,7 @@ Convert architectural measurements between feet-and-inches, decimal feet, inches
 - Bidirectional conversion with synchronized results
 - Architectural fractions such as `4' 6-1/2"`, `4' 6 1/2"`, and `1/2"`
 - One-click copying for every output
-- Pure client-side operation, including the [hosted version](https://weirdave.github.io/WD-Wireless-Tools/scale/)
+- Runs entirely on your machine — no upload, no round trip
 
 ### Report
 
@@ -114,7 +113,7 @@ Transform an `.esx` project into print-ready, installer-facing documents. Seven 
 - **Antenna Aim Sheet**
 - **Coverage Cell Boundary**
 
-The **Change / Audit Report (coming soon)** is visible in the gallery but is not selectable yet. Every available report supports its own options and print-optimized renderer through the shared report registry. Try it in the [hosted Report tool](https://weirdave.github.io/WD-Wireless-Tools/report/).
+The **Change / Audit Report (coming soon)** is visible in the gallery but is not selectable yet. Every available report supports its own options and print-optimized renderer through the shared report registry.
 
 ### PlanTrim
 
@@ -140,9 +139,9 @@ See your access points on the floor plan, pick a spatial ordering, set a naming 
 
 ## Quick Start
 
-### Try the browser tools
+### Which tools you get
 
-Open the [hosted tool suite](https://weirdave.github.io/WD-Wireless-Tools/) to use Quick Walls, Scale, or Report immediately. There is no installation or login. Cloud Manager, Squirrel, PlanTrim, and AP Labeler remain desktop-only because they need local file-system access or server-side processing.
+All seven tools are part of the desktop suite. Quick Walls, Scale and Report used to run as a browser demo on the project page; they are desktop-only now too, so every tool behaves the same way and every setting is saved in one place rather than depending on which browser you opened. The [project page](https://weirdave.github.io/WD-Wireless-Tools/) has a quick start.
 
 ### Install the complete desktop suite
 
@@ -202,7 +201,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.60.1
+WIRELESS TOOLS  v2.61.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
@@ -287,7 +286,7 @@ WD-Wireless-Tools/
 │   ├── folder_organizer.py            # Squirrel scanning and organization
 │   ├── rename_manager.py              # Bulk rename operations
 │   └── settings.py                    # Suite-wide settings and migration
-├── web/                               # Application source and hosted page templates
+├── web/                               # Application source and the public project page
 │   ├── assets/
 │   │   ├── versions.json              # Suite and component versions
 │   │   ├── lib/                       # Vendored browser libraries

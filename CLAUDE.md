@@ -9,13 +9,17 @@ re-discovered (or re-explained) each new chat.
    every tool's version + the suite version. Every page's displayed version
    (`data-ver` attributes, read by `WD.applyVersions()` in
    `web/assets/js/wd-shared.js`) comes from this file automatically.
-2. **Also manually update these two places** — they quote versions in prose
-   and are NOT auto-synced from versions.json:
-   - `README.md` — the `WIRELESS TOOLS  vX.X.X` example banner, and the
-     version badge of **every tool you touched** in the table near the top
+2. **Also manually update `README.md`** — it quotes versions in prose and is
+   NOT auto-synced from versions.json:
+   - the `WIRELESS TOOLS  vX.X.X` example banner, and
+   - the version badge of **every tool you touched** in the table near the top
      (not just Cloud Manager — the test checks all seven).
-   - `web/pages/hosted-cloud-stub.html` — the `<div class="stub-ver">`
-     line.
+
+   There used to be a third place, `web/pages/hosted-cloud-stub.html`, which
+   quoted the Cloud Manager version. It went with hosted mode. The public
+   landing page (`web/pages/landing.html`) deliberately quotes no version at
+   all, so there is nothing there to fall out of date.
+
    A real test enforces this:
    `tests/test_server_and_assets.py::test_public_documentation_uses_current_versions_and_report_status`.
    Skipping step 2 breaks CI on every commit — this has happened before.
@@ -142,6 +146,16 @@ server reads `d["patch"]` and therefore saved nothing while reporting success.
   Firefox does not implement them at all. Where they are not honoured every
   sheet takes the print dialog's orientation and the per-page choice is
   discarded silently.
+
+  **Correction (v2.56.1 → withdrawn in 49e30fb): the Firefox half of that claim
+  was never measured and must not be repeated.** Chrome and Edge were measured
+  and are correct. Firefox was not — headless printing could not be driven, so
+  what it does with named pages is simply unknown. Worse, the detection shipped
+  to warn about it was wrong on its own terms: `CSS.supports('page','auto')`
+  returns true in Firefox as well as Chrome, so the warning could never have
+  fired in the browser it existed for. Say "verified in Chrome and Edge", not
+  "Firefox is broken" — asserting a defect nobody has observed is worse than
+  saying nothing.
 
   Verified by printing the same document with the `page:` declarations intact
   and stripped: with them, each page gets the sheet it asked for; without them,
