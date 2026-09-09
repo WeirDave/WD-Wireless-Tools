@@ -7126,6 +7126,28 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
   font-size: 10px; color: var(--text-2); opacity: 0.75; margin-right: 4px;
 }
 
+/* Key Plan - the standard AEC name, on purpose. Every other section is
+   outlined and lettered so the reader can see what adjoins this one; the
+   current section stays filled. */
+.rep-seg-keyplan { flex-shrink: 0; }
+.rep-seg-locator-other { fill: none; stroke: rgba(120,130,140,0.55); }
+.rep-seg-locator-label {
+  fill: rgba(90,100,110,0.85); font-family: var(--sans); font-weight: 600;
+  paint-order: stroke; stroke: rgba(255,255,255,0.75); stroke-width: 0.6px;
+}
+.rep-seg-locator-label.is-here { fill: #111; font-weight: 800; }
+.rep-seg-locator-caption {
+  margin-top: 3px; text-align: center;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--text-2);
+}
+@media print {
+  .rep-seg-locator-caption { color: #555 !important; font-size: 7pt; }
+  .rep-seg-locator-label { fill: #444 !important; }
+  .rep-seg-locator-label.is-here { fill: #000 !important; }
+  .rep-seg-locator-other { stroke: #999 !important; }
+}
+
 .rep-set-nowarn {
   margin-top: 16px; padding: 10px 12px; border-radius: 6px;
   background: var(--amber-bg); color: var(--amber-dark);
