@@ -1,0 +1,53 @@
+{
+  "name": "Office, Wi-Fi 6E (example)",
+  "schema": 1,
+  "description": "One worked example, not a recommendation. It assumes every person carries three devices: a laptop, a work phone and a personal phone, at one each per head. The laptop is mostly on a normal SLA with a tenth of it conferencing; the work phone splits evenly between normal and background; the personal phone is almost all background. Your mix will differ - capture your own from an .esx rather than editing this by hand.",
+  "capturedFrom": "hand-authored from a real Ekahau Capacity panel",
+  "capturedOccupants": 500,
+  "requirementName": "Ekahau Best Practices",
+  "devicesPerOccupant": 3.0,
+  "items": [
+    {
+      "device": "Generic Wi-Fi 6E Laptop, Wi-Fi 6 2x2:2 160MHz",
+      "usage": "Normal SLA",
+      "perOccupant": 0.9,
+      "shareOfTotal": 0.3,
+      "capturedCount": 450
+    },
+    {
+      "device": "Generic Wi-Fi 6E Laptop, Wi-Fi 6 2x2:2 160MHz",
+      "usage": "Conferencing",
+      "perOccupant": 0.1,
+      "shareOfTotal": 0.033333,
+      "capturedCount": 50
+    },
+    {
+      "device": "Generic Wi-Fi 6E Smartphone, Wi-Fi 6 2x2:2 160MHz",
+      "usage": "Normal SLA",
+      "perOccupant": 0.5,
+      "shareOfTotal": 0.166667,
+      "capturedCount": 250
+    },
+    {
+      "device": "Generic Wi-Fi 6E Smartphone, Wi-Fi 6 2x2:2 160MHz",
+      "usage": "Background Sync",
+      "perOccupant": 0.5,
+      "shareOfTotal": 0.166667,
+      "capturedCount": 250
+    },
+    {
+      "device": "Generic Wi-Fi 6E Smartphone, Wi-Fi 6 2x2:2 160MHz",
+      "usage": "Background Sync",
+      "perOccupant": 0.9,
+      "shareOfTotal": 0.3,
+      "capturedCount": 450
+    },
+    {
+      "device": "Generic Wi-Fi 6E Smartphone, Wi-Fi 6 2x2:2 160MHz",
+      "usage": "Normal SLA",
+      "perOccupant": 0.1,
+      "shareOfTotal": 0.033333,
+      "capturedCount": 50
+    }
+  ]
+}
