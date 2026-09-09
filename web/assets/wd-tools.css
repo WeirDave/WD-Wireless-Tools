@@ -7094,6 +7094,13 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
 /* Which of the four sources supplied the last segment. The answer changes with
    how the file was opened, and nothing in the name itself says so. */
 .rep-set-name-src { margin-top: 6px; font-size: 11px; color: var(--text-2); }
+/* Says where the sidebar values came from and makes them the norm in one
+   press. The complaint was re-ticking the same boxes on every report, so this
+   sits with the boxes rather than on a settings page. */
+.rep-remembered-opts {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.rep-remembered-opts .rep-remembered-state { flex: 1 1 100%; }
 
 .rep-set-nowarn {
   margin-top: 16px; padding: 10px 12px; border-radius: 6px;
