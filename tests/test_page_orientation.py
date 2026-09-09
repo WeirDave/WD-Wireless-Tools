@@ -147,12 +147,29 @@ class PageOrientationTests(unittest.TestCase):
         self.assertIn("applyPageOrientation(host, currentOpts)", body)
         self.assertIn("sizePlacementPlansForPrint(host, currentOpts)", body)
 
-    def test_the_button_says_where_mixing_works(self):
-        """A feature that silently does nothing in one browser is worse than
-        one that explains itself."""
+    def test_the_button_claims_only_what_was_measured(self):
+        """Chrome and Edge were measured - the same six-page document printed
+        from each, sheet sizes read back out of the PDF. Firefox was not: it
+        reports the `page` property as supported, so it may well honour named
+        pages, and a headless print could not be driven here to find out.
+
+        An earlier version of this asserted Firefox was broken, and shipped a
+        print-time warning gated on CSS.supports('page','auto') - which returns
+        true in Firefox too, so it could never have fired there anyway. Both
+        the claim and the detection were withdrawn. If the wording ever names
+        a browser as broken again, it needs a measurement behind it.
+        """
         start = self.js.index("class=\"rep-orient-all\"")
-        window = self.js[start:start + 700]
-        self.assertIn("Chrome or Edge", window)
+        window = self.js[start:start + 900]
+        self.assertIn("verified in Chrome", window)
+        self.assertNotIn("Firefox", window,
+                         "do not name a browser as broken without measuring it")
+
+    def test_no_capability_sniffing_survives(self):
+        """CSS.supports('page', ...) does not separate the engines - measured
+        true in both Chrome and Firefox - so nothing may branch on it."""
+        self.assertNotIn("enginePrintsOneOrientationOnly", self.js)
+        self.assertNotIn("CSS.supports('page'", self.js)
 
     def test_the_older_setter_name_still_works(self):
         """Anything still calling setFloorOrient must not break."""
