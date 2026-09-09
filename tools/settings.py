@@ -111,6 +111,21 @@ DEFAULTS = {
         # The revision is a version number, so it earns a place in the saved
         # filename -- but not everyone names files that way, hence the switch.
         "include_revision_in_filename": True,
+        # Every checkbox, radio and select in the report sidebar, remembered
+        # per report type: {"<report id>": {"<option id>": value}}.
+        #
+        # Keyed by report type rather than shared by option id, because the
+        # shipped defaults deliberately differ - the Antenna Aim Sheet starts
+        # with omni APs excluded and every other report includes them - and
+        # because the same option id means different things in different
+        # reports ("overview" is per-floor mini-maps on the Aim Sheet and a
+        # detection map on Interference). Sharing by id would corrupt values
+        # rather than merely surprise someone.
+        #
+        # Only options deliberately saved appear here. Anything absent falls
+        # back to the option's own shipped default, so a new report or a new
+        # option needs no migration and nothing can be stranded.
+        "report_defaults": {},
         # Feet or metres for heights and distances. An .esx stores everything
         # in metres, so this is purely how the report is written; Ekahau keeps
         # its own display preference in the application, not the project file,
@@ -209,10 +224,40 @@ def save_settings(settings, _path=None):
         raise
 
 
+# Values that are a complete set rather than a bag of independent keys.
+#
+# Deep-merging one of these makes removal impossible: merging
+# {"report_defaults": {}} into an existing map keeps every old entry, so
+# "use the shipped defaults again" saved successfully and changed nothing.
+# For these paths the patch replaces the stored value outright.
+REPLACE_NOT_MERGE = (
+    ("report", "report_defaults"),
+)
+
+
+def _replace_whole_values(merged, patch):
+    """Undo the merge for paths that are sets, not bags."""
+    for path in REPLACE_NOT_MERGE:
+        src, dst = patch, merged
+        for key in path[:-1]:
+            if not isinstance(src, dict) or key not in src:
+                src = None
+                break
+            src = src[key]
+            dst = dst.setdefault(key, {})
+        if isinstance(src, dict) and path[-1] in src:
+            dst[path[-1]] = copy.deepcopy(src[path[-1]])
+    return merged
+
+
 def update_settings(patch, _path=None):
-    """Deep-merge *patch* into current settings, save, and return the result."""
+    """Deep-merge *patch* into current settings, save, and return the result.
+
+    Deep merge everywhere except REPLACE_NOT_MERGE - see the note there for
+    why a keyed store cannot be merged.
+    """
     current = load_settings(_path=_path)
-    merged = _deep_merge(current, patch)
+    merged = _replace_whole_values(_deep_merge(current, patch), patch)
     save_settings(merged, _path=_path)
     return merged
 

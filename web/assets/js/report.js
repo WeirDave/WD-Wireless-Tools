@@ -82,12 +82,24 @@
       else delete reportSettings[id];
     });
     includeRevisionInName = rep.include_revision_in_filename !== false;
+    if (rep.report_defaults && typeof rep.report_defaults === 'object') {
+      savedReportDefaults = rep.report_defaults;
+    }
     // A page turned on purpose should still be turned tomorrow.
     if (rep.page_orient && typeof rep.page_orient === 'object') {
       savedPageOrient = rep.page_orient;
     }
   }
   var savedPageOrient = {};
+  /* Sidebar options this person has saved, per report type. Seeded into
+     currentOpts when a report is chosen, so the same boxes do not have to be
+     ticked on every single report - which is the whole complaint this
+     answers. */
+  var savedReportDefaults = {};
+  function reportOptionDefaults(id) {
+    var d = savedReportDefaults && savedReportDefaults[id];
+    return (d && typeof d === 'object') ? d : {};
+  }
 
   function fetchSettings() {
     return WD.api('settings/get').then(function (r) {
@@ -532,6 +544,67 @@
       .catch(function (err) {
         setCoverStatus(err && err.message ? err.message : 'Could not remove the image.', 'err');
       });
+  };
+
+  /* Capture the sidebar as it stands, for this report type only.
+
+     One button rather than a saved default per control: he configures a
+     report the way he wants it once and presses this, instead of visiting a
+     settings page forty-one times. A sidebar change on its own stays with
+     this document - the same split the Cloud Manager owner filter settled on,
+     for the same reason. A stray click must not become permanent. */
+  function collectSidebarValues() {
+    var r = currentReport();
+    var out = {};
+    (r.sidebar || []).forEach(function (opt) {
+      if (opt.id.charAt(0) === '_') return;              // grid button, not a value
+      if (SETTING_IDS.indexOf(opt.id) !== -1) return;    // shared, stored globally
+      if (opt.type === 'text') return;
+      out[opt.id] = (opt.id in currentOpts) ? currentOpts[opt.id]
+                  : (opt.type === 'select' ? (opt.default || '') : !!opt.default);
+    });
+    return out;
+  }
+
+  function optionsDifferingFromSaved() {
+    var saved = reportOptionDefaults(currentReportId);
+    var now = collectSidebarValues();
+    return Object.keys(now).filter(function (k) {
+      return !(k in saved) ? now[k] !== shippedDefaultFor(k) : now[k] !== saved[k];
+    });
+  }
+
+  function shippedDefaultFor(id) {
+    var r = currentReport();
+    var opt = (r.sidebar || []).filter(function (o) { return o.id === id; })[0];
+    if (!opt) return undefined;
+    return opt.type === 'select' ? (opt.default || '') : !!opt.default;
+  }
+
+  window.saveReportOptionDefaults = function () {
+    if (!settingsAvailable) { showToast('No server, so there is nowhere to save these', 'warn'); return; }
+    var next = {};
+    Object.keys(savedReportDefaults || {}).forEach(function (k) { next[k] = savedReportDefaults[k]; });
+    next[currentReportId] = collectSidebarValues();
+    pushSettings({ report_defaults: next })
+      .then(function () { renderReportOpts(); showToast('Saved as your default for this report', 'success'); })
+      .catch(function (e) { showToast(e.message || 'Could not save', 'error'); });
+  };
+
+  window.clearReportOptionDefaults = function () {
+    if (!settingsAvailable) return;
+    var next = {};
+    Object.keys(savedReportDefaults || {}).forEach(function (k) {
+      if (k !== currentReportId) next[k] = savedReportDefaults[k];
+    });
+    pushSettings({ report_defaults: next })
+      .then(function () {
+        currentOpts = {};
+        optOverrides = {};
+        renderReportOpts();
+        showToast('Back to the shipped defaults for this report', 'success');
+      })
+      .catch(function (e) { showToast(e.message || 'Could not save', 'error'); });
   };
 
   // Per-report override controls -------------------------------------------
@@ -1322,6 +1395,10 @@
       currentReportId = id;
       currentOpts = {};
       optOverrides = {};
+      // Saved options are inherited, not overrides, so optOverrides stays
+      // empty - the card footer is what says they came from settings.
+      var saved = reportOptionDefaults(id);
+      Object.keys(saved).forEach(function (k) { currentOpts[k] = saved[k]; });
     }
     templateConfirmed = true;
     configureDirty = true;
@@ -1433,6 +1510,34 @@
         + '</div>';
     }
 
+    /* What the options on screen came from, and how to make them the norm.
+
+       The complaint this answers is re-ticking the same boxes on every
+       report, so the affordance has to be one press from where the boxes
+       are - not a settings page visited option by option. */
+    var savedForThis = reportOptionDefaults(currentReportId);
+    var savedCount = Object.keys(savedForThis).length;
+    var differing = optionsDifferingFromSaved().length;
+    if ((r.sidebar || []).some(function (o) {
+          return o.id.charAt(0) !== '_' && o.type !== 'text'
+              && SETTING_IDS.indexOf(o.id) === -1; })) {
+      html += '<div class="rep-remembered rep-remembered-opts">'
+        + '<span class="rep-remembered-state">'
+        + (savedCount
+            ? (differing
+                ? '<b>' + differing + '</b> option' + (differing === 1 ? '' : 's')
+                  + ' changed from your saved default for this report.'
+                : 'These are your saved defaults for this report.')
+            : 'Using the shipped defaults for this report.')
+        + '</span>'
+        + '<button type="button" class="btn btn-secondary btn-sm" '
+        +   'onclick="saveReportOptionDefaults()">Save these as my defaults</button>'
+        + (savedCount ? '<button type="button" class="rep-remembered-clear" '
+            + 'onclick="clearReportOptionDefaults()">Use shipped defaults</button>' : '')
+        + '</div>';
+    }
+
+
     host.innerHTML = html;
   }
   window.setOpt = function (cb) {
@@ -1461,8 +1566,27 @@
       currentOpts[id] = cb.checked;
     }
     configureDirty = true;
+    // Re-rendering the whole card would take the focus off the control that
+    // was just clicked, so only the sentence that went stale is rewritten.
+    refreshRememberedState();
     if (id === 'inclOmni' || id === 'inclDirectional') renderApFilter();
   };
+
+  function refreshRememberedState() {
+    var el = document.querySelector('.rep-remembered-opts .rep-remembered-state');
+    if (!el || !currentReportId) return;
+    var savedCount = Object.keys(reportOptionDefaults(currentReportId)).length;
+    var differing = optionsDifferingFromSaved().length;
+    el.innerHTML = savedCount
+      ? (differing
+          ? '<b>' + differing + '</b> option' + (differing === 1 ? '' : 's')
+            + ' changed from your saved default for this report.'
+          : 'These are your saved defaults for this report.')
+      : (differing
+          ? '<b>' + differing + '</b> option' + (differing === 1 ? '' : 's')
+            + ' changed from the shipped defaults.'
+          : 'Using the shipped defaults for this report.');
+  }
 
   // ── Grid configuration modal ──
 
