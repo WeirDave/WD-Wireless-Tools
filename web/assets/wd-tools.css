@@ -7113,6 +7113,19 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
 }
 .rep-orient-all:hover { background: var(--surface-hover); color: var(--text); }
 
+/* Who a report is for and what comes out of it, on the card face. Nine
+   templates that all draw APs on a plan are told apart by audience and page
+   count, not by their contents, so those two facts do not belong behind a
+   Details toggle. */
+.rep-template-facts {
+  display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 0;
+  font-size: 11px; color: var(--text-2); line-height: 1.5;
+}
+.rep-template-fact b {
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px;
+  font-size: 10px; color: var(--text-2); opacity: 0.75; margin-right: 4px;
+}
+
 .rep-set-nowarn {
   margin-top: 16px; padding: 10px 12px; border-radius: 6px;
   background: var(--amber-bg); color: var(--amber-dark);
