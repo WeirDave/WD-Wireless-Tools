@@ -7130,6 +7130,25 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
    outlined and lettered so the reader can see what adjoins this one; the
    current section stays filled. */
 .rep-seg-keyplan { flex-shrink: 0; }
+
+/* Match lines - the standard name, and the standard dashed treatment. Drawn
+   only on edges where another section actually continues, and labelled with
+   the section that carries on, so a run of racking can be followed sheet to
+   sheet. */
+.rep-matchline { stroke: #c0392b; fill: none; opacity: 0.9; }
+.rep-matchline-label {
+  fill: #c0392b; font-family: var(--sans); font-weight: 700;
+  letter-spacing: 0.5px;
+  paint-order: stroke; stroke: rgba(255,255,255,0.85); stroke-width: 2px;
+}
+[data-theme="dark"] .rep-matchline { stroke: #ef5350; }
+[data-theme="dark"] .rep-matchline-label {
+  fill: #ef5350; stroke: rgba(15,22,32,0.85);
+}
+@media print {
+  .rep-matchline { stroke: #b71c1c !important; opacity: 1 !important; }
+  .rep-matchline-label { fill: #b71c1c !important; stroke: #fff !important; }
+}
 .rep-seg-locator-other { fill: none; stroke: rgba(120,130,140,0.55); }
 .rep-seg-locator-label {
   fill: rgba(90,100,110,0.85); font-family: var(--sans); font-weight: 600;
