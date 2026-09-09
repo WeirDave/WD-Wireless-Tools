@@ -92,6 +92,16 @@ class StickyStorage(unittest.TestCase):
         self.assertEqual(rep["client_name"], "Acme")
         self.assertEqual(rep["revision"], "v3.1")
 
+    def test_page_orientation_can_also_be_cleared(self):
+        """Same shape as report_defaults, and it bit the same way. The keys
+        embed floor ids from one particular .esx, so merged they could never be
+        removed and every project ever opened would leave its floors behind."""
+        suite_settings.update_settings(
+            {"report": {"page_orient": {"placement:abc": "landscape"}}}, _path=self.tmp)
+        suite_settings.update_settings({"report": {"page_orient": {}}}, _path=self.tmp)
+        got = suite_settings.load_settings(_path=self.tmp)["report"]["page_orient"]
+        self.assertEqual(got, {})
+
     def test_only_declared_paths_are_replaced(self):
         """Replace-not-merge is a deliberate exception, not the rule. Anything
         else must keep merging, or an unrelated patch would wipe siblings."""
@@ -125,10 +135,13 @@ class StickyWiring(unittest.TestCase):
         one."""
         start = self.js.index("window.setOpt = function (cb)")
         body = self.js[start:self.js.index("\n  };", start)]
-        writes = body.count("settings/update")
-        self.assertLessEqual(writes, 1, "setOpt should not persist option values")
-        if writes:
-            self.assertIn("id === 'units'", body)
+        self.assertNotIn("settings/update", body,
+                         "setOpt must not build its own settings envelope")
+        saves = body.count("pushSettings(")
+        self.assertLessEqual(saves, 1, "setOpt should not persist option values")
+        if saves:
+            self.assertIn("id === 'units'", body,
+                          "units is the one person-level preference here")
 
     def test_the_shared_text_fields_stay_out_of_the_per_report_store(self):
         """Client, prepared-by, reference and revision are one value across
