@@ -2696,6 +2696,56 @@
       + '</div>';
   }
 
+  /* Match lines: the other half of the pair the Key Plan belongs to.
+
+     The key plan answers "where am I in the building". A match line answers
+     "where does this drawing continue", at the edge where the reader runs out
+     of paper. Standard name, drawn dashed along the shared edge and labelled
+     with the section that carries on - which is how someone follows a run of
+     racking from sheet to sheet.
+
+     Only edges that actually continue get one. A section with no APs is never
+     given a page, so an edge onto an empty section leads nowhere and marking
+     it would be a promise of a sheet that does not exist. The building
+     perimeter gets nothing either, for the same reason. */
+  function matchLinesFor(cell, cells, cW, cH) {
+    if (!cells || cells.length < 2) return '';
+    var byPos = {};
+    cells.forEach(function (c) { byPos[c.col + ',' + c.row] = c; });
+    var at = function (dc, dr) {
+      var c = byPos[(cell.col + dc) + ',' + (cell.row + dr)];
+      return (c && c.aps && c.aps.length) ? c : null;
+    };
+    var font = Math.min(cW, cH) * 0.045;
+    var dash = Math.min(cW, cH) * 0.035;
+    var sw = Math.min(cW, cH) * 0.006;
+    var pad = font * 0.5;
+    var out = '';
+
+    function edge(neighbour, x1, y1, x2, y2, tx, ty, rotate, anchor) {
+      if (!neighbour) return;
+      out += '<line class="rep-matchline" x1="' + x1 + '" y1="' + y1
+        + '" x2="' + x2 + '" y2="' + y2 + '" stroke-width="' + sw
+        + '" stroke-dasharray="' + dash + ',' + (dash * 0.6) + '"/>';
+      out += '<text class="rep-matchline-label" x="' + tx + '" y="' + ty
+        + '" font-size="' + font + '" text-anchor="' + anchor + '"'
+        + (rotate ? ' transform="rotate(' + rotate + ' ' + tx + ' ' + ty + ')"' : '')
+        + '>MATCH LINE \u2014 SECTION ' + WD.esc(segCellLabel(neighbour.col, neighbour.row))
+        + '</text>';
+    }
+
+    var midX = (cell.x0 + cell.x1) / 2, midY = (cell.y0 + cell.y1) / 2;
+    edge(at(1, 0), cell.x1, cell.y0, cell.x1, cell.y1,
+         cell.x1 - pad, midY, -90, 'middle');
+    edge(at(-1, 0), cell.x0, cell.y0, cell.x0, cell.y1,
+         cell.x0 + pad, midY, -90, 'middle');
+    edge(at(0, 1), cell.x0, cell.y1, cell.x1, cell.y1,
+         midX, cell.y1 - pad, 0, 'middle');
+    edge(at(0, -1), cell.x0, cell.y0, cell.x1, cell.y0,
+         midX, cell.y0 + pad + font * 0.8, 0, 'middle');
+    return out;
+  }
+
   function renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml, cells) {
     var cW = cell.x1 - cell.x0, cH = cell.y1 - cell.y0;
     var bleed = Math.min(cW, cH) * 0.03;
@@ -2703,7 +2753,8 @@
     var vx2 = Math.min(W, cell.x1 + bleed), vy2 = Math.min(H, cell.y1 + bleed);
     var vW = vx2 - vx, vH = vy2 - vy;
     var label = segCellLabel(cell.col, cell.row);
-    var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx, cell);
+    var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx, cell)
+      + matchLinesFor(cell, cells, cW, cH);
     return '<div class="rep-overview rep-seg-cell">'
       + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell, opts.cropBox, cells)
       +   '<h3 class="rep-seg-cell-title">Section ' + WD.esc(label)
