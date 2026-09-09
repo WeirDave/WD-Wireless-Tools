@@ -2552,7 +2552,7 @@
       + '</div>';
     out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb, segFloorHeading(opts));
     nonEmpty.forEach(function (cell) {
-      out += renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml);
+      out += renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml, cells);
     });
     return out;
   }
@@ -2612,22 +2612,62 @@
       + '</div>';
   }
 
-  function renderAntennaLocatorThumb(url, W, H, cell, cropBox) {
+  /* The Key Plan.
+
+     Standard name, deliberately: a construction reader recognises "Key Plan"
+     on sight and learns nothing from a label we invented. It is the companion
+     to the match lines at the sheet edges - the match line answers "where does
+     this join", the key plan answers "where am I in the building".
+
+     It already shaded the current section. What it did not do was draw the
+     others, so it told you which rectangle you were in without telling you
+     what was next to it - which is most of what someone lost in a warehouse
+     actually needs. Every section is now outlined and lettered, with this one
+     filled. */
+  function renderAntennaLocatorThumb(url, W, H, cell, cropBox, cells) {
     var cb = cropBox || { x: 0, y: 0, w: 1, h: 1 };
     var margin = Math.min(cb.w * W, cb.h * H) * 0.03;
     var vx = Math.max(0, cb.x * W - margin), vy = Math.max(0, cb.y * H - margin);
     var vW = Math.min(W - vx, cb.w * W + margin * 2), vH = Math.min(H - vy, cb.h * H + margin * 2);
     var lw = Math.min(vW, vH) * 0.008;
-    return '<div class="rep-seg-locator" style="--w:' + vW + ';--h:' + vH + '">'
-      + '<svg viewBox="' + vx + ' ' + vy + ' ' + vW + ' ' + vH + '">'
-      +   '<image href="' + WD.escAttr(url) + '" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/>'
-      +   '<rect x="' + cell.x0 + '" y="' + cell.y0 + '" width="' + (cell.x1 - cell.x0) + '" height="' + (cell.y1 - cell.y0)
-      +   '" class="rep-seg-locator-rect" stroke-width="' + lw + '"/>'
-      + '</svg>'
+
+    var others = '';
+    var all = cells || [];
+    // Only worth lettering when the letters will be readable at thumbnail size.
+    var labelAt = Math.min(vW, vH) * 0.055;
+    var showLabels = all.length > 1 && all.length <= 30;
+    all.forEach(function (c) {
+      var isThis = (c.col === cell.col && c.row === cell.row);
+      if (!isThis) {
+        others += '<rect x="' + c.x0 + '" y="' + c.y0 + '" width="' + (c.x1 - c.x0)
+          + '" height="' + (c.y1 - c.y0) + '" class="rep-seg-locator-other"'
+          + ' stroke-width="' + (lw * 0.6) + '"/>';
+      }
+      if (showLabels) {
+        others += '<text x="' + ((c.x0 + c.x1) / 2) + '" y="' + ((c.y0 + c.y1) / 2)
+          + '" class="rep-seg-locator-label' + (isThis ? ' is-here' : '') + '"'
+          + ' font-size="' + labelAt + '" text-anchor="middle"'
+          + ' dominant-baseline="central">' + WD.esc(segCellLabel(c.col, c.row)) + '</text>';
+      }
+    });
+
+    /* The caption sits outside the framed thumbnail, not inside it: the frame
+       carries aspect-ratio and overflow:hidden so the plan keeps its shape,
+       and anything else put in there is clipped away without trace. */
+    return '<div class="rep-seg-keyplan">'
+      + '<div class="rep-seg-locator" style="--w:' + vW + ';--h:' + vH + '">'
+      +   '<svg viewBox="' + vx + ' ' + vy + ' ' + vW + ' ' + vH + '">'
+      +     '<image href="' + WD.escAttr(url) + '" x="0" y="0" width="' + W + '" height="' + H + '" preserveAspectRatio="none"/>'
+      +     others
+      +     '<rect x="' + cell.x0 + '" y="' + cell.y0 + '" width="' + (cell.x1 - cell.x0) + '" height="' + (cell.y1 - cell.y0)
+      +     '" class="rep-seg-locator-rect" stroke-width="' + lw + '"/>'
+      +   '</svg>'
+      + '</div>'
+      + '<div class="rep-seg-locator-caption">Key Plan</div>'
       + '</div>';
   }
 
-  function renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml) {
+  function renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml, cells) {
     var cW = cell.x1 - cell.x0, cH = cell.y1 - cell.y0;
     var bleed = Math.min(cW, cH) * 0.03;
     var vx = Math.max(0, cell.x0 - bleed), vy = Math.max(0, cell.y0 - bleed);
@@ -2636,7 +2676,7 @@
     var label = segCellLabel(cell.col, cell.row);
     var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx, cell);
     return '<div class="rep-overview rep-seg-cell">'
-      + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell, opts.cropBox)
+      + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell, opts.cropBox, cells)
       +   '<h3 class="rep-seg-cell-title">Section ' + WD.esc(label)
       +     (opts.floorName ? ' <span class="rep-seg-cell-floor">— ' + WD.esc(opts.floorName) + '</span>' : '')
       +     ' <span class="rep-seg-cell-count">— ' + cell.aps.length + ' AP' + (cell.aps.length === 1 ? '' : 's') + '</span></h3>'
