@@ -2716,8 +2716,48 @@
     return Promise.all(pending);
   }
 
+  /* Named @page rules are what let one document hold both orientations.
+     Chromium implements them - six pages and three switches, verified against
+     a generated PDF. Firefox implements none of it: every sheet takes the
+     print dialog's orientation, so a page laid out for the other one loses its
+     right-hand edge. That is how APs went missing from a drawing an installer
+     was working from, and it happens silently.
+
+     Only said when it can actually bite: this document really does mix, and
+     this engine really does lack the property. On Chrome nobody ever sees it.
+     Testing the property rather than the user agent, because the question is
+     what the engine can do, not what it is called. */
+  function enginePrintsOneOrientationOnly() {
+    try { return !(window.CSS && CSS.supports && CSS.supports('page', 'auto')); }
+    catch (e) { return false; }        // unknown: say nothing rather than nag
+  }
+
+  function mixedOrientationWarning(host) {
+    if (!enginePrintsOneOrientationOnly()) return '';
+    var pages = host.querySelectorAll('[data-page-key]');
+    var landscape = 0, portrait = 0;
+    for (var i = 0; i < pages.length; i++) {
+      if (pages[i].classList.contains('is-landscape')) landscape++;
+      else portrait++;
+    }
+    if (!landscape || !portrait) return '';      // uniform: nothing to warn about
+    return 'This browser prints every sheet the same way round.\n\n'
+      + 'This report has ' + landscape + ' landscape and ' + portrait
+      + ' portrait page' + (landscape + portrait === 2 ? '' : 's') + ', so they '
+      + 'cannot both come out right here — whichever does not match the print '
+      + 'dialog will be cut off at the right-hand edge.\n\n'
+      + 'Either press “Match all pages” on any page to give them all one '
+      + 'orientation, or print from Chrome or Edge, which can mix them.\n\n'
+      + 'Print anyway?';
+  }
+
   window.printReport = async function () {
     syncDocTitle();
+    var host0 = document.getElementById('reportCanvas');
+    if (host0) {
+      var warn = mixedOrientationWarning(host0);
+      if (warn && !window.confirm(warn)) return;
+    }
     var host = document.getElementById('reportCanvas');
     await applyAntennaSegmentCrop(host, collectOpts());
     var images = Array.prototype.slice.call(host.querySelectorAll('img'));
