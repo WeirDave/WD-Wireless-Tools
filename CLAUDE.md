@@ -102,6 +102,37 @@ config block each — nothing below `CONFIG` names this app.
   cannot have the in-app button at all. Its path stays the standalone
   `Update-WaxFrame.ps1`, which is where this design came from.
 
+## Where a setting is allowed to live
+
+**Adding a setting means adding it to `web/assets/settings-registry.json` first.**
+That file is the rule, not a description of one, and
+`tests/test_settings_registry.py` enforces it. The three categories and why
+each exists are defined *in the registry itself* — read them there, they are
+the whole point.
+
+Short version: **preference** (follows the person, server-side in
+`settings.json`, exactly one control anywhere), **ui-state** (panel widths,
+collapsed sections, tips seen — stays in `localStorage` deliberately, because
+syncing a collapsed panel between machines is a regression), and
+**hosted-mirror** (Quick Walls / Scale / Report also run on GitHub Pages with
+no server, so those use the server when there is one and `localStorage` when
+hosted — a constraint, not an oversight).
+
+How this drifted in the first place, so it is not repeated: settings went
+wherever the tool that needed them already had a habit, and the habit was set
+by whether that tool happened to have a server call handy. Cloud Manager
+straddled both eras and ended up with `merge_rule` and `live_interval_ms` in
+**both** stores — Suite Settings read and wrote `settings.json` while the
+runtime only read `localStorage`, so the page displayed a value that was not
+in force and saving there did nothing at all. Fixed in v2.57.0; the migration
+takes the browser's value as the one in effect and only deletes the local key
+once the server write has succeeded.
+
+Two of the registry tests each correspond to a bug that shipped: "no setting
+lives in two stores" is that one, and "every `settings/update` sends a `patch`
+envelope" is report page orientation, which posted `{report: {...}}` where the
+server reads `d["patch"]` and therefore saved nothing while reporting success.
+
 ## Known gotchas
 
 - **Per-page paper orientation depends on a Chromium-only feature, and the

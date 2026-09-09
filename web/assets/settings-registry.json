@@ -1,0 +1,372 @@
+{
+  "_readme": [
+    "Every user-configurable setting in the suite, and where it is allowed to live.",
+    "",
+    "Settings drifted across two surfaces because there was never a rule: each one",
+    "went wherever the tool that needed it already had a habit, and the habit was",
+    "set by whether that tool happened to have a server call handy. Tools that were",
+    "always server-backed used settings.json; tools that must run without a server",
+    "used localStorage; Cloud Manager straddled both eras and ended up with one of",
+    "each in the same dialog. Merge rule and refresh interval were stored in BOTH,",
+    "which is how the Settings page came to show a value that was not in force.",
+    "",
+    "This file is the rule. tests/test_settings_registry.py enforces it.",
+    "Adding a setting means adding it here first."
+  ],
+  "categories": {
+    "preference": {
+      "store": "server",
+      "definition": "A choice about how the suite behaves for this person. Follows them across browsers and profiles, so it belongs in ~/.wd_wireless_tools/settings.json. Exactly one control anywhere in the suite.",
+      "examples": [
+        "merge conflict rule",
+        "report units",
+        "which owners the Files list opens on"
+      ]
+    },
+    "ui-state": {
+      "store": "browser",
+      "definition": "Where a panel was left, whether a section was expanded, whether a one-time tip has been seen. Deliberately stays in localStorage: syncing a collapsed panel between machines would be a regression, not a feature, and hoovering these onto the Settings page is what would turn it into a long list of toggles nobody wants.",
+      "examples": [
+        "sidebar width",
+        "disclosure open/closed",
+        "tip dismissed"
+      ]
+    },
+    "hosted-mirror": {
+      "store": "server-when-present",
+      "definition": "Quick Walls, Scale and Report also run hosted on GitHub Pages, where there is no server to save to. These settings use settings.json on the desktop suite and fall back to localStorage when hosted. This is a design decision forced by hosted mode, not an oversight - do not 'fix' it by making them server-only.",
+      "examples": [
+        "wall template preferences in hosted Quick Walls"
+      ]
+    }
+  },
+  "internal": {
+    "_comment": "State, not settings. No control, and not expected on the Settings page.",
+    "keys": [
+      "_version",
+      "setup_complete",
+      "report.page_orient",
+      "report.report_defaults"
+    ]
+  },
+  "settings": [
+    {
+      "key": "global.output_dir",
+      "label": "Local project folder",
+      "category": "preference",
+      "owner": "Suite",
+      "section": "general",
+      "home": "settings",
+      "control": "sOutputDir"
+    },
+    {
+      "key": "global.subfolders",
+      "label": "Default subfolders",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "subfolders",
+      "home": "settings"
+    },
+    {
+      "key": "global.subfolder_names",
+      "label": "Subfolder names",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "subfolders",
+      "home": "settings"
+    },
+    {
+      "key": "global.custom_destinations",
+      "label": "Custom destinations",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "subfolders",
+      "home": "settings"
+    },
+    {
+      "key": "organizer.image_ext",
+      "label": "Image extensions",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "squirrel",
+      "home": "settings",
+      "control": "sImageExt"
+    },
+    {
+      "key": "organizer.plan_ext",
+      "label": "Floor-plan extensions",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "squirrel",
+      "home": "settings",
+      "control": "sPlanExt"
+    },
+    {
+      "key": "organizer.report_ext",
+      "label": "Report extensions",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "squirrel",
+      "home": "settings",
+      "control": "sReportExt"
+    },
+    {
+      "key": "organizer.report_keywords",
+      "label": "Report keywords",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "squirrel",
+      "home": "settings",
+      "control": "sPdfKw"
+    },
+    {
+      "key": "organizer.json_report_keywords",
+      "label": "JSON report keywords",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "squirrel",
+      "home": "settings",
+      "control": "sJsonKw"
+    },
+    {
+      "key": "organizer.skip_dirs",
+      "label": "Folders to skip",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "squirrel",
+      "home": "settings",
+      "control": "sSkipDirs"
+    },
+    {
+      "key": "organizer.create_folder_template",
+      "label": "New site folder template",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "squirrel",
+      "home": "settings",
+      "control": "sCreateTpl"
+    },
+    {
+      "key_prefix": "organizer.rename.",
+      "label": "Squirrel rename rules",
+      "category": "preference",
+      "owner": "Squirrel",
+      "section": "squirrel",
+      "home": "rename-page"
+    },
+    {
+      "key": "cloud.merge_rule",
+      "label": "Merge conflict rule",
+      "category": "preference",
+      "owner": "Cloud Manager",
+      "section": "cloud",
+      "home": "settings",
+      "control": "mergeRule",
+      "legacy_browser_key": "wd-merge-rule"
+    },
+    {
+      "key": "cloud.live_interval_ms",
+      "label": "Live auto-refresh interval",
+      "category": "preference",
+      "owner": "Cloud Manager",
+      "section": "cloud",
+      "home": "settings",
+      "control": "sLiveMs",
+      "legacy_browser_key": "wd-live-ms"
+    },
+    {
+      "key": "cloud.default_owner_filter",
+      "label": "Default view (All / Mine / Others)",
+      "category": "preference",
+      "owner": "Cloud Manager",
+      "section": "cloud",
+      "home": "cloud-modal",
+      "control": "setowner"
+    },
+    {
+      "key_prefix": "rename.",
+      "label": "Rename formats and rules",
+      "category": "preference",
+      "owner": "Rename",
+      "section": "rename",
+      "home": "rename-page"
+    },
+    {
+      "key": "report.client_name",
+      "label": "Client / company",
+      "category": "preference",
+      "owner": "Report",
+      "section": "report",
+      "home": "report-modal",
+      "control": "set-clientName"
+    },
+    {
+      "key": "report.prepared_by",
+      "label": "Prepared by",
+      "category": "preference",
+      "owner": "Report",
+      "section": "report",
+      "home": "report-modal",
+      "control": "set-preparedBy"
+    },
+    {
+      "key": "report.project_ref",
+      "label": "Project reference",
+      "category": "preference",
+      "owner": "Report",
+      "section": "report",
+      "home": "report-modal",
+      "control": "set-projectRef"
+    },
+    {
+      "key": "report.revision",
+      "label": "Revision",
+      "category": "preference",
+      "owner": "Report",
+      "section": "report",
+      "home": "report-modal",
+      "control": "set-revision"
+    },
+    {
+      "key": "report.include_revision_in_filename",
+      "label": "Include revision in file name",
+      "category": "preference",
+      "owner": "Report",
+      "section": "report",
+      "home": "report-modal",
+      "control": "set-includeRevision"
+    },
+    {
+      "key": "report.units",
+      "label": "Units (feet / metres)",
+      "category": "preference",
+      "owner": "Report",
+      "section": "report",
+      "home": "report-tool"
+    },
+    {
+      "key": "walls.reveal_source_after_save",
+      "label": "Open the source folder after saving",
+      "category": "preference",
+      "owner": "Quick Walls",
+      "section": "walls",
+      "home": "settings",
+      "control": "sWallsReveal"
+    }
+  ],
+  "browser_only": {
+    "_comment": "ui-state and hosted-mirror keys. Listed so a new localStorage key is a deliberate choice rather than a habit, and so the 'no key in both stores' test knows what is allowed to be local.",
+    "keys": [
+      {
+        "key": "wd-theme",
+        "category": "ui-state",
+        "label": "Dark / light theme"
+      },
+      {
+        "key": "wd-live",
+        "category": "ui-state",
+        "label": "Live refresh on or off for this visit"
+      },
+      {
+        "key": "wd-project-directory",
+        "category": "ui-state",
+        "label": "Last browsed project folder"
+      },
+      {
+        "key": "wd-rename-root",
+        "category": "ui-state",
+        "label": "Last rename root"
+      },
+      {
+        "key": "wd-files-kind",
+        "category": "ui-state",
+        "label": "Files tab view"
+      },
+      {
+        "key": "wd-heldback-open",
+        "category": "ui-state",
+        "label": "Held-back section expanded"
+      },
+      {
+        "key": "wd-auto-assign-open",
+        "category": "ui-state",
+        "label": "Auto-assign section expanded"
+      },
+      {
+        "key": "wd-sharing-group",
+        "category": "ui-state",
+        "label": "Sharing group last used"
+      },
+      {
+        "key": "wd-match-help-seen",
+        "category": "ui-state",
+        "label": "Match help tip dismissed"
+      },
+      {
+        "key": "wd-organizer-advanced",
+        "category": "ui-state",
+        "label": "Squirrel advanced expanded"
+      },
+      {
+        "key": "wd-organizer-details",
+        "category": "ui-state",
+        "label": "Squirrel details expanded"
+      },
+      {
+        "key": "wd.walls.swapSidebarWidth",
+        "category": "ui-state",
+        "label": "Wall swap sidebar width"
+      },
+      {
+        "key": "wd.walls.swapFolded",
+        "category": "ui-state",
+        "label": "Wall swap groups folded"
+      },
+      {
+        "key": "wd-update-check",
+        "category": "ui-state",
+        "label": "Update check cache"
+      },
+      {
+        "key": "wd-update-dismissed",
+        "category": "ui-state",
+        "label": "Update banner dismissed"
+      },
+      {
+        "key": "wd-walls-units",
+        "category": "hosted-mirror",
+        "label": "Quick Walls units"
+      },
+      {
+        "key": "ekahau-default-template",
+        "category": "hosted-mirror",
+        "label": "Default wall template"
+      },
+      {
+        "key": "ekahau-auto-apply",
+        "category": "hosted-mirror",
+        "label": "Auto-apply default template"
+      },
+      {
+        "key": "wd-hosted-templates",
+        "category": "hosted-mirror",
+        "label": "Hosted Quick Walls templates"
+      },
+      {
+        "key": "wd-create-token-",
+        "category": "ui-state",
+        "label": "Squirrel create-folder token (per folder, prefix key)"
+      }
+    ]
+  },
+  "retired_browser_keys": {
+    "_comment": "Moved to the server. Must never be read or written again - a second store is exactly how the Settings page came to disagree with Cloud Manager.",
+    "keys": [
+      "wd-merge-rule",
+      "wd-live-ms",
+      "wd-report-details",
+      "wd-report-settings",
+      "wd-report-logo"
+    ]
+  }
+}
