@@ -84,6 +84,27 @@
     includeRevisionInName = rep.include_revision_in_filename !== false;
     if (rep.report_defaults && typeof rep.report_defaults === 'object') {
       savedReportDefaults = rep.report_defaults;
+      /* Saved options for a retired template are folded into its survivor
+         rather than left orphaned - he would otherwise silently lose settings
+         he had deliberately saved. Only options the survivor actually has are
+         carried, and anything it already has wins. */
+      Object.keys(RETIRED_REPORTS).forEach(function (old) {
+        var from = savedReportDefaults[old];
+        if (!from) return;
+        var to = RETIRED_REPORTS[old];
+        var survivor = REPORTS[to];
+        if (survivor) {
+          var known = {};
+          (survivor.sidebar || []).forEach(function (o) { known[o.id] = true; });
+          savedReportDefaults[to] = savedReportDefaults[to] || {};
+          Object.keys(from).forEach(function (k) {
+            if (known[k] && !(k in savedReportDefaults[to])) {
+              savedReportDefaults[to][k] = from[k];
+            }
+          });
+        }
+        delete savedReportDefaults[old];
+      });
     }
     // A page turned on purpose should still be turned tomorrow.
     if (rep.page_orient && typeof rep.page_orient === 'object') {
@@ -1282,7 +1303,7 @@
 
   var REPORT_CATEGORIES = [
     { key: 'install', label: 'Installation & Placement',
-      ids: ['placement', 'antenna', 'predictive', 'aim', 'location'] },
+      ids: ['placement', 'antenna', 'aim', 'location'] },
     { key: 'analysis', label: 'Site Analysis',
       ids: ['summary', 'coverage', 'interference', 'bom'] },
     { key: 'audit', label: 'Audit & Change',
@@ -1398,7 +1419,19 @@
     renderTemplateGallery();
   };
 
+  /* Predictive Design and the AP Placement Map were two templates whose only
+     real difference was whether large floors got split - which is a setting,
+     not a template. They are one now, and anything still asking for the old id
+     lands on the survivor rather than on an error.
+
+     Worth recording what former Predictive users gain: its floor sections were
+     plain blocks with no page key, so they never had per-page orientation, a
+     key plan or match lines. All three come with the merge. The one thing it
+     had that the map did not - the summary strip - came across as an option. */
+  var RETIRED_REPORTS = { predictive: 'placement' };
+
   window.selectReport = function (id) {
+    id = RETIRED_REPORTS[id] || id;
     if (!REPORTS[id]) return;
     if (REPORTS[id].status === 'coming-soon') return;
     if (id !== currentReportId) {
@@ -3237,6 +3270,9 @@
   function renderPlacementReport(aps, opts, ctx) {
     var head = opts.cover ? ctx.cover(aps.length, ctx.dateStr, 'Access points')
                           : ctx.inlineHeader(aps.length, ctx.dateStr, 'Access points');
+    // Carried over from Predictive Design when the two templates merged, so
+    // nobody who relied on it lost it.
+    head += opts.summary ? renderSummaryStrip(aps, ctx) : '';
     var byFloor = groupApsByFloor(aps, ctx);
     var floorOrder = sortedFloorOrder(byFloor);
     var sections = '';
@@ -3361,25 +3397,7 @@
     }
   }
 
-  function renderPredictiveReport(aps, opts, ctx) {
-    var head = opts.cover ? ctx.cover(aps.length, ctx.dateStr, 'APs to place')
-                          : ctx.inlineHeader(aps.length, ctx.dateStr, 'APs to place');
-    var summary = opts.summary ? renderPredictiveSummary(aps, ctx) : '';
-
-    var byFloor = groupApsByFloor(aps, ctx);
-    var floorOrder = sortedFloorOrder(byFloor);
-
-    var sections = '';
-    floorOrder.forEach(function (fp) {
-      var floorAps = byFloor[fp.id];
-      if (!floorAps || !floorAps.length) return;
-      sections += renderPredictiveFloorSection(fp, floorAps, opts, ctx);
-    });
-
-    return head + summary + sections + REPORT_FOOTER;
-  }
-
-  function renderPredictiveSummary(aps, ctx) {
+  function renderSummaryStrip(aps, ctx) {
     var floorIds = {};
     aps.forEach(function (ap) {
       var fp = ctx.floorPlanForAp(ap);
@@ -3392,18 +3410,6 @@
     if (directional) bits.push(directional + ' directional');
     if (omni) bits.push(omni + ' omni');
     return '<div class="rep-seg-note">' + WD.esc(bits.join(' · ')) + '.</div>';
-  }
-
-  function renderPredictiveFloorSection(fp, aps, opts, ctx) {
-    var sorted = aps.slice().sort(function (a, b) {
-      return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
-    });
-    var out = '<section class="rep-floor-section">'
-      + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
-    out += fp.id !== '_none'
-      ? renderAntennaOverview(fp, sorted, opts, ctx)
-      : '<div class="rep-empty-small">No floor plan assigned to these APs.</div>';
-    return out + '</section>';
   }
 
   function renderAntennaLegend(aps, ctx) {
@@ -5251,14 +5257,14 @@
     placement: {
       id: 'placement',
       label: 'AP Placement Map',
-      description: 'One sheet per floor: the plan, every AP where it actually goes, and its number. Nothing else.',
-      readBy: 'Whoever mounts the hardware',
-      output: 'One page per floor, always',
+      description: 'The plan, every AP where it actually goes, and its number. Large floors can be split into lettered sections with a key plan and match lines.',
+      readBy: 'Whoever mounts the hardware, and whoever signs off the design',
+      output: 'One page per floor, or several if you turn on section splitting',
       docName: 'AP Placement Map',
       coverBrand: 'Report \u00b7 AP Placement Map',
       status: 'ready',
       preview: PREVIEW_PLACEMENT,
-      bestFor: 'The sheet that goes in the folder or on the wall \u2014 handing an installer where the APs go, or dropping a clean placement map into a design package.',
+      bestFor: 'The sheet that goes in the folder or on the wall \u2014 handing an installer where the APs go, dropping a clean placement map into a design package, or handing exact placement to low-voltage installers before construction.',
       sections: [
         { icon: '\ud83d\uddfa\ufe0f', title: 'One page per floor',
           description: 'The full floor plan with every AP marked at its real position and labelled. The floor number is printed large at the top so a loose sheet still says where it belongs.' },
@@ -5283,6 +5289,8 @@
           description: 'A page per floor listing each marker number against the full AP name, so the installer can write the label correctly.' },
         { id: 'shortLabels', label: 'Short number labels on the plan', default: true,
           description: 'When your AP names end with an "AP" designator (e.g. "\u2026AP42"), show just the "42". Turn off to print the full AP name.' },
+        { id: 'summary', label: 'Summary strip', default: false,
+          description: 'AP count, floor-plan count, and the directional/omni split, above the floor plans.' },
         { id: 'labelModel', label: 'Add the AP model to each label', default: false,
           description: 'A second line under the name, e.g. "AP-515". Useful when a floor mixes hardware.' },
         { id: 'labelRadio', label: 'Add channel & TX power to each label', default: false,
@@ -5315,42 +5323,6 @@
         sizePlacementPlansForPrint(host, opts);
         if (opts.segmented) applyAntennaSegmentCrop.apply(null, arguments);
       },
-    },
-    predictive: {
-      id: 'predictive',
-      label: 'Predictive Design / AP Placement',
-      description: 'The same map, zoomed in far enough to read an exact position on a large floor.',
-      readBy: 'Low-voltage installers, and whoever signs off the design',
-      output: 'Several pages per floor on a big building, one on a small one',
-      docName: 'Predictive Design',
-      coverBrand: 'Report · Predictive Design',
-      status: 'ready',
-      preview: PREVIEW_PREDICTIVE,
-      bestFor: 'Handing exact AP placement to low-voltage installers before construction, and design sign-off before a build.',
-      sections: [
-        { icon: '📄', title: 'Cover page',
-          description: 'Site name, AP + floor-plan counts, your logo, date.' },
-        { icon: '📊', title: 'Summary strip',
-          description: 'Quick AP / floor-plan / directional-omni counts before the visuals.' },
-        { icon: '🗺️', title: 'Floor plan overview per floor',
-          description: 'Every AP plotted on each floor plan with SVG direction arrows. Large floors split into zoomed, lettered/numbered sections (with a locator map) so placement stays exact.' },
-      ],
-      sidebar: [
-        { id: 'summary',   label: 'Summary strip', default: true,
-          description: 'AP count, floor-plan count, and directional/omni split above the floor plans.' },
-        { id: 'inclDirectional', label: 'Include directional APs', default: true,
-          description: 'Standard case — APs whose antennas have a specific azimuth.' },
-        { id: 'inclOmni',        label: 'Include omni APs', default: true,
-          description: 'This report covers the whole placement plan, not just aiming — omni APs are on by default so nothing is missing from the crew\'s copy.' },
-        { id: 'shortLabels',     label: 'Short number labels on the plan', default: true,
-          description: 'When your AP names end with an "AP" designator (e.g. "…AP42"), show just the "42" on markers. Turn off to always show the full AP name — safer when APs are named by MAC or free-form text.' },
-        { id: 'segmented', label: 'Split large floor plans into zoomed sections', default: true,
-          description: 'Breaks each floor plan into a grid of zoomed-in, lettered/numbered sections (with a locator map) so AP markers stay pinpoint-legible. On by default here since exact placement is the point of this report — turn off to force one full-page image per floor regardless of size.' },
-        { id: '_gridConfig', type: 'grid-button', label: 'Configure grid…',
-          description: 'Choose how many rows and columns the segmented grid uses, with a live preview on your actual floor plan.' },
-      ],
-      render: renderPredictiveReport,
-      postRender: applyAntennaSegmentCrop,
     },
     summary: {
       id: 'summary',

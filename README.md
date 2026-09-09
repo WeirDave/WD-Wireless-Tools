@@ -31,7 +31,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"><br><b>Quick Walls</b><br><sub>v7.53 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.26.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"><br><b>Scale</b><br><sub>v1.5 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.52.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.53.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.0 · Desktop</sub></td>
 </tr>
@@ -201,7 +201,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.62.0
+WIRELESS TOOLS  v2.63.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
