@@ -46,6 +46,11 @@
       radios[i].checked = radios[i].value === rule;
     }
     document.getElementById('sLiveMs').value = String(c.live_interval_ms || 30000);
+
+    // Read by walls.js after a save. It had no control anywhere until now,
+    // so the only way to turn it off was editing settings.json by hand.
+    var w = settings.walls || {};
+    document.getElementById('sWallsReveal').checked = w.reveal_source_after_save !== false;
   }
 
   var _subfolders = [];
@@ -225,6 +230,9 @@
       cloud: {
         merge_rule: mergeRule,
         live_interval_ms: parseInt(document.getElementById('sLiveMs').value, 10) || 30000
+      },
+      walls: {
+        reveal_source_after_save: document.getElementById('sWallsReveal').checked
       }
     };
 
