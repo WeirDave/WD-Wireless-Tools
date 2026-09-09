@@ -504,10 +504,10 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
             with self.subTest(documented_path=documented_path):
                 self.assertIn(documented_path, readme)
 
-        cloud_stub = (ROOT / "web" / "pages" / "hosted-cloud-stub.html").read_text(encoding="utf-8")
-        squirrel_stub = (ROOT / "web" / "pages" / "hosted-organizer-stub.html").read_text(encoding="utf-8")
-        self.assertIn(f"v{versions['cloud']} · desktop suite", cloud_stub)
-        self.assertIn(f"v{versions['squirrel']} · desktop suite", squirrel_stub)
+        # The hosted stubs used to quote per-tool versions here, which meant a
+        # hand-edited version stamp in a third place on every release. They are
+        # gone with hosted mode, and so is that step: the landing page quotes
+        # no version at all, so there is nothing left to fall out of date.
 
     def test_backlog_contains_only_current_unfinished_work(self):
         backlog = (ROOT / "BACKLOG.md").read_text(encoding="utf-8")

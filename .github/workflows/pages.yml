@@ -1,5 +1,23 @@
 name: Deploy Pages
 
+# Publishes the public landing page to
+# https://weirdave.github.io/WD-Wireless-Tools/
+#
+# This used to build and publish a hosted copy of Quick Walls, Scale and Report
+# that ran with no server behind them. That is retired: settings had to work two
+# different ways depending on whether a server was there, which is one of the
+# reasons they drifted apart in the first place. The suite is desktop-only now
+# and every setting is saved in one place.
+#
+# The landing page is served at every path the hosted build used to answer, not
+# just at the root. Those URLs were posted publicly - LinkedIn, the Ekahau
+# community, WLAN Pros - and posts get read for years. A 404 is a worse outcome
+# than an explanation, so /walls/, /scale/, /report/ and the guide paths all
+# resolve to the same page rather than disappearing.
+#
+# Still workflow_dispatch only, deliberately: merging a change here must never
+# alter the live site by itself. Publishing is a separate, deliberate act.
+
 on:
   workflow_dispatch:
 
@@ -18,81 +36,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build hosted site
+      - name: Build the landing site
         run: |
           set -e
           BUILD=docs-build
           rm -rf "$BUILD"
-          mkdir -p "$BUILD/walls" "$BUILD/cloud" "$BUILD/organizer" "$BUILD/scale" "$BUILD/report" "$BUILD/templates"
+          mkdir -p "$BUILD"
 
+          # The page uses the suite's stylesheet and logos.
           cp -r web/assets "$BUILD/assets"
 
-          for f in web/guide*.html; do
-            [ -f "$f" ] && cp "$f" "$BUILD/"
+          cp web/pages/landing.html "$BUILD/index.html"
+
+          # Every path the hosted build answered. Same page at each: someone
+          # following an old "try Quick Walls in your browser" link lands on
+          # something that explains where it went, not on a 404.
+          for p in walls scale report cloud organizer; do
+            mkdir -p "$BUILD/$p"
+            cp web/pages/landing.html "$BUILD/$p/index.html"
+            sed -i \
+              -e 's|href="assets/|href="../assets/|g' \
+              -e 's|src="assets/|src="../assets/|g' \
+              "$BUILD/$p/index.html"
           done
 
-          cp templates/*.json "$BUILD/templates/" 2>/dev/null || true
-
-          cp web/walls.html "$BUILD/walls/index.html"
-          sed -i 's|<head>|<head>\n<script>window.WD_HOSTED = true;</script>|' "$BUILD/walls/index.html"
-          sed -i \
-            -e 's|href="/assets/|href="../assets/|g' \
-            -e 's|src="/assets/|src="../assets/|g' \
-            -e 's|href="/walls"|href="./"|g' \
-            -e 's|href="/cloud"|href="../cloud/"|g' \
-            -e 's|href="/organizer"|href="../organizer/"|g' \
-            -e 's|href="/scale"|href="../scale/"|g' \
-            -e 's|href="/report"|href="../report/"|g' \
-            -e 's|href="/guide"|href="../guide.html"|g' \
-            -e 's|href="/"|href="../"|g' \
-            "$BUILD/walls/index.html"
-
-          cp web/scale.html "$BUILD/scale/index.html"
-          sed -i 's|<head>|<head>\n<script>window.WD_HOSTED = true;</script>|' "$BUILD/scale/index.html"
-          sed -i \
-            -e 's|href="/assets/|href="../assets/|g' \
-            -e 's|src="/assets/|src="../assets/|g' \
-            -e 's|href="/walls"|href="../walls/"|g' \
-            -e 's|href="/cloud"|href="../cloud/"|g' \
-            -e 's|href="/organizer"|href="../organizer/"|g' \
-            -e 's|href="/scale"|href="./"|g' \
-            -e 's|href="/report"|href="../report/"|g' \
-            -e 's|href="/guide"|href="../guide.html"|g' \
-            -e 's|href="/"|href="../"|g' \
-            "$BUILD/scale/index.html"
-
-          cp web/report.html "$BUILD/report/index.html"
-          sed -i 's|<head>|<head>\n<script>window.WD_HOSTED = true;</script>|' "$BUILD/report/index.html"
-          sed -i \
-            -e 's|href="/assets/|href="../assets/|g' \
-            -e 's|src="/assets/|src="../assets/|g' \
-            -e 's|href="/walls"|href="../walls/"|g' \
-            -e 's|href="/cloud"|href="../cloud/"|g' \
-            -e 's|href="/organizer"|href="../organizer/"|g' \
-            -e 's|href="/scale"|href="../scale/"|g' \
-            -e 's|href="/report"|href="./"|g' \
-            -e 's|href="/guide"|href="../guide.html"|g' \
-            -e 's|href="/"|href="../"|g' \
-            "$BUILD/report/index.html"
-
-          cp web/pages/hosted-index.html "$BUILD/index.html"
-          cp web/pages/hosted-cloud-stub.html "$BUILD/cloud/index.html"
-          cp web/pages/hosted-organizer-stub.html "$BUILD/organizer/index.html"
-
-          for g in "$BUILD"/guide*.html; do
-            [ -f "$g" ] || continue
-            sed -i \
-              -e 's|href="/walls"|href="walls/"|g' \
-              -e 's|href="/cloud"|href="cloud/"|g' \
-              -e 's|href="/organizer"|href="organizer/"|g' \
-              -e 's|href="/scale"|href="scale/"|g' \
-              -e 's|href="/report"|href="report/"|g' \
-              -e 's|href="/"|href="./"|g' \
-              "$g"
+          # Guides were published as flat .html files and are the sort of thing
+          # people bookmark, so they keep resolving too.
+          for g in guide guide-cloud guide-organizer guide-report; do
+            cp web/pages/landing.html "$BUILD/$g.html"
           done
 
           echo "--- Built tree ---"
-          find "$BUILD" -maxdepth 3 -type f | sort
+          find "$BUILD" -maxdepth 2 -type f -name '*.html' | sort
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

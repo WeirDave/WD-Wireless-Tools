@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Wireless Tools — Ekahau workflow tools for wireless engineers</title>
+<meta name="description" content="A free, local-first suite of Ekahau workflow tools: cloud and file organisation, wall remapping, AP labelling, floor-plan trimming, scale conversion and installer-facing reports.">
+<link rel="icon" href="assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/wd-wireless-tools-v8.0-180x180.png">
+<link rel="stylesheet" href="assets/wd-tools.css">
+<style>
+  /* Self-contained: this page is served from GitHub Pages with no server
+     behind it, so it must not depend on anything the desktop app provides. */
+  body.lp { padding: 0 0 80px; }
+  .lp-wrap { max-width: 820px; margin: 0 auto; padding: 0 24px; }
+  .lp-hero { text-align: center; padding: 56px 0 36px; }
+  .lp-logo { width: 120px; height: auto; margin-bottom: 18px; }
+  .lp-hero h1 { font-size: 34px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 10px; }
+  .lp-hero h1 span { color: var(--green); }
+  .lp-sub { font-size: 16px; color: var(--text-2); line-height: 1.6; max-width: 620px; margin: 0 auto; }
+  .lp-cta { margin-top: 26px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .lp-btn {
+    padding: 12px 26px; border-radius: 8px; text-decoration: none;
+    font-size: 15px; font-weight: 600; background: var(--blue); color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .lp-btn:hover { filter: brightness(1.1); }
+  .lp-btn.ghost { background: transparent; color: var(--text-2); }
+  .lp-btn.ghost:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+
+  .lp-sec { margin-top: 44px; }
+  .lp-sec h2 {
+    font-size: 20px; font-weight: 700; margin-bottom: 6px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--green);
+  }
+  .lp-sec h3 { font-size: 15px; font-weight: 700; margin: 22px 0 6px; }
+  .lp-sec p { font-size: 14.5px; line-height: 1.65; margin: 10px 0; color: var(--text-2); }
+  .lp-sec p strong, .lp-sec li strong { color: var(--text); }
+  .lp-sec ol, .lp-sec ul { margin: 10px 0 10px 22px; font-size: 14.5px; line-height: 1.7; color: var(--text-2); }
+  .lp-sec li { margin: 6px 0; }
+
+  .lp-callout {
+    border-radius: 8px; padding: 16px 18px; margin: 18px 0;
+    font-size: 14px; line-height: 1.65; color: var(--text);
+    background: rgba(240,184,95,0.10); border: 1px solid rgba(240,184,95,0.32);
+  }
+  .lp-callout b { color: #f0b85f; }
+  .lp-callout.info { background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.32); }
+  .lp-callout.info b { color: #6bb3e0; }
+
+  .lp-code {
+    display: block; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px 14px; margin: 10px 0;
+    font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px;
+    color: var(--text); overflow-x: auto; white-space: pre;
+  }
+
+  .lp-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 16px; }
+  .lp-tool { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .lp-tool b { display: block; font-size: 14px; margin-bottom: 4px; }
+  .lp-tool span { font-size: 13px; color: var(--text-3); line-height: 1.55; }
+
+  .lp-foot {
+    margin-top: 52px; padding-top: 22px; border-top: 1px solid var(--border);
+    font-size: 13px; color: var(--text-3); text-align: center; line-height: 1.8;
+  }
+  .lp-foot a { color: var(--blue); text-decoration: none; }
+  .lp-foot a:hover { text-decoration: underline; }
+  @media (max-width: 600px) { .lp-hero { padding: 36px 0 24px; } .lp-hero h1 { font-size: 27px; } }
+</style>
+</head>
+<body class="lp">
+
+<div class="lp-wrap">
+
+  <div class="lp-hero">
+    <img class="lp-logo" src="assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Wireless Tools">
+    <h1><span>WD</span> Wireless Tools</h1>
+    <p class="lp-sub">
+      A free suite of Ekahau workflow tools for wireless engineers. Organise cloud and local
+      projects, remap wall types, label access points, trim oversized floor plans, convert scale,
+      and turn an <code>.esx</code> into installer-ready reports.
+    </p>
+    <p class="lp-sub" style="margin-top:12px">
+      It runs on your own machine. Your project files never leave it, there is no account,
+      and there is no telemetry.
+    </p>
+    <div class="lp-cta">
+      <a class="lp-btn" href="https://github.com/WeirDave/WD-Wireless-Tools/releases/latest">Download the latest release</a>
+      <a class="lp-btn ghost" href="https://github.com/WeirDave/WD-Wireless-Tools">View on GitHub</a>
+    </div>
+  </div>
+
+  <div class="lp-sec">
+    <h2>Install it</h2>
+
+    <div class="lp-callout">
+      <b>Install Python 3.10 or newer first — before anything else.</b>
+      On Windows, tick <b>Add Python to PATH</b> in the installer.
+      <br><br>
+      This is the one step that catches people out. On a stock Windows machine, typing
+      <code>python</code> opens the Microsoft Store instead of running Python. If that happens,
+      the install below will look like it worked and the app then will not start, with nothing
+      on screen explaining why. Install Python from
+      <a href="https://www.python.org/downloads/">python.org</a>, reopen your terminal, and
+      check <code>python --version</code> prints a number.
+    </div>
+
+    <h3>Then run one command</h3>
+    <p>Windows, in PowerShell:</p>
+    <code class="lp-code">irm https://raw.githubusercontent.com/WeirDave/WD-Wireless-Tools/main/install.ps1 | iex</code>
+    <p>macOS or Linux, in Terminal:</p>
+    <code class="lp-code">curl -fsSL https://raw.githubusercontent.com/WeirDave/WD-Wireless-Tools/main/install.sh | bash</code>
+    <p>
+      It asks whether you want a <b>git</b> install (updates take seconds, because only what
+      changed is downloaded) or a <b>ZIP</b> install (no dependencies, each update re-downloads
+      the app). Either is fine, and you can switch later from <b>Menu → About</b> without
+      reinstalling. The installer adds any missing Python packages and offers to start the suite.
+    </p>
+
+    <h3>Or download it by hand</h3>
+    <p>
+      Take the versioned <code>WD-Wireless-Tools-vX.Y.Z.zip</code> from the
+      <a href="https://github.com/WeirDave/WD-Wireless-Tools/releases/latest">latest release</a>
+      — not GitHub's automatic "Source code" archive — extract it somewhere permanent, and
+      run <code>Start WD Wireless Tools.bat</code> on Windows or
+      <code>Start WD Wireless Tools.command</code> on macOS.
+    </p>
+    <p>
+      Every release ships a <code>.sha256</code> checksum beside the ZIP. The in-app updater and
+      both install scripts refuse to install a download whose hash does not match it.
+    </p>
+  </div>
+
+  <div class="lp-sec">
+    <h2>Run it</h2>
+    <p>
+      Starting the suite opens a terminal window and then your browser at
+      <code>http://localhost:8675</code>. The terminal is the app itself — leave it open while
+      you work, and close it when you are done. Nothing is published to the internet; the
+      address is local to your machine.
+    </p>
+    <p>
+      The first screen is a set of cards, one per tool. Pick one, drop in an <code>.esx</code>,
+      and work from there.
+    </p>
+  </div>
+
+  <div class="lp-sec">
+    <h2>The tools</h2>
+    <div class="lp-tools">
+      <div class="lp-tool"><b>Cloud Manager</b><span>Compare Ekahau Cloud projects against your local files. Find duplicates, match names, sync in bulk.</span></div>
+      <div class="lp-tool"><b>Quick Walls</b><span>Remap every wall type in a project at once, with reusable templates and keyboard shortcuts.</span></div>
+      <div class="lp-tool"><b>AP Labeler</b><span>See your APs on the plan, choose a spatial order, and apply a naming pattern in one pass.</span></div>
+      <div class="lp-tool"><b>PlanTrim</b><span>Crop the empty canvas off a CAD import and rebase every object so nothing moves.</span></div>
+      <div class="lp-tool"><b>Report</b><span>Turn an <code>.esx</code> into installer-facing PDFs — AP installation, antenna aim, BOM and more.</span></div>
+      <div class="lp-tool"><b>Squirrel</b><span>Sort loose project files into a predictable folder structure, after reviewing the result.</span></div>
+      <div class="lp-tool"><b>Scale</b><span>Convert between feet-and-inches, decimal feet, inches, metres and millimetres.</span></div>
+    </div>
+  </div>
+
+  <div class="lp-sec">
+    <h2>A typical first pass</h2>
+    <ol>
+      <li><b>Open a project.</b> Drop an <code>.esx</code> onto whichever tool you need. Files are read on your machine.</li>
+      <li><b>Tidy the plan.</b> PlanTrim crops an oversized CAD canvas; Quick Walls fixes wall types that came in wrong.</li>
+      <li><b>Name the APs.</b> AP Labeler applies a consistent naming scheme across a floor in one go.</li>
+      <li><b>Produce the paperwork.</b> Report builds print-ready documents for whoever is doing the install.</li>
+      <li><b>Save and re-open in Ekahau.</b> Tools that change a project write a new <code>.esx</code> — your original is not modified in place.</li>
+    </ol>
+
+    <div class="lp-callout info">
+      <b>Printing reports:</b> mixed portrait-and-landscape reports are verified in
+      <b>Chrome</b> and <b>Edge</b> — each page comes out on the sheet it was laid out for.
+      If a report ever prints clipped at the margin, use <b>Match all pages</b> in the report
+      toolbar: it puts every page the same way round, which is always safe to print.
+    </div>
+  </div>
+
+  <div class="lp-sec">
+    <h2>Where the browser tools went</h2>
+    <p>
+      Quick Walls, Scale and Report used to run here in the browser as a demo. They are now
+      part of the desktop suite only, so that every tool behaves the same way and every setting
+      is saved in one place rather than depending on which browser you happened to open.
+      Install the suite above and you get all seven, including the ones that need access to
+      your files and your Ekahau Cloud account.
+    </p>
+  </div>
+
+  <div class="lp-foot">
+    <a href="https://github.com/WeirDave/WD-Wireless-Tools">Repository</a> ·
+    <a href="https://github.com/WeirDave/WD-Wireless-Tools/blob/main/docs/USER_MANUAL.md">User manual</a> ·
+    <a href="https://github.com/WeirDave/WD-Wireless-Tools/releases/latest">Releases</a> ·
+    <a href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml">Report a problem</a>
+    <br>
+    Built by <a href="https://weirdave.com">WeirDave</a> · MIT licensed · No telemetry
+  </div>
+
+</div>
+
+</body>
+</html>

@@ -12,7 +12,7 @@
 ![No Telemetry](https://img.shields.io/badge/telemetry-none-5fa970?style=flat-square)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-6b7280?style=flat-square)
 
-[Home](../README.md) · [Browser Tools](https://weirdave.github.io/WD-Wireless-Tools/) · [Latest Release](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) · [Get Help](https://github.com/WeirDave/WD-Wireless-Tools/issues)
+[Home](../README.md) · [Project Page](https://weirdave.github.io/WD-Wireless-Tools/) · [Latest Release](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) · [Get Help](https://github.com/WeirDave/WD-Wireless-Tools/issues)
 
 </div>
 
@@ -49,15 +49,15 @@
 
 ## Start Here
 
-WD Wireless Tools is a local, browser-based suite for common Ekahau workflows. The complete desktop suite runs on Windows and macOS. Quick Walls, Scale, and Report can also run directly from the public website.
+WD Wireless Tools is a local suite for common Ekahau workflows. It runs on Windows and macOS and opens in your normal browser, but everything executes on your own machine — nothing is uploaded.
 
 | If you need to… | Use | Available |
 |---|---|---|
 | Compare local projects with Ekahau Cloud | Cloud Manager | Desktop |
-| Remap wall types or apply wall templates | Quick Walls | Desktop + Web |
+| Remap wall types or apply wall templates | Quick Walls | Desktop |
 | Organize loose project files | Squirrel | Desktop |
-| Convert architectural measurements | Scale | Desktop + Web |
-| Generate installer-ready documents | Report | Desktop + Web |
+| Convert architectural measurements | Scale | Desktop |
+| Generate installer-ready documents | Report | Desktop |
 | Label access points with a naming pattern | AP Labeler | Desktop |
 | Trim excess whitespace from floor plans | PlanTrim | Desktop |
 
@@ -71,7 +71,7 @@ WD Wireless Tools is a local, browser-based suite for common Ekahau workflows. T
 - Python 3.10 or newer for the complete desktop suite
 - Chrome, Edge, or Firefox signed into Ekahau Cloud for Cloud Manager
 
-You do not need Python to use the [hosted browser tools](https://weirdave.github.io/WD-Wireless-Tools/).
+Python is required for every tool in the suite.
 
 ### Install the desktop suite
 
@@ -165,9 +165,7 @@ Quick Walls edits wall types inside an Ekahau `.esx` project without uploading i
 - Configure a default template when you want it proposed automatically on file open.
 - Use number keys `1` through `9` when working with the corresponding wall-picker positions.
 
-Desktop custom templates live in `templates/`. The hosted build stores custom templates in that browser's local storage, so templates do not automatically move between browsers or computers.
-
-Open [Quick Walls on the web](https://weirdave.github.io/WD-Wireless-Tools/walls/).
+Custom templates are saved under `~/.wd_wireless_tools/templates/`, outside the application folder, so updating the suite never touches them and they are the same whichever browser you open the tools in.
 
 ---
 
@@ -198,8 +196,6 @@ Scale converts architectural measurements between feet-and-inches, decimal feet,
 3. Select the copy control beside the value you need.
 
 Supported architectural formats include `4' 6-1/2"`, `4' 6 1/2"`, and `1/2"`. A bare number is treated as feet on the imperial side and meters on the metric side.
-
-Open [Scale on the web](https://weirdave.github.io/WD-Wireless-Tools/scale/).
 
 ---
 
@@ -238,8 +234,6 @@ Floor-plan markers and AP-table labels come from the AP names inside the project
 - Enable background graphics if your browser offers that option.
 - Inspect page breaks, map readability, and table wrapping in the preview.
 - Save to PDF and inspect the final PDF before sending it to installers or customers.
-
-Open [Report on the web](https://weirdave.github.io/WD-Wireless-Tools/report/).
 
 ---
 
@@ -297,7 +291,7 @@ PlanTrim removes excess whitespace around floor plan images inside an `.esx` fil
 - Saved Cloud-session data is encrypted, with the key stored in the operating-system credential vault.
 - **Menu → Forget Cloud Login** removes the saved Cloud session and its key.
 
-The hosted site has no server-side file-processing service. Files opened by the hosted tools remain in your browser.
+There is no server-side file-processing service anywhere in the suite. Files are opened, changed and saved on your own machine.
 
 ## Update or Uninstall
 
@@ -393,16 +387,16 @@ PORT=8676 bash "Start WD Wireless Tools.command"
 
 Open [http://localhost:8675](http://localhost:8675) manually while the launcher terminal remains open.
 
-### A hosted wall template is missing
+### A custom wall template is missing
 
-Hosted templates are saved in browser local storage. Use the same browser and browser profile, or export/import the JSON template.
+Custom templates are saved under `~/.wd_wireless_tools/templates/`. If one has disappeared, check that folder — updating the suite never writes to it. Templates saved by an older browser-only build stayed in that browser's local storage and are not carried across.
 
 ## Getting Help
 
 Use the guide built into the relevant tool first. For a reproducible bug or focused feature request, [open a GitHub issue](https://github.com/WeirDave/WD-Wireless-Tools/issues/new) and include:
 
 - the suite and tool version;
-- Windows or macOS version, or browser/version for a hosted tool;
+- Windows or macOS version, and your browser and its version;
 - the steps that reproduce the problem;
 - the expected result; and
 - the actual result or exact error text.
