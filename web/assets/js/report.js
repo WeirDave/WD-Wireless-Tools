@@ -1618,7 +1618,7 @@
     _gridFloorIdx = 0;
     var fp = fps[0];
     var aps = filterApsForFloor(fp);
-    var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
+    var auto = computeAntennaGrid(fp.width, fp.height, aps, {}, fp.metersPerUnit);
     _gridCols = (currentOpts.segCols > 0) ? currentOpts.segCols : auto.cols;
     _gridRows = (currentOpts.segRows > 0) ? currentOpts.segRows : auto.rows;
     _cropBoxes = {};
@@ -2032,7 +2032,7 @@
   window.resetGridToAuto = function () {
     var fp = proj.floorPlans[_gridFloorIdx];
     var aps = filterApsForFloor(fp);
-    var auto = computeAntennaGrid(fp.width, fp.height, aps, {});
+    var auto = computeAntennaGrid(fp.width, fp.height, aps, {}, fp.metersPerUnit);
     _gridCols = auto.cols;
     _gridRows = auto.rows;
     _cropBox = { x: 0, y: 0, w: 1, h: 1 };
@@ -2468,7 +2468,7 @@
     if (!keyHtml) keyHtml = antennaKeyHtml(opts, aps, ctx);
 
     if (opts.segmented) {
-      var grid = computeAntennaGrid(W, H, aps, opts);
+      var grid = computeAntennaGrid(W, H, aps, opts, fp.metersPerUnit);
       if (grid.cols * grid.rows > 1) {
         opts.cropBox = (opts.cropBoxes && opts.cropBoxes[fp.id]) || null;
         opts.floorName = fp.name || 'Floor plan';
@@ -2501,14 +2501,43 @@
 
 
 
-  function computeAntennaGrid(W, H, aps, opts) {
+  // Roughly a floor's worth of detail per sheet, and roughly as many APs as
+  // stay legible on one. Named so the two halves of the decision can be argued
+  // with separately.
+  var SEG_SQFT_PER_PAGE = 120000;
+  var SEG_APS_PER_PAGE = 14;
+  var SEG_MAX_CELLS = 24;
+
+  /* How many sections a floor is split into.
+
+     The size term used to be W * H * 10.7639 - plan units multiplied by the
+     square feet in a square metre, as though a plan unit were a metre. It is
+     not: a length in plan units becomes metres only after multiplying by that
+     plan's own metersPerUnit, which on a CAD import is about 0.025. So a
+     10000x7500 plan was measured as 807 million square feet instead of half a
+     million, out by a factor of 1584, and every plan of any size ran into the
+     24-cell cap.
+
+     The effect was that segmentation never adapted to anything. A 1,708 sq ft
+     apartment was cut into the same 24 sections as a 2.2 million sq ft
+     warehouse, and the density term never influenced the answer because the
+     size term always won. Construction asking for "fewer pages with more on
+     them" was asking for this to work, not for a different default.
+
+     Without a scale there is no honest way to know how big a building is, so
+     the count falls back to AP density alone, which needs none. */
+  function computeAntennaGrid(W, H, aps, opts, mPerUnit) {
     var userCols = parseInt(opts && opts.segCols, 10);
     var userRows = parseInt(opts && opts.segRows, 10);
     if (userCols > 0 && userRows > 0) return { cols: userCols, rows: userRows };
-    var areaSqFt = W * H * 10.7639;
-    var byDensity = Math.ceil(aps.length / 14) || 1;
-    var bySize = Math.ceil(areaSqFt / 120000) || 1;
-    var target = Math.min(24, Math.max(byDensity, bySize, 1));
+    var byDensity = Math.ceil(aps.length / SEG_APS_PER_PAGE) || 1;
+    var bySize = 1;
+    var scale = (typeof mPerUnit === 'number' && mPerUnit > 0) ? mPerUnit : 0;
+    if (scale) {
+      var areaSqFt = (W * scale) * (H * scale) * 10.7639;
+      bySize = Math.ceil(areaSqFt / SEG_SQFT_PER_PAGE) || 1;
+    }
+    var target = Math.min(SEG_MAX_CELLS, Math.max(byDensity, bySize, 1));
     if (target <= 1) return { cols: 1, rows: 1 };
     var cols = Math.max(1, Math.round(Math.sqrt(target * (W / H))));
     var rows = Math.max(1, Math.ceil(target / cols));
@@ -4504,7 +4533,7 @@
       var parts = [];
       if (opts.segmented && fp.id !== '_none') {
         var W = fp.width || 1, H = fp.height || 1;
-        var grid = computeAntennaGrid(W, H, byFloor[fp.id], opts);
+        var grid = computeAntennaGrid(W, H, byFloor[fp.id], opts, fp.metersPerUnit);
         if (grid.cols * grid.rows > 1) {
           parts.push('Sectional grid overview');
           parts.push((grid.cols * grid.rows) + ' detail sections with AP placement maps');
