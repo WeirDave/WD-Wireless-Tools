@@ -504,13 +504,17 @@ async function goToDashboard(email) {
   // Before the first listing is drawn, not after, or the page shows
   // everything and then hides half of it a moment later.
   await loadDefaultOwnerFilter();
+  // Same reason: the merge rule and refresh interval have to be the saved ones
+  // before anything can act on them.
+  await loadCloudPrefs();
   syncOwnerToggle();
   _syncTabUI(currentTab);
   refreshData();
   if (liveWanted()) startLive();
 }
 
-function liveMs() { try { return parseInt(localStorage.getItem('wd-live-ms')) || 30000; } catch (e) { return 30000; } }
+// Backed by settings.json, loaded once at login by loadCloudPrefs().
+function liveMs() { return _liveMs; }
 let liveTimer = null;
 let liveCountdown = 0;
 
@@ -3323,8 +3327,90 @@ function _lpPick(oppIdOrPath, oppName) {
   markManualMatch(cloudId, localPath, cloudName, localName);
 }
 
-function mergeRule() { try { return localStorage.getItem('wd-merge-rule') || 'ask'; } catch (e) { return 'ask'; } }
-function setMergeRule(v) { try { localStorage.setItem('wd-merge-rule', v); } catch (e) {} }
+/* Merge rule and live-refresh interval: one store, not two.
+
+   These used to live in localStorage while Suite Settings read and wrote the
+   same two keys in settings.json. Nothing connected the pair, so the Settings
+   page showed a value that was not in force and saving there changed nothing —
+   the control looked like it worked and did not. They are server-side now, and
+   this file is the only thing that reads them.
+
+   The old browser copy is the value actually in effect on this machine, so on
+   first run it wins and is written through to the server; the local key is only
+   deleted once that write has succeeded. Letting the server default win instead
+   would quietly undo a deliberate choice — someone who set "skip" would find
+   "ask" back. */
+const MERGE_RULES = ['ask', 'newer', 'both', 'skip'];
+const LEGACY_MERGE_KEY = 'wd-merge-rule';
+const LEGACY_LIVE_MS_KEY = 'wd-live-ms';
+
+let _mergeRule = 'ask';
+let _liveMs = 30000;
+
+function mergeRule() { return _mergeRule; }
+
+function setMergeRule(v) {
+  if (MERGE_RULES.indexOf(v) === -1) return;
+  _mergeRule = v;
+  _persistCloudPref({ merge_rule: v });
+}
+
+function setLiveMs(ms) {
+  const n = parseInt(ms, 10);
+  if (!(n > 0)) return;
+  _liveMs = n;
+  _persistCloudPref({ live_interval_ms: n });
+}
+
+function _persistCloudPref(patch) {
+  if (!window.WD || !WD.api) return Promise.resolve(false);
+  return WD.api('settings/update', { patch: { cloud: patch } })
+    .then(r => !!(r && r.ok))
+    .catch(() => false);
+}
+
+function _readLegacy(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+/* Read both prefs before the first refresh runs, migrating anything still in
+   this browser. Runs at login, alongside loadDefaultOwnerFilter. */
+async function loadCloudPrefs() {
+  const legacyRule = _readLegacy(LEGACY_MERGE_KEY);
+  const legacyMs = _readLegacy(LEGACY_LIVE_MS_KEY);
+
+  let cloud = {};
+  if (window.WD && WD.api) {
+    try {
+      const r = await WD.api('settings/get');
+      if (r && r.ok && r.settings && r.settings.cloud) cloud = r.settings.cloud;
+    } catch (e) { /* no server, or unreadable — fall through to defaults */ }
+  }
+
+  const savedRule = MERGE_RULES.indexOf(cloud.merge_rule) > -1 ? cloud.merge_rule : 'ask';
+  const savedMs = parseInt(cloud.live_interval_ms, 10) > 0
+    ? parseInt(cloud.live_interval_ms, 10) : 30000;
+
+  // The browser copy wins where it exists — it is what this machine was doing.
+  _mergeRule = MERGE_RULES.indexOf(legacyRule) > -1 ? legacyRule : savedRule;
+  const legacyMsNum = parseInt(legacyMs, 10);
+  _liveMs = legacyMsNum > 0 ? legacyMsNum : savedMs;
+
+  const patch = {};
+  if (_mergeRule !== savedRule) patch.merge_rule = _mergeRule;
+  if (_liveMs !== savedMs) patch.live_interval_ms = _liveMs;
+
+  const nothingToWrite = !Object.keys(patch).length;
+  const written = nothingToWrite ? true : await _persistCloudPref(patch);
+
+  // Only drop the browser copy once the server definitely has the value,
+  // otherwise a failed write would lose the setting outright.
+  if (written) {
+    if (legacyRule !== null) { try { localStorage.removeItem(LEGACY_MERGE_KEY); } catch (e) {} }
+    if (legacyMs !== null) { try { localStorage.removeItem(LEGACY_LIVE_MS_KEY); } catch (e) {} }
+  }
+  return { mergeRule: _mergeRule, liveMs: _liveMs, migrated: !nothingToWrite && written };
+}
 function localFolders() {
   const out = [];
   (data.matched || []).forEach(p => { if (p.local) out.push(p.local); });
@@ -3490,8 +3576,7 @@ function openSettings() {
 async function saveSettings() {
   const v = (document.querySelector('input[name="setrule"]:checked') || {}).value || 'ask';
   setMergeRule(v);
-  const ms = document.getElementById('setLiveInterval').value;
-  try { localStorage.setItem('wd-live-ms', ms); } catch (e) {}
+  setLiveMs(document.getElementById('setLiveInterval').value);
   restartLive();
 
   // The one setting on this page that is not per-browser. It decides what the
