@@ -2860,11 +2860,62 @@
       return '<button type="button" class="rep-orient-btn' + (mode === val ? ' is-on' : '') + '"'
         + ' onclick="setPageOrient(\'' + WD.escJsStr(fpId) + '\',\'' + val + '\')">' + label + '</button>';
     };
+    /* "Match all pages to this" is here because it is the correct thing to do
+        in a browser that cannot mix, and because doing it by hand across a
+        dozen pages is what he ended up doing.
+
+        Mixing orientations within one document is driven by named @page rules.
+        Chromium implements them - verified across seven pages and five
+        switches, every page getting the sheet it asked for, with the base
+        margins inherited. Firefox implements none of it: every sheet takes the
+        print dialog's orientation, so a page laid out for the other one
+        overflows and is clipped. One orientation for the whole document is the
+        right degradation, and this button is it. */
     return '<div class="rep-orient noprint" data-for="' + WD.escAttr(fpId) + '">'
       + '<span class="rep-orient-label">Page</span>'
       + btn('auto', 'Auto') + btn('portrait', 'Portrait') + btn('landscape', 'Landscape')
-      + '<span class="rep-orient-now"></span></div>';
+      + '<span class="rep-orient-now"></span>'
+      + '<button type="button" class="rep-orient-all"'
+      +   ' onclick="matchAllPageOrient(\'' + WD.escJsStr(fpId) + '\')"'
+      +   ' title="Give every page in this report the orientation this one is using.'
+      +   ' Printing from anything other than Chrome or Edge needs this: other'
+      +   ' browsers print every sheet the same way round, and a page laid out'
+      +   ' for the other one gets clipped.">Match all pages</button>'
+      + '</div>';
   }
+
+  /* Every orientable page in the report takes the orientation this one has
+     resolved to. "Auto" is deliberately resolved first rather than copied: the
+     point is that every page ends up the same way round, and copying "auto"
+     would leave each page free to decide differently again. */
+  window.matchAllPageOrient = function (fpId) {
+    var host = document.getElementById('reportCanvas');
+    if (!host) return;
+    var src = host.querySelector('[data-page-key="' + fpId + '"]');
+    var mode = pageOrientMode(fpId, currentOpts);
+    if (mode === 'auto') {
+      mode = (src && src.classList.contains('is-landscape')) ? 'landscape' : 'portrait';
+    }
+    if (!currentOpts.pageOrient) currentOpts.pageOrient = {};
+    var keys = host.querySelectorAll('[data-page-key]');
+    for (var i = 0; i < keys.length; i++) {
+      currentOpts.pageOrient[keys[i].getAttribute('data-page-key')] = mode;
+    }
+    sizePlacementPlansForPrint(host, currentOpts);
+    applyPageOrientation(host, currentOpts);
+    persistPageOrient();
+    configureDirty = true;
+    var n = keys.length;
+    showToast('All ' + n + ' page' + (n === 1 ? '' : 's') + ' set to ' + mode, 'success');
+    // The buttons on every other picker are now wrong.
+    var pickers = host.querySelectorAll('.rep-orient');
+    for (var p = 0; p < pickers.length; p++) {
+      var btns = pickers[p].querySelectorAll('.rep-orient-btn');
+      for (var b = 0; b < btns.length; b++) {
+        btns[b].classList.toggle('is-on', btns[b].textContent.toLowerCase() === mode);
+      }
+    }
+  };
 
   window.setPageOrient = function (fpId, mode) {
     if (!currentOpts.pageOrient) currentOpts.pageOrient = {};

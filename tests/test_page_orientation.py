@@ -52,7 +52,10 @@ class PageOrientationTests(unittest.TestCase):
                                 "the placement map, its key page, the "
                                 "installation table and the compass page at "
                                 "least")
-        for m in re.finditer(r"data-page-key=", self.js):
+        # Only attributes being *emitted* count. A CSS selector spelled
+        # '[data-page-key="..."]' is a lookup, not a page being rendered, and
+        # has no kind to declare.
+        for m in re.finditer(r"(?<!\[)data-page-key=", self.js):
             window = self.js[m.start():m.start() + 400]
             with self.subTest(at=self.js[m.start():m.start() + 60]):
                 self.assertIn("data-page-kind=", window,
@@ -108,6 +111,48 @@ class PageOrientationTests(unittest.TestCase):
         """
         self.assertIn("'key:' + fp.id", self.js)
         self.assertIn('data-page-kind="table"', self.js)
+
+    def test_one_action_gives_every_page_the_same_orientation(self):
+        """Mixing orientations needs named @page rules, which only Chromium
+        implements.
+
+        Verified by printing six pages carrying the real class strings, with
+        three orientation switches and repeated page types: every page got the
+        sheet its class asked for, and the base @page margins were inherited
+        (0.396in on all six). So mixing genuinely works there.
+
+        Firefox implements none of it - every sheet takes the print dialog's
+        orientation - so one orientation for the whole document is the only
+        configuration where layout and sheet agree. He arrived at that by
+        setting every page by hand and called it a workaround, which it was.
+        This is the same thing in one press.
+        """
+        self.assertIn("window.matchAllPageOrient = function (fpId)", self.js)
+        self.assertIn('onclick="matchAllPageOrient(', self.js)
+
+    def test_matching_resolves_auto_rather_than_copying_it(self):
+        """Copying "auto" onto every page would leave each free to decide
+        differently again, which is the opposite of the point."""
+        start = self.js.index("window.matchAllPageOrient = function (fpId)")
+        body = self.js[start:self.js.index("\n  };", start)]
+        self.assertIn("if (mode === 'auto')", body)
+        self.assertIn("is-landscape", body)
+
+    def test_matching_covers_every_orientable_page_and_is_remembered(self):
+        start = self.js.index("window.matchAllPageOrient = function (fpId)")
+        body = self.js[start:self.js.index("\n  };", start)]
+        self.assertIn("querySelectorAll('[data-page-key]')", body,
+                      "it has to reach every page, not just the plans")
+        self.assertIn("persistPageOrient()", body)
+        self.assertIn("applyPageOrientation(host, currentOpts)", body)
+        self.assertIn("sizePlacementPlansForPrint(host, currentOpts)", body)
+
+    def test_the_button_says_where_mixing_works(self):
+        """A feature that silently does nothing in one browser is worse than
+        one that explains itself."""
+        start = self.js.index("class=\"rep-orient-all\"")
+        window = self.js[start:start + 700]
+        self.assertIn("Chrome or Edge", window)
 
     def test_the_older_setter_name_still_works(self):
         """Anything still calling setFloorOrient must not break."""
