@@ -1347,6 +1347,16 @@
           +       pill
           +       '<h3 class="rep-template-title">' + WD.esc(r.label) + '</h3>'
           +       '<p class="rep-template-subtitle">' + WD.esc(r.description || '') + '</p>'
+          /* Who it is for and how many pages land on the desk, on the face of
+             the card rather than behind the Details toggle. Nine reports that
+             all put APs on a floor plan cannot be told apart by expanding nine
+             cards one at a time - and the thing that separates them is not
+             what they contain, it is who reads the sheet. */
+          +       (r.readBy ? '<p class="rep-template-facts">'
+                + '<span class="rep-template-fact"><b>For</b> ' + WD.esc(r.readBy) + '</span>'
+                + (r.output ? '<span class="rep-template-fact"><b>You get</b> '
+                    + WD.esc(r.output) + '</span>' : '')
+                + '</p>' : '')
           +     '</div>'
           +     '<div class="rep-template-actions">'
           +       detailToggle
@@ -5121,7 +5131,9 @@
     placement: {
       id: 'placement',
       label: 'AP Placement Map',
-      description: 'One page per floor: the floor plan, every AP at its real position, and its label. No tables, no aiming detail, no section grid \u2014 just the map.',
+      description: 'One sheet per floor: the plan, every AP where it actually goes, and its number. Nothing else.',
+      readBy: 'Whoever mounts the hardware',
+      output: 'One page per floor, always',
       docName: 'AP Placement Map',
       coverBrand: 'Report \u00b7 AP Placement Map',
       status: 'ready',
@@ -5187,7 +5199,9 @@
     predictive: {
       id: 'predictive',
       label: 'Predictive Design / AP Placement',
-      description: 'Floor plan(s) with proposed AP placement, split into zoomed sections on large floors. No mount/azimuth/tilt detail — placement only.',
+      description: 'The same map, zoomed in far enough to read an exact position on a large floor.',
+      readBy: 'Low-voltage installers, and whoever signs off the design',
+      output: 'Several pages per floor on a big building, one on a small one',
       docName: 'Predictive Design',
       coverBrand: 'Report · Predictive Design',
       status: 'ready',
@@ -5221,7 +5235,9 @@
     summary: {
       id: 'summary',
       label: 'Site Summary Sheet',
-      description: 'One-page executive overview of the project: APs, floors, buildings, radios, top models, antennas.',
+      description: 'One page of totals — APs, floors, buildings, radios, common models, antennas.',
+      readBy: 'Clients, and anyone who will not open a floor plan',
+      output: 'One page, whole project',
       docName: 'Site Summary',
       coverBrand: 'Report · Site Summary',
       status: 'ready',
@@ -5257,7 +5273,9 @@
     interference: {
       id: 'interference',
       label: 'Interference / Rogue Devices',
-      description: 'Phone hotspots, MiFi, and wide-channel rogue Wi-Fi picked up in the passive survey, scored by severity.',
+      description: 'Phone hotspots, MiFi and wide-channel rogue Wi-Fi found in the passive survey, scored by severity.',
+      readBy: 'Whoever has to go and find them',
+      output: 'A scored list, plus per-floor detection maps if you want them',
       docName: 'Interference',
       coverBrand: 'Report · Interference',
       status: 'ready',
@@ -5300,7 +5318,9 @@
     bom: {
       id: 'bom',
       label: 'Bill of Materials',
-      description: 'AP + antenna quantities for procurement handoff.',
+      description: 'AP and antenna quantities for procurement. Nothing else.',
+      readBy: 'Whoever raises the purchase order',
+      output: 'One table, a row per AP and antenna model',
       docName: 'Bill of Materials',
       coverBrand: 'Report · Bill of Materials',
       status: 'ready',
@@ -5324,7 +5344,9 @@
     aim: {
       id: 'aim',
       label: 'Antenna Aim Sheet',
-      description: 'One flat table: every AP with azimuth, tilt, mount height, and floor — for a clipboard, not a binder.',
+      description: 'One flat table — every directional AP with azimuth, tilt, mount height and floor.',
+      readBy: 'Whoever is physically aiming the antennas',
+      output: 'One table plus a compass reference page, sized for a clipboard',
       docName: 'Antenna Aim Sheet',
       coverBrand: 'Report · Antenna Aim',
       status: 'ready',
@@ -5370,7 +5392,9 @@
     audit: {
       id: 'audit',
       label: 'Change / Audit Report',
-      description: 'Diff between two .esx files (or two survey rounds) — what moved, what was added, what was removed.',
+      description: 'What moved, what was added and what was removed between two .esx files.',
+      readBy: 'Whoever has to show the build matches the design',
+      output: 'A diff, with the changes listed per floor',
       docName: 'Change Report',
       coverBrand: 'Report · Change / Audit',
       status: 'coming-soon',
@@ -5389,7 +5413,9 @@
     coverage: {
       id: 'coverage',
       label: 'Coverage Cell Boundary',
-      description: 'Per-floor overlay of each AP\'s coverage cell — where that AP is the primary, second-best, and where the signal gets weak.',
+      description: 'Each AP\'s coverage cell drawn on the plan, so the AP count explains itself.',
+      readBy: 'Clients and budget holders',
+      output: 'One overlay per floor',
       docName: 'Coverage Cell Boundary',
       coverBrand: 'Report · Coverage Cell',
       status: 'ready',
@@ -5424,7 +5450,9 @@
     location: {
       id: 'location',
       label: 'AP Installation',
-      description: 'Floor plan with every AP position labeled, per-floor tables with mount/azimuth/tilt detail when directional APs are present, and an optional naming audit.',
+      description: 'The full installer package: maps, plus per-floor tables with mount height, azimuth and tilt.',
+      readBy: 'The crew doing the work, and whoever verifies it afterwards',
+      output: 'Maps plus tables, so several pages per floor',
       docName: 'AP Installation',
       coverBrand: 'Report · AP Installation',
       status: 'ready',
