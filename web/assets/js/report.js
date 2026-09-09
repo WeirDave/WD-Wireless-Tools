@@ -1550,9 +1550,11 @@
       if (id === 'units') {
         unitsPref = cb.value;
         // Best effort: a report still renders correctly if this never lands.
+        // Through pushSettings so the envelope is built in exactly one place -
+        // the second hand-built one in this file dropped page_orient on every
+        // save for three releases without anything reporting a failure.
         if (settingsAvailable) {
-          WD.api('settings/update', { patch: { report: { units: cb.value } } })
-            .catch(function () {});
+          pushSettings({ units: cb.value }).catch(function () {});
         }
       }
     } else if (optType === 'text') {
@@ -2943,10 +2945,30 @@
   /* Kept with the rest of the report settings so a document that needed one
      portrait page in a landscape run does not need setting up again next time.
      Failing to save is not worth interrupting anyone over. */
+  /* Through pushSettings, so the patch envelope is applied in one place.
+
+     This used to post { report: {...} } directly. The server reads
+     d.get("patch", {}), so it merged an empty dict: the save succeeded, ok
+     came back, nothing was written, and nothing complained. Every per-page
+     orientation choice was therefore lost at the end of the session, which
+     looked exactly like the orientation feature not working - and no amount
+     of checking it inside one session would have shown it. */
+  var _orientSaveTimer = null;
   function persistPageOrient() {
     if (!settingsAvailable) return;
-    WD.api('settings/update', { report: { page_orient: currentOpts.pageOrient || {} } })
-      .catch(function () {});
+    /* Coalesced, because "Match all pages" changes a dozen at once and each
+       change used to post its own save.
+
+       Saving is read-modify-write on one file with no lock, so concurrent
+       posts race and the last writer wins - carrying whatever map it read,
+       which need not be the newest. Setting four pages in quick succession
+       reliably stored three. One trailing save per burst removes the race at
+       the only place that creates it, and it always carries the final map. */
+    clearTimeout(_orientSaveTimer);
+    _orientSaveTimer = setTimeout(function () {
+      pushSettings({ page_orient: currentOpts.pageOrient || {} })
+        .catch(function () {});
+    }, 350);
   }
 
   /* Turn every page that has an opinion, then let the plan pass size the maps

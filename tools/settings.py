@@ -232,6 +232,10 @@ def save_settings(settings, _path=None):
 # For these paths the patch replaces the stored value outright.
 REPLACE_NOT_MERGE = (
     ("report", "report_defaults"),
+    # Per-page orientation is keyed by page, and the keys embed floor ids from
+    # one particular .esx. Merged, a saved orientation could never be cleared
+    # and keys from every project ever opened would pile up for good.
+    ("report", "page_orient"),
 )
 
 

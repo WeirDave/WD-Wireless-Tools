@@ -171,6 +171,34 @@ class PageOrientationTests(unittest.TestCase):
         self.assertNotIn("enginePrintsOneOrientationOnly", self.js)
         self.assertNotIn("CSS.supports('page'", self.js)
 
+    def test_the_settings_envelope_is_built_in_exactly_one_place(self):
+        """The server reads d.get("patch", {}).
+
+        persistPageOrient posted { report: {...} } without it for three
+        releases. The server merged an empty dict, returned ok, wrote nothing,
+        and nothing complained - so every per-page orientation was lost at the
+        end of the session while appearing to work inside it. No check made
+        during one session could have caught that, which is why the rule is
+        structural: one place builds the envelope, everything else calls it.
+        """
+        self.assertEqual(self.js.count("settings/update"), 1,
+                         "a second hand-built envelope is how page_orient was "
+                         "dropped; route it through pushSettings")
+        start = self.js.index("function pushSettings(patch)")
+        self.assertIn("{ patch: { report: patch } }",
+                      self.js[start:start + 200])
+
+    def test_orientation_saves_are_coalesced(self):
+        """Saving is read-modify-write on one file with no lock, so concurrent
+        posts race and the last writer wins with whatever map it happened to
+        read. Setting four pages in quick succession reliably stored three;
+        "Match all pages" changes a dozen at once."""
+        start = self.js.index("function persistPageOrient()")
+        body = self.js[start:self.js.index("\n  }", start)]
+        self.assertIn("clearTimeout(", body)
+        self.assertIn("setTimeout(", body)
+        self.assertIn("pushSettings(", body)
+
     def test_the_older_setter_name_still_works(self):
         """Anything still calling setFloorOrient must not break."""
         self.assertIn("window.setFloorOrient = window.setPageOrient", self.js)
