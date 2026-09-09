@@ -4335,6 +4335,7 @@ async function uploadFromLocal(path, name, siteId) {
     );
     if (r && r.error) { toast(r.error, 'error'); return; }
     if (r && r.warning) toast(r.warning, 'warn');
+    else if (r && r.syncedBack) toast('Uploaded and synced "' + name + '.esx"', 'success');
     else toast('Uploaded "' + name + '.esx"', 'success');
 
     refreshData();

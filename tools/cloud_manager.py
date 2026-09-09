@@ -1963,7 +1963,20 @@ class CloudManager:
 
             before_ids = {p["id"] for p in self.api.get_projects()}
 
-            result = self.api.upload_project(esx_path, progress_cb=progress_cb)
+            def _remap(cb, lo, hi):
+                """Wrap progress_cb to remap 0-100 → lo-hi."""
+                if not cb:
+                    return None
+                def inner(**kw):
+                    if "current" in kw:
+                        frac = kw["current"] / max(kw.get("total", 100), 1)
+                        kw["current"] = int(lo + frac * (hi - lo))
+                        kw["total"] = 100
+                    cb(**kw)
+                return inner
+
+            result = self.api.upload_project(
+                esx_path, progress_cb=_remap(progress_cb, 0, 55))
             if isinstance(result, dict) and result.get("error"):
                 return result
 
@@ -1981,7 +1994,7 @@ class CloudManager:
                 if progress_cb:
 
 
-                    progress_cb(current=95 + i // 3,
+                    progress_cb(current=55 + i // 3,
                                 message=f"Waiting for cloud listing to update ({(i + 1) // 2}s)…")
 
 
@@ -1992,7 +2005,8 @@ class CloudManager:
                 if desired_name and cloud_name and cloud_name != desired_name:
                     try:
                         if progress_cb:
-                            progress_cb(message=f"Renaming cloud project → \"{desired_name}\"…")
+                            progress_cb(current=62,
+                                        message=f"Renaming cloud project → \"{desired_name}\"…")
                         self.api.rename_project(new_id, desired_name)
                         renamed_to = desired_name
                     except Exception as e:
@@ -2000,33 +2014,69 @@ class CloudManager:
 
                         renamed_to = None
 
-            if progress_cb:
-                progress_cb(current=100, message="Done.")
-
 
             if site_id and new_id:
                 try:
+                    if progress_cb:
+                        progress_cb(current=65,
+                                    message="Assigning project to site…")
                     self.api.assign_to_site(site_id, new_id)
                     ret = {"ok": True, "assigned": True, "siteId": site_id,
                            "datasetId": new_id}
                     if renamed_to:
                         ret["renamedTo"] = renamed_to
-                    return ret
                 except Exception as e:
-                    return {"ok": True, "uploaded": True, "datasetId": new_id,
-                            "assignError": str(e),
-                            "renamedTo": renamed_to,
-                            "warning": f"Uploaded but couldn't assign to site: {e}"}
-
-            if not new_id:
+                    ret = {"ok": True, "uploaded": True, "datasetId": new_id,
+                           "assignError": str(e),
+                           "renamedTo": renamed_to,
+                           "warning": f"Uploaded but couldn't assign to site: {e}"}
+            elif not new_id:
 
 
                 return {"ok": True, "uploaded": True,
                         "warning": "Uploaded but not yet visible in cloud listing — may take another moment to appear."}
+            else:
+                ret = {"ok": True, "uploaded": True, "datasetId": new_id}
+                if renamed_to:
+                    ret["renamedTo"] = renamed_to
 
-            ret = {"ok": True, "uploaded": True, "datasetId": new_id}
-            if renamed_to:
-                ret["renamedTo"] = renamed_to
+            # ── Sync-back: download the cloud copy over the local file ──
+            # The cloud assigns its own project ID and metadata to the
+            # uploaded file. Downloading it back makes the local copy
+            # byte-identical to the cloud, so future Cloud Manager
+            # refreshes see "Same file" instead of a name-only match.
+            if new_id:
+                try:
+                    if progress_cb:
+                        progress_cb(current=68,
+                                    message="Syncing cloud copy back to local…")
+
+                    dl = self.api.download_project(
+                        new_id, progress_cb=_remap(progress_cb, 68, 96))
+                    if isinstance(dl, dict) and dl.get("error"):
+                        ret["syncBackError"] = dl["error"]
+                        ret.setdefault("warning",
+                                       f"Uploaded OK, but sync-back failed: {dl['error']}")
+                    else:
+                        esx_bytes = dl["esx"]
+                        src = Path(esx_path)
+                        if progress_cb:
+                            progress_cb(current=97,
+                                        message="Replacing local file with cloud copy…")
+                        tmp = src.with_suffix(src.suffix + ".wd-syncback.tmp")
+                        with open(tmp, "wb") as f:
+                            f.write(esx_bytes)
+                        os.replace(tmp, src)
+                        _ESX_META_CACHE.pop(str(src), None)
+                        _ESX_TYPE_CACHE.pop(str(src), None)
+                        ret["syncedBack"] = True
+                except Exception as e:
+                    ret["syncBackError"] = str(e)
+                    ret.setdefault("warning",
+                                   f"Uploaded OK, but sync-back failed: {e}")
+
+            if progress_cb:
+                progress_cb(current=100, message="Done.")
             return ret
         except Exception as e:
             return {"error": str(e)}
