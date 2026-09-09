@@ -45,3 +45,8 @@ tmp/
 # AI-handoff notes — internal working notes, not for the public repo
 PROJECT_MEMORY.md
 
+
+# Windows reserved device names, created by a mistyped `> nul` redirect.
+# Harmless as content, but one `git add -A` from being committed.
+nul
+NUL
