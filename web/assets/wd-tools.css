@@ -7102,6 +7102,17 @@ body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
 }
 .rep-remembered-opts .rep-remembered-state { flex: 1 1 100%; }
 
+/* Sits with the per-page orientation buttons. Mixing orientations only works
+   when printing from Chromium; everywhere else one orientation for the whole
+   document is the only correct configuration, and this is how you get it
+   without visiting every page. */
+.rep-orient-all {
+  margin-left: 8px; padding: 2px 8px; font-size: 11px;
+  background: transparent; color: var(--text-2);
+  border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+}
+.rep-orient-all:hover { background: var(--surface-hover); color: var(--text); }
+
 .rep-set-nowarn {
   margin-top: 16px; padding: 10px 12px; border-radius: 6px;
   background: var(--amber-bg); color: var(--amber-dark);
