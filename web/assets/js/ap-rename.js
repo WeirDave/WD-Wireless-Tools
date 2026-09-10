@@ -1130,12 +1130,28 @@
       var k = colorKey(ap.color);
       seen[k] = (seen[k] || 0) + 1;
     });
+    /* Alphabetical by name, because that is a place to start looking rather
+       than an order anyone wants: Ekahau's palette order is arbitrary to
+       someone reading a list, and the whole point is that he drags it into
+       the order the work is actually done in. Only ever the first-run
+       default - once he has dragged, his order is what persists. */
     return Object.keys(seen).sort(function (a, b) {
-      return colorSortKey(a) - colorSortKey(b);
+      return colorLabel(a).localeCompare(colorLabel(b), undefined,
+                                         { sensitivity: 'base' });
     }).map(function (k) { return { key: k, count: seen[k] }; });
   }
 
+  /* Ekahau's own name for the colour where the project gives one. A custom
+     hex has no name, so it is labelled as what it is rather than shown as a
+     bare code - "#c0ffee" in a list you are meant to be putting in order
+     tells you nothing about which one it is. */
   function colorLabel(key) {
+    if (!key) return 'No colour';
+    if (EKAHAU_COLORS[key]) return key.charAt(0).toUpperCase() + key.slice(1);
+    if (/^#?[0-9a-f]{6}$/i.test(key)) {
+      return 'Custom ' + (key.charAt(0) === '#' ? key.toUpperCase()
+                                                : '#' + key.toUpperCase());
+    }
     return key.charAt(0).toUpperCase() + key.slice(1);
   }
 
@@ -1166,11 +1182,19 @@
     // does not use. Those are dropped rather than shown as phantom rows.
     _colorOrder = _colorOrder.filter(function (k) { return byKey[k] != null; });
 
+    /* "Added" only means something against an order he actually had. On a
+       first run the sequence is empty, so every colour is new and badging all
+       of them says nothing - the alphabetical starting order is the story
+       there, not a list of surprises. */
+    var hadOrder = _colorOrder.length > 0;
     var added = [];
     present.forEach(function (c) {
-      if (_colorOrder.indexOf(c.key) < 0) { _colorOrder.push(c.key); added.push(c.key); }
+      if (_colorOrder.indexOf(c.key) < 0) {
+        _colorOrder.push(c.key);
+        if (hadOrder) added.push(c.key);
+      }
     });
-    return { present: present, byKey: byKey, added: added };
+    return { present: present, byKey: byKey, added: added, hadOrder: hadOrder };
   }
 
   function moveColor(from, to) {
@@ -1206,7 +1230,13 @@
          means real ink: a number on Ekahau green in white cannot be read. */
       var ink = WD.readableOn(hex);
       var ring = WD.outlineOn(hex);
-      return '<div class="ar-cseq-row" draggable="true" data-i="' + i + '">' +
+      /* Focusable, because dragging a row inside a narrow sidebar is fiddly
+         and he works in a constrained window. Arrow keys move the focused
+         colour; the buttons do the same thing for a mouse. */
+      return '<div class="ar-cseq-row" draggable="true" data-i="' + i + '"' +
+        ' tabindex="0" role="listitem"' +
+        ' aria-label="' + esc(colorLabel(k)) + ', position ' + (i + 1) +
+        ' of ' + (last + 1) + '. Use the arrow keys to move it.">' +
         '<span class="ar-cseq-grip" title="Drag to reorder">&#8801;</span>' +
         '<span class="ar-cseq-dot" style="background:' + esc(hex) +
           ';color:' + esc(ink) + ';border-color:' + esc(ring) + '">' + (i + 1) + '</span>' +
@@ -1241,7 +1271,9 @@
     note += 'Within a colour, the ordering above decides the sequence.';
 
     panel.innerHTML =
-      '<div class="ar-cseq-lab">Number the colours in this order</div>' +
+      '<div class="ar-cseq-lab">Number the colours in this order' +
+        (state.hadOrder ? '' : ' <span class="ar-cseq-hint">' +
+          '— alphabetical to start; drag to reorder</span>') + '</div>' +
       '<div class="ar-cseq">' + rows + '</div>' +
       '<div class="ar-col-note">' + esc(note) + '</div>';
 
@@ -1260,6 +1292,17 @@
     // Drag, the same way the segment builder does it.
     panel.querySelectorAll('.ar-cseq-row').forEach(function (row) {
       var i = parseInt(row.getAttribute('data-i'), 10);
+      row.addEventListener('keydown', function (e) {
+        var to = e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? i - 1
+               : e.key === 'ArrowDown' || e.key === 'ArrowRight' ? i + 1 : null;
+        if (to == null) return;
+        e.preventDefault();
+        moveColor(i, to);
+        // Re-rendered underneath us; keep the colour he is moving in hand.
+        var moved = panel.querySelectorAll('.ar-cseq-row')[Math.max(0,
+          Math.min(_colorOrder.length - 1, to))];
+        if (moved) moved.focus();
+      });
       row.addEventListener('dragstart', function (e) {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', String(i));
@@ -2099,7 +2142,9 @@
 
   window._arShowAll = function () {
     S._showAllPreview = !S._showAllPreview;
-    renderPreviewTable();
+    // renderPreviewTable needs the items; called bare it threw on the first
+    // line and the button did nothing at all, silently, every time.
+    renderPreviewTable(S.preview || []);
   };
 
   /* ── download ──────────────────────────────────────────────────── */
@@ -2280,6 +2325,14 @@
       def: 340,
       maxRatio: 0.6
     });
+  }
+
+  /* Same folding as the Quick Walls panel, from the same implementation.
+     Once the naming pattern is set it is just taking up column, and the
+     colour sequence grows with the project - so being able to put Name
+     Pattern away is what keeps this usable in a small window. */
+  if (WD.mountFolds) {
+    WD.mountFolds({ selector: '.ar-foldable', key: 'wd.aprename.folded' });
   }
 
   // Diagnostics hook, same shape as Quick Walls' __wallsSwap.

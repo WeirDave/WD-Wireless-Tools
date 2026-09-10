@@ -320,6 +320,30 @@ class TheSequenceIsArrangeable(unittest.TestCase):
         self.assertIn("WD.readableOn(hex)", self.block)
         self.assertIn("WD.outlineOn(hex)", self.block)
 
+    def test_the_first_run_order_is_alphabetical(self):
+        """Ekahau's palette order is arbitrary to someone reading a list. This
+        is only ever the starting point - once dragged, his order persists."""
+        self.assertIn("colorLabel(a).localeCompare(colorLabel(b)", self.source)
+        self.assertNotIn("return colorSortKey(a) - colorSortKey(b);", self.source)
+
+    def test_a_colour_with_no_name_is_labelled_not_shown_as_a_bare_hex(self):
+        block = self.source[self.source.index("function colorLabel(key)"):]
+        block = block[:block.index("function colorKey(", 1)] if "function colorKey(" in block[1:] else block[:600]
+        self.assertIn("'Custom '", block)
+
+    def test_arrow_keys_reorder_the_focused_row(self):
+        """Drag targets in a narrow sidebar are fiddly, and he works in a
+        constrained window."""
+        self.assertIn("tabindex=\"0\"", self.block)
+        self.assertIn("ArrowUp", self.block)
+        self.assertIn("ArrowDown", self.block)
+
+    def test_added_is_only_flagged_against_an_order_he_actually_had(self):
+        """On a first run every colour is new, so badging all of them says
+        nothing."""
+        self.assertIn("var hadOrder = _colorOrder.length > 0;", self.block)
+        self.assertIn("if (hadOrder) added.push(c.key);", self.block)
+
     def test_a_colour_the_saved_order_does_not_cover_is_appended_and_named(self):
         """Silently dropping it would still number those APs, just not where
         he expected - and he would not find out until the labels were printed."""

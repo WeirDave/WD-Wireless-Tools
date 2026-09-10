@@ -47,6 +47,7 @@
 .tool-aprename .ar-marker.is-clear:hover { background:#f0f0f0; }
 .tool-aprename .ar-colorseq { margin:8px 0 4px; padding:10px 12px; border:1px solid var(--border,#333); border-radius:8px; background:var(--surface-2,#1e2530); }
 .tool-aprename .ar-cseq-lab { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3,#888); margin-bottom:6px; }
+.tool-aprename .ar-cseq-hint { text-transform:none; letter-spacing:0; opacity:.75; }
 .tool-aprename .ar-cseq { display:flex; flex-direction:column; gap:4px; margin-bottom:8px; }
 .tool-aprename .ar-cseq-row { display:flex; align-items:center; gap:7px; padding:4px 6px; border:1px solid var(--border,#333); border-radius:6px; background:var(--bg,#0f1620); font-size:12px; cursor:grab; }
 .tool-aprename .ar-cseq-row:active { cursor:grabbing; }
@@ -109,7 +110,27 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 [data-theme="light"] .tool-aprename .ar-preview td.ar-new { color:#4338ca; }
 .tool-aprename .ar-preview .ar-stem-mute { color:var(--text-3,#666); font-weight:400; }
 
-.tool-aprename .ar-sidebar { width:340px; min-width:280px; overflow-y:auto; border-left:1px solid var(--border,#333); padding:12px 14px; display:flex; flex-direction:column; gap:12px; background:var(--bg-2,#181828); }
+/* The sidebar is a column that does not itself scroll: the settings above
+   scroll, the preview and the numbering controls are docked below and stay
+   put. It used to be one long overflow-y:auto column, which meant .ar-preview
+   (flex:1) never got a bounded height - so its own scrollbar never engaged,
+   the table grew to whatever the project needed, and Undo went below the fold
+   on a floor with any real number of APs. min-height:0 on the scroller is what
+   lets a flex child actually shrink instead of being sized by its content. */
+.tool-aprename .ar-sidebar { width:340px; min-width:280px; overflow:hidden; border-left:1px solid var(--border,#333); padding:12px 14px; display:flex; flex-direction:column; gap:10px; background:var(--bg-2,#181828); }
+.tool-aprename .ar-side-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding-right:2px; }
+.tool-aprename .ar-side-dock { flex:0 0 auto; display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border,#333); padding-top:10px; }
+/* Bounded so a 400-AP floor scrolls inside the table instead of pushing the
+   controls off the panel. */
+.tool-aprename .ar-side-dock .ar-preview { max-height:34vh; min-height:96px; }
+.tool-aprename .ar-side-dock .ar-manual { margin-top:0; }
+/* Folding, same shape as the Quick Walls panel. Collapse Name Pattern once it
+   is set and the colour sequence gets the column. */
+.tool-aprename .ar-foldable > .ar-section-head { cursor:pointer; user-select:none; display:flex; align-items:center; gap:6px; }
+.tool-aprename .ar-fold-caret { margin-left:auto; font-size:10px; opacity:.6; transition:transform .12s; }
+.tool-aprename .ar-foldable.is-folded .ar-fold-caret { transform:rotate(-90deg); }
+.tool-aprename .ar-foldable.is-folded > *:not(.ar-section-head) { display:none; }
+.tool-aprename .ar-foldable > .ar-section-head:focus-visible { outline:2px solid var(--indigo,#6366f1); outline-offset:2px; border-radius:3px; }
 [data-theme="light"] .tool-aprename .ar-sidebar { background:var(--bg-2,#f4f4f8); }
 .tool-aprename .ar-group   { display:flex; flex-direction:column; gap:5px; }
 .tool-aprename .ar-lbl     { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); }
@@ -134,7 +155,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 
 .tool-aprename .ar-preview-wrap { flex:1; overflow:hidden; display:flex; flex-direction:column; min-height:120px; }
 .tool-aprename .ar-preview-head { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); margin-bottom:4px; }
-.tool-aprename .ar-preview { flex:1; overflow-y:auto; border:1px solid var(--border,#333); border-radius:4px; font-size:12px; }
+.tool-aprename .ar-preview { flex:1 1 auto; overflow-y:auto; border:1px solid var(--border,#333); border-radius:4px; font-size:12px; }
 .tool-aprename .ar-preview table { width:100%; border-collapse:collapse; }
 .tool-aprename .ar-preview th  { text-align:left; padding:4px 8px; background:var(--bg-3,#252538); position:sticky; top:0; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-2,#888); z-index:1; }
 [data-theme="light"] .tool-aprename .ar-preview th { background:var(--bg-3,#eee); }
@@ -337,10 +358,14 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
            role="separator" aria-orientation="vertical" tabindex="0"></div>
 
       <div class="ar-sidebar" id="arSidebar">
+        <!-- Everything that is set once scrolls. What he acts on while
+             numbering is docked below and always reachable. -->
+        <div class="ar-side-scroll" id="arSideScroll">
 
         <!-- ═══ SECTION 1: NAME PATTERN ═══ -->
-        <div class="ar-section">
-          <div class="ar-section-head"><span class="ar-section-num">1</span> Name Pattern</div>
+        <div class="ar-section ar-foldable" data-fold="pattern">
+          <div class="ar-section-head" data-fold-toggle tabindex="0" role="button" aria-expanded="true"
+               title="Click to collapse or expand"><span class="ar-section-num">1</span> Name Pattern<span class="ar-fold-caret">&#9662;</span></div>
           <div class="ar-mode-tabs">
             <button class="ar-mode-tab active" data-mode="structured" onclick="arSetMode('structured')">Structured</button>
             <button class="ar-mode-tab" data-mode="simple" onclick="arSetMode('simple')">Simple</button>
@@ -459,8 +484,9 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
         </div>
 
         <!-- ═══ SECTION 2: SCOPE ═══ -->
-        <div class="ar-section">
-          <div class="ar-section-head"><span class="ar-section-num">2</span> Scope</div>
+        <div class="ar-section ar-foldable" data-fold="scope">
+          <div class="ar-section-head" data-fold-toggle tabindex="0" role="button" aria-expanded="true"
+               title="Click to collapse or expand"><span class="ar-section-num">2</span> Scope<span class="ar-fold-caret">&#9662;</span></div>
           <div class="ar-scope-tabs" id="arScopeTabs">
             <button class="ar-scope-tab active" data-scope="all">All APs</button>
             <button class="ar-scope-tab" data-scope="perFloor">Per Floor</button>
@@ -469,8 +495,9 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
         </div>
 
         <!-- ═══ SECTION 3: ORDERING ═══ -->
-        <div class="ar-section">
-          <div class="ar-section-head"><span class="ar-section-num">3</span> Ordering</div>
+        <div class="ar-section ar-foldable" data-fold="ordering">
+          <div class="ar-section-head" data-fold-toggle tabindex="0" role="button" aria-expanded="true"
+               title="Click to collapse or expand — collapse Name Pattern to give the colour list the column"><span class="ar-section-num">3</span> Ordering<span class="ar-fold-caret">&#9662;</span></div>
           <select id="arOrder">
             <option value="proximity" selected>Nearest Neighbor</option>
             <option value="row-snake">Zigzag Rows</option>
@@ -497,20 +524,6 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
             <div class="ar-scope-desc" id="arNestDesc"></div>
           </div>
 
-          <div class="ar-manual" id="arManualPanel" hidden>
-            <div class="ar-manual-head">
-              <span class="ar-manual-next">Next: <b id="arManualNext">1</b></span>
-              <span class="ar-manual-count" id="arManualCount">0 of 0 numbered</span>
-            </div>
-            <p class="ar-manual-hint">Click access points on the plan in the order you want them
-              numbered. Click a numbered one again to remove it &mdash; the rest shift down.</p>
-            <div class="ar-manual-btns">
-              <button type="button" id="arManualUndo" onclick="arManualUndo()" disabled
-                      title="Undo the last assignment (Ctrl+Z)">Undo</button>
-              <button type="button" id="arManualClear" onclick="arManualClear()" disabled
-                      title="Clear every manual number on this project">Clear all</button>
-            </div>
-          </div>
           <div class="ar-row" id="arSpacingRow" hidden>
             <div style="flex:1">
               <div class="ar-field-lbl">Line Spacing <span style="opacity:.5">(px)</span></div>
@@ -532,14 +545,35 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
           </div>
         </details>
 
-        <div class="ar-preview-wrap">
-          <div class="ar-preview-head" id="arPreviewHead">Preview</div>
-          <div class="ar-stem" id="arStem" hidden></div>
-          <div class="ar-preview" id="arPreview">
-            <table>
-              <thead><tr><th class="ar-num">#</th><th>Current</th><th class="ar-arrow"></th><th>New</th></tr></thead>
-              <tbody id="arPreviewBody"></tbody>
-            </table>
+        </div><!-- /ar-side-scroll -->
+
+        <!-- Docked: the preview, and the controls used while numbering.
+             Losing Undo below the fold part-way through a manual run is the
+             whole reason this panel needed reworking. -->
+        <div class="ar-side-dock">
+          <div class="ar-manual" id="arManualPanel" hidden>
+            <div class="ar-manual-head">
+              <span class="ar-manual-next">Next: <b id="arManualNext">1</b></span>
+              <span class="ar-manual-count" id="arManualCount">0 of 0 numbered</span>
+            </div>
+            <p class="ar-manual-hint">Click access points on the plan in the order you want them
+              numbered. Click a numbered one again to remove it &mdash; the rest shift down.</p>
+            <div class="ar-manual-btns">
+              <button type="button" id="arManualUndo" onclick="arManualUndo()" disabled
+                      title="Undo the last assignment (Ctrl+Z)">Undo</button>
+              <button type="button" id="arManualClear" onclick="arManualClear()" disabled
+                      title="Clear every manual number on this project">Clear all</button>
+            </div>
+          </div>
+          <div class="ar-preview-wrap">
+            <div class="ar-preview-head" id="arPreviewHead">Preview</div>
+            <div class="ar-stem" id="arStem" hidden></div>
+            <div class="ar-preview" id="arPreview">
+              <table>
+                <thead><tr><th class="ar-num">#</th><th>Current</th><th class="ar-arrow"></th><th>New</th></tr></thead>
+                <tbody id="arPreviewBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
