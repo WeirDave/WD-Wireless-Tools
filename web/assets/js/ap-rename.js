@@ -71,6 +71,8 @@
   /* 'floor' finishes a floor before moving up; 'color' carries one colour
      through the whole building. Only consulted when ordering is by-color. */
   var _nesting = 'floor';
+  // What was read out of the loaded project, for the note. Null when nothing.
+  var _inferred = null;
   // The colour sequence for the By Colour ordering, newest choice last.
   var _colorOrder = [];
 
@@ -188,6 +190,225 @@
       }
     }
     return parts.join(sep);
+  }
+
+  /* ── reading the scheme a project already uses ──────────────────
+
+     If the APs in a project are already named to a scheme, retyping that
+     scheme by hand just to add one AP and renumber is work the file can do
+     for you. So the names are read and the segment list is inferred.
+
+     This infers *segments*, not a fixed CLLI/Building/Suite/Floor shape.
+     The Labeler stopped having named fields when the segment builder landed
+     - a name is whatever ordered list of text / floor / counter parts you
+     drag together - so inferring by position keeps working for schemes that
+     look nothing like anyone else's, and avoids having to decide whether the
+     third segment is a suite or a floor when the tool no longer cares.
+
+     Only what the names actually show is filled in. Where the evidence is
+     ambiguous the segment stays plain text, which reproduces the existing
+     names exactly; a wrong guess that goes unnoticed renames a building. */
+
+  var SEPARATOR_CANDIDATES = ['-', '_', '.', ' '];
+
+  function _modal(values) {
+    var count = {}, best = null, bestN = 0;
+    values.forEach(function (v) {
+      count[v] = (count[v] || 0) + 1;
+      if (count[v] > bestN) { bestN = count[v]; best = v; }
+    });
+    return { value: best, n: bestN };
+  }
+
+  /* The separator is whichever carves the most names into the same number of
+     parts. A scheme that uses none, or mixes them, yields nothing. */
+  function _detectSeparator(names) {
+    var best = null;
+    SEPARATOR_CANDIDATES.forEach(function (sep) {
+      var counts = names
+        .map(function (n) { return n.split(sep).length; })
+        .filter(function (c) { return c >= 2; });
+      if (!counts.length) return;
+      var m = _modal(counts);
+      if (!best || m.n > best.agree || (m.n === best.agree && m.value > best.parts)) {
+        best = { sep: sep, parts: m.value, agree: m.n };
+      }
+    });
+    return best;
+  }
+
+  /* "AP01" -> tag AP, 2 digits. Applied to one segment, never to a whole
+     name: a regex anchored at the end of a full name misses anything with a
+     suffix after the number, which is how a duplicate marker broke this
+     once. */
+  var COUNTER_RE = /^(.*?)(\d+)$/;
+
+  function _asCounter(values) {
+    var tags = [], widths = [];
+    for (var i = 0; i < values.length; i++) {
+      var m = COUNTER_RE.exec(values[i]);
+      if (!m) return null;
+      tags.push(m[1]);
+      widths.push(m[2].length);
+    }
+    var tag = _modal(tags), width = _modal(widths);
+    if (tag.n !== tags.length) return null;      // the tag has to be constant
+    return { tag: tag.value, digits: width.value };
+  }
+
+  /* entries: [{ name, floorId }]. Returns null when nothing can be read. */
+  function inferSegments(entries) {
+    entries = (entries || []).filter(function (e) { return e && e.name; });
+    if (entries.length < 2) return null;
+
+    var det = _detectSeparator(entries.map(function (e) { return e.name; }));
+    if (!det || det.parts < 2) return null;
+
+    /* Only the names sharing the majority shape take part. The rest are
+       counted and reported rather than forced to fit - a project with a
+       handful of oddly named APs should still hand over its scheme, and say
+       how many it read it from. */
+    var matched = entries.filter(function (e) {
+      return e.name.split(det.sep).length === det.parts;
+    });
+    if (matched.length < 2) return null;
+
+    var floors = {};
+    matched.forEach(function (e) {
+      (floors[e.floorId || ''] = floors[e.floorId || ''] || []).push(e);
+    });
+    var floorIds = Object.keys(floors);
+
+    var partAt = function (e, i) { return e.name.split(det.sep)[i]; };
+    var segments = [], counterAt = -1;
+
+    for (var i = 0; i < det.parts; i++) {
+      var all = matched.map(function (e) { return partAt(e, i); });
+      var everywhere = _modal(all);
+
+      if (everywhere.n === all.length) {
+        segments.push({ type: 'text', value: everywhere.value });
+        continue;
+      }
+
+      /* Constant within each floor but different between them: that is the
+         floor, and it is the one thing a single-floor project cannot show
+         us - so there it stays text, and the names still come out right. */
+      var constantPerFloor = floorIds.every(function (fid) {
+        var vals = floors[fid].map(function (e) { return partAt(e, i); });
+        return _modal(vals).n === vals.length;
+      });
+      if (constantPerFloor && floorIds.length > 1) {
+        segments.push({ type: 'floor' });
+        continue;
+      }
+
+      var counter = _asCounter(all);
+      if (counter) {
+        segments.push({ type: 'counter', tag: counter.tag, start: 1,
+                        digits: counter.digits });
+        counterAt = i;
+        continue;
+      }
+      return null;            // a segment nobody can explain; infer nothing
+    }
+
+    if (counterAt < 0) return null;             // no number means no scheme
+
+    // Exactly one counter. If a scheme somehow produced two, the later one is
+    // the AP number and the earlier is treated as the text it looks like.
+    for (var j = 0; j < segments.length; j++) {
+      if (segments[j].type === 'counter' && j !== counterAt) {
+        var col = matched.map(function (e) { return partAt(e, j); });
+        segments[j] = { type: 'text', value: _modal(col).value };
+      }
+    }
+
+    /* A scheme has to look deliberate before it is allowed to replace what he
+       already had. Ekahau's own default names are "AP-1", "AP-2" - which do
+       infer a scheme, technically, and reproducing it would be useless: a
+       fresh survey would arrive and quietly throw away his saved default in
+       favour of Ekahau's placeholder.
+
+       What separates a scheme somebody chose from a placeholder is that the
+       number carries a tag ("AP01") or is padded ("001"). Ekahau's are bare
+       and unpadded - "AP-1", "Ekahau AP 1" - so those are left alone and the
+       saved default stands. */
+    var tag = segments[counterAt].tag;
+    if (!tag && segments[counterAt].digits < 2) return null;
+
+    return {
+      segments: segments,
+      sep: det.sep,
+      matched: matched.length,
+      total: entries.length,
+      floors: floorIds.length,
+      sample: matched[0].name
+    };
+  }
+
+
+  /* Read the project's own scheme and use it.
+
+     The project wins over saved defaults when it has a scheme of its own,
+     because that is the point: adding one AP to a building that is already
+     named should not mean retyping the pattern. Saved defaults are what to
+     do when the file has nothing to say.
+
+     What was read, and from how many APs, is stated on screen. An inferred
+     pattern that silently disagreed with the file would rename every AP in
+     the building on the next Apply, so it says where it came from and shows
+     a name it matched. */
+  function adoptProjectScheme() {
+    var box = $('arInferred');
+    if (box) { box.hidden = true; box.innerHTML = ''; }
+    _inferred = null;
+
+    var read = inferSegments(S.aps.map(function (ap) {
+      return { name: ap.name, floorId: ap.floorPlanId };
+    }));
+    if (!read) return;
+
+    _segments = read.segments.map(function (seg) {
+      if (seg.type === 'text')    return { type: 'text', value: seg.value };
+      if (seg.type === 'floor')   return { type: 'floor', value: '' };
+      return { type: 'counter', tag: seg.tag, start: seg.start, digits: seg.digits };
+    });
+    var sepSel = $('arSepStructured');
+    if (sepSel) {
+      var has = Array.prototype.some.call(sepSel.options, function (o) {
+        return o.value === read.sep;
+      });
+      if (has) sepSel.value = read.sep;
+    }
+    _inferred = read;
+    renderSegments();
+    renderInferredNote(read);
+    updateAll();
+  }
+
+  function renderInferredNote(read) {
+    var box = $('arInferred');
+    if (!box) return;
+    var all = read.matched === read.total;
+    var from = all
+      ? 'all ' + read.matched + ' AP' + (read.matched === 1 ? '' : 's')
+      : read.matched + ' of ' + read.total + ' APs';
+    var floorNote = read.floors > 1
+      ? ' The segment that changes between floors is set to Floor.'
+      : ' Only one floor here, so nothing could show which segment is the '
+        + 'floor — every fixed part was left as text.';
+    var odd = all ? ''
+      : ' The other ' + (read.total - read.matched)
+        + ' do not follow it and were ignored.';
+    box.innerHTML =
+      '<div class="ar-inf-head">Read from this project</div>' +
+      '<div class="ar-inf-body">Filled in from the names ' + esc(from) +
+      ' already use, like <code>' + esc(read.sample) + '</code>.' +
+      esc(odd) + esc(floorNote) + '</div>' +
+      '<div class="ar-inf-body ar-inf-sub">Edit anything below — nothing is ' +
+      'renamed until you apply.</div>';
+    box.hidden = false;
   }
 
   /* ── segment builder UI ─────────────────────────────────────────── */
@@ -609,6 +830,7 @@
         $('arNoPlan').textContent = 'This project has no access points.';
         return;
       }
+      adoptProjectScheme();
       renderFloorTabs();
       showFloor(S.floors[0].id);
       $('arDownloadBtn').disabled = false;
