@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Capacity</title>
+<link rel="icon" href="/assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/wd-wireless-tools-v8.0-180x180.png">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+<style>
+/* Page-scoped for now. wd-tools.css is being edited by another workstream;
+   these belong there once it is free, and nothing here is novel enough to
+   deserve its own file. */
+.cap-wrap { max-width: 1100px; margin: 0 auto; padding: 18px 20px 40px; }
+.cap-card {
+  background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
+}
+.cap-step {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-3);
+  padding-bottom: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+.cap-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.cap-row label { font-size: 13px; color: var(--text-2); }
+.cap-input {
+  padding: 5px 9px; font-size: 13px; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--bg-1); color: var(--text);
+}
+.cap-input--num { width: 92px; }
+.cap-input--name { min-width: 240px; }
+.cap-hint { font-size: 11px; color: var(--text-3); line-height: 1.6; margin: 6px 0 0; }
+.cap-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 6px; }
+.cap-table th {
+  text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px;
+  color: var(--text-3); border-bottom: 1px solid var(--border); padding: 5px 8px 5px 0;
+}
+.cap-table td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--border); color: var(--text); }
+.cap-table td.cap-n { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.cap-table tr:last-child td { border-bottom: 0; }
+.cap-sub { color: var(--text-3); }
+.cap-total { font-weight: 700; }
+.cap-empty { font-size: 12px; color: var(--text-3); font-style: italic; padding: 8px 0; }
+.cap-floor { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+.cap-floor-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.cap-floor-name { font-size: 14px; font-weight: 700; }
+.cap-badge {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+  padding: 1px 8px; border-radius: 9px; white-space: nowrap;
+}
+.cap-badge--create { background: var(--green-bg); color: var(--green-dark); }
+.cap-badge--skip { background: var(--surface-2); color: var(--text-3); }
+.cap-badge--replace { background: var(--amber-bg); color: var(--amber-dark); }
+.cap-facts { font-size: 12px; color: var(--text-2); line-height: 1.7; }
+.cap-facts b { color: var(--text); }
+.cap-warn {
+  margin-top: 12px; padding: 10px 12px; border-radius: 6px;
+  background: var(--amber-bg); color: var(--amber-dark); font-size: 12px; line-height: 1.6;
+}
+.cap-tpl-list { display: flex; flex-direction: column; gap: 6px; }
+.cap-tpl {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 6px; cursor: pointer;
+}
+.cap-tpl.is-on { border-color: var(--blue); background: var(--surface-hover); }
+.cap-tpl-name { font-size: 13px; font-weight: 600; flex: 1 1 auto; }
+.cap-tpl-meta { font-size: 11px; color: var(--text-3); }
+</style>
+</head>
+<body class="tool-capacity">
+
+<div id="dzTopbar" class="dz-topbar" onclick="event.stopPropagation()">
+  <div class="header-left">
+    <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+    <div class="help-menu-wrap">
+      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'dzMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <div id="dzMenu" class="help-menu">
+        <div class="menu-section">&#9656; Navigation</div>
+        <a class="help-menu-item" href="/">⌂ Home</a>
+        <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+        <a class="help-menu-item" href="/walls">· Quick Walls</a>
+        <a class="help-menu-item" href="/report">· Report</a>
+        <a class="help-menu-item" href="/scale">· Scale</a>
+        <a class="help-menu-item" href="/plantrim">· PlanTrim</a>
+        <a class="help-menu-item" href="/aprename">· AP Labeler</a>
+        <a class="help-menu-item active" href="/capacity">· Capacity</a>
+        <a class="help-menu-item" href="/squirrel">· Squirrel</a>
+        <div class="help-menu-sep"></div>
+        <div class="menu-section">&#9656; Tools</div>
+        <a class="help-menu-item" href="/settings">· Suite Settings</a>
+        <div class="help-menu-sep"></div>
+        <div class="menu-section">&#9656; Help &amp; Support</div>
+        <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+        <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <a class="help-menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug</a>
+      </div>
+    </div>
+  </div>
+  <div class="header-center">
+    <h1><span>WD</span> Capacity <span class="ver" data-ver="capacity">v&hellip;</span></h1>
+  </div>
+  <div class="header-actions">
+    <button class="theme-toggle" onclick="WD.toggleTheme()">
+      <span class="ico">🌙</span><span class="txt">Dark</span>
+    </button>
+  </div>
+</div>
+
+<div id="dropzone" class="dropzone">
+  <div id="dropzoneLogo" class="dropzone-logo"></div>
+  <p class="dropzone-ver" data-ver="capacity">v&hellip;</p>
+  <p class="dropzone-sub">Ekahau Workflow Optimization Utility</p>
+  <p class="dropzone-desc">Reads the device mix out of a project you have already set up &mdash; device profiles, usage profiles and the ratios between them &mdash; and saves it as a template you can apply to the next building by typing one number: how many people work there.</p>
+  <div class="dropzone-divider"></div>
+  <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
+  <ul class="dropzone-steps">
+    <li data-step="1."><strong>Capture</strong> the device mix from a project set up the way you want</li>
+    <li data-step="2."><strong>Check</strong> the ratios it read back, then save them as a template</li>
+    <li data-step="3."><strong>Preview</strong> what applying it to another project would do</li>
+  </ul>
+</div>
+<input type="file" id="fileInput" accept=".esx" hidden>
+
+<div id="editor" class="editor">
+  <div class="header">
+    <div class="header-left">
+      <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+      <div class="help-menu-wrap">
+        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'helpMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <div id="helpMenu" class="help-menu">
+          <div class="menu-section">&#9656; Navigation</div>
+          <a class="help-menu-item" href="/">⌂ Home</a>
+          <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+          <a class="help-menu-item" href="/walls">· Quick Walls</a>
+          <a class="help-menu-item" href="/report">· Report</a>
+          <a class="help-menu-item" href="/scale">· Scale</a>
+          <a class="help-menu-item" href="/plantrim">· PlanTrim</a>
+          <a class="help-menu-item" href="/aprename">· AP Labeler</a>
+          <a class="help-menu-item active" href="/capacity">· Capacity</a>
+          <a class="help-menu-item" href="/squirrel">· Squirrel</a>
+          <div class="help-menu-sep"></div>
+          <div class="menu-section">&#9656; Help &amp; Support</div>
+          <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+          <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        </div>
+      </div>
+      <span id="fileBadge" class="file-badge" onclick="capLoadNewFile()"
+            title="Click to open another .esx"></span>
+    </div>
+    <div class="header-center">
+      <h1><span>WD</span> Capacity <span class="ver" data-ver="capacity">v&hellip;</span></h1>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-sec" onclick="capLoadNewFile()">Open another</button>
+    </div>
+  </div>
+
+  <div class="cap-wrap">
+
+    <div class="cap-card">
+      <div class="cap-step">1 &mdash; What this project is asking for</div>
+      <div id="capExtract"></div>
+    </div>
+
+    <div class="cap-card" id="capDeriveCard" hidden>
+      <div class="cap-step">2 &mdash; Turn it into a template</div>
+      <div class="cap-row">
+        <label for="capOccupants">This project was designed for</label>
+        <input type="number" id="capOccupants" class="cap-input cap-input--num" min="1" step="1" value="500"
+               oninput="capDerive()">
+        <label for="capOccupants">people</label>
+      </div>
+      <p class="cap-hint">
+        Everything is stored per person, so a template captured from a 500-person
+        building applies correctly to a 200-person one. Check the per-person column
+        below matches what you intended before saving.
+      </p>
+      <div id="capDerived"></div>
+      <div class="cap-row" style="margin-top:12px">
+        <label for="capName">Save as</label>
+        <input type="text" id="capName" class="cap-input cap-input--name" placeholder="e.g. Office, Wi-Fi 6E">
+        <button class="btn btn-primary" onclick="capSave()">Save template</button>
+      </div>
+    </div>
+
+    <div class="cap-card">
+      <div class="cap-step">3 &mdash; Apply a template to this project</div>
+      <div class="cap-tpl-list" id="capTemplates"></div>
+      <div class="cap-row" style="margin-top:12px">
+        <label for="capHeadcount">This building is for</label>
+        <input type="number" id="capHeadcount" class="cap-input cap-input--num" min="1" step="1" value="200"
+               oninput="capPlan()">
+        <label for="capHeadcount">people</label>
+        <label style="display:flex;align-items:center;gap:6px;margin-left:10px">
+          <input type="checkbox" id="capReplace" onchange="capPlan()">
+          <span>Replace requirement areas that already exist</span>
+        </label>
+      </div>
+      <p class="cap-hint">
+        A floor that already has a requirement area is left alone unless you tick that box.
+        A hand-drawn area is real work and is never replaced without being asked for.
+      </p>
+      <div id="capPlan"></div>
+    </div>
+
+    <p class="cap-hint" style="text-align:center">
+      Nothing is written to your project. This build previews only &mdash; the writer is not wired up yet.
+    </p>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/capacity.js"></script>
+</body>
+</html>

@@ -32,6 +32,7 @@ from tools.cloud_manager import CloudManager
 from tools.folder_organizer import FolderOrganizer
 from tools.rename_manager import RenameManager
 from tools.template_store import TemplateStore
+from tools import capacity_profiles
 from tools import report_store
 from tools import settings as suite_settings
 from tools import updater
@@ -173,6 +174,11 @@ def report():
     return send_from_directory(WEB, "report.html")
 
 
+@app.route("/capacity")
+def capacity():
+    return send_from_directory(WEB, "capacity.html")
+
+
 @app.route("/plantrim")
 def plantrim():
     return send_from_directory(WEB, "plantrim.html")
@@ -294,6 +300,58 @@ def api_walls(action):
         return jsonify({"error": "unknown action: " + action}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/capacity/<action>", methods=["POST"])
+def api_capacity(action):
+    """Capture a capacity template, and preview applying one.
+
+    Nothing here writes to a project. `analyze` and `plan` take the .esx as the
+    request body because it is a whole archive; the rest are ordinary JSON.
+    """
+    if action in ("analyze", "plan"):
+        blob = request.get_data(cache=False)
+        if not blob:
+            return jsonify({"error": "no file received"}), 400
+        name = request.args.get("name") or "project.esx"
+        tmpdir = tempfile.mkdtemp(prefix="wd-capacity-")
+        try:
+            src = Path(tmpdir) / "in.esx"
+            src.write_bytes(blob)
+            if action == "analyze":
+                out = capacity_profiles.extract(str(src))
+                out["source"] = name
+                return jsonify(out)
+
+            tpl_file = request.args.get("template") or ""
+            tpl = next((t for t in capacity_profiles.list_templates()["templates"]
+                        if t.get("_file") == tpl_file), None)
+            if tpl is None:
+                return jsonify({"ok": False, "error": "That template is no longer there."}), 404
+            out = capacity_profiles.plan_application(
+                str(src), tpl, request.args.get("occupants"),
+                replace_existing=request.args.get("replace") == "1")
+            out["source"] = name
+            return jsonify(out)
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    data = request.get_json(silent=True) or {}
+    try:
+        if action == "templates":
+            return jsonify(capacity_profiles.list_templates())
+        if action == "derive":
+            return jsonify(capacity_profiles.derive_template(
+                data.get("extracted") or {}, data.get("occupants"), data.get("name") or ""))
+        if action == "save":
+            return jsonify(capacity_profiles.save_template(data.get("template") or {}))
+        if action == "delete":
+            return jsonify(capacity_profiles.delete_template(data.get("file") or ""))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"error": f"unknown action: {action}"}), 404
 
 
 @app.route("/api/plantrim/<action>", methods=["POST"])
