@@ -205,28 +205,94 @@ Report turns an Ekahau `.esx` project into print-ready handoff documentation.
 
 ### Build a report
 
-1. Drop an `.esx` file onto the page, or select the drop area to browse.
-2. Choose an available report template.
+1. Select **Open from disk** to browse for an `.esx`, or drop one onto the page.
+2. Choose a report template.
 3. Configure sections, AP filters, label style, units, and template-specific options.
 4. Add a logo when the document requires customer or company branding.
 5. Review every generated page.
 6. Use the browser print dialog to print or save the result as PDF.
 
+**The saved file name includes the project.** It comes out as
+`Report - <template> - <revision> - <project>`, where the project is the name of
+the **folder the `.esx` was opened from** — that folder is usually the job
+itself (client, building, address) while the file inside it is named after the
+site or the discipline. Opening from disk is what makes the folder knowable; a
+dragged-and-dropped file carries only its own name, so the `.esx` file name is
+used instead. If the folder name says nothing about the job — `Downloads`,
+`Desktop`, `New Folder` — it is skipped in favour of the file name. Report
+settings shows the exact name it will offer, with and without the revision.
+
 ### Available report templates
 
+- AP Placement Map
 - AP Installation
-- Predictive Design / AP Placement
+- Antenna Aim Sheet
+- Coverage Cell Boundary
 - Site Summary Sheet
 - Interference / Rogue Devices
 - Bill of Materials
-- Antenna Aim Sheet
-- Coverage Cell Boundary
 
 The Change / Audit Report appears as **Coming soon** and cannot yet be selected.
+
+Each card says who the sheet is for and how many pages you get, because that is
+what separates templates that otherwise look alike.
+
+> **Changed:** *Predictive Design / AP Placement* no longer exists as a separate
+> template. Its only real difference from the AP Placement Map was whether large
+> floors were split into sections, which is now a checkbox on the map itself.
+> Choosing it now opens the AP Placement Map, and any options you had saved
+> against it are carried over. You gain per-page orientation, the Key Plan and
+> match lines, none of which the old template had.
+
+### Settings that stay set
+
+Every checkbox, radio and dropdown in the report sidebar is remembered, per
+template. Configure a report the way you want it and press **Save these as my
+defaults** — the next report of that type opens that way.
+
+Changing an option without pressing that button affects only the report in front
+of you. The card under the options always says which state you are in, and
+**Use shipped defaults** puts a template back to how it arrived.
+
+Client, prepared-by, project reference and revision are shared across every
+template rather than saved per template, and live in Report settings.
+
+**Units default to feet** and are remembered for you, not per report. There is
+no longer a "show both units" option — a length is shown once, in the unit you
+chose. An `.esx` always stores metres internally; this only changes how the
+report is written.
+
+### Large floors
+
+A floor too big to read on one sheet can be split into lettered sections. Turn on
+**Split large floor plans into zoomed sections**.
+
+- **Section size** controls how much ground one sheet covers, from *More detail —
+  smaller sections* through to *Fewest pages — largest sections*. It is
+  remembered for you. **Standard** is what the tool has always produced.
+- Every section page carries a **Key Plan** — the whole floor in miniature, all
+  sections lettered, the one you are looking at filled in.
+- **Match lines** mark each edge where the drawing continues, labelled with the
+  section that carries on, so a run of racking can be followed page to page.
+- **Configure grid…** opens the plan so you can set rows and columns by hand and
+  position the area to be covered. Sections containing no APs are drawn dashed —
+  they never become sheets.
 
 ### AP labels
 
 Floor-plan markers and AP-table labels come from the AP names inside the project. When a name ends in an AP designator such as `SITE-B1-01-AP42`, the short-label option can show `42` for quick map-to-table cross-reference. Turn off **Short number labels on the plan** when full names are preferable.
+
+### Page orientation
+
+Each page can be set to **Auto**, **Portrait** or **Landscape** using the control
+above it, and the choice is remembered. Auto turns a page only when turning it
+prints the map meaningfully larger, so a plan that gains little stays upright.
+
+**Mixing portrait and landscape in one document is verified in Chrome and Edge.**
+It relies on a CSS feature those browsers implement. If pages come out clipped at
+the right-hand edge in another browser, that is the symptom of a page laid out
+for one orientation printed on a sheet of the other — press **Match all pages**
+on any page to put the whole report one way round, which is always correct.
 
 ### Print cleanly
 
@@ -262,7 +328,40 @@ Choose one of three modes:
 
 ### Ordering
 
-Choose how APs are sequenced spatially: Nearest Neighbor, Zigzag Rows, Rows Left→Right, Rows Right→Left, Columns Top→Bottom, Columns Bottom→Top, Clockwise, Counter-clockwise, or Manual (click each AP on the floor plan in your preferred order).
+Ordering decides the sequence numbers are handed out in, so changing it changes
+every name the tool produces.
+
+> **Read this if you have a saved naming template or a numbering scheme you
+> expect to match a previous survey.** Two things about ordering are not what
+> they were in early versions:
+>
+> - **Nearest Neighbor is the default.** It walks from each AP to whichever one
+>   is closest, the way you would if you were pacing the building. On a real
+>   floor plan that follows rooms and corridors rather than the page.
+> - **Zigzag Rows means a true zigzag.** It sweeps row by row from the top,
+>   reversing direction on every other row, so the walk never jumps back across
+>   the building at the end of a row. It used to behave differently.
+>
+> If you renamed a site under an earlier version and need a new survey to match
+> it, check the preview against the existing names before downloading rather
+> than assuming the same option gives the same sequence.
+
+The full list:
+
+| Ordering | What it does |
+|---|---|
+| **Nearest Neighbor** *(default)* | Walks to the closest remaining AP each time |
+| **Zigzag Rows** | Rows top to bottom, every other row reversed |
+| Rows, Left → Right | Row by row, always left to right |
+| Rows, Right → Left | Row by row, always right to left |
+| Columns, Top → Bottom | Column by column, downward |
+| Columns, Bottom → Top | Column by column, upward |
+| Clockwise | Around the plan, clockwise from the top |
+| Counter-clockwise | Around the plan, anticlockwise from the top |
+| Manual (click order) | You click each AP on the plan in the order you want |
+
+The preview shows the resulting names over the floor plan, so the ordering can be
+judged by looking at it before anything is downloaded.
 
 ### Preview and download
 
