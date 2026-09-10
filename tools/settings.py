@@ -126,6 +126,11 @@ DEFAULTS = {
         # back to the option's own shipped default, so a new report or a new
         # option needs no migration and nothing can be stranded.
         "report_defaults": {},
+        # How much ground one section sheet covers when a large floor is split.
+        # "standard" is what the tool has always produced, so nobody's output
+        # changes by upgrading; the coarser settings are what construction asked
+        # for - fewer pages, more context around each AP.
+        "segment_granularity": "standard",
         # Feet or metres for heights and distances. An .esx stores everything
         # in metres, so this is purely how the report is written; Ekahau keeps
         # its own display preference in the application, not the project file,

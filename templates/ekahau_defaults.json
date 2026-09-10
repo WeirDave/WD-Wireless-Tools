@@ -27,7 +27,6 @@
       ],
       "thickness": 0.35,
       "lowerEdge": 0.0,
-      "upperEdge": 2.0,
       "status": "CREATED"
     },
     {
@@ -56,7 +55,6 @@
       ],
       "thickness": 0.1,
       "lowerEdge": 0.0,
-      "upperEdge": 1.5,
       "status": "CREATED",
       "keybindNumber": 8
     },
@@ -341,7 +339,6 @@
       ],
       "thickness": 1.0,
       "lowerEdge": 0.0,
-      "upperEdge": 2.5,
       "status": "CREATED"
     },
     {
@@ -370,7 +367,6 @@
       ],
       "thickness": 1.5,
       "lowerEdge": 0.0,
-      "upperEdge": 10.0,
       "status": "CREATED"
     },
     {

@@ -35,7 +35,7 @@ NODE_TIMEOUT_S = 120
 PRELUDE = r"""
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf8');
-const a = src.indexOf('var SEG_SQFT_PER_PAGE');
+const a = src.indexOf('var SEG_GRANULARITY');
 const b = src.indexOf('function segCellLabel');
 if (a < 0 || b < 0) throw new Error('computeAntennaGrid block not found');
 eval(src.slice(a, b));
@@ -118,8 +118,27 @@ class SegmentGrid(unittest.TestCase):
         """Area per sheet and APs per sheet are different arguments and should
         be arguable separately."""
         src = REPORT_JS.read_text(encoding="utf-8")
-        for name in ("SEG_SQFT_PER_PAGE", "SEG_APS_PER_PAGE", "SEG_MAX_CELLS"):
+        for name in ("SEG_GRANULARITY", "SEG_APS_PER_PAGE", "SEG_MAX_CELLS"):
             self.assertIn(name, src)
+
+    def test_section_size_is_a_dial_and_standard_changes_nothing(self):
+        """Construction asked for fewer pages with more context around each AP.
+        That is a setting - but the shipped value has to stay exactly where it
+        was, or everyone else's page count moves underneath them on upgrade."""
+        self.check("""
+          const std      = cells(14000, 9000, 18, 0.04, { segGranularity: 'standard' });
+          const fine     = cells(14000, 9000, 18, 0.04, { segGranularity: 'fine' });
+          const coarse   = cells(14000, 9000, 18, 0.04, { segGranularity: 'coarse' });
+          const coarsest = cells(14000, 9000, 18, 0.04, { segGranularity: 'coarsest' });
+          check('standard moved off the shipped 120,000 sq ft a sheet: ' + std,
+                std === 20);
+          check('the dial does not run the right way: '
+                + [fine, std, coarse, coarsest],
+                fine >= std && std > coarse && coarse > coarsest);
+          check('an unrecognised value should fall back to standard',
+                cells(14000, 9000, 18, 0.04, { segGranularity: 'nonsense' }) === std);
+          done();
+        """)
 
     def test_every_caller_passes_the_scale(self):
         """A caller that forgets it silently gets the density-only fallback,

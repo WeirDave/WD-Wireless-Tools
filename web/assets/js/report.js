@@ -131,6 +131,8 @@
       labelerPattern = (ar && ar.defaults) || null;
       var u = r.settings && r.settings.report && r.settings.report.units;
       if (u === 'feet' || u === 'meters') unitsPref = u;
+      var sg = r.settings && r.settings.report && r.settings.report.segment_granularity;
+      if (sg && SEG_GRANULARITY[sg]) segGranularityPref = sg;
     });
   }
 
@@ -574,12 +576,19 @@
      settings page forty-one times. A sidebar change on its own stays with
      this document - the same split the Cloud Manager owner filter settled on,
      for the same reason. A stray click must not become permanent. */
+  /* Person-level preferences that happen to be shown in the sidebar. They are
+     saved once, for the person, and must not also be copied into the
+     per-report store - a setting living in two places is how the Settings page
+     came to display a value that was not in force. */
+  var PERSON_LEVEL_OPTS = ['units', 'segGranularity'];
+
   function collectSidebarValues() {
     var r = currentReport();
     var out = {};
     (r.sidebar || []).forEach(function (opt) {
       if (opt.id.charAt(0) === '_') return;              // grid button, not a value
       if (SETTING_IDS.indexOf(opt.id) !== -1) return;    // shared, stored globally
+      if (PERSON_LEVEL_OPTS.indexOf(opt.id) !== -1) return;
       if (opt.type === 'text') return;
       out[opt.id] = (opt.id in currentOpts) ? currentOpts[opt.id]
                   : (opt.type === 'select' ? (opt.default || '') : !!opt.default);
@@ -1590,6 +1599,12 @@
       currentOpts[id] = cb.value === '' ? '' : parseInt(cb.value, 10);
     } else if (optType === 'select') {
       currentOpts[id] = cb.value;
+      if (id === 'segGranularity') {
+        segGranularityPref = cb.value;
+        if (settingsAvailable) {
+          pushSettings({ segment_granularity: cb.value }).catch(function () {});
+        }
+      }
       if (id === 'units') {
         unitsPref = cb.value;
         // Best effort: a report still renders correctly if this never lands.
@@ -2098,6 +2113,8 @@
         opts[o.id] = (o.id in currentOpts) ? currentOpts[o.id] : !!o.default;
       }
     });
+    opts.segGranularity = ('segGranularity' in currentOpts)
+      ? currentOpts.segGranularity : segGranularityPref;
     if (currentOpts.segCols > 0) opts.segCols = currentOpts.segCols;
     if (currentOpts.segRows > 0) opts.segRows = currentOpts.segRows;
     if (currentOpts.cropBoxes) opts.cropBoxes = currentOpts.cropBoxes;
@@ -2534,10 +2551,26 @@
 
 
 
-  // Roughly a floor's worth of detail per sheet, and roughly as many APs as
-  // stay legible on one. Named so the two halves of the decision can be argued
-  // with separately.
-  var SEG_SQFT_PER_PAGE = 120000;
+  /* How much ground one section sheet covers.
+
+     "standard" is the figure the tool has always used, so upgrading changes
+     nobody's page count. The coarser settings are what construction asked for
+     after seeing a warehouse come out as a stack of sheets each showing an AP
+     floating in empty slab - fewer pages, more around each AP to place it by.
+
+     Labelled by what you get rather than by an abstract scale, because "fine"
+     and "coarse" do not tell you which way the page count moves. */
+  var SEG_GRANULARITY = {
+    fine:     { sqft:  60000, label: 'More detail \u2014 smaller sections' },
+    standard: { sqft: 120000, label: 'Standard' },
+    coarse:   { sqft: 250000, label: 'Fewer pages \u2014 larger sections' },
+    coarsest: { sqft: 500000, label: 'Fewest pages \u2014 largest sections' },
+  };
+  function segSqFtPerPage(opts) {
+    var g = SEG_GRANULARITY[(opts && opts.segGranularity) || segGranularityPref];
+    return (g || SEG_GRANULARITY.standard).sqft;
+  }
+  var segGranularityPref = 'standard';
   var SEG_APS_PER_PAGE = 14;
   var SEG_MAX_CELLS = 24;
 
@@ -2568,7 +2601,7 @@
     var scale = (typeof mPerUnit === 'number' && mPerUnit > 0) ? mPerUnit : 0;
     if (scale) {
       var areaSqFt = (W * scale) * (H * scale) * 10.7639;
-      bySize = Math.ceil(areaSqFt / SEG_SQFT_PER_PAGE) || 1;
+      bySize = Math.ceil(areaSqFt / segSqFtPerPage(opts)) || 1;
     }
     var target = Math.min(SEG_MAX_CELLS, Math.max(byDensity, bySize, 1));
     if (target <= 1) return { cols: 1, rows: 1 };
@@ -5307,6 +5340,14 @@
           description: 'Adds "CONFIDENTIAL" to the report footer.' },
         { id: 'segmented', label: 'Split large floor plans into zoomed sections', default: false,
           description: 'Off by default \u2014 one page per floor is the point of this report. Turn on for a very large plan where one page cannot hold readable labels.' },
+        { id: 'segGranularity', type: 'select', label: 'Section size on large floors', default: 'standard',
+          options: [
+            { value: 'fine',     label: 'More detail — smaller sections' },
+            { value: 'standard', label: 'Standard' },
+            { value: 'coarse',   label: 'Fewer pages — larger sections' },
+            { value: 'coarsest', label: 'Fewest pages — largest sections' },
+          ],
+          description: 'How much ground one section sheet covers. Construction asked for fewer pages with more around each AP; this is that dial. Remembered for you, not per report.' },
         { id: '_gridConfig', type: 'grid-button', label: 'Configure grid\u2026',
           description: 'Only used when the split above is on.' },
         { id: 'compassRef', type: 'select', label: 'Compass reference page', default: 'auto',
@@ -5601,6 +5642,14 @@
           description: 'Adds a column flagging APs with missing, MAC-address, or generic names. Also adds a summary section at the end.' },
         { id: 'segmented', label: 'Split large floor plans into zoomed sections', default: true,
           description: 'Breaks each floor plan into a grid of zoomed-in sections so AP labels stay readable at any scale.' },
+        { id: 'segGranularity', type: 'select', label: 'Section size on large floors', default: 'standard',
+          options: [
+            { value: 'fine',     label: 'More detail — smaller sections' },
+            { value: 'standard', label: 'Standard' },
+            { value: 'coarse',   label: 'Fewer pages — larger sections' },
+            { value: 'coarsest', label: 'Fewest pages — largest sections' },
+          ],
+          description: 'How much ground one section sheet covers. Construction asked for fewer pages with more around each AP; this is that dial. Remembered for you, not per report.' },
         { id: '_gridConfig', type: 'grid-button', label: 'Configure grid…',
           description: 'Choose how many rows and columns the segmented grid uses, with a live preview on your actual floor plan.' },
         { id: 'inclDirectional', label: 'Include directional APs', default: true,
