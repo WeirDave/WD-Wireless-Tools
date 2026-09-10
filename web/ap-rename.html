@@ -205,6 +205,8 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 [data-theme="light"] .tool-aprename .ar-scope-tab { background:var(--bg-3,#eee); color:var(--text-2,#666); }
 [data-theme="light"] .tool-aprename .ar-scope-tab.active { background:#ea580c; color:#fff; }
 .tool-aprename .ar-scope-desc { font-size:11px; color:var(--text-2,#888); line-height:1.5; }
+.tool-aprename .ar-nest { margin-top:10px; display:flex; flex-direction:column; gap:5px; }
+.tool-aprename .ar-nest-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); }
 
 .tool-aprename .ar-templates-detail summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:4px; user-select:none; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); padding:6px 0; }
 .tool-aprename .ar-templates-detail summary::-webkit-details-marker { display:none; }
@@ -468,6 +470,17 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
           </select>
 
           <div class="ar-colorseq" id="arColorPanel" hidden></div>
+
+          <!-- Only meaningful for By Colour Groups, and only on a project with
+               more than one floor. Hidden otherwise. -->
+          <div class="ar-nest" id="arNestPanel" hidden>
+            <div class="ar-nest-label">Across floors</div>
+            <div class="ar-scope-tabs" id="arNestTabs">
+              <button class="ar-scope-tab active" data-nest="floor">Finish each floor</button>
+              <button class="ar-scope-tab" data-nest="color">Colour through building</button>
+            </div>
+            <div class="ar-scope-desc" id="arNestDesc"></div>
+          </div>
 
           <div class="ar-manual" id="arManualPanel" hidden>
             <div class="ar-manual-head">

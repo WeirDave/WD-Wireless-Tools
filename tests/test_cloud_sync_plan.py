@@ -190,6 +190,13 @@ class TheConfirmNamesWhatItWillDestroy(unittest.TestCase):
     def test_the_backup_is_promised_where_the_overwrite_is_confirmed(self):
         self.assertIn(".previous-", self.body)
 
+    def test_it_speaks_ekahau_s_vocabulary(self):
+        """He already has a mental model from Ekahau's own save prompt: sync
+        takes the correct side per file, overwrite forces one direction. Using
+        those two words to mean those two things beats teaching him ours."""
+        self.assertIn("Sync —", self.body)
+        self.assertIn("Sync never overwrites the newer side", self.body)
+
     def test_blocked_uploads_are_named_in_the_confirm(self):
         self.assertIn("blockedPushes.length", self.body)
         self.assertIn("not sent up", self.body)

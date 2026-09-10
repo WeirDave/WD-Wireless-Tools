@@ -68,6 +68,9 @@
   /* ── naming mode ────────────────────────────────────────────────── */
   var _mode = 'structured';
   var _scope = 'all';
+  /* 'floor' finishes a floor before moving up; 'color' carries one colour
+     through the whole building. Only consulted when ordering is by-color. */
+  var _nesting = 'floor';
   // The colour sequence for the By Colour ordering, newest choice last.
   var _colorOrder = [];
 
@@ -93,7 +96,11 @@
 
   window.arSetScope = function (s) {
     _scope = s;
-    document.querySelectorAll('.ar-scope-tab').forEach(function (t) {
+    /* Scoped to its own group. The nesting tabs below reuse .ar-scope-tab for
+       its styling, and a bare class query here toggled `active` off them by
+       asking for a data-scope they do not have - leaving both nesting tabs
+       looking unselected. */
+    document.querySelectorAll('#arScopeTabs .ar-scope-tab').forEach(function (t) {
       t.classList.toggle('active', t.getAttribute('data-scope') === s);
     });
     var desc = $('arScopeDesc');
@@ -104,6 +111,58 @@
     }
     updateAll();
   };
+
+  /* Colour-major and "restart numbering each floor" cannot both be true.
+
+     Numbering every blue on floors 1-3 and then coming back to floor 1 for the
+     greens means a per-floor counter has already been spent: the greens either
+     collide with the blues or restart in the middle of a floor. Neither is a
+     thing anybody wants, so choosing colour-major moves Scope to continuous
+     and says so, rather than letting the combination be discovered in a set of
+     duplicate AP names. Floor-major composes with either. */
+  window.arSetNesting = function (n) {
+    _nesting = n;
+    document.querySelectorAll('#arNestTabs .ar-scope-tab').forEach(function (t) {
+      t.classList.toggle('active', t.getAttribute('data-nest') === n);
+    });
+    var forced = false;
+    if (n === 'color' && _scope === 'perFloor') {
+      arSetScope('all');            // this calls updateAll() itself
+      forced = true;
+    }
+    var desc = $('arNestDesc');
+    if (desc) {
+      desc.textContent = n === 'color'
+        ? 'Every blue in the building, then every green, then every grey. One continuous sequence — a per-floor counter cannot survive leaving a floor and coming back.'
+        : 'Floor 1’s colours in your order, then floor 2’s, and so on. Each floor is finished before the next.';
+    }
+    var tabs = document.querySelectorAll('#arScopeTabs .ar-scope-tab');
+    tabs.forEach(function (t) {
+      var lock = (n === 'color' && t.getAttribute('data-scope') === 'perFloor');
+      t.disabled = lock;
+      t.title = lock
+        ? 'Not available while numbering a colour through the whole building — the sequence leaves each floor and comes back.'
+        : '';
+    });
+    if (forced) toast('Scope set to All APs — colour-through-building is one continuous sequence', 'info');
+    if (!forced) updateAll();
+  };
+
+  function syncNestPanel() {
+    var panel = $('arNestPanel');
+    if (!panel) return;
+    // Nothing to nest on a single-floor project.
+    var multiFloor = (S.floors || []).length > 1;
+    panel.hidden = !($('arOrder').value === 'by-color' && multiFloor);
+    // The description explains what the active choice does, so it has to say
+    // something before anyone has clicked anything.
+    var desc = $('arNestDesc');
+    if (!panel.hidden && desc && !desc.textContent) {
+      desc.textContent = _nesting === 'color'
+        ? 'Every blue in the building, then every green, then every grey. One continuous sequence — a per-floor counter cannot survive leaving a floor and coming back.'
+        : 'Floor 1’s colours in your order, then floor 2’s, and so on. Each floor is finished before the next.';
+    }
+  }
 
   function getFloorNumber(floor) {
     if (!floor) return '01';
@@ -281,6 +340,15 @@
   (function () {
     var tabs = $('arScopeTabs');
     if (!tabs) return;
+    var nestTabs = $('arNestTabs');
+    if (nestTabs) {
+      nestTabs.querySelectorAll('.ar-scope-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+          if (tab.disabled) return;
+          arSetNesting(tab.getAttribute('data-nest'));
+        });
+      });
+    }
     tabs.querySelectorAll('.ar-scope-tab').forEach(function (tab) {
       tab.addEventListener('click', function () {
         arSetScope(tab.getAttribute('data-scope'));
@@ -373,6 +441,7 @@
     return {
       mode:      _mode,
       scope:     _scope,
+      nesting:   _nesting,
       order:     $('arOrder').value,
       colorOrder: _colorOrder.slice(),
       segments:  _segments.map(function (s) {
@@ -398,7 +467,11 @@
 
   function applySettings(s) {
     if (s.mode) arSetMode(s.mode);
+    if (s.nesting) arSetNesting(s.nesting);
+    // After nesting, so colour-major's continuous rule is not undone by a
+    // stale saved scope from before the two were ever combined.
     if (s.scope) arSetScope(s.scope);
+    if (s.nesting === 'color') arSetScope('all');
     if (s.order)     $('arOrder').value = s.order;
     if (Array.isArray(s.colorOrder)) _colorOrder = s.colorOrder.slice();
     if (s.segments && Array.isArray(s.segments)) {
@@ -849,6 +922,7 @@
     if (!panel) return;
     var on = $('arOrder').value === 'by-color';
     panel.hidden = !on;
+    syncNestPanel();
     if (!on) return;
 
     var present = projectColors();
@@ -926,7 +1000,14 @@
     try { renderColorPanel(); } finally { _colorPanelSyncing = false; }
   }
 
-  function sortByColorGroup(aps, colorOrder) {
+  /* Group APs by colour and put the groups in the engineer's chosen order.
+
+     Split out from sortByColorGroup because the two nestings need the same
+     answer to "which colour comes first" while walking the project in
+     different orders: floor-major asks once per floor, colour-major asks once
+     for the whole building. One implementation of the ordering, two traversals
+     over it. */
+  function groupByColor(aps, colorOrder) {
     var order = (colorOrder || []).map(function (c) { return String(c).toLowerCase().trim(); });
     var groups = {};
     aps.forEach(function (ap) {
@@ -944,10 +1025,15 @@
       var d = rank(a) - rank(b);
       return d !== 0 ? d : (a < b ? -1 : 1);
     });
+    return { keys: keys, groups: groups };
+  }
+
+  function sortByColorGroup(aps, colorOrder) {
+    var g = groupByColor(aps, colorOrder);
     var result = [];
-    keys.forEach(function (k) {
-      var g = sortNearestNeighbor(groups[k]);
-      for (var i = 0; i < g.length; i++) result.push(g[i]);
+    g.keys.forEach(function (k) {
+      var one = sortNearestNeighbor(g.groups[k]);
+      for (var i = 0; i < one.length; i++) result.push(one[i]);
     });
     return result;
   }
@@ -1232,27 +1318,98 @@
     return settings.startNum;
   }
 
+  /* The order APs are handed to the numbering pass, as a flat list of
+     {floor, ap}. Two nestings, because "do all the blues" means two different
+     jobs depending on how the work is actually done:
+
+       floor-major  floor 1's blues, greens, greys; then floor 2's, and so on.
+                    You finish a floor before going up a ladder to the next.
+       colour-major all the blues on every floor, then every green, then every
+                    grey. You carry one box of hardware through the building.
+
+     Only the sequence changes. generatePreview() below remains the single
+     place a number is decided - this returns who is next, never what they are
+     called. */
+  function buildSequence(settings) {
+    var seq = [];
+    if (settings.order === 'by-color' && _nesting === 'color') {
+      var everyone = [];
+      S.floors.forEach(function (floor) {
+        getFloorAPs(floor.id).forEach(function (ap) {
+          everyone.push({ floor: floor, ap: ap });
+        });
+      });
+      var g = groupByColor(everyone.map(function (x) { return x.ap; }), _colorOrder);
+      var floorOf = {};
+      everyone.forEach(function (x) { floorOf[x.ap.id] = x.floor; });
+      g.keys.forEach(function (key) {
+        // Within one colour, walk the floors in their own order, and within a
+        // floor fall back to the spatial ordering rather than inventing one.
+        var byFloor = {};
+        g.groups[key].forEach(function (ap) {
+          var fid = floorOf[ap.id].id;
+          (byFloor[fid] = byFloor[fid] || []).push(ap);
+        });
+        S.floors.forEach(function (floor) {
+          var here = byFloor[floor.id];
+          if (!here) return;
+          sortNearestNeighbor(here).forEach(function (ap) {
+            seq.push({ floor: floor, ap: ap });
+          });
+        });
+      });
+      return seq;
+    }
+    S.floors.forEach(function (floor) {
+      sortAPs(getFloorAPs(floor.id), settings.order).forEach(function (ap) {
+        seq.push({ floor: floor, ap: ap });
+      });
+    });
+    return seq;
+  }
+
   function generatePreview() {
     var settings = getSettings();
     var allItems = [];
     var start = getStartNum(settings);
     var num = start;
 
+    // One pass, one counter, whatever the traversal was.
+    var seq = buildSequence(settings);
+    var colorMajor = settings.order === 'by-color' && _nesting === 'color';
+    var numbered = {};
+    var byFloorItems = {};
+    var lastFloorId = null;
+    seq.forEach(function (step) {
+      /* Restarting per floor only means anything while the walk stays on a
+         floor until it is done. Colour-major leaves and comes back, so the
+         two are mutually exclusive and the UI forces continuous there - this
+         guard is the same rule stated where the counter actually lives. */
+      if (_scope === 'perFloor' && !(settings.order === 'by-color' && _nesting === 'color')
+          && step.floor.id !== lastFloorId) {
+        num = start;
+      }
+      lastFloorId = step.floor.id;
+      numbered[step.ap.id] = 1;
+      var item = { ap: step.ap, oldName: step.ap.name,
+                   newName: generateName(settings, step.floor, num),
+                   floorId: step.floor.id, num: num };
+      num++;
+      /* Colour-major is listed in the order it will number, because that
+         sequence is the thing being chosen and it is invisible anywhere else.
+         Floor-major keeps the floor-by-floor table it has always had - which
+         is also the only readable shape when the counter restarts per floor. */
+      if (colorMajor) allItems.push(item);
+      else (byFloorItems[step.floor.id] = byFloorItems[step.floor.id] || []).push(item);
+    });
+
+    // In manual mode sortAPs only returns the clicked APs, so the rest are
+    // listed unchanged rather than silently vanishing from the preview.
     S.floors.forEach(function (floor) {
-      if (_scope === 'perFloor') num = start;
-      var floorAPs = getFloorAPs(floor.id);
-      var sorted = sortAPs(floorAPs, settings.order);
-      var numbered = {};
-      sorted.forEach(function (ap) {
-        var newName = generateName(settings, floor, num);
-        numbered[ap.id] = 1;
-        allItems.push({ ap: ap, oldName: ap.name, newName: newName,
-                        floorId: floor.id, num: num });
-        num++;
-      });
-      // In manual mode sortAPs only returns the clicked APs, so the rest are
-      // listed unchanged rather than silently vanishing from the preview.
-      floorAPs.forEach(function (ap) {
+      if (!colorMajor) {
+        (byFloorItems[floor.id] || []).forEach(function (it) { allItems.push(it); });
+      }
+      getFloorAPs(floor.id).forEach(function (ap) {
         if (!numbered[ap.id]) {
           allItems.push({ ap: ap, oldName: ap.name, newName: ap.name,
                           floorId: floor.id, unnumbered: true, num: null });

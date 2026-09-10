@@ -1921,7 +1921,7 @@ function stalenessBadgeHtml(r) {
 
   if (s === 'cloud_newer') {
     if (canPullFromCloud(r)) {
-      return `<button class="stale-badge stale-cloud is-action" title="The cloud copy was edited more recently. Click to download it over your local file — your current copy is kept alongside it as a .previous- file." onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#11015; Cloud newer &middot; download</button>`;
+      return `<button class="stale-badge stale-cloud is-action" title="Sync: the cloud copy was edited more recently, so it replaces your local one. Your current copy is kept alongside it as a .previous- file." onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#11015; Cloud newer &middot; download</button>`;
     }
     return `<span class="stale-badge stale-cloud" title="The cloud copy was edited more recently. These two were paired on name similarity rather than a proven match, so downloading over your local file is not offered — it could overwrite a different project. Link them yourself with the &#128279; button to confirm the pair, and the download becomes available.">&#11015; Cloud newer</span>`;
   }
@@ -1950,7 +1950,7 @@ function gutCell(r) {
 
     const isNameMatch = r.matchType === 'exact' && r.cloud && r.local && kind !== 'sites';
     const verifyBtn = (isNameMatch && !r.staleness)
-      ? `<button class="gut-arrow verify-btn" title="Download the cloud copy over your local file. These matched on name alone; this makes them byte-identical so the pair upgrades to Same file. Your current copy is kept alongside it." onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#8681;</button>`
+      ? `<button class="gut-arrow verify-btn" title="Overwrite: take the cloud copy over your local file regardless of which is newer. These matched on name alone; this makes them byte-identical so the pair upgrades to Same file. Your current copy is kept alongside it." onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#8681;</button>`
       : '';
     return `<div class="lr-gut ok">${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}${verifyBtn}</div>`;
   }
@@ -4046,7 +4046,7 @@ async function bulkSync(dir) {
     return n + kids.length;
   }, 0);
   const parts = [];
-  if (contentPulls.length) parts.push(`Replace <b>${contentPulls.length}</b> local file${contentPulls.length === 1 ? '' : 's'} with the newer cloud copy`);
+  if (contentPulls.length) parts.push(`Sync <b>${contentPulls.length}</b> file${contentPulls.length === 1 ? '' : 's'} — the newer cloud copy replaces the older local one`);
   if (pairs.length) parts.push(`Rename <b>${pairs.length}</b> matched item${pairs.length === 1 ? '' : 's'}`);
   if (uploads.length) parts.push(`Upload <b>${uploads.length}</b> local .esx file${uploads.length === 1 ? '' : 's'} to Ekahau Cloud`);
   if (downloads.length) parts.push(`Download <b>${downloads.length}</b> cloud project${downloads.length === 1 ? '' : 's'}`);
@@ -4071,7 +4071,7 @@ async function bulkSync(dir) {
           <span class="sub">local ${e(fmtRelDate(d.localMtime))}</span></td>
       </tr>`).join('');
     body += `
-      <p class="sync-plan-lead">These are replaced with the cloud copy:</p>
+      <p class="sync-plan-lead">Sync — each of these takes the newer side:</p>
       <div class="sync-plan-wrap"><table class="sync-plan">
         <thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -4092,9 +4092,11 @@ async function bulkSync(dir) {
       .map(d => e(d.localName || d.cloudName || '')).join(', ');
     body += `
       <p class="sub warn"><b>${blockedPushes.length} newer local file${blockedPushes.length === 1 ? ' is' : 's are'} not sent up:</b>
-        ${names}. Uploading over an existing cloud project is not built yet, so
-        ${blockedPushes.length === 1 ? 'it is' : 'they are'} left alone rather
-        than being overwritten from the cloud.</p>`;
+        ${names}. Sending a newer local file up to Ekahau Cloud is not built
+        yet, so ${blockedPushes.length === 1 ? 'it is' : 'they are'} left alone.
+        Sync never overwrites the newer side — to force the cloud copy down
+        over ${blockedPushes.length === 1 ? 'it' : 'them'} anyway, use the
+        <b>Cloud newer &middot; download</b> button on the row itself.</p>`;
   }
 
   if (stillSkipped.length) {
