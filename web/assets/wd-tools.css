@@ -5045,6 +5045,29 @@ body.tool-report {
 }
 .rep-grid-label--empty { opacity: 0.35; }
 
+/* The grid configuration view.
+
+   Same classes as the printed section index, so there is one description of
+   what a section boundary looks like rather than two that drift. The only
+   deliberate difference is weight: on screen he is deciding where the
+   divisions go, so they dominate; on the printed index they are reference
+   furniture and should not.
+
+   The halo exists because a CAD floor plan is white paper AND black linework,
+   and a single stroke colour disappears into one or the other. Same failure
+   the AP markers had when white-on-white made them invisible. */
+.rep-grid-halo { fill: none; stroke: rgba(255,255,255,0.92); }
+#gridSvg .rep-grid-cell { fill: rgba(29,78,216,0.10); stroke: #1d4ed8; }
+#gridSvg .rep-grid-cell--empty {
+  fill: none; stroke: #1d4ed8; opacity: 0.55; stroke-dasharray: 10 6;
+}
+#gridSvg .rep-grid-label {
+  fill: #1d4ed8; font-family: var(--sans); font-weight: 800;
+  paint-order: stroke; stroke: rgba(255,255,255,0.92); stroke-width: 3px;
+}
+#gridSvg .rep-grid-label--empty { opacity: 0.55; }
+#gridSvg .grid-crop-border { fill: none; stroke: #1d4ed8; }
+
 .rep-seg-cell { page-break-inside: avoid; break-inside: avoid; margin-top: 22px; }
 
 .rep-seg-cell-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }

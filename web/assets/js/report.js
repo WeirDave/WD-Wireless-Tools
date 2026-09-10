@@ -1751,26 +1751,55 @@
       + 'M' + bx + ',' + by + ' V' + (by + bh) + ' H' + (bx + bw) + ' V' + by + ' Z" '
       + 'fill="rgba(0,0,0,0.45)" fill-rule="evenodd" pointer-events="none"/>';
 
-    // grid lines inside crop box
-    var cw = bw / _gridCols, ch = bh / _gridRows;
-    for (var ci = 1; ci < _gridCols; ci++) {
-      var lx = bx + ci * cw;
-      svg += '<line x1="' + lx + '" y1="' + by + '" x2="' + lx + '" y2="' + (by + bh) + '" stroke="rgba(59,130,246,0.7)" stroke-width="1.5" stroke-dasharray="6,3" pointer-events="none"/>';
-    }
-    for (var ri = 1; ri < _gridRows; ri++) {
-      var ly = by + ri * ch;
-      svg += '<line x1="' + bx + '" y1="' + ly + '" x2="' + (bx + bw) + '" y2="' + ly + '" stroke="rgba(59,130,246,0.7)" stroke-width="1.5" stroke-dasharray="6,3" pointer-events="none"/>';
-    }
+    /* The same grid the printed section index draws, from the same classes.
 
-    // cell labels inside crop box
-    for (var ri2 = 0; ri2 < _gridRows; ri2++) {
-      for (var ci2 = 0; ci2 < _gridCols; ci2++) {
-        var lbl = (ci2 < 26 ? letters[ci2] : 'C' + (ci2 + 1)) + (ri2 + 1);
-        var cx = bx + ci2 * cw + cw / 2, cy = by + ri2 * ch + ch / 2;
-        svg += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="central" '
-          + 'fill="rgba(59,130,246,0.5)" font-size="' + Math.max(10, Math.min(24, cw * 0.3)) + '" font-weight="700" pointer-events="none">' + lbl + '</text>';
+       It used to be a second implementation: inline rgba(59,130,246,0.7) at
+       1.5 units in a 1000-unit viewBox, with labels at half opacity. Over a
+       white CAD plan that is very nearly nothing, so the one view where the
+       division is actually being decided was the one view where the divisions
+       could not be seen - while the printed index, which is only reference
+       furniture, came out bold.
+
+       Weight is the single deliberate difference between the two, and it is in
+       the stylesheet under #gridSvg rather than duplicated here. Each cell also
+       gets a white halo underneath, because a CAD plan is white paper *and*
+       black linework and a single colour loses against one of them - the same
+       fix the AP labels needed. */
+    var cw = bw / _gridCols, ch = bh / _gridRows;
+    var glw = Math.max(2.5, vw * 0.0035);
+
+    // Which sections will actually produce a page, so the choice can be made
+    // with that visible rather than discovered afterwards.
+    var hasApsAt = {};
+    aps.forEach(function (ap) {
+      var c = ap.location && ap.location.coord;
+      if (!c) return;
+      var px = c.x / W * vw, py = c.y / H * vh;
+      if (px < bx || px > bx + bw || py < by || py > by + bh) return;
+      var ci3 = Math.min(_gridCols - 1, Math.max(0, Math.floor((px - bx) / cw)));
+      var ri3 = Math.min(_gridRows - 1, Math.max(0, Math.floor((py - by) / ch)));
+      hasApsAt[ci3 + ',' + ri3] = true;
+    });
+
+    var cells = '', cellLabels = '';
+    for (var ri = 0; ri < _gridRows; ri++) {
+      for (var ci = 0; ci < _gridCols; ci++) {
+        var cxr = bx + ci * cw, cyr = by + ri * ch;
+        var used = !!hasApsAt[ci + ',' + ri];
+        cells += '<rect x="' + cxr + '" y="' + cyr + '" width="' + cw + '" height="' + ch
+          + '" class="rep-grid-halo" stroke-width="' + (glw * 2.6) + '" pointer-events="none"/>';
+        cells += '<rect x="' + cxr + '" y="' + cyr + '" width="' + cw + '" height="' + ch
+          + '" class="rep-grid-cell' + (used ? '' : ' rep-grid-cell--empty')
+          + '" stroke-width="' + glw + '" pointer-events="none"/>';
+        var lbl = (ci < 26 ? letters[ci] : 'C' + (ci + 1)) + (ri + 1);
+        cellLabels += '<text x="' + (cxr + cw / 2) + '" y="' + (cyr + ch / 2) + '"'
+          + ' text-anchor="middle" dominant-baseline="central"'
+          + ' class="rep-grid-label' + (used ? '' : ' rep-grid-label--empty') + '"'
+          + ' font-size="' + Math.max(12, Math.min(30, cw * 0.32)) + '"'
+          + ' pointer-events="none">' + lbl + '</text>';
       }
     }
+    svg += cells + cellLabels;
 
     // AP dots
     aps.forEach(function (ap) {
@@ -1780,9 +1809,11 @@
       svg += '<circle cx="' + px + '" cy="' + py + '" r="3" fill="rgba(239,68,68,0.8)" stroke="#fff" stroke-width="0.5" pointer-events="none"/>';
     });
 
-    // crop box border
+    // crop box border - haloed for the same reason as the cells
     svg += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh
-      + '" fill="none" stroke="#3b82f6" stroke-width="2" pointer-events="none"/>';
+      + '" class="rep-grid-halo" stroke-width="' + (glw * 3) + '" pointer-events="none"/>';
+    svg += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh
+      + '" class="grid-crop-border" stroke-width="' + (glw * 1.2) + '" pointer-events="none"/>';
 
     // move area rendered FIRST so edges and corners sit on top in SVG z-order
     svg += '<rect data-edge="move" x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh
