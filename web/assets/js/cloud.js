@@ -4222,6 +4222,164 @@ async function bulkSync(dir) {
   }
 
 }
+/* "Grab everything newer on the cloud, over the top of local."
+
+   Assembling that out of checkboxes is the same capability but not the same
+   thing: you have to find the stale rows first, across sites and nested files,
+   and know you found all of them. This walks the whole listing instead.
+
+   Two halves, because both are what "all the cloud stuff" means:
+     - matched pairs where the cloud copy is newer  -> content comes down
+     - cloud-only projects                          -> downloaded fresh
+   One-directional on purpose. Nothing locally newer is touched, and nothing
+   already in sync is re-fetched; that is what makes this safe to offer as one
+   button rather than a bulk overwrite of everything. */
+function everythingFromCloud() {
+  const pulls = [], fresh = [], blocked = [];
+  let inSync = 0;
+  const seenPair = new Set(), seenCloud = new Set();
+
+  const isFile = (l) => /\.esx$/i.test(String((l && l.path) || ''));
+
+  const takePair = (pr) => {
+    if (!pr || !pr.cloud || !pr.local) return;
+    const id = pr.cloud.id;
+    if (!id || seenPair.has(id)) return;
+    seenPair.add(id);
+    if (!isFile(pr.local)) return;              // a site is a folder, not a file
+    const row = {
+      cloudId: id,
+      cloudName: pr.cloud.name || '',
+      localName: pr.local.name || '',
+      localPath: pr.local.path,
+      cloudMtime: Number(pr.cloud.mtime) || 0,
+      localMtime: Number(pr.local.mtime) || 0,
+    };
+    if (pr.staleness === 'cloud_newer') pulls.push(row);
+    else if (pr.staleness === 'local_newer') blocked.push(row);
+    else inSync++;
+  };
+
+  const takeCloud = (c, siteName) => {
+    if (!c || !c.id || seenCloud.has(c.id)) return;
+    seenCloud.add(c.id);
+    fresh.push({ id: c.id, name: c.name || '', siteName: siteName || c.siteName || '' });
+  };
+
+  const walkKids = (kids, siteName) => {
+    if (!kids) return;
+    (kids.matched || []).forEach(takePair);
+    (kids.cloudOnly || []).forEach(c => takeCloud(c, siteName));
+  };
+
+  (data.matched || []).forEach(pr => {
+    takePair(pr);
+    const site = (pr.cloud && pr.cloud.name) || (pr.local && pr.local.name) || '';
+    walkKids((pr.cloud && pr.cloud.children) || (pr.local && pr.local.children), site);
+  });
+  (data.cloudOnly || []).forEach(c => { takeCloud(c); walkKids(c.children, c.name); });
+  (data.localOnly || []).forEach(l => walkKids(l.children, l.name));
+  if (data.orphans) {
+    (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
+  }
+
+  return { pulls, fresh, blocked, inSync };
+}
+
+async function pullEverythingFromCloud() {
+  if (!data || !data.summary) { toast('Nothing loaded yet', 'info'); return; }
+  const plan = everythingFromCloud();
+
+  if (!plan.pulls.length && !plan.fresh.length) {
+    toast(plan.blocked.length
+      ? `Nothing to pull — ${plan.blocked.length} file${plan.blocked.length === 1 ? ' is' : 's are'} newer locally`
+      : 'Everything local is already up to date with the cloud', 'info');
+    return;
+  }
+
+  const parts = [];
+  if (plan.pulls.length) {
+    parts.push(`Overwrite <b>${plan.pulls.length}</b> local file${plan.pulls.length === 1 ? '' : 's'} with the newer cloud copy`);
+  }
+  if (plan.fresh.length) {
+    parts.push(`Download <b>${plan.fresh.length}</b> cloud project${plan.fresh.length === 1 ? '' : 's'} you do not have locally`);
+  }
+  let body = `<ul>${parts.map(t => `<li>${t}</li>`).join('')}</ul>`;
+
+  if (plan.pulls.length) {
+    const rows = plan.pulls.map(d => `
+      <tr>
+        <td class="sync-plan-name">${e(d.localName || d.cloudName)}</td>
+        <td class="sync-plan-dir">&#11015; cloud &rarr; local</td>
+        <td class="sync-plan-when">cloud ${e(fmtRelDate(d.cloudMtime))}<br>
+          <span class="sub">local ${e(fmtRelDate(d.localMtime))}</span></td>
+      </tr>`).join('');
+    body += `
+      <p class="sync-plan-lead">These local files are replaced:</p>
+      <div class="sync-plan-wrap"><table class="sync-plan">
+        <thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <p class="sub">Each one is kept alongside as a <code>.previous-</code> file.</p>
+      <p class="sub warn"><b>Two dates cannot tell you whether both sides
+        changed.</b> If you edited one of these locally since it last matched
+        the cloud, "cloud is newer" and "we both changed it" look identical
+        from here, and your local edit goes into the <code>.previous-</code>
+        file rather than into the result.</p>`;
+  }
+
+  const kept = [];
+  if (plan.blocked.length) {
+    kept.push(`<b>${plan.blocked.length}</b> newer locally — left alone (sending a
+      newer local file up is not built yet)`);
+  }
+  if (plan.inSync) kept.push(`<b>${plan.inSync}</b> already in sync`);
+  if (kept.length) {
+    body += `<p class="sub">Not touched: ${kept.join('; ')}.</p>`;
+  }
+
+  const ok = await showConfirmModal('Pull everything from Ekahau Cloud?', body,
+                                    `Pull ${plan.pulls.length + plan.fresh.length}`);
+  if (!ok) return;
+  clearSelection();
+
+  /* Same call the per-row arrow and bulk Sync make. It backs the local file
+     up, downloads, replaces atomically, and refuses on its own if the server
+     disagrees about which side is newer. */
+  for (const d of plan.pulls) {
+    opEnqueue({
+      title: `Replacing "${d.localName || d.cloudName}" with the cloud copy`,
+      type: 'verify', pollBackend: false, undoable: false,
+      run: async () => {
+        const r = await pyApi('verify_replace_local', d.cloudId, d.localPath);
+        if (r && r.error) {
+          _markVerifyFailed(d.cloudId, d.localPath);
+          if (r.error === 'local_newer') {
+            throw new Error('Skipped — the server says local is newer');
+          }
+          throw new Error(r.error);
+        }
+        _scheduleOpRefresh();
+        return r;
+      },
+    });
+  }
+  for (const d of plan.fresh) {
+    const destFolder = d.siteName || d.name;
+    opEnqueue({
+      title: d.siteName ? `Downloading "${d.name}.esx" → ${d.siteName}`
+                        : `Downloading "${d.name}.esx"`,
+      type: 'download', pollBackend: true, undoable: false,
+      retryFn: async (newId) => pyApi('download_project', d.id, destFolder, newId),
+      run: async (opId) => pyApi('download_project', d.id, destFolder, opId),
+    });
+  }
+  _scheduleOpRefresh();
+}
+// Guarded: the sync helpers above are sliced out and evaluated in Node by
+// tests/test_server_and_assets.py, where there is no window to hang it on.
+if (typeof window !== 'undefined') window.pullEverythingFromCloud = pullEverythingFromCloud;
+
 function bulkDelete() {
 
   const contextForKey = (k) => (k.startsWith('ct') ? 'projects' : currentTab);
