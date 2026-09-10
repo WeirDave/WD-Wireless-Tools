@@ -3230,37 +3230,50 @@
   }
 
   /* Split a structured AP name into labelled segments, but only when it
-     really is one. The Labeler builds Structured names as the non-empty parts
-     of CLLI / building / floor / suite / tag+number joined by its separator,
-     so the same shape is reconstructed here and the name is only annotated
-     when it matches: same separator, same segment count, the fixed segments
-     equal to what the Labeler saved, and a trailing tag+digits. Anything else
-     returns null and the breakdown is left out rather than guessed. */
+     really is one.
+
+     This read the Labeler's old fixed CLLI / Building / Floor / Suite fields.
+     Those stopped being written when the Labeler moved to a draggable segment
+     list, so pat.clli and friends have been undefined ever since and this
+     could never match a five-part name - the Naming scheme header simply
+     stopped appearing, silently, for everyone on the current version.
+
+     It reads the segment list now, which is what the Labeler actually saves:
+     an ordered run of text / floor / counter parts. A name is still only
+     annotated when it genuinely matches - same separator, same count, fixed
+     parts equal to what was saved, a number where the counter goes - and
+     anything else returns null rather than guessing at a name that came from
+     somewhere else. */
   function structuredSegments(name, pat) {
-    if (!name || !pat) return null;
+    if (!name || !pat || !pat.segments || !pat.segments.length) return null;
     var sep = pat.sepS || '-';
     if (sep.length !== 1) return null;
     var parts = String(name).split(sep);
-    var expect = [];
-    if (pat.clli)     expect.push({ label: 'CLLI',     value: pat.clli });
-    if (pat.building) expect.push({ label: 'Building', value: pat.building });
-    expect.push({ label: 'Floor', value: null });      // varies per floor
-    if (pat.suite)    expect.push({ label: 'Suite',    value: pat.suite });
-    expect.push({ label: 'AP', value: null });         // tag + number
-    if (parts.length !== expect.length) return null;
+    // A text segment with no value contributes nothing to the built name.
+    var segs = pat.segments.filter(function (sg) {
+      return !(sg.type === 'text' && !sg.value);
+    });
+    if (parts.length !== segs.length) return null;
 
-    var tag = pat.apTag || '';
     var out = [];
-    for (var i = 0; i < expect.length; i++) {
-      var seg = parts[i], e = expect[i];
-      if (e.value != null && seg !== e.value) return null;
-      if (e.label === 'Floor' && !/^[0-9A-Za-z]+$/.test(seg)) return null;
-      if (e.label === 'AP') {
-        var re = new RegExp('^' + tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\d+', 'i');
-        if (tag && !re.test(seg)) return null;
-        if (!tag && !/\d/.test(seg)) return null;
+    for (var i = 0; i < segs.length; i++) {
+      var part = parts[i], sg = segs[i];
+      if (sg.type === 'text') {
+        if (part !== sg.value) return null;
+        out.push({ label: '', value: part });
+      } else if (sg.type === 'floor') {
+        // A fixed floor override has to match exactly; an automatic one only
+        // has to look like a floor.
+        if (sg.value) { if (part !== sg.value) return null; }
+        else if (!/^[0-9A-Za-z]+$/.test(part)) return null;
+        out.push({ label: 'Floor', value: part });
+      } else {
+        var tag = sg.tag || '';
+        var tagRe = tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (tag && !new RegExp('^' + tagRe + '\\d+', 'i').test(part)) return null;
+        if (!tag && !/^\d+$/.test(part)) return null;
+        out.push({ label: 'AP', value: part });
       }
-      out.push({ label: e.label, value: seg });
     }
     return out;
   }
@@ -3306,10 +3319,16 @@
     if (sample) {
       scheme = '<div class="rep-key-scheme"><div class="rep-key-scheme-lbl">Naming scheme</div>'
         + '<div class="rep-key-scheme-row">'
+        /* The separator is whatever the Labeler used, not always a hyphen.
+           And only the segments we can actually name are labelled: the
+           Labeler has no name for a text segment, so captioning three of them
+           "Text" says nothing and reads as noise. The value is the point. */
         + sample.map(function (seg, k) {
-            return (k ? '<span class="rep-key-sep">-</span>' : '')
+            var sep = (labelerPattern && labelerPattern.sepS) || '-';
+            return (k ? '<span class="rep-key-sep">' + WD.esc(sep) + '</span>' : '')
               + '<span class="rep-key-seg"><b>' + WD.esc(seg.value) + '</b>'
-              + '<i>' + WD.esc(seg.label) + '</i></span>';
+              + (seg.label ? '<i>' + WD.esc(seg.label) + '</i>' : '')
+              + '</span>';
           }).join('')
         + '</div></div>';
     }
