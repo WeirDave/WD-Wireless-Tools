@@ -24,12 +24,22 @@ window.setWallUnits = function (units) {
   const inp = document.getElementById('fThickness');
   const isOpen = document.getElementById('modal')?.classList.contains('active');
   let currentMeters = null;
+  // Heights are held in metres across the switch too, or toggling in/m mid-edit
+  // would reinterpret 12 ft as 12 m.
+  const topEl = document.getElementById('fUpperEdge');
+  const lowEl = document.getElementById('fLowerEdge');
+  let topM = null, lowM = null;
   if (isOpen && inp) currentMeters = displayToM(inp.value);
+  if (isOpen && topEl && topEl.value !== '') topM = heightToM(topEl.value);
+  if (isOpen && lowEl && lowEl.value !== '') lowM = heightToM(lowEl.value);
   try { localStorage.setItem('wd-walls-units', units); } catch (e) {}
   syncUnitToggleUI();
   if (isOpen && inp && currentMeters != null) {
     inp.value = fmtThickness(mToDisplay(currentMeters));
   }
+  if (isOpen && topEl && topM != null) topEl.value = fmtHeight(mToHeight(topM));
+  if (isOpen && lowEl && lowM != null) lowEl.value = fmtHeight(mToHeight(lowM));
+  if (isOpen) updateVertSummary();
   renderList();
 };
 function syncUnitToggleUI() {
@@ -45,6 +55,48 @@ function fmtThickness(n) {
   return wallUnits() === 'imperial' ? n.toFixed(2) : n.toFixed(3);
 }
 function unitLabel() { return wallUnits() === 'imperial' ? 'in' : 'm'; }
+
+// Heights are entered in feet, not the inches used for thickness. A wall is
+// millimetres thick and metres tall, and mixing the two in one modal is how you
+// get a 12 ft rack entered as 12 in.
+const M_TO_FT = 3.280839895;
+function mToHeight(m) {
+  return wallUnits() === 'imperial' ? (m * M_TO_FT) : m;
+}
+function heightToM(v) {
+  const n = parseFloat(v);
+  if (!Number.isFinite(n)) return null;
+  return wallUnits() === 'imperial' ? (n / M_TO_FT) : n;
+}
+function heightUnitLabel() { return wallUnits() === 'imperial' ? 'ft' : 'm'; }
+function fmtHeight(n) {
+  if (!Number.isFinite(n)) return '';
+  return String(Math.round(n * 100) / 100);
+}
+
+// Segment counts per wall type id, read from the open project. A height is a
+// property of the *type*, so the honest thing to show before saving one is how
+// many drawn segments the change is about to move.
+let _segmentCounts = {};
+
+async function loadSegmentCounts() {
+  _segmentCounts = {};
+  try {
+    const f = esxZip && esxZip.file('wallSegments.json');
+    if (!f) return;
+    const doc = JSON.parse(await f.async('string'));
+    for (const seg of doc.wallSegments || []) {
+      const id = seg.wallTypeId;
+      if (id) _segmentCounts[id] = (_segmentCounts[id] || 0) + 1;
+    }
+  } catch (e) {
+    _segmentCounts = {};
+  }
+}
+
+function segmentsUsing(wt) {
+  return (wt && wt.id && _segmentCounts[wt.id]) || 0;
+}
 
 let esxZip = null;
 let wallTypes = [];
@@ -96,6 +148,7 @@ async function loadFile(file) {
     fileName = file.name;
 
     await ensureEkahauDefaultsLoaded();
+    await loadSegmentCounts();
 
     const wtFile = esxZip.file('wallTypes.json');
     if (wtFile) {
@@ -201,6 +254,20 @@ function renderHotkeyPanel() {
   container.innerHTML = html;
 }
 
+function heightBadge(wt) {
+  const upper = parseFloat(wt && wt.upperEdge);
+  if (!Number.isFinite(upper) || upper <= 0) {
+    return '<span class="wall-height-badge" title="Modelled floor to ceiling">Auto</span>';
+  }
+  const lower = parseFloat(wt.lowerEdge) || 0;
+  const u = heightUnitLabel();
+  const range = lower > 0
+    ? `${fmtHeight(mToHeight(lower))}–${fmtHeight(mToHeight(upper))}`
+    : `${fmtHeight(mToHeight(upper))}`;
+  return `<span class="wall-height-badge is-limited" title="Stops short of the ceiling">` +
+         `${esc(range)} ${esc(u)}</span>`;
+}
+
 function renderWallCard(wt, i) {
   const bands = wt.propagationProperties || [];
   const getBand = (name) => bands.find(b => b.band === name) || {};
@@ -229,6 +296,7 @@ function renderWallCard(wt, i) {
           <span><span class="label">5:</span> ${esc(att5)}</span>
           <span><span class="label">6:</span> ${esc(att6)}</span>
           <span><span class="label">thick:</span> ${esc(fmtThickness(mToDisplay(parseFloat(wt.thickness) || 0)))}${unitLabel()}</span>
+          ${heightBadge(wt)}
         </div>
       </div>
       <div class="wall-actions">
@@ -413,6 +481,7 @@ function openAddModal() {
   document.getElementById('fName').value = '';
   document.getElementById('fColor').value = '#808080';
   document.getElementById('fThickness').value = fmtThickness(mToDisplay(0.1));
+  populateVertFields(null);
   syncUnitToggleUI();
   document.getElementById('fTwoAtt').value = '30';
   document.getElementById('fTwoRef').value = '0.1111';
@@ -437,6 +506,7 @@ function cloneWall(sourceIndex) {
   document.getElementById('fName').value = (src.name || '') + ' (Copy)';
   document.getElementById('fColor').value = src.color || '#808080';
   document.getElementById('fThickness').value = fmtThickness(mToDisplay(parseFloat(src.thickness) || 0));
+  populateVertFields(src);
   syncUnitToggleUI();
 
   const bands = src.propagationProperties || [];
@@ -468,6 +538,7 @@ function openEditModal(i) {
   document.getElementById('fName').value = wt.name;
   document.getElementById('fColor').value = wt.color || '#808080';
   document.getElementById('fThickness').value = fmtThickness(mToDisplay(parseFloat(wt.thickness) || 0));
+  populateVertFields(wt);
   syncUnitToggleUI();
 
   const bands = wt.propagationProperties || [];
@@ -509,12 +580,118 @@ function populateKeybindSelect(current) {
   }
 }
 
+// --- Vertical extent -------------------------------------------------------
+//
+// Ekahau stores lowerEdge/upperEdge in metres on the wall *type*. No upperEdge
+// at all means Auto: the engine runs the wall from floor to ceiling. That is
+// right for a wall and wrong for furniture, which is how 52 segments of
+// warehouse shelving end up modelled as 27 dB of solid barrier to the roof.
+
+let _heightMode = 'auto';
+
+window.setHeightMode = function (mode) {
+  _heightMode = (mode === 'fixed') ? 'fixed' : 'auto';
+  document.querySelectorAll('.wt-vert-mode').forEach(b => {
+    b.classList.toggle('active', b.dataset.vmode === _heightMode);
+  });
+  const fixed = document.getElementById('fVertFixed');
+  if (fixed) fixed.hidden = (_heightMode !== 'fixed');
+  if (_heightMode === 'fixed') {
+    const top = document.getElementById('fUpperEdge');
+    // Seed something plausible rather than an empty box the user must decode.
+    if (top && !top.value) top.value = fmtHeight(mToHeight(2.0));
+  }
+  updateVertSummary();
+};
+
+function currentVertEdges() {
+  if (_heightMode !== 'fixed') return { lower: 0, upper: null };
+  const upper = heightToM(document.getElementById('fUpperEdge')?.value);
+  const lowerRaw = heightToM(document.getElementById('fLowerEdge')?.value);
+  return { lower: Number.isFinite(lowerRaw) ? lowerRaw : 0, upper: upper };
+}
+
+window.updateVertSummary = function () {
+  const unit = heightUnitLabel();
+  const unitEl = document.getElementById('fVertUnit');
+  if (unitEl) unitEl.textContent = unit;
+
+  const summary = document.getElementById('fVertSummary');
+  const impact = document.getElementById('fVertImpact');
+  if (!summary) return;
+
+  const { lower, upper } = currentVertEdges();
+
+  if (_heightMode !== 'fixed') {
+    summary.innerHTML = 'Ekahau runs this type from the floor to the ceiling. ' +
+      'Right for a real wall — wrong for anything you can see over, which is ' +
+      'modelled as a solid barrier all the way up.';
+  } else if (!Number.isFinite(upper) || upper <= 0) {
+    summary.innerHTML = 'Enter how far above the floor this type reaches.';
+  } else if (upper <= lower) {
+    summary.innerHTML = '<strong>The top must be above the floor offset.</strong>';
+  } else {
+    const tall = upper - lower;
+    summary.innerHTML =
+      `Occupies ${esc(fmtHeight(mToHeight(lower)))}–${esc(fmtHeight(mToHeight(upper)))} ${esc(unit)} ` +
+      `above the floor (${esc(fmtHeight(mToHeight(tall)))} ${esc(unit)} tall). ` +
+      `Signal passes over the top.`;
+  }
+
+  // The per-type consequence, stated with the real number before saving.
+  if (!impact) return;
+  const existing = editingIndex >= 0 ? wallTypes[editingIndex] : null;
+  const count = segmentsUsing(existing);
+  const wasAuto = !(existing && Number.isFinite(parseFloat(existing.upperEdge)));
+  const nowAuto = (_heightMode !== 'fixed');
+  const changed = existing && (wasAuto !== nowAuto ||
+    (!nowAuto && parseFloat(existing.upperEdge) !== upper) ||
+    (!nowAuto && (parseFloat(existing.lowerEdge) || 0) !== lower));
+
+  if (count > 0 && changed) {
+    const what = nowAuto
+      ? 'run floor-to-ceiling again'
+      : `stop at ${esc(fmtHeight(mToHeight(upper)))} ${esc(unit)}`;
+    impact.innerHTML =
+      `<strong>Affects ${count} drawn segment${count === 1 ? '' : 's'}.</strong> ` +
+      `Height belongs to the wall type, not to individual segments — every ` +
+      `segment already drawn as “${esc(existing.name)}” will ${what} once you save.`;
+    impact.hidden = false;
+  } else if (count > 0) {
+    impact.innerHTML = `${count} drawn segment${count === 1 ? '' : 's'} use this type.`;
+    impact.hidden = false;
+  } else {
+    impact.hidden = true;
+  }
+};
+
+function populateVertFields(src) {
+  const upper = parseFloat(src && src.upperEdge);
+  const lower = parseFloat(src && src.lowerEdge) || 0;
+  const hasUpper = Number.isFinite(upper) && upper > 0;
+  const topEl = document.getElementById('fUpperEdge');
+  const lowEl = document.getElementById('fLowerEdge');
+  if (topEl) topEl.value = hasUpper ? fmtHeight(mToHeight(upper)) : '';
+  if (lowEl) lowEl.value = fmtHeight(mToHeight(lower));
+  setHeightMode(hasUpper ? 'fixed' : 'auto');
+}
+
 function saveWallType() {
   const name = document.getElementById('fName').value.trim();
   if (!name) { showToast('Name is required'); return; }
 
   const keybindVal = document.getElementById('fKeybind').value;
   const keybindNum = keybindVal ? parseInt(keybindVal) : null;
+
+  const { lower: vLower, upper: vUpper } = currentVertEdges();
+  if (_heightMode === 'fixed') {
+    if (!Number.isFinite(vUpper) || vUpper <= 0) {
+      showToast('Enter how far above the floor this type reaches'); return;
+    }
+    if (vUpper <= vLower) {
+      showToast('The top must be above the floor offset'); return;
+    }
+  }
 
   const existing = editingIndex >= 0 ? wallTypes[editingIndex] : {};
   const wt = {
@@ -523,7 +700,7 @@ function saveWallType() {
     key: existing.key || name.replace(/[^a-zA-Z0-9]/g, ''),
     color: document.getElementById('fColor').value,
     thickness: displayToM(document.getElementById('fThickness').value),
-    lowerEdge: existing.lowerEdge ?? 0.0,
+    lowerEdge: vLower,
     id: existing.id || crypto.randomUUID(),
     status: existing.status || 'CREATED',
     propagationProperties: [
@@ -547,6 +724,14 @@ function saveWallType() {
       },
     ],
   };
+
+  // Auto height is the *absence* of upperEdge, not a zero — writing 0 would
+  // make Ekahau treat the type as having no vertical extent at all.
+  if (_heightMode === 'fixed') {
+    wt.upperEdge = vUpper;
+  } else {
+    delete wt.upperEdge;
+  }
 
   if (keybindNum) {
     wallTypes.forEach(w => {
