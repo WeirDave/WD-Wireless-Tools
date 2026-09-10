@@ -6177,7 +6177,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
      Print with Report settings open and every page of the deliverable comes out
      with the dialog across the map. None of this shows on screen, which is why
      the list is kept deliberately wide. */
-  .wd-stale-banner, .wd-update-banner,
+  .wd-stale-banner, .wd-update-banner, .wd-update-badge,
   .modal-overlay, .grid-modal-overlay, .swap-modal, .swap-undo-toast,
   .toast-container, .ops-deck, .screen-home-btn { display: none !important; }
 
@@ -6972,6 +6972,18 @@ body.wd-has-update-banner { padding-top: 40px; }
 body.wd-has-update-banner .dz-topbar { top: 40px; }
 body.wd-has-stale-banner.wd-has-update-banner { padding-top: 84px; }
 body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
+
+.wd-update-badge {
+  position: fixed; bottom: 16px; right: 16px; z-index: calc(var(--z-modal) - 1);
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 12px; border-radius: 999px; border: 1px solid var(--blue);
+  background: var(--blue); color: #fff; cursor: pointer;
+  font: 600 11px/1 var(--mono); white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  transition: filter 0.15s;
+}
+.wd-update-badge:hover { filter: brightness(1.15); }
+body.wd-has-update-banner .wd-update-badge { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════
    Grid configuration modal (Report tool)
