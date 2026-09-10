@@ -35,6 +35,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.3 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.5 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.1 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v1.0 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -149,6 +150,19 @@ Read the device mix out of a project you have already set up in Ekahau, and appl
 - Carries the device and usage profiles themselves, so a template applies to a project that has never seen them
 - Leaves a floor alone when it already has a requirement area, unless replacement is asked for, and even then replaces only areas that carry capacity
 
+
+### Prep
+
+Get a freshly imported project ready to draw in, in one pass over the file instead of three.
+
+- Crops the empty canvas off each CAD sheet, puts a requirement area on every floor and loads your wall types, from one load and one save
+- Runs the steps in the order they need: trim, then areas, then wall types
+- A requirement area counts as something that must stay on the plan, so an area put in before the trim holds the crop open and the trim then reports there was nothing to crop — which looks exactly like success. The order is enforced in code, not left to whoever calls it
+- Previews every step before anything is written, floor by floor
+- Re-runnable: wall types already present are left alone, a trimmed floor is skipped, and a floor that already has a requirement area is left alone
+- Except the one case worth re-running for — an area that still covers the whole plan had nothing to measure when it was made, and tightens to the walls once you have drawn them. A polygon you moved, redrew or cut around an atrium is never touched
+- Writes a new copy and downloads it; your file is never written to
+
 ---
 
 ## Quick Start
@@ -215,7 +229,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.80.0
+WIRELESS TOOLS  v2.81.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
