@@ -45,7 +45,7 @@ const WD = {};
 eval(cut(shared, '  WD.EKAHAU_COLORS = {', '  /* ── Legibility on a user-chosen'));
 
 const block = slice('/* ── Ekahau color palette', '/* ── naming mode')
-            + slice('  function sortByColorGroup(aps, colorOrder) {', '  /* Proximity:');
+            + slice('  /* Group APs by colour and put the groups', '  /* Proximity:');
 
 // Within a colour group the spatial ordering does the work; these tests are
 // about which group comes first, so the inner sort is held constant.
@@ -154,6 +154,120 @@ class ColorOrdering(unittest.TestCase):
                 names(out).indexOf('r') === names(out).length - 1);
           done();
         """)
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class ColourMajorVersusFloorMajor(unittest.TestCase):
+    """"Do all the blues" means two different jobs.
+
+    Floor-major finishes a floor before going up a ladder. Colour-major carries
+    one box of hardware through the whole building. Identical inputs, very
+    different numbering - which is why the choice is explicit and the preview
+    shows the result.
+    """
+
+    def run_block(self, checks: str):
+        program = NODE_PRELUDE + "eval(block + " + _js(checks) + ");"
+        result = run_node(program)
+        self.assertEqual(result.returncode, 0,
+                         (result.stdout + result.stderr).strip())
+
+    def test_colour_major_finishes_a_colour_across_every_floor_first(self):
+        self.run_block("""
+          // Two floors, blue and green on each.
+          var f1 = {id:'f1'}, f2 = {id:'f2'};
+          var aps = [
+            {name:'f1-blue',  color:'BLUE',  _f: f1},
+            {name:'f1-green', color:'GREEN', _f: f1},
+            {name:'f2-blue',  color:'BLUE',  _f: f2},
+            {name:'f2-green', color:'GREEN', _f: f2}
+          ];
+          var g = groupByColor(aps, ['blue', 'green']);
+          var out = [];
+          g.keys.forEach(function (k) {
+            [f1, f2].forEach(function (fl) {
+              g.groups[k].filter(function (a) { return a._f === fl; })
+                .forEach(function (a) { out.push(a.name); });
+            });
+          });
+          check('both blues, then both greens: ' + out.join(','),
+                out.join(',') === 'f1-blue,f2-blue,f1-green,f2-green');
+          done();
+        """)
+
+    def test_floor_major_finishes_a_floor_before_the_next(self):
+        self.run_block("""
+          var floor1 = [{name:'f1-green', color:'GREEN'}, {name:'f1-blue', color:'BLUE'}];
+          var floor2 = [{name:'f2-green', color:'GREEN'}, {name:'f2-blue', color:'BLUE'}];
+          var out = [];
+          [floor1, floor2].forEach(function (fl) {
+            sortByColorGroup(fl, ['blue', 'green']).forEach(function (a) { out.push(a.name); });
+          });
+          check('floor 1 complete, then floor 2: ' + out.join(','),
+                out.join(',') === 'f1-blue,f1-green,f2-blue,f2-green');
+          done();
+        """)
+
+    def test_the_chosen_sequence_still_decides_which_colour_leads(self):
+        """Nesting changes the walk, never the colour order itself."""
+        self.run_block("""
+          var aps = [{name:'a', color:'GREEN'}, {name:'b', color:'BLUE'}];
+          var g = groupByColor(aps, ['green', 'blue']);
+          check('green leads because it was chosen first: ' + g.keys.join(','),
+                g.keys[0] === 'green');
+          done();
+        """)
+
+
+class ColourMajorCannotRestartPerFloor(unittest.TestCase):
+    """Numbering every blue on floors 1-3 and then returning to floor 1 for the
+    greens spends a per-floor counter before the floor is done. The combination
+    is incoherent, so it is prevented rather than left to be discovered in a set
+    of duplicate names."""
+
+    def setUp(self):
+        self.source = AP_JS.read_text(encoding="utf-8")
+
+    def test_choosing_colour_major_forces_continuous_numbering(self):
+        block = self.source[self.source.index("window.arSetNesting"):]
+        block = block[:block.index("function syncNestPanel")]
+        self.assertIn("arSetScope('all')", block)
+        self.assertIn("t.disabled = lock", block)
+
+    def test_setting_the_scope_does_not_deselect_the_nesting(self):
+        """The nesting tabs reuse .ar-scope-tab for its styling, so a bare
+        class query in arSetScope toggled `active` off them - and choosing
+        colour-major calls arSetScope, so both tabs ended up looking
+        unselected at exactly the moment one had just been chosen."""
+        block = self.source[self.source.index("window.arSetScope"):]
+        block = block[:block.index("window.arSetNesting")]
+        self.assertIn("#arScopeTabs .ar-scope-tab", block)
+        self.assertNotIn("querySelectorAll('.ar-scope-tab')", block)
+
+    def test_the_counter_itself_refuses_the_combination(self):
+        """Not only the UI - the rule is stated where the number is decided, so
+        a restored setting or a future caller cannot route around it."""
+        block = self.source[self.source.index("var seq = buildSequence(settings);"):]
+        block = block[:block.index("// In manual mode")]
+        self.assertIn("_scope === 'perFloor'", block)
+        self.assertIn("_nesting === 'color'", block)
+
+    def test_a_saved_colour_major_setting_cannot_restore_a_per_floor_scope(self):
+        block = self.source[self.source.index("if (s.nesting)"):]
+        block = block[:block.index("function ") if "function " in block else 400]
+        self.assertIn("arSetScope('all')", block)
+
+
+class ThereIsStillOnePlaceANumberIsDecided(unittest.TestCase):
+    """Colour ordering changes the sequence feeding the naming pass. It must
+    not become a second place that computes an ordinal."""
+
+    def test_the_traversal_returns_aps_not_names(self):
+        source = AP_JS.read_text(encoding="utf-8")
+        block = source[source.index("function buildSequence(settings)"):]
+        block = block[:block.index("function generatePreview")]
+        self.assertNotIn("generateName", block)
+        self.assertNotIn("num", block.replace("number", ""))
 
 
 class LabelerUsesTheSharedContrastHelper(unittest.TestCase):
