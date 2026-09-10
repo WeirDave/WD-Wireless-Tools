@@ -1135,6 +1135,25 @@ body.tool-walls .btn-sm { padding: 6px 12px; font-size: 12px; }
 .modal .confirm-body li:last-child { margin-bottom: 0; }
 .modal .confirm-body p.sub { margin: 10px 0 0; }
 
+/* The per-file plan inside a Sync confirm. A bulk overwrite names every file
+   it is going to replace and both dates, because "3 files" is not something
+   anyone can check. Scrolls in its own box - a long selection must not push
+   the Sync button off the modal. */
+.modal .confirm-body p.sync-plan-lead { margin: 14px 0 6px; color: var(--text); font-weight: 600; }
+.modal .confirm-body .sync-plan-wrap { max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.modal .confirm-body table.sync-plan { width: 100%; border-collapse: collapse; font-size: 12px; }
+.modal .confirm-body table.sync-plan th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 600; color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.modal .confirm-body table.sync-plan td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.modal .confirm-body table.sync-plan tr:last-child td { border-bottom: 0; }
+.modal .confirm-body td.sync-plan-name { color: var(--text); word-break: break-word; }
+.modal .confirm-body td.sync-plan-dir { white-space: nowrap; color: var(--text-2); }
+.modal .confirm-body td.sync-plan-when { white-space: nowrap; color: var(--text-2); }
+/* --amber is sized for a badge on a tinted chip; as body text on the dark
+   modal it is muddy. --amber-soft reads there, and is far too pale on the
+   light theme, so the light theme takes the dark tone instead. */
+.modal .confirm-body p.sub.warn { color: var(--amber-soft); }
+[data-theme="light"] .modal .confirm-body p.sub.warn { color: var(--amber-dark); }
+
 .modal label {
   display: block; font-size: 12px; font-weight: 600; color: var(--text-2);
   margin-bottom: 4px; margin-top: 14px;
