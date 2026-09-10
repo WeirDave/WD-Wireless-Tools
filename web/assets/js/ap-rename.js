@@ -1139,6 +1139,47 @@
     return key.charAt(0).toUpperCase() + key.slice(1);
   }
 
+  /* The colour sequence.
+
+     This was a picker: click a colour to append it, click x to take it out,
+     and anything not picked trailed along afterwards in Ekahau's palette
+     order. So the only way to get blue, yellow, green, grey was to remove
+     everything and re-add it in that order, and there was no way to move one
+     colour past another at all.
+
+     It is one list now, holding every colour the project actually uses, in
+     the order they will be numbered. Drag a row, or use the arrows. Nothing
+     to add because nothing is missing, nothing to remove because every AP has
+     to be numbered - the only question is what comes first. */
+
+  /* Reconcile the saved sequence with the colours this project really has.
+     Returns the keys that had to be appended so the panel can say so: a
+     colour quietly landing at the end would still be numbered, just not where
+     he expected, which is the sort of thing nobody notices until the labels
+     are printed. */
+  function syncColorOrder() {
+    var present = projectColors();
+    var byKey = {};
+    present.forEach(function (c) { byKey[c.key] = c.count; });
+
+    // A sequence carried over from another job may name colours this project
+    // does not use. Those are dropped rather than shown as phantom rows.
+    _colorOrder = _colorOrder.filter(function (k) { return byKey[k] != null; });
+
+    var added = [];
+    present.forEach(function (c) {
+      if (_colorOrder.indexOf(c.key) < 0) { _colorOrder.push(c.key); added.push(c.key); }
+    });
+    return { present: present, byKey: byKey, added: added };
+  }
+
+  function moveColor(from, to) {
+    if (to < 0 || to >= _colorOrder.length || from === to) return;
+    var item = _colorOrder.splice(from, 1)[0];
+    _colorOrder.splice(to, 0, item);
+    updateAll();
+  }
+
   function renderColorPanel() {
     var panel = $('arColorPanel');
     if (!panel) return;
@@ -1147,70 +1188,92 @@
     syncNestPanel();
     if (!on) return;
 
-    var present = projectColors();
-    var byKey = {};
-    present.forEach(function (c) { byKey[c.key] = c.count; });
+    var state = syncColorOrder();
+    if (!state.present.length) {
+      panel.innerHTML = '<div class="ar-col-note">No AP in this project has a ' +
+        'colour set, so every AP is numbered by the spatial order alone.</div>';
+      return;
+    }
 
-    // Drop anything from the saved sequence that this project does not use, so
-    // a sequence carried over from another job does not show phantom colours.
-    _colorOrder = _colorOrder.filter(function (k) { return byKey[k] != null; });
+    var justAdded = {};
+    state.added.forEach(function (k) { justAdded[k] = 1; });
+    var last = _colorOrder.length - 1;
 
-    var chosen = _colorOrder.map(function (k, i) {
+    var rows = _colorOrder.map(function (k, i) {
       var hex = resolveColor(k) || '#888';
-      return '<span class="ar-col-chip" title="' + esc(colorLabel(k)) + '">' +
-        '<b class="ar-col-sw" style="background:' + esc(hex) + '"></b>' +
-        '<span class="ar-col-n">' + (i + 1) + '</span>' +
-        esc(colorLabel(k)) + ' <span class="ar-col-ct">(' + byKey[k] + ')</span>' +
-        '<button type="button" class="ar-col-x" data-col="' + esc(k) +
-        '" title="Remove from the sequence">&times;</button></span>';
-    }).join('');
-
-    var rest = present.filter(function (c) { return _colorOrder.indexOf(c.key) < 0; });
-    var addable = rest.map(function (c) {
-      var hex = resolveColor(c.key) || '#888';
-      return '<button type="button" class="ar-col-add" data-col="' + esc(c.key) + '">' +
-        '<b class="ar-col-sw" style="background:' + esc(hex) + '"></b>' +
-        esc(colorLabel(c.key)) + ' <span class="ar-col-ct">(' + c.count + ')</span></button>';
+      /* The position sits inside the swatch, in the AP's own colour, the same
+         way it does on the plan - so this list reads like the map. Which
+         means real ink: a number on Ekahau green in white cannot be read. */
+      var ink = WD.readableOn(hex);
+      var ring = WD.outlineOn(hex);
+      return '<div class="ar-cseq-row" draggable="true" data-i="' + i + '">' +
+        '<span class="ar-cseq-grip" title="Drag to reorder">&#8801;</span>' +
+        '<span class="ar-cseq-dot" style="background:' + esc(hex) +
+          ';color:' + esc(ink) + ';border-color:' + esc(ring) + '">' + (i + 1) + '</span>' +
+        '<span class="ar-cseq-name">' + esc(colorLabel(k)) + '</span>' +
+        '<span class="ar-cseq-ct">' + state.byKey[k] +
+          ' AP' + (state.byKey[k] === 1 ? '' : 's') + '</span>' +
+        (justAdded[k] ? '<span class="ar-cseq-new" title="This project uses a ' +
+          'colour your saved order did not cover, so it was added at the end.">' +
+          'added</span>' : '') +
+        '<span class="ar-cseq-btns">' +
+          '<button type="button" class="ar-cseq-up" data-i="' + i + '"' +
+            (i === 0 ? ' disabled' : '') + ' title="Move earlier">&#9650;</button>' +
+          '<button type="button" class="ar-cseq-dn" data-i="' + i + '"' +
+            (i === last ? ' disabled' : '') + ' title="Move later">&#9660;</button>' +
+        '</span>' +
+      '</div>';
     }).join('');
 
     var none = (S.aps || []).filter(function (a) { return !a.color; }).length;
-
-    var html = '';
-    if (!present.length) {
-      html = '<div class="ar-col-note">No AP in this project has a colour set, ' +
-             'so every AP is numbered by the spatial order alone.</div>';
-    } else {
-      html = '<div class="ar-col-row"><span class="ar-col-lab">Number in this order:</span>' +
-             (chosen || '<span class="ar-col-empty">nothing chosen yet — ' +
-              'pick a colour below to start</span>') + '</div>';
-      if (addable) {
-        html += '<div class="ar-col-row"><span class="ar-col-lab">Add:</span>' + addable + '</div>';
-      }
-      html += '<div class="ar-col-note">';
-      if (rest.length) {
-        html += 'Colours you do not place follow the ones you did, in the Ekahau palette order. ';
-      }
-      if (none) {
-        html += String(none) + ' AP' + (none === 1 ? '' : 's') +
-                ' with no colour set ' + (none === 1 ? 'is' : 'are') + ' numbered last. ';
-      }
-      html += 'Within each colour, the ordering above decides the sequence.';
-      html += '</div>';
+    var note = '';
+    if (state.added.length) {
+      note += state.added.length + ' colour' + (state.added.length === 1 ? '' : 's') +
+        ' in this project ' + (state.added.length === 1 ? 'was' : 'were') +
+        ' not in your saved order, so ' +
+        (state.added.length === 1 ? 'it was' : 'they were') +
+        ' added at the end. ';
     }
-    panel.innerHTML = html;
+    note += none
+      ? String(none) + ' AP' + (none === 1 ? '' : 's') + ' with no colour set ' +
+        (none === 1 ? 'is' : 'are') + ' numbered last, after every colour. '
+      : 'Every AP in this project has a colour. ';
+    note += 'Within a colour, the ordering above decides the sequence.';
 
-    panel.querySelectorAll('.ar-col-add').forEach(function (b) {
+    panel.innerHTML =
+      '<div class="ar-cseq-lab">Number the colours in this order</div>' +
+      '<div class="ar-cseq">' + rows + '</div>' +
+      '<div class="ar-col-note">' + esc(note) + '</div>';
+
+    panel.querySelectorAll('.ar-cseq-up').forEach(function (b) {
       b.onclick = function () {
-        _colorOrder.push(b.getAttribute('data-col'));
-        updateAll();
+        var i = parseInt(b.getAttribute('data-i'), 10);
+        moveColor(i, i - 1);
       };
     });
-    panel.querySelectorAll('.ar-col-x').forEach(function (b) {
+    panel.querySelectorAll('.ar-cseq-dn').forEach(function (b) {
       b.onclick = function () {
-        var k = b.getAttribute('data-col');
-        _colorOrder = _colorOrder.filter(function (x) { return x !== k; });
-        updateAll();
+        var i = parseInt(b.getAttribute('data-i'), 10);
+        moveColor(i, i + 1);
       };
+    });
+    // Drag, the same way the segment builder does it.
+    panel.querySelectorAll('.ar-cseq-row').forEach(function (row) {
+      var i = parseInt(row.getAttribute('data-i'), 10);
+      row.addEventListener('dragstart', function (e) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(i));
+        row.style.opacity = '.4';
+      });
+      row.addEventListener('dragend', function () { row.style.opacity = ''; });
+      row.addEventListener('dragover', function (e) {
+        e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      });
+      row.addEventListener('drop', function (e) {
+        e.preventDefault();
+        var from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+        if (!isNaN(from)) moveColor(from, i);
+      });
     });
   }
   window.arRenderColorPanel = renderColorPanel;

@@ -270,6 +270,71 @@ class ThereIsStillOnePlaceANumberIsDecided(unittest.TestCase):
         self.assertNotIn("num", block.replace("number", ""))
 
 
+class TheSequenceIsArrangeable(unittest.TestCase):
+    """It was a picker, not a sort order.
+
+    You could append a colour and remove one, so the only way to get blue,
+    yellow, green, grey was to clear the list and re-add everything in that
+    order - and there was no way to move one colour past another at all.
+    Anything left unpicked trailed behind in Ekahau's palette order, which is
+    the thing being replaced.
+    """
+
+    def setUp(self):
+        self.source = AP_JS.read_text(encoding="utf-8")
+        start = self.source.index("function syncColorOrder()")
+        self.block = self.source[start:self.source.index("window.arRenderColorPanel")]
+
+    def test_a_colour_can_be_moved_past_another(self):
+        self.assertIn("function moveColor(from, to)", self.source)
+        self.assertIn("_colorOrder.splice(to, 0, item)", self.source)
+
+    def test_both_a_drag_and_a_button_can_do_it(self):
+        """Arrows work on a touchpad and read as affordances; drag is the
+        gesture the segment builder already taught."""
+        self.assertIn("ar-cseq-up", self.block)
+        self.assertIn("ar-cseq-dn", self.block)
+        self.assertIn("dragstart", self.block)
+        self.assertIn("drop", self.block)
+
+    def test_the_picker_is_gone(self):
+        """Nothing to add, because every colour present is already listed;
+        nothing to remove, because every AP has to be numbered."""
+        self.assertNotIn("ar-col-add", self.source)
+        self.assertNotIn("ar-col-x", self.source)
+
+    def test_the_list_holds_only_colours_the_project_uses(self):
+        """Twelve swatches for a four-colour project is noise, and a saved
+        sequence from another job would show colours that are not there."""
+        self.assertIn("projectColors()", self.block)
+        self.assertIn("_colorOrder.filter", self.block)
+
+    def test_each_row_shows_how_many_aps_carry_that_colour(self):
+        self.assertIn("ar-cseq-ct", self.block)
+        self.assertIn("state.byKey[k]", self.block)
+
+    def test_the_position_is_drawn_on_the_colour_with_readable_ink(self):
+        """The swatch carries its position the way a plan marker does, so the
+        list reads like the map - which means it needs the shared helper, or
+        green gets a white number on it again."""
+        self.assertIn("WD.readableOn(hex)", self.block)
+        self.assertIn("WD.outlineOn(hex)", self.block)
+
+    def test_a_colour_the_saved_order_does_not_cover_is_appended_and_named(self):
+        """Silently dropping it would still number those APs, just not where
+        he expected - and he would not find out until the labels were printed."""
+        self.assertIn("added.push(c.key)", self.block)
+        self.assertIn("ar-cseq-new", self.block)
+        self.assertIn("not in your saved order", self.block)
+
+    def test_where_uncoloured_aps_land_is_stated_not_discovered(self):
+        self.assertIn("numbered last, after every colour", self.block)
+
+    def test_the_order_is_saved(self):
+        self.assertIn("colorOrder: _colorOrder.slice()", self.source)
+        self.assertIn("if (Array.isArray(s.colorOrder))", self.source)
+
+
 class LabelerUsesTheSharedContrastHelper(unittest.TestCase):
     """Contrast lives in wd-shared.js and is covered by test_color_contrast.py.
     The labeler must not grow its own copy again - that is how green ended up
