@@ -179,6 +179,31 @@ server reads `d["patch"]` and therefore saved nothing while reporting success.
   guarded by `tests/test_marker_bounds.py`. Don't assume an orientation report
   and a clipping report are the same defect.
 
+- **A requirement area silently stops the canvas being trimmed, so trimming
+  always runs first.** `esx_trimmer._floor_coord_bbox` unions every coordinate
+  belonging to a floor into the crop box, so that nothing ends up off the image
+  — and `areas[].area[]` is one of the carriers it walks. An area written before
+  the trim is therefore part of the crop and holds it open. On a plan with no
+  walls or APs yet, `capacity_profiles.area_for_floor` falls back to the canvas
+  basis and the area *is* the whole sheet, so it holds the crop open to the full
+  sheet and `FILL_SKIP_RATIO` then skips the floor with "content already fills
+  100% of the canvas".
+
+  Nothing errors. The file opens, every floor is present, and the plan is simply
+  the size it always was — a clean skip reported for a crop that was prevented.
+  This is why `tools/prep_pipeline.py` has `STEP_ORDER` **and** `ORDER_RULES`:
+  the sequence about to run is checked against the rules before anything is
+  written, and again against what actually ran, so reordering the list fails
+  loudly. `tests/test_prep_pipeline.py` tests it twice — once against the guard,
+  and once by building the project that fails and asserting the floor really was
+  cropped, which still fails with every guard deleted.
+
+  The reverse constraint does not exist: injecting wall *types* adds no wall
+  *segments*, so it cannot change the area basis and can run either side of the
+  area step. Only trim-before-areas is real. An early draft of this had the
+  order wrong for a plausible-sounding reason, which is the argument for the
+  rules being executable rather than written down.
+
 - **Owner filter (Mine/Others/All)** in Cloud Manager used to persist to
   `localStorage` across page loads/sessions, which meant it could get
   silently stuck on "Mine" or "Others" on one machine while defaulting
