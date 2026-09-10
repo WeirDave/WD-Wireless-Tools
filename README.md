@@ -6,7 +6,7 @@
 
 **A suite of Ekahau workflow tools.**
 
-Seven focused utilities for organizing projects, managing Ekahau Cloud, editing walls,
+Eight focused utilities for organizing projects, managing Ekahau Cloud, editing walls,
 converting scale, building installer-ready reports, trimming floor plans, and labeling access points.
 
 [![Latest Release](https://img.shields.io/github/v/release/WeirDave/WD-Wireless-Tools?style=for-the-badge&color=1e77ac)](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest)
@@ -28,12 +28,13 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <table>
 <tr>
 <td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.22.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"><br><b>Quick Walls</b><br><sub>v7.54 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"><br><b>Quick Walls</b><br><sub>v7.55 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.26.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"><br><b>Scale</b><br><sub>v1.5 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.54.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.0 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -42,7 +43,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 ## Table of Contents
 
 - [What WD Wireless Tools Does](#what-wd-wireless-tools-does)
-- [Seven Tools, One Workflow](#seven-tools-one-workflow)
+- [Eight Tools, One Workflow](#eight-tools-one-workflow)
 - [Quick Start](#quick-start)
 - [Privacy and Local-First Design](#privacy-and-local-first-design)
 - [First Run](#first-run)
@@ -60,7 +61,7 @@ The suite runs from a tiny local Flask server and opens in your normal browser. 
 
 > **The important distinction:** the interface is browser-based, but nothing leaves your machine. Files are read and written locally; Cloud Manager contacts Ekahau Cloud only when you direct it to operate on your own tenant.
 
-## Seven Tools, One Workflow
+## Eight Tools, One Workflow
 
 ### Cloud Manager
 
@@ -135,13 +136,24 @@ See your access points on the floor plan, pick a spatial ordering, set a naming 
 - MAC address naming with hex incrementing and configurable format
 - Live preview of generated names overlaid on the floor plan
 
+
+### Capacity
+
+Read the device mix out of a project you have already set up in Ekahau, and apply those ratios to the next building.
+
+- Captures device profiles, usage profiles and their counts straight from an `.esx`
+- Stores ratios per person, not raw counts, so a template taken from a 500-person building applies to a 200-person one
+- Applies by typing one number: how many people work there
+- Previews per floor before anything is written, including where the requirement area would go and how big it is
+- Leaves a floor alone when it already has a requirement area, unless replacement is asked for
+
 ---
 
 ## Quick Start
 
 ### Which tools you get
 
-All seven tools are part of the desktop suite. Quick Walls, Scale and Report used to run as a browser demo on the project page; they are desktop-only now too, so every tool behaves the same way and every setting is saved in one place rather than depending on which browser you opened. The [project page](https://weirdave.github.io/WD-Wireless-Tools/) has a quick start.
+All eight tools are part of the desktop suite. Quick Walls, Scale and Report used to run as a browser demo on the project page; they are desktop-only now too, so every tool behaves the same way and every setting is saved in one place rather than depending on which browser you opened. The [project page](https://weirdave.github.io/WD-Wireless-Tools/) has a quick start.
 
 ### Install the complete desktop suite
 
@@ -201,7 +213,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.65.0
+WIRELESS TOOLS  v2.66.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
