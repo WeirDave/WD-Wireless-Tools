@@ -47,6 +47,14 @@
   }
   .ptb-hint { margin-top: 8px; font-size: 12px; color: var(--text-muted); min-height: 1.3em; }
   .ptb-hint.is-bad { color: var(--red, #e5534b); }
+  .ptb-evidence {
+    margin-top: 8px; padding: 9px 11px; border-radius: 6px; font-size: 12px;
+    line-height: 1.5; color: var(--text);
+    background: color-mix(in srgb, var(--blue) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--blue) 40%, transparent);
+  }
+  .ptb-evidence strong { color: var(--blue); }
+  .ptb-evidence .ptb-ev-basis { display: block; margin-bottom: 3px; }
 </style>
 </head>
 <body class="tool-plantrim">
@@ -151,6 +159,8 @@
         </label>
         <span class="ptb-readout" id="ptbReadout">Automatic</span>
         <span class="ptb-spacer"></span>
+        <button class="btn btn-sm btn-primary" id="ptbSuggest" onclick="ptbSuggest()"
+                title="Compare the sheets of this set to each other and propose a rectangle">Suggest from the set</button>
         <button class="btn btn-sm" id="ptbApplyAll" onclick="ptbApplyToAll()" disabled
                 title="Use this floor's rectangle on every other floor">Apply to all floors</button>
         <button class="btn btn-sm" id="ptbClear" onclick="ptbClearBox()" disabled
@@ -161,6 +171,7 @@
         <div class="ptb-empty" id="ptbEmpty">Select a floor to draw on.</div>
       </div>
       <div class="ptb-hint" id="ptbHint"></div>
+      <div class="ptb-evidence" id="ptbEvidence" hidden></div>
     </div>
 
     <div class="pt-card">

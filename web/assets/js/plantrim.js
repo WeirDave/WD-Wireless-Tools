@@ -47,6 +47,14 @@
     if (state.bytes && !state.busy) analyze();
   };
 
+  // The set comparison needs the whole archive, so it goes to the server the
+  // same way analyze does.
+  window.__ptSuggest = function () {
+    if (!state.bytes) return Promise.resolve({ ok: false, error: 'No file open' });
+    return postEsx('suggest', state.bytes, { name: state.file.name })
+      .then(function (r) { return r.json(); });
+  };
+
   function busy(on, label) {
     state.busy = on;
     var save = $('ptSaveBtn');
@@ -523,6 +531,8 @@
         box.boxes[box.current] = b;
       }
     }
+    if (box.suggestions) delete box.suggestions[box.current];
+    showEvidence();
     draw();
     updateReadout();
     persist();
@@ -578,6 +588,7 @@
       fitView();
       draw();
       updateReadout();
+      showEvidence();
     });
   };
 
@@ -616,6 +627,60 @@
       WD.toast('Applied to ' + applied + ' floor' + (applied === 1 ? '' : 's'), 'success');
     }
   };
+
+  // ------------------------------------------------------------- suggest
+  // Suggestions are filled into the editor, never applied. The rectangle lands
+  // where it can be seen and dragged, the evidence for it is stated, and
+  // nothing is written until Save. Detection that cannot be checked is what the
+  // manual box exists to escape, so it does not get to act on its own.
+  window.ptbSuggest = function () {
+    var btn = $('ptbSuggest');
+    btn.disabled = true;
+    btn.textContent = 'Comparing sheets…';
+    window.__ptSuggest().then(function (res) {
+      btn.disabled = false;
+      btn.textContent = 'Suggest from the set';
+      if (!res || !res.ok) {
+        WD.toast((res && res.error) || 'Could not compare the sheets', 'error');
+        return;
+      }
+      box.suggestions = {};
+      var filled = 0;
+      (res.suggestions || []).forEach(function (s) {
+        box.suggestions[s.floorId] = s;
+        if (s.box) { box.boxes[s.floorId] = s.box.slice(); filled++; }
+      });
+      draw();
+      updateReadout();
+      showEvidence();
+      reanalyze();
+      if (!filled) {
+        WD.toast('Nothing to suggest from this set', 'error');
+      } else {
+        WD.toast('Proposed a rectangle for ' + filled + ' floor' +
+                 (filled === 1 ? '' : 's') + ' — check it before saving',
+                 'success');
+      }
+    }).catch(function (e) {
+      btn.disabled = false;
+      btn.textContent = 'Suggest from the set';
+      WD.toast('Could not compare the sheets', 'error');
+    });
+  };
+
+  function showEvidence() {
+    var el = $('ptbEvidence');
+    var s = box.suggestions && box.suggestions[box.current];
+    if (!s) { el.hidden = true; return; }
+    var label = s.basis === 'cross-sheet'
+      ? 'Proposed from ' + s.sheets + ' sheets of this size'
+      : (s.basis === 'single-sheet' ? 'Proposed from this sheet alone'
+                                    : 'Nothing could be proposed');
+    el.innerHTML = '<span class="ptb-ev-basis"><strong>' + WD.esc(label) +
+                   '</strong></span>' + WD.esc(s.evidence) +
+                   ' <em>Check it and drag if it is wrong — nothing is written until you save.</em>';
+    el.hidden = false;
+  }
 
   function loadImage(f) {
     if (box.img && box.imgFor === f.imageId) return Promise.resolve();

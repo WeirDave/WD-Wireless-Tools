@@ -38,6 +38,7 @@ from tools import settings as suite_settings
 from tools import updater
 from tools import esx_trimmer
 from tools import plantrim_store
+from tools import plan_detect
 from tools import reveal as reveal_tool
 
 app = Flask(__name__, static_folder=None)
@@ -384,6 +385,42 @@ def api_capacity(action):
     return jsonify({"error": f"unknown action: {action}"}), 404
 
 
+def _plantrim_suggest(src: Path) -> dict:
+    """Propose a keep-region per floor by comparing the sheets to each other.
+
+    Suggestions are returned, never applied: the page fills the editor with them
+    and the user confirms or drags. Detection that cannot be checked is exactly
+    what the manual box exists to escape.
+    """
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(src) as z:
+            names = set(z.namelist())
+            if "floorPlans.json" not in names:
+                return {"ok": False, "error": "Not an Ekahau project"}
+            plans = json.loads(z.read("floorPlans.json")).get("floorPlans", [])
+            floors = []
+            for plan in plans:
+                member = "image-" + str(plan.get("imageId"))
+                if member not in names:
+                    continue
+                blob = z.read(member)
+                if esx_trimmer.image_kind(blob) not in ("PNG", "JPEG"):
+                    continue  # nothing to compare pixel-wise
+                floors.append((plan.get("id"), blob,
+                               int(plan.get("width") or 0),
+                               int(plan.get("height") or 0)))
+        if not floors:
+            return {"ok": True, "suggestions": []}
+        return {"ok": True,
+                "suggestions": [s.as_dict() for s in plan_detect.suggest(floors)]}
+    except esx_trimmer.TrimError as exc:
+        return {"ok": False, "error": str(exc)}
+    except Exception as exc:  # pragma: no cover - surfaced to the UI
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 @app.route("/api/plantrim/<action>", methods=["POST"])
 def api_plantrim(action):
     # The box store speaks JSON; analyze and trim carry the archive itself, so
@@ -398,7 +435,7 @@ def api_plantrim(action):
         return jsonify({"ok": True,
                         "boxes": plantrim_store.save(project_id, data.get("boxes"))})
 
-    if action not in ("analyze", "trim"):
+    if action not in ("analyze", "trim", "suggest"):
         return jsonify({"error": f"unknown action: {action}"}), 404
 
     blob = request.get_data(cache=False)
@@ -431,6 +468,9 @@ def api_plantrim(action):
     try:
         src = Path(tmpdir) / "in.esx"
         src.write_bytes(blob)
+        if action == "suggest":
+            return jsonify(_plantrim_suggest(src))
+
         if action == "analyze":
             return jsonify(esx_trimmer.api_analyze(str(src), margin, boxes=boxes))
 
