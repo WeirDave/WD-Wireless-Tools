@@ -1082,13 +1082,11 @@
 
   // Pick black or white text for a pill of the given fill, so a pale wall-type
   // colour does not produce white-on-white.
+  // Shared with every other surface that draws on a wall or AP colour. This
+  // was a Rec.601 luma over 150 of its own, which disagreed with the two other
+  // copies in the suite about the colours in the middle - green among them.
   function readableOn(hex) {
-    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex).trim());
-    if (!m) return '#ffffff';
-    const v = parseInt(m[1], 16);
-    const r = (v >> 16) & 255, gg = (v >> 8) & 255, b = v & 255;
-    // Rec. 601 luma is plenty for a two-way choice.
-    return (0.299 * r + 0.587 * gg + 0.114 * b) > 150 ? '#10161f' : '#ffffff';
+    return WD.readableOn(hex);
   }
 
   function roundRect(g, x, y, w, h, r) {
