@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Prep</title>
+<link rel="icon" href="/assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/assets/wd-wireless-tools-v8.0-180x180.png">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+<link rel="stylesheet" href="/assets/wd-tools.css">
+<style>
+/* Page-scoped, and the values are lifted from the Capacity page rather than
+   re-invented, so the two read as the same suite. They belong in wd-tools.css
+   together once one of us owns that file for long enough to move both. */
+body.tool-prep .dropzone-logo { background-image: url(/assets/wd-wireless-tools-v8.0-720x720.png); }
+
+.prep-wrap { max-width: 1100px; margin: 0 auto; padding: 18px 20px 40px; }
+.prep-card {
+  background: var(--surface-raised); border: 1px solid var(--border);
+  border-radius: 10px; padding: 16px 18px; margin-bottom: 16px;
+}
+.prep-step {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-3);
+  padding-bottom: 8px; margin-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+.prep-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.prep-row label { font-size: 13px; color: var(--text-2); }
+.prep-input {
+  padding: 5px 9px; font-size: 13px; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--bg-1); color: var(--text);
+}
+.prep-input--num { width: 92px; }
+.prep-input--sel { min-width: 260px; }
+.prep-hint { font-size: 11px; color: var(--text-3); line-height: 1.6; margin: 6px 0 0; }
+.prep-empty { font-size: 12px; color: var(--text-3); font-style: italic; padding: 8px 0; }
+
+.prep-toggle {
+  display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
+}
+.prep-toggle input { margin-top: 3px; }
+.prep-toggle-body { flex: 1 1 auto; }
+.prep-toggle-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.prep-toggle-why { font-size: 11px; color: var(--text-3); line-height: 1.6; margin-top: 2px; }
+.prep-opts { margin: 8px 0 0 28px; }
+
+.prep-item { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+.prep-item-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.prep-item-name { font-size: 14px; font-weight: 700; }
+.prep-badge {
+  font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+  padding: 1px 8px; border-radius: 9px; white-space: nowrap;
+}
+.prep-badge--do { background: var(--green-bg); color: var(--green-dark); }
+.prep-badge--skip { background: var(--surface-2); color: var(--text-3); }
+.prep-facts { font-size: 12px; color: var(--text-2); line-height: 1.7; }
+.prep-facts b { color: var(--text); }
+.prep-sub { color: var(--text-3); }
+.prep-chip {
+  display: inline-block; margin: 2px 4px 2px 0; padding: 1px 7px;
+  border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface-2); color: var(--text);
+  font-size: 11px; white-space: nowrap;
+}
+.prep-warn {
+  margin-top: 12px; padding: 10px 12px; border-radius: 6px;
+  background: var(--amber-bg); color: var(--amber-dark); font-size: 12px; line-height: 1.6;
+}
+.prep-done {
+  margin-top: 12px; padding: 10px 12px; border-radius: 6px;
+  background: var(--green-bg); color: var(--green-dark); font-size: 12px; line-height: 1.7;
+}
+.prep-go { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.prep-order {
+  font-size: 11px; color: var(--text-3); line-height: 1.6;
+  margin: 10px 0 0; padding: 8px 10px; border-left: 2px solid var(--border);
+}
+</style>
+</head>
+<body class="tool-prep">
+
+<div id="dzTopbar" class="dz-topbar" onclick="event.stopPropagation()">
+  <div class="header-left">
+    <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+    <div class="help-menu-wrap">
+      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'dzMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <div id="dzMenu" class="help-menu">
+        <div class="menu-section">&#9656; Navigation</div>
+        <a class="help-menu-item" href="/">⌂ Home</a>
+        <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+        <a class="help-menu-item" href="/walls">· Quick Walls</a>
+        <a class="help-menu-item" href="/report">· Report</a>
+        <a class="help-menu-item" href="/scale">· Scale</a>
+        <a class="help-menu-item" href="/plantrim">· PlanTrim</a>
+        <a class="help-menu-item" href="/aprename">· AP Labeler</a>
+        <a class="help-menu-item" href="/capacity">· Capacity</a>
+        <a class="help-menu-item active" href="/prep">· Prep</a>
+        <a class="help-menu-item" href="/squirrel">· Squirrel</a>
+        <div class="help-menu-sep"></div>
+        <div class="menu-section">&#9656; Tools</div>
+        <a class="help-menu-item" href="/settings">· Suite Settings</a>
+        <div class="help-menu-sep"></div>
+        <div class="menu-section">&#9656; Help &amp; Support</div>
+        <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+        <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <a class="help-menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug</a>
+      </div>
+    </div>
+  </div>
+  <div class="header-center">
+    <h1><span>WD</span> Prep <span class="ver" data-ver="prep">v&hellip;</span></h1>
+  </div>
+  <div class="header-actions">
+    <button class="theme-toggle" onclick="WD.toggleTheme()">
+      <span class="ico">🌙</span><span class="txt">Dark</span>
+    </button>
+  </div>
+</div>
+
+<div id="dropzone" class="dropzone">
+  <div id="dropzoneLogo" class="dropzone-logo"></div>
+  <p class="dropzone-ver" data-ver="prep">v&hellip;</p>
+  <p class="dropzone-sub">Ekahau Workflow Optimization Utility</p>
+  <p class="dropzone-desc">Gets a freshly imported project ready to draw in &mdash; crops the empty canvas off the CAD sheets, puts a requirement area on every floor and loads your wall types &mdash; in one pass over the file instead of three.</p>
+  <div class="dropzone-divider"></div>
+  <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
+  <ul class="dropzone-steps">
+    <li data-step="1."><strong>Choose</strong> which of the three things to do, and which templates to use</li>
+    <li data-step="2."><strong>Check</strong> what it says it will do to each floor</li>
+    <li data-step="3."><strong>Prepare</strong> &mdash; a new copy downloads, your original is untouched</li>
+  </ul>
+</div>
+<input type="file" id="fileInput" accept=".esx" hidden>
+
+<div id="editor" class="editor">
+  <div class="header">
+    <div class="header-left">
+      <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
+      <div class="help-menu-wrap">
+        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'helpMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <div id="helpMenu" class="help-menu">
+          <div class="menu-section">&#9656; Navigation</div>
+          <a class="help-menu-item" href="/">⌂ Home</a>
+          <a class="help-menu-item" href="/cloud">· Cloud Manager</a>
+          <a class="help-menu-item" href="/walls">· Quick Walls</a>
+          <a class="help-menu-item" href="/report">· Report</a>
+          <a class="help-menu-item" href="/scale">· Scale</a>
+          <a class="help-menu-item" href="/plantrim">· PlanTrim</a>
+          <a class="help-menu-item" href="/aprename">· AP Labeler</a>
+          <a class="help-menu-item" href="/capacity">· Capacity</a>
+          <a class="help-menu-item active" href="/prep">· Prep</a>
+          <a class="help-menu-item" href="/squirrel">· Squirrel</a>
+          <div class="help-menu-sep"></div>
+          <div class="menu-section">&#9656; Help &amp; Support</div>
+          <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+          <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        </div>
+      </div>
+      <span id="fileBadge" class="file-badge" onclick="prepLoadNewFile()"
+            title="Click to open another .esx"></span>
+    </div>
+    <div class="header-center">
+      <h1><span>WD</span> Prep <span class="ver" data-ver="prep">v&hellip;</span></h1>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-sec" onclick="prepLoadNewFile()">Open another</button>
+    </div>
+  </div>
+
+  <div class="prep-wrap">
+
+    <div class="prep-card">
+      <div class="prep-step">1 &mdash; What to do</div>
+
+      <label class="prep-toggle">
+        <input type="checkbox" id="prepStep-trim" checked onchange="prepSyncStepUi()">
+        <span class="prep-toggle-body">
+          <span class="prep-toggle-name">Trim the canvas</span>
+          <span class="prep-toggle-why">Crops the empty paper off each CAD sheet and moves every AP, wall
+            and area with it. <span id="prepNote-trim"></span></span>
+        </span>
+      </label>
+
+      <label class="prep-toggle">
+        <input type="checkbox" id="prepStep-areas" checked onchange="prepSyncStepUi()">
+        <span class="prep-toggle-body">
+          <span class="prep-toggle-name">Put a requirement area on every floor</span>
+          <span class="prep-toggle-why">From a capacity template and a headcount. A floor that already
+            has one is left alone. <span id="prepNote-areas"></span></span>
+        </span>
+      </label>
+      <div class="prep-opts" id="prepAreaOpts">
+        <div class="prep-row">
+          <label for="prepCapTpl">Template</label>
+          <select id="prepCapTpl" class="prep-input prep-input--sel" onchange="prepSyncStepUi()"></select>
+          <label for="prepOccupants">for</label>
+          <input type="number" id="prepOccupants" class="prep-input prep-input--num" min="1" step="1"
+                 value="200" onchange="prepSyncStepUi()">
+          <label for="prepOccupants">people</label>
+        </div>
+        <label class="prep-row" style="margin-bottom:0">
+          <input type="checkbox" id="prepRetighten" checked onchange="prepSyncStepUi()">
+          <span>Re-measure areas that still cover the whole plan</span>
+        </label>
+        <p class="prep-hint">
+          The first pass runs before there are any walls to measure, so the area covers the
+          whole sheet. Once you have drawn walls, running Prep again tightens it to them.
+          Only an area that is still exactly the whole plan is touched &mdash; a polygon you
+          moved, redrew or cut around an atrium is left alone.
+        </p>
+      </div>
+
+      <label class="prep-toggle">
+        <input type="checkbox" id="prepStep-walls" checked onchange="prepSyncStepUi()">
+        <span class="prep-toggle-body">
+          <span class="prep-toggle-name">Load the wall types</span>
+          <span class="prep-toggle-why">Adds the types from a Quick Walls template so they are there to
+            draw with. Nothing already drawn changes. <span id="prepNote-walls"></span></span>
+        </span>
+      </label>
+      <div class="prep-opts" id="prepWallOpts">
+        <div class="prep-row" style="margin-bottom:0">
+          <label for="prepWallTpl">Template</label>
+          <select id="prepWallTpl" class="prep-input prep-input--sel" onchange="prepSyncStepUi()"></select>
+        </div>
+      </div>
+
+      <p class="prep-order">
+        These always run in the order trim &rarr; areas &rarr; wall types, whichever you pick.
+        A requirement area counts as something that has to stay on the plan, so an area put in
+        before the trim holds the crop open &mdash; and the trim then reports that there was
+        nothing to crop, which looks exactly like success.
+      </p>
+    </div>
+
+    <div class="prep-card">
+      <div class="prep-step">2 &mdash; What that would do</div>
+      <div id="prepPreview"><div class="prep-empty">Reading the project…</div></div>
+
+      <div class="prep-row prep-go">
+        <button class="btn btn-primary" id="prepGoBtn" onclick="prepRun()" disabled>
+          Prepare and download
+        </button>
+        <span class="prep-hint" id="prepGoNote"></span>
+      </div>
+      <div id="prepResult"></div>
+    </div>
+
+    <p class="prep-hint" style="text-align:center">
+      Your project file is never written to. Preparing builds a new copy and downloads it,
+      so keeping it is your decision.
+    </p>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/prep.js"></script>
+</body>
+</html>

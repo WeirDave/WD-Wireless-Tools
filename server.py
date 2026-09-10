@@ -39,6 +39,7 @@ from tools import updater
 from tools import esx_trimmer
 from tools import plantrim_store
 from tools import plan_detect
+from tools import prep_pipeline
 from tools import reveal as reveal_tool
 
 app = Flask(__name__, static_folder=None)
@@ -184,6 +185,11 @@ def capacity():
 @app.route("/plantrim")
 def plantrim():
     return send_from_directory(WEB, "plantrim.html")
+
+
+@app.route("/prep")
+def prep():
+    return send_from_directory(WEB, "prep.html")
 
 
 @app.route("/aprename")
@@ -624,6 +630,118 @@ SETTINGS_ACTIONS = {
     "get_destinations": lambda d: {"ok": True, "destinations": [
                             dict(d) for d in suite_settings.get_destinations()]},
 }
+
+
+@app.route("/api/prep/<action>", methods=["POST"])
+def api_prep(action):
+    """Trim, area and wall-type a new project in one pass.
+
+    Same shape as the PlanTrim and Capacity routes it is built out of: the
+    .esx rides in the body because it is a whole archive, everything else is a
+    query parameter, and `run` hands the result back as a download rather than
+    writing over anything. The project on disk is never opened for writing by
+    this route - saving over the original stays the user's decision, which is
+    also why the pipeline's own backup is turned off here.
+
+    The order the steps run in is the pipeline's business, not this route's.
+    Whatever set of steps arrives is passed through as a set for exactly that
+    reason - see tools/prep_pipeline.py, where getting it wrong is a refusal
+    rather than a project that was quietly never cropped.
+    """
+    if action == "templates":
+        return jsonify({
+            "ok": True,
+            "wall": [{"name": t["name"], "file": t["file"],
+                      "builtin": t["builtin"], "count": len(t.get("wallTypes") or [])}
+                     for t in ts.scan().get("templates", [])],
+            "capacity": capacity_profiles.list_templates().get("templates", []),
+        })
+
+    if action not in ("plan", "run"):
+        return jsonify({"error": f"unknown action: {action}"}), 404
+
+    blob = request.get_data(cache=False)
+    if not blob:
+        return jsonify({"ok": False, "error": "no file received"}), 400
+
+    name = request.args.get("name") or "project.esx"
+    steps = [s for s in (request.args.get("steps") or "").split(",") if s]
+    margin = request.args.get("margin", type=int) or esx_trimmer.DEFAULT_MARGIN
+    retighten = request.args.get("retighten") != "0"
+
+    wall_types = None
+    wall_file = request.args.get("wallTemplate") or ""
+    if wall_file:
+        tpl = next((t for t in ts.scan().get("templates", [])
+                    if t.get("file") == wall_file), None)
+        if tpl is None:
+            return jsonify({"ok": False,
+                            "error": "That wall template is no longer there."}), 404
+        wall_types = tpl.get("wallTypes") or []
+
+    capacity_tpl = None
+    cap_file = request.args.get("capacityTemplate") or ""
+    if cap_file:
+        capacity_tpl = next(
+            (t for t in capacity_profiles.list_templates().get("templates", [])
+             if t.get("_file") == cap_file), None)
+        if capacity_tpl is None:
+            return jsonify({"ok": False,
+                            "error": "That capacity template is no longer there."}), 404
+
+    tmpdir = tempfile.mkdtemp(prefix="wd-prep-api-")
+    try:
+        src = Path(tmpdir) / "in.esx"
+        src.write_bytes(blob)
+        common = dict(steps=steps or None, wall_types=wall_types,
+                      template=capacity_tpl, occupants=request.args.get("occupants"),
+                      margin=margin, retighten=retighten)
+
+        if action == "plan":
+            out = prep_pipeline.plan(str(src), **common)
+            out["source"] = name
+            return jsonify(out), (200 if out.get("ok") else 400)
+
+        dest = Path(tmpdir) / "out.esx"
+        out = prep_pipeline.run(str(src), dest=dest, backup=False, **common)
+        out["source"] = name
+        if not out.get("ok"):
+            return jsonify(out), 400
+        if not out.get("written"):
+            # Already prepared. A success with no file attached, so the page
+            # can say so rather than handing back a copy of what he already has.
+            return jsonify(out)
+
+        stem = Path(name).stem or "project"
+        response = make_response(dest.read_bytes())
+        response.headers["Content-Type"] = "application/octet-stream"
+        response.headers["Content-Disposition"] = (
+            f'attachment; filename="{stem} (prepared).esx"')
+        # A summary, not the whole report. A dozen floors of trim detail runs
+        # past what a header is allowed to carry, and a truncated header is a
+        # page that silently renders nothing.
+        step = out.get("step") or {}
+        trim = step.get("trim") or {}
+        areas = step.get("areas") or {}
+        walls = step.get("walls") or {}
+        response.headers["X-WD-Prep-Report"] = quote(json.dumps({
+            "ok": True,
+            "ran": out.get("ran"),
+            "trimmed": trim.get("trimmedCount"),
+            "floorCount": trim.get("floorCount"),
+            "bytesBefore": trim.get("bytesBefore"),
+            "bytesAfter": trim.get("bytesAfter"),
+            "areasWritten": areas.get("floorsWritten"),
+            "areasSkipped": areas.get("floorsSkipped"),
+            "areasRetightened": [r.get("floorName") for r in (step.get("retighten") or [])],
+            "wallTypesAdded": [a.get("name") for a in (walls.get("add") or [])],
+            "wallTypesSkipped": len(walls.get("skip") or []),
+        }))
+        return response
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 @app.route("/api/report/cover", methods=["GET"])
