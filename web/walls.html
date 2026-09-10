@@ -15,6 +15,42 @@
 </script>
 <script src="/assets/lib/jszip.min.js"></script>
 <link rel="stylesheet" href="/assets/wd-tools.css">
+<style>
+  /* Vertical extent editor. Scoped here rather than in wd-tools.css so the
+     shared stylesheet stays out of this change. */
+  .wt-vert-unit {
+    font-size: 11px; color: var(--text-muted); font-weight: 500;
+    border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px;
+  }
+  .wt-vert-modes { display: flex; gap: 6px; margin-bottom: 8px; }
+  .wt-vert-mode {
+    flex: 1; padding: 7px 10px; font-size: 12px; cursor: pointer;
+    background: var(--bg); color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  .wt-vert-mode:hover { border-color: var(--blue); color: var(--text); }
+  .wt-vert-mode.active {
+    background: var(--blue); border-color: var(--blue); color: #fff; font-weight: 600;
+  }
+  .wt-vert-inputs { display: flex; gap: 10px; margin-bottom: 6px; }
+  .wt-vert-in { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .wt-vert-in > span { font-size: 11px; color: var(--text-muted); }
+  .wt-vert-impact {
+    margin-top: 8px; padding: 8px 10px; border-radius: 6px; font-size: 12px;
+    line-height: 1.45; color: var(--text);
+    background: color-mix(in srgb, var(--amber, #f0ad4e) 14%, transparent);
+    border: 1px solid color-mix(in srgb, var(--amber, #f0ad4e) 45%, transparent);
+  }
+  .wt-vert-impact strong { color: var(--amber, #f0ad4e); }
+  .wall-height-badge {
+    font-size: 10px; padding: 1px 5px; border-radius: 3px;
+    border: 1px solid var(--border); color: var(--text-muted);
+  }
+  .wall-height-badge.is-limited {
+    border-color: color-mix(in srgb, var(--amber, #f0ad4e) 55%, transparent);
+    color: var(--amber, #f0ad4e);
+  }
+</style>
 </head>
 <body class="tool-walls">
 
@@ -185,6 +221,30 @@
           </label>
           <input type="number" id="fThickness" step="0.001" min="0" value="0.1">
           <div class="field-desc">Real-world wall thickness. Ekahau uses this with attenuation to model signal loss. <a href="/scale" target="_blank" rel="noopener">Convert units →</a></div>
+        </div>
+        <div class="field">
+          <label>
+            <span>Vertical extent</span>
+            <span class="wt-vert-unit" id="fVertUnit">ft</span>
+          </label>
+          <div class="wt-vert-modes" role="group" aria-label="Vertical extent mode">
+            <button type="button" class="wt-vert-mode" data-vmode="auto"
+                    onclick="setHeightMode('auto')">Auto — floor to ceiling</button>
+            <button type="button" class="wt-vert-mode" data-vmode="fixed"
+                    onclick="setHeightMode('fixed')">Stops short of the ceiling</button>
+          </div>
+          <div class="wt-vert-inputs" id="fVertFixed" hidden>
+            <label class="wt-vert-in">
+              <span>Top</span>
+              <input type="number" id="fUpperEdge" step="0.5" min="0" oninput="updateVertSummary()">
+            </label>
+            <label class="wt-vert-in">
+              <span>Floor offset</span>
+              <input type="number" id="fLowerEdge" step="0.5" min="0" value="0" oninput="updateVertSummary()">
+            </label>
+          </div>
+          <div class="field-desc" id="fVertSummary"></div>
+          <div class="wt-vert-impact" id="fVertImpact" hidden></div>
         </div>
         <div class="field">
           <label>Keyboard Shortcut</label>
