@@ -91,14 +91,118 @@
     return /^#[0-9a-fA-F]{3,8}$|^rgba?\([^)]+\)$|^hsla?\([^)]+\)$/.test(c) ? c : '#888';
   };
 
+  /* ── The Ekahau AP palette ───────────────────────────────────────
+     The ten colours Ekahau offers in its Mark menu, plus CLEAR (no colour).
+
+     An .esx stores whichever the project used: the palette name ("GREEN") or
+     the hex Ekahau paints it with ("#00FF00"). Anything drawing an AP has to
+     cope with both, so the map lives here rather than in the one tool that
+     happened to need it first. The Report drew names straight into SVG
+     `fill=`, where a browser reads them as CSS keywords - and CSS green is
+     #008000, a different colour from Ekahau's. It also handed the name to the
+     contrast helper below, which cannot parse a word, so every marked AP in a
+     printed report came out with white lettering regardless of its fill. */
+  WD.EKAHAU_COLORS = {
+    yellow:  '#FFE600', orange: '#FF8500', red:     '#FF0000',
+    magenta: '#FF00FF', purple: '#C297FF', blue:    '#0068FF',
+    gray:    '#6B6B6B', green:  '#00FF00', brown:   '#C97700',
+    cyan:    '#00FFCE'
+  };
+  WD.EKAHAU_COLOR_ORDER = [
+    'yellow', 'orange', 'red', 'magenta', 'purple', 'blue',
+    'gray', 'green', 'brown', 'cyan'
+  ];
+
+  // An AP's stored colour as a hex this suite can measure and paint.
+  // Null for an unmarked AP; anything unrecognised is passed through, because
+  // a colour we have not seen is still better drawn than dropped.
+  WD.resolveApColor = function (c) {
+    if (!c) return null;
+    var lc = String(c).toLowerCase().trim();
+    if (WD.EKAHAU_COLORS[lc]) return WD.EKAHAU_COLORS[lc];
+    if (/^#[0-9a-f]{6}$/i.test(lc)) return lc.toUpperCase();
+    return c;
+  };
+
+  /* ── Legibility on a user-chosen colour ──────────────────────────
+     Every tool that paints text or a glyph on a colour somebody picked in
+     Ekahau has the same problem, so it is answered once, here.
+
+     This used a Rec.601 brightness over 180, and two other copies elsewhere in
+     the suite used their own thresholds. They disagreed about exactly the
+     colours that matter: Ekahau green (#00FF00) scores 150 and cyan (#00FFCE)
+     173, so all three put white text on both - a contrast ratio of about 1.4,
+     which is a number that is drawn and cannot be read.
+
+     Relative luminance and a real contrast ratio instead. It is computed rather
+     than listed because Ekahau can add a swatch and a user can type a custom
+     hex; a list of "colours that need black" would be silently wrong the first
+     time either happens. */
+  function _hexBytes(hex) {
+    if (!hex || typeof hex !== 'string') return null;
+    var h = hex.trim().replace('#', '');
+    if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) return null;
+    return [parseInt(h.substr(0, 2), 16),
+            parseInt(h.substr(2, 2), 16),
+            parseInt(h.substr(4, 2), 16)];
+  }
+
+  WD.relLuminance = function (hex) {
+    var rgb = _hexBytes(hex);
+    if (!rgb) return null;
+    var c = rgb.map(function (v) {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  };
+
+  WD.contrastRatio = function (a, b) {
+    var la = typeof a === 'number' ? a : WD.relLuminance(a);
+    var lb = typeof b === 'number' ? b : WD.relLuminance(b);
+    if (la == null || lb == null) return 1;
+    var hi = Math.max(la, lb), lo = Math.min(la, lb);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  WD.DARK_INK = '#111111';
+  WD.LIGHT_INK = '#ffffff';
+
+  // True when near-black reads better on this fill than white does.
   WD.needsDarkText = function (hex) {
-    if (!hex || typeof hex !== 'string') return false;
-    var h = hex.replace('#', '');
-    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
-    var r = parseInt(h.substr(0, 2), 16);
-    var g = parseInt(h.substr(2, 2), 16);
-    var b = parseInt(h.substr(4, 2), 16);
-    return (r * 299 + g * 587 + b * 114) / 1000 > 180;
+    var lum = WD.relLuminance(hex);
+    if (lum == null) return false;
+    return WD.contrastRatio(lum, WD.relLuminance(WD.DARK_INK)) >
+           WD.contrastRatio(lum, WD.relLuminance(WD.LIGHT_INK));
+  };
+
+  // The ink to actually use on `hex`.
+  WD.readableOn = function (hex) {
+    return WD.needsDarkText(hex) ? WD.DARK_INK : WD.LIGHT_INK;
+  };
+
+  /* A ring that keeps a shape visible on the paper behind it.
+
+     A pale AP colour on a white CAD plan is the bug that already shipped once,
+     where markers were drawn white on white and were simply not there. The
+     ring gets firmer as the fill approaches the background, so a near-white
+     marker still has an edge.
+
+     This is for shapes on a light background - a floor plan, a printed sheet -
+     because the ring it returns is always black. `against` only says how light
+     that background is, so it can tune the firmness; it does not make the ring
+     work on a dark panel. For a swatch on the app's own (dark by default)
+     chrome, use WD.needsDarkText() and ring the pale ones.
+
+     A colour it cannot parse scores 1 and takes the firmest ring, which is the
+     safe way to be wrong: an unnecessary outline is visible, a missing one is
+     an AP the installer never sees. */
+  WD.outlineOn = function (hex, against) {
+    var ratio = WD.contrastRatio(hex, against || '#ffffff');
+    if (ratio < 1.6) return 'rgba(0,0,0,.72)';   // all but invisible on paper
+    if (ratio < 3)   return 'rgba(0,0,0,.5)';    // pale
+    return 'rgba(0,0,0,.28)';                    // holds its own
   };
 
   WD.toast = function (msg, type) {

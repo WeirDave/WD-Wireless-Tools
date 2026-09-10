@@ -24,25 +24,13 @@
   function esc(s) { return WD.esc(s); }
   function toast(m, k) { WD.toast(m, k); }
 
-  /* ── Ekahau color palette (10 selectable colors + CLEAR) ─────────── */
-  var EKAHAU_COLORS = {
-    yellow:  '#FFE600', orange: '#FF8500', red:     '#FF0000',
-    magenta: '#FF00FF', purple: '#C297FF', blue:    '#0068FF',
-    gray:    '#6B6B6B', green:  '#00FF00', brown:   '#C97700',
-    cyan:    '#00FFCE'
-  };
-  var COLOR_ORDER = [
-    'yellow','orange','red','magenta','purple','blue',
-    'gray','green','brown','cyan'
-  ];
+  /* ── Ekahau color palette (10 selectable colors + CLEAR) ───────────
+     Defined in wd-shared.js, because the Report has to read the same .esx and
+     was drawing palette names as CSS keywords for want of this map. */
+  var EKAHAU_COLORS = WD.EKAHAU_COLORS;
+  var COLOR_ORDER = WD.EKAHAU_COLOR_ORDER;
 
-  function resolveColor(c) {
-    if (!c) return null;
-    var lc = c.toLowerCase().trim();
-    if (EKAHAU_COLORS[lc]) return EKAHAU_COLORS[lc];
-    if (/^#[0-9a-f]{6}$/i.test(c)) return c.toUpperCase();
-    return c;
-  }
+  function resolveColor(c) { return WD.resolveApColor(c); }
 
   /* One group key per colour, whichever way the project spells it.
 
@@ -72,41 +60,10 @@
     return COLOR_ORDER.length;
   }
 
-  /* Pick the label colour that is actually readable on the AP colour.
-
-     This used a weighted-average brightness over 180, which put Ekahau green
-     (#00FF00, 150) and cyan (#00FFCE, 173) under the line and gave them white
-     text. White on bright green is a contrast ratio of about 1.4 - the number
-     is there but you cannot read it, which is the same failure as the
-     white-on-white markers this styling was introduced to fix.
-
-     Relative luminance and a real contrast ratio instead, choosing whichever of
-     near-black and white reads better. Any colour Ekahau can produce is then
-     legible by construction rather than by where a threshold happened to sit. */
-  function relLuminance(r, g, b) {
-    var c = [r, g, b].map(function (v) {
-      v /= 255;
-      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
-    });
-    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-  }
-
-  function contrastRatio(lumA, lumB) {
-    var hi = Math.max(lumA, lumB), lo = Math.min(lumA, lumB);
-    return (hi + 0.05) / (lo + 0.05);
-  }
-
-  function needsDarkText(hex) {
-    if (!hex) return false;
-    var h = hex.replace('#', '');
-    if (h.length !== 6) return false;
-    var lum = relLuminance(parseInt(h.substr(0, 2), 16),
-                           parseInt(h.substr(2, 2), 16),
-                           parseInt(h.substr(4, 2), 16));
-    // #111 and #fff are what the marker actually uses.
-    var dark = relLuminance(17, 17, 17);
-    return contrastRatio(lum, dark) > contrastRatio(lum, 1.0);
-  }
+  /* Contrast is decided in wd-shared.js, not here. Every tool that paints on
+     a colour somebody chose in Ekahau has this problem, and three private
+     copies of the answer is how they came to disagree about green. Call
+     WD.readableOn() for ink and WD.outlineOn() for the ring. */
 
   /* ── naming mode ────────────────────────────────────────────────── */
   var _mode = 'structured';
@@ -1428,10 +1385,12 @@
       var resolved = resolveColor(ap.color);
       if (resolved) {
         marker.style.background = resolved;
-        if (needsDarkText(resolved)) {
-          marker.style.color = '#111';
-          marker.style.borderColor = 'rgba(0,0,0,.3)';
-        }
+        marker.style.color = WD.readableOn(resolved);
+        // The default ring is white, which is fine on screen and disappears on
+        // a white CAD plan the moment the fill is pale - yellow or cyan with a
+        // white ring on white paper is the marker not being there at all. The
+        // ring is darkened in proportion to how close the fill is to the paper.
+        marker.style.borderColor = WD.outlineOn(resolved);
       } else {
         marker.classList.add('is-clear');
       }
@@ -1551,7 +1510,11 @@
       var swatch = '';
       var rc = resolveColor(it.ap.color);
       if (rc) {
-        var border = needsDarkText(rc) ? '1px solid rgba(0,0,0,.2)' : 'none';
+        // Not WD.outlineOn(): that returns a black ring sized for white paper,
+        // which is what the plan is. This swatch sits on the panel, which is
+        // dark by default and light only under [data-theme=light] - so ring
+        // the pale ones, which are the only ones the light theme can lose.
+        var border = WD.needsDarkText(rc) ? '1px solid rgba(0,0,0,.2)' : 'none';
         swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + rc + ';border:' + border + ';vertical-align:middle;margin-right:4px"></span>';
       } else {
         swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #222;vertical-align:middle;margin-right:4px;box-sizing:border-box"></span>';

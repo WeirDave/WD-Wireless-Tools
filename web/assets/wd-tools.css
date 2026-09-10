@@ -5997,15 +5997,18 @@ body.wd-has-stale-banner { padding-top: 52px; }
    intentional Ekahau colour pick. */
 .rep-mark--dir .rep-mark-cone:not([fill]) { fill: #78716c; fill-opacity: 0.35; stroke: #78716c; }
 .rep-mark--dir .rep-mark-cone { fill-opacity: 0.35; }
-.rep-mark--dir .rep-mark-dot,
-.rep-mark--omni .rep-mark-dot,
-.rep-mark--loc .rep-mark-dot { stroke: #fff; }
+/* :not([stroke]) for the same reason as :not([fill]) below - a rule here beats
+   a presentation attribute, so without it the darkened ring report.js computes
+   for a pale AP colour would be silently overridden back to white. */
+.rep-mark--dir .rep-mark-dot:not([stroke]),
+.rep-mark--omni .rep-mark-dot:not([stroke]),
+.rep-mark--loc .rep-mark-dot:not([stroke]) { stroke: #fff; }
 .rep-mark--dir .rep-mark-dot:not([fill]),
 .rep-mark--omni .rep-mark-dot:not([fill]),
 .rep-mark--loc .rep-mark-dot:not([fill]) { fill: #78716c; }
-.rep-mark--dir .rep-mark-pill,
-.rep-mark--omni .rep-mark-pill,
-.rep-mark--loc .rep-mark-pill { stroke: #fff; }
+.rep-mark--dir .rep-mark-pill:not([stroke]),
+.rep-mark--omni .rep-mark-pill:not([stroke]),
+.rep-mark--loc .rep-mark-pill:not([stroke]) { stroke: #fff; }
 .rep-mark--dir .rep-mark-pill:not([fill]),
 .rep-mark--omni .rep-mark-pill:not([fill]),
 .rep-mark--loc .rep-mark-pill:not([fill]) { fill: #78716c; }

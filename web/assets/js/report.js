@@ -2380,7 +2380,12 @@
       var isDirectional = ctx ? radioIsDirectional(r) : false;
       var cls = !ctx ? 'rep-mark rep-mark--loc'
         : isDirectional ? 'rep-mark rep-mark--dir' : 'rep-mark rep-mark--omni';
-      var apColor = ap.color || '';
+      /* Resolve to hex before anything is painted or measured. An .esx may
+         store "GREEN", and a browser reads that as CSS green (#008000), not
+         Ekahau's #00FF00 - so the printed marker was the wrong colour, and the
+         contrast helper, handed a word it cannot parse, put white lettering on
+         all of them. */
+      var apColor = WD.resolveApColor(ap.color) || '';
       var dir = (isDirectional && r) ? r.antennaDirection : null;
 
       var parts = apMarkerLabel(ap, opts, ctx);
@@ -2487,8 +2492,13 @@
       var darkText = apColor && WD.needsDarkText(apColor);
       var labelFill = darkText ? ' style="fill:#111"' : '';
       var subFill   = darkText ? ' style="fill:#333"' : '';
-      markers += '<rect class="rep-mark-dot" x="' + (-dotSize / 2) + '" y="' + (-dotSize / 2) + '" width="' + dotSize + '" height="' + dotSize + '" rx="' + dotR + '" ry="' + dotR + '" stroke-width="' + sw + '"' + dotFill + '/>'
-        + '<rect class="rep-mark-pill" x="' + chosen.x + '" y="' + chosen.y + '" width="' + pillW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '" stroke-width="' + sw + '"' + pillFill + '/>'
+      /* These print. The stylesheet strokes both shapes white, which reads on
+         screen and vanishes on paper as soon as the AP colour is pale - a
+         yellow pill outlined in white on a white sheet is not a marker. Darken
+         the stroke in proportion to how close the fill is to the page. */
+      var edge = apColor ? ' stroke="' + WD.escAttr(WD.outlineOn(apColor)) + '"' : '';
+      markers += '<rect class="rep-mark-dot" x="' + (-dotSize / 2) + '" y="' + (-dotSize / 2) + '" width="' + dotSize + '" height="' + dotSize + '" rx="' + dotR + '" ry="' + dotR + '" stroke-width="' + sw + '"' + dotFill + edge + '/>'
+        + '<rect class="rep-mark-pill" x="' + chosen.x + '" y="' + chosen.y + '" width="' + pillW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '" stroke-width="' + sw + '"' + pillFill + edge + '/>'
         + '<text class="rep-mark-label" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '"' + labelFill + '>' + WD.esc(label) + '</text>';
       if (sub) {
         markers += '<text class="rep-mark-sub" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH + subFont * 0.55) + '" text-anchor="middle" font-size="' + subFont + '"' + subFill + '>' + WD.esc(sub) + '</text>';
