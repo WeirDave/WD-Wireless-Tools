@@ -1184,34 +1184,32 @@
     reflowSidebarWidth();
   }
 
-  // Collapsible side panels, Paint Shop Pro style — folding Quick Swap away is
+  // Collapsible side panels, Paint Shop Pro style - folding Quick Swap away is
   // how you give the selection tree the whole column on a dense floor.
+  // The implementation lives in wd-shared.js so this and the AP Labeler share
+  // one, rather than two copies with two chances to disagree about the key.
   const FOLD_KEY = 'wd.walls.swapFolded';
+  let _folds = null;
 
-  function readFolded() {
-    try {
-      const raw = localStorage.getItem(FOLD_KEY);
-      return raw ? new Set(JSON.parse(raw)) : new Set();
-    } catch (e) { return new Set(); }
-  }
-
-  function writeFolded(set) {
-    try { localStorage.setItem(FOLD_KEY, JSON.stringify([...set])); } catch (e) { /* private mode */ }
-  }
-
-  function applyFolded() {
-    const folded = readFolded();
-    document.querySelectorAll('.swap-panel-foldable').forEach(el => {
-      el.classList.toggle('is-folded', folded.has(el.dataset.fold));
-    });
-    resizeCanvas();
+  function installFolds() {
+    if (!_folds) {
+      _folds = WD.mountFolds({
+        selector: '.swap-panel-foldable',
+        key: FOLD_KEY,
+        // Folding a panel changes how much column the canvas gets.
+        onChange: resizeCanvas,
+      });
+    } else {
+      _folds.apply();
+    }
   }
 
   window.toggleSwapPanel = function (key) {
-    const folded = readFolded();
-    if (folded.has(key)) folded.delete(key); else folded.add(key);
-    writeFolded(folded);
-    applyFolded();
+    // Mount on demand: folding used to work before a project was loaded,
+    // because it read and wrote localStorage directly. Installing only in the
+    // load path would have made the headers silently dead until then.
+    installFolds();
+    if (_folds) _folds.toggle(key);
   };
 
   const evHandlers = {};
@@ -1261,7 +1259,7 @@
     }
     installSplitter();
     initSidebarWidth();
-    applyFolded();
+    installFolds();
     updateHistoryButtons();
     setSwapTool(state.tool);
   }

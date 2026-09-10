@@ -1265,6 +1265,65 @@
 
      mount({ splitter, panel, container, key, min, def, maxRatio, onResize })
      returns { reflow, set, get }. */
+  /* Foldable side panels, Paint Shop Pro style.
+
+     Folding a section away is how a narrow sidebar gives the part you are
+     actually using the whole column. Written here rather than in one tool
+     because Quick Walls and the AP Labeler both need it, and two copies of a
+     thing that writes to localStorage is two chances to disagree about the
+     key.
+
+     Which sections are folded is a view preference, not project data, so
+     localStorage is right - and unlike a hidden filter it is plainly visible
+     on screen, so persisting it cannot hide anything from anyone. */
+  WD.mountFolds = function (opts) {
+    var selector = opts.selector;
+    var KEY = opts.key;
+    var onChange = opts.onChange || function () {};
+
+    function read() {
+      try {
+        var raw = localStorage.getItem(KEY);
+        return raw ? new Set(JSON.parse(raw)) : new Set();
+      } catch (e) { return new Set(); }
+    }
+    function write(set) {
+      // Array.from, not [].slice.call: a Set has no length, so slice returns
+      // an empty array and every fold would persist as "nothing folded".
+      try { localStorage.setItem(KEY, JSON.stringify(Array.from(set))); }
+      catch (e) { /* private mode */ }
+    }
+    function apply() {
+      var folded = read();
+      document.querySelectorAll(selector).forEach(function (el) {
+        var on = folded.has(el.dataset.fold);
+        el.classList.toggle('is-folded', on);
+        var head = el.querySelector('[data-fold-toggle]');
+        if (head) head.setAttribute('aria-expanded', on ? 'false' : 'true');
+      });
+      onChange();
+    }
+    function toggle(k) {
+      var folded = read();
+      if (folded.has(k)) folded.delete(k); else folded.add(k);
+      write(folded);
+      apply();
+    }
+
+    document.querySelectorAll(selector).forEach(function (el) {
+      var head = el.querySelector('[data-fold-toggle]');
+      if (!head) return;
+      head.addEventListener('click', function () { toggle(el.dataset.fold); });
+      head.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault(); toggle(el.dataset.fold);
+        }
+      });
+    });
+    apply();
+    return { apply: apply, toggle: toggle };
+  };
+
   WD.mountSplitter = function (opts) {
     var splitter = typeof opts.splitter === 'string'
       ? document.getElementById(opts.splitter) : opts.splitter;
