@@ -673,6 +673,13 @@ function indexRowData() {
       localName: p.local.name, localPath: p.local.path,
       mismatch: p.namesDiffer,
       matchType: p.matchType,
+      /* Which side is newer, and both dates, travel with the row you can
+         select. They used to exist only on the render row, so Sync - which
+         reads rowData - could not see that a pair needed content moved and
+         silently did nothing but rename. */
+      staleness: p.staleness || null,
+      cloudMtime: Number(p.cloud.mtime) || 0,
+      localMtime: Number(p.local.mtime) || 0,
 
       cloudOwner: (p.cloud.owner || ''),
       siteName: p.cloud.siteName || '',
@@ -722,6 +729,9 @@ function indexRowData() {
         localName: p.local.name, localPath: p.local.path,
         mismatch: p.namesDiffer,
         matchType: p.matchType,
+        staleness: p.staleness || null,
+        cloudMtime: Number(p.cloud.mtime) || 0,
+        localMtime: Number(p.local.mtime) || 0,
         cloudOwner: (p.cloud.owner || ''),
         siteName: parentSite || p.cloud.siteName || '',
         entityKind: 'projects',
@@ -3920,15 +3930,54 @@ function isProjectSyncItem(d) {
    newer" badge that had no handler, and this one - selecting local sites left
    both Sync buttons dead while bulkSync was perfectly willing to create them.
    Two readings of one question is the bug, so there is one reading now. */
+/* What "sync" means here.
+
+   It used to mean reconciling *presence*: matched pairs got their names made
+   to agree, and orphans got copied to the side that lacked them. Nothing moved
+   *content*. So selecting three files that the badge said were newer on cloud
+   and pressing Sync renamed three things and left three stale files on disk -
+   the word promised something the feature did not do.
+
+   A matched pair whose two sides differ in age is now a content transfer, in
+   the direction of the newer side, and it is planned per file so the confirm
+   can show which way each one goes.
+
+   Only cloud-to-local is implemented. Sending a local file up to an existing
+   cloud project is not something the API client can do yet: the upload flow
+   creates a new project rather than replacing one in place. Rather than
+   quietly leave those out of the count, they are collected separately and
+   named in the confirm as skipped, with the reason. */
 function syncPlan(items, dir) {
-  const pairs = items.filter(d => d.kind === 'pair');
+  const allPairs = items.filter(d => d.kind === 'pair');
+
+  /* A matched *site* is also kind 'pair', and its local side is a folder.
+     verify_replace_local would be handed a directory path. Content transfer
+     applies to a file, so that is what is tested for rather than the tab or
+     the entity kind - a site row can never satisfy it. */
+  const isFilePair = (d) => d.kind === 'pair'
+    && /\.esx$/i.test(String(d.localPath || ''));
+
+  // Content first: a pair that is stale is not merely misnamed.
+  const contentPulls = dir === 'to-local'
+    ? allPairs.filter(d => isFilePair(d) && d.staleness === 'cloud_newer')
+    : [];
+  const pulling = new Set(contentPulls);
+
+  // The other direction, recognised and reported rather than silently dropped.
+  const blockedPushes = allPairs.filter(
+    d => !pulling.has(d) && isFilePair(d) && d.staleness === 'local_newer');
+  const blocked = new Set(blockedPushes);
+
+  // What is left of the matched rows is the old behaviour: names only.
+  const pairs = allPairs.filter(d => !pulling.has(d) && !blocked.has(d));
+
   const uploads = dir === 'to-cloud'
     ? items.filter(d => isProjectSyncItem(d) && d.kind === 'local' && !d.isDir)
     : [];
   const downloads = dir === 'to-local'
     ? items.filter(d => isProjectSyncItem(d) && d.kind === 'cloud')
     : [];
-  const handled = new Set([...pairs, ...uploads, ...downloads]);
+  const handled = new Set([...allPairs, ...uploads, ...downloads]);
   // A whole site with no counterpart: create it on the other side and carry
   // the files already inside it across in the same action. Selecting the site
   // is enough - its children come with it.
@@ -3938,8 +3987,10 @@ function syncPlan(items, dir) {
   const skipped = items.filter(d => !handled.has(d) && !creating.has(d));
   return {
     pairs: pairs, uploads: uploads, downloads: downloads,
+    contentPulls: contentPulls, blockedPushes: blockedPushes,
     siteCreates: siteCreates, skipped: skipped,
-    total: pairs.length + uploads.length + downloads.length + siteCreates.length,
+    total: pairs.length + uploads.length + downloads.length
+         + contentPulls.length + siteCreates.length,
   };
 }
 
@@ -3979,6 +4030,8 @@ async function bulkSync(dir) {
   const uploads = plan.uploads;
   const downloads = plan.downloads;
   const siteCreates = plan.siteCreates;
+  const contentPulls = plan.contentPulls;
+  const blockedPushes = plan.blockedPushes;
   const stillSkipped = plan.skipped;
 
   if (!plan.total) {
@@ -3993,6 +4046,7 @@ async function bulkSync(dir) {
     return n + kids.length;
   }, 0);
   const parts = [];
+  if (contentPulls.length) parts.push(`Replace <b>${contentPulls.length}</b> local file${contentPulls.length === 1 ? '' : 's'} with the newer cloud copy`);
   if (pairs.length) parts.push(`Rename <b>${pairs.length}</b> matched item${pairs.length === 1 ? '' : 's'}`);
   if (uploads.length) parts.push(`Upload <b>${uploads.length}</b> local .esx file${uploads.length === 1 ? '' : 's'} to Ekahau Cloud`);
   if (downloads.length) parts.push(`Download <b>${downloads.length}</b> cloud project${downloads.length === 1 ? '' : 's'}`);
@@ -4004,6 +4058,45 @@ async function bulkSync(dir) {
     parts.push(`Create <b>${siteCreates.length}</b> new ${noun}${siteCreates.length === 1 ? '' : 's'}${fileNote}`);
   }
   let body = `<ul>${parts.map(t => `<li>${t}</li>`).join('')}</ul>`;
+
+  /* Overwriting a file is not a line item in a summary. Whatever is about to
+     be replaced gets named here with both dates, so "3 files" is something you
+     can actually check before it happens rather than after. */
+  if (contentPulls.length) {
+    const rows = contentPulls.map(d => `
+      <tr>
+        <td class="sync-plan-name">${e(d.cloudName || d.localName || '')}</td>
+        <td class="sync-plan-dir">&#11015; cloud &rarr; local</td>
+        <td class="sync-plan-when">cloud ${e(fmtRelDate(d.cloudMtime))}<br>
+          <span class="sub">local ${e(fmtRelDate(d.localMtime))}</span></td>
+      </tr>`).join('');
+    body += `
+      <p class="sync-plan-lead">These are replaced with the cloud copy:</p>
+      <div class="sync-plan-wrap"><table class="sync-plan">
+        <thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <p class="sub">Your current copy of each is kept alongside it as a
+        <code>.previous-</code> file.</p>
+      <p class="sub warn"><b>Two dates cannot tell you whether both sides
+        changed.</b> If you edited one of these locally since it last matched
+        the cloud, "cloud is newer" and "we both changed it" look identical
+        from here, and your local edit goes into the <code>.previous-</code>
+        file rather than into the result.</p>`;
+  }
+
+  /* The direction that does not exist yet. Saying so, by name, beats letting
+     him count three selected files and watch two of them happen. */
+  if (blockedPushes.length) {
+    const names = blockedPushes
+      .map(d => e(d.localName || d.cloudName || '')).join(', ');
+    body += `
+      <p class="sub warn"><b>${blockedPushes.length} newer local file${blockedPushes.length === 1 ? ' is' : 's are'} not sent up:</b>
+        ${names}. Uploading over an existing cloud project is not built yet, so
+        ${blockedPushes.length === 1 ? 'it is' : 'they are'} left alone rather
+        than being overwritten from the cloud.</p>`;
+  }
+
   if (stillSkipped.length) {
     body += `<p class="sub">${stillSkipped.length} selected item${stillSkipped.length === 1 ? '' : 's'} will be skipped (already in sync, or nothing to do in this direction).</p>`;
   }
@@ -4017,6 +4110,32 @@ async function bulkSync(dir) {
   // batch finishes and the screen suddenly changes underneath them, which
   // for a bulk cloud operation is a real data-loss risk, not just a UX
   // nitpick.
+  /* Content before names. verify_replace_local is the same call the per-row
+     arrow makes - it backs the local file up, downloads, and replaces
+     atomically, and it refuses on its own if the server says local is newer
+     than the listing claimed. Writing a second download path here is how this
+     repo grows two implementations of one operation. */
+  for (const d of contentPulls) {
+    opEnqueue({
+      title: `Replacing "${d.localName || d.cloudName}" with the cloud copy`,
+      type: 'verify', pollBackend: false, undoable: false,
+      run: async () => {
+        const r = await pyApi('verify_replace_local', d.cloudId, d.localPath);
+        if (r && r.error) {
+          _markVerifyFailed(d.cloudId, d.localPath);
+          if (r.error === 'local_newer') {
+            // The listing said cloud was newer and the server disagrees. It
+            // wins - it just re-read both - and nothing was written.
+            throw new Error('Skipped — the server says local is newer');
+          }
+          throw new Error(r.error);
+        }
+        _scheduleOpRefresh();
+        return r;
+      },
+    });
+  }
+
   for (const d of pairs) {
     const label = dir === 'to-local'
       ? `Renaming local to "${d.cloudName}"`
