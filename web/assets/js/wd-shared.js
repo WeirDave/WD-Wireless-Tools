@@ -880,7 +880,8 @@
   };
 
   function _maybeShowUpdateBanner(state) {
-    if (!state || !state.isNewer) { _removeUpdateBanner(); return; }
+    if (!state || !state.isNewer) { _removeUpdateBanner(); _removeUpdateBadge(); return; }
+    _renderUpdateBadge(state);
     try {
       var hidden = localStorage.getItem(WD_UPDATE_DISMISS_KEY);
       if (hidden === state.latestVersion) return;
@@ -920,6 +921,24 @@
     var el = document.getElementById('wdUpdateBanner');
     if (el) el.remove();
     document.body.classList.remove('wd-has-update-banner');
+  }
+
+  function _renderUpdateBadge(state) {
+    if (document.getElementById('wdUpdateBadge')) return;
+    var b = document.createElement('button');
+    b.id = 'wdUpdateBadge';
+    b.className = 'wd-update-badge';
+    b.type = 'button';
+    b.title = 'Update available — click for details';
+    // textContent, so no escaping - WD.esc here would render the entities literally.
+    b.textContent = '⬆ v' + state.latestVersion;
+    b.addEventListener('click', function () { WD.openAbout(); });
+    document.body.appendChild(b);
+  }
+
+  function _removeUpdateBadge() {
+    var el = document.getElementById('wdUpdateBadge');
+    if (el) el.remove();
   }
 
   WD.api = function (action, body) {
