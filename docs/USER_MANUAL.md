@@ -40,6 +40,7 @@
 - [Report](#report)
 - [AP Labeler](#ap-labeler)
 - [PlanTrim](#plantrim)
+- [Prep](#prep)
 - [Data, Privacy, and Security](#data-privacy-and-security)
 - [Update or Uninstall](#update-or-uninstall)
 - [Troubleshooting](#troubleshooting)
@@ -379,10 +380,44 @@ PlanTrim removes excess whitespace around floor plan images inside an `.esx` fil
 
 ---
 
+## Prep
+
+Prep does the setup work on a freshly imported project in one pass over the file, instead of three trips through three tools. Drop the `.esx` on it, choose which of the three things to do, check what it says it will do, and download the prepared copy.
+
+- **Trim the canvas** — crops the empty paper off each CAD sheet and moves every AP, wall and area with it. The same work PlanTrim does.
+- **Put a requirement area on every floor** — from a capacity template and a headcount, using the templates saved in WD Capacity.
+- **Load the wall types** — adds the types from a Quick Walls template so they are there to draw with.
+
+Each step is optional, each is previewed per floor before anything is written, and your project file is never written to: preparing builds a new copy and downloads it.
+
+### The steps always run in the same order
+
+Trim, then requirement areas, then wall types — whichever ones you pick, and whatever order you tick them in.
+
+This is not a preference. A requirement area counts as something that has to stay on the plan, so an area put in before the trim holds the crop open. On a plan with no walls drawn yet the area covers the whole sheet, so it holds the crop open to the full sheet — and the trim then reports that there was nothing to crop. Nothing errors, the file opens, every floor is there, and the plan is simply the size it always was. The order is enforced in the code so this cannot happen.
+
+### Running it again
+
+Prep is meant to be run more than once. Run it on the fresh import, draw your walls in Ekahau, and run it again.
+
+- Wall types already in the project are left alone. Replacing one would change the attenuation of every wall already drawn with it.
+- A floor that has already been trimmed is skipped.
+- A floor that already has a requirement area is left alone.
+
+The exception is the whole reason to run it a second time. The first pass has no walls to measure, so the requirement area covers the entire plan. Once you have drawn walls, running Prep again tightens the area to them.
+
+> **Only an area that still covers exactly the whole plan is replaced.** If you moved a corner, redrew it, or cut it around an atrium, it is your work and Prep never touches it. Untick **Re-measure areas that still cover the whole plan** to turn even that off.
+
+### If a step cannot run
+
+Prep refuses rather than guessing, and nothing is written when it does. The most common case is a capacity template that does not carry definitions for profiles the target project has never seen — it names each missing profile, and the fix is to re-capture the template from its source project, or add those profiles in Ekahau first.
+
+---
+
 ## Data, Privacy, and Security
 
 - Quick Walls and Report parse `.esx` files locally in the browser with JSZip.
-- AP Labeler and PlanTrim parse `.esx` files locally on the desktop server.
+- AP Labeler, PlanTrim, Capacity and Prep parse `.esx` files locally on the desktop server.
 - Scale performs its conversions locally.
 - The application contains no telemetry.
 - Squirrel and Cloud Manager access only folders you choose.
