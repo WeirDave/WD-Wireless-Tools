@@ -7,9 +7,87 @@ function detectDefaultUnits() {
     return lang.startsWith('en-us') ? 'imperial' : 'metric';
   } catch (e) { return 'metric'; }
 }
+/* Quick Walls preferences: units, default template, auto-apply.
+
+   These were per-browser, because Quick Walls also ran hosted on GitHub Pages
+   with no server to save to. Hosted mode is retired, so the fallback is gone
+   and all three live in settings.json like every other preference - the same
+   whichever browser you open, and untouched by an update.
+
+   The browser copy is the value this machine was actually using, so on first
+   run it wins over the saved default and is written through; the local key is
+   deleted only once that write has succeeded. */
+const LEGACY_UNITS_KEY = 'wd-walls-units';
+const LEGACY_DEFAULT_TPL_KEY = 'ekahau-default-template';
+const LEGACY_AUTO_APPLY_KEY = 'ekahau-auto-apply';
+
+let _wallUnits = null;          // null until the settings file has been read
+let _defaultTemplate = null;
+let _autoApply = false;
+
+function _readLegacy(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+function _persistWallsPref(patch) {
+  if (!window.WD || !WD.api) return Promise.resolve(false);
+  return WD.api('settings/update', { patch: { walls: patch } })
+    .then(r => !!(r && r.ok))
+    .catch(() => false);
+}
+
+async function loadWallsPrefs() {
+  const legacyUnits = _readLegacy(LEGACY_UNITS_KEY);
+  const legacyTpl = _readLegacy(LEGACY_DEFAULT_TPL_KEY);
+  const legacyAuto = _readLegacy(LEGACY_AUTO_APPLY_KEY);
+
+  let saved = {};
+  if (window.WD && WD.api) {
+    try {
+      const r = await WD.api('settings/get');
+      if (r && r.ok && r.settings && r.settings.walls) saved = r.settings.walls;
+    } catch (e) { /* no server or unreadable - fall through to defaults */ }
+  }
+
+  const savedUnits = (saved.units === 'imperial' || saved.units === 'metric') ? saved.units : '';
+  const savedTpl = typeof saved.default_template === 'string' ? saved.default_template : '';
+  const savedAuto = saved.auto_apply_template === true;
+
+  // The browser copy wins where it exists.
+  const legacyUnitsValid = (legacyUnits === 'imperial' || legacyUnits === 'metric');
+  _wallUnits = legacyUnitsValid ? legacyUnits : (savedUnits || null);
+
+  let legacyTplName = null;
+  if (legacyTpl !== null) {
+    try {
+      const v = JSON.parse(legacyTpl);
+      if (typeof v === 'string' && v) legacyTplName = (v === 'Recommended by WD') ? 'WD Template' : v;
+    } catch (e) { /* unparseable - treat as absent */ }
+  }
+  _defaultTemplate = legacyTplName || savedTpl || null;
+  _autoApply = legacyAuto !== null ? (legacyAuto === 'true') : savedAuto;
+
+  const patch = {};
+  if ((_wallUnits || '') !== savedUnits) patch.units = _wallUnits || '';
+  if ((_defaultTemplate || '') !== savedTpl) patch.default_template = _defaultTemplate || '';
+  if (_autoApply !== savedAuto) patch.auto_apply_template = _autoApply;
+
+  const nothingToWrite = !Object.keys(patch).length;
+  const written = nothingToWrite ? true : await _persistWallsPref(patch);
+
+  if (written) {
+    for (const k of [LEGACY_UNITS_KEY, LEGACY_DEFAULT_TPL_KEY, LEGACY_AUTO_APPLY_KEY]) {
+      try { localStorage.removeItem(k); } catch (e) {}
+    }
+  }
+
+  try { syncUnitToggleUI(); } catch (e) {}
+  return { units: _wallUnits, defaultTemplate: _defaultTemplate,
+           autoApply: _autoApply, migrated: !nothingToWrite && written };
+}
+
 function wallUnits() {
-  try { return localStorage.getItem('wd-walls-units') || detectDefaultUnits(); }
-  catch (e) { return detectDefaultUnits(); }
+  return _wallUnits || detectDefaultUnits();
 }
 function mToDisplay(m) {
   return wallUnits() === 'imperial' ? (m * M_TO_IN) : m;
@@ -32,7 +110,8 @@ window.setWallUnits = function (units) {
   if (isOpen && inp) currentMeters = displayToM(inp.value);
   if (isOpen && topEl && topEl.value !== '') topM = heightToM(topEl.value);
   if (isOpen && lowEl && lowEl.value !== '') lowM = heightToM(lowEl.value);
-  try { localStorage.setItem('wd-walls-units', units); } catch (e) {}
+  _wallUnits = units;
+  _persistWallsPref({ units: units });
   syncUnitToggleUI();
   if (isOpen && inp && currentMeters != null) {
     inp.value = fmtThickness(mToDisplay(currentMeters));
@@ -112,6 +191,11 @@ function preserveId(wt) {
 }
 let editingIndex = -1;
 let openMenuIndex = -1;
+
+// Read the saved preferences once, and migrate anything still in this browser.
+// Nothing is rendered until a project is opened, so the brief window before
+// this resolves costs nothing; syncUnitToggleUI() runs again when it lands.
+loadWallsPrefs();
 
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
@@ -894,66 +978,13 @@ window.openFromDisk = openFromDisk;
 
 let _tplCache = [];
 
-const HOSTED = typeof window !== 'undefined' && !!window.WD_HOSTED;
-
 async function tplApi(action, data = {}) {
-  if (HOSTED) return _hostedTplApi(action, data);
   const r = await fetch(`/api/templates/${action}`, {
     method: 'POST',
     headers: {'Content-Type':'application/json', 'X-WD-Wireless-Tools':'1'},
     body: JSON.stringify(data)
   });
   return r.json();
-}
-
-async function _hostedTplApi(action, data) {
-  const KEY = 'wd-hosted-templates';
-  const loadAll = () => {
-    try { return JSON.parse(localStorage.getItem(KEY)) || []; }
-    catch (e) { return []; }
-  };
-  const saveAll = ts => localStorage.setItem(KEY, JSON.stringify(ts));
-
-  if (action === 'scan') {
-    let ts = loadAll();
-    const renamed = ts.filter(t => t.name === 'Recommended by WD');
-    if (renamed.length) {
-      renamed.forEach(t => { t.name = 'WD Template'; });
-      saveAll(ts);
-    }
-    if (!ts.length) {
-      try {
-        const r = await fetch('../templates/WD%20Template_walltemplate.json');
-        if (r.ok) { ts = [await r.json()]; saveAll(ts); }
-      } catch (e) {}
-    }
-    return { ok: true, templates: ts };
-  }
-  if (action === 'defaults') {
-    try {
-      const r = await fetch('../templates/ekahau_defaults.json');
-      const d = await r.json();
-      return { ok: true, wallTypes: d.wallTypes || d };
-    } catch (e) { return { ok: false, error: 'Could not load Ekahau defaults' }; }
-  }
-  if (action === 'save') {
-    const ts = loadAll();
-    const rec = { name: data.name, wallTypes: data.wallTypes,
-                  created: new Date().toISOString() };
-    const i = ts.findIndex(t => t.name === data.name);
-    if (i >= 0) ts[i] = rec; else ts.push(rec);
-    saveAll(ts);
-    return { ok: true };
-  }
-  if (action === 'delete') {
-    const ts = loadAll().filter(t => t.name !== data.name);
-    saveAll(ts);
-    return { ok: true };
-  }
-  if (action === 'get_folder') {
-    return { ok: true, folder: 'browser localStorage (hosted)', exists: true };
-  }
-  return { ok: false, error: 'unknown action: ' + action };
 }
 
 async function loadTemplatesFromServer() {
@@ -1062,26 +1093,23 @@ function toggleHelpMenu(e) {
   WD.toggleMenu(e, 'helpMenu');
 }
 
-const DEFAULT_TPL_KEY = 'ekahau-default-template';
-const AUTO_APPLY_KEY = 'ekahau-auto-apply';
-
+// Backed by settings.json; loaded once by loadWallsPrefs().
 function getDefaultTemplate() {
-  try {
-    const v = JSON.parse(localStorage.getItem(DEFAULT_TPL_KEY));
-    return v === 'Recommended by WD' ? 'WD Template' : v;
-  } catch { return null; }
+  return _defaultTemplate || null;
 }
 function setLastTemplate(name) {
-  localStorage.setItem(DEFAULT_TPL_KEY, JSON.stringify(name));
+  _defaultTemplate = name || null;
+  _persistWallsPref({ default_template: name || '' });
   refreshTemplateBar();
 }
 
 function getAutoApply() {
-  return localStorage.getItem(AUTO_APPLY_KEY) === 'true';
+  return _autoApply === true;
 }
 function toggleAutoApply() {
   const checked = document.getElementById('autoApplyCheck').checked;
-  localStorage.setItem(AUTO_APPLY_KEY, checked ? 'true' : 'false');
+  _autoApply = checked;
+  _persistWallsPref({ auto_apply_template: checked });
   if (checked) showToast('Template will auto-apply on next file open', 'success');
 }
 

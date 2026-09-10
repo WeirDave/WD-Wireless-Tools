@@ -69,10 +69,15 @@ class RegistryShape(unittest.TestCase):
             with self.subTest(entry=entry.get("key") or entry.get("key_prefix")):
                 self.assertIn(entry["category"], known)
 
-    def test_the_three_categories_are_defined_in_the_registry_itself(self):
+    def test_the_categories_are_defined_in_the_registry_itself(self):
         """A future contributor has to meet the rule where the data is, not in
-        a document they will never open."""
-        for name in ("preference", "ui-state", "hosted-mirror"):
+        a document they will never open.
+
+        Two categories, not three: the hosted-mirror category existed only for
+        the GitHub Pages build, where there was no server to save to. That is
+        retired, so there is no server-when-present store any more."""
+        self.assertEqual(set(REGISTRY["categories"]), {"preference", "ui-state"})
+        for name in ("preference", "ui-state"):
             with self.subTest(category=name):
                 definition = REGISTRY["categories"][name]["definition"]
                 self.assertGreater(len(definition), 80,

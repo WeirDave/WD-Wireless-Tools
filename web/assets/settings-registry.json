@@ -2,13 +2,16 @@
   "_readme": [
     "Every user-configurable setting in the suite, and where it is allowed to live.",
     "",
-    "Settings drifted across two surfaces because there was never a rule: each one",
+    "Two categories, and only two. A setting is either a preference (server-side,",
+    "one control, follows the person) or per-browser UI state (deliberately local).",
+    "There used to be a third for hosted mode, where Quick Walls, Scale and Report",
+    "ran on GitHub Pages with no server to save to. That branching is retired.",
+    "",
+    "Settings drifted in the first place because there was never a rule: each one",
     "went wherever the tool that needed it already had a habit, and the habit was",
-    "set by whether that tool happened to have a server call handy. Tools that were",
-    "always server-backed used settings.json; tools that must run without a server",
-    "used localStorage; Cloud Manager straddled both eras and ended up with one of",
-    "each in the same dialog. Merge rule and refresh interval were stored in BOTH,",
-    "which is how the Settings page came to show a value that was not in force.",
+    "set by whether that tool happened to have a server call handy. Merge rule and",
+    "refresh interval ended up in BOTH stores, which is how the Settings page came",
+    "to show a value that was not in force.",
     "",
     "This file is the rule. tests/test_settings_registry.py enforces it.",
     "Adding a setting means adding it here first."
@@ -16,7 +19,7 @@
   "categories": {
     "preference": {
       "store": "server",
-      "definition": "A choice about how the suite behaves for this person. Follows them across browsers and profiles, so it belongs in ~/.wd_wireless_tools/settings.json. Exactly one control anywhere in the suite.",
+      "definition": "A choice about how the suite behaves for this person. Follows them across browsers and profiles, so it belongs in ~/.wd_wireless_tools/settings.json. Exactly one control anywhere in the suite. There is no second store and no server-when-present fallback: hosted mode is retired, so every tool has a server and every preference lives in one place.",
       "examples": [
         "merge conflict rule",
         "report units",
@@ -30,13 +33,6 @@
         "sidebar width",
         "disclosure open/closed",
         "tip dismissed"
-      ]
-    },
-    "hosted-mirror": {
-      "store": "server-when-present",
-      "definition": "Quick Walls, Scale and Report also run hosted on GitHub Pages, where there is no server to save to. These settings use settings.json on the desktop suite and fall back to localStorage when hosted. This is a design decision forced by hosted mode, not an oversight - do not 'fix' it by making them server-only.",
-      "examples": [
-        "wall template preferences in hosted Quick Walls"
       ]
     }
   },
@@ -260,6 +256,34 @@
       "section": "walls",
       "home": "settings",
       "control": "sWallsReveal"
+    },
+    {
+      "key": "walls.units",
+      "label": "Units (inches / metres)",
+      "category": "preference",
+      "owner": "Quick Walls",
+      "section": "walls",
+      "home": "walls-tool",
+      "legacy_browser_key": "wd-walls-units"
+    },
+    {
+      "key": "walls.default_template",
+      "label": "Default wall template",
+      "category": "preference",
+      "owner": "Quick Walls",
+      "section": "walls",
+      "home": "walls-tool",
+      "legacy_browser_key": "ekahau-default-template"
+    },
+    {
+      "key": "walls.auto_apply_template",
+      "label": "Auto-apply the default template on open",
+      "category": "preference",
+      "owner": "Quick Walls",
+      "section": "walls",
+      "home": "walls-tool",
+      "control": "autoApplyCheck",
+      "legacy_browser_key": "ekahau-auto-apply"
     }
   ],
   "browser_only": {
@@ -341,26 +365,6 @@
         "label": "Update banner dismissed"
       },
       {
-        "key": "wd-walls-units",
-        "category": "hosted-mirror",
-        "label": "Quick Walls units"
-      },
-      {
-        "key": "ekahau-default-template",
-        "category": "hosted-mirror",
-        "label": "Default wall template"
-      },
-      {
-        "key": "ekahau-auto-apply",
-        "category": "hosted-mirror",
-        "label": "Auto-apply default template"
-      },
-      {
-        "key": "wd-hosted-templates",
-        "category": "hosted-mirror",
-        "label": "Hosted Quick Walls templates"
-      },
-      {
         "key": "wd-create-token-",
         "category": "ui-state",
         "label": "Squirrel create-folder token (per folder, prefix key)"
@@ -368,13 +372,17 @@
     ]
   },
   "retired_browser_keys": {
-    "_comment": "Moved to the server. Must never be read or written again - a second store is exactly how the Settings page came to disagree with Cloud Manager.",
+    "_comment": "Moved to the server, or gone with hosted mode. Must never be read or written again - a second store is exactly how the Settings page came to disagree with Cloud Manager.",
     "keys": [
-      "wd-merge-rule",
+      "ekahau-auto-apply",
+      "ekahau-default-template",
+      "wd-hosted-templates",
       "wd-live-ms",
+      "wd-merge-rule",
       "wd-report-details",
+      "wd-report-logo",
       "wd-report-settings",
-      "wd-report-logo"
+      "wd-walls-units"
     ]
   }
 }

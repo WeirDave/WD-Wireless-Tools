@@ -110,17 +110,21 @@ config block each — nothing below `CONFIG` names this app.
 
 **Adding a setting means adding it to `web/assets/settings-registry.json` first.**
 That file is the rule, not a description of one, and
-`tests/test_settings_registry.py` enforces it. The three categories and why
-each exists are defined *in the registry itself* — read them there, they are
-the whole point.
+`tests/test_settings_registry.py` enforces it. The categories and why each
+exists are defined *in the registry itself* — read them there, they are the
+whole point.
 
-Short version: **preference** (follows the person, server-side in
-`settings.json`, exactly one control anywhere), **ui-state** (panel widths,
-collapsed sections, tips seen — stays in `localStorage` deliberately, because
-syncing a collapsed panel between machines is a regression), and
-**hosted-mirror** (Quick Walls / Scale / Report also run on GitHub Pages with
-no server, so those use the server when there is one and `localStorage` when
-hosted — a constraint, not an oversight).
+**Two categories, and only two.** **preference** (follows the person,
+server-side in `settings.json`, exactly one control anywhere) and **ui-state**
+(panel widths, collapsed sections, tips seen — stays in `localStorage`
+deliberately, because syncing a collapsed panel between machines is a
+regression).
+
+There used to be a third, `hosted-mirror`, for the GitHub Pages build where
+Quick Walls / Scale / Report ran with no server to save to. **Hosted mode is
+retired** (v2.61.0 replaced it with a static landing page; v2.71.0 moved the
+last three settings server-side). There is no server-when-present store any
+more, and adding one back would recreate the two-store bug below.
 
 How this drifted in the first place, so it is not repeated: settings went
 wherever the tool that needed them already had a habit, and the habit was set
