@@ -137,6 +137,14 @@ DEFAULTS = {
         # so it cannot be read from the .esx.
         "units": "feet",
     },
+    # AP Labeler already saved here through settings/update, but the key was
+    # never declared, so nothing checked it and the registry could not see it.
+    "aprename": {
+        # The whole naming setup as one blob - segments, separators, scope and
+        # the colour sequence - because "save as defaults" is a single act.
+        "defaults": {},
+        "templates": [],
+    },
     "walls": {
         # Opening a project from disk lets Quick Walls show you the folder it
         # came from after a save, which is otherwise hard to find again. Not

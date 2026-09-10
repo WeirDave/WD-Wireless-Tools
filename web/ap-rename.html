@@ -45,6 +45,19 @@
    white plan and on a dark one, with no theme fork. */
 .tool-aprename .ar-marker.is-clear { background:#fff; color:#111; border:2px solid #222; }
 .tool-aprename .ar-marker.is-clear:hover { background:#f0f0f0; }
+.tool-aprename .ar-colorseq { margin:8px 0 4px; padding:10px 12px; border:1px solid var(--border,#333); border-radius:8px; background:var(--surface-2,#1e2530); }
+.tool-aprename .ar-col-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:8px; }
+.tool-aprename .ar-col-lab { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3,#888); margin-right:2px; }
+.tool-aprename .ar-col-chip { display:inline-flex; align-items:center; gap:5px; padding:3px 6px 3px 4px; border:1px solid var(--border,#333); border-radius:6px; background:var(--bg,#0f1620); font-size:12px; }
+.tool-aprename .ar-col-add { display:inline-flex; align-items:center; gap:5px; padding:3px 8px 3px 4px; border:1px dashed var(--border-strong,#3a4a5e); border-radius:6px; background:none; color:var(--text-2,#9aa5b1); font-size:12px; cursor:pointer; font-family:inherit; }
+.tool-aprename .ar-col-add:hover { color:var(--text,#fff); border-style:solid; }
+.tool-aprename .ar-col-sw { width:12px; height:12px; border-radius:3px; border:1px solid rgba(0,0,0,.35); flex:none; }
+.tool-aprename .ar-col-n { display:inline-flex; align-items:center; justify-content:center; min-width:15px; height:15px; border-radius:8px; background:var(--indigo,#6366f1); color:#fff; font-size:10px; font-weight:700; }
+.tool-aprename .ar-col-ct { color:var(--text-3,#888); }
+.tool-aprename .ar-col-x { background:none; border:0; color:var(--text-3,#888); cursor:pointer; font-size:14px; line-height:1; padding:0 1px; font-family:inherit; }
+.tool-aprename .ar-col-x:hover { color:var(--rose,#9F1B58); }
+.tool-aprename .ar-col-empty { font-size:12px; color:var(--text-3,#888); font-style:italic; }
+.tool-aprename .ar-col-note { font-size:11px; color:var(--text-3,#888); line-height:1.55; }
 .tool-aprename .ar-marker.is-unnumbered { background:#fff; color:var(--indigo,#6366f1); border:2px dashed var(--indigo,#6366f1); box-shadow:0 0 0 1px rgba(0,0,0,.35), 0 1px 4px rgba(0,0,0,.45); font-weight:800; font-size:13px; }
 .tool-aprename .ar-marker.is-unnumbered:hover { background:var(--indigo,#6366f1); color:#fff; border-style:solid; }
 .tool-aprename .ar-marker.is-last { box-shadow:0 0 0 3px rgba(99,102,241,.55),0 1px 4px rgba(0,0,0,.5); }
@@ -450,8 +463,11 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
             <option value="col-btt">Columns, Bottom &rarr; Top</option>
             <option value="clockwise">Clockwise</option>
             <option value="counter-clockwise">Counter-clockwise</option>
+            <option value="by-color">By Colour Groups</option>
             <option value="manual">Manual (click order)</option>
           </select>
+
+          <div class="ar-colorseq" id="arColorPanel" hidden></div>
 
           <div class="ar-manual" id="arManualPanel" hidden>
             <div class="ar-manual-head">

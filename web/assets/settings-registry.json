@@ -284,6 +284,14 @@
       "home": "walls-tool",
       "control": "autoApplyCheck",
       "legacy_browser_key": "ekahau-auto-apply"
+    },
+    {
+      "key_prefix": "aprename.",
+      "label": "AP Labeler naming defaults, templates and colour sequence",
+      "category": "preference",
+      "owner": "AP Labeler",
+      "section": "aprename",
+      "home": "aprename-tool"
     }
   ],
   "browser_only": {
