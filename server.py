@@ -310,7 +310,7 @@ def api_capacity(action):
     Nothing here writes to a project. `analyze` and `plan` take the .esx as the
     request body because it is a whole archive; the rest are ordinary JSON.
     """
-    if action in ("analyze", "plan"):
+    if action in ("analyze", "plan", "apply"):
         blob = request.get_data(cache=False)
         if not blob:
             return jsonify({"error": "no file received"}), 400
@@ -329,11 +329,40 @@ def api_capacity(action):
                         if t.get("_file") == tpl_file), None)
             if tpl is None:
                 return jsonify({"ok": False, "error": "That template is no longer there."}), 404
-            out = capacity_profiles.plan_application(
-                str(src), tpl, request.args.get("occupants"),
-                replace_existing=request.args.get("replace") == "1")
+            replace = request.args.get("replace") == "1"
+
+            if action == "plan":
+                out = capacity_profiles.plan_application(
+                    str(src), tpl, request.args.get("occupants"), replace_existing=replace)
+                out["source"] = name
+                return jsonify(out)
+
+            # apply: the uploaded copy is the source and a new archive is built
+            # beside it. The project on the user's disk is never opened for
+            # writing by this route at all - the result comes back as a
+            # download, so saving over the original stays their decision.
+            dest = Path(tmpdir) / "out.esx"
+            out = capacity_profiles.apply_to(
+                str(src), str(dest), tpl, request.args.get("occupants"),
+                replace_existing=replace, backup=False)
             out["source"] = name
-            return jsonify(out)
+            if not out.get("ok"):
+                return jsonify(out), 400
+            if not out.get("written"):
+                # Nothing to write is a success with no file attached.
+                return jsonify(out)
+
+            stem = Path(name).stem or "project"
+            response = make_response(dest.read_bytes())
+            response.headers["Content-Type"] = "application/octet-stream"
+            response.headers["Content-Disposition"] = (
+                f'attachment; filename="{stem} (capacity).esx"')
+            report = {k: out[k] for k in
+                      ("ok", "occupants", "totalDevices", "floorsWritten",
+                       "floorsSkipped", "areasReplaced", "areasLeftInPlace",
+                       "profilesCreated", "orphanAreasIgnored")}
+            response.headers["X-WD-Capacity-Report"] = quote(json.dumps(report))
+            return response
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
         finally:

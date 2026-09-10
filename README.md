@@ -34,7 +34,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.54.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.2 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.1 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -145,7 +145,9 @@ Read the device mix out of a project you have already set up in Ekahau, and appl
 - Stores ratios per person, not raw counts, so a template taken from a 500-person building applies to a 200-person one
 - Applies by typing one number: how many people work there
 - Previews per floor before anything is written, including where the requirement area would go and how big it is
-- Leaves a floor alone when it already has a requirement area, unless replacement is asked for
+- Writes the requirement areas into a new copy of the project and downloads it; your file is never written to
+- Carries the device and usage profiles themselves, so a template applies to a project that has never seen them
+- Leaves a floor alone when it already has a requirement area, unless replacement is asked for, and even then replaces only areas that carry capacity
 
 ---
 
@@ -213,7 +215,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.67.0
+WIRELESS TOOLS  v2.68.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.

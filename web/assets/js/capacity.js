@@ -1,8 +1,9 @@
-/* WD Capacity — capture a device mix from one project, preview applying it to another.
+/* WD Capacity — capture a device mix from one project, apply it to another.
  *
- * Preview only. Nothing here writes to a project; the apply step reports what it
- * would do and stops. The writer comes next, and it will be gated behind the
- * same preview this page already shows.
+ * Applying is gated behind the preview above it: the button does exactly what
+ * the plan just described, and the file you loaded is never written to. The
+ * result comes back as a download, so replacing the original stays a decision
+ * the user makes in their file manager rather than one this page makes for them.
  */
 (function () {
   'use strict';
@@ -183,8 +184,10 @@
   // ── apply preview ──────────────────────────────────────────────────────────
   window.capPlan = function () {
     var host = $('capPlan');
+    $('capResult').innerHTML = '';
     if (!fileBytes || !chosen) {
       host.innerHTML = '<div class="cap-empty">Pick a template to see what applying it here would do.</div>';
+      setApply(false, chosen ? 'Load a project first.' : 'Pick a template first.');
       return;
     }
     var q = '?name=' + encodeURIComponent(fileName)
@@ -194,7 +197,19 @@
     api('plan', fileBytes, q).then(function (r) {
       if (!r || !r.ok) {
         host.innerHTML = '<div class="cap-empty">' + esc((r && r.error) || 'Could not plan that.') + '</div>';
+        setApply(false, 'Nothing to apply.');
         return;
+      }
+      // The button says what it will do, so the count is on the button rather
+      // than only in the paragraph underneath it.
+      if (r.willWrite) {
+        setApply(true, 'Builds a new .esx and downloads it. Your file is not touched.');
+        $('capApplyBtn').textContent = 'Apply to ' + r.willWrite + ' floor'
+          + (r.willWrite === 1 ? '' : 's') + ' and download';
+      } else {
+        setApply(false, 'Every floor already has a requirement area. Tick the box above '
+          + 'to replace them.');
+        $('capApplyBtn').textContent = 'Apply and download';
       }
       var counts = r.rows.map(function (x) {
         return '<tr><td>' + esc(shortDevice(x.device)) + '</td><td class="cap-sub">' + esc(x.usage)
@@ -231,6 +246,90 @@
             + ' orphaned area ignored.' : '') + '</p>';
     });
   };
+
+  function setApply(on, note) {
+    $('capApplyBtn').disabled = !on;
+    $('capApplyNote').textContent = note || '';
+  }
+
+  // ── apply ──────────────────────────────────────────────────────────────────
+  window.capApply = function () {
+    if (!fileBytes || !chosen) return;
+    var btn = $('capApplyBtn'), label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Applying…';
+    var q = '?name=' + encodeURIComponent(fileName)
+      + '&template=' + encodeURIComponent(chosen)
+      + '&occupants=' + encodeURIComponent($('capHeadcount').value)
+      + '&replace=' + ($('capReplace').checked ? '1' : '0');
+    fetch('/api/capacity/apply' + q, {
+      method: 'POST',
+      headers: { 'X-WD-Wireless-Tools': '1' },
+      body: fileBytes,
+    }).then(function (res) {
+      var report = res.headers.get('X-WD-Capacity-Report');
+      if (!report) {
+        // No file came back: either a refusal, or nothing needed writing.
+        return res.json().then(function (j) { renderResult(j, null); });
+      }
+      return res.blob().then(function (blob) {
+        renderResult(JSON.parse(decodeURIComponent(report)), blob);
+      });
+    }).catch(function (e) {
+      WD.toast('Could not apply: ' + e.message, 'error');
+    }).then(function () {
+      btn.textContent = label;
+      btn.disabled = false;
+    });
+  };
+
+  function renderResult(r, blob) {
+    var host = $('capResult');
+    if (!r || !r.ok) {
+      host.innerHTML = '<div class="cap-warn">' + esc((r && r.error) || 'Could not apply that.') + '</div>';
+      return;
+    }
+    if (!blob) {
+      host.innerHTML = '<div class="cap-warn">' + esc(r.note || 'Nothing needed writing.') + '</div>';
+      return;
+    }
+    var name = fileName.replace(/\.esx$/i, '') + ' (capacity).esx';
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+
+    var bits = ['Wrote <b>' + esc(name) + '</b> — '
+      + r.floorsWritten.length + ' floor'
+      + (r.floorsWritten.length === 1 ? '' : 's') + ', '
+      + r.totalDevices + ' devices for ' + r.occupants + ' people.'];
+    if (r.floorsSkipped.length) {
+      bits.push(r.floorsSkipped.length + ' floor'
+        + (r.floorsSkipped.length === 1 ? '' : 's') + ' left alone: '
+        + esc(r.floorsSkipped.join(', ')) + '.');
+    }
+    if (r.areasReplaced) {
+      bits.push('Replaced ' + r.areasReplaced + ' capacity area'
+        + (r.areasReplaced === 1 ? '' : 's') + '.');
+    }
+    if (r.areasLeftInPlace) {
+      // Worth saying out loud: "replace" did not mean "delete every area".
+      bits.push(r.areasLeftInPlace + ' area'
+        + (r.areasLeftInPlace === 1 ? ' that carries' : 's that carry')
+        + ' a requirement but no capacity ' + (r.areasLeftInPlace === 1 ? 'was' : 'were')
+        + ' left where they are.');
+    }
+    if (r.profilesCreated && r.profilesCreated.length) {
+      bits.push('Added ' + r.profilesCreated.length + ' profile'
+        + (r.profilesCreated.length === 1 ? '' : 's') + ' this project did not have: '
+        + esc(r.profilesCreated.join(', ')) + '.');
+    }
+    if (r.orphanAreasIgnored) {
+      bits.push(r.orphanAreasIgnored + ' orphaned area left untouched.');
+    }
+    host.innerHTML = '<div class="cap-done">' + bits.join('<br>') + '</div>';
+  }
 
   function basisWords(basis) {
     if (basis === 'walls') return 'the walls you drew';

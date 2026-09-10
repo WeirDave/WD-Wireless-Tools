@@ -26,6 +26,7 @@ BACKGROUND = "use-bg"
 
 FLOOR = "floor-live"
 DEAD_FLOOR = "floor-deleted"
+FLOOR_2 = "floor-2"
 
 # 450+50 laptop, 250+250+450+50 smartphone = 1500 devices for 500 people.
 CAPACITY_ITEMS = [
@@ -39,7 +40,7 @@ CAPACITY_ITEMS = [
 
 
 def build_esx(path, *, walls=True, aps=True, areas=None, mpu=0.05,
-              width=2000.0, height=1500.0):
+              width=2000.0, height=1500.0, with_capacity=True, extra_floor=False):
     members = {
         "project.json": {"project": {"id": "p", "name": "Capacity Fixture"}},
         "floorPlans.json": {"floorPlans": [
@@ -53,14 +54,36 @@ def build_esx(path, *, walls=True, aps=True, areas=None, mpu=0.05,
             {"id": PHONE, "name": "Generic Wi-Fi 6E Smartphone, Wi-Fi 6 2x2:2 160MHz"},
         ]},
         "alsoUnexpected.json": {"usageProfiles": [
-            {"id": NORMAL, "name": "Normal SLA"},
-            {"id": CONF, "name": "Conferencing"},
+            {"id": NORMAL, "name": "Normal SLA",
+             "applicationProfileIds": ["app-voice"]},
+            {"id": CONF, "name": "Conferencing",
+             "applicationProfileIds": ["app-voice", "app-video"]},
             {"id": BACKGROUND, "name": "Background Sync"},
+        ]},
+        # Usage profiles reference these. Anything that copies a usage profile
+        # has to bring them, or the copy points at nothing.
+        "applicationProfiles.json": {"applicationProfiles": [
+            {"id": "app-voice", "name": "Voice"},
+            {"id": "app-video", "name": "Video"},
         ]},
         "requirements.json": {"requirements": [
             {"id": "req-1", "name": "Ekahau Best Practices", "isDefault": True},
         ]},
     }
+    if extra_floor:
+        members["floorPlans.json"]["floorPlans"].append(
+            {"id": FLOOR_2, "name": "Level 2", "width": width, "height": height,
+             "metersPerUnit": mpu, "bitmapImageId": "img-2"})
+    if not with_capacity:
+        # A project that has never had capacity set up: no areas, and none of
+        # the profiles either. This is what the writer has to inject into.
+        members["areas.json"] = {"areas": []}
+        del members["surprisingProfileHome.json"]
+        del members["alsoUnexpected.json"]
+        del members["applicationProfiles.json"]
+        del members["requirements.json"]
+        _finish(path, members, walls, aps, extra_floor)
+        return path
     if areas is None:
         areas = [{"id": "area-2", "floorPlanId": FLOOR, "requirementId": "req-1",
                   "capacityItems": CAPACITY_ITEMS,
@@ -69,6 +92,11 @@ def build_esx(path, *, walls=True, aps=True, areas=None, mpu=0.05,
                  {"id": "area-1", "floorPlanId": DEAD_FLOOR, "requirementId": "req-1",
                   "capacityItems": [{"deviceCount": 99, "deviceProfileId": LAPTOP,
                                      "usageProfileId": NORMAL}]}]
+    if extra_floor:
+        areas = list(areas) + [
+            {"id": "area-3", "floorPlanId": FLOOR_2, "requirementId": "req-1",
+             "capacityItems": CAPACITY_ITEMS,
+             "area": [{"x": 50.0, "y": 50.0}, {"x": 300.0, "y": 300.0}]}]
     members["areas.json"] = {"areas": areas}
 
     if walls:
@@ -96,10 +124,17 @@ def build_esx(path, *, walls=True, aps=True, areas=None, mpu=0.05,
              "location": {"floorPlanId": FLOOR, "coord": {"x": 700.0, "y": 600.0}}},
         ]}
 
+    _finish(path, members, walls, aps, extra_floor)
+    return path
+
+
+def _finish(path, members, walls, aps, extra_floor):
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
         for name, body in members.items():
             z.writestr(name, json.dumps(body))
-    return path
+        # A real .esx is mostly bitmaps. One here keeps the writer honest about
+        # carrying members it does not understand across untouched.
+        z.writestr("image-img-1", bytes([0x89]) + b"PNG fixture floor plan")
 
 
 class ExtractionTests(unittest.TestCase):
