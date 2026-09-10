@@ -1186,9 +1186,116 @@
     return result;
   }
 
+  function _dist(a, b) {
+    var dx = a.x - b.x, dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  /* 2-opt on an open path: uncross the route.
+
+     Reversing the run p[i..j] swaps the edges (i-1,i) and (j,j+1) for
+     (i-1,j) and (i,j+1). Where j is the last stop there is no following
+     edge, so the move is simply "turn the tail around", which is still
+     worth testing - a greedy walk very often ends by doubling back. */
+  function _twoOpt(p) {
+    var n = p.length, changed = false;
+    for (var i = 1; i < n - 1; i++) {
+      for (var j = i + 1; j < n; j++) {
+        var a = p[i - 1], b = p[i], c = p[j];
+        var before, after;
+        if (j + 1 < n) {
+          var d = p[j + 1];
+          before = _dist(a, b) + _dist(c, d);
+          after  = _dist(a, c) + _dist(b, d);
+        } else {
+          before = _dist(a, b);
+          after  = _dist(a, c);
+        }
+        if (after < before - 1e-9) {
+          for (var lo = i, hi = j; lo < hi; lo++, hi--) {
+            var t = p[lo]; p[lo] = p[hi]; p[hi] = t;
+          }
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  /* Or-opt: lift a run of 1-3 stops out and re-insert it where it belongs.
+
+     This is the one that rescues a stranded AP. 2-opt can only reverse a
+     run, so it cannot rescue a single unit the greedy walk visited at the
+     wrong moment; or-opt picks it up and drops it next to its neighbours.
+     Both orientations of the lifted run are tried. */
+  function _orOpt(p) {
+    var n = p.length, changed = false;
+    for (var L = 1; L <= 3; L++) {
+      for (var i = 1; i + L <= n; i++) {
+        var prev = p[i - 1], segFirst = p[i], segLast = p[i + L - 1];
+        var after = i + L;
+        var removed = _dist(prev, segFirst)
+                    + (after < n ? _dist(segLast, p[after]) : 0)
+                    - (after < n ? _dist(prev, p[after]) : 0);
+        if (removed <= 1e-9) continue;          // lifting it saves nothing
+        var seg = p.slice(i, i + L);
+        var rest = p.slice(0, i).concat(p.slice(i + L));
+        var bestGain = 1e-9, bestPos = -1, bestRev = false;
+        for (var k = 1; k <= rest.length; k++) {
+          var A = rest[k - 1], B = (k < rest.length ? rest[k] : null);
+          for (var r = 0; r < 2; r++) {
+            var head = r ? seg[L - 1] : seg[0];
+            var tail = r ? seg[0] : seg[L - 1];
+            var added = _dist(A, head) + (B ? _dist(tail, B) : 0)
+                      - (B ? _dist(A, B) : 0);
+            if (removed - added > bestGain) {
+              bestGain = removed - added; bestPos = k; bestRev = !!r;
+            }
+          }
+        }
+        if (bestPos >= 0) {
+          var put = bestRev ? seg.slice().reverse() : seg;
+          rest.splice.apply(rest, [bestPos, 0].concat(put));
+          for (var q = 0; q < n; q++) p[q] = rest[q];
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  /* Greedy nearest-neighbour is fast and it strands outliers: it takes the
+     closest unvisited AP every time, so the one on the far side of the floor
+     is left until the walk has no choice, and the sequence ends with a long
+     trek back. That gets *more* likely inside a colour group, which is often
+     a handful of APs scattered over a floor rather than a cluster.
+
+     So the greedy walk is a first draft, and these passes clean it up. They
+     run on every proximity ordering, at every size - a five-AP group with one
+     outlier is exactly where the fix matters, and it is far too small for the
+     cost to matter. Only strictly-improving moves are taken, scanned in a
+     fixed order, so the result is reproducible.
+
+     The one guard is at the top end: a floor with hundreds of APs re-sorts on
+     every keystroke, so the number of rounds tightens as the set grows. */
+  function _improvePath(p) {
+    var n = p.length;
+    if (n < 4) return p;
+    var limit = n <= 60 ? 12 : (n <= 200 ? 6 : 3);
+    var rounds = 0, moved = true;
+    while (moved && rounds++ < limit) {
+      var a = _twoOpt(p);
+      var b = _orOpt(p);
+      moved = a || b;
+    }
+    return p;
+  }
+
   function sortNearestNeighbor(aps) {
     if (aps.length < 2) return aps.slice();
     var remaining = aps.slice();
+    // Deterministic start: the top-left-most AP, so the same project always
+    // numbers the same way.
     remaining.sort(function (a, b) { return a.y - b.y || a.x - b.x; });
     var result = [remaining.shift()];
     while (remaining.length) {
@@ -1203,7 +1310,7 @@
       }
       result.push(remaining.splice(bestIdx, 1)[0]);
     }
-    return result;
+    return _improvePath(result);
   }
 
   function sortByRow(aps, reverse) {
