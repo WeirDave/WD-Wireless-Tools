@@ -142,6 +142,13 @@ DEFAULTS = {
         # came from after a save, which is otherwise hard to find again. Not
         # everyone wants a window appearing, so it is a switch.
         "reveal_source_after_save": True,
+        # "imperial", "metric", or "" to follow the browser locale. These three
+        # were per-browser while Quick Walls also ran hosted with no server to
+        # save to; hosted mode is retired, so they are ordinary preferences and
+        # are the same whichever browser the suite is opened in.
+        "units": "",
+        "default_template": "",
+        "auto_apply_template": False,
     },
 }
 
