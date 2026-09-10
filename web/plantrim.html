@@ -14,6 +14,40 @@
   (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
 </script>
 <link rel="stylesheet" href="/assets/wd-tools.css">
+<style>
+  /* Manual keep-region editor. Scoped here rather than in wd-tools.css, which
+     another session has open. */
+  .ptb-intro { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 0 0 12px; }
+  .ptb-intro kbd {
+    font: 11px/1 ui-monospace, monospace; padding: 2px 5px; border-radius: 3px;
+    border: 1px solid var(--border); background: var(--bg);
+  }
+  .ptb-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .ptb-spacer { flex: 1; }
+  .ptb-floor { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+  .ptb-floor select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-size: 12px; max-width: 260px;
+  }
+  .ptb-readout {
+    font: 12px/1 ui-monospace, monospace; color: var(--text-muted);
+    border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px;
+  }
+  .ptb-readout.is-manual { color: var(--blue); border-color: var(--blue); }
+  .ptb-stage {
+    position: relative; height: 460px; border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; background: var(--bg);
+  }
+  .ptb-stage canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  .ptb-stage.is-panning canvas { cursor: grabbing; }
+  .ptb-stage.can-pan canvas { cursor: grab; }
+  .ptb-empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted); font-size: 13px; pointer-events: none;
+  }
+  .ptb-hint { margin-top: 8px; font-size: 12px; color: var(--text-muted); min-height: 1.3em; }
+  .ptb-hint.is-bad { color: var(--red, #e5534b); }
+</style>
 </head>
 <body class="tool-plantrim">
 
@@ -103,6 +137,32 @@
   </div>
 
   <div class="pt-wrap">
+    <div class="pt-card" id="ptBoxCard" hidden>
+      <div class="pt-step">Draw what to keep</div>
+      <p class="ptb-intro">
+        Automatic detection reads a drawing frame and a title block as content, because they are —
+        ink on the sheet. Drag a rectangle to say what to keep instead. Hold
+        <kbd>Space</kbd> and drag to pan, scroll to zoom.
+      </p>
+      <div class="ptb-bar">
+        <label class="ptb-floor">
+          <span>Floor</span>
+          <select id="ptbFloor" onchange="ptbSelectFloor(this.value)"></select>
+        </label>
+        <span class="ptb-readout" id="ptbReadout">Automatic</span>
+        <span class="ptb-spacer"></span>
+        <button class="btn btn-sm" id="ptbApplyAll" onclick="ptbApplyToAll()" disabled
+                title="Use this floor's rectangle on every other floor">Apply to all floors</button>
+        <button class="btn btn-sm" id="ptbClear" onclick="ptbClearBox()" disabled
+                title="Go back to automatic detection for this floor">Back to automatic</button>
+      </div>
+      <div class="ptb-stage" id="ptbStage">
+        <canvas id="ptbCanvas"></canvas>
+        <div class="ptb-empty" id="ptbEmpty">Select a floor to draw on.</div>
+      </div>
+      <div class="ptb-hint" id="ptbHint"></div>
+    </div>
+
     <div class="pt-card">
       <div class="pt-step">What PlanTrim would do</div>
       <div id="ptFloors" class="pt-floors"></div>
@@ -120,6 +180,7 @@
 
 <div id="toast" class="toast"></div>
 
+<script src="/assets/lib/jszip.min.js"></script>
 <script src="/assets/js/wd-shared.js"></script>
 <script src="/assets/js/plantrim.js"></script>
 </body>
