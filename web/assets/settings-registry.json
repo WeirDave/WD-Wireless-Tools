@@ -245,6 +245,14 @@
       "home": "report-tool"
     },
     {
+      "key": "report.segment_granularity",
+      "label": "Section size on large floors",
+      "category": "preference",
+      "owner": "Report",
+      "section": "report",
+      "home": "report-tool"
+    },
+    {
       "key": "walls.reveal_source_after_save",
       "label": "Open the source folder after saving",
       "category": "preference",

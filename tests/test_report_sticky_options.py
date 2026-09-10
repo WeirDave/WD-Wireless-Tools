@@ -29,6 +29,7 @@ nothing. A keyed store has to be replaced, not merged.
 from __future__ import annotations
 
 import copy
+import re
 import json
 import sys
 import tempfile
@@ -137,11 +138,26 @@ class StickyWiring(unittest.TestCase):
         body = self.js[start:self.js.index("\n  };", start)]
         self.assertNotIn("settings/update", body,
                          "setOpt must not build its own settings envelope")
-        saves = body.count("pushSettings(")
-        self.assertLessEqual(saves, 1, "setOpt should not persist option values")
-        if saves:
-            self.assertIn("id === 'units'", body,
-                          "units is the one person-level preference here")
+        # A sidebar control may write straight to settings only if it is a
+        # person-level preference - one value that follows the person rather
+        # than belonging to this document. Those are declared in one list, and
+        # every save here must be guarded by one of them.
+        declared = re.search(r"var PERSON_LEVEL_OPTS = \[([^\]]*)\]", self.js)
+        self.assertIsNotNone(declared, "person-level options must be declared")
+        ids = re.findall(r"'([^']+)'", declared.group(1))
+        self.assertEqual(body.count("pushSettings("), len(ids),
+                         "a document-level option is writing itself to settings")
+        for opt_id in ids:
+            with self.subTest(option=opt_id):
+                self.assertIn("id === '" + opt_id + "'", body)
+
+    def test_a_person_level_option_is_not_also_stored_per_report(self):
+        """The rule the registry exists for: one setting, one store. Units and
+        section size are shown in the sidebar but belong to the person, so
+        copying them into the per-report map would be the second home."""
+        start = self.js.index("function collectSidebarValues()")
+        body = self.js[start:self.js.index("\n  }", start)]
+        self.assertIn("PERSON_LEVEL_OPTS.indexOf(opt.id) !== -1", body)
 
     def test_the_shared_text_fields_stay_out_of_the_per_report_store(self):
         """Client, prepared-by, reference and revision are one value across

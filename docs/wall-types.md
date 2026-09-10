@@ -151,16 +151,59 @@ not by lamination or thickness. Do not re-derive from those sources.
 ## Partial-height furniture
 
 Wall types with no `upperEdge` are Auto height — floor to ceiling. That is right
-for a wall and wrong for furniture. See `tests/test_wall_heights.py` for the
-values and `tools/wall_audit.py` for the scanner that finds projects where it
-was left wrong.
+for a wall and wrong for furniture, and it is how 52 segments of warehouse
+racking in one real project came to be modelled as 27 dB of solid barrier from
+the slab to the roof.
 
-| Type | Height | Source |
+**A height ships only when the type's own name states one.** Everything else
+ships on Auto and `tools/wall_audit.py` reports it per project, by name, with a
+segment count and a severity.
+
+| Type | Height | Why |
 |---|---|---|
-| Cubicle | 1.5 m | Ekahau's own Cubicle |
-| Shelf, Retail | 2.5 m | Ekahau's own Retail Shelf |
-| Shelf, Warehouse | 10.0 m | Ekahau's own Warehouse Shelf |
-| Bookshelf | 2.0 m | no Ekahau equivalent; a tall office bookshelf |
-| Warehouse Rack Wall - 12ft | 3.6576 m | stated in its own name |
-| Warehouse Rack Wall - 16ft | 4.8768 m | stated in its own name |
-| Warehouse Rack Wall | **none** | name states no height; racking varies too much to guess |
+| Walls, Steel 12ft | 3.6576 m | **12 ft**, stated in its own name |
+| Warehouse Rack Wall - 12ft | 3.6576 m | **12 ft**, stated in its own name |
+| Warehouse Rack Wall - 16ft | 4.8768 m | **16 ft**, stated in its own name |
+| Warehouse Rack Wall | Auto | name states no height; racking varies too much to guess |
+| Cubicle | Auto | height depends on the building — see below |
+| Shelf, Retail | Auto | ” |
+| Shelf, Warehouse | Auto | ” |
+| Bookshelf | Auto | ” |
+| Framery Pod | Auto, deliberately | a sealed box with a metal roof and floor; limiting its height would let a ceiling AP drop in over the top at no loss, which is the opposite of what a steel roof does |
+
+### Why the guessed heights were withdrawn
+
+v2.44.0 gave Bookshelf, Cubicle, Shelf Retail and Shelf Warehouse an
+`upperEdge`. The reasoning — furniture stops short of the ceiling — is correct.
+The action was wrong, for two separate reasons, and both are worth keeping
+written down because the argument for making the change is more obvious than
+the argument against it.
+
+**We do not know the number.** A cubicle is 1.2 m in one office and 1.7 m in
+the next; warehouse racking varies more than that again. A shipped guess changes
+every project that opens the template, silently, in a direction nobody chose,
+and the person who finds out is the one whose AP count moved. The audit report
+is the better instrument: it names the project, the type and the segment count,
+and the user decides.
+
+**The numbers came from the wrong primitive.** Ekahau does model partial-height
+furniture with an upper edge — on *attenuation areas*, which are polygons
+carrying both a lower and an upper edge, not on wall types. Before v2.44.0,
+`templates/ekahau_defaults.json` carried no `upperEdge` on any wall type at all.
+So the 1.5 m and 2.5 m adopted "so our template and Ekahau's agree" were lifted
+from Ekahau's *area* types onto walls, and the agreement the old test asserted
+was with a file we had edited ourselves in the same commit.
+
+Restored in v2.65.0. `templates/ekahau_defaults.json` mirrors what Ekahau ships
+and is not ours to improve; `tests/test_wall_heights.py` now enforces the rule
+in the other direction — a height only where the name states one.
+
+### The honest fix, when it comes
+
+An attenuation area with an `upperEdge` is the correct model for a pod, a
+cubicle or a run of racking: Ekahau's engine computes the over-the-top path
+itself, with no ceiling-height assumption baked into any number, and it is
+right in a 2.7 m office and a 12 m high-bay alike. Nothing in this suite reads
+or writes `attenuationAreaTypes.json` or `areas.json` today, so that is new
+capability rather than a template edit. Until then, a calibrated wall type plus
+the audit is the workable compromise, and the compromise should stay visible.
