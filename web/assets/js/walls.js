@@ -665,6 +665,34 @@ window.updateVertSummary = function () {
   }
 };
 
+// The one place the vertical extent is written onto a wall type. Kept separate
+// from saveWallType so the rule can be tested against real output rather than
+// re-stated in a test and hoped to match.
+function applyVertExtent(wt, mode, lower, upper) {
+  if (mode === 'fixed') {
+    wt.lowerEdge = lower;
+    wt.upperEdge = upper;
+  } else {
+    // Auto is the absence of upperEdge, not a zero: writing 0 would tell
+    // Ekahau the type has no vertical extent at all rather than a full one.
+    wt.lowerEdge = 0;
+    delete wt.upperEdge;
+  }
+  return wt;
+}
+
+// Auto is a real answer, not an unset state, so returning to it has to be one
+// click and has to survive a save. Anything that treats it as "not yet chosen"
+// would leave a type stuck at whatever height it was last given.
+function vertExtentError(mode, lower, upper) {
+  if (mode !== 'fixed') return null;
+  if (!Number.isFinite(upper) || upper <= 0) {
+    return 'Enter how far above the floor this type reaches';
+  }
+  if (upper <= lower) return 'The top must be above the floor offset';
+  return null;
+}
+
 function populateVertFields(src) {
   const upper = parseFloat(src && src.upperEdge);
   const lower = parseFloat(src && src.lowerEdge) || 0;
@@ -684,14 +712,8 @@ function saveWallType() {
   const keybindNum = keybindVal ? parseInt(keybindVal) : null;
 
   const { lower: vLower, upper: vUpper } = currentVertEdges();
-  if (_heightMode === 'fixed') {
-    if (!Number.isFinite(vUpper) || vUpper <= 0) {
-      showToast('Enter how far above the floor this type reaches'); return;
-    }
-    if (vUpper <= vLower) {
-      showToast('The top must be above the floor offset'); return;
-    }
-  }
+  const vertError = vertExtentError(_heightMode, vLower, vUpper);
+  if (vertError) { showToast(vertError); return; }
 
   const existing = editingIndex >= 0 ? wallTypes[editingIndex] : {};
   const wt = {
@@ -725,13 +747,7 @@ function saveWallType() {
     ],
   };
 
-  // Auto height is the *absence* of upperEdge, not a zero — writing 0 would
-  // make Ekahau treat the type as having no vertical extent at all.
-  if (_heightMode === 'fixed') {
-    wt.upperEdge = vUpper;
-  } else {
-    delete wt.upperEdge;
-  }
+  applyVertExtent(wt, _heightMode, vLower, vUpper);
 
   if (keybindNum) {
     wallTypes.forEach(w => {
