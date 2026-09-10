@@ -37,6 +37,7 @@ from tools import report_store
 from tools import settings as suite_settings
 from tools import updater
 from tools import esx_trimmer
+from tools import plantrim_store
 from tools import reveal as reveal_tool
 
 app = Flask(__name__, static_folder=None)
@@ -356,6 +357,18 @@ def api_capacity(action):
 
 @app.route("/api/plantrim/<action>", methods=["POST"])
 def api_plantrim(action):
+    # The box store speaks JSON; analyze and trim carry the archive itself, so
+    # they are handled below rather than sharing this path.
+    if action in ("boxes_load", "boxes_save"):
+        data = request.get_json(silent=True) or {}
+        project_id = data.get("projectId") or ""
+        if not project_id:
+            return jsonify({"ok": True, "boxes": {}})
+        if action == "boxes_load":
+            return jsonify({"ok": True, "boxes": plantrim_store.load(project_id)})
+        return jsonify({"ok": True,
+                        "boxes": plantrim_store.save(project_id, data.get("boxes"))})
+
     if action not in ("analyze", "trim"):
         return jsonify({"error": f"unknown action: {action}"}), 404
 
@@ -367,15 +380,33 @@ def api_plantrim(action):
     stem = Path(name).stem or "project"
     margin = request.args.get("margin", type=int) or esx_trimmer.DEFAULT_MARGIN
 
+    # Boxes the user drew, keyed by floorPlanId. They ride in a query parameter
+    # because the body is already the raw .esx; a dozen floors of four integers
+    # each is a few hundred characters, well inside what a URL carries.
+    boxes = None
+    raw_boxes = request.args.get("boxes")
+    if raw_boxes:
+        try:
+            parsed = json.loads(raw_boxes)
+        except ValueError:
+            return jsonify({"error": "boxes was not valid JSON"}), 400
+        if not isinstance(parsed, dict):
+            return jsonify({"error": "boxes must be an object keyed by floor id"}), 400
+        boxes = {}
+        for fid, box in parsed.items():
+            if not (isinstance(box, (list, tuple)) and len(box) == 4):
+                return jsonify({"error": f"box for {fid} must be four numbers"}), 400
+            boxes[fid] = box
+
     tmpdir = tempfile.mkdtemp(prefix="wd-plantrim-")
     try:
         src = Path(tmpdir) / "in.esx"
         src.write_bytes(blob)
         if action == "analyze":
-            return jsonify(esx_trimmer.api_analyze(str(src), margin))
+            return jsonify(esx_trimmer.api_analyze(str(src), margin, boxes=boxes))
 
         dest = Path(tmpdir) / "out.esx"
-        result = esx_trimmer.api_trim_to(str(src), str(dest), margin)
+        result = esx_trimmer.api_trim_to(str(src), str(dest), margin, boxes=boxes)
         if not result.get("ok"):
             return jsonify(result), 400
 

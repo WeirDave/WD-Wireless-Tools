@@ -106,6 +106,10 @@ class FloorResult:
     old_size: tuple | None = None
     new_size: tuple | None = None
     offset: tuple | None = None
+    #: "auto" when the bounds were detected, "manual" when the user drew them.
+    source: str = "auto"
+    #: The box actually used, in image pixels, so the page can draw it back.
+    box: tuple | None = None
 
     @property
     def trimmed(self) -> bool:
@@ -221,37 +225,39 @@ def content_bounds(image, margin: int = DEFAULT_MARGIN):
     return x0, y0, x1, y1
 
 
-def _floor_coord_bbox(members: dict, floor_id: str):
-    """Bounding box of every coordinate that belongs to one floor.
+def _floor_coords(members: dict, floor_id: str):
+    """Yield every coordinate dict that belongs to one floor.
 
-    The crop must never land inside this box or metadata would end up off the
-    image, so it is unioned into the final bounds.
+    One traversal, used both to bound the coordinates and to count the ones a
+    drawn box would leave behind. Two copies of this walk would drift, and the
+    consequence of missing a carrier here is an object stranded off the plan.
     """
-    xs, ys = [], []
-
     def take(c):
         if isinstance(c, dict) and isinstance(c.get("x"), (int, float)):
-            xs.append(float(c["x"]))
-            ys.append(float(c["y"]))
+            return c
+        return None
 
     for name, key in POINT_FILES.items():
         for item in _entries(members, name, key):
             loc = item.get("location") or {}
             if loc.get("floorPlanId") == floor_id:
-                take(loc.get("coord"))
+                c = take(loc.get("coord"))
+                if c: yield c
 
     for name, key in AREA_FILES.items():
         for item in _entries(members, name, key):
             if item.get("floorPlanId") == floor_id:
                 for c in item.get("area") or []:
-                    take(c)
+                    c = take(c)
+                    if c: yield c
 
     for item in _entries(members, "referencePoints.json", "referencePoints"):
         # floorPlanId is per projection: one physical point can be projected
         # onto several floors, so filter inside the list, not outside it.
         for proj in item.get("projections") or []:
             if proj.get("floorPlanId") == floor_id:
-                take(proj.get("coord"))
+                c = take(proj.get("coord"))
+                if c: yield c
 
     for name in _survey_members(members):
         for survey in _entries(members, name, "surveys"):
@@ -262,11 +268,34 @@ def _floor_coord_bbox(members: dict, floor_id: str):
                 # directly under `location` rather than `location.coord`.
                 for rp in (leg if isinstance(leg, list) else [leg]):
                     if isinstance(rp, dict):
-                        take(rp.get("location"))
+                        c = take(rp.get("location"))
+                        if c: yield c
 
+
+def _floor_coord_bbox(members: dict, floor_id: str):
+    """Bounding box of every coordinate that belongs to one floor.
+
+    The crop must never land inside this box or metadata would end up off the
+    image, so it is unioned into the final bounds.
+    """
+    xs, ys = [], []
+    for c in _floor_coords(members, floor_id):
+        xs.append(float(c["x"]))
+        ys.append(float(c["y"]))
     if not xs:
         return None
     return min(xs), min(ys), max(xs), max(ys)
+
+
+def _count_coords_outside(members: dict, floor_id: str, box) -> int:
+    """How many of this floor's coordinates sit outside *box*."""
+    x0, y0, x1, y1 = box
+    n = 0
+    for c in _floor_coords(members, floor_id):
+        x, y = float(c["x"]), float(c["y"])
+        if x < x0 or x > x1 or y < y0 or y > y1:
+            n += 1
+    return n
 
 
 def _entries(members: dict, name: str, key: str):
@@ -375,8 +404,15 @@ def _crop_image(blob: bytes, box, kind: str) -> bytes:
     return out.getvalue()
 
 
-def _plan_floor(members: dict, plan: dict, images: dict, margin: int) -> tuple:
-    """Decide what to do with one floor. Returns (FloorResult, box or None)."""
+def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
+                manual_box=None) -> tuple:
+    """Decide what to do with one floor. Returns (FloorResult, box or None).
+
+    *manual_box* is an ``(x0, y0, x1, y1)`` rectangle in image pixels that the
+    user drew. Automatic detection reads a title block and a drawing frame as
+    content, which is why a bare floor plate trims and a titled CAD sheet does
+    not; a drawn box says what to keep and is taken at its word.
+    """
     fid = plan.get("id")
     name = plan.get("name") or "(unnamed)"
 
@@ -414,6 +450,9 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int) -> tuple:
         return refuse(
             f"floorPlans.json says {declared_w:.0f}x{declared_h:.0f} but the image is {w}x{h}"
         )
+
+    if manual_box is not None:
+        return _plan_manual(members, plan, fid, name, manual_box, w, h, refuse, skip)
 
     bounds = content_bounds(im, margin=margin)
     if bounds is None:
@@ -453,6 +492,68 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int) -> tuple:
     )
 
 
+MIN_MANUAL_SIDE = 8
+
+
+def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip) -> tuple:
+    """Honour a drawn box, refusing only what cannot be made safe.
+
+    A drawn box is deliberately *not* unioned with the detected content or with
+    Ekahau's own display rectangle. Both of those include the drawing frame and
+    the title block, which is the whole reason the box exists - widening it back
+    out would quietly undo the drag.
+
+    What is not negotiable is that everything on the floor stays on the plan. A
+    box that leaves an AP or a wall point outside the kept region would put that
+    object at a negative coordinate, so that is refused with a count rather than
+    written and explained afterwards.
+    """
+    try:
+        x0, y0, x1, y1 = (int(round(float(v))) for v in box)
+    except (TypeError, ValueError):
+        return refuse("the drawn area could not be read as a rectangle")
+
+    x0, x1 = sorted((x0, x1))
+    y0, y1 = sorted((y0, y1))
+    x0 = max(0, min(x0, w))
+    y0 = max(0, min(y0, h))
+    x1 = max(0, min(x1, w))
+    y1 = max(0, min(y1, h))
+
+    if x1 - x0 < MIN_MANUAL_SIDE or y1 - y0 < MIN_MANUAL_SIDE:
+        return refuse("the drawn area is too small to crop to")
+
+    outside = _coords_outside(members, fid, (x0, y0, x1, y1))
+    if outside:
+        return refuse(
+            f"{outside} object{'s' if outside != 1 else ''} on this floor would fall "
+            "outside the drawn area. Widen it to include everything on the plan."
+        )
+
+    if (x1 - x0) >= w and (y1 - y0) >= h:
+        return skip("the drawn area covers the whole canvas")
+
+    return (
+        FloorResult(fid, name, "trimmed", old_size=(w, h),
+                    new_size=(x1 - x0, y1 - y0), offset=(x0, y0),
+                    source="manual", box=(x0, y0, x1, y1)),
+        (x0, y0, x1, y1),
+    )
+
+
+def _coords_outside(members: dict, floor_id: str, box) -> int:
+    """How many of this floor's coordinates fall outside *box*."""
+    bbox = _floor_coord_bbox(members, floor_id)
+    if not bbox:
+        return 0
+    x0, y0, x1, y1 = box
+    # _floor_coord_bbox is the union of every coordinate on the floor, so if it
+    # sits inside the box then so does every point that formed it.
+    if bbox[0] >= x0 and bbox[1] >= y0 and bbox[2] <= x1 and bbox[3] <= y1:
+        return 0
+    return _count_coords_outside(members, floor_id, box)
+
+
 def _existing_crop_rect(plan: dict, w: int, h: int):
     """Ekahau's own display rectangle, if it is a real sub-rectangle.
 
@@ -481,13 +582,13 @@ def _rebase_crop_rect(plan: dict, dx: float, dy: float, new_w: int, new_h: int) 
     plan["cropMaxY"] = min(float(new_h), float(plan["cropMaxY"]) - dy)
 
 
-def analyze(source: Path, margin: int = DEFAULT_MARGIN) -> TrimReport:
+def analyze(source: Path, margin: int = DEFAULT_MARGIN, boxes=None) -> TrimReport:
     """Report what trimming would do, without writing anything."""
-    return _run(Path(source), None, margin, dry_run=True)
+    return _run(Path(source), None, margin, dry_run=True, boxes=boxes)
 
 
 def trim(source: Path, dest: Path | None = None, margin: int = DEFAULT_MARGIN,
-         in_place: bool = False) -> TrimReport:
+         in_place: bool = False, boxes=None) -> TrimReport:
     """Trim *source* into *dest* (or alongside it) and return a report.
 
     Never writes over the input while working: the archive is built at a
@@ -498,10 +599,11 @@ def trim(source: Path, dest: Path | None = None, margin: int = DEFAULT_MARGIN,
         dest = source
     elif dest is None:
         dest = source.with_name(source.stem + " (trimmed)" + source.suffix)
-    return _run(source, Path(dest), margin, dry_run=False)
+    return _run(source, Path(dest), margin, dry_run=False, boxes=boxes)
 
 
-def _run(source: Path, dest: Path | None, margin: int, dry_run: bool) -> TrimReport:
+def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
+         boxes=None) -> TrimReport:
     if not source.exists():
         raise TrimError(f"no such file: {source}")
 
@@ -535,7 +637,8 @@ def _run(source: Path, dest: Path | None, margin: int, dry_run: bool) -> TrimRep
     dirty: set = set()
 
     for plan in plans:
-        result, box = _plan_floor(members, plan, images, margin)
+        result, box = _plan_floor(members, plan, images, margin,
+                                  manual_box=(boxes or {}).get(plan.get("id")))
         report.floors.append(result)
         if box is None or dry_run:
             continue
@@ -612,6 +715,8 @@ def _floor_json(f: FloorResult) -> dict:
         "newSize": list(f.new_size) if f.new_size else None,
         "offset": list(f.offset) if f.offset else None,
         "areaSavedPct": saved,
+        "source": f.source,
+        "box": list(f.box) if f.box else None,
     }
 
 
@@ -631,17 +736,18 @@ def _report_json(report: TrimReport, dest: Path | None = None) -> dict:
     }
 
 
-def api_analyze(path: str, margin: int = DEFAULT_MARGIN) -> dict:
+def api_analyze(path: str, margin: int = DEFAULT_MARGIN, boxes=None) -> dict:
     try:
-        return _report_json(analyze(Path(path), margin=int(margin)))
+        return _report_json(analyze(Path(path), margin=int(margin), boxes=boxes))
     except TrimError as exc:
         return {"ok": False, "error": str(exc)}
 
 
-def api_trim_to(path: str, dest: str, margin: int = DEFAULT_MARGIN) -> dict:
+def api_trim_to(path: str, dest: str, margin: int = DEFAULT_MARGIN,
+                boxes=None) -> dict:
     """Trim *path* into an explicit *dest*, for the upload/download flow."""
     try:
-        report = trim(Path(path), Path(dest), margin=int(margin))
+        report = trim(Path(path), Path(dest), margin=int(margin), boxes=boxes)
         return _report_json(report, dest=Path(dest))
     except TrimError as exc:
         return {"ok": False, "error": str(exc)}
