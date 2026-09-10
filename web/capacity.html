@@ -72,6 +72,12 @@
 .cap-tpl.is-on { border-color: var(--blue); background: var(--surface-hover); }
 .cap-tpl-name { font-size: 13px; font-weight: 600; flex: 1 1 auto; }
 .cap-tpl-meta { font-size: 11px; color: var(--text-3); }
+.cap-apply { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.cap-done {
+  margin-top: 12px; padding: 10px 12px; border-radius: 6px;
+  background: var(--green-bg); color: var(--green-dark); font-size: 12px; line-height: 1.7;
+}
+.cap-done b { font-weight: 700; }
 </style>
 </head>
 <body class="tool-capacity">
@@ -208,10 +214,19 @@
         A hand-drawn area is real work and is never replaced without being asked for.
       </p>
       <div id="capPlan"></div>
+
+      <div class="cap-row cap-apply">
+        <button class="btn btn-primary" id="capApplyBtn" onclick="capApply()" disabled>
+          Apply and download
+        </button>
+        <span class="cap-hint" id="capApplyNote">Pick a template first.</span>
+      </div>
+      <div id="capResult"></div>
     </div>
 
     <p class="cap-hint" style="text-align:center">
-      Nothing is written to your project. This build previews only &mdash; the writer is not wired up yet.
+      Your project file is never written to. Applying builds a new copy and downloads it,
+      so keeping it is your decision.
     </p>
   </div>
 </div>

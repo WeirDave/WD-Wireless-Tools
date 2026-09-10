@@ -3,6 +3,7 @@
 Deliberately not through a real server on a port: binding one is a step that has
 hung this work before, and nothing here needs a socket to be exercised.
 """
+import io
 import json
 import sys
 import tempfile
@@ -17,6 +18,9 @@ sys.path.insert(0, str(ROOT / "tests"))
 import server  # noqa: E402
 from tools import capacity_profiles as cap  # noqa: E402
 from test_capacity_profiles import build_esx  # noqa: E402
+
+import json as _json
+from urllib.parse import unquote  # noqa: E402
 
 HDR = {"X-WD-Wireless-Tools": "1"}
 
@@ -91,6 +95,51 @@ class CapacityRouteTests(unittest.TestCase):
     def test_an_unknown_action_is_a_404_not_a_crash(self):
         r = self._post("wat", json_body={})
         self.assertEqual(r.status_code, 404)
+
+    def _saved_template(self):
+        got = self._post("analyze", self.bytes, "?name=src.esx").get_json()
+        tpl = self._post("derive", json_body={"extracted": got, "occupants": 500,
+                                              "name": "Office"}).get_json()
+        return self._post("save", json_body={"template": tpl}).get_json()["file"]
+
+    def test_apply_returns_a_project_to_download(self):
+        blank = build_esx(Path(self.tmp.name) / "blank.esx", areas=[])
+        tpl = self._saved_template()
+        r = self._post("apply", Path(blank).read_bytes(),
+                       "?name=blank.esx&template=%s&occupants=200&replace=0" % tpl)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.headers["Content-Type"], "application/octet-stream")
+        self.assertIn("(capacity).esx", r.headers["Content-Disposition"])
+        self.assertTrue(zipfile.is_zipfile(io.BytesIO(r.data)))
+
+    def test_the_apply_report_rides_in_a_header(self):
+        blank = build_esx(Path(self.tmp.name) / "blank.esx", areas=[])
+        tpl = self._saved_template()
+        r = self._post("apply", Path(blank).read_bytes(),
+                       "?name=blank.esx&template=%s&occupants=200&replace=0" % tpl)
+        report = _json.loads(unquote(r.headers["X-WD-Capacity-Report"]))
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["totalDevices"], 600)
+        self.assertEqual(report["floorsWritten"], ["Level 1"])
+
+    def test_apply_that_writes_nothing_returns_json_not_a_file(self):
+        """Every floor skipped is a success with nothing attached to it."""
+        tpl = self._saved_template()
+        r = self._post("apply", self.bytes,
+                       "?name=src.esx&template=%s&occupants=200&replace=0" % tpl)
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn("X-WD-Capacity-Report", r.headers)
+        body = r.get_json()
+        self.assertTrue(body["ok"])
+        self.assertIsNone(body["written"])
+        self.assertIn("not changed", body["note"])
+
+    def test_apply_does_not_touch_the_file_on_disk(self):
+        before = Path(self.esx).read_bytes()
+        tpl = self._saved_template()
+        self._post("apply", self.bytes,
+                   "?name=src.esx&template=%s&occupants=200&replace=1" % tpl)
+        self.assertEqual(Path(self.esx).read_bytes(), before)
 
     def test_nothing_is_written_to_the_uploaded_project(self):
         before = Path(self.esx).read_bytes()
