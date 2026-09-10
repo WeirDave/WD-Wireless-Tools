@@ -1362,8 +1362,17 @@ function _sanitizeExtractStem(s) {
 }
 
 function _extFor(f) {
-  const map = { png: '.png', jpeg: '.jpg', gif: '.gif', webp: '.webp', bmp: '.bmp', tiff: '.tif' };
-  return map[f.format] || '.png';
+  // Must agree with _IMAGE_EXTS in tools/folder_organizer.py: this is only the
+  // name previewed in the list, and a preview that promises .png for a file
+  // written as .svg is its own small lie.
+  const map = {
+    png: '.png', jpeg: '.jpg', gif: '.gif', webp: '.webp',
+    bmp: '.bmp', tiff: '.tif', svg: '.svg', wbmp: '.wbmp'
+  };
+  // No .png fallback. An unrecognised format is written as .bin, because
+  // calling unknown bytes a PNG is what made extraction produce files that
+  // would not open.
+  return map[f.format] || '.bin';
 }
 
 function _renderExtractFloors() {
