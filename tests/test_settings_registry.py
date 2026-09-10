@@ -44,7 +44,7 @@ def _flatten(node, prefix=""):
         # right (page_orient, subfolder_names) and must not be walked into.
         if isinstance(value, dict) and path in (
             "global", "organizer", "cloud", "rename", "report", "walls",
-            "organizer.rename", "rename.file_rules",
+            "aprename", "organizer.rename", "rename.file_rules",
         ):
             out.extend(_flatten(value, path + "."))
         else:

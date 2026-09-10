@@ -44,6 +44,23 @@
     return c;
   }
 
+  /* One group key per colour, whichever way the project spells it.
+
+     An .esx may carry a palette name ("BLUE") or the hex Ekahau paints it with
+     ("#0068FF"). Grouped on the raw string those are two different colours, so
+     a sequence chosen by name would skip every hex-coloured AP and drop it into
+     the leftovers. Normalise to the palette name where one matches. */
+  function colorKey(c) {
+    if (!c) return '__none';
+    var lc = String(c).toLowerCase().trim();
+    if (EKAHAU_COLORS[lc]) return lc;
+    var up = lc.toUpperCase();
+    for (var i = 0; i < COLOR_ORDER.length; i++) {
+      if (EKAHAU_COLORS[COLOR_ORDER[i]] === up) return COLOR_ORDER[i];
+    }
+    return lc;
+  }
+
   function colorSortKey(c) {
     if (!c) return COLOR_ORDER.length;
     var lc = c.toLowerCase().trim();
@@ -55,18 +72,47 @@
     return COLOR_ORDER.length;
   }
 
+  /* Pick the label colour that is actually readable on the AP colour.
+
+     This used a weighted-average brightness over 180, which put Ekahau green
+     (#00FF00, 150) and cyan (#00FFCE, 173) under the line and gave them white
+     text. White on bright green is a contrast ratio of about 1.4 - the number
+     is there but you cannot read it, which is the same failure as the
+     white-on-white markers this styling was introduced to fix.
+
+     Relative luminance and a real contrast ratio instead, choosing whichever of
+     near-black and white reads better. Any colour Ekahau can produce is then
+     legible by construction rather than by where a threshold happened to sit. */
+  function relLuminance(r, g, b) {
+    var c = [r, g, b].map(function (v) {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+
+  function contrastRatio(lumA, lumB) {
+    var hi = Math.max(lumA, lumB), lo = Math.min(lumA, lumB);
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
   function needsDarkText(hex) {
     if (!hex) return false;
     var h = hex.replace('#', '');
-    var r = parseInt(h.substr(0, 2), 16);
-    var g = parseInt(h.substr(2, 2), 16);
-    var b = parseInt(h.substr(4, 2), 16);
-    return (r * 299 + g * 587 + b * 114) / 1000 > 180;
+    if (h.length !== 6) return false;
+    var lum = relLuminance(parseInt(h.substr(0, 2), 16),
+                           parseInt(h.substr(2, 2), 16),
+                           parseInt(h.substr(4, 2), 16));
+    // #111 and #fff are what the marker actually uses.
+    var dark = relLuminance(17, 17, 17);
+    return contrastRatio(lum, dark) > contrastRatio(lum, 1.0);
   }
 
   /* ── naming mode ────────────────────────────────────────────────── */
   var _mode = 'structured';
   var _scope = 'all';
+  // The colour sequence for the By Colour ordering, newest choice last.
+  var _colorOrder = [];
 
   /* ── segment builder model ──────────────────────────────────────── */
   var _segments = [
@@ -371,6 +417,7 @@
       mode:      _mode,
       scope:     _scope,
       order:     $('arOrder').value,
+      colorOrder: _colorOrder.slice(),
       segments:  _segments.map(function (s) {
         var o = { type: s.type };
         if (s.type === 'text')    o.value = s.value || '';
@@ -396,6 +443,7 @@
     if (s.mode) arSetMode(s.mode);
     if (s.scope) arSetScope(s.scope);
     if (s.order)     $('arOrder').value = s.order;
+    if (Array.isArray(s.colorOrder)) _colorOrder = s.colorOrder.slice();
     if (s.segments && Array.isArray(s.segments)) {
       _segments = s.segments.map(function (o) {
         if (o.type === 'text')    return { type: 'text', value: o.value || '' };
@@ -714,7 +762,7 @@
       case 'col-btt':    return sortByColumn(sorted, true);
       case 'clockwise':  return sortRadial(sorted, true);
       case 'counter-clockwise': return sortRadial(sorted, false);
-      // by-color reserved for a future scope feature
+      case 'by-color':   return sortByColorGroup(sorted, _colorOrder);
       case 'manual':     return sortManual(sorted);
     }
     return sorted;
@@ -807,15 +855,137 @@
     $('arManualClear').disabled = !S.manualOrder.length;
   }
 
-  function sortByColorGroup(aps) {
+  /* Number colour group by colour group, in the order the engineer chose.
+
+     The sequence is theirs because it mirrors how the work is actually done -
+     hang all the blues, come back for the oranges - and no fixed palette order
+     can know which colour means what on this job.
+
+     Colours present in the project but not placed in the sequence follow it, in
+     palette order, so nothing is silently dropped. APs with no colour are
+     numbered last: they are the ones nobody marked, and putting them first
+     would push the deliberate groups down the sequence.
+
+     Within a group the existing spatial ordering does the work - this changes
+     which APs are handed to the numbering pass and in what order, nothing else. */
+  /* ── colour sequence panel ──────────────────────────────────────
+     Only the colours actually in the project are offered. Showing all ten
+     Ekahau colours would mostly be a list of things this job does not use. */
+  function projectColors() {
+    var seen = {};
+    (S.aps || []).forEach(function (ap) {
+      if (!ap.color) return;
+      var k = colorKey(ap.color);
+      seen[k] = (seen[k] || 0) + 1;
+    });
+    return Object.keys(seen).sort(function (a, b) {
+      return colorSortKey(a) - colorSortKey(b);
+    }).map(function (k) { return { key: k, count: seen[k] }; });
+  }
+
+  function colorLabel(key) {
+    return key.charAt(0).toUpperCase() + key.slice(1);
+  }
+
+  function renderColorPanel() {
+    var panel = $('arColorPanel');
+    if (!panel) return;
+    var on = $('arOrder').value === 'by-color';
+    panel.hidden = !on;
+    if (!on) return;
+
+    var present = projectColors();
+    var byKey = {};
+    present.forEach(function (c) { byKey[c.key] = c.count; });
+
+    // Drop anything from the saved sequence that this project does not use, so
+    // a sequence carried over from another job does not show phantom colours.
+    _colorOrder = _colorOrder.filter(function (k) { return byKey[k] != null; });
+
+    var chosen = _colorOrder.map(function (k, i) {
+      var hex = resolveColor(k) || '#888';
+      return '<span class="ar-col-chip" title="' + esc(colorLabel(k)) + '">' +
+        '<b class="ar-col-sw" style="background:' + esc(hex) + '"></b>' +
+        '<span class="ar-col-n">' + (i + 1) + '</span>' +
+        esc(colorLabel(k)) + ' <span class="ar-col-ct">(' + byKey[k] + ')</span>' +
+        '<button type="button" class="ar-col-x" data-col="' + esc(k) +
+        '" title="Remove from the sequence">&times;</button></span>';
+    }).join('');
+
+    var rest = present.filter(function (c) { return _colorOrder.indexOf(c.key) < 0; });
+    var addable = rest.map(function (c) {
+      var hex = resolveColor(c.key) || '#888';
+      return '<button type="button" class="ar-col-add" data-col="' + esc(c.key) + '">' +
+        '<b class="ar-col-sw" style="background:' + esc(hex) + '"></b>' +
+        esc(colorLabel(c.key)) + ' <span class="ar-col-ct">(' + c.count + ')</span></button>';
+    }).join('');
+
+    var none = (S.aps || []).filter(function (a) { return !a.color; }).length;
+
+    var html = '';
+    if (!present.length) {
+      html = '<div class="ar-col-note">No AP in this project has a colour set, ' +
+             'so every AP is numbered by the spatial order alone.</div>';
+    } else {
+      html = '<div class="ar-col-row"><span class="ar-col-lab">Number in this order:</span>' +
+             (chosen || '<span class="ar-col-empty">nothing chosen yet — ' +
+              'pick a colour below to start</span>') + '</div>';
+      if (addable) {
+        html += '<div class="ar-col-row"><span class="ar-col-lab">Add:</span>' + addable + '</div>';
+      }
+      html += '<div class="ar-col-note">';
+      if (rest.length) {
+        html += 'Colours you do not place follow the ones you did, in the Ekahau palette order. ';
+      }
+      if (none) {
+        html += String(none) + ' AP' + (none === 1 ? '' : 's') +
+                ' with no colour set ' + (none === 1 ? 'is' : 'are') + ' numbered last. ';
+      }
+      html += 'Within each colour, the ordering above decides the sequence.';
+      html += '</div>';
+    }
+    panel.innerHTML = html;
+
+    panel.querySelectorAll('.ar-col-add').forEach(function (b) {
+      b.onclick = function () {
+        _colorOrder.push(b.getAttribute('data-col'));
+        updateAll();
+      };
+    });
+    panel.querySelectorAll('.ar-col-x').forEach(function (b) {
+      b.onclick = function () {
+        var k = b.getAttribute('data-col');
+        _colorOrder = _colorOrder.filter(function (x) { return x !== k; });
+        updateAll();
+      };
+    });
+  }
+  window.arRenderColorPanel = renderColorPanel;
+
+  var _colorPanelSyncing = false;
+  function syncColorPanelVisibility() {
+    if (_colorPanelSyncing) return;
+    _colorPanelSyncing = true;
+    try { renderColorPanel(); } finally { _colorPanelSyncing = false; }
+  }
+
+  function sortByColorGroup(aps, colorOrder) {
+    var order = (colorOrder || []).map(function (c) { return String(c).toLowerCase().trim(); });
     var groups = {};
     aps.forEach(function (ap) {
-      var key = ap.color ? ap.color.toLowerCase().trim() : '__none';
+      var key = colorKey(ap.color);
       if (!groups[key]) groups[key] = [];
       groups[key].push(ap);
     });
+    function rank(k) {
+      if (k === '__none') return 2e6;                 // unmarked APs go last
+      var i = order.indexOf(k);
+      if (i >= 0) return i;                           // chosen sequence first
+      return 1e6 + colorSortKey(k);                   // then the rest, palette order
+    }
     var keys = Object.keys(groups).sort(function (a, b) {
-      return colorSortKey(a === '__none' ? null : a) - colorSortKey(b === '__none' ? null : b);
+      var d = rank(a) - rank(b);
+      return d !== 0 ? d : (a < b ? -1 : 1);
     });
     var result = [];
     keys.forEach(function (k) {
@@ -1157,6 +1327,7 @@
   /* ── render ────────────────────────────────────────────────────── */
   function updateAll() {
     updateSpacingVisibility();
+    syncColorPanelVisibility();
     var items = generatePreview();
     renderMarkers();
     renderPreviewTable(items);
@@ -1217,6 +1388,12 @@
         m.className = 'ar-marker is-unnumbered is-clickable';
         m.style.left = (ap.x / floor.width * 100) + '%';
         m.style.top  = (ap.y / floor.height * 100) + '%';
+        // Ring the marker in its own AP colour. Without this every un-clicked
+        // AP is the same white-with-a-dashed-ring, which makes "start with the
+        // blue ones" impossible to do by eye - the one view where you are
+        // picking APs by colour was the one view that did not show them.
+        var uc = resolveColor(ap.color);
+        if (uc) { m.style.borderColor = uc; m.style.color = uc; }
         m.textContent = '+';
         m.setAttribute('data-ap-id', ap.id);
         m.onclick = function (e) { e.stopPropagation(); arManualClick(ap.id); };
