@@ -14,6 +14,16 @@
   (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) {} })();
 </script>
 <link rel="stylesheet" href="/assets/wd-tools.css">
+<style>
+  /* Capacity's card colour. Scoped here rather than added to wd-tools.css:
+     every colour that stylesheet defines is already spoken for by another
+     card, and the shared file is being edited by another workstream. */
+  .card.violet h2,
+  .card.violet h2 span { color: #a78bfa; }
+  .card.violet .open-btn { background: #a78bfa; }
+  .card.violet:hover { border-color: #a78bfa; background: rgba(167, 139, 250, 0.20); }
+  [data-theme="light"] .card.violet:hover { background: rgba(167, 139, 250, 0.14); }
+</style>
 </head>
 <body class="tool-home">
   <div class="topbar">
@@ -29,6 +39,7 @@
           <a class="menu-item" href="/scale">· Scale</a>
           <a class="menu-item" href="/plantrim">· PlanTrim</a>
           <a class="menu-item" href="/aprename">· AP Labeler</a>
+          <a class="menu-item" href="/capacity">· Capacity</a>
           <a class="menu-item" href="/squirrel">· Squirrel</a>
           <div class="menu-sep"></div>
           <div class="menu-section">&#9656; Tools</div>
@@ -91,6 +102,13 @@
         <div class="logo-well"><img src="/assets/ap-labeler-v1.0-560x560.png" alt="WD AP Labeler"></div>
         <h2><span>AP</span> Labeler <span class="card-ver" data-ver="aprename">v&hellip;</span></h2>
         <p>See your APs on the floor plan, pick a spatial ordering — snake, row by row, clockwise — set a naming pattern, and download a labeled <code>.esx</code>.</p>
+        <span class="open-btn">Open &rarr;</span>
+      </a>
+
+      <a class="card violet" href="/capacity">
+        <div class="logo-well"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Capacity"></div>
+        <h2><span>WD</span> Capacity <span class="card-ver" data-ver="capacity">v&hellip;</span></h2>
+        <p>Read the device mix out of a project you have already set up, and apply those ratios to the next building by typing one number &mdash; how many people work there.</p>
         <span class="open-btn">Open &rarr;</span>
       </a>
 
