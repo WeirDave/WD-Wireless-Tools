@@ -348,6 +348,16 @@ def _esx_summary(path: Path) -> dict | None:
 _IMAGE_EXTS = {
     "png": ".png", "jpeg": ".jpg", "gif": ".gif",
     "webp": ".webp", "bmp": ".bmp", "tiff": ".tif",
+    "svg": ".svg",
+}
+
+# What images.json calls a format, mapped to an extension. Used when the bytes
+# themselves are not something we recognise - Ekahau lists WBMP among its
+# supported map formats and nothing sniffs that from a magic number.
+_DECLARED_EXTS = {
+    "PNG": ".png", "JPEG": ".jpg", "JPG": ".jpg", "GIF": ".gif",
+    "BMP": ".bmp", "WBMP": ".wbmp", "TIFF": ".tif", "SVG": ".svg",
+    "WEBP": ".webp",
 }
 
 
@@ -367,13 +377,37 @@ def _sniff_image_format(head: bytes) -> str:
         return "bmp"
     if head[:4] in (b"II*\x00", b"MM\x00*"):
         return "tiff"
+    # SVG is text, so it has no magic number in the usual sense. Ekahau stores
+    # CAD imports this way, and they are why extraction shipped broken: bytes
+    # nothing recognised used to fall back to .png, producing an XML document
+    # named .png that no image viewer will open.
+    lead = head.lstrip(b"\xef\xbb\xbf").lstrip()
+    if lead[:5] == b"<?xml" or lead[:4] == b"<svg":
+        return "svg"
     return ""
 
 
-def _image_ext_from_bytes(data: bytes) -> str:
-    """Return a filename extension (with dot) for an image blob, or .png
-    as a safe fallback — Ekahau raster imports are overwhelmingly PNG."""
-    return _IMAGE_EXTS.get(_sniff_image_format(data[:16]), ".png")
+def _image_ext_from_bytes(data: bytes, declared: str | None = None) -> str:
+    """Filename extension for an image blob, from its bytes and its declaration.
+
+    Neither source is trusted alone. The bytes are what the file *is*, so a
+    recognised magic number wins. Where the bytes say nothing we recognise, the
+    ``imageFormat`` in images.json is believed instead - it is the only way to
+    name a format that has no magic number to sniff, such as WBMP.
+
+    There is deliberately no .png fallback any more. Guessing .png for bytes
+    nobody could identify is what shipped SVG floor plans as .png files no
+    image viewer would open: the data was intact and the label was a lie. An
+    honest .bin the user can rename is better than a confident wrong name.
+    """
+    sniffed = _sniff_image_format(data[:64])
+    if sniffed:
+        return _IMAGE_EXTS[sniffed]
+    if declared:
+        ext = _DECLARED_EXTS.get(str(declared).strip().upper())
+        if ext:
+            return ext
+    return ".bin"
 
 
 def _human_size(n: int) -> str:
@@ -772,6 +806,14 @@ class FolderOrganizer:
                 if "floorPlans.json" not in names:
                     return {"ok": False, "error": "No floorPlans.json inside — not a valid .esx?"}
                 body = json.loads(z.read("floorPlans.json"))
+                declared: dict[str, str] = {}
+                if "images.json" in names:
+                    try:
+                        for img in (json.loads(z.read("images.json")).get("images") or []):
+                            if img.get("id"):
+                                declared[img["id"]] = img.get("imageFormat") or ""
+                    except (json.JSONDecodeError, OSError, KeyError):
+                        declared = {}
                 floors = []
                 for fp in (body.get("floorPlans") or []):
                     image_id = fp.get("imageId")
@@ -783,9 +825,16 @@ class FolderOrganizer:
                         try:
                             size = z.getinfo(entry).file_size
                             with z.open(entry) as fh:
-                                fmt = _sniff_image_format(fh.read(12))
+                                # Enough bytes to see past a byte-order mark and
+                                # leading whitespace to an SVG's opening tag.
+                                fmt = _sniff_image_format(fh.read(64))
                         except (KeyError, OSError):
                             available = False
+                    if not fmt:
+                        # Nothing recognisable in the bytes: report what the
+                        # project says it is, so the list and the extracted
+                        # filename agree.
+                        fmt = (declared.get(image_id) or "").strip().lower()
                     floors.append({
                         "id": fp.get("id"),
                         "name": fp.get("name") or "Unnamed",
@@ -847,37 +896,65 @@ class FolderOrganizer:
             with zipfile.ZipFile(p, "r") as z:
                 names = set(z.namelist())
                 body = json.loads(z.read("floorPlans.json"))
+                # images.json declares each image's format. It is the only way
+                # to name one the bytes cannot identify, and a cross-check on
+                # the ones they can.
+                declared: dict[str, str] = {}
+                if "images.json" in names:
+                    try:
+                        for img in (json.loads(z.read("images.json")).get("images") or []):
+                            if img.get("id"):
+                                declared[img["id"]] = img.get("imageFormat") or ""
+                    except (json.JSONDecodeError, OSError, KeyError):
+                        declared = {}
+
                 for fp in (body.get("floorPlans") or []):
                     if fp.get("id") not in wanted:
                         continue
                     label = fp.get("name") or f"floor-{fp.get('id')}"
-                    image_id = fp.get("imageId")
-                    entry = f"image-{image_id}" if image_id else None
-                    if not entry or entry not in names:
-                        errors.append({"name": label,
-                                       "error": "image missing in .esx"})
-                        continue
-                    try:
-                        data = z.read(entry)
-                    except (KeyError, OSError) as e:
-                        errors.append({"name": label, "error": str(e)})
-                        continue
-                    ext = _image_ext_from_bytes(data)
                     raw_stem = overrides.get(fp.get("id")) or label
                     stem = _sanitize_folder_name(raw_stem) or f"floor-{fp.get('id')}"
-                    dest = _unique_path(out / f"{stem}{ext}")
-                    if not _is_inside(dest, out):
+
+                    # A floor plan can carry a second image: `imageId` is the
+                    # one coordinates are in, `bitmapImageId` a render of it at
+                    # another resolution. Both are written, because which one is
+                    # wanted depends on what it is for - the vector original is
+                    # the drawing, the raster is what pastes into a report - and
+                    # silently dropping either is worse than two files.
+                    plan_images = [(fp.get("imageId"), "")]
+                    bitmap_id = fp.get("bitmapImageId")
+                    if bitmap_id and bitmap_id != fp.get("imageId"):
+                        plan_images.append((bitmap_id, " (raster)"))
+
+                    found_any = False
+                    for image_id, suffix in plan_images:
+                        entry = f"image-{image_id}" if image_id else None
+                        if not entry or entry not in names:
+                            continue
+                        try:
+                            data = z.read(entry)
+                        except (KeyError, OSError) as e:
+                            errors.append({"name": label + suffix, "error": str(e)})
+                            continue
+                        found_any = True
+                        ext = _image_ext_from_bytes(data, declared.get(image_id))
+                        dest = _unique_path(out / f"{stem}{suffix}{ext}")
+                        if not _is_inside(dest, out):
+                            errors.append({"name": label + suffix,
+                                           "error": "Destination escapes the output folder"})
+                            continue
+                        try:
+                            dest.write_bytes(data)
+                            written.append({"name": label + suffix,
+                                            "file": dest.name,
+                                            "size": len(data),
+                                            "size_h": _human_size(len(data))})
+                        except Exception as e:
+                            errors.append({"name": label + suffix, "error": str(e)})
+
+                    if not found_any:
                         errors.append({"name": label,
-                                       "error": "Destination escapes the output folder"})
-                        continue
-                    try:
-                        dest.write_bytes(data)
-                        written.append({"name": label,
-                                        "file": dest.name,
-                                        "size": len(data),
-                                        "size_h": _human_size(len(data))})
-                    except Exception as e:
-                        errors.append({"name": label, "error": str(e)})
+                                       "error": "image missing in .esx"})
         except (zipfile.BadZipFile, OSError, json.JSONDecodeError) as e:
             return {"ok": False, "error": f"Could not read .esx: {e}"}
 
