@@ -110,6 +110,12 @@ class FloorResult:
     source: str = "auto"
     #: The box actually used, in image pixels, so the page can draw it back.
     box: tuple | None = None
+    #: Objects a drawn box would leave off the plan, named and located so the
+    #: page can mark them on the canvas instead of reporting a bare count.
+    stranded: list = field(default_factory=list)
+    stranded_count: int = 0
+    #: How many were pulled to the crop edge, when the user asked for that.
+    clamped_count: int = 0
 
     @property
     def trimmed(self) -> bool:
@@ -225,12 +231,28 @@ def content_bounds(image, margin: int = DEFAULT_MARGIN):
     return x0, y0, x1, y1
 
 
-def _floor_coords(members: dict, floor_id: str):
-    """Yield every coordinate dict that belongs to one floor.
+#: How an object is described to the user when it falls outside a drawn box.
+#: A count of 13 is unactionable; "Note: Rev A" sitting at 9,100 x 300 is not.
+_KIND_LABELS = {
+    "accessPoints.json": "Access point",
+    "wallPoints.json": "Wall point",
+    "interferers.json": "Interferer",
+    "pictureNotes.json": "Picture note",
+    "areas.json": "Area",
+    "attenuationAreas.json": "Attenuation area",
+    "exclusionAreas.json": "Exclusion area",
+    "referencePoints.json": "Reference point",
+}
 
-    One traversal, used both to bound the coordinates and to count the ones a
-    drawn box would leave behind. Two copies of this walk would drift, and the
-    consequence of missing a carrier here is an object stranded off the plan.
+
+def _floor_coords(members: dict, floor_id: str):
+    """Yield ``(coord, kind, name)`` for every coordinate on one floor.
+
+    One traversal, used to bound the coordinates, to find the ones a drawn box
+    would leave behind, and to name them. Separate copies of this walk would
+    drift, and the consequence of missing a carrier is an object stranded off
+    the plan - so the kind and the name ride along with the coordinate rather
+    than being looked up again somewhere else.
     """
     def take(c):
         if isinstance(c, dict) and isinstance(c.get("x"), (int, float)):
@@ -238,38 +260,87 @@ def _floor_coords(members: dict, floor_id: str):
         return None
 
     for name, key in POINT_FILES.items():
+        kind = _KIND_LABELS.get(name, key)
         for item in _entries(members, name, key):
             loc = item.get("location") or {}
             if loc.get("floorPlanId") == floor_id:
                 c = take(loc.get("coord"))
-                if c: yield c
+                if c:
+                    yield c, kind, item.get("name") or item.get("title") or ""
 
     for name, key in AREA_FILES.items():
+        kind = _KIND_LABELS.get(name, key)
         for item in _entries(members, name, key):
             if item.get("floorPlanId") == floor_id:
+                label = item.get("name") or ""
                 for c in item.get("area") or []:
                     c = take(c)
-                    if c: yield c
+                    if c:
+                        yield c, kind, label
 
     for item in _entries(members, "referencePoints.json", "referencePoints"):
         # floorPlanId is per projection: one physical point can be projected
         # onto several floors, so filter inside the list, not outside it.
+        label = item.get("name") or ""
         for proj in item.get("projections") or []:
             if proj.get("floorPlanId") == floor_id:
                 c = take(proj.get("coord"))
-                if c: yield c
+                if c:
+                    yield c, "Reference point", label
 
     for name in _survey_members(members):
         for survey in _entries(members, name, "surveys"):
             if survey.get("floorPlanId") != floor_id:
                 continue
+            label = survey.get("name") or ""
             for leg in survey.get("routePoints") or []:
                 # routePoints is a list of lists, and the coordinate sits
                 # directly under `location` rather than `location.coord`.
                 for rp in (leg if isinstance(leg, list) else [leg]):
                     if isinstance(rp, dict):
                         c = take(rp.get("location"))
-                        if c: yield c
+                        if c:
+                            yield c, "Survey route point", label
+
+
+#: Most a refusal will itemise. Enough to see the pattern; a survey walk can
+#: strand thousands of route points and a list that long helps nobody.
+MAX_STRANDED_LISTED = 40
+
+
+def _describe(item) -> str:
+    """"Access point 'AP-12' at 9100, 300" - something a person can act on."""
+    label = f" '{item['name']}'" if item.get("name") else ""
+    return f"{item['kind']}{label} at {item['x']:.0f}, {item['y']:.0f}"
+
+
+def stranded_objects(members: dict, floor_id: str, box):
+    """Objects on *floor_id* that a crop to *box* would leave off the plan.
+
+    Returns ``(items, total)``. Each item names what the object is, what it is
+    called and where it sits, because the only useful thing to tell someone
+    whose crop was refused is which things are in the way - a bare count sends
+    them widening the box until the title block is back inside it, which is the
+    one outcome the box was drawn to avoid.
+    """
+    x0, y0, x1, y1 = box
+    items, total = [], 0
+    seen = set()
+    for c, kind, name in _floor_coords(members, floor_id):
+        x, y = float(c["x"]), float(c["y"])
+        if x0 <= x <= x1 and y0 <= y <= y1:
+            continue
+        total += 1
+        # Areas and survey walks contribute many coordinates each; listing one
+        # per object is what a person can read.
+        key = (kind, name)
+        if key in seen and name:
+            continue
+        seen.add(key)
+        if len(items) < MAX_STRANDED_LISTED:
+            items.append({"kind": kind, "name": name,
+                          "x": round(x, 1), "y": round(y, 1)})
+    return items, total
 
 
 def _floor_coord_bbox(members: dict, floor_id: str):
@@ -279,7 +350,7 @@ def _floor_coord_bbox(members: dict, floor_id: str):
     image, so it is unioned into the final bounds.
     """
     xs, ys = [], []
-    for c in _floor_coords(members, floor_id):
+    for c, _kind, _name in _floor_coords(members, floor_id):
         xs.append(float(c["x"]))
         ys.append(float(c["y"]))
     if not xs:
@@ -287,15 +358,6 @@ def _floor_coord_bbox(members: dict, floor_id: str):
     return min(xs), min(ys), max(xs), max(ys)
 
 
-def _count_coords_outside(members: dict, floor_id: str, box) -> int:
-    """How many of this floor's coordinates sit outside *box*."""
-    x0, y0, x1, y1 = box
-    n = 0
-    for c in _floor_coords(members, floor_id):
-        x, y = float(c["x"]), float(c["y"])
-        if x < x0 or x > x1 or y < y0 or y > y1:
-            n += 1
-    return n
 
 
 def _entries(members: dict, name: str, key: str):
@@ -310,16 +372,35 @@ def _survey_members(members: dict):
     return [n for n in members if n.startswith("survey-") and n.endswith(".json")]
 
 
-def _shift_coord(c, dx: float, dy: float) -> bool:
+def _shift_coord(c, dx: float, dy: float, clamp=None) -> bool:
+    """Translate one coordinate, optionally holding it inside the new canvas.
+
+    *clamp* is the new ``(width, height)``. Without it a coordinate outside the
+    crop goes negative and the object lands off the drawing, which is why that
+    case is refused by default. With it the object is pulled to the nearest
+    edge: still visible, still selectable in Ekahau, and no longer where it
+    was - which is a trade the user has to make knowingly, not one made for
+    them.
+    """
     if isinstance(c, dict) and isinstance(c.get("x"), (int, float)):
-        c["x"] = float(c["x"]) - dx
-        c["y"] = float(c["y"]) - dy
+        x = float(c["x"]) - dx
+        y = float(c["y"]) - dy
+        if clamp:
+            x = min(max(x, 0.0), float(clamp[0]))
+            y = min(max(y, 0.0), float(clamp[1]))
+        c["x"] = x
+        c["y"] = y
         return True
     return False
 
 
-def offset_metadata(members: dict, floor_id: str, dx: float, dy: float) -> dict:
-    """Subtract (dx, dy) from every coordinate belonging to *floor_id*."""
+def offset_metadata(members: dict, floor_id: str, dx: float, dy: float,
+                    clamp=None) -> dict:
+    """Subtract (dx, dy) from every coordinate belonging to *floor_id*.
+
+    With *clamp* set to the new ``(width, height)``, anything that would end up
+    outside the cropped canvas is pulled to its edge instead of going negative.
+    """
     counts = {}
 
     def bump(k, n=1):
@@ -331,7 +412,7 @@ def offset_metadata(members: dict, floor_id: str, dx: float, dy: float) -> dict:
         for item in _entries(members, name, key):
             loc = item.get("location") or {}
             if loc.get("floorPlanId") == floor_id:
-                n += _shift_coord(loc.get("coord"), dx, dy)
+                n += _shift_coord(loc.get("coord"), dx, dy, clamp)
         bump(name, n)
 
     for name, key in AREA_FILES.items():
@@ -339,14 +420,14 @@ def offset_metadata(members: dict, floor_id: str, dx: float, dy: float) -> dict:
         for item in _entries(members, name, key):
             if item.get("floorPlanId") == floor_id:
                 for c in item.get("area") or []:
-                    n += _shift_coord(c, dx, dy)
+                    n += _shift_coord(c, dx, dy, clamp)
         bump(name, n)
 
     n = 0
     for item in _entries(members, "referencePoints.json", "referencePoints"):
         for proj in item.get("projections") or []:
             if proj.get("floorPlanId") == floor_id:
-                n += _shift_coord(proj.get("coord"), dx, dy)
+                n += _shift_coord(proj.get("coord"), dx, dy, clamp)
     bump("referencePoints.json", n)
 
     for name in _survey_members(members):
@@ -357,7 +438,7 @@ def offset_metadata(members: dict, floor_id: str, dx: float, dy: float) -> dict:
             for leg in survey.get("routePoints") or []:
                 for rp in (leg if isinstance(leg, list) else [leg]):
                     if isinstance(rp, dict):
-                        n += _shift_coord(rp.get("location"), dx, dy)
+                        n += _shift_coord(rp.get("location"), dx, dy, clamp)
         bump(name, n)
 
     return counts
@@ -405,7 +486,7 @@ def _crop_image(blob: bytes, box, kind: str) -> bytes:
 
 
 def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
-                manual_box=None) -> tuple:
+                manual_box=None, outside_policy: str = "refuse") -> tuple:
     """Decide what to do with one floor. Returns (FloorResult, box or None).
 
     *manual_box* is an ``(x0, y0, x1, y1)`` rectangle in image pixels that the
@@ -452,7 +533,8 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
         )
 
     if manual_box is not None:
-        return _plan_manual(members, plan, fid, name, manual_box, w, h, refuse, skip)
+        return _plan_manual(members, plan, fid, name, manual_box, w, h, refuse, skip,
+                            policy=outside_policy)
 
     bounds = content_bounds(im, margin=margin)
     if bounds is None:
@@ -495,7 +577,8 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
 MIN_MANUAL_SIDE = 8
 
 
-def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip) -> tuple:
+def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip,
+                 policy: str = "refuse") -> tuple:
     """Honour a drawn box, refusing only what cannot be made safe.
 
     A drawn box is deliberately *not* unioned with the detected content or with
@@ -523,35 +606,53 @@ def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip) -> tuple:
     if x1 - x0 < MIN_MANUAL_SIDE or y1 - y0 < MIN_MANUAL_SIDE:
         return refuse("the drawn area is too small to crop to")
 
-    outside = _coords_outside(members, fid, (x0, y0, x1, y1))
-    if outside:
-        return refuse(
-            f"{outside} object{'s' if outside != 1 else ''} on this floor would fall "
-            "outside the drawn area. Widen it to include everything on the plan."
-        )
+    items, outside = _coords_outside(members, fid, (x0, y0, x1, y1))
+    if outside and policy != "clamp":
+        # "Widen the box" is the one piece of advice that cannot work here: the
+        # strays are out by the sheet margin, so widening far enough to catch
+        # them puts the title block back inside the crop, which is what the box
+        # was drawn to exclude. Name what is in the way instead, and leave the
+        # decision where it belongs.
+        what = ", ".join(_describe(i) for i in items[:4])
+        more = f" and {outside - 4} more" if outside > 4 else ""
+        result = FloorResult(
+            fid, name, "refused",
+            f"{outside} object{'s' if outside != 1 else ''} would be left off the "
+            f"plan by this crop: {what}{more}. Cropping anyway puts them at a "
+            "negative coordinate, off the drawing. If they are import leftovers, "
+            "delete them in Ekahau and trim again - that is the clean fix. "
+            "Otherwise choose 'Keep them on the edge' to pull them to the crop "
+            "boundary, or redraw the box to take them in.",
+            old_size=(w, h), source="manual", box=(x0, y0, x1, y1))
+        result.stranded = items
+        result.stranded_count = outside
+        return result, None
 
     if (x1 - x0) >= w and (y1 - y0) >= h:
         return skip("the drawn area covers the whole canvas")
 
-    return (
-        FloorResult(fid, name, "trimmed", old_size=(w, h),
-                    new_size=(x1 - x0, y1 - y0), offset=(x0, y0),
-                    source="manual", box=(x0, y0, x1, y1)),
-        (x0, y0, x1, y1),
-    )
+    result = FloorResult(fid, name, "trimmed", old_size=(w, h),
+                         new_size=(x1 - x0, y1 - y0), offset=(x0, y0),
+                         source="manual", box=(x0, y0, x1, y1))
+    if outside:
+        result.stranded = items
+        result.stranded_count = outside
+        result.clamped_count = outside
+    return result, (x0, y0, x1, y1)
 
 
-def _coords_outside(members: dict, floor_id: str, box) -> int:
-    """How many of this floor's coordinates fall outside *box*."""
+def _coords_outside(members: dict, floor_id: str, box):
+    """What this floor would leave outside *box*: ``(items, total)``."""
     bbox = _floor_coord_bbox(members, floor_id)
     if not bbox:
-        return 0
+        return [], 0
     x0, y0, x1, y1 = box
     # _floor_coord_bbox is the union of every coordinate on the floor, so if it
-    # sits inside the box then so does every point that formed it.
+    # sits inside the box then so does every point that formed it, and the
+    # expensive walk can be skipped.
     if bbox[0] >= x0 and bbox[1] >= y0 and bbox[2] <= x1 and bbox[3] <= y1:
-        return 0
-    return _count_coords_outside(members, floor_id, box)
+        return [], 0
+    return stranded_objects(members, floor_id, box)
 
 
 def _existing_crop_rect(plan: dict, w: int, h: int):
@@ -582,13 +683,16 @@ def _rebase_crop_rect(plan: dict, dx: float, dy: float, new_w: int, new_h: int) 
     plan["cropMaxY"] = min(float(new_h), float(plan["cropMaxY"]) - dy)
 
 
-def analyze(source: Path, margin: int = DEFAULT_MARGIN, boxes=None) -> TrimReport:
+def analyze(source: Path, margin: int = DEFAULT_MARGIN, boxes=None,
+             outside_policy: str = "refuse") -> TrimReport:
     """Report what trimming would do, without writing anything."""
-    return _run(Path(source), None, margin, dry_run=True, boxes=boxes)
+    return _run(Path(source), None, margin, dry_run=True, boxes=boxes,
+                outside_policy=outside_policy)
 
 
 def trim(source: Path, dest: Path | None = None, margin: int = DEFAULT_MARGIN,
-         in_place: bool = False, boxes=None) -> TrimReport:
+         in_place: bool = False, boxes=None,
+         outside_policy: str = "refuse") -> TrimReport:
     """Trim *source* into *dest* (or alongside it) and return a report.
 
     Never writes over the input while working: the archive is built at a
@@ -599,11 +703,12 @@ def trim(source: Path, dest: Path | None = None, margin: int = DEFAULT_MARGIN,
         dest = source
     elif dest is None:
         dest = source.with_name(source.stem + " (trimmed)" + source.suffix)
-    return _run(source, Path(dest), margin, dry_run=False, boxes=boxes)
+    return _run(source, Path(dest), margin, dry_run=False, boxes=boxes,
+                outside_policy=outside_policy)
 
 
 def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
-         boxes=None) -> TrimReport:
+         boxes=None, outside_policy: str = "refuse") -> TrimReport:
     if not source.exists():
         raise TrimError(f"no such file: {source}")
 
@@ -638,7 +743,8 @@ def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
 
     for plan in plans:
         result, box = _plan_floor(members, plan, images, margin,
-                                  manual_box=(boxes or {}).get(plan.get("id")))
+                                  manual_box=(boxes or {}).get(plan.get("id")),
+                                  outside_policy=outside_policy)
         report.floors.append(result)
         if box is None or dry_run:
             continue
@@ -648,7 +754,11 @@ def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
         kind = image_kind(blob)
         new_images[plan["imageId"]] = _crop_image(blob, box, kind)
 
-        touched = offset_metadata(members, plan["id"], float(x0), float(y0))
+        # Only a deliberate "keep them on the edge" clamps; otherwise a
+        # coordinate outside the crop would have been refused already, so there
+        # is nothing to pull in and nothing to move by accident.
+        clamp = (x1 - x0, y1 - y0) if result.clamped_count else None
+        touched = offset_metadata(members, plan["id"], float(x0), float(y0), clamp)
         dirty.update(name for name, count in touched.items() if count)
         dirty.add("floorPlans.json")
         new_w, new_h = x1 - x0, y1 - y0
@@ -717,6 +827,9 @@ def _floor_json(f: FloorResult) -> dict:
         "areaSavedPct": saved,
         "source": f.source,
         "box": list(f.box) if f.box else None,
+        "stranded": f.stranded,
+        "strandedCount": f.stranded_count,
+        "clampedCount": f.clamped_count,
     }
 
 
@@ -736,18 +849,21 @@ def _report_json(report: TrimReport, dest: Path | None = None) -> dict:
     }
 
 
-def api_analyze(path: str, margin: int = DEFAULT_MARGIN, boxes=None) -> dict:
+def api_analyze(path: str, margin: int = DEFAULT_MARGIN, boxes=None,
+                outside_policy: str = "refuse") -> dict:
     try:
-        return _report_json(analyze(Path(path), margin=int(margin), boxes=boxes))
+        return _report_json(analyze(Path(path), margin=int(margin), boxes=boxes,
+                                   outside_policy=outside_policy))
     except TrimError as exc:
         return {"ok": False, "error": str(exc)}
 
 
 def api_trim_to(path: str, dest: str, margin: int = DEFAULT_MARGIN,
-                boxes=None) -> dict:
+                boxes=None, outside_policy: str = "refuse") -> dict:
     """Trim *path* into an explicit *dest*, for the upload/download flow."""
     try:
-        report = trim(Path(path), Path(dest), margin=int(margin), boxes=boxes)
+        report = trim(Path(path), Path(dest), margin=int(margin), boxes=boxes,
+                      outside_policy=outside_policy)
         return _report_json(report, dest=Path(dest))
     except TrimError as exc:
         return {"ok": False, "error": str(exc)}

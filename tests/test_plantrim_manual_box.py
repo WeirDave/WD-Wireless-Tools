@@ -173,8 +173,13 @@ class ManualBoxTests(unittest.TestCase):
         rep = esx_trimmer.analyze(src, boxes={FLOOR: [150, 150, 950, 1150]})
         floor = rep.floors[0]
         self.assertEqual(floor.action, "refused")
-        self.assertIn("outside the drawn area", floor.reason)
         self.assertIn("1 object", floor.reason)
+        # Named, not counted: a bare count sends the user widening the box.
+        self.assertIn("Access point", floor.reason)
+        self.assertIn("AP-1", floor.reason)
+        self.assertEqual(floor.stranded_count, 1)
+        self.assertEqual(floor.stranded[0]["kind"], "Access point")
+        self.assertEqual(floor.stranded[0]["name"], "AP-1")
 
     def test_the_count_of_stranded_objects_is_reported(self):
         src = build(self.dir / "far2.esx",
@@ -238,6 +243,134 @@ class ManualBoxTests(unittest.TestCase):
         rep = esx_trimmer.analyze(svg, boxes={FLOOR: [150, 150, 950, 1150]})
         self.assertEqual(rep.floors[0].action, "refused")
         self.assertIn("SVG", rep.floors[0].reason)
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow is required")
+class StrandedObjectTests(unittest.TestCase):
+    """What happens when a sensible crop leaves something behind.
+
+    His Anduril warehouse sheet is the case: a box over the building, dropping
+    74% of the sheet, refused because 13 objects sat out in the margin. The
+    refusal was right and the advice - widen the box - was the one action that
+    cannot work, because widening far enough to catch strays in the margin puts
+    the title block back inside the crop.
+    """
+
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+        self.addCleanup(self.tmp.cleanup)
+        # A plan in the middle, plus junk out by the title block.
+        self.src = build(self.dir / "strays.esx", aps=(
+            (400.0, 400.0), (500.0, 600.0),          # on the plan
+            (1850.0, 220.0), (1870.0, 260.0), (1900.0, 1310.0),  # margin junk
+        ))
+        self.box = [150, 150, 950, 1150]
+
+    def test_the_refusal_names_each_object_and_where_it_is(self):
+        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
+        self.assertEqual(floor.action, "refused")
+        self.assertEqual(floor.stranded_count, 3)
+        kinds = {i["kind"] for i in floor.stranded}
+        names = {i["name"] for i in floor.stranded}
+        self.assertEqual(kinds, {"Access point"})
+        self.assertEqual(names, {"AP-2", "AP-3", "AP-4"})
+        for i in floor.stranded:
+            self.assertGreater(i["x"], 1000)   # locations, for the canvas
+
+    def test_the_message_does_not_tell_him_to_widen_the_box(self):
+        """Widening is the one move that guarantees the title block comes back."""
+        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
+        self.assertNotIn("Widen", floor.reason)
+        self.assertNotIn("widen", floor.reason)
+
+    def test_the_message_recommends_deleting_them_in_ekahau(self):
+        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
+        self.assertIn("delete them in Ekahau", floor.reason)
+
+    def test_the_message_says_what_going_ahead_would_do(self):
+        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
+        self.assertIn("negative coordinate", floor.reason)
+
+    def test_refusing_is_still_the_default(self):
+        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
+        self.assertEqual(floor.action, "refused")
+
+    # -- the informed override --------------------------------------------
+
+    def test_clamp_lets_the_crop_go_ahead(self):
+        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box},
+                                    outside_policy="clamp").floors[0]
+        self.assertEqual(floor.action, "trimmed")
+        self.assertEqual(floor.clamped_count, 3)
+        self.assertEqual(floor.new_size, (800, 1000))
+
+    def test_clamped_objects_land_on_the_edge_not_off_the_plan(self):
+        out = self.dir / "clamped.esx"
+        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box},
+                         outside_policy="clamp")
+        plan = member(out, "floorPlans.json")["floorPlans"][0]
+        w, h = plan["width"], plan["height"]
+        for ap in member(out, "accessPoints.json")["accessPoints"]:
+            c = ap["location"]["coord"]
+            with self.subTest(ap=ap["name"]):
+                self.assertGreaterEqual(c["x"], 0.0, "nothing may go negative")
+                self.assertGreaterEqual(c["y"], 0.0)
+                self.assertLessEqual(c["x"], w)
+                self.assertLessEqual(c["y"], h)
+
+    def test_clamping_does_not_move_what_was_already_inside(self):
+        """Only the strays are touched; the real plan keeps its geometry."""
+        out = self.dir / "clamped2.esx"
+        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box},
+                         outside_policy="clamp")
+        by_name = {a["name"]: a["location"]["coord"]
+                   for a in member(out, "accessPoints.json")["accessPoints"]}
+        self.assertEqual(by_name["AP-0"], {"x": 250.0, "y": 250.0})
+        self.assertEqual(by_name["AP-1"], {"x": 350.0, "y": 450.0})
+
+    def test_clamping_does_not_drop_anything(self):
+        out = self.dir / "clamped3.esx"
+        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box},
+                         outside_policy="clamp")
+        self.assertEqual(len(member(out, "accessPoints.json")["accessPoints"]), 5)
+
+    def test_clamping_still_leaves_metersperunit_alone(self):
+        out = self.dir / "clamped4.esx"
+        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box},
+                         outside_policy="clamp")
+        plan = member(out, "floorPlans.json")["floorPlans"][0]
+        self.assertEqual(repr(plan["metersPerUnit"]), repr(MPU))
+
+    def test_a_clean_crop_clamps_nothing(self):
+        clean = build(self.dir / "clean.esx", aps=((400.0, 400.0),))
+        floor = esx_trimmer.analyze(clean, boxes={FLOOR: self.box},
+                                    outside_policy="clamp").floors[0]
+        self.assertEqual(floor.action, "trimmed")
+        self.assertEqual(floor.clamped_count, 0)
+
+    def test_a_long_list_is_capped_but_the_count_is_not(self):
+        many = build(self.dir / "many.esx",
+                     aps=tuple((1800.0 + i, 200.0 + i) for i in range(60)))
+        floor = esx_trimmer.analyze(many, boxes={FLOOR: self.box}).floors[0]
+        self.assertEqual(floor.stranded_count, 60)
+        self.assertLessEqual(len(floor.stranded), esx_trimmer.MAX_STRANDED_LISTED)
+
+    def test_different_kinds_are_named_separately(self):
+        esx = build(self.dir / "mixed.esx", aps=((400.0, 400.0), (1850.0, 220.0)))
+        with zipfile.ZipFile(esx) as z:
+            members = {n: z.read(n) for n in z.namelist()}
+        doc = json.loads(members["wallPoints.json"])
+        doc["wallPoints"].append({"id": "wp-stray", "location": {
+            "floorPlanId": FLOOR, "coord": {"x": 1900.0, "y": 1350.0}}})
+        members["wallPoints.json"] = json.dumps(doc).encode()
+        with zipfile.ZipFile(esx, "w", zipfile.ZIP_DEFLATED) as z:
+            for n, b in members.items():
+                z.writestr(n, b)
+        floor = esx_trimmer.analyze(esx, boxes={FLOOR: self.box}).floors[0]
+        self.assertEqual({i["kind"] for i in floor.stranded},
+                         {"Access point", "Wall point"})
 
 
 if __name__ == "__main__":

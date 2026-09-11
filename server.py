@@ -455,6 +455,13 @@ def api_plantrim(action):
     # Boxes the user drew, keyed by floorPlanId. They ride in a query parameter
     # because the body is already the raw .esx; a dozen floors of four integers
     # each is a few hundred characters, well inside what a URL carries.
+    # What to do with objects a drawn box would leave off the plan. Refusing is
+    # the default; "clamp" is the user saying, with the list in front of them,
+    # to pull those objects to the crop edge instead.
+    outside_policy = request.args.get("outside") or "refuse"
+    if outside_policy not in ("refuse", "clamp"):
+        return jsonify({"error": f"unknown outside policy: {outside_policy}"}), 400
+
     boxes = None
     raw_boxes = request.args.get("boxes")
     if raw_boxes:
@@ -478,10 +485,12 @@ def api_plantrim(action):
             return jsonify(_plantrim_suggest(src))
 
         if action == "analyze":
-            return jsonify(esx_trimmer.api_analyze(str(src), margin, boxes=boxes))
+            return jsonify(esx_trimmer.api_analyze(str(src), margin, boxes=boxes,
+                                                   outside_policy=outside_policy))
 
         dest = Path(tmpdir) / "out.esx"
-        result = esx_trimmer.api_trim_to(str(src), str(dest), margin, boxes=boxes)
+        result = esx_trimmer.api_trim_to(str(src), str(dest), margin, boxes=boxes,
+                                         outside_policy=outside_policy)
         if not result.get("ok"):
             return jsonify(result), 400
 
