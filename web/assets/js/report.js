@@ -3315,13 +3315,33 @@
      copies them onto a physical label - so the column is sized for the longest
      name on the floor and the page scrolls to two columns rather than
      squeezing one. */
-  function renderApNameKeySection(fp, aps, opts, ctx, floorIdx) {
-    var sorted = aps.slice().sort(function (a, b) {
-      return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
-    });
+  /* A reference page names itself first, then says which floor it belongs to.
+
+     Both of these pages used to take the floor heading as their title, which
+     on a plan with no floor number resolves to the floor's own name - printed
+     at 30px as if it were the page title, then repeated in the line beneath,
+     while nothing on the page said what the page actually was. The compass
+     reference gets this right: a descriptive title in .rep-floor-title, and
+     that is the treatment these now share. */
+  function referencePageHead(title, fp, countText) {
     var heading = fp.id === '_none' ? '' : segFloorHeading({
       floorNumber: floorNumberFor(fp),
       floorName: fp.name || 'Floor plan',
+    });
+    var bits = [];
+    if (heading) bits.push(heading);
+    // Only add the floor name when the heading is not already it.
+    if (fp.name && fp.name !== heading) bits.push(fp.name);
+    if (countText) bits.push(countText);
+    return '<h2 class="rep-floor-title">' + WD.esc(title) + '</h2>'
+      + (bits.length
+          ? '<p class="rep-ref-sub">' + WD.esc(bits.join(' · ')) + '</p>'
+          : '');
+  }
+
+  function renderApNameKeySection(fp, aps, opts, ctx, floorIdx) {
+    var sorted = aps.slice().sort(function (a, b) {
+      return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
     });
     var count = sorted.length + ' AP' + (sorted.length === 1 ? '' : 's');
 
@@ -3357,14 +3377,8 @@
     var out = '<section class="rep-floor-section rep-key-page rep-oriented"'
       + ' data-page-key="key:' + WD.escAttr(fp.id) + '" data-page-kind="table"'
       + ' data-floor-idx="' + (floorIdx % 5) + '">'
-      + orientPickerHtml('key:' + fp.id, opts);
-    if (heading) {
-      out += '<div class="rep-seg-floor rep-key-head">' + WD.esc(heading)
-        + '<span class="rep-placement-sub">' + WD.esc((fp.name || '') + ' \u00b7 ' + count)
-        + '</span></div>';
-    } else {
-      out += '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
-    }
+      + orientPickerHtml('key:' + fp.id, opts)
+      + referencePageHead('AP Label Reference', fp, count);
     out += '<p class="rep-key-intro">The plan shows the number. Write the full name on the label.</p>'
       + scheme
       + '<table class="rep-key-table"><thead><tr>'
@@ -3418,10 +3432,6 @@
     });
 
     var count = withNotes.length + (withNotes.length === 1 ? ' AP with notes' : ' APs with notes');
-    var heading = fp.id === '_none' ? '' : segFloorHeading({
-      floorNumber: floorNumberFor(fp),
-      floorName: fp.name || 'Floor plan',
-    });
 
     var rows = sorted.map(function (ap) {
       var items = notesForAp(ap, ctx).map(function (n) {
@@ -3444,14 +3454,8 @@
     var out = '<section class="rep-floor-section rep-notes-page rep-oriented"'
       + ' data-page-key="notes:' + WD.escAttr(fp.id) + '" data-page-kind="table"'
       + ' data-floor-idx="' + (floorIdx % 5) + '">'
-      + orientPickerHtml('notes:' + fp.id, opts);
-    if (heading) {
-      out += '<div class="rep-seg-floor rep-notes-head">' + WD.esc(heading)
-        + '<span class="rep-placement-sub">' + WD.esc((fp.name || '') + ' · ' + count)
-        + '</span></div>';
-    } else {
-      out += '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
-    }
+      + orientPickerHtml('notes:' + fp.id, opts)
+      + referencePageHead('AP Notes Reference', fp, count);
     out += '<p class="rep-notes-intro">Notes recorded against an access point in the survey.</p>'
       + '<table class="rep-notes-table"><thead><tr>'
       + '<th class="rep-note-ap">Access point</th><th>Note</th>'
