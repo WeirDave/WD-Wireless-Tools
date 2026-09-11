@@ -17,7 +17,13 @@
 <style>
   /* Manual keep-region editor. Scoped here rather than in wd-tools.css, which
      another session has open. */
-  .ptb-intro { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 0 0 12px; }
+  .ptb-intro { color: var(--text-muted); font-size: 12.5px; line-height: 1.45; margin: 0 0 8px; }
+  /* Firefox hides the scrollbar until it is scrolled and then draws it thin,
+     which on a long page reads as there being no scrollbar at all. These are
+     Firefox's own properties and are ignored elsewhere, so the Chromium look
+     is untouched. */
+  html { scrollbar-width: auto; scrollbar-color: var(--text-muted) transparent; }
+  body.tool-plantrim { scrollbar-gutter: stable; }
   .ptb-intro kbd {
     font: 11px/1 ui-monospace, monospace; padding: 2px 5px; border-radius: 3px;
     border: 1px solid var(--border); background: var(--bg);
@@ -35,13 +41,26 @@
   }
   .ptb-readout.is-manual { color: var(--blue); border-color: var(--blue); }
   .ptb-stage {
-    /* The plan is the thing being worked on, so it gets the room. A drag is
-       only as accurate as what can be seen while making it, and the old 460px
-       box showed a 5000x3750 CAD sheet about two inches tall. */
-    position: relative; height: min(72vh, 900px); min-height: 420px;
+    /* The plan is the thing being worked on, so it gets the room - but the
+       card has to fit its controls and its action alongside, or the verb ends
+       up below the fold and the page needs scrolling to finish a crop. */
+    position: relative; height: min(58vh, 760px); min-height: 360px;
     border: 1px solid var(--border); border-radius: 8px;
     overflow: hidden; background: var(--bg);
+    overscroll-behavior: contain;
   }
+  /* The action that does the work. Everything else on this card is a modifier,
+     so this is the only primary control, and it stays in view while the card
+     is: after drawing a box the next step should never be somewhere else. */
+  .ptb-actions {
+    position: sticky; bottom: 0; z-index: 3;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-top: 10px; padding: 10px 0 2px;
+    background: linear-gradient(to bottom, transparent, var(--panel, var(--bg)) 35%);
+  }
+  .ptb-cut { font-size: 14px; font-weight: 600; padding: 9px 20px; }
+  .ptb-cut:disabled { opacity: 0.45; }
+  .ptb-cut-note { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
   .ptb-stage canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   .ptb-stage.is-panning canvas { cursor: grabbing; }
   .ptb-stage.can-pan canvas { cursor: grab; }
@@ -148,7 +167,8 @@
     </div>
     <div class="header-actions">
       <button class="btn btn-sec" onclick="ptLoadNewFile()">Open another</button>
-      <button class="btn btn-primary" id="ptSaveBtn" onclick="ptTrim()" disabled>Save trimmed .esx</button>
+      <button class="btn btn-sec" id="ptSaveBtn" onclick="ptTrim()" disabled
+              title="Same as Cut and save, next to the plan">Save trimmed .esx</button>
     </div>
   </div>
 
@@ -156,11 +176,9 @@
     <div class="pt-card" id="ptBoxCard" hidden>
       <div class="pt-step">Draw what to keep</div>
       <p class="ptb-intro">
-        Drag a rectangle around what you want to keep. Everything outside it is cut away, like
-        scissors on a sheet — drag the handles to adjust before you save. Hold <kbd>Space</kbd>
-        and drag to pan, scroll to zoom.
-        <strong>Your original file is never changed</strong> — saving gives you a new copy, so if
-        a cut comes out wrong just open it again and redraw.
+        Drag a rectangle around what to keep &mdash; everything outside it is cut away.
+        Drag the handles to adjust. <kbd>Space</kbd>+drag pans, scroll zooms.
+        <strong>Your original file is never changed.</strong>
       </p>
       <div class="ptb-bar">
         <label class="ptb-floor">
@@ -169,7 +187,9 @@
         </label>
         <span class="ptb-readout" id="ptbReadout">Automatic</span>
         <span class="ptb-spacer"></span>
-        <button class="btn btn-sm btn-primary" id="ptbSuggest" onclick="ptbSuggest()"
+        <button class="btn btn-sm" id="ptbFit" onclick="ptbFitView()"
+                title="Put the whole plan back in view">Fit</button>
+        <button class="btn btn-sm" id="ptbSuggest" onclick="ptbSuggest()"
                 title="Compare the sheets of this set to each other and propose a rectangle">Suggest from the set</button>
         <button class="btn btn-sm" id="ptbApplyAll" onclick="ptbApplyToAll()" disabled
                 title="Use this floor's rectangle on every other floor">Apply to all floors</button>
@@ -179,6 +199,12 @@
       <div class="ptb-stage" id="ptbStage">
         <canvas id="ptbCanvas"></canvas>
         <div class="ptb-empty" id="ptbEmpty">Select a floor to draw on.</div>
+      </div>
+      <div class="ptb-actions">
+        <button class="btn btn-primary ptb-cut" id="ptbCut" onclick="ptCut()" disabled>
+          Cut and save
+        </button>
+        <span class="ptb-cut-note" id="ptbCutNote"></span>
       </div>
       <div class="ptb-hint" id="ptbHint"></div>
       <div class="ptb-evidence" id="ptbEvidence" hidden></div>
