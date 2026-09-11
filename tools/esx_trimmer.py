@@ -24,18 +24,19 @@ What it refuses
 The tool would rather do nothing than corrupt a project, so it refuses per
 floor and explains why:
 
-  * SVG floor plans — there is no pixel grid to crop.
-  * Floors carrying a ``bitmapImageId`` — a second image at a different
-    resolution.  Every such floor observed in the survey was SVG-backed, so
-    this costs nothing today; supporting it means cropping both images at an
-    exact resolution ratio, which has never been testable against real data.
+  * A vector plan whose ``<svg>`` root cannot be read — there is nothing to
+    move the window on.  An SVG that *can* be read is cropped by editing its
+    ``viewBox`` rather than its pixels, and a companion raster, where Ekahau
+    wrote one, takes the same region in its own resolution.  The two axes are
+    scaled independently on purpose: Ekahau renders a 792x612 plan to 5000x3863
+    and 612 x (5000/792) is 3863.6, so the rasteriser rounded and one shared
+    ratio would refuse every real file over the artefact.
   * Populated ``gpsReferencePoints`` — geo-anchored plans, shape never observed
     (0 of 173 floors), so the correct offset behaviour is unknown.
   * Content that already fills most of the canvas — nothing worth reclaiming.
   * Empty floor plans — cropping to nothing is worse than leaving them alone.
 
-``wallSegments.json``, ``wallTypes.json`` and ``metersPerUnit`` are never
-touched; ``metersPerUnit`` is asserted byte-identical after the rewrite and
+``wallTypes.json`` and ``metersPerUnit`` are never touched; ``metersPerUnit`` is asserted byte-identical after the rewrite and
 aborts the whole file if it ever moves, because scale drift silently ruins
 every attenuation calculation downstream.
 
@@ -49,6 +50,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 import shutil
 import struct
 import zipfile
@@ -453,6 +455,99 @@ def offset_metadata(members: dict, floor_id: str, dx: float, dy: float,
     return counts
 
 
+#: The root tag never sits far into the file, and these documents run to
+#: megabytes - there is no reason to parse the whole thing to edit one element.
+_SVG_HEAD_BYTES = 8192
+_SVG_ROOT = re.compile(rb"<svg\b[^>]*>", re.S)
+_SVG_ATTR = re.compile(rb'(\b(?:width|height|viewBox)\s*=\s*)(["\'])(.*?)\2', re.S)
+
+
+def svg_viewport(blob: bytes):
+    """The root element's ``width``/``height``/``viewBox``, or None.
+
+    Returns ``(start, end, width, height, viewbox)`` where the first two are the
+    byte span of the root tag. A missing viewBox is normal and means user units
+    are the declared pixels, which is what Ekahau's own exporter writes.
+    """
+    m = _SVG_ROOT.search(blob[:_SVG_HEAD_BYTES])
+    if not m:
+        return None
+    tag = m.group(0)
+    attrs = {}
+    for a in _SVG_ATTR.finditer(tag):
+        attrs[a.group(1).split(b"=")[0].strip().decode("ascii").lower()] = a.group(3)
+
+    def number(raw):
+        if raw is None:
+            return None
+        try:
+            return float(re.sub(rb"[a-zA-Z%]+$", b"", raw.strip()) or b"nan")
+        except ValueError:
+            return None
+
+    w = number(attrs.get("width"))
+    h = number(attrs.get("height"))
+    vb = None
+    if attrs.get("viewbox") is not None:
+        parts = attrs["viewbox"].replace(b",", b" ").split()
+        if len(parts) == 4:
+            try:
+                vb = tuple(float(v) for v in parts)
+            except ValueError:
+                vb = None
+        if vb is None:
+            return None          # a viewBox we cannot read is not one to edit
+    if not w or not h or w <= 0 or h <= 0:
+        return None
+    return m.start(), m.end(), w, h, vb
+
+
+def crop_svg(blob: bytes, box) -> bytes:
+    """Crop a vector floor plan by moving its window, not its pixels.
+
+    An SVG has no pixel grid to cut, so the crop is a viewBox edit: the same
+    drawing, shown through a smaller opening, with width and height reduced to
+    match. Only the root tag is rewritten - the body, which is most of several
+    megabytes, is copied through untouched.
+
+    Where the document already carries a viewBox, the box arrives in the
+    declared pixel space and is converted into user units before being applied,
+    so a document whose user units are not pixels crops in the right place.
+    """
+    info = svg_viewport(blob)
+    if info is None:
+        raise TrimError("the SVG floor plan has no readable <svg> element to crop")
+    start, end, w, h, vb = info
+    x0, y0, x1, y1 = (float(v) for v in box)
+    new_w, new_h = x1 - x0, y1 - y0
+    if new_w <= 0 or new_h <= 0:
+        raise TrimError("the crop of the SVG floor plan has no area")
+
+    if vb:
+        sx, sy = vb[2] / w, vb[3] / h
+        view = (vb[0] + x0 * sx, vb[1] + y0 * sy, new_w * sx, new_h * sy)
+    else:
+        # No viewBox: user units are the declared pixels, which is what
+        # Ekahau's exporter writes.
+        view = (x0, y0, new_w, new_h)
+
+    def fmt(v):
+        return f"{v:.6f}".rstrip("0").rstrip(".") or "0"
+
+    tag = blob[start:end]
+    tag = _SVG_ATTR.sub(lambda m: m.group(0), tag)      # no-op, keeps the regex warm
+    for attr, value in (("width", fmt(new_w)), ("height", fmt(new_h)),
+                        ("viewBox", " ".join(fmt(v) for v in view))):
+        pattern = re.compile(rb'\b' + attr.encode() + rb'\s*=\s*(["\']).*?\1',
+                             re.S | re.I)
+        replacement = f'{attr}="{value}"'.encode()
+        if pattern.search(tag):
+            tag = pattern.sub(replacement, tag, count=1)
+        else:
+            tag = tag[:-1].rstrip() + b" " + replacement + b">"
+    return blob[:start] + tag + blob[end:]
+
+
 def _crop_image(blob: bytes, box, kind: str) -> bytes:
     """Crop and re-encode, keeping a JPEG as close to its original as possible."""
     Image = _require_pillow()
@@ -494,6 +589,21 @@ def _crop_image(blob: bytes, box, kind: str) -> bytes:
     return out.getvalue()
 
 
+def _companion(plan: dict, images: dict):
+    """The floor's second image, if it has one: ``(id, blob)`` or None.
+
+    ``imageId`` is the space coordinates live in; ``bitmapImageId`` is a render
+    of the same plan at another resolution, which Ekahau writes for every vector
+    import. Both have to receive the same crop, or the two stop agreeing about
+    where the building is.
+    """
+    bid = plan.get("bitmapImageId")
+    if not bid or bid == plan.get("imageId"):
+        return None
+    blob = images.get(bid)
+    return (bid, blob) if blob is not None else None
+
+
 def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
                 manual_box=None) -> tuple:
     """Decide what to do with one floor. Returns (FloorResult, box or None).
@@ -514,11 +624,6 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
 
     if plan.get("gpsReferencePoints"):
         return refuse("floor plan is geo-anchored (gpsReferencePoints is populated)")
-    if plan.get("bitmapImageId"):
-        return refuse(
-            "floor plan carries a second image (bitmapImageId) at another resolution; "
-            "cropping one and not the other would corrupt the project"
-        )
 
     image_id = plan.get("imageId")
     blob = images.get(image_id)
@@ -526,25 +631,52 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
         return refuse("floor plan image is missing from the archive")
 
     kind = image_kind(blob)
-    if kind == "SVG":
-        return refuse("floor plan is an SVG; there is no pixel grid to crop")
     if kind == "UNKNOWN":
         return refuse("unrecognised image format")
 
-    Image = _require_pillow()
-    im = Image.open(io.BytesIO(blob))
-    w, h = im.size
+    # A vector plan has no pixel grid, so its size comes from the root element
+    # and its crop is a viewBox edit rather than a cut. Coordinates live in this
+    # same space either way, which is what makes both paths one operation
+    # underneath: a translation by the crop offset.
+    im = None
+    companion = _companion(plan, images)
+    if kind == "SVG":
+        viewport = svg_viewport(blob)
+        if viewport is None:
+            return refuse("the SVG floor plan has no readable <svg> element to crop")
+        w, h = int(round(viewport[2])), int(round(viewport[3]))
+    else:
+        Image = _require_pillow()
+        im = Image.open(io.BytesIO(blob))
+        w, h = im.size
 
     declared_w, declared_h = plan.get("width"), plan.get("height")
     if declared_w and abs(float(declared_w) - w) > 0.5:
         return refuse(
             f"floorPlans.json says {declared_w:.0f}x{declared_h:.0f} but the image is {w}x{h}"
         )
+    if companion and image_kind(companion[1]) not in ("PNG", "JPEG"):
+        return refuse("the second image on this floor is in a format that cannot be cropped")
 
     if manual_box is not None:
         return _plan_manual(members, plan, fid, name, manual_box, w, h, refuse, skip)
 
-    bounds = content_bounds(im, margin=margin)
+    if kind == "SVG":
+        # There is no ink to measure on a vector document. Where Ekahau kept a
+        # raster of the same plan the bounds are found there and divided back
+        # into vector space; without one, a box has to be drawn instead.
+        if not companion:
+            return skip("a vector floor plan needs a drawn box; there is nothing "
+                        "to measure content on")
+        Image = _require_pillow()
+        cim = Image.open(io.BytesIO(companion[1]))
+        cbounds = content_bounds(cim, margin=margin)
+        if cbounds is None:
+            return skip("floor plan has no detectable content")
+        sx, sy = cim.size[0] / float(w), cim.size[1] / float(h)
+        bounds = (cbounds[0] / sx, cbounds[1] / sy, cbounds[2] / sx, cbounds[3] / sy)
+    else:
+        bounds = content_bounds(im, margin=margin)
     if bounds is None:
         return skip("floor plan has no detectable content")
 
@@ -785,6 +917,47 @@ def _assert_nothing_off_the_plan(members: dict, floor_id: str, w: float, h: floa
             )
 
 
+def companion_box(box, from_size, to_size):
+    """The same region, expressed in a companion image's own pixels.
+
+    The axes are scaled independently on purpose. Ekahau renders a 792x612
+    vector plan to 5000x3863, and 612 x (5000/792) is 3863.6 - the rasteriser
+    rounded, so the two axes genuinely do not share one ratio. Insisting they
+    match would refuse every real file of his for a rounding artefact.
+    """
+    fw, fh = float(from_size[0]), float(from_size[1])
+    tw, th = float(to_size[0]), float(to_size[1])
+    if fw <= 0 or fh <= 0 or tw <= 0 or th <= 0:
+        raise TrimError("cannot map a crop onto an image of unknown size")
+    sx, sy = tw / fw, th / fh
+    x0 = max(0, min(int(round(box[0] * sx)), int(tw)))
+    y0 = max(0, min(int(round(box[1] * sy)), int(th)))
+    x1 = max(0, min(int(round(box[2] * sx)), int(tw)))
+    y1 = max(0, min(int(round(box[3] * sy)), int(th)))
+    if x1 - x0 < 1 or y1 - y0 < 1:
+        raise TrimError("the crop maps to nothing in the companion image")
+    return x0, y0, x1, y1
+
+
+def _set_resolution(members: dict, image_id: str, w, h, dirty: set) -> None:
+    """Keep images.json honest about how big the image now is.
+
+    It was never updated, so a trimmed project carried an image of 3275x4469
+    while images.json still claimed 10000x7500. floorPlans.json was correct, so
+    nothing obviously broke - but two records of the same fact disagreeing is
+    the kind of thing that surfaces later as a scaling bug nobody can place.
+    """
+    doc = members.get("images.json")
+    if not isinstance(doc, dict) or not isinstance(doc.get("images"), list):
+        return
+    for img in doc["images"]:
+        if img.get("id") == image_id:
+            img["resolutionWidth"] = float(w)
+            img["resolutionHeight"] = float(h)
+            dirty.add("images.json")
+            return
+
+
 def _existing_crop_rect(plan: dict, w: int, h: int):
     """Ekahau's own display rectangle, if it is a real sub-rectangle.
 
@@ -877,7 +1050,25 @@ def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
         x0, y0, x1, y1 = box
         blob = images[plan["imageId"]]
         kind = image_kind(blob)
-        new_images[plan["imageId"]] = _crop_image(blob, box, kind)
+        old_w, old_h = result.old_size
+        if kind == "SVG":
+            new_images[plan["imageId"]] = crop_svg(blob, box)
+        else:
+            new_images[plan["imageId"]] = _crop_image(blob, box, kind)
+        _set_resolution(members, plan["imageId"], x1 - x0, y1 - y0, dirty)
+
+        # The companion render takes the same region in its own pixels, so both
+        # images keep describing the same building. The axes are scaled
+        # independently: Ekahau renders 792x612 to 5000x3863, and 612 scaled by
+        # 5000/792 is 3863.6 - the rasteriser rounded, so one shared ratio would
+        # refuse every real file over an artefact.
+        companion = _companion(plan, images)
+        if companion:
+            cid, cblob = companion
+            cim = _require_pillow().open(io.BytesIO(cblob))
+            cbox = companion_box(box, (old_w, old_h), cim.size)
+            new_images[cid] = _crop_image(cblob, cbox, image_kind(cblob))
+            _set_resolution(members, cid, cbox[2] - cbox[0], cbox[3] - cbox[1], dirty)
 
         # A drawn box cuts: anything outside it goes, along with whatever
         # referenced it. Automatic bounds always contain every coordinate, so
