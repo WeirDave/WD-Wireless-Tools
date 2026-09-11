@@ -5528,7 +5528,11 @@
           ],
           description: 'A one-page compass rose with practical guidance for aligning directional antennas to the azimuth values in this report.' },
         { id: 'apNotes', label: 'Include AP notes pages', default: false,
-          description: 'A page per floor listing the notes recorded against each AP on site. Text only — a note with a photo is listed and marked, but the image is not printed.' },
+          description: 'A page per floor listing the notes recorded against each AP on site. '
+            + 'Off unless you ask for it, and independent of every other option here: site notes '
+            + 'are often your own working annotations — mounting caveats, access problems — and '
+            + 'are not always meant for a client or an installer. Text only; a note with a photo is '
+            + 'listed and marked, but the image is not printed.' },
       ],
       render: renderPlacementReport,
       postRender: function (host, opts) {
