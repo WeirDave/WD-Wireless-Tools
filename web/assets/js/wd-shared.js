@@ -1338,6 +1338,64 @@
      Which sections are folded is a view preference, not project data, so
      localStorage is right - and unlike a hidden filter it is plainly visible
      on screen, so persisting it cannot hide anything from anyone. */
+  /* Drag a row to reorder a list.
+
+     Quick Walls already taught this gesture with its hotkey slots: grab the
+     row itself, drop it where you want it, with the row you are dragging
+     faded and the one you are over highlighted. Anything else in the suite
+     that reorders a list should feel the same, so the gesture lives here
+     rather than being re-invented per tool.
+
+     Quick Walls' own handlers are not reusable as they stand - they swap a
+     shortcut into a numbered slot, which is a different operation from moving
+     an item to a position - so this is the interaction lifted out, not that
+     code moved. Its classes match, so the two look and feel identical.
+
+     `onMove(from, to)` does the actual reordering and re-render; this only
+     works out which index went where. */
+  WD.mountDragReorder = function (opts) {
+    var container = typeof opts.container === 'string'
+      ? document.getElementById(opts.container) : opts.container;
+    if (!container) return;
+    var sel = opts.itemSelector;
+    var onMove = opts.onMove;
+    var attr = opts.indexAttr || 'data-i';
+
+    function indexOf(el) { return parseInt(el.getAttribute(attr), 10); }
+    function clear() {
+      container.querySelectorAll(sel).forEach(function (r) {
+        r.classList.remove('dragging', 'dragover');
+      });
+    }
+
+    container.querySelectorAll(sel).forEach(function (row) {
+      row.setAttribute('draggable', 'true');
+      row.addEventListener('dragstart', function (e) {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(indexOf(row)));
+        row.classList.add('dragging');
+      });
+      row.addEventListener('dragend', clear);
+      row.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        // Show where it would land. Without this you are dragging blind,
+        // which is most of what makes a drag feel fiddly.
+        if (!row.classList.contains('dragging')) row.classList.add('dragover');
+      });
+      row.addEventListener('dragleave', function () {
+        row.classList.remove('dragover');
+      });
+      row.addEventListener('drop', function (e) {
+        e.preventDefault();
+        var from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+        var to = indexOf(row);
+        clear();
+        if (!isNaN(from) && !isNaN(to) && from !== to) onMove(from, to);
+      });
+    });
+  };
+
   WD.mountFolds = function (opts) {
     var selector = opts.selector;
     var KEY = opts.key;
