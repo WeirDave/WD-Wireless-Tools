@@ -39,8 +39,9 @@
      a sequence chosen by name would skip every hex-coloured AP and drop it into
      the leftovers. Normalise to the palette name where one matches. */
   function colorKey(c) {
-    if (!c) return '__none';
+    if (!c) return WD.CLEAR_KEY;          // Clear and never-marked are one state
     var lc = String(c).toLowerCase().trim();
+    if (WD.EKAHAU_COLOR_ALIASES[lc]) lc = WD.EKAHAU_COLOR_ALIASES[lc];
     if (EKAHAU_COLORS[lc]) return lc;
     var up = lc.toUpperCase();
     for (var i = 0; i < COLOR_ORDER.length; i++) {
@@ -1123,10 +1124,16 @@
   /* ── colour sequence panel ──────────────────────────────────────
      Only the colours actually in the project are offered. Showing all ten
      Ekahau colours would mostly be a list of things this job does not use. */
+  /* Every colour the project uses, Clear included.
+
+     Clear is the first entry in Ekahau's Mark menu and he orders by it - "blue,
+     then orange, then white/clear". It was being counted as "no colour set" and
+     pinned to the end, which is the one place he could not move it to. An AP
+     set to Clear and an AP never marked are the same thing in the file, so
+     they are one row. */
   function projectColors() {
     var seen = {};
     (S.aps || []).forEach(function (ap) {
-      if (!ap.color) return;
       var k = colorKey(ap.color);
       seen[k] = (seen[k] || 0) + 1;
     });
@@ -1145,15 +1152,8 @@
      hex has no name, so it is labelled as what it is rather than shown as a
      bare code - "#c0ffee" in a list you are meant to be putting in order
      tells you nothing about which one it is. */
-  function colorLabel(key) {
-    if (!key) return 'No colour';
-    if (EKAHAU_COLORS[key]) return key.charAt(0).toUpperCase() + key.slice(1);
-    if (/^#?[0-9a-f]{6}$/i.test(key)) {
-      return 'Custom ' + (key.charAt(0) === '#' ? key.toUpperCase()
-                                                : '#' + key.toUpperCase());
-    }
-    return key.charAt(0).toUpperCase() + key.slice(1);
-  }
+  // Ekahau's own word for the colour, from the shared table.
+  function colorLabel(key) { return WD.ekahauColorName(key); }
 
   /* The colour sequence.
 
@@ -1224,7 +1224,7 @@
     var last = _colorOrder.length - 1;
 
     var rows = _colorOrder.map(function (k, i) {
-      var hex = resolveColor(k) || '#888';
+      var hex = k === WD.CLEAR_KEY ? WD.CLEAR_HEX : (resolveColor(k) || '#888');
       /* The position sits inside the swatch, in the AP's own colour, the same
          way it does on the plan - so this list reads like the map. Which
          means real ink: a number on Ekahau green in white cannot be read. */
@@ -1255,7 +1255,6 @@
       '</div>';
     }).join('');
 
-    var none = (S.aps || []).filter(function (a) { return !a.color; }).length;
     var note = '';
     if (state.added.length) {
       note += state.added.length + ' colour' + (state.added.length === 1 ? '' : 's') +
@@ -1264,10 +1263,13 @@
         (state.added.length === 1 ? 'it was' : 'they were') +
         ' added at the end. ';
     }
-    note += none
-      ? String(none) + ' AP' + (none === 1 ? '' : 's') + ' with no colour set ' +
-        (none === 1 ? 'is' : 'are') + ' numbered last, after every colour. '
-      : 'Every AP in this project has a colour. ';
+    // Clear is in the list now, so it needs explaining once rather than a
+    // running commentary about APs being pushed to the end.
+    if (state.byKey[WD.CLEAR_KEY]) {
+      note += 'Clear is Ekahau’s own first swatch and it sits in the ' +
+        'order wherever you put it — it also covers any AP never marked ' +
+        'at all, because the file stores those the same way. ';
+    }
     note += 'Within a colour, the ordering above decides the sequence.';
 
     panel.innerHTML =
@@ -1344,9 +1346,12 @@
       groups[key].push(ap);
     });
     function rank(k) {
-      if (k === '__none') return 2e6;                 // unmarked APs go last
+      /* Clear is a choice in Ekahau's menu, not a gap, so it takes whatever
+         place in the sequence he gives it. Only when he has not placed it
+         does it fall to the end - which is where an unmarked AP belongs. */
       var i = order.indexOf(k);
       if (i >= 0) return i;                           // chosen sequence first
+      if (k === WD.CLEAR_KEY) return 2e6;             // unplaced: last
       return 1e6 + colorSortKey(k);                   // then the rest, palette order
     }
     var keys = Object.keys(groups).sort(function (a, b) {

@@ -113,15 +113,56 @@
     'gray', 'green', 'brown', 'cyan'
   ];
 
+  /* What Ekahau calls them in its own Mark menu, which is not what this code
+     called them. The hex values were checked against the picker; the names
+     were ours, and three of them were wrong: Ekahau says Pink, Violet and
+     Mint where this said magenta, purple and cyan.
+
+     He reads our list against theirs, so the label has to be their word. The
+     keys stay as they are - they are internal, and renaming them would break
+     a saved colour sequence - and both spellings are accepted coming in,
+     because no local project has ever stored an AP colour as a name and
+     there is no evidence of which form Ekahau writes. */
+  WD.EKAHAU_COLOR_NAMES = {
+    yellow: 'Yellow', orange: 'Orange', red: 'Red', magenta: 'Pink',
+    purple: 'Violet', blue: 'Blue', gray: 'Gray', green: 'Green',
+    brown: 'Brown', cyan: 'Mint'
+  };
+  WD.EKAHAU_COLOR_ALIASES = {
+    pink: 'magenta', violet: 'purple', mint: 'cyan',
+    grey: 'gray', teal: 'cyan'
+  };
+
+  /* CLEAR is the first entry in Ekahau's menu and it is a choice, not a gap -
+     but what it writes is no colour at all, so an AP set to Clear and an AP
+     never marked are the same thing in the file. They are therefore one row
+     here, named the way Ekahau names it. */
+  WD.CLEAR_KEY = '__none';
+  WD.CLEAR_HEX = '#FFFFFF';
+
   // An AP's stored colour as a hex this suite can measure and paint.
   // Null for an unmarked AP; anything unrecognised is passed through, because
   // a colour we have not seen is still better drawn than dropped.
   WD.resolveApColor = function (c) {
     if (!c) return null;
     var lc = String(c).toLowerCase().trim();
+    if (WD.EKAHAU_COLOR_ALIASES[lc]) lc = WD.EKAHAU_COLOR_ALIASES[lc];
     if (WD.EKAHAU_COLORS[lc]) return WD.EKAHAU_COLORS[lc];
     if (/^#[0-9a-f]{6}$/i.test(lc)) return lc.toUpperCase();
     return c;
+  };
+
+  // Ekahau's word for a colour. Falls back to the key capitalised, so a
+  // swatch nobody has seen before still gets a readable label.
+  WD.ekahauColorName = function (key) {
+    if (!key || key === WD.CLEAR_KEY) return 'Clear';
+    var k = String(key).toLowerCase().trim();
+    if (WD.EKAHAU_COLOR_ALIASES[k]) k = WD.EKAHAU_COLOR_ALIASES[k];
+    if (WD.EKAHAU_COLOR_NAMES[k]) return WD.EKAHAU_COLOR_NAMES[k];
+    if (/^#?[0-9a-f]{6}$/i.test(k)) {
+      return 'Custom ' + (k.charAt(0) === '#' ? k.toUpperCase() : '#' + k.toUpperCase());
+    }
+    return k.charAt(0).toUpperCase() + k.slice(1);
   };
 
   /* ── Legibility on a user-chosen colour ──────────────────────────

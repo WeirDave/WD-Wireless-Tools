@@ -326,9 +326,32 @@ class TheSequenceIsArrangeable(unittest.TestCase):
         self.assertIn("colorLabel(a).localeCompare(colorLabel(b)", self.source)
         self.assertNotIn("return colorSortKey(a) - colorSortKey(b);", self.source)
 
+    def test_the_labels_are_ekahau_s_own_words(self):
+        """He reads our list against Ekahau's menu, so Pink / Violet / Mint
+        are what it has to say - this code called them magenta, purple and
+        cyan. The keys stay internal so a saved sequence still loads."""
+        shared = SHARED_JS.read_text(encoding="utf-8")
+        block = shared[shared.index("WD.EKAHAU_COLOR_NAMES = {"):]
+        block = block[:block.index("};")]
+        for key, shown in (("magenta", "Pink"), ("purple", "Violet"),
+                           ("cyan", "Mint"), ("gray", "Gray")):
+            with self.subTest(colour=key):
+                self.assertIn("%s: '%s'" % (key, shown), block)
+
+    def test_both_spellings_of_a_colour_resolve_to_one(self):
+        """Nothing local has ever stored an AP colour as a name, so there is
+        no evidence which word Ekahau writes. Both are accepted."""
+        shared = SHARED_JS.read_text(encoding="utf-8")
+        block = shared[shared.index("WD.EKAHAU_COLOR_ALIASES = {"):]
+        block = block[:block.index("};")]
+        for alias in ("pink", "violet", "mint", "grey"):
+            with self.subTest(alias=alias):
+                self.assertIn(alias + ":", block)
+
     def test_a_colour_with_no_name_is_labelled_not_shown_as_a_bare_hex(self):
-        block = self.source[self.source.index("function colorLabel(key)"):]
-        block = block[:block.index("function colorKey(", 1)] if "function colorKey(" in block[1:] else block[:600]
+        shared = SHARED_JS.read_text(encoding="utf-8")
+        block = shared[shared.index("WD.ekahauColorName = function"):]
+        block = block[:block.index("WD.relLuminance")]
         self.assertIn("'Custom '", block)
 
     def test_arrow_keys_reorder_the_focused_row(self):
@@ -351,8 +374,24 @@ class TheSequenceIsArrangeable(unittest.TestCase):
         self.assertIn("ar-cseq-new", self.block)
         self.assertIn("not in your saved order", self.block)
 
-    def test_where_uncoloured_aps_land_is_stated_not_discovered(self):
-        self.assertIn("numbered last, after every colour", self.block)
+    def test_clear_is_a_colour_in_the_list_not_a_leftover_at_the_end(self):
+        """Clear is the first entry in Ekahau's Mark menu and he orders by it
+        - "blue, then orange, then white/clear". It was counted as "no colour
+        set" and pinned last, which is the one place he could not move it."""
+        self.assertIn("WD.CLEAR_KEY", self.block)
+        self.assertIn("WD.CLEAR_HEX", self.block)
+        self.assertNotIn("numbered last, after every colour", self.block)
+
+    def test_clear_and_never_marked_are_one_row(self):
+        """Ekahau writes no colour at all for Clear, so the file cannot tell
+        them apart - and the panel says so rather than implying two states."""
+        self.assertIn("never marked", self.block)
+
+    def test_a_white_swatch_still_gets_a_ring(self):
+        """Clear is white, which is the white-on-white case that shipped once
+        before. It goes through the shared helper like every other colour."""
+        self.assertIn("WD.outlineOn(hex)", self.block)
+        self.assertIn("WD.readableOn(hex)", self.block)
 
     def test_the_order_is_saved(self):
         self.assertIn("colorOrder: _colorOrder.slice()", self.source)
