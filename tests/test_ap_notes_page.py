@@ -257,6 +257,35 @@ class NotesReachPaper(unittest.TestCase):
         self.assertIn("overflow-wrap: anywhere", rule)
         self.assertIn("pre-wrap", rule)
 
+    def test_the_option_sits_directly_below_the_compass_one(self):
+        """Where he looked for it, and did not find it.
+
+        The two "add a reference page" controls are the compass page and this
+        one; they belong together at the foot of the list. It first shipped up
+        beside the label-reference select, which is defensible and is not where
+        anybody goes looking.
+        """
+        import re
+        start = self.js.index("    placement: {")
+        end_marker = "\n    },\n"
+        block = self.js[start:self.js.index(end_marker,
+                                            self.js.index("sidebar: [", start))]
+        ids = re.findall(r"\{ id: '([a-zA-Z]+)'", block)
+        self.assertIn("apNotes", ids)
+        self.assertEqual(ids[ids.index("compassRef") + 1], "apNotes")
+
+    def test_the_checkbox_is_never_conditional_on_finding_notes(self):
+        """An absent control looks like a feature that did not ship.
+
+        The pages are gated on notes existing; the control must not be. A
+        visible checkbox that produces nothing explains itself - a missing one
+        costs somebody a phone call.
+        """
+        start = self.js.index("id: 'apNotes'")
+        entry = self.js[start:start + 400]
+        for gate in ("disabledWhen", "hiddenWhen", "if ("):
+            self.assertNotIn(gate, entry.split("},")[0])
+
     def test_the_option_is_registered_on_the_placement_report(self):
         self.assertIn("id: 'apNotes'", self.js)
         idx = self.js.index("id: 'apNotes'")
