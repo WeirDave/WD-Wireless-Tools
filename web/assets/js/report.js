@@ -1123,8 +1123,13 @@
   }
   function apGroupLabel(key, dim) {
     if (dim === 'color') {
-      if (key === '__nocolor') return 'No color';
-      return key;
+      /* The stored value is a hex, so this printed "#6B6B6B" as a section
+         heading where Ekahau says "Gray". He reported seeing a hex code
+         instead of a name and it was still here, because the fix went into
+         the Labeler and this is a second place that renders a colour to the
+         reader. Both go through the shared table now. */
+      if (key === '__nocolor') return WD.ekahauColorName(WD.CLEAR_KEY);
+      return WD.ekahauColorName(WD.ekahauColorKey(key));
     }
     if (dim === 'model') {
       if (key === 'Unknown|Unknown') return 'Unknown model';

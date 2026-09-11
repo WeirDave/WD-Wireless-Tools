@@ -141,6 +141,54 @@ lives in two stores" is that one, and "every `settings/update` sends a `patch`
 envelope" is report page orientation, which posted `{report: {...}}` where the
 server reads `d["patch"]` and therefore saved nothing while reporting success.
 
+## The Ekahau AP colour palette
+
+`WD.EKAHAU_COLORS` in `web/assets/js/wd-shared.js` is the only copy. Anything
+that draws or names an AP colour goes through `WD.ekahauColorKey()` (value →
+key) and `WD.ekahauColorName()` (key → the word Ekahau uses).
+
+| Ekahau's name | key in code | hex |
+|---|---|---|
+| Clear | `__none` | *(no colour written at all)* |
+| Yellow | `yellow` | `#FFE600` |
+| Orange | `orange` | `#FF8500` |
+| Red | `red` | `#FF0000` |
+| Pink | `magenta` | `#FF00FF` |
+| Violet | `purple` | `#C297FF` |
+| Blue | `blue` | `#0068FF` |
+| Gray | `gray` | `#6B6B6B` |
+| Green | `green` | `#00FF00` |
+| Brown | `brown` | `#C97700` |
+| Mint | `cyan` | `#00FFCE` |
+
+**The names and the keys disagree on purpose.** Ekahau says Pink, Violet and
+Mint; this codebase called them magenta, purple and cyan long before anyone
+checked. The keys are internal and a saved colour sequence is stored by key,
+so renaming them would silently reorder somebody's sequence — the display name
+is what changed. `WD.EKAHAU_COLOR_ALIASES` accepts either vocabulary coming in.
+
+**What is verified and what is not.** The hex values were checked against the
+real Ekahau colour picker (2026-09-04). The *stored representation* is not
+verified: across 111 local `.esx` files and 913 APs there is not a single
+`color` field on an access point, because none of those projects has a marked
+AP. Everywhere else the format stores colour as hex (`"color": "#FF0000"` on
+wall types, areas, attenuation areas) and no palette name appears anywhere in
+any file, so hex is what is trusted. If a value arrives that is neither a known
+hex nor a known name it is kept as-is, drawn, and labelled `Custom #XXXXXX` —
+never dropped and never guessed at.
+
+To settle it: mark one AP of each colour in a throwaway project, save, and read
+`accessPoints.json`. Until then, do not assume the table is complete — Ekahau
+may permit a custom colour.
+
+**Two implementations is the failure mode here.** The Report printed `#6B6B6B`
+as a section heading while the Labeler said `Gray`, because grouping-by-colour
+labelled sections with the raw stored value. The user reported seeing a hex,
+the Labeler got fixed, and the Report kept doing it. Every surface that shows
+an AP colour to a reader — labeler sequence list, labeler preview swatch,
+report grouping headings — goes through the shared pair now, and
+`tests/test_ap_color_order.py` holds that.
+
 ## Known gotchas
 
 - **Per-page paper orientation depends on a Chromium-only feature, and the
