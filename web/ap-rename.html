@@ -45,7 +45,7 @@
    white plan and on a dark one, with no theme fork. */
 .tool-aprename .ar-marker.is-clear { background:#fff; color:#111; border:2px solid #222; }
 .tool-aprename .ar-marker.is-clear:hover { background:#f0f0f0; }
-.tool-aprename .ar-colorseq { margin:8px 0 4px; padding:10px 12px; border:1px solid var(--border,#333); border-radius:8px; background:var(--surface-2,#1e2530); }
+.tool-aprename .ar-colorseq { margin:8px 0 0; padding:10px 12px; border:1px solid var(--border,#333); border-radius:8px; background:var(--surface-2,#1e2530); }
 .tool-aprename .ar-cseq-lab { font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-3,#888); margin-bottom:6px; }
 .tool-aprename .ar-cseq-hint { text-transform:none; letter-spacing:0; opacity:.75; }
 .tool-aprename .ar-cseq { display:flex; flex-direction:column; gap:5px; margin-bottom:8px; }
@@ -120,7 +120,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
    on a floor with any real number of APs. min-height:0 on the scroller is what
    lets a flex child actually shrink instead of being sized by its content. */
 .tool-aprename .ar-sidebar { width:340px; min-width:280px; overflow:hidden; border-left:1px solid var(--border,#333); padding:12px 14px; display:flex; flex-direction:column; gap:10px; background:var(--bg-2,#181828); }
-.tool-aprename .ar-side-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding-right:2px; }
+.tool-aprename .ar-side-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:12px; padding-right:2px; }
 .tool-aprename .ar-side-dock { flex:0 0 auto; display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border,#333); padding-top:10px; }
 /* Bounded so a 400-AP floor scrolls inside the table instead of pushing the
    controls off the panel. */
@@ -182,11 +182,17 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-mac-input { font-family:var(--mono,'Consolas',monospace); letter-spacing:1px; }
 
 .tool-aprename .ar-section { display:flex; flex-direction:column; gap:8px; padding-bottom:10px; border-bottom:1px solid var(--border,#333); }
+.tool-aprename .ar-section:last-of-type { padding-bottom:4px; border-bottom:none; }
 .tool-aprename .ar-section-head { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-2,#888); }
 .tool-aprename .ar-section-num { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:4px; background:hsla(239,84%,67%,.12); color:var(--indigo,#6366f1); font-size:10px; font-weight:700; font-family:var(--mono,monospace); }
 
 .tool-aprename .ar-segments { display:flex; flex-direction:column; gap:5px; }
-.tool-aprename .ar-seg-row { display:flex; gap:5px; align-items:center; padding:5px 7px; background:var(--bg-3,#252538); border:1px solid var(--border,#444); border-radius:5px; }
+/* Wraps rather than pushing the whole column sideways. A counter row is
+   wider than a 296px sidebar, and because the scroller sets overflow-y the
+   other axis computes to auto - so one over-wide row put a horizontal
+   scrollbar across the settings and ate a strip of height with it. */
+.tool-aprename .ar-seg-row { display:flex; flex-wrap:wrap; gap:5px; align-items:center; padding:5px 7px; background:var(--bg-3,#252538); border:1px solid var(--border,#444); border-radius:5px; min-width:0; }
+.tool-aprename .ar-seg-row > * { min-width:0; }
 .tool-aprename .ar-seg-row:hover { border-color:hsla(239,84%,67%,.3); }
 [data-theme="light"] .tool-aprename .ar-seg-row { background:var(--bg-3,#f0f0f4); }
 .tool-aprename .ar-seg-handle { cursor:grab; color:var(--text-3,#555); font-size:13px; padding:0 2px; user-select:none; line-height:1; }
@@ -243,7 +249,12 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 [data-theme="light"] .tool-aprename .ar-inf-head { color:#1d4ed8; }
 [data-theme="light"] .tool-aprename .ar-inf-body code { color:var(--text,#222); background:rgba(0,0,0,.06); }
 
-.tool-aprename .ar-templates-detail summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:4px; user-select:none; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); padding:6px 0; }
+/* Collapsed, this is one line of text. It was sitting in 38px of nothing:
+   the section above pads and rules off below its last control, the scroll
+   column adds its own gap, and then the summary padded itself again on both
+   sides. Three sources of spacing stacked around a 17px label. */
+.tool-aprename .ar-templates-detail summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:4px; user-select:none; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); padding:0; }
+.tool-aprename .ar-templates-detail { padding-bottom:0; }
 .tool-aprename .ar-templates-detail summary::-webkit-details-marker { display:none; }
 .tool-aprename .ar-templates-arrow { display:inline-block; transition:transform .15s; font-size:10px; }
 .tool-aprename .ar-templates-detail[open] .ar-templates-arrow { transform:rotate(90deg); }

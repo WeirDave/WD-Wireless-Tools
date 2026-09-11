@@ -432,6 +432,73 @@ class TheSequenceIsArrangeable(unittest.TestCase):
         self.assertIn("if (Array.isArray(s.colorOrder))", self.source)
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class EveryPaletteHexResolvesToItsName(unittest.TestCase):
+    """Gray fell through to "Custom #6D6D6D" in a live project.
+
+    The first version of this table had #6D6D6D - which is what a real .esx
+    actually contains. A later pass "corrected" it to #6B6B6B by reading the
+    swatch off the colour picker on screen, and from then on every grey AP was
+    labelled as an unknown custom colour. Reading a rendered swatch is not the
+    same as knowing what gets written to the file.
+
+    Four of these are now confirmed against his real project, because they
+    rendered as names in it: Red, Green, Orange, Pink. Gray is confirmed the
+    other way. The rest are still only as good as the picker.
+    """
+
+    def run_block(self, checks: str):
+        program = NODE_PRELUDE + "eval(" + _js(checks) + ");"
+        result = run_node(program)
+        self.assertEqual(result.returncode, 0,
+                         (result.stdout + result.stderr).strip())
+
+    def test_the_grey_a_real_project_contains_is_named(self):
+        self.run_block("""
+          check('#6D6D6D is Gray, not a custom colour',
+                WD.ekahauColorName(WD.ekahauColorKey('#6D6D6D')) === 'Gray');
+          done();
+        """)
+
+    def test_the_other_grey_still_works_too(self):
+        """Replacing one value with the other would just move the bug to
+        whoever had the first one."""
+        self.run_block("""
+          check('#6B6B6B also lands on Gray',
+                WD.ekahauColorName(WD.ekahauColorKey('#6B6B6B')) === 'Gray');
+          done();
+        """)
+
+    def test_no_palette_colour_falls_through_to_custom(self):
+        """The whole table, not just the ones a given project happens to use -
+        five rendered fine in his and the sixth was broken."""
+        self.run_block("""
+          var expected = {
+            '#FFE600':'Yellow', '#FF8500':'Orange', '#FF0000':'Red',
+            '#FF00FF':'Pink',   '#C297FF':'Violet', '#0068FF':'Blue',
+            '#6D6D6D':'Gray',   '#00FF00':'Green',  '#C97700':'Brown',
+            '#00FFCE':'Mint'
+          };
+          Object.keys(expected).forEach(function (hex) {
+            var got = WD.ekahauColorName(WD.ekahauColorKey(hex));
+            check(hex + ' should be ' + expected[hex] + ', got ' + got,
+                  got === expected[hex]);
+            check(hex + ' lowercase too',
+                  WD.ekahauColorName(WD.ekahauColorKey(hex.toLowerCase())) === expected[hex]);
+          });
+          done();
+        """)
+
+    def test_a_genuinely_unknown_colour_still_says_custom(self):
+        """The fallback is doing its job - it just should not catch a
+        standard swatch."""
+        self.run_block("""
+          check('an unknown hex is labelled, not guessed',
+                WD.ekahauColorName(WD.ekahauColorKey('#C0FFEE')) === 'Custom #C0FFEE');
+          done();
+        """)
+
+
 class NoSurfaceShowsAHexWhereEkahauShowsAName(unittest.TestCase):
     """He reported seeing a hex code instead of a colour name, and it was
     still there after the Labeler was fixed - because the Report renders
