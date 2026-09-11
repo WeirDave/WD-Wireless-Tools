@@ -3455,7 +3455,7 @@
       + ' data-page-key="notes:' + WD.escAttr(fp.id) + '" data-page-kind="table"'
       + ' data-floor-idx="' + (floorIdx % 5) + '">'
       + orientPickerHtml('notes:' + fp.id, opts)
-      + referencePageHead('AP Notes Reference', fp, count);
+      + referencePageHead('AP Notes', fp, count);
     out += '<p class="rep-notes-intro">Notes recorded against an access point in the survey.</p>'
       + '<table class="rep-notes-table"><thead><tr>'
       + '<th class="rep-note-ap">Access point</th><th>Note</th>'

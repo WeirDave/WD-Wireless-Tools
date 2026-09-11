@@ -222,9 +222,9 @@ class NotesRendering(unittest.TestCase):
         self.run_block(r"""
         const ctx = ctxWith({ n1: { id: 'n1', text: 'note', imageIds: [] } });
         const html = renderApNotesSection(FLOOR, [{ name: 'AP1', noteIds: ['n1'] }], {}, ctx, 0);
-        check('the page names itself', html.includes('AP Notes Reference'));
+        check('the page names itself', html.includes('AP Notes'));
         check('the title uses the compass page treatment',
-              html.includes('<h2 class="rep-floor-title">AP Notes Reference</h2>'));
+              html.includes('<h2 class="rep-floor-title">AP Notes</h2>'));
         check('the floor is demoted to the subtitle', html.includes('rep-ref-sub'));
         check('floor still identified', html.includes('Office'));
         check('the old 30px floor title is gone', !html.includes('rep-seg-floor'));
@@ -241,7 +241,7 @@ class NotesRendering(unittest.TestCase):
         const html = renderApNotesSection(fp, [{ name: 'AP1', noteIds: ['n1'] }], {}, ctx, 0);
         const occurrences = html.split('PARTITION PLAN').length - 1;
         check('floor name appears once, got ' + occurrences, occurrences === 1);
-        check('and the page still names itself', html.includes('AP Notes Reference'));
+        check('and the page still names itself', html.includes('AP Notes'));
         done();
         """)
 
