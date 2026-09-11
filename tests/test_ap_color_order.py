@@ -290,13 +290,46 @@ class TheSequenceIsArrangeable(unittest.TestCase):
         self.assertIn("function moveColor(from, to)", self.source)
         self.assertIn("_colorOrder.splice(to, 0, item)", self.source)
 
-    def test_both_a_drag_and_a_button_can_do_it(self):
-        """Arrows work on a touchpad and read as affordances; drag is the
-        gesture the segment builder already taught."""
-        self.assertIn("ar-cseq-up", self.block)
-        self.assertIn("ar-cseq-dn", self.block)
-        self.assertIn("dragstart", self.block)
-        self.assertIn("drop", self.block)
+    def test_it_is_the_gesture_quick_walls_already_taught(self):
+        """Quick Walls reorders its hotkey slots by dragging the row itself.
+        Doing it a second, different way in the same suite is what made
+        ordering four colours feel like work."""
+        self.assertIn("WD.mountDragReorder", self.block)
+        shared = SHARED_JS.read_text(encoding="utf-8")
+        self.assertIn("WD.mountDragReorder = function", shared)
+
+    def test_the_extra_controls_are_gone(self):
+        """A grip glyph and a pair of arrow buttons, on a row you can already
+        pick up, is three affordances for one action."""
+        source = AP_JS.read_text(encoding="utf-8")
+        for gone in ("ar-cseq-grip", "ar-cseq-up", "ar-cseq-dn", "ar-cseq-btns"):
+            with self.subTest(removed=gone):
+                self.assertNotIn(gone, source)
+
+    def test_the_drag_shows_where_it_will_land(self):
+        """Dragging with no feedback is most of what makes a drag feel fiddly,
+        and it is the part the old one was missing entirely."""
+        shared = SHARED_JS.read_text(encoding="utf-8")
+        block = shared[shared.index("WD.mountDragReorder = function"):]
+        block = block[:block.index("WD.mountFolds")]
+        self.assertIn("'dragover'", block)
+        self.assertIn("'dragging'", block)
+        css = AP_HTML.read_text(encoding="utf-8")
+        self.assertIn(".ar-cseq-row.dragover", css)
+        self.assertIn(".ar-cseq-row.dragging", css)
+
+    def test_the_tag_looks_like_a_quick_walls_slot(self):
+        """His words were "like the little tags" - matching them visually is
+        half of not having to learn a second way to order things."""
+        css = AP_HTML.read_text(encoding="utf-8")
+        self.assertIn(".ar-cseq-edge", css)          # colour down the left edge
+        self.assertIn("cursor:grab", css)
+
+    def test_the_keyboard_route_survives(self):
+        """Drag is primary, but a narrow window and a touchpad is his normal
+        working setup."""
+        self.assertIn("ArrowUp", self.block)
+        self.assertIn("ArrowDown", self.block)
 
     def test_the_picker_is_gone(self):
         """Nothing to add, because every colour present is already listed;

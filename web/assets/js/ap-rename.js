@@ -1214,21 +1214,26 @@
     state.added.forEach(function (k) { justAdded[k] = 1; });
     var last = _colorOrder.length - 1;
 
+    /* One draggable tag per colour, the same shape as a Quick Walls hotkey
+       slot: colour down the left edge, its place in the order, the name.
+
+       It had a grip glyph and a pair of up/down buttons as well. That is two
+       mechanisms and a handle for a third, on a row you can already just pick
+       up - which is what made ordering four colours feel like work. Grab the
+       tag, drop it where you want it. Arrow keys still move the focused one,
+       for a narrow window or no mouse, but they are not more chrome on screen. */
     var rows = _colorOrder.map(function (k, i) {
       var hex = k === WD.CLEAR_KEY ? WD.CLEAR_HEX : (resolveColor(k) || '#888');
-      /* The position sits inside the swatch, in the AP's own colour, the same
-         way it does on the plan - so this list reads like the map. Which
-         means real ink: a number on Ekahau green in white cannot be read. */
+      // The number sits on the colour itself, the way it does on the plan, so
+      // it needs real ink: a number on Ekahau green in white cannot be read.
       var ink = WD.readableOn(hex);
       var ring = WD.outlineOn(hex);
-      /* Focusable, because dragging a row inside a narrow sidebar is fiddly
-         and he works in a constrained window. Arrow keys move the focused
-         colour; the buttons do the same thing for a mouse. */
-      return '<div class="ar-cseq-row" draggable="true" data-i="' + i + '"' +
-        ' tabindex="0" role="listitem"' +
+      return '<div class="ar-cseq-row" data-i="' + i + '"' +
+        ' tabindex="0" role="listitem" style="--cseq-color:' + esc(hex) + '"' +
+        ' title="Drag to reorder"' +
         ' aria-label="' + esc(colorLabel(k)) + ', position ' + (i + 1) +
-        ' of ' + (last + 1) + '. Use the arrow keys to move it.">' +
-        '<span class="ar-cseq-grip" title="Drag to reorder">&#8801;</span>' +
+        ' of ' + (last + 1) + '. Drag to reorder, or use the arrow keys.">' +
+        '<span class="ar-cseq-edge"></span>' +
         '<span class="ar-cseq-dot" style="background:' + esc(hex) +
           ';color:' + esc(ink) + ';border-color:' + esc(ring) + '">' + (i + 1) + '</span>' +
         '<span class="ar-cseq-name">' + esc(colorLabel(k)) + '</span>' +
@@ -1237,12 +1242,6 @@
         (justAdded[k] ? '<span class="ar-cseq-new" title="This project uses a ' +
           'colour your saved order did not cover, so it was added at the end.">' +
           'added</span>' : '') +
-        '<span class="ar-cseq-btns">' +
-          '<button type="button" class="ar-cseq-up" data-i="' + i + '"' +
-            (i === 0 ? ' disabled' : '') + ' title="Move earlier">&#9650;</button>' +
-          '<button type="button" class="ar-cseq-dn" data-i="' + i + '"' +
-            (i === last ? ' disabled' : '') + ' title="Move later">&#9660;</button>' +
-        '</span>' +
       '</div>';
     }).join('');
 
@@ -1270,19 +1269,15 @@
       '<div class="ar-cseq">' + rows + '</div>' +
       '<div class="ar-col-note">' + esc(note) + '</div>';
 
-    panel.querySelectorAll('.ar-cseq-up').forEach(function (b) {
-      b.onclick = function () {
-        var i = parseInt(b.getAttribute('data-i'), 10);
-        moveColor(i, i - 1);
-      };
+    /* Drag the tag, same gesture as the Quick Walls hotkey slots and from the
+       same implementation. Arrow keys move the focused tag for a narrow
+       window or no mouse - a keyboard alternative, not a second set of
+       controls taking up the row. */
+    WD.mountDragReorder({
+      container: panel,
+      itemSelector: '.ar-cseq-row',
+      onMove: moveColor,
     });
-    panel.querySelectorAll('.ar-cseq-dn').forEach(function (b) {
-      b.onclick = function () {
-        var i = parseInt(b.getAttribute('data-i'), 10);
-        moveColor(i, i + 1);
-      };
-    });
-    // Drag, the same way the segment builder does it.
     panel.querySelectorAll('.ar-cseq-row').forEach(function (row) {
       var i = parseInt(row.getAttribute('data-i'), 10);
       row.addEventListener('keydown', function (e) {
@@ -1295,20 +1290,6 @@
         var moved = panel.querySelectorAll('.ar-cseq-row')[Math.max(0,
           Math.min(_colorOrder.length - 1, to))];
         if (moved) moved.focus();
-      });
-      row.addEventListener('dragstart', function (e) {
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', String(i));
-        row.style.opacity = '.4';
-      });
-      row.addEventListener('dragend', function () { row.style.opacity = ''; });
-      row.addEventListener('dragover', function (e) {
-        e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-      });
-      row.addEventListener('drop', function (e) {
-        e.preventDefault();
-        var from = parseInt(e.dataTransfer.getData('text/plain'), 10);
-        if (!isNaN(from)) moveColor(from, i);
       });
     });
   }
