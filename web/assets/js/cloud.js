@@ -4342,8 +4342,12 @@ async function syncEverything() {
   }
 
   if (plan.up.length) {
+    /* "Cannot" was the wrong word and it said something false about his own
+       tool: Ekahau's API is not the obstacle, the code is simply not written.
+       Say which it is - one of those is a limit he has to work around, the
+       other is a job still on the list. */
     body += '<p class="sync-plan-lead">Newer locally — these need to go up, and '
-      + 'this cannot do it yet:</p>'
+      + 'that direction is not built yet:</p>'
       + '<div class="sync-plan-wrap"><table class="sync-plan">'
       + '<thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>'
       + '<tbody>' + _syncRowsHtml(plan.up, '&#11014; local &rarr; cloud') + '</tbody>'
@@ -4351,7 +4355,7 @@ async function syncEverything() {
       + '<p class="sub">They are left exactly as they are. Sync never replaces '
       + 'the newer side with the older one, so running this cannot put your work '
       + 'at risk — but it does not finish the job either. Send these up from '
-      + 'Ekahau until the upload direction is built.</p>';
+      + 'Ekahau in the meantime.</p>';
   }
 
   if (plan.inSync.length) {

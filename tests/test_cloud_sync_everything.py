@@ -227,8 +227,12 @@ class ItIsHonestAboutTheHalfItCannotDo(unittest.TestCase):
         self.assertIn("plan.up.length", self.body)
         self.assertIn("local &rarr; cloud", self.body)
 
-    def test_it_says_uploading_is_not_built_rather_than_staying_quiet(self):
-        self.assertIn("upload direction is built", self.body)
+    def test_it_says_not_built_rather_than_cannot(self):
+        """"We cannot upload" says something false about his own tool: the API
+        is not the obstacle, the code is simply not written. One of those is a
+        limit to work around, the other is a job still on the list."""
+        self.assertIn("not built yet", self.body)
+        self.assertNotIn("this cannot do it yet", self.body)
 
     def test_an_otherwise_clean_run_still_mentions_what_is_waiting(self):
         """Nothing to bring down must not render as "all done" when a
