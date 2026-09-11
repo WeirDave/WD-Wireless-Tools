@@ -8,8 +8,7 @@
 (function () {
   'use strict';
 
-  var state = { file: null, bytes: null, report: null, busy: false,
-                outside: 'refuse' };
+  var state = { file: null, bytes: null, report: null, busy: false };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return WD.esc(s); }
@@ -39,7 +38,6 @@
     var params = { name: state.file.name };
     var boxes = window.__ptBoxes && window.__ptBoxes();
     if (boxes) params.boxes = JSON.stringify(boxes);
-    if (state.outside === 'clamp') params.outside = 'clamp';
     return params;
   }
 
@@ -169,7 +167,6 @@
       } else {
         badge = f.action === 'skipped' ? 'Leave as is' : 'Refused';
         right = '<span class="pt-reason">' + esc(f.reason || f.action) + '</span>';
-        if (f.strandedCount) right += _strandedPanel(f);
       }
       return '<div class="pt-floor is-' + f.action + '">' +
                '<span class="pt-badge">' + badge + '</span>' +
@@ -194,54 +191,6 @@
         'corner of it.';
     }
   }
-
-  // A refusal is only useful if it says what is in the way. The list is the
-  // actionable part; the buttons are the two honest ways forward.
-  function _strandedPanel(f) {
-    var rows = (f.stranded || []).map(function (o) {
-      return '<li>' + esc(o.kind) + (o.name ? ' <b>' + esc(o.name) + '</b>' : '') +
-             ' <span class="pt-at">at ' + Math.round(o.x) + ', ' + Math.round(o.y) +
-             '</span></li>';
-    }).join('');
-    var more = f.strandedCount > (f.stranded || []).length
-      ? '<li class="pt-more">and ' + (f.strandedCount - f.stranded.length) + ' more</li>'
-      : '';
-    return '<div class="pt-stranded">' +
-      '<div class="pt-stranded-head">' + f.strandedCount + ' object' +
-        (f.strandedCount === 1 ? '' : 's') + ' outside the box' +
-        ' <button type="button" class="pt-link" data-stranded="' +
-        esc(f.id) + '">show me on the plan</button></div>' +
-      '<ul class="pt-stranded-list">' + rows + more + '</ul>' +
-      '<div class="pt-stranded-acts">' +
-        '<button class="btn btn-sm" onclick="ptKeepOnEdge()">Keep them on the edge and trim</button>' +
-        '<span class="pt-stranded-note">Or delete them in Ekahau and open the file again ' +
-        '&mdash; that is the clean fix if they are import leftovers.</span>' +
-      '</div></div>';
-  }
-
-  // Delegated so the button's floor id travels in a data attribute rather than
-  // through a quoted onclick, which is one escaping mistake away from breaking.
-  document.addEventListener('click', function (e) {
-    var btn = e.target && e.target.closest && e.target.closest('[data-stranded]');
-    if (btn) window.ptbShowStranded(btn.getAttribute('data-stranded'));
-  });
-
-  // Jump to the floor and mark the strays, so "13 objects" becomes 13 things
-  // he can see sitting out by the title block.
-  window.ptbShowStranded = function (floorId) {
-    var f = null;
-    (state.report && state.report.floors || []).forEach(function (x) {
-      if (x.id === floorId) f = x;
-    });
-    if (!f) return;
-    window.__ptMarkStranded(floorId, f.stranded || []);
-  };
-
-  window.ptKeepOnEdge = function () {
-    state.outside = 'clamp';
-    toast('Objects outside the box will be pulled to the crop edge', 'success');
-    analyze();
-  };
 
   // -------------------------------------------------------------------- trim
   window.ptTrim = function () {
@@ -281,6 +230,12 @@
           '<div class="pt-result-path">' + esc(name) + '</div>' +
           (meta ? '<div class="pt-result-size">' + mb(meta.bytesBefore) + ' &rarr; ' +
                   mb(meta.bytesAfter) + '</div>' : '') +
+          // Stated, not asked about: scissors do not keep what they cut away.
+          (meta && meta.droppedCount
+            ? '<div class="pt-result-cut">' + meta.droppedCount + ' object' +
+              (meta.droppedCount === 1 ? '' : 's') + ' outside the box ' +
+              (meta.droppedCount === 1 ? 'was' : 'were') + ' cut away with it.</div>'
+            : '') +
           '<div class="pt-result-next">Open it in Ekahau to confirm it looks right before using it ' +
           'on real work. Your original file is untouched.</div>';
         toast('Trimmed ' + count + ' floor plan' + (count === 1 ? '' : 's'), 'success');
@@ -319,8 +274,19 @@
 (function () {
   'use strict';
 
-  var HANDLE = 8;           // hit radius, screen px
-  var MIN_SIDE = 8;         // image px; matches MIN_MANUAL_SIDE server-side
+  // Sizes are CSS pixels, scaled to the canvas's device pixels where used.
+  // They used to be device pixels, which on a 1.5x or 2x Windows display made
+  // both the drawn handle and its hit target about four CSS pixels across: too
+  // small to aim at, and a near miss did not merely fail to grab the handle,
+  // it started a new box over the one being adjusted. "Drag a handle to
+  // adjust" destroyed the work rather than doing nothing.
+  var HANDLE_HIT_CSS = 16;   // how close a press counts as grabbing a handle
+  var HANDLE_DRAW_CSS = 11;  // how big the handle looks
+  var MIN_SIDE = 8;          // image px; matches MIN_MANUAL_SIDE server-side
+
+  function dpr() { return window.devicePixelRatio || 1; }
+  function hitRadius() { return HANDLE_HIT_CSS * dpr(); }
+  function handleSize() { return HANDLE_DRAW_CSS * dpr(); }
 
   var box = {
     zip: null,
@@ -346,7 +312,7 @@
   function fitView() {
     var cv = $('ptbCanvas');
     if (!box.img || !cv.width) return;
-    var s = Math.min(cv.width / box.img.width, cv.height / box.img.height) * 0.92;
+    var s = Math.min(cv.width / box.img.width, cv.height / box.img.height) * 0.97;
     box.view.scale = s;
     box.view.x = (cv.width - box.img.width * s) / 2;
     box.view.y = (cv.height - box.img.height * s) / 2;
@@ -395,54 +361,17 @@
     g.lineWidth = 2;
     g.strokeRect(x, y, w, h);
 
-    g.fillStyle = '#4a9eff';
+    // Big enough to grab, with a white surround so a handle stays visible
+    // over dark linework as well as over paper.
+    var hs = handleSize();
     handlePoints(x, y, w, h).forEach(function (p) {
-      g.fillRect(p.x - 4, p.y - 4, 8, 8);
+      g.fillStyle = '#ffffff';
+      g.fillRect(p.x - hs / 2 - 1, p.y - hs / 2 - 1, hs + 2, hs + 2);
+      g.fillStyle = '#4a9eff';
+      g.fillRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
     });
 
-    drawStranded(g);
   }
-
-  // The objects a crop would leave behind, marked where they actually sit.
-  // This is the whole answer to "13 objects" being unactionable: once they are
-  // visible out by the title block, it is obvious whether they matter.
-  function drawStranded(g) {
-    var list = box.stranded && box.stranded[box.current];
-    if (!list || !list.length) return;
-    g.save();
-    g.strokeStyle = '#ff8c42';
-    g.fillStyle = 'rgba(255,140,66,0.9)';
-    g.lineWidth = 2;
-    g.font = '11px ui-monospace, monospace';
-    list.forEach(function (o) {
-      var p = toScreen(o.x, o.y);
-      g.beginPath();
-      g.arc(p.x, p.y, 9, 0, Math.PI * 2);
-      g.stroke();
-      g.beginPath();
-      g.arc(p.x, p.y, 3, 0, Math.PI * 2);
-      g.fill();
-      var label = o.name || o.kind;
-      if (label) g.fillText(label, p.x + 13, p.y + 4);
-    });
-    g.restore();
-  }
-
-  window.__ptMarkStranded = function (floorId, list) {
-    box.stranded = box.stranded || {};
-    box.stranded[floorId] = list;
-    var sel = $('ptbFloor');
-    if (sel && sel.value !== floorId) {
-      sel.value = floorId;
-      window.ptbSelectFloor(floorId);
-    } else {
-      draw();
-    }
-    var card = $('ptBoxCard');
-    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    WD.toast(list.length + ' object' + (list.length === 1 ? '' : 's') +
-             ' marked on the plan', 'success');
-  };
 
   function handlePoints(x, y, w, h) {
     return [
@@ -464,9 +393,14 @@
     var c = toScreen(b[2], b[3]);
     var x = Math.min(a.x, c.x), y = Math.min(a.y, c.y);
     var w = Math.abs(c.x - a.x), h = Math.abs(c.y - a.y);
-    var found = null;
+    // Nearest handle within reach, rather than the last one that matches:
+    // corner and edge handles sit close together on a small box, and picking
+    // by iteration order grabs the wrong one.
+    var r = hitRadius();
+    var found = null, best = Infinity;
     handlePoints(x, y, w, h).forEach(function (p) {
-      if (Math.abs(px - p.x) <= HANDLE && Math.abs(py - p.y) <= HANDLE) found = p.id;
+      var d = Math.max(Math.abs(px - p.x), Math.abs(py - p.y));
+      if (d <= r && d < best) { best = d; found = p.id; }
     });
     if (found) return found;
     if (px > x && px < x + w && py > y && py < y + h) return 'move';

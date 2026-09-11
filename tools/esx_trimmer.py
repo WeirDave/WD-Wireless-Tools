@@ -74,15 +74,24 @@ AREA_FILES = {
 # absence.  AP position lives only in accessPoints.json; the radio files
 # reference an AP by id and carry no geometry of their own.
 NEVER_TOUCH = (
-    "wallSegments.json",
     "wallTypes.json",
-    "simulatedRadios.json",
-    "measuredRadios.json",
     "accessPointMeasurements.json",
     "notes.json",
     "requirements.json",
     "buildingFloors.json",
     "surveyLookups.json",
+)
+
+# Carry no geometry either, but they reference objects that do. A drawn box
+# that cuts an access point away has to take its radios with it, and one that
+# cuts a wall point has to take the segments built on it - otherwise the
+# project ships with ids pointing at things that are gone. They are rewritten
+# only for that reason: an automatic trim never drops anything, so it never
+# touches them, and the guard below holds that.
+CUT_CASCADE = (
+    "wallSegments.json",
+    "simulatedRadios.json",
+    "measuredRadios.json",
 )
 
 DEFAULT_MARGIN = 10
@@ -114,8 +123,8 @@ class FloorResult:
     #: page can mark them on the canvas instead of reporting a bare count.
     stranded: list = field(default_factory=list)
     stranded_count: int = 0
-    #: How many were pulled to the crop edge, when the user asked for that.
-    clamped_count: int = 0
+    #: Objects cut away because they sat outside a drawn box.
+    dropped_count: int = 0
 
     @property
     def trimmed(self) -> bool:
@@ -486,7 +495,7 @@ def _crop_image(blob: bytes, box, kind: str) -> bytes:
 
 
 def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
-                manual_box=None, outside_policy: str = "refuse") -> tuple:
+                manual_box=None) -> tuple:
     """Decide what to do with one floor. Returns (FloorResult, box or None).
 
     *manual_box* is an ``(x0, y0, x1, y1)`` rectangle in image pixels that the
@@ -533,8 +542,7 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
         )
 
     if manual_box is not None:
-        return _plan_manual(members, plan, fid, name, manual_box, w, h, refuse, skip,
-                            policy=outside_policy)
+        return _plan_manual(members, plan, fid, name, manual_box, w, h, refuse, skip)
 
     bounds = content_bounds(im, margin=margin)
     if bounds is None:
@@ -577,8 +585,7 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
 MIN_MANUAL_SIDE = 8
 
 
-def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip,
-                 policy: str = "refuse") -> tuple:
+def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip) -> tuple:
     """Honour a drawn box, refusing only what cannot be made safe.
 
     A drawn box is deliberately *not* unioned with the detected content or with
@@ -606,39 +613,15 @@ def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip,
     if x1 - x0 < MIN_MANUAL_SIDE or y1 - y0 < MIN_MANUAL_SIDE:
         return refuse("the drawn area is too small to crop to")
 
-    items, outside = _coords_outside(members, fid, (x0, y0, x1, y1))
-    if outside and policy != "clamp":
-        # "Widen the box" is the one piece of advice that cannot work here: the
-        # strays are out by the sheet margin, so widening far enough to catch
-        # them puts the title block back inside the crop, which is what the box
-        # was drawn to exclude. Name what is in the way instead, and leave the
-        # decision where it belongs.
-        what = ", ".join(_describe(i) for i in items[:4])
-        more = f" and {outside - 4} more" if outside > 4 else ""
-        result = FloorResult(
-            fid, name, "refused",
-            f"{outside} object{'s' if outside != 1 else ''} would be left off the "
-            f"plan by this crop: {what}{more}. Cropping anyway puts them at a "
-            "negative coordinate, off the drawing. If they are import leftovers, "
-            "delete them in Ekahau and trim again - that is the clean fix. "
-            "Otherwise choose 'Keep them on the edge' to pull them to the crop "
-            "boundary, or redraw the box to take them in.",
-            old_size=(w, h), source="manual", box=(x0, y0, x1, y1))
-        result.stranded = items
-        result.stranded_count = outside
-        return result, None
-
     if (x1 - x0) >= w and (y1 - y0) >= h:
         return skip("the drawn area covers the whole canvas")
 
-    result = FloorResult(fid, name, "trimmed", old_size=(w, h),
-                         new_size=(x1 - x0, y1 - y0), offset=(x0, y0),
-                         source="manual", box=(x0, y0, x1, y1))
-    if outside:
-        result.stranded = items
-        result.stranded_count = outside
-        result.clamped_count = outside
-    return result, (x0, y0, x1, y1)
+    return (
+        FloorResult(fid, name, "trimmed", old_size=(w, h),
+                    new_size=(x1 - x0, y1 - y0), offset=(x0, y0),
+                    source="manual", box=(x0, y0, x1, y1)),
+        (x0, y0, x1, y1),
+    )
 
 
 def _coords_outside(members: dict, floor_id: str, box):
@@ -653,6 +636,153 @@ def _coords_outside(members: dict, floor_id: str, box):
     if bbox[0] >= x0 and bbox[1] >= y0 and bbox[2] <= x1 and bbox[3] <= y1:
         return [], 0
     return stranded_objects(members, floor_id, box)
+
+
+#: Files that reference an object by id rather than carrying geometry. When a
+#: cut removes the object, these have to lose the reference too or the project
+#: ships with a dangling id.
+_AP_REFERENCING = (("simulatedRadios.json", "simulatedRadios"),
+                   ("measuredRadios.json", "measuredRadios"))
+
+
+def _inside(c, box) -> bool:
+    x0, y0, x1, y1 = box
+    return x0 <= float(c["x"]) <= x1 and y0 <= float(c["y"]) <= y1
+
+
+def cut_outside(members: dict, floor_id: str, box) -> int:
+    """Remove everything on *floor_id* that falls outside *box*.
+
+    A drawn box is a pair of scissors: what is inside is kept and what is
+    outside is gone. Cropping to one conference room and keeping the access
+    points from the rest of the building would be the surprising behaviour, not
+    this one.
+
+    The only thing not left to the cut is referential integrity. An access
+    point carries its radios by id in separate files and a wall point is
+    referenced by its segments, so removing either without removing what points
+    at it would ship a project with dangling ids - corruption the user cannot
+    see and did not ask for. Those cascades are followed here.
+    """
+    removed = 0
+    dropped_aps: set = set()
+    dropped_wall_points: set = set()
+
+    for member, key in POINT_FILES.items():
+        doc = members.get(member)
+        if not isinstance(doc, dict) or not isinstance(doc.get(key), list):
+            continue
+        kept = []
+        for item in doc[key]:
+            loc = item.get("location") or {}
+            coord = loc.get("coord")
+            if loc.get("floorPlanId") == floor_id and isinstance(coord, dict)                     and isinstance(coord.get("x"), (int, float))                     and not _inside(coord, box):
+                removed += 1
+                if member == "accessPoints.json" and item.get("id"):
+                    dropped_aps.add(item["id"])
+                elif member == "wallPoints.json" and item.get("id"):
+                    dropped_wall_points.add(item["id"])
+                continue
+            kept.append(item)
+        if len(kept) != len(doc[key]):
+            doc[key] = kept
+
+    # An area is a polygon: if any corner is outside the cut it is not wholly
+    # kept, and half an attenuation area is a worse claim than none.
+    for member, key in AREA_FILES.items():
+        doc = members.get(member)
+        if not isinstance(doc, dict) or not isinstance(doc.get(key), list):
+            continue
+        kept = []
+        for item in doc[key]:
+            if item.get("floorPlanId") == floor_id:
+                pts = [c for c in (item.get("area") or [])
+                       if isinstance(c, dict) and isinstance(c.get("x"), (int, float))]
+                if pts and not all(_inside(c, box) for c in pts):
+                    removed += 1
+                    continue
+            kept.append(item)
+        if len(kept) != len(doc[key]):
+            doc[key] = kept
+
+    # A reference point can be projected onto several floors; only this floor's
+    # projection is cut.
+    doc = members.get("referencePoints.json")
+    if isinstance(doc, dict) and isinstance(doc.get("referencePoints"), list):
+        for item in doc["referencePoints"]:
+            projs = item.get("projections")
+            if not isinstance(projs, list):
+                continue
+            kept = []
+            for pr in projs:
+                c = pr.get("coord") if isinstance(pr, dict) else None
+                if pr.get("floorPlanId") == floor_id and isinstance(c, dict)                         and isinstance(c.get("x"), (int, float)) and not _inside(c, box):
+                    removed += 1
+                    continue
+                kept.append(pr)
+            if len(kept) != len(projs):
+                item["projections"] = kept
+
+    # Survey route points are samples along a walk: drop the ones outside and
+    # keep the rest of the walk, which is what cutting the sheet would leave.
+    for member in _survey_members(members):
+        doc = members.get(member)
+        if not isinstance(doc, dict) or not isinstance(doc.get("surveys"), list):
+            continue
+        for survey in doc["surveys"]:
+            if survey.get("floorPlanId") != floor_id:
+                continue
+            legs = survey.get("routePoints")
+            if not isinstance(legs, list):
+                continue
+            new_legs = []
+            for leg in legs:
+                pts = leg if isinstance(leg, list) else [leg]
+                keep = []
+                for rp in pts:
+                    c = rp.get("location") if isinstance(rp, dict) else None
+                    if isinstance(c, dict) and isinstance(c.get("x"), (int, float))                             and not _inside(c, box):
+                        removed += 1
+                        continue
+                    keep.append(rp)
+                if keep:
+                    new_legs.append(keep if isinstance(leg, list) else keep[0])
+            survey["routePoints"] = new_legs
+
+    # --- cascades, so nothing is left pointing at what was cut -------------
+    if dropped_wall_points:
+        doc = members.get("wallSegments.json")
+        if isinstance(doc, dict) and isinstance(doc.get("wallSegments"), list):
+            doc["wallSegments"] = [
+                seg for seg in doc["wallSegments"]
+                if not (set(seg.get("wallPoints") or []) & dropped_wall_points)
+            ]
+    if dropped_aps:
+        for member, key in _AP_REFERENCING:
+            doc = members.get(member)
+            if isinstance(doc, dict) and isinstance(doc.get(key), list):
+                doc[key] = [r for r in doc[key]
+                            if r.get("accessPointId") not in dropped_aps]
+
+    return removed
+
+
+def _assert_nothing_off_the_plan(members: dict, floor_id: str, w: float, h: float) -> None:
+    """After a cut, no coordinate on this floor may sit off the new canvas.
+
+    A negative coordinate is the one outcome nobody asked for: the object is
+    neither kept nor cut, just invisible. Across 109 real projects not one of
+    51,394 coordinates was ever negative, so Ekahau does not produce them and
+    this tool will not be the first thing that does.
+    """
+    for c, kind, name in _floor_coords(members, floor_id):
+        x, y = float(c["x"]), float(c["y"])
+        if x < -0.5 or y < -0.5 or x > w + 0.5 or y > h + 0.5:
+            label = f" {name!r}" if name else ""
+            raise TrimError(
+                f"internal error: {kind}{label} ended up at {x:.0f}, {y:.0f} on a "
+                f"{w:.0f}x{h:.0f} floor plan; refusing to write it"
+            )
 
 
 def _existing_crop_rect(plan: dict, w: int, h: int):
@@ -683,16 +813,13 @@ def _rebase_crop_rect(plan: dict, dx: float, dy: float, new_w: int, new_h: int) 
     plan["cropMaxY"] = min(float(new_h), float(plan["cropMaxY"]) - dy)
 
 
-def analyze(source: Path, margin: int = DEFAULT_MARGIN, boxes=None,
-             outside_policy: str = "refuse") -> TrimReport:
+def analyze(source: Path, margin: int = DEFAULT_MARGIN, boxes=None) -> TrimReport:
     """Report what trimming would do, without writing anything."""
-    return _run(Path(source), None, margin, dry_run=True, boxes=boxes,
-                outside_policy=outside_policy)
+    return _run(Path(source), None, margin, dry_run=True, boxes=boxes)
 
 
 def trim(source: Path, dest: Path | None = None, margin: int = DEFAULT_MARGIN,
-         in_place: bool = False, boxes=None,
-         outside_policy: str = "refuse") -> TrimReport:
+         in_place: bool = False, boxes=None) -> TrimReport:
     """Trim *source* into *dest* (or alongside it) and return a report.
 
     Never writes over the input while working: the archive is built at a
@@ -703,12 +830,11 @@ def trim(source: Path, dest: Path | None = None, margin: int = DEFAULT_MARGIN,
         dest = source
     elif dest is None:
         dest = source.with_name(source.stem + " (trimmed)" + source.suffix)
-    return _run(source, Path(dest), margin, dry_run=False, boxes=boxes,
-                outside_policy=outside_policy)
+    return _run(source, Path(dest), margin, dry_run=False, boxes=boxes)
 
 
 def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
-         boxes=None, outside_policy: str = "refuse") -> TrimReport:
+         boxes=None) -> TrimReport:
     if not source.exists():
         raise TrimError(f"no such file: {source}")
 
@@ -743,8 +869,7 @@ def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
 
     for plan in plans:
         result, box = _plan_floor(members, plan, images, margin,
-                                  manual_box=(boxes or {}).get(plan.get("id")),
-                                  outside_policy=outside_policy)
+                                  manual_box=(boxes or {}).get(plan.get("id")))
         report.floors.append(result)
         if box is None or dry_run:
             continue
@@ -754,11 +879,17 @@ def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
         kind = image_kind(blob)
         new_images[plan["imageId"]] = _crop_image(blob, box, kind)
 
-        # Only a deliberate "keep them on the edge" clamps; otherwise a
-        # coordinate outside the crop would have been refused already, so there
-        # is nothing to pull in and nothing to move by accident.
-        clamp = (x1 - x0, y1 - y0) if result.clamped_count else None
-        touched = offset_metadata(members, plan["id"], float(x0), float(y0), clamp)
+        # A drawn box cuts: anything outside it goes, along with whatever
+        # referenced it. Automatic bounds always contain every coordinate, so
+        # there is nothing to cut on that path.
+        if result.source == "manual":
+            result.dropped_count = cut_outside(members, plan["id"], (x0, y0, x1, y1))
+            if result.dropped_count:
+                dirty.update(("wallSegments.json", "simulatedRadios.json",
+                              "measuredRadios.json"))
+        touched = offset_metadata(members, plan["id"], float(x0), float(y0))
+        _assert_nothing_off_the_plan(members, plan["id"],
+                                     float(x1 - x0), float(y1 - y0))
         dirty.update(name for name, count in touched.items() if count)
         dirty.add("floorPlans.json")
         new_w, new_h = x1 - x0, y1 - y0
@@ -778,6 +909,12 @@ def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
     if protected:
         raise TrimError(
             "refusing to rewrite protected member(s): " + ", ".join(sorted(protected))
+        )
+    # The cascade files may only move when a drawn box actually cut something.
+    if dirty.intersection(CUT_CASCADE) and not any(f.dropped_count for f in report.floors):
+        raise TrimError(
+            "refusing to rewrite reference member(s) when nothing was cut: "
+            + ", ".join(sorted(dirty.intersection(CUT_CASCADE)))
         )
 
     if dry_run:
@@ -827,9 +964,7 @@ def _floor_json(f: FloorResult) -> dict:
         "areaSavedPct": saved,
         "source": f.source,
         "box": list(f.box) if f.box else None,
-        "stranded": f.stranded,
-        "strandedCount": f.stranded_count,
-        "clampedCount": f.clamped_count,
+        "droppedCount": f.dropped_count,
     }
 
 
@@ -849,21 +984,18 @@ def _report_json(report: TrimReport, dest: Path | None = None) -> dict:
     }
 
 
-def api_analyze(path: str, margin: int = DEFAULT_MARGIN, boxes=None,
-                outside_policy: str = "refuse") -> dict:
+def api_analyze(path: str, margin: int = DEFAULT_MARGIN, boxes=None) -> dict:
     try:
-        return _report_json(analyze(Path(path), margin=int(margin), boxes=boxes,
-                                   outside_policy=outside_policy))
+        return _report_json(analyze(Path(path), margin=int(margin), boxes=boxes))
     except TrimError as exc:
         return {"ok": False, "error": str(exc)}
 
 
 def api_trim_to(path: str, dest: str, margin: int = DEFAULT_MARGIN,
-                boxes=None, outside_policy: str = "refuse") -> dict:
+                boxes=None) -> dict:
     """Trim *path* into an explicit *dest*, for the upload/download flow."""
     try:
-        report = trim(Path(path), Path(dest), margin=int(margin), boxes=boxes,
-                      outside_policy=outside_policy)
+        report = trim(Path(path), Path(dest), margin=int(margin), boxes=boxes)
         return _report_json(report, dest=Path(dest))
     except TrimError as exc:
         return {"ok": False, "error": str(exc)}

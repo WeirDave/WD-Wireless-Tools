@@ -1,11 +1,11 @@
 {
-  "suite": "2.89.0",
+  "suite": "2.90.0",
   "cloud": "4.26.0",
   "walls": "7.58",
   "report": "2.59.0",
   "scale": "1.5",
   "squirrel": "1.26.1",
-  "plantrim": "1.4",
+  "plantrim": "1.5",
   "aprename": "2.9",
   "capacity": "1.1",
   "prep": "1.0"

@@ -168,34 +168,15 @@ class ManualBoxTests(unittest.TestCase):
 
     # -- refusals ----------------------------------------------------------
 
-    def test_a_box_that_strands_an_access_point_is_refused(self):
+    def test_a_box_that_leaves_an_access_point_out_cuts_it(self):
         src = build(self.dir / "far.esx", aps=((400.0, 400.0), (1800.0, 700.0)))
-        rep = esx_trimmer.analyze(src, boxes={FLOOR: [150, 150, 950, 1150]})
+        out = self.dir / "far-out.esx"
+        rep = esx_trimmer.trim(src, out, boxes={FLOOR: [150, 150, 950, 1150]})
         floor = rep.floors[0]
-        self.assertEqual(floor.action, "refused")
-        self.assertIn("1 object", floor.reason)
-        # Named, not counted: a bare count sends the user widening the box.
-        self.assertIn("Access point", floor.reason)
-        self.assertIn("AP-1", floor.reason)
-        self.assertEqual(floor.stranded_count, 1)
-        self.assertEqual(floor.stranded[0]["kind"], "Access point")
-        self.assertEqual(floor.stranded[0]["name"], "AP-1")
-
-    def test_the_count_of_stranded_objects_is_reported(self):
-        src = build(self.dir / "far2.esx",
-                    aps=((400.0, 400.0), (1800.0, 700.0), (1810.0, 720.0)))
-        rep = esx_trimmer.analyze(src, boxes={FLOOR: [150, 150, 950, 1150]})
-        self.assertIn("2 objects", rep.floors[0].reason)
-
-    def test_nothing_is_written_for_a_refused_floor(self):
-        src = build(self.dir / "far3.esx", aps=((400.0, 400.0), (1800.0, 700.0)))
-        out = self.dir / "far3-out.esx"
-        esx_trimmer.trim(src, out, boxes={FLOOR: [150, 150, 950, 1150]})
-        with zipfile.ZipFile(out) as z:
-            im = Image.open(io.BytesIO(z.read("image-" + IMAGE)))
-        self.assertEqual(im.size, (SHEET_W, SHEET_H), "a refused floor keeps its image")
-        ap = member(out, "accessPoints.json")["accessPoints"][0]
-        self.assertEqual(ap["location"]["coord"], {"x": 400.0, "y": 400.0})
+        self.assertEqual(floor.action, "trimmed")
+        self.assertEqual(floor.dropped_count, 1)
+        names = {a["name"] for a in member(out, "accessPoints.json")["accessPoints"]}
+        self.assertEqual(names, {"AP-0"})
 
     def test_a_degenerate_box_is_refused(self):
         for box in ([500, 500, 503, 900], [500, 500, 900, 502]):
@@ -246,14 +227,19 @@ class ManualBoxTests(unittest.TestCase):
 
 
 @unittest.skipUnless(HAVE_PILLOW, "Pillow is required")
-class StrandedObjectTests(unittest.TestCase):
-    """What happens when a sensible crop leaves something behind.
+class CutTests(unittest.TestCase):
+    """A drawn box is a pair of scissors, not a proposal.
 
-    His Anduril warehouse sheet is the case: a box over the building, dropping
-    74% of the sheet, refused because 13 objects sat out in the margin. The
-    refusal was right and the advice - widen the box - was the one action that
-    cannot work, because widening far enough to catch strays in the margin puts
-    the title block back inside the crop.
+    This used to refuse when objects fell outside the box, on the theory that
+    it must be a mis-drag. A mis-drag cannot be told from a deliberate crop to
+    one conference room, one wing, or one group of rooms - all real uses - and
+    refusing made the tool worse than the automatic version it replaced, which
+    simply trimmed and was done.
+
+    So the box is honoured and what falls outside is cut away. The only thing
+    the cut does not leave to chance is referential integrity: an access point
+    carries its radios by id and a wall point is referenced by its segments, so
+    those go with it rather than being left as ids pointing at nothing.
     """
 
     def setUp(self):
@@ -261,116 +247,127 @@ class StrandedObjectTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.dir = Path(self.tmp.name)
         self.addCleanup(self.tmp.cleanup)
-        # A plan in the middle, plus junk out by the title block.
         self.src = build(self.dir / "strays.esx", aps=(
-            (400.0, 400.0), (500.0, 600.0),          # on the plan
-            (1850.0, 220.0), (1870.0, 260.0), (1900.0, 1310.0),  # margin junk
-        ))
+            (400.0, 400.0), (500.0, 600.0),                       # inside
+            (1850.0, 220.0), (1870.0, 260.0), (1900.0, 1310.0)))  # outside
         self.box = [150, 150, 950, 1150]
 
-    def test_the_refusal_names_each_object_and_where_it_is(self):
+    def test_the_box_is_honoured_not_refused(self):
         floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
-        self.assertEqual(floor.action, "refused")
-        self.assertEqual(floor.stranded_count, 3)
-        kinds = {i["kind"] for i in floor.stranded}
-        names = {i["name"] for i in floor.stranded}
-        self.assertEqual(kinds, {"Access point"})
-        self.assertEqual(names, {"AP-2", "AP-3", "AP-4"})
-        for i in floor.stranded:
-            self.assertGreater(i["x"], 1000)   # locations, for the canvas
-
-    def test_the_message_does_not_tell_him_to_widen_the_box(self):
-        """Widening is the one move that guarantees the title block comes back."""
-        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
-        self.assertNotIn("Widen", floor.reason)
-        self.assertNotIn("widen", floor.reason)
-
-    def test_the_message_recommends_deleting_them_in_ekahau(self):
-        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
-        self.assertIn("delete them in Ekahau", floor.reason)
-
-    def test_the_message_says_what_going_ahead_would_do(self):
-        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
-        self.assertIn("negative coordinate", floor.reason)
-
-    def test_refusing_is_still_the_default(self):
-        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box}).floors[0]
-        self.assertEqual(floor.action, "refused")
-
-    # -- the informed override --------------------------------------------
-
-    def test_clamp_lets_the_crop_go_ahead(self):
-        floor = esx_trimmer.analyze(self.src, boxes={FLOOR: self.box},
-                                    outside_policy="clamp").floors[0]
-        self.assertEqual(floor.action, "trimmed")
-        self.assertEqual(floor.clamped_count, 3)
+        self.assertEqual(floor.action, "trimmed", floor.reason)
         self.assertEqual(floor.new_size, (800, 1000))
 
-    def test_clamped_objects_land_on_the_edge_not_off_the_plan(self):
-        out = self.dir / "clamped.esx"
-        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box},
-                         outside_policy="clamp")
+    def test_what_falls_outside_is_cut_away(self):
+        out = self.dir / "cut.esx"
+        rep = esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box})
+        self.assertEqual(rep.floors[0].dropped_count, 3)
+        names = {a["name"] for a in member(out, "accessPoints.json")["accessPoints"]}
+        self.assertEqual(names, {"AP-0", "AP-1"})
+
+    def test_what_was_inside_keeps_its_position(self):
+        out = self.dir / "cut2.esx"
+        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box})
+        by = {a["name"]: a["location"]["coord"]
+              for a in member(out, "accessPoints.json")["accessPoints"]}
+        self.assertEqual(by["AP-0"], {"x": 250.0, "y": 250.0})
+        self.assertEqual(by["AP-1"], {"x": 350.0, "y": 450.0})
+
+    def test_nothing_is_left_at_a_negative_coordinate(self):
+        """Neither kept nor cut is the one outcome nobody asked for."""
+        out = self.dir / "cut3.esx"
+        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box})
         plan = member(out, "floorPlans.json")["floorPlans"][0]
-        w, h = plan["width"], plan["height"]
         for ap in member(out, "accessPoints.json")["accessPoints"]:
             c = ap["location"]["coord"]
-            with self.subTest(ap=ap["name"]):
-                self.assertGreaterEqual(c["x"], 0.0, "nothing may go negative")
-                self.assertGreaterEqual(c["y"], 0.0)
-                self.assertLessEqual(c["x"], w)
-                self.assertLessEqual(c["y"], h)
+            self.assertGreaterEqual(c["x"], 0.0)
+            self.assertGreaterEqual(c["y"], 0.0)
+            self.assertLessEqual(c["x"], plan["width"])
+            self.assertLessEqual(c["y"], plan["height"])
 
-    def test_clamping_does_not_move_what_was_already_inside(self):
-        """Only the strays are touched; the real plan keeps its geometry."""
-        out = self.dir / "clamped2.esx"
-        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box},
-                         outside_policy="clamp")
-        by_name = {a["name"]: a["location"]["coord"]
-                   for a in member(out, "accessPoints.json")["accessPoints"]}
-        self.assertEqual(by_name["AP-0"], {"x": 250.0, "y": 250.0})
-        self.assertEqual(by_name["AP-1"], {"x": 350.0, "y": 450.0})
+    def test_a_cut_wall_point_takes_its_segments_with_it(self):
+        """Otherwise the project ships with a segment pointing at nothing."""
+        esx = self.dir / "walls.esx"
+        build(esx, aps=((400.0, 400.0),))
+        with zipfile.ZipFile(esx) as z:
+            m = {n: z.read(n) for n in z.namelist()}
+        wp = json.loads(m["wallPoints.json"])
+        wp["wallPoints"].append({"id": "wp-out", "location": {
+            "floorPlanId": FLOOR, "coord": {"x": 1900.0, "y": 1350.0}}})
+        m["wallPoints.json"] = json.dumps(wp).encode()
+        seg = json.loads(m["wallSegments.json"])
+        seg["wallSegments"].append({"id": "ws-out", "wallPoints": ["wp-1", "wp-out"],
+                                    "wallTypeId": "wt-1"})
+        m["wallSegments.json"] = json.dumps(seg).encode()
+        with zipfile.ZipFile(esx, "w", zipfile.ZIP_DEFLATED) as z:
+            for n, b in m.items():
+                z.writestr(n, b)
+        out = self.dir / "walls-out.esx"
+        esx_trimmer.trim(esx, out, boxes={FLOOR: self.box})
+        kept_points = {w["id"] for w in member(out, "wallPoints.json")["wallPoints"]}
+        kept_segs = member(out, "wallSegments.json")["wallSegments"]
+        self.assertNotIn("wp-out", kept_points)
+        self.assertEqual([x["id"] for x in kept_segs], ["ws-1"])
+        for x in kept_segs:
+            for ref in x.get("wallPoints", []):
+                self.assertIn(ref, kept_points, "a segment points at a cut wall point")
 
-    def test_clamping_does_not_drop_anything(self):
-        out = self.dir / "clamped3.esx"
-        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box},
-                         outside_policy="clamp")
-        self.assertEqual(len(member(out, "accessPoints.json")["accessPoints"]), 5)
+    def test_a_cut_access_point_takes_its_radios_with_it(self):
+        esx = self.dir / "radios.esx"
+        build(esx, aps=((400.0, 400.0), (1850.0, 220.0)))
+        with zipfile.ZipFile(esx) as z:
+            m = {n: z.read(n) for n in z.namelist()}
+        m["simulatedRadios.json"] = json.dumps({"simulatedRadios": [
+            {"id": "r-in", "accessPointId": "ap-0"},
+            {"id": "r-out", "accessPointId": "ap-1"}]}).encode()
+        with zipfile.ZipFile(esx, "w", zipfile.ZIP_DEFLATED) as z:
+            for n, b in m.items():
+                z.writestr(n, b)
+        out = self.dir / "radios-out.esx"
+        esx_trimmer.trim(esx, out, boxes={FLOOR: self.box})
+        aps = {a["id"] for a in member(out, "accessPoints.json")["accessPoints"]}
+        radios = member(out, "simulatedRadios.json")["simulatedRadios"]
+        self.assertEqual(aps, {"ap-0"})
+        self.assertEqual([r["id"] for r in radios], ["r-in"])
+        for r in radios:
+            self.assertIn(r["accessPointId"], aps, "a radio points at a cut AP")
 
-    def test_clamping_still_leaves_metersperunit_alone(self):
-        out = self.dir / "clamped4.esx"
-        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box},
-                         outside_policy="clamp")
+    def test_an_automatic_trim_never_cuts_anything(self):
+        """Detected bounds always contain every coordinate, so nothing is lost."""
+        rep = esx_trimmer.analyze(self.src)
+        for f in rep.floors:
+            self.assertEqual(f.dropped_count, 0)
+
+    def test_an_automatic_trim_leaves_the_reference_files_alone(self):
+        out = self.dir / "auto.esx"
+        esx_trimmer.trim(self.src, out)
+        with zipfile.ZipFile(self.src) as a, zipfile.ZipFile(out) as b:
+            for n in ("wallSegments.json", "wallTypes.json"):
+                self.assertEqual(a.read(n), b.read(n), n)
+
+    def test_a_clean_crop_cuts_nothing(self):
+        clean = build(self.dir / "clean.esx", aps=((400.0, 400.0),))
+        rep = esx_trimmer.trim(clean, self.dir / "clean-out.esx",
+                               boxes={FLOOR: self.box})
+        self.assertEqual(rep.floors[0].dropped_count, 0)
+
+    def test_metersperunit_still_survives_a_cut(self):
+        out = self.dir / "cut4.esx"
+        esx_trimmer.trim(self.src, out, boxes={FLOOR: self.box})
         plan = member(out, "floorPlans.json")["floorPlans"][0]
         self.assertEqual(repr(plan["metersPerUnit"]), repr(MPU))
 
-    def test_a_clean_crop_clamps_nothing(self):
-        clean = build(self.dir / "clean.esx", aps=((400.0, 400.0),))
-        floor = esx_trimmer.analyze(clean, boxes={FLOOR: self.box},
-                                    outside_policy="clamp").floors[0]
-        self.assertEqual(floor.action, "trimmed")
-        self.assertEqual(floor.clamped_count, 0)
+    def test_wall_types_are_still_never_rewritten(self):
+        """The guard against corruption stays; the veto over his choice went."""
+        self.assertIn("wallTypes.json", esx_trimmer.NEVER_TOUCH)
+        self.assertNotIn("wallSegments.json", esx_trimmer.NEVER_TOUCH)
+        self.assertIn("wallSegments.json", esx_trimmer.CUT_CASCADE)
 
-    def test_a_long_list_is_capped_but_the_count_is_not(self):
-        many = build(self.dir / "many.esx",
-                     aps=tuple((1800.0 + i, 200.0 + i) for i in range(60)))
-        floor = esx_trimmer.analyze(many, boxes={FLOOR: self.box}).floors[0]
-        self.assertEqual(floor.stranded_count, 60)
-        self.assertLessEqual(len(floor.stranded), esx_trimmer.MAX_STRANDED_LISTED)
-
-    def test_different_kinds_are_named_separately(self):
-        esx = build(self.dir / "mixed.esx", aps=((400.0, 400.0), (1850.0, 220.0)))
-        with zipfile.ZipFile(esx) as z:
-            members = {n: z.read(n) for n in z.namelist()}
-        doc = json.loads(members["wallPoints.json"])
-        doc["wallPoints"].append({"id": "wp-stray", "location": {
-            "floorPlanId": FLOOR, "coord": {"x": 1900.0, "y": 1350.0}}})
-        members["wallPoints.json"] = json.dumps(doc).encode()
-        with zipfile.ZipFile(esx, "w", zipfile.ZIP_DEFLATED) as z:
-            for n, b in members.items():
-                z.writestr(n, b)
-        floor = esx_trimmer.analyze(esx, boxes={FLOOR: self.box}).floors[0]
-        self.assertEqual({i["kind"] for i in floor.stranded},
-                         {"Access point", "Wall point"})
+    def test_cutting_to_a_single_room_is_allowed(self):
+        """A conference room, a group of rooms, who knows - all his call."""
+        rep = esx_trimmer.analyze(self.src, boxes={FLOOR: [380, 380, 560, 640]})
+        floor = rep.floors[0]
+        self.assertEqual(floor.action, "trimmed", floor.reason)
+        self.assertEqual(floor.new_size, (180, 260))
 
 
 if __name__ == "__main__":

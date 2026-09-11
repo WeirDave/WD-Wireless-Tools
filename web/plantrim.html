@@ -35,8 +35,12 @@
   }
   .ptb-readout.is-manual { color: var(--blue); border-color: var(--blue); }
   .ptb-stage {
-    position: relative; height: 460px; border: 1px solid var(--border);
-    border-radius: 8px; overflow: hidden; background: var(--bg);
+    /* The plan is the thing being worked on, so it gets the room. A drag is
+       only as accurate as what can be seen while making it, and the old 460px
+       box showed a 5000x3750 CAD sheet about two inches tall. */
+    position: relative; height: min(72vh, 900px); min-height: 420px;
+    border: 1px solid var(--border); border-radius: 8px;
+    overflow: hidden; background: var(--bg);
   }
   .ptb-stage canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   .ptb-stage.is-panning canvas { cursor: grabbing; }
@@ -55,21 +59,6 @@
   }
   .ptb-evidence strong { color: var(--blue); }
   .ptb-evidence .ptb-ev-basis { display: block; margin-bottom: 3px; }
-  /* The objects a crop would leave behind. A count of 13 is unactionable; this
-     is the list that makes the decision obvious. */
-  .pt-stranded {
-    flex-basis: 100%; margin-top: 8px; padding: 9px 11px; border-radius: 6px;
-    font-size: 12px; line-height: 1.5;
-    background: color-mix(in srgb, var(--amber, #f0ad4e) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--amber, #f0ad4e) 42%, transparent);
-  }
-  .pt-stranded-head { font-weight: 600; margin-bottom: 5px; }
-  .pt-stranded-list { margin: 0 0 8px; padding-left: 18px; }
-  .pt-stranded-list li { margin: 1px 0; }
-  .pt-stranded-list .pt-at { color: var(--text-muted); font-family: ui-monospace, monospace; font-size: 11px; }
-  .pt-stranded-list .pt-more { color: var(--text-muted); list-style: none; margin-left: -18px; }
-  .pt-stranded-acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .pt-stranded-note { color: var(--text-muted); font-size: 11px; }
   .pt-link {
     background: none; border: none; padding: 0; font: inherit; cursor: pointer;
     color: var(--blue); text-decoration: underline;
@@ -167,9 +156,11 @@
     <div class="pt-card" id="ptBoxCard" hidden>
       <div class="pt-step">Draw what to keep</div>
       <p class="ptb-intro">
-        Automatic detection reads a drawing frame and a title block as content, because they are —
-        ink on the sheet. Drag a rectangle to say what to keep instead. Hold
-        <kbd>Space</kbd> and drag to pan, scroll to zoom.
+        Drag a rectangle around what you want to keep. Everything outside it is cut away, like
+        scissors on a sheet — drag the handles to adjust before you save. Hold <kbd>Space</kbd>
+        and drag to pan, scroll to zoom.
+        <strong>Your original file is never changed</strong> — saving gives you a new copy, so if
+        a cut comes out wrong just open it again and redraw.
       </p>
       <div class="ptb-bar">
         <label class="ptb-floor">
