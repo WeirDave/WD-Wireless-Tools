@@ -156,7 +156,7 @@ key) and `WD.ekahauColorName()` (key → the word Ekahau uses).
 | Pink | `magenta` | `#FF00FF` |
 | Violet | `purple` | `#C297FF` |
 | Blue | `blue` | `#0068FF` |
-| Gray | `gray` | `#6B6B6B` |
+| Gray | `gray` | `#6D6D6D` (also accepts `#6B6B6B`) |
 | Green | `green` | `#00FF00` |
 | Brown | `brown` | `#C97700` |
 | Mint | `cyan` | `#00FFCE` |
@@ -167,7 +167,18 @@ checked. The keys are internal and a saved colour sequence is stored by key,
 so renaming them would silently reorder somebody's sequence — the display name
 is what changed. `WD.EKAHAU_COLOR_ALIASES` accepts either vocabulary coming in.
 
-**What is verified and what is not.** The hex values were checked against the
+**Gray is the cautionary tale.** The table started with `#6D6D6D`, which is
+what a real project actually contains. A later pass "corrected" it to
+`#6B6B6B` by reading the swatch off the picker on screen, and from then on
+every grey AP fell through to `Custom #6D6D6D` in the colour list. Reading a
+rendered colour is not the same as knowing what gets written to the file.
+`WD.EKAHAU_HEX_ALIASES` exists for this: **add an observed hex, never replace
+one**, or the bug just moves to whoever had the other value.
+
+**What is verified and what is not.** Red, Green, Orange and Pink are
+confirmed against a real project — they resolved to names in it. Gray is
+confirmed the other way round, as above. Yellow, Violet, Blue, Brown and Mint
+are still only as good as the picker. The hex values were checked against the
 real Ekahau colour picker (2026-09-04). The *stored representation* is not
 verified: across 111 local `.esx` files and 913 APs there is not a single
 `color` field on an access point, because none of those projects has a marked

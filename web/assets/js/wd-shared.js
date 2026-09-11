@@ -105,8 +105,24 @@
   WD.EKAHAU_COLORS = {
     yellow:  '#FFE600', orange: '#FF8500', red:     '#FF0000',
     magenta: '#FF00FF', purple: '#C297FF', blue:    '#0068FF',
-    gray:    '#6B6B6B', green:  '#00FF00', brown:   '#C97700',
+    gray:    '#6D6D6D', green:  '#00FF00', brown:   '#C97700',
     cyan:    '#00FFCE'
+  };
+
+  /* Other hexes that are the same swatch.
+
+     Gray is the one that bit. The first version of this table had #6D6D6D,
+     which is what a real project actually contains; a later pass "corrected"
+     it to #6B6B6B by reading the colour off the picker on screen, and from
+     then on every grey AP fell through to Custom #6D6D6D. Eyeballing a
+     rendered swatch is not the same as knowing what gets written to the file.
+
+     So both are accepted. Add to this rather than replacing a value whenever
+     a project turns up carrying a hex we do not recognise - the observed one
+     is the truth, and swapping the canonical value out would just move the
+     bug to whoever had the other one. */
+  WD.EKAHAU_HEX_ALIASES = {
+    '#6B6B6B': 'gray'
   };
   WD.EKAHAU_COLOR_ORDER = [
     'yellow', 'orange', 'red', 'magenta', 'purple', 'blue',
@@ -170,6 +186,7 @@
         return WD.EKAHAU_COLOR_ORDER[i];
       }
     }
+    if (WD.EKAHAU_HEX_ALIASES[up]) return WD.EKAHAU_HEX_ALIASES[up];
     return lc;                 // unknown: kept as-is, drawn and labelled
   };
 
