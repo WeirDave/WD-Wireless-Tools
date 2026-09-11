@@ -55,6 +55,25 @@
   }
   .ptb-evidence strong { color: var(--blue); }
   .ptb-evidence .ptb-ev-basis { display: block; margin-bottom: 3px; }
+  /* The objects a crop would leave behind. A count of 13 is unactionable; this
+     is the list that makes the decision obvious. */
+  .pt-stranded {
+    flex-basis: 100%; margin-top: 8px; padding: 9px 11px; border-radius: 6px;
+    font-size: 12px; line-height: 1.5;
+    background: color-mix(in srgb, var(--amber, #f0ad4e) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--amber, #f0ad4e) 42%, transparent);
+  }
+  .pt-stranded-head { font-weight: 600; margin-bottom: 5px; }
+  .pt-stranded-list { margin: 0 0 8px; padding-left: 18px; }
+  .pt-stranded-list li { margin: 1px 0; }
+  .pt-stranded-list .pt-at { color: var(--text-muted); font-family: ui-monospace, monospace; font-size: 11px; }
+  .pt-stranded-list .pt-more { color: var(--text-muted); list-style: none; margin-left: -18px; }
+  .pt-stranded-acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .pt-stranded-note { color: var(--text-muted); font-size: 11px; }
+  .pt-link {
+    background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+    color: var(--blue); text-decoration: underline;
+  }
 </style>
 </head>
 <body class="tool-plantrim">
