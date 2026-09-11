@@ -336,5 +336,100 @@ class HandleDragTests(unittest.TestCase):
         self.assertEqual(self.run_js(2, script)["mode"], "pan")
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class CanvasImageTypeTests(unittest.TestCase):
+    """A floor plan has to be visible before a box can be drawn around it.
+
+    Members inside an .esx carry no extension and no content type, so a blob
+    built from one has neither. A browser sniffs a raster out of that happily,
+    but an SVG is text and will not render through <img> without being told it
+    is an image - so vector plans showed an empty canvas and no error at all.
+    """
+
+    PRELUDE = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('could not find ' + a);
+      return src.slice(i, j);
+    }
+    eval(slice('  var MIME = {', '  function loadImage(f)'));
+    const bytesOf = (arr) => new Uint8Array(arr);
+    const textBytes = (s) => new Uint8Array([...s].map(c => c.charCodeAt(0)));
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.PRELUDE + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_an_svg_gets_a_type_that_renders(self):
+        out = self.run_js("""
+          console.log(JSON.stringify({
+            decl: mimeFor(textBytes('<?xml version="1.0"?><svg/>'), 'SVG'),
+            bare: mimeFor(textBytes('<svg xmlns="x"/>'), ''),
+            bom: mimeFor(new Uint8Array([0xef,0xbb,0xbf,
+                   ...textBytes('<svg  ')]), ''),
+            spaced: mimeFor(textBytes(String.fromCharCode(10) +
+                     '  <?xml version="1.0"?>'), ''),
+          }));
+        """)
+        for key, mime in out.items():
+            with self.subTest(case=key):
+                self.assertEqual(mime, "image/svg+xml")
+
+    def test_the_raster_formats_still_work(self):
+        out = self.run_js("""
+          console.log(JSON.stringify({
+            png: mimeFor(bytesOf([0x89,0x50,0x4e,0x47,13,10,26,10]), 'PNG'),
+            jpeg: mimeFor(bytesOf([0xff,0xd8,0xff,0xe0]), 'JPEG'),
+            gif: mimeFor(textBytes('GIF89a'), 'GIF'),
+          }));
+        """)
+        self.assertEqual(out["png"], "image/png")
+        self.assertEqual(out["jpeg"], "image/jpeg")
+        self.assertEqual(out["gif"], "image/gif")
+
+    def test_the_bytes_beat_a_wrong_declaration(self):
+        """Same rule as the extractor: what the file is, not what it claims."""
+        out = self.run_js("""
+          console.log(JSON.stringify({
+            m: mimeFor(bytesOf([0x89,0x50,0x4e,0x47,13,10,26,10]), 'JPEG') }));
+        """)
+        self.assertEqual(out["m"], "image/png")
+
+    def test_a_short_buffer_is_still_identified(self):
+        """Guards count the bytes actually read, not the signature length."""
+        out = self.run_js("""
+          console.log(JSON.stringify({
+            png: mimeFor(bytesOf([0x89,0x50,0x4e,0x47]), ''),
+            jpeg: mimeFor(bytesOf([0xff,0xd8]), ''),
+          }));
+        """)
+        self.assertEqual(out["png"], "image/png")
+        self.assertEqual(out["jpeg"], "image/jpeg")
+
+    def test_the_declaration_fills_in_when_the_bytes_say_nothing(self):
+        out = self.run_js("""
+          console.log(JSON.stringify({ m: mimeFor(bytesOf([1,2,3,4,5]), 'PNG') }));
+        """)
+        self.assertEqual(out["m"], "image/png")
+
+    def test_an_unidentifiable_image_gets_no_type_rather_than_a_guess(self):
+        out = self.run_js("""
+          console.log(JSON.stringify({ m: mimeFor(bytesOf([1,2,3,4,5]), 'WBMP') }));
+        """)
+        self.assertEqual(out["m"], "")
+
+    def test_the_editor_reads_the_declared_formats(self):
+        js = PLANTRIM_JS.read_text(encoding="utf-8")
+        self.assertIn("images.json", js)
+        self.assertIn("format: formats[f.imageId]", js)
+        self.assertIn("mimeFor(bytes, f.format)", js)
+
+
 if __name__ == "__main__":
     unittest.main()
