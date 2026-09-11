@@ -5490,8 +5490,6 @@
             { value: 'never',  label: 'Never include' },
           ],
           description: 'A page per floor listing each marker number against the full AP name, so the installer can write the label correctly.' },
-        { id: 'apNotes', label: 'Include AP notes pages', default: false,
-          description: 'A page per floor listing the notes recorded against each AP on site. Text only — a note with a photo is listed and marked, but the image is not printed.' },
         { id: 'shortLabels', label: 'Short number labels on the plan', default: true,
           description: 'When your AP names end with an "AP" designator (e.g. "\u2026AP42"), show just the "42". Turn off to print the full AP name.' },
         { id: 'summary', label: 'Summary strip', default: false,
@@ -5529,6 +5527,8 @@
             { value: 'never',  label: 'Never include' },
           ],
           description: 'A one-page compass rose with practical guidance for aligning directional antennas to the azimuth values in this report.' },
+        { id: 'apNotes', label: 'Include AP notes pages', default: false,
+          description: 'A page per floor listing the notes recorded against each AP on site. Text only — a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderPlacementReport,
       postRender: function (host, opts) {
