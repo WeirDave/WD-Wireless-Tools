@@ -212,18 +212,34 @@ class ManualBoxTests(unittest.TestCase):
         rep = esx_trimmer.analyze(self.src, boxes={"some-other-floor": [0, 0, 10, 10]})
         self.assertEqual(rep.floors[0].source, "auto")
 
-    def test_the_existing_refusals_still_win_over_a_box(self):
-        """A box cannot talk the tool into cropping an SVG."""
+    def test_a_box_crops_a_vector_plan_too(self):
+        """SVG used to be refused outright; the box now works on it."""
         with zipfile.ZipFile(self.src) as z:
             members = {n: z.read(n) for n in z.namelist()}
-        members["image-" + IMAGE] = b'<?xml version="1.0"?><svg></svg>'
+        members["image-" + IMAGE] = (
+            b'<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg" '
+            b'width="2000" height="1500"><rect width="10" height="10"/></svg>')
         svg = self.dir / "svg.esx"
         with zipfile.ZipFile(svg, "w", zipfile.ZIP_DEFLATED) as z:
             for n, b in members.items():
                 z.writestr(n, b)
         rep = esx_trimmer.analyze(svg, boxes={FLOOR: [150, 150, 950, 1150]})
+        floor = rep.floors[0]
+        self.assertEqual(floor.action, "trimmed", floor.reason)
+        self.assertEqual(floor.new_size, (800, 1000))
+
+    def test_a_vector_plan_with_no_readable_root_is_still_refused(self):
+        """The narrow case that genuinely cannot be done, refused precisely."""
+        with zipfile.ZipFile(self.src) as z:
+            members = {n: z.read(n) for n in z.namelist()}
+        members["image-" + IMAGE] = b'<?xml version="1.0"?><notsvg/>'
+        bad = self.dir / "bad.esx"
+        with zipfile.ZipFile(bad, "w", zipfile.ZIP_DEFLATED) as z:
+            for n, b in members.items():
+                z.writestr(n, b)
+        rep = esx_trimmer.analyze(bad, boxes={FLOOR: [150, 150, 950, 1150]})
         self.assertEqual(rep.floors[0].action, "refused")
-        self.assertIn("SVG", rep.floors[0].reason)
+        self.assertIn("<svg>", rep.floors[0].reason)
 
 
 @unittest.skipUnless(HAVE_PILLOW, "Pillow is required")

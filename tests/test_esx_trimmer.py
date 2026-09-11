@@ -253,22 +253,95 @@ class EsxTrimmerTests(unittest.TestCase):
         self.assertGreater(plan["height"], 110)
 
     # -------------------------------------------------------------- refusals
-    def test_svg_floor_plan_is_refused(self):
-        svg = b'<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"/>'
+    def test_an_svg_floor_plan_is_cropped_by_its_viewbox(self):
+        """A vector plan has no pixel grid, so the window moves instead."""
+        svg = (b'<?xml version="1.0"?>\n'
+               b'<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300">'
+               b'<rect x="100" y="80" width="120" height="90"/></svg>')
         src = make_project(self.tmp / "svg.esx",
                            plans=[_plan(FLOOR_A, IMG_A, 400, 300, SCALE_A)],
                            images={IMG_A: svg})
-        report = trimmer.trim(src, self.tmp / "svg-out.esx")
-        self.assertEqual(report.floors[0].action, "refused")
-        self.assertIn("SVG", report.floors[0].reason)
+        out = self.tmp / "svg-out.esx"
+        report = trimmer.trim(src, out, boxes={FLOOR_A: [50, 40, 350, 260]})
+        self.assertEqual(report.floors[0].action, "trimmed", report.floors[0].reason)
+        with zipfile.ZipFile(out) as z:
+            body = z.read("image-" + IMG_A)
+        import re as _re
+        self.assertIn(b'viewBox="50 40 300 220"', body)
+        self.assertIn(b'width="300"', body)
+        self.assertIn(b'height="220"', body)
+        # The drawing itself is untouched: only the root element is rewritten.
+        self.assertIn(b'<rect x="100" y="80" width="120" height="90"/>', body)
 
-    def test_bitmap_image_id_is_refused(self):
-        src = make_project(self.tmp / "bmp.esx",
-                           plans=[_plan(FLOOR_A, IMG_A, 400, 300, SCALE_A, bitmapImageId=IMG_B)],
-                           images={IMG_A: _drawing(), IMG_B: _drawing(800, 600)})
-        report = trimmer.trim(src, self.tmp / "bmp-out.esx")
+    def test_an_svg_with_a_viewbox_crops_in_user_units(self):
+        """A document whose user units are not pixels still crops in place."""
+        svg = (b'<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" '
+               b'viewBox="0 0 800 600"><rect width="10" height="10"/></svg>')
+        src = make_project(self.tmp / "vb.esx",
+                           plans=[_plan(FLOOR_A, IMG_A, 400, 300, SCALE_A)],
+                           images={IMG_A: svg})
+        out = self.tmp / "vb-out.esx"
+        trimmer.trim(src, out, boxes={FLOOR_A: [100, 50, 300, 250]})
+        with zipfile.ZipFile(out) as z:
+            body = z.read("image-" + IMG_A)
+        # 2 user units per pixel, so the window doubles.
+        self.assertIn(b'viewBox="200 100 400 400"', body)
+        self.assertIn(b'width="200"', body)
+
+    def test_an_unreadable_vector_root_is_refused_precisely(self):
+        src = make_project(self.tmp / "bad.esx",
+                           plans=[_plan(FLOOR_A, IMG_A, 400, 300, SCALE_A)],
+                           images={IMG_A: b'<?xml version="1.0"?><nothing/>'})
+        report = trimmer.trim(src, self.tmp / "bad-out.esx",
+                              boxes={FLOOR_A: [50, 40, 350, 260]})
         self.assertEqual(report.floors[0].action, "refused")
-        self.assertIn("bitmapImageId", report.floors[0].reason)
+        self.assertIn("<svg>", report.floors[0].reason)
+
+    def test_a_second_image_is_cropped_to_the_same_region(self):
+        """Crop one and not the other and every AP lands wrong."""
+        from PIL import Image as _I
+        import io as _io
+        big = _drawing(800, 600, box=(240, 160, 520, 420))
+        src = make_project(
+            self.tmp / "pair.esx",
+            plans=[_plan(FLOOR_A, IMG_A, 400, 300, SCALE_A, bitmapImageId=IMG_B)],
+            images={IMG_A: _drawing(400, 300), IMG_B: big})
+        out = self.tmp / "pair-out.esx"
+        report = trimmer.trim(src, out, boxes={FLOOR_A: [50, 40, 350, 260]})
+        self.assertEqual(report.floors[0].action, "trimmed", report.floors[0].reason)
+        with zipfile.ZipFile(out) as z:
+            a = _I.open(_io.BytesIO(z.read("image-" + IMG_A)))
+            b = _I.open(_io.BytesIO(z.read("image-" + IMG_B)))
+            plan = json.loads(z.read("floorPlans.json"))["floorPlans"][0]
+        self.assertEqual(a.size, (300, 220))
+        # The companion is twice the resolution, so it keeps twice the region.
+        self.assertEqual(b.size, (600, 440))
+        self.assertEqual((plan["width"], plan["height"]), (300.0, 220.0))
+
+    def test_both_images_record_their_new_size(self):
+        """images.json used to keep the original resolution after a trim."""
+        from PIL import Image as _I
+        import io as _io
+        big = _drawing(800, 600, box=(240, 160, 520, 420))
+        src = make_project(
+            self.tmp / "res.esx",
+            plans=[_plan(FLOOR_A, IMG_A, 400, 300, SCALE_A, bitmapImageId=IMG_B)],
+            images={IMG_A: _drawing(400, 300), IMG_B: big},
+            extra_members={"images.json": {"images": [
+                {"id": IMG_A, "imageFormat": "PNG",
+                 "resolutionWidth": 400.0, "resolutionHeight": 300.0},
+                {"id": IMG_B, "imageFormat": "PNG",
+                 "resolutionWidth": 800.0, "resolutionHeight": 600.0}]}})
+        out = self.tmp / "res-out.esx"
+        trimmer.trim(src, out, boxes={FLOOR_A: [50, 40, 350, 260]})
+        with zipfile.ZipFile(out) as z:
+            imgs = {i["id"]: i for i in json.loads(z.read("images.json"))["images"]}
+            a = _I.open(_io.BytesIO(z.read("image-" + IMG_A)))
+            b = _I.open(_io.BytesIO(z.read("image-" + IMG_B)))
+        self.assertEqual((imgs[IMG_A]["resolutionWidth"],
+                          imgs[IMG_A]["resolutionHeight"]), (float(a.width), float(a.height)))
+        self.assertEqual((imgs[IMG_B]["resolutionWidth"],
+                          imgs[IMG_B]["resolutionHeight"]), (float(b.width), float(b.height)))
 
     def test_gps_anchored_floor_plan_is_refused(self):
         src = make_project(self.tmp / "gps.esx",
