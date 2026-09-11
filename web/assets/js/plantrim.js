@@ -710,6 +710,43 @@
     el.hidden = false;
   }
 
+  // A floor plan member carries no extension and no content type, so a blob
+  // made from it has neither. A browser will sniff a raster out of that, but an
+  // SVG is text and will not render without being told it is an image - which
+  // is why vector plans showed an empty canvas and no error. The format comes
+  // from images.json, cross-checked against the bytes in the same spirit as the
+  // extractor: what the file *is* wins over what it is labelled.
+  var MIME = { SVG: 'image/svg+xml', PNG: 'image/png', JPEG: 'image/jpeg',
+               JPG: 'image/jpeg', GIF: 'image/gif', BMP: 'image/bmp',
+               TIFF: 'image/tiff', WEBP: 'image/webp' };
+
+  function sniffMime(bytes) {
+    // Guards are the number of bytes each check actually reads, not the length
+    // of the signature: a four-byte read behind a "length > 8" guard silently
+    // declines to identify a file it could have.
+    if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 &&
+        bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg';
+    if (bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 &&
+        bytes[2] === 0x46) return 'image/gif';
+    // SVG is text: look past a byte-order mark and any leading whitespace.
+    var i = 0;
+    if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) i = 3;
+    while (i < bytes.length && bytes[i] <= 0x20) i++;
+    if (bytes[i] === 0x3c) {          // '<'
+      var head = '';
+      for (var j = i; j < Math.min(i + 8, bytes.length); j++) {
+        head += String.fromCharCode(bytes[j]);
+      }
+      if (head.indexOf('<?xml') === 0 || head.indexOf('<svg') === 0) return 'image/svg+xml';
+    }
+    return '';
+  }
+
+  function mimeFor(bytes, declared) {
+    return sniffMime(bytes) || MIME[String(declared || '').toUpperCase()] || '';
+  }
+
   function loadImage(f) {
     if (box.img && box.imgFor === f.imageId) return Promise.resolve();
     var entry = box.zip && box.zip.file('image-' + f.imageId);
@@ -719,9 +756,10 @@
       $('ptbEmpty').textContent = 'This floor has no image in the archive.';
       return Promise.resolve();
     }
-    return entry.async('blob').then(function (blob) {
+    return entry.async('uint8array').then(function (bytes) {
       return new Promise(function (resolve) {
-        var url = URL.createObjectURL(blob);
+        var type = mimeFor(bytes, f.format);
+        var url = URL.createObjectURL(new Blob([bytes], type ? { type: type } : undefined));
         var im = new Image();
         im.onload = function () {
           box.img = im;
@@ -732,7 +770,9 @@
         im.onerror = function () {
           box.img = null;
           $('ptbEmpty').hidden = false;
-          $('ptbEmpty').textContent = 'This floor plan cannot be drawn on (it may be an SVG).';
+          $('ptbEmpty').textContent = type
+            ? 'This floor plan image could not be displayed.'
+            : 'This floor plan is in a format the page cannot display.';
           URL.revokeObjectURL(url);
           resolve();
         };
@@ -765,12 +805,20 @@
 
     return Promise.all([
       zip.file('floorPlans.json') ? zip.file('floorPlans.json').async('string') : null,
-      restore(projectId)
+      restore(projectId),
+      zip.file('images.json') ? zip.file('images.json').async('string') : null
     ]).then(function (res) {
       var doc = res[0] ? JSON.parse(res[0]) : { floorPlans: [] };
       box.boxes = res[1] || {};
+      var formats = {};
+      try {
+        ((JSON.parse(res[2] || '{}').images) || []).forEach(function (i) {
+          if (i && i.id) formats[i.id] = i.imageFormat || '';
+        });
+      } catch (e) { formats = {}; }
       box.floors = (doc.floorPlans || []).map(function (f) {
         return { id: f.id, name: f.name || '(unnamed)', imageId: f.imageId,
+                 format: formats[f.imageId] || '',
                  w: Math.round(f.width || 0), h: Math.round(f.height || 0) };
       });
       var sel = $('ptbFloor');
