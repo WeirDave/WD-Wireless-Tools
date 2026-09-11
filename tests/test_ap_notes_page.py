@@ -38,6 +38,12 @@ const source = fs.readFileSync(process.argv[1], 'utf8');
 const a = source.indexOf('  function notesForAp(ap, ctx) {');
 const b = source.indexOf('  function renderPlacementReport(aps, opts, ctx) {');
 if (a < 0 || b < 0) throw new Error('the AP notes block moved');
+// The shared reference-page heading lives with the label-reference page, so it
+// is pulled in separately - the real one, not a stub, because how these pages
+// title themselves is exactly what is under test.
+const ha = source.indexOf('  function referencePageHead(title, fp, countText) {');
+const hb = source.indexOf('  function renderApNameKeySection(');
+if (ha < 0 || hb < 0) throw new Error('referencePageHead moved');
 
 const WD = {
   esc: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
@@ -45,11 +51,15 @@ const WD = {
   escAttr: s => String(s).replace(/"/g, '&quot;'),
 };
 function apLabel(ap, mode) { return (ap && ap.name) || ''; }
-function segFloorHeading(o) { return 'FLOOR ' + o.floorNumber; }
-function floorNumberFor(fp) { return fp.number || '1'; }
+function segFloorHeading(o) {
+  return (o.floorNumber !== null && o.floorNumber !== undefined)
+    ? 'Floor ' + o.floorNumber : (o.floorName || '');
+}
+function floorNumberFor(fp) { return fp.number; }
 function orientPickerHtml(key) { return '<!--orient:' + key + '-->'; }
 function renderReportFooter() { return '<footer></footer>'; }
 
+eval(source.slice(ha, hb));
 eval(source.slice(a, b));
 
 const failures = [];
@@ -201,15 +211,37 @@ class NotesRendering(unittest.TestCase):
         done();
         """)
 
-    def test_the_page_carries_the_floor_heading_the_map_uses(self):
-        """A note belongs with the plan it was written on."""
+    def test_the_page_names_itself_and_demotes_the_floor(self):
+        """It is a reference page, like the compass one, and must say so.
+
+        It used to take the floor heading as its title. On a plan with no floor
+        number that resolves to the floor's own name, so the page was titled
+        with the floor name at 30px, repeated it underneath, and never said
+        what the page was.
+        """
         self.run_block(r"""
         const ctx = ctxWith({ n1: { id: 'n1', text: 'note', imageIds: [] } });
         const html = renderApNotesSection(FLOOR, [{ name: 'AP1', noteIds: ['n1'] }], {}, ctx, 0);
-        check('floor heading present', html.includes('FLOOR 1'));
-        check('floor name present', html.includes('Office'));
+        check('the page names itself', html.includes('AP Notes Reference'));
+        check('the title uses the compass page treatment',
+              html.includes('<h2 class="rep-floor-title">AP Notes Reference</h2>'));
+        check('the floor is demoted to the subtitle', html.includes('rep-ref-sub'));
+        check('floor still identified', html.includes('Office'));
+        check('the old 30px floor title is gone', !html.includes('rep-seg-floor'));
         check('it is a page section', html.includes('rep-notes-page'));
         check('it takes part in orientation', html.includes('rep-oriented'));
+        done();
+        """)
+
+    def test_a_floor_without_a_number_is_not_printed_twice(self):
+        """His project: the floor has a long CAD name and no number."""
+        self.run_block(r"""
+        const ctx = ctxWith({ n1: { id: 'n1', text: 'note', imageIds: [] } });
+        const fp = { id: 'f1', name: 'Warehouse - Sheet IA-1-1 - PARTITION PLAN' };
+        const html = renderApNotesSection(fp, [{ name: 'AP1', noteIds: ['n1'] }], {}, ctx, 0);
+        const occurrences = html.split('PARTITION PLAN').length - 1;
+        check('floor name appears once, got ' + occurrences, occurrences === 1);
+        check('and the page still names itself', html.includes('AP Notes Reference'));
         done();
         """)
 
