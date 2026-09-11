@@ -7674,6 +7674,54 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 
 .dropzone-open-disk:hover { background: var(--surface-hover); color: var(--text); }
 
+/* ── AP notes pages ──────────────────────────────────────────
+   Notes typed against an AP on site. Unlike the label reference, this text is
+   read rather than transcribed, so it wraps freely and long notes are allowed
+   to run - a truncated note is worse than a long one. */
+.rep-notes-page { break-inside: auto; }
+
+.rep-notes-intro { color: #555; font-size: 12px; margin: 6px 0 10px; }
+.rep-notes-head .rep-placement-sub { display: block; margin-top: 2px; }
+
+.rep-notes-table { width: 100%; border-collapse: collapse; }
+.rep-notes-table th {
+  text-align: left; font-size: 10px; font-weight: 700; padding: 4px 8px;
+  text-transform: uppercase; letter-spacing: .4px; color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+}
+.rep-notes-table td {
+  padding: 6px 8px; border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.rep-notes-table td.rep-note-ap,
+.rep-notes-table th.rep-note-ap {
+  width: 2.1in; font-family: var(--mono); font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.rep-note-list { margin: 0; padding: 0; list-style: none; }
+.rep-note-item + .rep-note-item { margin-top: 6px; }
+.rep-note-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rep-note-empty { color: var(--text-3); font-style: italic; }
+.rep-note-img {
+  display: block; margin-top: 2px;
+  font-size: 10px; color: var(--text-3);
+}
+
+@media print {
+  /* Its own sheet, like every other reference page. */
+  .rep-notes-page { page-break-before: always; break-before: page; }
+  .rep-notes-table { font-size: 9pt !important; }
+  .rep-notes-table th, .rep-notes-table td {
+    color: #111 !important; border-bottom-color: #e5e5e7 !important;
+    padding: 3px 6px !important;
+  }
+  .rep-notes-table th { color: #555 !important; }
+  .rep-notes-intro { color: #555 !important; }
+  .rep-note-empty, .rep-note-img { color: #666 !important; }
+  /* A note must not be split so that half of it is on another sheet. */
+  .rep-notes-table tr { page-break-inside: avoid; break-inside: avoid; }
+}
+
 /* ── AP label reference page ───────────────────────────────────────────────
    The installer reads this and writes the label by hand, so a name is never
    shortened, never ellipsed, and never broken across lines. That is the same

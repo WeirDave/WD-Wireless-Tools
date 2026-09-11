@@ -865,6 +865,7 @@
     var img = await readJson('images.json');
     var bld = await readJson('buildings.json');
     var bf = await readJson('buildingFloors.json');
+    var nts = await readJson('notes.json');
     var apm = await readJson('accessPointMeasurements.json');
     var mr = await readJson('measuredRadios.json');
     var sv = await readJson('surveys.json');
@@ -894,6 +895,14 @@
     ((bld && bld.buildings) || []).forEach(function (b) { proj.buildings[b.id] = b; });
     proj.buildingFloors = {};
     ((bf && bf.buildingFloors) || []).forEach(function (x) { proj.buildingFloors[x.floorPlanId] = x; });
+    // Notes hang off an AP by id. There is no separate pictureNotes.json in a
+    // real project - verified against one carrying both a text note and a
+    // photo note: a note is a picture note when its imageIds is non-empty, and
+    // such a note can carry no text at all.
+    proj.notes = {};
+    ((nts && nts.notes) || []).forEach(function (n) {
+      if (n && n.id) proj.notes[n.id] = n;
+    });
     proj.measurements = (apm && apm.accessPointMeasurements) || [];
     proj.measuredRadios = (mr && mr.measuredRadios) || [];
     proj.surveys = (sv && sv.surveys) ? sv.surveys.slice() : [];
@@ -3365,6 +3374,92 @@
     return out + '</section>';
   }
 
+  /* ── AP notes pages ────────────────────────────────────────────────────
+     Notes an engineer typed on site against an AP. They exist in the project
+     and had no way out of it, which is the whole reason this page exists.
+
+     Text only, deliberately. A note carrying an image is still listed - with
+     its text if it has any, and a marker saying an image is attached - because
+     silently dropping a note is how an installer misses the one that mattered.
+     The image itself is not rendered and no layout path exists for one. */
+  function notesForAp(ap, ctx) {
+    var store = (ctx.proj && ctx.proj.notes) || {};
+    var ids = (ap && ap.noteIds) || [];
+    var out = [];
+    for (var i = 0; i < ids.length; i++) {
+      var n = store[ids[i]];
+      if (!n) continue;                       // dangling id: nothing to show
+      var text = String(n.text == null ? '' : n.text).trim();
+      var images = (n.imageIds || []).length;
+      if (!text && !images) continue;         // an empty note is not a note
+      out.push({ text: text, images: images });
+    }
+    return out;
+  }
+
+  function apsWithNotes(aps, ctx) {
+    return aps.filter(function (ap) { return notesForAp(ap, ctx).length > 0; });
+  }
+
+  function wantsApNotes(aps, opts, ctx) {
+    if (!opts.apNotes) return false;
+    return apsWithNotes(aps, ctx).length > 0;
+  }
+
+  /* One page per floor, same order and same heading as the map it belongs to,
+     so a note sits with the plan it was written on. */
+  function renderApNotesSection(fp, aps, opts, ctx, floorIdx) {
+    var withNotes = apsWithNotes(aps, ctx);
+    if (!withNotes.length) return '';
+
+    var sorted = withNotes.slice().sort(function (a, b) {
+      return String(apLabel(a, 'full')).localeCompare(String(apLabel(b, 'full')),
+        undefined, { numeric: true, sensitivity: 'base' });
+    });
+
+    var count = withNotes.length + (withNotes.length === 1 ? ' AP with notes' : ' APs with notes');
+    var heading = fp.id === '_none' ? '' : segFloorHeading({
+      floorNumber: floorNumberFor(fp),
+      floorName: fp.name || 'Floor plan',
+    });
+
+    var rows = sorted.map(function (ap) {
+      var items = notesForAp(ap, ctx).map(function (n) {
+        var body = n.text
+          ? '<span class="rep-note-text">' + WD.esc(n.text) + '</span>'
+          : '<span class="rep-note-empty">No text on this note.</span>';
+        var flag = n.images
+          ? '<span class="rep-note-img">Image attached'
+            + (n.images > 1 ? ' ×' + n.images : '')
+            + ' — not shown in this report</span>'
+          : '';
+        return '<li class="rep-note-item">' + body + flag + '</li>';
+      }).join('');
+      return '<tr>'
+        + '<td class="rep-note-ap">' + WD.esc(apLabel(ap, 'full') || '(unnamed)') + '</td>'
+        + '<td class="rep-note-body"><ul class="rep-note-list">' + items + '</ul></td>'
+        + '</tr>';
+    }).join('');
+
+    var out = '<section class="rep-floor-section rep-notes-page rep-oriented"'
+      + ' data-page-key="notes:' + WD.escAttr(fp.id) + '" data-page-kind="table"'
+      + ' data-floor-idx="' + (floorIdx % 5) + '">'
+      + orientPickerHtml('notes:' + fp.id, opts);
+    if (heading) {
+      out += '<div class="rep-seg-floor rep-notes-head">' + WD.esc(heading)
+        + '<span class="rep-placement-sub">' + WD.esc((fp.name || '') + ' · ' + count)
+        + '</span></div>';
+    } else {
+      out += '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
+    }
+    out += '<p class="rep-notes-intro">Notes recorded against an access point in the survey.</p>'
+      + '<table class="rep-notes-table"><thead><tr>'
+      + '<th class="rep-note-ap">Access point</th><th>Note</th>'
+      + '</tr></thead><tbody>' + rows + '</tbody></table>'
+      + renderReportFooter(opts, ctx);
+    return out + '</section>';
+  }
+
   function renderPlacementReport(aps, opts, ctx) {
     var head = opts.cover ? ctx.cover(aps.length, ctx.dateStr, 'Access points')
                           : ctx.inlineHeader(aps.length, ctx.dateStr, 'Access points');
@@ -3391,6 +3486,16 @@
         if (!floorAps || !floorAps.length) return;
         sections += renderApNameKeySection(fp, floorAps, opts, ctx, kidx);
         kidx++;
+      });
+    }
+    // Notes follow the label reference, again one page per floor in map order.
+    if (wantsApNotes(aps, opts, ctx)) {
+      var nidx = 0;
+      floorOrder.forEach(function (fp) {
+        var floorAps = byFloor[fp.id];
+        if (!floorAps || !floorAps.length) return;
+        var sec = renderApNotesSection(fp, floorAps, opts, ctx, nidx);
+        if (sec) { sections += sec; nidx++; }
       });
     }
     if (!sections) sections = '<div class="rep-empty-small">No APs with a position on a floor plan.</div>';
@@ -5385,6 +5490,8 @@
             { value: 'never',  label: 'Never include' },
           ],
           description: 'A page per floor listing each marker number against the full AP name, so the installer can write the label correctly.' },
+        { id: 'apNotes', label: 'Include AP notes pages', default: false,
+          description: 'A page per floor listing the notes recorded against each AP on site. Text only — a note with a photo is listed and marked, but the image is not printed.' },
         { id: 'shortLabels', label: 'Short number labels on the plan', default: true,
           description: 'When your AP names end with an "AP" designator (e.g. "\u2026AP42"), show just the "42". Turn off to print the full AP name.' },
         { id: 'summary', label: 'Summary strip', default: false,
