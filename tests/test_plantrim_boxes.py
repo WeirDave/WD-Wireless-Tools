@@ -431,5 +431,150 @@ class CanvasImageTypeTests(unittest.TestCase):
         self.assertIn("mimeFor(bytes, f.format)", js)
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class WheelTests(unittest.TestCase):
+    """Scrolling over the plan must zoom it, never scroll the page.
+
+    Reported as "you can scroll over towards the bounding box and it scrolls the
+    document". The handler existed and called preventDefault - but only after an
+    early return for a floor whose image had not loaded, so on those the wheel
+    fell straight through to the page. Same shape as the drag-handle bug: a
+    handler that is present but never gets to act.
+    """
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    const DPR = 2;
+    const stage = { classList:{add(){},remove(){},toggle(){}} };
+    const ctx = new Proxy({}, { get: () => () => {} });
+    const canvas = { width:1200*DPR, height:600*DPR, getContext:()=>ctx,
+      getBoundingClientRect:()=>({left:0,top:0,width:1200,height:600}) };
+    const els = { ptbCanvas: canvas, ptbStage: stage };
+    const stub = () => ({ value:'', textContent:'', innerHTML:'', hidden:true,
+      disabled:false, className:'', classList:{add(){},remove(){},toggle(){}} });
+    globalThis.document = { getElementById: id => els[id] || (els[id]=stub()),
+                            addEventListener(){} };
+    globalThis.window = { devicePixelRatio: DPR, addEventListener(){} };
+    globalThis.WD = { PanZoom:{ isPanGesture:()=>false, isHeld:()=>false,
+                                onChange(){} }, toast(){}, esc:s=>String(s) };
+    globalThis.$ = id => document.getElementById(id);
+    globalThis.box = { boxes:{}, current:'f1', img:{width:5000,height:3750},
+      view:{scale:1,x:0,y:0}, drag:null,
+      floors:[{id:'f1',name:'L1',w:5000,h:3750}] };
+    globalThis.draw=()=>{}; globalThis.updateReadout=()=>{};
+    globalThis.persist=()=>{}; globalThis.reanalyze=()=>{};
+    globalThis.showEvidence=()=>{};
+    globalThis.floorById = id => box.floors.find(f=>f.id===id);
+    eval(slice('  var HANDLE_HIT_CSS', '  var box = {'));
+    eval(slice('  function toImage(px, py)', '  function fitView()'));
+    eval(slice('  function handlePoints(x, y, w, h)', '  function updateReadout()'));
+    eval(slice('  function clampBox(b, f)', '  window.ptbSelectFloor'));
+    const sc = Math.min(canvas.width/5000, canvas.height/3750) * 0.97;
+    box.view = { scale: sc, x:(canvas.width-5000*sc)/2, y:(canvas.height-3750*sc)/2 };
+    box.boxes.f1 = [1000, 800, 3200, 3000];
+    function wheelAt(cx, cy) {
+      let prevented = false;
+      onWheel({ clientX:cx, clientY:cy, deltaY:-120,
+                preventDefault(){ prevented = true; } });
+      return prevented;
+    }
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_the_page_never_scrolls_over_the_plan(self):
+        out = self.run_js("""
+          const mid = toScreen(2100, 1900), corner = toScreen(3200, 3000);
+          const r = { empty: wheelAt(100, 60),
+                      overBox: wheelAt(mid.x/DPR, mid.y/DPR),
+                      overHandle: wheelAt(corner.x/DPR, corner.y/DPR) };
+          box.img = null;
+          r.noImage = wheelAt(300, 200);
+          console.log(JSON.stringify(r));
+        """)
+        for where, prevented in out.items():
+            with self.subTest(where=where):
+                self.assertTrue(prevented, f"the wheel reached the page at {where}")
+
+    def test_the_wheel_actually_zooms(self):
+        out = self.run_js("""
+          const before = box.view.scale;
+          wheelAt(600, 300);
+          console.log(JSON.stringify({ changed: box.view.scale !== before }));
+        """)
+        self.assertTrue(out["changed"])
+
+    def test_zoom_stays_anchored_at_the_cursor(self):
+        out = self.run_js("""
+          const p = { x:1234, y:999 };
+          const a = toScreen(p.x, p.y);
+          wheelAt(a.x/DPR, a.y/DPR);
+          const b = toScreen(p.x, p.y);
+          console.log(JSON.stringify({ dx: Math.abs(a.x-b.x), dy: Math.abs(a.y-b.y) }));
+        """)
+        self.assertLess(out["dx"], 0.5)
+        self.assertLess(out["dy"], 0.5)
+
+    def test_fit_restores_the_view(self):
+        js = PLANTRIM_JS.read_text(encoding="utf-8")
+        self.assertIn("window.ptbFitView", js)
+        self.assertIn("fitView();", js)
+
+
+class ActionVisibilityTests(unittest.TestCase):
+    """The verb has to be next to the thing it acts on, and be the only primary."""
+
+    def setUp(self):
+        self.html = PLANTRIM_HTML.read_text(encoding="utf-8")
+
+    def test_there_is_a_cut_action_on_the_drawing_card(self):
+        self.assertIn('id="ptbCut"', self.html)
+        self.assertIn("Cut and save", self.html)
+
+    def test_the_cut_action_sits_inside_the_box_card(self):
+        card = self.html[self.html.index('id="ptBoxCard"'):]
+        card = card[:card.index('<div class="pt-card">')]
+        self.assertIn('id="ptbCut"', card, "the verb must live with the canvas")
+        self.assertIn('id="ptbStage"', card)
+
+    def test_it_is_the_only_primary_button(self):
+        """Suggest used to be the loudest control on the page."""
+        self.assertEqual(self.html.count("btn-primary"), 1)
+        suggest = self.html[self.html.index('id="ptbSuggest"'):]
+        self.assertNotIn("btn-primary", suggest[:200])
+
+    def test_the_action_row_is_pinned(self):
+        self.assertIn(".ptb-actions", self.html)
+        row = self.html[self.html.index(".ptb-actions {"):]
+        self.assertIn("position: sticky", row[:300])
+
+    def test_there_is_a_way_back_to_a_fitted_view(self):
+        self.assertIn('id="ptbFit"', self.html)
+        self.assertIn("ptbFitView()", self.html)
+
+    def test_the_stage_leaves_room_for_its_controls(self):
+        """72vh put the action below the fold on his laptop."""
+        self.assertIn("min(58vh, 760px)", self.html)
+        self.assertNotIn("min(72vh, 900px)", self.html)
+
+    def test_firefox_gets_a_findable_scrollbar(self):
+        self.assertIn("scrollbar-width: auto", self.html)
+        self.assertIn("scrollbar-color:", self.html)
+
+    def test_the_wheel_does_not_chain_to_the_page(self):
+        self.assertIn("overscroll-behavior: contain", self.html)
+
+
 if __name__ == "__main__":
     unittest.main()

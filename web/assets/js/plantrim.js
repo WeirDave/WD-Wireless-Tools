@@ -57,6 +57,11 @@
 
   function busy(on, label) {
     state.busy = on;
+    var cut = $('ptbCut');
+    if (cut) {
+      cut.disabled = on || !state.report || !state.report.trimmedCount;
+      if (on && label) cut.textContent = label;
+    }
     var save = $('ptSaveBtn');
     if (save) {
       save.disabled = on || !state.report || !state.report.trimmedCount;
@@ -145,12 +150,42 @@
         state.report = res;
         renderFloors(res);
         busy(false, 'Save trimmed .esx');
+        syncCutButton(res);
       })
       .catch(function (e) {
         $('ptFloors').innerHTML = '<div class="pt-empty pt-bad">' + esc(String(e)) + '</div>';
         busy(false, 'Save trimmed .esx');
       });
   }
+
+  // The verb, next to the thing it acts on. Everything else on the page is a
+  // modifier; this is the only control that does anything to the file, so it
+  // says what it does rather than naming a file operation.
+  function syncCutButton(res) {
+    var btn = $('ptbCut');
+    var note = $('ptbCutNote');
+    if (!btn) return;
+    var n = res && res.trimmedCount;
+    btn.disabled = !n || state.busy;
+    if (!res) {
+      btn.textContent = 'Cut and save';
+      if (note) note.textContent = '';
+      return;
+    }
+    btn.textContent = n ? 'Cut and save' : 'Nothing to cut';
+    if (!note) return;
+    if (!n) {
+      note.textContent = 'Every floor plan is already tight, or cannot be cropped.';
+    } else {
+      var drawn = 0;
+      (res.floors || []).forEach(function (f) { if (f.source === 'manual') drawn++; });
+      note.textContent = n + ' floor plan' + (n === 1 ? '' : 's') + ' will be cropped' +
+        (drawn ? ' (' + drawn + ' to a box you drew)' : ' automatically') +
+        '. Your original file is not changed \u2014 you get a new copy.';
+    }
+  }
+
+  window.ptCut = function () { window.ptTrim(); };
 
   function renderFloors(res) {
     if (!res.floors.length) {
@@ -568,8 +603,12 @@
   }
 
   function onWheel(e) {
-    if (!box.img) return;
+    // Always swallow the wheel over the stage, even with nothing to zoom.
+    // Returning first meant that a floor whose image had not loaded - every
+    // vector plan, before those started rendering - scrolled the page instead,
+    // which reads as the canvas ignoring the wheel entirely.
     e.preventDefault();
+    if (!box.img) return;
     var cv = $('ptbCanvas');
     var dpr = window.devicePixelRatio || 1;
     var r = cv.getBoundingClientRect();
@@ -618,6 +657,15 @@
       updateReadout();
       showEvidence();
     });
+  };
+
+  // Every pan and zoom needs a way back. Without one, one stray wheel over
+  // the stage leaves the plan somewhere off screen with no way to find it.
+  window.ptbFitView = function () {
+    if (!box.img) return;
+    sizeCanvas();
+    fitView();
+    draw();
   };
 
   window.ptbClearBox = function () {
@@ -846,7 +894,9 @@
     cv.addEventListener('mousedown', onDown);
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-    cv.addEventListener('wheel', onWheel, { passive: false });
+    // Bound on the stage rather than the canvas so the whole framed area
+    // answers, including any overlay sitting on top of it.
+    $('ptbStage').addEventListener('wheel', onWheel, { passive: false });
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
     window.addEventListener('resize', function () {
       if (!box.img) return;
