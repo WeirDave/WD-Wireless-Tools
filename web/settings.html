@@ -176,6 +176,30 @@
         </div>
         <div class="hint">Root folder where your Ekahau site folders live.</div>
       </div>
+
+      <div class="s-field">
+        <label>Backup copies to keep</label>
+        <div class="s-row">
+          <select id="sBackupKeep">
+            <option value="0">Off &mdash; keep none</option>
+            <option value="1">1 copy</option>
+            <option value="2">2 copies</option>
+            <option value="3">3 copies</option>
+            <option value="5">5 copies</option>
+            <option value="10">10 copies</option>
+          </select>
+          <button class="btn" id="sBackupScanBtn" onclick="SP.scanBackups()"
+                  title="Count the backup copies on disk and add up what they are using">Check usage</button>
+          <button class="btn btn-red" id="sBackupPurgeBtn" onclick="SP.purgeBackups()"
+                  title="Delete backup copies, keeping the number set above" hidden>Clean up</button>
+        </div>
+        <div class="hint">Before a tool overwrites a project it copies the old one
+          beside it as <code>&lt;name&gt;.previous-&lt;date&gt;.esx</code>. Older copies
+          past this count are removed automatically after each write &mdash; the copy
+          from the run that just happened is never removed. Set to
+          <b>Off</b> to stop keeping them at all.</div>
+        <div class="hint" id="sBackupUsage" hidden></div>
+      </div>
     </div>
   </details>
 

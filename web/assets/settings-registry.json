@@ -80,6 +80,15 @@
       "home": "settings"
     },
     {
+      "key": "global.backup_keep",
+      "label": "Backup copies to keep",
+      "category": "preference",
+      "owner": "Suite",
+      "section": "general",
+      "home": "settings",
+      "control": "sBackupKeep"
+    },
+    {
       "key": "organizer.image_ext",
       "label": "Image extensions",
       "category": "preference",

@@ -621,6 +621,45 @@ def api_templates(action):
         return jsonify({"error": str(e)}), 500
 
 
+def _backup_roots():
+    """Where the suite's backups can be. The project folder is where every
+    per-file backup lands; the install's parent is where the updater puts the
+    folder it keeps so an update can be rolled back."""
+    roots = []
+    out = (suite_settings.load_settings().get("global") or {}).get("output_dir")
+    if out:
+        roots.append(out)
+    try:
+        roots.append(str(Path(__file__).resolve().parent.parent))
+    except Exception:
+        pass
+    return roots
+
+
+def _backups_scan(_d):
+    from tools import backups as _b
+    found = _b.scan(_backup_roots())
+    installs = [i for i in found["items"] if i["kind"] == "install"]
+    return {"ok": True, "count": found["count"], "bytes": found["bytes"],
+            "human": _b.human_size(found["bytes"]),
+            "installCount": len(installs), "roots": _backup_roots()}
+
+
+def _backups_purge(d):
+    """Keep the newest `keep` of each project and delete the rest.
+
+    Previous *installs* are left alone: that folder is how a bad update gets
+    rolled back, and a cleanup that quietly removed it would take the way out
+    at the moment it is needed. They are counted in the total so the number is
+    honest about what is on disk.
+    """
+    from tools import backups as _b
+    keep = int(d.get("keep") or 0)
+    res = _b.purge(_backup_roots(), keep=keep, include_install=False)
+    return {"ok": True, "count": res["count"], "bytes": res["freed"],
+            "human": _b.human_size(res["freed"])}
+
+
 SETTINGS_ACTIONS = {
     "get":              lambda d: {"ok": True, "settings": suite_settings.load_settings()},
     "update":           lambda d: {"ok": True, "settings": suite_settings.update_settings(d.get("patch", {}))},
@@ -631,6 +670,11 @@ SETTINGS_ACTIONS = {
                             {"setup_complete": False})},
     "get_destinations": lambda d: {"ok": True, "destinations": [
                             dict(d) for d in suite_settings.get_destinations()]},
+}
+
+BACKUP_ACTIONS = {
+    "scan":  _backups_scan,
+    "purge": _backups_purge,
 }
 
 
@@ -812,6 +856,17 @@ def api_report_open_esx():
     response.headers["X-WD-File-Name"] = quote(path.name)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.route("/api/backups/<action>", methods=["POST"])
+def api_backups(action):
+    fn = BACKUP_ACTIONS.get(action)
+    if not fn:
+        return jsonify({"error": f"unknown action: {action}"}), 404
+    try:
+        return jsonify(fn(request.get_json(silent=True) or {}))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/settings/<action>", methods=["POST"])

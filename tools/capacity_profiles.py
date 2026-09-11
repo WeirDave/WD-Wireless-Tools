@@ -41,6 +41,22 @@ LIKELY_PROFILE_FILES = (
 )
 
 
+def _prune_backups(target, protect=None):
+    """Trim old backups of `target` to the configured count, after the write.
+
+    Never allowed to fail the operation: a project written correctly must not
+    report an error because tidying up afterwards did not work.
+    """
+    try:
+        from tools import backups as _b
+        from tools import settings as _s
+        keep = (_s.load_settings().get("global") or {}).get("backup_keep")
+        keep = _b.DEFAULT_KEEP if keep is None else int(keep)
+        return _b.prune_for(target, keep=keep, protect=protect)
+    except Exception:
+        return None
+
+
 def _read_members(zf: zipfile.ZipFile) -> dict:
     """Every JSON member of the archive, parsed, keyed by name."""
     out = {}
@@ -797,12 +813,16 @@ def apply_to(src_path, dest_path, template, occupants,
             for name, body in members.items():
                 zout.writestr(name, json.dumps(body, indent=2))
 
+        backup_path = None
         if backup and dest_path.exists():
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             backup_path = dest_path.with_name(
                 "%s.backup-%s%s" % (dest_path.stem, stamp, dest_path.suffix))
             shutil.copy2(str(dest_path), str(backup_path))
         os.replace(tmp_name, str(dest_path))
+        # Only once the new file is in place.
+        if backup_path:
+            _prune_backups(dest_path, protect=str(backup_path))
     finally:
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
