@@ -11,6 +11,7 @@ endpoints. Runs a tiny local Flask server and opens your default browser to it.
 No pywebview, no WebView2 — so none of the desktop-window headaches.
 """
 import json
+import logging
 import shutil
 import tempfile
 import os
@@ -1164,6 +1165,38 @@ def _print_banner():
     print(border + "\n", flush=True)
 
 
+# ── waitress queue noise ─────────────────────────────────────────────────────
+# waitress logs "Task queue depth is N" at warning level every time a request
+# arrives with no idle thread free to take it. On a single-user local tool that
+# is a momentary burst - the browser firing parallel requests while one long
+# one (parsing a large .esx, a Cloud sync) holds a thread - and a depth of 1 or
+# 2 means nothing is wrong and there is nothing to do about it.
+#
+# The launcher window stays open while the server runs and is something the
+# user watches, so anything printed there has to be something they can act on.
+# A raw internal counter reads as a fault; it was reported as one.
+#
+# `_quiet=True` on serve() only suppresses the startup banner, not the loggers,
+# so the message is filtered at its own logger instead. Real saturation still
+# gets through, in words, at a depth that actually means something.
+QUEUE_SATURATION_DEPTH = 10
+
+
+class _QueueDepthFilter(logging.Filter):
+    def filter(self, record):
+        depth = record.args[0] if record.args else 0
+        if not isinstance(depth, int) or depth < QUEUE_SATURATION_DEPTH:
+            return False
+        record.msg = ("Server busy: %d requests are waiting for a free thread. "
+                      "If this does not clear, something is holding a "
+                      "connection open.")
+        return True
+
+
+def _quieten_queue_warnings():
+    logging.getLogger("waitress.queue").addFilter(_QueueDepthFilter())
+
+
 def main():
     _print_banner()
     threading.Thread(target=_open_browser, daemon=True).start()
@@ -1171,6 +1204,7 @@ def main():
 
     try:
         from waitress import serve
+        _quieten_queue_warnings()
         serve(app, host="127.0.0.1", port=PORT, threads=8, _quiet=True)
     except ImportError:
 
