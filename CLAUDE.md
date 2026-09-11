@@ -225,6 +225,78 @@ lives in two stores" is that one, and "every `settings/update` sends a `patch`
 envelope" is report page orientation, which posted `{report: {...}}` where the
 server reads `d["patch"]` and therefore saved nothing while reporting success.
 
+## Uploading to Ekahau Cloud — what is known, and what is not
+
+Cloud Manager can download and it cannot upload over an existing cloud
+project. The wording in the Sync confirm says "that direction is not built
+yet" **deliberately**: the API is not known to be the obstacle, the code is
+simply not written, and the previous wording ("cannot") told the user
+something false about his own tool.
+
+**What is established:**
+
+- `GET /projectapi/v1/projects/{id}/batch` returns every document keyed
+  exactly as the `.esx` members. `download_project` writes each key as
+  `{key}.json` and the result is byte-identical to Ekahau's own download
+  (`docs/releases/v1.8.41.md`).
+- That batch response therefore **includes `projectHistorys`** — a real `.esx`
+  contains `projectHistorys.json`, and it can only have come from there. So
+  **the cloud stores the revision chain**, which is the data a server would
+  need to detect a conflict. That is what makes in-place update with a
+  sync-or-overwrite prompt plausible rather than wishful.
+- `rename_project` already writes back in place:
+  `PUT /projectapi/v1/projects/{id}/batch/update` with `{"project": {...}}`.
+  Read-all and write-one, same shape.
+- `upload_project` uses `esxfileapi/v1/projects/upload/initiate` → S3 PUT →
+  `commit`. `initiate` takes only `fileName`/`fileExtension`, no project id,
+  so that flow creates a **new** project. This is the web UI's upload path.
+- `assign_to_site(site_id, dataset_id, type)` exists and works, so
+  re-attaching a re-uploaded project to its original site is a call we
+  already have.
+
+**What is NOT established:** whether `batch/update` accepts documents other
+than `project`. Nothing has been tested against it, and no speculative PUT
+should be made against a real account to find out.
+
+**Dead ends — do not spend another session on these:**
+
+- `docs/reverse-engineering/capture_upload.js` **cannot see the sync/overwrite
+  prompt.** That dialog is in Ekahau AI Pro, the desktop client; the script
+  wraps `fetch`/`XHR` in a browser page and desktop traffic never goes near
+  it.
+- **There is no public Ekahau Cloud API documentation.** That is why these
+  capture scripts exist at all.
+- Proxying the desktop client would settle it, but it means installing a
+  trusted root certificate on a **work machine**. Not to be suggested.
+
+**The cheap route that is still open.**
+`docs/reverse-engineering/capture_project_fields.js` hits the project
+*listing*, which is a browser operation and is unaffected by the desktop
+problem. Field names alone answer whether a project record carries a
+revision, version or etag. The safe one-liner, which prints no values and
+copies nothing:
+
+```js
+fetch('/projectapi/v1/projects').then(r => r.json()).then(d => {
+  const p = (Array.isArray(d) ? d : d.projects || d.items || [])[0] || {};
+  console.log(Object.keys(p).sort().join(', '));
+});
+```
+
+Whether the Ekahau Cloud **web** UI can replace an existing project is the
+other open question. Note that if it only offers "upload new", capturing it
+will reveal nothing about replacing — our `upload_project` already is that
+flow.
+
+**The fallback, if in-place proves unavailable:** delete the cloud project,
+upload the local file, re-assign it to its original site. The loss is
+narrower than earlier notes claimed — `tags` live inside `project.json` and
+travel with the file, and `projectHistorys.json` travels with it too. Shares
+are keyed to the project id and would be lost, but `share_projects` exists,
+so they can be captured beforehand and re-applied. That is a product
+decision, not an engineering one: take it to the user rather than choosing
+for him.
+
 ## The Ekahau AP colour palette
 
 `WD.EKAHAU_COLORS` in `web/assets/js/wd-shared.js` is the only copy. Anything
