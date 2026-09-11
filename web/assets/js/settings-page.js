@@ -29,6 +29,8 @@
     var c = settings.cloud || {};
 
     document.getElementById('sOutputDir').value = g.output_dir || '';
+    document.getElementById('sBackupKeep').value =
+      String(g.backup_keep == null ? 3 : g.backup_keep);
     renderSubfolders(g.subfolders || [], g.subfolder_names || {});
     renderCustomDests(g.custom_destinations || []);
 
@@ -146,6 +148,51 @@
     });
   };
 
+  /* Backups, with the number attached.
+
+     "Delete backups" on its own tells nobody whether it is worth doing, so
+     nothing is offered until the size is on screen. The button that removes
+     them only appears once he has seen what they cost. */
+  SP.scanBackups = function () {
+    var out = document.getElementById('sBackupUsage');
+    var purge = document.getElementById('sBackupPurgeBtn');
+    out.hidden = false;
+    out.textContent = 'Checking…';
+    API('backups/scan', {}).then(function (r) {
+      if (r.error) { out.textContent = r.error; return; }
+      if (!r.count) {
+        out.textContent = 'No backup copies found.';
+        purge.hidden = true;
+        return;
+      }
+      var where = r.roots && r.roots.length ? ' under ' + r.roots.join(', ') : '';
+      out.innerHTML = '<b>' + r.count + '</b> backup cop' +
+        (r.count === 1 ? 'y' : 'ies') + ' using <b>' + r.human + '</b>' +
+        WD.esc(where) + '.' +
+        (r.installCount ? ' ' + r.installCount + ' of those are previous ' +
+          'installs kept for rolling an update back; those are only removed ' +
+          'if you ask.' : '');
+      purge.hidden = false;
+    }).catch(function () { out.textContent = 'Could not check.'; });
+  };
+
+  SP.purgeBackups = function () {
+    var keep = parseInt(document.getElementById('sBackupKeep').value, 10) || 0;
+    var msg = keep
+      ? 'Delete every backup copy except the newest ' + keep + ' of each project?'
+      : 'Delete every backup copy?';
+    if (!confirm(msg + '\n\nThe projects themselves are not touched.')) return;
+    var out = document.getElementById('sBackupUsage');
+    out.hidden = false;
+    out.textContent = 'Cleaning up…';
+    API('backups/purge', { keep: keep }).then(function (r) {
+      if (r.error) { out.textContent = r.error; return; }
+      out.innerHTML = 'Removed <b>' + r.count + '</b> cop' +
+        (r.count === 1 ? 'y' : 'ies') + ', freeing <b>' + r.human + '</b>.';
+      document.getElementById('sBackupPurgeBtn').hidden = true;
+    }).catch(function () { out.textContent = 'Could not clean up.'; });
+  };
+
   SP.clearFolder = function () {
     document.getElementById('sOutputDir').value = '';
   };
@@ -214,6 +261,7 @@
     var patch = {
       global: {
         output_dir: document.getElementById('sOutputDir').value,
+        backup_keep: parseInt(document.getElementById('sBackupKeep').value, 10) || 0,
         subfolders: cleanKeys,
         subfolder_names: cleanNames,
         custom_destinations: collectCustomDests()

@@ -35,6 +35,22 @@ from pathlib import Path
 MEMBER = "wallTypes.json"
 
 
+def _prune_backups(target, protect=None):
+    """Trim old backups of `target` to the configured count, after the write.
+
+    Never allowed to fail the operation: a project written correctly must not
+    report an error because tidying up afterwards did not work.
+    """
+    try:
+        from tools import backups as _b
+        from tools import settings as _s
+        keep = (_s.load_settings().get("global") or {}).get("backup_keep")
+        keep = _b.DEFAULT_KEEP if keep is None else int(keep)
+        return _b.prune_for(target, keep=keep, protect=protect)
+    except Exception:
+        return None
+
+
 def _key(name) -> str:
     """How two wall types are decided to be the same one.
 
@@ -169,6 +185,10 @@ def inject(esx_path, wall_types: list, dest=None, backup: bool = True) -> dict:
         if backup_path:
             backup_path.unlink(missing_ok=True)
         return {"error": f"Write failed, the project was not changed: {exc}"}
+
+    # Written; only now is an older generation expendable.
+    if backup_path:
+        _prune_backups(target, protect=str(backup_path))
 
     return {**report, "ok": True, "written": True, "path": str(target),
             "backup": str(backup_path) if backup_path else None}

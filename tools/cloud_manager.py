@@ -1575,6 +1575,23 @@ def _dup_key(name):
     return re.sub(r"\s+", " ", stem).strip()
 
 
+def _prune_backups(target, protect=None):
+    """Trim old backups of `target` to the configured count.
+
+    Called only after the new file is safely in place, and never allowed to
+    fail the operation: a project that was written correctly must not report
+    an error because tidying up afterwards did not work.
+    """
+    try:
+        from tools import backups as _b
+        from tools import settings as _s
+        keep = (_s.load_settings().get("global") or {}).get("backup_keep")
+        keep = _b.DEFAULT_KEEP if keep is None else int(keep)
+        return _b.prune_for(target, keep=keep, protect=protect)
+    except Exception:
+        return None
+
+
 def _parse_cloud_mtime(pr):
     """Best-effort extraction of a modification timestamp from a project dict.
     Returns unix seconds (int) or 0. Ekahau nests the real dates inside
@@ -2280,6 +2297,8 @@ class CloudManager:
 
         _ESX_META_CACHE.pop(str(src), None)
         _ESX_TYPE_CACHE.pop(str(src), None)
+        # The new file is in place; only now is an older generation expendable.
+        _prune_backups(src, protect=str(backup))
 
 
         new_fs_mtime = int(src.stat().st_mtime)

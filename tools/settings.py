@@ -31,6 +31,11 @@ DEFAULTS = {
             "reports": "reports",
         },
         "custom_destinations": [],
+        # How many generations of "<name>.previous-<date>.esx" to keep beside
+        # a project. 0 turns backups off entirely - he asked for that, and an
+        # .esx is big enough that keeping every one of them forever fills a
+        # disk rather than protecting anything.
+        "backup_keep": 3,
     },
     "organizer": {
         "image_ext": [
