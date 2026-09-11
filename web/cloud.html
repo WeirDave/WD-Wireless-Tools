@@ -175,14 +175,15 @@
     <span class="selcount" id="selCount"></span>
     <button class="btn btn-secondary" id="expandAllBtn" onclick="expandAllSites()" title="Expand every site" hidden>Expand All</button>
     <button class="btn btn-secondary" id="collapseAllBtn" onclick="collapseAllSites()" title="Collapse every site" hidden>Collapse All</button>
-    <!-- Not a bulk-btn: this one needs no selection, which is the point. -->
-    <button class="btn btn-blue" id="pullAllBtn" onclick="pullEverythingFromCloud()"
-            title="Download everything the cloud has that is newer than your local copy, plus anything you do not have locally at all. Nothing newer on your machine is touched. Shows what it will overwrite before it does it.">&#11015; Pull all from cloud</button>
+    <!-- Not a bulk-btn: it needs no selection, which is the point. Not
+         directional either - it works out per file which side is newer. -->
+    <button class="btn btn-blue" id="syncAllBtn" onclick="syncEverything()"
+            title="Works out for each file which side is newer and does that, or nothing when the two already match. It never replaces a newer file with an older one, so it cannot overwrite work. Shows what it will do before it does it, and says what still needs to go up.">&#8645; Sync everything</button>
     <button class="btn btn-secondary bulk-btn" id="bulkSyncTo" onclick="bulkSync('to-local')" title="Copy cloud names onto matched local (for selected matched rows)">Sync &#8594;</button>
     <button class="btn btn-secondary bulk-btn" id="bulkSyncFrom" onclick="bulkSync('to-cloud')" title="Copy local names onto matched cloud (for selected matched rows)">Sync &#8592;</button>
     <button class="btn btn-secondary bulk-btn" id="compareBtn" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
     <button class="btn btn-blue bulk-btn" id="bulkMoveBtn" onclick="bulkMoveToSite()" title="Move all selected to a site">Move to site&hellip;</button>
-    <button class="btn btn-secondary bulk-btn" id="bulkVerifyBtn" onclick="bulkVerifyNameMatches()" title="For selected 'Name matches' pairs: download cloud copy, overwrite local, so the pair upgrades to 'Same file'. Pairs where local is newer than cloud are skipped automatically.">Verify pairs</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkVerifyBtn" onclick="bulkVerifyNameMatches()" title="Escape hatch, not the everyday route — use Sync everything for that. For selected 'Name matches' pairs this forces the cloud copy down so the pair becomes 'Same file'. A pair where local is newer is still refused, and the copy it replaces is kept as a .previous- file.">Overwrite from cloud&hellip;</button>
     <button class="btn btn-secondary bulk-btn" id="bulkShareBtn" onclick="openBulkShare()" title="Share all selected cloud projects with people or your Sharing Group in one action">Share&hellip;</button>
     <button class="btn btn-red bulk-btn" id="bulkDeleteBtn" onclick="bulkDelete()">Delete selected</button>
     <span class="spacer"></span>
