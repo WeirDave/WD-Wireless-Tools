@@ -282,14 +282,52 @@ class NotesReachPaper(unittest.TestCase):
         costs somebody a phone call.
         """
         start = self.js.index("id: 'apNotes'")
-        entry = self.js[start:start + 400]
+        entry = self.js[start:start + 900]
         for gate in ("disabledWhen", "hiddenWhen", "if ("):
             self.assertNotIn(gate, entry.split("},")[0])
+
+    def test_notes_are_independent_of_the_label_reference_setting(self):
+        """Whether notes print has nothing to do with whether markers show numbers.
+
+        The two controls sat next to each other and were read as one: the
+        label-reference select shows "Auto - when the plan shows numbers", so
+        the notes checkbox under it looked like part of that decision. They are
+        separate keys read in separate places and must stay that way - including
+        notes is an audience and privacy call, not a formatting one.
+        """
+        self.assertIn("opts.apNotes", self.js)
+        self.assertIn("opts.nameKey", self.js)
+        # Neither gate may mention the other.
+        end_of_fn = "\n  }"
+        notes_gate = self.js[self.js.index("function wantsApNotes"):]
+        notes_gate = notes_gate[:notes_gate.index(end_of_fn)]
+        self.assertNotIn("nameKey", notes_gate)
+        key_gate = self.js[self.js.index("function wantsNameKey"):]
+        key_gate = key_gate[:key_gate.index(end_of_fn)]
+        self.assertNotIn("apNotes", key_gate)
+
+    def test_the_notes_option_says_why_it_is_off(self):
+        """His reason for wanting it separate, kept where the choice is made."""
+        start = self.js.index("id: 'apNotes'")
+        entry = self.js[start:start + 900]
+        self.assertIn("not always meant for a client", entry)
+        self.assertIn("independent of every other option", entry)
+
+    def test_the_choice_persists_with_the_other_report_options(self):
+        """It is swept up by the per-report defaults button like any checkbox.
+
+        Guards the two lists that would silently exclude it.
+        """
+        self.assertNotIn("'apNotes'", self.js[self.js.index("var SETTING_IDS"):
+                                              self.js.index("var SETTING_FIELD")])
+        start = self.js.index("var PERSON_LEVEL_OPTS")
+        line_end = self.js.index("\n", start)
+        self.assertNotIn("apNotes", self.js[start:line_end])
 
     def test_the_option_is_registered_on_the_placement_report(self):
         self.assertIn("id: 'apNotes'", self.js)
         idx = self.js.index("id: 'apNotes'")
-        block = self.js[idx:idx + 400]
+        block = self.js[idx:idx + 900]
         self.assertIn("default: false", block)
         self.assertIn("Text only", block)
 
