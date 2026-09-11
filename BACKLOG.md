@@ -18,6 +18,30 @@ Automatic External detection uses project ownership metadata. Add a persistent p
 
 The dashboard counts, filters, and row styling must all honor the same override. The final UI—row action, inline control, or settings list—still needs a design decision.
 
+## P3 — Report: revisit where the AP notes section sits
+
+Notes pages are **unbounded in length** and are kept **last in the AP Placement
+Map deliberately**. Today they are short text tables, so the position looks
+arbitrary; it is not.
+
+If picture notes become common the section could run to dozens of image-heavy
+pages. That is an existing industry practice rather than a hypothetical — Mist's
+installer app requires a photo of every AP — so a project could arrive with one
+note and one image per access point.
+
+An open-ended section at the end cannot push fixed reference material around.
+Anything placed after it would move unpredictably depending on how many photos
+a survey happened to carry. So: last is right while the length is unknown, and
+if the order is ever changed this reasoning has to be answered rather than
+rediscovered.
+
+It also supports the decision not to build an image layout path speculatively.
+The day that matters it will be a real requirement with real files and a real
+page budget, not a guess at what an image note should look like.
+
+No action now. Revisit when a project actually turns up with photo notes on
+most of its APs.
+
 ## P3 — Report: Change / Audit report
 
 The gallery card exists but is intentionally marked **Coming soon**. Completing it requires:
