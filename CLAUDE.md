@@ -47,6 +47,52 @@ re-discovered (or re-explained) each new chat.
    Note: tag pushes work from local sessions but are blocked from
    Claude Code **cloud** sessions (claude.ai web).
 
+## Verifying a change — test servers, ports, and browsers
+
+**Sessions have hung here before. The symptom is a session that reports as
+running with a frozen turn count** — a dev-server start or a browser-pane call
+that never returns. From outside it is indistinguishable from idle, which is
+why it costs real waiting time. Four sessions stalled on this in one day.
+
+- **Prefer not starting a server at all.** Most things are verifiable by
+  generating the output and inspecting it, or by executing the renderer in Node
+  against real data. `tests/test_ap_notes_page.py` is the pattern: it slices the
+  render function out of `report.js`, runs it with stubs, and asserts on the
+  HTML. No port, nothing to leak, and it runs in CI.
+- **Never bind a default or shared port.** Several sessions work in this repo at
+  once, and 8675 is the user's own running instance. Pick an explicit, unusual
+  high port, and pick a different one per session rather than the number
+  everybody reaches for.
+- **Always tear it down**, on the failure path too. An abandoned process holds
+  the port for the next session. Kill it by PID on the port, not by name — that
+  would take down the user's own instance.
+- **Never block indefinitely on a bind or a browser call.** Bound the wait, and
+  fail loudly if it does not come up. A failed check is visible; a stalled
+  session is not, which makes the stall the worse outcome.
+
+### Print verification needs a real browser — use BiDi
+
+Print is the one thing that genuinely needs a browser, and it must be checked in
+**Firefox**, which is what the user prints from. Fixes verified only in Chromium
+have twice failed to reach him.
+
+Firefox has **no `--print-to-pdf`**, and the silent-print preferences
+(`print.always_print_silent` + `print.print_to_filename`) produce no file.
+Headless also throws `RenderCompositorSWGL failed mapping default framebuffer`.
+Do not spend another session rediscovering those three.
+
+What works is **WebDriver BiDi**: launch with `--remote-debugging-port`, connect
+to `ws://127.0.0.1:<port>/session`, then `session.new` →
+`browsingContext.getTree` → `browsingContext.print`, which returns the PDF as
+base64. There is no websocket library installed; a minimal RFC 6455 client is
+about 60 lines. This drives the same path `window.print()` takes, which is what
+the Report Print button calls.
+
+Inspect the result rather than trusting it: decompressing the content streams
+and reading the `(...)` text operators is enough to tell which page each piece
+of content landed on, so "it starts a new sheet" and "the row did not split" are
+assertions about the printed output, not about the CSS source.
+
 ## Updating (in-app) — how it fits together
 
 - `tools/updater.py` is the whole mechanism. `detect_install()` decides which
