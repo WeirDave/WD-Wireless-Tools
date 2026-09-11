@@ -47,6 +47,32 @@ re-discovered (or re-explained) each new chat.
    Note: tag pushes work from local sessions but are blocked from
    Claude Code **cloud** sessions (claude.ai web).
 
+6. **A release note for a user-facing feature must say how to use it.**
+   "Added X" is not sufficient. Someone read a note, saw the feature listed,
+   and still could not find the control — it was sixth in a panel of
+   eighteen, and the note never said where it was. Every user-facing entry
+   states four things:
+
+   - **the tool** it is in (Report → AP Placement Map)
+   - **the panel** it lives in (the options panel in the Configure step)
+   - **the exact label** on the control, quoted, so it can be searched for
+   - **its default**, and what to do to turn it on
+
+   Where it sits in a long list is worth a sentence too, and if a later
+   release moves it, say so — someone on the older build is reading the
+   older note.
+
+   This is the same rule the product itself follows: state the consequence
+   and the action, not just the fact. A note is documentation for someone
+   who was not in the conversation where the feature was designed.
+
+   Version numbers are a live source of confusion and belong in the note.
+   **The suite version and each tool's version are different numbers** —
+   suite 2.92.0 ships Report 2.60.0, and the Report page shows the Report
+   one. A note that says "fixed in 2.92" leaves the reader unable to tell
+   whether the number on their screen is newer or older than that.
+
+
 ## Verifying a change — test servers, ports, and browsers
 
 **Sessions have hung here before. The symptom is a session that reports as
@@ -69,6 +95,18 @@ why it costs real waiting time. Four sessions stalled on this in one day.
 - **Never block indefinitely on a bind or a browser call.** Bound the wait, and
   fail loudly if it does not come up. A failed check is visible; a stalled
   session is not, which makes the stall the worse outcome.
+
+### Nobody is at the keyboard
+
+The user works remotely from these sessions and often reads them hours later
+on a phone. **Never use AskUserQuestion or any other interactive prompt**, and
+never run a command that waits on stdin (`git rebase -i`, `git add -i`, a
+`read`, a pager). A session blocked on a prompt nobody can answer looks
+exactly like a session doing work, which is how the time gets lost.
+
+Make the reasonable call, do the whole task, and say in the report what you
+decided and why. A decision that turns out wrong is cheap to correct; a
+session that stopped to ask is not.
 
 ### Print verification needs a real browser — use BiDi
 
