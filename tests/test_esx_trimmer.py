@@ -253,6 +253,45 @@ class EsxTrimmerTests(unittest.TestCase):
         self.assertGreater(plan["height"], 110)
 
     # -------------------------------------------------------------- refusals
+    def test_a_dense_scan_is_not_reported_as_empty(self):
+        """The cutoff is a share of the total, compared against one column.
+
+        On a dark or photographed scan it asks for more ink than any single
+        column can hold, nothing qualifies, and a plan full of content reports
+        "no detectable content". One of his real sheets is 100% below the ink
+        threshold: a cutoff of 1794 against a peak column of 1085.
+        """
+        im = Image.new("RGB", (400, 300))
+        for x in range(400):
+            for y in range(300):
+                # A continuous gradient: every pixel counts as ink, which is
+                # what a scan of a shaded drawing looks like.
+                im.putpixel((x, y), (40 + (x * 120) // 400,) * 3)
+        buf = io.BytesIO(); im.save(buf, format="PNG")
+        src = make_project(self.tmp / "dense.esx",
+                           plans=[_plan(FLOOR_A, IMG_A, 400, 300, SCALE_A)],
+                           images={IMG_A: buf.getvalue()})
+        report = trimmer.analyze(src)
+        self.assertNotIn("no detectable content", report.floors[0].reason,
+                         "a sheet covered in ink is not an empty sheet")
+
+    def test_the_cutoff_never_exceeds_what_a_column_can_hold(self):
+        """The rule, stated directly, so the arithmetic cannot regress."""
+        self.assertLessEqual(trimmer.DENSITY_PEAK_CAP, 1.0)
+        self.assertGreater(trimmer.DENSITY_PEAK_CAP, 0.0)
+
+    def test_a_sparse_plan_is_unaffected_by_the_cap(self):
+        """166 of 173 real images were byte-identical before and after."""
+        src = make_project(self.tmp / "sparse.esx",
+                           plans=[_plan(FLOOR_A, IMG_A, 400, 300, SCALE_A)],
+                           images={IMG_A: _drawing(400, 300, box=(120, 80, 260, 210))})
+        report = trimmer.analyze(src)
+        floor = report.floors[0]
+        self.assertEqual(floor.action, "trimmed", floor.reason)
+        # The drawn rectangle plus the default margin, not the whole canvas.
+        self.assertLess(floor.new_size[0], 400)
+        self.assertLess(floor.new_size[1], 300)
+
     def test_an_svg_floor_plan_is_cropped_by_its_viewbox(self):
         """A vector plan has no pixel grid, so the window moves instead."""
         svg = (b'<?xml version="1.0"?>\n'

@@ -36,9 +36,10 @@ floor and explains why:
   * Content that already fills most of the canvas — nothing worth reclaiming.
   * Empty floor plans — cropping to nothing is worse than leaving them alone.
 
-``wallTypes.json`` and ``metersPerUnit`` are never touched; ``metersPerUnit`` is asserted byte-identical after the rewrite and
-aborts the whole file if it ever moves, because scale drift silently ruins
-every attenuation calculation downstream.
+``wallTypes.json`` and ``metersPerUnit`` are never touched; ``metersPerUnit``
+is asserted byte-identical after the rewrite and aborts the whole file if it
+ever moves, because scale drift silently ruins every attenuation calculation
+downstream.
 
 Pillow ships in requirements.txt, so a normal install already has it, and the
 installers' dependency probe checks for it.  It is still imported lazily: both
@@ -101,6 +102,8 @@ DEFAULT_MARGIN = 10
 FILL_SKIP_RATIO = 0.90
 # Column/row is "content" once it holds this share of the darkest column's ink.
 DENSITY_CUTOFF = 0.001
+# Never demand more of one row or column than its busiest can supply.
+DENSITY_PEAK_CAP = 0.5
 INK_THRESHOLD = 245
 
 
@@ -226,7 +229,18 @@ def content_bounds(image, margin: int = DEFAULT_MARGIN):
         total = sum(counts)
         if not total:
             return None
+        peak = max(counts)
         cutoff = max(1, int(DENSITY_CUTOFF * total))
+        # The cutoff is a share of the *total* ink but is compared against a
+        # single row or column, so on a dense image it asks for more than any
+        # one row can hold and nothing ever qualifies - the whole plan then
+        # reports "no detectable content". A photographed or heavily shaded
+        # scan is exactly that case: one of his is 100% below the ink
+        # threshold, giving a cutoff of 1794 against a peak column of 1085.
+        # Capping at half the peak guarantees the densest row always counts,
+        # and changes nothing on a sparse plan, where the cap is never the
+        # smaller of the two.
+        cutoff = min(cutoff, max(1, int(DENSITY_PEAK_CAP * peak)))
         hits = [i for i, c in enumerate(counts) if c >= cutoff]
         return (hits[0], hits[-1]) if hits else None
 
