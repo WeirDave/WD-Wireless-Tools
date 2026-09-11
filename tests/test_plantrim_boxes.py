@@ -198,5 +198,143 @@ class EditorMarkupTests(unittest.TestCase):
         self.assertNotIn("zipfile", store)
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class HandleDragTests(unittest.TestCase):
+    """A handle that renders is not a handle that works.
+
+    Reported as "it says I can drag a handle to adjust but that is not working
+    either". The handles drew fine. The sizes were in canvas *device* pixels,
+    so on a 1.5x or 2x Windows display both the drawn handle and its hit target
+    were about four CSS pixels across - and a near miss did not simply fail to
+    grab, it fell through to "start a new box" and wiped the one being adjusted.
+
+    So these drive a real press-move-release against the real functions and
+    assert the box moved, at each display scaling, rather than checking that
+    handles are drawn.
+    """
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    const DPR = Number(process.argv[2]);
+    const stage = { classList: { add(){}, remove(){}, toggle(){} } };
+    const ctx = new Proxy({}, { get: () => () => {} });
+    const canvas = {
+      width: 1200 * DPR, height: 800 * DPR,
+      getContext: () => ctx,
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 1200, height: 800 }),
+    };
+    const els = { ptbCanvas: canvas, ptbStage: stage };
+    const stub = () => ({ value:'', textContent:'', innerHTML:'', hidden:true,
+                          disabled:false, className:'',
+                          classList:{add(){},remove(){},toggle(){}} });
+    globalThis.document = { getElementById: id => els[id] || (els[id] = stub()),
+                            addEventListener(){} };
+    globalThis.window = { devicePixelRatio: DPR, addEventListener(){} };
+    globalThis.WD = { PanZoom: { isPanGesture: e => e.button === 1 || e.button === 2,
+                                 isHeld: () => false, onChange(){} },
+                      toast(){}, esc: s => String(s) };
+    globalThis.$ = id => document.getElementById(id);
+    globalThis.box = { boxes:{}, current:'f1', img:{ width:5000, height:3750 },
+                       view:{ scale:1, x:0, y:0 }, drag:null,
+                       floors:[{ id:'f1', name:'L1', w:5000, h:3750 }] };
+    globalThis.draw = () => {};
+    globalThis.updateReadout = () => {};
+    globalThis.persist = () => {};
+    globalThis.reanalyze = () => {};
+    globalThis.showEvidence = () => {};
+    globalThis.floorById = id => box.floors.find(f => f.id === id);
+
+    eval(slice('  var HANDLE_HIT_CSS', '  var box = {'));
+    eval(slice('  function toImage(px, py)', '  function fitView()'));
+    eval(slice('  function handlePoints(x, y, w, h)', '  function updateReadout()'));
+    eval(slice('  function clampBox(b, f)', '  function onWheel(e)'));
+
+    const sc = Math.min(canvas.width/5000, canvas.height/3750) * 0.97;
+    box.view = { scale: sc, x: (canvas.width-5000*sc)/2, y: (canvas.height-3750*sc)/2 };
+    """
+
+    def run_js(self, dpr, script):
+        body = self.HARNESS + script
+        proc = subprocess.run(["node", "-e", body, str(PLANTRIM_JS), str(dpr)],
+                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed:\n" + proc.stderr)
+        return json.loads(proc.stdout)
+
+    DRAG = """
+    box.boxes.f1 = [1000, 800, 3200, 3000];
+    const before = box.boxes.f1.slice();
+    const c = toScreen(3200, 3000);
+    const off = Number(process.env.AIM_OFF_CSS || 0) * DPR;
+    onDown({ button:0, clientX:(c.x+off)/DPR, clientY:(c.y+off)/DPR,
+             preventDefault(){} });
+    const mode = box.drag && box.drag.mode;
+    onMove({ clientX:(c.x+160)/DPR, clientY:(c.y+80)/DPR });
+    onUp();
+    console.log(JSON.stringify({ mode: mode,
+      before: before, after: box.boxes.f1,
+      changed: JSON.stringify(box.boxes.f1) !== JSON.stringify(before) }));
+    """
+
+    def test_a_drag_on_a_handle_resizes_the_box(self):
+        for dpr in (1, 1.5, 2, 3):
+            with self.subTest(dpr=dpr):
+                out = self.run_js(dpr, self.DRAG)
+                self.assertEqual(out["mode"], "se",
+                                 "the press must grab the handle, not start a new box")
+                self.assertTrue(out["changed"], "the box did not move")
+                self.assertGreater(out["after"][2], out["before"][2])
+                self.assertGreater(out["after"][3], out["before"][3])
+
+    def test_an_imprecise_aim_still_grabs_the_handle(self):
+        """Six CSS pixels off used to miss and wipe the box."""
+        import os
+        env = dict(os.environ, AIM_OFF_CSS="6")
+        for dpr in (1.5, 2):
+            with self.subTest(dpr=dpr):
+                body = self.HARNESS + self.DRAG
+                proc = subprocess.run(["node", "-e", body, str(PLANTRIM_JS), str(dpr)],
+                                      capture_output=True, text=True,
+                                      timeout=NODE_TIMEOUT_S, env=env)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
+                out = json.loads(proc.stdout)
+                self.assertEqual(out["mode"], "se")
+                self.assertTrue(out["changed"])
+
+    def test_the_hit_target_is_the_same_size_at_every_scaling(self):
+        script = ("console.log(JSON.stringify({ hitCss: hitRadius() / DPR, "
+                  "drawCss: handleSize() / DPR }));")
+        for dpr in (1, 1.5, 2, 3):
+            with self.subTest(dpr=dpr):
+                out = self.run_js(dpr, script)
+                self.assertAlmostEqual(out["hitCss"], 16, places=6)
+                self.assertAlmostEqual(out["drawCss"], 11, places=6)
+
+    def test_a_press_well_away_from_the_box_still_starts_a_new_one(self):
+        script = """
+        box.boxes.f1 = [1000, 800, 3200, 3000];
+        const p = toScreen(4600, 3500);
+        onDown({ button:0, clientX:p.x/DPR, clientY:p.y/DPR, preventDefault(){} });
+        console.log(JSON.stringify({ mode: box.drag && box.drag.mode }));
+        """
+        self.assertEqual(self.run_js(2, script)["mode"], "new")
+
+    def test_space_held_pans_instead_of_drawing(self):
+        script = """
+        box.boxes.f1 = [1000, 800, 3200, 3000];
+        WD.PanZoom.isPanGesture = () => true;
+        const c = toScreen(3200, 3000);
+        onDown({ button:0, clientX:c.x/DPR, clientY:c.y/DPR, preventDefault(){} });
+        console.log(JSON.stringify({ mode: box.drag && box.drag.mode }));
+        """
+        self.assertEqual(self.run_js(2, script)["mode"], "pan")
+
+
 if __name__ == "__main__":
     unittest.main()
