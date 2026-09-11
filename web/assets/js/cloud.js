@@ -4222,21 +4222,26 @@ async function bulkSync(dir) {
   }
 
 }
-/* "Grab everything newer on the cloud, over the top of local."
+/* Sync, as the round trip the tool exists for.
 
-   Assembling that out of checkboxes is the same capability but not the same
-   thing: you have to find the stale rows first, across sites and nested files,
-   and know you found all of them. This walks the whole listing instead.
+   Cloud Manager is not a file browser. A site starts as DWGs, becomes a local
+   .esx, goes through PlanTrim and Quick Walls and Ekahau, and ends up in the
+   cloud. Local is where the work happens and is also the backup of what the
+   cloud holds; the cloud is where the finished thing belongs.
 
-   Two halves, because both are what "all the cloud stuff" means:
-     - matched pairs where the cloud copy is newer  -> content comes down
-     - cloud-only projects                          -> downloaded fresh
-   One-directional on purpose. Nothing locally newer is touched, and nothing
-   already in sync is re-fetched; that is what makes this safe to offer as one
-   button rather than a bulk overwrite of everything. */
-function everythingFromCloud() {
-  const pulls = [], fresh = [], blocked = [];
-  let inSync = 0;
+   So this does not ask which direction to move. It looks at each file, works
+   out which side is newer, and does that - or nothing at all, when the two
+   already agree. There is deliberately no "overwrite everything downward"
+   control here, because its safety would depend on the person pressing it
+   having reasoned correctly about state the tool already knows.
+
+   What it cannot do, it says. A newer local file is not an anomaly - it is
+   the normal result of a day's work, and the tool's job is getting it home.
+   Until the upload direction exists those are listed as still needing to go
+   up, never quietly counted as done: believing you are in sync when you are
+   not is worse than the friction of being told you are not. */
+function syncEverythingPlan() {
+  const down = [], up = [], inSync = [], fresh = [];
   const seenPair = new Set(), seenCloud = new Set();
 
   const isFile = (l) => /\.esx$/i.test(String((l && l.path) || ''));
@@ -4246,7 +4251,7 @@ function everythingFromCloud() {
     const id = pr.cloud.id;
     if (!id || seenPair.has(id)) return;
     seenPair.add(id);
-    if (!isFile(pr.local)) return;              // a site is a folder, not a file
+    if (!isFile(pr.local)) return;          // a site is a folder, not a file
     const row = {
       cloudId: id,
       cloudName: pr.cloud.name || '',
@@ -4255,9 +4260,9 @@ function everythingFromCloud() {
       cloudMtime: Number(pr.cloud.mtime) || 0,
       localMtime: Number(pr.local.mtime) || 0,
     };
-    if (pr.staleness === 'cloud_newer') pulls.push(row);
-    else if (pr.staleness === 'local_newer') blocked.push(row);
-    else inSync++;
+    if (pr.staleness === 'cloud_newer') down.push(row);
+    else if (pr.staleness === 'local_newer') up.push(row);
+    else inSync.push(row);
   };
 
   const takeCloud = (c, siteName) => {
@@ -4279,76 +4284,93 @@ function everythingFromCloud() {
   });
   (data.cloudOnly || []).forEach(c => { takeCloud(c); walkKids(c.children, c.name); });
   (data.localOnly || []).forEach(l => walkKids(l.children, l.name));
-  if (data.orphans) {
-    (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
-  }
+  if (data.orphans) (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
 
-  return { pulls, fresh, blocked, inSync };
+  return { down, up, fresh, inSync };
 }
 
-async function pullEverythingFromCloud() {
-  if (!data || !data.summary) { toast('Nothing loaded yet', 'info'); return; }
-  const plan = everythingFromCloud();
+function _syncRowsHtml(rows, dir) {
+  return rows.map(d => '<tr>'
+    + '<td class="sync-plan-name">' + e(d.localName || d.cloudName) + '</td>'
+    + '<td class="sync-plan-dir">' + dir + '</td>'
+    + '<td class="sync-plan-when">cloud ' + e(fmtRelDate(d.cloudMtime)) + '<br>'
+    + '<span class="sub">local ' + e(fmtRelDate(d.localMtime)) + '</span></td>'
+    + '</tr>').join('');
+}
 
-  if (!plan.pulls.length && !plan.fresh.length) {
-    toast(plan.blocked.length
-      ? `Nothing to pull — ${plan.blocked.length} file${plan.blocked.length === 1 ? ' is' : 's are'} newer locally`
-      : 'Everything local is already up to date with the cloud', 'info');
+async function syncEverything() {
+  if (!data || !data.summary) { toast('Nothing loaded yet', 'info'); return; }
+  const plan = syncEverythingPlan();
+  const willDo = plan.down.length + plan.fresh.length;
+
+  if (!willDo) {
+    // Still say what is waiting to go up - that is the half of the loop this
+    // cannot finish yet, and silence would read as "all done".
+    toast(plan.up.length
+      ? plan.up.length + ' local file' + (plan.up.length === 1 ? '' : 's')
+        + ' still ' + (plan.up.length === 1 ? 'needs' : 'need')
+        + ' to go up — uploading is not built yet. Nothing to bring down.'
+      : 'Local and cloud already match', plan.up.length ? 'info' : 'success');
     return;
   }
 
   const parts = [];
-  if (plan.pulls.length) {
-    parts.push(`Overwrite <b>${plan.pulls.length}</b> local file${plan.pulls.length === 1 ? '' : 's'} with the newer cloud copy`);
+  if (plan.down.length) {
+    parts.push('Bring down <b>' + plan.down.length + '</b> file'
+      + (plan.down.length === 1 ? '' : 's') + ' the cloud has a newer copy of');
   }
   if (plan.fresh.length) {
-    parts.push(`Download <b>${plan.fresh.length}</b> cloud project${plan.fresh.length === 1 ? '' : 's'} you do not have locally`);
+    parts.push('Download <b>' + plan.fresh.length + '</b> cloud project'
+      + (plan.fresh.length === 1 ? '' : 's') + ' you have no local copy of');
   }
-  let body = `<ul>${parts.map(t => `<li>${t}</li>`).join('')}</ul>`;
+  let body = '<ul>' + parts.map(t => '<li>' + t + '</li>').join('') + '</ul>';
 
-  if (plan.pulls.length) {
-    const rows = plan.pulls.map(d => `
-      <tr>
-        <td class="sync-plan-name">${e(d.localName || d.cloudName)}</td>
-        <td class="sync-plan-dir">&#11015; cloud &rarr; local</td>
-        <td class="sync-plan-when">cloud ${e(fmtRelDate(d.cloudMtime))}<br>
-          <span class="sub">local ${e(fmtRelDate(d.localMtime))}</span></td>
-      </tr>`).join('');
-    body += `
-      <p class="sync-plan-lead">These local files are replaced:</p>
-      <div class="sync-plan-wrap"><table class="sync-plan">
-        <thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>
-      <p class="sub">Each one is kept alongside as a <code>.previous-</code> file.</p>
-      <p class="sub warn"><b>Two dates cannot tell you whether both sides
-        changed.</b> If you edited one of these locally since it last matched
-        the cloud, "cloud is newer" and "we both changed it" look identical
-        from here, and your local edit goes into the <code>.previous-</code>
-        file rather than into the result.</p>`;
+  if (plan.down.length) {
+    body += '<p class="sync-plan-lead">Newer on the cloud — the local copy is replaced:</p>'
+      + '<div class="sync-plan-wrap"><table class="sync-plan">'
+      + '<thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>'
+      + '<tbody>' + _syncRowsHtml(plan.down, '&#11015; cloud &rarr; local') + '</tbody>'
+      + '</table></div>'
+      + '<p class="sub">Every local copy that is replaced is kept beside it as a '
+      + '<code>.previous-&lt;date&gt;.esx</code>, one per run — nothing is pruned, '
+      + 'so an older state stays recoverable.</p>'
+      + '<p class="sub warn"><b>Two dates cannot tell you whether both sides '
+      + 'changed.</b> If you edited one of these locally since it last matched '
+      + 'the cloud, "cloud is newer" and "we both changed it" look identical '
+      + 'from here, and your local edit goes into the <code>.previous-</code> '
+      + 'file rather than into the result.</p>';
   }
 
-  const kept = [];
-  if (plan.blocked.length) {
-    kept.push(`<b>${plan.blocked.length}</b> newer locally — left alone (sending a
-      newer local file up is not built yet)`);
-  }
-  if (plan.inSync) kept.push(`<b>${plan.inSync}</b> already in sync`);
-  if (kept.length) {
-    body += `<p class="sub">Not touched: ${kept.join('; ')}.</p>`;
+  if (plan.up.length) {
+    body += '<p class="sync-plan-lead">Newer locally — these need to go up, and '
+      + 'this cannot do it yet:</p>'
+      + '<div class="sync-plan-wrap"><table class="sync-plan">'
+      + '<thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>'
+      + '<tbody>' + _syncRowsHtml(plan.up, '&#11014; local &rarr; cloud') + '</tbody>'
+      + '</table></div>'
+      + '<p class="sub">They are left exactly as they are. Sync never replaces '
+      + 'the newer side with the older one, so running this cannot put your work '
+      + 'at risk — but it does not finish the job either. Send these up from '
+      + 'Ekahau until the upload direction is built.</p>';
   }
 
-  const ok = await showConfirmModal('Pull everything from Ekahau Cloud?', body,
-                                    `Pull ${plan.pulls.length + plan.fresh.length}`);
+  if (plan.inSync.length) {
+    body += '<p class="sub"><b>' + plan.inSync.length
+      + '</b> already match and are not touched.</p>';
+  }
+
+  const ok = await showConfirmModal('Sync local and cloud?', body, 'Sync ' + willDo);
   if (!ok) return;
   clearSelection();
 
-  /* Same call the per-row arrow and bulk Sync make. It backs the local file
-     up, downloads, replaces atomically, and refuses on its own if the server
-     disagrees about which side is newer. */
-  for (const d of plan.pulls) {
-    opEnqueue({
-      title: `Replacing "${d.localName || d.cloudName}" with the cloud copy`,
+  /* verify_replace_local is the same call the per-row arrow makes: it backs
+     the local file up, downloads, replaces atomically, and refuses on its own
+     if the server disagrees about which side is newer. */
+  const results = { done: 0, failed: 0, skipped: 0, backups: [] };
+  const waits = [];
+  for (const d of plan.down) {
+    const { promise } = opEnqueue({
+      title: 'Updating "' + (d.localName || d.cloudName) + '" from the cloud',
       type: 'verify', pollBackend: false, undoable: false,
       run: async () => {
         const r = await pyApi('verify_replace_local', d.cloudId, d.localPath);
@@ -4363,22 +4385,63 @@ async function pullEverythingFromCloud() {
         return r;
       },
     });
+    waits.push(promise.then(r => {
+      results.done++;
+      if (r && r.backup) results.backups.push(r.backup);
+    }).catch(err => {
+      if (/local is newer/i.test((err && err.message) || '')) results.skipped++;
+      else results.failed++;
+    }));
   }
   for (const d of plan.fresh) {
     const destFolder = d.siteName || d.name;
-    opEnqueue({
-      title: d.siteName ? `Downloading "${d.name}.esx" → ${d.siteName}`
-                        : `Downloading "${d.name}.esx"`,
+    const { promise } = opEnqueue({
+      title: d.siteName ? 'Downloading "' + d.name + '.esx" → ' + d.siteName
+                        : 'Downloading "' + d.name + '.esx"',
       type: 'download', pollBackend: true, undoable: false,
       retryFn: async (newId) => pyApi('download_project', d.id, destFolder, newId),
       run: async (opId) => pyApi('download_project', d.id, destFolder, opId),
     });
+    waits.push(promise.then(() => { results.done++; })
+                      .catch(() => { results.failed++; }));
   }
+
+  await Promise.all(waits);
   _scheduleOpRefresh();
+  _reportSyncOutcome(results, plan);
+}
+
+/* What actually happened, not what was planned. "Make sure the two versions
+   are in sync" is a step he performs by hand at the end of every site, so a
+   run ends by saying where the two sides now stand - not by reporting that
+   some downloads succeeded. */
+function _reportSyncOutcome(results, plan) {
+  const bits = [];
+  if (results.done) bits.push(results.done + ' updated');
+  if (results.skipped) bits.push(results.skipped + ' skipped');
+  if (results.failed) bits.push(results.failed + ' failed');
+  if (plan.inSync.length) bits.push(plan.inSync.length + ' already matched');
+
+  let tone = results.failed ? 'error' : 'success';
+  let msg = bits.join(', ') || 'Nothing to do';
+  if (plan.up.length) {
+    if (!results.failed) tone = 'info';
+    msg += ' — ' + plan.up.length + ' still to go up (uploading not built yet)';
+  } else if (!results.failed && !results.skipped) {
+    msg += ' — local and cloud now match';
+  }
+  toast(msg, tone);
+
+  if (results.backups.length) {
+    const folder = results.backups[0].replace(/[^\\/]+$/, '');
+    console.info('[wd] previous local copies kept:', results.backups);
+    toast(results.backups.length + ' previous local cop'
+      + (results.backups.length === 1 ? 'y' : 'ies') + ' kept in ' + folder, 'info');
+  }
 }
 // Guarded: the sync helpers above are sliced out and evaluated in Node by
 // tests/test_server_and_assets.py, where there is no window to hang it on.
-if (typeof window !== 'undefined') window.pullEverythingFromCloud = pullEverythingFromCloud;
+if (typeof window !== 'undefined') window.syncEverything = syncEverything;
 
 function bulkDelete() {
 
