@@ -38,17 +38,8 @@
      ("#0068FF"). Grouped on the raw string those are two different colours, so
      a sequence chosen by name would skip every hex-coloured AP and drop it into
      the leftovers. Normalise to the palette name where one matches. */
-  function colorKey(c) {
-    if (!c) return WD.CLEAR_KEY;          // Clear and never-marked are one state
-    var lc = String(c).toLowerCase().trim();
-    if (WD.EKAHAU_COLOR_ALIASES[lc]) lc = WD.EKAHAU_COLOR_ALIASES[lc];
-    if (EKAHAU_COLORS[lc]) return lc;
-    var up = lc.toUpperCase();
-    for (var i = 0; i < COLOR_ORDER.length; i++) {
-      if (EKAHAU_COLORS[COLOR_ORDER[i]] === up) return COLOR_ORDER[i];
-    }
-    return lc;
-  }
+  // Delegates: one normaliser for the whole suite, in wd-shared.js.
+  function colorKey(c) { return WD.ekahauColorKey(c); }
 
   function colorSortKey(c) {
     if (!c) return COLOR_ORDER.length;
@@ -2112,9 +2103,13 @@
         // dark by default and light only under [data-theme=light] - so ring
         // the pale ones, which are the only ones the light theme can lose.
         var border = WD.needsDarkText(rc) ? '1px solid rgba(0,0,0,.2)' : 'none';
-        swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + rc + ';border:' + border + ';vertical-align:middle;margin-right:4px"></span>';
+        // Named, not just coloured: a dot on its own says nothing, and the
+        // name is the word he sees in Ekahau's own menu.
+        swatch = '<span title="' + esc(colorLabel(colorKey(it.ap.color))) +
+          '" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + rc + ';border:' + border + ';vertical-align:middle;margin-right:4px"></span>';
       } else {
-        swatch = '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #222;vertical-align:middle;margin-right:4px;box-sizing:border-box"></span>';
+        swatch = '<span title="' + esc(colorLabel(WD.CLEAR_KEY)) +
+          '" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #222;vertical-align:middle;margin-right:4px;box-sizing:border-box"></span>';
       }
       var curTxt = it.oldName || '—';
       var newTxt = it.newName || '';

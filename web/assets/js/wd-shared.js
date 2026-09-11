@@ -152,6 +152,27 @@
     return c;
   };
 
+  /* One key per colour, whichever way the project spells it.
+
+     An .esx stores a hex. Ekahau's menu shows a name. Anything that puts a
+     colour in front of the reader has to get from one to the other, and this
+     is the only place that conversion happens - the Report was printing
+     "#6B6B6B" as a section heading while the Labeler said "Gray", which is
+     what two implementations of one mapping looks like from the outside. */
+  WD.ekahauColorKey = function (value) {
+    if (!value) return WD.CLEAR_KEY;
+    var lc = String(value).toLowerCase().trim();
+    if (WD.EKAHAU_COLOR_ALIASES[lc]) lc = WD.EKAHAU_COLOR_ALIASES[lc];
+    if (WD.EKAHAU_COLORS[lc]) return lc;
+    var up = lc.charAt(0) === '#' ? lc.toUpperCase() : '#' + lc.toUpperCase();
+    for (var i = 0; i < WD.EKAHAU_COLOR_ORDER.length; i++) {
+      if (WD.EKAHAU_COLORS[WD.EKAHAU_COLOR_ORDER[i]] === up) {
+        return WD.EKAHAU_COLOR_ORDER[i];
+      }
+    }
+    return lc;                 // unknown: kept as-is, drawn and labelled
+  };
+
   // Ekahau's word for a colour. Falls back to the key capitalised, so a
   // swatch nobody has seen before still gets a readable label.
   WD.ekahauColorName = function (key) {

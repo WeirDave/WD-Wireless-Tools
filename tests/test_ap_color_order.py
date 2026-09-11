@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 AP_JS = ROOT / "web" / "assets" / "js" / "ap-rename.js"
 AP_HTML = ROOT / "web" / "ap-rename.html"
 SHARED_JS = ROOT / "web" / "assets" / "js" / "wd-shared.js"
+REPORT_JS = ROOT / "web" / "assets" / "js" / "report.js"
 
 NODE_TIMEOUT_S = 120
 
@@ -396,6 +397,45 @@ class TheSequenceIsArrangeable(unittest.TestCase):
     def test_the_order_is_saved(self):
         self.assertIn("colorOrder: _colorOrder.slice()", self.source)
         self.assertIn("if (Array.isArray(s.colorOrder))", self.source)
+
+
+class NoSurfaceShowsAHexWhereEkahauShowsAName(unittest.TestCase):
+    """He reported seeing a hex code instead of a colour name, and it was
+    still there after the Labeler was fixed - because the Report renders
+    colours to the reader too, and that is a second implementation of the
+    same mapping. One normaliser, one name table, every surface through them.
+    """
+
+    def test_the_report_does_not_print_the_stored_value_as_a_heading(self):
+        """Grouping APs by colour titled each section with ap.color, which is
+        a hex - "#6B6B6B" where Ekahau says "Gray"."""
+        source = REPORT_JS.read_text(encoding="utf-8")
+        block = source[source.index("function apGroupLabel(key, dim)"):]
+        block = block[:block.index("if (dim === 'model')")]
+        self.assertIn("WD.ekahauColorName", block)
+        self.assertNotIn("return key;", block)
+
+    def test_the_report_says_clear_not_no_color(self):
+        source = REPORT_JS.read_text(encoding="utf-8")
+        block = source[source.index("function apGroupLabel(key, dim)"):]
+        block = block[:block.index("if (dim === 'model')")]
+        self.assertNotIn("'No color'", block)
+        self.assertIn("WD.CLEAR_KEY", block)
+
+    def test_there_is_one_normaliser_not_one_per_tool(self):
+        shared = SHARED_JS.read_text(encoding="utf-8")
+        self.assertIn("WD.ekahauColorKey = function", shared)
+        ap = AP_JS.read_text(encoding="utf-8")
+        block = ap[ap.index("function colorKey(c)"):][:120]
+        self.assertIn("WD.ekahauColorKey(c)", block)
+
+    def test_the_preview_swatch_names_its_colour(self):
+        """A coloured dot with no tooltip tells you nothing on hover."""
+        ap = AP_JS.read_text(encoding="utf-8")
+        block = ap[ap.index("var rc = resolveColor(it.ap.color);"):]
+        block = block[:block.index("var curTxt")]
+        self.assertIn("colorLabel(", block)
+        self.assertIn("title=", block)
 
 
 class LabelerUsesTheSharedContrastHelper(unittest.TestCase):
