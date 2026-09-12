@@ -1048,5 +1048,120 @@ class CropMarkupTests(unittest.TestCase):
         self.assertIn("Reset view", btn[:200])
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class ReachableHandleTests(unittest.TestCase):
+    """Every handle has to be on the stage, and every edge has to be grabbable.
+
+    Reported against v1.11: "I hit suggest from the set and I could alter it but
+    I have nothing on the right hand side or the left hand side to drag from".
+    The handles were all being drawn - the view was the problem. Framing the
+    stage on the *detected* content while the box on it was a *suggestion* half
+    again as wide put the whole right-hand side of that rectangle on the frame,
+    where there was nothing left to grab. His real numbers are the fixture.
+    """
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    // His stage, in device pixels, at the 90% browser zoom of the report.
+    const CV = { width: 487, height: 456 };
+    globalThis.$ = () => CV;
+    globalThis.window = { devicePixelRatio: 0.9,
+      __ptReport: () => ({ floors: [{ id:'f1', action:'trimmed',
+        offset:[3200,1800], newSize:[3275,4469] }] }) };
+    eval(slice('  var HANDLE_HIT_CSS', '  function $(id)'));
+    eval(slice('  function toImage(px, py)', '  function sizeCanvas()'));
+    eval(slice('  function framedRegion()', '  function draw()'));
+    eval(slice('  function handlePoints(x, y, w, h)',
+               '  // -------------------------------------------------------------- readout'));
+    // box is declared by the first slice, so it is populated after the evals.
+    box.current = 'f1'; box.applied = {}; box.boxes = {};
+    box.img = { width: 10000, height: 7500 };
+    // LNBH1 floor 1: detection kept 3275x4469, Suggest proposed 6234x4691.
+    const SUGGESTED = [1883, 1404, 8117, 6095];
+    function place(b) {
+      box.boxes.f1 = b;
+      fitView();
+      const a = toScreen(b[0], b[1]), c = toScreen(b[2], b[3]);
+      const x = Math.min(a.x, c.x), y = Math.min(a.y, c.y);
+      return { x: x, y: y, w: Math.abs(c.x - a.x), h: Math.abs(c.y - a.y) };
+    }
+    function clipped(r) {
+      const half = handleSize() / 2;
+      return handlePoints(r.x, r.y, r.w, r.h).filter(function (p) {
+        return p.x - half < 0 || p.x + half > CV.width ||
+               p.y - half < 0 || p.y + half > CV.height;
+      }).map(function (p) { return p.id; });
+    }
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_a_suggested_box_leaves_every_handle_on_the_stage(self):
+        """The reported bug, with his numbers. Before the fix this returned
+        ne, e and se - the entire right-hand side."""
+        out = self.run_js("""
+          console.log(JSON.stringify({ off: clipped(place(SUGGESTED)) }));
+        """)
+        self.assertEqual(out["off"], [])
+
+    def test_a_box_dragged_out_to_the_full_sheet_stays_reachable(self):
+        """The widest a box can get is the sheet itself, which is the worst
+        case for framing - and the one a scissors user reaches for."""
+        out = self.run_js("""
+          console.log(JSON.stringify({ off: clipped(place([0, 0, 10000, 7500])) }));
+        """)
+        self.assertEqual(out["off"], [])
+
+    def test_a_small_box_is_not_framed_so_tightly_it_fills_the_stage(self):
+        out = self.run_js("""
+          const r = place([4000, 3000, 4600, 3600]);
+          console.log(JSON.stringify({ off: clipped(r), w: r.w, h: r.h }));
+        """)
+        self.assertEqual(out["off"], [])
+        self.assertLess(out["w"], 487 * 0.95, "room around it, not wall to wall")
+
+    def test_the_whole_edge_drags_that_edge(self):
+        """A square on the midpoint is a hint, not the only target. Grabbing the
+        side of a rectangle to widen it is what people try first, and it means a
+        handle that does end up awkwardly placed is no longer a dead end."""
+        out = self.run_js("""
+          const r = place(SUGGESTED);
+          console.log(JSON.stringify({
+            right: handleAt(r.x + r.w, r.y + r.h / 3),
+            left:  handleAt(r.x,       r.y + r.h * 0.8),
+            top:   handleAt(r.x + r.w * 0.3, r.y),
+            bottom:handleAt(r.x + r.w * 0.7, r.y + r.h) }));
+        """)
+        self.assertEqual(out, {"right": "e", "left": "w", "top": "n", "bottom": "s"})
+
+    def test_a_corner_still_wins_over_the_edges_it_joins(self):
+        out = self.run_js("""
+          const r = place(SUGGESTED);
+          console.log(JSON.stringify({
+            ne: handleAt(r.x + r.w, r.y), sw: handleAt(r.x, r.y + r.h) }));
+        """)
+        self.assertEqual(out, {"ne": "ne", "sw": "sw"})
+
+    def test_the_middle_still_moves_and_the_outside_still_does_nothing(self):
+        out = self.run_js("""
+          const r = place(SUGGESTED);
+          console.log(JSON.stringify({ mid: handleAt(r.x + r.w/2, r.y + r.h/2),
+                                       out: handleAt(2, 2) }));
+        """)
+        self.assertEqual(out["mid"], "move")
+        self.assertIsNone(out["out"])
+
+
 if __name__ == "__main__":
     unittest.main()

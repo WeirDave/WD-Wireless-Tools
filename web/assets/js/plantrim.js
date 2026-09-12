@@ -360,8 +360,26 @@
   // viewport change rather than a new image - which is also why it cannot
   // accidentally become a commit.
   function framedRegion() {
-    var b = box.applied && box.applied[box.current] && box.boxes[box.current];
-    if (b) return { x: b[0], y: b[1], w: b[2] - b[0], h: b[3] - b[1] };
+    var b = box.boxes[box.current];
+    // A cropped floor is framed exactly: that view is the result.
+    if (b && box.applied && box.applied[box.current]) {
+      return { x: b[0], y: b[1], w: b[2] - b[0], h: b[3] - b[1] };
+    }
+    // A rectangle still being drawn is framed with room around it, because the
+    // handles live on its edges. Framing something narrower than the rectangle
+    // - which is what detection's own bounds are, once Suggest or a drag has
+    // widened the box past them - pushes those edges onto the edge of the stage
+    // and there is nothing left to grab. That is exactly what happened: a
+    // 6234-wide suggestion inside a view sized for a 3275-wide detection put
+    // the whole right-hand side of the box against the frame.
+    if (b) {
+      var bw = b[2] - b[0], bh = b[3] - b[1];
+      if (bw > 1 && bh > 1) {
+        var m = 0.12;
+        return { x: b[0] - bw * m, y: b[1] - bh * m,
+                 w: bw * (1 + 2 * m), h: bh * (1 + 2 * m) };
+      }
+    }
 
     // Before anything is cropped, frame the drawing rather than the sheet. A
     // 10000x7500 CAD canvas with the building using a fifth of it renders the
@@ -505,6 +523,17 @@
       if (d <= r && d < best) { best = d; found = p.id; }
     });
     if (found) return found;
+
+    // Anywhere along an edge drags that edge. Corners still win because they
+    // are tested first, and the square on each side is still drawn - it says
+    // the edge can be dragged - but it is no longer the only place that works.
+    var onY = py >= y - r && py <= y + h + r;
+    var onX = px >= x - r && px <= x + w + r;
+    if (onY && Math.abs(px - x) <= r) return 'w';
+    if (onY && Math.abs(px - (x + w)) <= r) return 'e';
+    if (onX && Math.abs(py - y) <= r) return 'n';
+    if (onX && Math.abs(py - (y + h)) <= r) return 's';
+
     if (px > x && px < x + w && py > y && py < y + h) return 'move';
     return null;
   }
@@ -902,6 +931,7 @@
     persist();
     reanalyze();
     updateReadout();
+    if (window.__ptRefit) window.__ptRefit();
     if (!applied) {
       WD.toast('No other floor is the same size as this one', 'error');
     } else if (skipped.length) {
@@ -934,6 +964,7 @@
         box.suggestions[s.floorId] = s;
         if (s.box) { box.boxes[s.floorId] = s.box.slice(); filled++; }
       });
+      if (window.__ptRefit) window.__ptRefit();
       draw();
       updateReadout();
       showEvidence();
