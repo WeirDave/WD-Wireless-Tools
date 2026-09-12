@@ -173,13 +173,24 @@
       if (note) note.textContent = '';
       return;
     }
-    btn.textContent = n ? 'Cut and save' : 'Nothing to cut';
+    // Once every crop is a box he drew and cropped, the cutting is done as far
+    // as he is concerned and the only act left is writing the file. A button
+    // still offering to cut at that point is offering work already finished.
+    var drawn = 0, auto = 0;
+    (res.floors || []).forEach(function (f) {
+      if (f.action !== 'trimmed') return;
+      if (f.source === 'manual') drawn++; else auto++;
+    });
+    var allMine = n && drawn === n && !auto;
+    btn.textContent = !n ? 'Nothing to cut'
+                         : (allMine ? 'Save trimmed .esx' : 'Cut and save');
     if (!note) return;
     if (!n) {
       note.textContent = 'Every floor plan is already tight, or cannot be cropped.';
+    } else if (allMine) {
+      note.textContent = 'Every crop is a box you drew. Saving writes a new copy \u2014 ' +
+        'your original file is not changed.';
     } else {
-      var drawn = 0;
-      (res.floors || []).forEach(function (f) { if (f.source === 'manual') drawn++; });
       note.textContent = n + ' floor plan' + (n === 1 ? '' : 's') + ' will be cropped' +
         (drawn ? ' (' + drawn + ' to a box you drew)' : ' automatically') +
         '. Your original file is not changed \u2014 you get a new copy.';
@@ -828,17 +839,28 @@
     return { word: 'Cannot crop', cls: 'is-refused', detail: f.reason || '' };
   }
 
+  // Ekahau lets the customer name a floor, and what comes back is usually the
+  // number off the drawing - "01", "02", "3A". Numbering the rows as well put
+  // two different numbers on the same line: row 1 was floor 02. So the row is
+  // the floor's own name, and "Floor" is prepended only where the name is bare
+  // enough to need it - never in front of a name that already reads as one,
+  // which is how you get "Floor Ground Floor".
+  function floorLabel(name) {
+    var s = String(name == null ? '' : name).trim();
+    if (!s) return 'Floor';
+    return /^[0-9]/.test(s) ? 'Floor ' + s : s;
+  }
+
   function renderStrip(rep) {
     var el = $('ptbStrip');
     if (!el) return;
     if (!box.floors.length) { el.innerHTML = ''; return; }
-    el.innerHTML = box.floors.map(function (f, i) {
+    el.innerHTML = box.floors.map(function (f) {
       var st = floorState(rep, f.id);
       var here = f.id === box.current;
       return '<button type="button" class="ptb-row ' + st.cls +
                (here ? ' is-current' : '') + '" data-floor="' + WD.esc(f.id) + '">' +
-               '<span class="ptb-row-n">' + (i + 1) + '</span>' +
-               '<span class="ptb-row-name">' + WD.esc(f.name) + '</span>' +
+               '<span class="ptb-row-name">' + WD.esc(floorLabel(f.name)) + '</span>' +
                '<span class="ptb-row-state">' + WD.esc(st.word) + '</span>' +
                '<span class="ptb-row-detail">' + WD.esc(st.detail) + '</span>' +
              '</button>';
@@ -853,9 +875,11 @@
     var count = $('ptbFloorCount');
     if (count) {
       var i2 = floorIndex(box.current);
+      var cur = box.floors[i2];
       count.textContent = box.floors.length === 1
         ? '1 floor plan'
-        : 'Floor ' + (i2 + 1) + ' of ' + box.floors.length;
+        : floorLabel(cur && cur.name) + ' \u2014 ' + (i2 + 1) +
+          ' of ' + box.floors.length;
     }
   }
 
