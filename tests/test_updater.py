@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 import tempfile
 import time
 from unittest import mock
@@ -789,6 +791,113 @@ class ClientChecksThroughTheServerTests(unittest.TestCase):
         """"Not a problem with your install" is only true for one of them."""
         self.assertIn("ratelimit", self.src)
         self.assertIn("rate.?limit", self.src)
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class AboutPanelFreshnessTests(unittest.TestCase):
+    """Opening About is the act of asking, so it has to actually ask.
+
+    Reported: "I refreshed on the page and there wasn't an update available or
+    didn't say anything so then I went into about and then when I went to about
+    it said I had the latest version but I clicked the button anyway and then it
+    told me that there was a new release... when you bring up the about... it
+    should literally look for the latest release at that point without hitting
+    the button."
+
+    Two causes, both here. Opening the panel rendered a cached answer and never
+    checked, and that cache was good for twenty-four hours - so the panel said
+    "you have the latest version" on the strength of something it had been told
+    the day before, and a release had landed since.
+    """
+
+    SHARED = Path(__file__).resolve().parent.parent / "web" / "assets" / "js" / "wd-shared.js"
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    const store = {};
+    globalThis.localStorage = {
+      getItem: k => (k in store ? store[k] : null),
+      setItem: (k, v) => { store[k] = String(v); },
+      removeItem: k => { delete store[k]; }
+    };
+    eval(slice('  var WD_UPDATE_CACHE_KEY', '  function _cmpVer'));
+    const HOUR = 60 * 60 * 1000;
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(self.SHARED)],
+                              capture_output=True, text=True, encoding="utf-8", timeout=60)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_a_days_old_answer_is_no_longer_treated_as_current(self):
+        out = self.run_js("""
+          _writeUpdateCache({ checkedAt: Date.now() - 24 * HOUR,
+                              latestVersion: '2.9.0', isNewer: false });
+          console.log(JSON.stringify({ kept: !!_readUpdateCache() }));
+        """)
+        self.assertFalse(out["kept"])
+
+    def test_a_check_from_two_hours_ago_is_stale_too(self):
+        """His laptop had been open for days; an hour is the new budget."""
+        out = self.run_js("""
+          _writeUpdateCache({ checkedAt: Date.now() - 2 * HOUR,
+                              latestVersion: '2.9.0', isNewer: false });
+          console.log(JSON.stringify({ kept: !!_readUpdateCache() }));
+        """)
+        self.assertFalse(out["kept"])
+
+    def test_a_recent_answer_is_still_reused(self):
+        """The point is freshness, not refusing to remember anything."""
+        out = self.run_js("""
+          _writeUpdateCache({ checkedAt: Date.now() - 5 * 60 * 1000,
+                              latestVersion: '2.9.0', isNewer: false });
+          const v = _readUpdateCache();
+          console.log(JSON.stringify({ kept: !!v, version: v && v.latestVersion }));
+        """)
+        self.assertTrue(out["kept"])
+        self.assertEqual(out["version"], "2.9.0")
+
+    def test_the_background_budget_is_an_hour_not_a_day(self):
+        out = self.run_js("""
+          console.log(JSON.stringify({ ttl: WD_UPDATE_TTL_MS }));
+        """)
+        self.assertEqual(out["ttl"], 60 * 60 * 1000)
+
+    def test_a_rate_limit_is_still_respected_while_it_lasts(self):
+        """Checking more often must not mean ignoring GitHub saying stop."""
+        out = self.run_js("""
+          _writeUpdateCache({ checkedAt: Date.now(), error: true,
+                              kind: 'ratelimit', resetAt: Date.now() + 10 * 60 * 1000 });
+          const held = _readUpdateCache();
+          _writeUpdateCache({ checkedAt: Date.now(), error: true,
+                              kind: 'ratelimit', resetAt: Date.now() - 60 * 1000 });
+          console.log(JSON.stringify({ held: !!held, expired: !!_readUpdateCache() }));
+        """)
+        self.assertTrue(out["held"], "a live rate limit is remembered")
+        self.assertFalse(out["expired"], "and forgotten once it has passed")
+
+    def test_opening_about_runs_a_real_check(self):
+        src = self.SHARED.read_text(encoding="utf-8")
+        body = src[src.index("WD.openAbout = function"):]
+        body = body[:body.index("WD.closeAbout")]
+        self.assertIn("WD.checkForUpdates({ force: true })", body,
+                      "opening About must ask, not recite")
+
+    def test_it_still_shows_what_it_knew_while_asking(self):
+        """A panel that blanks itself for a second on every open is worse."""
+        src = self.SHARED.read_text(encoding="utf-8")
+        body = src[src.index("WD.openAbout = function"):]
+        body = body[:body.index("WD.closeAbout")]
+        self.assertLess(body.index("_readUpdateCache"),
+                        body.index("WD.checkForUpdates"))
 
 
 if __name__ == "__main__":
