@@ -529,5 +529,267 @@ class ReleaseLookupCostTests(unittest.TestCase):
         with mock.patch("requests.get", dead):
             self.assertEqual(updater.fetch_latest_release(), known)
 
+class BlockedApiTests(unittest.TestCase):
+    """git works, api.github.com does not - and the check has to survive that.
+
+    Reported by the user, about his work machine: "I wasn't using the updater at
+    work because it was messing up and giving me time out error messages and it
+    was just faster for me to go to my open terminal window hit the up arrow one
+    time... and then just pull it down."
+
+    Both halves of that are the finding. `git pull` from his terminal worked, so
+    github.com over git was fine; the in-app check reached for api.github.com
+    for every install, which a corporate network will commonly block or
+    throttle while leaving git alone. A minute of waiting, then a timeout, on a
+    machine perfectly able to update itself.
+    """
+
+    def setUp(self):
+        from server import app
+        self.client = app.test_client()
+
+    def _status(self):
+        return json.loads(self.client.get("/api/update/status").data)
+
+    def test_a_git_install_answers_with_the_api_unreachable(self):
+        blew_up = []
+
+        def dead_api(*a, **kw):
+            blew_up.append(kw.get("timeout"))
+            raise updater.UpdateError("Could not reach GitHub: timed out")
+
+        with patch.object(updater, "detect_install", return_value={
+                    "isGitInstall": True, "currentVersion": "2.5.0",
+                    "releasesUrl": "https://github.com/o/r/releases",
+                    "method": "git"}), \
+             patch.object(updater, "remote_release_tag", return_value="v2.9.0"), \
+             patch.object(updater, "fetch_latest_release", side_effect=dead_api):
+            out = self._status()
+
+        self.assertTrue(out["updateAvailable"],
+                        "git knew there was a newer release; the API was not needed")
+        self.assertEqual(out["latest"]["version"], "2.9.0")
+        self.assertEqual(out["latestSource"], "git")
+        self.assertIn("notesError", out, "and it says why the notes are missing")
+        self.assertEqual(blew_up, [updater.NOTES_TIMEOUT],
+                         "the optional call gets the short wait, not the full minute")
+
+    def test_being_up_to_date_is_decided_by_git_too(self):
+        with patch.object(updater, "detect_install", return_value={
+                    "isGitInstall": True, "currentVersion": "2.9.0",
+                    "releasesUrl": "https://github.com/o/r/releases",
+                    "method": "git"}), \
+             patch.object(updater, "remote_release_tag", return_value="v2.9.0"), \
+             patch.object(updater, "fetch_latest_release",
+                          side_effect=updater.UpdateError("blocked")):
+            out = self._status()
+        self.assertFalse(out["updateAvailable"])
+        self.assertEqual(out["latest"]["tag"], "v2.9.0")
+
+    def test_the_notes_are_used_when_the_api_does_answer(self):
+        with patch.object(updater, "detect_install", return_value={
+                    "isGitInstall": True, "currentVersion": "2.5.0",
+                    "releasesUrl": "https://github.com/o/r/releases",
+                    "method": "git"}), \
+             patch.object(updater, "remote_release_tag", return_value="v2.9.0"), \
+             patch.object(updater, "fetch_latest_release", return_value={
+                    "tag": "v2.9.0", "version": "2.9.0", "notes": "what changed",
+                    "url": "https://github.com/o/r/releases/tag/v2.9.0",
+                    "assets": {}}):
+            out = self._status()
+        self.assertEqual(out["latest"]["notes"], "what changed")
+        self.assertEqual(out["latestSource"], "git")
+
+    def test_notes_from_a_different_tag_are_not_pinned_to_this_one(self):
+        """The API's idea of latest can lag its own tags. Git said v2.9.0, so
+        notes for something else do not belong on it."""
+        with patch.object(updater, "detect_install", return_value={
+                    "isGitInstall": True, "currentVersion": "2.5.0",
+                    "releasesUrl": "https://github.com/o/r/releases",
+                    "method": "git"}), \
+             patch.object(updater, "remote_release_tag", return_value="v2.9.0"), \
+             patch.object(updater, "fetch_latest_release", return_value={
+                    "tag": "v2.8.0", "version": "2.8.0", "notes": "older notes",
+                    "url": "https://github.com/o/r/releases/tag/v2.8.0",
+                    "assets": {}}):
+            out = self._status()
+        self.assertEqual(out["latest"]["tag"], "v2.9.0")
+        self.assertEqual(out["latest"]["notes"], "")
+
+    def test_a_zip_install_still_uses_the_api(self):
+        """It has no remote to ask, so nothing changes for it."""
+        asked = []
+        with patch.object(updater, "detect_install", return_value={
+                    "isGitInstall": False, "currentVersion": "2.5.0",
+                    "releasesUrl": "https://github.com/o/r/releases",
+                    "method": "zip"}), \
+             patch.object(updater, "remote_release_tag",
+                          side_effect=AssertionError("must not ask git")), \
+             patch.object(updater, "fetch_latest_release", side_effect=lambda *a, **k: (
+                    asked.append(True) or {"tag": "v2.9.0", "version": "2.9.0",
+                                           "notes": "n", "url": "u", "assets": {}})):
+            out = self._status()
+        self.assertEqual(out["latestSource"], "api")
+        self.assertTrue(out["updateAvailable"])
+        self.assertTrue(asked)
+
+    def test_git_failing_falls_back_to_the_api(self):
+        with patch.object(updater, "detect_install", return_value={
+                    "isGitInstall": True, "currentVersion": "2.5.0",
+                    "releasesUrl": "https://github.com/o/r/releases",
+                    "method": "git"}), \
+             patch.object(updater, "remote_release_tag", return_value=None), \
+             patch.object(updater, "fetch_latest_release", return_value={
+                    "tag": "v2.9.0", "version": "2.9.0", "notes": "n",
+                    "url": "u", "assets": {}}):
+            out = self._status()
+        self.assertEqual(out["latestSource"], "api")
+        self.assertTrue(out["updateAvailable"])
+
+    def test_both_failing_still_reports_the_install(self):
+        with patch.object(updater, "detect_install", return_value={
+                    "isGitInstall": True, "currentVersion": "2.5.0",
+                    "releasesUrl": "https://github.com/o/r/releases",
+                    "method": "git"}), \
+             patch.object(updater, "remote_release_tag", return_value=None), \
+             patch.object(updater, "fetch_latest_release",
+                          side_effect=updater.UpdateError("Could not reach GitHub")):
+            out = self._status()
+        self.assertIsNone(out["latest"])
+        self.assertIn("latestError", out)
+        self.assertEqual(out["install"]["currentVersion"], "2.5.0",
+                         "the install facts are still useful with no network")
+
+
+class NoInteractivePromptTests(unittest.TestCase):
+    """Nothing here runs on a terminal, so git must never wait for one.
+
+    A git subprocess that asks for a username hangs until the timeout, and on
+    Windows the credential manager can raise a dialog - on a desktop nobody is
+    sitting at, since these sessions are driven remotely.
+    """
+
+    def test_every_git_call_refuses_to_prompt(self):
+        seen = {}
+
+        def fake_run(cmd, **kw):
+            seen.update(kw.get("env") or {})
+            return mock.Mock(returncode=0, stdout="", stderr="")
+
+        with patch("subprocess.run", side_effect=fake_run):
+            updater._run_git(["status", "--porcelain"], Path("."))
+
+        self.assertEqual(seen.get("GIT_TERMINAL_PROMPT"), "0")
+        self.assertEqual(seen.get("GCM_INTERACTIVE"), "never")
+        self.assertIn("GIT_ASKPASS", seen)
+        self.assertIn("PATH", seen, "and it still inherits the real environment")
+
+    def test_a_local_command_is_not_blamed_on_the_network(self):
+        import subprocess as sp
+        with patch("subprocess.run",
+                   side_effect=sp.TimeoutExpired(cmd="git", timeout=20)):
+            with self.assertRaises(updater.UpdateError) as caught:
+                updater._run_git(["status", "--porcelain"], Path("."))
+        msg = str(caught.exception)
+        self.assertIn("status", msg, "it names the command that stalled")
+        self.assertIn("does not use the network", msg)
+        self.assertNotIn("proxy", msg)
+
+    def test_a_network_command_says_so_and_says_what_to_try(self):
+        import subprocess as sp
+        with patch("subprocess.run",
+                   side_effect=sp.TimeoutExpired(cmd="git", timeout=120)):
+            with self.assertRaises(updater.UpdateError) as caught:
+                updater._run_git(["fetch", "--tags", "origin"], Path("."))
+        msg = str(caught.exception)
+        self.assertIn("fetch", msg)
+        self.assertIn("proxy", msg)
+        self.assertIn("terminal", msg, "which is what actually worked for him")
+
+    def test_local_commands_do_not_wait_two_minutes(self):
+        """A `git status` that needs longer than this is not slow, it is stuck."""
+        self.assertLessEqual(updater.LOCAL_GIT_TIMEOUT, 30)
+        self.assertLess(updater.LOCAL_GIT_TIMEOUT, updater.GIT_TIMEOUT)
+
+
+class RemoteTagTests(unittest.TestCase):
+    """Reading the newest release tag straight off the remote."""
+
+    def _with_output(self, out, code=0):
+        proc = mock.Mock(returncode=code, stdout=out, stderr="")
+        return patch.object(updater, "_run_git", return_value=proc)
+
+    def test_it_picks_the_newest_by_version_not_by_order(self):
+        with self._with_output(
+                "aaa\trefs/tags/v2.10.0\n"
+                "bbb\trefs/tags/v2.9.0\n"
+                "ccc\trefs/tags/v2.98.0\n"
+                "ddd\trefs/tags/v2.100.0\n"):
+            self.assertEqual(updater.remote_release_tag(Path(".")), "v2.100.0")
+
+    def test_it_ignores_anything_that_is_not_a_release_tag(self):
+        with self._with_output(
+                "aaa\trefs/tags/v2.9.0\n"
+                "bbb\trefs/tags/nightly\n"
+                "ccc\trefs/tags/v3.0.0-rc1\n"
+                "ddd\trefs/tags/release-2020\n"):
+            self.assertEqual(updater.remote_release_tag(Path(".")), "v2.9.0")
+
+    def test_no_tags_is_not_an_answer(self):
+        with self._with_output(""):
+            self.assertIsNone(updater.remote_release_tag(Path(".")))
+
+    def test_a_failed_command_returns_none_rather_than_raising(self):
+        """It is an optimisation - the API is still there to fall back on."""
+        with self._with_output("", code=128):
+            self.assertIsNone(updater.remote_release_tag(Path(".")))
+        with patch.object(updater, "_run_git",
+                          side_effect=updater.UpdateError("timed out")):
+            self.assertIsNone(updater.remote_release_tag(Path(".")))
+
+    def test_it_does_not_wait_as_long_as_a_fetch(self):
+        """Someone is watching a panel that has not opened yet."""
+        self.assertLess(updater.GIT_LS_REMOTE_TIMEOUT, updater.GIT_TIMEOUT)
+        captured = {}
+
+        def spy(args, cwd, check=True, timeout=None):
+            captured["timeout"] = timeout
+            return mock.Mock(returncode=0, stdout="", stderr="")
+
+        with patch.object(updater, "_run_git", side_effect=spy):
+            updater.remote_release_tag(Path("."))
+        self.assertEqual(captured["timeout"], updater.GIT_LS_REMOTE_TIMEOUT)
+
+
+class ClientChecksThroughTheServerTests(unittest.TestCase):
+    """The browser must not call api.github.com itself.
+
+    It used to, with no timeout on the request at all, so on a network that
+    blocks api.github.com the About panel hung and then reported that GitHub
+    could not be reached - on a machine where git worked perfectly. The server
+    can answer the same question from git, so the page asks the server.
+    """
+
+    SHARED = Path(__file__).resolve().parent.parent / "web" / "assets" / "js" / "wd-shared.js"
+
+    def setUp(self):
+        self.src = self.SHARED.read_text(encoding="utf-8")
+
+    def test_the_update_check_calls_our_own_endpoint(self):
+        self.assertIn("fetch('/api/update/status'", self.src)
+
+    def test_nothing_fetches_the_github_api_directly(self):
+        """The constant may survive as documentation; a call to it may not."""
+        self.assertNotIn("fetch(WD_API_LATEST", self.src)
+        for line in self.src.splitlines():
+            if "fetch(" in line and "api.github.com" in line:
+                self.fail("the browser is calling GitHub directly: " + line.strip())
+
+    def test_it_still_tells_a_rate_limit_apart_from_a_dead_network(self):
+        """"Not a problem with your install" is only true for one of them."""
+        self.assertIn("ratelimit", self.src)
+        self.assertIn("rate.?limit", self.src)
+
+
 if __name__ == "__main__":
     unittest.main()

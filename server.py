@@ -1083,15 +1083,46 @@ def api_update_status():
     """
     info = updater.detect_install()
     payload = {"install": info, "latest": None, "updateAvailable": False}
+    current = info.get("currentVersion") or ""
+
+    # Ask git before asking the GitHub API. They are not equally reachable: a
+    # network can carry git to github.com and still block api.github.com, and
+    # this check used the API for every install - so on a machine where
+    # `git pull` worked from a terminal, opening this panel waited a minute and
+    # then reported a timeout. Git already has a working route; use it.
+    tag = None
+    if info.get("isGitInstall"):
+        tag = updater.remote_release_tag()
+    if tag:
+        version = tag.lstrip("v")
+        payload["latest"] = {
+            "tag": tag,
+            "version": version,
+            "url": f"{info['releasesUrl']}/tag/{tag}",
+            "notes": "",
+        }
+        payload["latestSource"] = "git"
+        payload["updateAvailable"] = updater.cmp_version(version, current) > 0
+        # The notes are the only thing left that needs the API, and nothing
+        # depends on them, so a short wait and a quiet failure.
+        try:
+            release = updater.fetch_latest_release(timeout=updater.NOTES_TIMEOUT)
+            if release["tag"] == tag:
+                payload["latest"]["notes"] = release["notes"][:4000]
+                payload["latest"]["url"] = release["url"]
+        except updater.UpdateError as e:
+            payload["notesError"] = str(e)
+        return jsonify(payload)
+
     try:
         release = updater.fetch_latest_release()
-        current = info.get("currentVersion") or ""
         payload["latest"] = {
             "tag": release["tag"],
             "version": release["version"],
             "url": release["url"],
             "notes": release["notes"][:4000],
         }
+        payload["latestSource"] = "api"
         payload["updateAvailable"] = updater.cmp_version(release["version"], current) > 0
     except updater.UpdateError as e:
         payload["latestError"] = str(e)
