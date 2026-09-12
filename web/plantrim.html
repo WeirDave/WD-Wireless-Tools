@@ -29,6 +29,43 @@
     border: 1px solid var(--border); background: var(--bg);
   }
   .ptb-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .ptb-where { font-size: 12px; font-weight: 600; color: var(--text); }
+  /* One row per floor: where he is, and what each one will do. Scrolls on its
+     own past a handful of floors so a 14-sheet set does not push the plan off
+     the screen. */
+  .ptb-strip {
+    display: flex; flex-direction: column; gap: 2px;
+    max-height: 132px; overflow-y: auto; margin-bottom: 10px;
+    border: 1px solid var(--border); border-radius: 8px; padding: 4px;
+    background: var(--bg);
+  }
+  .ptb-row {
+    display: grid; grid-template-columns: 22px 1fr auto auto;
+    align-items: center; gap: 10px; width: 100%;
+    padding: 5px 8px; border: 1px solid transparent; border-radius: 5px;
+    background: none; color: var(--text); font: inherit; font-size: 12px;
+    text-align: left; cursor: pointer;
+  }
+  .ptb-row:hover { background: color-mix(in srgb, var(--blue) 10%, transparent); }
+  .ptb-row.is-current {
+    border-color: var(--blue);
+    background: color-mix(in srgb, var(--blue) 16%, transparent);
+  }
+  .ptb-row-n { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .ptb-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ptb-row-state { font-weight: 600; font-size: 11px; }
+  .ptb-row-detail {
+    color: var(--text-muted); font-size: 11px;
+    font-family: ui-monospace, monospace; white-space: nowrap;
+  }
+  .ptb-row.is-auto .ptb-row-state { color: var(--text-muted); }
+  .ptb-row.is-manual .ptb-row-state { color: var(--blue); }
+  .ptb-row.is-skip .ptb-row-state { color: var(--text-muted); }
+  .ptb-row.is-refused .ptb-row-state { color: var(--amber, #f0ad4e); }
+  .ptb-row.is-refused .ptb-row-detail,
+  .ptb-row.is-skip .ptb-row-detail {
+    overflow: hidden; text-overflow: ellipsis; max-width: 44ch; white-space: nowrap;
+  }
   .ptb-spacer { flex: 1; }
   .ptb-floor { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
   .ptb-floor select {
@@ -180,11 +217,10 @@
         Drag the handles to adjust. <kbd>Space</kbd>+drag pans, scroll zooms.
         <strong>Your original file is never changed.</strong>
       </p>
+      <div class="ptb-strip" id="ptbStrip"></div>
       <div class="ptb-bar">
-        <label class="ptb-floor">
-          <span>Floor</span>
-          <select id="ptbFloor" onchange="ptbSelectFloor(this.value)"></select>
-        </label>
+        <span class="ptb-where" id="ptbFloorCount"></span>
+        <button class="btn btn-sm" id="ptbNext" onclick="ptbNextFloor()" hidden>Next floor &rarr;</button>
         <span class="ptb-readout" id="ptbReadout">Automatic</span>
         <span class="ptb-spacer"></span>
         <button class="btn btn-sm" id="ptbFit" onclick="ptbFitView()"
@@ -210,11 +246,13 @@
       <div class="ptb-evidence" id="ptbEvidence" hidden></div>
     </div>
 
-    <div class="pt-card">
-      <div class="pt-step">What PlanTrim would do</div>
-      <div id="ptFloors" class="pt-floors"></div>
-      <div class="pt-note" id="ptSizeNote"></div>
-    </div>
+    <!-- The per-floor state used to be listed again here, below and away from
+         the canvas. Two copies of the same facts is how the flow came apart, so
+         the strip inside the drawing card is now the only place it lives.
+         ptFloors and ptSizeNote stay as hidden sinks because the analyze path
+         still writes its error text into them. -->
+    <div id="ptFloors" hidden></div>
+    <div id="ptSizeNote" hidden></div>
 
     <div class="pt-result" id="ptResult" hidden></div>
 
