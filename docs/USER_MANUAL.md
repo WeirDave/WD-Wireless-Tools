@@ -398,6 +398,8 @@ Each step is optional, each is previewed per floor before anything is written, a
 
 Either way your original is never written to. The prepared copy is a new file, so keeping or discarding it stays your decision.
 
+> **Preparing again asks before replacing a prepared file that is already there.** A second run re-derives everything from the original, which is untouched and so still has all the work to do — so it would write that file again. By then it may be the file you opened in Ekahau and have been drawing in for an hour. Nothing inside the archive distinguishes *output Prep made* from *output you have since worked in*, so you are asked rather than assumed at.
+
 Prep only knows where a project came from when you opened it through the dialog: a dropped file gives the browser no folder to report.
 
 ### The steps always run in the same order

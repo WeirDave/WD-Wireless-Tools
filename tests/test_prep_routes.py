@@ -264,17 +264,41 @@ class OpenedFromDisk(unittest.TestCase):
         self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
         self.assertEqual(self.esx.read_bytes(), self.before)
 
-    def test_running_twice_does_not_pile_up_copies(self):
-        """The second run has nothing left to do, so it writes nothing."""
+    def test_a_second_run_will_not_overwrite_the_prepared_file_unasked(self):
+        """The hazard this guard exists for.
+
+        A second run re-derives everything from the original, which is untouched
+        and therefore still has all the work to do - so it would write the
+        prepared file again. By then that may be the file he opened in Ekahau
+        and has been drawing in. Nothing in the archive distinguishes "output I
+        made" from "output I have since worked in", so he is asked.
+        """
         self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
         prepared = self.esx.with_name("Carnation Farms (prepared).esx")
-        stamp = prepared.read_bytes()
+        self.assertTrue(prepared.is_file())
+        prepared.write_bytes(b"an hour of drawing")   # stand in for his work
+
         again = self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
+        self.assertEqual(again.status_code, 409)
+        body = again.get_json()
+        self.assertFalse(body["ok"])
+        self.assertEqual(body["code"], "exists")
+        self.assertEqual(body["filename"], "Carnation Farms (prepared).esx")
+        self.assertIn("overwrite that work", body["error"])
+        self.assertEqual(prepared.read_bytes(), b"an hour of drawing")
+
+    def test_replacing_is_possible_once_it_is_asked_for(self):
+        self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
+        prepared = self.esx.with_name("Carnation Farms (prepared).esx")
+        prepared.write_bytes(b"stale")
+        again = self.post("run", f"steps=trim,walls&replace=1&wallTemplate={self.wall_file}")
         body = again.get_json()
         self.assertTrue(body["ok"], body)
-        self.assertEqual(sorted(p.name for p in self.esx.parent.glob("*.esx")),
-                         ["Carnation Farms (prepared).esx", "Carnation Farms.esx"])
-        self.assertEqual(prepared.read_bytes(), stamp)
+        self.assertTrue(body["written"])
+        self.assertNotEqual(prepared.read_bytes(), b"stale")
+        self.assertEqual(sorted(q.name for q in self.esx.parent.glob("*.esx")),
+                         ["Carnation Farms (prepared).esx", "Carnation Farms.esx"],
+                         "preparing again piled up another copy")
 
     def test_a_project_that_has_moved_is_refused_rather_than_guessed_at(self):
         self.esx.unlink()
