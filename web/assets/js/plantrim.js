@@ -151,6 +151,7 @@
         busy(false, 'Save trimmed .esx');
         syncCutButton(res);
         if (window.__ptRenderStrip) window.__ptRenderStrip(res);
+        if (window.__ptRefit) window.__ptRefit();
       })
       .catch(function (e) {
         $('ptFloors').innerHTML = '<div class="pt-empty pt-bad">' + esc(String(e)) + '</div>';
@@ -332,6 +333,11 @@
     zip: null,
     floors: [],             // { id, name, imageId, w, h }
     boxes: {},              // floorPlanId -> [x0,y0,x1,y1] in image pixels
+    // A drawn rectangle is a draft until Crop is pressed, the way a marquee is
+    // in any image editor. Only applied boxes reach the server, so a box he
+    // drew and did not crop changes nothing - which is what makes the Crop
+    // button mean something rather than decorate the page.
+    applied: {},            // floorPlanId -> true once cropped
     current: null,
     img: null,
     view: { scale: 1, x: 0, y: 0 },
@@ -349,13 +355,51 @@
     return { x: ix * box.view.scale + box.view.x, y: iy * box.view.scale + box.view.y };
   }
 
+  // What the stage should frame: the kept region once cropped, the whole sheet
+  // while still drawing. The cropped preview costs nothing because it is a
+  // viewport change rather than a new image - which is also why it cannot
+  // accidentally become a commit.
+  function framedRegion() {
+    var b = box.applied && box.applied[box.current] && box.boxes[box.current];
+    if (b) return { x: b[0], y: b[1], w: b[2] - b[0], h: b[3] - b[1] };
+
+    // Before anything is cropped, frame the drawing rather than the sheet. A
+    // 10000x7500 CAD canvas with the building using a fifth of it renders the
+    // building as a postage stamp in a white field, which is a poor thing to
+    // ask someone to draw a precise rectangle around. The server already found
+    // the content - its automatic crop is exactly those bounds - so the view
+    // reuses it, padded so there is room to drag wider than the detection.
+    var rep = window.__ptReport && window.__ptReport();
+    var f = null;
+    ((rep && rep.floors) || []).forEach(function (x) {
+      if (x.id === box.current && x.action === 'trimmed' && x.offset && x.newSize) f = x;
+    });
+    if (f) {
+      var pad = 0.18;
+      var px = f.newSize[0] * pad, py = f.newSize[1] * pad;
+      var x0 = Math.max(0, f.offset[0] - px);
+      var y0 = Math.max(0, f.offset[1] - py);
+      var x1 = Math.min(box.img.width, f.offset[0] + f.newSize[0] + px);
+      var y1 = Math.min(box.img.height, f.offset[1] + f.newSize[1] + py);
+      if (x1 - x0 > 1 && y1 - y0 > 1) {
+        return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      }
+    }
+    return { x: 0, y: 0, w: box.img.width, h: box.img.height };
+  }
+
   function fitView() {
     var cv = $('ptbCanvas');
     if (!box.img || !cv.width) return;
-    var s = Math.min(cv.width / box.img.width, cv.height / box.img.height) * 0.97;
+    var r = framedRegion();
+    var s = Math.min(cv.width / r.w, cv.height / r.h) * 0.97;
     box.view.scale = s;
-    box.view.x = (cv.width - box.img.width * s) / 2;
-    box.view.y = (cv.height - box.img.height * s) / 2;
+    box.view.x = (cv.width - r.w * s) / 2 - r.x * s;
+    box.view.y = (cv.height - r.h * s) / 2 - r.y * s;
+    // Detection usually lands after the image does, so the first fit has to be
+    // allowed to improve itself. Once he has panned or zoomed, it must not:
+    // moving the plan under someone mid-drag is worse than a loose fit.
+    box.autoFramed = true;
   }
 
   function sizeCanvas() {
@@ -380,6 +424,24 @@
 
     var b = box.boxes[box.current];
     if (!b) return;
+
+    // Cropped: the kept region is the picture. No shading and no handles,
+    // because there is nothing being chosen any more - this is the result.
+    if (box.applied && box.applied[box.current]) {
+      var tl2 = toScreen(b[0], b[1]);
+      var br2 = toScreen(b[2], b[3]);
+      g.save();
+      g.fillStyle = 'rgba(0,0,0,0.75)';
+      g.beginPath();
+      g.rect(0, 0, cv.width, cv.height);
+      g.rect(tl2.x, tl2.y, br2.x - tl2.x, br2.y - tl2.y);
+      g.fill('evenodd');
+      g.restore();
+      g.strokeStyle = 'rgba(74,158,255,0.55)';
+      g.lineWidth = 1;
+      g.strokeRect(tl2.x, tl2.y, br2.x - tl2.x, br2.y - tl2.y);
+      return;
+    }
 
     var a = toScreen(b[0], b[1]);
     var c = toScreen(b[2], b[3]);
@@ -448,7 +510,26 @@
   }
 
   // -------------------------------------------------------------- readout
+  // One control is obviously next at any moment: Crop when a rectangle is
+  // waiting, nothing in the card once the floor is settled.
+  function syncFloorButtons() {
+    var drafted = hasDraft(box.current);
+    var cropped = !!(box.applied && box.applied[box.current]);
+    var crop = $('ptbCrop'), edit = $('ptbEdit'), clear = $('ptbClear');
+    if (crop) { crop.hidden = !drafted; crop.disabled = !drafted; }
+    if (edit) { edit.hidden = !cropped; }
+    if (clear) { clear.disabled = !box.boxes[box.current]; }
+    // Exactly one loud control at a time. While a rectangle is waiting, Crop is
+    // plainly what comes next, so finishing the file steps back until it is.
+    var cut = $('ptbCut');
+    if (cut && cut.classList) {
+      cut.classList.toggle('btn-primary', !drafted);
+      cut.classList.toggle('btn-sec', drafted);
+    }
+  }
+
   function updateReadout() {
+    syncFloorButtons();
     var b = box.boxes[box.current];
     var out = $('ptbReadout');
     var hint = $('ptbHint');
@@ -506,6 +587,10 @@
 
   function onDown(e) {
     if (!box.img) return;
+    // While a floor shows its cropped result, dragging would silently start a
+    // new rectangle over it. Edit box puts it back into drawing mode.
+    if (box.applied && box.applied[box.current] &&
+        !(WD.PanZoom && WD.PanZoom.isPanGesture(e))) return;
     var cv = $('ptbCanvas');
     var dpr = window.devicePixelRatio || 1;
     var r = cv.getBoundingClientRect();
@@ -550,6 +635,7 @@
     if (d.mode === 'pan') {
       box.view.x = d.ox + (px - d.px);
       box.view.y = d.oy + (py - d.py);
+      box.autoFramed = false;
       draw();
       return;
     }
@@ -622,6 +708,7 @@
     var before = toImage(px, py);
     var k = e.deltaY < 0 ? 1.15 : 1 / 1.15;
     box.view.scale = Math.max(0.02, Math.min(20, box.view.scale * k));
+    box.autoFramed = false;
     var after = toScreen(before.x, before.y);
     box.view.x += px - after.x;
     box.view.y += py - after.y;
@@ -639,7 +726,14 @@
     if (!box.projectId) return;
     var payload = {};
     payload[box.projectId] = box.boxes;
-    WD.api('plantrim/boxes_save', { projectId: box.projectId, boxes: box.boxes })
+    // Only cropped floors are remembered. A rectangle he drew and did not crop
+    // is not a decision yet, so it lives for the session and no longer - which
+    // also keeps the stored shape exactly four numbers.
+    var stored = {};
+    Object.keys(box.boxes).forEach(function (id) {
+      if (box.applied && box.applied[id]) stored[id] = box.boxes[id];
+    });
+    WD.api('plantrim/boxes_save', { projectId: box.projectId, boxes: stored })
       .catch(function () { /* a lost box is a redraw, not a failure worth a toast */ });
   }
 
@@ -753,8 +847,37 @@
     draw();
   };
 
+  // Draw, crop, see the result - the model every other cropping tool uses, so
+  // the next move needs no explanation and the cropped image is the
+  // confirmation. Nothing is written: this is a view of what the output will
+  // be, and the file on disk is untouched until the whole project is saved.
+  window.ptbCropBox = function () {
+    var b = box.boxes[box.current];
+    if (!b) return;
+    box.applied[box.current] = true;
+    fitView();
+    draw();
+    updateReadout();
+    persist();
+    reanalyze();
+    WD.toast('Cropped \u2014 nothing is written until you save', 'success');
+  };
+
+  // A crop he cannot back out of turns a misdrag into starting the floor over,
+  // so the rectangle survives: this puts the handles back on the box he had.
+  window.ptbEditBox = function () {
+    if (!box.boxes[box.current]) return;
+    box.applied[box.current] = false;
+    fitView();
+    draw();
+    updateReadout();
+    persist();
+    reanalyze();
+  };
+
   window.ptbClearBox = function () {
     delete box.boxes[box.current];
+    delete box.applied[box.current];
     draw();
     updateReadout();
     persist();
@@ -925,8 +1048,28 @@
   }
 
   window.__ptBoxes = function () {
-    return Object.keys(box.boxes).length ? box.boxes : null;
+    var out = {};
+    Object.keys(box.boxes).forEach(function (id) {
+      if (box.applied && box.applied[id]) out[id] = box.boxes[id];
+    });
+    return Object.keys(out).length ? out : null;
   };
+
+  // Called when analyze returns: the content bounds are only known then, so a
+  // view that is still the automatic one re-frames onto the drawing.
+  window.__ptRefit = function () {
+    if (!box.img || !box.autoFramed) return;
+    fitView();
+    draw();
+  };
+
+  // True when this floor has a rectangle waiting to be cropped. The applied
+  // lookup is written defensively here and at its three other call sites
+  // because box is rebuilt on every file open, and because the Node tests
+  // evaluate these functions in isolation from one another.
+  function hasDraft(id) {
+    return !!(box.boxes[id] && !(box.applied && box.applied[id]));
+  }
 
   // Called by loadFile once the archive is open.
   window.__ptBoxInit = function (zip, projectId) {
@@ -942,7 +1085,14 @@
       zip.file('images.json') ? zip.file('images.json').async('string') : null
     ]).then(function (res) {
       var doc = res[0] ? JSON.parse(res[0]) : { floorPlans: [] };
-      box.boxes = res[1] || {};
+      var saved = res[1] || {};
+      box.boxes = {};
+      box.applied = {};
+      // Anything that was stored had been cropped, so it comes back cropped.
+      Object.keys(saved).forEach(function (id) {
+        box.boxes[id] = saved[id].slice(0, 4);
+        box.applied[id] = true;
+      });
       var formats = {};
       try {
         ((JSON.parse(res[2] || '{}').images) || []).forEach(function (i) {

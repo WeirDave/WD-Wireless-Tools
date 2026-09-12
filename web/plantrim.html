@@ -96,6 +96,13 @@
     background: linear-gradient(to bottom, transparent, var(--panel, var(--bg)) 35%);
   }
   .ptb-cut { font-size: 14px; font-weight: 600; padding: 9px 20px; }
+  /* The crop control sits directly under the plan, appearing only while a
+     rectangle is waiting to be cropped - so at any moment there is exactly one
+     obvious next thing to press. */
+  .ptb-cropbar { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; }
+  .ptb-cropbar:empty { display: none; }
+  .ptb-cropbtn { font-size: 13px; font-weight: 600; padding: 8px 18px; }
+  .ptb-reset { font-variant: small-caps; }
   .ptb-cut:disabled { opacity: 0.45; }
   .ptb-cut-note { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
   .ptb-stage canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
@@ -223,14 +230,21 @@
         <button class="btn btn-sm" id="ptbNext" onclick="ptbNextFloor()" hidden>Next floor &rarr;</button>
         <span class="ptb-readout" id="ptbReadout">Automatic</span>
         <span class="ptb-spacer"></span>
-        <button class="btn btn-sm" id="ptbFit" onclick="ptbFitView()"
-                title="Put the whole plan back in view">Fit</button>
+        <button class="btn btn-sm ptb-reset" id="ptbFit" onclick="ptbFitView()"
+                title="Re-centre the plan and fit it to the window">&#8634; Reset view</button>
         <button class="btn btn-sm" id="ptbSuggest" onclick="ptbSuggest()"
                 title="Compare the sheets of this set to each other and propose a rectangle">Suggest from the set</button>
         <button class="btn btn-sm" id="ptbApplyAll" onclick="ptbApplyToAll()" disabled
                 title="Use this floor's rectangle on every other floor">Apply to all floors</button>
         <button class="btn btn-sm" id="ptbClear" onclick="ptbClearBox()" disabled
-                title="Go back to automatic detection for this floor">Back to automatic</button>
+                title="Discard the rectangle and let detection decide this floor">Back to automatic</button>
+      </div>
+      <div class="ptb-cropbar">
+        <button class="btn btn-primary ptb-cropbtn" id="ptbCrop" onclick="ptbCropBox()" hidden>
+          &#9986; Crop to this box
+        </button>
+        <button class="btn btn-sm" id="ptbEdit" onclick="ptbEditBox()" hidden
+                title="Put the handles back on this box">Edit box</button>
       </div>
       <div class="ptb-stage" id="ptbStage">
         <canvas id="ptbCanvas"></canvas>

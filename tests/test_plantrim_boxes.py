@@ -550,11 +550,27 @@ class ActionVisibilityTests(unittest.TestCase):
         self.assertIn('id="ptbStage"', card)
         self.assertIn('id="ptbStrip"', card)
 
-    def test_it_is_the_only_primary_button(self):
-        """Suggest used to be the loudest control on the page."""
-        self.assertEqual(self.html.count("btn-primary"), 1)
+    def test_suggest_is_not_the_loudest_control(self):
+        """Suggest used to be the primary button, above the thing it modified."""
         suggest = self.html[self.html.index('id="ptbSuggest"'):]
         self.assertNotIn("btn-primary", suggest[:200])
+
+    def test_only_the_cut_and_the_crop_can_ever_be_primary(self):
+        """One loud control at a time is the rule. Two buttons carry the class
+        in markup - Cut, and Crop - but Crop ships hidden and Cut is demoted
+        while a rectangle is waiting, so only one is ever both loud and on
+        screen. That is asserted for real in CropStepTests; this only stops a
+        third primary appearing somewhere else on the page."""
+        loud = [self.html[i:i + 400].split('id="', 1)[1].split('"')[0]
+                for i in self._primary_positions()]
+        self.assertEqual(sorted(loud), ["ptbCrop", "ptbCut"])
+
+    def _primary_positions(self):
+        out, i = [], self.html.find("btn-primary")
+        while i >= 0:
+            out.append(i)
+            i = self.html.find("btn-primary", i + 1)
+        return out
 
     def test_the_action_row_is_pinned(self):
         self.assertIn(".ptb-actions", self.html)
@@ -739,6 +755,297 @@ class NoDuplicateStateTests(unittest.TestCase):
     def test_the_floor_dropdown_is_gone(self):
         html = PLANTRIM_HTML.read_text(encoding="utf-8")
         self.assertNotIn('id="ptbFloor"', html)
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class CropStepTests(unittest.TestCase):
+    """Draw, press Crop, see the cropped plan - the two-part model he asked for.
+
+    His words: "or you can make it a two-part process that makes it more like
+    everybody else's cropping mechanism where you draw the bounding box, you
+    click a button to crop it, it crops it and shows you the new image", and on
+    a rectangle left uncropped: "if you draw a box and then you don't hit crop
+    then the box should be ignored That would be normal".
+
+    So a drawn rectangle is a draft. What makes that real rather than cosmetic is
+    that a draft never reaches the server - the crop is what commits it - and
+    these assert exactly that at every step of the cycle.
+    """
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    const made = {};
+    function el(id) {
+      if (!made[id]) made[id] = { id, innerHTML:'', textContent:'', hidden:false,
+        disabled:false, value:'', className:'',
+        classList: { _s:new Set(), add(c){this._s.add(c);},
+                     remove(c){this._s.delete(c);},
+                     toggle(c,on){ on ? this._s.add(c) : this._s.delete(c); },
+                     contains(c){ return this._s.has(c); } } };
+      return made[id];
+    }
+    const canvas = Object.assign(el('ptbCanvas'), { width:1200, height:600,
+      getContext: () => new Proxy({}, { get: () => () => {} }),
+      getBoundingClientRect: () => ({ left:0, top:0, width:1200, height:600 }) });
+    globalThis.document = { getElementById: el, addEventListener(){} };
+    globalThis.window = { devicePixelRatio:1, addEventListener(){} };
+    globalThis.WD = { esc: s=>String(s), toast(){},
+      PanZoom: { isPanGesture: e => e && (e.button===1||e.button===2),
+                 isHeld: ()=>false, onChange(){} },
+      api: () => Promise.resolve({ ok:true, boxes:{} }) };
+    globalThis.$ = el;
+    globalThis.reanalyze = () => {};
+    globalThis.showEvidence = () => {};
+    globalThis.renderStrip = () => {};
+    globalThis.floorById = id => box.floors.find(f => f.id === id);
+
+    eval(slice('  var HANDLE_HIT_CSS', '  function $(id)'));
+    eval(slice('  function toImage(px, py)', '  function sizeCanvas()'));
+    eval(slice('  function draw()', '  function loadImage(f)'));
+    eval(slice('  window.__ptBoxes = function', '  // Called by loadFile'));
+    eval(slice('  function syncFloorButtons()', '  function persist()'));
+    eval(slice('  function persist()', '  function restore(projectId)'));
+    eval(slice('  window.ptbFitView', '  function loadImage(f)'));
+
+    function setup() {
+      box.floors = [{ id:'f1', name:'L1', w:5000, h:3750 },
+                    { id:'f2', name:'L2', w:5000, h:3750 }];
+      box.current = 'f2';
+      box.img = { width:5000, height:3750 };
+      box.boxes = {}; box.applied = {};
+      fitView();
+    }
+    const cropBtn = () => el('ptbCrop'), editBtn = () => el('ptbEdit');
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_an_uncropped_box_is_ignored(self):
+        """The ruling: a rectangle he drew and did not crop changes nothing."""
+        out = self.run_js("""
+          setup();
+          box.boxes.f2 = [1000, 800, 3200, 3000];
+          updateReadout();
+          console.log(JSON.stringify({ sent: window.__ptBoxes(),
+                                       cropOffered: !cropBtn().hidden }));
+        """)
+        self.assertIsNone(out["sent"], "a draft must never reach the server")
+        self.assertTrue(out["cropOffered"], "and Crop must be the obvious next move")
+
+    def test_crop_is_what_commits_the_box(self):
+        out = self.run_js("""
+          setup();
+          box.boxes.f2 = [1000, 800, 3200, 3000];
+          updateReadout();
+          window.ptbCropBox();
+          console.log(JSON.stringify({ sent: window.__ptBoxes(),
+                                       cropGone: cropBtn().hidden,
+                                       editOffered: !editBtn().hidden }));
+        """)
+        self.assertEqual(out["sent"], {"f2": [1000, 800, 3200, 3000]})
+        self.assertTrue(out["cropGone"])
+        self.assertTrue(out["editOffered"], "a crop he cannot back out of is a trap")
+
+    def test_cropping_shows_the_cropped_plan(self):
+        """"it crops it and shows you the new image" - the kept region fills the
+        stage, which is the confirmation that replaces a sentence of text."""
+        out = self.run_js("""
+          setup();
+          box.boxes.f2 = [1000, 800, 3200, 3000];
+          window.ptbCropBox();
+          const tl = toScreen(1000, 800), br = toScreen(3200, 3000);
+          console.log(JSON.stringify({
+            fills: (br.x - tl.x) > 1200 * 0.9 || (br.y - tl.y) > 600 * 0.9,
+            onScreen: tl.x > -1 && tl.x < 1200 && tl.y > -1 && tl.y < 600 }));
+        """)
+        self.assertTrue(out["fills"], "the kept region should fill the stage")
+        self.assertTrue(out["onScreen"])
+
+    def test_a_cropped_floor_is_not_drawn_on_by_accident(self):
+        out = self.run_js("""
+          setup();
+          box.boxes.f2 = [1000, 800, 3200, 3000];
+          window.ptbCropBox();
+          const before = JSON.stringify(box.boxes.f2);
+          onDown({ button:0, clientX:600, clientY:300, preventDefault(){} });
+          console.log(JSON.stringify({ dragStarted: !!box.drag,
+            unchanged: JSON.stringify(box.boxes.f2) === before }));
+        """)
+        self.assertFalse(out["dragStarted"])
+        self.assertTrue(out["unchanged"])
+
+    def test_edit_box_returns_the_rectangle_not_a_blank_floor(self):
+        out = self.run_js("""
+          setup();
+          box.boxes.f2 = [1000, 800, 3200, 3000];
+          window.ptbCropBox();
+          window.ptbEditBox();
+          console.log(JSON.stringify({ kept: box.boxes.f2, sent: window.__ptBoxes(),
+                                       cropOffered: !cropBtn().hidden }));
+        """)
+        self.assertEqual(out["kept"], [1000, 800, 3200, 3000])
+        self.assertIsNone(out["sent"], "back in draft, so back to sending nothing")
+        self.assertTrue(out["cropOffered"])
+
+    def test_back_to_automatic_discards_everything(self):
+        out = self.run_js("""
+          setup();
+          box.boxes.f2 = [1000, 800, 3200, 3000];
+          window.ptbCropBox();
+          window.ptbClearBox();
+          console.log(JSON.stringify({ box: box.boxes.f2 || null,
+                                       applied: !!box.applied.f2,
+                                       sent: window.__ptBoxes() }));
+        """)
+        self.assertIsNone(out["box"])
+        self.assertFalse(out["applied"], "a cleared floor must not stay marked cropped")
+        self.assertIsNone(out["sent"])
+
+    def test_only_cropped_floors_are_remembered(self):
+        """A stored box is by definition one he cropped, so a re-opened project
+        comes back with those floors already cropped and nothing else pending.
+        It also keeps the stored shape at exactly four numbers, which is what
+        plantrim_store._clean_boxes accepts."""
+        out = self.run_js("""
+          setup();
+          box.projectId = 'p1';
+          box.boxes = { f1:[0,0,10,10], f2:[1,1,20,20] };
+          box.applied = { f1:true };
+          let posted = null;
+          WD.api = (path, body) => { posted = body; return Promise.resolve({ok:true}); };
+          persist();
+          console.log(JSON.stringify({ posted }));
+        """)
+        stored = out["posted"]["boxes"]
+        self.assertEqual(stored["f1"], [0, 0, 10, 10], "the cropped floor is kept")
+        self.assertNotIn("f2", stored,
+                         "an uncropped draft is not a decision, so it is not stored")
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class ContentFramingTests(unittest.TestCase):
+    """Open on the drawing, not on the empty sheet around it.
+
+    A CAD export is often a 10000x7500 canvas with the building occupying a
+    fifth of it. Fitting the whole sheet renders that building as a small object
+    in a white field and then asks for a precise rectangle around it. Detection
+    already knows where the content is - the automatic crop is those bounds - so
+    the opening view reuses them rather than running a second detector.
+    """
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    globalThis.box = { current:'f1', applied:{}, boxes:{},
+                       img:{ width:10000, height:7500 }, view:{ x:0, y:0, scale:1 } };
+    globalThis.window = {};
+    globalThis.$ = () => ({ width:1200, height:600 });
+    eval(slice('  function framedRegion()', '  function fitView()'));
+    const REPORT = { floors: [{ id:'f1', action:'trimmed',
+                                offset:[3200,1800], newSize:[3275,4469] }] };
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_the_building_is_most_of_the_view_not_a_speck_in_it(self):
+        out = self.run_js("""
+          window.__ptReport = () => REPORT;
+          const r = framedRegion();
+          console.log(JSON.stringify({ share: (3275*4469) / (r.w*r.h) }));
+        """)
+        whole_sheet = (3275 * 4469) / (10000 * 7500)
+        self.assertLess(whole_sheet, 0.25, "precondition: it really is a speck")
+        self.assertGreater(out["share"], 0.45,
+                           "the drawing should dominate the opening view")
+
+    def test_there_is_room_to_draw_wider_than_the_detection(self):
+        """Framing exactly on the detected bounds would put the edges of the
+        rectangle against the edges of the stage, with nothing to grab."""
+        out = self.run_js("""
+          window.__ptReport = () => REPORT;
+          const r = framedRegion();
+          console.log(JSON.stringify({ x:r.x, y:r.y, w:r.w, h:r.h }));
+        """)
+        self.assertLess(out["x"], 3200, "padding on the left")
+        self.assertLess(out["y"], 1800, "padding on the top")
+        self.assertGreater(out["x"] + out["w"], 3200 + 3275, "padding on the right")
+
+    def test_a_cropped_floor_frames_its_own_box(self):
+        out = self.run_js("""
+          window.__ptReport = () => REPORT;
+          box.boxes.f1 = [4000, 2000, 6000, 5000];
+          box.applied.f1 = true;
+          console.log(JSON.stringify(framedRegion()));
+        """)
+        self.assertEqual([out["x"], out["y"], out["w"], out["h"]],
+                         [4000, 2000, 2000, 3000])
+
+    def test_without_a_report_it_falls_back_to_the_whole_sheet(self):
+        """Before analyze returns there is nothing better to know, and guessing
+        at content bounds in the browser would be a second detector to keep."""
+        out = self.run_js("""
+          window.__ptReport = () => null;
+          console.log(JSON.stringify(framedRegion()));
+        """)
+        self.assertEqual([out["w"], out["h"]], [10000, 7500])
+
+    def test_a_floor_that_cannot_be_cropped_frames_the_whole_sheet(self):
+        out = self.run_js("""
+          window.__ptReport = () => ({ floors: [
+            { id:'f1', action:'refused', reason:'floor plan is geo-anchored' }] });
+          console.log(JSON.stringify(framedRegion()));
+        """)
+        self.assertEqual([out["w"], out["h"]], [10000, 7500])
+
+    def test_the_view_only_re_frames_itself_while_it_is_still_automatic(self):
+        """Detection lands after the image does, so the first fit has to be
+        allowed to improve. Once he has panned, moving the plan under him is
+        worse than a loose fit - so a touched view is left alone."""
+        js = PLANTRIM_JS.read_text(encoding="utf-8")
+        refit = js[js.index("window.__ptRefit = function"):]
+        refit = refit[:refit.index("};") + 2]
+        self.assertIn("box.autoFramed", refit,
+                      "re-framing must be conditional on an untouched view")
+        # panning and zooming both have to clear the flag, or the view snaps back
+        pan = js[js.index("box.view.x = d.ox"):]
+        self.assertIn("box.autoFramed = false", pan[:220])
+        wheel = js[js.index("function onWheel"):]
+        self.assertIn("box.autoFramed = false", wheel[:1400])
+
+
+class CropMarkupTests(unittest.TestCase):
+    def test_the_page_carries_the_crop_and_edit_controls(self):
+        html = PLANTRIM_HTML.read_text(encoding="utf-8")
+        for ident in ("ptbCrop", "ptbEdit"):
+            self.assertIn('id="%s"' % ident, html)
+
+    def test_the_reset_is_named_for_what_it_does(self):
+        """"you should also have a reset button on that workspace to bring the
+        plan back into order" - "Fit" did that, but did not say so."""
+        html = PLANTRIM_HTML.read_text(encoding="utf-8")
+        btn = html[html.index('id="ptbFit"'):]
+        self.assertIn("Reset view", btn[:200])
 
 
 if __name__ == "__main__":
