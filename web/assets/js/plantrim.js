@@ -148,9 +148,9 @@
           return;
         }
         state.report = res;
-        renderFloors(res);
         busy(false, 'Save trimmed .esx');
         syncCutButton(res);
+        if (window.__ptRenderStrip) window.__ptRenderStrip(res);
       })
       .catch(function (e) {
         $('ptFloors').innerHTML = '<div class="pt-empty pt-bad">' + esc(String(e)) + '</div>';
@@ -186,6 +186,11 @@
   }
 
   window.ptCut = function () { window.ptTrim(); };
+
+  // The report is the strip's data source now; it used to be rendered twice,
+  // once here and once beside the canvas, which is the duplication that let the
+  // two drift apart.
+  window.__ptReport = function () { return state.report; };
 
   function renderFloors(res) {
     if (!res.floors.length) {
@@ -645,6 +650,85 @@
   }
 
   // ------------------------------------------------------------- wiring
+  // Where he is, and what every floor is going to do. The same facts used to
+  // live in a separate card below the canvas, which is how the flow came apart:
+  // the state was on the page but not beside the thing it described, so there
+  // was nothing to tell him what had registered or how much was left.
+  function floorState(rep, id) {
+    var f = null;
+    ((rep && rep.floors) || []).forEach(function (x) { if (x.id === id) f = x; });
+    if (!f) return { word: 'Reading\u2026', cls: 'is-pending', detail: '' };
+    if (f.action === 'trimmed') {
+      var dims = f.oldSize[0] + '\u00d7' + f.oldSize[1] + ' \u2192 ' +
+                 f.newSize[0] + '\u00d7' + f.newSize[1];
+      var saved = (f.areaSavedPct ? '  \u2212' + f.areaSavedPct + '%' : '');
+      return f.source === 'manual'
+        ? { word: 'Your box', cls: 'is-manual', detail: dims + saved }
+        : { word: 'Automatic', cls: 'is-auto', detail: dims + saved };
+    }
+    if (f.action === 'skipped') {
+      return { word: 'Nothing to do', cls: 'is-skip', detail: f.reason || '' };
+    }
+    return { word: 'Cannot crop', cls: 'is-refused', detail: f.reason || '' };
+  }
+
+  function renderStrip(rep) {
+    var el = $('ptbStrip');
+    if (!el) return;
+    if (!box.floors.length) { el.innerHTML = ''; return; }
+    el.innerHTML = box.floors.map(function (f, i) {
+      var st = floorState(rep, f.id);
+      var here = f.id === box.current;
+      return '<button type="button" class="ptb-row ' + st.cls +
+               (here ? ' is-current' : '') + '" data-floor="' + WD.esc(f.id) + '">' +
+               '<span class="ptb-row-n">' + (i + 1) + '</span>' +
+               '<span class="ptb-row-name">' + WD.esc(f.name) + '</span>' +
+               '<span class="ptb-row-state">' + WD.esc(st.word) + '</span>' +
+               '<span class="ptb-row-detail">' + WD.esc(st.detail) + '</span>' +
+             '</button>';
+    }).join('');
+    var next = $('ptbNext');
+    if (next) {
+      next.hidden = box.floors.length < 2;
+      var i = floorIndex(box.current);
+      next.disabled = i < 0 || i >= box.floors.length - 1;
+      next.textContent = next.disabled ? 'Last floor' : 'Next floor \u2192';
+    }
+    var count = $('ptbFloorCount');
+    if (count) {
+      var i2 = floorIndex(box.current);
+      count.textContent = box.floors.length === 1
+        ? '1 floor plan'
+        : 'Floor ' + (i2 + 1) + ' of ' + box.floors.length;
+    }
+  }
+
+  function floorIndex(id) {
+    for (var i = 0; i < box.floors.length; i++) {
+      if (box.floors[i].id === id) return i;
+    }
+    return -1;
+  }
+
+  // Clicking a floor jumps to it. Nothing is locked and there is no sequence to
+  // follow - the strip says what each floor will do, it does not gate them.
+  document.addEventListener('click', function (e) {
+    var row = e.target && e.target.closest && e.target.closest('[data-floor]');
+    if (row) window.ptbSelectFloor(row.getAttribute('data-floor'));
+  });
+
+  // "you just choose to go to the next floor kind of thing" - his words, so the
+  // control gets the name he already uses for it.
+  window.ptbNextFloor = function () {
+    var i = floorIndex(box.current);
+    if (i >= 0 && i < box.floors.length - 1) {
+      window.ptbSelectFloor(box.floors[i + 1].id);
+    }
+  };
+
+  // Called by the analyze path so the strip always describes the current plan.
+  window.__ptRenderStrip = function (rep) { renderStrip(rep); };
+
   window.ptbSelectFloor = function (id) {
     box.current = id;
     var f = floorById(id);
@@ -656,6 +740,7 @@
       draw();
       updateReadout();
       showEvidence();
+      renderStrip(window.__ptReport && window.__ptReport());
     });
   };
 
@@ -869,14 +954,9 @@
                  format: formats[f.imageId] || '',
                  w: Math.round(f.width || 0), h: Math.round(f.height || 0) };
       });
-      var sel = $('ptbFloor');
-      sel.innerHTML = box.floors.map(function (f) {
-        return '<option value="' + f.id + '">' + WD.esc(f.name) +
-               ' \u2014 ' + f.w + '\u00d7' + f.h + '</option>';
-      }).join('');
       $('ptBoxCard').hidden = box.floors.length === 0;
+      renderStrip(null);
       if (box.floors.length) {
-        sel.value = box.floors[0].id;
         window.ptbSelectFloor(box.floors[0].id);
       }
       var restored = Object.keys(box.boxes).length;

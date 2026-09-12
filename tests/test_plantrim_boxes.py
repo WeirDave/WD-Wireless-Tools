@@ -167,8 +167,9 @@ class EditorLogicTests(unittest.TestCase):
 class EditorMarkupTests(unittest.TestCase):
     def test_the_controls_exist(self):
         html = PLANTRIM_HTML.read_text(encoding="utf-8")
-        for ident in ("ptbFloor", "ptbCanvas", "ptbReadout", "ptbApplyAll",
-                      "ptbClear", "ptbStage", "ptbHint", "ptBoxCard"):
+        for ident in ("ptbStrip", "ptbCanvas", "ptbReadout", "ptbApplyAll",
+                      "ptbClear", "ptbStage", "ptbHint", "ptBoxCard",
+                      "ptbNext", "ptbFloorCount"):
             with self.subTest(id=ident):
                 self.assertIn(f'id="{ident}"', html)
 
@@ -474,7 +475,7 @@ class WheelTests(unittest.TestCase):
     eval(slice('  var HANDLE_HIT_CSS', '  var box = {'));
     eval(slice('  function toImage(px, py)', '  function fitView()'));
     eval(slice('  function handlePoints(x, y, w, h)', '  function updateReadout()'));
-    eval(slice('  function clampBox(b, f)', '  window.ptbSelectFloor'));
+    eval(slice('  function clampBox(b, f)', '  function floorState(rep, id)'));
     const sc = Math.min(canvas.width/5000, canvas.height/3750) * 0.97;
     box.view = { scale: sc, x:(canvas.width-5000*sc)/2, y:(canvas.height-3750*sc)/2 };
     box.boxes.f1 = [1000, 800, 3200, 3000];
@@ -544,9 +545,10 @@ class ActionVisibilityTests(unittest.TestCase):
 
     def test_the_cut_action_sits_inside_the_box_card(self):
         card = self.html[self.html.index('id="ptBoxCard"'):]
-        card = card[:card.index('<div class="pt-card">')]
+        card = card[:card.index('id="ptResult"')]
         self.assertIn('id="ptbCut"', card, "the verb must live with the canvas")
         self.assertIn('id="ptbStage"', card)
+        self.assertIn('id="ptbStrip"', card)
 
     def test_it_is_the_only_primary_button(self):
         """Suggest used to be the loudest control on the page."""
@@ -574,6 +576,169 @@ class ActionVisibilityTests(unittest.TestCase):
 
     def test_the_wheel_does_not_chain_to_the_page(self):
         self.assertIn("overscroll-behavior: contain", self.html)
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class FloorStripTests(unittest.TestCase):
+    """Where he is, and what every floor will do, beside the plan.
+
+    His words: "there's no leading key that tells you what you're supposed to do
+    next... it's not that complicated but it makes it complicated." The facts
+    were all on the page - in a second card below the canvas, away from the
+    thing they described - so nothing said which floors were settled or how much
+    was left. His real case is the mixed one: automatic on floor 1, a drawn box
+    on floor 2, with no way to see that either had registered.
+    """
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    const made = {};
+    function el(id) {
+      if (!made[id]) made[id] = { id, innerHTML:'', textContent:'', hidden:false,
+        disabled:false, classList:{add(){},remove(){},toggle(){}} };
+      return made[id];
+    }
+    globalThis.document = { getElementById: el, addEventListener(){} };
+    globalThis.window = { devicePixelRatio:1, addEventListener(){} };
+    globalThis.WD = { esc: s => String(s), toast(){},
+      PanZoom:{ isPanGesture:()=>false, isHeld:()=>false, onChange(){} } };
+    globalThis.$ = el;
+    globalThis.box = { floors: [], current: null, boxes: {} };
+    globalThis.draw=()=>{}; globalThis.updateReadout=()=>{};
+    globalThis.showEvidence=()=>{};
+    eval(slice('  function floorState(rep, id)',
+               '  window.ptbSelectFloor = function (id)'));
+    function mixedSet(n) {
+      box.floors = Array.from({length:n}, (_,i) =>
+        ({ id:'f'+(i+1), name:'Level '+(i+1), w:5000, h:3750 }));
+      return { floors: box.floors.map((f,i) => {
+        if (i === 1) return { id:f.id, action:'trimmed', source:'manual',
+          oldSize:[5000,3750], newSize:[2207,2227], areaSavedPct:74 };
+        if (i === n-2) return { id:f.id, action:'skipped',
+          reason:'content already fills 100% of the canvas' };
+        if (i === n-1) return { id:f.id, action:'refused',
+          reason:'floor plan is geo-anchored' };
+        return { id:f.id, action:'trimmed', source:'auto',
+          oldSize:[5000,3750], newSize:[3275,2469], areaSavedPct:57 };
+      })};
+    }
+    const strip = () => el('ptbStrip').innerHTML;
+    const rows = () => strip().split('<button').filter(x => x.includes('data-floor'));
+    const plain = t => t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_it_says_which_floor_he_is_on(self):
+        out = self.run_js("""
+          const rep = mixedSet(14); box.current = 'f2'; renderStrip(rep);
+          console.log(JSON.stringify({ where: el('ptbFloorCount').textContent }));
+        """)
+        self.assertEqual(out["where"], "Floor 2 of 14")
+
+    def test_every_floor_says_what_it_will_do(self):
+        out = self.run_js("""
+          const rep = mixedSet(14); box.current = 'f1'; renderStrip(rep);
+          const txt = rows().map(plain);
+          console.log(JSON.stringify({ auto: txt[0], manual: txt[1],
+                                       skip: txt[12], refused: txt[13] }));
+        """)
+        self.assertIn("Automatic", out["auto"])
+        self.assertIn("Your box", out["manual"])
+        self.assertIn("2207", out["manual"], "the drawn box result should be visible")
+        self.assertIn("Nothing to do", out["skip"])
+        self.assertIn("Cannot crop", out["refused"])
+
+    def test_the_current_floor_is_marked(self):
+        out = self.run_js("""
+          const rep = mixedSet(14); box.current = 'f2'; renderStrip(rep);
+          const r = rows();
+          console.log(JSON.stringify({ cur: r[1].includes('is-current'),
+                                       other: r[0].includes('is-current') }));
+        """)
+        self.assertTrue(out["cur"])
+        self.assertFalse(out["other"])
+
+    def test_a_drawn_box_reads_differently_from_automatic(self):
+        """The confirmation he never got: floor 2 visibly differs from floor 1."""
+        out = self.run_js("""
+          const rep = mixedSet(14); box.current = 'f1'; renderStrip(rep);
+          const r = rows();
+          console.log(JSON.stringify({ manual: r[1].includes('is-manual'),
+                                       auto: r[0].includes('is-auto') }));
+        """)
+        self.assertTrue(out["manual"])
+        self.assertTrue(out["auto"])
+
+    def test_every_floor_can_be_jumped_to(self):
+        """No sequence and no locking - the strip reports, it does not gate."""
+        out = self.run_js("""
+          const rep = mixedSet(14); box.current = 'f1'; renderStrip(rep);
+          console.log(JSON.stringify({ n: (strip().match(/data-floor=/g)||[]).length }));
+        """)
+        self.assertEqual(out["n"], 14)
+
+    def test_next_floor_stops_at_the_last_one(self):
+        out = self.run_js("""
+          const rep = mixedSet(14);
+          box.current = 'f1'; renderStrip(rep);
+          const first = { label: el('ptbNext').textContent, off: el('ptbNext').disabled };
+          box.current = 'f14'; renderStrip(rep);
+          const last = { label: el('ptbNext').textContent, off: el('ptbNext').disabled };
+          console.log(JSON.stringify({ first, last }));
+        """)
+        self.assertFalse(out["first"]["off"])
+        self.assertIn("Next floor", out["first"]["label"])
+        self.assertTrue(out["last"]["off"])
+
+    def test_a_single_floor_project_carries_no_navigation(self):
+        out = self.run_js("""
+          box.floors = [{ id:'only', name:'Ground', w:1000, h:800 }];
+          box.current = 'only';
+          renderStrip({ floors:[{ id:'only', action:'trimmed', source:'auto',
+            oldSize:[1000,800], newSize:[900,700], areaSavedPct:21 }] });
+          console.log(JSON.stringify({ hidden: el('ptbNext').hidden,
+                                       where: el('ptbFloorCount').textContent }));
+        """)
+        self.assertTrue(out["hidden"], "one floor needs no Next button")
+        self.assertEqual(out["where"], "1 floor plan")
+
+    def test_it_says_something_before_the_first_analyze(self):
+        out = self.run_js("""
+          box.floors = [{ id:'g0', name:'F0', w:10, h:10 }];
+          box.current = 'g0'; renderStrip(null);
+          console.log(JSON.stringify({ txt: plain(strip()) }));
+        """)
+        self.assertIn("Reading", out["txt"])
+
+
+class NoDuplicateStateTests(unittest.TestCase):
+    """The same facts in two places is how the flow came apart."""
+
+    def test_the_second_floor_list_card_is_gone(self):
+        html = PLANTRIM_HTML.read_text(encoding="utf-8")
+        self.assertNotIn("What PlanTrim would do", html)
+
+    def test_the_strip_lives_with_the_canvas(self):
+        html = PLANTRIM_HTML.read_text(encoding="utf-8")
+        card = html[html.index('id="ptBoxCard"'):]
+        self.assertLess(card.index('id="ptbStrip"'), card.index('id="ptbStage"'),
+                        "state belongs beside the plan it describes")
+
+    def test_the_floor_dropdown_is_gone(self):
+        html = PLANTRIM_HTML.read_text(encoding="utf-8")
+        self.assertNotIn('id="ptbFloor"', html)
 
 
 if __name__ == "__main__":
