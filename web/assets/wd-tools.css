@@ -6250,6 +6250,32 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-placement-page, .rep-oriented { page: placementPortrait; }
   .rep-placement-page.is-landscape, .rep-oriented.is-landscape { page: placementLandscape; }
 
+  /* The blank sheet at the end of the document, in Firefox.
+
+     The sections above belong to a named page. The document's own boxes - the
+     root, the body, the canvas that wraps them - belong to the unnamed one,
+     and a page name that changes forces a break. So when the last section
+     ends, the ancestors reclaim their page and Firefox lays out one more sheet
+     to put them on. Nothing is on it: the single mark it carries is the white
+     the body paints, which is exactly what he reported - a blank final page
+     with nothing but the browser's own header and footer.
+
+     Naming the root the same thing removes the change, and with it the sheet.
+     Measured through Firefox's own print pipeline (geckodriver's Print Page):
+     seven sheets before, six after, on both an all-portrait and an
+     all-landscape document.
+
+     Chromium does not do this - it has always produced six - which is why the
+     fault survived every check made here until one was finally run in the
+     browser he actually prints from.
+
+     Scoped with :has() so it only reaches documents that use named pages at
+     all. Those are already pinned to Letter by the sections themselves, so
+     this takes nobody's A4 away; a report with no oriented pages never matches
+     and keeps the paper the print dialog chose. Where :has() is unsupported
+     the rule is skipped and the behaviour is what it was. */
+  html:has(.rep-oriented) { page: placementPortrait; }
+
   /* The installation table's own sheet. It gets the same break behaviour the
      bare table had, moved out to the section that now wraps it. */
   .rep-loc-page { page-break-before: always; break-before: page; }
