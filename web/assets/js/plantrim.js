@@ -506,6 +506,32 @@
     ];
   }
 
+  // What the pointer says about the thing under it. These are the standard
+  // resize cursors every image editor uses, so they need no explanation.
+  var HANDLE_CURSORS = {
+    nw: 'nwse-resize', se: 'nwse-resize',
+    ne: 'nesw-resize', sw: 'nesw-resize',
+    n:  'ns-resize',   s:  'ns-resize',
+    e:  'ew-resize',   w:  'ew-resize',
+    move: 'move'
+  };
+
+  // Kept off the canvas element's inline style while a pan is available, so the
+  // grab cursor in the stylesheet still wins there.
+  function setCursor(name) {
+    var cv = $('ptbCanvas');
+    if (cv && cv.style) cv.style.cursor = name || '';
+  }
+
+  function cursorFor(px, py) {
+    if (box.applied && box.applied[box.current]) return 'default';
+    if (!box.img) return '';
+    var id = handleAt(px, py);
+    if (id) return HANDLE_CURSORS[id] || 'default';
+    // Nothing under the pointer means a drag here starts a new rectangle.
+    return 'crosshair';
+  }
+
   function handleAt(px, py) {
     var b = box.boxes[box.current];
     if (!b) return null;
@@ -656,11 +682,18 @@
     var py = (e.clientY - r.top) * dpr;
 
     if (!box.drag) {
-      $('ptbStage').classList.toggle('can-pan',
-        !!(WD.PanZoom && WD.PanZoom.isHeld()));
+      var held = !!(WD.PanZoom && WD.PanZoom.isHeld());
+      $('ptbStage').classList.toggle('can-pan', held);
+      // While space is held the stylesheet's grab cursor applies, so the inline
+      // one is cleared rather than fighting it.
+      setCursor(held ? '' : cursorFor(px, py));
       return;
     }
     var d = box.drag;
+    // The cursor holds its meaning for the whole drag, even when the pointer
+    // runs ahead of the edge it is moving.
+    setCursor(d.mode === 'pan' ? 'grabbing'
+              : (HANDLE_CURSORS[d.mode] || 'crosshair'));
     if (d.mode === 'pan') {
       box.view.x = d.ox + (px - d.px);
       box.view.y = d.oy + (py - d.py);
