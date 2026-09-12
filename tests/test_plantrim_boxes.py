@@ -147,7 +147,7 @@ class EditorLogicTests(unittest.TestCase):
 
     def run_node(self, script):
         proc = subprocess.run(["node", "-e", self.PRELUDE + script, str(PLANTRIM_JS)],
-                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError(f"node failed:\n{proc.stderr}")
         return json.loads(proc.stdout)
@@ -263,7 +263,7 @@ class HandleDragTests(unittest.TestCase):
     def run_js(self, dpr, script):
         body = self.HARNESS + script
         proc = subprocess.run(["node", "-e", body, str(PLANTRIM_JS), str(dpr)],
-                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError("node failed:\n" + proc.stderr)
         return json.loads(proc.stdout)
@@ -301,7 +301,7 @@ class HandleDragTests(unittest.TestCase):
             with self.subTest(dpr=dpr):
                 body = self.HARNESS + self.DRAG
                 proc = subprocess.run(["node", "-e", body, str(PLANTRIM_JS), str(dpr)],
-                                      capture_output=True, text=True,
+                                      capture_output=True, text=True, encoding="utf-8",
                                       timeout=NODE_TIMEOUT_S, env=env)
                 self.assertEqual(proc.returncode, 0, proc.stderr)
                 out = json.loads(proc.stdout)
@@ -362,7 +362,7 @@ class CanvasImageTypeTests(unittest.TestCase):
 
     def run_js(self, script):
         proc = subprocess.run(["node", "-e", self.PRELUDE + script, str(PLANTRIM_JS)],
-                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError("node failed: " + proc.stderr)
         return json.loads(proc.stdout)
@@ -489,7 +489,7 @@ class WheelTests(unittest.TestCase):
 
     def run_js(self, script):
         proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
-                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError("node failed: " + proc.stderr)
         return json.loads(proc.stdout)
@@ -651,17 +651,19 @@ class FloorStripTests(unittest.TestCase):
 
     def run_js(self, script):
         proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
-                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError("node failed: " + proc.stderr)
         return json.loads(proc.stdout)
 
     def test_it_says_which_floor_he_is_on(self):
+        """It names the floor as well as its position. "Floor 2 of 2" while the
+        floor was called 01 was two numbers disagreeing about the same sheet."""
         out = self.run_js("""
           const rep = mixedSet(14); box.current = 'f2'; renderStrip(rep);
           console.log(JSON.stringify({ where: el('ptbFloorCount').textContent }));
         """)
-        self.assertEqual(out["where"], "Floor 2 of 14")
+        self.assertEqual(out["where"], "Level 2 \u2014 2 of 14")
 
     def test_every_floor_says_what_it_will_do(self):
         out = self.run_js("""
@@ -826,7 +828,7 @@ class CropStepTests(unittest.TestCase):
 
     def run_js(self, script):
         proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
-                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError("node failed: " + proc.stderr)
         return json.loads(proc.stdout)
@@ -963,7 +965,7 @@ class ContentFramingTests(unittest.TestCase):
 
     def run_js(self, script):
         proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
-                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError("node failed: " + proc.stderr)
         return json.loads(proc.stdout)
@@ -1102,7 +1104,7 @@ class ReachableHandleTests(unittest.TestCase):
 
     def run_js(self, script):
         proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
-                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError("node failed: " + proc.stderr)
         return json.loads(proc.stdout)
@@ -1184,7 +1186,7 @@ class CursorTests(unittest.TestCase):
 
     def run_js(self, script):
         proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
-                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError("node failed: " + proc.stderr)
         return json.loads(proc.stdout)
@@ -1252,6 +1254,173 @@ class CursorMarkupTests(unittest.TestCase):
         the pointer would otherwise be showing."""
         html = PLANTRIM_HTML.read_text(encoding="utf-8")
         self.assertIn(".ptb-stage.can-pan canvas { cursor: grab !important; }", html)
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class FloorNameTests(unittest.TestCase):
+    """A floor is called what the customer calls it.
+
+    Reported against v1.13: "it shouldn't say one and two it should say floor
+    and then whatever the customer's got for the name for the floor it shouldn't
+    say one and two because that's not how Ekahau has it either". His sheets are
+    named 02 and 01, so numbering the rows as well put row 1 against floor 02 -
+    two numbers for one sheet, disagreeing.
+    """
+
+    HARNESS = FloorStripTests.HARNESS
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_his_sheets_read_as_the_floors_they_are(self):
+        out = self.run_js("""
+          box.floors = [{ id:'a', name:'02' }, { id:'b', name:'01' }];
+          box.current = 'b';
+          renderStrip({ floors: [
+            { id:'a', action:'trimmed', source:'manual',
+              oldSize:[10000,7500], newSize:[3100,4691], areaSavedPct:81 },
+            { id:'b', action:'trimmed', source:'manual',
+              oldSize:[10000,7500], newSize:[3479,4691], areaSavedPct:78 }] });
+          const names = (strip().match(/ptb-row-name">([^<]*)/g) || [])
+            .map(m => m.replace('ptb-row-name">', ''));
+          console.log(JSON.stringify({ names }));
+        """)
+        self.assertEqual(out["names"], ["Floor 02", "Floor 01"])
+
+    def test_the_row_carries_no_second_number(self):
+        """The ordinal column is gone, not merely restyled."""
+        out = self.run_js("""
+          box.floors = [{ id:'a', name:'02' }, { id:'b', name:'01' }];
+          box.current = 'a';
+          renderStrip({ floors: [] });
+          console.log(JSON.stringify({ html: strip() }));
+        """)
+        self.assertNotIn('class="ptb-row-n"', out["html"])
+        html = PLANTRIM_HTML.read_text(encoding="utf-8")
+        self.assertNotIn(".ptb-row-n ", html, "and its style went with it")
+
+    def test_a_name_that_already_reads_as_a_floor_is_left_alone(self):
+        """"Floor Ground Floor" is the failure mode of prepending blindly."""
+        out = self.run_js("""
+          box.floors = [{ id:'g', name:'Ground Floor' }, { id:'m', name:'Mezzanine' },
+                        { id:'t', name:'3A' }, { id:'r', name:'B1' }];
+          box.current = 'g';
+          renderStrip({ floors: [] });
+          const names = (strip().match(/ptb-row-name">([^<]*)/g) || [])
+            .map(m => m.replace('ptb-row-name">', ''));
+          console.log(JSON.stringify({ names }));
+        """)
+        self.assertEqual(out["names"],
+                         ["Ground Floor", "Mezzanine", "Floor 3A", "B1"])
+
+    def test_an_unnamed_floor_still_says_something(self):
+        out = self.run_js("""
+          box.floors = [{ id:'x', name:'' }];
+          box.current = 'x';
+          renderStrip({ floors: [] });
+          const m = strip().match(/ptb-row-name">([^<]*)/);
+          console.log(JSON.stringify({ txt: m && m[1] }));
+        """)
+        self.assertEqual(out["txt"], "Floor")
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class RemainingWorkTests(unittest.TestCase):
+    """The button names the work that is actually left.
+
+    Reported against v1.13, after cropping both floors by hand: "I'm left with a
+    button that says cut and save but we already cut it so really at this point
+    we need to be saving it and if we're going to keep it down there then that
+    should change to just save".
+    """
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    const made = {};
+    function el(id) {
+      if (!made[id]) made[id] = { id, innerHTML:'', textContent:'', hidden:false,
+        disabled:false, classList:{add(){},remove(){},toggle(){}} };
+      return made[id];
+    }
+    globalThis.document = { getElementById: el, addEventListener(){} };
+    globalThis.window = { devicePixelRatio:1, addEventListener(){} };
+    globalThis.WD = { esc: s => String(s), toast(){} };
+    globalThis.$ = el;
+    globalThis.state = { busy: false };
+    eval(slice('  function syncCutButton(res)', '  window.ptCut = function'));
+    function floor(id, source) {
+      return { id: id, action: 'trimmed', source: source,
+               oldSize: [10000, 7500], newSize: [3479, 4691], areaSavedPct: 78 };
+    }
+    const btn = () => el('ptbCut'), note = () => el('ptbCutNote');
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_when_every_crop_is_his_the_button_only_saves(self):
+        out = self.run_js("""
+          syncCutButton({ trimmedCount: 2,
+                          floors: [floor('a','manual'), floor('b','manual')] });
+          console.log(JSON.stringify({ label: btn().textContent, note: note().textContent }));
+        """)
+        self.assertEqual(out["label"], "Save trimmed .esx")
+        self.assertNotIn("Cut", out["label"])
+        self.assertIn("box you drew", out["note"])
+
+    def test_one_floor_left_to_automatic_still_offers_to_cut(self):
+        """Because there is cutting left for the tool to do."""
+        out = self.run_js("""
+          syncCutButton({ trimmedCount: 2,
+                          floors: [floor('a','manual'), floor('b','auto')] });
+          console.log(JSON.stringify({ label: btn().textContent, note: note().textContent }));
+        """)
+        self.assertEqual(out["label"], "Cut and save")
+        self.assertIn("1 to a box you drew", out["note"])
+
+    def test_all_automatic_still_offers_to_cut(self):
+        out = self.run_js("""
+          syncCutButton({ trimmedCount: 2,
+                          floors: [floor('a','auto'), floor('b','auto')] });
+          console.log(JSON.stringify({ label: btn().textContent }));
+        """)
+        self.assertEqual(out["label"], "Cut and save")
+
+    def test_nothing_to_cut_is_unchanged(self):
+        out = self.run_js("""
+          syncCutButton({ trimmedCount: 0, floors: [] });
+          console.log(JSON.stringify({ label: btn().textContent,
+                                       off: btn().disabled }));
+        """)
+        self.assertEqual(out["label"], "Nothing to cut")
+        self.assertTrue(out["off"])
+
+    def test_a_floor_that_cannot_be_cropped_does_not_count_as_his(self):
+        """A refused floor has no source, and must not be mistaken for one he
+        cropped - that would label the button Save while a floor is still
+        waiting on the automatic pass."""
+        out = self.run_js("""
+          syncCutButton({ trimmedCount: 1, floors: [
+            floor('a','manual'),
+            { id:'b', action:'refused', reason:'floor plan is geo-anchored' }] });
+          console.log(JSON.stringify({ label: btn().textContent }));
+        """)
+        self.assertEqual(out["label"], "Save trimmed .esx",
+                         "a refused floor is not work left for the cutter")
 
 
 if __name__ == "__main__":
