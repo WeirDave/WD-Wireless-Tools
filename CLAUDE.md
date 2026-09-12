@@ -442,6 +442,35 @@ report grouping headings — goes through the shared pair now, and
   order wrong for a plausible-sounding reason, which is the argument for the
   rules being executable rather than written down.
 
+- **A note's photo does not live in `pictureNotes.json`, and AP notes are one
+  object type rather than two.** This was written down wrongly once and the
+  wrong version cost a round of design work, so: observed in a real project
+  Ekahau itself wrote (its own `Office-Onsite-Example` with a text note and a
+  picture note added through the Ekahau UI), `pictureNotes.json` was **absent
+  from the archive entirely**.
+
+  What is actually there is `notes.json`, whose entries are
+  `{id, text, imageIds[], history?}`. A picture note is one of those with
+  `imageIds` populated - and usually `text: ""`, because a note taken for its
+  photo often has nothing typed on it. So there is no separate picture-note
+  object to look for: there is a note, and it may have images.
+
+  Access points reference notes by `noteIds`, which is an array, and **one AP
+  can carry several** - in that sample `Cisco: Entrance` holds a text note and
+  a picture note. Resolve every id, not the first.
+
+  Two consequences for anything that reads them. A note with no text but an
+  image is still a note; dropping it because `text` is empty loses exactly the
+  one an installer took a photo for, which is why `notesForAp()` in
+  `web/assets/js/report.js` skips an entry only when text *and* images are both
+  empty. And `pictureNotes.json` is some other feature - it carries
+  `location.coord`, so most likely standalone pins on the plan - and is not the
+  place to look for what is attached to an AP.
+
+  The Report's AP notes page renders the text and marks the attachment rather
+  than printing the image. That is deliberate and there is no image layout path
+  to fall back on: see the option's own description in `report.js`.
+
 - **Owner filter (Mine/Others/All)** in Cloud Manager used to persist to
   `localStorage` across page loads/sessions, which meant it could get
   silently stuck on "Mine" or "Others" on one machine while defaulting
