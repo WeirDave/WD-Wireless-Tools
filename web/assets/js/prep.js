@@ -313,7 +313,10 @@
       // Opened from disk there is no download at all - the server wrote the
       // file beside the original and hands back where it put it.
       if (fromDisk) {
-        return res.json().then(function (j) { renderWritten(j); });
+        return res.json().then(function (j) {
+          if (j && j.code === 'exists') return confirmReplace(j);
+          renderWritten(j);
+        });
       }
       var report = res.headers.get('X-WD-Prep-Report');
       if (!report) {
@@ -384,6 +387,31 @@
       + '<button class="btn btn-sec" onclick="prepReveal()">Show me the file</button>'
       + '</div></div>';
   }
+
+  /* The prepared file is already there. It may be last week's output, or it
+     may be the file he opened in Ekahau this morning and has been drawing in -
+     nothing in the archive tells them apart, so he does. */
+  function confirmReplace(j) {
+    $('prepResult').innerHTML = '<div class="prep-warn">' + esc(j.error)
+      + '<div class="prep-row" style="margin:10px 0 0">'
+      + '<button class="btn btn-primary" onclick="prepReplace()">Replace it</button>'
+      + '<button class="btn btn-sec" onclick="prepReveal()">Show me the folder</button>'
+      + '</div></div>';
+  }
+
+  window.prepReplace = function () {
+    var btn = $('prepGoBtn'), label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Preparing…';
+    fetch('/api/prep/run' + query() + '&replace=1', {
+      method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
+    }).then(function (r) { return r.json(); })
+      .then(renderWritten)
+      .catch(function (e) {
+        WD.toast('Could not prepare that project: ' + e.message, 'error');
+      })
+      .finally(function () { btn.textContent = label; btn.disabled = false; });
+  };
 
   window.prepReveal = function () {
     fetch('/api/prep/reveal', {

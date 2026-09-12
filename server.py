@@ -817,6 +817,20 @@ def api_prep(action):
             # discarding the result stays his decision, and the file lands in
             # the folder he is about to reopen in Ekahau.
             dest = on_disk.with_name(on_disk.stem + " (prepared)" + on_disk.suffix)
+            # A second run re-derives everything from the original, which is
+            # untouched and therefore still has all the work to do - so it would
+            # write this file again. By then it may be the file he opened in
+            # Ekahau and has been drawing in for an hour. Nothing in the archive
+            # distinguishes "output I made" from "output I have since worked
+            # in", so replacing it is asked for rather than assumed.
+            if dest.exists() and request.args.get("replace") != "1":
+                return jsonify({
+                    "ok": False, "code": "exists",
+                    "filename": dest.name, "dir": str(dest.parent),
+                    "error": f"{dest.name} is already in that folder. If you have "
+                             f"opened it in Ekahau and drawn in it, preparing again "
+                             f"would overwrite that work.",
+                }), 409
         else:
             dest = Path(tmpdir) / "out.esx"
         out = prep_pipeline.run(str(src), dest=dest, backup=False, **common)
