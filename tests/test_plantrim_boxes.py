@@ -1163,5 +1163,96 @@ class ReachableHandleTests(unittest.TestCase):
         self.assertIsNone(out["out"])
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class CursorTests(unittest.TestCase):
+    """The pointer has to say what is under it.
+
+    Reported against v1.12: "cursor not changing to hand to drag". There was no
+    cursor handling in the editor at all, so the only way to discover that an
+    edge could be dragged was to try it - the same problem as the edge not being
+    grabbable in the first place, one step earlier.
+    """
+
+    HARNESS = ReachableHandleTests.HARNESS + """
+    box.boxes.f1 = SUGGESTED;
+    fitView();
+    const a0 = toScreen(SUGGESTED[0], SUGGESTED[1]);
+    const c0 = toScreen(SUGGESTED[2], SUGGESTED[3]);
+    const X = Math.min(a0.x, c0.x), Y = Math.min(a0.y, c0.y);
+    const W = Math.abs(c0.x - a0.x), H = Math.abs(c0.y - a0.y);
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_the_sides_show_a_resize_cursor_anywhere_along_them(self):
+        out = self.run_js("""
+          console.log(JSON.stringify({
+            left:  cursorFor(X,     Y + H * 0.8),
+            right: cursorFor(X + W, Y + H / 3),
+            top:   cursorFor(X + W * 0.3, Y),
+            bottom:cursorFor(X + W * 0.7, Y + H) }));
+        """)
+        self.assertEqual(out, {"left": "ew-resize", "right": "ew-resize",
+                               "top": "ns-resize", "bottom": "ns-resize"})
+
+    def test_the_corners_show_the_diagonal_they_move_on(self):
+        out = self.run_js("""
+          console.log(JSON.stringify({ nw: cursorFor(X, Y),
+                                       ne: cursorFor(X + W, Y),
+                                       sw: cursorFor(X, Y + H),
+                                       se: cursorFor(X + W, Y + H) }));
+        """)
+        self.assertEqual(out, {"nw": "nwse-resize", "se": "nwse-resize",
+                               "ne": "nesw-resize", "sw": "nesw-resize"})
+
+    def test_inside_moves_and_empty_canvas_draws(self):
+        out = self.run_js("""
+          console.log(JSON.stringify({ inside: cursorFor(X + W/2, Y + H/2),
+                                       empty: cursorFor(3, 3) }));
+        """)
+        self.assertEqual(out["inside"], "move")
+        self.assertEqual(out["empty"], "crosshair",
+                         "an empty stage should say a drag starts a rectangle")
+
+    def test_a_cropped_floor_offers_nothing_to_drag(self):
+        """Dragging is refused there, so the pointer must not promise it."""
+        out = self.run_js("""
+          box.applied.f1 = true;
+          console.log(JSON.stringify({ mid: cursorFor(X + W/2, Y + H/2),
+                                       edge: cursorFor(X, Y + H/2) }));
+        """)
+        self.assertEqual(out["mid"], "default")
+        self.assertEqual(out["edge"], "default")
+
+    def test_setting_a_cursor_survives_a_canvas_with_no_style(self):
+        """The other Node harnesses stub the canvas element, and a crash in the
+        move handler would take out every drag test with it."""
+        out = self.run_js("""
+          const real = CV.style; delete CV.style;
+          let threw = null;
+          try { setCursor('ew-resize'); } catch (e) { threw = String(e); }
+          CV.style = real;
+          console.log(JSON.stringify({ threw }));
+        """)
+        self.assertIsNone(out["threw"])
+
+
+class CursorMarkupTests(unittest.TestCase):
+    def test_the_stage_starts_with_a_drawing_cursor(self):
+        html = PLANTRIM_HTML.read_text(encoding="utf-8")
+        self.assertIn(".ptb-stage canvas { cursor: crosshair; }", html)
+
+    def test_the_pan_cursor_still_beats_the_inline_one(self):
+        """Space-drag pans, and that reading has to win over the resize cursor
+        the pointer would otherwise be showing."""
+        html = PLANTRIM_HTML.read_text(encoding="utf-8")
+        self.assertIn(".ptb-stage.can-pan canvas { cursor: grab !important; }", html)
+
+
 if __name__ == "__main__":
     unittest.main()

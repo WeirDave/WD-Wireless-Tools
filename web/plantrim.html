@@ -107,7 +107,10 @@
   .ptb-cut-note { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
   .ptb-stage canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
   .ptb-stage.is-panning canvas { cursor: grabbing; }
-  .ptb-stage.can-pan canvas { cursor: grab; }
+  .ptb-stage.can-pan canvas { cursor: grab !important; }
+  /* The starting cursor before JS has seen the pointer move. Every other
+     state is set inline from cursorFor(). */
+  .ptb-stage canvas { cursor: crosshair; }
   .ptb-empty {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
     color: var(--text-muted); font-size: 13px; pointer-events: none;
