@@ -146,6 +146,29 @@ assertions about the printed output, not about the CSS source.
   templates stay in `templates/` as read-only built-ins; user files shadow them
   by filename; deleting a built-in writes a tombstone in `hidden.json`. If you
   add any new user-writable state, put it under `~/.wd_wireless_tools/`.
+- **The update check must not depend on `api.github.com`, and the browser must
+  not call GitHub at all.** Both were true until v2.98.1 and it cost the feature
+  its only user: on his work machine `git pull` worked from a terminal while the
+  in-app check timed out, because a corporate network commonly carries git over
+  HTTPS to github.com and still blocks or throttles `api.github.com`. The page
+  made that call itself, with no timeout on it, so About hung and then reported
+  that GitHub was unreachable on an install perfectly able to update.
+
+  The order now is: the page asks `/api/update/status`; that asks
+  `remote_release_tag()` (`git ls-remote --tags origin`) for a git install; and
+  the API is left with release notes only, on an 8s budget, failing quietly. A
+  ZIP install has no remote and still uses the API. Don't put the API back in
+  front of that, and don't let the browser reach GitHub directly —
+  `tests/test_updater.py::ClientChecksThroughTheServerTests` and
+  `BlockedApiTests` hold both.
+
+  Related: every git call runs with `GIT_TERMINAL_PROMPT=0` and non-interactive
+  credential helpers. Nothing here has a terminal, so a prompt became a
+  two-minute timeout and on Windows could raise a credential dialog on a desktop
+  nobody is at. Local git commands have their own `LOCAL_GIT_TIMEOUT`, and the
+  timeout message names the command — "timed out talking to GitHub" was being
+  reported for `git status`.
+
 - `is_dev_checkout()` blocks auto-update on a maintainer's clone (detected by
   `.github` / `tests` / `scripts` / `BACKLOG.md` / `CLAUDE.md`, none of which
   ship in a release ZIP). Without it, clicking Update in your own working copy
