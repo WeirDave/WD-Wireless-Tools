@@ -189,5 +189,116 @@ class PrepRouteTests(unittest.TestCase):
             ["walls"])
 
 
+@unittest.skipIf(Image is None, "Pillow is required to build the fixture")
+class OpenedFromDisk(unittest.TestCase):
+    """The picker path, where nothing is uploaded.
+
+    A dropped file has no filesystem path, so the whole archive has to travel
+    for the preview and again for the run - and his projects run to a couple of
+    hundred megabytes. Opened through the picker the server reads the file where
+    it lies and writes the prepared copy back beside it, which is also the
+    folder he is about to reopen in Ekahau.
+
+    The path lives on the server and only there: no action here accepts one from
+    the browser.
+    """
+
+    def setUp(self):
+        server.app.config["TESTING"] = True
+        self.client = server.app.test_client()
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.esx = make_esx(root / "Carnation Farms.esx")
+        self.before = self.esx.read_bytes()
+
+        self._cap_dir, cap.USER_DIR = cap.USER_DIR, root / "capacity"
+        self._ts_user, template_store.USER_DIR = template_store.USER_DIR, root / "walls"
+        self._ts_builtin, template_store.BUILTIN_DIR = (
+            template_store.BUILTIN_DIR, root / "walls-builtin")
+        template_store.USER_DIR.mkdir(parents=True)
+        template_store.BUILTIN_DIR.mkdir(parents=True)
+        server.ts.save("Prep Walls", [wall_type("Framery Pod")])
+        self.wall_file = next(t["file"] for t in server.ts.scan()["templates"])
+
+        self._picked = dict(server._PREP_PROJECT)
+        server._PREP_PROJECT["path"] = str(self.esx)
+        server._PREP_PROJECT["written"] = None
+
+    def tearDown(self):
+        server._PREP_PROJECT.update(self._picked)
+        cap.USER_DIR = self._cap_dir
+        template_store.USER_DIR = self._ts_user
+        template_store.BUILTIN_DIR = self._ts_builtin
+        self.tmp.cleanup()
+
+    def post(self, action, query=""):
+        """Note the empty body - that is the point of this path."""
+        return self.client.post(f"/api/prep/{action}?source=disk&{query}",
+                                data=b"", headers=HDR,
+                                content_type="application/octet-stream")
+
+    def test_it_previews_without_the_archive_being_uploaded(self):
+        res = self.post("plan", f"steps=trim,walls&wallTemplate={self.wall_file}")
+        body = res.get_json()
+        self.assertTrue(body["ok"], body)
+        self.assertTrue(body["fromDisk"])
+        self.assertEqual(body["step"]["trim"]["trimmedCount"], 1)
+
+    def test_it_names_the_project_from_the_path_not_the_query(self):
+        res = self.post("plan", f"name=wrong.esx&steps=walls&wallTemplate={self.wall_file}")
+        self.assertEqual(res.get_json()["source"], "Carnation Farms.esx")
+
+    def test_the_prepared_copy_lands_beside_the_original(self):
+        res = self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
+        body = res.get_json()
+        self.assertTrue(body["ok"], body)
+        self.assertTrue(body["written"])
+        self.assertEqual(body["filename"], "Carnation Farms (prepared).esx")
+        self.assertEqual(Path(body["dir"]), self.esx.parent)
+        self.assertTrue(Path(body["path"]).is_file())
+        # no archive in the response - the file is already where he wants it
+        self.assertNotIn("X-WD-Prep-Report", res.headers)
+        self.assertLess(len(res.data), 4096)
+
+    def test_the_original_is_not_touched(self):
+        self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
+        self.assertEqual(self.esx.read_bytes(), self.before)
+
+    def test_running_twice_does_not_pile_up_copies(self):
+        """The second run has nothing left to do, so it writes nothing."""
+        self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
+        prepared = self.esx.with_name("Carnation Farms (prepared).esx")
+        stamp = prepared.read_bytes()
+        again = self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
+        body = again.get_json()
+        self.assertTrue(body["ok"], body)
+        self.assertEqual(sorted(p.name for p in self.esx.parent.glob("*.esx")),
+                         ["Carnation Farms (prepared).esx", "Carnation Farms.esx"])
+        self.assertEqual(prepared.read_bytes(), stamp)
+
+    def test_a_project_that_has_moved_is_refused_rather_than_guessed_at(self):
+        self.esx.unlink()
+        res = self.post("plan", f"steps=walls&wallTemplate={self.wall_file}")
+        self.assertEqual(res.status_code, 404)
+        self.assertIn("Open it again", res.get_json()["error"])
+
+    def test_reveal_takes_no_path_from_the_browser(self):
+        """The one rule that keeps a localhost tool from shelling out on
+        whatever a page hands it."""
+        import inspect
+        src = inspect.getsource(server.api_prep)
+        marker = src[src.index('if action == "reveal"'):]
+        marker = marker[:marker.index("if action ==", 10)]
+        self.assertNotIn("request.args", marker)
+        self.assertNotIn("request.get_json", marker)
+        self.assertIn("_PREP_PROJECT", marker)
+
+    def test_forget_clears_what_the_server_remembers(self):
+        self.client.post("/api/prep/forget", headers=HDR, json={})
+        self.assertIsNone(server._PREP_PROJECT["path"])
+        res = self.post("plan", f"steps=walls&wallTemplate={self.wall_file}")
+        self.assertEqual(res.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

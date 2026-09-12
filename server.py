@@ -499,8 +499,7 @@ def api_plantrim(action):
             "floorCount": result["floorCount"],
             "bytesBefore": result["bytesBefore"],
             "bytesAfter": result["bytesAfter"],
-            "droppedCount": sum(f.get("droppedCount") or 0
-                                for f in result.get("floors") or []),
+            "droppedCount": sum(f.get("droppedCount") or 0 for f in result.get("floors") or []),
         }))
         return response
     except Exception as e:
@@ -679,22 +678,70 @@ BACKUP_ACTIONS = {
 }
 
 
+# Prep can work from a dropped file or from one opened through the native
+# picker, and the difference is not cosmetic. His projects run to a couple of
+# hundred megabytes; a dropped file has no filesystem path, so the browser has
+# to upload the whole archive for the preview and again for the run. Opened from
+# disk, the server reads the file where it already is and writes the prepared
+# copy back beside it - no upload at all, and the result lands in the project
+# folder he is about to reopen in Ekahau rather than in Downloads.
+#
+# Same rule as Quick Walls: the path lives here and only here. /api/prep/reveal
+# takes no arguments, so the browser can never hand a path to a command line.
+_PREP_PROJECT = {"path": None, "written": None}
+
+
 @app.route("/api/prep/<action>", methods=["POST"])
 def api_prep(action):
     """Trim, area and wall-type a new project in one pass.
 
-    Same shape as the PlanTrim and Capacity routes it is built out of: the
-    .esx rides in the body because it is a whole archive, everything else is a
-    query parameter, and `run` hands the result back as a download rather than
-    writing over anything. The project on disk is never opened for writing by
-    this route - saving over the original stays the user's decision, which is
-    also why the pipeline's own backup is turned off here.
+    Built out of the PlanTrim and Capacity routes: everything but the archive
+    rides in query parameters. A dropped archive arrives in the body; one opened
+    from disk is read where it lies, and `?source=disk` says which.
+
+    The original is never written over either way. Dropped, the result comes
+    back as a download; opened from disk, it is written alongside as
+    "<name> (prepared).esx" - a new file, so keeping or discarding it stays the
+    user's decision, which is also why the pipeline's own backup is off here.
 
     The order the steps run in is the pipeline's business, not this route's.
     Whatever set of steps arrives is passed through as a set for exactly that
     reason - see tools/prep_pipeline.py, where getting it wrong is a refusal
     rather than a project that was quietly never cropped.
     """
+    if action == "pick":
+        from tools.folder_organizer import _tk_dialog
+        code = (
+            "import tkinter as tk\n"
+            "from tkinter import filedialog\n"
+            "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
+            "p = filedialog.askopenfilename(title='Open an Ekahau project (.esx)', filetypes=[('Ekahau project', '*.esx'), ('All files', '*.*')])\n"
+            "print(p or '')\n"
+        )
+        chosen = _tk_dialog(code)
+        if not chosen:
+            return jsonify({"ok": False, "error": "No file selected"})
+        path = Path(chosen)
+        if not path.is_file():
+            return jsonify({"ok": False, "error": "That file could not be opened"})
+        _PREP_PROJECT["path"] = str(path)
+        _PREP_PROJECT["written"] = None
+        return jsonify({"ok": True, "name": path.name, "dir": str(path.parent),
+                        "bytes": path.stat().st_size})
+
+    if action == "reveal":
+        # Whatever was produced last, falling back to where it came from.
+        # Cosmetic by design: a failure here never means the save failed.
+        target = _PREP_PROJECT.get("written") or _PREP_PROJECT.get("path")
+        if not target:
+            return jsonify({"ok": False, "error": "no folder known"})
+        return jsonify(reveal_tool.reveal(target))
+
+    if action == "forget":
+        _PREP_PROJECT["path"] = None
+        _PREP_PROJECT["written"] = None
+        return jsonify({"ok": True})
+
     if action == "templates":
         return jsonify({
             "ok": True,
@@ -707,11 +754,23 @@ def api_prep(action):
     if action not in ("plan", "run"):
         return jsonify({"error": f"unknown action: {action}"}), 404
 
-    blob = request.get_data(cache=False)
-    if not blob:
-        return jsonify({"ok": False, "error": "no file received"}), 400
+    # Opened from disk, the archive is read where it lies and nothing is
+    # uploaded. His projects run to a couple of hundred megabytes and the
+    # preview re-runs on every change, so this is the difference between a
+    # page that responds and one that does not.
+    from_disk = request.args.get("source") == "disk"
+    on_disk = Path(_PREP_PROJECT["path"]) if (from_disk and _PREP_PROJECT["path"]) else None
+    if from_disk and (on_disk is None or not on_disk.is_file()):
+        return jsonify({"ok": False, "error": "That project is no longer where it "
+                                              "was opened from. Open it again."}), 404
 
-    name = request.args.get("name") or "project.esx"
+    blob = None
+    if not from_disk:
+        blob = request.get_data(cache=False)
+        if not blob:
+            return jsonify({"ok": False, "error": "no file received"}), 400
+
+    name = (on_disk.name if on_disk else None) or request.args.get("name") or "project.esx"
     steps = [s for s in (request.args.get("steps") or "").split(",") if s]
     margin = request.args.get("margin", type=int) or esx_trimmer.DEFAULT_MARGIN
     retighten = request.args.get("retighten") != "0"
@@ -738,8 +797,11 @@ def api_prep(action):
 
     tmpdir = tempfile.mkdtemp(prefix="wd-prep-api-")
     try:
-        src = Path(tmpdir) / "in.esx"
-        src.write_bytes(blob)
+        if on_disk is not None:
+            src = on_disk
+        else:
+            src = Path(tmpdir) / "in.esx"
+            src.write_bytes(blob)
         common = dict(steps=steps or None, wall_types=wall_types,
                       template=capacity_tpl, occupants=request.args.get("occupants"),
                       margin=margin, retighten=retighten)
@@ -747,13 +809,28 @@ def api_prep(action):
         if action == "plan":
             out = prep_pipeline.plan(str(src), **common)
             out["source"] = name
+            out["fromDisk"] = on_disk is not None
             return jsonify(out), (200 if out.get("ok") else 400)
 
-        dest = Path(tmpdir) / "out.esx"
+        if on_disk is not None:
+            # Beside the original, never over it. A new name means keeping or
+            # discarding the result stays his decision, and the file lands in
+            # the folder he is about to reopen in Ekahau.
+            dest = on_disk.with_name(on_disk.stem + " (prepared)" + on_disk.suffix)
+        else:
+            dest = Path(tmpdir) / "out.esx"
         out = prep_pipeline.run(str(src), dest=dest, backup=False, **common)
         out["source"] = name
         if not out.get("ok"):
             return jsonify(out), 400
+        if on_disk is not None:
+            # No download: the page gets the path and an offer to show it.
+            if out.get("written"):
+                _PREP_PROJECT["written"] = str(dest)
+                out["path"] = str(dest)
+                out["dir"] = str(dest.parent)
+                out["filename"] = dest.name
+            return jsonify(out)
         if not out.get("written"):
             # Already prepared. A success with no file attached, so the page
             # can say so rather than handing back a copy of what he already has.

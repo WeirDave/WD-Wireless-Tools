@@ -388,7 +388,17 @@ Prep does the setup work on a freshly imported project in one pass over the file
 - **Put a requirement area on every floor** — from a capacity template and a headcount, using the templates saved in WD Capacity.
 - **Load the wall types** — adds the types from a Quick Walls template so they are there to draw with.
 
-Each step is optional, each is previewed per floor before anything is written, and your project file is never written to: preparing builds a new copy and downloads it.
+Each step is optional, each is previewed per floor before anything is written, and your project file is never written to.
+
+### Two ways to open a project, and they are not the same
+
+**Drop it, or click to browse,** and the file is uploaded to the local server for the preview and again for the run. The prepared copy comes back as a download.
+
+**Open from disk…** uses a file dialog instead, and Prep then reads the project where it already sits — nothing is uploaded at all. On a project of a couple of hundred megabytes that is the difference between a preview that keeps up with you and one that does not. The prepared copy is written **beside the original**, named `<name> (prepared).esx`, and Prep offers to show you the folder — because the next thing you do is open it in Ekahau.
+
+Either way your original is never written to. The prepared copy is a new file, so keeping or discarding it stays your decision.
+
+Prep only knows where a project came from when you opened it through the dialog: a dropped file gives the browser no folder to report.
 
 ### The steps always run in the same order
 
