@@ -21,6 +21,13 @@
 
   var fileBytes = null;      // the .esx currently loaded, as an ArrayBuffer
   var fileName = '';
+  // Opened through the native picker rather than dropped. The server then has
+  // the path and reads the file where it lies, so nothing is uploaded - which
+  // for a two hundred megabyte project is the difference between a preview
+  // that re-runs on every change and one that cannot. It also means the
+  // prepared copy is written into the project folder rather than Downloads.
+  var fromDisk = false;
+  var lastWritten = null;
   var wallTemplates = [];
   var capTemplates = [];
   var previewSeq = 0;        // so a slow preview cannot land after a newer one
@@ -72,15 +79,52 @@
 
   window.prepLoadNewFile = function () { $('fileInput').click(); };
 
+  function openEditor(name) {
+    fileName = name;
+    $('dropzone').style.display = 'none';
+    $('editor').classList.add('active');
+    $('fileBadge').textContent = name;
+    $('fileBadge').style.display = 'inline-block';
+    $('prepResult').innerHTML = '';
+    lastWritten = null;
+  }
+
+  window.prepOpenFromDisk = function () {
+    fetch('/api/prep/pick', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: '{}',
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (!res || !res.ok) {
+        if (res && res.error && res.error !== 'No file selected') {
+          WD.toast(res.error, 'error');
+        }
+        return;
+      }
+      fromDisk = true;
+      fileBytes = null;            // deliberately not read into the browser
+      openEditor(res.name);
+      $('fileBadge').title = res.dir;
+      WD.toast('Opened from ' + res.dir, 'success');
+      preview();
+    }).catch(function (e) {
+      WD.toast('Could not open that project: ' + e.message, 'error');
+    });
+  };
+
   function loadFile(file) {
+    // A dropped file has no path, so anything the server remembered about a
+    // previously picked one is now wrong.
+    fromDisk = false;
+    fetch('/api/prep/forget', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: '{}',
+    }).catch(function () { /* nothing depends on it */ });
     fileName = file.name;
     file.arrayBuffer().then(function (buf) {
       fileBytes = buf;
-      $('dropzone').style.display = 'none';
-      $('editor').classList.add('active');
-      $('fileBadge').textContent = fileName;
-      $('fileBadge').style.display = 'inline-block';
-      $('prepResult').innerHTML = '';
+      openEditor(file.name);
       preview();
     }).catch(function (e) {
       WD.toast('Could not read that file: ' + e.message, 'error');
@@ -97,6 +141,7 @@
 
   function query() {
     var q = '?name=' + encodeURIComponent(fileName)
+      + (fromDisk ? '&source=disk' : '')
       + '&steps=' + chosenSteps().join(',')
       + '&retighten=' + ($('prepRetighten').checked ? '1' : '0');
     if ($('prepStep-walls').checked) {
@@ -117,8 +162,10 @@
     preview();
   }
 
+  function loaded() { return fromDisk || !!fileBytes; }
+
   function preview() {
-    if (!fileBytes) return;
+    if (!loaded()) return;
     var steps = chosenSteps();
     if (!steps.length) {
       $('prepPreview').innerHTML =
@@ -130,7 +177,8 @@
     $('prepPreview').innerHTML = '<div class="prep-empty">Reading the project…</div>';
     setGo(false, '');
     fetch('/api/prep/plan' + query(), {
-      method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' }, body: fileBytes,
+      method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
+      body: fromDisk ? null : fileBytes,
     }).then(function (r) { return r.json(); }).then(function (r) {
       if (seq !== previewSeq) return;    // a newer preview has overtaken this one
       renderPreview(r);
@@ -254,13 +302,19 @@
   // ── the run ────────────────────────────────────────────────────────────────
 
   window.prepRun = function () {
-    if (!fileBytes) return;
+    if (!loaded()) return;
     var btn = $('prepGoBtn'), label = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Preparing…';
     fetch('/api/prep/run' + query(), {
-      method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' }, body: fileBytes,
+      method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
+      body: fromDisk ? null : fileBytes,
     }).then(function (res) {
+      // Opened from disk there is no download at all - the server wrote the
+      // file beside the original and hands back where it put it.
+      if (fromDisk) {
+        return res.json().then(function (j) { renderWritten(j); });
+      }
       var report = res.headers.get('X-WD-Prep-Report');
       if (!report) {
         // No file came back: either a refusal, or nothing needed doing.
@@ -275,6 +329,68 @@
       btn.textContent = label;
       btn.disabled = false;
     });
+  };
+
+  function didWhat(r) {
+    var bits = [];
+    if (r.trimmed) {
+      bits.push('trimmed <b>' + r.trimmed + '</b> of ' + r.floorCount + ' '
+        + plural(r.floorCount, 'floor plan'));
+    }
+    if (r.areasWritten && r.areasWritten.length) {
+      bits.push('put a requirement area on <b>' + r.areasWritten.length + '</b> '
+        + plural(r.areasWritten.length, 'floor'));
+    }
+    if (r.areasRetightened && r.areasRetightened.length) {
+      bits.push('re-measured <b>' + r.areasRetightened.length + '</b> '
+        + plural(r.areasRetightened.length, 'area') + ' that still covered the whole plan');
+    }
+    if (r.wallTypesAdded && r.wallTypesAdded.length) {
+      bits.push('added <b>' + r.wallTypesAdded.length + '</b> wall '
+        + plural(r.wallTypesAdded.length, 'type'));
+    }
+    return bits.length ? bits.join(', ') : 'no changes were needed';
+  }
+
+  /* Opened from disk: the prepared copy is already sitting in the project
+     folder, so the useful thing to say is where, and to offer to show it -
+     the next thing he does is open it in Ekahau. */
+  function renderWritten(r) {
+    var host = $('prepResult');
+    if (!r || !r.ok) {
+      host.innerHTML = '<div class="prep-warn">'
+        + esc((r && r.error) || 'Nothing was written.') + '</div>';
+      return;
+    }
+    if (!r.written) {
+      host.innerHTML = '<div class="prep-warn">' + esc(r.note || 'Nothing needed doing.')
+        + '</div>';
+      return;
+    }
+    lastWritten = r.path || null;
+    var step = r.step || {};
+    var summary = didWhat({
+      trimmed: (step.trim || {}).trimmedCount,
+      floorCount: (step.trim || {}).floorCount,
+      areasWritten: (step.areas || {}).floorsWritten,
+      areasRetightened: (step.retighten || []).map(function (x) { return x.floorName; }),
+      wallTypesAdded: ((step.walls || {}).add || []).map(function (x) { return x.name; }),
+    });
+    host.innerHTML = '<div class="prep-done">Wrote <b>' + esc(r.filename || '') + '</b> — '
+      + summary + '.'
+      + '<br><span class="prep-sub">It is in <b>' + esc(r.dir || '') + '</b>, beside the '
+      + 'original, which is unchanged. Open it in Ekahau and start drawing.</span>'
+      + '<div class="prep-row" style="margin:10px 0 0">'
+      + '<button class="btn btn-sec" onclick="prepReveal()">Show me the file</button>'
+      + '</div></div>';
+  }
+
+  window.prepReveal = function () {
+    fetch('/api/prep/reveal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: '{}',
+    }).catch(function () { /* cosmetic - the file is already written */ });
   };
 
   function renderResult(r, blob) {
@@ -297,25 +413,8 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
 
-    var bits = [];
-    if (r.trimmed) {
-      bits.push('trimmed <b>' + r.trimmed + '</b> of ' + r.floorCount + ' '
-        + plural(r.floorCount, 'floor plan'));
-    }
-    if (r.areasWritten && r.areasWritten.length) {
-      bits.push('put a requirement area on <b>' + r.areasWritten.length + '</b> '
-        + plural(r.areasWritten.length, 'floor'));
-    }
-    if (r.areasRetightened && r.areasRetightened.length) {
-      bits.push('re-measured <b>' + r.areasRetightened.length + '</b> '
-        + plural(r.areasRetightened.length, 'area') + ' that still covered the whole plan');
-    }
-    if (r.wallTypesAdded && r.wallTypesAdded.length) {
-      bits.push('added <b>' + r.wallTypesAdded.length + '</b> wall '
-        + plural(r.wallTypesAdded.length, 'type'));
-    }
     host.innerHTML = '<div class="prep-done">Wrote <b>' + esc(name) + '</b> — '
-      + (bits.length ? bits.join(', ') : 'no changes were needed') + '.'
+      + didWhat(r) + '.'
       + '<br><span class="prep-sub">Your original is untouched. Open the downloaded copy '
       + 'in Ekahau and start drawing.</span></div>';
   }

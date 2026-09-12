@@ -35,7 +35,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.9 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.9.2 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.1 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v1.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v1.1 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -161,7 +161,9 @@ Get a freshly imported project ready to draw in, in one pass over the file inste
 - Previews every step before anything is written, floor by floor
 - Re-runnable: wall types already present are left alone, a trimmed floor is skipped, and a floor that already has a requirement area is left alone
 - Except the one case worth re-running for — an area that still covers the whole plan had nothing to measure when it was made, and tightens to the walls once you have drawn them. A polygon you moved, redrew or cut around an atrium is never touched
-- Writes a new copy and downloads it; your file is never written to
+- **Open from disk** reads the project where it sits — nothing is uploaded, and on a project of a couple of hundred megabytes that is the difference between a preview that keeps up and one that does not
+- Opened that way, the prepared copy is written beside the original as `<name> (prepared).esx` and Prep offers to show you the folder, because the next thing you do is open it in Ekahau
+- Dropped instead, the result comes back as a download. Either way the original is never written to
 
 ---
 
@@ -229,7 +231,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.94.0
+WIRELESS TOOLS  v2.95.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
