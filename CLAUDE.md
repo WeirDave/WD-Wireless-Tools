@@ -131,6 +131,23 @@ and reading the `(...)` text operators is enough to tell which page each piece
 of content landed on, so "it starts a new sheet" and "the row did not split" are
 assertions about the printed output, not about the CSS source.
 
+**A second path that works, and needs no hand-rolled websocket: geckodriver.**
+`pip install selenium`, then `webdriver.Firefox(headless)` →
+`driver.print_page(PrintOptions())`, which returns the same base64 PDF through
+the same Firefox print pipeline. Selenium Manager fetches geckodriver itself, so
+there is nothing to install by hand. Two things to know. `PrintOptions` is in
+`selenium.webdriver.common.print_page_options`, not the firefox package. And
+setting `page_width`/`page_height` on it **overrides what the CSS asked for** -
+leave them unset when the question is what `@page` does, or every sheet comes
+back the size you pinned and you will conclude the engine ignored the rule.
+
+This is what found the trailing blank sheet in v2.96.2 - a fault Chromium does
+not have and that therefore survived every check made here until one was run in
+Firefox. Page count is the assertion: seven sheets before, six after. A page
+carrying nothing but the body's white background reads as `chars=0 imgs=0
+draws=1` through PyMuPDF, which is how "blank" was made checkable rather than a
+matter of opinion.
+
 ## Updating (in-app) — how it fits together
 
 - `tools/updater.py` is the whole mechanism. `detect_install()` decides which
@@ -381,23 +398,25 @@ report grouping headings — goes through the shared pair now, and
 
 ## Known gotchas
 
-- **Per-page paper orientation depends on a Chromium-only feature, and the
-  invariant matters more than the feature.** Mixed orientation in one document
-  is done with named `@page` rules (`@page placementLandscape { size: Letter
-  landscape }`) in `web/assets/wd-tools.css`. Chromium implements named pages;
-  Firefox does not implement them at all. Where they are not honoured every
-  sheet takes the print dialog's orientation and the per-page choice is
-  discarded silently.
+- **Per-page paper orientation works in Firefox too. It is measured now, and
+  the invariant still matters more than the feature.** Mixed orientation in one
+  document is done with named `@page` rules (`@page placementLandscape { size:
+  Letter landscape }`) in `web/assets/wd-tools.css`.
 
-  **Correction (v2.56.1 → withdrawn in 49e30fb): the Firefox half of that claim
-  was never measured and must not be repeated.** Chrome and Edge were measured
-  and are correct. Firefox was not — headless printing could not be driven, so
-  what it does with named pages is simply unknown. Worse, the detection shipped
-  to warn about it was wrong on its own terms: `CSS.supports('page','auto')`
-  returns true in Firefox as well as Chrome, so the warning could never have
-  fired in the browser it existed for. Say "verified in Chrome and Edge", not
-  "Firefox is broken" — asserting a defect nobody has observed is worse than
-  saying nothing.
+  **Settled 2026-09-12: Firefox 155 honours named `@page` sizes at print time.**
+  A two-page probe - one div on a named portrait page, one on a named landscape
+  page - came out 612x792 then 792x612 from a single document, printed through
+  geckodriver's WebDriver Print Page command. Chromium and Edge were already
+  measured and are correct. So mixed orientation is supported in all three, and
+  "make everything portrait" is a workaround nobody needs any more.
+
+  **The history, because this claim has been wrong in both directions.** It was
+  first asserted that Firefox does not implement named pages at all; that was
+  never measured and was withdrawn in 49e30fb. The detection shipped alongside
+  it was wrong on its own terms too - `CSS.supports('page','auto')` returns true
+  in Firefox as well as Chromium, so the warning could never have fired in the
+  browser it existed for. The lesson held through both rounds: print behaviour
+  is a measurement, not a recollection, and the engine has to be named.
 
   Verified by printing the same document with the `page:` declarations intact
   and stripped: with them, each page gets the sheet it asked for; without them,
