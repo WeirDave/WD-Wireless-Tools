@@ -283,17 +283,44 @@ A floor too big to read on one sheet can be split into lettered sections. Turn o
 
 Floor-plan markers and AP-table labels come from the AP names inside the project. When a name ends in an AP designator such as `SITE-B1-01-AP42`, the short-label option can show `42` for quick map-to-table cross-reference. Turn off **Short number labels on the plan** when full names are preferable.
 
+### AP notes
+
+Notes you record against an access point in Ekahau — mounting caveats, access
+problems, anything typed onto the AP — can be printed as their own page.
+
+In **Report → AP Placement Map**, in the options panel of the **Configure** step,
+tick **"Include AP notes pages"**. It sits directly below *Compass reference
+page*, near the bottom of that panel. It is **off by default** and your choice is
+remembered once you set it.
+
+You get one page per floor, headed **AP Notes**, listing each access point that
+has notes and the text of each one. An AP can carry more than one note and all of
+them are listed.
+
+> **Text is printed; photographs are not.** A note can have a picture attached.
+> Those notes are still listed, with any text they carry, and marked *"Image
+> attached — not shown in this report"* — so nothing is silently dropped, but the
+> image itself is not printed and there is no option to print it.
+
+The page appears only when at least one access point on that floor actually has
+notes, so turning the option on for a project without any changes nothing.
+
 ### Page orientation
 
 Each page can be set to **Auto**, **Portrait** or **Landscape** using the control
 above it, and the choice is remembered. Auto turns a page only when turning it
 prints the map meaningfully larger, so a plan that gains little stays upright.
 
-**Mixing portrait and landscape in one document is verified in Chrome and Edge.**
-It relies on a CSS feature those browsers implement. If pages come out clipped at
-the right-hand edge in another browser, that is the symptom of a page laid out
-for one orientation printed on a sheet of the other — press **Match all pages**
-on any page to put the whole report one way round, which is always correct.
+**Mixing portrait and landscape in one document works in Firefox, Chrome and
+Edge.** All three have been measured printing a document whose pages ask for
+different sheets, and all three give each page the sheet it asked for. You do
+not need to make a report uniform to get it to print correctly.
+
+If pages ever do come out clipped at the right-hand edge, that is the symptom of
+a page laid out for one orientation printed on a sheet of the other. Press
+**Match all pages** on any page to put the whole report one way round, which is
+always correct — and worth reporting, because on these three browsers it should
+not happen.
 
 ### Print cleanly
 
