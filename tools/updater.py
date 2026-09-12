@@ -121,7 +121,14 @@ PAYLOAD_DIRS = CONFIG.payload_dirs
 
 TAG_RE = re.compile(r"^v[0-9]+(?:\.[0-9]+)+$")
 GIT_TIMEOUT = 120
+LOCAL_GIT_TIMEOUT = 20
 NET_TIMEOUT = 60
+# Shorter than a fetch: this is a single ref listing, and it runs while someone
+# is waiting for a panel to open.
+GIT_LS_REMOTE_TIMEOUT = 30
+# Once git has already answered the question that matters, the API is only
+# being asked for the release notes. Optional data gets an optional-sized wait.
+NOTES_TIMEOUT = 8
 WINGET_TIMEOUT = 600
 
 
@@ -192,16 +199,57 @@ def _friendly_git_error(args, proc) -> str:
             "Try again, and if it keeps failing use Copy Diagnostics from the menu.")
 
 
-def _run_git(args, cwd: Path, check: bool = True):
+# Nothing here runs on a terminal. Git asking for a username, or Windows'
+# credential manager raising a dialog, would hang the request until the timeout
+# and - worse - could put a window on a desktop nobody is sitting at. Refusing
+# the prompt turns that into an error in seconds, with a reason attached.
+_GIT_ENV = {
+    "GIT_TERMINAL_PROMPT": "0",
+    "GCM_INTERACTIVE": "never",
+    "GIT_ASKPASS": "echo",
+    "SSH_ASKPASS": "echo",
+}
+
+# Commands that reach the network, and therefore the ones a proxy can stall.
+# The rest are local and should never take seconds, let alone minutes.
+_NETWORK_GIT = {"fetch", "ls-remote", "clone", "pull", "push"}
+
+
+def _git_verb(args) -> str:
+    for a in args:
+        if not a.startswith("-"):
+            return a
+    return "git"
+
+
+def _run_git(args, cwd: Path, check: bool = True, timeout: int | None = None):
+    verb = _git_verb(args)
+    networked = verb in _NETWORK_GIT
+    limit = timeout or (GIT_TIMEOUT if networked else LOCAL_GIT_TIMEOUT)
+    env = dict(os.environ)
+    env.update(_GIT_ENV)
     try:
         proc = subprocess.run(
             ["git"] + args, cwd=str(cwd), capture_output=True, text=True,
-            timeout=GIT_TIMEOUT,
+            timeout=limit, env=env,
         )
     except FileNotFoundError:
         raise UpdateError("Git is not installed or not on PATH.")
     except subprocess.TimeoutExpired:
-        raise UpdateError("The update timed out talking to GitHub. Check the network and try again.")
+        # Naming the command and the wait is the difference between a report
+        # that can be acted on and "it timed out". A local command timing out
+        # is not a network problem and must not be described as one.
+        if networked:
+            raise UpdateError(
+                f"git {verb} did not finish within {limit}s. The network or a "
+                "proxy is blocking GitHub \u2014 git works from a terminal on the "
+                "same machine, so try there."
+            )
+        raise UpdateError(
+            f"git {verb} did not finish within {limit}s, working in {cwd}. "
+            "That command does not use the network, so this is a problem with "
+            "the folder rather than with GitHub."
+        )
     if check and proc.returncode != 0:
         raise UpdateError(_friendly_git_error(args, proc))
     return proc
@@ -593,7 +641,40 @@ def _rate_limit_message(reset_epoch) -> str:
             f"else on the same connection. The app works normally meanwhile.")
 
 
-def fetch_latest_release(cfg: AppConfig = CONFIG):
+def remote_release_tag(root: Path | None = None, cfg: AppConfig = CONFIG):
+    """The newest release tag, asked of git rather than of the GitHub API.
+
+    This exists because the two are not equally reachable. A corporate network
+    will commonly carry git over HTTPS to github.com and still block or throttle
+    api.github.com, and the update check used the API for every install - so on
+    a machine where `git pull` worked perfectly from a terminal, the in-app
+    check sat for up to a minute and then reported a timeout. Reported by the
+    user, who stopped using the updater entirely and pulled by hand instead.
+
+    Returns None rather than raising: it is an optimisation, and the API is
+    still there to fall back on.
+    """
+    root = root or cfg.install_root
+    try:
+        proc = _run_git(["ls-remote", "--tags", "--refs", "origin"],
+                        root, check=False, timeout=GIT_LS_REMOTE_TIMEOUT)
+    except UpdateError:
+        return None
+    if proc.returncode != 0:
+        return None
+
+    best = None
+    for line in (proc.stdout or "").splitlines():
+        _, _, ref = line.partition("refs/tags/")
+        tag = ref.strip()
+        if not tag or not re.match(r"^v\d+(\.\d+)*$", tag):
+            continue
+        if best is None or cmp_version(tag, best) > 0:
+            best = tag
+    return best
+
+
+def fetch_latest_release(cfg: AppConfig = CONFIG, timeout: int | None = None):
     import requests
     import time as _time
 
@@ -613,7 +694,8 @@ def fetch_latest_release(cfg: AppConfig = CONFIG):
         headers["If-None-Match"] = _RELEASE_CACHE["etag"]
 
     try:
-        r = requests.get(cfg.api_latest, headers=headers, timeout=NET_TIMEOUT)
+        r = requests.get(cfg.api_latest, headers=headers,
+                         timeout=timeout or NET_TIMEOUT)
     except Exception as e:
         if cached:
             return cached

@@ -470,6 +470,8 @@
 
   var WD_REPO = 'WeirDave/WD-Wireless-Tools';
   var WD_RELEASES_URL = 'https://github.com/' + WD_REPO + '/releases/latest';
+  // Kept for reference only - the browser no longer calls GitHub directly; see
+  // the update check below, which goes through /api/update/status.
   var WD_API_LATEST = 'https://api.github.com/repos/' + WD_REPO + '/releases/latest';
   var WD_UPDATE_CACHE_KEY = 'wd-update-check';
   var WD_UPDATE_DISMISS_KEY = 'wd-update-dismissed';
@@ -1013,32 +1015,37 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (versions) {
         localVersion = versions && versions.suite ? versions.suite : null;
-        return fetch(WD_API_LATEST, {
-          headers: { 'Accept': 'application/vnd.github+json' },
-          cache: 'no-store'
-        });
+        // Ask our own server, not api.github.com directly. The browser used to
+        // make this call itself, with no timeout on it, so on a network that
+        // blocks api.github.com - which a corporate one routinely does while
+        // leaving git alone - opening About sat there and then said it could
+        // not reach GitHub. The server answers the same question from git where
+        // it can, over a route already known to work on that machine.
+        return fetch('/api/update/status', { cache: 'no-store' });
       })
       .then(function (r) {
         if (!r) throw { kind: 'network' };
-        if (!r.ok) {
-          var remaining = r.headers && r.headers.get ? r.headers.get('X-RateLimit-Remaining') : null;
-          var reset = r.headers && r.headers.get ? r.headers.get('X-RateLimit-Reset') : null;
-          if (r.status === 403 && remaining === '0') {
-            throw { kind: 'ratelimit', resetAt: reset ? parseInt(reset, 10) * 1000 : null };
-          }
-          throw { kind: 'http', status: r.status };
-        }
+        if (!r.ok) throw { kind: 'http', status: r.status };
         return r.json();
       })
-      .then(function (release) {
-        var latest = String(release.tag_name || '').replace(/^v/i, '');
-        var url = release.html_url || WD_RELEASES_URL;
+      .then(function (payload) {
+        if (!payload || !payload.latest) {
+          var why = (payload && payload.latestError) || '';
+          // A rate limit is not a broken install, and saying so is the whole
+          // point of telling them apart.
+          throw /rate.?limit/i.test(why) ? { kind: 'ratelimit', resetAt: null }
+                                         : { kind: 'network' };
+        }
+        var latest = String(payload.latest.version || '');
+        var url = payload.latest.url || WD_RELEASES_URL;
         var state = {
           checkedAt: Date.now(),
           localVersion: localVersion,
           latestVersion: latest,
           latestUrl: url,
-          isNewer: latest && localVersion ? _cmpVer(latest, localVersion) > 0 : false
+          isNewer: typeof payload.updateAvailable === 'boolean'
+            ? payload.updateAvailable
+            : (latest && localVersion ? _cmpVer(latest, localVersion) > 0 : false)
         };
         _writeUpdateCache(state);
         _renderUpdateResult(state);
