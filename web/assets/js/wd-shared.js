@@ -475,7 +475,13 @@
   var WD_API_LATEST = 'https://api.github.com/repos/' + WD_REPO + '/releases/latest';
   var WD_UPDATE_CACHE_KEY = 'wd-update-check';
   var WD_UPDATE_DISMISS_KEY = 'wd-update-dismissed';
-  var WD_UPDATE_TTL_MS = 24 * 60 * 60 * 1000;
+  // A day was the right number while every check spent one of GitHub's 60
+  // anonymous API calls an hour, shared by everyone behind the same address.
+  // Since v2.98.1 a git install is answered by `git ls-remote` through our own
+  // server, which has no such limit, and the server caches the API for the ZIP
+  // path - so the background check can be current instead of merely cheap. At
+  // an hour, a page refresh means something again.
+  var WD_UPDATE_TTL_MS = 60 * 60 * 1000;
   var WD_ABOUT_ID = 'wdAboutModal';
 
   function _readUpdateCache() {
@@ -568,12 +574,21 @@
     _ensureAboutModal();
     document.querySelectorAll('.main-menu.open, .help-menu.open, .wd-menu.open')
       .forEach(function (m) { m.classList.remove('open'); });
+    // Show what we knew, so the panel is never blank...
     var cached = _readUpdateCache();
     if (cached) {
       if (cached.error) _renderUpdateError(cached);
       else _renderUpdateResult(cached);
     }
     document.getElementById(WD_ABOUT_ID).classList.add('active');
+
+    // ...then find out whether it is still true. Opening About is the act of
+    // asking, so answering from a cache and saying "you have the latest
+    // version" was an assertion this panel had not earned: a release could
+    // have landed since, and one had - pressing Check right afterwards found
+    // it. The check is fast and rate-limit-free for a git install now, so
+    // there is nothing left to save by not doing it.
+    WD.checkForUpdates({ force: true });
   };
 
   WD.closeAbout = function () {
