@@ -650,17 +650,75 @@ def _inject(members: dict, chain: list, id_map: dict):
     return last
 
 
+def _base_name(label: str) -> str:
+    """A profile name with its qualifying suffix removed.
+
+    Ekahau names the same stock profile differently across versions and across
+    the panel it is read from: "Normal SLA (2 Mbps)" and "Normal SLA",
+    "Conferencing, GoToMeeting" and "Conferencing", "Generic Wi-Fi 6E Laptop"
+    and "Generic Wi-Fi 6E Laptop, Wi-Fi 6 2x2:2 160MHz". The stem before the
+    comma or the bracket is the part that survives, so that is what a template
+    captured on one project is matched on when applied to another.
+    """
+    s = str(label or "")
+    s = re.sub(r"\s*\([^)]*\)\s*$", "", s)      # trailing "(2 Mbps)"
+    s = s.split(",")[0]                          # ", GoToMeeting", ", Wi-Fi 6 2x2:2"
+    return " ".join(s.split()).casefold()
+
+
 def _resolve_profile(members, defs_chain, label, collection, id_map, created):
-    """Find a profile by name in the target, or inject the captured one."""
-    existing = _collection_lookup(members, collection).get(label)
+    """Find a profile by name in the target, or inject the captured one.
+
+    Name, never id. Ekahau mints fresh uuids per project, so a template's ids
+    exist nowhere but the project it was captured from; the name is the only
+    thing that crosses. Exact first, then on the stem - and a stem that matches
+    more than one profile is reported as ambiguous rather than guessed at,
+    because picking one of two real profiles silently is how a project ends up
+    quietly describing the wrong devices.
+    """
+    lookup = _collection_lookup(members, collection)
+    existing = lookup.get(label)
     if existing:
         return existing, None
+
+    stem = _base_name(label)
+    if stem:
+        hits = sorted({name for name in lookup if _base_name(name) == stem})
+        if len(hits) == 1:
+            return lookup[hits[0]], None
+        if len(hits) > 1:
+            return None, {"label": label, "reason": "ambiguous", "candidates": hits}
+
     if not defs_chain:
-        return None, label
+        return None, {"label": label, "reason": "absent", "candidates": []}
     new_id = _inject(members, defs_chain, id_map)
     if new_id:
         created.append(label)
     return new_id, None
+
+
+def _missing_message(missing) -> str:
+    """Say which profiles could not be resolved, and what to do about it."""
+    ambiguous = [m for m in missing if m.get("reason") == "ambiguous"]
+    absent = [m for m in missing if m.get("reason") != "ambiguous"]
+    parts = []
+    if absent:
+        names = ", ".join("%s “%s”" % (m["kind"], m["label"]) for m in absent)
+        parts.append(
+            "This project does not have: " + names + ". "
+            "Ekahau ships these as stock content in a new project, so if this is "
+            "a project you have just created, check the names match what your "
+            "Ekahau version calls them - they differ between releases. "
+            "Otherwise add them in Ekahau, or capture the template again from a "
+            "project that has them so it can bring its own copies."
+        )
+    for m in ambiguous:
+        parts.append(
+            "%s “%s” matches more than one profile in this project (%s). "
+            "Rename the template's row, or the profiles, so one is meant."
+            % (m["kind"], m["label"], ", ".join(m["candidates"]))
+        )
+    return " ".join(parts)
 
 
 def apply_to(src_path, dest_path, template, occupants,
@@ -717,14 +775,14 @@ def apply_to(src_path, dest_path, template, occupants,
                 row["device"], "deviceProfiles", id_map, created)
             device_ids[row["device"]] = got
             if miss:
-                missing.append("device profile “%s”" % miss)
+                missing.append(dict(miss, kind="device profile"))
         if row["usage"] not in usage_ids:
             got, miss = _resolve_profile(
                 members, (defs.get("usages") or {}).get(row["usage"]),
                 row["usage"], "usageProfiles", id_map, created)
             usage_ids[row["usage"]] = got
             if miss:
-                missing.append("usage profile “%s”" % miss)
+                missing.append(dict(miss, kind="usage profile"))
 
     req_name = template.get("requirementName") or ""
     req_id = None
@@ -732,17 +790,17 @@ def apply_to(src_path, dest_path, template, occupants,
         req_id, req_missing = _resolve_profile(
             members, defs.get("requirement"), req_name, "requirements", id_map, created)
         if req_missing:
-            missing.append("requirement “%s”" % req_missing)
+            missing.append(dict(req_missing, kind="requirement"))
 
     if missing:
         # Refusing is the right answer. Capacity items pointing at profiles the
         # file does not contain produce a project that opens and is quietly
-        # wrong, which is worse than not writing at all.
+        # wrong, which is worse than not writing at all. But the message has to
+        # say which case this is: a name Ekahau ships under a slightly
+        # different spelling is a different problem from a profile nobody has,
+        # and "re-capture the template" is useless advice for the first.
         return {"ok": False, "missing": missing,
-                "error": "This template does not carry definitions for, and the target "
-                         "project does not have: " + ", ".join(missing)
-                         + ". Re-capture the template from its source project, or add "
-                           "those profiles in Ekahau first."}
+                "error": _missing_message(missing)}
 
     areas_body = members.get("areas.json")
     if not isinstance(areas_body, dict):
