@@ -821,22 +821,47 @@
   // live in a separate card below the canvas, which is how the flow came apart:
   // the state was on the page but not beside the thing it described, so there
   // was nothing to tell him what had registered or how much was left.
+  /* The strip reported the outcome and never the input, so a floor the user had
+     drawn a box on could read "Automatic" - the page crediting the machine for
+     a decision he made. Whatever happened, if there is a box on this floor the
+     row says so, and a box that did not get used says that rather than going
+     quiet.
+
+     The box check is inline rather than a helper above this function because
+     tests slice this file from `function floorState` and a helper outside that
+     boundary is simply undefined when they run it. */
   function floorState(rep, id) {
+    var savedBox = box.boxes && box.boxes[id];
+    var drawn = !!(savedBox && savedBox.length === 4);
     var f = null;
     ((rep && rep.floors) || []).forEach(function (x) { if (x.id === id) f = x; });
-    if (!f) return { word: 'Reading\u2026', cls: 'is-pending', detail: '' };
+    if (!f) {
+      return drawn
+        ? { word: 'Your box', cls: 'is-manual', detail: 'drawn \u2014 not cropped yet' }
+        : { word: 'Reading\u2026', cls: 'is-pending', detail: '' };
+    }
     if (f.action === 'trimmed') {
       var dims = f.oldSize[0] + '\u00d7' + f.oldSize[1] + ' \u2192 ' +
                  f.newSize[0] + '\u00d7' + f.newSize[1];
       var saved = (f.areaSavedPct ? '  \u2212' + f.areaSavedPct + '%' : '');
-      return f.source === 'manual'
-        ? { word: 'Your box', cls: 'is-manual', detail: dims + saved }
-        : { word: 'Automatic', cls: 'is-auto', detail: dims + saved };
+      if (f.source === 'manual') {
+        return { word: 'Your box', cls: 'is-manual', detail: dims + saved };
+      }
+      return {
+        word: 'Automatic', cls: 'is-auto',
+        detail: dims + saved + (drawn ? '  \u00b7 your box was not used' : ''),
+      };
     }
     if (f.action === 'skipped') {
-      return { word: 'Nothing to do', cls: 'is-skip', detail: f.reason || '' };
+      return {
+        word: 'Nothing to do', cls: 'is-skip',
+        detail: (f.reason || '') + (drawn ? '  \u00b7 your box is still saved' : ''),
+      };
     }
-    return { word: 'Cannot crop', cls: 'is-refused', detail: f.reason || '' };
+    return {
+      word: 'Cannot crop', cls: 'is-refused',
+      detail: (f.reason || '') + (drawn ? '  \u00b7 your box is still saved' : ''),
+    };
   }
 
   // Ekahau lets the customer name a floor, and what comes back is usually the
