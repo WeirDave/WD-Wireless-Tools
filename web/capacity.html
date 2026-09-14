@@ -58,6 +58,7 @@
 .cap-badge--create { background: var(--green-bg); color: var(--green-dark); }
 .cap-badge--skip { background: var(--surface-2); color: var(--text-3); }
 .cap-badge--replace { background: var(--amber-bg); color: var(--amber-dark); }
+.cap-badge--yours { background: var(--blue-bg, #e6f0ff); color: var(--blue, #0068FF); }
 .cap-facts { font-size: 12px; color: var(--text-2); line-height: 1.7; }
 .cap-facts b { color: var(--text); }
 .cap-warn {
@@ -210,8 +211,10 @@
         </label>
       </div>
       <p class="cap-hint">
-        A floor that already has a requirement area is left alone unless you tick that box.
-        A hand-drawn area is real work and is never replaced without being asked for.
+        An area you drew yourself is filled in, not replaced &mdash; your outline is kept
+        exactly as it is and only the devices are written into it. A floor is left alone
+        only when its area <em>already carries capacity items</em>, since overwriting
+        those would discard numbers you set; tick the box to replace them.
       </p>
       <div id="capPlan"></div>
 

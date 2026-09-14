@@ -294,13 +294,16 @@ class PlanTests(unittest.TestCase):
     def test_replacing_is_possible_but_has_to_be_asked_for(self):
         got = cap.plan_application(self.esx, self.tpl, 200, replace_existing=True)
         self.assertEqual(got["willWrite"], 1)
-        self.assertEqual(got["floors"][0]["action"], "replace existing")
+        self.assertEqual(got["floors"][0]["mode"], "replace")
+        self.assertIn("replace the 6 capacity items", got["floors"][0]["action"])
 
     def test_a_floor_with_no_requirement_is_created(self):
         path = build_esx(Path(self.tmp.name) / "bare.esx", areas=[])
         got = cap.plan_application(path, self.tpl, 200)
         self.assertEqual(got["willWrite"], 1)
-        self.assertEqual(got["floors"][0]["action"], "create")
+        # `action` is prose for the user; `mode` is the stable contract.
+        self.assertEqual(got["floors"][0]["mode"], "create")
+        self.assertIn("create an area", got["floors"][0]["action"])
 
     def test_the_preview_carries_the_counts_that_would_be_written(self):
         got = cap.plan_application(self.esx, self.tpl, 200)

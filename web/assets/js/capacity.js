@@ -216,22 +216,37 @@
           + '</td><td class="cap-n">' + x.deviceCount + '</td></tr>';
       }).join('');
       var floors = r.floors.map(function (f) {
-        var cls = f.skipped ? 'skip' : (f.hasExistingRequirement ? 'replace' : 'create');
+        var cls = f.skipped ? 'skip' : (f.mode === 'populate' ? 'yours'
+                 : f.mode === 'replace' ? 'replace' : 'create');
         var size = f.widthFt
           ? f.widthFt + ' &times; ' + f.heightFt + ' ft'
           : 'size unknown — this floor plan has no scale set';
+        // What happens to THIS floor, in the terms that matter to him: whether
+        // his own outline is being used, and whether anything of his is at
+        // risk. The computed extent is only relevant when we are making one.
+        var facts;
+        if (f.mode === 'populate') {
+          facts = 'Using the area you drew'
+            + (f.targetAreaName ? ' (<b>' + esc(f.targetAreaName) + '</b>)' : '')
+            + (f.targetVertexCount ? ', ' + f.targetVertexCount + ' points' : '')
+            + ' — the outline is not changed, only the devices are written into it.';
+        } else if (f.mode === 'replace') {
+          facts = 'This area already carries <b>' + (f.existingItemCount || 0)
+            + '</b> capacity item' + (f.existingItemCount === 1 ? '' : 's')
+            + '. Tick the box above to overwrite them; your outline is kept either way.';
+        } else {
+          facts = 'Area from <b>' + esc(basisWords(f.basis)) + '</b>'
+            + (f.padMeters ? ' plus ' + f.padMeters + ' m padding' : '')
+            + ' &mdash; <b>' + size + '</b>'
+            + (f.fractionOfCanvas != null
+                ? ' <span class="cap-sub">(' + (f.fractionOfCanvas * 100).toFixed(1)
+                  + '% of the page)</span>' : '');
+        }
         return '<div class="cap-floor">'
           + '<div class="cap-floor-head"><span class="cap-floor-name">'
           + esc(f.floorName || 'Floor plan') + '</span>'
           + '<span class="cap-badge cap-badge--' + cls + '">' + esc(f.action) + '</span></div>'
-          + '<div class="cap-facts">'
-          + 'Area from <b>' + esc(basisWords(f.basis)) + '</b>'
-          + (f.padMeters ? ' plus ' + f.padMeters + ' m padding' : '')
-          + ' &mdash; <b>' + size + '</b>'
-          + (f.fractionOfCanvas != null
-              ? ' <span class="cap-sub">(' + (f.fractionOfCanvas * 100).toFixed(1)
-                + '% of the page)</span>' : '')
-          + '</div></div>';
+          + '<div class="cap-facts">' + facts + '</div></div>';
       }).join('');
       host.innerHTML =
         '<table class="cap-table"><thead><tr><th>Device profile</th><th>Usage profile</th>'
@@ -240,7 +255,7 @@
         + '<td class="cap-n cap-total">' + r.totalDevices + '</td></tr></tbody></table>'
         + '<div style="margin-top:14px">' + floors + '</div>'
         + '<p class="cap-hint">' + r.willWrite + ' floor'
-        + (r.willWrite === 1 ? '' : 's') + ' would get a requirement area, '
+        + (r.willWrite === 1 ? '' : 's') + ' would be written, '
         + r.willSkip + ' left alone.'
         + (r.orphanAreasIgnored ? ' ' + r.orphanAreasIgnored
             + ' orphaned area ignored.' : '') + '</p>';
