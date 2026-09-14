@@ -524,6 +524,45 @@ def area_for_floor(members, floor, image_bounds=None):
     return out
 
 
+def _polygon_area(area) -> float:
+    """Shoelace, for picking the area he actually drew the requirement on."""
+    pts = [p for p in (area.get("area") or []) if isinstance(p, dict)]
+    if len(pts) < 3:
+        return 0.0
+    total = 0.0
+    for i in range(len(pts)):
+        a, b = pts[i], pts[(i + 1) % len(pts)]
+        try:
+            total += float(a.get("x", 0)) * float(b.get("y", 0))
+            total -= float(b.get("x", 0)) * float(a.get("y", 0))
+        except (TypeError, ValueError):
+            return 0.0
+    return abs(total) / 2.0
+
+
+def _area_to_populate(areas):
+    """Which drawn area on this floor should receive the capacity items.
+
+    An area already marked as a requirement is the one he meant; failing that,
+    the largest, because a requirement area covers the space being designed for
+    and the small ones tend to be exclusions or annotations.
+    """
+    candidates = [a for a in areas if not a.get("capacityItems")]
+    if not candidates:
+        return None
+    flagged = [a for a in candidates if a.get("requirementId")]
+    pool = flagged or candidates
+    return max(pool, key=_polygon_area)
+
+
+def _basis_words(basis) -> str:
+    return {
+        "walls": "the walls you drew",
+        "aps": "where the APs are",
+        "image": "the floor plan image",
+    }.get(basis, "the whole page")
+
+
 def plan_application(esx_path, template, occupants, replace_existing=False):
     """Work out what applying this template would do, without writing anything.
 
@@ -543,30 +582,64 @@ def plan_application(esx_path, template, occupants, replace_existing=False):
               if isinstance(f, dict) and f.get("id")]
     live = {f["id"] for f in floors}
 
-    # Which floors already carry a requirement. Matched on floorPlanId only:
-    # `key` and the display name both drift between Ekahau versions, and
-    # `isDefault` means "shipped by Ekahau", not "the one in use".
-    existing = set()
+    # Areas per live floor. Matched on floorPlanId only: `key` and the display
+    # name both drift between Ekahau versions, and `isDefault` means "shipped
+    # by Ekahau", not "the one in use".
+    #
+    # The distinction that matters is NOT whether an area exists - it is
+    # whether that area already carries capacity items.
+    #
+    #   nothing drawn          create an area from the computed extent
+    #   an area, no capacity   fill it in, keeping his polygon exactly
+    #   an area with capacity  leave alone unless replacement is asked for
+    #
+    # Only the third discards anything he set. Treating all three as "already
+    # has a requirement area" is what stopped a hand-drawn area - sixteen
+    # vertices of real work - from ever being populated, which is the whole
+    # reason he draws one.
+    by_floor = {}
     orphans = 0
     for area in (members.get("areas.json") or {}).get("areas", []):
         if not isinstance(area, dict):
             continue
-        if not (area.get("requirementId") or area.get("capacityItems")):
-            continue
         fid = area.get("floorPlanId")
         if fid in live:
-            existing.add(fid)
-        else:
+            by_floor.setdefault(fid, []).append(area)
+        elif area.get("requirementId") or area.get("capacityItems"):
             orphans += 1
 
     plans = []
     for floor in floors:
         info = area_for_floor(members, floor)
-        already = floor["id"] in existing
-        info["hasExistingRequirement"] = already
-        info["skipped"] = already and not replace_existing
-        info["action"] = ("skip - already has a requirement area" if info["skipped"]
-                          else "replace existing" if already else "create")
+        here = by_floor.get(floor["id"], [])
+        with_capacity = [a for a in here if a.get("capacityItems")]
+        target = _area_to_populate(here)
+
+        if with_capacity:
+            info["mode"] = "replace"
+            info["targetAreaId"] = with_capacity[0].get("id")
+            info["existingItemCount"] = len(with_capacity[0].get("capacityItems") or [])
+            info["skipped"] = not replace_existing
+            info["action"] = (
+                "skip - this area already has %d capacity items"
+                % info["existingItemCount"] if info["skipped"]
+                else "replace the %d capacity items already on your area"
+                % info["existingItemCount"])
+        elif target is not None:
+            info["mode"] = "populate"
+            info["targetAreaId"] = target.get("id")
+            info["targetAreaName"] = target.get("name") or ""
+            info["targetVertexCount"] = len(target.get("area") or [])
+            info["skipped"] = False
+            info["action"] = ("your area - adding %d capacity items, "
+                              "your outline is not changed" % len(counts["rows"]))
+        else:
+            info["mode"] = "create"
+            info["skipped"] = False
+            info["action"] = "create an area from %s" % _basis_words(info.get("basis"))
+
+        # Kept for callers written against the old shape.
+        info["hasExistingRequirement"] = bool(with_capacity)
         info["rows"] = counts["rows"]
         info["totalDevices"] = counts["totalDevices"]
         plans.append(info)
@@ -818,43 +891,63 @@ def apply_to(src_path, dest_path, template, occupants,
     # delete it. On one real project this distinction is the difference between
     # removing one area and removing seven. Whatever is left standing is
     # counted and reported rather than passed over in silence.
-    replaced, left_in_place = 0, 0
-    if replace_existing and target_ids:
-        keep = []
-        for area in areas:
-            if isinstance(area, dict) and area.get("floorPlanId") in target_ids:
-                if area.get("capacityItems"):
-                    replaced += 1
-                    continue
-                if area.get("requirementId"):
-                    left_in_place += 1
-            keep.append(area)
-        areas[:] = keep
+    by_id = {a.get("id"): a for a in areas if isinstance(a, dict)}
 
+    def items_for():
+        return [
+            {
+                "identifier": _new_id(),
+                "deviceCount": row["deviceCount"],
+                "usageProfileId": usage_ids[row["usage"]],
+                "deviceProfileId": device_ids[row["device"]],
+            }
+            for row in counts["rows"] if row["deviceCount"] > 0
+        ]
+
+    # No area is ever deleted, in any of the three cases. Where one already
+    # exists the items are written into it and the polygon, name, colour and
+    # notes are left exactly as he drew them - replacing a capacity template is
+    # not permission to redraw his outline, and on a hand-drawn requirement
+    # area that outline is the work.
+    replaced, populated = 0, 0
     written = []
     for floor in write_floors:
-        area = {
-            "floorPlanId": floor["floorPlanId"],
-            "name": template.get("name") or "Capacity",
-            "noteIds": [],
-            "capacityItems": [
-                {
-                    "identifier": _new_id(),
-                    "deviceCount": row["deviceCount"],
-                    "usageProfileId": usage_ids[row["usage"]],
-                    "deviceProfileId": device_ids[row["device"]],
-                }
-                for row in counts["rows"] if row["deviceCount"] > 0
-            ],
-            "color": "#2c3e50",
-            "area": [{"x": p["x"], "y": p["y"]} for p in floor["polygon"]],
-            "id": _new_id(),
-            "status": "CREATED",
-        }
-        if req_id:
-            area["requirementId"] = req_id
-        areas.append(area)
+        mode = floor.get("mode") or "create"
+        target = by_id.get(floor.get("targetAreaId")) if floor.get("targetAreaId") else None
+
+        if mode in ("populate", "replace") and target is not None:
+            if target.get("capacityItems"):
+                replaced += 1
+            else:
+                populated += 1
+            target["capacityItems"] = items_for()
+            if req_id:
+                target["requirementId"] = req_id
+        else:
+            area = {
+                "floorPlanId": floor["floorPlanId"],
+                "name": template.get("name") or "Capacity",
+                "noteIds": [],
+                "capacityItems": items_for(),
+                "color": "#2c3e50",
+                "area": [{"x": p["x"], "y": p["y"]} for p in floor["polygon"]],
+                "id": _new_id(),
+                "status": "CREATED",
+            }
+            if req_id:
+                area["requirementId"] = req_id
+            areas.append(area)
         written.append(floor["floorName"] or floor["floorPlanId"])
+
+    # Other areas on the floors written to: a lobby, an aisle, an exclusion.
+    # Untouched, and said out loud so "replace" is never read as "delete
+    # everything that was drawn here".
+    touched = {f.get("targetAreaId") for f in write_floors if f.get("targetAreaId")}
+    left_in_place = sum(
+        1 for a in areas
+        if isinstance(a, dict) and a.get("floorPlanId") in target_ids
+        and a.get("id") not in touched and a.get("requirementId")
+        and not a.get("capacityItems"))
 
     # Build the new archive beside the destination first, so a failure part-way
     # through never lands on top of a real project.
@@ -897,6 +990,7 @@ def apply_to(src_path, dest_path, template, occupants,
         "floorsSkipped": [f["floorName"] or f["floorPlanId"]
                           for f in plan["floors"] if f["skipped"]],
         "areasReplaced": replaced,
+        "areasPopulated": populated,
         "areasLeftInPlace": left_in_place,
         "profilesCreated": created,
         "orphanAreasIgnored": plan["orphanAreasIgnored"],

@@ -17,7 +17,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
 from tools import capacity_profiles as cap  # noqa: E402
-from test_capacity_profiles import DEAD_FLOOR, FLOOR, build_esx  # noqa: E402
+from test_capacity_profiles import (  # noqa: E402
+    DEAD_FLOOR, FLOOR, LAPTOP, NORMAL, build_esx)
 
 
 def members_of(path):
@@ -192,12 +193,19 @@ class WriterTests(unittest.TestCase):
         self.assertIn("not changed", r["note"])
 
     def test_profiles_are_not_injected_when_no_area_will_be_written(self):
-        """The bug this guards: 5 profiles added to a project, used by nothing."""
-        no_capacity_but_has_areas = Path(build_esx(
+        """The bug this guards: 5 profiles added to a project, used by nothing.
+
+        The floor has to already carry *capacity* for nothing to be written.
+        An area with no capacity items is now filled in rather than skipped,
+        which is the point of v2.98.9.
+        """
+        already_full = Path(build_esx(
             self.dir / "zoned.esx",
             areas=[{"id": "zone-1", "floorPlanId": FLOOR, "requirementId": "req-1",
+                    "capacityItems": [{"deviceCount": 5, "deviceProfileId": LAPTOP,
+                                       "usageProfileId": NORMAL}],
                     "area": [{"x": 10.0, "y": 10.0}, {"x": 20.0, "y": 20.0}]}]))
-        r = cap.apply_to(no_capacity_but_has_areas, self.dir / "zoned-out.esx",
+        r = cap.apply_to(already_full, self.dir / "zoned-out.esx",
                          self.template, 100)
         self.assertTrue(r["ok"])
         self.assertEqual(r["profilesCreated"], [])
