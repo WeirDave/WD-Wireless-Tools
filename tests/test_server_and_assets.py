@@ -512,13 +512,37 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
         # no version at all, so there is nothing left to fall out of date.
 
     def test_backlog_contains_only_current_unfinished_work(self):
-        backlog = (ROOT / "BACKLOG.md").read_text(encoding="utf-8")
+        """The long-standing open items are still named, and shipped work is not.
+
+        Matched case-insensitively: these assert that an item is still tracked,
+        not how its heading happens to be capitalised. The 2026-09-14 rewrite
+        turned the headings into sentence case and broke all three on nothing
+        but a capital letter.
+        """
+        backlog = (ROOT / "BACKLOG.md").read_text(encoding="utf-8").lower()
         self.assertIn("bulk merge many folders into one", backlog)
-        self.assertIn("manual External override", backlog)
-        self.assertIn("Change / Audit report", backlog)
-        self.assertNotIn("Recently shipped", backlog)
-        self.assertNotIn("Process reminders", backlog)
-        self.assertNotIn("PROJECT_MEMORY", backlog)
+        self.assertIn("manual external override", backlog)
+        self.assertIn("change / audit report", backlog)
+        for gone in ("recently shipped", "process reminders", "project_memory"):
+            with self.subTest(must_not_appear=gone):
+                self.assertNotIn(gone, backlog)
+
+    def test_backlog_separates_work_from_decisions(self):
+        """A queue that mixes settled decisions into it is a queue nobody trusts.
+
+        The AP-notes ordering entry sat in the open list for weeks saying "no
+        action now" in its own text. Decisions live in their own section now,
+        and so do the items blocked on a call rather than on effort.
+        """
+        backlog = (ROOT / "BACKLOG.md").read_text(encoding="utf-8")
+        for heading in ("## Open work",
+                        "## Awaiting a decision, not work",
+                        "## Decisions already made"):
+            with self.subTest(section=heading):
+                self.assertIn(heading, backlog)
+        # The ordering rationale is a decision, not pending work.
+        decisions = backlog[backlog.index("## Decisions already made"):]
+        self.assertIn("Where the AP Notes section sits", decisions)
 
     def test_html_references_existing_local_assets(self):
         asset_pattern = re.compile(r'''(?:src|href)=["'](/assets/[^"'?#]+)''')
