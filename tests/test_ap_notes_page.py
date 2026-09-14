@@ -200,14 +200,38 @@ class NotesRendering(unittest.TestCase):
         done();
         """)
 
-    def test_the_checkbox_gates_the_pages(self):
+    def test_auto_always_never_gate_the_pages(self):
+        """Auto is the default: notes appear when the project actually has them."""
         self.run_block(r"""
         const ctx = ctxWith({ n1: { id: 'n1', text: 'note', imageIds: [] } });
         const aps = [{ name: 'AP1', noteIds: ['n1'] }];
-        check('off by default', wantsApNotes(aps, {}, ctx) === false);
-        check('on when ticked', wantsApNotes(aps, { apNotes: true }, ctx) === true);
-        check('ticked but nothing to show stays off',
-              wantsApNotes([{ name: 'AP2', noteIds: [] }], { apNotes: true }, ctx) === false);
+        const none = [{ name: 'AP2', noteIds: [] }];
+        check('auto is the default', wantsApNotes(aps, {}, ctx) === true);
+        check('auto with no notes stays off', wantsApNotes(none, {}, ctx) === false);
+        check('never means never', wantsApNotes(aps, { apNotes: 'never' }, ctx) === false);
+        check('always means always', wantsApNotes(none, { apNotes: 'always' }, ctx) === true);
+        check('auto named explicitly behaves as auto',
+              wantsApNotes(aps, { apNotes: 'auto' }, ctx) === true);
+        done();
+        """)
+
+    def test_a_saved_checkbox_value_still_means_what_he_chose(self):
+        """It was a checkbox until v2.98.8 and saved defaults are still booleans.
+
+        Reading a saved `false` as "auto" would put site notes into a
+        deliverable for the one person who had deliberately switched them off.
+        """
+        self.run_block(r"""
+        const ctx = ctxWith({ n1: { id: 'n1', text: 'note', imageIds: [] } });
+        const aps = [{ name: 'AP1', noteIds: ['n1'] }];
+        check('a saved false still means never',
+              wantsApNotes(aps, { apNotes: false }, ctx) === false);
+        check('a saved true still means always',
+              wantsApNotes([{ name: 'AP2', noteIds: [] }], { apNotes: true }, ctx) === true);
+        check('mode maps false to never', apNotesMode({ apNotes: false }) === 'never');
+        check('mode maps true to always', apNotesMode({ apNotes: true }) === 'always');
+        check('mode defaults to auto', apNotesMode({}) === 'auto');
+        check('mode survives no opts at all', apNotesMode() === 'auto');
         done();
         """)
 
@@ -327,7 +351,7 @@ class NotesReachPaper(unittest.TestCase):
         separate keys read in separate places and must stay that way - including
         notes is an audience and privacy call, not a formatting one.
         """
-        self.assertIn("opts.apNotes", self.js)
+        self.assertIn("apNotes", self.js)
         self.assertIn("opts.nameKey", self.js)
         # Neither gate may mention the other.
         end_of_fn = "\n  }"
@@ -341,9 +365,11 @@ class NotesReachPaper(unittest.TestCase):
     def test_the_notes_option_says_why_it_is_off(self):
         """His reason for wanting it separate, kept where the choice is made."""
         start = self.js.index("id: 'apNotes'")
-        entry = self.js[start:start + 900]
-        self.assertIn("not always meant for a client", entry)
-        self.assertIn("independent of every other option", entry)
+        entry = self.js[start:start + 1400]
+        self.assertIn("not always meant for a", entry)
+        self.assertIn("Independent of every other option", entry)
+        # The action, not just the reason: what to do before handing it over.
+        self.assertIn("set this to Never", entry)
 
     def test_the_choice_persists_with_the_other_report_options(self):
         """It is swept up by the per-report defaults button like any checkbox.
@@ -359,8 +385,8 @@ class NotesReachPaper(unittest.TestCase):
     def test_the_option_is_registered_on_the_placement_report(self):
         self.assertIn("id: 'apNotes'", self.js)
         idx = self.js.index("id: 'apNotes'")
-        block = self.js[idx:idx + 900]
-        self.assertIn("default: false", block)
+        block = self.js[idx:idx + 1400]
+        self.assertIn("default: 'auto'", block)
         self.assertIn("Text only", block)
 
     def test_notes_are_read_from_the_project(self):
