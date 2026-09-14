@@ -5,7 +5,7 @@ history and GitHub Releases.
 
 Priorities: **P1** = blocking · **P2** = wanted · **P3** = future enhancement.
 
-Last reviewed against **v2.98.5**, 2026-09-14.
+Last reviewed against **v2.98.8**, 2026-09-14.
 
 > **What the 2026-09-14 review found.** The previous review was against
 > v2.69.0 — twenty-nine releases stale — and the problem was the opposite of
@@ -145,21 +145,7 @@ BiDi path, page count asserted.
 
 ### PlanTrim
 
-#### 8. P2 — The floor strip says "Automatic" for a floor that has a drawn box
-
-`floorState()` in `web/assets/js/plantrim.js` is given the trim report and
-nothing else. It never consults `box.boxes`, so a floor where the user drew a
-box that the trim did not end up using reads as **Automatic** — with no hint
-that a box exists at all.
-
-That is the one case where the strip is actively misleading rather than merely
-terse: it reports the outcome and hides the input. The user drew something and
-the page says the machine decided.
-
-**Done** is: a floor with a saved box says so, whichever way the crop went, and
-a box that was drawn but not used says that it was not used and why.
-
-#### 9. P3 — Only PNG, JPEG and SVG floor plans can be cropped
+#### 8. P3 — Only PNG, JPEG and SVG floor plans can be cropped
 
 `image_kind()` in `tools/esx_trimmer.py` returns `PNG`, `JPEG`, `SVG` or
 `UNKNOWN`, and `UNKNOWN` is refused. Ekahau accepts more than that — BMP, WBMP
@@ -175,7 +161,7 @@ higher.
 
 ### Quick Walls
 
-#### 10. P2 — The wall audit is built, tested, and unreachable
+#### 9. P2 — The wall audit is built, tested, and unreachable
 
 `tools/wall_audit.py` exists with 15 passing tests, and `scripts/audit_walls.py`
 drives it from a terminal. There is **no server route and no UI** — grep finds
@@ -194,7 +180,7 @@ is a route plus a panel.
 
 ### Suite-wide
 
-#### 11. P3 — The Firefox scrollbar styling was shipped unverified
+#### 10. P3 — The Firefox scrollbar styling was shipped unverified
 
 `wd-tools.css` carries one `scrollbar-width` / `scrollbar-color` rule. Firefox
 is the browser he actually uses, and this has never been looked at in it. It is
@@ -202,7 +188,7 @@ cosmetic, so it is P3 — but it is also five minutes with the BiDi path that is
 now established, and print work has twice shipped wrong by being checked in the
 wrong engine.
 
-#### 12. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
+#### 11. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
 
 A finding about going from DWG to `.esx` was established in an earlier session
 and never recorded, so the next session will redo the work.
@@ -224,16 +210,7 @@ so they can be answered together.
   **AP Notes** at his request. The label page beside it still says **AP Label
   Reference**, so two sibling pages are named two different ways. Options:
   leave it, `AP Labels`, or `AP Label Key`.
-- **AP Notes pages on report types beyond the AP Placement Map.** `compassRef`
-  already appears on **Antenna Aim** and **Location**, which makes those the
-  natural candidates. Notes exist only on Placement today.
-- **Auto / Always / Never for the notes pages.** Today it is a checkbox, off by
-  default. The compass page uses a three-way select. Consistency argues for a
-  select; the privacy reasoning behind notes being opt-in argues for keeping a
-  plain off switch.
-- **Squirrel Rename has no link anywhere.** `/rename` is routed in `server.py`
-  and reachable only by typing the URL. Either it gets a menu entry or it is
-  deliberately internal — it has never been decided which.
+
 
 ---
 
@@ -241,6 +218,20 @@ so they can be answered together.
 
 Not work. Recorded because each was settled once and would otherwise be
 rediscovered as an open question.
+
+### Squirrel Rename is reachable, and the audit was wrong about it
+
+Recorded because this was raised as a gap and should not be raised again.
+
+`/rename` was reported as having "no link from any page". That was an audit
+looking in the wrong place: it swept the suite-wide navigation menus and found
+nothing. Rename is linked from **Squirrel's own page**, which is where a
+sub-tool of Squirrel belongs - his words, "rename is located on the main page
+of squirrel so not understanding this either."
+
+The lesson is about the audit rather than the app: "no link in any menu" is not
+the same as "unreachable", and a grep for menu entries cannot tell the
+difference. Check the owning tool's page before calling something orphaned.
 
 ### Where the AP Notes section sits: last, deliberately
 

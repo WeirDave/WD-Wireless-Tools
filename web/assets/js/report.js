@@ -3415,11 +3415,47 @@
     return aps.filter(function (ap) { return notesForAp(ap, ctx).length > 0; });
   }
 
+  /* Auto / Always / Never, the same shape the compass and label-reference
+     pages use. It was a checkbox until v2.98.8, so a saved default is still a
+     boolean for anyone who set one: false is the person who deliberately
+     turned notes off and must keep getting no notes pages, true is the person
+     who turned them on. Reading those as 'auto' would put site notes into a
+     deliverable for someone who had switched them off, which is the one
+     mistake this option exists to avoid. */
+  function apNotesMode(opts) {
+    var v = (opts || {}).apNotes;
+    if (v === true) return 'always';
+    if (v === false) return 'never';
+    return v || 'auto';
+  }
+
   function wantsApNotes(aps, opts, ctx) {
-    if (!opts.apNotes) return false;
+    var mode = apNotesMode(opts);
+    if (mode === 'never') return false;
+    if (mode === 'always') return true;
     return apsWithNotes(aps, ctx).length > 0;
   }
 
+  /* Every report can carry the notes pages, so the per-floor loop lives here
+     rather than being copied into each renderer. A floor with no notes
+     contributes nothing, so "always" on a project without notes is simply an
+     empty answer rather than a page saying nothing. */
+  function apNotesPages(aps, opts, ctx) {
+    if (!wantsApNotes(aps, opts, ctx)) return '';
+    var byFloor = groupApsByFloor(aps, ctx);
+    var out = '';
+    var idx = 0;
+    sortedFloorOrder(byFloor).forEach(function (fp) {
+      var floorAps = byFloor[fp.id];
+      if (!floorAps || !floorAps.length) return;
+      var sec = renderApNotesSection(fp, floorAps, opts, ctx, idx);
+      if (sec) { out += sec; idx++; }
+    });
+    return out;
+  }
+
+  /* One page per floor, same order and same heading as the map it belongs to,
+     so a note sits with the plan it was written on. */
   /* One page per floor, same order and same heading as the map it belongs to,
      so a note sits with the plan it was written on. */
   function renderApNotesSection(fp, aps, opts, ctx, floorIdx) {
@@ -3493,15 +3529,7 @@
       });
     }
     // Notes follow the label reference, again one page per floor in map order.
-    if (wantsApNotes(aps, opts, ctx)) {
-      var nidx = 0;
-      floorOrder.forEach(function (fp) {
-        var floorAps = byFloor[fp.id];
-        if (!floorAps || !floorAps.length) return;
-        var sec = renderApNotesSection(fp, floorAps, opts, ctx, nidx);
-        if (sec) { sections += sec; nidx++; }
-      });
-    }
+    sections += apNotesPages(aps, opts, ctx);
     if (!sections) sections = '<div class="rep-empty-small">No APs with a position on a floor plan.</div>';
     var compassPage = wantsCompassRef(aps, opts) ? renderCompassReferencePage(opts, ctx) : '';
     return head + sections + compassPage;
@@ -3635,7 +3663,7 @@
     return '<section class="rep-legend"><h2 class="rep-floor-title">Antennas in use</h2>' + tbl + '</section>';
   }
 
-  function renderSummaryReport(_apsUnused, opts, ctx) {
+  function renderSummaryReport(aps, opts, ctx) {
 
 
     var head = opts.cover ? ctx.cover(proj.accessPoints.length, ctx.dateStr, 'Access points')
@@ -3774,7 +3802,7 @@
     var antennasSection = opts.antennas !== false ? summaryAntennas() : '';
 
 
-    return head + strip + perFloorSection + bandSection + modelsSection + antennasSection
+    return head + strip + perFloorSection + bandSection + modelsSection + antennasSection + apNotesPages(aps, opts, ctx)
       + REPORT_FOOTER;
   }
 
@@ -3786,7 +3814,7 @@
       + '<h2 class="rep-floor-title">Antennas in use</h2>' + tbl + '</section>';
   }
 
-  function renderBomReport(_apsUnused, opts, ctx) {
+  function renderBomReport(aps, opts, ctx) {
 
     var head = opts.cover ? ctx.cover(proj.accessPoints.length, ctx.dateStr, 'Access points')
                           : ctx.inlineHeader(proj.accessPoints.length, ctx.dateStr, 'Access points');
@@ -3882,7 +3910,7 @@
       + '</ul>'
       + '</section>';
 
-    return head + apSection + antSection + notes
+    return head + apSection + antSection + notes + apNotesPages(aps, opts, ctx)
       + REPORT_FOOTER;
   }
 
@@ -4171,7 +4199,7 @@
       + '</div>'
       + '</section>';
 
-    return head + summary + overlays + tableSection + method
+    return head + summary + overlays + tableSection + method + apNotesPages(aps, opts, ctx)
       + REPORT_FOOTER;
   }
 
@@ -4262,7 +4290,7 @@
 
     var compassPage = wantsCompassRef(aps, opts) ? renderCompassReferencePage(opts, ctx) : '';
 
-    return head + table + maps + compassPage
+    return head + table + maps + compassPage + apNotesPages(aps, opts, ctx)
       + REPORT_FOOTER;
   }
 
@@ -4390,7 +4418,8 @@
     var legend = opts.legend !== false ? renderCoverageLegend(aps, opts, ctx, indexById) : '';
     var method = renderCoverageMethodology(opts);
 
-    return head + sections + legend + method + REPORT_FOOTER;
+    return head + sections + legend + method + apNotesPages(aps, opts, ctx)
+      + REPORT_FOOTER;
   }
 
   function renderCoverageFloorSection(fp, aps, opts, ctx, indexById) {
@@ -4944,7 +4973,8 @@
 
     var compassPage = wantsCompassRef(aps, opts) ? renderCompassReferencePage(opts, ctx) : '';
 
-    return head + toc + summary + matrix + sections + audit + legend + compassPage + signoff + foot;
+    return head + toc + summary + matrix + sections + audit + legend + compassPage
+      + apNotesPages(aps, opts, ctx) + signoff + foot;
   }
 
   function renderApLocationOverview(fp, aps, opts, ctx) {
@@ -5531,12 +5561,17 @@
             { value: 'never',  label: 'Never include' },
           ],
           description: 'A one-page compass rose with practical guidance for aligning directional antennas to the azimuth values in this report.' },
-        { id: 'apNotes', label: 'Include AP notes pages', default: false,
+        { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when the project has notes' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
           description: 'A page per floor listing the notes recorded against each AP on site. '
-            + 'Off unless you ask for it, and independent of every other option here: site notes '
-            + 'are often your own working annotations — mounting caveats, access problems — and '
-            + 'are not always meant for a client or an installer. Text only; a note with a photo is '
-            + 'listed and marked, but the image is not printed.' },
+            + 'Independent of every other option here: site notes are often your own working '
+            + 'annotations — mounting caveats, access problems — and are not always meant for a '
+            + 'client or an installer, so set this to Never on a document you are handing over. '
+            + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderPlacementReport,
       postRender: function (host, opts) {
@@ -5580,6 +5615,17 @@
           description: 'Ranked list of AP models by quantity.' },
         { id: 'antennas',      label: 'Antennas in use', default: true,
           description: 'Legend section describing every antenna model in this project.' },
+        { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when the project has notes' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A page per floor listing the notes recorded against each AP on site. '
+            + 'Independent of every other option here: site notes are often your own working '
+            + 'annotations — mounting caveats, access problems — and are not always meant for a '
+            + 'client or an installer, so set this to Never on a document you are handing over. '
+            + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderSummaryReport,
     },
@@ -5624,6 +5670,17 @@
           description: 'Ekahau sometimes saves a floor plan on an oversized canvas with lots of whitespace. When on, each overlay zooms to the actual drawn content (plus the walk path, so nothing is cut off).' },
         { id: 'channel',    label: 'Show channel numbers', default: false,
           description: 'Adds a Channel(s) column to the device table. Off by default — most readers just need the band and width.' },
+        { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when the project has notes' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A page per floor listing the notes recorded against each AP on site. '
+            + 'Independent of every other option here: site notes are often your own working '
+            + 'annotations — mounting caveats, access problems — and are not always meant for a '
+            + 'client or an installer, so set this to Never on a document you are handing over. '
+            + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderInterferenceReport,
       postRender: applyHotspotAutocrop,
@@ -5651,6 +5708,17 @@
       sidebar: [
         { id: 'externalOnly', label: 'Show external antennas only', default: false,
           description: 'Filter to procurement-relevant antennas — hides built-in antennas that ship with the AP. Handy for orders like "AP + external antenna kit".' },
+        { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when the project has notes' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A page per floor listing the notes recorded against each AP on site. '
+            + 'Independent of every other option here: site notes are often your own working '
+            + 'annotations — mounting caveats, access problems — and are not always meant for a '
+            + 'client or an installer, so set this to Never on a document you are handing over. '
+            + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderBomReport,
     },
@@ -5699,6 +5767,17 @@
             { value: 'never',  label: 'Never include' },
           ],
           description: 'A one-page compass rose with practical guidance for aligning directional antennas to the azimuth values in this report.' },
+        { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when the project has notes' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A page per floor listing the notes recorded against each AP on site. '
+            + 'Independent of every other option here: site notes are often your own working '
+            + 'annotations — mounting caveats, access problems — and are not always meant for a '
+            + 'client or an installer, so set this to Never on a document you are handing over. '
+            + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderAimReport,
     },
@@ -5757,6 +5836,17 @@
           description: 'Directional antennas are drawn as circles (radius uses their full EIRP). Angular beam shaping is not modelled — see methodology.' },
         { id: 'inclOmni', label: 'Include omni APs', default: true,
           description: 'Omni APs produce broadly circular cells and are usually the primary content of this report.' },
+        { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when the project has notes' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A page per floor listing the notes recorded against each AP on site. '
+            + 'Independent of every other option here: site notes are often your own working '
+            + 'annotations — mounting caveats, access problems — and are not always meant for a '
+            + 'client or an installer, so set this to Never on a document you are handing over. '
+            + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderCoverageReport,
     },
@@ -5843,6 +5933,17 @@
             { value: 'never',  label: 'Never include' },
           ],
           description: 'A one-page compass rose with practical guidance for aligning directional antennas to the azimuth values in this report.' },
+        { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'auto',
+          options: [
+            { value: 'auto',   label: 'Auto — when the project has notes' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A page per floor listing the notes recorded against each AP on site. '
+            + 'Independent of every other option here: site notes are often your own working '
+            + 'annotations — mounting caveats, access problems — and are not always meant for a '
+            + 'client or an installer, so set this to Never on a document you are handing over. '
+            + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderApLocationReport,
       postRender: applyAntennaSegmentCrop,
