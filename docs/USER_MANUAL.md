@@ -42,6 +42,7 @@
 - [PlanTrim](#plantrim)
 - [Capacity](#capacity)
 - [Prep](#prep)
+- [Suite Settings](#suite-settings)
 - [Data, Privacy, and Security](#data-privacy-and-security)
 - [Update or Uninstall](#update-or-uninstall)
 - [Troubleshooting](#troubleshooting)
@@ -548,6 +549,84 @@ The exception is the whole reason to run it a second time. The first pass has no
 ### If a step cannot run
 
 Prep refuses rather than guessing, and nothing is written when it does. The most common case is a capacity template that does not carry definitions for profiles the target project has never seen — it names each missing profile, and the fix is to re-capture the template from its source project, or add those profiles in Ekahau first.
+
+---
+
+## Suite Settings
+
+**Menu → Suite Settings**, or `/settings`. Everything here follows *you* rather
+than the document: it is saved once, on this machine, in
+`~/.wd_wireless_tools/settings.json`, and is the same whichever browser you open
+the suite in.
+
+Two things are worth knowing before the list.
+
+**A setting has exactly one home.** Some live on the Settings page, some on the
+tool they belong to, some in a modal — but never in two places. That rule exists
+because two of them once lived in two stores at the same time: the Settings page
+showed a value that was not the one in force, and saving there did nothing at
+all. Where a setting is edited somewhere other than the Settings page, the table
+below says so.
+
+**Panel widths, collapsed sections and dismissed tips are not here.** Those stay
+in the browser deliberately — syncing a collapsed panel between machines would
+be a regression, not a feature.
+
+### Suite
+
+| Setting | Where | What it does |
+| --- | --- | --- |
+| **Local project folder** | Settings | The folder the suite treats as home for your `.esx` files |
+| **Backup copies to keep** | Settings | How many backups are kept per file before old ones are pruned. **0 turns backups off.** The page shows the total space used across all of them |
+
+### Cloud Manager
+
+| Setting | Where | What it does |
+| --- | --- | --- |
+| **Merge conflict rule** | Settings | What happens when a merge finds two files with the same name |
+| **Live auto-refresh interval** | Settings | How often the listing re-reads the cloud while you watch it |
+| **Default view (All / Mine / Others)** | Cloud Manager | Which owner filter the list *opens* on. Ships as **All**. The toolbar toggle changes only the current visit and never writes here — a per-browser copy of this is how two machines once disagreed about how many sites existed |
+
+### Quick Walls
+
+| Setting | Where | What it does |
+| --- | --- | --- |
+| **Units (inches / metres)** | Quick Walls | Thickness is entered in inches or metres. Heights are always in feet when this is imperial |
+| **Default wall template** | Quick Walls | Which template the **Apply** button offers first |
+| **Auto-apply the default template on open** | Quick Walls | Applies that template as soon as a project is opened, without asking |
+| **Open the source folder after saving** | Settings | Reveals the folder in Explorer or Finder once a save finishes |
+
+### Report
+
+| Setting | Where | What it does |
+| --- | --- | --- |
+| **Client / company**, **Prepared by**, **Project reference**, **Revision** | Report settings | Printed on the cover and in the footer. Shared across every report template rather than saved per template |
+| **Include revision in file name** | Report settings | Whether the saved PDF is named `Report - Type - v2.0 - Site` or `Report - Type - Site` |
+| **Units (feet / metres)** | Report | How lengths are written. The `.esx` always stores metres; this changes only the report |
+| **Section size on large floors** | Report | How much ground one section sheet covers when a large floor is split. Follows you, not the document |
+
+Everything else in a report's options panel is remembered **per report type**
+when you press **Save these as my defaults** — see *Settings that stay set*.
+
+### Squirrel
+
+All on the Settings page, and all about how a folder is sorted:
+
+| Setting | What it does |
+| --- | --- |
+| **Default subfolders**, **Subfolder names** | Which folders are created and what they are called |
+| **Custom destinations** | Send a chosen file type somewhere of your own |
+| **Image / Floor-plan / Report extensions** | Which file extensions count as which kind of thing |
+| **Report keywords**, **JSON report keywords** | Words in a filename that mark it as a report |
+| **Folders to skip** | Folders left untouched when organising |
+| **New site folder template** | The shape of a newly created site folder |
+| **Squirrel rename rules** | Held on the Rename page itself |
+
+### AP Labeler
+
+Its naming defaults, templates, colour sequence and floor-walking order are kept
+with the tool rather than on the Settings page, because they are edited while
+looking at the plan they apply to.
 
 ---
 
