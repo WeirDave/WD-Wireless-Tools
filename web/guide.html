@@ -117,10 +117,20 @@
   <p>The tool ships with a <strong>WD Template</strong> preset (marked with a star in the dropdown) — Dave's own wall-type setup, not a universal recommendation. It includes optimized colors for better differentiation between similar wall types — for example, Elevator Shafts use green and Steel Fire/Exit Doors use orange instead of the hard-to-distinguish grays in Ekahau's defaults.</p>
 
   <h3>Sharing Templates</h3>
-  <p>Click <strong>Manage</strong> to open the Import / Export dialog. Templates are stored as <code>.json</code> files in the <code>templates/</code> folder within the WD Wireless Tools directory. You can share template files with colleagues by exporting them and sending the <code>.json</code> file.</p>
+  <p>Click <strong>Manage</strong> to open the Import / Export dialog. You can share template files with colleagues by exporting them and sending the <code>.json</code> file.</p>
+  <p>Templates live in two places, and the split matters:</p>
+  <ul>
+    <li><strong>Templates you create or edit</strong> are written to <code>~/.wd_wireless_tools/templates/</code> — your home folder, outside the app.</li>
+    <li><strong>Templates shipped with the app</strong> (including <strong>WD Template</strong>) sit in <code>templates/</code> inside the install folder and are read-only. Editing one creates your own copy in the home folder above, which then shadows the shipped one by name.</li>
+  </ul>
+  <div class="warning-box">
+    <strong>Don't put your own files in the install folder.</strong> User templates used to live there, and a customized copy of a shipped template made <code>git pull</code> refuse to update the app at all — the update would have overwritten your edits, so it stopped instead. That is why anything you author goes to your home folder now.
+  </div>
 
   <div class="warning-box">
-    <strong>Note:</strong> Applying a template replaces all wall types in the current project. If you have unsaved changes, save your <code>.esx</code> first.
+    <strong>Apply replaces the whole list — it does not merge.</strong> Every wall type in the project is swapped for the template's types. If you have unsaved changes, save your <code>.esx</code> first.
+    <p>Most types survive the swap under a new name: where a template type matches an existing one, it keeps the original's identity, so walls already drawn with it still resolve. A type the template has no counterpart for is simply gone — and any walls drawn with it are left pointing at a wall type that is no longer in the file.</p>
+    <p>In practice this bites on furniture. Checked across 70 local projects that have walls drawn, applying <strong>WD Template</strong> would strand walls in 11 of them, every time on a shelving type (<em>Warehouse Shelf</em> or <em>Retail Shelf</em>) that the template does not carry. If a project uses a type like that, add it to your template before applying, or apply the template first and draw afterwards.</p>
   </div>
 
   <h2>Adding, Cloning &amp; Editing Wall Types</h2>
@@ -141,6 +151,15 @@
   <h3>Thickness</h3>
   <p>Real-world thickness of the wall. Ekahau stores this internally in meters, but Quick Walls lets you enter it in either <strong>inches</strong> or <strong>meters</strong> — flip the <kbd>in</kbd> / <kbd>m</kbd> pill next to the label. Your preference is remembered across sessions and auto-detects to imperial on US locales.</p>
   <p>The value matters because Ekahau's simulation combines thickness with the attenuation numbers below to model signal loss. A 6-inch concrete wall attenuates differently from a 3-inch concrete wall even if the material is the same.</p>
+
+  <h3>Height</h3>
+  <p>How far up the wall actually goes. Two settings, on the <strong>Auto — floor to ceiling</strong> / <strong>Stops short of the ceiling</strong> pair in the wall editor:</p>
+  <ul>
+    <li><strong>Auto</strong> — Ekahau runs the wall from the floor to the ceiling. Right for walls. This is the default, and the wall card shows an <em>Auto</em> badge.</li>
+    <li><strong>Stops short of the ceiling</strong> — you give a height in feet, and the card shows it (for example <em>8.2 ft</em>). Right for anything that stands on the floor and stops: shelving, racking, cubicles, pods, counters.</li>
+  </ul>
+  <p>The difference is not cosmetic. A warehouse shelf modelled floor-to-ceiling blocks signal that in reality passes straight over the top of it, and that moves AP counts rather than nudging a heat map. Ekahau stores the value in metres on the wall type; Quick Walls shows and accepts feet. A type with no height set at all is Auto — there is no third state.</p>
+  <p>Two shipped types carry real heights as examples: <em>Warehouse Rack Wall - 12ft</em> and <em>- 16ft</em>. Their heights are exact conversions of the feet in their names, not estimates.</p>
 
   <h3>Keyboard shortcut</h3>
   <p>Bind the wall type to <kbd>1</kbd>–<kbd>9</kbd> so you can press that key inside Ekahau while drawing to switch to this wall type instantly. Shortcuts are persisted in the <code>.esx</code> file itself, so they travel with the project.</p>
