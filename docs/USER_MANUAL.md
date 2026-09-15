@@ -816,17 +816,34 @@ The suite chooses the mechanism for you based on how it was installed:
 | --- | --- |
 | Cloned with git | Fetches and checks out the newest release tag. Fast, and the previous version stays available in git. |
 | Installed from a ZIP | Downloads the release asset, verifies its SHA-256, copies the current folder to a dated `.previous-vX.X.X` backup, then installs. |
-| A development checkout | **No Update button, deliberately.** The panel prints the exact `git` command to run instead. |
+| A development checkout | A **Pull now** button that fast-forwards your branch, plus the exact `git` command to run by hand. |
 
 #### If you are running from a development checkout
 
 A clone that also carries `tests/`, `scripts/`, `.github/` and `CLAUDE.md` is a
-working copy, not an installation. Updating it in place would check out a
+working copy, not an installation. Updating it the normal way would check out a
 release tag over whatever you have in progress and leave the repository on a
-detached HEAD, so **there is no Update button on purpose.**
+detached HEAD, so **that** update is blocked on purpose.
 
-Instead, About prints the command with your own install folder already in it,
-and a **Copy** button beside it:
+**Press "Pull now".** It runs `git pull --ff-only` — it moves the branch you
+are on forward and will not merge, check anything out, or rebase. When it is
+done, **Restart to finish** loads the new code.
+
+It refuses, and changes nothing, in four cases:
+
+| What it finds | What it says |
+|---|---|
+| Uncommitted changes to tracked files | Names them, up to five — commit or stash them first |
+| A detached HEAD | There is no branch to move; check one out |
+| Commits of yours that aren't on GitHub | How many, that your work is safe, and to push or rebase from a terminal |
+| No `.git` folder | There is nothing to pull |
+
+A pull that brings commits without a version bump reports **"Pulled 3 commits —
+still on v2.99.8"**. That is normal: the version number only moves when a
+release bumps it.
+
+Under **Or run it yourself**, About also prints the command with your own
+install folder already in it, and a **Copy** button beside it:
 
 ```
 git -C "<your install folder>" pull
@@ -838,7 +855,8 @@ works exactly as it does for any other install.
 
 > This is the answer if the in-app updater has never seemed to do anything for
 > you. Before **v2.99.7** this case said only "update it with git", which names
-> a tool rather than a command.
+> a tool rather than a command, and there was no button at all until
+> **v2.99.9**.
 
 **Other ways to update** in the same panel covers the rest: switching a ZIP install over to git updates, copying the PowerShell command, or downloading the ZIP by hand. These open on their own if an update fails, along with a plain-language explanation of what went wrong.
 
