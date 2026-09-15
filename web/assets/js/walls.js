@@ -199,6 +199,31 @@ function matchKey(wt) {
   return 'n:' + String((wt && wt.name) || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+// Is this one of the wall types Ekahau itself ships?
+//
+// Matched the same way everything else here is matched, so a type Ekahau has
+// renamed between releases still counts as the same type.
+function isStockType(wt) {
+  const src = (typeof _ekahauDefaults !== 'undefined' && _ekahauDefaults)
+    ? _ekahauDefaults.wallTypes : null;
+  if (!src) return false;
+  const key = matchKey(wt);
+  return src.some(d => matchKey(d) === key);
+}
+
+// The fields a template can carry that would show up in Ekahau. `id`, `key`
+// and `status` are identity and are never compared.
+const TEMPLATE_FIELDS = ['name', 'color', 'attenuationFactor', 'thickness',
+                         'upperEdge', 'lowerEdge', 'keybindNumber'];
+
+function templateWouldChange(have, want) {
+  return TEMPLATE_FIELDS.some(f => {
+    const a = have[f] === undefined ? null : have[f];
+    const b = want[f] === undefined ? null : want[f];
+    return a !== b;
+  });
+}
+
 // Apply a template by adding to the list, never by replacing it.
 //
 // Replacing is what this used to do, and it deleted every wall type the
@@ -213,11 +238,30 @@ function matchKey(wt) {
 // it still resolve. A type the template says nothing about is left exactly as
 // it is. Nothing is ever removed here; "Ekahau Defaults" is the button that
 // deliberately starts over, and it asks first.
-function mergeTemplateTypes(newTypes) {
+//
+// **A wall type Ekahau ships is left exactly as Ekahau ships it.** His rule,
+// and the reason for it is that a survey is read by people who know the
+// standard set: "I just want to add in the walls that we added, not change
+// anything from the defaults. So if stuff has changed from the defaults,
+// that's probably wrong." Applying WD Template used to recolour three stock
+// types - Door Steel Fire/Exit, Elevator Shaft and Window Thick - purely
+// because the template had been saved out of a project where they had been
+// recoloured once. Nothing said so, and the recolour then travelled to every
+// project the template was applied to.
+//
+// Two things this is deliberately not. It is not a refusal to touch stock
+// types at all - the **Ekahau Defaults** template passes `fromDefaults`, since
+// putting the stock values back is the entire point of that one. And it is not
+// silent: what was left alone is counted and named in the toast, so a template
+// that really was meant to carry a house value for a stock type shows up as a
+// thing that did not happen rather than as nothing at all.
+function mergeTemplateTypes(newTypes, opts) {
+  const fromDefaults = !!(opts && opts.fromDefaults);
   const where = new Map();
   wallTypes.forEach((wt, i) => where.set(matchKey(wt), i));
 
   let added = 0, updated = 0;
+  const kept = [];
   const claimed = [];
   (newTypes || []).forEach(src => {
     const copy = JSON.parse(JSON.stringify(src));
@@ -229,7 +273,12 @@ function mergeTemplateTypes(newTypes) {
       where.set(key, wallTypes.length - 1);
       added++;
     } else {
-      copy.id = wallTypes[at].id;
+      const have = wallTypes[at];
+      if (!fromDefaults && isStockType(have)) {
+        if (templateWouldChange(have, copy)) kept.push(have.name);
+        return;
+      }
+      copy.id = have.id;
       wallTypes[at] = copy;
       updated++;
     }
@@ -247,7 +296,7 @@ function mergeTemplateTypes(newTypes) {
     });
   });
 
-  return { added, updated };
+  return { added, updated, kept };
 }
 let editingIndex = -1;
 let openMenuIndex = -1;
@@ -1337,6 +1386,17 @@ async function refreshTemplateBar() {
   applyBtn.disabled = !selected || selected === '';
 }
 
+// What the toast says about types left as Ekahau ships them. Named rather than
+// counted where there are few enough to read, because "left 3 alone" invites
+// the question the names answer.
+function keptPhrase(kept) {
+  if (!kept || !kept.length) return '';
+  if (kept.length <= 3) {
+    return `left ${kept.map(n => `“${n}”`).join(', ')} as Ekahau ships ${kept.length === 1 ? 'it' : 'them'}`;
+  }
+  return `left ${kept.length} Ekahau types as Ekahau ships them`;
+}
+
 async function applySelectedTemplate() {
   const sel = document.getElementById('templateSelect');
   const name = sel.value;
@@ -1362,12 +1422,14 @@ async function applySelectedTemplate() {
     return;
   }
 
-  const { added, updated } = mergeTemplateTypes(newTypes);
+  const { added, updated, kept } = mergeTemplateTypes(
+    newTypes, { fromDefaults: name === 'Ekahau Defaults' });
 
   renderAll();
   const parts = [];
   if (added) parts.push(`added ${added}`);
   if (updated) parts.push(`updated ${updated}`);
+  if (kept.length) parts.push(keptPhrase(kept));
   showToast(parts.length
     ? `Applied "${name}" — ${parts.join(', ')}; nothing removed (${wallTypes.length} types)`
     : `"${name}" is already in this project`, 'success');
@@ -1394,21 +1456,21 @@ async function tryAutoApply() {
 
   if (!newTypes || !newTypes.length) return;
 
-  const { added, updated } = mergeTemplateTypes(newTypes);
+  const { added, updated, kept } = mergeTemplateTypes(
+    newTypes, { fromDefaults: def === 'Ekahau Defaults' });
 
   renderAll();
   const parts = [];
   if (added) parts.push(`added ${added}`);
   if (updated) parts.push(`updated ${updated}`);
+  if (kept.length) parts.push(keptPhrase(kept));
   showToast(parts.length
     ? `Auto-applied "${def}" — ${parts.join(', ')}; nothing removed`
     : `Auto-apply: "${def}" is already in this project`, 'success');
 }
 
 function _isEkahauDefault(wt) {
-  if (!_ekahauDefaults) return false;
-  const key = matchKey(wt);
-  return _ekahauDefaults.wallTypes.some(d => matchKey(d) === key);
+  return isStockType(wt);
 }
 
 function resetToEkahauDefaults() {
