@@ -106,7 +106,7 @@
   <table>
     <tr><th>Control</th><th>What it does</th></tr>
     <tr><td><strong>Template dropdown</strong></td><td>Select a saved template to preview or apply</td></tr>
-    <tr><td><strong>Apply</strong></td><td>Replace the current wall types with the selected template</td></tr>
+    <tr><td><strong>Apply</strong></td><td>Add the template's wall types to the project &mdash; nothing is removed, and Ekahau's own types are left as they are</td></tr>
     <tr><td><strong>Save Template</strong></td><td>Save the current wall types and shortcuts as a new template</td></tr>
     <tr><td><strong>Ekahau Defaults</strong></td><td>Reset to Ekahau's factory-default wall types (no keybinds)</td></tr>
     <tr><td><strong>Manage</strong></td><td>Import or export templates as <code>.json</code> files for sharing</td></tr>
@@ -114,7 +114,11 @@
   </table>
 
   <h3>WD Template</h3>
-  <p>The tool ships with a <strong>WD Template</strong> preset (marked with a star in the dropdown) — Dave's own wall-type setup, not a universal recommendation. It includes optimized colors for better differentiation between similar wall types — for example, Elevator Shafts use green and Steel Fire/Exit Doors use orange instead of the hard-to-distinguish grays in Ekahau's defaults.</p>
+  <p>The tool ships with a <strong>WD Template</strong> preset (marked with a star in the dropdown) — one wireless engineer's own wall-type setup, not a universal recommendation. It adds the types that Ekahau does not ship — framery pods, retail and warehouse shelving, cable trays, rack walls at two heights — and leaves Ekahau's own types exactly as Ekahau ships them.</p>
+  <div class="warning-box">
+    <strong>It used to recolour three of Ekahau's types, and no longer does.</strong> Until v2.100.5 the template gave Elevator Shaft a green, Steel Fire/Exit Door an orange and Thick Window a darker blue, on the reasoning that Ekahau's greys are hard to tell apart. Applying it carried those colours into every project it touched, without saying so.
+    <p>The rule now is that a template adds your own types and never changes a standard one, so a survey is read by people who know the standard set and find it unchanged. If you want those colours, add them as wall types of your own rather than as edits to Ekahau's — a template can still carry anything you created.</p>
+  </div>
 
   <h3>Sharing Templates</h3>
   <p>Click <strong>Manage</strong> to open the Import / Export dialog. You can share template files with colleagues by exporting them and sending the <code>.json</code> file.</p>
@@ -128,12 +132,12 @@
   </div>
 
   <div class="tip-box">
-    <strong>Apply adds; it never deletes.</strong> Every type in the template is added to the project, and a type the project already has is updated to the template's version — keeping the identity it already had, so walls already drawn with it are unaffected. Anything in the project the template says nothing about is left exactly as it is.
+    <strong>Apply adds; it never deletes, and it never restyles Ekahau's own types.</strong> Every type in the template is added to the project. A type <em>you</em> added and the project already has is updated to the template's version, keeping the identity it already had so walls already drawn with it are unaffected. A type <strong>Ekahau ships</strong> is left exactly as it is, and the message afterwards names the ones it left alone. Anything the template says nothing about is untouched.
     <p>This changed in v2.100.0. Applying a template used to replace the whole list, which deleted any type the template had no counterpart for — and walls drawn with that type were left pointing at something no longer in the file. Measured across 70 local projects with walls drawn, the old behaviour would have stranded walls in 11 of them, every time on a shelving type. If you are on an older build, that is what Apply still does there.</p>
   </div>
 
   <div class="warning-box">
-    <strong>Ekahau Defaults is the one that removes things.</strong> The <strong>Ekahau Defaults</strong> button beside the template bar is the deliberate way back to factory: it replaces your wall types with Ekahau's own. It names what it is about to remove and asks first. Use it to start over — not to add the defaults. For that, apply <em>Ekahau Defaults</em> from the template dropdown, which adds what is missing and removes nothing.
+    <strong>Ekahau Defaults is the one that removes things.</strong> The <strong>Ekahau Defaults</strong> button beside the template bar is the deliberate way back to factory: it replaces your wall types with Ekahau's own. It names what it is about to remove and asks first. Use it to start over — not to add the defaults. For that, apply <em>Ekahau Defaults</em> from the template dropdown, which adds what is missing and removes nothing. That is also the way to put a standard type <em>back</em> after you have changed one: it is the one template allowed to write Ekahau's own types, because restoring them is what it is for.
   </div>
 
   <h2>Furniture modelled to the ceiling</h2>
