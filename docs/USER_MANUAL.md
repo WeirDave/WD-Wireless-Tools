@@ -730,6 +730,14 @@ Prep does the setup work on a freshly imported project in one pass over the file
 
 Each step is optional, each is previewed per floor before anything is written, and your project file is never written to.
 
+The button is **Prepare and download**, under the preview. It is unavailable
+until there is something to do, and the line beside it says which of the two
+reasons applies — *"Pick at least one thing to do."* with nothing ticked, or
+*"This project is already prepared — there is nothing left to do."* when every
+step reports nothing to change. In that second case the preview still lists each
+floor and why it was skipped, so a project that needs no work reads as finished
+rather than as broken.
+
 ### Two ways to open a project, and they are not the same
 
 **Drop it, or click to browse,** and the file is uploaded to the local server for the preview and again for the run. The prepared copy comes back as a download.
@@ -737,6 +745,14 @@ Each step is optional, each is previewed per floor before anything is written, a
 **Open from disk…** uses a file dialog instead, and Prep then reads the project where it already sits — nothing is uploaded at all. On a project of a couple of hundred megabytes that is the difference between a preview that keeps up with you and one that does not. The prepared copy is written **beside the original**, named `<name> (prepared).esx`, and Prep offers to show you the folder — because the next thing you do is open it in Ekahau.
 
 Either way your original is never written to. The prepared copy is a new file, so keeping or discarding it stays your decision.
+
+> **If the file dialog cannot open, Prep says so and gives you the browser's
+> own picker instead.** The button reads *Opening…* while the dialog is up — it
+> is allowed three minutes — and if it never appears you get a message naming
+> the reason and the ordinary browse dialog, so the click still gets you in.
+> Cancelling the dialog does nothing, which is the intended answer. Quick Walls
+> behaves the same way. Before v2.100.9 a dialog that failed to open was
+> reported as a cancel, so the button did nothing at all and said nothing.
 
 > **Preparing again asks before replacing a prepared file that is already there.** A second run re-derives everything from the original, which is untouched and so still has all the work to do — so it would write that file again. By then it may be the file you opened in Ekahau and have been drawing in for an hour. Nothing inside the archive distinguishes *output Prep made* from *output you have since worked in*, so you are asked rather than assumed at.
 

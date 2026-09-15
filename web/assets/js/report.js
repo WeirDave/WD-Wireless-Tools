@@ -1471,6 +1471,13 @@
     renderTemplateGallery();
     renderReportOpts();
     renderApFilter();
+    /* The tab name is the file name the print dialog offers, so it follows the
+       report you have picked rather than the one you last rendered. Measured
+       before this line existed: picking a report left the title naming the
+       previous one until a render replaced it, so the whole select and
+       configure stage sat under a stale name. The app's own Print button syncs
+       first and was never wrong - this is the tab, and Ctrl+P. */
+    syncDocTitle();
     goStage('configure');
   };
 
