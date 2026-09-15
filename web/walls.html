@@ -42,6 +42,28 @@
     border: 1px solid color-mix(in srgb, var(--amber, #f0ad4e) 45%, transparent);
   }
   .wt-vert-impact strong { color: var(--amber, #f0ad4e); }
+  /* The audit sits with the list it is about, because the fix is a wall type
+     edit and this is where those are made. */
+  .wall-audit {
+    border: 1px solid var(--amber, #f0ad4e);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--amber, #f0ad4e) 10%, transparent);
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+  .wall-audit-head { font-weight: 600; margin-bottom: 4px; }
+  .wall-audit-why { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+  .wall-audit-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 6px 0; border-top: 1px solid var(--border);
+  }
+  .wall-audit-name { font-weight: 600; }
+  .wall-audit-detail {
+    color: var(--text-muted); font-size: 12px;
+    font-family: ui-monospace, monospace;
+  }
+  .wall-audit-spacer { flex: 1; }
+
   .wall-height-badge {
     font-size: 10px; padding: 1px 5px; border-radius: 3px;
     border: 1px solid var(--border); color: var(--text-muted);
@@ -191,6 +213,7 @@
             <button class="btn btn-visual-swap" onclick="openSwapModal()" title="Bulk swap walls on the floor plan — draw a box, pick a new type"><span class="swap-ico">&#x1F5BC;</span> Visual Swap</button>
           </div>
         </div>
+        <div id="wallAudit" class="wall-audit" hidden></div>
         <div id="wallList" class="wall-list"></div>
       </div>
     </div>

@@ -311,6 +311,29 @@ def api_walls(action):
             _WALLS_PROJECT["path"] = None
             return jsonify({"ok": True})
 
+        if action == "audit":
+            # Quick Walls holds the project open in the browser, so it posts
+            # the two documents rather than a path. The rule stays in
+            # tools/wall_audit.py - one implementation, reachable from both the
+            # folder sweep and the editor.
+            from tools import wall_audit
+            payload = request.get_json(silent=True) or {}
+            findings = wall_audit.audit_members(
+                payload.get("wallTypes") or [],
+                payload.get("wallSegments") or [],
+                segment_counts=payload.get("segmentCounts") or None)
+            return jsonify({"ok": True, "findings": [
+                {"wallTypeId": f.wall_type_id,
+                 "wallType": f.wall_type,
+                 "segments": f.segments,
+                 "dbTotal": round(f.db_total, 2),
+                 "suggestedM": f.suggested_m,
+                 "suggestedFt": (None if f.suggested_ft is None
+                                 else round(f.suggested_ft, 1)),
+                 "why": f.suggestion_source,
+                 "severity": round(f.severity, 1)}
+                for f in findings]})
+
         return jsonify({"error": "unknown action: " + action}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500

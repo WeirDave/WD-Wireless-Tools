@@ -189,6 +189,66 @@ Object.defineProperty(window, 'fileName',  { get: () => fileName });
 function preserveId(wt) {
   return _originalIdMap[wt.key] || wt.id || crypto.randomUUID();
 }
+
+// How a template type is matched to one already in the project: Ekahau's own
+// key where there is one, otherwise the name with punctuation and case thrown
+// away, so "Dry Wall" and "Drywall" are the same type.
+function matchKey(wt) {
+  const k = (wt && wt.key ? String(wt.key) : '').trim();
+  if (k) return 'k:' + k;
+  return 'n:' + String((wt && wt.name) || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+// Apply a template by adding to the list, never by replacing it.
+//
+// Replacing is what this used to do, and it deleted every wall type the
+// template had no counterpart for. That is fine until a project uses one: 92
+// segments drawn with "Retail Shelf" were left pointing at a wall type that
+// was no longer in the file, and nothing said so. Measured across 70 local
+// projects with walls drawn, the old behaviour would have stranded walls in 11
+// of them.
+//
+// So: a type the template carries is added, or updated in place if the project
+// already has it - keeping the id the project already uses, so walls drawn with
+// it still resolve. A type the template says nothing about is left exactly as
+// it is. Nothing is ever removed here; "Ekahau Defaults" is the button that
+// deliberately starts over, and it asks first.
+function mergeTemplateTypes(newTypes) {
+  const where = new Map();
+  wallTypes.forEach((wt, i) => where.set(matchKey(wt), i));
+
+  let added = 0, updated = 0;
+  const claimed = [];
+  (newTypes || []).forEach(src => {
+    const copy = JSON.parse(JSON.stringify(src));
+    const key = matchKey(copy);
+    const at = where.get(key);
+    if (at === undefined) {
+      copy.id = preserveId(src);
+      wallTypes.push(copy);
+      where.set(key, wallTypes.length - 1);
+      added++;
+    } else {
+      copy.id = wallTypes[at].id;
+      wallTypes[at] = copy;
+      updated++;
+    }
+    if (copy.keybindNumber >= 1 && copy.keybindNumber <= 9) {
+      claimed.push([copy.keybindNumber, matchKey(copy)]);
+    }
+  });
+
+  // A shortcut can only belong to one type. Where the template claims a number
+  // an untouched type was holding, the template wins and the old one loses the
+  // binding rather than the two silently colliding.
+  claimed.forEach(([num, key]) => {
+    wallTypes.forEach(wt => {
+      if (wt.keybindNumber === num && matchKey(wt) !== key) delete wt.keybindNumber;
+    });
+  });
+
+  return { added, updated };
+}
 let editingIndex = -1;
 let openMenuIndex = -1;
 
@@ -295,9 +355,87 @@ function clearKeybind(num) {
   renderAll();
 }
 
+// ---------------------------------------------------------------- audit ---
+// Furniture modelled floor to ceiling. A warehouse shelf on Auto blocks signal
+// that in reality passes over the top of it, and that moves AP counts rather
+// than nudging a heat map - so it is worth saying out loud, next to the list
+// where the height is set.
+//
+// The rule lives in tools/wall_audit.py and is reached over /api/walls/audit,
+// rather than being written a second time in JavaScript. One implementation is
+// the whole point: a wall-type rule that existed twice in this codebase once
+// had the Report printing a hex code where the Labeler printed a colour name,
+// and only one of them got fixed.
+let _auditFindings = [];
+
+async function refreshWallAudit() {
+  const panel = document.getElementById('wallAudit');
+  if (!panel) return;
+  if (!esxZip || !wallTypes.length) {
+    _auditFindings = [];
+    panel.hidden = true;
+    return;
+  }
+  try {
+    const r = await fetch('/api/walls/audit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: JSON.stringify({ wallTypes, segmentCounts: _segmentCounts })
+    });
+    const d = await r.json();
+    _auditFindings = (d && d.findings) || [];
+  } catch (e) {
+    _auditFindings = [];          // never block the editor on the check
+  }
+  renderWallAudit();
+}
+
+function renderWallAudit() {
+  const panel = document.getElementById('wallAudit');
+  if (!panel) return;
+  if (!_auditFindings.length) { panel.hidden = true; panel.innerHTML = ''; return; }
+
+  const n = _auditFindings.length;
+  panel.hidden = false;
+  panel.innerHTML =
+    `<div class="wall-audit-head">${n} wall type${n === 1 ? '' : 's'} `
+    + `drawn on this plan ${n === 1 ? 'reaches' : 'reach'} the ceiling, and probably should not</div>`
+    + `<div class="wall-audit-why">These are set to Auto, so Ekahau models them floor to ceiling. `
+    + `Signal that would pass over the top is predicted as blocked.</div>`
+    + _auditFindings.map(f => {
+        const i = wallTypes.findIndex(w => w.id === f.wallTypeId);
+        const ft = f.suggestedFt;
+        return `<div class="wall-audit-row">`
+          + `<span class="wall-audit-name">${esc(f.wallType)}</span>`
+          + `<span class="wall-audit-detail">${f.segments} segment${f.segments === 1 ? '' : 's'}`
+          + ` &middot; ${f.dbTotal} dB each</span>`
+          + `<span class="wall-audit-spacer"></span>`
+          + (ft ? `<button class="btn btn-sm btn-primary" onclick="applyAuditHeight('${f.wallTypeId}')"`
+                  + ` title="${esc(f.why)}">Set to ${ft} ft</button>` : '')
+          + (i >= 0 ? `<button class="btn btn-sm" onclick="openEditModal(${i})">Edit&hellip;</button>` : '')
+          + `</div>`;
+      }).join('');
+}
+
+// Applying the suggestion writes the height onto the type, the same field the
+// editor writes. Nothing is saved to disk here - it lands in the .esx when he
+// saves, like every other change on this page.
+function applyAuditHeight(wallTypeId) {
+  const f = _auditFindings.find(x => x.wallTypeId === wallTypeId);
+  const i = wallTypes.findIndex(w => w.id === wallTypeId);
+  if (!f || i < 0 || !f.suggestedM) return;
+  wallTypes[i].lowerEdge = wallTypes[i].lowerEdge || 0;
+  wallTypes[i].upperEdge = f.suggestedM;
+  showToast(`${wallTypes[i].name} now stops at ${f.suggestedFt} ft `
+            + `(${f.segments} segment${f.segments === 1 ? '' : 's'}) — save to keep it`,
+            'success');
+  renderAll();
+}
+
 function renderAll() {
   renderHotkeyPanel();
   renderList();
+  refreshWallAudit();
 }
 
 function renderHotkeyPanel() {
@@ -1193,13 +1331,15 @@ async function applySelectedTemplate() {
     return;
   }
 
-  wallTypes = newTypes.map(wt => ({
-    ...JSON.parse(JSON.stringify(wt)),
-    id: preserveId(wt)
-  }));
+  const { added, updated } = mergeTemplateTypes(newTypes);
 
   renderAll();
-  showToast(`Applied "${name}" (${wallTypes.length} types)`, 'success');
+  const parts = [];
+  if (added) parts.push(`added ${added}`);
+  if (updated) parts.push(`updated ${updated}`);
+  showToast(parts.length
+    ? `Applied "${name}" — ${parts.join(', ')}; nothing removed (${wallTypes.length} types)`
+    : `"${name}" is already in this project`, 'success');
   setLastTemplate(name);
 }
 
@@ -1223,13 +1363,21 @@ async function tryAutoApply() {
 
   if (!newTypes || !newTypes.length) return;
 
-  wallTypes = newTypes.map(wt => ({
-    ...JSON.parse(JSON.stringify(wt)),
-    id: preserveId(wt)
-  }));
+  const { added, updated } = mergeTemplateTypes(newTypes);
 
   renderAll();
-  showToast(`Auto-applied "${def}" (${wallTypes.length} types)`, 'success');
+  const parts = [];
+  if (added) parts.push(`added ${added}`);
+  if (updated) parts.push(`updated ${updated}`);
+  showToast(parts.length
+    ? `Auto-applied "${def}" — ${parts.join(', ')}; nothing removed`
+    : `Auto-apply: "${def}" is already in this project`, 'success');
+}
+
+function _isEkahauDefault(wt) {
+  if (!_ekahauDefaults) return false;
+  const key = matchKey(wt);
+  return _ekahauDefaults.wallTypes.some(d => matchKey(d) === key);
 }
 
 function resetToEkahauDefaults() {
@@ -1237,7 +1385,16 @@ function resetToEkahauDefaults() {
     showToast('Ekahau defaults not loaded yet');
     return;
   }
-  if (!confirm('Reset all wall types to Ekahau factory defaults? This will replace your current wall types.')) return;
+  // The one place that still replaces the list outright - which is the whole
+  // point of it, so it says what it will cost before doing it.
+  const own = wallTypes.filter(wt => !_isEkahauDefault(wt));
+  const warning = own.length
+    ? `\n\n${own.length} wall type${own.length === 1 ? '' : 's'} not in Ekahau's `
+      + `defaults will be removed: ${own.slice(0, 6).map(w => w.name).join(', ')}`
+      + `${own.length > 6 ? '…' : ''}.\n\nWalls already drawn with them will be `
+      + `left without a type.`
+    : '';
+  if (!confirm('Reset all wall types to Ekahau factory defaults?' + warning)) return;
 
   wallTypes = _ekahauDefaults.wallTypes.map(wt => ({
     ...JSON.parse(JSON.stringify(wt)),
