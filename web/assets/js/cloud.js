@@ -3871,7 +3871,14 @@ function updateBulkBar() {
     }
     if (d.kind === 'cloud' || d.kind === 'local') deletableCount++;
     if (d.kind === 'local') localFolderCount++;
-    if (currentTab === 'projects' && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir))) {
+    /* A project, on whichever tab it was selected from. This used to require
+       the Projects tab, which hid "Move to site…" entirely on the Sites tab -
+       where the nested .esx rows live and where you would naturally select a
+       handful of files to move. The tab was standing in for "is this a
+       project", because a site row and a project row are both kind 'cloud';
+       isProjectSyncItem is that question asked directly, so a site can never
+       be handed to assign_to_site as though it were a project. */
+    if (isProjectSyncItem(d) && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir))) {
       movableCount++;
     }
 
@@ -3916,7 +3923,7 @@ function updateBulkBar() {
   window._bulkShareOwnedIds = Array.from(ownedCloudIds);
   setBtn('bulkDeleteBtn', true, deletableCount > 0, 'Bulk delete only works on cloud-only or local-only rows');
   setBtn('compareBtn', currentTab === 'sites', localFolderCount >= 2, 'Select 2+ local folders to compare');
-  setBtn('bulkMoveBtn', currentTab === 'projects', movableCount > 0, 'Select cloud projects or local .esx files first');
+  setBtn('bulkMoveBtn', true, movableCount > 0, 'Select cloud projects or local .esx files first');
 }
 
 function isProjectSyncItem(d) {
@@ -4922,7 +4929,9 @@ async function startMoveLocalToSite(path, name) {
   await _openMoveToSitePicker();
 }
 async function bulkMoveToSite() {
-  const targets = [...selected].map(k => rowData[k]).filter(d => d && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir)))
+  const targets = [...selected].map(k => rowData[k])
+    .filter(d => d && isProjectSyncItem(d)
+                 && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir)))
     .map(d => ({
       kind: d.kind, id: d.id, path: d.path, name: d.name,
       size: d.size, owner: d.owner,
