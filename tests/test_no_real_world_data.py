@@ -48,6 +48,10 @@ ALLOWED_CODE_TOKENS = {
     "ACME1", "ACME2",
     "FLR1", "FLR2", "FLR3",
     "UTF8",          # an encoding, not a site
+    "IPV4",          # a protocol, not a site - and it is this file's own
+                     # regex constant, so the scan reads its own source and
+                     # flags it. Allowlisting beats exempting this file:
+                     # a checker that skips itself is a checker with a hole.
 }
 
 #: Reserved-for-documentation domains (RFC 2606) plus the generic stand-in.
