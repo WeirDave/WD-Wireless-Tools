@@ -1580,7 +1580,7 @@ body.tool-home .topbar {
 .launcher {
   --tile-icon-size: 96px;
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
-  max-width: 900px; margin: 0 auto;
+  max-width: 1180px; margin: 0 auto;
 }
 
 .tile {
@@ -1615,9 +1615,21 @@ body.tool-home .topbar {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* What the tool is for, in the tile rather than behind a hover.
+
+   There were never any tooltips - no title, no aria-label, nothing - so until
+   now the only way to tell these apart was to know already. The anchor carries
+   a fuller sentence in `title` as a supplement, but the tile has to stand on
+   its own: a hover does not exist on a touch screen, and that was always the
+   flaw in "put it in a tooltip". */
+.tile-desc {
+  font-size: 12.5px; line-height: 1.45; color: var(--text-2);
+  margin-top: 3px;
+}
+
 .tile-ver {
   font-size: 11px; font-weight: 600; color: var(--text-3);
-  letter-spacing: 0.2px;
+  letter-spacing: 0.2px; margin-top: 4px;
 }
 
 .tile--blue   { --tile-accent: var(--blue); }
