@@ -128,6 +128,66 @@ Safari, Brave, Arc, and Private/Incognito windows are not supported for automati
 - The **Duplicates** view groups near-duplicate files and identifies useful comparison details such as newest and largest.
 - The **≈** indicator jumps from a project row to its duplicate cluster.
 
+### Who you are seeing — the Owner filter
+
+The **Owner** toggle in the toolbar switches between **All**, **Mine** and
+**Others**. It lasts until you reload the page and nothing in the toolbar is
+written to disk.
+
+What the list *opens* on is a separate, saved setting: **Suite Settings →
+Cloud → Default view**. It ships as **All**.
+
+These are deliberately two different things. A per-browser memory of the filter
+is how one machine came to show three sites and another twenty — so any filter
+narrower than All prints a line above the list saying what is hidden and whether
+that is your saved default or just this visit, an empty list names the filter
+that emptied it, and a sign-in that returns no user identity turns the filter
+off and says why.
+
+### Which side is newer
+
+A matched pair whose two copies differ in age carries a badge:
+
+- **⇩ Cloud newer · download** — the cloud copy was edited more recently. Click
+  the badge to bring it down over your local file. Your current copy is kept
+  beside it as a `.previous-<timestamp>.esx`.
+- **⇧ Local newer** — your copy is the newer one. **Sending it up is not built
+  yet.** The upload this tool has creates a *new* cloud project rather than
+  replacing the one already there, so the direction is a job still on the list
+  rather than something Ekahau forbids. Nothing is at risk in the meantime:
+  sync never replaces the newer side with the older one. Open the project in
+  Ekahau and save it to the cloud from there — that is where Ekahau's own
+  sync-or-overwrite prompt lives.
+
+The download is only offered for a pair that is **proven** or that you linked
+yourself. A pair matched on name similarity alone says so and offers the 🔗
+button to confirm the link, which makes the download available. Overwriting a
+file on a guess is how the wrong project gets lost.
+
+### Sync everything
+
+**⇅ Sync everything** needs no selection, which is the point. It works out for
+each file which side is newer and does that, or nothing when the two already
+match, and shows the whole plan before it runs. It never replaces a newer file
+with an older one. When it finishes it says where local and cloud stand,
+including anything still waiting to go up.
+
+### Move projects into a site
+
+Select any number of projects — on either the **Projects** tab or among the
+nested files on the **Sites** tab — and choose **Move to site…**. The picker
+confirms a destination per row, auto-filled where the site is recognisable, and
+each move is queued as its own card with its own retry. A project whose local
+and cloud copies are matched moves **both** sides, so the pair survives the
+move.
+
+### Buttons that are greyed out
+
+The toolbar's bulk buttons switch on and off with what you have selected.
+**Click a greyed-out one and it tells you what to select** — hovering says the
+same thing. A dimmed "Compare" answers "Select 2+ local folders to compare"; a
+dimmed "Share…" explains that Ekahau only lets a project's owner add shares.
+
 ### Perform an operation
 
 1. Filter or search until the intended projects are visible.
@@ -139,6 +199,12 @@ Safari, Brave, Arc, and Private/Incognito windows are not supported for automati
 Use **Show in Explorer/Finder** to verify a local file directly before acting on it.
 
 > **Cloud actions are real actions.** A clean preview is your last checkpoint before a rename, move, overwrite, or deletion reaches the selected files or tenant.
+
+**Deleting anything on the cloud side asks twice**, and the second time you type
+`DELETE` before the button will enable. Local deletes do not, and the difference
+is deliberate: a local file you can download again, a cloud project you cannot.
+That applies to a single row and to a bulk delete alike. Selecting one side of a
+matched pair deletes only that side.
 
 ### Login storage
 
@@ -382,6 +448,23 @@ Choose one of three modes:
   
   A global **Separator between segments** dropdown sets the character placed between each segment (dash, underscore, dot, space, or none). Add, remove, and reorder segments to match your site's naming convention.
 
+  **The segments arrive filled in.** If the APs in the project are already named
+  to a scheme, the file is read and the segments are built from it — site code,
+  building, AP prefix, number width and separator — so adding one AP and
+  renumbering does not mean retyping a convention the file already states.
+  Change anything you disagree with; nothing is committed until you download.
+
+  **What the Floor segment auto-detects.** In order of preference: the floor
+  number Ekahau recorded for that floor, then a number found in the floor's own
+  name (`01 - Ground`, `Level 2`, `3rd floor`), then the floor's position in the
+  list. Hover the box to see which value was picked; type in it to override.
+
+  > Before **v2.99.8** this read only the first of those three, which Ekahau
+  > fills in only for floors attached to a building. A project without one had
+  > every floor auto-detect as `00`, and with **Per Floor** scope that produced
+  > the same set of names on every floor. If you labelled a multi-floor project
+  > on an earlier build, check it for repeated names.
+
 - **Simple** — prefix + separator + sequential number with configurable leading zeros and start number.
 - **MAC** — names derived from each AP's MAC address.
 
@@ -422,14 +505,69 @@ The full list:
 | Columns, Bottom → Top | Column by column, upward |
 | Clockwise | Around the plan, clockwise from the top |
 | Counter-clockwise | Around the plan, anticlockwise from the top |
+| **By Colour Groups** | All of one Ekahau colour, then all of the next |
 | Manual (click order) | You click each AP on the plan in the order you want |
 
 The preview shows the resulting names over the floor plan, so the ordering can be
 judged by looking at it before anything is downloaded.
 
+### By Colour Groups
+
+Picking **By Colour Groups** numbers every AP of one colour before moving to the
+next, using the colour you marked each AP with in Ekahau. Within a colour the
+APs are still walked by proximity, so a group is numbered in the order you would
+walk it.
+
+Two extra controls appear when it is chosen:
+
+- **The colour sequence list**, under the ordering dropdown. It lists every
+  colour actually present in the project, by the name Ekahau uses for it —
+  Clear, Yellow, Orange, Red, Pink, Violet, Blue, Gray, Green, Brown, Mint —
+  with a count of how many APs carry it. It starts alphabetical. **Drag a row to
+  move it**, the same gesture as the wall-type slots in Quick Walls; the number
+  beside each row is the order it will be numbered in. An AP with no colour set
+  in Ekahau appears as **Clear** and is numbered like any other group.
+
+- **Two tabs above it** decide how colour and floor interleave:
+  - **Finish each floor** — floor 1's blues, greens and greys, then floor 2's
+    blues, greens and greys.
+  - **Colour through building** — every blue on every floor, then every green on
+    every floor.
+
+  Choosing **Colour through building** switches **Scope** to **All APs** and
+  says so. The two cannot both be true: carrying one colour up through the
+  building has already spent the per-floor counter by the time it comes back
+  down for the next colour.
+
+### Manual (click order)
+
+Every AP on the floor is drawn, ringed in its own Ekahau colour, so "start with
+the blue ones" can be done by eye. Click one to give it the next number. Three
+things take a number back:
+
+- **right-click anywhere on the plan**,
+- **Ctrl+Z**, or
+- **click the numbered marker itself** (its tooltip says so).
+
+**Undo** and **Clear all** buttons above the preview do the same thing. APs you
+have not clicked keep their current names and show a `–` in the preview's
+number column.
+
 ### Preview and download
 
 The preview table shows the first five current→new name mappings with a toggle to expand. Once satisfied, click **Download labeled .esx** to save the renamed file.
+
+Above the table, a line shows what every name on the floor has in common before
+and after, so the part that is actually changing is the part you read. The table
+itself omits that shared stem from both columns.
+
+**If any two APs would end up with the same name**, an amber line appears above
+the preview naming them and suggesting the two fixes — add a **Floor** segment,
+or set **Scope** to **All APs** so the counter keeps going instead of restarting
+on each floor. It is a warning, not a block: the Download button stays
+available, because a name you chose deliberately is your decision. Ekahau will
+accept duplicate names, and you will not be able to tell those APs apart
+afterwards.
 
 ### Templates
 
@@ -678,6 +816,29 @@ The suite chooses the mechanism for you based on how it was installed:
 | --- | --- |
 | Cloned with git | Fetches and checks out the newest release tag. Fast, and the previous version stays available in git. |
 | Installed from a ZIP | Downloads the release asset, verifies its SHA-256, copies the current folder to a dated `.previous-vX.X.X` backup, then installs. |
+| A development checkout | **No Update button, deliberately.** The panel prints the exact `git` command to run instead. |
+
+#### If you are running from a development checkout
+
+A clone that also carries `tests/`, `scripts/`, `.github/` and `CLAUDE.md` is a
+working copy, not an installation. Updating it in place would check out a
+release tag over whatever you have in progress and leave the repository on a
+detached HEAD, so **there is no Update button on purpose.**
+
+Instead, About prints the command with your own install folder already in it,
+and a **Copy** button beside it:
+
+```
+git -C "<your install folder>" pull
+```
+
+Or simply `git pull` if you are already in that folder. Everything else in the
+panel — the version you are on, the version available, the release notes —
+works exactly as it does for any other install.
+
+> This is the answer if the in-app updater has never seemed to do anything for
+> you. Before **v2.99.7** this case said only "update it with git", which names
+> a tool rather than a command.
 
 **Other ways to update** in the same panel covers the rest: switching a ZIP install over to git updates, copying the PowerShell command, or downloading the ZIP by hand. These open on their own if an update fails, along with a plain-language explanation of what went wrong.
 
