@@ -1143,7 +1143,9 @@ def api_update():
     mode = data.get("mode")
     channel = data.get("channel") or "release"
     install_git = bool(data.get("installGit"))
-    if mode not in (None, "git", "zip", "convert"):
+    # "dev_pull" is the only mode a development checkout accepts, and it has to
+    # be named: perform_update still refuses a bare update on a working copy.
+    if mode not in (None, "git", "zip", "convert", "dev_pull"):
         return jsonify({"ok": False, "error": f"unknown update mode: {mode}"}), 400
 
     steps = []

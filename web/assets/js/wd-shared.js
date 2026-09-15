@@ -739,6 +739,13 @@
       var go = host.querySelector('.wd-update-goBtn');
       if (go) go.addEventListener('click', function () { run(null); });
 
+      /* Named, not a bare run(). perform_update() still refuses an unqualified
+         update on a development checkout - "dev_pull" is the only mode it
+         accepts there, and asking for it explicitly is what keeps a future
+         "just update" from quietly detaching HEAD on a working copy. */
+      var pullBtn = host.querySelector('.wd-update-pullBtn');
+      if (pullBtn) pullBtn.addEventListener('click', function () { run('dev_pull'); });
+
       var conv = host.querySelector('.wd-update-convertBtn');
       if (conv) conv.addEventListener('click', showConvertConfirm);
 
@@ -819,28 +826,46 @@
       }
 
       if (info.method === 'dev') {
-        /* There is deliberately no Update button here: clicking one on a
-           maintainer's clone would check out a release tag over in-progress
-           work and detach HEAD.
+        /* "Pull now" is not the Update button, and the difference is the whole
+           reason this case exists.
 
-           What was missing is the other half. "Update it with git" is not an
-           instruction — it names a tool, not a command, and this panel was the
-           only place that said anything at all. A git install gets a command
-           and a Copy button; a ZIP install gets a command and a Copy button;
-           this case got one sentence and a dead end, which is how the feature
-           lost the person it was written for. So it names the command, and
-           puts the folder inside it so the copied line runs from anywhere. */
+           Update checks out a release *tag*, which on a working copy means
+           landing on a detached HEAD with your branch left behind - that is
+           what is_dev_checkout() blocks and it still does. Pull moves the
+           branch you are already on, and only forward: the server runs
+           `git pull --ff-only` and refuses on a dirty tree, a detached HEAD,
+           or anything that is not a fast-forward, naming the files each time.
+
+           The typed command stays underneath. A refusal has to leave him
+           somewhere to go, and the shell is where he can see what git says and
+           decide what to do about it. */
         var pull = 'git -C "' + (info.root || '.') + '" pull';
         render({ body:
-          '<div class="wd-update-note">This is a development checkout — ' +
-          'updating from here would check out a release tag over your work ' +
-          'and detach HEAD. Pull it instead:</div>' +
-          '<div class="wd-update-cmdRow">' +
-            '<code class="wd-update-cmd">' + esc(pull) + '</code>' +
-            '<button class="btn btn-sm wd-update-copyBtn" type="button">Copy</button>' +
+          '<div class="wd-update-primaryRow">' +
+            '<button class="btn btn-primary wd-update-pullBtn" type="button">' +
+              'Pull now' +
+            '</button>' +
+            '<span class="wd-update-target">v' +
+              esc(state.localVersion || info.currentVersion) +
+              ' &rarr; v' + esc(state.latestVersion) + '</span>' +
           '</div>' +
-          '<div class="wd-update-altNote">Or just <code>git pull</code> if you ' +
-          'are already in that folder.</div>' });
+          '<div class="wd-update-note">This is a development checkout, so ' +
+          'updating the normal way would check out a release tag over your ' +
+          'work and detach HEAD. <b>Pull now</b> fast-forwards the branch you ' +
+          'are on instead, and stops without changing anything if you have ' +
+          'uncommitted work.</div>' +
+          '<details class="wd-update-alts"><summary>Or run it yourself</summary>' +
+            '<div class="wd-update-altBody">' +
+              '<div class="wd-update-alt">' +
+                '<div class="wd-update-cmdRow">' +
+                  '<code class="wd-update-cmd">' + esc(pull) + '</code>' +
+                  '<button class="btn btn-sm wd-update-copyBtn" type="button">Copy</button>' +
+                '</div>' +
+                '<div class="wd-update-altNote">Or just <code>git pull</code> ' +
+                'if you are already in that folder.</div>' +
+              '</div>' +
+            '</div>' +
+          '</details>' });
         wire();
         return;
       }
@@ -872,7 +897,8 @@
       render({ cls: 'is-busy', body:
         '<div class="wd-update-primaryRow">' +
           '<span class="wd-about-checkSpinner" aria-hidden="true"></span>' +
-          '<b>' + (mode === 'convert' ? 'Switching to git updates…' : 'Updating…') + '</b>' +
+          '<b>' + (mode === 'convert' ? 'Switching to git updates…'
+                 : mode === 'dev_pull' ? 'Pulling…' : 'Updating…') + '</b>' +
         '</div>' +
         '<div class="wd-update-note">Progress is also printed in the terminal ' +
         'window the app is running in.</div>' });
@@ -917,11 +943,27 @@
 
       var from = res.previousVersion || (state && state.localVersion) || '';
       var to = res.newVersion || (state && state.latestVersion) || '';
+
+      /* Something arrived but the version did not move - a pull that brought
+         commits nothing in which bumped versions.json. "Updated v2.99.8 →
+         v2.99.8" is what that rendered as before, which reads as a bug in the
+         thing that just worked. Say what actually happened instead. */
+      var sameVersion = from && to && from === to;
+      var headline;
+      if (sameVersion) {
+        var n = res.commits || 0;
+        headline = '<span class="wd-update-tick">&#10003;</span> Pulled' +
+          (n ? ' <b>' + esc(String(n)) + '</b> commit' + (n === 1 ? '' : 's') : '') +
+          ' &mdash; still on <b>v' + esc(to) + '</b>';
+      } else {
+        headline = '<span class="wd-update-tick">&#10003;</span> Updated' +
+          (from && to ? ' <b>v' + esc(from) + '</b> &rarr; <b>v' + esc(to) + '</b>' : '');
+      }
+
       render({ cls: 'is-done', body:
-        '<div class="wd-update-headline">' +
-          '<span class="wd-update-tick">&#10003;</span> Updated' +
-          (from && to ? ' <b>v' + esc(from) + '</b> &rarr; <b>v' + esc(to) + '</b>' : '') +
-        '</div>' +
+        '<div class="wd-update-headline">' + headline + '</div>' +
+        (sameVersion ? '<div class="wd-update-note">The version number only ' +
+          'moves when a release bumps it, so this is normal.</div>' : '') +
         (res.rescuedTemplates && res.rescuedTemplates.length
           ? '<div class="wd-update-note">Your edits to ' +
             esc(res.rescuedTemplates.join(', ')) + ' were kept as personal copies.</div>'

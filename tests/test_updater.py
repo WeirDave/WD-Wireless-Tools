@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -964,6 +965,140 @@ class TheDevCheckoutIsToldWhatToRunTests(unittest.TestCase):
         self.assertIn("querySelector('.wd-update-cmd')", wire)
         self.assertIn("|| config.bootstrapCommand", wire,
                       "and still falls back to what it used to copy")
+
+
+class DevPullTests(unittest.TestCase):
+    """The one update a maintainer's clone can safely do to itself.
+
+    `is_dev_checkout()` blocks `git_update` because that checks out a release
+    *tag*, which on a working copy means a detached HEAD with your branch left
+    behind. `dev_pull` moves the branch you are already on, and only forward,
+    so the hazard the guard exists for is not reachable through it.
+
+    Every refusal below was exercised against a real clone before being written
+    down: a dirty tree (this repo's own, mid-session), a detached HEAD, and a
+    branch carrying a commit that is not upstream. In all three the working
+    copy was checked afterwards and nothing had moved.
+    """
+
+    def setUp(self):
+        self.src = (Path(__file__).resolve().parent.parent
+                    / "tools" / "updater.py").read_text(encoding="utf-8")
+        body = self.src[self.src.index("def dev_pull("):]
+        self.body = body[:body.index("def convert_to_git")]
+
+    def test_it_never_checks_out_a_tag(self):
+        """The whole difference between this and the blocked path.
+
+        Asked of the git commands, not of the text: the word "checkout" is
+        all over the prose here ("development checkout", and the advice to run
+        `git checkout main`), and matching on that tests the comments."""
+        calls = re.findall(r'_run_git\(\[([^\]]*)\]', self.body)
+        verbs = [c.split(",")[0].strip().strip('"') for c in calls]
+        self.assertNotIn("checkout", verbs)
+        self.assertEqual(sorted(set(verbs)), ["pull", "rev-list", "rev-parse"])
+        self.assertNotIn("_latest_release_tag", self.body)
+
+    def test_the_pull_is_fast_forward_only(self):
+        """Without --ff-only a divergent branch gets a merge commit nobody
+        asked for, made by a button press."""
+        self.assertIn('"pull", "--ff-only"', self.body)
+
+    def test_it_refuses_a_dirty_tree_and_names_the_files(self):
+        self.assertIn("_dirty_paths(root)", self.body)
+        self.assertIn("uncommitted changes to", self.body)
+
+    def test_it_refuses_a_detached_head(self):
+        """There is no branch to move, and pulling would be meaningless."""
+        self.assertIn('"rev-parse", "--abbrev-ref", "HEAD"', self.body)
+        self.assertIn("detached HEAD", self.body)
+
+    def test_a_branch_ahead_of_origin_is_explained_not_just_failed(self):
+        """git's own failure here came back as "the update could not finish,
+        try again" - true, useless, and trying again fails identically."""
+        self.assertIn("origin/{branch}..HEAD", self.body)
+        # The sentence is wrapped in the source, so the halves are asserted
+        # separately; the assembled wording was read off a real clone that had
+        # one unpushed commit, and then a second.
+        self.assertIn("not on GitHub, so this cannot ", self.body)
+        self.assertIn('"fast-forward.', self.body)
+        self.assertIn("your work is safe", self.body)
+        self.assertIn('"1 commit that is"', self.body)
+
+    def test_whether_anything_arrived_is_measured_on_the_commit(self):
+        """A pull of three documentation commits with no version bump reported
+        "Already up to date", which reads as the button having done nothing."""
+        self.assertIn("head_before != head_after", self.body)
+        self.assertIn("rev-list", self.body)
+        self.assertNotIn('changed": cmp_version', self.body)
+
+
+class DevPullIsOptInOnlyTests(unittest.TestCase):
+    """A bare "update me" on a working copy is still refused. Only the named
+    mode gets through, so a future caller that forgets to pass one cannot
+    detach HEAD over in-progress work."""
+
+    def setUp(self):
+        root = Path(__file__).resolve().parent.parent
+        src = (root / "tools" / "updater.py").read_text(encoding="utf-8")
+        block = src[src.index("def perform_update("):]
+        sep = chr(10) * 3
+        self.block = (block[:block.index(sep)]
+                      if sep in block else block)
+        self.server = (root / "server.py").read_text(encoding="utf-8")
+
+    def test_the_guard_still_rejects_an_unqualified_update(self):
+        self.assertIn('if info.get("isDevCheckout"):', self.block)
+        self.assertIn("raise UpdateError", self.block)
+
+    def test_only_the_named_mode_is_let_through(self):
+        self.assertIn('if mode == "dev_pull":', self.block)
+        guard_at = self.block.index('if info.get("isDevCheckout"):')
+        mode_at = self.block.index('if mode == "dev_pull":')
+        raise_at = self.block.index("raise UpdateError", guard_at)
+        self.assertLess(mode_at, raise_at,
+                        "the exception must be inside the guard, before it raises")
+
+    def test_the_route_accepts_it(self):
+        self.assertIn('"dev_pull"', self.server)
+        self.assertIn('mode not in (None, "git", "zip", "convert", "dev_pull")',
+                      self.server)
+
+
+class DevPullButtonTests(unittest.TestCase):
+    """The panel offers it, and asks for it by name."""
+
+    SHARED = Path(__file__).resolve().parent.parent / "web" / "assets" / "js" / "wd-shared.js"
+
+    def setUp(self):
+        src = self.SHARED.read_text(encoding="utf-8")
+        self.src = src
+        body = src[src.index("if (info.method === 'dev')"):]
+        self.dev = body[:body.index("if (info.method === 'manual')")]
+
+    def test_there_is_a_button(self):
+        self.assertIn("wd-update-pullBtn", self.dev)
+        self.assertIn("Pull now", self.dev)
+
+    def test_it_asks_for_the_mode_by_name(self):
+        self.assertIn("run('dev_pull')", self.src)
+
+    def test_it_is_still_not_the_ordinary_update_button(self):
+        """wd-update-goBtn sends mode null, which perform_update refuses on a
+        development checkout. It must not appear in this branch."""
+        self.assertNotIn("wd-update-goBtn", self.dev)
+
+    def test_it_says_what_it_will_and_will_not_do(self):
+        self.assertIn("detach HEAD", self.dev)
+        self.assertIn("uncommitted work", self.dev)
+
+    def test_the_typed_command_is_still_offered(self):
+        """A refusal has to leave somewhere to go."""
+        self.assertIn("wd-update-cmd", self.dev)
+        self.assertIn("wd-update-copyBtn", self.dev)
+
+    def test_the_busy_state_names_what_is_happening(self):
+        self.assertIn("'Pulling", self.src)
 
 
 if __name__ == "__main__":
