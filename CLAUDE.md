@@ -478,22 +478,30 @@ report grouping headings — goes through the shared pair now, and
 
 ## Known gotchas
 
-- **A wall template adds his walls; it never changes one Ekahau ships.** His
-  rule, v2.100.5: "I just want to add in the walls that we added, not change
-  anything from the defaults. So if stuff has changed from the defaults, that's
-  probably wrong." `mergeTemplateTypes` in `web/assets/js/walls.js` therefore
-  skips a matched type that `isStockType()` recognises, and names what it
-  skipped in the toast rather than going quiet. The **Ekahau Defaults**
-  template passes `fromDefaults: true` and is allowed to write them, because
-  restoring the standard values is what that one is for.
+- **A wall template updates every type it carries, including the ones Ekahau
+  ships - and three of those are recoloured on purpose.** `Elevator Shaft`
+  green, `Door, Steel Fire/Exit` orange, `Window, Thick` `#0093EA`, because
+  Ekahau's greys for those three are hard to tell apart on a plan.
 
-  How the deviation got there is the part worth remembering: the shipped
-  template had been **saved out of a project** where three types had been
-  recoloured, so it carried that project's appearance as if it were a house
-  standard, and applied it everywhere. Anything captured from a real project
-  can carry more than what it was captured for. `tests/test_wall_template_merge.py`
-  now fails if any value in the shipped template deviates from
-  `templates/ekahau_defaults.json`.
+  **This was got wrong once, expensively, so do not re-derive it.** v2.100.5
+  read "I just want to add in the walls that we added, not change anything from
+  the defaults" as meaning the template must never deviate from Ekahau, removed
+  those three colours and added a guard to `mergeTemplateTypes` that skipped
+  stock types. Both were wrong: the Quick Walls guide had documented the
+  recolour as a feature for as long as it existed, and he asked for them back -
+  "get them back to where they were for my template."
+
+  The colours were recovered from `wallTypes.json` inside his own most recent
+  project, which is the backup for this: Quick Walls writes his types into
+  every project he applies them to. Only the newest of three September projects
+  carried them; the two older ones had Ekahau's greys, so **take the most
+  recent rather than assuming agreement**.
+
+  The guard had to go with them. Every Ekahau project already contains those
+  three types, so a skip-stock-types rule means his colours never land on
+  anything - a restoration that changes a file and nothing anyone can see. The
+  `kept` / `keptPhrase` reporting is still in `walls.js` if the guard is ever
+  wanted back.
 
 - **The AP notes pages print last, and it is a decision.** The section is
   unbounded - a survey that photographs every AP would be a page per access

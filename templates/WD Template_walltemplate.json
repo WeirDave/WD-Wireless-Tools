@@ -151,7 +151,7 @@
     {
       "name": "Door, Steel Fire/Exit",
       "key": "SteelFire/ExitDoor",
-      "color": "#999999",
+      "color": "#E85D04",
       "propagationProperties": [
         {
           "band": "FIVE",
@@ -240,7 +240,7 @@
     {
       "name": "Elevator Shaft",
       "key": "ElevatorShaft",
-      "color": "#5A5A5A",
+      "color": "#5FAB4F",
       "propagationProperties": [
         {
           "band": "FIVE",
@@ -741,7 +741,7 @@
     {
       "name": "Window, Thick",
       "key": "ThickWindow",
-      "color": "#ADE1FF",
+      "color": "#0093EA",
       "propagationProperties": [
         {
           "band": "FIVE",
