@@ -62,6 +62,25 @@ def _key(name) -> str:
     return " ".join(str(name or "").split()).casefold()
 
 
+def _words(name) -> tuple:
+    """The same name with Ekahau's own renaming folded out.
+
+    Ekahau renamed its stock wall types between releases: "Dry Wall" became
+    "Wall, Dry", "Thin Door" became "Door, Thin", "Thick Window" became
+    "Window, Thick". An exact name match sees those as different types, so a
+    project made in an older release collected a second copy of each - one real
+    run came out with 43 wall types and ten near-duplicate pairs, which is not
+    a project anybody wants to open.
+
+    Same words, in any order, with punctuation dropped: that is the same type
+    under a new name. Different words are left alone, so "Wall, Dry" and
+    "Wall, Dry, Hollow" stay two types, and none of his own five - Framery Pod,
+    the steel and rack walls - collides with anything stock.
+    """
+    cleaned = "".join(c if (c.isalnum() or c.isspace()) else " " for c in str(name or ""))
+    return tuple(sorted(cleaned.casefold().split()))
+
+
 def _read_members(path: Path) -> dict:
     with zipfile.ZipFile(path) as z:
         return {n: z.read(n) for n in z.namelist()}
@@ -79,8 +98,10 @@ def plan_into_members(members: dict, wall_types: list) -> dict:
         return {"error": f"wallTypes.json could not be read: {exc}"}
 
     have = {_key(w.get("name")) for w in existing}
+    # Same words in a different order is Ekahau's own renaming, not a new type.
+    renamed = {_words(w.get("name")): w.get("name") for w in existing}
     add, skip = [], []
-    seen = set()
+    seen, seen_words = set(), set()
     for wt in wall_types or []:
         name = wt.get("name")
         k = _key(name)
@@ -92,7 +113,18 @@ def plan_into_members(members: dict, wall_types: list) -> dict:
             skip.append({"name": name,
                          "why": "the project already has a wall type with this name"})
             continue
+        w = _words(name)
+        if w in renamed:
+            skip.append({"name": name,
+                         "why": "the project already has this type under Ekahau's "
+                                "older name, “%s”" % renamed[w]})
+            continue
+        if w in seen_words:
+            skip.append({"name": name,
+                         "why": "the template names this type twice"})
+            continue
         seen.add(k)
+        seen_words.add(w)
         add.append({"name": name})
     return {"ok": True, "add": add, "skip": skip,
             "existing": len(existing), "total": len(existing) + len(add)}
