@@ -158,9 +158,22 @@
     }
   }
 
+  /* The number that goes into a name for this floor.
+
+     This used to read `order`, which is only ever set from
+     buildingFloors.json and is 0 for everything otherwise - so a project whose
+     floors are not attached to a building auto-detected EVERY floor as "00".
+     With Per Floor scope the counter also restarts on each floor, and 27 APs
+     over three floors came out as nine names used three times each. Nothing
+     said so; the duplicates are simply what gets written to the .esx.
+
+     `num` is worked out at load with a stated precedence - what Ekahau says,
+     then the number in the floor's own name, then its position - so there is
+     always something that distinguishes one floor from another. */
   function getFloorNumber(floor) {
     if (!floor) return '01';
-    var n = floor.order != null ? floor.order : 0;
+    var n = floor.num != null ? floor.num
+          : (floor.order != null ? floor.order : 0);
     var s = String(n);
     while (s.length < 2) s = '0' + s;
     return s;
@@ -889,6 +902,24 @@
       });
 
       S.floors.sort(function (a, b) { return a.order - b.order; });
+
+      /* A floor number for naming, which is not the same thing as `order`.
+
+         `order` sorts the tabs and is 0 when buildingFloors.json has nothing
+         to say - which is fine for sorting and wrong for a name, because
+         every floor then gets the same token. Precedence, most authoritative
+         first: what Ekahau recorded, then a number in the floor's own name
+         ("01 - Ground", "Level 2", "3rd floor"), then its position in the
+         list, which is always distinct even when nothing else is. */
+      var fromBuilding = {};
+      ((bfData && bfData.buildingFloors) || []).forEach(function (bf) {
+        if (bf.floorNumber != null) fromBuilding[bf.floorPlanId] = bf.floorNumber;
+      });
+      S.floors.forEach(function (f, i) {
+        if (fromBuilding[f.id] != null) { f.num = fromBuilding[f.id]; return; }
+        var m = String(f.name || '').match(/\d+/);
+        f.num = m ? parseInt(m[0], 10) : (i + 1);
+      });
     });
   }
 
@@ -2116,8 +2147,50 @@
     body.innerHTML = html;
   }
 
+  /* Two APs must never leave here with one name.
+
+     The floor token defaulting to "00" on every floor is how this was found -
+     three floors, Per Floor scope, and nine names used three times each - but
+     that is one cause among several. A template with no Floor and no AP #
+     segment does it, and so does a colour sequence numbered per floor. The
+     code already knew this was the outcome to avoid: the comment on
+     arSetNesting says so, and forcing continuous scope there is a guard
+     against exactly one of the ways in.
+
+     So the check is on the names themselves, at the end, where every path has
+     already run. It names the collisions rather than reporting a count: a
+     warning that says "9 duplicates" leaves him to find them. */
+  function duplicateNames(items) {
+    var seen = {}, dupes = [];
+    items.forEach(function (it) {
+      var n = it.newName || '';
+      if (!n) return;
+      if (seen[n] === 1) { dupes.push(n); seen[n] = 2; }
+      else if (!seen[n]) { seen[n] = 1; }
+    });
+    return dupes;
+  }
+
   function updateDownloadBtn() {
     var hasChanges = S.preview.some(function (it) { return it.oldName !== it.newName; });
+    var dupes = duplicateNames(S.preview);
+    var warn = $('arDupeWarn');
+    if (warn) {
+      if (dupes.length) {
+        var shown = dupes.slice(0, 4).map(esc).join(', ');
+        warn.innerHTML = '<b>' + dupes.length + ' name'
+          + (dupes.length === 1 ? '' : 's')
+          + ' would be used more than once</b> — ' + shown
+          + (dupes.length > 4 ? ' and ' + (dupes.length - 4) + ' more' : '')
+          + '. Ekahau will take them, and you will not be able to tell those '
+          + 'APs apart afterwards. Add a Floor segment, or switch Scope to '
+          + '"All APs" so the counter keeps going instead of restarting.';
+        warn.hidden = false;
+      } else {
+        warn.hidden = true;
+        warn.innerHTML = '';
+      }
+    }
     $('arDownloadBtn').disabled = !hasChanges;
   }
 
