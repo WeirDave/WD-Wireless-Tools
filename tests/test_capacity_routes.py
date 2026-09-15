@@ -48,8 +48,13 @@ class CapacityRouteTests(unittest.TestCase):
 
     def test_the_page_is_served(self):
         r = self.client.get("/capacity")
-        self.assertEqual(r.status_code, 200)
-        self.assertIn(b"WD Capacity", r.data)
+        try:
+            self.assertEqual(r.status_code, 200)
+            self.assertIn(b"WD Capacity", r.data)
+        finally:
+            # send_file hands back an open reader; the suite runs with
+            # warnings on and an unclosed one prints a ResourceWarning.
+            r.close()
 
     def test_analyze_reads_the_uploaded_project(self):
         r = self._post("analyze", self.bytes, "?name=src.esx")
