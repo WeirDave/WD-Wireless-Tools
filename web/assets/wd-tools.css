@@ -508,6 +508,25 @@ body.tool-report .report-wiz-topbar { background: linear-gradient(rgba(159,27,88
 
 .btn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
 
+/* A button that is off but still clickable, so it can say why.
+
+   Cloud Manager's bulk buttons used the `disabled` attribute, which emits no
+   pointer events - so the reason each one was off, written out in full in
+   `updateBulkBar`, could never be hovered or clicked for. They carry
+   aria-disabled and this class instead, and must look exactly as off as
+   `:disabled` does or the swap becomes a behaviour change. The lift and
+   shadow on :hover/:active are suppressed to match. */
+.btn[aria-disabled="true"] {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.btn[aria-disabled="true"]:hover,
+.btn[aria-disabled="true"]:active {
+  transform: none;
+  box-shadow: none;
+}
+
 .btn-primary { background: var(--green); color: #fff; border-color: var(--green); }
 
 .btn-primary:hover { background: var(--green-dark); border-color: var(--green-dark); }

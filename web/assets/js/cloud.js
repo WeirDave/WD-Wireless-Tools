@@ -1927,10 +1927,14 @@ function stalenessBadgeHtml(r) {
   }
 
   if (s === 'local_newer') {
-    // Nothing behind this one anywhere in the app: Ekahau's upload only
-    // creates new cloud projects, it cannot replace the contents of an
-    // existing one. Saying so beats implying a button that does not exist.
-    return `<span class="stale-badge stale-local" title="Your local copy was edited more recently than the cloud one. This cannot be pushed up from here — Ekahau's upload creates a new project rather than replacing an existing one. Open the project in Ekahau and save it to the cloud from there.">&#11014; Local newer</span>`;
+    /* Nothing behind this one anywhere in the app, and the reason matters.
+       The upload flow this client has (`upload/initiate`) creates a new cloud
+       project rather than replacing one in place - so the direction is not
+       built. Whether the API could do it has never been tested, so saying
+       Ekahau "cannot" would tell him something false about his own tool. The
+       Sync confirm settled on this vocabulary already; the badge said the
+       other thing for four releases. */
+    return `<span class="stale-badge stale-local" title="Your local copy was edited more recently than the cloud one. Sending it up is not built yet — the upload this tool has creates a new cloud project instead of replacing the one already there. Nothing here is at risk: sync never replaces the newer side with the older one. In the meantime, open the project in Ekahau and save it to the cloud from there, which is where the sync-or-overwrite prompt lives.">&#11014; Local newer</span>`;
   }
   return '';
 }
@@ -3819,7 +3823,7 @@ function updateBulkBar() {
   const n = selected.size;
   document.getElementById('selCount').textContent = n ? n + ' selected' : '';
 
-  let pairCount = 0, deletableCount = 0, movableCount = 0, localFolderCount = 0, uploadableCount = 0, downloadableCount = 0;
+  let deletableCount = 0, movableCount = 0, localFolderCount = 0;
   let verifyableCount = 0;
   const verifyablePairIds = new Set();
 
@@ -3830,7 +3834,6 @@ function updateBulkBar() {
 
     const isTreeChild = k.startsWith('ct:');
     if (d.kind === 'pair') {
-      pairCount++;
       localFolderCount++;
       if (currentTab === 'projects' || isTreeChild) deletableCount++;
 
@@ -3878,24 +3881,36 @@ function updateBulkBar() {
        project", because a site row and a project row are both kind 'cloud';
        isProjectSyncItem is that question asked directly, so a site can never
        be handed to assign_to_site as though it were a project. */
-    if (isProjectSyncItem(d) && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir))) {
-      movableCount++;
-    }
+    if (movableSidesOf(d).length) movableCount++;
 
-    if (currentTab === 'projects' && d.kind === 'local' && !d.isDir) uploadableCount++;
-
-    if (currentTab === 'projects' && d.kind === 'cloud') downloadableCount++;
   });
   const syncItems = selectedSyncItems();
   const planToLocal = syncPlan(syncItems, 'to-local');
   const planToCloud = syncPlan(syncItems, 'to-cloud');
+  /* Why a bulk button is off has to reach him, and until now none of it did.
+
+     The old version set `el.disabled = true` and stashed the reason in
+     `el.dataset.disabledTitle` - which nothing in this file, in the CSS or in
+     the tooltip delegation ever read. Six carefully written explanations, none
+     of them rendered anywhere. A disabled button emits no pointer events
+     either, so even `title` would not have shown; the greyed button was the
+     entire message.
+
+     So the button stays enabled to the DOM and is disabled by class and
+     aria-disabled instead. It greys the same way, screen readers still
+     announce it as unavailable, and it can be hovered and clicked - which is
+     what makes the reason reachable. _wireDisabledBulkReasons catches the
+     click and says what to select. */
   const setBtn = (id, tabVisible, enabled, disabledTitle, tooltip) => {
     const el = document.getElementById(id); if (!el) return;
+    if (el.dataset.baseTitle === undefined) el.dataset.baseTitle = el.title || '';
     el.style.display = tabVisible ? '' : 'none';
-    el.disabled = !enabled;
+    el.disabled = false;
+    el.setAttribute('aria-disabled', enabled ? 'false' : 'true');
     el.classList.toggle('is-disabled', !enabled);
-    if (!enabled && disabledTitle) el.dataset.disabledTitle = disabledTitle;
-    if (tooltip) el.title = tooltip;
+    el.title = enabled
+      ? (tooltip || el.dataset.baseTitle)
+      : (disabledTitle || el.dataset.baseTitle);
   };
   const syncFromTip = currentTab === 'projects'
     ? 'Push local → cloud: renames matched cloud projects to the local name, and uploads local-only .esx files to Ekahau Cloud'
@@ -3928,6 +3943,41 @@ function updateBulkBar() {
 
 function isProjectSyncItem(d) {
   return !!d && (currentTab === 'projects' || d.entityKind === 'projects');
+}
+
+/* Which sides of a selected row can be moved into a site.
+
+   The count and the action both used to ask
+   `d.kind === 'cloud' || (d.kind === 'local' && !d.isDir)` - which covers
+   every row shape except a matched pair. On the **Projects** tab a matched
+   project is a single `pair` row, so "Move to site..." was dead for exactly
+   the files the everyday workflow produces: design locally, push up, and the
+   two sides match from then on. It worked on the Sites tab only because the
+   tree gives each side of a nested pair its own checkbox key (`ct-c:` /
+   `ct-l:`) and those rows are plain cloud/local, which is why the feature
+   tested fine and still could not be used where it was reached for.
+
+   A pair yields both of its sides, because moving one and not the other would
+   file the cloud project under one site and leave the .esx in another folder -
+   the pair survives the move only if both ends go. The `.esx` test is what
+   keeps a matched *site* out: a site pair's local side is a folder, and
+   `assign_to_site` must never be handed one. Same idiom as `isFilePair`. */
+function movableSidesOf(d) {
+  if (!d || !isProjectSyncItem(d)) return [];
+  if (d.kind === 'cloud') {
+    return [{ kind: 'cloud', id: d.id, name: d.name, size: d.size, owner: d.owner }];
+  }
+  if (d.kind === 'local') {
+    return d.isDir ? []
+      : [{ kind: 'local', path: d.path, name: d.name, size: d.size, owner: d.owner }];
+  }
+  if (d.kind === 'pair' && /\.esx$/i.test(String(d.localPath || ''))) {
+    return [
+      { kind: 'cloud', id: d.cloudId, name: d.cloudName, owner: d.cloudOwner },
+      { kind: 'local', path: d.localPath, name: d.localName },
+    ];
+  }
+  return [];
 }
 
 /* What a Sync in this direction would actually do, given a selection.
@@ -4929,12 +4979,17 @@ async function startMoveLocalToSite(path, name) {
   await _openMoveToSitePicker();
 }
 async function bulkMoveToSite() {
-  const targets = [...selected].map(k => rowData[k])
-    .filter(d => d && isProjectSyncItem(d)
-                 && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir)))
-    .map(d => ({
-      kind: d.kind, id: d.id, path: d.path, name: d.name,
-      size: d.size, owner: d.owner,
+  const seenSide = new Set();
+  const targets = [...selected].flatMap(k => movableSidesOf(rowData[k]))
+    .filter(sd => {
+      const idk = sd.kind + ':' + (sd.id || sd.path);
+      if (seenSide.has(idk)) return false;
+      seenSide.add(idk);
+      return true;
+    })
+    .map(sd => ({
+      kind: sd.kind, id: sd.id, path: sd.path, name: sd.name,
+      size: sd.size, owner: sd.owner,
       destValue: '', destNewName: '', destAuto: false,
     }));
   if (!targets.length) { toast('Select cloud projects or local .esx files first', 'info'); return; }
@@ -5436,6 +5491,25 @@ function _reportMoveOutcome(results, dests) {
   toast(`${bits.join(' · ')} (${results.firstErr})`, 'error');
 }
 
+
+/* Clicking a bulk button that is off says what would switch it on.
+
+   The gestures people actually make at a greyed control are hover and click,
+   so both have to answer. The click is caught in the capture phase on the
+   document, which is what stops the inline onclick underneath from running -
+   a capture listener on an ancestor fires before the target's own handlers,
+   and stopPropagation there keeps it from reaching them. */
+function _wireDisabledBulkReasons() {
+  document.addEventListener('click', (ev) => {
+    const btn = ev.target && ev.target.closest
+      ? ev.target.closest('.bulk-btn.is-disabled') : null;
+    if (!btn) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    toast(btn.title || 'Select some rows first', 'info');
+  }, true);
+}
+_wireDisabledBulkReasons();
 
 function _wireIconTipDelegation() {
   const migrate = (target) => {
