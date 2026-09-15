@@ -152,7 +152,25 @@ higher.
 
 ### Suite-wide
 
-#### 8. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
+#### 8. P3 — The Report's native picker still can't fall back
+
+v2.100.9 fixed the dead end behind **Open from disk…** in Prep and Quick Walls:
+a picker that cannot open now says so and hands you the browser's own file
+dialog instead of doing nothing. The root cause — `_tk_dialog` reporting every
+failure as a cancel — is fixed underneath every caller.
+
+The Report reaches its picker a different way, through
+`organizer/pick_esx_file`, and `openViaNativePicker()` in `report.js` returns
+`true` for anything that is not a chosen path, so a picker that could not open
+still stops there rather than falling through to `fileInput`. Its own comment
+says "a cancelled picker must not leave the page doing nothing", which is what
+it does.
+
+Left alone tonight only because `report.js` was open in another session. It is
+a three-line change: read the new `code` field and return `false` on
+`picker_unavailable`.
+
+#### 9. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
 
 A finding about going from DWG to `.esx` was established in an earlier session
 and never recorded, so the next session will redo the work.

@@ -1170,7 +1170,16 @@ async function revealSourceFolder() {
   }
 }
 
+// Three outcomes, and they are not the same thing: a file was chosen, the
+// dialog was cancelled, or the dialog never opened. The third used to arrive
+// as the second and was therefore silent, which left this button doing nothing
+// at all. A picker that cannot run falls through to the browser's own file
+// input - getting a project in matters more than which dialog did it.
 async function openFromDisk() {
+  const btn = document.querySelector('.dropzone-open-disk');
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+  const done = () => { if (btn) { btn.disabled = false; btn.textContent = label; } };
   try {
     const res = await fetch('/api/walls/pick', {
       method: 'POST',
@@ -1178,6 +1187,13 @@ async function openFromDisk() {
       body: '{}',
     }).then(r => r.json());
     if (!res || !res.ok) {
+      done();
+      if (res && res.code === 'picker_unavailable') {
+        showToast(res.error + ' Use the drop zone instead.', 'error');
+        fileInput.value = '';
+        fileInput.click();
+        return;
+      }
       if (res && res.error && res.error !== 'No file selected') showToast(res.error, 'error');
       return;
     }

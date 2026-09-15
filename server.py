@@ -277,7 +277,7 @@ _WALLS_PROJECT = {"path": None}
 def api_walls(action):
     try:
         if action == "pick":
-            from tools.folder_organizer import _tk_dialog
+            from tools.folder_organizer import _tk_dialog_result
             code = (
                 "import tkinter as tk\n"
                 "from tkinter import filedialog\n"
@@ -285,10 +285,18 @@ def api_walls(action):
                 "p = filedialog.askopenfilename(title='Open an Ekahau project (.esx)', filetypes=[('Ekahau project', '*.esx'), ('All files', '*.*')])\n"
                 "print(p or '')\n"
             )
-            chosen = _tk_dialog(code)
-            if not chosen:
-                return jsonify({"ok": False, "error": "No file selected"})
-            path = Path(chosen)
+            res = _tk_dialog_result(code)
+            if not res["ran"]:
+                # A picker that never opened is not a cancel. Saying so is what
+                # lets the page offer the ordinary browse dialog instead of
+                # leaving a button that does nothing.
+                return jsonify({"ok": False, "code": "picker_unavailable",
+                                "error": "Could not open the file picker — %s."
+                                         % res["why"]})
+            if not res["path"]:
+                return jsonify({"ok": False, "code": "cancelled",
+                                "error": "No file selected"})
+            path = Path(res["path"])
             if not path.is_file():
                 return jsonify({"ok": False, "error": "That file could not be opened"})
             _WALLS_PROJECT["path"] = str(path)
@@ -738,7 +746,7 @@ def api_prep(action):
     rather than a project that was quietly never cropped.
     """
     if action == "pick":
-        from tools.folder_organizer import _tk_dialog
+        from tools.folder_organizer import _tk_dialog_result
         code = (
             "import tkinter as tk\n"
             "from tkinter import filedialog\n"
@@ -746,10 +754,15 @@ def api_prep(action):
             "p = filedialog.askopenfilename(title='Open an Ekahau project (.esx)', filetypes=[('Ekahau project', '*.esx'), ('All files', '*.*')])\n"
             "print(p or '')\n"
         )
-        chosen = _tk_dialog(code)
-        if not chosen:
-            return jsonify({"ok": False, "error": "No file selected"})
-        path = Path(chosen)
+        res = _tk_dialog_result(code)
+        if not res["ran"]:
+            return jsonify({"ok": False, "code": "picker_unavailable",
+                            "error": "Could not open the file picker — %s."
+                                     % res["why"]})
+        if not res["path"]:
+            return jsonify({"ok": False, "code": "cancelled",
+                            "error": "No file selected"})
+        path = Path(res["path"])
         if not path.is_file():
             return jsonify({"ok": False, "error": "That file could not be opened"})
         _PREP_PROJECT["path"] = str(path)
