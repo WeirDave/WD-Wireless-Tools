@@ -254,8 +254,11 @@
       </div>
       <div class="s-field">
         <label>Create-folder naming template</label>
-        <input type="text" id="sCreateTpl" placeholder="e.g. {site} - {date}">
-        <div class="hint">Used by "Create Project Folder" in Squirrel.</div>
+        <input type="text" id="sCreateTpl" placeholder="e.g. {site_code} - {site_name}">
+        <div class="hint">Used by &quot;Create Project Folder&quot; in Squirrel. Tokens:
+          <code>{site_code}</code> <code>{site_name}</code> <code>{city}</code>
+          <code>{state}</code> <code>{zip}</code> <code>{date}</code> &mdash;
+          anything else is kept as typed. Leave blank for free-form names.</div>
       </div>
       <div class="s-field text-right">
         <button class="btn btn-red" onclick="SP.resetOrganizer()">Reset Organizer Defaults</button>
@@ -334,6 +337,8 @@
     <button class="btn btn-blue" onclick="SP.save()">Save</button>
   </div>
 </div>
+
+<div class="toast-container" id="toasts"></div>
 
 <script src="/assets/js/wd-shared.js"></script>
 <script src="/assets/js/settings-page.js"></script>
