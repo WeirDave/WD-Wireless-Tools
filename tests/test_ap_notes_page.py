@@ -258,10 +258,15 @@ class NotesRendering(unittest.TestCase):
         """)
 
     def test_a_floor_without_a_number_is_not_printed_twice(self):
-        """His project: the floor has a long CAD name and no number."""
+        """A CAD-imported plan: a long sheet name and no floor number.
+
+        The name below is invented. It only has to be long, carry no digit a
+        floor parser would latch onto, and read like a drawing sheet - which is
+        the shape that made the heading print twice.
+        """
         self.run_block(r"""
         const ctx = ctxWith({ n1: { id: 'n1', text: 'note', imageIds: [] } });
-        const fp = { id: 'f1', name: 'Warehouse - Sheet A-1-1 - SAMPLE LAYOUT' };
+        const fp = { id: 'f1', name: 'Depot - Sheet QQ-0-0 - SAMPLE LAYOUT' };
         const html = renderApNotesSection(fp, [{ name: 'AP1', noteIds: ['n1'] }], {}, ctx, 0);
         const occurrences = html.split('SAMPLE LAYOUT').length - 1;
         check('floor name appears once, got ' + occurrences, occurrences === 1);
