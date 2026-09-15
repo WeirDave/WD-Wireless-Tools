@@ -813,9 +813,46 @@ def remote_branch_state(root: Path | None = None, cfg: AppConfig = CONFIG):
         sha = proc.stdout.split()[0].strip()
         if not re.fullmatch(r"[0-9a-f]{40}", sha or ""):
             return None
+        state = {"branch": branch, "remote": sha[:12], "behind": False,
+                 "behindBy": 0}
+
+        # The cheap answer, and the common one: HEAD already is the branch tip.
+        # One ls-remote and one rev-parse, nothing written.
+        head = _run_git(["rev-parse", "HEAD"], root, check=False).stdout.strip()
+        if head == sha:
+            return state
+
+        def _count():
+            r = _run_git(["rev-list", "--count", "HEAD.." + sha], root,
+                         check=False)
+            n = (r.stdout or "").strip()
+            return int(n) if r.returncode == 0 and n.isdigit() else None
+
+        # "Do I have the object" is NOT the same question as "am I behind", and
+        # conflating them was a real bug: the fetch below brings the object in,
+        # so the very next check saw it, concluded it was up to date, and the
+        # banner vanished while the checkout was still four commits back. Count
+        # the commits between instead - which also answers "ahead" correctly,
+        # since unpushed work of his own must not read as an update waiting.
         have = _run_git(["cat-file", "-e", sha + "^{commit}"], root,
                         check=False).returncode == 0
-        return {"branch": branch, "remote": sha[:12], "behind": not have}
+        if not have:
+            # Only now is a fetch worth it: being behind is rare, and it is
+            # exactly when the number matters. "4 commits behind" is a fact he
+            # can act on; "there are new commits" is a rumour. The client
+            # caches for an hour, so this is at most one fetch an hour.
+            _run_git(["fetch", "--quiet", "origin", branch], root, check=False)
+
+        n = _count()
+        if n is None:
+            # The object is still unreachable and the fetch did not help, but
+            # the tip is not our HEAD - so something is there, we just cannot
+            # count it. Say so rather than claim we are current.
+            state["behind"] = not have
+            return state
+        state["behindBy"] = n
+        state["behind"] = n > 0
+        return state
     except UpdateError:
         return None
 

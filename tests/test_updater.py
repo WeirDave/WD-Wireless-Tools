@@ -1126,14 +1126,28 @@ class ABranchCheckoutIsAskedADifferentQuestionTests(unittest.TestCase):
         body = self.src[self.src.index("def remote_branch_state("):]
         self.body = body[:body.index("\ndef fetch_latest_release")]
 
-    def test_it_never_fetches(self):
-        """A fetch writes to the repository, and this runs on every page load.
-        ls-remote plus cat-file answers the same question read-only."""
+    def test_being_up_to_date_costs_nothing_but_one_ls_remote(self):
+        """This runs on every page load, and a fetch writes to the repository.
+
+        Up to date is the common case and must stay read-only: ls-remote for
+        the branch head, cat-file to ask whether the object store already has
+        that commit, and an early return. The fetch exists only past that
+        return, where it buys the exact number of commits - "4 commits behind"
+        is a fact he can act on; "there are new commits" is a rumour."""
         calls = re.findall(r'_run_git\(\[([^\]]*)\]', self.body)
         verbs = [c.split(",")[0].strip().strip('"') for c in calls]
-        self.assertNotIn("fetch", verbs)
         self.assertIn("ls-remote", verbs)
         self.assertIn("cat-file", verbs)
+        marker = "if have:" + chr(10) + "            return state"
+        early_return = self.body.index(marker)
+        fetch_at = self.body.index('"fetch"')
+        self.assertLess(early_return, fetch_at,
+                        "the fetch must sit past the up-to-date return")
+
+    def test_the_count_is_only_paid_for_when_behind(self):
+        self.assertIn("if have:", self.body)
+        self.assertIn('"behindBy"', self.body)
+        self.assertIn('"rev-list", "--count", "HEAD.." + sha', self.body)
 
     def test_having_the_commit_means_not_behind(self):
         """Level or ahead both mean there is nothing to offer."""
