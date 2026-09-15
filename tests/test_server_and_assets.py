@@ -523,12 +523,24 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
         self.assertEqual(broken, [], f"menu button without wd-shared.js: {broken}")
 
     def test_home_page_offers_every_tool(self):
+        """Every tool is reachable from the home page's own grid.
+
+        This used to match `<a class="card" ...>` literally, and broke the day
+        the grid was restyled from `card` to `tile` - seven failures about
+        tools being missing when nothing was missing at all. The class is
+        presentation; what the test is actually about is whether each tool has
+        a link on the page outside the shared menu.
+
+        The menu is excluded deliberately. It lists every tool on every page,
+        so matching any link at all would pass even if the grid were deleted.
+        """
         home = (ROOT / "web" / "home.html").read_text(encoding="utf-8")
-        cards = set(re.findall(r'<a class="card[^"]*" href="(/[a-z0-9\-]*)"', home))
+        links = re.findall(r'<a\s+([^>]*?)href="(/[a-z0-9\-]*)"', home)
+        grid = {route for attrs, route in links if "menu-item" not in attrs}
         for route in ("/cloud", "/walls", "/report", "/scale",
                       "/plantrim", "/aprename", "/squirrel"):
             with self.subTest(tool=route):
-                self.assertIn(route, cards)
+                self.assertIn(route, grid)
 
     def test_versions_manifest_has_every_tool(self):
         versions = json.loads((ROOT / "web" / "assets" / "versions.json").read_text(encoding="utf-8"))

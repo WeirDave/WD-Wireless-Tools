@@ -14,16 +14,6 @@
   (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) {} })();
 </script>
 <link rel="stylesheet" href="/assets/wd-tools.css">
-<style>
-  /* Capacity's card colour. Scoped here rather than added to wd-tools.css:
-     every colour that stylesheet defines is already spoken for by another
-     card, and the shared file is being edited by another workstream. */
-  .card.violet h2,
-  .card.violet h2 span { color: #a78bfa; }
-  .card.violet .open-btn { background: #a78bfa; }
-  .card.violet:hover { border-color: #a78bfa; background: rgba(167, 139, 250, 0.20); }
-  [data-theme="light"] .card.violet:hover { background: rgba(167, 139, 250, 0.14); }
-</style>
 </head>
 <body class="tool-home">
   <div class="topbar">
@@ -63,69 +53,86 @@
     <div class="suite-badge"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Wireless Tools"></div>
     <div class="tagline">A suite of Ekahau workflow tools <span class="suite-ver" data-ver="suite">v&hellip;</span></div>
 
-    <div class="cards">
-      <a class="card blue" href="/cloud">
-        <div class="logo-well"><img src="/assets/cloud-manager-v8.0-560x560.png" alt="WD Cloud Manager"></div>
-        <h2><span>Cloud</span> Manager <span class="card-ver" data-ver="cloud">v&hellip;</span></h2>
-        <p>Sync and manage your Ekahau Cloud sites and projects against your local files — match, rename, and clean up in bulk.</p>
-        <span class="open-btn">Open →</span>
+    <div class="launcher">
+      <!-- Row 1: Blue family -->
+      <a class="tile tile--indigo" href="/aprename">
+        <div class="tile-icon"><img src="/assets/ap-labeler-v1.0-560x560.png" alt=""></div>
+        <div class="tile-text">
+          <div class="tile-name">AP Labeler</div>
+          <div class="tile-ver" data-ver="aprename">v&hellip;</div>
+        </div>
       </a>
 
-      <a class="card green" href="/walls">
-        <div class="logo-well"><img src="/assets/quick-walls-v8.0-560x560.png" alt="WD Quick Walls"></div>
-        <h2><span>Quick</span> Walls <span class="card-ver" data-ver="walls">v&hellip;</span></h2>
-        <p>Open an .esx, remap wall types with hotkeys, tidy up your wall segments, and save it back — right in the browser.</p>
-        <span class="open-btn">Open →</span>
+      <a class="tile tile--cyan" href="/capacity">
+        <div class="tile-icon"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt=""></div>
+        <div class="tile-text">
+          <div class="tile-name">Capacity</div>
+          <div class="tile-ver" data-ver="capacity">v&hellip;</div>
+        </div>
       </a>
 
-      <a class="card rose" href="/report">
-        <div class="logo-well"><img src="/assets/report-v8.0-560x560.png" alt="WD Report"></div>
-        <h2><span>WD</span> Report <span class="card-ver" data-ver="report">v&hellip;</span></h2>
-        <p>Generate installer-facing PDF reports from your <code>.esx</code> — antenna azimuths, tilts, mount heights, and floor-plan markers.</p>
-        <span class="open-btn">Open →</span>
+      <a class="tile tile--blue" href="/cloud">
+        <div class="tile-icon"><img src="/assets/cloud-manager-v8.0-560x560.png" alt=""></div>
+        <div class="tile-text">
+          <div class="tile-name">Cloud Manager</div>
+          <div class="tile-ver" data-ver="cloud">v&hellip;</div>
+        </div>
       </a>
 
-      <a class="card purple" href="/scale">
-        <div class="logo-well"><img src="/assets/scale-v8.0-560x560.png" alt="WD Scale"></div>
-        <h2><span>WD</span> Scale <span class="card-ver" data-ver="scale">v&hellip;</span></h2>
-        <p>Convert feet-and-inches to decimal (and metric) for typing into Ekahau's scale field — <code>536'4"</code> in, decimal out.</p>
-        <span class="open-btn">Open →</span>
+      <!-- Row 2: Green family -->
+      <a class="tile tile--teal" href="/plantrim">
+        <div class="tile-icon"><img src="/assets/plantrim-v1.0-560x480.png" alt=""></div>
+        <div class="tile-text">
+          <div class="tile-name">PlanTrim</div>
+          <div class="tile-ver" data-ver="plantrim">v&hellip;</div>
+        </div>
       </a>
 
-      <a class="card teal" href="/plantrim">
-        <div class="logo-well"><img src="/assets/plantrim-v1.0-560x480.png" alt="WD PlanTrim"></div>
-        <h2><span>WD</span> PlanTrim <span class="card-ver" data-ver="plantrim">v&hellip;</span></h2>
-        <p>Crop the empty canvas off a CAD import — shrink a 10000&times;7500 page down to the drawing and move every AP, wall and area with it.</p>
-        <span class="open-btn">Open &rarr;</span>
+      <a class="tile tile--lime" href="/prep">
+        <div class="tile-icon"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt=""></div>
+        <div class="tile-text">
+          <div class="tile-name">Prep</div>
+          <div class="tile-ver" data-ver="prep">v&hellip;</div>
+        </div>
       </a>
 
-      <a class="card indigo" href="/aprename">
-        <div class="logo-well"><img src="/assets/ap-labeler-v1.0-560x560.png" alt="WD AP Labeler"></div>
-        <h2><span>AP</span> Labeler <span class="card-ver" data-ver="aprename">v&hellip;</span></h2>
-        <p>See your APs on the floor plan, pick a spatial ordering — snake, row by row, clockwise — set a naming pattern, and download a labeled <code>.esx</code>.</p>
-        <span class="open-btn">Open &rarr;</span>
+      <a class="tile tile--green" href="/walls">
+        <div class="tile-icon"><img src="/assets/quick-walls-v8.0-560x560.png" alt=""></div>
+        <div class="tile-text">
+          <div class="tile-name">Quick Walls</div>
+          <div class="tile-ver" data-ver="walls">v&hellip;</div>
+        </div>
       </a>
 
-      <a class="card cyan" href="/prep">
-        <div class="logo-well"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Prep"></div>
-        <h2><span>WD</span> Prep <span class="card-ver" data-ver="prep">v&hellip;</span></h2>
-        <p>Get a freshly imported project ready to draw in &mdash; crop the CAD sheets, put a requirement area on every floor and load your wall types &mdash; in one pass instead of three.</p>
-        <span class="open-btn">Open &rarr;</span>
+      <!-- Row 3: Warm family -->
+      <a class="tile tile--rose" href="/report">
+        <div class="tile-icon"><img src="/assets/report-v8.0-560x560.png" alt=""></div>
+        <div class="tile-text">
+          <div class="tile-name">Report</div>
+          <div class="tile-ver" data-ver="report">v&hellip;</div>
+        </div>
       </a>
 
-      <a class="card violet" href="/capacity">
-        <div class="logo-well"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Capacity"></div>
-        <h2><span>WD</span> Capacity <span class="card-ver" data-ver="capacity">v&hellip;</span></h2>
-        <p>Read the device mix out of a project you have already set up, and apply those ratios to the next building by typing one number &mdash; how many people work there.</p>
-        <span class="open-btn">Open &rarr;</span>
+      <a class="tile tile--red" href="/scale">
+        <div class="tile-icon"><img src="/assets/scale-v8.0-560x560.png" alt=""></div>
+        <div class="tile-text">
+          <div class="tile-name">Scale</div>
+          <div class="tile-ver" data-ver="scale">v&hellip;</div>
+        </div>
       </a>
 
-      <a class="card amber" href="/squirrel">
-        <div class="logo-well"><img src="/assets/squirrel-v8.0-560x560.png" alt="WD Squirrel"></div>
-        <h2><span>WD</span> Squirrel <span class="card-ver" data-ver="squirrel">v&hellip;</span></h2>
-        <p>Stash your Ekahau files — sort loose files into organized subfolders, create new project folders with the right structure.</p>
-        <span class="open-btn">Open →</span>
+      <a class="tile tile--amber" href="/squirrel">
+        <div class="tile-icon"><img src="/assets/squirrel-v8.0-560x560.png" alt=""></div>
+        <div class="tile-text">
+          <div class="tile-name">Squirrel</div>
+          <div class="tile-ver" data-ver="squirrel">v&hellip;</div>
+        </div>
       </a>
+
+      <div class="launcher-footer">
+        <a class="launcher-link link-blue" href="/guide">User Manual</a>
+        <a class="launcher-link link-green" href="/settings">Settings</a>
+      </div>
     </div>
   </div>
 
