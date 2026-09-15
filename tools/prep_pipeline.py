@@ -275,8 +275,25 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
     Each step reads the file the previous step produced, which is what makes
     this a pass rather than three errands: the areas are measured on the
     trimmed canvas, not the original one. Those intermediates live in a
-    temporary directory and are never seen - one file goes in, one comes out,
-    and if any step refuses, nothing is written at all.
+    temporary directory and are never seen - one file goes in, one comes out.
+
+    A step that cannot run no longer stops the others. It used to: any refusal
+    abandoned the whole run and wrote nothing, which meant a capacity template
+    naming a profile the project does not have cost him the trim and the wall
+    types as well. What he reported was "no trimming happened and no quick
+    walls" - both of those steps had worked, and both were thrown away because
+    a third one could not.
+
+    So each step is attempted against the state so far; one that refuses leaves
+    that state untouched and records why. Whatever did work is written, and the
+    refusals come back in ``failed`` so the page can say plainly which part of
+    the job is still outstanding. Two thirds of a pass is worth having; being
+    told nothing happened, when two thirds of it could have, is not.
+
+    The one thing that is still all-or-nothing is inside the areas step, and it
+    has to be: clearing the placeholder areas is only ever a move towards
+    replacing them, so if the replacements cannot be written the removal is
+    discarded with them rather than left behind as data loss.
     """
     src = Path(esx_path)
     if not src.is_file():
@@ -288,7 +305,12 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
 
     target = Path(dest) if dest else src
     result = {"ok": True, "source": src.name, "steps": order,
-              "ran": [], "step": {}, "changed": False}
+              "ran": [], "step": {}, "changed": False, "failed": []}
+
+    def refuse(step, message, report=None):
+        """Record a step that could not run, and carry on with the rest."""
+        result["failed"].append({"step": step, "error": message})
+        result["step"][step] = dict(report or {}, ok=False, error=message)
 
     tmpdir = Path(tempfile.mkdtemp(prefix="wd-prep-"))
     try:
@@ -308,8 +330,8 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                     out = nxt()
                     report = esx_trimmer.trim(cur, dest=out, margin=margin, boxes=boxes)
                 except esx_trimmer.TrimError as exc:
-                    return {"ok": False, "error": f"Trimming refused: {exc}",
-                            "ran": result["ran"]}
+                    refuse("trim", f"Trimming refused: {exc}")
+                    continue
                 result["step"]["trim"] = esx_trimmer._report_json(report)
                 if report.trimmed_count:
                     cur = out
@@ -317,9 +339,9 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
 
             elif step == "areas":
                 if not template:
-                    return {"ok": False, "ran": result["ran"],
-                            "error": "No capacity template was chosen, so nothing "
-                                     "was written."}
+                    refuse("areas", "No capacity template was chosen, so no "
+                                    "requirement areas were written.")
+                    continue
                 dropped = []
                 staged = cur
                 if retighten:
@@ -334,10 +356,13 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                     staged, out, template, occupants, replace_existing=False,
                     backup=False)
                 if not report.get("ok"):
-                    return {"ok": False, "ran": result["ran"],
-                            "error": report.get("error", "The requirement areas "
-                                                         "could not be written."),
-                            "step": {"areas": report}}
+                    # `cur` is left where it was, so the staged removal above is
+                    # abandoned with everything else this step touched.
+                    refuse("areas",
+                           report.get("error", "The requirement areas could not "
+                                               "be written."),
+                           report)
+                    continue
                 result["step"]["areas"] = report
                 if report.get("written"):
                     cur = out
@@ -346,24 +371,24 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                     # The removals are only ever a step on the way to the
                     # replacements. Keeping them without the areas that were
                     # supposed to take their place would delete his capacity
-                    # data and call the run a success.
-                    return {"ok": False, "ran": result["ran"],
-                            "error": "The areas that cover the whole plan were "
-                                     "cleared to be re-measured, but nothing was "
-                                     "written to replace them, so the project was "
-                                     "left exactly as it was.",
-                            "step": {"areas": report}}
+                    # data, so the whole step is discarded - but only this step.
+                    refuse("areas",
+                           "The areas that cover the whole plan were cleared to "
+                           "be re-measured, but nothing was written to replace "
+                           "them, so they were left exactly as they were.",
+                           report)
+                    continue
 
             elif step == "walls":
                 if not wall_types:
-                    return {"ok": False, "ran": result["ran"],
-                            "error": "No wall template was chosen, so nothing "
-                                     "was written."}
+                    refuse("walls", "No wall template was chosen, so no wall "
+                                    "types were added.")
+                    continue
                 out = nxt()
                 report = wall_inject.inject(cur, wall_types, dest=out, backup=False)
                 if report.get("error"):
-                    return {"ok": False, "ran": result["ran"],
-                            "error": report["error"], "step": {"walls": report}}
+                    refuse("walls", report["error"], report)
+                    continue
                 result["step"]["walls"] = report
                 if report.get("written"):
                     cur = out
@@ -374,6 +399,13 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
         _check_order(result["ran"])
 
         if not result["changed"]:
+            if result["failed"]:
+                # Not "already prepared" - it could not be prepared, and saying
+                # the first when the second is true is how a broken run reads as
+                # a successful one.
+                result.update(ok=False, written=False, path=None, backup=None,
+                              error="; ".join(f["error"] for f in result["failed"]))
+                return result
             result.update(written=False, path=None, backup=None,
                           note="This project is already prepared - nothing to "
                                "trim, no areas to add and no wall types "

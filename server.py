@@ -931,6 +931,14 @@ def api_prep(action):
             "areasRetightened": [r.get("floorName") for r in (step.get("retighten") or [])],
             "wallTypesAdded": [a.get("name") for a in (walls.get("add") or [])],
             "wallTypesSkipped": len(walls.get("skip") or []),
+            # A step that refused has to travel with the file. Without this the
+            # page said what it had done and nothing about what it had not, and
+            # he opened a project expecting areas that were never written. The
+            # reason is trimmed because this is a header, not a report - enough
+            # to name the problem and act on it.
+            "failed": [{"step": f.get("step"),
+                        "error": (f.get("error") or "")[:300]}
+                       for f in (out.get("failed") or [])[:3]],
         }))
         return response
     except Exception as e:

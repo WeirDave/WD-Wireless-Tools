@@ -240,17 +240,18 @@
 
     var cards = [];
     var willDo = 0;
-    // Any step that cannot run stops the whole prepare, so the button must not
-    // offer one. Before this, a refusal the preview already knew about was
-    // discovered by clicking: the run came back 400 and nothing was written.
-    var blocked = false;
+    // A step that cannot run used to stop the whole prepare, so the button was
+    // disabled whenever one refused. It does not any more: the steps that can
+    // run do, and the refusal is reported. What the button must not offer is a
+    // run where *nothing* can happen.
+    var refused = [];
     var order = r.steps || [];
 
     if (order.indexOf('trim') >= 0) {
       var t = (r.step && r.step.trim) || {};
       if (t.error) {
         cards.push(stepCard('Trim the canvas', 'cannot', 'skip', [esc(t.error)]));
-        blocked = true;
+        refused.push('the trim');
       } else {
         var n = t.trimmedCount || 0;
         willDo += n;
@@ -272,17 +273,15 @@
     if (order.indexOf('areas') >= 0) {
       var a = (r.step && r.step.areas) || {};
       if (!a.ok) {
-        // A step that cannot run stops the whole prepare - nothing is written
-        // if any step refuses, which is right, because a half-prepared project
-        // is worse than an unprepared one. So the card has to say the way out,
-        // or the reader is left with a reason and no move: untick this one and
-        // the other two still run.
+        // The other steps still run. Saying so matters: the reader is looking
+        // at a reason, and needs to know whether it costs them the whole pass
+        // or just this part of it.
         cards.push(stepCard('Requirement areas', 'cannot', 'skip',
           [esc(a.error || 'Could not work out the requirement areas.'),
-           '<span class="prep-sub">Nothing is prepared while a step cannot run. '
-           + 'Untick <b>Put a requirement area on every floor</b> above to '
-           + 'prepare the rest, or fix the project in Ekahau and reload it.</span>']));
-        blocked = true;
+           '<span class="prep-sub">The other steps still run and the file is '
+           + 'still written — this part of it is what will be missing. Fix the '
+           + 'project in Ekahau and prepare it again to add the areas.</span>']));
+        refused.push('the requirement areas');
       } else {
         willDo += a.willWrite || 0;
         var rows = (a.floors || []).map(function (f) {
@@ -309,7 +308,7 @@
       var w = (r.step && r.step.walls) || {};
       if (w.error) {
         cards.push(stepCard('Wall types', 'cannot', 'skip', [esc(w.error)]));
-        blocked = true;
+        refused.push('the wall types');
       } else {
         var add = w.add || [], skip = w.skip || [];
         willDo += add.length;
@@ -335,11 +334,14 @@
     }
 
     host.innerHTML = cards.join('');
-    if (blocked) {
-      setGo(false, 'One of the steps cannot run on this project, and nothing is '
-                 + 'prepared while that is true. Untick it to prepare the rest.');
-    } else if (willDo) {
-      setGo(true, 'Builds a new .esx and downloads it. Your file is not touched.');
+    if (willDo) {
+      setGo(true, refused.length
+        ? 'Builds a new .esx without ' + refused.join(' or ')
+          + ' — that part cannot run on this project. Your file is not touched.'
+        : 'Builds a new .esx and downloads it. Your file is not touched.');
+    } else if (refused.length) {
+      setGo(false, 'Nothing can run on this project: ' + refused.join(' and ')
+                 + ' cannot, and there is nothing else left to do.');
     } else {
       setGo(false, 'This project is already prepared — there is nothing left to do.');
     }
@@ -430,8 +432,16 @@
       areasRetightened: (step.retighten || []).map(function (x) { return x.floorName; }),
       wallTypesAdded: ((step.walls || {}).add || []).map(function (x) { return x.name; }),
     });
+    // A pass that did two of three things is a success with a gap in it, and
+    // the gap has to be as visible as the success - otherwise he opens the
+    // project expecting areas that are not there.
+    var missed = (r.failed || []).map(function (f) {
+      return '<div class="prep-sub">&bull; ' + esc(f.error) + '</div>';
+    }).join('');
     host.innerHTML = '<div class="prep-done">Wrote <b>' + esc(r.filename || '') + '</b> — '
       + summary + '.'
+      + (missed ? '<div class="prep-warn" style="margin:8px 0">'
+                  + '<b>One part of the pass did not run:</b>' + missed + '</div>' : '')
       + '<br><span class="prep-sub">It is in <b>' + esc(r.dir || '') + '</b>, beside the '
       + 'original, which is unchanged. Open it in Ekahau and start drawing.</span>'
       + '<div class="prep-row" style="margin:10px 0 0">'
@@ -492,8 +502,16 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
 
+    // The same gap has to be visible on this path as on the write-to-disk one:
+    // two of three steps is a success with something missing from it, and he
+    // opens the project expecting all three.
+    var missed = (r.failed || []).map(function (f) {
+      return '<div class="prep-sub">&bull; ' + esc(f.error) + '</div>';
+    }).join('');
     host.innerHTML = '<div class="prep-done">Wrote <b>' + esc(name) + '</b> — '
       + didWhat(r) + '.'
+      + (missed ? '<div class="prep-warn" style="margin:8px 0">'
+                  + '<b>One part of the pass did not run:</b>' + missed + '</div>' : '')
       + '<br><span class="prep-sub">Your original is untouched. Open the downloaded copy '
       + 'in Ekahau and start drawing.</span></div>';
   }
