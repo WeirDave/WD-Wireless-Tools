@@ -178,8 +178,8 @@ class ExtractTests(unittest.TestCase):
 
     def test_files_are_named_for_the_floor_not_the_uuid(self):
         res, files = self.extract([
-            {"name": "10.EXM.01 - Harbour Point", "blob": PNG_1PX, "format": "PNG"}])
-        self.assertTrue(any(f.startswith("10.EXM.01") for f in files), files)
+            {"name": "24.EXM.01 - Harbor Point", "blob": PNG_1PX, "format": "PNG"}])
+        self.assertTrue(any(f.startswith("24.EXM.01") for f in files), files)
         self.assertFalse(any(f.startswith("image-") for f in files))
 
     def test_a_missing_image_is_reported_once_not_silently_skipped(self):
