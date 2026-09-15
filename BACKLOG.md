@@ -5,7 +5,9 @@ history and GitHub Releases.
 
 Priorities: **P1** = blocking · **P2** = wanted · **P3** = future enhancement.
 
-Last reviewed against **v2.98.8**, 2026-09-14.
+Last reviewed against **v2.100.5**, 2026-09-14 — the second pass that day was a
+verification sweep, run in Chrome, Edge and Firefox against a real project
+rather than read off the source. What it closed is noted on each item.
 
 > **What the 2026-09-14 review found.** The previous review was against
 > v2.69.0 — twenty-nine releases stale — and the problem was the opposite of
@@ -130,22 +132,11 @@ it requires:
 This is the largest remaining Report feature and should be developed separately
 from routine maintenance.
 
-#### 7. P3 — A notes-terminated document has not been print-verified
-
-The trailing blank sheet was fixed in v2.96.2 and confirmed on a real
-deliverable — but that document had notes **off**, so its last section was the
-compass page. The fix is independent of which section is last, and the
-mechanism is length-independent, so this is a gap in evidence rather than a
-suspected fault.
-
-**Done** is: one document ending in AP Notes pages, printed through the Firefox
-BiDi path, page count asserted.
-
 ---
 
 ### PlanTrim
 
-#### 8. P3 — Only PNG, JPEG and SVG floor plans can be cropped
+#### 7. P3 — Only PNG, JPEG and SVG floor plans can be cropped
 
 `image_kind()` in `tools/esx_trimmer.py` returns `PNG`, `JPEG`, `SVG` or
 `UNKNOWN`, and `UNKNOWN` is refused. Ekahau accepts more than that — BMP, WBMP
@@ -161,7 +152,7 @@ higher.
 
 ### Suite-wide
 
-#### 9. P3 — The Firefox scrollbar styling was shipped unverified
+#### 8. P3 — The Firefox scrollbar styling was shipped unverified
 
 `wd-tools.css` carries one `scrollbar-width` / `scrollbar-color` rule. Firefox
 is the browser he actually uses, and this has never been looked at in it. It is
@@ -169,7 +160,7 @@ cosmetic, so it is P3 — but it is also five minutes with the BiDi path that is
 now established, and print work has twice shipped wrong by being checked in the
 wrong engine.
 
-#### 10. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
+#### 9. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
 
 A finding about going from DWG to `.esx` was established in an earlier session
 and never recorded, so the next session will redo the work.
@@ -199,6 +190,17 @@ so they can be answered together.
 
 Not work. Recorded because each was settled once and would otherwise be
 rediscovered as an open question.
+
+### A notes-terminated document prints correctly — item 7, closed by evidence
+
+The trailing-blank-sheet fix (v2.96.2) had only ever been confirmed on a
+document whose last section was the compass page. A project with a note on all
+44 of its access points was printed in Chrome, Edge and Firefox: 13 sheets in
+every engine, the last one an **AP Notes** page, and no blank sheet anywhere.
+
+Printing it is also what found the ordering fault fixed in v2.100.6 — the
+compass page was coming out **after** the notes on the AP Placement Map, which
+is the one report he asked for notes on.
 
 ### A template adds; it never changes a wall type Ekahau ships
 
