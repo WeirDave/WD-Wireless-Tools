@@ -108,11 +108,27 @@ Make the reasonable call, do the whole task, and say in the report what you
 decided and why. A decision that turns out wrong is cheap to correct; a
 session that stopped to ask is not.
 
-### Print verification needs a real browser — use BiDi
+### Browser verification — Chrome, Edge and Firefox, every time
 
-Print is the one thing that genuinely needs a browser, and it must be checked in
-**Firefox**, which is what the user prints from. Fixes verified only in Chromium
-have twice failed to reach him.
+**Standing rule from the user: anything user-facing is checked in all three.**
+Not Firefox alone, and not Chromium alone. This was written down only after a
+sweep was run in Firefox by itself and he had to say so again, so it is the rule
+rather than a suggestion.
+
+All three are installed:
+
+    Chrome   C:\Program Files\Google\Chrome\Application\chrome.exe
+    Edge     C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
+    Firefox  C:\Program Files\Mozilla Firefoxirefox.exe
+
+`selenium` drives all three; Selenium Manager fetches each driver itself, so
+there is nothing to install by hand. Point `options.binary_location` at the
+executable above and use the matching `Options` class.
+
+**Firefox still decides a print question**, because it is what he prints from
+and it is the engine that has twice carried a fault Chromium does not have - the
+trailing blank sheet in v2.96.2 among them. So: check all three, and when they
+disagree about print, Firefox is the one that matters.
 
 Firefox has **no `--print-to-pdf`**, and the silent-print preferences
 (`print.always_print_silent` + `print.print_to_filename`) produce no file.
