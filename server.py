@@ -36,6 +36,7 @@ from tools.template_store import TemplateStore
 from tools import capacity_profiles
 from tools import report_store
 from tools import settings as suite_settings
+from tools import settings_backup
 from tools import updater
 from tools import esx_trimmer
 from tools import plantrim_store
@@ -706,6 +707,20 @@ SETTINGS_ACTIONS = {
                             {"setup_complete": False})},
     "get_destinations": lambda d: {"ok": True, "destinations": [
                             dict(d) for d in suite_settings.get_destinations()]},
+    # Backup and restore. `browser` carries the page's own localStorage, which
+    # the server cannot see; export folds it into the bundle and import hands
+    # the keys back for the page to write, because localStorage belongs to the
+    # browser rather than to us.
+    "export":         lambda d: {"ok": True,
+                            "filename": settings_backup.suggested_filename(),
+                            "bundle": settings_backup.export_bundle(
+                                browser=d.get("browser") or {})},
+    "import_preview": lambda d: settings_backup.preview_import(
+                            d.get("bundle"), browser=d.get("browser") or {}),
+    "import_apply":   lambda d: settings_backup.apply_import(
+                            d.get("bundle") or {},
+                            sections=d.get("sections")
+                                     or ("settings", "files", "browser")),
 }
 
 BACKUP_ACTIONS = {

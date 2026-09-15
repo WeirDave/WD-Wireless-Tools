@@ -508,6 +508,40 @@ body.tool-report .report-wiz-topbar { background: linear-gradient(rgba(159,27,88
 
 .btn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
 
+/* Import preview - what a restore would change, before it changes it.
+
+   Laid out as a diff rather than a summary because a count ("12 settings
+   changed") is not something he can check, and being unable to check is how
+   settings got overwritten twice in one night. */
+.s-import-modal { max-width: 720px; width: 92vw; }
+.s-imp-sum { font-size: 13px; font-weight: 600; margin: 6px 0 10px; }
+.s-imp-none { font-size: 13px; color: var(--text-2); margin: 6px 0 10px; }
+.s-import-detail { max-height: 46vh; overflow-y: auto; margin-bottom: 14px; }
+.s-imp-group { margin-bottom: 12px; }
+.s-imp-head {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--text-2); margin: 10px 0 4px;
+}
+.s-imp-same { font-weight: 500; text-transform: none; letter-spacing: 0; }
+.s-imp {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  font-size: 12px; padding: 3px 6px; border-radius: 3px;
+  border-left: 3px solid transparent; overflow-wrap: anywhere;
+}
+.s-imp code { font-family: var(--mono, monospace); color: var(--text); }
+.s-imp-change { border-left-color: var(--amber, #d97706); }
+.s-imp-add { border-left-color: var(--green, #22c55e); }
+.s-imp-unknown { border-left-color: var(--text-3, #888); }
+.s-imp-old { color: var(--text-2); text-decoration: line-through; }
+.s-imp-arrow { color: var(--text-2); }
+.s-imp-new { color: var(--text); font-weight: 600; }
+.s-imp-warn {
+  font-size: 12px; line-height: 1.5; padding: 8px 10px; margin-bottom: 8px;
+  border: 1px solid var(--amber, #d97706); border-radius: 4px;
+  background: rgba(217,119,6,.12);
+}
+.s-import-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* A button that is off but still clickable, so it can say why.
 
    Cloud Manager's bulk buttons used the `disabled` attribute, which emits no
