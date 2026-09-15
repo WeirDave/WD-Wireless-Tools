@@ -87,6 +87,27 @@ def _tk_dialog(code: str, timeout: int = 180) -> str:
     return _tk_dialog_result(code, timeout)["path"]
 
 
+def _picked(res: dict, kind: str, on_ok=None) -> dict:
+    """Turn a dialog result into the answer a page can act on.
+
+    `kind` is "file" or "folder" and only picks the wording. The cancel message
+    is the one every page suppresses, and it must stay exactly as it is or every
+    cancel starts raising a toast; `picker_unavailable` is the one that must not
+    be confused with it, because a dialog that never opened leaves a control
+    that appears to do nothing at all.
+    """
+    if not res["ran"]:
+        return {"ok": False, "code": "picker_unavailable",
+                "error": "Could not open the %s picker — %s."
+                         % (kind, res["why"])}
+    if not res["path"]:
+        return {"ok": False, "code": "cancelled",
+                "error": "No %s selected" % kind}
+    if on_ok:
+        on_ok(res["path"])
+    return {"ok": True, "path": res["path"]}
+
+
 def _undo_path(root: Path) -> Path:
     """One rollback log per organize root (path hash keeps filenames sane)."""
     key = hashlib.sha1(str(root.resolve()).encode("utf-8")).hexdigest()[:16]
@@ -786,11 +807,8 @@ class FolderOrganizer:
             "p = filedialog.askdirectory(title='Select the folder containing your Ekahau site folders')\n"
             "print(p or '')\n"
         )
-        folder = _tk_dialog(code)
-        if not folder:
-            return {"ok": False, "error": "No folder selected"}
-        self._root = folder
-        return {"ok": True, "path": folder}
+        return _picked(_tk_dialog_result(code), "folder",
+                       on_ok=lambda f: setattr(self, "_root", f))
 
 
     def pick_esx_file(self) -> dict:
@@ -803,10 +821,7 @@ class FolderOrganizer:
             "filetypes=[('Ekahau project', '*.esx'), ('All files', '*.*')])\n"
             "print(p or '')\n"
         )
-        path = _tk_dialog(code)
-        if not path:
-            return {"ok": False, "error": "No file selected"}
-        return {"ok": True, "path": path}
+        return _picked(_tk_dialog_result(code), "file")
 
     def pick_output_folder(self, default: str | None = None) -> dict:
         """Folder picker seeded with `default` when it exists (Tk, isolated subprocess)."""
@@ -823,10 +838,7 @@ class FolderOrganizer:
             f"p = filedialog.askdirectory(title='Select the folder to save floorplans into'{initialdir_src})\n"
             "print(p or '')\n"
         )
-        folder = _tk_dialog(code)
-        if not folder:
-            return {"ok": False, "error": "No folder selected"}
-        return {"ok": True, "path": folder}
+        return _picked(_tk_dialog_result(code), "folder")
 
     def list_floorplans(self, path: str) -> dict:
         """Read floorPlans.json from an .esx and return a floor list plus
