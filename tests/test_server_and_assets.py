@@ -56,7 +56,8 @@ class ServerAndAssetTests(unittest.TestCase):
     def test_public_routes_load(self):
         for route in ("/", "/cloud", "/walls", "/squirrel", "/scale", "/report",
                       "/rename", "/squirrel/rename",
-                      "/guide", "/guide-cloud", "/guide-squirrel", "/api/version"):
+                      "/guide", "/guide-cloud", "/guide-squirrel",
+                      "/guide-plantrim", "/guide-report", "/api/version"):
             with self.subTest(route=route):
                 response = self.client.get(route)
                 try:
@@ -65,6 +66,56 @@ class ServerAndAssetTests(unittest.TestCase):
                                      "no-store, no-cache, must-revalidate, max-age=0")
                 finally:
                     response.close()
+
+
+    def test_every_tool_page_offers_its_guide(self):
+        """A tool nobody can find the manual for is an undocumented tool.
+
+        PlanTrim shipped for months with no guide at all - it appeared in the
+        navigation menu of every other page, so it looked covered, while the
+        only writing about it was the release notes. Scale still has none; it
+        is listed here so the exemption is a decision on the record rather than
+        an oversight that repeats.
+        """
+        # tool page -> the guide it must link to
+        expected = {
+            "walls.html": "/guide",
+            "plantrim.html": "/guide-plantrim",
+            "organizer.html": "/guide-squirrel",
+            "cloud.html": "/guide-cloud",
+            "report.html": "/guide-report",
+        }
+        # Deliberately without a guide of their own for now. Scale is a
+        # two-field converter whose labels say what it does; the rest are
+        # newer tools whose guides have not been written yet.
+        exempt = {"scale.html", "ap-rename.html", "capacity.html", "prep.html",
+                  "rename.html", "home.html", "settings.html", "setup.html"}
+
+        missing = []
+        for page in sorted((ROOT / "web").glob("*.html")):
+            if page.name.startswith("guide") or page.name in exempt:
+                continue
+            want = expected.get(page.name)
+            if want is None:
+                continue
+            if want not in page.read_text(encoding="utf-8"):
+                missing.append(f"{page.name} does not link to {want}")
+        self.assertEqual(missing, [], "; ".join(missing))
+
+    def test_a_guide_exists_for_every_guide_link(self):
+        """A User Guide link that 404s is worse than no link."""
+        import re as _re
+        broken = []
+        for page in sorted((ROOT / "web").glob("*.html")):
+            html = page.read_text(encoding="utf-8")
+            for href in set(_re.findall(r'href="(/guide[a-z-]*)"', html)):
+                response = self.client.get(href)
+                try:
+                    if response.status_code not in (200, 302):
+                        broken.append(f"{page.name} -> {href} ({response.status_code})")
+                finally:
+                    response.close()
+        self.assertEqual(broken, [], "; ".join(broken))
 
     def test_legacy_organizer_routes_redirect(self):
         for old, new in (("/organizer", "/squirrel"), ("/guide-organizer", "/guide-squirrel")):

@@ -235,6 +235,11 @@ def guide_organizer_legacy_redirect():
     return redirect("/guide-squirrel", code=302)
 
 
+@app.route("/guide-plantrim")
+def guide_plantrim():
+    return send_from_directory(WEB, "guide-plantrim.html")
+
+
 @app.route("/guide-report")
 def guide_report():
     return send_from_directory(WEB, "guide-report.html")
