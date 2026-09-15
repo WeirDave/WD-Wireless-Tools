@@ -900,5 +900,71 @@ class AboutPanelFreshnessTests(unittest.TestCase):
                         body.index("WD.checkForUpdates"))
 
 
+class TheDevCheckoutIsToldWhatToRunTests(unittest.TestCase):
+    """The one install that had no way forward, and it is the maintainer's own.
+
+    `detect_install()` on this repo returns method "dev", and that is correct:
+    clicking Update on a maintainer's clone would check out a release tag over
+    in-progress work and detach HEAD, so there deliberately is no button.
+
+    What was missing is the other half. The panel said "This is a development
+    checkout - update it with git so your work isn't checked out from under
+    you." That names a tool, not a command. A git install gets a command and a
+    Copy button; a ZIP install gets a command and a Copy button; this case got
+    one sentence and a dead end - which is how the in-app updater lost the only
+    person using it, who went back to running `git pull` by hand.
+
+    Verified in Firefox against the real panel with the endpoint's reply
+    rewritten to report a newer release: the dev case renders
+    `git -C "<the install folder>" pull`, and clicking Copy puts exactly that
+    on the clipboard.
+    """
+
+    SHARED = Path(__file__).resolve().parent.parent / "web" / "assets" / "js" / "wd-shared.js"
+
+    def setUp(self):
+        src = self.SHARED.read_text(encoding="utf-8")
+        body = src[src.index("function showPrimary()"):]
+        self.body = body[:body.index("function run(")]
+        self.dev = self.body[self.body.index("if (info.method === 'dev')"):]
+        self.dev = self.dev[:self.dev.index("if (info.method === 'manual')")]
+        self.src = src
+
+    def test_it_names_the_command_not_just_the_tool(self):
+        self.assertIn("pull", self.dev)
+        self.assertIn("wd-update-cmd", self.dev)
+
+    def test_the_command_carries_the_folder_so_it_runs_from_anywhere(self):
+        """He reads these sessions on a phone and runs the command later, in
+        whatever shell is open. A bare `git pull` in the wrong directory
+        either fails or updates something else."""
+        self.assertIn("info.root", self.dev)
+        self.assertIn("git -C", self.dev)
+
+    def test_it_offers_the_same_copy_button_the_other_installs_get(self):
+        self.assertIn("wd-update-copyBtn", self.dev)
+        self.assertIn("wire();", self.dev)
+
+    def test_there_is_still_no_update_button_on_a_dev_checkout(self):
+        """The reason the case exists at all. An Update button here would
+        detach HEAD over uncommitted work."""
+        self.assertNotIn("wd-update-goBtn", self.dev)
+
+    def test_it_says_what_would_happen_rather_than_only_that_it_will_not(self):
+        self.assertIn("detach HEAD", self.dev)
+
+    def test_copy_copies_the_command_beside_it(self):
+        """There is more than one command in this panel now. A Copy button
+        hardwired to the bootstrap line would hand over the wrong one while
+        reading as the right one - which is this repo's usual failure, a
+        control that looks correct and does something else."""
+        wire = self.src[self.src.index("host.querySelectorAll('.wd-update-copyBtn')"):]
+        wire = wire[:wire.index("\n    }")]
+        self.assertIn("closest('.wd-update-cmdRow')", wire)
+        self.assertIn("querySelector('.wd-update-cmd')", wire)
+        self.assertIn("|| config.bootstrapCommand", wire,
+                      "and still falls back to what it used to copy")
+
+
 if __name__ == "__main__":
     unittest.main()

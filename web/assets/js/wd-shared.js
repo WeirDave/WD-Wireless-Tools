@@ -754,24 +754,32 @@
       var restart = host.querySelector('.wd-update-restartBtn');
       if (restart) restart.addEventListener('click', function () { doRestart(restart); });
 
-      var copy = host.querySelector('.wd-update-copyBtn');
-      if (copy) {
+      /* Copies the command shown beside it, not a fixed string. There is more
+         than one command in this panel now - the bootstrap line and, on a
+         development checkout, the pull - and a button that always copied the
+         bootstrap command would hand over the wrong one while reading as the
+         right one. Falls back to the bootstrap command if it cannot find a
+         code element, which is the shape it had before. */
+      host.querySelectorAll('.wd-update-copyBtn').forEach(function (copy) {
         copy.addEventListener('click', function () {
+          var row = copy.closest('.wd-update-cmdRow');
+          var code = row && row.querySelector('.wd-update-cmd');
+          var text = (code && code.textContent) || config.bootstrapCommand;
           var done = function () {
             copy.textContent = 'Copied';
             setTimeout(function () { copy.textContent = 'Copy'; }, 1600);
           };
           if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(config.bootstrapCommand).then(done, function () {});
+            navigator.clipboard.writeText(text).then(done, function () {});
           } else {
             var ta = document.createElement('textarea');
-            ta.value = config.bootstrapCommand;
+            ta.value = text;
             document.body.appendChild(ta); ta.select();
             try { document.execCommand('copy'); done(); } catch (e) {}
             document.body.removeChild(ta);
           }
         });
-      }
+      });
     }
 
     function showConvertConfirm() {
@@ -811,9 +819,29 @@
       }
 
       if (info.method === 'dev') {
+        /* There is deliberately no Update button here: clicking one on a
+           maintainer's clone would check out a release tag over in-progress
+           work and detach HEAD.
+
+           What was missing is the other half. "Update it with git" is not an
+           instruction — it names a tool, not a command, and this panel was the
+           only place that said anything at all. A git install gets a command
+           and a Copy button; a ZIP install gets a command and a Copy button;
+           this case got one sentence and a dead end, which is how the feature
+           lost the person it was written for. So it names the command, and
+           puts the folder inside it so the copied line runs from anywhere. */
+        var pull = 'git -C "' + (info.root || '.') + '" pull';
         render({ body:
-          '<div class="wd-update-note">This is a development checkout — update it ' +
-          'with git so your work isn’t checked out from under you.</div>' });
+          '<div class="wd-update-note">This is a development checkout — ' +
+          'updating from here would check out a release tag over your work ' +
+          'and detach HEAD. Pull it instead:</div>' +
+          '<div class="wd-update-cmdRow">' +
+            '<code class="wd-update-cmd">' + esc(pull) + '</code>' +
+            '<button class="btn btn-sm wd-update-copyBtn" type="button">Copy</button>' +
+          '</div>' +
+          '<div class="wd-update-altNote">Or just <code>git pull</code> if you ' +
+          'are already in that folder.</div>' });
+        wire();
         return;
       }
 
