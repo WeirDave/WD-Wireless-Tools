@@ -341,17 +341,41 @@ async function doRename() {
   btn.textContent = 'Renaming…';
   let r;
 
+  /* What this page is supposed to remember, actually written down.
+
+     This used to POST `/api/settings/set` with `{settings: {...}}`. There is
+     no "set" action - the server has get / update / needs_setup /
+     complete_setup / reset_setup / get_destinations - so every call returned
+     404 "unknown action: set", and the shape was wrong too: update reads
+     `d["patch"]`, not `d["settings"]`. Both halves of the same mistake the
+     settings registry has a test for, on the one page the registry names as
+     `rename.`'s home.
+
+     Nothing noticed because the reply was never read and the rename on the
+     next line went ahead regardless. The files were renamed correctly; the
+     rules were simply gone next time.
+
+     The formats go with them. Lines 27-28 load `rename.folder_format` and
+     `rename.file_rules` on arrival, which only means anything if something
+     writes them - and nothing did. Saved here, on the action, rather than on
+     every keystroke. */
+  const remember = async (patch) => {
+    const res = await WD.api('settings/update', { patch: { rename: patch } });
+    if (!res || !res.ok) {
+      toast('Renamed, but your rename settings could not be saved'
+            + (res && res.error ? ': ' + res.error : ''), 'error');
+    }
+  };
+
   if (tab === 'rules') {
-    const rn = _getRuleValues();
-    await fetch('/api/settings/set', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
-      body: JSON.stringify({ settings: { rename: { file_rules: rn } } }),
-    });
+    await remember({ file_rules: _getRuleValues() });
     r = await renameApi('execute_bulk_rename', { items: _renameState.items });
   } else {
     const renames = _renameState.items.filter(x => x.status === 'rename');
     if (!renames.length) { btn.textContent = originalLabel; btn.disabled = false; return; }
+    await remember(tab === 'folders'
+      ? { folder_format: document.getElementById('rnFolderFormat').value }
+      : { file_format: document.getElementById('rnFileFormat').value });
     const action = tab === 'folders' ? 'execute_folder_rename' : 'execute_file_rename';
     r = await renameApi(action, { root: _renameState.root, renames });
   }
