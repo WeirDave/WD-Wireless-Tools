@@ -56,13 +56,13 @@ function done() {
 const siteCloud    = { kind: 'cloud', id: 'site-1', name: 'Sydney', entityKind: 'sites' };
 const siteLocal    = { kind: 'local', path: '/l/Sydney', name: 'Sydney', isDir: true,
                        entityKind: 'sites' };
-const projectCloud = { kind: 'cloud', id: 'proj-1', name: 'FTCL3-A', entityKind: 'projects' };
-const projectLocal = { kind: 'local', path: '/l/FTCL3-A.esx', name: 'FTCL3-A',
+const projectCloud = { kind: 'cloud', id: 'proj-1', name: 'SITE1-A', entityKind: 'projects' };
+const projectLocal = { kind: 'local', path: '/l/SITE1-A.esx', name: 'SITE1-A',
                        isDir: false, entityKind: 'projects' };
 
 // A matched project on the Projects tab: one row, two sides.
-const projectPair  = { kind: 'pair', cloudId: 'proj-1', cloudName: 'FTCL3-A',
-                       localName: 'FTCL3-A', localPath: '/l/FTCL3-A.esx',
+const projectPair  = { kind: 'pair', cloudId: 'proj-1', cloudName: 'SITE1-A',
+                       localName: 'SITE1-A', localPath: '/l/SITE1-A.esx',
                        matchType: 'exact', entityKind: 'projects' };
 const sitePair     = { kind: 'pair', cloudId: 'site-1', cloudName: 'Sydney',
                        localName: 'Sydney', localPath: '/l/Sydney',
@@ -271,7 +271,7 @@ class AMatchedProjectCanBeMovedTo(unittest.TestCase):
           check('cloud side carries the cloud id',
                 sides.some(s => s.kind === 'cloud' && s.id === 'proj-1'));
           check('local side carries the local path',
-                sides.some(s => s.kind === 'local' && s.path === '/l/FTCL3-A.esx'));
+                sides.some(s => s.kind === 'local' && s.path === '/l/SITE1-A.esx'));
           done();
         """)
 

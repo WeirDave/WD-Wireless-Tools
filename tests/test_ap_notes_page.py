@@ -261,7 +261,7 @@ class NotesRendering(unittest.TestCase):
         """His project: the floor has a long CAD name and no number."""
         self.run_block(r"""
         const ctx = ctxWith({ n1: { id: 'n1', text: 'note', imageIds: [] } });
-        const fp = { id: 'f1', name: 'Warehouse - Sheet IA-1-1 - PARTITION PLAN' };
+        const fp = { id: 'f1', name: 'Warehouse - Sheet A-1-1 - PARTITION PLAN' };
         const html = renderApNotesSection(fp, [{ name: 'AP1', noteIds: ['n1'] }], {}, ctx, 0);
         const occurrences = html.split('PARTITION PLAN').length - 1;
         check('floor name appears once, got ' + occurrences, occurrences === 1);

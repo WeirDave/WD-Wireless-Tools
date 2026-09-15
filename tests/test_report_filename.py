@@ -13,7 +13,7 @@ The folder is only knowable through the native picker. A browser file input -
 which is what drag-and-drop and the hosted build both use - hands over a bare
 file name with no path at all, so there the .esx stem answers instead:
 
-    Report - AP Installation - v2.0 - 4653 Denrose Ct, Fort Collins, CO 80524 - PD
+    Report - AP Installation - v2.0 - 400 Example St, Fairview, CA 90003 - PD
 
 The project segment has gone missing once already (fixed in v2.33.0) and been
 reported missing a second time, which is what this file exists to stop. There
@@ -98,11 +98,11 @@ class ReportFileName(unittest.TestCase):
     def test_the_project_is_the_last_segment(self):
         """The whole of the reported bug, in one assertion."""
         self.check("""
-          fileName = '4653 Denrose Ct, Fort Collins, CO 80524 - PD.esx';
+          fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = 'v2.0';
           eq('the saved name lost the project', reportDocTitle(),
              'Report - AP Installation - v2.0 - '
-             + '4653 Denrose Ct, Fort Collins, CO 80524 - PD');
+             + '400 Example St, Fairview, CA 90003 - PD');
           done();
         """)
 
@@ -114,7 +114,7 @@ class ReportFileName(unittest.TestCase):
         """
         self.check("""
           projectFolder = 'Silicone Plus - Building 4 - 1200 Fake Rd';
-          fileName = '4653 Denrose Ct, Fort Collins, CO 80524 - PD.esx';
+          fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = 'v2.0';
           eq('the file name was used instead of the folder', reportDocTitle(),
              'Report - AP Installation - v2.0 - Silicone Plus - Building 4 - 1200 Fake Rd');
@@ -132,11 +132,11 @@ class ReportFileName(unittest.TestCase):
         """
         self.check("""
           projectFolder = '';
-          fileName = '4653 Denrose Ct, Fort Collins, CO 80524 - PD.esx';
+          fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = 'v2.0';
           eq('a drop lost the project', reportDocTitle(),
              'Report - AP Installation - v2.0 - '
-             + '4653 Denrose Ct, Fort Collins, CO 80524 - PD');
+             + '400 Example St, Fairview, CA 90003 - PD');
           eq('the preview would name the wrong source',
              projectNameSource().from, 'the .esx file name');
           done();
@@ -150,7 +150,7 @@ class ReportFileName(unittest.TestCase):
         not.
         """
         self.check("""
-          fileName = '4653 Denrose Ct, Fort Collins, CO 80524 - PD.esx';
+          fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = '';
           ['Downloads', 'Desktop', 'Documents', 'OneDrive', 'Dropbox',
            'New Folder (2)', 'temp', 'ESX', 'Ekahau Projects', ''].forEach(function (f) {
@@ -158,7 +158,7 @@ class ReportFileName(unittest.TestCase):
             const t = reportDocTitle();
             check('"' + f + '" was treated as a project name: ' + t,
                   t === 'Report - AP Installation - '
-                      + '4653 Denrose Ct, Fort Collins, CO 80524 - PD');
+                      + '400 Example St, Fairview, CA 90003 - PD');
           });
           ['Downtown Campus', 'Project Falcon', 'Documents Warehouse'].forEach(function (f) {
             projectFolder = f;
@@ -185,12 +185,12 @@ class ReportFileName(unittest.TestCase):
         """A file name is not a slug. Commas, digits and a trailing discipline
         code are all legal on both platforms and all carry meaning here."""
         self.check("""
-          fileName = 'LNBH1 - LGB-03 - 3435 E Conant St, Long Beach, CA 90806 - B20 - PD.esx';
+          fileName = 'SITE1 - BLD-03 - 100 Example Ave, Springfield, WA 90000 - B10 - PD.esx';
           currentOpts.revision = 'v1.3';
           const t = reportDocTitle();
           check('the address was mangled: ' + t,
-                t.indexOf('3435 E Conant St, Long Beach, CA 90806') > -1);
-          check('the trailing code was dropped: ' + t, /- B20 - PD$/.test(t));
+                t.indexOf('100 Example Ave, Springfield, WA 90000') > -1);
+          check('the trailing code was dropped: ' + t, /- B10 - PD$/.test(t));
           done();
         """)
 
@@ -198,25 +198,25 @@ class ReportFileName(unittest.TestCase):
         """The two options are independent, and the segment order is the point
         of the report: the project stays last either way."""
         self.check("""
-          fileName = '4653 Denrose Ct, Fort Collins, CO 80524 - PD.esx';
+          fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = 'v2.0';
 
           includeRevisionInName = true;
           eq('with the version', reportDocTitle(),
-             'Report - AP Installation - v2.0 - 4653 Denrose Ct, Fort Collins, CO 80524 - PD');
+             'Report - AP Installation - v2.0 - 400 Example St, Fairview, CA 90003 - PD');
 
           includeRevisionInName = false;
           eq('without the version', reportDocTitle(),
-             'Report - AP Installation - 4653 Denrose Ct, Fort Collins, CO 80524 - PD');
+             'Report - AP Installation - 400 Example St, Fairview, CA 90003 - PD');
           done();
         """)
 
     def test_a_blank_version_leaves_no_dangling_separator(self):
         self.check("""
-          fileName = 'Denrose.esx';
+          fileName = 'Example.esx';
           currentOpts.revision = '';
           eq('an empty piece left its separator behind', reportDocTitle(),
-             'Report - AP Installation - Denrose');
+             'Report - AP Installation - Example');
           done();
         """)
 
@@ -225,34 +225,34 @@ class ReportFileName(unittest.TestCase):
         reports. One of them getting a different assembler is exactly how this
         would break a third time."""
         self.check("""
-          fileName = '4653 Denrose Ct, Fort Collins, CO 80524 - PD.esx';
+          fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = 'v2.0';
           ['AP Installation', 'Antenna Aim Sheet', 'AP Placement Map',
            'Site Survey Summary'].forEach(function (name) {
             docName = name;
             const t = reportDocTitle();
             check('"' + name + '" lost the project: ' + t,
-                  /4653 Denrose Ct, Fort Collins, CO 80524 - PD$/.test(t));
+                  /400 Example St, Fairview, CA 90003 - PD$/.test(t));
             check('"' + name + '" lost the version: ' + t, t.indexOf(' - v2.0 - ') > -1);
           });
           done();
         """)
 
     def test_a_name_that_says_nothing_defers_to_the_project_file(self):
-        """"final.esx" is not a project name; "Final Report Denrose.esx" is.
+        """"final.esx" is not a project name; "Final Report Example.esx" is.
         The fallback is matched whole for that reason."""
         self.check("""
-          proj.projectName = 'Denrose Court';
+          proj.projectName = 'Example Court';
           currentOpts.revision = 'v1.0';
 
           fileName = 'final.esx';
           eq('a placeholder name was used as the project', reportDocTitle(),
-             'Report - AP Installation - v1.0 - Denrose Court');
+             'Report - AP Installation - v1.0 - Example Court');
 
-          fileName = 'Final Denrose Ct - PD.esx';
+          fileName = 'Final Example St - PD.esx';
           eq('a real name starting with a placeholder word was thrown away',
              reportDocTitle(),
-             'Report - AP Installation - v1.0 - Final Denrose Ct - PD');
+             'Report - AP Installation - v1.0 - Final Example St - PD');
           done();
         """)
 
@@ -261,11 +261,11 @@ class ReportFileName(unittest.TestCase):
         file name. Replacing it keeps the rest of the name; stopping at it would
         silently amputate everything after."""
         self.check("""
-          fileName = 'Site: Denrose / Phase 2.esx';
+          fileName = 'Site: Example / Phase 2.esx';
           currentOpts.revision = '';
           const t = reportDocTitle();
           check('the name was cut at the illegal character: ' + t,
-                t.indexOf('Denrose') > -1 && t.indexOf('Phase 2') > -1);
+                t.indexOf('Example') > -1 && t.indexOf('Phase 2') > -1);
           check('an illegal character reached the file name: ' + t,
                 !/[<>:"/\\\\|?*]/.test(t));
           done();
@@ -331,7 +331,7 @@ class OpenEsxRoute(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-fname-"))
         folder = self.tmp / "Silicone Plus - Building 4 - 1200 Fake Rd"
         folder.mkdir()
-        self.esx = folder / "4653 Denrose Ct, Fort Collins, CO 80524 - PD.esx"
+        self.esx = folder / "400 Example St, Fairview, CA 90003 - PD.esx"
         with zipfile.ZipFile(self.esx, "w") as z:
             z.writestr("project.json", "{}")
 

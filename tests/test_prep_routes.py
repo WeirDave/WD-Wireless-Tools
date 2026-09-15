@@ -208,7 +208,7 @@ class OpenedFromDisk(unittest.TestCase):
         self.client = server.app.test_client()
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
-        self.esx = make_esx(root / "Carnation Farms.esx")
+        self.esx = make_esx(root / "Example Farms.esx")
         self.before = self.esx.read_bytes()
 
         self._cap_dir, cap.USER_DIR = cap.USER_DIR, root / "capacity"
@@ -246,14 +246,14 @@ class OpenedFromDisk(unittest.TestCase):
 
     def test_it_names_the_project_from_the_path_not_the_query(self):
         res = self.post("plan", f"name=wrong.esx&steps=walls&wallTemplate={self.wall_file}")
-        self.assertEqual(res.get_json()["source"], "Carnation Farms.esx")
+        self.assertEqual(res.get_json()["source"], "Example Farms.esx")
 
     def test_the_prepared_copy_lands_beside_the_original(self):
         res = self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
         body = res.get_json()
         self.assertTrue(body["ok"], body)
         self.assertTrue(body["written"])
-        self.assertEqual(body["filename"], "Carnation Farms (prepared).esx")
+        self.assertEqual(body["filename"], "Example Farms (prepared).esx")
         self.assertEqual(Path(body["dir"]), self.esx.parent)
         self.assertTrue(Path(body["path"]).is_file())
         # no archive in the response - the file is already where he wants it
@@ -274,7 +274,7 @@ class OpenedFromDisk(unittest.TestCase):
         made" from "output I have since worked in", so he is asked.
         """
         self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
-        prepared = self.esx.with_name("Carnation Farms (prepared).esx")
+        prepared = self.esx.with_name("Example Farms (prepared).esx")
         self.assertTrue(prepared.is_file())
         prepared.write_bytes(b"an hour of drawing")   # stand in for his work
 
@@ -283,13 +283,13 @@ class OpenedFromDisk(unittest.TestCase):
         body = again.get_json()
         self.assertFalse(body["ok"])
         self.assertEqual(body["code"], "exists")
-        self.assertEqual(body["filename"], "Carnation Farms (prepared).esx")
+        self.assertEqual(body["filename"], "Example Farms (prepared).esx")
         self.assertIn("overwrite that work", body["error"])
         self.assertEqual(prepared.read_bytes(), b"an hour of drawing")
 
     def test_replacing_is_possible_once_it_is_asked_for(self):
         self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")
-        prepared = self.esx.with_name("Carnation Farms (prepared).esx")
+        prepared = self.esx.with_name("Example Farms (prepared).esx")
         prepared.write_bytes(b"stale")
         again = self.post("run", f"steps=trim,walls&replace=1&wallTemplate={self.wall_file}")
         body = again.get_json()
@@ -297,7 +297,7 @@ class OpenedFromDisk(unittest.TestCase):
         self.assertTrue(body["written"])
         self.assertNotEqual(prepared.read_bytes(), b"stale")
         self.assertEqual(sorted(q.name for q in self.esx.parent.glob("*.esx")),
-                         ["Carnation Farms (prepared).esx", "Carnation Farms.esx"],
+                         ["Example Farms (prepared).esx", "Example Farms.esx"],
                          "preparing again piled up another copy")
 
     def test_a_project_that_has_moved_is_refused_rather_than_guessed_at(self):

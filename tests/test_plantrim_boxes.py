@@ -1084,7 +1084,7 @@ class ReachableHandleTests(unittest.TestCase):
     // box is declared by the first slice, so it is populated after the evals.
     box.current = 'f1'; box.applied = {}; box.boxes = {};
     box.img = { width: 10000, height: 7500 };
-    // LNBH1 floor 1: detection kept 3275x4469, Suggest proposed 6234x4691.
+    // SITE1 floor 1: detection kept 3275x4469, Suggest proposed 6234x4691.
     const SUGGESTED = [1883, 1404, 8117, 6095];
     function place(b) {
       box.boxes.f1 = b;
