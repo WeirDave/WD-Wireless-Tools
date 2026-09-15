@@ -2268,7 +2268,12 @@
     if (opts.labelRadio && ctx) {
       var r = ctx.primaryRadio(ap.id);
       var ch = r && r.channelByCenterFrequencyDefinedNarrowChannels;
-      if (ch && ch.length) extra.push('ch ' + ch.join('+'));
+      // Ekahau stores these as centre frequencies in MHz. The label said
+      // "ch 2412" - which is channel 1 - while the AP table on a later page of
+      // the same document said "ch 1", because the table converts and this did
+      // not. An installer reading a frequency where the word "ch" is printed
+      // has no way to tell which of the two is lying.
+      if (ch && ch.length) extra.push('ch ' + ch.map(freqToChannel).join('+'));
       if (r && typeof r.transmitPower === 'number') extra.push(fmt(r.transmitPower, 0) + ' dBm');
     }
     if (opts.labelHeight && ctx) {
