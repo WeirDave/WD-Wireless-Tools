@@ -56,6 +56,23 @@ NEVER_EXPORT = ("cookies.enc", "cookies.json", "acorn_state", "organizer_undo")
 MACHINE_SPECIFIC_SETTINGS = ("global.output_dir",)
 MACHINE_SPECIFIC_BROWSER = ("wd-project-directory", "wd-rename-root")
 
+#: The only localStorage keys a restore puts back.
+#:
+#: The registry's own rule: ui-state "deliberately stays in localStorage:
+#: syncing a collapsed panel between machines would be a regression, not a
+#: feature". So panel widths, folded sections and dismissed tips are exported
+#: - a backup that quietly omits things is not a backup, and he should be able
+#: to read the file and see everything - but they are never written back.
+#: Restoring them would carry the work machine's layout onto the laptop, which
+#: is the regression that rule exists to prevent.
+#:
+#: These two are the exceptions because they follow the person rather than the
+#: window: which theme he reads in, and which Ekahau sharing group he works
+#: with. Both are filed as ui-state today and behave like preferences; they are
+#: restored here rather than reclassified, because moving a key between stores
+#: needs a migration and is not this feature's job.
+RESTORABLE_BROWSER_KEYS = ("wd-theme", "wd-sharing-group")
+
 #: Text-ish payloads are embedded as JSON so he can open the bundle and read
 #: his own values. Anything else (a report cover image) goes in as base64 and
 #: says so.
@@ -177,6 +194,22 @@ def suggested_filename(bundle: dict | None = None) -> str:
     return f"wd-wireless-tools-settings-{when}.json"
 
 
+def note_export_taken() -> str:
+    """Record that an export just happened, so the page can say how old it is.
+
+    A backup nobody can date is one he has to trust rather than check. Recorded
+    only for an export he asked for - an automatic dump before an update is the
+    suite protecting itself and would make the figure read as reassurance he
+    did not earn.
+    """
+    when = _now_iso()
+    try:
+        _settings.update_settings({"global": {"last_settings_export": when}})
+    except Exception:
+        return ""
+    return when
+
+
 # ── comparing a bundle with what is here now ──────────────────────────────
 
 def _flatten(obj, prefix=""):
@@ -268,8 +301,15 @@ def preview_import(bundle: dict, browser: dict | None = None,
                                         "new": _describe(payload)})
     result["files"] = file_diff
 
+    # Only what would actually be written is diffed. Listing panel widths as
+    # "will change" and then not changing them is the kind of preview that
+    # teaches him to stop reading previews.
     incoming_browser = bundle.get("browser") or {}
-    result["browser"] = _diff_map(incoming_browser, dict(browser or {}))
+    restorable = {k: v for k, v in incoming_browser.items()
+                  if k in RESTORABLE_BROWSER_KEYS}
+    result["browser"] = _diff_map(restorable, dict(browser or {}))
+    result["browserNotRestored"] = sorted(set(incoming_browser)
+                                          - set(RESTORABLE_BROWSER_KEYS))
 
     # Paths mean something different on another machine, so each one is
     # checked against this disk rather than assumed.
@@ -359,6 +399,65 @@ def backup_current(root: Path | None = None, keep: int | None = None) -> dict:
             "pruned": pruned.get("deleted") if isinstance(pruned, dict) else None}
 
 
+#: Where automatic dumps go. Their own folder so a directory listing reads as
+#: "these are my settings backups" rather than as clutter beside settings.json.
+AUTO_DIR_NAME = "settings-backups"
+
+
+def auto_dump(reason: str, root: Path | None = None, keep: int | None = None,
+              browser: dict | None = None) -> dict:
+    """A full export taken before something that could lose settings.
+
+    Triggered by the operations that have actually cost him settings or could:
+    an update, and an import. Roughly 5 KB, so the cheapest insurance in the
+    suite.
+
+    Retention is his `backup_keep`, and **0 genuinely means off here** - these
+    are the accumulating kind, which is what that switch is for. The one
+    exception is the dump taken immediately before an import, which is the undo
+    for an action he just asked for rather than a copy piling up, and is kept
+    by `backup_current` regardless.
+
+    Pruned per reason, so a run of updates cannot evict the dump taken before
+    the last import - the same "five backups of one file do not hide a single
+    backup of another" rule `tools/backups.py` already applies.
+    """
+    root = Path(root) if root else _user_dir()
+    if keep is None:
+        try:
+            keep = int((_settings.load_settings().get("global") or {})
+                       .get("backup_keep", _backups.DEFAULT_KEEP))
+        except Exception:
+            keep = _backups.DEFAULT_KEEP
+    keep = int(keep or 0)
+    if keep <= 0:
+        return {"ok": True, "written": None, "reason": reason,
+                "note": "automatic settings backups are switched off "
+                        '("Backup copies to keep" is set to Off)'}
+
+    safe = "".join(c for c in str(reason) if c.isalnum() or c in "-_") or "auto"
+    folder = root / AUTO_DIR_NAME
+    folder.mkdir(parents=True, exist_ok=True)
+    # `settings-<reason>.backup-<stamp>.json` - the stamp before the extension,
+    # so tools/backups.py classify() recognises it and the Clean up button on
+    # the Settings page can see and prune these too.
+    owner = folder / f"settings-{safe}.json"
+    dest = folder / f"settings-{safe}.backup-{_stamp()}.json"
+    try:
+        bundle = export_bundle(browser=browser, root=root)
+        bundle["takenBecause"] = reason
+        dest.write_text(json.dumps(bundle, indent=2), encoding="utf-8")
+    except Exception as exc:
+        # Never fail the operation this was protecting. A missing safety net is
+        # bad; an update that refuses to run because of one is worse.
+        return {"ok": False, "written": None, "reason": reason,
+                "error": f"{type(exc).__name__}: {exc}"}
+
+    pruned = _backups.prune_for(owner, keep=keep, protect=dest)
+    return {"ok": True, "written": str(dest), "reason": reason, "keep": keep,
+            "pruned": (pruned or {}).get("deleted")}
+
+
 def apply_import(bundle: dict, sections=("settings", "files"),
                  root: Path | None = None, keep: int | None = None) -> dict:
     """Write the bundle in. Backs up first, always.
@@ -390,6 +489,14 @@ def apply_import(bundle: dict, sections=("settings", "files"),
             _write_payload(target, payload)
             applied["files"].append(rel)
 
+    browser_back = {}
+    if "browser" in want:
+        incoming = bundle.get("browser") or {}
+        browser_back = {k: incoming[k] for k in RESTORABLE_BROWSER_KEYS
+                        if k in incoming}
+
     return {"ok": True, "backup": backup.get("backup"),
             "keep": backup.get("keep"), "applied": applied,
-            "browser": bundle.get("browser") or {} if "browser" in want else {}}
+            "browser": browser_back,
+            "browserSkipped": sorted(set(bundle.get("browser") or {})
+                                     - set(RESTORABLE_BROWSER_KEYS))}

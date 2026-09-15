@@ -1037,10 +1037,31 @@ def detect_install(root: Path | None = None, cfg: AppConfig = CONFIG) -> dict:
     return base
 
 
+def _dump_settings_first(reason: str, log=None):
+    """Copy his settings aside before an update touches anything.
+
+    Settings live outside the install tree, so the ZIP updater's folder backup
+    has never covered them - an update that went wrong could take the tree back
+    and leave the settings where they ended up. This is about five kilobytes.
+
+    Imported late and wrapped, because a safety net must never be the thing
+    that stops an update running.
+    """
+    try:
+        from tools import settings_backup
+        result = settings_backup.auto_dump(reason)
+    except Exception:
+        return None
+    if log and result.get("written"):
+        log("Saved a copy of your settings first.")
+    return result
+
+
 def perform_update(mode: str | None = None, channel: str = "release", log=None,
                    install_git_if_missing: bool = False, cfg: AppConfig = CONFIG):
     """Run the correct update for this install.  `mode` forces a path."""
     info = detect_install(cfg=cfg)
+    _dump_settings_first("update", log)
     if info.get("isDevCheckout"):
         # One exception, and only when asked for by name. `dev_pull` moves the
         # branch you are on and refuses on anything it could overwrite; the

@@ -36,6 +36,10 @@ DEFAULTS = {
         # .esx is big enough that keeping every one of them forever fills a
         # disk rather than protecting anything.
         "backup_keep": 3,
+        # When Settings was last exported to a file, so the page can say
+        # how stale the backup is. A record rather than a choice - it is
+        # in the registry's "internal" list and has no control.
+        "last_settings_export": "",
     },
     "organizer": {
         "image_ext": [

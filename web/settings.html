@@ -203,26 +203,6 @@
         <div class="hint" id="sBackupUsage" hidden></div>
       </div>
 
-      <div class="s-field">
-        <label>Back up your settings</label>
-        <div class="s-row">
-          <button class="btn" onclick="SP.exportSettings()"
-                  title="Save everything you have configured to one file">&#11015; Export to a file&hellip;</button>
-          <button class="btn" onclick="document.getElementById('sImportFile').click()"
-                  title="Restore from a settings file, after showing you what would change">&#11014; Import from a file&hellip;</button>
-          <input type="file" id="sImportFile" accept=".json,application/json" hidden
-                 onchange="SP.chooseImport(this)">
-        </div>
-        <div class="hint">One readable file with everything you have set up:
-          every setting on this page, your wall templates &mdash; <b>which is where
-          your Quick Walls keyboard shortcuts live</b> &mdash; your capacity
-          templates, Squirrel's rules and your report details. It never contains
-          your saved Ekahau login.
-          <br>Use it as a backup, or to copy your setup to another machine.
-          Importing shows you exactly what would change first, and copies your
-          current settings aside before it writes anything.</div>
-        <div class="hint" id="sExportResult" hidden></div>
-      </div>
     </div>
   </details>
 
@@ -348,6 +328,54 @@
       </div>
       <div class="s-field">
         <div class="hint">Wall template preferences are managed within Quick Walls for now.</div>
+      </div>
+    </div>
+  </details>
+
+  <details class="s-section" id="sec-backup">
+    <summary>Backup &amp; restore</summary>
+    <div class="s-body">
+      <div class="s-field">
+        <label>Your whole setup, in one file</label>
+        <div class="s-row">
+          <button class="btn btn-blue" onclick="SP.exportSettings()"
+                  title="Save everything you have configured to one file">&#11015; Export to a file&hellip;</button>
+          <button class="btn" onclick="document.getElementById('sImportFile').click()"
+                  title="Restore from a settings file, after showing you what would change">&#11014; Import from a file&hellip;</button>
+          <input type="file" id="sImportFile" accept=".json,application/json" hidden
+                 onchange="SP.chooseImport(this)">
+        </div>
+        <div class="hint" id="sLastExport">&nbsp;</div>
+        <div class="hint">Every setting on this page, your wall templates
+          &mdash; <b>which is where your Quick Walls keyboard shortcuts live</b>
+          &mdash; your capacity templates, Squirrel's rules, PlanTrim's saved
+          boxes and your report details. Your saved Ekahau login is never in it.
+          <br>Two things it is for: getting back what you had after something
+          overwrites it, and copying your setup to another machine.
+          <br>Importing shows you exactly what would change before it writes,
+          and copies your current settings aside first.</div>
+        <div class="hint" id="sExportResult" hidden></div>
+      </div>
+
+      <div class="s-field">
+        <label>What a restore does not bring back</label>
+        <div class="hint">Panel widths, which sections you left folded and tips
+          you have dismissed stay with the browser you set them in. They are in
+          the file so you can read it, but a restore skips them &mdash; carrying
+          the work machine's layout onto this one would be a nuisance rather
+          than a rescue. Dark/light and your Ekahau sharing group <i>do</i>
+          come back, because those follow you rather than the window.</div>
+      </div>
+
+      <div class="s-field">
+        <label>Automatic copies</label>
+        <div class="hint">Before an update, and before an import, a copy of your
+          settings is written to
+          <code>~/.wd_wireless_tools/settings-backups/</code> without being
+          asked for. How many are kept follows <b>Backup copies to keep</b>
+          above, and setting that to <b>Off</b> stops the automatic ones
+          &mdash; except the one taken immediately before an import, which is
+          the undo for something you just did and is always kept.</div>
       </div>
     </div>
   </details>

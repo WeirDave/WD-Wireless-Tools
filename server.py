@@ -714,7 +714,8 @@ SETTINGS_ACTIONS = {
     "export":         lambda d: {"ok": True,
                             "filename": settings_backup.suggested_filename(),
                             "bundle": settings_backup.export_bundle(
-                                browser=d.get("browser") or {})},
+                                browser=d.get("browser") or {}),
+                            "takenAt": settings_backup.note_export_taken()},
     "import_preview": lambda d: settings_backup.preview_import(
                             d.get("bundle"), browser=d.get("browser") or {}),
     "import_apply":   lambda d: settings_backup.apply_import(
