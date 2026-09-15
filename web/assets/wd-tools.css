@@ -6198,6 +6198,33 @@ body.wd-has-stale-banner { padding-top: 52px; }
 @media print {
   html, body { background: #fff !important; color: #111 !important; }
 
+  /* `min-height: 100vh` is a screen rule, and in paged media 100vh is the
+     sheet - so the body was forced to a full page tall however little was on
+     it, and the banner allowance on top of that pushed it past the bottom. A
+     one-page report came out as two in Firefox, the second carrying nothing but
+     the page background. Chromium clamps this and prints one sheet, which is
+     why it only ever showed up in the browser he actually prints from.
+
+     The padding goes with it: the banners it makes room for are display:none in
+     print, so it is reserving space for something that is not there.
+
+     Resetting the body alone is not enough, and that was the first attempt: the
+     shells around the content carry the same screen rule, and
+     `.report-workspace.active` is the specific one that kept a full sheet of
+     minimum height after `body` had been freed. Every full-height shell is
+     listed here rather than only the one that was caught, because the next
+     short document would have found the next one. */
+  html, body,
+  body.tool-report, body.tool-scale,
+  .report-workspace, .report-workspace.active,
+  .rep-stage, .rep-stage-review,
+  .app, .editor, .editor.active, #appScreen,
+  #loginScreen, #setupScreen > div {
+    min-height: 0 !important;
+    height: auto !important;
+  }
+  html, body { padding-top: 0 !important; }
+
   .noprint, #dzTopbar, .report-wiz-topbar, .rep-stepper,
   .rep-stage:not(.rep-stage-review), .rep-review-bar, .toasts { display: none !important; }
 

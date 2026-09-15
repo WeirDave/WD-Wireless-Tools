@@ -2229,7 +2229,8 @@
       return true;
     });
     if (!aps.length && !r.noApFilter) {
-      host.innerHTML = '<div class="rep-empty">No APs selected — check the AP filter panel.</div>';
+      host.innerHTML = '<div class="rep-empty">'
+        + WD.esc(emptyApReason(inclOmni, inclDirectional)) + '</div>';
       return;
     }
     var today = new Date();
@@ -2261,6 +2262,40 @@
 
   // Label text is composable so one report can show just the name while another
   // carries the detail an installer needs without a second lookup.
+  /* Why the AP list came out empty, naming the thing to change.
+
+     "No APs selected - check the AP filter panel" was printed for every cause,
+     including the two where the panel was never touched and the report's own
+     option did the hiding. On an all-omni project the Antenna Aim Sheet said it
+     in front of 44 access points, telling him to go and fix a panel that was
+     correct. Found by printing the same report in Chrome, Edge and Firefox and
+     reading what came out. */
+  function emptyApReason(inclOmni, inclDirectional) {
+    var all = proj.accessPoints || [];
+    if (!all.length) return 'This project has no access points in it.';
+
+    var enabled = all.filter(function (a) { return !apDisabled.has(a.id); });
+    if (!enabled.length) {
+      return 'Every access point is unticked in the AP filter panel below. '
+        + 'Tick the ones this report should cover.';
+    }
+
+    var omni = enabled.filter(apIsOmniOnly).length;
+    var dir = enabled.length - omni;
+    if (!inclOmni && omni && !dir) {
+      return 'All ' + omni + ' access point' + (omni === 1 ? ' here is' : 's here are')
+        + ' omni, and this report is set to leave omni units out. '
+        + 'Turn on "Include omni APs" to list them.';
+    }
+    if (!inclDirectional && dir && !omni) {
+      return 'All ' + dir + ' access point' + (dir === 1 ? ' here is' : 's here are')
+        + ' directional, and this report is set to leave directional units out. '
+        + 'Turn on "Include directional APs" to list them.';
+    }
+    return 'No access point matches the current options. Check "Include omni APs" '
+      + 'and "Include directional APs", and the AP filter panel below.';
+  }
+
   function apMarkerLabel(ap, opts, ctx) {
     var main = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
     var extra = [];
