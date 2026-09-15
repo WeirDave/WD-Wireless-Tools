@@ -40,6 +40,7 @@
 - [Report](#report)
 - [AP Labeler](#ap-labeler)
 - [PlanTrim](#plantrim)
+- [Capacity](#capacity)
 - [Prep](#prep)
 - [Data, Privacy, and Security](#data-privacy-and-security)
 - [Update or Uninstall](#update-or-uninstall)
@@ -158,6 +159,27 @@ Quick Walls edits wall types inside an Ekahau `.esx` project without uploading i
 2. Review every wall type detected in the project.
 3. Choose a replacement for each type you want to change.
 4. Review the mapping, then save the updated `.esx`.
+
+### Wall heights
+
+A wall type can be given a height, so a partial-height obstruction is modelled
+as one rather than as a barrier from the slab to the roof. In **Quick Walls**,
+open a wall type and set **Height**:
+
+- **Auto** is the default and means floor to ceiling. It is a real answer, not
+  an unset one, and it is what most wall types should stay on.
+- **Fixed** takes a number, entered in **feet** when the units toggle is set to
+  imperial, and metres otherwise. Thickness is in inches; height is in feet.
+
+The panel says how many drawn segments the change affects, because **height
+belongs to the wall type, not to an individual segment** — changing it changes
+every wall already drawn with that type.
+
+> **The shipped template only sets a height where the name says one.**
+> `Walls, Steel 12ft` is 12 ft and `Warehouse Rack Wall - 16ft` is 16 ft. Every
+> other type ships on Auto, including `Warehouse Rack Wall`, `Cubicle` and
+> `Bookshelf` — a guessed height changes every project that opens the template,
+> silently, in a direction nobody chose.
 
 ### Use templates
 
@@ -288,10 +310,23 @@ Floor-plan markers and AP-table labels come from the AP names inside the project
 Notes you record against an access point in Ekahau — mounting caveats, access
 problems, anything typed onto the AP — can be printed as their own page.
 
-In **Report → AP Placement Map**, in the options panel of the **Configure** step,
-tick **"Include AP notes pages"**. It sits directly below *Compass reference
-page*, near the bottom of that panel. It is **off by default** and your choice is
-remembered once you set it.
+In **any report**, in the options panel of the **Configure** step, set
+**"AP notes pages"**. It is the last control in that panel, directly below
+*Compass reference page*, and it offers three choices:
+
+| Choice | What you get |
+| --- | --- |
+| **Auto** (the default) | The pages appear when the project has notes on its APs, and not otherwise |
+| **Always include** | The same, since a floor with no notes contributes no page |
+| **Never include** | No notes pages, whatever the project contains |
+
+Your choice is remembered once you press **Save these as my defaults**.
+
+> **Set it to Never on a document you are handing over.** Site notes are often
+> your own working annotations — mounting caveats, access problems, things you
+> wrote for yourself — and they are not always meant for a client or an
+> installer. That is the whole reason this is a separate control rather than
+> something tied to another setting.
 
 You get one page per floor, headed **AP Notes**, listing each access point that
 has notes and the text of each one. An AP can carry more than one note and all of
@@ -407,6 +442,69 @@ PlanTrim removes excess whitespace around floor plan images inside an `.esx` fil
 
 ---
 
+## Capacity
+
+Capacity reads the device mix out of a project you have already set up in
+Ekahau and applies those ratios to another building. It exists so the thinking
+you did once — how many devices a person carries, of which kinds, doing what —
+does not have to be re-entered on every site.
+
+**What it stores is ratios, not counts.** A project designed for 500 people
+carrying 1,500 devices is stored as "three devices per person, split like so".
+Applied to a 200-person building it writes 600. Headcount is the only number you
+type.
+
+### Capture a template
+
+Open an `.esx` that is already set up the way you want. Capacity reads the
+requirement areas and lists what it found: each device profile, each usage
+profile, and the device count against it. Rows are shown exactly as authored —
+two rows can name the same device and usage profile and still mean different
+things, so they are never merged.
+
+Type how many people that project was designed for, check the per-person column
+matches what you intended, name the template and save it. Templates live in
+`~/.wd_wireless_tools/capacity/`, outside the install folder, so an update never
+touches them.
+
+### Apply a template
+
+Open the project you want to set up, pick a template, type the headcount, and
+press **Apply and download**. Nothing is written to the file you opened — a new
+copy is built and downloaded, so replacing the original stays your decision.
+
+The preview says what will happen to each floor before you press anything:
+
+| What it says | What it will do |
+| --- | --- |
+| **your area — adding N capacity items** | An area you drew is filled in. Your outline is not changed; only the devices are written into it |
+| **create an area from the walls you drew** | No area on that floor, so one is created from the extent of the walls (or the APs, or the page, in that order) |
+| **skip — this area already has N capacity items** | Left alone. Those are numbers you set, and overwriting them is the one destructive case |
+
+Tick **Replace requirement areas that already exist** to overwrite that last
+case. Even then your outline is kept — no area is ever deleted, in any of the
+three situations.
+
+### Profiles
+
+A template names device and usage profiles by name, because Ekahau gives every
+project its own internal identifiers and a template's identifiers mean nothing
+in another file. Names are matched exactly first, then on the stem before a
+comma or a bracket — so a template saying `Normal SLA` finds `Normal SLA
+(2 Mbps)`, which is the same profile under a different Ekahau release.
+
+Where a name genuinely could mean two profiles it stops and names both rather
+than guessing. Ekahau ships both `Conferencing, GoToMeeting` and `Conferencing,
+Lync/Skype`, so a template row saying only `Conferencing` is ambiguous and is
+reported as such.
+
+A template captured from a project carries the profile definitions with it, so
+it can create a profile the target project does not have. The example template
+shipped with the suite names only Ekahau stock profiles, so it applies to a new
+project without creating anything.
+
+---
+
 ## Prep
 
 Prep does the setup work on a freshly imported project in one pass over the file, instead of three trips through three tools. Drop the `.esx` on it, choose which of the three things to do, check what it says it will do, and download the prepared copy.
@@ -465,6 +563,25 @@ Prep refuses rather than guessing, and nothing is written when it does. The most
 - **Menu → Forget Cloud Login** removes the saved Cloud session and its key.
 
 There is no server-side file-processing service anywhere in the suite. Files are opened, changed and saved on your own machine.
+
+### Backups of your projects
+
+Every tool that writes to an `.esx` takes a copy of the original first, beside
+the file it is replacing. That is separate from the update backup described
+below — this one is about your survey files.
+
+In **Settings → General**, **Backup copies to keep** controls how many are
+retained per file. Older ones are pruned automatically after a successful write,
+so the folder does not fill up.
+
+- Set it to **0** to turn backups off entirely.
+- The page shows the **total space used** across every backup the suite has
+  taken, so the cost is visible rather than discovered later.
+
+Pruning never fails an operation: a project written correctly is never reported
+as an error because tidying up afterwards did not work.
+
+---
 
 ## Update or Uninstall
 
