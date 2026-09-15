@@ -96,16 +96,16 @@ class ReadingARealScheme(unittest.TestCase):
                          (result.stdout + result.stderr).strip())
 
     def test_his_scheme_across_two_floors(self):
-        """SITE4-01-01-01-AP01. The segment that changes between floors, and
+        """SITE1-01-01-01-AP01. The segment that changes between floors, and
         only between floors, is the floor."""
         self.run_block("""
-          var aps = floorOf('f1', 'SITE4-01-01-01-AP#', 1, 6)
-            .concat(floorOf('f2', 'SITE4-01-01-02-AP#', 1, 6));
+          var aps = floorOf('f1', 'SITE1-01-01-01-AP#', 1, 6)
+            .concat(floorOf('f2', 'SITE1-01-01-02-AP#', 1, 6));
           var r = inferSegments(aps);
           check('four fixed parts then the counter: ' + shape(r),
                 shape(r) === 'tttFc');
           check('the fixed values are the ones in the file: ' + texts(r),
-                texts(r) === 'SITE4,01,01');
+                texts(r) === 'SITE1,01,01');
           check('tag AP', counter(r).tag === 'AP');
           check('two digits, from AP01', counter(r).digits === 2);
           check('hyphen separator', r.sep === '-');
@@ -117,11 +117,11 @@ class ReadingARealScheme(unittest.TestCase):
         """Every fixed part looks identical on a single floor. Marking one of
         them Floor would be a guess, and text reproduces the names exactly."""
         self.run_block("""
-          var r = inferSegments(floorOf('f1', 'SITE4-01-01-01-AP#', 1, 6));
+          var r = inferSegments(floorOf('f1', 'SITE1-01-01-01-AP#', 1, 6));
           check('no floor segment is invented: ' + shape(r),
                 shape(r) === 'ttttc');
           check('and the names would rebuild as they are: ' + texts(r),
-                texts(r) === 'SITE4,01,01,01');
+                texts(r) === 'SITE1,01,01,01');
           done();
         """)
 
@@ -187,7 +187,7 @@ class WhereItRefusesToGuess(unittest.TestCase):
           check('no number anywhere', inferSegments(
             [{name:'A-B-C',floorId:'f'},{name:'A-B-D',floorId:'f'}]) === null);
           check('a single AP is not a pattern', inferSegments(
-            [{name:'SITE4-01-01-01-AP01',floorId:'f'}]) === null);
+            [{name:'SITE1-01-01-01-AP01',floorId:'f'}]) === null);
           check('nothing at all', inferSegments([]) === null);
           done();
         """)
@@ -218,10 +218,10 @@ class NamesThatDoNotFitAreCountedNotForced(unittest.TestCase):
         too many; they must not distort the pattern, and the count has to say
         the scheme came from fewer APs than the project holds."""
         self.run_block("""
-          var aps = floorOf('f1', 'SITE4-01-01-01-AP#', 1, 6)
-            .concat(floorOf('f2', 'SITE4-01-01-02-AP#', 1, 6))
-            .concat([{name:'SITE4-01-01-01-AP07-001',floorId:'f1'},
-                     {name:'SITE4-01-01-01-AP08-001',floorId:'f1'}]);
+          var aps = floorOf('f1', 'SITE1-01-01-01-AP#', 1, 6)
+            .concat(floorOf('f2', 'SITE1-01-01-02-AP#', 1, 6))
+            .concat([{name:'SITE1-01-01-01-AP07-001',floorId:'f1'},
+                     {name:'SITE1-01-01-01-AP08-001',floorId:'f1'}]);
           var r = inferSegments(aps);
           check('the scheme still reads correctly: ' + shape(r),
                 shape(r) === 'tttFc');
@@ -233,7 +233,7 @@ class NamesThatDoNotFitAreCountedNotForced(unittest.TestCase):
 
     def test_a_few_odd_names_do_not_stop_the_majority(self):
         self.run_block("""
-          var aps = floorOf('f1', 'SITE4-01-01-01-AP#', 1, 8)
+          var aps = floorOf('f1', 'SITE1-01-01-01-AP#', 1, 8)
             .concat([{name:'spare',floorId:'f1'},
                      {name:'test rig',floorId:'f1'}]);
           var r = inferSegments(aps);
@@ -247,7 +247,7 @@ class NamesThatDoNotFitAreCountedNotForced(unittest.TestCase):
         reconstruction - a rebuilt sample that disagreed with the file would
         be exactly the failure this is meant to prevent."""
         self.run_block("""
-          var aps = floorOf('f1', 'SITE4-01-01-01-AP#', 1, 4);
+          var aps = floorOf('f1', 'SITE1-01-01-01-AP#', 1, 4);
           var r = inferSegments(aps);
           var real = aps.some(function (a) { return a.name === r.sample; });
           check('the sample is one of the real names: ' + r.sample, real);

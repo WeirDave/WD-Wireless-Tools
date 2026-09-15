@@ -2006,7 +2006,7 @@
   }
 
   /* The structured pattern gives every AP on a floor the same leading
-     segments - SITE4-01-00-01- - so the only thing that differs row to row is
+     segments - SITE1-01-00-01- - so the only thing that differs row to row is
      the tail. Hoisting that stem out of the rows is what makes the diff
      readable in a narrow panel instead of wrapping onto two lines.
 

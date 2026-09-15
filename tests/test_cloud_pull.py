@@ -63,12 +63,12 @@ LOCAL_OLD = "2026-08-01T08:00:00.000Z"
 class CloudPullTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-cloud-pull-"))
-        self.local = self.tmp / "Example Ct - PD.esx"
-        _esx(self.local, "Example Ct - PD", LOCAL_OLD)
+        self.local = self.tmp / "Example St - PD.esx"
+        _esx(self.local, "Example St - PD", LOCAL_OLD)
         self.original = self.local.read_bytes()
 
         buf = self.tmp / "_cloud.esx"
-        _esx(buf, "Example Ct - PD", CLOUD_NEW)
+        _esx(buf, "Example St - PD", CLOUD_NEW)
         self.cloud_bytes = buf.read_bytes()
         buf.unlink()
 
@@ -77,7 +77,7 @@ class CloudPullTests(unittest.TestCase):
         mgr.config = {"output_dir": str(self.tmp)}
         mgr._ensure = lambda: True
         mgr.api = _StubApi(
-            get if get is not None else _Resp(200, {"name": "Example Ct - PD",
+            get if get is not None else _Resp(200, {"name": "Example St - PD",
                                                     "modifiedAt": CLOUD_NEW}),
             download if download is not None else {"esx": self.cloud_bytes},
         )
@@ -118,7 +118,7 @@ class CloudPullTests(unittest.TestCase):
     # ---- everything that must not overwrite --------------------------------
 
     def test_local_newer_is_refused(self):
-        _esx(self.local, "Example Ct - PD", "2026-10-01T08:00:00.000Z")
+        _esx(self.local, "Example St - PD", "2026-10-01T08:00:00.000Z")
         self.original = self.local.read_bytes()
         res = self._run()
         self.assertEqual(res.get("error"), "local_newer")
