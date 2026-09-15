@@ -890,6 +890,55 @@ so the folder does not fill up.
 Pruning never fails an operation: a project written correctly is never reported
 as an error because tidying up afterwards did not work.
 
+### Backing up your settings
+
+Everything you have configured can be saved to one file and restored from it.
+Both buttons are in **Settings → General**, under **Back up your settings**.
+
+**⇩ Export to a file…** writes `wd-wireless-tools-settings-<date>.json` to your
+downloads folder. It is meant to be read: open it and your own values are in
+there as plain JSON, with a schema version and the time it was taken.
+
+What it contains:
+
+| In the file | Why |
+|---|---|
+| Every setting on the Settings page | The obvious half |
+| Your **wall templates** | **This is where your Quick Walls keyboard shortcuts live** — the shortcut number is a field on each wall type, not a store of its own |
+| Your capacity templates | Captured per person, so they apply to any headcount |
+| Squirrel's rename rules and folder settings | |
+| PlanTrim's saved crop boxes | |
+| Cloud Manager's match decisions | The pairs you linked or marked "not a match" |
+| Your report details and cover image | |
+| The per-browser values the page keeps | The server cannot see these, so the page collects them |
+
+What it never contains: **your saved Ekahau Cloud login**, and the per-project
+state recording where you got to in each file. A credential does not belong in
+a backup, and the project state is not a preference.
+
+**⇧ Import from a file…** restores one, and shows you what would change before
+it writes anything:
+
+- a line per value, with the old beside the new;
+- anything already identical is counted, not listed;
+- **a folder path from another machine is called out by name** and checked
+  against this disk, because your home project folder is not where the work
+  machine keeps them;
+- an export from a newer version is read as far as it can be, and anything
+  unrecognised is listed rather than dropped.
+
+**Import these changes** is greyed out when the file would change nothing.
+
+Before it writes, your current settings are copied aside as
+`settings.backup-<date>.json`. That is the same convention as every other
+backup, so **Check usage** and **Clean up** on this page see and prune them too.
+Retention follows **Backup copies to keep**, except that you always keep at
+least one — turning backups off is about routine copies accumulating, not about
+losing the undo for an import you have just run.
+
+> **This is also how you move a setup between machines.** Export on one, import
+> on the other, and skip the folder path when it warns you.
+
 ---
 
 ## Update or Uninstall
