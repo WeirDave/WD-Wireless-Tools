@@ -30,8 +30,8 @@ UNDO_DIR = CONFIG_DIR / "organizer_undo"
 ACORN_STATE_DIR = CONFIG_DIR / "acorn_state"
 
 
-def _tk_dialog(code: str, timeout: int = 180) -> str:
-    """Run a Tk file/folder dialog in its own subprocess and return stdout.
+def _tk_dialog_result(code: str, timeout: int = 180) -> dict:
+    """Run a Tk file/folder dialog in its own subprocess and say what happened.
 
     The server (waitress) handles requests on a pool of worker threads, but
     Tkinter's Tcl interpreter is not thread-safe — creating a Tk() root
@@ -40,6 +40,19 @@ def _tk_dialog(code: str, timeout: int = 180) -> str:
     while the first is still open. Running each dialog in its own process
     sidesteps that entirely, matching the pattern cloud_manager.py already
     uses for its folder picker.
+
+    **Three outcomes, and telling them apart is the point of this function.**
+    The dialog opened and something was chosen; the dialog opened and the
+    person cancelled; the dialog never opened at all. Until v2.100.8 all three
+    came back as the empty string, every caller reported that as "No file
+    selected", and every page suppresses that message because it reads as a
+    cancel. So a picker that could not run produced a button that did
+    absolutely nothing — measured in Chrome, Edge and Firefox, the page did not
+    change by one character — which is what "I selected the option and there
+    was nothing that allowed me to move forward" was.
+
+    `ran` is False only for the third case. A cancel is `ran=True` with an
+    empty `path`, and stays silent, because silence is the right answer there.
     """
     try:
         kwargs = {}
@@ -47,9 +60,31 @@ def _tk_dialog(code: str, timeout: int = 180) -> str:
             kwargs["creationflags"] = 0x08000000
         out = subprocess.run([sys.executable, "-c", code], capture_output=True,
                              text=True, timeout=timeout, **kwargs)
-        return out.stdout.strip()
-    except Exception:
-        return ""
+    except subprocess.TimeoutExpired:
+        return {"path": "", "ran": False, "why": "it did not respond"}
+    except Exception as exc:                       # noqa: BLE001 - reported
+        return {"path": "", "ran": False,
+                "why": "it could not be started (%s)" % type(exc).__name__}
+    if out.returncode != 0:
+        # Tk missing, no window station, a crashed interpreter. The child's
+        # own message is the most useful thing there is, so keep a little of it.
+        # `why` is written as a clause, because the caller puts it after
+        # "Could not open the file picker - " and two sentences that both name
+        # the picker read as a stutter.
+        detail = (out.stderr or "").strip().splitlines()
+        return {"path": "", "ran": False,
+                "why": "it closed immediately"
+                       + (" (%s)" % detail[-1][:120] if detail else "")}
+    return {"path": out.stdout.strip(), "ran": True, "why": ""}
+
+
+def _tk_dialog(code: str, timeout: int = 180) -> str:
+    """The path only, for callers that do not distinguish cancel from failure.
+
+    Kept so the existing pickers are unchanged; anything new should use
+    `_tk_dialog_result` and tell the user which of the two happened.
+    """
+    return _tk_dialog_result(code, timeout)["path"]
 
 
 def _undo_path(root: Path) -> Path:

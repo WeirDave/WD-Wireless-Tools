@@ -89,13 +89,42 @@
     lastWritten = null;
   }
 
+  /* Opening from disk, and what happens when that cannot be done.
+
+     The native dialog runs on the server - a browser file input hands over a
+     name with no path, and the whole point of this route is knowing which
+     folder the project sits in. So there are three outcomes and the page has
+     to tell them apart:
+
+       chose a file   - open it
+       cancelled      - say nothing; that is the right answer
+       never opened   - say so, and fall through to the ordinary browse dialog
+
+     The third used to be reported as the second, which made this button do
+     literally nothing: measured in Chrome, Edge and Firefox, the page did not
+     change by one character after clicking it. Falling through matters more
+     than the message - a tool he cannot get a file into is not usable, and the
+     plain input works everywhere. */
   window.prepOpenFromDisk = function () {
+    var btn = document.querySelector('.dropzone-open-disk');
+    var label = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+    var done = function () {
+      if (btn) { btn.disabled = false; btn.textContent = label; }
+    };
     fetch('/api/prep/pick', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
       body: '{}',
     }).then(function (r) { return r.json(); }).then(function (res) {
+      done();
       if (!res || !res.ok) {
+        if (res && res.code === 'picker_unavailable') {
+          WD.toast(res.error + ' Use the drop zone instead.', 'error');
+          $('fileInput').value = '';
+          $('fileInput').click();
+          return;
+        }
         if (res && res.error && res.error !== 'No file selected') {
           WD.toast(res.error, 'error');
         }
@@ -108,7 +137,11 @@
       WD.toast('Opened from ' + res.dir, 'success');
       preview();
     }).catch(function (e) {
-      WD.toast('Could not open that project: ' + e.message, 'error');
+      done();
+      WD.toast('Could not open that project: ' + e.message
+               + ' Use the drop zone instead.', 'error');
+      $('fileInput').value = '';
+      $('fileInput').click();
     });
   };
 
