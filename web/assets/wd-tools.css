@@ -509,6 +509,26 @@ body.tool-report .report-wiz-topbar { background: linear-gradient(rgba(159,27,88
 }
 
 .btn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+/* Where the keyboard is, in every engine.
+
+   Nothing declared a focus style for ordinary controls, so the ring was the
+   browser's own `outline: auto` - and the three engines pick that colour
+   differently. Measured after the palette went from navy to near-black:
+   Firefox drew it at rgb(237,237,240) and Chrome at rgb(238,238,238), both
+   plainly visible, and **Edge drew it at rgb(16,16,16)** on a #090909 page.
+   Invisible. Tabbing through the suite in Edge left no way to tell where you
+   were, which is the one accessibility fault that makes a page unusable rather
+   than merely awkward.
+
+   An explicit colour takes the decision away from the engine. `:focus-visible`
+   rather than `:focus` so a mouse click does not draw it, and the more
+   specific per-component focus rules further down still win where they
+   exist. */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
 
 /* Import preview - what a restore would change, before it changes it.
 
