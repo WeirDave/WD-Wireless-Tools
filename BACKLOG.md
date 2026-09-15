@@ -152,15 +152,7 @@ higher.
 
 ### Suite-wide
 
-#### 8. P3 — The Firefox scrollbar styling was shipped unverified
-
-`wd-tools.css` carries one `scrollbar-width` / `scrollbar-color` rule. Firefox
-is the browser he actually uses, and this has never been looked at in it. It is
-cosmetic, so it is P3 — but it is also five minutes with the BiDi path that is
-now established, and print work has twice shipped wrong by being checked in the
-wrong engine.
-
-#### 9. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
+#### 8. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
 
 A finding about going from DWG to `.esx` was established in an earlier session
 and never recorded, so the next session will redo the work.
@@ -201,6 +193,21 @@ every engine, the last one an **AP Notes** page, and no blank sheet anywhere.
 Printing it is also what found the ordering fault fixed in v2.100.6 — the
 compass page was coming out **after** the notes on the AP Placement Map, which
 is the one report he asked for notes on.
+
+### The scrollbar styling is verified, and it was not what the item said
+
+Item 8 described "one `scrollbar-width` / `scrollbar-color` rule". There were
+two different mechanisms, and the one on the Cloud Manager list was
+`::-webkit-scrollbar`, which **Firefox does not implement at all**. Measured
+with the list scrolling: Chrome and Edge reserved a 6px gutter, Firefox reserved
+0 and drew its own overlay bar in the platform colour.
+
+Fixed in v2.100.7 by adding the standard properties behind
+`@supports not selector(::-webkit-scrollbar)`. The guard is not decoration:
+Chromium 121+ reads `scrollbar-width` too, and setting it there overrode the
+WebKit rule and took Chrome and Edge from 6px to 10px. Firefox still overlays
+rather than reserving — that is the platform, not a bug — so its bar is now
+thin and muted where it was default, and nothing about the layout moved.
 
 ### A template adds; it never changes a wall type Ekahau ships
 
