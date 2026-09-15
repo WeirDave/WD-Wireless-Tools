@@ -1098,7 +1098,7 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
                          the building token doesn't change the id).
     Pass  1 · NAME     — exact name equality (case + whitespace normalized).
                          High confidence with no id link.
-    Pass  2 · CODE     — same site code (e.g. "CLMB2") plus fuzzy name score,
+    Pass  2 · CODE     — same site code (e.g. "SITE1") plus fuzzy name score,
                          with discriminator guard (Bldg 3 vs Bldg 5 rejected).
     Pass  3 · FUZZY    — fuzzy name overlap only, with discriminator guard.
                          The weakest auto-pass — surface confidence in the UI.
