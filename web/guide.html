@@ -114,10 +114,10 @@
   </table>
 
   <h3>WD Template</h3>
-  <p>The tool ships with a <strong>WD Template</strong> preset (marked with a star in the dropdown) — one wireless engineer's own wall-type setup, not a universal recommendation. It adds the types that Ekahau does not ship — framery pods, retail and warehouse shelving, cable trays, rack walls at two heights — and leaves Ekahau's own types exactly as Ekahau ships them.</p>
-  <div class="warning-box">
-    <strong>It used to recolour three of Ekahau's types, and no longer does.</strong> Until v2.100.5 the template gave Elevator Shaft a green, Steel Fire/Exit Door an orange and Thick Window a darker blue, on the reasoning that Ekahau's greys are hard to tell apart. Applying it carried those colours into every project it touched, without saying so.
-    <p>The rule now is that a template adds your own types and never changes a standard one, so a survey is read by people who know the standard set and find it unchanged. If you want those colours, add them as wall types of your own rather than as edits to Ekahau's — a template can still carry anything you created.</p>
+  <p>The tool ships with a <strong>WD Template</strong> preset (marked with a star in the dropdown) — one wireless engineer's own wall-type setup, not a universal recommendation. It adds the types that Ekahau does not ship — framery pods, retail and warehouse shelving, cable trays, rack walls at two heights — and recolours three of Ekahau's own so similar types can be told apart.</p>
+  <div class="tip-box">
+    <strong>It recolours three of Ekahau's own types, on purpose.</strong> <strong>Elevator Shaft</strong> is green, <strong>Door, Steel Fire/Exit</strong> orange and <strong>Window, Thick</strong> a deeper blue, because Ekahau's greys for those three are hard to tell apart on a plan.
+    <p>These were removed in v2.100.5 by mistake and restored in v2.100.19 from the wall types inside a real project that still carried them. If you would rather keep Ekahau's own colours, edit the three types and save the template again.</p>
   </div>
 
   <h3>Sharing Templates</h3>
@@ -132,7 +132,7 @@
   </div>
 
   <div class="tip-box">
-    <strong>Apply adds; it never deletes, and it never restyles Ekahau's own types.</strong> Every type in the template is added to the project. A type <em>you</em> added and the project already has is updated to the template's version, keeping the identity it already had so walls already drawn with it are unaffected. A type <strong>Ekahau ships</strong> is left exactly as it is, and the message afterwards names the ones it left alone. Anything the template says nothing about is untouched.
+    <strong>Apply adds; it never deletes, and it never restyles Ekahau's own types.</strong> Every type in the template is added to the project. A type <em>you</em> added and the project already has is updated to the template's version, keeping the identity it already had so walls already drawn with it are unaffected. A type <strong>Ekahau ships</strong> is updated from the template too — that is how the three recoloured types reach your project. Anything the template says nothing about is untouched.
     <p>This changed in v2.100.0. Applying a template used to replace the whole list, which deleted any type the template had no counterpart for — and walls drawn with that type were left pointing at something no longer in the file. Measured across 70 local projects with walls drawn, the old behaviour would have stranded walls in 11 of them, every time on a shelving type. If you are on an older build, that is what Apply still does there.</p>
   </div>
 

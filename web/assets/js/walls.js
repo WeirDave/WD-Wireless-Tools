@@ -239,22 +239,23 @@ function templateWouldChange(have, want) {
 // it is. Nothing is ever removed here; "Ekahau Defaults" is the button that
 // deliberately starts over, and it asks first.
 //
-// **A wall type Ekahau ships is left exactly as Ekahau ships it.** His rule,
-// and the reason for it is that a survey is read by people who know the
-// standard set: "I just want to add in the walls that we added, not change
-// anything from the defaults. So if stuff has changed from the defaults,
-// that's probably wrong." Applying WD Template used to recolour three stock
-// types - Door Steel Fire/Exit, Elevator Shaft and Window Thick - purely
-// because the template had been saved out of a project where they had been
-// recoloured once. Nothing said so, and the recolour then travelled to every
-// project the template was applied to.
+// **A wall type Ekahau ships is updated from the template like any other, and
+// that is deliberate again.** v2.100.5 made this skip stock types, on my
+// reading of "I just want to add in the walls that we added, not change
+// anything from the defaults". That reading was wrong: the three colours it
+// was protecting Ekahau's greys from - Door Steel Fire/Exit, Elevator Shaft,
+// Window Thick - are *his*, chosen so similar types can be told apart, and the
+// Quick Walls guide had documented them as a feature for as long as they
+// existed. He asked for them back: "get them back to where they were for my
+// template."
 //
-// Two things this is deliberately not. It is not a refusal to touch stock
-// types at all - the **Ekahau Defaults** template passes `fromDefaults`, since
-// putting the stock values back is the entire point of that one. And it is not
-// silent: what was left alone is counted and named in the toast, so a template
-// that really was meant to carry a house value for a stock type shows up as a
-// thing that did not happen rather than as nothing at all.
+// Leaving the guard in would have made that restoration cosmetic. Every Ekahau
+// project already contains those three types, so the guard would skip them on
+// every project he applied the template to and his colours would never land.
+//
+// The reporting machinery below (`kept`, `keptPhrase`) is left in place on
+// purpose: if he does want the standard set protected again, re-adding the
+// skip is one line and the message that explains it is already written.
 function mergeTemplateTypes(newTypes, opts) {
   const fromDefaults = !!(opts && opts.fromDefaults);
   const where = new Map();
@@ -274,10 +275,6 @@ function mergeTemplateTypes(newTypes, opts) {
       added++;
     } else {
       const have = wallTypes[at];
-      if (!fromDefaults && isStockType(have)) {
-        if (templateWouldChange(have, copy)) kept.push(have.name);
-        return;
-      }
       copy.id = have.id;
       wallTypes[at] = copy;
       updated++;
