@@ -31,13 +31,12 @@
   --cyan: #0891b2;  --cyan-dark: #0e7490;
   --pink: #ec4899;  --pink-dark: #db2777;
   --lime: #84cc16;  --lime-dark: #65a30d;
-  /* Capacity's blue. --blue is the sky blue Cloud Manager owns, and the two
-     read as the same colour on the homepage - measured at dE 21.5, the only
-     pair on the board under 25. A true navy was the other option he offered
-     and it does not survive the near-black background: #1e3a8a comes out at
-     1.92:1, which is the muddiness that makes a tile unreadable rather than
-     distinct. This is 5.41:1. */
-  --azure: #3b82f6; --azure-dark: #2563eb;
+  /* Capacity's blue. He asked twice for "standard blue", so this is the hue of
+     CSS `blue` - 240 degrees, unchanged - lifted in lightness and nothing else.
+     Pure #0000FF measures 2.32:1 against the #090909 background, which is not
+     legible for the tile name set in it; #4040ff is the same blue at 3.22:1.
+     Hue was the thing not to touch, so it was not touched. */
+  --azure: #4040ff; --azure-dark: #2d2de0;
   /* Report's tile only. --rose itself is the Report tool's brand colour in 32
      other places and is not being restyled here; against #090909 it measures
      2.63:1, which is under the 3:1 floor for the tile name set in it. This is
