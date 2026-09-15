@@ -73,11 +73,37 @@ CREDENTIAL = re.compile(
 ALLOWED_IPS = {"127.0.0.1", "0.0.0.0", "255.255.255.255"}
 
 
+def _candidate_paths():
+    """Tracked files when git can say, every file on disk when it cannot.
+
+    The release ZIP is extracted without a `.git`, and so is anything else that
+    unpacks a tarball to run the suite. Erroring there would turn a
+    confidentiality check into a broken test in exactly the place the check is
+    most worth having - the packaged artefact. Falling back to a filesystem
+    walk keeps it running.
+    """
+    try:
+        out = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True,
+                             capture_output=True, text=True).stdout
+        rels = out.splitlines()
+        if rels:
+            return rels
+    except (OSError, subprocess.SubprocessError):
+        pass
+    skip = {".git", "__pycache__", "node_modules", "venv", ".venv", "tmp", ".claude"}
+    rels = []
+    for path in ROOT.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part in skip for part in path.relative_to(ROOT).parts):
+            continue
+        rels.append(path.relative_to(ROOT).as_posix())
+    return rels
+
+
 def tracked_text_files():
-    """Every tracked file we can read as text, minus vendored bundles."""
-    out = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True,
-                         capture_output=True, text=True).stdout
-    for rel in out.splitlines():
+    """Every file we can read as text, minus vendored bundles."""
+    for rel in _candidate_paths():
         if not rel or rel.endswith(SKIP_SUFFIXES) or rel.startswith(SKIP_DIRS):
             continue
         path = ROOT / rel
