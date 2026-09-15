@@ -127,11 +127,20 @@
     <strong>Don't put your own files in the install folder.</strong> User templates used to live there, and a customized copy of a shipped template made <code>git pull</code> refuse to update the app at all — the update would have overwritten your edits, so it stopped instead. That is why anything you author goes to your home folder now.
   </div>
 
-  <div class="warning-box">
-    <strong>Apply replaces the whole list — it does not merge.</strong> Every wall type in the project is swapped for the template's types. If you have unsaved changes, save your <code>.esx</code> first.
-    <p>Most types survive the swap under a new name: where a template type matches an existing one, it keeps the original's identity, so walls already drawn with it still resolve. A type the template has no counterpart for is simply gone — and any walls drawn with it are left pointing at a wall type that is no longer in the file.</p>
-    <p>In practice this bites on furniture. Checked across 70 local projects that have walls drawn, applying <strong>WD Template</strong> would strand walls in 11 of them, every time on a shelving type (<em>Warehouse Shelf</em> or <em>Retail Shelf</em>) that the template does not carry. If a project uses a type like that, add it to your template before applying, or apply the template first and draw afterwards.</p>
+  <div class="tip-box">
+    <strong>Apply adds; it never deletes.</strong> Every type in the template is added to the project, and a type the project already has is updated to the template's version — keeping the identity it already had, so walls already drawn with it are unaffected. Anything in the project the template says nothing about is left exactly as it is.
+    <p>This changed in v2.100.0. Applying a template used to replace the whole list, which deleted any type the template had no counterpart for — and walls drawn with that type were left pointing at something no longer in the file. Measured across 70 local projects with walls drawn, the old behaviour would have stranded walls in 11 of them, every time on a shelving type. If you are on an older build, that is what Apply still does there.</p>
   </div>
+
+  <div class="warning-box">
+    <strong>Ekahau Defaults is the one that removes things.</strong> The <strong>Ekahau Defaults</strong> button beside the template bar is the deliberate way back to factory: it replaces your wall types with Ekahau's own. It names what it is about to remove and asks first. Use it to start over — not to add the defaults. For that, apply <em>Ekahau Defaults</em> from the template dropdown, which adds what is missing and removes nothing.
+  </div>
+
+  <h2>Furniture modelled to the ceiling</h2>
+  <p>When you open a project, Quick Walls checks the wall types actually drawn on the plan for one specific mistake: something that stands on the floor and stops — shelving, racking, cubicles, pods — left on <strong>Auto</strong>, which models it from the slab to the roof. If it finds any, a panel appears above the wall list naming them, with how many segments are drawn with each and how much attenuation each carries.</p>
+  <p>It is worth taking seriously. A warehouse shelf at 18 dB/m through 1.5 m of thickness is 27 dB; on Auto that blocks signal which in reality passes over the top of the racking, and that moves AP counts rather than nudging a heat map. One real project had 52 segments of it.</p>
+  <p>Each row offers <strong>Set to <em>n</em> ft</strong>, which writes the height Ekahau itself uses for that kind of object, and <strong>Edit&hellip;</strong> if you would rather choose your own. Nothing is written to disk either way — the height lands in the file when you save, like every other change here. The row disappears once the type has a height, because the finding is resolved.</p>
+  <p>Only types you have actually drawn with are listed. A type sitting unused in the list is not a problem with the drawing, and reporting it would bury the ones that are.</p>
 
   <h2>Adding, Cloning &amp; Editing Wall Types</h2>
   <p>Three ways to get a new wall type onto the list:</p>

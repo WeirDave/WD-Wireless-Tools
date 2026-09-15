@@ -76,6 +76,9 @@ class Finding:
     thickness: float
     suggested_m: float | None
     suggestion_source: str
+    # Which type this is about, so a caller holding the project open can take
+    # the reader straight to it rather than making them find it by name.
+    wall_type_id: str | None = None
 
     @property
     def severity(self) -> float:
@@ -155,12 +158,34 @@ def audit_project(path: Path) -> ProjectReport:
         report.error = f"could not be read: {e}"
         return report
 
-    used: dict[str, int] = {}
-    for s in segments:
-        tid = s.get("wallTypeId")
-        if tid:
-            used[tid] = used.get(tid, 0) + 1
+    report.findings = audit_members(list(types.values()), segments, project=path)
+    return report
 
+
+def audit_members(wall_types, wall_segments=None, project: Path | None = None,
+                  segment_counts=None) -> list:
+    """The rule itself, over data rather than a file on disk.
+
+    Quick Walls holds the project open in the browser and has no path to hand
+    over, so it posts these two lists instead. Keeping the rule here rather than
+    reimplementing it in JavaScript is deliberate: the last time a rule about
+    wall types lived in two places, one copy printed a hex code where the other
+    printed a colour name and only one of them ever got fixed.
+    """
+    types = {w.get("id"): w for w in (wall_types or []) if w.get("id")}
+
+    # The editor has already counted the segments to show "used by N walls", so
+    # it sends the tally rather than re-sending every segment back to us.
+    if segment_counts:
+        used = {k: int(v) for k, v in segment_counts.items() if v}
+    else:
+        used = {}
+        for s in (wall_segments or []):
+            tid = s.get("wallTypeId")
+            if tid:
+                used[tid] = used.get(tid, 0) + 1
+
+    findings = []
     for tid, count in used.items():
         w = types.get(tid)
         if not w:
@@ -174,13 +199,14 @@ def audit_project(path: Path) -> ProjectReport:
             continue                       # sealed on top; see the note above
         thickness = float(w.get("thickness") or 0.0)
         suggested, why = _suggest_height(name)
-        report.findings.append(Finding(
-            project=path, wall_type=name, segments=count,
+        findings.append(Finding(
+            project=project, wall_type=name, segments=count,
             db_total=_five_ghz_db_per_m(w) * thickness, thickness=thickness,
-            suggested_m=suggested, suggestion_source=why))
+            suggested_m=suggested, suggestion_source=why,
+            wall_type_id=tid))
 
-    report.findings.sort(key=lambda f: -f.severity)
-    return report
+    findings.sort(key=lambda f: -f.severity)
+    return findings
 
 
 def audit_folder(folder: Path) -> list[ProjectReport]:
