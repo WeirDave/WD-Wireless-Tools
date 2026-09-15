@@ -273,7 +273,42 @@ Squirrel organizes loose Ekahau project material into consistent project folders
 
 Squirrel can classify `.esx` files, images, floor plans, and reports; create project folders; apply naming rules; find duplicates; and undo supported organization operations.
 
+Classification follows the extensions and keywords in **Suite Settings →
+Squirrel**: `.dwg` and the other plan types go to `floorplans/`, images to
+`images/`, and reports to `reports/`. The `.esx` itself stays where it is — it
+is the project, not material belonging to one.
+
+**Undo puts everything back.** After an organize run, Undo restores every file
+to where it came from, and the menu says how many moves are available to undo.
+
 > Start with a small representative folder if you are introducing new naming rules. Once the preview is right, apply the same rules to the larger collection.
+
+### Rename
+
+**Squirrel → ▸ Tools → "· Rename…"** renames folders or files in bulk. Three
+tabs, each with its own preview and its own Undo:
+
+- **Folders** — build a folder name from a format string using tokens like
+  `{site_code} - {site_name}`. Values come from a CSV you load, or you type them.
+- **Files** — the same idea for filenames, with `{original}` available for the
+  part you want to keep.
+- **Rules** — no format string; strip a prefix or suffix, apply a regex,
+  normalise the separator, or force a case.
+
+Nothing happens until the preview looks right: **Apply Rename** stays greyed out
+until the preview contains at least one item that would actually change, and the
+preview names anything it would skip — already correct, unmatched, or a
+collision with a name that already exists.
+
+Your format strings and rules are remembered and come back the next time you
+open the page.
+
+> **They did not, before v2.100.x.** The page saved them to an endpoint that
+> did not exist, and the reply was never checked — so every setting on this page
+> was silently discarded the moment you left it, while the page went on loading
+> them back on arrival, which is what made it look like it remembered. The
+> renames themselves were always performed correctly; only the settings were
+> lost.
 
 ---
 
