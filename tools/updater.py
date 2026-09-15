@@ -553,6 +553,107 @@ def git_update(root: Path | None = None, channel: str = "release", log=None,
     }
 
 
+def dev_pull(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
+    """Fast-forward a development checkout to whatever origin already has.
+
+    This is the one update a maintainer's clone can safely do to itself, and it
+    is deliberately not `git_update`. That one checks out a *release tag*, which
+    on a working copy means landing on a detached HEAD with your branch left
+    behind - which is exactly why `is_dev_checkout()` blocks it. This moves the
+    branch you are already on, and only forward.
+
+    Four refusals, each of which is a way a "just update me" button could
+    otherwise eat work in progress:
+
+    - not a git install, so there is nothing to pull into;
+    - HEAD is detached, so there is no branch to move;
+    - tracked files are modified, so a pull could overwrite them - the same
+      check `git_update` makes, and it names the files;
+    - the pull is not a fast-forward, which `--ff-only` turns into a refusal
+      rather than a merge commit nobody asked for.
+
+    Untracked files are not a refusal here, the same as everywhere else in this
+    module - but git still guards them itself: a pull that would write over one
+    aborts and says so, and that message is passed straight through.
+    """
+    root = root or cfg.install_root
+    say = log or (lambda m: None)
+    before = local_version(root, cfg)
+
+    if not is_git_install(root, cfg):
+        raise UpdateError("This install has no .git folder, so there is "
+                          "nothing to pull.")
+    if not git_available():
+        raise UpdateError("Git is not installed or not on PATH.")
+
+    branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], root).stdout.strip()
+    if not branch or branch == "HEAD":
+        raise UpdateError(
+            "This checkout is on a detached HEAD, so there is no branch to "
+            "pull into. Check out a branch first (git checkout main)."
+        )
+
+    dirty = _dirty_paths(root)
+    if dirty:
+        listed = ", ".join(dirty[:5]) + ("…" if len(dirty) > 5 else "")
+        raise UpdateError(
+            f"You have uncommitted changes to {listed}. A pull could overwrite "
+            "them, so nothing was done — commit or stash them and try again."
+        )
+
+    _ensure_origin(root, cfg)
+    head_before = _run_git(["rev-parse", "HEAD"], root).stdout.strip()
+
+    say(f"Pulling {branch} from GitHub…")
+    proc = _run_git(["pull", "--ff-only", "origin", branch], root, check=False)
+    if proc.returncode != 0:
+        # A fast-forward that cannot happen almost always means one thing, and
+        # it has a precise answer. _friendly_git_error's fallback - "the update
+        # could not finish, try again" - is true and useless: trying again will
+        # fail identically, and it does not say that the reason is work of his
+        # own sitting on the branch.
+        ahead = _run_git(["rev-list", "--count", f"origin/{branch}..HEAD"],
+                         root, check=False).stdout.strip()
+        if ahead.isdigit() and int(ahead) > 0:
+            n = int(ahead)
+            noun = "1 commit that is" if n == 1 else f"{n} commits that are"
+            them = "it" if n == 1 else "them"
+            raise UpdateError(
+                f"Your {branch} has {noun} not on GitHub, so this cannot "
+                f"fast-forward. Nothing was changed and your work is safe. "
+                f"Push {them}, or rebase onto origin/{branch}, from a terminal."
+            )
+        raise UpdateError(_friendly_git_error(["pull", "--ff-only"], proc))
+
+    head_after = _run_git(["rev-parse", "HEAD"], root).stdout.strip()
+    after = local_version(root, cfg)
+
+    # Whether anything arrived is a question about the commit, not about the
+    # version string. A pull that brought three commits of documentation and no
+    # version bump reported "Already up to date" - which reads as the button
+    # having done nothing, and is how a working feature gets abandoned for the
+    # second time.
+    moved = head_before != head_after
+    if moved:
+        count = _run_git(["rev-list", "--count", f"{head_before}..{head_after}"],
+                         root, check=False).stdout.strip() or "?"
+        plural = "" if count == "1" else "s"
+        if cmp_version(after, before) != 0:
+            say(f"Pulled {count} commit{plural} — now on v{after}.")
+        else:
+            say(f"Pulled {count} commit{plural}. The version is still v{after}, "
+                f"which just means nothing in them bumped it.")
+    else:
+        say(f"Already up to date (v{after}).")
+
+    return {
+        "ok": True, "mode": "dev_pull", "branch": branch,
+        "previousVersion": before, "newVersion": after,
+        "target": branch, "rescuedTemplates": [], "changed": moved,
+        "commits": int(count) if moved and count.isdigit() else 0,
+    }
+
+
 def convert_to_git(root: Path | None = None, log=None, install_git_if_missing: bool = False,
                    cfg: AppConfig = CONFIG):
     """Adopt an existing ZIP install into git, in place.
@@ -941,6 +1042,14 @@ def perform_update(mode: str | None = None, channel: str = "release", log=None,
     """Run the correct update for this install.  `mode` forces a path."""
     info = detect_install(cfg=cfg)
     if info.get("isDevCheckout"):
+        # One exception, and only when asked for by name. `dev_pull` moves the
+        # branch you are on and refuses on anything it could overwrite; the
+        # thing this guard exists to prevent is `git_update`, which checks out
+        # a release tag and detaches HEAD. Falling through to `info["method"]`
+        # would still land on "dev" and be refused below, so the mode has to be
+        # explicit - a bare "update me" on a working copy is still a no.
+        if mode == "dev_pull":
+            return dev_pull(log=log, cfg=cfg)
         raise UpdateError(
             "This is a development checkout of the suite. Updating it from the "
             "app would check out a release tag over your work. Use git directly."
