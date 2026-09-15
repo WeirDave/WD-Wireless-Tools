@@ -387,6 +387,19 @@
 
   function _renderStaleBanner(mismatched, serverStartedAt) {
     var existing = document.getElementById('wdStaleBanner');
+    /* The files on disk just changed, so any cached "you are N commits behind"
+       is now a lie - he has almost certainly only just pulled them. Drop the
+       cached answer and take the update banner down, so the two do not sit
+       there contradicting each other: one saying to pull, the other saying the
+       pull already happened and to reload.
+
+       Once per detection, not on every poll: checkServerVersion runs every few
+       seconds while the mismatch lasts. */
+    if (!existing) {
+      try { localStorage.removeItem(WD_UPDATE_CACHE_KEY); } catch (e) {}
+      _removeUpdateBanner();
+      _removeUpdateBadge();
+    }
     if (existing) existing.remove();
     var b = document.createElement('div');
     b.id = 'wdStaleBanner';
@@ -537,7 +550,8 @@
             '<div class="wd-about-heroText">' +
               '<div class="wd-about-name">WD Wireless Tools</div>' +
               '<div class="wd-about-tagline">A suite of Ekahau workflow tools.</div>' +
-              '<div class="wd-about-version">Installed: <b data-ver="suite">v&hellip;</b></div>' +
+              '<div class="wd-about-version">Installed: <b data-ver="suite">v&hellip;</b>' +
+                '<span class="wd-about-tracking" id="wdAboutTracking"></span></div>' +
             '</div>' +
           '</div>' +
           '<div class="wd-about-updateRow">' +
@@ -607,7 +621,21 @@
     if (label) label.textContent = busy ? 'Checking…' : 'Check for updates';
   }
 
+  /* "tracking main" or "tracking releases", beside the version.
+
+     Not knowing which question the check was asking is what made this
+     confusing for a week: he pulls main, so his version is routinely ahead of
+     the newest tag, and a check comparing against tags could only ever say
+     "up to date". One line removes the whole class of confusion. */
+  function _renderTracking(state) {
+    var el = document.getElementById('wdAboutTracking');
+    if (!el) return;
+    if (!state || !state.tracking) { el.textContent = ''; return; }
+    el.textContent = ' · ' + state.tracking;
+  }
+
   function _renderUpdateResult(state) {
+    _renderTracking(state);
     var modal = document.getElementById(WD_ABOUT_ID);
     if (!modal) return;
     var el = modal.querySelector('.wd-about-updateResult');
@@ -1153,8 +1181,10 @@
           // than "there is a newer release". Saying "Update available:
           // v2.100.19" to someone already on 2.100.20 reads as nonsense, and
           // he is the person this case exists for.
+          tracking: payload.trackingLabel || null,
           branch: (payload.branch && payload.branch.behind)
             ? payload.branch.branch : null,
+          behindBy: (payload.branch && payload.branch.behindBy) || 0,
           branchAt: (payload.branch && payload.branch.behind)
             ? payload.branch.remote : null
         };
@@ -1216,8 +1246,10 @@
     var b = document.createElement('div');
     b.id = 'wdUpdateBanner';
     b.className = 'wd-update-banner';
+    var n = state.behindBy || 0;
     var headline = state.branch
-      ? '<b>New commits on ' + WD.esc(state.branch) + '</b>'
+      ? '<b>' + (n ? n + ' new commit' + (n === 1 ? '' : 's') + ' on '
+                   : 'New commits on ') + WD.esc(state.branch) + '</b>'
       : '<b>Update available: v' + WD.esc(state.latestVersion) + '</b>';
     var detail = state.branch
       ? ' &middot; Your checkout is behind the branch it follows. You’re on v'

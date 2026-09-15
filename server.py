@@ -1159,6 +1159,17 @@ def api_update_status():
         if branch:
             payload["branch"] = branch
         tag = updater.remote_release_tag()
+
+    # Which question this install is being asked, in one word, because not
+    # knowing it is what made this confusing for a week: a checkout that
+    # follows a branch is compared against that branch, and everything else is
+    # compared against the newest release.
+    payload["tracking"] = ("branch" if branch else
+                           ("releases" if info.get("isGitInstall") else "zip"))
+    payload["trackingLabel"] = (
+        f"tracking {branch['branch']}" if branch else
+        "tracking releases" if info.get("isGitInstall") else
+        "installed from a ZIP")
     if tag:
         version = tag.lstrip("v")
         payload["latest"] = {
