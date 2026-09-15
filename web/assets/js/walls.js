@@ -289,6 +289,7 @@ async function loadFile(file) {
   try {
     const data = await file.arrayBuffer();
     esxZip = await JSZip.loadAsync(data);
+    _auditAccepted = new Set();
     fileName = file.name;
 
     await ensureEkahauDefaultsLoaded();
@@ -356,10 +357,19 @@ function clearKeybind(num) {
 }
 
 // ---------------------------------------------------------------- audit ---
-// Furniture modelled floor to ceiling. A warehouse shelf on Auto blocks signal
-// that in reality passes over the top of it, and that moves AP counts rather
-// than nudging a heat map - so it is worth saying out loud, next to the list
-// where the height is set.
+// Things that stand on the floor, modelled all the way to the ceiling.
+//
+// Auto is not wrong here - his correction, and it is the important one: racking
+// that really does reach the deck should be modelled floor to ceiling, exactly
+// as Ekahau intends. Only the racking that stops short should carry a height.
+// Which of the two a given project has is a fact about the building, and
+// nothing in the file records it, so the tool cannot know.
+//
+// So this asks rather than tells. It is worth asking because the cost is
+// asymmetric: a 27 dB shelf wrongly run to the roof blocks signal that really
+// passes over it and moves AP counts, while a shelf correctly left on Auto and
+// queried once costs a glance. What it must not do is call a correct plan
+// broken, or keep asking after he has said the racking is full height.
 //
 // The rule lives in tools/wall_audit.py and is reached over /api/walls/audit,
 // rather than being written a second time in JavaScript. One implementation is
@@ -367,6 +377,9 @@ function clearKeybind(num) {
 // had the Report printing a hex code where the Labeler printed a colour name,
 // and only one of them got fixed.
 let _auditFindings = [];
+// Wall types he has told us really do run to the deck. Held for this project
+// only: the answer is about a building, so opening another one asks again.
+let _auditAccepted = new Set();
 
 async function refreshWallAudit() {
   const panel = document.getElementById('wallAudit');
@@ -393,16 +406,20 @@ async function refreshWallAudit() {
 function renderWallAudit() {
   const panel = document.getElementById('wallAudit');
   if (!panel) return;
-  if (!_auditFindings.length) { panel.hidden = true; panel.innerHTML = ''; return; }
+  const shown = _auditFindings.filter(f => !_auditAccepted.has(f.wallTypeId));
+  if (!shown.length) { panel.hidden = true; panel.innerHTML = ''; return; }
 
-  const n = _auditFindings.length;
+  const n = shown.length;
   panel.hidden = false;
   panel.innerHTML =
-    `<div class="wall-audit-head">${n} wall type${n === 1 ? '' : 's'} `
-    + `drawn on this plan ${n === 1 ? 'reaches' : 'reach'} the ceiling, and probably should not</div>`
-    + `<div class="wall-audit-why">These are set to Auto, so Ekahau models them floor to ceiling. `
-    + `Signal that would pass over the top is predicted as blocked.</div>`
-    + _auditFindings.map(f => {
+    `<div class="wall-audit-head">${n === 1
+        ? 'Does this one reach the ceiling?'
+        : `Do these ${n} reach the ceiling?`}</div>`
+    + `<div class="wall-audit-why">Set to Auto, so Ekahau models `
+    + `${n === 1 ? 'it' : 'them'} floor to ceiling. That is right where the racking `
+    + `really does run to the deck. Where it stops short, give it a height — `
+    + `otherwise signal that passes over the top is modelled as blocked.</div>`
+    + shown.map(f => {
         const i = wallTypes.findIndex(w => w.id === f.wallTypeId);
         const ft = f.suggestedFt;
         return `<div class="wall-audit-row">`
@@ -413,8 +430,22 @@ function renderWallAudit() {
           + (ft ? `<button class="btn btn-sm btn-primary" onclick="applyAuditHeight('${f.wallTypeId}')"`
                   + ` title="${esc(f.why)}">Set to ${ft} ft</button>` : '')
           + (i >= 0 ? `<button class="btn btn-sm" onclick="openEditModal(${i})">Edit&hellip;</button>` : '')
+          + `<button class="btn btn-sm" onclick="dismissAuditFinding('${f.wallTypeId}')"`
+          + ` title="Leave it floor to ceiling and stop asking about it">It does reach</button>`
           + `</div>`;
       }).join('');
+}
+
+// "It does reach" is a real answer, not a way of hiding the question. The type
+// is left on Auto - which is the correct model for racking that runs to the
+// deck - and the row goes away for as long as this project is open. Nothing is
+// written to the file, because there is nothing to write: Auto is already what
+// it says.
+function dismissAuditFinding(wallTypeId) {
+  _auditAccepted.add(wallTypeId);
+  const f = _auditFindings.find(x => x.wallTypeId === wallTypeId);
+  if (f) showToast(`${f.wallType} left floor to ceiling`, 'success');
+  renderWallAudit();
 }
 
 // Applying the suggestion writes the height onto the type, the same field the

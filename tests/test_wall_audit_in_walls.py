@@ -115,6 +115,42 @@ class OneImplementationTests(unittest.TestCase):
                       "audit_project must go through the shared seam, not copy it")
 
 
+class AutoIsALegitimateAnswerTests(unittest.TestCase):
+    """Racking that really does run to the deck should stay floor to ceiling.
+
+    His correction, and the important one: Auto is not a defect. Some racking
+    reaches the ceiling and should be modelled exactly as Ekahau intends; only
+    the racking that stops short needs a height. Which it is, is a fact about
+    the building that nothing in the file records - so the panel asks rather
+    than declaring the plan wrong, and takes an answer.
+    """
+
+    def test_the_panel_asks_rather_than_asserting(self):
+        js = WALLS_JS.read_text(encoding="utf-8")
+        body = js[js.index("function renderWallAudit"):]
+        body = body[:body.index("function dismissAuditFinding")]
+        self.assertIn("reach the ceiling?", body, "it should be a question")
+        for verdict in ("should not", "wrong", "mistake", "incorrect"):
+            self.assertNotIn(verdict, body,
+                             f"the panel calls a legitimate model {verdict!r}")
+
+    def test_it_does_reach_leaves_the_type_alone(self):
+        """Accepting full height writes nothing: Auto is already what it says."""
+        js = WALLS_JS.read_text(encoding="utf-8")
+        body = js[js.index("function dismissAuditFinding"):]
+        body = body[:body.index("// Applying the suggestion")]
+        self.assertNotIn("upperEdge", body,
+                         "saying it reaches must not set a height")
+        self.assertIn("_auditAccepted", body)
+
+    def test_the_answer_does_not_follow_him_to_another_building(self):
+        js = WALLS_JS.read_text(encoding="utf-8")
+        self.assertIn("_auditAccepted = new Set();", js)
+        load = js[js.index("esxZip = await JSZip.loadAsync"):]
+        self.assertIn("_auditAccepted = new Set();", load[:200],
+                      "opening another project has to ask again")
+
+
 class PanelTests(unittest.TestCase):
     """The panel is only useful if it is next to the thing it is about and its
     buttons call functions that exist."""
