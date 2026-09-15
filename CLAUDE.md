@@ -3,6 +3,62 @@
 Read this at the start of every session. It exists so facts don't have to be
 re-discovered (or re-explained) each new chat.
 
+## Rule zero — never commit real personal or company information
+
+**Never use real personal or company information in this project, in any form,
+without asking him first.** Not as an example, not as a test fixture, not in a
+comment, not in a commit message, not "just to reproduce the bug". Ask, and
+wait for an answer.
+
+**What counts.** His employer's name. Site and building codes. Street
+addresses and the cities his sites are in. Client, consultant and vendor names
+off his drawings. Colleague names. Internal hostnames, gateways or other
+infrastructure names. Internal chat channels. His work email. Real project and
+`.esx` filenames, and real CAD sheet names. **And any measurement, count or
+figure attributed to an identifiable real site** - "52 segments in <site>" is
+disclosure; "52 segments in one real project" is not.
+
+**Where it applies: everything that persists.** Source, comments, test
+fixtures, sample data, `docs/`, the user manual, `BACKLOG.md`, this file,
+commit messages, published GitHub release notes, the landing page, and
+screenshots.
+
+**When he shares a real project to settle a technical question** - and he does,
+sparingly, because he keeps work data out of development - read it for
+structure and metadata only. Do not copy its content, do not turn it into a
+fixture, and do not let a name or a figure out of it reach a commit. Build the
+fixture synthetically, with invented names.
+
+**Assume this repository is public, because it is.** Anything committed is
+published, and a public repository is not a place anything can be quietly
+un-published: release notes can be edited, but ZIP assets, forks, clones and
+commit history cannot be taken back the same way.
+
+**If you are unsure whether something is traceable to his employer or to a
+real person, leave it out and ask.** Unsure is a hit.
+
+### Why this is rule zero rather than a guideline
+
+It was escalated as an emergency, in those words, because it had already gone
+wrong. A real site code was the worked example for Cloud Manager's site-code
+match - in `cloud.html` and `guide-cloud.html`, so it was **on screen in the
+shipped product**, and inside every release ZIP. A real building and city, a
+real Ekahau Cloud project name and a second site code were sitting in release
+notes. His employer's name reached a published release note in a quoted CAD
+sheet title. None of it was malicious; each one arrived the same way, as real
+data used to reproduce a real problem and then left behind.
+
+`tests/test_no_real_world_data.py` enforces what can be enforced: every
+site-code-shaped token in tracked files must be on an allowlist of invented
+ones, emails must use documentation domains, and no credential shapes or
+infrastructure addresses are allowed. **A new placeholder will fail that test.
+That is the check working** - confirm the value is invented, then add it to the
+allowlist. Never add a real one to make the suite green.
+
+The audit lesson is in the method: searching a *list of known names* missed
+every real identifier that was found. Enumerating every token of the shape and
+reading all of them is what worked.
+
 ## Release process — do this every time you commit to `main`
 
 1. Bump `web/assets/versions.json` — this is the single source of truth for
