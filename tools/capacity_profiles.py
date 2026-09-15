@@ -20,6 +20,7 @@ and none of it should be hiding in code.
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 import zipfile
@@ -644,6 +645,28 @@ def plan_application(esx_path, template, occupants, replace_existing=False):
         info["totalDevices"] = counts["totalDevices"]
         plans.append(info)
 
+    # The profiles, resolved here rather than only in the writer.
+    #
+    # This is the whole reason the plan was worth changing. `apply_to` refuses
+    # when the project does not carry the profiles the template names, and it
+    # is right to refuse - capacity items pointing at profiles that are not in
+    # the file open quietly wrong. But until this check existed here as well,
+    # the *preview* knew nothing about it: it said "adding 6 capacity items",
+    # the button offered to prepare, and the refusal arrived only after the
+    # click. Measured against Ekahau's own samples, two of twenty did exactly
+    # that - a green preview and then a 400.
+    #
+    # Resolution mutates: it injects any profile the template carries a
+    # definition for. So the probe runs against a throwaway copy and the real
+    # members are left untouched. `_read_members` parses only the JSON members,
+    # so the copy is a few documents, not the floor plan images.
+    if any(not p["skipped"] for p in plans):
+        missing = _missing_for(copy.deepcopy(members), template, counts)
+        if missing:
+            return {"ok": False, "missing": missing,
+                    "error": _missing_message(missing),
+                    "source": esx_path.name}
+
     return {
         "ok": True,
         "source": esx_path.name,
@@ -655,6 +678,43 @@ def plan_application(esx_path, template, occupants, replace_existing=False):
         "willWrite": sum(1 for p in plans if not p["skipped"]),
         "willSkip": sum(1 for p in plans if p["skipped"]),
     }
+
+
+def _missing_for(members: dict, template: dict, counts: dict) -> list:
+    """Which of the template's profiles this project cannot supply.
+
+    The same three resolutions `apply_to` performs, in the same order, so the
+    preview and the writer cannot disagree about whether a run is possible.
+    Pass a copy: resolving creates profiles as a side effect.
+    """
+    defs = template.get("profileDefs") or {}
+    id_map, created, missing = {}, [], []
+    seen_device, seen_usage = set(), set()
+
+    for row in counts["rows"]:
+        if row["device"] not in seen_device:
+            seen_device.add(row["device"])
+            _got, miss = _resolve_profile(
+                members, (defs.get("devices") or {}).get(row["device"]),
+                row["device"], "deviceProfiles", id_map, created)
+            if miss:
+                missing.append(dict(miss, kind="device profile"))
+        if row["usage"] not in seen_usage:
+            seen_usage.add(row["usage"])
+            _got, miss = _resolve_profile(
+                members, (defs.get("usages") or {}).get(row["usage"]),
+                row["usage"], "usageProfiles", id_map, created)
+            if miss:
+                missing.append(dict(miss, kind="usage profile"))
+
+    req_name = template.get("requirementName") or ""
+    if req_name:
+        _got, req_missing = _resolve_profile(
+            members, defs.get("requirement"), req_name,
+            "requirements", id_map, created)
+        if req_missing:
+            missing.append(dict(req_missing, kind="requirement"))
+    return missing
 
 
 # ── the writer ───────────────────────────────────────────────────────────────

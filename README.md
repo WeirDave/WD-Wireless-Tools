@@ -34,8 +34,8 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.60.11 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.16.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.10.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.3.1 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v1.2.2 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.3.2 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v1.2.3 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -232,7 +232,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.100.13
+WIRELESS TOOLS  v2.100.14
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
