@@ -167,12 +167,62 @@ class MovingIsAReassignmentNotARewrite(unittest.TestCase):
 
     def test_a_partial_failure_names_what_happened(self):
         """Three of five moving and the fourth failing must not leave him
-        guessing which."""
+        counting cards to work out which."""
         src = CLOUD_JS.read_text(encoding="utf-8")
-        block = src[src.index("const newSiteByName = new Map();"):]
-        block = block[:block.index("_scheduleOpRefresh();")]
-        self.assertIn("Moved ${ok} · ${fail} failed", block)
-        self.assertIn("firstErr", block)
+        block = src[src.index("function _reportMoveOutcome"):]
+        block = block[:block.index("function _wireIconTipDelegation")]
+        self.assertIn("results.failed", block)
+        self.assertIn("results.skipped", block)
+        self.assertIn("results.firstErr", block)
+        self.assertIn("Moved ${results.ok}", block)
+
+
+class MovesGoThroughTheQueueLikeEverythingElse(unittest.TestCase):
+    """He asked for this directly: "you can queue the move just like we
+    currently queue moves."
+
+    Auto-assign already queued `assign_to_site` through opEnqueue, with a card,
+    a stage, a retry and a cancel. The bulk move ran its own blocking
+    for-await loop with a private tally - a second implementation of "assign a
+    project to a site" sitting right next to the queued one, and the only
+    operation in the tool with no card to look at when one of fifteen failed.
+    """
+
+    def setUp(self):
+        self.source = CLOUD_JS.read_text(encoding="utf-8")
+        start = self.source.index("  closeModal('moveToSiteModal');")
+        self.body = self.source[start:self.source.index("function _reportMoveOutcome")]
+
+    def test_each_move_is_queued(self):
+        self.assertIn("opEnqueue({", self.body)
+        self.assertIn("pyApi('assign_to_site', siteId, t.id)", self.body)
+        self.assertIn("pyApi('move_local_to_site', t.path, folder)", self.body)
+
+    def test_a_single_failed_move_can_be_retried(self):
+        """The point of the deck. A blocking loop gave him no way to retry
+        one of fifteen without redoing the selection."""
+        self.assertIn("retryFn:", self.body)
+
+    def test_the_blocking_loop_is_gone(self):
+        self.assertNotIn("let ok = 0, fail = 0, firstErr = ''", self.source)
+
+    def test_creating_a_destination_site_is_resolved_before_the_moves(self):
+        """A move needs the new site's id, so that one op is awaited. Queueing
+        it alongside the moves would race the id it hands them."""
+        create_at = self.body.index("Creating cloud site")
+        move_at = self.body.index("Moving \"${label}\"")
+        self.assertLess(create_at, move_at)
+        self.assertIn("await promise;", self.body[:move_at])
+
+    def test_two_rows_bound_for_one_new_site_create_it_once(self):
+        self.assertIn("const needNew = new Set();", self.body)
+        self.assertIn("newSiteByName.get(key)", self.body)
+
+    def test_a_move_whose_site_could_not_be_created_is_skipped_not_lost(self):
+        """Queueing it anyway would fail with a confusing error; dropping it
+        silently would leave him believing it moved."""
+        self.assertIn("createFailed", self.body)
+        self.assertIn("results.skipped++", self.body)
 
 
 if __name__ == "__main__":

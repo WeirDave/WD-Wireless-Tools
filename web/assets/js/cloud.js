@@ -5316,51 +5316,124 @@ async function confirmMoveToSite() {
   closeModal('moveToSiteModal');
   clearSelection();
 
+  /* Through the ops deck, the same way auto-assign already queues its moves.
+
+     This used to be a blocking for-await loop with its own tally, which meant
+     a bulk move was the one operation in this tool with no card, no stage, no
+     retry on a single failure and no cancel - and a second implementation of
+     "assign a project to a site" sitting next to the queued one. The deck does
+     all of that already.
+
+     Creating a destination site is resolved first and awaited, because the
+     moves that land in it need its id. Two rows aimed at the same new site
+     create it once. */
   const newSiteByName = new Map();
-  let ok = 0, fail = 0, firstErr = '';
+  const needNew = new Set();
+  plans.forEach(({ t, dest }) => {
+    if (t.kind === 'cloud' && !dest.siteId && t.destValue === '__new__') {
+      const key = (t.destNewName || '').trim();
+      if (key) needNew.add(key);
+    }
+  });
+
+  const createFailed = new Map();
+  for (const key of needNew) {
+    const { promise } = opEnqueue({
+      title: `Creating cloud site "${key}"`,
+      type: 'create', pollBackend: false, undoable: false,
+      retryFn: async () => pyApi('create_site', key),
+      run: async () => pyApi('create_site', key),
+    });
+    try {
+      const r = await promise;
+      if (r && r.error) { createFailed.set(key, r.error); continue; }
+      newSiteByName.set(key, { id: r.id || r.siteId, folder: key });
+    } catch (err) {
+      createFailed.set(key, (err && err.message) || 'failed');
+    }
+  }
+
+  const results = { ok: 0, failed: 0, skipped: 0, firstErr: '' };
   const dests = new Set();
+  const waits = [];
+
   for (const { t, dest } of plans) {
     let siteId = dest.siteId;
     let folder = dest.folder;
 
     if (t.kind === 'cloud' && !siteId && t.destValue === '__new__') {
       const key = (t.destNewName || '').trim();
-      if (newSiteByName.has(key)) {
-        siteId = newSiteByName.get(key).id;
-        folder = newSiteByName.get(key).folder;
-      } else {
-        try {
-          const r = await pyApi('create_site', key);
-          if (r && r.error) { fail++; firstErr = firstErr || `couldn't create "${key}": ${r.error}`; continue; }
-          siteId = r.id || r.siteId;
-          folder = key;
-          newSiteByName.set(key, { id: siteId, folder });
-        } catch (err) { fail++; firstErr = firstErr || (err.message || 'failed'); continue; }
+      const made = newSiteByName.get(key);
+      if (!made) {
+        // Its site could not be created, so this move has nowhere to go.
+        results.skipped++;
+        results.firstErr = results.firstErr
+          || `couldn't create "${key}": ${createFailed.get(key) || 'failed'}`;
+        continue;
       }
+      siteId = made.id;
+      folder = made.folder;
     }
-    try {
-      let r;
-      if (t.kind === 'cloud') {
-        if (!siteId) { fail++; firstErr = firstErr || 'destination site has no cloud counterpart'; continue; }
-        r = await pyApi('assign_to_site', siteId, t.id);
-      } else {
-        r = await pyApi('move_local_to_site', t.path, folder);
+
+    if (t.kind === 'cloud' && !siteId) {
+      results.skipped++;
+      results.firstErr = results.firstErr || 'destination site has no cloud counterpart';
+      continue;
+    }
+
+    const label = t.name + (t.isDir ? '' : '.esx');
+    const where = folder || dest.folder || 'site';
+    const { promise } = opEnqueue({
+      title: `Moving "${label}" to ${where}`,
+      type: 'op', pollBackend: false, undoable: false,
+      retryFn: async () => (t.kind === 'cloud'
+        ? pyApi('assign_to_site', siteId, t.id)
+        : pyApi('move_local_to_site', t.path, folder)),
+      run: async () => (t.kind === 'cloud'
+        ? pyApi('assign_to_site', siteId, t.id)
+        : pyApi('move_local_to_site', t.path, folder)),
+    });
+    waits.push(promise.then(r => {
+      if (r && r.error) {
+        results.failed++;
+        results.firstErr = results.firstErr || r.error;
+        return;
       }
-      if (r && r.error) { fail++; firstErr = firstErr || r.error; }
-      else { ok++; dests.add(folder); }
-    } catch (err) { fail++; firstErr = firstErr || (err.message || 'failed'); }
+      results.ok++;
+      dests.add(where);
+    }).catch(err => {
+      results.failed++;
+      results.firstErr = results.firstErr || (err && err.message) || 'failed';
+    }));
   }
-  if (fail === 0 && ok > 0) {
-    toast(dests.size === 1
-      ? `Moved ${ok} to ${[...dests][0]}`
-      : `Moved ${ok} to ${dests.size} sites`,
-      'success');
-  } else if (ok === 0) {
-    toast(`Move failed: ${firstErr}`, 'error');
-  } else {
-    toast(`Moved ${ok} · ${fail} failed (${firstErr})`, 'error');
-  }
+
+  await Promise.all(waits);
+  _reportMoveOutcome(results, dests);
   _scheduleOpRefresh();
+}
+
+/* Each move has its own card in the deck; this is the one line that says how
+   the batch as a whole went. Three of five moving and the fourth failing must
+   not leave him counting cards to work out which. */
+function _reportMoveOutcome(results, dests) {
+  const bits = [];
+  if (results.ok) {
+    bits.push(dests.size === 1
+      ? `Moved ${results.ok} to ${[...dests][0]}`
+      : `Moved ${results.ok} to ${dests.size} sites`);
+  }
+  if (results.failed) bits.push(`${results.failed} failed`);
+  if (results.skipped) bits.push(`${results.skipped} skipped`);
+
+  if (!results.failed && !results.skipped && results.ok) {
+    toast(bits.join(' · '), 'success');
+    return;
+  }
+  if (!results.ok) {
+    toast(`Move failed: ${results.firstErr || 'nothing could be moved'}`, 'error');
+    return;
+  }
+  toast(`${bits.join(' · ')} (${results.firstErr})`, 'error');
 }
 
 
