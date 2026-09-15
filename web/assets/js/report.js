@@ -402,8 +402,8 @@
      someone would do by hand, and doing it by hand on every save is the thing
      this replaces.
 
-     The stem is next and is kept whole - "LNBH1 - LGB-03 - 3435 E Conant St,
-     Long Beach, CA 90806 - B20 - PD" stays as it is. It is the answer whenever
+     The stem is next and is kept whole - "ACME2 - SITE-03 - 100 Example St,
+     Springfield, IL 62701 - B01 - PD" stays as it is. It is the answer whenever
      the folder is unknown, which is every drag-and-drop and the whole hosted
      build, because a browser file input hands over a bare name with no path.
 
@@ -925,7 +925,7 @@
     if (mode === 'full') return n;
     // Ekahau appends "-001" when an AP is duplicated, so the number is not
     // always the last thing in the name. Anchoring on end-of-string made
-    // FTCL3-01-00-01-AP05-001 fail to match and fall through to the whole
+    // ACME1-01-00-01-AP05-001 fail to match and fall through to the whole
     // name - in a column sized for two characters, and on the map marker.
     var m = n.match(/AP[\-_\s]?(\d+[A-Za-z]?)(?:[\-_](\d+))?\s*$/i);
     if (!m) return n;
@@ -933,7 +933,7 @@
   }
 
   /* A floor plan imported from CAD carries a generated name like
-     "4563 Denrose TF_Overall Plan background_2026-08-14". The full name
+     "200 Sample TF_Overall Plan background_2026-08-14". The full name
      belongs in the floor heading, which has a whole line for it; repeating it
      in a table cell sized for a few characters is what made rows explode. */
   function shortFloorLabel(name) {
