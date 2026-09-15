@@ -193,10 +193,25 @@ def audit_members(wall_types, wall_segments=None, project: Path | None = None,
         name = w.get("name") or ""
         if "upperEdge" in w:
             continue                       # already has a height
-        if not PARTIAL_HEIGHT_NAME.search(name):
-            continue                       # nothing about it says partial height
         if DELIBERATELY_FULL_HEIGHT.search(name):
             continue                       # sealed on top; see the note above
+        # Auto on its own is not a finding.
+        #
+        # This used to report anything whose name sounded like furniture and had
+        # no height - shelving, racking, cubicles. Ekahau ships "Shelf,
+        # Warehouse" on Auto, so a project imported straight out of Ekahau was
+        # asked about it immediately, every time. That is the shipped state, not
+        # a decision anyone made, and asking about it trains someone to click
+        # past prompts that might one day matter.
+        #
+        # His rule, and it settles it: Auto is the correct default and an
+        # explicit height is the exception he sets deliberately. So what is left
+        # is the one case where the file contradicts itself - a name that states
+        # a height the data does not carry. "Warehouse Rack Wall - 16ft" with no
+        # upperEdge is not an assumption to confirm, it is two halves of the
+        # same type disagreeing.
+        if not NAME_STATES_HEIGHT.search(name):
+            continue
         thickness = float(w.get("thickness") or 0.0)
         suggested, why = _suggest_height(name)
         findings.append(Finding(

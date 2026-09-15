@@ -26,7 +26,8 @@ WALLS_HTML = ROOT / "web" / "walls.html"
 
 
 def shelf(**over):
-    w = {"id": "shelf-1", "name": "Shelf, Warehouse", "thickness": 1.5,
+    """A type whose name states a height - the only shape that is a finding."""
+    w = {"id": "shelf-1", "name": "Rack Wall - 16ft", "thickness": 1.5,
          "propagationProperties": [
              {"band": "FIVE", "attenuationFactor": 18.0}]}
     w.update(over)
@@ -45,7 +46,7 @@ class EndpointTests(unittest.TestCase):
         finally:
             r.close()
 
-    def test_it_reports_furniture_left_on_auto(self):
+    def test_it_reports_a_name_stating_a_height_the_file_lacks(self):
         code, body = self.post({
             "wallTypes": [shelf()],
             "segmentCounts": {"shelf-1": 52},
@@ -53,7 +54,7 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual(len(body["findings"]), 1)
         f = body["findings"][0]
-        self.assertEqual(f["wallType"], "Shelf, Warehouse")
+        self.assertEqual(f["wallType"], "Rack Wall - 16ft")
         self.assertEqual(f["segments"], 52)
         self.assertEqual(f["wallTypeId"], "shelf-1")
         self.assertTrue(f["suggestedFt"], "a finding with no suggestion is not actionable")
@@ -71,7 +72,7 @@ class EndpointTests(unittest.TestCase):
         code, body = self.post({"wallTypes": [shelf()], "segmentCounts": {}})
         self.assertEqual(body["findings"], [])
 
-    def test_a_wall_is_not_furniture(self):
+    def test_a_name_that_states_no_height_is_not_reported(self):
         code, body = self.post({
             "wallTypes": [{"id": "w", "name": "Concrete", "thickness": 0.2}],
             "segmentCounts": {"w": 40},
@@ -115,27 +116,37 @@ class OneImplementationTests(unittest.TestCase):
                       "audit_project must go through the shared seam, not copy it")
 
 
-class AutoIsALegitimateAnswerTests(unittest.TestCase):
-    """Racking that really does run to the deck should stay floor to ceiling.
+class AutoIsNeverTheFindingTests(unittest.TestCase):
+    """Auto is the correct default, so it is never what gets reported.
 
-    His correction, and the important one: Auto is not a defect. Some racking
-    reaches the ceiling and should be modelled exactly as Ekahau intends; only
-    the racking that stops short needs a height. Which it is, is a fact about
-    the building that nothing in the file records - so the panel asks rather
-    than declaring the plan wrong, and takes an answer.
+    Two corrections got this here. First: racking that really does run to the
+    deck should be modelled floor to ceiling, exactly as Ekahau intends, so a
+    type on Auto is not a defect. Then, when the panel still asked about it:
+    Ekahau *ships* "Shelf, Warehouse" on Auto, so a freshly imported project was
+    queried on the way in about a state nobody had chosen. In his words - "if
+    we're importing a new ESX file then by default they have the warehouse shelf
+    being Auto... Why are we asking about that off the beginning?"
+
+    What is left is the contradiction: a name stating a height the file does not
+    carry. Noise trains someone to click past prompts that might one day matter,
+    so the bar for showing one at all is a disagreement in the data.
     """
 
-    def test_the_panel_asks_rather_than_asserting(self):
+    def test_the_panel_says_auto_is_fine(self):
+        """It must not read as though Auto is the problem - that is the state
+        Ekahau ships and the one he expects."""
         js = WALLS_JS.read_text(encoding="utf-8")
         body = js[js.index("function renderWallAudit"):]
         body = body[:body.index("function dismissAuditFinding")]
-        self.assertIn("reach the ceiling?", body, "it should be a question")
+        self.assertIn("Auto is the default and is usually right", body)
+        self.assertIn("name", body, "it should say what actually disagrees")
         for verdict in ("should not", "wrong", "mistake", "incorrect"):
             self.assertNotIn(verdict, body,
                              f"the panel calls a legitimate model {verdict!r}")
 
-    def test_it_does_reach_leaves_the_type_alone(self):
-        """Accepting full height writes nothing: Auto is already what it says."""
+    def test_leave_as_is_leaves_the_type_alone(self):
+        """Dismissing writes nothing: Auto is already what the file says, and
+        the name is his to keep or rename."""
         js = WALLS_JS.read_text(encoding="utf-8")
         body = js[js.index("function dismissAuditFinding"):]
         body = body[:body.index("// Applying the suggestion")]
@@ -143,7 +154,7 @@ class AutoIsALegitimateAnswerTests(unittest.TestCase):
                          "saying it reaches must not set a height")
         self.assertIn("_auditAccepted", body)
 
-    def test_the_answer_does_not_follow_him_to_another_building(self):
+    def test_a_dismissal_does_not_follow_him_to_another_project(self):
         js = WALLS_JS.read_text(encoding="utf-8")
         self.assertIn("_auditAccepted = new Set();", js)
         load = js[js.index("esxZip = await JSZip.loadAsync"):]
