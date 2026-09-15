@@ -1138,20 +1138,31 @@ class ABranchCheckoutIsAskedADifferentQuestionTests(unittest.TestCase):
         verbs = [c.split(",")[0].strip().strip('"') for c in calls]
         self.assertIn("ls-remote", verbs)
         self.assertIn("cat-file", verbs)
-        marker = "if have:" + chr(10) + "            return state"
+        marker = "if head == sha:" + chr(10) + "            return state"
         early_return = self.body.index(marker)
         fetch_at = self.body.index('"fetch"')
         self.assertLess(early_return, fetch_at,
                         "the fetch must sit past the up-to-date return")
 
     def test_the_count_is_only_paid_for_when_behind(self):
-        self.assertIn("if have:", self.body)
+        self.assertIn("if not have:", self.body)
         self.assertIn('"behindBy"', self.body)
         self.assertIn('"rev-list", "--count", "HEAD.." + sha', self.body)
 
-    def test_having_the_commit_means_not_behind(self):
-        """Level or ahead both mean there is nothing to offer."""
-        self.assertIn('"behind": not have', self.body)
+    def test_the_docstring_does_not_still_claim_it_never_fetches(self):
+        """It did, until the count was added. A comment that describes the
+        previous design is worse than none."""
+        doc = self.body[:self.body.index('"""', self.body.index('"""') + 3)]
+        self.assertNotIn("Deliberately no fetch", doc)
+
+    def test_behind_is_decided_by_counting_not_by_having_the_object(self):
+        """Not academic: the fetch this makes brings the object in, so an
+        object test would see it on the very next call and report up to date
+        while the checkout was still four commits back - the banner appearing
+        once and then vanishing. It also gets "ahead" right, so unpushed work
+        of his own never reads as an update waiting."""
+        self.assertIn('state["behind"] = n > 0', self.body)
+        self.assertNotIn('"behind": not have', self.body)
 
     def test_a_detached_head_says_nothing(self):
         """That is what an ordinary release install looks like, and there the
@@ -1227,6 +1238,56 @@ class RemoteBranchStateAgainstRealClonesTests(unittest.TestCase):
              self.clone)
         state = updater.remote_branch_state(self.clone)
         self.assertFalse(state["behind"])
+
+
+    def test_asking_twice_still_says_behind(self):
+        """The fetch this makes must not convince the next check it is current.
+
+        The first version asked `cat-file -e` alone - "do I have this object" -
+        and its own fetch brought the object in, so the second check saw it and
+        reported up to date while the checkout was still four commits back. The
+        banner appeared and then vanished on the next page load. Counting the
+        commits between is the question that does not change underneath itself.
+        """
+        for i in range(3):
+            (self.seed / "BACKLOG.md").write_text("later %d" % i, encoding="utf-8")
+            _git(["add", "-A"], self.seed)
+            _git(["-c", "user.email=t@t", "-c", "user.name=T",
+                  "commit", "-m", "later %d" % i], self.seed)
+        _git(["push", "--quiet", "origin", "main"], self.seed)
+
+        first = updater.remote_branch_state(self.clone)
+        second = updater.remote_branch_state(self.clone)
+        self.assertTrue(first["behind"], "the first look must see it")
+        self.assertTrue(second["behind"],
+                        "and so must the second, after the fetch")
+        self.assertEqual(first["behindBy"], 3)
+        self.assertEqual(second["behindBy"], 3)
+
+    def test_it_counts_the_commits(self):
+        """"4 commits behind" is a fact he can act on. "There are new commits"
+        is a rumour."""
+        for i in range(4):
+            (self.seed / "BACKLOG.md").write_text("n %d" % i, encoding="utf-8")
+            _git(["add", "-A"], self.seed)
+            _git(["-c", "user.email=t@t", "-c", "user.name=T",
+                  "commit", "-m", "n %d" % i], self.seed)
+        _git(["push", "--quiet", "origin", "main"], self.seed)
+        self.assertEqual(updater.remote_branch_state(self.clone)["behindBy"], 4)
+
+    def test_being_level_costs_no_fetch_and_reports_nothing(self):
+        state = updater.remote_branch_state(self.clone)
+        self.assertFalse(state["behind"])
+        self.assertEqual(state["behindBy"], 0)
+
+    def test_unpushed_work_of_his_own_is_not_an_update(self):
+        (self.clone / "BACKLOG.md").write_text("mine", encoding="utf-8")
+        _git(["add", "-A"], self.clone)
+        _git(["-c", "user.email=t@t", "-c", "user.name=T",
+              "commit", "-m", "local only"], self.clone)
+        state = updater.remote_branch_state(self.clone)
+        self.assertFalse(state["behind"])
+        self.assertEqual(state["behindBy"], 0)
 
     def test_a_detached_checkout_returns_nothing(self):
         _git(["-c", "advice.detachedHead=false", "checkout", "HEAD"], self.clone)
