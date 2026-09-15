@@ -281,12 +281,106 @@ class OnePassOneSave(unittest.TestCase):
         self.assertEqual(len(read(self.esx, "wallTypes.json")["wallTypes"]), 1)
         self.assertEqual(len(read(dest, "wallTypes.json")["wallTypes"]), 2)
 
-    def test_a_step_that_refuses_leaves_the_project_untouched(self):
-        before = self.esx.read_bytes()
+    def test_a_step_that_refuses_does_not_discard_the_ones_that_worked(self):
+        """The reported bug, and the reason this file exists.
+
+        "prep is still not working... you go through the motions and I've saved
+        and nothing happened, no trimming happened and no quick walls."
+
+        Both of those steps had worked. A capacity template naming a profile the
+        project does not have made the areas step refuse, the whole run was
+        abandoned, and the trim and the wall types went with it. A pass that
+        does two of the three things is worth having; being told nothing
+        happened, when two thirds of it could have, is not.
+        """
+        before_plans = read(self.esx, "floorPlans.json")["floorPlans"][0]
+        before_areas = read(self.esx, "areas.json")["areas"]
+
+        out = prep_pipeline.run(self.esx, steps=["trim", "areas", "walls"],
+                                template=UNRESOLVABLE, occupants=10,
+                                wall_types=[wall_type("Framery Pod")])
+
+        self.assertTrue(out["ok"], out)
+        self.assertTrue(out["written"], "nothing was written at all")
+
+        after_plans = read(self.esx, "floorPlans.json")["floorPlans"][0]
+        self.assertLess(after_plans["width"], before_plans["width"],
+                        "the trim did not survive the areas refusing")
+        names = {w["name"] for w in read(self.esx, "wallTypes.json")["wallTypes"]}
+        self.assertIn("Framery Pod", names,
+                      "the wall types did not survive the areas refusing")
+        self.assertEqual(read(self.esx, "areas.json")["areas"], before_areas,
+                         "the step that refused must change nothing")
+
+    def test_the_refusal_is_reported_rather_than_swallowed(self):
+        """A gap he cannot see is worse than a refusal he can."""
+        out = prep_pipeline.run(self.esx, steps=["trim", "areas"],
+                                template=UNRESOLVABLE, occupants=10)
+        failed = {f["step"] for f in out.get("failed") or []}
+        self.assertEqual(failed, {"areas"})
+        self.assertTrue(out["failed"][0]["error"],
+                        "a refusal with no reason is not reportable")
+        self.assertFalse(out["step"]["areas"]["ok"])
+
+    def test_a_run_where_nothing_worked_is_not_called_already_prepared(self):
+        """"Already prepared" and "could not be prepared" are opposite facts,
+        and saying the first when the second is true is how a broken run reads
+        as a successful one."""
+        prep_pipeline.run(self.esx, steps=["trim"])          # leaves it tight
         out = prep_pipeline.run(self.esx, steps=["trim", "areas"],
                                 template=UNRESOLVABLE, occupants=10)
         self.assertFalse(out["ok"], out)
-        self.assertEqual(self.esx.read_bytes(), before)
+        self.assertFalse(out["written"])
+        self.assertIn("does not have", out["error"])
+        self.assertNotIn("already prepared", (out.get("note") or ""))
+
+    def test_a_clean_run_reports_no_failures(self):
+        out = prep_pipeline.run(self.esx, steps=["trim", "areas", "walls"],
+                                template=TEMPLATE, occupants=40,
+                                wall_types=[wall_type("Framery Pod")])
+        self.assertTrue(out["ok"], out)
+        self.assertEqual(out.get("failed"), [])
+
+    def test_every_step_changes_the_member_it_is_responsible_for(self):
+        """Proof by diff, not by absence of an exception. Each of the three has
+        one document it exists to change, and this run changes all three."""
+        before = {m: read(self.esx, m) for m in
+                  ("floorPlans.json", "wallTypes.json", "areas.json")}
+        out = prep_pipeline.run(self.esx, steps=["trim", "areas", "walls"],
+                                template=TEMPLATE, occupants=40,
+                                wall_types=[wall_type("Framery Pod")])
+        self.assertTrue(out["written"], out)
+        after = {m: read(self.esx, m) for m in before}
+
+        self.assertNotEqual(after["floorPlans.json"], before["floorPlans.json"],
+                            "trim changed nothing")
+        self.assertNotEqual(after["wallTypes.json"], before["wallTypes.json"],
+                            "the wall types changed nothing")
+        self.assertNotEqual(after["areas.json"], before["areas.json"],
+                            "the areas changed nothing")
+
+    def test_the_scale_is_byte_identical_through_the_whole_pass(self):
+        """metersPerUnit is the scale. Any drift corrupts the design, and it
+        passes through three steps here."""
+        before = read(self.esx, "floorPlans.json")["floorPlans"][0]["metersPerUnit"]
+        prep_pipeline.run(self.esx, steps=["trim", "areas", "walls"],
+                          template=TEMPLATE, occupants=40,
+                          wall_types=[wall_type("Framery Pod")])
+        after = read(self.esx, "floorPlans.json")["floorPlans"][0]["metersPerUnit"]
+        self.assertEqual(repr(after), repr(before))
+
+    def test_the_wall_types_are_added_not_replaced(self):
+        """His ruling: "I just want to add in the walls that we added, not
+        change anything from the defaults." The project's own type keeps its
+        name and its id, so walls already drawn with it still resolve."""
+        before = read(self.esx, "wallTypes.json")["wallTypes"]
+        prep_pipeline.run(self.esx, steps=["walls"],
+                          wall_types=[wall_type("Framery Pod")])
+        after = read(self.esx, "wallTypes.json")["wallTypes"]
+        self.assertLessEqual({w["name"] for w in before},
+                             {w["name"] for w in after})
+        self.assertLessEqual({w["id"] for w in before}, {w["id"] for w in after})
+        self.assertIn("Framery Pod", {w["name"] for w in after})
 
     def test_the_preview_names_the_same_steps_the_run_will_take(self):
         preview = prep_pipeline.plan(self.esx, steps=["walls", "trim"],

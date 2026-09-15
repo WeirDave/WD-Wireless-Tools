@@ -161,25 +161,50 @@ class ThePlanSeesWhatTheWriterSees(unittest.TestCase):
         self.assertEqual(plan["willWrite"], 0)
 
 
-class ThePageWillNotOfferABlockedRun(unittest.TestCase):
-    """Prep aborts the whole prepare if any step refuses, so the button must
-    not offer one - and the reader needs the way out, not just the reason."""
+class ThePageOffersTheRunThatCanHappen(unittest.TestCase):
+    """A step that refuses no longer costs him the other two.
+
+    This class used to assert the opposite - that any refusal disabled the
+    button - because the pipeline abandoned the whole pass when one step could
+    not run. That is exactly what he reported: "no trimming happened and no
+    quick walls", when both of those had worked and were thrown away because
+    the areas step could not resolve a profile name against the project.
+
+    The steps that can run now do, and the refusal is reported beside the
+    result rather than in place of it.
+    """
 
     def setUp(self):
         self.js = PREP_JS.read_text(encoding="utf-8")
         start = self.js.index("function renderPreview(")
-        self.body = self.js[start:self.js.index("\n  function ", start + 10)]
+        self.body = self.js[start:self.js.index(chr(10) + "  function ", start + 10)]
 
-    def test_a_step_that_cannot_run_blocks_the_button(self):
-        self.assertIn("var blocked = false;", self.body)
-        self.assertGreaterEqual(self.body.count("blocked = true;"), 3,
-                                "every 'cannot' branch has to set it")
+    def test_a_refusal_no_longer_disables_the_button(self):
+        self.assertNotIn("var blocked = false;", self.body)
+        self.assertNotIn("blocked = true;", self.body)
 
-    def test_the_button_says_why_it_is_off(self):
+    def test_a_refusal_is_collected_so_it_can_be_named(self):
+        self.assertIn("refused.push(", self.body)
+        self.assertGreaterEqual(self.body.count("refused.push("), 3,
+                                "every 'cannot' branch has to record itself")
+
+    def test_the_button_says_what_it_will_leave_out(self):
         self.assertIn("cannot run on this project", self.body)
 
-    def test_the_card_says_what_to_do_about_it(self):
-        self.assertIn("Untick", self.body)
+    def test_a_run_with_nothing_left_to_do_is_still_refused(self):
+        """Offering a pass that cannot do anything at all is the other error."""
+        self.assertIn("Nothing can run on this project", self.body)
+
+    def test_the_card_says_the_rest_still_runs(self):
+        """The reader is looking at a reason and needs to know whether it costs
+        the whole pass or only this part of it."""
+        self.assertIn("The other steps still run", self.body)
+
+    def test_the_result_names_what_did_not_run(self):
+        """Written-but-incomplete has to read as incomplete, on the download
+        path and on the write-beside-the-original path alike - the download one
+        carries its report in a header, and the refusal was missing from it."""
+        self.assertEqual(self.js.count("One part of the pass did not run"), 2)
 
 
 if __name__ == "__main__":
