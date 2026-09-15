@@ -1147,8 +1147,17 @@ def api_update_status():
     # this check used the API for every install - so on a machine where
     # `git pull` worked from a terminal, opening this panel waited a minute and
     # then reported a timeout. Git already has a working route; use it.
+    # A checkout that follows a branch is asked a different question. "Is there
+    # a tag newer than my versions.json" is permanently false for it, because
+    # the bump lands on the branch before the tag is pushed - so a pull leaves
+    # the version equal to or ahead of the newest release, and no amount of
+    # refreshing will ever offer anything.
+    branch = None
     tag = None
     if info.get("isGitInstall"):
+        branch = updater.remote_branch_state()
+        if branch:
+            payload["branch"] = branch
         tag = updater.remote_release_tag()
     if tag:
         version = tag.lstrip("v")
@@ -1159,7 +1168,13 @@ def api_update_status():
             "notes": "",
         }
         payload["latestSource"] = "git"
-        payload["updateAvailable"] = updater.cmp_version(version, current) > 0
+        # Either a newer release, or the branch he follows has moved. For a
+        # detached install at a tag - which is what an ordinary git install
+        # looks like - `branch` is None and this is the tag comparison as
+        # before.
+        payload["updateAvailable"] = (
+            updater.cmp_version(version, current) > 0
+            or bool(branch and branch.get("behind")))
         # The notes are the only thing left that needs the API, and nothing
         # depends on them, so a short wait and a quiet failure.
         try:

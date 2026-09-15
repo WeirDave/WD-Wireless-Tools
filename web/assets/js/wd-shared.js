@@ -1072,6 +1072,24 @@
       '<a class="wd-about-updateLink" href="' + WD_RELEASES_URL + '" target="_blank" rel="noopener">Browse releases &rarr;</a>';
   }
 
+  /* Set the moment the page starts going away, so a request cancelled by that
+     navigation is not mistaken for the network being down. `pagehide` fires
+     for a reload, a link and a back/forward; `beforeunload` covers the rest. */
+  var _navigatingAway = false;
+  window.addEventListener('pagehide', function () { _navigatingAway = true; });
+  window.addEventListener('beforeunload', function () { _navigatingAway = true; });
+
+  /* Only a real abort. A cancelled fetch and a genuinely unreachable network
+     produce the same message in every engine - "NetworkError when attempting
+     to fetch resource" in Firefox, "Failed to fetch" in Chrome and Edge - so
+     matching on the text would swallow the real failure too, and About would
+     stop being able to say GitHub was unreachable. `_navigatingAway` is the
+     signal that actually distinguishes them, and it is set before the
+     rejection arrives. */
+  function _isAbortError(err) {
+    return !!err && err.name === 'AbortError';
+  }
+
   WD.checkForUpdates = function (opts) {
     opts = opts || {};
     if (!opts.force) {
@@ -1130,7 +1148,15 @@
           latestUrl: url,
           isNewer: typeof payload.updateAvailable === 'boolean'
             ? payload.updateAvailable
-            : (latest && localVersion ? _cmpVer(latest, localVersion) > 0 : false)
+            : (latest && localVersion ? _cmpVer(latest, localVersion) > 0 : false),
+          // Set when the update is "the branch you follow has moved" rather
+          // than "there is a newer release". Saying "Update available:
+          // v2.100.19" to someone already on 2.100.20 reads as nonsense, and
+          // he is the person this case exists for.
+          branch: (payload.branch && payload.branch.behind)
+            ? payload.branch.branch : null,
+          branchAt: (payload.branch && payload.branch.behind)
+            ? payload.branch.remote : null
         };
         _writeUpdateCache(state);
         _renderUpdateResult(state);
@@ -1144,6 +1170,23 @@
           kind: (err && err.kind) || 'network',
           resetAt: (err && err.resetAt) || null
         };
+        /* Leaving the page cancels the request, and a cancelled request is not
+           a failed one.
+
+           This is why he refreshed the home page repeatedly and was never
+           offered an update. The check starts on DOMContentLoaded and takes
+           about 600ms; navigating inside that window - a refresh, or clicking
+           through to a tool, which every page does - rejects the fetch, and
+           the rejection used to be written to the cache as `kind: network`.
+           A cached error suppresses the check for thirty minutes, and every
+           page load after it returned that error instead of asking. One
+           mistimed click bought half an hour of silence.
+
+           Measured at roughly one load in five before this guard. */
+        if (_navigatingAway || _isAbortError(err)) {
+          _setUpdateBusy(false);
+          return null;
+        }
         _writeUpdateCache(errState);
         _renderUpdateError(errState);
         return errState;
@@ -1157,9 +1200,13 @@
   function _maybeShowUpdateBanner(state) {
     if (!state || !state.isNewer) { _removeUpdateBanner(); _removeUpdateBadge(); return; }
     _renderUpdateBadge(state);
+    /* Dismiss until the next one - and for a branch update "the next one" is
+       a different commit, not a different version. The version does not move
+       between branch pushes, so keying on it would have meant one dismissal
+       silencing the banner for good. */
+    var token = state.branch ? ('branch:' + state.branchAt) : state.latestVersion;
     try {
-      var hidden = localStorage.getItem(WD_UPDATE_DISMISS_KEY);
-      if (hidden === state.latestVersion) return;
+      if (localStorage.getItem(WD_UPDATE_DISMISS_KEY) === token) return;
     } catch (e) {}
     _renderUpdateBanner(state);
   }
@@ -1169,17 +1216,23 @@
     var b = document.createElement('div');
     b.id = 'wdUpdateBanner';
     b.className = 'wd-update-banner';
+    var headline = state.branch
+      ? '<b>New commits on ' + WD.esc(state.branch) + '</b>'
+      : '<b>Update available: v' + WD.esc(state.latestVersion) + '</b>';
+    var detail = state.branch
+      ? ' &middot; Your checkout is behind the branch it follows. You’re on v'
+        + WD.esc(state.localVersion || '?') + '.'
+      : ' &middot; You’re running v' + WD.esc(state.localVersion || '?') + '.';
     b.innerHTML =
       '<span class="wd-update-icon">&#8681;</span>' +
-      '<span class="wd-update-msg">' +
-        '<b>Update available: v' + WD.esc(state.latestVersion) + '</b>' +
-        '<span class="wd-update-detail"> &middot; You’re running v' + WD.esc(state.localVersion || '?') + '.' +
-        '</span>' +
+      '<span class="wd-update-msg">' + headline +
+        '<span class="wd-update-detail">' + detail + '</span>' +
       '</span>' +
       '<button class="wd-update-download" type="button">Update</button>' +
       '<button class="wd-update-close" type="button" title="Dismiss until next release">&times;</button>';
     b.querySelector('.wd-update-close').addEventListener('click', function () {
-      try { localStorage.setItem(WD_UPDATE_DISMISS_KEY, state.latestVersion); } catch (e) {}
+      var token = state.branch ? ('branch:' + state.branchAt) : state.latestVersion;
+      try { localStorage.setItem(WD_UPDATE_DISMISS_KEY, token); } catch (e) {}
       _removeUpdateBanner();
     });
     // Opens the About panel rather than linking out to GitHub — the panel is

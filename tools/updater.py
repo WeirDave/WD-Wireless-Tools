@@ -775,6 +775,51 @@ def remote_release_tag(root: Path | None = None, cfg: AppConfig = CONFIG):
     return best
 
 
+def remote_branch_state(root: Path | None = None, cfg: AppConfig = CONFIG):
+    """Has the branch this checkout follows moved ahead of us?
+
+    The release check asks "is there a tag newer than my versions.json", and
+    for anyone who tracks a branch the answer is permanently no - the version
+    bump is committed to the branch *before* the tag is pushed, so a pull
+    always leaves versions.json equal to, or ahead of, the newest tag. Measured
+    on his own install: versions.json 2.100.20, newest tag v2.100.19. He was
+    never going to be offered an update, however many times he refreshed.
+
+    So this asks the question that applies to him instead: does the remote
+    branch point at a commit this clone does not have?
+
+    Deliberately no fetch. `ls-remote` is one round trip and costs nothing
+    locally; `cat-file -e` then answers "do I already have that commit" from
+    the object store. If we have it we are level or ahead, and neither is an
+    update. If we do not, the branch has genuinely moved on. Doing this with a
+    fetch instead would write to the repository on every page load.
+
+    Returns None when there is nothing to say - not a git install, a detached
+    HEAD (which is what a normal release install looks like, and where the tag
+    comparison is the right question), or git being unavailable.
+    """
+    root = root or cfg.install_root
+    if not is_git_install(root, cfg) or not git_available():
+        return None
+    try:
+        branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], root,
+                          check=False).stdout.strip()
+        if not branch or branch == "HEAD":
+            return None
+        proc = _run_git(["ls-remote", "origin", "refs/heads/" + branch], root,
+                        check=False, timeout=GIT_LS_REMOTE_TIMEOUT)
+        if proc.returncode != 0 or not proc.stdout.strip():
+            return None
+        sha = proc.stdout.split()[0].strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", sha or ""):
+            return None
+        have = _run_git(["cat-file", "-e", sha + "^{commit}"], root,
+                        check=False).returncode == 0
+        return {"branch": branch, "remote": sha[:12], "behind": not have}
+    except UpdateError:
+        return None
+
+
 def fetch_latest_release(cfg: AppConfig = CONFIG, timeout: int | None = None):
     import requests
     import time as _time
