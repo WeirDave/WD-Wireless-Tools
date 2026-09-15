@@ -3568,11 +3568,18 @@
         kidx++;
       });
     }
-    // Notes follow the label reference, again one page per floor in map order.
-    sections += apNotesPages(aps, opts, ctx);
     if (!sections) sections = '<div class="rep-empty-small">No APs with a position on a floor plan.</div>';
     var compassPage = wantsCompassRef(aps, opts) ? renderCompassReferencePage(opts, ctx) : '';
-    return head + sections + compassPage;
+    // Notes go last, after the compass page, and that ordering is a decision
+    // rather than a layout preference: the notes section is **unbounded**. It
+    // is short text tables today, but a survey that photographs every AP - the
+    // way Mist's installer app requires - could carry one note and one image
+    // per access point, and an open-ended section cannot be allowed to push
+    // fixed reference material around. Every other report already ended with
+    // it; this one printed the compass sheet after it, so a document could end
+    // on a reference page whose position depended on how many notes the
+    // project happened to have.
+    return head + sections + compassPage + apNotesPages(aps, opts, ctx);
   }
 
   // A full-page plan has no segment cropping to size it, so without this the

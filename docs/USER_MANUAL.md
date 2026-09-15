@@ -248,6 +248,24 @@ every wall already drawn with that type.
 > `Bookshelf` — a guessed height changes every project that opens the template,
 > silently, in a direction nobody chose.
 
+### Does this one reach the ceiling?
+
+When a project is open, a panel above the wall list asks about any wall type
+that is **set to Auto and describes something standing on the floor** — racking,
+shelving, cubicles. Auto means Ekahau models it from the slab to the roof, which
+is right when the racking really does run to the deck and wrong when it stops
+short, and nothing in the file records which building you have.
+
+Each row names the type, how many segments are drawn with it, and its
+attenuation. Three answers:
+
+- **Set to N ft** writes the suggested height onto the wall type.
+- **Edit…** opens the type so you can enter your own.
+- **It does reach** leaves it on Auto and stops asking for as long as the
+  project is open. Nothing is written — Auto is already what it says.
+
+The panel disappears when there is nothing to ask about.
+
 ### Use templates
 
 - Apply an included Ekahau or WD template to create a mapping quickly.
@@ -256,6 +274,23 @@ every wall already drawn with that type.
 - Use number keys `1` through `9` when working with the corresponding wall-picker positions.
 
 Custom templates are saved under `~/.wd_wireless_tools/templates/`, outside the application folder, so updating the suite never touches them and they are the same whichever browser you open the tools in.
+
+**Applying a template adds; it never removes, and it never restyles a wall type
+Ekahau ships.** A type the template carries is added, or updated if you added it
+yourself. A type the template says nothing about is left alone, so walls already
+drawn with it still resolve. And a type that is part of Ekahau's standard set is
+left exactly as Ekahau ships it — the toast names the ones it left alone rather
+than going quiet about them.
+
+That last rule exists because a template saved out of a project carries whatever
+that project had, including a colour somebody changed once. Until v2.100.5,
+applying the shipped template recoloured three standard types in every project
+it touched, and said nothing.
+
+To put a standard type *back*, pick **Ekahau Defaults** in the Template dropdown
+and press **Apply** — restoring the standard values is what that one is for.
+The **Ekahau Defaults** *button* further along the bar is a different thing: it
+replaces the whole list, names what it will remove, and asks first.
 
 ---
 
@@ -441,6 +476,12 @@ them are listed.
 
 The page appears only when at least one access point on that floor actually has
 notes, so turning the option on for a project without any changes nothing.
+
+**The notes pages are the last thing in the document**, after the compass
+reference page and any label key. That is deliberate rather than incidental: the
+section has no fixed length — a survey that photographs every AP would produce a
+page per access point — so nothing you might look up by position is allowed to
+sit behind it.
 
 ### Page orientation
 
