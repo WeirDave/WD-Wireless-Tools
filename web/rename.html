@@ -21,7 +21,7 @@
     <div class="topbar-left">
       <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
       <div class="menu-wrap">
-        <button class="hamburger-btn" id="menuBtn" title="Menu"><span></span><span></span><span></span></button>
+        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'mainMenu')" title="Menu"><span></span><span></span><span></span></button>
         <div class="main-menu" id="mainMenu">
           <div class="menu-section">&#9656; Navigation</div>
           <a class="menu-item" href="/">⌂ Home</a>
@@ -31,10 +31,13 @@
           <a class="menu-item" href="/scale">· Scale</a>
           <a class="menu-item" href="/plantrim">· PlanTrim</a>
           <a class="menu-item" href="/aprename">· AP Labeler</a>
+          <a class="menu-item" href="/capacity">· Capacity</a>
+          <a class="menu-item" href="/prep">· Prep</a>
           <a class="menu-item active" href="/squirrel">· Squirrel</a>
           <div class="menu-sep"></div>
           <div class="menu-section">&#9656; Tools</div>
           <a class="menu-item" href="/squirrel">· Back to Squirrel</a>
+          <a class="menu-item" href="/settings#organizer">· Suite Settings</a>
           <div class="menu-sep"></div>
           <div class="menu-section">&#9656; Help &amp; Support</div>
           <a class="menu-item" href="/guide-squirrel" target="_blank">· User Guide</a>
