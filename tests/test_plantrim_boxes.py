@@ -1423,5 +1423,119 @@ class RemainingWorkTests(unittest.TestCase):
                          "a refused floor is not work left for the cutter")
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class ApplyToAllTests(unittest.TestCase):
+    """Apply to all floors has to carry the decision, not just the rectangle.
+
+    Found by driving the real page in Firefox on a real three-floor project:
+    the toast said "Applied to 1 floor" and the strip still read
+    "Automatic - your box was not used" on that floor, because the copy was a
+    draft and a draft is ignored at save. Nothing reached the output.
+
+    It broke when the crop step split boxes into drawn and applied (v2.97.0).
+    Apply-to-all predates that split and was never told about it, and the test
+    covering it asserted on a string in the source, so it stayed green
+    throughout. That is why this one runs the function.
+    """
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    const toasts = [];
+    globalThis.WD = { esc: s => String(s), toast: (m, k) => toasts.push([k, m]) };
+    globalThis.persist = () => {};
+    globalThis.reanalyze = () => {};
+    globalThis.updateReadout = () => {};
+    globalThis.box = { current: 'a', boxes: {}, applied: {}, floors: [] };
+    globalThis.floorById = id => box.floors.find(f => f.id === id);
+    globalThis.window = {};
+    eval(slice('  window.ptbApplyToAll = function', '  // ------------------------------------------------------------- suggest'));
+    eval(slice('  window.__ptBoxes = function', '  // True when this floor has'));
+
+    function threeFloors() {
+      box.floors = [{ id:'a', name:'FLR1', w:1152, h:506 },
+                    { id:'b', name:'FLR2', w:1152, h:506 },
+                    { id:'c', name:'FLR3', w:800,  h:600 }];
+      box.current = 'a';
+      box.boxes = { a: [100, 100, 500, 400] };
+      box.applied = {};
+    }
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, encoding="utf-8",
+                              timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_a_cropped_box_arrives_cropped_on_the_other_floors(self):
+        """The whole point: what he applied has to reach the output."""
+        out = self.run_js("""
+          threeFloors();
+          box.applied.a = true;          // he cropped this floor
+          window.ptbApplyToAll();
+          console.log(JSON.stringify({ sent: window.__ptBoxes(), toasts }));
+        """)
+        sent = out["sent"] or {}
+        self.assertIn("b", sent, "the same-sized floor did not reach the output")
+        self.assertEqual(sent["b"], [100, 100, 500, 400])
+        self.assertEqual(len(sent), 2, "his floor and the one it applied to")
+
+    def test_what_it_says_matches_what_it_did(self):
+        out = self.run_js("""
+          threeFloors();
+          box.applied.a = true;
+          window.ptbApplyToAll();
+          console.log(JSON.stringify({ sent: Object.keys(window.__ptBoxes()||{}),
+                                       toasts }));
+        """)
+        said = " ".join(m for _, m in out["toasts"])
+        self.assertIn("Applied to 1 floor", said)
+        self.assertEqual(len(out["sent"]), 2,
+                         "it claimed one floor; that many must actually apply")
+
+    def test_a_different_sized_sheet_is_still_refused(self):
+        """Reusing pixel numbers on another size would box the wrong region."""
+        out = self.run_js("""
+          threeFloors();
+          box.applied.a = true;
+          window.ptbApplyToAll();
+          console.log(JSON.stringify({ sent: Object.keys(window.__ptBoxes()||{}),
+                                       toasts }));
+        """)
+        self.assertNotIn("c", out["sent"], "800x600 sheet must not take a 1152x506 box")
+        self.assertIn("skipped 1 of a different size",
+                      " ".join(m for _, m in out["toasts"]))
+
+    def test_an_uncropped_draft_stays_a_draft_everywhere(self):
+        """Applying a rectangle he has not committed must not commit it for him
+        on five other floors - the copies match the source."""
+        out = self.run_js("""
+          threeFloors();                 // nothing applied
+          window.ptbApplyToAll();
+          console.log(JSON.stringify({ sent: window.__ptBoxes(),
+                                       drawn: Object.keys(box.boxes) }));
+        """)
+        self.assertIsNone(out["sent"], "a draft must not reach the output")
+        self.assertIn("b", out["drawn"], "but the rectangle is still copied over")
+
+    def test_clearing_one_floor_does_not_clear_the_others(self):
+        out = self.run_js("""
+          threeFloors();
+          box.applied.a = true;
+          window.ptbApplyToAll();
+          delete box.boxes.a; delete box.applied.a;     // Back to automatic here
+          console.log(JSON.stringify({ sent: window.__ptBoxes() }));
+        """)
+        self.assertEqual(list(out["sent"] or {}), ["b"])
+
+
 if __name__ == "__main__":
     unittest.main()

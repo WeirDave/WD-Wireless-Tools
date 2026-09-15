@@ -1008,6 +1008,17 @@
       var here = floorById(box.current);
       if (f.w !== here.w || f.h !== here.h) { skipped.push(f.name); return; }
       box.boxes[f.id] = b.slice();
+      // The copies inherit this floor's state, cropped or draft. Copying the
+      // rectangle without it left every other floor holding a draft, and a
+      // draft is ignored at save - so "Applied to 2 floors" was reported while
+      // nothing reached the output. That went unnoticed because it only became
+      // true when the crop step split boxes into drawn and applied (v2.97.0);
+      // apply-to-all predates the split and was never told about it.
+      if (box.applied && box.applied[box.current]) {
+        box.applied[f.id] = true;
+      } else if (box.applied) {
+        delete box.applied[f.id];
+      }
       applied++;
     });
     persist();
