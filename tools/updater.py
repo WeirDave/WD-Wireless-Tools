@@ -785,14 +785,21 @@ def remote_branch_state(root: Path | None = None, cfg: AppConfig = CONFIG):
     on his own install: versions.json 2.100.20, newest tag v2.100.19. He was
     never going to be offered an update, however many times he refreshed.
 
-    So this asks the question that applies to him instead: does the remote
-    branch point at a commit this clone does not have?
+    So this asks the question that applies to him instead: how many commits is
+    this checkout behind the branch it follows?
 
-    Deliberately no fetch. `ls-remote` is one round trip and costs nothing
-    locally; `cat-file -e` then answers "do I already have that commit" from
-    the object store. If we have it we are level or ahead, and neither is an
-    update. If we do not, the branch has genuinely moved on. Doing this with a
-    fetch instead would write to the repository on every page load.
+    Cheap where it matters. Up to date is the common case and this runs on
+    every page load, so it costs one `ls-remote` and one `rev-parse`: if HEAD
+    already is the branch tip there is nothing to do and nothing is written. A
+    fetch happens only when the tip is a commit we do not have, which is
+    precisely when the number is worth paying for.
+
+    It counts rather than asking "do I have the object", and the difference is
+    not academic: the fetch brings the object in, so an object test would see
+    it on the very next call and report up to date while the checkout was still
+    four commits back - the banner appearing once and then vanishing. Counting
+    also gets "ahead" right, so unpushed work of his own never reads as an
+    update waiting for him.
 
     Returns None when there is nothing to say - not a git install, a detached
     HEAD (which is what a normal release install looks like, and where the tag
