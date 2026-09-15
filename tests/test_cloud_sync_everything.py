@@ -234,6 +234,38 @@ class ItIsHonestAboutTheHalfItCannotDo(unittest.TestCase):
         self.assertIn("not built yet", self.body)
         self.assertNotIn("this cannot do it yet", self.body)
 
+    def test_the_row_badge_says_the_same_thing_the_confirm_does(self):
+        """The Sync confirm was corrected to "not built yet" and the badge on
+        the row was not, so for four releases the two surfaces disagreed - and
+        the badge is the one he reads first, because it is on the row that
+        prompted the question.
+
+        It said "This cannot be pushed up from here - Ekahau's upload creates a
+        new project rather than replacing an existing one", stated as a fact
+        about Ekahau. Whether the API can do it has never been tested; what is
+        known is that the upload flow this client has creates a new project.
+        The first is a wall, the second is a job on the list, and only the
+        second is true."""
+        badge = self.source[self.source.index("function stalenessBadgeHtml"):]
+        badge = badge[:badge.index("function gutCell")]
+        local_newer = badge[badge.index("if (s === 'local_newer')"):]
+        self.assertIn("not built yet", local_newer)
+        for false_claim in ("cannot be pushed up",
+                            "Ekahau's upload creates a new project"):
+            with self.subTest(claim=false_claim):
+                self.assertNotIn(false_claim, local_newer)
+
+    def test_the_badge_still_says_nothing_is_at_risk_and_what_to_do(self):
+        """Being told a direction is missing is only half of it. Sync never
+        replaces the newer side with the older one, and the working route is
+        Ekahau's own save-to-cloud - which is where the sync-or-overwrite
+        prompt he described actually lives."""
+        badge = self.source[self.source.index("function stalenessBadgeHtml"):]
+        local_newer = badge[badge.index("if (s === 'local_newer')"):
+                            badge.index("function gutCell")]
+        self.assertIn("never replaces the newer side", local_newer)
+        self.assertIn("save it to the cloud from there", local_newer)
+
     def test_an_otherwise_clean_run_still_mentions_what_is_waiting(self):
         """Nothing to bring down must not render as "all done" when a
         finished site is still sitting on his machine."""

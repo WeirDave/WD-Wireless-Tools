@@ -22,6 +22,7 @@ Driven through the real selection code in Node.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import unittest
@@ -59,11 +60,16 @@ const projectCloud = { kind: 'cloud', id: 'proj-1', name: 'SITE4-A', entityKind:
 const projectLocal = { kind: 'local', path: '/l/SITE4-A.esx', name: 'SITE4-A',
                        isDir: false, entityKind: 'projects' };
 
-// What the bulk bar counts, and what the action takes - the same test.
-function movable(d) {
-  return !!d && isProjectSyncItem(d)
-      && (d.kind === 'cloud' || (d.kind === 'local' && !d.isDir));
-}
+// A matched project on the Projects tab: one row, two sides.
+const projectPair  = { kind: 'pair', cloudId: 'proj-1', cloudName: 'SITE4-A',
+                       localName: 'SITE4-A', localPath: '/l/SITE4-A.esx',
+                       matchType: 'exact', entityKind: 'projects' };
+const sitePair     = { kind: 'pair', cloudId: 'site-1', cloudName: 'Sydney',
+                       localName: 'Sydney', localPath: '/l/Sydney',
+                       matchType: 'exact', entityKind: 'sites' };
+
+// What the bulk bar counts and what the action takes are the same function.
+function movable(d) { return movableSidesOf(d).length > 0; }
 """
 
 
@@ -137,16 +143,22 @@ class TheButtonAndTheActionAgree(unittest.TestCase):
         self.assertIn("setBtn('bulkMoveBtn', true, movableCount > 0", self.source)
         self.assertNotIn("setBtn('bulkMoveBtn', currentTab === 'projects'", self.source)
 
-    def test_the_count_asks_whether_the_row_is_a_project(self):
-        block = self.source[self.source.index("movableCount++"):]
-        block = self.source[self.source.rindex("isProjectSyncItem(d)",
-                                               0, self.source.index("movableCount++")):]
-        self.assertTrue(block.startswith("isProjectSyncItem(d)"))
+    def test_the_count_asks_the_shared_question(self):
+        self.assertIn("if (movableSidesOf(d).length) movableCount++;", self.source)
 
     def test_the_action_applies_the_same_test(self):
         block = self.source[self.source.index("async function bulkMoveToSite()"):]
         block = block[:block.index("_openMoveToSitePicker")]
-        self.assertIn("isProjectSyncItem(d)", block)
+        self.assertIn("movableSidesOf(rowData[k])", block)
+
+    def test_there_is_only_one_answer_to_what_can_move(self):
+        """The old shape - `d.kind === 'cloud' || (d.kind === 'local' &&
+        !d.isDir)` - was written out twice, and both copies were wrong in the
+        same way. One function now, or the next fix lands in one of them."""
+        code = re.sub(r"/\*.*?\*/", "", self.source, flags=re.S)
+        code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
+        self.assertNotIn("d.kind === 'cloud' || (d.kind === 'local' && !d.isDir)", code,
+                         "the old two-copy rule is back in live code")
 
 
 class MovingIsAReassignmentNotARewrite(unittest.TestCase):
@@ -223,6 +235,74 @@ class MovesGoThroughTheQueueLikeEverythingElse(unittest.TestCase):
         silently would leave him believing it moved."""
         self.assertIn("createFailed", self.body)
         self.assertIn("results.skipped++", self.body)
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class AMatchedProjectCanBeMovedTo(unittest.TestCase):
+    """The everyday case, and the one that did not work.
+
+    His workflow ends with the local .esx and the cloud project matched. On the
+    **Projects** tab that is a single row of `kind: 'pair'` - which is the one
+    row shape neither the count nor the action accepted, so "Move to site..."
+    stayed greyed out for precisely the files he would be moving. It worked on
+    the Sites tab only because the tree gives each side of a nested pair its own
+    checkbox key, and those rows are plain cloud/local.
+    """
+
+    def run_block(self, checks: str):
+        result = run_node(checks)
+        self.assertEqual(result.returncode, 0,
+                         (result.stdout + result.stderr).strip())
+
+    def test_a_matched_project_is_movable_from_the_projects_tab(self):
+        self.run_block("""
+          currentTab = 'projects';
+          check('a matched project row is movable', movable(projectPair));
+          done();
+        """)
+
+    def test_both_sides_of_the_pair_move(self):
+        """Filing the cloud project under one site and leaving the .esx in
+        another folder would break the pair that the move is meant to keep."""
+        self.run_block("""
+          currentTab = 'projects';
+          const sides = movableSidesOf(projectPair);
+          check('two sides', sides.length === 2);
+          check('cloud side carries the cloud id',
+                sides.some(s => s.kind === 'cloud' && s.id === 'proj-1'));
+          check('local side carries the local path',
+                sides.some(s => s.kind === 'local' && s.path === '/l/SITE4-A.esx'));
+          done();
+        """)
+
+    def test_a_matched_site_is_still_not_movable(self):
+        """A site pair's local side is a folder. assign_to_site must never be
+        handed one, which is what the .esx test is for."""
+        self.run_block("""
+          currentTab = 'sites';
+          check('a matched site is not movable', !movable(sitePair));
+          currentTab = 'projects';
+          check('nor on the projects tab', !movable(sitePair));
+          done();
+        """)
+
+    def test_selecting_a_pair_and_one_of_its_sides_moves_each_side_once(self):
+        """Both are reachable on the Sites tab, and a doubled move would queue
+        assign_to_site twice for one project."""
+        self.run_block("""
+          currentTab = 'projects';
+          const rows = [projectPair, projectCloud];
+          const seen = new Set();
+          const sides = rows.flatMap(movableSidesOf).filter(sd => {
+            const k = sd.kind + ':' + (sd.id || sd.path);
+            if (seen.has(k)) return false;
+            seen.add(k); return true;
+          });
+          check('three moves, not four', sides.length === 2 + 0 + 1 - 1);
+          check('the cloud project is queued once',
+                sides.filter(s => s.kind === 'cloud' && s.id === 'proj-1').length === 1);
+          done();
+        """)
 
 
 if __name__ == "__main__":
