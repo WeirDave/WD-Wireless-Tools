@@ -140,12 +140,26 @@
     <strong>Ekahau Defaults is the one that removes things.</strong> The <strong>Ekahau Defaults</strong> button beside the template bar is the deliberate way back to factory: it replaces your wall types with Ekahau's own. It names what it is about to remove and asks first. Use it to start over — not to add the defaults. For that, apply <em>Ekahau Defaults</em> from the template dropdown, which adds what is missing and removes nothing. That is also the way to put a standard type <em>back</em> after you have changed one: it is the one template allowed to write Ekahau's own types, because restoring them is what it is for.
   </div>
 
-  <h2>Furniture modelled to the ceiling</h2>
-  <p>When you open a project, Quick Walls checks the wall types actually drawn on the plan for one specific case worth a second look: something that stands on the floor and stops — shelving, racking, cubicles, pods — left on <strong>Auto</strong>, which models it from the slab to the roof. If it finds any, a panel appears above the wall list naming them, with how many segments are drawn with each and how much attenuation each carries.</p>
-  <p><strong>Auto is not automatically wrong.</strong> Racking that really does run to the deck should be modelled floor to ceiling, exactly as Ekahau intends — the panel is asking, not correcting. Which kind you have is a fact about the building, and nothing in the file records it.</p>
-  <p>It is worth asking because the cost is one-sided. A warehouse shelf at 18 dB/m through 1.5 m of thickness is 27 dB; run wrongly to the roof it blocks signal that in reality passes over the top, and that moves AP counts rather than nudging a heat map. One real project had 52 segments of it. A shelf correctly left on Auto costs you a glance.</p>
-  <p>Each row offers three answers: <strong>Set to <em>n</em> ft</strong>, which writes the height Ekahau itself uses for that kind of object; <strong>Edit&hellip;</strong> if you would rather choose your own; and <strong>It does reach</strong>, which leaves the type floor to ceiling and stops asking for as long as that project is open. Opening a different project asks again, because the answer was about that building. Nothing is written to disk either way — the height lands in the file when you save, like every other change here. The row disappears once the type has a height, because the finding is resolved.</p>
-  <p>Only types you have actually drawn with are listed. A type sitting unused in the list is not a problem with the drawing, and reporting it would bury the ones that are.</p>
+  <h2>When a name and the file disagree</h2>
+  <p>When you open a project, Quick Walls checks the wall types actually drawn
+  on the plan for one thing: a type whose <em>name</em> states a height that the
+  file does not carry — <em>Warehouse Rack Wall - 16ft</em> with no height set,
+  for example. If it finds any, a panel appears above the wall list naming them.</p>
+  <p><strong>Being on Auto is not flagged, ever.</strong> Auto models a type
+  from floor to ceiling, it is what Ekahau ships for shelving and racking, and
+  it is the right default — an explicit height is the exception you set
+  deliberately. A freshly imported project is not questioned about the state it
+  arrived in.</p>
+  <p>What is worth a line is the contradiction. If the name says 16 ft and no
+  height is set, one of the two is wrong: either the height was never applied,
+  or the name is left over from something else. Each row offers
+  <strong>Set to <em>n</em> ft</strong>, which uses the height the name already
+  gives; <strong>Edit&hellip;</strong> to choose your own; and
+  <strong>Leave as is</strong>, which keeps it on Auto and stops mentioning it
+  for as long as that project is open.</p>
+  <p>Nothing is written to disk either way — the height lands in the file when
+  you save, like every other change here. Only types you have actually drawn
+  with are listed.</p>
 
   <h2>Adding, Cloning &amp; Editing Wall Types</h2>
   <p>Three ways to get a new wall type onto the list:</p>

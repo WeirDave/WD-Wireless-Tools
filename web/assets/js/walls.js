@@ -406,19 +406,19 @@ function clearKeybind(num) {
 }
 
 // ---------------------------------------------------------------- audit ---
-// Things that stand on the floor, modelled all the way to the ceiling.
+// Wall types whose name states a height the file does not carry.
 //
-// Auto is not wrong here - his correction, and it is the important one: racking
-// that really does reach the deck should be modelled floor to ceiling, exactly
-// as Ekahau intends. Only the racking that stops short should carry a height.
-// Which of the two a given project has is a fact about the building, and
-// nothing in the file records it, so the tool cannot know.
+// This started out reporting anything that stands on the floor and was modelled
+// to the ceiling, and it was wrong twice over. Auto is the correct default and
+// an explicit height is the exception he sets deliberately - so Auto is never
+// the finding. And Ekahau ships "Shelf, Warehouse" on Auto, so every freshly
+// imported project was asked about it on the way in: the shipped state, queried
+// as though someone had chosen it.
 //
-// So this asks rather than tells. It is worth asking because the cost is
-// asymmetric: a 27 dB shelf wrongly run to the roof blocks signal that really
-// passes over it and moves AP counts, while a shelf correctly left on Auto and
-// queried once costs a glance. What it must not do is call a correct plan
-// broken, or keep asking after he has said the racking is full height.
+// What is left is a contradiction rather than an assumption. A type called
+// "Warehouse Rack Wall - 16ft" with no upperEdge has a name asserting something
+// the data does not back up, and one of the two is wrong. That is worth a line.
+// Being on Auto is not.
 //
 // The rule lives in tools/wall_audit.py and is reached over /api/walls/audit,
 // rather than being written a second time in JavaScript. One implementation is
@@ -460,40 +460,42 @@ function renderWallAudit() {
 
   const n = shown.length;
   panel.hidden = false;
+  // What is left to report is a contradiction, not a question about the
+  // building, so this states what it found rather than asking him to adjudicate.
   panel.innerHTML =
     `<div class="wall-audit-head">${n === 1
-        ? 'Does this one reach the ceiling?'
-        : `Do these ${n} reach the ceiling?`}</div>`
-    + `<div class="wall-audit-why">Set to Auto, so Ekahau models `
-    + `${n === 1 ? 'it' : 'them'} floor to ceiling. That is right where the racking `
-    + `really does run to the deck. Where it stops short, give it a height — `
-    + `otherwise signal that passes over the top is modelled as blocked.</div>`
+        ? 'A wall type names a height it does not have'
+        : `${n} wall types name a height they do not have`}</div>`
+    + `<div class="wall-audit-why">Auto is the default and is usually right — `
+    + `it models a type floor to ceiling, and nothing here is flagged for being `
+    + `on it. ${n === 1 ? 'This one is' : 'These are'} flagged because the name `
+    + `states a height the file does not carry, so the two disagree. Setting it `
+    + `uses the height the name already gives.</div>`
     + shown.map(f => {
         const i = wallTypes.findIndex(w => w.id === f.wallTypeId);
         const ft = f.suggestedFt;
         return `<div class="wall-audit-row">`
           + `<span class="wall-audit-name">${esc(f.wallType)}</span>`
           + `<span class="wall-audit-detail">${f.segments} segment${f.segments === 1 ? '' : 's'}`
-          + ` &middot; ${f.dbTotal} dB each</span>`
+          + ` &middot; name says ${ft ? ft + ' ft' : 'a height'} &middot; none set</span>`
           + `<span class="wall-audit-spacer"></span>`
           + (ft ? `<button class="btn btn-sm btn-primary" onclick="applyAuditHeight('${f.wallTypeId}')"`
                   + ` title="${esc(f.why)}">Set to ${ft} ft</button>` : '')
           + (i >= 0 ? `<button class="btn btn-sm" onclick="openEditModal(${i})">Edit&hellip;</button>` : '')
           + `<button class="btn btn-sm" onclick="dismissAuditFinding('${f.wallTypeId}')"`
-          + ` title="Leave it floor to ceiling and stop asking about it">It does reach</button>`
+          + ` title="Leave it on Auto and stop mentioning it">Leave as is</button>`
           + `</div>`;
       }).join('');
 }
 
-// "It does reach" is a real answer, not a way of hiding the question. The type
-// is left on Auto - which is the correct model for racking that runs to the
-// deck - and the row goes away for as long as this project is open. Nothing is
-// written to the file, because there is nothing to write: Auto is already what
-// it says.
+// "Leave as is" is a real answer, not a way of hiding the question. The type
+// stays on Auto and the row goes away for as long as this project is open.
+// Nothing is written to the file, because there is nothing to write: Auto is
+// already what it says, and the name is his to keep or rename.
 function dismissAuditFinding(wallTypeId) {
   _auditAccepted.add(wallTypeId);
   const f = _auditFindings.find(x => x.wallTypeId === wallTypeId);
-  if (f) showToast(`${f.wallType} left floor to ceiling`, 'success');
+  if (f) showToast(`${f.wallType} left on Auto`, 'success');
   renderWallAudit();
 }
 

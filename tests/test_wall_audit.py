@@ -63,17 +63,35 @@ class AuditTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_racking_on_auto_height_is_reported(self):
+    def test_a_name_that_states_a_height_the_file_lacks_is_reported(self):
+        """The one finding left: the name and the data disagree."""
         p = self.tmp / "warehouse.esx"
-        _project(p, [_wall_type("Shelf, Warehouse", 18.0, 1.5, tid="sw")],
-                 {"sw": 52})
+        _project(p, [_wall_type("Warehouse Rack Wall - 16ft", 18.0, 1.5, tid="r")],
+                 {"r": 52})
         r = audit_project(p)
         self.assertEqual(len(r.findings), 1)
         f = r.findings[0]
-        self.assertEqual(f.wall_type, "Shelf, Warehouse")
+        self.assertEqual(f.wall_type, "Warehouse Rack Wall - 16ft")
         self.assertEqual(f.segments, 52)
         self.assertAlmostEqual(f.db_total, 27.0)
         self.assertAlmostEqual(f.severity, 27.0 * 52)
+
+    def test_being_on_auto_is_not_a_finding(self):
+        """Ekahau ships "Shelf, Warehouse" on Auto, so a project imported
+        straight out of Ekahau used to be queried about it on the way in - the
+        shipped state, asked about as though someone had chosen it.
+
+        His rule settles it: Auto is the correct default and an explicit height
+        is the exception he sets deliberately. Nothing is flagged for being on
+        Auto, whoever shipped it.
+        """
+        p = self.tmp / "auto.esx"
+        _project(p, [_wall_type("Shelf, Warehouse", 18.0, 1.5, tid="sw"),
+                     _wall_type("Cubicle", 10.0, 0.1, tid="cu"),
+                     _wall_type("Warehouse Rack Wall", 45.71, 0.35, tid="r")],
+                 {"sw": 52, "cu": 4, "r": 6})
+        self.assertEqual(audit_project(p).findings, [],
+                         "a type on Auto is not a finding")
 
     def test_a_type_that_already_has_a_height_is_left_alone(self):
         p = self.tmp / "ok.esx"
@@ -102,21 +120,20 @@ class AuditTests(unittest.TestCase):
         self.assertAlmostEqual(f.suggested_m, round(16 * FT, 4), places=3)
         self.assertIn("stated in the name", f.suggestion_source)
 
-    def test_no_height_is_invented_when_nothing_says_one(self):
+    def test_a_name_with_no_height_is_left_alone(self):
+        """"Warehouse Rack Wall" states nothing, so there is nothing to
+        contradict. Inventing a height for it is what put wrong values in the
+        shipped templates in the first place."""
         p = self.tmp / "unknown.esx"
         _project(p, [_wall_type("Warehouse Rack Wall", 45.71, 0.35, tid="r")],
                  {"r": 6})
-        f = audit_project(p).findings[0]
-        self.assertIsNone(f.suggested_m,
-                          "inventing a height is what put wrong values in the "
-                          "shipped templates")
-        self.assertIn("needs a decision", f.suggestion_source)
+        self.assertEqual(audit_project(p).findings, [])
 
     def test_the_worst_project_sorts_first(self):
         big = self.tmp / "warehouse.esx"
         small = self.tmp / "office.esx"
-        _project(big, [_wall_type("Shelf, Warehouse", 18.0, 1.5, tid="sw")], {"sw": 52})
-        _project(small, [_wall_type("Cubicle", 10.0, 0.1, tid="cu")], {"cu": 4})
+        _project(big, [_wall_type("Rack Wall - 16ft", 18.0, 1.5, tid="sw")], {"sw": 52})
+        _project(small, [_wall_type("Shelf - 6ft", 10.0, 0.1, tid="cu")], {"cu": 4})
         order = [r.path.name for r in audit_folder(self.tmp)]
         self.assertEqual(order[0], "warehouse.esx",
                          "1404 dB-segments should outrank 4")
