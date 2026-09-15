@@ -1101,5 +1101,209 @@ class DevPullButtonTests(unittest.TestCase):
         self.assertIn("'Pulling", self.src)
 
 
+class ABranchCheckoutIsAskedADifferentQuestionTests(unittest.TestCase):
+    """Why he refreshed the home page all night and was never offered anything.
+
+    The release check asks "is there a tag newer than my versions.json". For
+    anyone who tracks a branch that is permanently false, because the version
+    bump is committed to the branch **before** the tag is pushed - so a pull
+    always leaves versions.json equal to, or ahead of, the newest tag.
+
+    Measured on his own install while investigating: versions.json said
+    2.100.20 and the newest tag was v2.100.19. `cmp_version` therefore returned
+    -1 and `updateAvailable` was false, and would have stayed false however
+    many times he refreshed. The feature was not removed; it could not fire.
+
+    `remote_branch_state()` asks the question that does apply: does the branch
+    point at a commit this clone does not have.
+    """
+
+    SRC = Path(__file__).resolve().parent.parent / "tools" / "updater.py"
+    SERVER = Path(__file__).resolve().parent.parent / "server.py"
+
+    def setUp(self):
+        self.src = self.SRC.read_text(encoding="utf-8")
+        body = self.src[self.src.index("def remote_branch_state("):]
+        self.body = body[:body.index("\ndef fetch_latest_release")]
+
+    def test_it_never_fetches(self):
+        """A fetch writes to the repository, and this runs on every page load.
+        ls-remote plus cat-file answers the same question read-only."""
+        calls = re.findall(r'_run_git\(\[([^\]]*)\]', self.body)
+        verbs = [c.split(",")[0].strip().strip('"') for c in calls]
+        self.assertNotIn("fetch", verbs)
+        self.assertIn("ls-remote", verbs)
+        self.assertIn("cat-file", verbs)
+
+    def test_having_the_commit_means_not_behind(self):
+        """Level or ahead both mean there is nothing to offer."""
+        self.assertIn('"behind": not have', self.body)
+
+    def test_a_detached_head_says_nothing(self):
+        """That is what an ordinary release install looks like, and there the
+        tag comparison is the right question."""
+        self.assertIn('if not branch or branch == "HEAD":', self.body)
+        self.assertIn("return None", self.body)
+
+    def test_a_bad_sha_is_not_trusted(self):
+        self.assertIn("re.fullmatch", self.body)
+
+    def test_the_endpoint_offers_an_update_when_the_branch_moved(self):
+        server = self.SERVER.read_text(encoding="utf-8")
+        block = server[server.index("def api_update_status"):]
+        block = block[:block.index("@app.route", 10)]
+        self.assertIn("updater.remote_branch_state()", block)
+        self.assertIn('or bool(branch and branch.get("behind"))', block)
+
+    def test_the_tag_comparison_is_still_there_for_everyone_else(self):
+        server = self.SERVER.read_text(encoding="utf-8")
+        block = server[server.index("def api_update_status"):]
+        block = block[:block.index("@app.route", 10)]
+        self.assertIn("updater.cmp_version(version, current) > 0", block)
+
+
+@unittest.skipUnless(updater.git_available(), "git is not installed")
+class RemoteBranchStateAgainstRealClonesTests(unittest.TestCase):
+    """Driven against real repositories rather than asserted about."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        base = Path(self.temp.name)
+        self.origin = base / "origin"
+        self.clone = base / "clone"
+        self.origin.mkdir()
+        _git(["init", "--bare", "--initial-branch=main"], self.origin)
+
+        seed = base / "seed"
+        _make_install(seed)
+        _git(["init", "--initial-branch=main"], seed)
+        _git(["add", "-A"], seed)
+        _git(["-c", "user.email=t@t", "-c", "user.name=T", "commit", "-m", "one"], seed)
+        _git(["remote", "add", "origin", str(self.origin)], seed)
+        _git(["push", "--quiet", "origin", "main"], seed)
+        self.seed = seed
+        _git(["clone", "--quiet", str(self.origin), str(self.clone)], base)
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def test_a_clone_level_with_its_branch_is_not_behind(self):
+        state = updater.remote_branch_state(self.clone)
+        self.assertIsNotNone(state)
+        self.assertEqual(state["branch"], "main")
+        self.assertFalse(state["behind"])
+
+    def test_a_clone_whose_branch_moved_on_is_behind(self):
+        """The case he is in every time a release ships."""
+        (self.seed / "README.md").write_text("more", encoding="utf-8")
+        _git(["add", "-A"], self.seed)
+        _git(["-c", "user.email=t@t", "-c", "user.name=T", "commit", "-m", "two"],
+             self.seed)
+        _git(["push", "--quiet", "origin", "main"], self.seed)
+
+        state = updater.remote_branch_state(self.clone)
+        self.assertTrue(state["behind"],
+                        "the branch moved and the clone has not got the commit")
+
+    def test_a_clone_that_is_ahead_is_not_reported_as_behind(self):
+        """Unpushed work of his own is not an update waiting for him."""
+        (self.clone / "README.md").write_text("mine", encoding="utf-8")
+        _git(["add", "-A"], self.clone)
+        _git(["-c", "user.email=t@t", "-c", "user.name=T", "commit", "-m", "local"],
+             self.clone)
+        state = updater.remote_branch_state(self.clone)
+        self.assertFalse(state["behind"])
+
+    def test_a_detached_checkout_returns_nothing(self):
+        _git(["-c", "advice.detachedHead=false", "checkout", "HEAD"], self.clone)
+        _git(["checkout", "--detach"], self.clone)
+        self.assertIsNone(updater.remote_branch_state(self.clone))
+
+    def test_a_tree_that_is_not_a_git_install_returns_nothing(self):
+        plain = Path(self.temp.name) / "plain"
+        _make_install(plain)
+        self.assertIsNone(updater.remote_branch_state(plain))
+
+
+class ACancelledCheckIsNotAFailedOneTests(unittest.TestCase):
+    """The other half of why he saw nothing.
+
+    The check starts on DOMContentLoaded and takes about 600ms. Navigating
+    inside that window - a refresh, or clicking through to a tool, which every
+    page in the suite does - rejects the fetch. That rejection was written to
+    the cache as `kind: network`, and a cached error suppresses the check for
+    thirty minutes, so every page load afterwards returned the stale error
+    instead of asking. One mistimed click bought half an hour of silence.
+
+    Measured at roughly one load in five before the guard, and zero of ten
+    after it - then zero of six in each of Firefox, Chrome and Edge, because
+    pagehide and beforeunload do not behave identically across engines.
+    """
+
+    SHARED = Path(__file__).resolve().parent.parent / "web" / "assets" / "js" / "wd-shared.js"
+
+    def setUp(self):
+        self.src = self.SHARED.read_text(encoding="utf-8")
+
+    def test_leaving_the_page_is_recorded(self):
+        self.assertIn("addEventListener('pagehide'", self.src)
+        self.assertIn("addEventListener('beforeunload'", self.src)
+        self.assertIn("_navigatingAway = true", self.src)
+
+    def test_a_check_cut_off_by_navigation_is_not_cached(self):
+        body = self.src[self.src.index("WD.checkForUpdates = function"):]
+        body = body[:body.index("function _maybeShowUpdateBanner")]
+        catch = body[body.index(".catch(function (err)"):]
+        self.assertIn("if (_navigatingAway || _isAbortError(err))", catch)
+        guard = catch.index("_navigatingAway")
+        write = catch.index("_writeUpdateCache(errState)")
+        self.assertLess(guard, write, "the guard must come before the write")
+
+    def test_a_real_network_failure_is_still_reported(self):
+        """Suppressing everything that looks like a cancelled request would
+        also suppress the genuine one, and About would lose its ability to say
+        GitHub was unreachable."""
+        fn = self.src[self.src.index("function _isAbortError"):]
+        fn = fn[:fn.index("\n  }") + 4]
+        self.assertIn("err.name === 'AbortError'", fn)
+        for over_broad in ("Failed to fetch", "NetworkError"):
+            with self.subTest(pattern=over_broad):
+                self.assertNotIn(over_broad, fn)
+
+    def test_the_error_is_still_written_for_a_real_failure(self):
+        body = self.src[self.src.index("WD.checkForUpdates = function"):]
+        self.assertIn("_writeUpdateCache(errState)", body)
+        self.assertIn("_renderUpdateError(errState)", body)
+
+
+class TheBannerSaysSomethingTrueTests(unittest.TestCase):
+    """"Update available: v2.100.19" to someone already running 2.100.20 is
+    not an update, it is a contradiction - and he is exactly that person."""
+
+    SHARED = Path(__file__).resolve().parent.parent / "web" / "assets" / "js" / "wd-shared.js"
+
+    def setUp(self):
+        src = self.SHARED.read_text(encoding="utf-8")
+        self.src = src
+        self.banner = src[src.index("function _renderUpdateBanner"):]
+        self.banner = self.banner[:self.banner.index("function _removeUpdateBanner")]
+
+    def test_a_branch_update_is_worded_as_one(self):
+        self.assertIn("New commits on", self.banner)
+        self.assertIn("behind the branch it follows", self.banner)
+
+    def test_a_release_update_still_names_the_version(self):
+        self.assertIn("Update available: v", self.banner)
+
+    def test_dismissing_a_branch_update_keys_on_the_commit(self):
+        """The version does not move between branch pushes, so keying the
+        dismissal on it would mean one dismissal silenced the banner for
+        good."""
+        maybe = self.src[self.src.index("function _maybeShowUpdateBanner"):]
+        maybe = maybe[:maybe.index("function _renderUpdateBanner")]
+        self.assertIn("state.branch ? ('branch:' + state.branchAt)", maybe)
+        self.assertIn("state.branch ? ('branch:' + state.branchAt)", self.banner)
+
+
 if __name__ == "__main__":
     unittest.main()
