@@ -1417,6 +1417,32 @@ body.tool-organizer .big-spin {
 
 to { transform: scale(1); opacity: 1; }}
 
+/* The thin muted scrollbar on the Cloud Manager list, now in Firefox too.
+   `::-webkit-scrollbar` is Chromium-only, so this styled the bar in Chrome and
+   Edge and did nothing at all in Firefox - which is the browser he uses.
+
+   Measured rather than assumed, with the list scrolling: Chrome and Edge
+   reserved a 6px gutter; Firefox reserved 0 and drew its own overlay bar in the
+   platform colour.
+
+   The guard is doing real work, so do not simplify it away. Chromium 121+ reads
+   `scrollbar-width` as well, and when it is set the `::-webkit-scrollbar` width
+   is ignored - applying these unconditionally took Chrome and Edge from a 6px
+   gutter to 10px, which is a change to what he already had, for the sake of a
+   browser that was not reading them anyway. `@supports not selector(...)` is
+   true only where the WebKit pseudo-element does not exist.
+
+   Firefox still overlays rather than reserving, measured again after: gutter
+   stays 0 there, the bar is simply thin and muted now instead of default. The
+   two engines are not made identical - that is the platform - only the styling
+   is no longer silently skipped in one of them. */
+@supports not selector(::-webkit-scrollbar) {
+  .rows-container {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(128,140,160,0.35) transparent;
+  }
+}
+
 .rows-container::-webkit-scrollbar { width: 6px; }
 
 .rows-container::-webkit-scrollbar-thumb { background: rgba(128,140,160,0.35); border-radius: 3px; }

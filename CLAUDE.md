@@ -422,6 +422,34 @@ report grouping headings — goes through the shared pair now, and
 
 ## Known gotchas
 
+- **A wall template adds his walls; it never changes one Ekahau ships.** His
+  rule, v2.100.5: "I just want to add in the walls that we added, not change
+  anything from the defaults. So if stuff has changed from the defaults, that's
+  probably wrong." `mergeTemplateTypes` in `web/assets/js/walls.js` therefore
+  skips a matched type that `isStockType()` recognises, and names what it
+  skipped in the toast rather than going quiet. The **Ekahau Defaults**
+  template passes `fromDefaults: true` and is allowed to write them, because
+  restoring the standard values is what that one is for.
+
+  How the deviation got there is the part worth remembering: the shipped
+  template had been **saved out of a project** where three types had been
+  recoloured, so it carried that project's appearance as if it were a house
+  standard, and applied it everywhere. Anything captured from a real project
+  can carry more than what it was captured for. `tests/test_wall_template_merge.py`
+  now fails if any value in the shipped template deviates from
+  `templates/ekahau_defaults.json`.
+
+- **The AP notes pages print last, and it is a decision.** The section is
+  unbounded - a survey that photographs every AP would be a page per access
+  point - so nothing anyone looks up by position may sit behind it. Every
+  renderer in `report.js` concatenates `apNotesPages(...)` **in its return
+  expression**, never into an earlier block. That form is enforced by
+  `tests/test_ap_notes_last.py`, and the reason it is enforced rather than
+  written down: the AP Placement Map did `sections += apNotesPages(...)` two
+  dozen lines before its return and then appended the compass page after the
+  lot, so the return expression did not mention the notes at all and there was
+  nothing for a reader to notice. Found by printing it, not by reading it.
+
 - **Per-page paper orientation works in Firefox too. It is measured now, and
   the invariant still matters more than the feature.** Mixed orientation in one
   document is done with named `@page` rules (`@page placementLandscape { size:
