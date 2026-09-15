@@ -893,51 +893,91 @@ as an error because tidying up afterwards did not work.
 ### Backing up your settings
 
 Everything you have configured can be saved to one file and restored from it.
-Both buttons are in **Settings → General**, under **Back up your settings**.
+
+**Where:** **Settings → Backup & restore**. It is its own section, below Quick
+Walls. Two buttons, and a line above them saying when you last took a copy —
+*"Last exported 12 days ago"* — so you can tell at a glance whether the backup
+is worth anything.
+
+#### Export
 
 **⇩ Export to a file…** writes `wd-wireless-tools-settings-<date>.json` to your
 downloads folder. It is meant to be read: open it and your own values are in
 there as plain JSON, with a schema version and the time it was taken.
 
-What it contains:
-
-| In the file | Why |
+| In the file | Note |
 |---|---|
-| Every setting on the Settings page | The obvious half |
+| Every setting on the Settings page | |
 | Your **wall templates** | **This is where your Quick Walls keyboard shortcuts live** — the shortcut number is a field on each wall type, not a store of its own |
-| Your capacity templates | Captured per person, so they apply to any headcount |
+| Your capacity templates | |
 | Squirrel's rename rules and folder settings | |
 | PlanTrim's saved crop boxes | |
-| Cloud Manager's match decisions | The pairs you linked or marked "not a match" |
+| Cloud Manager's match decisions | The pairs you linked, and the ones you marked "not a match" |
 | Your report details and cover image | |
-| The per-browser values the page keeps | The server cannot see these, so the page collects them |
 
-What it never contains: **your saved Ekahau Cloud login**, and the per-project
-state recording where you got to in each file. A credential does not belong in
-a backup, and the project state is not a preference.
+**Not in the file:** your saved Ekahau Cloud login, and the per-project state
+recording where you got to in each file. A credential does not belong in a
+backup, and that state is not a preference.
+
+#### What a restore deliberately does not bring back
+
+Panel widths, which sections you left folded, and tips you have dismissed stay
+with the browser you set them in. They *are* written into the file, so you can
+open it and see everything — but importing skips them, and says how many it
+skipped.
+
+That is on purpose. Those values describe a window, not a person: carrying the
+work machine's sidebar width onto the laptop would be a nuisance rather than a
+rescue. Two exceptions do come back, because they follow you rather than the
+window — **dark/light** and your **Ekahau sharing group**.
+
+#### Import
 
 **⇧ Import from a file…** restores one, and shows you what would change before
 it writes anything:
 
 - a line per value, with the old beside the new;
-- anything already identical is counted, not listed;
+- anything already identical is counted rather than listed;
 - **a folder path from another machine is called out by name** and checked
   against this disk, because your home project folder is not where the work
   machine keeps them;
 - an export from a newer version is read as far as it can be, and anything
   unrecognised is listed rather than dropped.
 
-**Import these changes** is greyed out when the file would change nothing.
+**Import these changes** stays greyed out when the file would change nothing.
 
 Before it writes, your current settings are copied aside as
-`settings.backup-<date>.json`. That is the same convention as every other
-backup, so **Check usage** and **Clean up** on this page see and prune them too.
-Retention follows **Backup copies to keep**, except that you always keep at
-least one — turning backups off is about routine copies accumulating, not about
-losing the undo for an import you have just run.
+`settings.backup-<date>.json`, next to `settings.json` in
+`~/.wd_wireless_tools/`.
 
-> **This is also how you move a setup between machines.** Export on one, import
-> on the other, and skip the folder path when it warns you.
+#### The two things this is for
+
+1. **Getting back what you had.** If something overwrites your settings, the
+   file puts them back — including the wall templates your keyboard shortcuts
+   and wall colours live in.
+2. **Moving between machines.** Export on the one at home, import on the one at
+   work. Skip the project-folder path when it warns you; everything else
+   travels.
+
+#### Automatic copies
+
+Two moments write a copy without being asked, because both can lose settings:
+
+| When | Where |
+|---|---|
+| Before an **update** | `~/.wd_wireless_tools/settings-backups/` |
+| Before an **import** | beside `settings.json`, as `settings.backup-<date>.json` |
+
+How many are kept follows **Backup copies to keep** in Settings → General, and
+the same **Check usage** and **Clean up** buttons find and prune them.
+
+Setting that to **Off** stops the automatic ones — with one exception: the copy
+taken immediately before an import is always kept, because it is the undo for
+something you just asked for rather than a copy quietly piling up.
+
+An automatic copy does not reset the "Last exported" line. That line is about
+backups *you* took, and a file the suite wrote to protect itself is not one you
+know about.
 
 ---
 

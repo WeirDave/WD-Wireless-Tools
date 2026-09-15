@@ -10,6 +10,7 @@
     API('settings/get', {}).then(function (r) {
       if (!r.ok) return;
       settings = r.settings;
+      showLastExport((r.settings.global || {}).last_settings_export);
       populate();
       checkCloud();
       openHashSection();
@@ -314,6 +315,17 @@
     return out;
   }
 
+  function showLastExport(when) {
+    var el = document.getElementById('sLastExport');
+    if (!el) return;
+    if (!when) { el.innerHTML = '<b>No export taken yet.</b>'; return; }
+    var then = new Date(when);
+    var days = Math.floor((Date.now() - then.getTime()) / 86400000);
+    var ago = days <= 0 ? 'today' : days === 1 ? 'yesterday' : days + ' days ago';
+    el.innerHTML = 'Last exported <b>' + WD.esc(ago) + '</b> — '
+      + WD.esc(then.toLocaleString());
+  }
+
   SP.exportSettings = function () {
     var note = document.getElementById('sExportResult');
     API('settings/export', { browser: readBrowserState() }).then(function (r) {
@@ -342,6 +354,7 @@
           + (browser === 1 ? '' : 's') + '. Keep it somewhere that is not this '
           + 'machine.';
       }
+      showLastExport(r.takenAt || new Date().toISOString());
       WD.toast('Settings exported', 'ok');
     });
   };
@@ -474,6 +487,16 @@
       WD.closeModal('importModal');
       _pendingBundle = null;
       var files = (r.applied && r.applied.files || []).length;
+      var skipped = (r.browserSkipped || []).length;
+      if (skipped) {
+        var note = document.getElementById('sExportResult');
+        if (note) {
+          note.hidden = false;
+          note.innerHTML = skipped + ' per-browser value'
+            + (skipped === 1 ? ' was' : 's were') + ' left alone — panel '
+            + 'widths and folded sections belong to the browser you set them in.';
+        }
+      }
       WD.toast('Imported ' + (r.applied && r.applied.settings || 0) + ' settings, '
                + files + ' file' + (files === 1 ? '' : 's') + ' and ' + wrote
                + ' browser value' + (wrote === 1 ? '' : 's')

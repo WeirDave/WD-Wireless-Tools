@@ -337,5 +337,154 @@ class TheBundleIsReadable(Harness):
         self.assertIn("keybindNumber", b["notes"]["keyboardShortcuts"])
 
 
+class UiStateIsExportedButNeverRestored(Harness):
+    """The registry's own rule, applied.
+
+    ui-state "deliberately stays in localStorage: syncing a collapsed panel
+    between machines would be a regression, not a feature". So the panel widths
+    are in the file - a backup that quietly omits things is not a backup, and
+    he should be able to open it and see everything - and a restore leaves them
+    alone.
+    """
+
+    BROWSER = {
+        "wd-theme": "light",
+        "wd-sharing-group": "some-group",
+        "wd.walls.swapSidebarWidth": "420",
+        "wd-heldback-open": "1",
+        "wd-match-help-seen": "1",
+    }
+
+    def test_everything_is_in_the_file(self):
+        self.write_settings()
+        b = settings_backup.export_bundle(browser=self.BROWSER, root=self.root)
+        self.assertEqual(b["browser"], self.BROWSER)
+
+    def test_only_the_ones_that_follow_the_person_come_back(self):
+        self.write_settings()
+        b = settings_backup.export_bundle(browser=self.BROWSER, root=self.root)
+        r = settings_backup.apply_import(
+            b, sections=("settings", "files", "browser"), root=self.root)
+        self.assertEqual(sorted(r["browser"]), ["wd-sharing-group", "wd-theme"])
+
+    def test_the_panel_widths_are_named_as_skipped_rather_than_dropped(self):
+        """Silently not restoring something is how a restore comes to be
+        mistrusted. The caller is told what it left alone."""
+        self.write_settings()
+        b = settings_backup.export_bundle(browser=self.BROWSER, root=self.root)
+        r = settings_backup.apply_import(
+            b, sections=("settings", "files", "browser"), root=self.root)
+        self.assertIn("wd.walls.swapSidebarWidth", r["browserSkipped"])
+        self.assertIn("wd-heldback-open", r["browserSkipped"])
+
+    def test_the_preview_only_promises_what_it_will_do(self):
+        """Listing a panel width as "will change" and then not changing it
+        teaches him to stop reading previews."""
+        self.write_settings()
+        b = settings_backup.export_bundle(browser=self.BROWSER, root=self.root)
+        p = settings_backup.preview_import(b, browser={}, root=self.root)
+        promised = {e["key"] for e in p["browser"]["add"] + p["browser"]["change"]}
+        self.assertEqual(promised, {"wd-theme", "wd-sharing-group"})
+        self.assertIn("wd.walls.swapSidebarWidth", p["browserNotRestored"])
+
+    def test_the_restorable_list_is_declared_in_the_registry(self):
+        """Both exceptions are filed as ui-state today. A known mismatch,
+        recorded here so nobody 'fixes' it by deleting the exception."""
+        reg = json.loads((Path(__file__).resolve().parent.parent / "web" /
+                          "assets" / "settings-registry.json")
+                         .read_text(encoding="utf-8"))
+        declared = {k["key"] for k in reg["browser_only"]["keys"]}
+        for key in settings_backup.RESTORABLE_BROWSER_KEYS:
+            with self.subTest(key=key):
+                self.assertIn(key, declared)
+
+
+class AnAutomaticDumpBeforeSomethingRisky(Harness):
+
+    def test_it_writes_a_full_bundle_into_its_own_folder(self):
+        self.write_settings(**{"walls.units": "imperial"})
+        self.write_template()
+        r = settings_backup.auto_dump("update", root=self.root)
+        self.assertTrue(r["ok"])
+        path = Path(r["written"])
+        self.assertEqual(path.parent.name, settings_backup.AUTO_DIR_NAME)
+        saved = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(saved["settings"]["walls"]["units"], "imperial")
+        self.assertIn("templates/My Walls_walltemplate.json", saved["files"])
+        self.assertEqual(saved["takenBecause"], "update")
+
+    def test_the_off_switch_really_switches_it_off(self):
+        """These are the accumulating kind, which is what that setting is for."""
+        self.write_settings(**{"global.backup_keep": 0})
+        r = settings_backup.auto_dump("update", root=self.root)
+        self.assertIsNone(r["written"])
+        self.assertFalse((self.root / settings_backup.AUTO_DIR_NAME).exists())
+
+    def test_retention_applies_and_the_suite_can_see_them(self):
+        import time
+        self.write_settings(**{"global.backup_keep": 2})
+        for _ in range(4):
+            settings_backup.auto_dump("update", root=self.root)
+            time.sleep(1.05)
+        kept = sorted((self.root / settings_backup.AUTO_DIR_NAME).glob("*.json"))
+        self.assertEqual(len(kept), 2)
+        for f in kept:
+            with self.subTest(file=f.name):
+                self.assertIsNotNone(backups.classify(f))
+
+    def test_one_reason_does_not_evict_another(self):
+        """A run of updates must not push out the dump taken before the last
+        import - the same rule backups.py applies per owner."""
+        self.write_settings(**{"global.backup_keep": 1})
+        settings_backup.auto_dump("import", root=self.root)
+        settings_backup.auto_dump("update", root=self.root)
+        names = sorted(p.name for p in
+                       (self.root / settings_backup.AUTO_DIR_NAME).glob("*.json"))
+        self.assertTrue(any("import" in n for n in names), names)
+        self.assertTrue(any("update" in n for n in names), names)
+
+    def test_it_never_fails_the_operation_it_protects(self):
+        """An update that refuses to run because its safety net broke is worse
+        than one with no safety net."""
+        with patch.object(settings_backup, "export_bundle",
+                          side_effect=OSError("disk full")):
+            r = settings_backup.auto_dump("update", root=self.root)
+        self.assertFalse(r["ok"])
+        self.assertIsNone(r["written"])
+
+    def test_the_updater_takes_one_before_it_runs(self):
+        src = (Path(__file__).resolve().parent.parent / "tools" /
+               "updater.py").read_text(encoding="utf-8")
+        block = src[src.index("def perform_update("):]
+        block = block[:block.index("chosen = mode")]
+        self.assertIn('_dump_settings_first("update"', block)
+
+
+class TheLastExportIsDated(Harness):
+
+    def test_taking_an_export_records_when(self):
+        self.write_settings()
+        when = settings_backup.note_export_taken()
+        self.assertTrue(when)
+        got = settings.load_settings(_path=self.settings_file)
+        self.assertEqual(got["global"]["last_settings_export"], when)
+
+    def test_it_is_declared_as_internal_state_not_a_setting(self):
+        """No control and not a choice, so it belongs in the registry's
+        internal list rather than as an entry with a home."""
+        reg = json.loads((Path(__file__).resolve().parent.parent / "web" /
+                          "assets" / "settings-registry.json")
+                         .read_text(encoding="utf-8"))
+        self.assertIn("global.last_settings_export", reg["internal"]["keys"])
+
+    def test_an_automatic_dump_does_not_count_as_one_he_took(self):
+        """Otherwise the page says his backup is fresh because the suite
+        protected itself, which is reassurance he has not earned."""
+        self.write_settings()
+        settings_backup.auto_dump("update", root=self.root)
+        got = settings.load_settings(_path=self.settings_file)
+        self.assertEqual(got["global"]["last_settings_export"], "")
+
+
 if __name__ == "__main__":
     unittest.main()

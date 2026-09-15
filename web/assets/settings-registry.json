@@ -42,7 +42,8 @@
       "_version",
       "setup_complete",
       "report.page_orient",
-      "report.report_defaults"
+      "report.report_defaults",
+      "global.last_settings_export"
     ]
   },
   "settings": [
