@@ -308,6 +308,23 @@ class FileNameAssembly(unittest.TestCase):
         body = self.js[start:self.js.index("window.print()", start)]
         self.assertIn("syncDocTitle()", body)
 
+    def test_picking_a_report_renames_the_tab_straight_away(self):
+        """Measured in Firefox before this was true: choosing a report left the
+        tab - and therefore Ctrl+P - naming the report you had picked *last*,
+        all the way through the configure stage, until a render replaced it.
+        Picking the aim sheet showed "AP Placement Map" until you generated.
+
+        The app's own Print button was never wrong; it syncs first. This is the
+        tab and the keyboard shortcut, which is why it is a rename rather than
+        a wrong file.
+        """
+        start = self.js.index("window.selectReport = function (id)")
+        body = self.js[start:self.js.index("\n  function ", start)]
+        self.assertIn("syncDocTitle()", body,
+                      "selectReport must refresh the title it just invalidated")
+        self.assertLess(body.index("syncDocTitle()"), body.index("goStage("),
+                        "refresh before leaving for the next stage")
+
 
 class OpenEsxRoute(unittest.TestCase):
     """The endpoint that makes the folder knowable at all.
