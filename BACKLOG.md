@@ -5,7 +5,7 @@ history and GitHub Releases.
 
 Priorities: **P1** = blocking · **P2** = wanted · **P3** = future enhancement.
 
-Last reviewed against **v2.100.5**, 2026-09-14 — the second pass that day was a
+Last reviewed against **v2.100.12**, 2026-09-14 — the second pass that day was a
 verification sweep, run in Chrome, Edge and Firefox against a real project
 rather than read off the source. What it closed is noted on each item.
 
@@ -152,25 +152,7 @@ higher.
 
 ### Suite-wide
 
-#### 8. P3 — The Report's native picker still can't fall back
-
-v2.100.9 fixed the dead end behind **Open from disk…** in Prep and Quick Walls:
-a picker that cannot open now says so and hands you the browser's own file
-dialog instead of doing nothing. The root cause — `_tk_dialog` reporting every
-failure as a cancel — is fixed underneath every caller.
-
-The Report reaches its picker a different way, through
-`organizer/pick_esx_file`, and `openViaNativePicker()` in `report.js` returns
-`true` for anything that is not a chosen path, so a picker that could not open
-still stops there rather than falling through to `fileInput`. Its own comment
-says "a cancelled picker must not leave the page doing nothing", which is what
-it does.
-
-Left alone tonight only because `report.js` was open in another session. It is
-a three-line change: read the new `code` field and return `false` on
-`picker_unavailable`.
-
-#### 9. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
+#### 8. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
 
 A finding about going from DWG to `.esx` was established in an earlier session
 and never recorded, so the next session will redo the work.
@@ -200,6 +182,21 @@ so they can be answered together.
 
 Not work. Recorded because each was settled once and would otherwise be
 rediscovered as an open question.
+
+### Every native file picker says when it could not open — v2.100.12
+
+A picker that failed to open was reported as a cancel, everywhere, and a cancel
+is silent by design. So **Open from disk...** in Prep and Quick Walls could do
+nothing at all, measured in three engines: the page did not change by one
+character.
+
+Fixed at the source, so it holds for all six pickers - Prep, Quick Walls, both
+of Squirrel's, the Report's, and Cloud Manager's folder picker. Prep, Quick
+Walls and the Report fall through to the browser's own file dialog; Squirrel
+cannot (it needs a path, not bytes) and says what went wrong instead.
+
+The distinction is load-bearing and is tested: the cancel wording must stay
+exactly as it is, because every page keys its silence on that string.
 
 ### A notes-terminated document prints correctly — item 7, closed by evidence
 

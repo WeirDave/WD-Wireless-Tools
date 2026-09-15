@@ -211,6 +211,86 @@ class ThePageDoesSomethingUseful(unittest.TestCase):
         self.assertEqual(out["browseOpened"], 0)
 
 
+class EveryPickerInTheSuite(unittest.TestCase):
+    """The same distinction, wherever a native dialog is opened.
+
+    Squirrel's Extract and Acorn pickers are the sharper case: there is no drop
+    zone behind them, because they work on a file where it sits rather than on
+    bytes in the browser. A silent failure there has no way round it at all.
+    Those pages already toast anything that is not the cancel wording, so
+    telling the two apart at the source is the whole fix for them.
+    """
+
+    def setUp(self):
+        from tools.folder_organizer import FolderOrganizer
+        self.org = FolderOrganizer()
+
+    def _as(self, method, result, *args):
+        with mock.patch("tools.folder_organizer._tk_dialog_result",
+                        return_value=result):
+            return getattr(self.org, method)(*args)
+
+    def test_each_picker_reports_an_unavailable_dialog(self):
+        broken = {"path": "", "ran": False, "why": "it closed immediately"}
+        for method in ("pick_folder", "pick_esx_file", "pick_output_folder"):
+            with self.subTest(method=method):
+                out = self._as(method, broken)
+                self.assertFalse(out["ok"])
+                self.assertEqual(out["code"], "picker_unavailable")
+                self.assertIn("closed immediately", out["error"])
+
+    def test_each_picker_still_cancels_in_the_suppressed_words(self):
+        """Squirrel and Cloud Manager suppress these exact strings."""
+        cancelled = {"path": "", "ran": True, "why": ""}
+        self.assertEqual(self._as("pick_folder", cancelled)["error"],
+                         "No folder selected")
+        self.assertEqual(self._as("pick_esx_file", cancelled)["error"],
+                         "No file selected")
+        self.assertEqual(self._as("pick_output_folder", cancelled)["error"],
+                         "No folder selected")
+
+    def test_a_chosen_path_still_comes_back_and_is_remembered(self):
+        chosen = {"path": "C:/projects", "ran": True, "why": ""}
+        out = self._as("pick_folder", chosen)
+        self.assertTrue(out["ok"])
+        self.assertEqual(out["path"], "C:/projects")
+        self.assertEqual(self.org._root, "C:/projects",
+                         "pick_folder sets the root it just picked")
+
+    def test_the_pages_that_suppress_the_cancel_will_show_the_failure(self):
+        """They key on the cancel wording, so a different message gets through."""
+        for rel in ("web/assets/js/organizer.js", "web/assets/js/cloud.js"):
+            js = (ROOT / rel).read_text(encoding="utf-8")
+            with self.subTest(file=rel):
+                self.assertIn("No f", js)
+                self.assertNotIn("picker_unavailable", js,
+                                 "these need no special case - a message that "
+                                 "is not the cancel wording already toasts")
+
+
+class TheReportFallsThroughToo(unittest.TestCase):
+    """Its comment promised this and the code could not deliver it."""
+
+    def setUp(self):
+        self.js = (ROOT / "web" / "assets" / "js" / "report.js").read_text(
+            encoding="utf-8")
+        start = self.js.index("async function openViaNativePicker()")
+        self.body = self.js[start:self.js.index("window.loadNewFile", start)]
+
+    def test_an_unavailable_picker_returns_false_so_the_input_opens(self):
+        self.assertIn("picker_unavailable", self.body)
+        self.assertIn("return false", self.body)
+
+    def test_a_cancel_still_stops(self):
+        self.assertIn("cancelled: done", self.body)
+
+    def test_loadNewFile_still_falls_through_on_false(self):
+        start = self.js.index("window.loadNewFile = async function")
+        body = self.js[start:start + 300]
+        self.assertIn("if (await openViaNativePicker()) return;", body)
+        self.assertIn("fileInput.click()", body)
+
+
 class BothPagesGotIt(unittest.TestCase):
     """Quick Walls has the same button and had the same dead end."""
 

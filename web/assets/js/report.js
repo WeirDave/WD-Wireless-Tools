@@ -759,7 +759,18 @@
     try {
       picked = await WD.api('organizer/pick_esx_file', {});
     } catch (e) { return false; }
-    if (!picked || !picked.ok || !picked.path) return true;   // cancelled: done
+    if (!picked || !picked.ok || !picked.path) {
+      /* A picker that could not open is not a cancel, and until the server
+         started saying which was which, every failure arrived here looking
+         like one - so the fall-through promised in the comment above could
+         never fire and the click did nothing at all. Returning false hands the
+         caller back to the plain file input. */
+      if (picked && picked.code === 'picker_unavailable') {
+        showToast(picked.error + ' Use the drop zone instead.', 'error');
+        return false;
+      }
+      return true;                                          // cancelled: done
+    }
 
     var resp;
     try {
