@@ -159,28 +159,9 @@ higher.
 
 ---
 
-### Quick Walls
-
-#### 9. P2 — The wall audit is built, tested, and unreachable
-
-`tools/wall_audit.py` exists with 15 passing tests, and `scripts/audit_walls.py`
-drives it from a terminal. There is **no server route and no UI** — grep finds
-zero references in `server.py` and zero in any page's JavaScript.
-
-It reports, per project, which wall types are on Auto height with a segment
-count and a severity. That is the backstop the whole
-"a height ships only where the name states one" decision rests on
-(see `docs/wall-types.md`), and nobody using the app can run it.
-
-**Done** is: reachable from Quick Walls on an open project, reporting in the
-page rather than the terminal. The logic and its tests already exist, so this
-is a route plus a panel.
-
----
-
 ### Suite-wide
 
-#### 10. P3 — The Firefox scrollbar styling was shipped unverified
+#### 9. P3 — The Firefox scrollbar styling was shipped unverified
 
 `wd-tools.css` carries one `scrollbar-width` / `scrollbar-color` rule. Firefox
 is the browser he actually uses, and this has never been looked at in it. It is
@@ -188,7 +169,7 @@ cosmetic, so it is P3 — but it is also five minutes with the BiDi path that is
 now established, and print work has twice shipped wrong by being checked in the
 wrong engine.
 
-#### 11. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
+#### 10. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
 
 A finding about going from DWG to `.esx` was established in an earlier session
 and never recorded, so the next session will redo the work.
@@ -218,6 +199,30 @@ so they can be answered together.
 
 Not work. Recorded because each was settled once and would otherwise be
 rediscovered as an open question.
+
+### A template adds; it never changes a wall type Ekahau ships
+
+His words, after applying WD Template was found to recolour three standard wall
+types: "I just want to add in the walls that we added, not change anything from
+the defaults. So if stuff has changed from the defaults, that's probably wrong."
+
+So the merge leaves a stock type exactly as it is and says in the toast which
+ones it left alone. The **Ekahau Defaults** template is the deliberate
+exception — putting the stock values back is the whole point of that one — and
+the three drifted colours were corrected in the shipped template as well, since
+a template carrying a wrong value is wrong whether or not anything applies it.
+
+The trade is recorded because it is a real one: a template can no longer carry
+a house value for a standard type. If that is ever wanted it has to be a
+deliberate, visible thing, not a side effect of having saved a template out of
+a project where somebody had recoloured a door once.
+
+### The wall audit is reachable — item 9 of the 2026-09-14 review, now done
+
+`tools/wall_audit.py` had 15 passing tests and no way into it from the app. It
+is now reached over `/api/walls/audit` and reported in the `#wallAudit` panel
+beside the wall list, on the open project, with one implementation shared with
+the folder sweep.
 
 ### Squirrel Rename is reachable, and the audit was wrong about it
 

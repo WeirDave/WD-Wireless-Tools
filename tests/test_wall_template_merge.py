@@ -157,6 +157,98 @@ class MergeTests(unittest.TestCase):
                          "the displaced type loses the binding, not the type")
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class StockTypesAreLeftAsEkahauShipsThem(unittest.TestCase):
+    """A template may add types; it may not quietly restyle the standard set.
+
+    His rule, after finding that applying WD Template recoloured three wall
+    types Ekahau ships: "I just want to add in the walls that we added, not
+    change anything from the defaults. So if stuff has changed from the
+    defaults, that's probably wrong."
+
+    The recolour had got into the template because it was saved out of a
+    project where those types had been changed once, and from there it
+    travelled to every project the template was applied to. Nothing said so.
+    """
+
+    DEFAULTS = """
+      globalThis._ekahauDefaults = { wallTypes: [
+        { key: 'DRY_WALL', name: 'Dry Wall', color: '#D9D9D9' },
+        { key: 'ElevatorShaft', name: 'Elevator Shaft', color: '#5A5A5A' }
+      ] };
+    """
+
+    def test_a_stock_type_is_not_recoloured(self):
+        out = run_node(self.DEFAULTS + """
+          wallTypes = [{ id: 'id-lift', key: 'ElevatorShaft',
+                         name: 'Elevator Shaft', color: '#5A5A5A' }];
+          const r = mergeTemplateTypes([{ id: 't', key: 'ElevatorShaft',
+                         name: 'Elevator Shaft', color: '#5fab4f' }]);
+          console.log(JSON.stringify({ color: wallTypes[0].color, r }));
+        """)
+        self.assertEqual(out["color"], "#5A5A5A")
+        self.assertEqual(out["r"]["updated"], 0)
+        self.assertEqual(out["r"]["kept"], ["Elevator Shaft"])
+
+    def test_what_was_left_alone_is_reported_not_swallowed(self):
+        """Silently ignoring half a template is its own kind of wrong."""
+        js = WALLS_JS.read_text(encoding="utf-8")
+        self.assertIn("keptPhrase", js)
+        body = js[js.index("async function applySelectedTemplate"):]
+        body = body[:body.index("async function tryAutoApply")]
+        self.assertIn("keptPhrase(kept)", body)
+
+    def test_a_custom_type_is_still_updated(self):
+        """The template is authoritative for the types he added - that is what
+        a template is for. Only the standard set is protected."""
+        out = run_node(self.DEFAULTS + """
+          wallTypes = [{ id: 'id-pod', name: 'Framery Pod', color: '#111111' }];
+          const r = mergeTemplateTypes([{ id: 't', name: 'Framery Pod',
+                                          color: '#222222' }]);
+          console.log(JSON.stringify({ color: wallTypes[0].color, r }));
+        """)
+        self.assertEqual(out["color"], "#222222")
+        self.assertEqual(out["r"]["updated"], 1)
+        self.assertEqual(out["r"]["kept"], [])
+
+    def test_the_ekahau_defaults_template_may_still_write_stock_types(self):
+        """Putting the stock values back is the whole point of that one."""
+        out = run_node(self.DEFAULTS + """
+          wallTypes = [{ id: 'id-lift', key: 'ElevatorShaft',
+                         name: 'Elevator Shaft', color: '#5fab4f' }];
+          const r = mergeTemplateTypes(_ekahauDefaults.wallTypes,
+                                       { fromDefaults: true });
+          const lift = wallTypes.find(w => w.key === 'ElevatorShaft');
+          console.log(JSON.stringify({ color: lift.color, id: lift.id, r }));
+        """)
+        self.assertEqual(out["color"], "#5A5A5A")
+        self.assertEqual(out["id"], "id-lift", "the project's id is still kept")
+        self.assertEqual(out["r"]["kept"], [])
+
+    def test_an_identical_stock_type_is_not_reported_as_kept(self):
+        """Nothing was refused, so nothing is announced."""
+        out = run_node(self.DEFAULTS + """
+          wallTypes = [{ id: 'id-lift', key: 'ElevatorShaft',
+                         name: 'Elevator Shaft', color: '#5A5A5A' }];
+          const r = mergeTemplateTypes([{ id: 't', key: 'ElevatorShaft',
+                         name: 'Elevator Shaft', color: '#5A5A5A' }]);
+          console.log(JSON.stringify({ r }));
+        """)
+        self.assertEqual(out["r"]["kept"], [])
+
+    def test_a_stock_type_the_project_does_not_have_is_still_added(self):
+        """The guard is about not changing what is there, not about refusing
+        to complete the standard set."""
+        out = run_node(self.DEFAULTS + """
+          wallTypes = [];
+          const r = mergeTemplateTypes([{ id: 't', key: 'ElevatorShaft',
+                         name: 'Elevator Shaft', color: '#5fab4f' }]);
+          console.log(JSON.stringify({ n: wallTypes.length, r }));
+        """)
+        self.assertEqual(out["n"], 1)
+        self.assertEqual(out["r"]["added"], 1)
+
+
 class ShippedTemplateTests(unittest.TestCase):
     """What WD Template carries, since the merge makes its contents the whole
     of what applying it does."""
@@ -178,6 +270,24 @@ class ShippedTemplateTests(unittest.TestCase):
         wd = {self._key(w) for w in self._types("WD Template_walltemplate.json")}
         self.assertEqual(ek - wd, set(),
                          "Ekahau defaults missing from WD Template")
+
+    def test_wd_template_does_not_deviate_from_the_stock_types(self):
+        """Three colours had drifted. The merge guard would now stop them
+        landing, but a template that carries a wrong value is still wrong -
+        anyone reading it would take those colours for his house standard.
+        """
+        ek = {self._key(w): w for w in self._types("ekahau_defaults.json")}
+        drift = []
+        for w in self._types("WD Template_walltemplate.json"):
+            o = ek.get(self._key(w))
+            if not o:
+                continue
+            for f in ("name", "color", "attenuationFactor", "thickness",
+                      "upperEdge", "lowerEdge"):
+                if f in w and w.get(f) != o.get(f):
+                    drift.append("%s.%s = %r, Ekahau ships %r"
+                                 % (w.get("name"), f, w.get(f), o.get(f)))
+        self.assertEqual(drift, [], "; ".join(drift))
 
     def test_wd_template_carries_his_own_additions(self):
         wd = {w["name"] for w in self._types("WD Template_walltemplate.json")}
