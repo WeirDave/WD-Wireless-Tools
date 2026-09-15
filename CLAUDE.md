@@ -131,6 +131,14 @@ and reading the `(...)` text operators is enough to tell which page each piece
 of content landed on, so "it starts a new sheet" and "the row did not split" are
 assertions about the printed output, not about the CSS source.
 
+**Do not install Playwright.** It was tried on 2026-09-15 and removed the same
+night. Its bundled Firefox spawned processes that never exited, those locked its
+own binary, and every launch after the first failed with `spawn UNKNOWN` against
+files its own zombies were holding - which reads exactly like a policy block and
+is not one. It left eight orphaned processes running and 683 MB in
+`%LOCALAPPDATA%\ms-playwright`. `selenium` + the installed Firefox does the same
+job, cleans up after itself, and drives the browser he actually prints from.
+
 **A second path that works, and needs no hand-rolled websocket: geckodriver.**
 `pip install selenium`, then `webdriver.Firefox(headless)` →
 `driver.print_page(PrintOptions())`, which returns the same base64 PDF through
