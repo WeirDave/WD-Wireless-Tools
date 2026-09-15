@@ -294,5 +294,194 @@
     });
   };
 
+  /* ── backup and restore ──────────────────────────────────────────────
+     Written after a night of testing overwrote his live settings. His Quick
+     Walls defaults went, his wall-type colours went, and the keyboard
+     shortcuts survived only because he had typed them into OneNote.
+
+     localStorage is collected here rather than on the server because the
+     server cannot see it. It goes into the bundle so a restore is complete,
+     and comes back out on import for the page to write. */
+  function readBrowserState() {
+    var out = {};
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k) out[k] = localStorage.getItem(k);
+      }
+    } catch (e) { /* private window, blocked storage - a partial bundle
+                     beats refusing to make one */ }
+    return out;
+  }
+
+  SP.exportSettings = function () {
+    var note = document.getElementById('sExportResult');
+    API('settings/export', { browser: readBrowserState() }).then(function (r) {
+      if (!r || !r.ok) {
+        WD.toast((r && r.error) || 'Export failed', 'error');
+        return;
+      }
+      var text = JSON.stringify(r.bundle, null, 2);
+      var blob = new Blob([text], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = r.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+
+      var files = Object.keys(r.bundle.files || {}).length;
+      var browser = Object.keys(r.bundle.browser || {}).length;
+      if (note) {
+        note.hidden = false;
+        note.innerHTML = 'Saved <b>' + WD.esc(r.filename) + '</b> — your settings, '
+          + files + ' file' + (files === 1 ? '' : 's') + ' (templates and report '
+          + 'details), and ' + browser + ' per-browser value'
+          + (browser === 1 ? '' : 's') + '. Keep it somewhere that is not this '
+          + 'machine.';
+      }
+      WD.toast('Settings exported', 'ok');
+    });
+  };
+
+  var _pendingBundle = null;
+
+  SP.chooseImport = function (input) {
+    var file = input && input.files && input.files[0];
+    input.value = '';                    // so the same file can be picked twice
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var bundle;
+      try {
+        bundle = JSON.parse(String(reader.result));
+      } catch (e) {
+        WD.toast('That file is not readable JSON', 'error');
+        return;
+      }
+      _pendingBundle = bundle;
+      API('settings/import_preview',
+          { bundle: bundle, browser: readBrowserState() }).then(showImportPreview);
+    };
+    reader.onerror = function () { WD.toast('Could not read that file', 'error'); };
+    reader.readAsText(file);
+  };
+
+  function line(entry, kind) {
+    var k = WD.esc(String(entry.key));
+    if (kind === 'change') {
+      return '<div class="s-imp s-imp-change"><code>' + k + '</code>'
+        + '<span class="s-imp-old">' + WD.esc(short(entry.old)) + '</span>'
+        + '<span class="s-imp-arrow">&rarr;</span>'
+        + '<span class="s-imp-new">' + WD.esc(short(entry.new)) + '</span></div>';
+    }
+    return '<div class="s-imp s-imp-' + kind + '"><code>' + k + '</code>'
+      + '<span class="s-imp-new">' + WD.esc(short(entry.new)) + '</span></div>';
+  }
+
+  function short(v) {
+    if (v === null || v === undefined) return '(not set)';
+    if (typeof v === 'object') return JSON.stringify(v).slice(0, 70);
+    var s = String(v);
+    return s === '' ? '(empty)' : s.slice(0, 70);
+  }
+
+  function showImportPreview(p) {
+    if (!p || !p.ok) {
+      WD.toast((p && p.error) || 'That file could not be read as a settings export',
+               'error');
+      return;
+    }
+    document.getElementById('sImportFrom').textContent =
+      'Exported ' + (p.from.exportedAt || 'at an unknown time')
+      + ' from version ' + (p.from.appVersion || 'unknown') + '.';
+
+    var c = p.counts, parts = [], detail = '';
+    ['settings', 'files', 'browser'].forEach(function (section) {
+      var n = c[section];
+      if (!n.add && !n.change && !n.unknown) return;
+      parts.push(n.add + ' added, ' + n.change + ' changed in ' + section);
+    });
+
+    var summary = document.getElementById('sImportSummary');
+    if (!p.willChangeAnything) {
+      summary.innerHTML = '<div class="s-imp-none">Everything in this file '
+        + 'already matches what you have. Importing would change nothing.</div>';
+    } else {
+      summary.innerHTML = '<div class="s-imp-sum">' + WD.esc(parts.join(' · '))
+        + '</div>';
+    }
+
+    if (p.schemaNotes && p.schemaNotes.length) {
+      detail += '<div class="s-imp-warn">' + WD.esc(p.schemaNotes.join(' ')) + '</div>';
+    }
+    (p.machineSpecific || []).forEach(function (m) {
+      if (m.existsHere) return;
+      detail += '<div class="s-imp-warn"><b>' + WD.esc(m.key) + '</b> is a folder '
+        + 'from another machine and does not exist here: <code>'
+        + WD.esc(short(m.new)) + '</code>. Importing it will point the suite at '
+        + 'a folder that is not there, and you can set it again afterwards.</div>';
+    });
+
+    ['settings', 'files', 'browser'].forEach(function (section) {
+      var block = p[section] || {};
+      var rows = '';
+      (block.change || []).forEach(function (e) { rows += line(e, 'change'); });
+      (block.add || []).forEach(function (e) { rows += line(e, 'add'); });
+      (block.unknown || []).forEach(function (e) { rows += line(e, 'unknown'); });
+      if (!rows) return;
+      var same = (block.same || []).length;
+      detail += '<div class="s-imp-group"><div class="s-imp-head">' + section
+        + (same ? ' <span class="s-imp-same">' + same + ' already identical</span>' : '')
+        + '</div>' + rows + '</div>';
+    });
+    document.getElementById('sImportDetail').innerHTML = detail;
+    document.getElementById('sImportApplyBtn').disabled = !p.willChangeAnything;
+    WD.showModal('importModal');
+  }
+
+  SP.cancelImport = function () {
+    _pendingBundle = null;
+    WD.closeModal('importModal');
+  };
+
+  SP.applyImport = function () {
+    if (!_pendingBundle) return;
+    var btn = document.getElementById('sImportApplyBtn');
+    btn.disabled = true;
+    btn.textContent = 'Importing…';
+    API('settings/import_apply', {
+      bundle: _pendingBundle,
+      sections: ['settings', 'files', 'browser'],
+    }).then(function (r) {
+      btn.textContent = 'Import these changes';
+      if (!r || !r.ok) {
+        btn.disabled = false;
+        WD.toast((r && r.error) || 'Import failed', 'error');
+        return;
+      }
+      // localStorage is the page's to write, so the server hands the keys back.
+      var wrote = 0;
+      try {
+        Object.keys(r.browser || {}).forEach(function (k) {
+          localStorage.setItem(k, r.browser[k]);
+          wrote++;
+        });
+      } catch (e) { /* blocked storage - the server-side settings still landed */ }
+
+      WD.closeModal('importModal');
+      _pendingBundle = null;
+      var files = (r.applied && r.applied.files || []).length;
+      WD.toast('Imported ' + (r.applied && r.applied.settings || 0) + ' settings, '
+               + files + ' file' + (files === 1 ? '' : 's') + ' and ' + wrote
+               + ' browser value' + (wrote === 1 ? '' : 's')
+               + (r.backup ? ' — your previous settings were saved first' : ''),
+               'ok');
+      setTimeout(function () { location.reload(); }, 1400);
+    });
+  };
+
   init();
 })();

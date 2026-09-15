@@ -202,6 +202,27 @@
           <b>Off</b> to stop keeping them at all.</div>
         <div class="hint" id="sBackupUsage" hidden></div>
       </div>
+
+      <div class="s-field">
+        <label>Back up your settings</label>
+        <div class="s-row">
+          <button class="btn" onclick="SP.exportSettings()"
+                  title="Save everything you have configured to one file">&#11015; Export to a file&hellip;</button>
+          <button class="btn" onclick="document.getElementById('sImportFile').click()"
+                  title="Restore from a settings file, after showing you what would change">&#11014; Import from a file&hellip;</button>
+          <input type="file" id="sImportFile" accept=".json,application/json" hidden
+                 onchange="SP.chooseImport(this)">
+        </div>
+        <div class="hint">One readable file with everything you have set up:
+          every setting on this page, your wall templates &mdash; <b>which is where
+          your Quick Walls keyboard shortcuts live</b> &mdash; your capacity
+          templates, Squirrel's rules and your report details. It never contains
+          your saved Ekahau login.
+          <br>Use it as a backup, or to copy your setup to another machine.
+          Importing shows you exactly what would change first, and copies your
+          current settings aside before it writes anything.</div>
+        <div class="hint" id="sExportResult" hidden></div>
+      </div>
     </div>
   </details>
 
@@ -335,6 +356,23 @@
     <button class="rerun-link" onclick="SP.rerunSetup()">Re-run Setup Wizard</button>
     <button class="btn" onclick="location.reload()">Cancel</button>
     <button class="btn btn-blue" onclick="SP.save()">Save</button>
+  </div>
+</div>
+
+<!-- Nothing is written until this has been read and confirmed. He has had
+     settings change underneath him without warning; a restore is the last
+     place that should happen again. -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal s-import-modal">
+    <h3>Import settings</h3>
+    <p class="sub" id="sImportFrom"></p>
+    <div id="sImportSummary"></div>
+    <div class="s-import-detail" id="sImportDetail"></div>
+    <div class="s-import-actions">
+      <button class="btn" onclick="SP.cancelImport()">Cancel</button>
+      <button class="btn btn-blue" id="sImportApplyBtn"
+              onclick="SP.applyImport()">Import these changes</button>
+    </div>
   </div>
 </div>
 
