@@ -240,12 +240,17 @@
 
     var cards = [];
     var willDo = 0;
+    // Any step that cannot run stops the whole prepare, so the button must not
+    // offer one. Before this, a refusal the preview already knew about was
+    // discovered by clicking: the run came back 400 and nothing was written.
+    var blocked = false;
     var order = r.steps || [];
 
     if (order.indexOf('trim') >= 0) {
       var t = (r.step && r.step.trim) || {};
       if (t.error) {
         cards.push(stepCard('Trim the canvas', 'cannot', 'skip', [esc(t.error)]));
+        blocked = true;
       } else {
         var n = t.trimmedCount || 0;
         willDo += n;
@@ -267,8 +272,17 @@
     if (order.indexOf('areas') >= 0) {
       var a = (r.step && r.step.areas) || {};
       if (!a.ok) {
+        // A step that cannot run stops the whole prepare - nothing is written
+        // if any step refuses, which is right, because a half-prepared project
+        // is worse than an unprepared one. So the card has to say the way out,
+        // or the reader is left with a reason and no move: untick this one and
+        // the other two still run.
         cards.push(stepCard('Requirement areas', 'cannot', 'skip',
-          [esc(a.error || 'Could not work out the requirement areas.')]));
+          [esc(a.error || 'Could not work out the requirement areas.'),
+           '<span class="prep-sub">Nothing is prepared while a step cannot run. '
+           + 'Untick <b>Put a requirement area on every floor</b> above to '
+           + 'prepare the rest, or fix the project in Ekahau and reload it.</span>']));
+        blocked = true;
       } else {
         willDo += a.willWrite || 0;
         var rows = (a.floors || []).map(function (f) {
@@ -295,6 +309,7 @@
       var w = (r.step && r.step.walls) || {};
       if (w.error) {
         cards.push(stepCard('Wall types', 'cannot', 'skip', [esc(w.error)]));
+        blocked = true;
       } else {
         var add = w.add || [], skip = w.skip || [];
         willDo += add.length;
@@ -320,7 +335,10 @@
     }
 
     host.innerHTML = cards.join('');
-    if (willDo) {
+    if (blocked) {
+      setGo(false, 'One of the steps cannot run on this project, and nothing is '
+                 + 'prepared while that is true. Untick it to prepare the rest.');
+    } else if (willDo) {
       setGo(true, 'Builds a new .esx and downloads it. Your file is not touched.');
     } else {
       setGo(false, 'This project is already prepared — there is nothing left to do.');
