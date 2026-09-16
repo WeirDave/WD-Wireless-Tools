@@ -310,12 +310,35 @@ class AboutCanFindTheLogTests(unittest.TestCase):
         self.assertTrue(body.get("logPath"))
         self.assertTrue(body["logPath"].endswith(".log"))
 
+    def test_the_panel_can_open_the_folder_without_naming_a_path(self):
+        """The route takes no argument, so a page cannot aim it somewhere."""
+        import server
+        seen = []
+        with patch.object(server.reveal_tool, "reveal",
+                          side_effect=lambda t: seen.append(Path(t)) or {"ok": True}):
+            res = self.client.post("/api/logs/reveal",
+                                   headers={"X-WD-Wireless-Tools": "1"},
+                                   json={"path": "C:/somewhere/else"})
+        self.assertEqual(200, res.status_code)
+        self.assertTrue(json.loads(res.data).get("ok"))
+        self.assertEqual(1, len(seen))
+        self.assertNotIn("somewhere", str(seen[0]),
+                         "the client managed to choose the folder")
+        self.assertIn("logs", str(seen[0]))
+
+    def test_the_version_route_states_the_limits(self):
+        body = json.loads(self.client.get("/api/version").data)
+        self.assertEqual(7, body["logRetentionDays"])
+        self.assertLessEqual(body["logMaxBytes"], 10_000_000)
+
     def test_the_about_panel_renders_it(self):
         js = (Path(__file__).resolve().parent.parent / "web" / "assets" / "js"
               / "wd-shared.js").read_text(encoding="utf-8")
         self.assertIn("wdAboutLogPath", js)
+        self.assertIn("wdAboutLogOpen", js)
         self.assertIn("_renderLogPath", js)
         self.assertIn("/api/version", js)
+        self.assertIn("/api/logs/reveal", js)
 
 
 if __name__ == "__main__":

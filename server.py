@@ -37,6 +37,7 @@ from tools import capacity_profiles
 from tools import report_store
 from tools import settings as suite_settings
 from tools import settings_backup
+from tools import share_recipients
 from tools import updater
 from tools import applog
 from tools import esx_trimmer
@@ -1152,6 +1153,16 @@ CLOUD_ACTIONS = {
     "verify_replace_local": lambda d: cm.verify_replace_local(d.get("cloudId"), d.get("localPath")),
     "list_shares": lambda d: cm.list_shares(d.get("projectId")),
     "add_share": lambda d: cm.add_share(d.get("projectId"), d.get("email"), d.get("role", "READ_USER")),
+    # Several recipients in one go. The endpoint always accepted an array;
+    # the one-at-a-time limit was the form, not Ekahau.
+    "add_shares": lambda d: cm.add_shares(d.get("projectId"), d.get("emails") or [],
+                                          d.get("role", "READ_USER")),
+    # The people he has shared with before, so he stops retyping addresses
+    # from memory. Local to this machine and never sent anywhere.
+    "recent_recipients": lambda d: {"ok": True,
+                                    "recipients": share_recipients.recent()},
+    "forget_recipient": lambda d: share_recipients.forget(d.get("email")),
+    "forget_all_recipients": lambda d: share_recipients.forget_all(),
     "remove_share": lambda d: cm.remove_share(d.get("projectId"), d.get("email")),
     "change_share_role": lambda d: cm.change_share_role(d.get("projectId"), d.get("email"), d.get("role")),
     "toggle_group_share": lambda d: cm.toggle_group_share(d.get("projectId"), d.get("groupId"),

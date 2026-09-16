@@ -56,6 +56,9 @@ const API_MAP = {
   verify_replace_local: ['verify_replace_local', ['cloudId', 'localPath']],
   list_shares: ['list_shares', ['projectId']],
   add_share: ['add_share', ['projectId', 'email', 'role']],
+  add_shares: ['add_shares', ['projectId', 'emails', 'role']],
+  recent_recipients: ['recent_recipients', []],
+  forget_recipient: ['forget_recipient', ['email']],
   remove_share: ['remove_share', ['projectId', 'email']],
   change_share_role: ['change_share_role', ['projectId', 'email', 'role']],
   toggle_group_share: ['toggle_group_share', ['projectId', 'groupId', 'groupName', 'role', 'enable']],
@@ -2419,8 +2422,9 @@ async function openManageShares(projectId, projectName, bulkProjectIds) {
     ? 'Add people, enable your Sharing Group, or both — applies to every selected project.'
     : 'Loading current shares…';
   document.getElementById('shareList').innerHTML = '';
-  document.getElementById('shareEmail').value = '';
   document.getElementById('shareRole').value = 'READ_USER';
+  _shareChipsReset();
+  _shareLoadRecent();
   showModal('shareModal');
   if (isBulk) {
 
@@ -2955,46 +2959,342 @@ async function _transferOwnershipCommit() {
   }
 }
 
+/* ---- Recipients: chips, and the people he has shared with before --------
+
+   Two things he asked for, and they are the same problem twice. He was
+   retyping colleagues' addresses from memory every time, and he could only
+   enter one at a time - so sharing a project with three people meant typing
+   three addresses he had to remember, one after another.
+
+   The API always took an array. The limit was this form.
+
+   Addresses become chips rather than staying as text, so removing the one he
+   mistyped does not mean editing a string and re-checking the other four. */
+
+let _shareChips = [];
+let _shareKnown = [];        // remembered recipients, most recent first
+let _shareSuggestIndex = -1;
+
+/* Comma, semicolon, whitespace, newline - and `Name <a@example.com>`, because
+   pasting from a mail client is a normal thing to do. Mirrors
+   tools/share_recipients.py; the server splits again and is the authority. */
+function _shareSplit(text) {
+  if (!text) return [];
+  const cleaned = String(text).replace(/[^<>]*<([^>]+)>/g, '$1 ');
+  const out = [];
+  cleaned.split(/[,;\s]+/).forEach(function (chunk) {
+    const one = chunk.trim().replace(/^[<>,;]+|[<>,;]+$/g, '').toLowerCase();
+    if (one && out.indexOf(one) === -1) out.push(one);
+  });
+  return out;
+}
+
+function _shareLooksLikeEmail(value) {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(value || '').trim());
+}
+
+function _shareChipsAdd(text) {
+  let added = false;
+  _shareSplit(text).forEach(function (one) {
+    if (_shareChips.some(function (c) { return c.email === one; })) return;
+    _shareChips.push({ email: one, valid: _shareLooksLikeEmail(one) });
+    added = true;
+  });
+  if (added) _shareChipsRender();
+  return added;
+}
+
+function _shareChipRemove(email) {
+  _shareChips = _shareChips.filter(function (c) { return c.email !== email; });
+  _shareChipsRender();
+  const el = document.getElementById('shareEmail');
+  if (el) el.focus();
+}
+
+function _shareChipsReset() {
+  _shareChips = [];
+  _shareSuggestIndex = -1;
+  _shareChipsRender();
+  const el = document.getElementById('shareEmail');
+  if (el) el.value = '';
+  _shareSuggestHide();
+}
+
+function _shareChipsRender() {
+  const host = document.getElementById('shareChips');
+  if (!host) return;
+  host.innerHTML = _shareChips.map(function (c) {
+    // A malformed entry is marked rather than refused. Rejecting the whole
+    // field because one address is wrong throws away the four that were right.
+    return '<span class="share-chip' + (c.valid ? '' : ' is-bad') + '"'
+      + (c.valid ? '' : ' title="That does not look like an email address"')
+      + '>' + WD.esc(c.email)
+      + '<button type="button" class="share-chip-x" aria-label="Remove '
+      + WD.esc(c.email) + '" onclick="event.stopPropagation();_shareChipRemove('
+      + JSON.stringify(c.email).replace(/"/g, '&quot;') + ')">&times;</button>'
+      + '</span>';
+  }).join('');
+}
+
+/* ---- typing ------------------------------------------------------------ */
+
+function _shareEmailInput(e) {
+  const el = e.target;
+  // A separator means "that one is finished" - the same gesture as Enter.
+  if (/[,;\s]/.test(el.value)) {
+    const trailing = /[,;\s]$/.test(el.value);
+    const parts = _shareSplit(el.value);
+    const keep = trailing ? '' : (parts.pop() || '');
+    if (parts.length) _shareChipsAdd(parts.join(','));
+    el.value = keep;
+  }
+  _shareSuggestShow(el.value);
+}
+
+function _shareEmailPaste(e) {
+  // Belt and braces. This handler is an optimisation, not the mechanism: a
+  // paste also fires `input`, and _shareEmailInput splits on the same
+  // separators - so if the clipboard is unreadable here for any reason, the
+  // default paste lands in the field and the splitter picks it up anyway.
+  let text = '';
+  try {
+    const data = e.clipboardData || window.clipboardData;
+    text = (data && data.getData('text')) || '';
+  } catch (err) {
+    text = '';
+  }
+  if (!text || !/[,;\s]/.test(text)) return;     // a single address: let it through
+  e.preventDefault();
+  _shareChipsAdd(text);
+  e.target.value = '';
+  _shareSuggestHide();
+}
+
+function _shareEmailKey(e) {
+  const el = e.target;
+  const open = !document.getElementById('shareSuggest').hidden;
+
+  if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+    e.preventDefault();
+    _shareSuggestMove(e.key === 'ArrowDown' ? 1 : -1);
+    return;
+  }
+  if (e.key === 'Escape' && open) { e.preventDefault(); _shareSuggestHide(); return; }
+
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const picked = _shareSuggestCurrent();
+    if (picked) { _sharePick(picked); return; }
+    if (el.value.trim()) { _shareChipsAdd(el.value); el.value = ''; _shareSuggestHide(); return; }
+    _shareAdd();
+    return;
+  }
+  // Backspace on an empty field takes back the last chip, which is what every
+  // other chip field does and therefore what the fingers expect.
+  if (e.key === 'Backspace' && !el.value && _shareChips.length) {
+    e.preventDefault();
+    _shareChipRemove(_shareChips[_shareChips.length - 1].email);
+  }
+}
+
+function _shareEmailBlur() {
+  // Delayed, or clicking a suggestion would blur the field and close the list
+  // before the click ever lands.
+  setTimeout(function () {
+    const el = document.getElementById('shareEmail');
+    if (el && el.value.trim()) { _shareChipsAdd(el.value); el.value = ''; }
+    _shareSuggestHide();
+  }, 160);
+}
+
+/* ---- suggestions ------------------------------------------------------- */
+
+function _shareSuggestMatches(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const chosen = _shareChips.map(function (c) { return c.email; });
+  return _shareKnown
+    .filter(function (r) { return chosen.indexOf(r.email) === -1; })
+    .filter(function (r) { return !q || r.email.indexOf(q) !== -1; })
+    .slice(0, 6);
+}
+
+function _shareSuggestShow(query) {
+  const box = document.getElementById('shareSuggest');
+  if (!box) return;
+  const matches = _shareSuggestMatches(query);
+  // With nothing typed the list is only offered once he has a history worth
+  // offering; suggesting an empty box on every focus is just noise.
+  if (!matches.length) { _shareSuggestHide(); return; }
+  _shareSuggestIndex = -1;
+  box.innerHTML = matches.map(function (r, i) {
+    return '<button type="button" class="share-suggest-item" data-i="' + i + '"'
+      + ' onmousedown="event.preventDefault()"'
+      + ' onclick="_sharePick(' + JSON.stringify(r.email).replace(/"/g, '&quot;') + ')">'
+      + WD.esc(r.email) + '</button>';
+  }).join('');
+  box.hidden = false;
+}
+
+function _shareSuggestHide() {
+  const box = document.getElementById('shareSuggest');
+  if (box) { box.hidden = true; _shareSuggestIndex = -1; }
+}
+
+function _shareSuggestMove(step) {
+  const box = document.getElementById('shareSuggest');
+  const items = box ? [].slice.call(box.querySelectorAll('.share-suggest-item')) : [];
+  if (!items.length) return;
+  _shareSuggestIndex = (_shareSuggestIndex + step + items.length) % items.length;
+  items.forEach(function (el, i) {
+    el.classList.toggle('is-active', i === _shareSuggestIndex);
+  });
+}
+
+function _shareSuggestCurrent() {
+  const box = document.getElementById('shareSuggest');
+  if (!box || box.hidden || _shareSuggestIndex < 0) return null;
+  const items = [].slice.call(box.querySelectorAll('.share-suggest-item'));
+  const el = items[_shareSuggestIndex];
+  return el ? el.textContent.trim() : null;
+}
+
+function _sharePick(email) {
+  _shareChipsAdd(email);
+  const el = document.getElementById('shareEmail');
+  if (el) { el.value = ''; el.focus(); }
+  _shareSuggestHide();
+  _shareRecentRender();
+}
+
+/* ---- the remembered list ----------------------------------------------- */
+
+async function _shareLoadRecent() {
+  try {
+    const r = await pyApi('recent_recipients');
+    _shareKnown = (r && r.recipients) || [];
+  } catch (err) {
+    _shareKnown = [];       // a convenience feature never breaks the panel
+  }
+  _shareRecentRender();
+}
+
+function _shareRecentRender() {
+  const host = document.getElementById('shareRecent');
+  if (!host) return;
+  const chosen = _shareChips.map(function (c) { return c.email; });
+  const offer = _shareKnown
+    .filter(function (r) { return chosen.indexOf(r.email) === -1; })
+    .slice(0, 8);
+  if (!offer.length) { host.hidden = true; host.innerHTML = ''; return; }
+  host.hidden = false;
+  host.innerHTML =
+    '<div class="share-recent-label">Recent</div>'
+    + offer.map(function (r) {
+      const safe = JSON.stringify(r.email).replace(/"/g, '&quot;');
+      return '<span class="share-recent-item">'
+        + '<button type="button" class="share-recent-pick" onclick="_sharePick(' + safe + ')">'
+        + WD.esc(r.email) + '</button>'
+        + '<button type="button" class="share-recent-x" title="Forget '
+        + WD.esc(r.email) + '" aria-label="Forget ' + WD.esc(r.email)
+        + '" onclick="_shareForget(' + safe + ')">&times;</button>'
+        + '</span>';
+    }).join('');
+}
+
+async function _shareForget(email) {
+  try {
+    const r = await pyApi('forget_recipient', email);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    _shareKnown = _shareKnown.filter(function (x) { return x.email !== email; });
+    _shareRecentRender();
+    _shareSuggestHide();
+  } catch (err) {
+    toast('Could not forget that address', 'error');
+  }
+}
+
 async function _shareAdd() {
   const ctx = _shareCtx;
   if (!ctx) return;
   const emailEl = document.getElementById('shareEmail');
   const roleEl = document.getElementById('shareRole');
-  const email = (emailEl.value || '').trim();
   const role = roleEl.value || 'READ_USER';
   const isBulk = !!(ctx.bulkProjectIds && ctx.bulkProjectIds.length);
-  if (!email || !email.includes('@')) {
+
+  // Anything still half-typed counts. Pressing Add with text in the box and
+  // meaning "not that one" is not a thing anybody does.
+  if (emailEl.value.trim()) { _shareChipsAdd(emailEl.value); emailEl.value = ''; }
+  _shareSuggestHide();
+
+  const bad = _shareChips.filter(function (c) { return !c.valid; });
+  if (bad.length) {
+    toast(bad.length === 1
+      ? bad[0].email + ' is not a valid email address'
+      : bad.length + ' entries are not valid email addresses', 'error');
+    emailEl.focus();
+    return;
+  }
+
+  let emails = _shareChips.map(function (c) { return c.email; });
+  if (!emails.length) {
     toast('Enter a valid email address', 'error');
     emailEl.focus();
     return;
   }
 
-  if (!isBulk && ctx.users.some(u => (u.username || '').toLowerCase() === email.toLowerCase())) {
-    toast(email + ' already has access', 'info');
-    return;
+  // Someone already on the project is dropped rather than sent, and said so -
+  // but only the ones that are, so four new people still go through.
+  if (!isBulk) {
+    const have = (ctx.users || []).map(function (u) {
+      return (u.username || '').toLowerCase();
+    });
+    const already = emails.filter(function (e) { return have.indexOf(e) !== -1; });
+    emails = emails.filter(function (e) { return have.indexOf(e) === -1; });
+    if (already.length) {
+      toast(already.join(', ') + (already.length === 1 ? ' already has' : ' already have')
+        + ' access', 'info');
+    }
+    if (!emails.length) { _shareChipsReset(); return; }
   }
+
   emailEl.disabled = true; roleEl.disabled = true;
   try {
     let r;
     if (isBulk) {
-
-      r = await pyApi('bulk_share', ctx.bulkProjectIds, [email], role, false, null, '', 'READ_USER');
+      r = await pyApi('bulk_share', ctx.bulkProjectIds, emails, role, false, null, '', 'READ_USER');
     } else {
-      r = await pyApi('add_share', ctx.projectId, email, role);
+      r = await pyApi('add_shares', ctx.projectId, emails, role);
     }
     if (r && r.error) { toast(r.error, 'error'); return; }
-    emailEl.value = '';
+
     if (isBulk) {
       const n = r.ownedCount || 0;
       const skipped = (r.skipped || []).length;
-      const msg = `Shared with ${email} on ${n} project${n === 1 ? '' : 's'}`
-                + (skipped ? ` (${skipped} skipped — not owner)` : '');
-      toast(msg, 'success');
+      const who = _shareNameList(r.emailsAdded || emails);
+      toast(`Shared with ${who} on ${n} project${n === 1 ? '' : 's'}`
+            + (skipped ? ` (${skipped} skipped — not owner)` : ''), 'success');
+      _shareChipsReset();
     } else {
-      toast(r.message || `Shared with ${email}`, 'success');
+      // Per recipient, because the request is one call but the outcome is not
+      // one answer. Saying "shared" over a list where one address bounced is
+      // the kind of false report that gets found out a week later.
+      const results = r.results || [];
+      const ok = results.filter(function (x) { return x.ok; }).map(function (x) { return x.email; });
+      const failed = results.filter(function (x) { return !x.ok; });
+      if (ok.length) toast('Shared with ' + _shareNameList(ok), 'success');
+      failed.forEach(function (x) {
+        toast(x.email + ' — ' + (x.message || 'could not be added'), 'error');
+      });
+      if (!ok.length && !failed.length) toast('Shared', 'success');
+
+      // Keep the ones that did not work so he can fix a typo in place.
+      _shareChips = failed.map(function (x) { return { email: x.email, valid: true }; });
+      _shareChipsRender();
+      emailEl.value = '';
       await _shareRefresh();
     }
 
+    await _shareLoadRecent();
     _scheduleOpRefresh();
   } catch (err) {
     toast('Add failed: ' + err.message, 'error');
@@ -3002,6 +3302,13 @@ async function _shareAdd() {
     emailEl.disabled = false; roleEl.disabled = false;
     emailEl.focus();
   }
+}
+
+function _shareNameList(list) {
+  const items = (list || []).slice();
+  if (items.length <= 1) return items[0] || '';
+  if (items.length === 2) return items[0] + ' and ' + items[1];
+  return items.slice(0, -1).join(', ') + ' and ' + items[items.length - 1];
 }
 
 async function _shareRemove(email) {

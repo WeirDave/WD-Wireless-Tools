@@ -54,3 +54,4 @@ NUL
 # Local diagnostics - real paths and hostnames, never published.
 logs/
 *.log
+share_recipients.json

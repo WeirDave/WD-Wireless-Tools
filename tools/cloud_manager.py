@@ -21,6 +21,7 @@ from pathlib import Path
 import requests
 
 from tools.settings import get_destinations as _get_suite_destinations
+from tools import share_recipients
 from tools.settings import load_settings as _load_suite_settings
 from tools.settings import update_settings as _update_suite_settings
 
@@ -1780,6 +1781,21 @@ def pick_folder_dialog(initial=""):
         return ""
 
 
+#: Ekahau answers per address with free text. There is no status code in
+#: there, so "did it work" is read off the wording - and the default has to be
+#: success, because the common case is an empty string and treating that as a
+#: failure would report every working share as broken.
+_SHARE_FAILURE_WORDS = ("not found", "invalid", "error", "failed", "cannot",
+                        "could not", "unable", "does not exist", "denied")
+
+
+def _share_message_is_failure(message) -> bool:
+    text = str(message or "").strip().lower()
+    if not text:
+        return False
+    return any(word in text for word in _SHARE_FAILURE_WORDS)
+
+
 class CloudManager:
     def __init__(self):
         self.api = None
@@ -2331,21 +2347,73 @@ class CloudManager:
             return {"error": str(e)}
 
     def add_share(self, project_id, email, role="READ_USER"):
+        """One recipient. Kept because callers and tests use it; it delegates."""
+        out = self.add_shares(project_id, [email], role)
+        if out.get("error"):
+            return out
+        first = (out.get("results") or [{}])[0]
+        return {"ok": True, "email": first.get("email", ""),
+                "message": first.get("message", ""),
+                "results": out.get("results", [])}
+
+    def add_shares(self, project_id, emails, role="READ_USER"):
+        """Several recipients, in one request, reported one by one.
+
+        Ekahau's endpoint has always taken `emailAddresses` as an array - the
+        one-at-a-time limit was ours, in the form. So this is a single call
+        rather than a loop, and nothing here has to pretend a sequence of
+        requests was atomic.
+
+        It also answers per recipient, in `responsePerEmailAddress`, which is
+        what makes honest reporting possible: "shared with two of three, and
+        here is which one did not" rather than one verdict covering everybody.
+        """
         if not self._ensure():
             return {"error": "Not connected"}
-        if not project_id or not email:
-            return {"error": "projectId and email are required"}
+        if not project_id:
+            return {"error": "projectId is required"}
 
+        wanted, invalid = [], []
+        for raw in (emails or []):
+            for candidate in share_recipients.split_addresses(str(raw)):
+                if share_recipients.looks_like_email(candidate):
+                    if candidate not in wanted:
+                        wanted.append(candidate)
+                elif candidate not in invalid:
+                    invalid.append(candidate)
+        if not wanted:
+            return {"error": "No valid email address to share with."}
 
-        email = email.strip().lower()
         try:
-            r = self.api.add_project_share(project_id, email, role)
-
-            per_email = ((r or [{}])[0] or {}).get("responsePerEmailAddress", {})
-            msg = per_email.get(email, "")
-            return {"ok": True, "email": email, "message": msg}
+            r = self.api.bulk_add_shares([project_id], wanted, role)
         except Exception as e:
             return {"error": str(e)}
+
+        per_email = {}
+        for row in (r or []):
+            if isinstance(row, dict):
+                per_email.update(row.get("responsePerEmailAddress") or {})
+
+        results, succeeded = [], []
+        for email in wanted:
+            message = per_email.get(email, "")
+            # Ekahau reports a per-address problem as text against that
+            # address. An empty entry is the quiet success case, which is what
+            # the single-recipient path has always treated it as.
+            ok = not _share_message_is_failure(message)
+            results.append({"email": email, "ok": ok, "message": message})
+            if ok:
+                succeeded.append(email)
+        for email in invalid:
+            results.append({"email": email, "ok": False,
+                            "message": "That does not look like an email address."})
+
+        if succeeded:
+            share_recipients.remember(succeeded)
+
+        return {"ok": bool(succeeded), "results": results,
+                "shared": succeeded, "invalid": invalid}
+
 
     def remove_share(self, project_id, email):
         if not self._ensure():
@@ -2377,7 +2445,14 @@ class CloudManager:
         project_ids = [p for p in (project_ids or []) if p]
         if not project_ids:
             return {"error": "No projects selected"}
-        emails = [e.strip().lower() for e in (emails or []) if e and "@" in e]
+        # The same splitter the single-project path uses, so a list pasted
+        # into the bulk form behaves identically to one pasted into the other.
+        parsed = []
+        for raw in (emails or []):
+            for candidate in share_recipients.split_addresses(str(raw)):
+                if share_recipients.looks_like_email(candidate) and candidate not in parsed:
+                    parsed.append(candidate)
+        emails = parsed
         if not emails and not share_with_group:
             return {"error": "Provide at least one email or enable group share"}
         my_email = (self.api.user_email or "").strip().lower()
@@ -2410,6 +2485,7 @@ class CloudManager:
                 self.api.bulk_add_shares(owned_ids, emails, role)
                 results["emailsAdded"] = emails
                 results["role"] = role
+                share_recipients.remember(emails)
             except Exception as e:
                 results["emailError"] = str(e)
 

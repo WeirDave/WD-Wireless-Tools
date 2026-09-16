@@ -442,8 +442,18 @@
     <div class="share-add">
       <label class="share-add-label">Share with someone</label>
       <div class="share-add-row">
-        <input type="email" id="shareEmail" placeholder="email@company.com"
-               autocomplete="off" onkeydown="if(event.key==='Enter')_shareAdd()">
+        <div class="share-chips-field" id="shareChipsField"
+             onclick="document.getElementById('shareEmail').focus()">
+          <span class="share-chips" id="shareChips"></span>
+          <input type="text" id="shareEmail" placeholder="email@company.com"
+                 autocomplete="off" aria-autocomplete="list"
+                 aria-controls="shareSuggest"
+                 oninput="_shareEmailInput(event)"
+                 onpaste="_shareEmailPaste(event)"
+                 onblur="_shareEmailBlur()"
+                 onkeydown="_shareEmailKey(event)">
+          <div class="share-suggest" id="shareSuggest" hidden></div>
+        </div>
         <select id="shareRole" title="Hover each option for a description of the role">
           <option value="READ_USER" title="Read-only access with option to create a copy">View only</option>
           <option value="WRITE_USER" title="Collaborative access without sharing privileges">Edit rights</option>
@@ -452,9 +462,12 @@
         <button class="btn btn-blue" onclick="_shareAdd()">Add</button>
       </div>
       <div class="share-add-note">
-        External emails (outside your Ekahau org) always come in as View
-        only — Ekahau limits write access to org members.
+        Add several at once — separate them with a comma, a semicolon or a
+        space, or paste a list. External emails (outside your Ekahau org)
+        always come in as View only — Ekahau limits write access to org
+        members.
       </div>
+      <div class="share-recent" id="shareRecent" hidden></div>
     </div>
     <div id="shareDangerSlot" class="share-danger-slot" hidden></div>
     <div class="modal-actions">

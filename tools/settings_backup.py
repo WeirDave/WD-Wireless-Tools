@@ -44,6 +44,10 @@ EXPORT_FILES = (
     "not_matches.json",
     "manual_matches.json",
     "config.json",
+    # Who he has shared cloud projects with. Included because losing it is
+    # exactly the small, annoying loss this export exists to prevent - and
+    # because it is his own list, in a file he makes deliberately and keeps.
+    "share_recipients.json",
 )
 EXPORT_DIRS = ("templates", "capacity", "report")
 

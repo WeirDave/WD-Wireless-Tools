@@ -181,6 +181,43 @@ each move is queued as its own card with its own retry. A project whose local
 and cloud copies are matched moves **both** sides, so the pair survives the
 move.
 
+### Share a project with people
+
+**Menu → Manage Sharing** on a project, then the **Share with someone** box.
+
+**Add several people at once.** Separate addresses with a **comma, a semicolon
+or a space**, or paste a list — any of those, mixed in any combination. A list
+copied out of Outlook works, including the `Name <address>` form; the names are
+dropped and the addresses kept. Each address becomes its own removable tag, so
+correcting a typo means clicking the × on that one rather than editing a long
+line of text. Backspace in an empty box takes back the last one.
+
+Choose the role once in the dropdown beside the box — it applies to everyone
+you add in that go. It defaults to **View only**, and external addresses always
+arrive as View only regardless, because Ekahau limits write access to people
+inside your organisation.
+
+**One bad address does not throw away the good ones.** Anything that is not a
+valid address is outlined in red and left in place for you to fix. Everyone
+else still goes through, and the result is reported **per person** — so if one
+address bounces you are told which one, and the people it worked for are
+genuinely shared. Any address that failed stays in the box so you can correct
+it and try again.
+
+**It remembers who you have shared with.** Start typing and matching addresses
+appear beneath the box; arrow keys and Enter pick one. A **Recent** row under
+the box offers the last few directly. To drop someone from that list, click the
+× beside their name in the Recent row — it removes them from the suggestions
+only and changes nothing about who has access to anything.
+
+Only addresses that a share actually succeeded for are remembered, so a typo
+is never offered back to you.
+
+**This list stays on your computer.** It lives with your other settings, in
+`%USERPROFILE%\.wd_wireless_tools\share_recipients.json`, and is never sent
+anywhere. It is included in **Settings → Export settings**, so rebuilding a
+machine does not mean rebuilding the list from memory.
+
 ### Buttons that are greyed out
 
 The toolbar's bulk buttons switch on and off with what you have selected.
