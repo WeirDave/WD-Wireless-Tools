@@ -226,8 +226,13 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-seg-rm:hover { background:hsla(0,86%,59%,.12); color:#f87171; }
 [data-theme="light"] .tool-aprename .ar-seg-rm:hover { background:hsla(0,72%,51%,.1); color:#dc2626; }
 .tool-aprename .ar-add-wrap { position:relative; }
-.tool-aprename .ar-add-btn { display:flex; align-items:center; gap:5px; width:100%; padding:6px 9px; border:1px dashed var(--border,#444); border-radius:5px; background:none; color:var(--text-3,#555); font-size:12px; font-family:inherit; font-weight:500; cursor:pointer; transition:all .12s; }
-.tool-aprename .ar-add-btn:hover { border-color:var(--indigo,#6366f1); color:var(--indigo,#6366f1); background:hsla(239,84%,67%,.06); }
+/* This is an action, not chrome. It was a 12px dashed outline in the
+   muted text colour, sitting under the rows, and the word used for it
+   was "buried" - by the person who designed the tool. A name here is
+   built from parts, so the control that adds a part has to read as the
+   next thing to do. */
+.tool-aprename .ar-add-btn { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; padding:9px 12px; border:1px solid var(--indigo,#6366f1); border-radius:6px; background:hsla(239,84%,67%,.10); color:var(--indigo,#6366f1); font-size:13px; font-family:inherit; font-weight:600; cursor:pointer; transition:all .12s; }
+.tool-aprename .ar-add-btn:hover { background:hsla(239,84%,67%,.20); border-color:var(--indigo,#6366f1); }
 .tool-aprename .ar-add-menu { position:absolute; top:100%; left:0; right:0; margin-top:3px; background:var(--bg-3,#252538); border:1px solid var(--border,#444); border-radius:5px; box-shadow:0 6px 20px rgba(0,0,0,.4); z-index:10; overflow:hidden; }
 [data-theme="light"] .tool-aprename .ar-add-menu { background:#fff; box-shadow:0 6px 20px rgba(0,0,0,.12); }
 .tool-aprename .ar-add-item { display:flex; align-items:center; gap:7px; padding:7px 10px; border:none; background:none; color:var(--text,#ddd); font-family:inherit; font-size:12px; cursor:pointer; width:100%; text-align:left; }

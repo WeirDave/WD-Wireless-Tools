@@ -374,11 +374,36 @@
     }));
     if (!read) return;
 
+    /* A project's names are only a *scheme* if there is something to a name
+       besides the counter. `AP-1` splits into two parts and infers cleanly,
+       but it is the absence of a convention rather than one worth adopting -
+       and adopting it replaced his own structure with a single text box.
+
+       That is what happened: he opened a new site, whose APs arrive named
+       `AP-1`, and the builder came up with one text field. He read that as the
+       naming fields having been deleted, which for an experienced user of his
+       own tool is the starting state being wrong rather than his attention.
+
+       So a scheme is adopted when it carries at least two segments that are
+       not the counter; below that his saved structure stays, which on a new
+       site is exactly the one he is about to apply. */
+    var substantive = read.segments.filter(function (seg) {
+      return seg.type !== 'counter';
+    }).length;
+    if (substantive < 2) {
+      _inferred = null;
+      renderSegments();
+      renderNoSchemeNote(read);
+      updateAll();
+      return;
+    }
+
     _segments = read.segments.map(function (seg) {
       if (seg.type === 'text')    return { type: 'text', value: seg.value };
       if (seg.type === 'floor')   return { type: 'floor', value: '' };
       return { type: 'counter', tag: seg.tag, start: seg.start, digits: seg.digits };
     });
+    padSegments();
     var sepSel = $('arSepStructured');
     if (sepSel) {
       var has = Array.prototype.some.call(sepSel.options, function (o) {
@@ -390,6 +415,43 @@
     renderSegments();
     renderInferredNote(read);
     updateAll();
+  }
+
+  /* The builder has to look like what it is: a name built from parts.
+
+     Opening with one row says "this tool names one thing", which is not what
+     it does, and the way to a second row is a dashed grey button that reads as
+     chrome. Empty text segments contribute nothing to a name - the composer
+     skips any whose value is blank - so showing three costs nothing and makes
+     the structure legible before anything is typed. */
+  var MIN_VISIBLE_SEGMENTS = 3;
+
+  function padSegments() {
+    var counterAt = -1;
+    _segments.forEach(function (seg, i) {
+      if (seg.type === 'counter') counterAt = i;
+    });
+    while (_segments.length < MIN_VISIBLE_SEGMENTS) {
+      var blank = { type: 'text', value: '' };
+      if (counterAt >= 0) _segments.splice(counterAt, 0, blank);
+      else _segments.push(blank);
+      counterAt = counterAt >= 0 ? counterAt + 1 : counterAt;
+    }
+  }
+
+  /* Said when the file's names carry no structure to borrow. Worth saying
+     rather than staying silent: the previous behaviour quietly replaced his
+     structure and left no clue that it had read anything at all. */
+  function renderNoSchemeNote(read) {
+    var box = $('arInferred');
+    if (!box) return;
+    padSegments();
+    box.hidden = false;
+    box.innerHTML = '<div class="ar-inf-head">Nothing to read from this project</div>'
+      + '<div class="ar-inf-body">These APs are named <code>'
+      + esc((read.sample || '').toString()) + '</code>, which is a number and '
+      + 'nothing else — so your own pattern below is left as it was. '
+      + 'Edit it, or add segments, and nothing is renamed until you apply.</div>';
   }
 
   function renderInferredNote(read) {
@@ -707,6 +769,7 @@
         if (o.type === 'counter') return { type: 'counter', tag: o.tag || '', start: o.start || 1, digits: o.digits || 3 };
         return { type: 'text', value: '' };
       });
+      padSegments();
       renderSegments();
     }
     // Migrate old structured fields into segments
