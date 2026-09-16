@@ -387,8 +387,8 @@
   // while still drawing. The cropped preview costs nothing because it is a
   // viewport change rather than a new image - which is also why it cannot
   // accidentally become a commit.
-  function framedRegion() {
-    var b = box.boxes[box.current];
+  function framedRegion(ignoreBox) {
+    var b = ignoreBox ? null : box.boxes[box.current];
     // A cropped floor is framed exactly: that view is the result.
     if (b && box.applied && box.applied[box.current]) {
       return { x: b[0], y: b[1], w: b[2] - b[0], h: b[3] - b[1] };
@@ -434,10 +434,10 @@
     return { x: 0, y: 0, w: box.img.width, h: box.img.height };
   }
 
-  function fitView() {
+  function fitView(ignoreBox) {
     var cv = $('ptbCanvas');
     if (!box.img || !cv.width) return;
-    var r = framedRegion();
+    var r = framedRegion(ignoreBox);
     var s = Math.min(cv.width / r.w, cv.height / r.h) * 0.97;
     box.view.scale = s;
     box.view.x = (cv.width - r.w * s) / 2 - r.x * s;
@@ -469,7 +469,10 @@
                 box.img.width * box.view.scale, box.img.height * box.view.scale);
 
     var b = box.boxes[box.current];
-    if (!b) return;
+    if (!b) {
+      drawProposed(g, cv);
+      return;
+    }
 
     // Cropped: the kept region is the picture. No shading and no handles,
     // because there is nothing being chosen any more - this is the result.
@@ -519,6 +522,46 @@
       g.fillRect(p.x - hs / 2, p.y - hs / 2, hs, hs);
     });
 
+  }
+
+  // What automatic would keep on this floor, straight out of the report the
+  // server just sent - the same numbers the strip is quoting, so the picture
+  // and the words cannot disagree.
+  function proposedBox() {
+    var rep = window.__ptReport && window.__ptReport();
+    var found = null;
+    ((rep && rep.floors) || []).forEach(function (f) {
+      if (f.id === box.current && f.action === 'trimmed'
+          && f.offset && f.newSize) found = f;
+    });
+    if (!found) return null;
+    return [found.offset[0], found.offset[1],
+            found.offset[0] + found.newSize[0],
+            found.offset[1] + found.newSize[1]];
+  }
+
+  function drawProposed(g, cv) {
+    var b = proposedBox();
+    if (!b) return;
+    var a = toScreen(b[0], b[1]);
+    var c = toScreen(b[2], b[3]);
+    var x = Math.min(a.x, c.x), y = Math.min(a.y, c.y);
+    var w = Math.abs(c.x - a.x), h = Math.abs(c.y - a.y);
+
+    g.save();
+    g.fillStyle = 'rgba(0,0,0,0.38)';
+    g.beginPath();
+    g.rect(0, 0, cv.width, cv.height);
+    g.rect(x, y, w, h);
+    g.fill('evenodd');
+    g.restore();
+
+    g.save();
+    g.strokeStyle = 'rgba(74,158,255,0.85)';
+    g.lineWidth = 2;
+    g.setLineDash([7, 5]);
+    g.strokeRect(x, y, w, h);
+    g.restore();
   }
 
   function handlePoints(x, y, w, h) {
@@ -971,7 +1014,10 @@
   window.ptbFitView = function () {
     if (!box.img) return;
     sizeCanvas();
-    fitView();
+    // Ignore any rectangle on this floor. Reset means the view the plan opened
+    // with - the drawing framed, whatever has been drawn or cropped since -
+    // rather than a fresh fit around whatever is currently on it.
+    fitView(true);
     draw();
   };
 
@@ -1199,8 +1245,12 @@
   // Called when analyze returns: the content bounds are only known then, so a
   // view that is still the automatic one re-frames onto the drawing.
   window.__ptRefit = function () {
-    if (!box.img || !box.autoFramed) return;
-    fitView();
+    if (!box.img) return;
+    // The report is what the proposed rectangle is drawn from, so a new one
+    // always redraws - that is how changing the margin becomes visible. The
+    // framing only moves while it is still the automatic one, because pulling
+    // the plan out from under a pan is worse than a loose fit.
+    if (box.autoFramed) fitView();
     draw();
   };
 

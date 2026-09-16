@@ -416,22 +416,48 @@
 
   function didWhat(r) {
     var bits = [];
-    if (r.trimmed) {
-      bits.push('trimmed <b>' + r.trimmed + '</b> of ' + r.floorCount + ' '
-        + plural(r.floorCount, 'floor plan'));
+    var ran = r.ran || [];
+    var failed = {};
+    (r.failed || []).forEach(function (f) { failed[f.step] = f.error; });
+
+    if (ran.indexOf('trim') >= 0) {
+      if (failed.trim) bits.push('<b>did not trim</b>');
+      else if (r.trimmed) {
+        bits.push('trimmed <b>' + r.trimmed + '</b> of ' + r.floorCount + ' '
+          + plural(r.floorCount, 'floor plan'));
+      } else {
+        bits.push('<b>no floor plan needed trimming</b>');
+      }
     }
-    if (r.areasWritten && r.areasWritten.length) {
-      bits.push('put a requirement area on <b>' + r.areasWritten.length + '</b> '
-        + plural(r.areasWritten.length, 'floor'));
+
+    if (ran.indexOf('areas') >= 0) {
+      if (failed.areas) bits.push('<b>did not add requirement areas</b>');
+      else if (r.areasWritten && r.areasWritten.length) {
+        bits.push('put a requirement area on <b>' + r.areasWritten.length + '</b> '
+          + plural(r.areasWritten.length, 'floor'));
+      } else {
+        bits.push('<b>every floor already had a requirement area</b>');
+      }
+      if (r.areasRetightened && r.areasRetightened.length) {
+        bits.push('re-measured <b>' + r.areasRetightened.length + '</b> '
+          + plural(r.areasRetightened.length, 'area') + ' that still covered the whole plan');
+      }
     }
-    if (r.areasRetightened && r.areasRetightened.length) {
-      bits.push('re-measured <b>' + r.areasRetightened.length + '</b> '
-        + plural(r.areasRetightened.length, 'area') + ' that still covered the whole plan');
+
+    if (ran.indexOf('walls') >= 0) {
+      if (failed.walls) bits.push('<b>did not add wall types</b>');
+      else if (r.wallTypesAdded && r.wallTypesAdded.length) {
+        bits.push('added <b>' + r.wallTypesAdded.length + '</b> wall '
+          + plural(r.wallTypesAdded.length, 'type'));
+      } else if (r.wallTypesPresent) {
+        bits.push('<b>all ' + r.wallTypesPresent + '</b> wall '
+          + plural(r.wallTypesPresent, 'type') + ' from that template '
+          + (r.wallTypesPresent === 1 ? 'was' : 'were') + ' already in the project');
+      } else {
+        bits.push('<b>no wall types to add</b>');
+      }
     }
-    if (r.wallTypesAdded && r.wallTypesAdded.length) {
-      bits.push('added <b>' + r.wallTypesAdded.length + '</b> wall '
-        + plural(r.wallTypesAdded.length, 'type'));
-    }
+
     return bits.length ? bits.join(', ') : 'no changes were needed';
   }
 
@@ -453,11 +479,14 @@
     lastWritten = r.path || null;
     var step = r.step || {};
     var summary = didWhat({
+      ran: r.ran,
+      failed: r.failed,
       trimmed: (step.trim || {}).trimmedCount,
       floorCount: (step.trim || {}).floorCount,
       areasWritten: (step.areas || {}).floorsWritten,
       areasRetightened: (step.retighten || []).map(function (x) { return x.floorName; }),
       wallTypesAdded: ((step.walls || {}).add || []).map(function (x) { return x.name; }),
+      wallTypesPresent: ((step.walls || {}).skip || []).length,
     });
     // A pass that did two of three things is a success with a gap in it, and
     // the gap has to be as visible as the success - otherwise he opens the

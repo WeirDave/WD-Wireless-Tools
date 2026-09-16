@@ -193,9 +193,23 @@ class EditorMarkupTests(unittest.TestCase):
         self.assertIn("ptb-stage", PLANTRIM_HTML.read_text(encoding="utf-8"))
 
     def test_boxes_are_not_written_into_the_esx(self):
-        """The archive is Ekahau's format; our state lives beside the app."""
+        """The archive is Ekahau's format; our state lives beside the app.
+
+        This used to grep the source for the literal `.wd_wireless_tools`,
+        which stopped meaning anything the moment that path moved behind
+        `user_dir()` so tests could be pointed at a scratch directory. The
+        property worth holding is where the file actually lands, so that is
+        what is checked now - and that nothing here opens an archive.
+        """
+        import sys
+        sys.path.insert(0, str(ROOT))
+        from tools import plantrim_store, user_dir
+
+        self.assertTrue(
+            str(plantrim_store.STORE).startswith(str(user_dir.user_dir())),
+            "the boxes must live in the user-data directory, not in the .esx")
+        self.assertEqual(plantrim_store.STORE.suffix, ".json")
         store = (ROOT / "tools" / "plantrim_store.py").read_text(encoding="utf-8")
-        self.assertIn(".wd_wireless_tools", store)
         self.assertNotIn("zipfile", store)
 
 
@@ -252,7 +266,7 @@ class HandleDragTests(unittest.TestCase):
     globalThis.floorById = id => box.floors.find(f => f.id === id);
 
     eval(slice('  var HANDLE_HIT_CSS', '  var box = {'));
-    eval(slice('  function toImage(px, py)', '  function fitView()'));
+    eval(slice('  function toImage(px, py)', '  function fitView('));
     eval(slice('  function handlePoints(x, y, w, h)', '  function updateReadout()'));
     eval(slice('  function clampBox(b, f)', '  function onWheel(e)'));
 
@@ -473,7 +487,7 @@ class WheelTests(unittest.TestCase):
     globalThis.showEvidence=()=>{};
     globalThis.floorById = id => box.floors.find(f=>f.id===id);
     eval(slice('  var HANDLE_HIT_CSS', '  var box = {'));
-    eval(slice('  function toImage(px, py)', '  function fitView()'));
+    eval(slice('  function toImage(px, py)', '  function fitView('));
     eval(slice('  function handlePoints(x, y, w, h)', '  function updateReadout()'));
     eval(slice('  function clampBox(b, f)', '  function floorState(rep, id)'));
     const sc = Math.min(canvas.width/5000, canvas.height/3750) * 0.97;
@@ -958,7 +972,7 @@ class ContentFramingTests(unittest.TestCase):
                        img:{ width:10000, height:7500 }, view:{ x:0, y:0, scale:1 } };
     globalThis.window = {};
     globalThis.$ = () => ({ width:1200, height:600 });
-    eval(slice('  function framedRegion()', '  function fitView()'));
+    eval(slice('  function framedRegion(', '  function fitView('));
     const REPORT = { floors: [{ id:'f1', action:'trimmed',
                                 offset:[3200,1800], newSize:[3275,4469] }] };
     """
@@ -1078,7 +1092,7 @@ class ReachableHandleTests(unittest.TestCase):
         offset:[3200,1800], newSize:[3275,4469] }] }) };
     eval(slice('  var HANDLE_HIT_CSS', '  function $(id)'));
     eval(slice('  function toImage(px, py)', '  function sizeCanvas()'));
-    eval(slice('  function framedRegion()', '  function draw()'));
+    eval(slice('  function framedRegion(', '  function draw()'));
     eval(slice('  function handlePoints(x, y, w, h)',
                '  // -------------------------------------------------------------- readout'));
     // box is declared by the first slice, so it is populated after the evals.
@@ -1535,6 +1549,136 @@ class ApplyToAllTests(unittest.TestCase):
           console.log(JSON.stringify({ sent: window.__ptBoxes() }));
         """)
         self.assertEqual(list(out["sent"] or {}), ["b"])
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class TheProposedCropIsVisible(unittest.TestCase):
+    """Automatic had no rectangle on screen, only numbers in the strip.
+
+    "choosing the different margin should show visible different bounding
+    boxes" - and choosing one changed nothing visible, because the automatic
+    crop was never drawn at all. The margin was reaching the output the whole
+    time; what was missing was any way to see what you were picking before
+    committing to it.
+
+    The rectangle is taken from the report the server just sent, so the picture
+    and the sizes quoted beside it cannot disagree.
+    """
+
+    HARNESS = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    function slice(a, b) {
+      const i = src.indexOf(a), j = src.indexOf(b, i);
+      if (i < 0 || j < 0) throw new Error('missing ' + a);
+      return src.slice(i, j);
+    }
+    const CV = { width: 600, height: 400 };
+    globalThis.$ = () => CV;
+    globalThis.window = {};
+    eval(slice('  var HANDLE_HIT_CSS', '  function $(id)'));
+    eval(slice('  function toImage(px, py)', '  function sizeCanvas()'));
+    eval(slice('  function framedRegion(', '  function draw()'));
+    eval(slice('  function proposedBox()', '  function handlePoints'));
+    box.current = 'f1'; box.applied = {}; box.boxes = {};
+    box.img = { width: 1200, height: 900 };
+    box.view = { x: 0, y: 0, scale: 1 };
+    function report(offset, size) {
+      window.__ptReport = () => ({ floors: [{ id: 'f1', action: 'trimmed',
+        offset: offset, newSize: size }] });
+    }
+    """
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, encoding="utf-8",
+                              timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_the_rectangle_comes_from_the_report(self):
+        out = self.run_js("""
+          report([440, 340], [320, 220]);
+          console.log(JSON.stringify({ box: proposedBox() }));
+        """)
+        self.assertEqual(out["box"], [440, 340, 760, 560])
+
+    def test_a_different_margin_is_a_different_rectangle(self):
+        """The whole complaint, in one assertion."""
+        out = self.run_js("""
+          report([490, 390], [220, 120]); const tight = proposedBox();
+          report([440, 340], [320, 220]); const normal = proposedBox();
+          report([380, 280], [440, 340]); const wide = proposedBox();
+          console.log(JSON.stringify({ tight, normal, wide }));
+        """)
+        self.assertNotEqual(out["tight"], out["normal"])
+        self.assertNotEqual(out["normal"], out["wide"])
+
+    def test_a_floor_that_will_not_be_trimmed_has_no_rectangle(self):
+        """Nothing proposed means nothing drawn, rather than a box round the
+        whole sheet implying a crop that is not going to happen."""
+        out = self.run_js("""
+          window.__ptReport = () => ({ floors: [
+            { id: 'f1', action: 'skipped', reason: 'already fills the canvas' }] });
+          console.log(JSON.stringify({ box: proposedBox() }));
+        """)
+        self.assertIsNone(out["box"])
+
+    def test_draw_falls_through_to_it_when_no_box_is_drawn(self):
+        js = PLANTRIM_JS.read_text(encoding="utf-8")
+        body = js[js.index("  function draw()"):]
+        body = body[:body.index("  function proposedBox")]
+        self.assertIn("drawProposed(g, cv)", body,
+                      "draw() must render the proposal when there is no manual box")
+
+    def test_a_new_report_always_redraws(self):
+        """The margin only becomes visible if a fresh report repaints. Refit
+        used to return early unless the view was still the automatic one."""
+        js = PLANTRIM_JS.read_text(encoding="utf-8")
+        body = js[js.index("window.__ptRefit = function"):]
+        body = body[:body.index(chr(10) + "  };") + 5]
+        self.assertIn("draw();", body)
+        self.assertNotIn("if (!box.img || !box.autoFramed) return;", body,
+                         "a report must repaint even when he has panned")
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class ResetViewGoesBackToTheOpeningView(unittest.TestCase):
+    """"the reset view isn't resetting" - it re-framed whatever rectangle was
+    on the floor, so after drawing one it zoomed into that instead of going
+    back to the plan."""
+
+    HARNESS = TheProposedCropIsVisible.HARNESS
+
+    def run_js(self, script):
+        proc = subprocess.run(["node", "-e", self.HARNESS + script, str(PLANTRIM_JS)],
+                              capture_output=True, text=True, encoding="utf-8",
+                              timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError("node failed: " + proc.stderr)
+        return json.loads(proc.stdout)
+
+    def test_a_drawn_rectangle_does_not_capture_the_framing(self):
+        out = self.run_js("""
+          report([440, 340], [320, 220]);
+          const opening = JSON.stringify(framedRegion(true));
+          box.boxes.f1 = [500, 400, 560, 440];       // a small box drawn on it
+          const withBox = JSON.stringify(framedRegion(false));
+          const reset = JSON.stringify(framedRegion(true));
+          console.log(JSON.stringify({ opening, withBox, reset }));
+        """)
+        self.assertNotEqual(out["withBox"], out["opening"],
+                            "precondition: a box does change the normal framing")
+        self.assertEqual(out["reset"], out["opening"],
+                         "reset has to ignore the box and go back")
+
+    def test_reset_asks_for_the_opening_framing(self):
+        js = PLANTRIM_JS.read_text(encoding="utf-8")
+        body = js[js.index("window.ptbFitView = function"):]
+        body = body[:body.index(chr(10) + "  };") + 5]
+        self.assertIn("fitView(true)", body,
+                      "Reset view must ask for the framing that ignores the box")
 
 
 if __name__ == "__main__":

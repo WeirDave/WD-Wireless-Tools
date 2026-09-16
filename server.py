@@ -1003,6 +1003,12 @@ def api_prep(action):
             "areasRetightened": [r.get("floorName") for r in (step.get("retighten") or [])],
             "wallTypesAdded": [a.get("name") for a in (walls.get("add") or [])],
             "wallTypesSkipped": len(walls.get("skip") or []),
+            # The download path builds its summary from this header, so a step
+            # that added nothing has to be able to say so here too - otherwise
+            # the dropped-file route stays silent about it while the
+            # open-from-disk route explains itself.
+            "wallTypesPresent": len(walls.get("skip") or []),
+            "ran": out.get("ran"),
             # A step that refused has to travel with the file. Without this the
             # page said what it had done and nothing about what it had not, and
             # he opened a project expecting areas that were never written. The
