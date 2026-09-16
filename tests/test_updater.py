@@ -1382,3 +1382,126 @@ class TheBannerSaysSomethingTrueTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheHostileCasesStayCalmTests(unittest.TestCase):
+    """Every way git can refuse, asked of the thing the user actually sees.
+
+    The update check shells out to git now, and a subprocess has more ways to
+    go wrong than an HTTP call does. The bar is not that these are handled
+    somewhere - it is that the status endpoint still answers, with a short
+    reason, and that nothing raw from git reaches the page. A traceback on the
+    home page is worse than no update check at all, because the check is an
+    optimisation and the page is the whole product.
+
+    `_run_git` converts every one of these into `UpdateError`, and both remote
+    lookups swallow that and return None. These tests hold the conversion at
+    both ends: the function returns None, and the request comes back 200.
+    """
+
+    def setUp(self):
+        from server import app
+        self.client = app.test_client()
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        (self.tmp / ".git").mkdir()
+
+    def _status(self):
+        res = self.client.get("/api/update/status")
+        return res.status_code, json.loads(res.data)
+
+    def _failing_git(self, exc=None, returncode=1, stderr=""):
+        """subprocess.run replaced by one specific way of going wrong."""
+        def run(*a, **kw):
+            if exc is not None:
+                raise exc
+            return subprocess.CompletedProcess(a[0] if a else [], returncode,
+                                               stdout="", stderr=stderr)
+        return patch.object(updater.subprocess, "run", side_effect=run)
+
+    # ------------------------------------------------------ the five cases --
+
+    def test_git_is_not_on_the_path(self):
+        with self._failing_git(exc=FileNotFoundError(2, "not found")):
+            self.assertFalse(updater.git_available())
+            self.assertIsNone(updater.remote_branch_state(self.tmp))
+            self.assertIsNone(updater.remote_release_tag(self.tmp))
+
+    def test_there_is_no_git_folder(self):
+        bare = self.tmp / "nogit"
+        bare.mkdir()
+        self.assertFalse(updater.is_git_install(bare))
+        self.assertIsNone(updater.remote_branch_state(bare))
+
+    def test_the_network_is_unreachable(self):
+        with self._failing_git(returncode=128, stderr=(
+                "fatal: unable to access 'https://github.com/o/r/': "
+                "Could not resolve host: github.com")):
+            self.assertIsNone(updater.remote_branch_state(self.tmp))
+            self.assertIsNone(updater.remote_release_tag(self.tmp))
+
+    def test_the_remote_refuses_authentication(self):
+        with self._failing_git(returncode=128, stderr=(
+                "remote: Invalid username or password.\n"
+                "fatal: Authentication failed for "
+                "'https://github.com/o/r/'")):
+            self.assertIsNone(updater.remote_branch_state(self.tmp))
+            self.assertIsNone(updater.remote_release_tag(self.tmp))
+
+    def test_a_subprocess_that_never_returns(self):
+        with self._failing_git(
+                exc=subprocess.TimeoutExpired(cmd="git ls-remote", timeout=30)):
+            self.assertIsNone(updater.remote_branch_state(self.tmp))
+            self.assertIsNone(updater.remote_release_tag(self.tmp))
+
+    def test_git_is_present_but_cannot_be_executed(self):
+        """OSError that is not FileNotFoundError - a blocked or unreadable git.
+
+        This one escaped. `FileNotFoundError` had its own branch and every
+        caller guards on `UpdateError`, so a `PermissionError` from a policy
+        that blocks the binary went straight past both and out of the request.
+        """
+        with self._failing_git(exc=PermissionError(13, "Access is denied")):
+            self.assertIsNone(updater.remote_branch_state(self.tmp))
+            self.assertIsNone(updater.remote_release_tag(self.tmp))
+
+    # ------------------------------------------- and the page still answers --
+
+    def test_the_status_endpoint_survives_every_one_of_them(self):
+        cases = {
+            "git missing": FileNotFoundError(2, "not found"),
+            "git unrunnable": PermissionError(13, "Access is denied"),
+            "never returns": subprocess.TimeoutExpired(cmd="git", timeout=30),
+            "some new OSError": OSError(99, "something nobody predicted"),
+        }
+        for name, exc in cases.items():
+            with self.subTest(case=name):
+                with self._failing_git(exc=exc), \
+                     patch.object(updater, "detect_install", return_value={
+                         "isGitInstall": True, "currentVersion": "2.5.0",
+                         "releasesUrl": "https://github.com/o/r/releases",
+                         "method": "git"}), \
+                     patch.object(updater, "fetch_latest_release",
+                                  side_effect=updater.UpdateError("no api")):
+                    code, out = self._status()
+                self.assertEqual(200, code, f"{name} took the endpoint down")
+                self.assertFalse(out.get("updateAvailable"))
+                self.assertTrue(out.get("trackingLabel"),
+                                "the panel still has to say what it follows")
+
+    def test_a_failure_message_never_carries_raw_git_output(self):
+        """Whatever git printed, the user gets a sentence, not a transcript.
+
+        Multi-line stderr on screen is the shape of the thing that gets
+        reported as "there was an error and it is too long to type".
+        """
+        noisy = ("remote: Invalid username or password.\n"
+                 "fatal: Authentication failed for 'https://github.com/o/r/'\n"
+                 "hint: see https://example.invalid/auth for more\n")
+        proc = subprocess.CompletedProcess(["git", "fetch"], 128,
+                                           stdout="", stderr=noisy)
+        message = updater._friendly_git_error(["fetch"], proc)
+        self.assertNotIn("\n", message, "the message is one line")
+        for fragment in ("remote:", "fatal:", "hint:", "Invalid username"):
+            self.assertNotIn(fragment, message,
+                             f"raw git output leaked: {fragment}")

@@ -1181,10 +1181,23 @@ def api_update_status():
     branch = None
     tag = None
     if info.get("isGitInstall"):
-        branch = updater.remote_branch_state()
+        # Neither lookup is allowed to fail the request. Both already return
+        # None for anything git can report, and both are optimisations over
+        # the API path - so there is no answer either can give that is worth
+        # a 500. What is left is the unreportable: a git binary that cannot be
+        # executed at all, a folder that disappeared mid-request. Those used to
+        # escape, and a status check that 500s is exactly how "couldn't check
+        # for updates" turns into a wall of traceback on the page.
+        try:
+            branch = updater.remote_branch_state()
+        except Exception:
+            branch = None
         if branch:
             payload["branch"] = branch
-        tag = updater.remote_release_tag()
+        try:
+            tag = updater.remote_release_tag()
+        except Exception:
+            tag = None
 
     # Which question this install is being asked, in one word, because not
     # knowing it is what made this confusing for a week: a checkout that

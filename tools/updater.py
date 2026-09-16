@@ -235,6 +235,13 @@ def _run_git(args, cwd: Path, check: bool = True, timeout: int | None = None):
         )
     except FileNotFoundError:
         raise UpdateError("Git is not installed or not on PATH.")
+    except OSError as exc:
+        # A git that is on PATH and still cannot be run - no execute
+        # permission, a broken symlink, WinError 5 from a policy that blocks
+        # the binary. FileNotFoundError is the common case and has its own
+        # sentence; without this branch the rest escape as OSError, past every
+        # caller that guards on UpdateError, and out of the request as a 500.
+        raise UpdateError(f"Git could not be run ({exc.strerror or exc}).")
     except subprocess.TimeoutExpired:
         # Naming the command and the wait is the difference between a report
         # that can be acted on and "it timed out". A local command timing out
