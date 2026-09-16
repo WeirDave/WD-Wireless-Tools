@@ -24,6 +24,7 @@ on his own machine and pastes from deliberately.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import logging
 import logging.handlers
 import os
@@ -37,10 +38,19 @@ LOGGER_NAME = "wd"
 LOG_DIR_NAME = "logs"
 LOG_FILE_NAME = "wd-wireless-tools.log"
 
-# Small enough that he can open it, big enough to hold a session's worth of
-# noise. Four files total, so the ceiling is about 4 MB however long it runs.
-MAX_BYTES = 1_000_000
-BACKUP_COUNT = 3
+# He asked how large it can get, and "it cannot exceed 10 MB" is a better
+# answer than an estimate - so both limits are enforced rather than hoped for.
+#
+# Seven days because that is what he asked for, and because "it happened
+# yesterday" should be answerable by opening yesterday's file. Rotation is by
+# day rather than by size for the same reason: a size-rolled file tells you
+# nothing about when it covers.
+RETAIN_DAYS = 7
+MAX_FILE_BYTES = 2_000_000      # one day's file, before it rolls to a part
+MAX_TOTAL_BYTES = 8_000_000     # everything kept, pruned oldest-first
+# Worst case is one live file that has not yet rolled on top of a pruned set,
+# so the true ceiling is MAX_TOTAL_BYTES + MAX_FILE_BYTES.
+HARD_CEILING_BYTES = MAX_TOTAL_BYTES + MAX_FILE_BYTES
 
 _FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 
@@ -60,14 +70,132 @@ def get_logger() -> logging.Logger:
     return logging.getLogger(LOGGER_NAME)
 
 
+class DailyCappedFileHandler(logging.FileHandler):
+    """A day per file, seven days kept, and a ceiling it cannot pass.
+
+    **It appends, and it never truncates on startup.** That is the whole point
+    of the class: a handler that opened in "w" would have destroyed the only
+    copy of a fault the moment he restarted to see whether it recurred, which
+    is exactly the sequence that lost one.
+
+    The live file always has the same name, so the path shown in About stays
+    true. Yesterday's is renamed with its own date beside it.
+    """
+
+    def __init__(self, path, retain_days: int = RETAIN_DAYS,
+                 max_file_bytes: int = MAX_FILE_BYTES,
+                 max_total_bytes: int = MAX_TOTAL_BYTES):
+        self._live = Path(path)
+        self._retain_days = retain_days
+        self._max_file_bytes = max_file_bytes
+        self._max_total_bytes = max_total_bytes
+        self._day = self._today()
+        self._live.parent.mkdir(parents=True, exist_ok=True)
+        # mode "a": the existing file is continued, never replaced.
+        super().__init__(str(self._live), mode="a", encoding="utf-8",
+                         delay=True)
+
+    # -- naming ------------------------------------------------------------
+
+    @staticmethod
+    def _today() -> str:
+        return _dt.date.today().isoformat()
+
+    def _archive_name(self, day: str) -> Path:
+        stem = self._live.stem
+        candidate = self._live.with_name(f"{stem}.{day}.log")
+        part = 1
+        while candidate.exists():
+            candidate = self._live.with_name(f"{stem}.{day}.{part}.log")
+            part += 1
+        return candidate
+
+    def archives(self) -> list[Path]:
+        stem = self._live.stem
+        return sorted(
+            (p for p in self._live.parent.glob(f"{stem}.*.log")
+             if p != self._live),
+            key=lambda p: p.name)
+
+    # -- rotation ----------------------------------------------------------
+
+    def emit(self, record):
+        try:
+            self._roll_if_due()
+        except Exception:          # rotation must never lose the record
+            pass
+        super().emit(record)
+
+    def _roll_if_due(self) -> None:
+        today = self._today()
+        try:
+            size = self._live.stat().st_size
+        except OSError:
+            size = 0
+        if today == self._day and size < self._max_file_bytes:
+            return
+        self._roll(today)
+
+    def _roll(self, today: str) -> None:
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+        if self._live.exists():
+            try:
+                self._live.rename(self._archive_name(self._day))
+            except OSError:
+                return             # keep writing where we are rather than lose it
+        self._day = today
+        self.prune()
+
+    def prune(self) -> None:
+        """Drop anything past the window, then anything past the ceiling."""
+        cutoff = _dt.date.today() - _dt.timedelta(days=self._retain_days)
+        kept = []
+        for path in self.archives():
+            day = _day_of(path)
+            if day is not None and day < cutoff:
+                _unlink(path)
+            else:
+                kept.append(path)
+
+        def total() -> int:
+            files = kept + ([self._live] if self._live.exists() else [])
+            out = 0
+            for f in files:
+                try:
+                    out += f.stat().st_size
+                except OSError:
+                    pass
+            return out
+
+        while kept and total() > self._max_total_bytes:
+            _unlink(kept.pop(0))
+
+
+def _day_of(path: Path):
+    """The date in `<stem>.YYYY-MM-DD[.n].log`, or None if it has none."""
+    for part in path.name.split("."):
+        try:
+            return _dt.date.fromisoformat(part)
+        except ValueError:
+            continue
+    return None
+
+
+def _unlink(path: Path) -> None:
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
 def _file_handler() -> logging.Handler:
     log_dir().mkdir(parents=True, exist_ok=True)
-    handler = logging.handlers.RotatingFileHandler(
-        str(log_path()), maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT,
-        encoding="utf-8", delay=True,
-    )
+    handler = DailyCappedFileHandler(log_path())
     handler.setFormatter(logging.Formatter(_FORMAT))
     handler.setLevel(logging.INFO)
+    handler.prune()
     return handler
 
 
@@ -90,8 +218,14 @@ def install(quiet_console: bool = True,
             return None
 
         root = logging.getLogger()
-        root.setLevel(logging.INFO)
+        # Ours at INFO, everything else at WARNING. A file dominated by
+        # library chatter rotates the useful part out early, and the useful
+        # part is the reason the file exists. `waitress` does not log a line
+        # per request by default, and the queue-depth noise it does produce is
+        # already filtered in server.py.
+        root.setLevel(logging.WARNING)
         root.addHandler(handler)
+        get_logger().setLevel(logging.INFO)
 
         _install_excepthooks(quiet_console)
         _installed = True

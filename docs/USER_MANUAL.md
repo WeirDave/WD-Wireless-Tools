@@ -1049,8 +1049,18 @@ window when the suite starts, just under the address.
 
 Everything that goes wrong is written there — including errors that only ever
 appeared in the terminal window and used to vanish the moment it was closed.
-Each entry is timestamped, and the file is capped in size so it cannot grow
-without bound.
+Each entry is timestamped, and every launch writes a line saying which version
+started, so a file you send answers "which build was this" on its own.
+
+**It is kept across restarts, and the last seven days are retained.** Starting
+the suite never wipes it, which matters because the natural reaction to an
+error is to restart and see whether it happens again. Yesterday's entries are
+filed under yesterday's date beside the live file.
+
+**It cannot exceed 10 MB in total**, and in practice it is far smaller than
+that: on a healthy install it grows by about **90 bytes per launch** and
+nothing else — browsing every tool in the suite adds nothing at all. It only
+grows when something actually goes wrong, which is the point of it.
 
 If you hit something odd, that file is the thing to send. It stays on your own
 computer: nothing is uploaded, and it is not part of any release.

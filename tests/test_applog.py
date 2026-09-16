@@ -16,6 +16,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -68,17 +69,79 @@ class WhereTheLogLivesTests(_Isolated):
         root = Path(__file__).resolve().parent.parent
         self.assertNotIn(str(root), str(applog.log_path()))
 
-    def test_it_rotates_so_it_cannot_grow_without_bound(self):
+    def _handler(self):
         applog.install()
-        handlers = [h for h in logging.getLogger().handlers
-                    if isinstance(h, logging.handlers.RotatingFileHandler)]
-        self.assertTrue(handlers, "expected a rotating handler")
-        handler = handlers[0]
-        self.assertGreater(handler.maxBytes, 0)
-        self.assertGreater(handler.backupCount, 0)
-        ceiling = handler.maxBytes * (handler.backupCount + 1)
-        self.assertLessEqual(ceiling, 8_000_000,
-                             "the log has no sensible ceiling")
+        found = [h for h in logging.getLogger().handlers
+                 if isinstance(h, applog.DailyCappedFileHandler)]
+        self.assertTrue(found, "expected the daily capped handler")
+        return found[0]
+
+    def test_it_keeps_a_week_and_cannot_pass_its_ceiling(self):
+        """He asked how large it can get. The answer has to be enforced."""
+        self._handler()
+        self.assertEqual(7, applog.RETAIN_DAYS)
+        self.assertEqual(applog.MAX_TOTAL_BYTES + applog.MAX_FILE_BYTES,
+                         applog.HARD_CEILING_BYTES)
+        self.assertLessEqual(applog.HARD_CEILING_BYTES, 10_000_000)
+
+    def test_it_appends_and_never_truncates_on_startup(self):
+        """The one that cost a traceback.
+
+        A handler opening in "w" destroys the evidence at exactly the moment
+        someone restarts to see whether the fault recurs - which is the
+        sequence that happened.
+        """
+        handler = self._handler()
+        self.assertEqual("a", handler.mode)
+        applog.note_failure("first run", OSError("before the restart"))
+        logging.getLogger().removeHandler(handler)
+        handler.close()
+
+        applog._installed = False
+        self._handler()          # a second "launch" of the app
+        applog.note_failure("second run", OSError("after the restart"))
+
+        body = self.text()
+        self.assertIn("before the restart", body,
+                      "restarting destroyed the previous run's log")
+        self.assertIn("after the restart", body)
+
+    def test_a_file_older_than_the_window_is_dropped(self):
+        handler = self._handler()
+        stale = applog.log_dir() / "wd-wireless-tools.2020-01-01.log"
+        recent = (applog.log_dir() /
+                  f"wd-wireless-tools.{date.today() - timedelta(days=2)}.log")
+        for f in (stale, recent):
+            f.write_text("x", encoding="utf-8")
+        handler.prune()
+        self.assertFalse(stale.exists(), "a file past the window was kept")
+        self.assertTrue(recent.exists(), "a file inside the window was dropped")
+
+    def test_going_over_the_ceiling_drops_the_oldest_first(self):
+        handler = self._handler()
+        made = []
+        for days_ago in (6, 5, 4):
+            f = (applog.log_dir() /
+                 f"wd-wireless-tools.{date.today() - timedelta(days=days_ago)}.log")
+            f.write_text("y" * 400_000, encoding="utf-8")
+            made.append(f)
+        handler._max_total_bytes = 600_000
+        handler.prune()
+        self.assertFalse(made[0].exists(), "the oldest should have gone first")
+        self.assertTrue(made[-1].exists(), "the newest should have been kept")
+
+    def test_a_new_day_moves_yesterday_aside_under_its_own_date(self):
+        handler = self._handler()
+        applog.note_failure("yesterday", OSError("older entry"))
+        yesterday = str(date.today() - timedelta(days=1))
+        handler._day = yesterday          # pretend the process ran overnight
+        applog.note_failure("today", OSError("newer entry"))
+
+        archived = applog.log_dir() / f"wd-wireless-tools.{yesterday}.log"
+        self.assertTrue(archived.exists(), "yesterday was not filed by date")
+        self.assertIn("older entry", archived.read_text(encoding="utf-8"))
+        self.assertIn("newer entry", self.text())
+        self.assertNotIn("older entry", self.text())
 
     def test_install_survives_a_directory_it_cannot_create(self):
         """A log that cannot be written is not a reason to refuse to start."""
@@ -115,9 +178,10 @@ class WhatReachesTheFileTests(_Isolated):
         def boom():
             raise RuntimeError("raised on a background thread")
 
-        thread = threading.Thread(target=boom, name="probe")
-        thread.start()
-        thread.join(timeout=10)
+        with patch.object(applog, "console"):
+            thread = threading.Thread(target=boom, name="probe")
+            thread.start()
+            thread.join(timeout=10)
         body = self.text()
         self.assertIn("raised on a background thread", body)
         self.assertIn("probe", body)

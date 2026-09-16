@@ -308,10 +308,21 @@ appeared in his terminal on a machine three hours away, printed a wall of
 traceback, and was gone the moment the window was closed. One chance to see
 it, missed - that is what this exists for.
 
-- The file is `~/.wd_wireless_tools/logs/wd-wireless-tools.log`, rotating,
-  capped near 4 MB across four files. **Do not add a second log location.**
-  The user directory is where state lives; a second home for it is the same
-  bug as the two-store settings drift above.
+- The file is `~/.wd_wireless_tools/logs/wd-wireless-tools.log` - on Windows,
+  `%USERPROFILE%\.wd_wireless_tools\logs\`. **Do not add a second log
+  location.** The user directory is where state lives; a second home for it is
+  the same bug as the two-store settings drift above.
+- **It appends and is never truncated on startup**, and the last **7 days** are
+  kept, yesterday's filed under its own date. That mode is not an incidental
+  default: a handler opening in `w` destroys the evidence at the exact moment
+  someone restarts to see whether the fault recurs, which is the sequence that
+  lost one. Ceiling is `MAX_TOTAL_BYTES + MAX_FILE_BYTES` = **10 MB**,
+  enforced by pruning oldest-first, not estimated.
+- **Measured growth on a healthy install: 90 bytes per launch, and nothing
+  else** - browsing every tool and calling every endpoint added zero. Root
+  logger sits at WARNING and `wd` at INFO deliberately, so library chatter
+  cannot rotate the useful part out. If you add per-request logging, put it
+  behind a level that can be dialled down.
 - `applog.install()` is called once from `main()`. It installs **both**
   `sys.excepthook` and `threading.excepthook` - a raising background thread is
   never seen by the first, prints to stderr, and the process carries on

@@ -1163,6 +1163,21 @@ def api_cloud(action):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/logs/reveal", methods=["POST"])
+def api_logs_reveal():
+    """Open the log folder. Takes no arguments, deliberately.
+
+    Same rule as Quick Walls and Prep: the path lives server-side and the
+    client cannot name one, so there is nothing here to point at somebody
+    else's folder. He reads this panel on a phone at work - a path he has to
+    transcribe is not an instruction he can follow, and a button is.
+    """
+    target = applog.log_path()
+    if not target.exists():
+        target = applog.log_dir()
+    return jsonify(reveal_tool.reveal(target))
+
+
 @app.route("/api/version", methods=["GET"])
 def api_version():
     """Startup snapshot of versions.json + process metadata. The frontend
@@ -1177,10 +1192,14 @@ def api_version():
         "onDiskVersion": on_disk,
         "restartReady": bool(on_disk and on_disk != startup),
         "pid": os.getpid(),
-        # About shows this so that "send me the log" is one action rather than
-        # a hunt through a hidden folder. This route touches nothing but local
-        # state, so it answers even when the update check cannot.
+        # About shows these so that "send me the log" is one action rather
+        # than a hunt through a hidden folder, and so the panel can say how
+        # long it keeps and how large it can get - he asked, and a number the
+        # code enforces beats an estimate. This route touches nothing but
+        # local state, so it answers even when the update check cannot.
         "logPath": str(applog.log_path()),
+        "logRetentionDays": applog.RETAIN_DAYS,
+        "logMaxBytes": applog.HARD_CEILING_BYTES,
     })
 
 

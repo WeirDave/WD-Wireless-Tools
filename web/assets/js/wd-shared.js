@@ -567,12 +567,14 @@
             '<div class="wd-about-logRow">' +
               '<span class="wd-about-logLabel">Log file</span>' +
               '<code class="wd-about-logPath" id="wdAboutLogPath">—</code>' +
+              '<button class="btn btn-sm wd-about-logOpen" type="button" ' +
+                'id="wdAboutLogOpen">Open folder</button>' +
               '<button class="btn btn-sm wd-about-logCopy" type="button" ' +
                 'id="wdAboutLogCopy" hidden>Copy path</button>' +
             '</div>' +
-            '<div class="wd-about-logHint">Errors are written here, including ' +
-              'ones that only appear in the terminal window. It stays on this ' +
-              'computer.</div>' +
+            '<div class="wd-about-logHint" id="wdAboutLogHint">Errors are ' +
+              'written here, including ones that only appear in the terminal ' +
+              'window. It stays on this computer.</div>' +
           '</div>' +
           '<div class="wd-about-section">' +
             '<div class="wd-about-sectionTitle">Links</div>' +
@@ -631,6 +633,34 @@
       .then(function (d) {
         if (!d || !d.logPath) return;
         el.textContent = d.logPath;
+
+        var hint = document.getElementById('wdAboutLogHint');
+        if (hint && d.logRetentionDays) {
+          var mb = Math.round((d.logMaxBytes || 0) / 1000000);
+          hint.textContent =
+            'Errors are written here, including ones that only appear in the ' +
+            'terminal window — it is kept across restarts. The last ' +
+            d.logRetentionDays + ' days are retained' +
+            (mb ? ', never more than ' + mb + ' MB in total' : '') +
+            '. It stays on this computer.';
+        }
+
+        var open = document.getElementById('wdAboutLogOpen');
+        if (open) {
+          open.onclick = function () {
+            fetch('/api/logs/reveal', {
+              method: 'POST',
+              headers: { 'X-WD-Wireless-Tools': '1',
+                         'Content-Type': 'application/json' },
+              body: '{}'
+            }).then(function (r) { return r.json(); })
+              .then(function (res) {
+                if (res && res.error) WD.toast('Could not open the folder: ' + res.error);
+              })
+              .catch(function () { WD.toast('Could not open the folder.'); });
+          };
+        }
+
         var btn = document.getElementById('wdAboutLogCopy');
         if (!btn || !navigator.clipboard) return;
         btn.hidden = false;
