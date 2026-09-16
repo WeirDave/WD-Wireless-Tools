@@ -301,6 +301,35 @@ matter of opinion.
   only clicked "switch". It backs up first and is gated behind a confirm step
   in the UI.
 
+## Logging — `tools/applog.py`, and why there is only one of it
+
+**Anything that goes wrong goes through `applog`, not `print`.** A fault
+appeared in his terminal on a machine three hours away, printed a wall of
+traceback, and was gone the moment the window was closed. One chance to see
+it, missed - that is what this exists for.
+
+- The file is `~/.wd_wireless_tools/logs/wd-wireless-tools.log`, rotating,
+  capped near 4 MB across four files. **Do not add a second log location.**
+  The user directory is where state lives; a second home for it is the same
+  bug as the two-store settings drift above.
+- `applog.install()` is called once from `main()`. It installs **both**
+  `sys.excepthook` and `threading.excepthook` - a raising background thread is
+  never seen by the first, prints to stderr, and the process carries on
+  serving, which is exactly the failure that leaves no trace.
+- `applog.note_failure("update check", exc)` for anything the app chooses to
+  carry on from. `applog.console(...)` for the one line the terminal gets.
+- **A traceback must never reach his terminal.** `server.py` has a catch-all
+  `@app.errorhandler(Exception)` that logs the stack to the file and returns
+  short JSON; Flask's default writes the whole stack to stderr, which is how
+  one failing request filled the console with seventeen lines.
+- The path is on screen in **About → Diagnostics** with a copy button, and in
+  the startup banner. Every run writes a `started - version ...` line, so the
+  file always exists (About must not point at nothing) and the first question
+  - which version was running - is already answered.
+- **It holds real paths and hostnames, so it is rule zero material**:
+  gitignored, absent from the release payload, never a fixture, never
+  uploaded. `tests/test_applog.py` holds all three.
+
 ## Porting the updater to the other apps
 
 `tools/updater.py` and the `WD.Updater` block in `wd-shared.js` are written to

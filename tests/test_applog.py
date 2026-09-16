@@ -133,6 +133,19 @@ class WhatReachesTheFileTests(_Isolated):
         self.assertIn(str(applog.log_path()), text)
         self.assertNotIn("Traceback", text)
 
+    def test_the_file_exists_before_anything_goes_wrong(self):
+        """About points at this path, so it must not point at nothing.
+
+        It also answers the first question anyone asks of a report: which
+        version was running when it happened.
+        """
+        applog.install(app_version="9.9.9")
+        self.assertTrue(applog.log_path().exists(),
+                        "About would be pointing at a file that is not there")
+        body = self.text()
+        self.assertIn("started", body)
+        self.assertIn("9.9.9", body)
+
     def test_a_carried_on_failure_reads_as_a_sentence(self):
         applog.install()
         applog.note_failure("update check", OSError("git could not be run"))

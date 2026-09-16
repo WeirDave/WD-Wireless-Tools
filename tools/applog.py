@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import logging.handlers
+import os
 import sys
 import threading
 from pathlib import Path
@@ -70,7 +71,8 @@ def _file_handler() -> logging.Handler:
     return handler
 
 
-def install(quiet_console: bool = True) -> Path | None:
+def install(quiet_console: bool = True,
+            app_version: str | None = None) -> Path | None:
     """Start writing to the log file. Returns the path, or None if it cannot.
 
     Never raises. A read-only home directory or a full disk is a reason to
@@ -93,7 +95,28 @@ def install(quiet_console: bool = True) -> Path | None:
 
         _install_excepthooks(quiet_console)
         _installed = True
+        _note_start(app_version)
         return log_path()
+
+
+def _note_start(app_version: str | None) -> None:
+    """One line per run, so the file exists before anything goes wrong.
+
+    Two reasons it is not just noise. A log that is only created by a failure
+    is a path in the About panel pointing at nothing, and "send me the log" is
+    then an instruction that fails for the person following it. And the first
+    question asked of any report is which version was running - so the answer
+    is written down at the top of every run rather than reconstructed later.
+    """
+    try:
+        get_logger().info(
+            "started - version %s, python %s, pid %s",
+            app_version or "unknown",
+            sys.version.split()[0],
+            os.getpid(),
+        )
+    except Exception:
+        pass
 
 
 def _install_excepthooks(quiet_console: bool) -> None:

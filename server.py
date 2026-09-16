@@ -1499,7 +1499,7 @@ def main():
     # An import-time failure is still only visible on the console - by then
     # this module has not finished loading - which is what the tracked-module
     # test exists to prevent.
-    applog.install()
+    applog.install(app_version=_STARTUP_VERSIONS.get("suite"))
     _print_banner()
     threading.Thread(target=_open_browser, daemon=True).start()
 
