@@ -321,6 +321,63 @@
     document.getElementById(id || 'modal').classList.remove('active');
   };
 
+  /* Put the Navigation block of every menu in alphabetical order.
+
+     Sorted here rather than in the markup because the markup is seventeen
+     pages, most of them carrying the menu twice. Hand-ordering that is a
+     standing invitation to drift - the same duplication had already let one
+     tool go missing from most of the menus - and it means whoever adds the
+     next tool has to insert it in the right slot in thirty-odd places. Sorting
+     what is there at load puts a new entry where it belongs wherever it was
+     pasted in.
+
+     Home is pinned rather than sorted. It is where the list starts, not a tool
+     competing for a place in it, and alphabetically it would land in the
+     middle. The Tools and Help sections below are separate blocks and are left
+     as their authors arranged them.
+
+     The menu is display:none until it is opened, so this never shows as a
+     reshuffle. */
+  WD.sortNavMenus = function (root) {
+    var scope = root || document;
+    var heads = scope.querySelectorAll('.menu-section');
+    for (var i = 0; i < heads.length; i++) {
+      var head = heads[i];
+      if (!/Navigation/i.test(head.textContent || '')) continue;
+
+      // Everything up to the next divider or section heading belongs to this
+      // block; anything after it is somebody else's list.
+      var items = [], node = head.nextElementSibling;
+      while (node && !node.classList.contains('menu-section')
+             && !/menu-sep$/.test(node.className || '')) {
+        if (node.tagName === 'A') items.push(node);
+        node = node.nextElementSibling;
+      }
+      if (items.length < 2) continue;
+
+      var label = function (a) {
+        // Strip the leading bullet or home glyph so "· Report" sorts as Report.
+        return (a.textContent || '').replace(/^[\s·⌂▸*.-]+/, '').trim();
+      };
+      var pinned = items.filter(function (a) {
+        return (a.getAttribute('href') || '') === '/';
+      });
+      var rest = items.filter(function (a) { return pinned.indexOf(a) === -1; });
+
+      rest.sort(function (a, b) {
+        return label(a).localeCompare(label(b), undefined,
+                                      { sensitivity: 'base', numeric: true });
+      });
+
+      var parent = head.parentNode;
+      var after = head;
+      pinned.concat(rest).forEach(function (a) {
+        parent.insertBefore(a, after.nextSibling);
+        after = a;
+      });
+    }
+  };
+
   WD.toggleMenu = function (ev, menuId) {
     if (ev) ev.stopPropagation();
     var menu = document.getElementById(menuId);
@@ -1386,6 +1443,7 @@
   };
 
   document.addEventListener('DOMContentLoaded', function () {
+    try { WD.sortNavMenus(); } catch (e) { /* an unsorted menu still works */ }
     WD.syncThemeUI();
     WD.syncFavicon();
     WD.applyVersions();
