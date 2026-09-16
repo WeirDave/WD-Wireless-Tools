@@ -8167,3 +8167,70 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 @media (max-width: 560px) {
   .share-add-row { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   Configure: columns that fill, and previews that show transparency
+   ═══════════════════════════════════════════════════════════════ */
+
+/* **The empty column.** The Configure grid held two cards side by side - a
+   short Cover page card and the tall options card - so on any report with a
+   few options the left column was a checkbox, a thumbnail and then a column of
+   nothing running the full height of the page.
+
+   Placing panels by hand would regress the next time somebody adds a checkbox,
+   so nothing here depends on how many options a report has: the cards stack,
+   and the options themselves flow into as many columns as the width allows and
+   balance across them. One option or thirty, there is no empty column to
+   leave. */
+.rep-config-grid { grid-template-columns: 1fr; }
+
+#reportOptsSlot,
+#reportDetailsSlot {
+  display: block;                 /* multi-column needs a block container */
+  columns: 300px;
+  column-gap: 22px;
+}
+
+/* A control split down the middle of a column boundary is worse than an
+   uneven column, so each one stays whole. */
+#reportOptsSlot > *,
+#reportDetailsSlot > * {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  margin-bottom: 8px;
+}
+
+/* Headings, rules and the footers under them belong to the whole card, not to
+   whichever column they happened to land in. Spanning also ends the flow above
+   them, so "Cover page" starts a fresh set of columns rather than appearing
+   halfway down the third one. */
+#reportOptsSlot > .rep-config-card-head,
+#reportOptsSlot > .rep-remembered,
+#reportDetailsSlot > .rep-config-card-head,
+#reportDetailsSlot > .rep-opts-subhead-note,
+#reportDetailsSlot > .rep-opts-divider {
+  column-span: all;
+}
+
+/* **Transparent images rendered as nothing.** A PNG with transparency was
+   previewed against the page background - `var(--bg)`, which on the dark theme
+   is #090909 - so a cover image came out as a black rectangle. The file name
+   and size rendered correctly beside it, which is worse than showing nothing:
+   the panel said a file was loaded while showing no sign of one.
+
+   A checkerboard is the convention for "this part is transparent", and it is
+   put behind every surface that previews a user's image rather than only the
+   one that was reported. */
+:root {
+  --img-checker:
+    repeating-conic-gradient(#c9c9c9 0% 25%, #ffffff 0% 50%) 0 0 / 14px 14px;
+}
+
+.rep-cover-thumb,
+.rep-sb-thumb,
+.rep-logo-preview img,
+.rep-set-cover-preview img,
+.rep-template-preview img {
+  background: var(--img-checker) !important;
+}
