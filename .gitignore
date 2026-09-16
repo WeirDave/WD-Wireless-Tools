@@ -50,3 +50,7 @@ PROJECT_MEMORY.md
 # Harmless as content, but one `git add -A` from being committed.
 nul
 NUL
+
+# Local diagnostics - real paths and hostnames, never published.
+logs/
+*.log

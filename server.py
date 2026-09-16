@@ -38,6 +38,7 @@ from tools import report_store
 from tools import settings as suite_settings
 from tools import settings_backup
 from tools import updater
+from tools import applog
 from tools import esx_trimmer
 from tools import plantrim_store
 from tools import plan_detect
@@ -86,6 +87,30 @@ if not suite_settings.SETTINGS_FILE.exists() and (
 
 _progress_lock = threading.Lock()
 _progress = {}
+
+
+from werkzeug.exceptions import HTTPException
+
+
+@app.errorhandler(Exception)
+def _unhandled(exc):
+    """No route failure is allowed to print a stack to his terminal.
+
+    Flask's default is to log the exception through `app.logger`, which writes
+    a full traceback to stderr - so a single failing request filled the
+    console with seventeen lines, the app carried on serving, and the only
+    record of it was a window that later got closed. The traceback is the most
+    useful thing we have and the terminal is the worst place to keep it.
+    """
+    if isinstance(exc, HTTPException):
+        return exc
+    applog.note_failure(f"{request.method} {request.path}", exc,
+                        to_console=True)
+    return jsonify({
+        "ok": False,
+        "error": "Something went wrong handling that request.",
+        "logPath": str(applog.log_path()),
+    }), 500
 
 
 @app.before_request
@@ -1152,6 +1177,10 @@ def api_version():
         "onDiskVersion": on_disk,
         "restartReady": bool(on_disk and on_disk != startup),
         "pid": os.getpid(),
+        # About shows this so that "send me the log" is one action rather than
+        # a hunt through a hidden folder. This route touches nothing but local
+        # state, so it answers even when the update check cannot.
+        "logPath": str(applog.log_path()),
     })
 
 
@@ -1164,8 +1193,26 @@ def api_update_status():
     is not an error state: the install info is still useful, so the release
     lookup degrades to `latest: null` with a reason.
     """
-    info = updater.detect_install()
-    payload = {"install": info, "latest": None, "updateAvailable": False}
+    # Even working out what kind of install this is shells out to git, and
+    # that is the call that actually failed on his machine. An update check
+    # that cannot answer is a normal thing to be; it reports what it knows and
+    # says so on screen. It is never a reason to fail the request.
+    try:
+        info = updater.detect_install()
+    except Exception as exc:
+        applog.note_failure("update check (identifying this install)", exc)
+        return jsonify({
+            "install": {"method": "unknown", "isGitInstall": False},
+            "latest": None,
+            "updateAvailable": False,
+            "tracking": "unknown",
+            "trackingLabel": "couldn't check for updates",
+            "checkError": "Could not check for updates on this machine.",
+            "logPath": str(applog.log_path()),
+        })
+
+    payload = {"install": info, "latest": None, "updateAvailable": False,
+               "logPath": str(applog.log_path())}
     current = info.get("currentVersion") or ""
 
     # Ask git before asking the GitHub API. They are not equally reachable: a
@@ -1190,13 +1237,15 @@ def api_update_status():
         # for updates" turns into a wall of traceback on the page.
         try:
             branch = updater.remote_branch_state()
-        except Exception:
+        except Exception as exc:
+            applog.note_failure("update check (reading the remote branch)", exc)
             branch = None
         if branch:
             payload["branch"] = branch
         try:
             tag = updater.remote_release_tag()
-        except Exception:
+        except Exception as exc:
+            applog.note_failure("update check (reading the newest tag)", exc)
             tag = None
 
     # Which question this install is being asked, in one word, because not
@@ -1397,6 +1446,8 @@ def _print_banner():
         "",
         f"Open http://localhost:{PORT}/ in your browser to get started.",
         "Press CTRL+C in this window to stop the server.",
+        "",
+        f"Log file: {applog.log_path()}",
     ]
     width = max([len(line) for line in lines] + [len(l) for l in logo]) + 4
     border = "=" * width
@@ -1444,6 +1495,11 @@ def _quieten_queue_warnings():
 
 
 def main():
+    # Before the banner, so that anything the startup itself hits is recorded.
+    # An import-time failure is still only visible on the console - by then
+    # this module has not finished loading - which is what the tracked-module
+    # test exists to prevent.
+    applog.install()
     _print_banner()
     threading.Thread(target=_open_browser, daemon=True).start()
 

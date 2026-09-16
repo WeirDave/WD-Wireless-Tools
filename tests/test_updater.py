@@ -1505,3 +1505,60 @@ class TheHostileCasesStayCalmTests(unittest.TestCase):
         for fragment in ("remote:", "fatal:", "hint:", "Invalid username"):
             self.assertNotIn(fragment, message,
                              f"raw git output leaked: {fragment}")
+
+
+class ClassifyingAnInstallNeverRaisesTests(unittest.TestCase):
+    """`detect_install` runs before anything else and used to be the raiser.
+
+    This is the fault that put a wall of traceback in his terminal. Working out
+    *what kind of install this is* shells out to git, and `is_dev_checkout`
+    did so without first asking whether git existed - so on a machine where
+    git was simply not on PATH it raised, took `/api/update/status` down with
+    it, and Flask logged seventeen lines to the console. The app carried on
+    serving, which is why it looked like "an error in the terminal" rather
+    than a crash.
+
+    `detect_install` already had a branch for this exact machine - a git
+    folder with no git, reported as `manual` - and the exception was what made
+    that branch unreachable.
+    """
+
+    def setUp(self):
+        from server import app
+        self.client = app.test_client()
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
+        (self.root / ".git").mkdir()
+        _make_install(self.root)
+
+    def _no_git(self):
+        return patch.object(updater.subprocess, "run",
+                            side_effect=FileNotFoundError(2, "not found"))
+
+    def test_a_git_folder_with_no_git_is_not_a_dev_checkout(self):
+        with self._no_git():
+            self.assertFalse(updater.is_dev_checkout(self.root))
+
+    def test_detect_install_reaches_the_branch_written_for_that_machine(self):
+        with self._no_git():
+            info = updater.detect_install(self.root)
+        self.assertEqual("manual", info["method"])
+        self.assertFalse(info["gitAvailable"])
+        self.assertTrue(info["isGitInstall"])
+        self.assertIn("git is not installed", info["reason"].lower())
+
+    def test_the_status_route_answers_instead_of_logging_a_stack(self):
+        # CONFIG is frozen, so point the route at the temp install by calling
+        # the real function with that root - the code under test is unchanged.
+        real = updater.detect_install
+        # The API is blocked too, so this is the whole check failing at once -
+        # no git, no network - which is the worst case and still has to answer.
+        with self._no_git(),              patch.object(updater, "detect_install",
+                          lambda *a, **kw: real(self.root)),              patch.object(updater, "fetch_latest_release",
+                          side_effect=updater.UpdateError("no network")):
+            res = self.client.get("/api/update/status")
+        self.assertEqual(200, res.status_code)
+        body = json.loads(res.data)          # an HTML 500 page would not parse
+        self.assertEqual("manual", body["install"]["method"])
+        self.assertTrue(body["trackingLabel"])
+        self.assertTrue(body["logPath"], "About needs somewhere to point")

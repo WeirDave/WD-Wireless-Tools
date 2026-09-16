@@ -444,20 +444,31 @@ def is_dev_checkout(root: Path | None = None, cfg: AppConfig = CONFIG) -> bool:
     root = root or cfg.install_root
     if not is_git_install(root, cfg):
         return False
-
-    head = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], root, check=False)
-    ref = (head.stdout or "").strip()
-    if head.returncode != 0 or not ref or ref == "HEAD":
+    if not git_available():
+        # Without git there is no way to read the repository state, and this
+        # question has a safe answer: no. `detect_install` has a branch for a
+        # git folder on a machine with no git - it reports `manual` and says
+        # so - but raising here made that branch unreachable, took the whole
+        # status request down with it, and put seventeen lines of traceback in
+        # the terminal of an install whose only problem was its PATH.
         return False
 
-    ahead = _run_git(["rev-list", "--count", "@{u}..HEAD"], root, check=False)
-    count = (ahead.stdout or "").strip()
-    if ahead.returncode == 0 and count.isdigit() and int(count) > 0:
-        return True
-
     try:
+        head = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], root, check=False)
+        ref = (head.stdout or "").strip()
+        if head.returncode != 0 or not ref or ref == "HEAD":
+            return False
+
+        ahead = _run_git(["rev-list", "--count", "@{u}..HEAD"], root, check=False)
+        count = (ahead.stdout or "").strip()
+        if ahead.returncode == 0 and count.isdigit() and int(count) > 0:
+            return True
+
         return bool(_dirty_paths(root))
     except UpdateError:
+        # Classification is not worth an exception. Anything git refuses to
+        # answer leaves this "not a dev checkout", which blocks nothing a
+        # normal install needs.
         return False
 
 

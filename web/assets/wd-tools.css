@@ -8060,3 +8060,10 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   .rep-comp-needle-n { fill: #b71c1c !important; }
   .rep-comp-needle-s { fill: #555 !important; }
 }
+
+/* About → Diagnostics. The log path is meant to be read off a phone and
+   pasted into a message, so it wraps rather than being clipped. */
+.wd-about-logRow { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.wd-about-logLabel { color: var(--muted, #888); font-size: .85rem; }
+.wd-about-logPath { font-size: .8rem; word-break: break-all; }
+.wd-about-logHint { color: var(--muted, #888); font-size: .8rem; margin-top: .35rem; }

@@ -1041,6 +1041,20 @@ works exactly as it does for any other install.
 
 **Other ways to update** in the same panel covers the rest: switching a ZIP install over to git updates, copying the PowerShell command, or downloading the ZIP by hand. These open on their own if an update fails, along with a plain-language explanation of what went wrong.
 
+#### If something goes wrong: the log file
+
+**Menu → About → Diagnostics** shows the full path of the log file, with a
+**Copy path** button next to it. The same path is printed in the black terminal
+window when the suite starts, just under the address.
+
+Everything that goes wrong is written there — including errors that only ever
+appeared in the terminal window and used to vanish the moment it was closed.
+Each entry is timestamped, and the file is capped in size so it cannot grow
+without bound.
+
+If you hit something odd, that file is the thing to send. It stays on your own
+computer: nothing is uploaded, and it is not part of any release.
+
 #### Switching a ZIP install to git updates
 
 If you installed from a ZIP, **Menu → About → Other ways to update → Switch to git updates** converts the folder in place. You do not need to reinstall or move anything.

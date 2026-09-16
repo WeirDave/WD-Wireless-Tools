@@ -563,6 +563,18 @@
           '</div>' +
           '<div class="wd-update-panel" hidden></div>' +
           '<div class="wd-about-section">' +
+            '<div class="wd-about-sectionTitle">Diagnostics</div>' +
+            '<div class="wd-about-logRow">' +
+              '<span class="wd-about-logLabel">Log file</span>' +
+              '<code class="wd-about-logPath" id="wdAboutLogPath">—</code>' +
+              '<button class="btn btn-sm wd-about-logCopy" type="button" ' +
+                'id="wdAboutLogCopy" hidden>Copy path</button>' +
+            '</div>' +
+            '<div class="wd-about-logHint">Errors are written here, including ' +
+              'ones that only appear in the terminal window. It stays on this ' +
+              'computer.</div>' +
+          '</div>' +
+          '<div class="wd-about-section">' +
             '<div class="wd-about-sectionTitle">Links</div>' +
             '<div class="wd-about-links">' +
               '<a href="https://github.com/WeirDave?tab=repositories" target="_blank" rel="noopener">GitHub repository</a>' +
@@ -603,7 +615,34 @@
     // it. The check is fast and rate-limit-free for a git install now, so
     // there is nothing left to save by not doing it.
     WD.checkForUpdates({ force: true });
+    _renderLogPath();
   };
+
+  /* Where the log is, shown in the panel he already opens to read the version.
+
+     The reason this is on screen at all: a fault appeared in his terminal,
+     the window was closed, and the text was gone for good. A path he can read
+     off his phone turns the next one into "send me the log". */
+  function _renderLogPath() {
+    var el = document.getElementById('wdAboutLogPath');
+    if (!el) return;
+    fetch('/api/version', { headers: { 'X-WD-Wireless-Tools': '1' } })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d || !d.logPath) return;
+        el.textContent = d.logPath;
+        var btn = document.getElementById('wdAboutLogCopy');
+        if (!btn || !navigator.clipboard) return;
+        btn.hidden = false;
+        btn.onclick = function () {
+          navigator.clipboard.writeText(d.logPath).then(function () {
+            btn.textContent = 'Copied';
+            setTimeout(function () { btn.textContent = 'Copy path'; }, 1500);
+          });
+        };
+      })
+      .catch(function () { /* the panel is still useful without it */ });
+  }
 
   WD.closeAbout = function () {
     var m = document.getElementById(WD_ABOUT_ID);
