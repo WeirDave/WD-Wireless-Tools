@@ -192,6 +192,28 @@ body.tool-prep .dropzone-logo { background-image: url(/assets/wd-wireless-tools-
             and area with it. <span id="prepNote-trim"></span></span>
         </span>
       </label>
+      <div class="prep-opts" id="prepTrimOpts">
+        <div class="prep-row">
+          <label for="prepMargin">Leave a margin of</label>
+          <select id="prepMargin" class="prep-input prep-input--sel" onchange="prepSyncStepUi()">
+            <option value="tight">Tight &mdash; 10 pixels, barely any</option>
+            <option value="normal" selected>Normal &mdash; 3 m, about 10 ft</option>
+            <option value="wide">Wide &mdash; 6 m, about 20 ft</option>
+            <option value="extra-wide">Extra wide &mdash; 10 m, about 33 ft</option>
+          </select>
+          <span>around the drawing</span>
+        </div>
+        <label class="prep-row" id="prepUseBoxesRow" style="margin-bottom:0" hidden>
+          <input type="checkbox" id="prepUseBoxes" onchange="prepSyncStepUi()">
+          <span id="prepUseBoxesLabel">Use the rectangles I drew in PlanTrim</span>
+        </label>
+        <p class="prep-hint">
+          The margin is measured on the plan&rsquo;s own scale, so the same setting means the
+          same real distance on every sheet whatever its resolution. A plan with no scale falls
+          back to 10 pixels. <b>Normal</b> is the default and is what PlanTrim uses, so the two
+          tools crop the same way unless you change this.
+        </p>
+      </div>
 
       <label class="prep-toggle">
         <input type="checkbox" id="prepStep-areas" checked onchange="prepSyncStepUi()">

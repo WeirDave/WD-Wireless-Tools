@@ -177,6 +177,13 @@
       + (fromDisk ? '&source=disk' : '')
       + '&steps=' + chosenSteps().join(',')
       + '&retighten=' + ($('prepRetighten').checked ? '1' : '0');
+    if ($('prepStep-trim').checked) {
+      // "legacy" is the 10-pixel margin Prep has always used, sent as the same
+      // integer it has always sent, so an untouched form produces the identical
+      // crop it did before these controls existed.
+      q += '&margin=' + encodeURIComponent($('prepMargin').value);
+      if ($('prepUseBoxes').checked) q += '&useBoxes=1';
+    }
     if ($('prepStep-walls').checked) {
       q += '&wallTemplate=' + encodeURIComponent($('prepWallTpl').value);
     }
@@ -190,6 +197,7 @@
   window.prepSyncStepUi = syncStepUi;
 
   function syncStepUi() {
+    $('prepTrimOpts').hidden = !$('prepStep-trim').checked;
     $('prepAreaOpts').hidden = !$('prepStep-areas').checked;
     $('prepWallOpts').hidden = !$('prepStep-walls').checked;
     preview();
@@ -229,6 +237,24 @@
       + '<div class="prep-facts">' + lines.join('<br>') + '</div></div>';
   }
 
+  // PlanTrim remembers the rectangles he cropped, per project. Prep can reuse
+  // them rather than asking him to draw again - the one part of PlanTrim that
+  // cannot be a batch control is drawing a box, but a box already drawn is just
+  // data. The row stays hidden unless this project has some.
+  function syncSavedBoxes(r) {
+    var row = $('prepUseBoxesRow');
+    if (!row) return;
+    var n = (r && r.savedBoxes) || 0;
+    row.hidden = !n;
+    if (!n) {
+      $('prepUseBoxes').checked = false;
+      return;
+    }
+    $('prepUseBoxesLabel').textContent =
+      'Use the ' + n + ' rectangle' + (n === 1 ? '' : 's') + ' I drew in PlanTrim'
+      + ' (instead of finding the drawing automatically)';
+  }
+
   function renderPreview(r) {
     var host = $('prepPreview');
     if (!r || !r.ok) {
@@ -238,6 +264,7 @@
       return;
     }
 
+    syncSavedBoxes(r);
     var cards = [];
     var willDo = 0;
     // A step that cannot run used to stop the whole prepare, so the button was

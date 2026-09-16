@@ -204,7 +204,7 @@ def _drop_areas(src: Path, dest: Path, area_ids: set) -> None:
 # ── the preview ──────────────────────────────────────────────────────────────
 
 def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
-         margin: int | str = esx_trimmer.DEFAULT_MARGIN, boxes=None,
+         margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET, boxes=None,
          retighten: bool = True) -> dict:
     """What a run would do, without writing anything.
 
@@ -268,7 +268,7 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
 # ── the run ──────────────────────────────────────────────────────────────────
 
 def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
-        occupants=None, margin: int | str = esx_trimmer.DEFAULT_MARGIN,
+        occupants=None, margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET,
         boxes=None, retighten: bool = True, backup: bool = True) -> dict:
     """Do the whole pass and write once.
 

@@ -777,6 +777,26 @@ BACKUP_ACTIONS = {
 _PREP_PROJECT = {"path": None, "written": None}
 
 
+def _prep_saved_boxes(src):
+    """The rectangles PlanTrim saved for this project, if any.
+
+    Keyed by the project's own id, the same way PlanTrim keys them, so a plan
+    cropped there and then prepared here reuses that work instead of asking for
+    it twice. Drawing a box is the one part of PlanTrim that cannot become a
+    batch control; a box already drawn is just data, and this is the seam.
+
+    Any failure to read them is silent and means "none" - a convenience that
+    cannot be loaded must never stop a prepare.
+    """
+    import zipfile
+    try:
+        with zipfile.ZipFile(src) as z:
+            pid = json.loads(z.read("project.json"))["project"]["id"]
+        return plantrim_store.load(pid) or {}
+    except Exception:
+        return {}
+
+
 @app.route("/api/prep/<action>", methods=["POST"])
 def api_prep(action):
     """Trim, area and wall-type a new project in one pass.
@@ -902,14 +922,23 @@ def api_prep(action):
         else:
             src = Path(tmpdir) / "in.esx"
             src.write_bytes(blob)
+        # Rectangles he already cropped in PlanTrim, reused rather than redrawn.
+        # Read by the project's own id, the same key PlanTrim stores them under,
+        # and only when asked for - the default is to find the drawing
+        # automatically, exactly as before.
+        saved = _prep_saved_boxes(src)
+        boxes = saved if (saved and request.args.get("useBoxes") == "1") else None
+
         common = dict(steps=steps or None, wall_types=wall_types,
                       template=capacity_tpl, occupants=request.args.get("occupants"),
-                      margin=margin, retighten=retighten)
+                      margin=margin, retighten=retighten, boxes=boxes)
 
         if action == "plan":
             out = prep_pipeline.plan(str(src), **common)
             out["source"] = name
             out["fromDisk"] = on_disk is not None
+            # So the page can offer them, and say how many there are.
+            out["savedBoxes"] = len(saved or {})
             return jsonify(out), (200 if out.get("ok") else 400)
 
         if on_disk is not None:
