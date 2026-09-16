@@ -11,8 +11,9 @@ import os
 import re
 import tempfile
 from pathlib import Path
+from tools.user_dir import user_dir
 
-SETTINGS_DIR = Path.home() / ".wd_wireless_tools"
+SETTINGS_DIR = user_dir()
 SETTINGS_FILE = SETTINGS_DIR / "settings.json"
 LEGACY_ORGANIZER_CONFIG = SETTINGS_DIR / "organizer_config.json"
 LEGACY_CLOUD_CONFIG = SETTINGS_DIR / "config.json"
@@ -153,6 +154,9 @@ DEFAULTS = {
         # the colour sequence - because "save as defaults" is a single act.
         "defaults": {},
         "templates": [],
+    },
+    "plantrim": {
+        "margin_preset": "normal",
     },
     "walls": {
         # Opening a project from disk lets Quick Walls show you the folder it

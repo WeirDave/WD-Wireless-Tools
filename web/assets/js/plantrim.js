@@ -8,7 +8,7 @@
 (function () {
   'use strict';
 
-  var state = { file: null, bytes: null, report: null, busy: false };
+  var state = { file: null, bytes: null, report: null, busy: false, margin: 'normal' };
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return WD.esc(s); }
@@ -35,11 +35,28 @@
 
   // Drawn keep-regions ride in the query string; the body is already the .esx.
   function analyzeParams() {
-    var params = { name: state.file.name };
+    var params = { name: state.file.name, margin: state.margin };
     var boxes = window.__ptBoxes && window.__ptBoxes();
     if (boxes) params.boxes = JSON.stringify(boxes);
     return params;
   }
+
+  // Load the saved margin preset on page open, and wire up the selector.
+  WD.api('settings/get').then(function (r) {
+    var preset = r && r.settings && r.settings.plantrim &&
+                 r.settings.plantrim.margin_preset;
+    if (preset) {
+      state.margin = preset;
+      var sel = $('ptbMargin');
+      if (sel) sel.value = preset;
+    }
+  }).catch(function () { /* settings unavailable — keep the default */ });
+
+  window.ptbSetMargin = function (value) {
+    state.margin = value;
+    WD.api('settings/update', { patch: { plantrim: { margin_preset: value } } });
+    if (state.bytes && !state.busy) analyze();
+  };
 
   // The box editor re-runs analyze after every change, so the list below the
   // canvas always describes what Save would actually produce.

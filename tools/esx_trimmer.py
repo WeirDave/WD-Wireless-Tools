@@ -98,6 +98,40 @@ CUT_CASCADE = (
 )
 
 DEFAULT_MARGIN = 10
+
+# Real-world margin presets, in metres.  The names show up in the UI selector
+# and in the settings file; the metre value is converted to pixels per-floor
+# using the plan's own metersPerUnit.
+MARGIN_PRESETS = {
+    "tight":      0,      # legacy 10-pixel padding only
+    "normal":     3.0,    # ~10 ft — room for survey paths near exterior walls
+    "wide":       6.0,    # ~20 ft — see some exterior RF bleed
+    "extra-wide": 10.0,   # ~33 ft — generous exterior coverage
+}
+DEFAULT_MARGIN_PRESET = "normal"
+
+
+def margin_px(preset_or_metres, meters_per_unit=None):
+    """Convert a margin preset name or metre value to pixels.
+
+    Falls back to ``DEFAULT_MARGIN`` (10 px) when the plan carries no scale
+    (``metersPerUnit`` is None or zero), which keeps the old behaviour on
+    files that lack the field.
+    """
+    if isinstance(preset_or_metres, str):
+        metres = MARGIN_PRESETS.get(preset_or_metres, 0)
+    else:
+        metres = float(preset_or_metres)
+
+    if metres <= 0:
+        return DEFAULT_MARGIN
+
+    if not meters_per_unit or meters_per_unit <= 0:
+        return DEFAULT_MARGIN
+
+    return max(DEFAULT_MARGIN, int(round(metres / meters_per_unit)))
+
+
 # Above this fraction of the canvas there is nothing worth reclaiming.
 FILL_SKIP_RATIO = 0.90
 # Column/row is "content" once it holds this share of the darkest column's ink.
@@ -618,15 +652,23 @@ def _companion(plan: dict, images: dict):
     return (bid, blob) if blob is not None else None
 
 
-def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
+def _plan_floor(members: dict, plan: dict, images: dict, margin,
                 manual_box=None) -> tuple:
     """Decide what to do with one floor. Returns (FloorResult, box or None).
+
+    *margin* may be an ``int`` (pixel count, legacy), a ``float`` (metres), or
+    a preset name like ``"normal"``.  When it is not a plain pixel count it is
+    converted using the floor's own ``metersPerUnit``.
 
     *manual_box* is an ``(x0, y0, x1, y1)`` rectangle in image pixels that the
     user drew. Automatic detection reads a title block and a drawing frame as
     content, which is why a bare floor plate trims and a titled CAD sheet does
     not; a drawn box says what to keep and is taken at its word.
     """
+    if isinstance(margin, int):
+        mpx = margin
+    else:
+        mpx = margin_px(margin, plan.get("metersPerUnit"))
     fid = plan.get("id")
     name = plan.get("name") or "(unnamed)"
 
@@ -684,13 +726,13 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
                         "to measure content on")
         Image = _require_pillow()
         cim = Image.open(io.BytesIO(companion[1]))
-        cbounds = content_bounds(cim, margin=margin)
+        cbounds = content_bounds(cim, margin=mpx)
         if cbounds is None:
             return skip("floor plan has no detectable content")
         sx, sy = cim.size[0] / float(w), cim.size[1] / float(h)
         bounds = (cbounds[0] / sx, cbounds[1] / sy, cbounds[2] / sx, cbounds[3] / sy)
     else:
-        bounds = content_bounds(im, margin=margin)
+        bounds = content_bounds(im, margin=mpx)
     if bounds is None:
         return skip("floor plan has no detectable content")
 
@@ -699,10 +741,10 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin: int,
     x0, y0, x1, y1 = bounds
     coord_box = _floor_coord_bbox(members, fid)
     if coord_box:
-        x0 = min(x0, coord_box[0] - margin)
-        y0 = min(y0, coord_box[1] - margin)
-        x1 = max(x1, coord_box[2] + margin)
-        y1 = max(y1, coord_box[3] + margin)
+        x0 = min(x0, coord_box[0] - mpx)
+        y0 = min(y0, coord_box[1] - mpx)
+        x1 = max(x1, coord_box[2] + mpx)
+        y1 = max(y1, coord_box[3] + mpx)
 
     rect = _existing_crop_rect(plan, w, h)
     if rect:
@@ -1000,12 +1042,14 @@ def _rebase_crop_rect(plan: dict, dx: float, dy: float, new_w: int, new_h: int) 
     plan["cropMaxY"] = min(float(new_h), float(plan["cropMaxY"]) - dy)
 
 
-def analyze(source: Path, margin: int = DEFAULT_MARGIN, boxes=None) -> TrimReport:
+def analyze(source: Path, margin: int | str = DEFAULT_MARGIN,
+            boxes=None) -> TrimReport:
     """Report what trimming would do, without writing anything."""
     return _run(Path(source), None, margin, dry_run=True, boxes=boxes)
 
 
-def trim(source: Path, dest: Path | None = None, margin: int = DEFAULT_MARGIN,
+def trim(source: Path, dest: Path | None = None,
+         margin: int | str = DEFAULT_MARGIN,
          in_place: bool = False, boxes=None) -> TrimReport:
     """Trim *source* into *dest* (or alongside it) and return a report.
 
@@ -1020,7 +1064,7 @@ def trim(source: Path, dest: Path | None = None, margin: int = DEFAULT_MARGIN,
     return _run(source, Path(dest), margin, dry_run=False, boxes=boxes)
 
 
-def _run(source: Path, dest: Path | None, margin: int, dry_run: bool,
+def _run(source: Path, dest: Path | None, margin, dry_run: bool,
          boxes=None) -> TrimReport:
     if not source.exists():
         raise TrimError(f"no such file: {source}")
@@ -1189,18 +1233,19 @@ def _report_json(report: TrimReport, dest: Path | None = None) -> dict:
     }
 
 
-def api_analyze(path: str, margin: int = DEFAULT_MARGIN, boxes=None) -> dict:
+def api_analyze(path: str, margin: int | str = DEFAULT_MARGIN,
+                boxes=None) -> dict:
     try:
-        return _report_json(analyze(Path(path), margin=int(margin), boxes=boxes))
+        return _report_json(analyze(Path(path), margin=margin, boxes=boxes))
     except TrimError as exc:
         return {"ok": False, "error": str(exc)}
 
 
-def api_trim_to(path: str, dest: str, margin: int = DEFAULT_MARGIN,
+def api_trim_to(path: str, dest: str, margin: int | str = DEFAULT_MARGIN,
                 boxes=None) -> dict:
     """Trim *path* into an explicit *dest*, for the upload/download flow."""
     try:
-        report = trim(Path(path), Path(dest), margin=int(margin), boxes=boxes)
+        report = trim(Path(path), Path(dest), margin=margin, boxes=boxes)
         return _report_json(report, dest=Path(dest))
     except TrimError as exc:
         return {"ok": False, "error": str(exc)}

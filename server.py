@@ -488,7 +488,16 @@ def api_plantrim(action):
 
     name = request.args.get("name") or "project.esx"
     stem = Path(name).stem or "project"
-    margin = request.args.get("margin", type=int) or esx_trimmer.DEFAULT_MARGIN
+    raw_margin = request.args.get("margin", "")
+    if raw_margin in esx_trimmer.MARGIN_PRESETS:
+        margin = raw_margin
+    elif raw_margin:
+        try:
+            margin = int(raw_margin)
+        except ValueError:
+            margin = esx_trimmer.DEFAULT_MARGIN_PRESET
+    else:
+        margin = esx_trimmer.DEFAULT_MARGIN_PRESET
 
     # Boxes the user drew, keyed by floorPlanId. They ride in a query parameter
     # because the body is already the raw .esx; a dozen floors of four integers
@@ -829,7 +838,16 @@ def api_prep(action):
 
     name = (on_disk.name if on_disk else None) or request.args.get("name") or "project.esx"
     steps = [s for s in (request.args.get("steps") or "").split(",") if s]
-    margin = request.args.get("margin", type=int) or esx_trimmer.DEFAULT_MARGIN
+    raw_margin = request.args.get("margin", "")
+    if raw_margin in esx_trimmer.MARGIN_PRESETS:
+        margin = raw_margin
+    elif raw_margin:
+        try:
+            margin = int(raw_margin)
+        except ValueError:
+            margin = esx_trimmer.DEFAULT_MARGIN_PRESET
+    else:
+        margin = esx_trimmer.DEFAULT_MARGIN_PRESET
     retighten = request.args.get("retighten") != "0"
 
     wall_types = None

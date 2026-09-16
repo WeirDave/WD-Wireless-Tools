@@ -296,6 +296,14 @@
       "legacy_browser_key": "ekahau-auto-apply"
     },
     {
+      "key": "plantrim.margin_preset",
+      "label": "Trim margin (how much room to leave around the building)",
+      "category": "preference",
+      "owner": "PlanTrim",
+      "section": "plantrim",
+      "home": "plantrim-tool"
+    },
+    {
       "key_prefix": "aprename.",
       "label": "AP Labeler naming defaults, templates, colour sequence and how it walks the floors",
       "category": "preference",

@@ -29,6 +29,12 @@
     border: 1px solid var(--border); background: var(--bg);
   }
   .ptb-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .ptb-margin-group { display: flex; align-items: center; gap: 6px; }
+  .ptb-margin-group label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  .ptb-margin-group select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 8px; font-size: 12px;
+  }
   .ptb-where { font-size: 12px; font-weight: 600; color: var(--text); }
   /* One row per floor: where he is, and what each one will do. Scrolls on its
      own past a handful of floors so a 14-sheet set does not push the plan off
@@ -240,6 +246,16 @@
         <span class="ptb-where" id="ptbFloorCount"></span>
         <button class="btn btn-sm" id="ptbNext" onclick="ptbNextFloor()" hidden>Next floor &rarr;</button>
         <span class="ptb-readout" id="ptbReadout">Automatic</span>
+        <span class="ptb-margin-group">
+          <label for="ptbMargin">Margin:</label>
+          <select id="ptbMargin" onchange="ptbSetMargin(this.value)"
+                  title="How much whitespace to leave around the building when trimming automatically">
+            <option value="tight">Tight</option>
+            <option value="normal" selected>Normal (~10 ft)</option>
+            <option value="wide">Wide (~20 ft)</option>
+            <option value="extra-wide">Extra wide (~33 ft)</option>
+          </select>
+        </span>
         <span class="ptb-spacer"></span>
         <button class="btn btn-sm ptb-reset" id="ptbFit" onclick="ptbFitView()"
                 title="Re-centre the plan and fit it to the window">&#8634; Reset view</button>
