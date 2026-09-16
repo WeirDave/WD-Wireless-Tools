@@ -37,6 +37,16 @@ commit history cannot be taken back the same way.
 **If you are unsure whether something is traceable to his employer or to a
 real person, leave it out and ask.** Unsure is a hit.
 
+**One file in the user data directory is worse than the rest and should be
+treated that way.** `~/.wd_wireless_tools/share_recipients.json` holds the
+email addresses of real colleagues - not a path or a filename, other people's
+contact details. `tools/share_recipients.py` manages it; it is gitignored,
+absent from the release payload, and has no network imports at all, and
+`tests/test_share_recipients.py` asserts each of those. Never open his copy to
+"see the real shape", never paste a line of it into an issue or a commit, and
+never build a fixture from it. Every address in this repo is invented at an
+RFC 2606 documentation domain.
+
 ### Why this is rule zero rather than a guideline
 
 It was escalated as an emergency, in those words, because it had already gone
