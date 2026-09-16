@@ -81,10 +81,31 @@ class RememberingWhoHeSharedWithTests(_Isolated):
         self.assertEqual([], sr.recent())
 
     def test_most_recently_used_comes_first(self):
-        """Two shares in the same second is one click, not an edge case."""
         sr.remember(["first@example.com"])
         sr.remember(["second@example.org"])
         self.assertEqual(["second@example.org", "first@example.com"],
+                         [r["email"] for r in sr.recent()])
+
+    def test_the_order_holds_when_the_clock_cannot_tell_them_apart(self):
+        """Windows ticks about every 15ms; two writes share a timestamp.
+
+        This is not a hypothetical - it is what the first version did, and it
+        passed here and failed in CI, which is the worst way to find it. The
+        clock is for display; the order is a counter, and a counter cannot
+        tie.
+        """
+        with patch.object(sr, "_now", lambda: "2026-09-16T12:00:00.000000+00:00"):
+            sr.remember(["first@example.com"])
+            sr.remember(["second@example.org"])
+            sr.remember(["third@example.net"])
+        self.assertEqual(
+            ["third@example.net", "second@example.org", "first@example.com"],
+            [r["email"] for r in sr.recent()])
+
+    def test_one_batch_keeps_the_order_he_typed_them(self):
+        with patch.object(sr, "_now", lambda: "2026-09-16T12:00:00.000000+00:00"):
+            sr.remember(["ada@example.com", "bo@example.org", "cy@example.net"])
+        self.assertEqual(["ada@example.com", "bo@example.org", "cy@example.net"],
                          [r["email"] for r in sr.recent()])
 
     def test_sharing_with_someone_again_moves_them_up_and_counts(self):

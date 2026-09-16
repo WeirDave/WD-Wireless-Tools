@@ -94,10 +94,7 @@ def classify(text: str) -> dict:
 # --------------------------------------------------------------- store ----
 
 def _now() -> str:
-    # Microseconds, not seconds. Sharing with two people in the same second is
-    # the normal case rather than an edge one - it is a single click - and at
-    # second resolution the two entries tie and the order he sees is whatever
-    # the sort happened to do.
+    """A timestamp for display. It is deliberately not what the order uses."""
     return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
@@ -123,8 +120,14 @@ def _load() -> dict:
             "email": email,
             "lastUsed": str(entry.get("lastUsed") or ""),
             "count": int(entry.get("count") or 1),
+            "seq": int(entry.get("seq") or 0),
         })
-    return {"version": SCHEMA_VERSION, "recipients": clean}
+    try:
+        next_seq = int(data.get("nextSeq") or 0)
+    except (TypeError, ValueError):
+        next_seq = 0
+    next_seq = max([next_seq] + [e["seq"] for e in clean] + [0]) + 0
+    return {"version": SCHEMA_VERSION, "recipients": clean, "nextSeq": next_seq}
 
 
 def _save(data: dict) -> None:
@@ -144,9 +147,17 @@ def _save(data: dict) -> None:
 
 
 def recent(limit: int = MAX_REMEMBERED) -> list[dict]:
-    """Most recently shared with, first."""
+    """Most recently shared with, first.
+
+    Ordered by a counter rather than by the clock. Two shares a second apart
+    is not the interesting case - two in the *same* click is, and on Windows
+    the system clock granularity is around 15ms, so back-to-back writes get
+    byte-identical timestamps however many decimal places they are printed to.
+    Sorting on that put the list in whatever order the sort happened to be
+    stable in. A counter cannot tie.
+    """
     entries = _load()["recipients"]
-    entries.sort(key=lambda e: (e.get("lastUsed") or "", e.get("count") or 0),
+    entries.sort(key=lambda e: (e.get("seq") or 0, e.get("lastUsed") or ""),
                  reverse=True)
     return entries[:max(0, int(limit))]
 
@@ -168,16 +179,23 @@ def remember(emails) -> list[dict]:
     data = _load()
     by_email = {e["email"]: e for e in data["recipients"]}
     stamp = _now()
-    for email in wanted:
+    base = int(data.get("nextSeq") or 0)
+    # Descending within the batch, so that sorting by seq afterwards gives
+    # back the order he typed them rather than reversing it.
+    for offset, email in enumerate(wanted):
+        seq = base + len(wanted) - offset
         entry = by_email.get(email)
         if entry:
             entry["lastUsed"] = stamp
+            entry["seq"] = seq
             entry["count"] = int(entry.get("count") or 0) + 1
         else:
-            by_email[email] = {"email": email, "lastUsed": stamp, "count": 1}
+            by_email[email] = {"email": email, "lastUsed": stamp,
+                               "count": 1, "seq": seq}
+    data["nextSeq"] = base + len(wanted)
 
     entries = sorted(by_email.values(),
-                     key=lambda e: (e.get("lastUsed") or "", e.get("count") or 0),
+                     key=lambda e: (e.get("seq") or 0, e.get("lastUsed") or ""),
                      reverse=True)[:MAX_REMEMBERED]
     data["recipients"] = entries
     try:
@@ -203,7 +221,7 @@ def forget(email: str) -> dict:
 
 
 def forget_all() -> dict:
-    data = {"version": SCHEMA_VERSION, "recipients": []}
+    data = {"version": SCHEMA_VERSION, "recipients": [], "nextSeq": 0}
     try:
         _save(data)
     except OSError:
