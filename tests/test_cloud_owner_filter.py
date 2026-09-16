@@ -58,6 +58,10 @@ globalThis.document = {
   querySelectorAll: () => [],
 };
 globalThis.e = (s) => String(s);
+// `emptyLedgerMessage` also names the Not Shared filter when that is what
+// emptied the list, so the block reaches for this too. 'all' keeps these
+// tests on the owner-filter branch, which is what they are about.
+globalThis.activeFilter = 'all';
 globalThis.data = null;
 globalThis.currentTab = 'sites';
 globalThis.updateDashboard = () => {};

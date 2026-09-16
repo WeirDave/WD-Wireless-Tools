@@ -1896,6 +1896,9 @@ body.tool-cloud .dup-toolbar-btn {
 .dash-card.cloud-only    { --dc: var(--blue-soft);       --dc-active: rgba(107,179,224,0.26); }
 .dash-card.local-only    { --dc: var(--purple-soft);       --dc-active: rgba(180,140,232,0.26); }
 .dash-card.external      { --dc: var(--purple);            --dc-active: rgba(139, 92,246,0.22); }
+/* An attention colour, not a category one: this card exists to be noticed
+   when it is non-zero. Orange is unused elsewhere on this row. */
+.dash-card.unshared      { --dc: var(--orange);            --dc-active: rgba(234, 88, 12, 0.26); }
 .dash-card.dup-all       { --dc: var(--amber-soft);       --dc-active: rgba(240,184, 95,0.26); }
 .dash-card.dup-mixed     { --dc: var(--blue-soft);       --dc-active: rgba(107,179,224,0.26); }
 .dash-card.dup-local     { --dc: var(--purple-soft);       --dc-active: rgba(180,140,232,0.26); }

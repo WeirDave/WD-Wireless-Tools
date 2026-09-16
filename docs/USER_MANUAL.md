@@ -144,6 +144,36 @@ that is your saved default or just this visit, an empty list names the filter
 that emptied it, and a sign-in that returns no user identity turns the filter
 off and says why.
 
+### Finding what you never shared
+
+The **Not Shared** card on the dashboard row narrows the list to **projects you
+own that nobody else has access to**. Click it to filter, click it again to
+turn it off — it works like the other cards, and combines with them and with
+the Owner filter.
+
+The number on the card is the count, and it is the point of the card: it tells
+you at a glance whether there is anything sitting finished and unsent.
+
+**What counts as not shared.** Exactly one thing: you own it, and nobody other
+than you can see it. Three cases that are easy to get wrong, and how they are
+treated:
+
+- A project **someone else owns and shared with you** is shared — that is how
+  you can see it at all — so it never appears here. It is also not something
+  you could have forgotten to share.
+- A project of yours shared **only with your own address** counts as not
+  shared, because nobody else has access.
+- A file that is **only on your computer** is not listed. That is not unshared,
+  it is not uploaded, and the **Local-Only** card already answers it.
+
+Sharing with your Sharing Group counts as shared, because every member of the
+group is given access individually.
+
+**The card only appears when it has something to say** — when the count is
+zero, or when the listing came back without telling us who you are (in which
+case "yours" is unanswerable and no filter would be honest). If the filter is
+on and empties the list, the list says so and offers the way back.
+
 ### Which side is newer
 
 A matched pair whose two copies differ in age carries a badge:

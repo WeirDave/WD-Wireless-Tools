@@ -800,6 +800,49 @@ function _isExternal(cloudObj, localObj) {
 }
 
 
+/* Projects you own that nobody else can see.
+
+   This is an oversight filter, not a browsing convenience: it is for finding
+   the survey you finished and never sent, while somebody waits on it. So the
+   definition has to be the one that makes that question answerable, and there
+   are three cases the obvious version gets wrong.
+
+   `sharedWith` already excludes the OWNER role, so it is "everyone else with
+   access". Then:
+
+   - **You have to own it.** A project someone else owns and shared *with you*
+     has `sharedWith == [you]`; subtracting yourself would leave it empty and
+     call it unshared, which is exactly backwards - it is shared, that is how
+     you can see it. It is also not something you could have failed to share.
+   - **Shared only with yourself counts as unshared**, because nobody other
+     than you has access, which is the thing being asked.
+   - **It has to exist in the cloud.** A local-only file is not "unshared", it
+     is un-uploaded, and the Local-Only card already answers that. Counting it
+     here would make this number mean two different things at once.
+
+   Group shares are covered without special handling: toggling the sharing
+   group adds every member as a dataset user, so they arrive in `sharedWith`
+   like anyone else. */
+function _isUnshared(cloudObj) {
+  if (!cloudObj) return false;                 // local-only: a different question
+  const me = ((data && data.currentUser) || '').toLowerCase();
+  if (!me) return false;                       // cannot tell yours from theirs
+  const owner = (cloudObj.owner || '').toLowerCase();
+  if (owner && owner !== me) return false;     // theirs, so not yours to have shared
+  const others = (cloudObj.sharedWith || [])
+    .map(x => String(x || '').toLowerCase())
+    .filter(x => x && x !== me);
+  return others.length === 0;
+}
+
+function _siteHasUnshared(cloudObj, localObj) {
+  if (_isUnshared(cloudObj)) return true;
+  const kids = (cloudObj && cloudObj.children) || (localObj && localObj.children) || null;
+  if (!kids) return false;
+  return (kids.matched || []).some(p => _isUnshared(p.cloud))
+      || (kids.cloudOnly || []).some(c => _isUnshared(c));
+}
+
 function _siteHasExternal(cloudObj, localObj) {
   if (_isExternal(cloudObj, localObj)) return true;
   const kids = (cloudObj && cloudObj.children) || (localObj && localObj.children) || null;
@@ -912,6 +955,26 @@ function updateDashboard() {
     if (dExt) dExt.textContent = externalCount;
     const dExtCard = document.getElementById('dExternalCard');
     if (dExtCard) dExtCard.hidden = isDup || externalCount === 0;
+
+    // Counted through the owner filter, like every other card, so the number
+    // on the card is the number of rows the list will actually show.
+    let unsharedCount = 0;
+    (data.matched || []).forEach(p => {
+      if (_isUnshared(p.cloud) && _passOwnerForCounts(p.cloud, p.local)) unsharedCount++;
+    });
+    (data.cloudOnly || []).forEach(c => {
+      if (_isUnshared(c) && _passOwnerForCounts(c, null)) unsharedCount++;
+    });
+    const dUns = document.getElementById('dUnshared');
+    if (dUns) dUns.textContent = unsharedCount;
+    const dUnsCard = document.getElementById('dUnsharedCard');
+    // Hidden when there are none to find, and when we do not know who he is -
+    // without that, "yours" is unanswerable and the filter would silently
+    // mean something else.
+    if (dUnsCard) {
+      dUnsCard.hidden = isDup || !((data && data.currentUser) || '')
+                     || unsharedCount === 0;
+    }
     document.getElementById('dTypeDesign').textContent = typeCount.Design;
     document.getElementById('dTypeMeasured').textContent = typeCount.Measured;
     document.getElementById('dTypeHybrid').textContent = typeCount.Hybrid;
@@ -934,6 +997,9 @@ function updateDashboard() {
     document.getElementById('dUnassigned').textContent = noSite;
   }
   if (!isProj && activeFilter === 'unassigned') { activeFilter = 'all'; }
+  if (activeFilter === 'unshared' && !((data && data.currentUser) || '')) {
+    activeFilter = 'all';
+  }
   document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
 }
 function setFilter(f) {
@@ -1405,6 +1471,7 @@ function renderLedger(hit) {
   const showUnassigned = activeFilter === 'unassigned';
   const showNameMatches = activeFilter === 'name-matches';
   const showExternal = activeFilter === 'external';
+  const showUnshared = activeFilter === 'unshared';
   const showStale = activeFilter === 'stale';
 
   const typeFilter = /^type-(design|measured|hybrid)$/.test(activeFilter)
@@ -1448,6 +1515,11 @@ function renderLedger(hit) {
     if (showStale) return rowIsStale(row);
     if (showNameMatches) return rowIsNameMatch(row);
     if (showUnassigned) return row && row.cloud && !row.cloud.hasSite;
+    if (showUnshared) {
+      return isSites
+        ? _siteHasUnshared(row && row.cloud, row && row.local)
+        : _isUnshared(row && row.cloud);
+    }
     if (showExternal) {
 
 
@@ -1762,6 +1834,11 @@ function toggleHeldBack() {
    suspect a filter. Name it, and offer the way out. */
 function emptyLedgerMessage() {
   const cur = ownerFilter();
+  if (activeFilter === 'unshared') {
+    return '<div class="empty-msg">Everything you own has been shared with '
+      + 'someone.<br><button class="btn btn-secondary own-empty-btn" '
+      + 'onclick="setFilter(&quot;unshared&quot;)">Show all projects</button></div>';
+  }
   if (cur === 'all') return '<div class="empty-msg">Nothing here for this filter.</div>';
   return '<div class="empty-msg">Nothing here owned by '
     + (cur === 'mine' ? 'you' : 'anyone else')
