@@ -86,6 +86,17 @@ reading all of them is what worked.
    -q -r requirements.txt && /tmp/venv/bin/python -m unittest discover -s
    tests -v`.
 4. Commit and push to `main` directly (no PR needed for routine work).
+   **Then wait for the push's CI run to go green before pushing the tag**
+   (`gh run watch`). A local suite and CI do not ask the same question: CI
+   runs against a clean checkout, so it is the only thing that sees a file you
+   forgot to `git add`. v2.102.0 went out with `tools/user_dir.py` untracked -
+   the local suite passed because the file was sitting there untracked, CI
+   failed with 30 errors, and the tag and release were pushed over the top of
+   that failure. The result was a release whose server could not start and
+   which had no ZIP asset, because the release build correctly refused to
+   package a failing tree. `tests/test_shipped_modules_are_tracked.py` now
+   catches that particular shape locally, but red CI means stop, whatever it
+   says.
 5. Create the GitHub release with hand-written notes, matching the
    WaxFrame Pro style (H1 = one-line summary, `## What changed` with
    bullets, `## Verified`, `## Files changed`):
