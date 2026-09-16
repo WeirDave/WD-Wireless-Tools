@@ -17,7 +17,12 @@
     // so a fresh marquee hit always arrives checked.
     selected: new Set(),
     excluded: new Set(),
-    collapsedTypes: new Set(),
+    // Which groups are OPEN. Stored this way round on purpose: he asked for
+    // the list to start collapsed, and a set of *collapsed* keys cannot express
+    // that - a group nobody has touched yet is not in it, so it would render
+    // open. Storing the open ones makes "collapsed by default" the behaviour of
+    // an empty set rather than a rule anyone has to remember to apply.
+    expandedTypes: new Set(),
     hoverSegId: null,
     hoverGroupKey: null,
     segOrdinal: new Map(),
@@ -443,7 +448,7 @@
   function clearSelectionState() {
     state.selected.clear();
     state.excluded.clear();
-    state.collapsedTypes.clear();
+    state.expandedTypes.clear();   // a new selection opens collapsed
     state.hoverSegId = null;
     state.hoverGroupKey = null;
   }
@@ -510,7 +515,7 @@
     const scrollTop = el.scrollTop;
     const groups = selectionGroups();
     el.innerHTML = groups.map(gr => {
-      const collapsed = state.collapsedTypes.has(gr.key);
+      const collapsed = !state.expandedTypes.has(gr.key);
       const rows = gr.segs.map((g, i) => {
         const len = segLengthLabel(g);
         const jid = escJsStr(g.id);
@@ -538,7 +543,8 @@
         +   'onmouseleave="swapHoverGroup(\'' + escJsStr(gr.key) + '\',0)">'
         +   '<button type="button" class="swap-sel-group-chevron" '
         +     'onclick="toggleSwapGroupCollapse(\'' + escJsStr(gr.key) + '\')" '
-        +     'title="Show the individual segments">▾</button>'
+        +     'aria-expanded="' + (collapsed ? 'false' : 'true') + '" '
+        +     'title="' + (collapsed ? 'Show' : 'Hide') + ' the individual segments">▾</button>'
         +   '<input type="checkbox" class="swap-sel-group-check" '
         +     'data-group-key="' + esc(gr.key) + '"' + parentAttrs
         +     ' onchange="toggleSwapGroup(this)" '
@@ -647,31 +653,60 @@
     return [...keys];
   }
 
-  window.toggleAllSwapGroups = function () {
-    const keys = allGroupKeys();
-    if (!keys.length) return;
-    const anyOpen = keys.some(k => !state.collapsedTypes.has(k));
-    if (anyOpen) keys.forEach(k => state.collapsedTypes.add(k));
-    else state.collapsedTypes.clear();
+  /* Two buttons rather than one that changes its mind.
+
+     It used to be a single toggle reading "Collapse all" whenever anything was
+     open, which makes the common half-open case ambiguous - the label tells you
+     what it will do, but there is no way to ask for the other one without
+     pressing it twice and watching. Two named actions, each disabled exactly
+     when it would do nothing, say what is available without being read. */
+  window.expandAllSwapGroups = function () {
+    allGroupKeys().forEach(k => state.expandedTypes.add(k));
+    renderSelection();
+  };
+
+  window.collapseAllSwapGroups = function () {
+    state.expandedTypes.clear();
+    // The list is about to get much shorter. Without this the old offset is
+    // clamped to the new height and lands at the bottom of a short list, which
+    // reads as the page having jumped somewhere on its own.
+    const el = $('swapSelBreakdown');
+    if (el) el.scrollTop = 0;
     renderSelection();
   };
 
   function updateCollapseAllButton() {
-    const btn = $('swapCollapseAllBtn');
-    if (!btn) return;
+    const expandBtn = $('swapExpandAllBtn');
+    const collapseBtn = $('swapCollapseAllBtn');
     const keys = allGroupKeys();
-    btn.disabled = !keys.length;
-    const anyOpen = keys.some(k => !state.collapsedTypes.has(k));
-    btn.textContent = anyOpen ? 'Collapse all' : 'Expand all';
-    btn.title = anyOpen ? 'Collapse every wall type' : 'Expand every wall type';
+    const anyOpen = keys.some(k => state.expandedTypes.has(k));
+    const anyShut = keys.some(k => !state.expandedTypes.has(k));
+    if (expandBtn) {
+      expandBtn.disabled = !keys.length || !anyShut;
+      expandBtn.title = anyShut ? 'Open every wall type in the list'
+                                : 'Every wall type is already open';
+    }
+    if (collapseBtn) {
+      collapseBtn.disabled = !keys.length || !anyOpen;
+      collapseBtn.title = anyOpen ? 'Close every wall type in the list'
+                                  : 'Every wall type is already closed';
+    }
   }
 
   window.toggleSwapGroupCollapse = function (key) {
-    if (state.collapsedTypes.has(key)) state.collapsedTypes.delete(key);
-    else state.collapsedTypes.add(key);
+    if (state.expandedTypes.has(key)) state.expandedTypes.delete(key);
+    else state.expandedTypes.add(key);
+    const collapsed = !state.expandedTypes.has(key);
     const host = document.querySelector('#swapSelBreakdown .swap-sel-group[data-group-key="'
       + CSS.escape(key) + '"]');
-    if (host) host.classList.toggle('is-collapsed', state.collapsedTypes.has(key));
+    if (host) {
+      host.classList.toggle('is-collapsed', collapsed);
+      const chev = host.querySelector('.swap-sel-group-chevron');
+      if (chev) {
+        chev.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        chev.title = (collapsed ? 'Show' : 'Hide') + ' the individual segments';
+      }
+    }
     updateCollapseAllButton();
   };
 

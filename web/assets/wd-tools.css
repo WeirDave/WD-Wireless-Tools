@@ -5668,6 +5668,11 @@ body.swap-resizing *, body.wd-resizing * { cursor: col-resize !important; user-s
   background: var(--accent); color: #fff;
   border-radius: 10px;
   padding: 1px 8px; font-size: 11px; min-width: 20px; text-align: center;
+  /* A second button in this header left the count enough room to wrap, and
+     "1374 / 1376" came out stacked over three lines and clipped. It is the
+     number the whole panel is about, so it gets its width first and the
+     buttons give way. */
+  flex: 0 0 auto; white-space: nowrap;
 }
 
 .swap-panel-selection .swap-panel-header .swap-sel-count { font-weight: 700; }
@@ -5815,8 +5820,22 @@ body.swap-resizing *, body.wd-resizing * { cursor: col-resize !important; user-s
   width: 16px; height: 16px; margin: 0;
 }
 
+/* The pair sits together and takes the auto margin, so the two buttons stay
+   one control rather than drifting apart across the header. */
+/* Their own row, directly above the list.
+
+   They started in the panel header, which already carried "Selected" and the
+   running count - four things competing for one narrow strip, and "Collapse
+   all" ended up underneath the count badge. A row of its own fits both labels
+   at full length, and puts them where the thing they act on begins. */
+.swap-foldall {
+  display: flex; gap: 6px; margin: 0 0 8px;
+}
+.swap-foldall .swap-collapse-all { margin-left: 0; margin-right: 0; }
+
 .swap-collapse-all {
   margin-left: auto; margin-right: 8px;
+  white-space: nowrap;
   background: transparent;
   border: 1px solid var(--border);
   color: var(--text-2);

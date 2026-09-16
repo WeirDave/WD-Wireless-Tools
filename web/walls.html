@@ -463,12 +463,18 @@
       <div class="swap-panel swap-panel-selection">
         <div class="swap-panel-header">
           <span>Selected</span>
-          <button type="button" class="swap-collapse-all" id="swapCollapseAllBtn"
-                  onclick="toggleAllSwapGroups()" disabled title="Collapse every wall type">Collapse all</button>
           <span class="swap-sel-count" id="swapSelCount" title="Checked / caught by the selection">0</span>
         </div>
         <div class="swap-panel-body">
           <p class="swap-panel-hint swap-sel-hint">Point at a wall on the plan to light up its row — click it to check or uncheck it. Hover a wall type to highlight all of it at once.</p>
+          <div class="swap-foldall">
+            <button type="button" class="swap-collapse-all" id="swapExpandAllBtn"
+                    onclick="expandAllSwapGroups()" disabled
+                    title="Open every wall type in the list">Expand all</button>
+            <button type="button" class="swap-collapse-all" id="swapCollapseAllBtn"
+                    onclick="collapseAllSwapGroups()" disabled
+                    title="Close every wall type in the list">Collapse all</button>
+          </div>
           <div id="swapSelBreakdown" class="swap-sel-breakdown">
             <div class="swap-empty">Drag a marquee to select walls, or click a wall on the plan. Everything you catch starts checked — uncheck what you don’t want to change.</div>
           </div>
