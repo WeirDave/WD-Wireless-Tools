@@ -86,9 +86,12 @@
 
   --stripe: #131313;
   --row-hover: #1e1e1e;
-  /* +4 on each band, so the detail sits just above its parent either way */
-  --detail-row: #1a1a1a;
-  --detail-row-stripe: #171717;
+  /* Matching the parent band: the detail row is separated by a rule, not a
+     tint, so the bold treatment is reserved for the site boundary. */
+  --detail-row: #161616;
+  --detail-row-stripe: #131313;
+  --detail-rule: #2b2b2b;
+  --site-rule: #3a4657;
   --head-bg: #0e0e0e;
 
 
@@ -148,9 +151,11 @@
 
   --stripe: #eef1f5;
   --row-hover: #e2e9f2;
-  /* Light theme goes the other way: a touch darker than the row above. */
-  --detail-row: #f4f6f9;
-  --detail-row-stripe: #e9edf2;
+  /* Same on the light theme: the rule separates, the tint does not. */
+  --detail-row: #ffffff;
+  --detail-row-stripe: #eef1f5;
+  --detail-rule: #d4dae2;
+  --site-rule: #b9c6d8;
   --head-bg: #e9eff5;
 
   --slate-bg: #eff0f1;
@@ -2659,8 +2664,24 @@ body.tool-cloud .toolbar input.search:focus {
   padding: 6px 14px 7px 14px;
   font-size: 12.5px; line-height: 1.5;
   border-bottom: 1px solid var(--border);
-  background: var(--detail-row);
   color: var(--text-2);
+
+  /* A hairline, not a tint. "scratch what I said about bolder on the 3rd
+     line ... they should delineate that with a line maybe."
+
+     He is right, and the reason is hierarchy rather than taste. There are
+     three levels - site, file, detail - and they need three *distinct*
+     treatments, not three strengths of the same one. The site boundary is
+     the bold one, because the site is the unit he works in; tinting the
+     detail row as well made it compete for the same signal. A rule says
+     "this belongs to the row above and starts here" and adds no weight.
+
+     So the background matches its parent band exactly and the line does the
+     work. --detail-row / --detail-row-stripe are kept equal to --surface /
+     --stripe so anything that wants to reintroduce a tint has one place to
+     do it. */
+  background: var(--detail-row);
+  border-top: 1px solid var(--detail-rule);
 }
 .row-detail.stripe { background: var(--detail-row-stripe); }
 
@@ -3181,7 +3202,26 @@ body.tool-cloud .toolbar input.search:focus {
 
 .ledger.tree .tree-parent .lr-cell.cloud, .ledger.tree .tree-parent .lr-cell.local { font-weight: 700; }
 
-.ledger.tree .tree-parent { background: var(--surface-raised); }
+/* The boundary between one site and the next is the line that matters most,
+   because the site is the unit he actually works in - "it should be a clear
+   separator in between each site". Dark mode is not a reason for everything
+   to be low contrast, and judged against ninety-seven folders on a wide
+   monitor the old hairline disappeared.
+
+   Deliberately *not* changed: sites blue with a border, files white. He said
+   that reads well and asked for it to stay. This strengthens the boundary
+   without touching the palette or the hierarchy. */
+.ledger.tree .tree-parent {
+  background: var(--surface-raised);
+  border-top: 3px solid var(--site-rule);
+}
+/* Not above the first site in the list - a rule there separates it from the
+   header, which is not a site boundary. */
+.ledger.tree .tree-parent:first-child { border-top: 0; }
+
+/* Air above the site header as well: spacing reads as a break even at a
+   glance, where a line alone still has to be looked at. */
+.ledger.tree .tree-parent .lr-cell { padding-top: 9px; padding-bottom: 9px; }
 
 .ledger.tree .tree-parent .lr-cell.cloud .cell-name { color: var(--blue); }
 

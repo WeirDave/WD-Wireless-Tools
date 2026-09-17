@@ -226,6 +226,56 @@ class ItStopsContradictingItsOwnFindingTests(unittest.TestCase):
         self.assertIn("download", badge)
 
 
+class ThreeLevelsGetThreeTreatmentsTests(unittest.TestCase):
+    """Site, file, detail - three distinct treatments, not three intensities.
+
+    "it should be a clear separator in between each site" and, for the level
+    below, "scratch what I said about bolder on the 3rd line ... they should
+    delineate that with a line maybe."
+
+    Both instincts point the same way. The site is the unit he works in, so
+    that boundary earns the weight; tinting the detail row as well made two
+    levels compete for one signal. The site gets a heavy rule and raised
+    background, the detail gets a hairline and no tint at all.
+
+    Measured in Firefox, Chrome and Edge at 1920x1200 against twelve sites of
+    four files each: site rule 3px, detail rule 1px, detail tint delta 0.
+    """
+
+    CSS_TEXT = CSS.read_text(encoding="utf-8")
+
+    def test_the_site_boundary_is_heavy(self):
+        block = self.CSS_TEXT[self.CSS_TEXT.index(".ledger.tree .tree-parent {"):]
+        block = block[:block.index(chr(10) + "}")]
+        self.assertIn("border-top: 3px solid var(--site-rule)", block)
+
+    def test_the_detail_row_is_a_line_rather_than_a_tint(self):
+        block = self.CSS_TEXT[self.CSS_TEXT.index(".row-detail {"):]
+        block = block[:block.index(chr(10) + "}")]
+        self.assertIn("border-top: 1px solid var(--detail-rule)", block)
+
+    def test_the_detail_row_does_not_tint_against_its_parent(self):
+        """A tint here would compete with the site boundary. The tokens match
+        the row bands exactly, so the rule does all the separating."""
+        import re as _re
+        dark = self.CSS_TEXT[self.CSS_TEXT.index("--bg: #090909"):]
+        dark = dark[:dark.index("}")]
+        def token(name):
+            m = _re.search("--%s:" % name + r"\s*([^;]+);", dark)
+            return m.group(1).strip() if m else None
+        self.assertEqual(token("surface"), token("detail-row"))
+        self.assertEqual(token("stripe"), token("detail-row-stripe"))
+
+    def test_the_site_and_file_palette_is_left_alone(self):
+        """"Currently the sites are labelled in blue and the files are labelled
+        using white text, and the sites have a nice border ... I hope they
+        don't go the other direction." So this is not touched."""
+        self.assertIn(".ledger.tree .tree-parent .lr-cell.cloud .cell-name { color: var(--blue); }",
+                      self.CSS_TEXT)
+        self.assertIn(".ledger.tree .tree-parent .lr-cell.local .cell-name { color: var(--green); }",
+                      self.CSS_TEXT)
+
+
 class TheBandIsStyledForAWideScreenTests(unittest.TestCase):
 
     def test_the_band_has_its_own_rules(self):
