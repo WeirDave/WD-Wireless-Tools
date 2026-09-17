@@ -900,6 +900,10 @@ fact:
   the push and a bare `git tag`
 - `v2.102.0` shipped dead, because a module was present in the shared tree and
   untracked, so the local suite passed and CI did not
+- uncommitted routing edits sitting in the shared tree failed CI for a session
+  that had not touched them
+- a session left a landmine where a plain `git add` would have reverted three
+  version numbers
 - and the clean-slate operation itself opened with `tools/cloud_manager.py`
   holding another session's stale work-in-progress, six lines of committed code
   behind the tree it was sitting in
@@ -910,34 +914,40 @@ is shared. Stop sharing the tree and most of them stop being load-bearing.
 
 ### Where they live
 
-    .claude/worktrees/<session-name>/
+    C:\wd-worktrees\<session-name>\
 
-`.claude/` is gitignored, so nothing here can reach a commit by accident.
+**Outside Dropbox, deliberately.** This repository lives inside a Dropbox
+folder and a worktree is a full second copy of the tree, so a worktree kept
+under the repo gets uploaded and re-downloaded in its entirety, and Dropbox
+takes file locks on files git is in the middle of writing.
 
-**`.claude/worktrees` is marked Dropbox-ignored** (an NTFS alternate data
-stream, `com.dropbox.ignored`), because this repository lives inside a Dropbox
-folder and a worktree is a full second copy of the tree. Without that mark
-every session's worktree syncs to the cloud and back, and Dropbox takes file
-locks on files git is trying to write. If you create the directory fresh, set
-it again:
+An earlier draft of this note kept them at `.claude/worktrees/` and suppressed
+the sync with an NTFS alternate data stream (`com.dropbox.ignored`). That
+works, and it is the wrong shape: it defends against a problem rather than not
+having it, and it stays correct only while one invisible attribute survives
+every fresh clone, restore and copy. `C:\wd-worktrees` is not Dropbox's
+business in the first place. If you find a worktree under `.claude/worktrees/`,
+it predates this note - move it.
 
-```powershell
-Set-Content -Path .claude\worktrees -Stream com.dropbox.ignored -Value 1
-```
-
-Check it with `Get-Item .claude\worktrees -Stream *`.
+The directory is created on demand; nothing needs to exist first.
 
 ### How to create one
 
 ```powershell
 git fetch origin
-git worktree add -b claude/<session-name> .claude\worktrees\<session-name> origin/main
+git worktree add -b claude/<session-name> C:\wd-worktrees\<session-name> origin/main
 ```
 
 Branch off `origin/main`, not off the shared checkout's `HEAD` - the shared
 checkout may be mid-edit, and that is the whole problem being avoided. Then
-work in there: it has its own index, its own HEAD, and its own working files,
-so `git add`, `git commit` and `git stash` all become ordinary again.
+work in there: it has its own index, its own HEAD and its own working files, so
+`git add`, `git commit` and `git stash` all become ordinary again.
+
+Two things are still shared and are worth knowing. The **object store** is
+shared, which is why this is cheap rather than a second clone. And the **stash
+stack** is shared, so a bare `git stash pop` in a worktree can still take
+somebody else's entry - prefer a throwaway WIP commit, or `git stash push -m
+"<unique tag>"` and `git stash apply <sha>` by id.
 
 ### How work merges back
 
@@ -969,7 +979,7 @@ A worktree left behind is a stale branch, a second copy of the tree, and a
 place rule zero material sits unnoticed. From the shared checkout:
 
 ```powershell
-git worktree remove .claude\worktrees\<session-name>
+git worktree remove C:\wd-worktrees\<session-name>
 git branch -d claude/<session-name>
 git worktree prune -v
 ```
@@ -977,32 +987,37 @@ git worktree prune -v
 `git worktree remove` refuses if the tree has uncommitted changes, which is the
 correct behaviour - look at what is in there before reaching for `--force`.
 
-**On this machine it also fails on a clean worktree**, with:
+**If a teardown ever fails on a perfectly clean worktree**, with:
 
-    error: failed to delete '...\.claude\worktrees\<name>': Permission denied
+    error: failed to delete '...': Permission denied
 
-Measured on 2026-09-17: that is not a lock on the contents. Git deletes every
-file successfully and then cannot remove the empty directory, because Windows
-still holds a handle on it. The registration *is* cleared - `git worktree list`
-stops showing it - so the state is half-done and looks finished. Finish it:
+that is not a lock on the contents. Git deletes every file successfully and
+then cannot remove the now-empty directory, because something outside git is
+holding a handle on it. The registration *is* cleared - `git worktree list`
+stops showing it - so the state is half-done while looking finished. Finish it:
 
 ```powershell
-Remove-Item .claude\worktrees\<session-name> -Recurse -Force
+Remove-Item C:\wd-worktrees\<session-name> -Recurse -Force
 git worktree prune -v
 ```
 
-This is the mechanism behind "the folder itself sometimes survives" below. It
-survives almost every time here.
+**Measured on 2026-09-17, and it is the argument for the location.** A worktree
+under the repo inside Dropbox failed teardown exactly this way. Three
+create-and-remove cycles at `C:\wd-worktrees` - 380 files each - all exited 0
+with the directory gone. So the handle was Dropbox's, and moving out of Dropbox
+did not merely avoid the sync traffic, it removed the failure. Keep the
+`Remove-Item` line anyway: a virus scanner or an open editor can hold a handle
+just as well.
 
 **And prune at the start of every session**, because a session that dies
 mid-task - crash, timeout, closed window - removes nothing. `git worktree
 prune -v` clears git's registration; the directory on disk sometimes survives
-that, so check for it separately, and check for the `claude/<name>` branch too.
-This repo has had an abandoned worktree sitting in it, plus several more in a
-temp directory outside Dropbox that are not reachable from here at all. None of
-that is dangerous by itself, but rule zero material has sat in exactly these
-forgotten corners before. Report what you found and removed rather than
-cleaning quietly.
+that, so check `C:\wd-worktrees` separately, and check for the
+`claude/<name>` branch too. This repo has had an abandoned worktree sitting in
+it, plus several more in a temp directory that are not reachable from here at
+all. None of that is dangerous by itself, but rule zero material has sat in
+exactly these forgotten corners before. Report what you found and removed
+rather than cleaning quietly.
 
 ## Memory across sessions, generally
 
