@@ -514,16 +514,9 @@ def api_plantrim(action):
 
     name = request.args.get("name") or "project.esx"
     stem = Path(name).stem or "project"
-    raw_margin = request.args.get("margin", "")
-    if raw_margin in esx_trimmer.MARGIN_PRESETS:
-        margin = raw_margin
-    elif raw_margin:
-        try:
-            margin = int(raw_margin)
-        except ValueError:
-            margin = esx_trimmer.DEFAULT_MARGIN_PRESET
-    else:
-        margin = esx_trimmer.DEFAULT_MARGIN_PRESET
+    # A preset name, "60.96m" for a custom distance, or a bare integer for the
+    # legacy pixel form. One reader, so the two routes cannot disagree.
+    margin = esx_trimmer.parse_margin(request.args.get("margin", ""))
 
     # Boxes the user drew, keyed by floorPlanId. They ride in a query parameter
     # because the body is already the raw .esx; a dozen floors of four integers
@@ -884,16 +877,9 @@ def api_prep(action):
 
     name = (on_disk.name if on_disk else None) or request.args.get("name") or "project.esx"
     steps = [s for s in (request.args.get("steps") or "").split(",") if s]
-    raw_margin = request.args.get("margin", "")
-    if raw_margin in esx_trimmer.MARGIN_PRESETS:
-        margin = raw_margin
-    elif raw_margin:
-        try:
-            margin = int(raw_margin)
-        except ValueError:
-            margin = esx_trimmer.DEFAULT_MARGIN_PRESET
-    else:
-        margin = esx_trimmer.DEFAULT_MARGIN_PRESET
+    # A preset name, "60.96m" for a custom distance, or a bare integer for the
+    # legacy pixel form. One reader, so the two routes cannot disagree.
+    margin = esx_trimmer.parse_margin(request.args.get("margin", ""))
     retighten = request.args.get("retighten") != "0"
 
     wall_types = None

@@ -250,11 +250,17 @@
           <label for="ptbMargin">Margin:</label>
           <select id="ptbMargin" onchange="ptbSetMargin(this.value)"
                   title="How much whitespace to leave around the building when trimming automatically">
-            <option value="tight">Tight</option>
-            <option value="normal" selected>Normal (~10 ft)</option>
-            <option value="wide">Wide (~20 ft)</option>
-            <option value="extra-wide">Extra wide (~33 ft)</option>
+            <option value="tight">Tight &mdash; 3 ft (0.9 m)</option>
+            <option value="normal" selected>Normal &mdash; 10 ft (3 m)</option>
+            <option value="wide">Wide &mdash; 20 ft (6.1 m)</option>
+            <option value="extra-wide">Extra wide &mdash; 35 ft (10.7 m)</option>
+            <option value="parking-lot">Parking lot &mdash; 200 ft (61 m)</option>
+            <option value="custom">Custom&hellip;</option>
           </select>
+          <span id="ptbMarginCustomWrap" hidden><input type="number" id="ptbMarginFt"
+                 min="1" max="2000" step="1" value="200" style="width:5.5em"
+                 title="How far out to keep, in feet"
+                 onchange="ptbSetCustomMargin(this.value)"> ft</span>
         </span>
         <span class="ptb-spacer"></span>
         <button class="btn btn-sm ptb-reset" id="ptbFit" onclick="ptbFitView()"

@@ -549,6 +549,87 @@ an AP colour to a reader — labeler sequence list, labeler preview swatch,
 report grouping headings — goes through the shared pair now, and
 `tests/test_ap_color_order.py` holds that.
 
+## Changing a report means printing it and reading it
+
+**A report that renders is not a report that works, and only one of those had
+ever been checked.** Three defects were reported from a live job in one
+evening - match line text painted across the AP markers at 24pt, AP names
+printed on top of the floor column, a compass page set at 3.9pt - and every one
+of them was green in the suite the whole time. The tests asserted properties:
+that the match line label was rotated, that the table had `table-layout: fixed`.
+Both were true throughout the period the sheets were unusable.
+
+So, for any change to report generation: **generate the affected reports,
+print them, and measure the PDF.** The question is not "did it render" but
+"can the person this sheet is for finish their task from it".
+
+- **AP installation and placement sheets** - an installer standing in the
+  building. Every AP identifier legible at printed size, every marker findable,
+  model, mount, height and orientation present, sections joining up through the
+  match lines and key plan.
+- **Bill of Materials and the summary** - someone raising a purchase order.
+  Every distinct part and its quantity, without counting anything by hand.
+- **Everything** - nothing overlapping, nothing off the sheet, nothing clipped
+  at a page break, table headers repeated on every page they continue onto, and
+  no text under about 6pt.
+
+### What to measure, and how
+
+`tests/test_ap_notes_page.py` is still the pattern for anything checkable in
+Node. What that cannot do is measure ink on paper, and that is where these
+faults live. Print through the real pipeline (`driver.print_page(PrintOptions())`
+- see the browser section above) and read the PDF with PyMuPDF:
+
+- **Text on top of text.** Take every span's bbox and look for pairs that
+  overlap by more than half the shorter one's height and a couple of points of
+  width. That single check finds the whole class: 24 hits on the aim sheet, 4
+  on the BOM, none after. Glyph boxes run slightly above and below their ink,
+  so a large numeral over its own caption is a false positive - hence the
+  thresholds.
+- **Anything outside the printable area.** Any span or image whose box passes
+  within about 18pt of the sheet edge. Chromium's own page footer sits there
+  and is not ours.
+- **Point sizes.** Collect every span's size. Anything under 6pt is a defect,
+  not a style choice.
+- **Cross-sheet references.** Collect the section headings and the match line
+  labels and confirm every reference names a sheet that exists.
+
+### The fixture, and why it is deliberately imperfect
+
+Build it synthetically, invented throughout, and structurally realistic: two
+floors, one dense enough to trigger section splitting, on the order of seventy
+APs, **two omni models and two directional models** so per-model counts are
+exercised, external antennas with azimuth, tilt, mount and height, and
+deliberately long antenna part numbers - a real one is fifty characters and
+that is what overflows a table.
+
+And leave faults in it: an AP with a generic name, one with no model, one with
+no mount or height, one on no floor plan. Every one of those found something.
+A clean project passes everything and proves nothing.
+
+### The rule that keeps coming back
+
+**A size that is a fraction of the drawing is not a size on paper.** The match
+line label was `min(cellW, cellH) * 0.045` and printed at 24pt. The aim
+mini-map and coverage markers were `min(W, H) * 0.022` and printed at 5.4pt.
+The placement map has had the right idiom since v2.52 with the reasoning
+written beside it - floor the value at about 1.35% of the long edge, which
+lands near 7pt at the width these print - and the fix each time was to use it.
+Anything a person reads off a sheet gets an absolute floor, or a size in
+points, and the label goes in the margin rather than on the drawing.
+
+### And the one that caused two of them
+
+`.rep-ap-table td.rep-name` is used by three tables. Its print rule said "the
+AP name is transcribed onto a physical label, so it is never cut" and
+implemented that as `white-space: nowrap; overflow: visible` - which is not
+"never cut", it is "never wrapped, and allowed to leave the cell". Only one of
+the three tables holds a short AP name. **Before writing a rule for a shared
+class, check who else uses it**, and prefer wrapping to nowrap: wrapping loses
+no characters, which is what "never cut" actually asks for. `overflow: hidden`
+on a table cell is not a reliable backstop on its own - the BOM had it and
+overflowed anyway. Column widths are the mechanism.
+
 ## Known gotchas
 
 - **A wall template updates every type it carries, including the ones Ekahau

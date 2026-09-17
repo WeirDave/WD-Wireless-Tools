@@ -97,6 +97,27 @@
 
   <p><strong>Floor 02 — 2 of 3</strong> under the list tells you which floor you are on and how far through you are. <strong>Next floor →</strong> steps to the next one and greys out on the last.</p>
 
+  <p>Each row also says <strong>how much drawing lies beyond the building</strong>, in feet, in each of the four directions. That is a fact about the sheet rather than about the crop — it does not move when you change the margin. It is there so you can tell whether a big margin is a real choice on this drawing: if a sheet only carries 80&nbsp;ft of site beyond the building, then every margin above 80 keeps exactly the same thing.</p>
+
+  <h2>Margin — how much to leave around the building</h2>
+  <p>The <strong>Margin</strong> dropdown, in the bar above the plan, decides how far out from the drawing the automatic crop stops. <strong>Normal</strong> is the default. Every setting is a real-world distance, measured on the plan's own scale, so the same choice means the same distance on the ground whatever resolution the sheet was exported at.</p>
+
+  <table class="ref-table">
+    <tr><th>Setting</th><th>Keeps</th><th>For</th></tr>
+    <tr><td><strong>Tight</strong></td><td>3 ft (0.9 m)</td><td>Cropping hard to the building envelope.</td></tr>
+    <tr><td><strong>Normal</strong></td><td>10 ft (3 m)</td><td>The default — room for survey paths along the exterior walls.</td></tr>
+    <tr><td><strong>Wide</strong></td><td>20 ft (6.1 m)</td><td>Seeing some of the RF bleed outside the walls.</td></tr>
+    <tr><td><strong>Extra wide</strong></td><td>35 ft (10.7 m)</td><td>Generous exterior coverage.</td></tr>
+    <tr><td><strong>Parking lot</strong></td><td>200 ft (61 m)</td><td>Keeping the parking and the approaches, where APs cover outdoors.</td></tr>
+    <tr><td><strong>Custom…</strong></td><td>Whatever you type, in feet</td><td>When none of the five is the number you want. It is remembered.</td></tr>
+  </table>
+
+  <p><strong>A margin never invents paper.</strong> Ask for more than the sheet has and it keeps everything there is and stops at the edge — you cannot end up with blank canvas that was not in the drawing. If the margin ends up covering the whole sheet, the floor simply reports <em>Nothing to do</em>.</p>
+
+  <p><strong>This is the same setting Prep uses</strong> (Prep → <em>What to do</em> → <em>Leave a margin of</em>). Change it in either tool and both follow, so a project you prepare in Prep is cropped the way you set it here.</p>
+
+  <p class="note">Until v2.103.17 these were 3, 6 and 10 <em>metres</em> shown in feet, which read as 10, 20 and 33&nbsp;ft — and <strong>Tight</strong> was not a distance at all but a flat ten pixels, so it meant something different on every drawing. They are round numbers of feet now, and every one of them converts through the plan's scale.</p>
+
   <h2>Drawing your own rectangle</h2>
   <p>Automatic is a starting point, not a verdict. When you want a specific part of the sheet — one wing, a single conference room, the racking and nothing else — draw it.</p>
 

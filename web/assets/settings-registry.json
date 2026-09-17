@@ -296,6 +296,20 @@
       "legacy_browser_key": "ekahau-auto-apply"
     },
     {
+      "key": "plantrim.margin_custom_ft",
+      "label": "Trim margin, custom distance (feet)",
+      "category": "preference",
+      "owner": "PlanTrim, and read and written by Prep's trim step too",
+      "section": "plantrim",
+      "home": "plantrim-tool",
+      "_comment": [
+        "Used only when margin_preset is \"custom\". Stored in feet because feet",
+        "is the unit the choice is made in; the trimmer converts to metres and",
+        "then to pixels through the plan's own metersPerUnit, so it is a real",
+        "distance on the ground whatever the drawing's scale."
+      ]
+    },
+    {
       "key": "plantrim.margin_preset",
       "label": "Trim margin (how much room to leave around the building)",
       "category": "preference",

@@ -156,7 +156,14 @@ DEFAULTS = {
         "templates": [],
     },
     "plantrim": {
+        # A preset name, or "custom" to use the distance below. Shared with
+        # Prep's trim step - one setting, so the two tools cannot crop the same
+        # project differently.
         "margin_preset": "normal",
+        # The custom distance, in feet, because feet is what he chooses in.
+        # It exists because the presets cannot all be right: "I don't know if
+        # 200 ft is the magic number, I just threw it out."
+        "margin_custom_ft": 200,
     },
     "walls": {
         # Opening a project from disk lets Quick Walls show you the folder it

@@ -102,6 +102,26 @@
      #008000, a different colour from Ekahau's. It also handed the name to the
      contrast helper below, which cannot parse a word, so every marked AP in a
      printed report came out with white lettering regardless of its fill. */
+  /* Distances. The .esx is metric and he works in feet, so anything that puts
+     a distance on screen shows both rather than picking one and leaving the
+     reader to convert. That is not decoration: the trim presets were stored as
+     3 / 6 / 10 metres and labelled 10, 20 and 33 ft, and read as numbers
+     somebody had invented. They are round in feet now, and the metres are
+     shown beside them so the metric equivalent is never a surprise. */
+  WD.METRES_PER_FOOT = 0.3048;
+  WD.FEET_PER_METRE = 3.280839895013123;
+  WD.DEFAULT_CUSTOM_MARGIN_FT = 200;
+
+  /* Metres in, "84 ft (26 m)" out. One decimal under 10, none above, because
+     "25.6 ft" of clearance is false precision on a scanned drawing. */
+  WD.metresAsFeet = function (m) {
+    if (m == null || isNaN(m)) return '';
+    var ft = m * WD.FEET_PER_METRE;
+    var f = ft < 10 ? ft.toFixed(1) : String(Math.round(ft));
+    var mm = m < 10 ? m.toFixed(1) : String(Math.round(m));
+    return f + ' ft (' + mm + ' m)';
+  };
+
   WD.EKAHAU_COLORS = {
     yellow:  '#FFE600', orange: '#FF8500', red:     '#FF0000',
     magenta: '#FF00FF', purple: '#C297FF', blue:    '#0068FF',

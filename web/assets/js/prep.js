@@ -47,19 +47,45 @@
   // disagreed. He runs Prep on every new site and cannot easily go and look.
   function loadMargin() {
     return WD.api('settings/get').then(function (r) {
-      var preset = r && r.settings && r.settings.plantrim
-                && r.settings.plantrim.margin_preset;
+      var pt = (r && r.settings && r.settings.plantrim) || {};
       var sel = $('prepMargin');
-      if (preset && sel) sel.value = preset;
+      if (pt.margin_custom_ft && $('prepMarginFt')) {
+        $('prepMarginFt').value = pt.margin_custom_ft;
+      }
+      if (pt.margin_preset && sel) sel.value = pt.margin_preset;
+      syncMarginUi();
     }).catch(function () { /* settings unavailable - keep the shipped default */ });
+  }
+
+  function syncMarginUi() {
+    var wrap = $('prepMarginCustomWrap');
+    if (wrap) wrap.hidden = $('prepMargin').value !== 'custom';
   }
 
   // Its own handler rather than the shared one, so picking a margin saves it
   // and ticking an unrelated checkbox does not.
   window.prepSetMargin = function (value) {
     WD.api('settings/update', { patch: { plantrim: { margin_preset: value } } });
+    syncMarginUi();
     syncStepUi();
   };
+
+  window.prepSetCustomMargin = function (value) {
+    var ft = Math.max(1, Math.min(2000, parseFloat(value) || 0));
+    $('prepMarginFt').value = ft;
+    WD.api('settings/update', { patch: { plantrim: { margin_custom_ft: ft } } });
+    syncStepUi();
+  };
+
+  // What goes on the wire. A preset travels by name; a typed distance travels
+  // as metres with an `m` on it, because a bare number still means pixels to
+  // the trimmer and 60 pixels is not 60 feet.
+  function marginParam() {
+    var v = $('prepMargin').value;
+    if (v !== 'custom') return v;
+    var ft = parseFloat($('prepMarginFt').value) || WD.DEFAULT_CUSTOM_MARGIN_FT;
+    return (ft * WD.METRES_PER_FOOT).toFixed(4) + 'm';
+  }
 
   function loadTemplates() {
     return fetch('/api/prep/templates', {
@@ -205,7 +231,7 @@
       // rather than a pixel count. Prep used to send the bare 10-pixel
       // DEFAULT_MARGIN here, which is the `tight` preset by another name - that
       // is why prepared plans came back cropped hard against the building.
-      q += '&margin=' + encodeURIComponent($('prepMargin').value);
+      q += '&margin=' + encodeURIComponent(marginParam());
       if ($('prepUseBoxes').checked) q += '&useBoxes=1';
     }
     if ($('prepStep-walls').checked) {
@@ -279,6 +305,19 @@
       + ' (instead of finding the drawing automatically)';
   }
 
+  // How much drawing this sheet actually carries beyond the building, each
+  // way. It is the only thing that answers "is 200 ft a real choice here" -
+  // on a sheet with 80 ft of site on it, every margin above 80 is the same
+  // margin, and without this the only way to find that out is to try one.
+  function clearanceLine(f) {
+    var c = f && f.clearance;
+    if (!c) return '';
+    var ft = function (m) { return Math.round(m * WD.FEET_PER_METRE) + ' ft'; };
+    return '<br><span class="prep-sub">drawing beyond the building: '
+      + ft(c.left) + ' left, ' + ft(c.right) + ' right, '
+      + ft(c.top) + ' up, ' + ft(c.bottom) + ' down</span>';
+  }
+
   function renderPreview(r) {
     var host = $('prepPreview');
     if (!r || !r.ok) {
@@ -310,10 +349,12 @@
           if (f.action === 'trimmed') {
             return '<b>' + esc(f.name) + '</b> — ' + f.oldSize[0] + '×' + f.oldSize[1]
               + ' → ' + f.newSize[0] + '×' + f.newSize[1]
-              + ' <span class="prep-sub">(' + f.areaSavedPct + '% of the sheet was empty)</span>';
+              + ' <span class="prep-sub">(' + f.areaSavedPct + '% of the sheet was empty)</span>'
+              + clearanceLine(f);
           }
           return '<b>' + esc(f.name) + '</b> — <span class="prep-sub">'
-            + esc(f.action + (f.reason ? ': ' + f.reason : '')) + '</span>';
+            + esc(f.action + (f.reason ? ': ' + f.reason : '')) + '</span>'
+            + clearanceLine(f);
         });
         cards.push(stepCard('Trim the canvas',
           n ? n + ' of ' + t.floorCount + ' ' + plural(t.floorCount, 'floor') : 'nothing to do',

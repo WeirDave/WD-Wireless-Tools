@@ -35,26 +35,52 @@
 
   // Drawn keep-regions ride in the query string; the body is already the .esx.
   function analyzeParams() {
-    var params = { name: state.file.name, margin: state.margin };
+    var params = { name: state.file.name, margin: marginParam() };
     var boxes = window.__ptBoxes && window.__ptBoxes();
     if (boxes) params.boxes = JSON.stringify(boxes);
     return params;
   }
 
+  // What goes on the wire. A preset travels by name; a typed distance travels
+  // as metres with an `m` on it, because a bare number still means pixels to
+  // the trimmer and 60 pixels is not 60 feet.
+  function marginParam() {
+    if (state.margin !== 'custom') return state.margin;
+    var el = $('ptbMarginFt');
+    var ft = (el && parseFloat(el.value)) || WD.DEFAULT_CUSTOM_MARGIN_FT;
+    return (ft * WD.METRES_PER_FOOT).toFixed(4) + 'm';
+  }
+
+  function syncMarginUi() {
+    var wrap = $('ptbMarginCustomWrap');
+    if (wrap) wrap.hidden = state.margin !== 'custom';
+  }
+
   // Load the saved margin preset on page open, and wire up the selector.
   WD.api('settings/get').then(function (r) {
-    var preset = r && r.settings && r.settings.plantrim &&
-                 r.settings.plantrim.margin_preset;
-    if (preset) {
-      state.margin = preset;
-      var sel = $('ptbMargin');
-      if (sel) sel.value = preset;
+    var pt = (r && r.settings && r.settings.plantrim) || {};
+    if (pt.margin_custom_ft && $('ptbMarginFt')) {
+      $('ptbMarginFt').value = pt.margin_custom_ft;
     }
+    if (pt.margin_preset) {
+      state.margin = pt.margin_preset;
+      var sel = $('ptbMargin');
+      if (sel) sel.value = pt.margin_preset;
+    }
+    syncMarginUi();
   }).catch(function () { /* settings unavailable — keep the default */ });
 
   window.ptbSetMargin = function (value) {
     state.margin = value;
     WD.api('settings/update', { patch: { plantrim: { margin_preset: value } } });
+    syncMarginUi();
+    if (state.bytes && !state.busy) analyze();
+  };
+
+  window.ptbSetCustomMargin = function (value) {
+    var ft = Math.max(1, Math.min(2000, parseFloat(value) || 0));
+    $('ptbMarginFt').value = ft;
+    WD.api('settings/update', { patch: { plantrim: { margin_custom_ft: ft } } });
     if (state.bytes && !state.busy) analyze();
   };
 
@@ -891,6 +917,21 @@
      tests slice this file from `function floorState` and a helper outside that
      boundary is simply undefined when they run it. */
   function floorState(rep, id) {
+    // How much drawing the sheet carries beyond the building, each way.
+    // Without it, choosing a margin is guesswork: a 200 ft margin on a sheet
+    // with 80 ft of site drawn on it is not a wider crop, it is "keep
+    // everything", and the only way to find that out was to try one and
+    // compare the numbers. Local to this function on purpose - the tests that
+    // hold this row's wording slice exactly this function out and run it, so a
+    // helper outside it would be a name they cannot resolve.
+    function clearanceText(x) {
+      var c = x && x.clearance;
+      if (!c) return '';
+      var ft = function (m) { return Math.round(m * 3.280839895013123); };
+      return '  · beyond the building: ' + ft(c.left) + ' left, '
+        + ft(c.right) + ' right, ' + ft(c.top) + ' up, ' + ft(c.bottom)
+        + ' down (ft)';
+    }
     var savedBox = box.boxes && box.boxes[id];
     var drawn = !!(savedBox && savedBox.length === 4);
     var f = null;
@@ -900,10 +941,11 @@
         ? { word: 'Your box', cls: 'is-manual', detail: 'drawn \u2014 not cropped yet' }
         : { word: 'Reading\u2026', cls: 'is-pending', detail: '' };
     }
+    var beyond = clearanceText(f);
     if (f.action === 'trimmed') {
       var dims = f.oldSize[0] + '\u00d7' + f.oldSize[1] + ' \u2192 ' +
                  f.newSize[0] + '\u00d7' + f.newSize[1];
-      var saved = (f.areaSavedPct ? '  \u2212' + f.areaSavedPct + '%' : '');
+      var saved = (f.areaSavedPct ? '  \u2212' + f.areaSavedPct + '%' : '') + beyond;
       if (f.source === 'manual') {
         return { word: 'Your box', cls: 'is-manual', detail: dims + saved };
       }
@@ -915,7 +957,8 @@
     if (f.action === 'skipped') {
       return {
         word: 'Nothing to do', cls: 'is-skip',
-        detail: (f.reason || '') + (drawn ? '  \u00b7 your box is still saved' : ''),
+        detail: (f.reason || '') + beyond
+          + (drawn ? '  \u00b7 your box is still saved' : ''),
       };
     }
     return {

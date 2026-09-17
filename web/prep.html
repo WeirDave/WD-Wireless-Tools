@@ -196,11 +196,16 @@ body.tool-prep .dropzone-logo { background-image: url(/assets/wd-wireless-tools-
         <div class="prep-row">
           <label for="prepMargin">Leave a margin of</label>
           <select id="prepMargin" class="prep-input prep-input--sel" onchange="prepSetMargin(this.value)">
-            <option value="tight">Tight &mdash; 10 pixels, barely any</option>
-            <option value="normal" selected>Normal &mdash; 3 m, about 10 ft</option>
-            <option value="wide">Wide &mdash; 6 m, about 20 ft</option>
-            <option value="extra-wide">Extra wide &mdash; 10 m, about 33 ft</option>
+            <option value="tight">Tight &mdash; 3 ft (0.9 m)</option>
+            <option value="normal" selected>Normal &mdash; 10 ft (3 m)</option>
+            <option value="wide">Wide &mdash; 20 ft (6.1 m)</option>
+            <option value="extra-wide">Extra wide &mdash; 35 ft (10.7 m)</option>
+            <option value="parking-lot">Parking lot &mdash; 200 ft (61 m)</option>
+            <option value="custom">Custom&hellip;</option>
           </select>
+          <span id="prepMarginCustomWrap" hidden><input type="number" id="prepMarginFt"
+                 class="prep-input prep-input--num" min="1" max="2000" step="1" value="200"
+                 onchange="prepSetCustomMargin(this.value)"> ft</span>
           <span>around the drawing</span>
         </div>
         <label class="prep-row" id="prepUseBoxesRow" style="margin-bottom:0" hidden>
@@ -212,7 +217,12 @@ body.tool-prep .dropzone-logo { background-image: url(/assets/wd-wireless-tools-
           same real distance on every sheet whatever its resolution. A plan with no scale falls
           back to 10 pixels. <b>Normal</b> is what the suite ships with; <b>Wide</b> and
           <b>Extra wide</b> leave noticeably more paper around the building if a crop that
-          close to the walls is tighter than you like.
+          close to the walls is tighter than you like, and <b>Parking lot</b> keeps the
+          site around it for outdoor APs. Pick <b>Custom</b> to type any distance.
+          A margin never invents paper: if you ask for more than the sheet has, it keeps
+          everything there is and stops at the edge. Each floor below says how much
+          drawing it actually carries beyond the building, which is what tells you
+          whether a big margin is a real choice or just &ldquo;keep the whole sheet&rdquo;.
         </p>
         <p class="prep-hint">
           This is the <b>same setting as PlanTrim&rsquo;s Margin</b>, not a separate one &mdash;

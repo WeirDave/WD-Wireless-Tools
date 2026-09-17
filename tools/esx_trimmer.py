@@ -99,16 +99,73 @@ CUT_CASCADE = (
 
 DEFAULT_MARGIN = 10
 
-# Real-world margin presets, in metres.  The names show up in the UI selector
-# and in the settings file; the metre value is converted to pixels per-floor
-# using the plan's own metersPerUnit.
-MARGIN_PRESETS = {
-    "tight":      0,      # legacy 10-pixel padding only
-    "normal":     3.0,    # ~10 ft — room for survey paths near exterior walls
-    "wide":       6.0,    # ~20 ft — see some exterior RF bleed
-    "extra-wide": 10.0,   # ~33 ft — generous exterior coverage
+FEET_PER_METRE = 3.280839895013123
+#: Exact, by definition.  Used so a preset chosen in feet is stored as the
+#: metres that number really is, rather than as a rounded approximation.
+METRES_PER_FOOT = 0.3048
+
+# Margin presets.  **Every one of these is a real-world distance**, converted
+# to pixels per-floor through the plan's own metersPerUnit, so a preset means
+# the same thing on the ground whatever the drawing's scale or resolution.
+#
+# The values are round numbers **in feet**, because feet is what the person
+# choosing them is working in.  They were not always: until v2.103.16 the table
+# was 3 / 6 / 10 metres, which rendered as 10, 20 and 33 ft and read as a
+# progression somebody had picked at random - "it's not scaling upward
+# correctly, but what do I know", and he was right.  Storage stays metric
+# because the .esx is metric; the choosing is done in feet.
+#
+# `tight` was worse than untidy.  It was `0`, which fell through to
+# DEFAULT_MARGIN - **ten pixels**, not a distance at all.  A pixel margin is a
+# different real-world size on every drawing, so `tight` was the one preset
+# that meant something different every time it was used.  It is 3 ft now.
+MARGIN_PRESET_FEET = {
+    "tight":       3,     # a hair's breadth, but a measurable one
+    "normal":     10,     # room for survey paths along the exterior walls
+    "wide":       20,     # some exterior RF bleed
+    "extra-wide": 35,     # generous exterior coverage
+    "parking-lot": 200,   # the parking and the approaches, for outdoor APs
 }
+#: The same presets in metres, which is what the trimmer actually works in.
+MARGIN_PRESETS = {k: round(v * METRES_PER_FOOT, 4)
+                  for k, v in MARGIN_PRESET_FEET.items()}
 DEFAULT_MARGIN_PRESET = "normal"
+#: What the custom box starts at when nobody has set one. His number, and the
+#: reason it is a box rather than a constant is that he said "I don't know if
+#: 200 ft is the magic number, I just threw it out".
+DEFAULT_CUSTOM_MARGIN_FEET = 200
+
+
+def parse_margin(raw, default=DEFAULT_MARGIN_PRESET):
+    """Read a margin off the wire.
+
+    Three forms, and they have to stay distinguishable:
+
+    * a preset name          -> that preset
+    * ``"60.96m"``           -> that many **metres**, as a float
+    * a bare integer         -> that many **pixels**, the legacy form that
+                                predates presets and still means pixels to
+                                ``_plan_floor``
+
+    The trailing ``m`` is what keeps a custom distance from being read as a
+    pixel count: ``60`` and ``60m`` are both plausible requests and mean very
+    different things.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return default
+    if raw in MARGIN_PRESETS:
+        return raw
+    if raw[-1:].lower() == "m":
+        try:
+            metres = float(raw[:-1])
+        except ValueError:
+            return default
+        return metres if metres > 0 else default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 def margin_px(preset_or_metres, meters_per_unit=None):
@@ -129,7 +186,13 @@ def margin_px(preset_or_metres, meters_per_unit=None):
     if not meters_per_unit or meters_per_unit <= 0:
         return DEFAULT_MARGIN
 
-    return max(DEFAULT_MARGIN, int(round(metres / meters_per_unit)))
+    # One pixel, not ten.  The old floor was `max(DEFAULT_MARGIN, ...)`, which
+    # quietly replaced any distance smaller than ten pixels with ten pixels -
+    # so on a coarsely-scaled plan the tightest presets all collapsed to the
+    # same crop and none of them was the distance it claimed. A margin is
+    # allowed to be small; what it is not allowed to be is a different number
+    # from the one on the label.
+    return max(1, int(round(metres / meters_per_unit)))
 
 
 # Above this fraction of the canvas there is nothing worth reclaiming.
@@ -164,6 +227,10 @@ class FloorResult:
     stranded_count: int = 0
     #: Objects cut away because they sat outside a drawn box.
     dropped_count: int = 0
+    #: Metres of drawing beyond the content in each direction, before any
+    #: margin was applied: ``{"left": .., "top": .., "right": .., "bottom": ..}``.
+    #: None on a plan with no scale, or where no ink was measured.
+    clearance: dict | None = None
 
     @property
     def trimmed(self) -> bool:
@@ -288,6 +355,41 @@ def content_bounds(image, margin: int = DEFAULT_MARGIN):
     if x1 <= x0 or y1 <= y0:
         return None
     return x0, y0, x1, y1
+
+
+def _expand_bounds(raw, margin, w, h):
+    """Pad an ink box by *margin* pixels, clamped to the sheet.
+
+    A margin never invents canvas. Asking for 200 ft on a sheet that only has
+    80 ft of site drawn on it keeps all 80 and stops at the paper edge.
+    """
+    x0 = max(0, raw[0] - margin)
+    y0 = max(0, raw[1] - margin)
+    x1 = min(w, raw[2] + margin)
+    y1 = min(h, raw[3] + margin)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return x0, y0, x1, y1
+
+
+def _clearance_metres(raw, w, h, meters_per_unit):
+    """How much drawing lies beyond the content, each way, in metres.
+
+    This is what tells someone whether a margin they are about to choose is a
+    real choice or just "keep the whole sheet": a 200 ft margin on a plan
+    carrying 80 ft of site beyond the building is the second one.  Returns
+    ``None`` when the plan has no scale, because then there is no honest
+    distance to quote.
+    """
+    if not meters_per_unit or meters_per_unit <= 0:
+        return None
+    m = float(meters_per_unit)
+    return {
+        "left": round(raw[0] * m, 2),
+        "top": round(raw[1] * m, 2),
+        "right": round((w - raw[2]) * m, 2),
+        "bottom": round((h - raw[3]) * m, 2),
+    }
 
 
 #: How an object is described to the user when it falls outside a drawn box.
@@ -726,15 +828,24 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin,
                         "to measure content on")
         Image = _require_pillow()
         cim = Image.open(io.BytesIO(companion[1]))
-        cbounds = content_bounds(cim, margin=mpx)
+        cbounds = content_bounds(cim, margin=0)
         if cbounds is None:
             return skip("floor plan has no detectable content")
         sx, sy = cim.size[0] / float(w), cim.size[1] / float(h)
-        bounds = (cbounds[0] / sx, cbounds[1] / sy, cbounds[2] / sx, cbounds[3] / sy)
+        raw = (cbounds[0] / sx, cbounds[1] / sy, cbounds[2] / sx, cbounds[3] / sy)
     else:
-        bounds = content_bounds(im, margin=mpx)
-    if bounds is None:
+        raw = content_bounds(im, margin=0)
+    if raw is None:
         return skip("floor plan has no detectable content")
+    # The ink is found once, with no margin, and the margin applied afterwards.
+    # It used to be found again for every margin; measuring it once also leaves
+    # the *unpadded* box in hand, which is the only thing that can answer "how
+    # much drawing is there beyond the building on this sheet" - the question
+    # behind choosing a margin at all.
+    clearance = _clearance_metres(raw, w, h, plan.get("metersPerUnit"))
+    bounds = _expand_bounds(raw, mpx, w, h)
+    if bounds is None:
+        return skip("content bounds collapsed to nothing")
 
     # The crop must contain the drawing, every coordinate, and whatever region
     # Ekahau itself is displaying. Union all three, then clamp.
@@ -761,11 +872,14 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin,
         return skip("content bounds collapsed to nothing")
 
     if (x1 - x0) * (y1 - y0) >= FILL_SKIP_RATIO * w * h:
-        return skip(f"content already fills {(x1-x0)*(y1-y0)/(w*h)*100:.0f}% of the canvas")
+        res, _ = skip(f"content already fills {(x1-x0)*(y1-y0)/(w*h)*100:.0f}% of the canvas")
+        res.clearance = clearance
+        return res, None
 
     return (
         FloorResult(fid, name, "trimmed", old_size=(w, h),
-                    new_size=(x1 - x0, y1 - y0), offset=(x0, y0)),
+                    new_size=(x1 - x0, y1 - y0), offset=(x0, y0),
+                    clearance=clearance),
         (x0, y0, x1, y1),
     )
 
@@ -1214,6 +1328,9 @@ def _floor_json(f: FloorResult) -> dict:
         "source": f.source,
         "box": list(f.box) if f.box else None,
         "droppedCount": f.dropped_count,
+        # Metres of drawing beyond the building, each way, before any margin.
+        # The page turns it into feet; it is sent metric because the file is.
+        "clearance": f.clearance,
     }
 
 
