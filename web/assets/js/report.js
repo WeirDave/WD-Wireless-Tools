@@ -318,8 +318,8 @@
         settingsAvailable = false;
       })
       .then(function () {
-        renderCoverSummary();
         if (typeof renderReportOpts === 'function') renderReportOpts();
+        renderCoverSummary();
       });
   }
 
@@ -489,6 +489,35 @@
   }
   window.renderFilenamePreview = renderFilenamePreview;
 
+  function renderSettingsBanner() {
+    var host = document.getElementById('settingsBanner');
+    if (!host) return;
+    var fields = [
+      { key: 'clientName', label: 'Client / company' },
+      { key: 'preparedBy', label: 'Prepared by' },
+      { key: 'projectRef', label: 'Project reference' },
+      { key: 'revision',   label: 'Revision' },
+    ];
+    var coverHtml = coverImage
+      ? '<img class="rep-sb-thumb" src="' + WD.escAttr(coverImage.url) + '" alt="">'
+      : '<span class="rep-sb-empty">No image</span>';
+    var fieldsHtml = '';
+    fields.forEach(function (f) {
+      var val = settingDefault(f.key);
+      fieldsHtml += '<div class="rep-sb-field">'
+        + '<b>' + WD.esc(f.label) + '</b>'
+        + (val ? '<span class="val">' + WD.esc(val) + '</span>'
+               : '<span class="empty">Not set</span>')
+        + '</div>';
+    });
+    host.innerHTML =
+      '<div class="rep-sb-cover">' + coverHtml + '</div>'
+      + '<div class="rep-sb-fields">' + fieldsHtml + '</div>'
+      + '<div class="rep-sb-actions">'
+      + '<button type="button" class="btn btn-secondary btn-sm" onclick="openReportSettings()">'
+      + '&#9881; Edit report settings</button></div>';
+  }
+
   window.openReportSettings = function () {
     var modal = document.getElementById('reportSettingsModal');
     if (!modal) return;
@@ -526,6 +555,7 @@
         configureDirty = true;
         renderReportOpts();
         renderCoverSummary();
+        renderSettingsBanner();
         closeReportSettings();
         showToast('Report settings saved', 'success');
       })
@@ -546,6 +576,7 @@
         .then(refreshCoverInfo)
         .then(function () {
           renderCoverSummary();
+          renderSettingsBanner();
           configureDirty = true;
           setCoverStatus('Saved to ' + (coverImage ? coverImage.name : 'disk'), 'ok');
         })
@@ -561,6 +592,7 @@
       .then(refreshCoverInfo)
       .then(function () {
         renderCoverSummary();
+        renderSettingsBanner();
         configureDirty = true;
         setCoverStatus('Cover image removed', 'ok');
       })
@@ -636,6 +668,64 @@
       })
       .catch(function (e) { showToast(e.message || 'Could not save', 'error'); });
   };
+
+  // ── Auto-save per-report options ─────────────────────────────────────────
+  var _autoSaveTimer = null;
+  var AUTO_SAVE_DELAY = 1500;
+
+  function scheduleAutoSave() {
+    if (!settingsAvailable) return;
+    if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(function () {
+      _autoSaveTimer = null;
+      var next = {};
+      Object.keys(savedReportDefaults || {}).forEach(function (k) { next[k] = savedReportDefaults[k]; });
+      next[currentReportId] = collectSidebarValues();
+      pushSettings({ report_defaults: next })
+        .then(function () {
+          savedReportDefaults = next;
+          refreshRememberedState();
+          var dot = document.getElementById('autoSaveIndicator');
+          if (dot) {
+            dot.textContent = 'Saved';
+            dot.classList.add('is-saved');
+            setTimeout(function () { dot.classList.remove('is-saved'); }, 1200);
+          }
+        })
+        .catch(function () {});
+    }, AUTO_SAVE_DELAY);
+  }
+
+  // ── Report preview (what this report produces) ─────────────────────────
+  function renderReportPreview() {
+    var host = document.getElementById('reportPreviewCard');
+    if (!host) return;
+    var r = currentReport();
+    var sections = r.sections || [];
+    if (!sections.length) { host.hidden = true; return; }
+    host.hidden = false;
+    var html = '<div class="rep-config-card-head">'
+      + '<span class="rep-config-icon">📄</span>'
+      + '<span>What this report produces</span></div>'
+      + '<p class="rep-preview-desc">' + WD.esc(r.description || '') + '</p>'
+      + '<ul class="rep-preview-sections">';
+    sections.forEach(function (s) {
+      html += '<li class="rep-preview-section">'
+        + '<span class="rep-preview-icon">' + (s.icon || '') + '</span>'
+        + '<span class="rep-preview-body">'
+        + '<b>' + WD.esc(s.title) + '</b>'
+        + '<span>' + WD.esc(s.description || '') + '</span>'
+        + '</span></li>';
+    });
+    html += '</ul>';
+    if (r.readBy) {
+      html += '<div class="rep-preview-meta">'
+        + '<b>For:</b> ' + WD.esc(r.readBy)
+        + (r.output ? ' · <b>You get:</b> ' + WD.esc(r.output) : '')
+        + '</div>';
+    }
+    host.innerHTML = html;
+  }
 
   // Per-report override controls -------------------------------------------
   function settingState(id) {
@@ -1446,6 +1536,7 @@
     }
 
     host.innerHTML = html;
+    renderSettingsBanner();
   }
 
   window.toggleTemplateDetail = function (id) {
@@ -1480,7 +1571,9 @@
     templateConfirmed = true;
     configureDirty = true;
     renderTemplateGallery();
+    renderReportPreview();
     renderReportOpts();
+    renderCoverSummary();
     renderApFilter();
     /* The tab name is the file name the print dialog offers, so it follows the
        report you have picked rather than the one you last rendered. Measured
@@ -1492,135 +1585,161 @@
     goStage('configure');
   };
 
+  function renderOptHtml(opt) {
+    var disabled = typeof opt.disabledWhen === 'function' ? !!opt.disabledWhen(proj) : false;
+    var desc = opt.description || '';
+    var reason = disabled && opt.disabledReason ? opt.disabledReason(proj) : '';
+    if (reason) desc = (desc ? desc + ' ' : '') + '— ' + reason;
+    if (opt.type === 'grid-button') {
+      var gc = (currentOpts.segCols || '') + '';
+      var gr = (currentOpts.segRows || '') + '';
+      var gridLabel = (gc && gr) ? gc + ' × ' + gr : 'Auto';
+      if (currentOpts.cropBoxes && Object.keys(currentOpts.cropBoxes).length) gridLabel += ' (cropped)';
+      return '<div class="rep-check with-desc">'
+        + '<span class="rep-check-body">'
+        +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
+        +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+        + '</span>'
+        + '<button type="button" class="btn btn-secondary btn-sm rep-btn-right" '
+        + 'onclick="openGridConfig()">' + gridLabel + '</button>'
+        + '</div>';
+    }
+    if (opt.type === 'text') {
+      var textVal = (opt.id in currentOpts) ? (currentOpts[opt.id] || '') : (opt.default || '');
+      var isSetting = SETTING_IDS.indexOf(opt.id) !== -1;
+      return '<div class="rep-check with-desc">'
+        + '<span class="rep-check-body">'
+        +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
+        +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+        +   (isSetting ? settingBadgeHtml(opt.id) : '')
+        + '</span>'
+        + '<input type="text" id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" data-opt-type="text" '
+        + 'value="' + WD.escAttr(textVal) + '" placeholder="' + WD.escAttr(opt.placeholder || '') + '" '
+        + 'class="rep-input-text" '
+        + 'onchange="setOpt(this)" oninput="setOpt(this)">'
+        + '</div>';
+    }
+    if (opt.type === 'select') {
+      var selVal = (opt.id in currentOpts) ? currentOpts[opt.id] : (opt.default || '');
+      return '<div class="rep-check with-desc">'
+        + '<span class="rep-check-body">'
+        +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
+        +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+        + '</span>'
+        + '<select id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" '
+        + 'data-opt-type="select" class="rep-input-text" onchange="setOpt(this)">'
+        + (opt.options || []).map(function (o) {
+            return '<option value="' + WD.escAttr(o.value) + '"'
+              + (String(o.value) === String(selVal) ? ' selected' : '') + '>'
+              + WD.esc(o.label) + '</option>';
+          }).join('')
+        + '</select>'
+        + '</div>';
+    }
+    if (opt.type === 'number') {
+      var numVal = (opt.id in currentOpts) ? currentOpts[opt.id] : (opt.default || '');
+      return '<div class="rep-check with-desc' + (disabled ? ' is-disabled' : '') + '">'
+        + '<span class="rep-check-body">'
+        +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
+        +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+        + '</span>'
+        + '<input type="number" id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" data-opt-type="number" '
+        + 'value="' + WD.escAttr(String(numVal)) + '" min="' + (opt.min || 1) + '" max="' + (opt.max || 20) + '" '
+        + 'class="rep-input-sm" '
+        + (disabled ? 'disabled' : '')
+        + ' onchange="setOpt(this)" oninput="setOpt(this)">'
+        + '</div>';
+    }
+    var checked = (opt.id in currentOpts) ? currentOpts[opt.id] : !!opt.default;
+    return '<label class="rep-check with-desc' + (disabled ? ' is-disabled' : '') + '"'
+      + (disabled ? ' title="' + WD.escAttr(reason || 'Not available for this project') + '"' : '') + '>'
+      + '<input type="checkbox" data-opt-id="' + WD.escAttr(opt.id) + '" '
+      + (checked ? 'checked' : '') + (disabled ? ' disabled' : '')
+      + ' onchange="setOpt(this)">'
+      + '<span class="rep-check-body">'
+      +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
+      +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+      + '</span></label>';
+  }
+
   function renderReportOpts() {
     var host = document.getElementById('reportOptsSlot');
+    var detailsHost = document.getElementById('reportDetailsSlot');
     if (!host) return;
     seedSettingDefaults();
     var r = currentReport();
     var apCard = document.getElementById('apFilterCard');
     if (apCard) apCard.hidden = !!r.noApFilter;
-    if (!r.sidebar || !r.sidebar.length) {
+
+    var settingItems = [];
+    var optionItems = [];
+    (r.sidebar || []).forEach(function (opt) {
+      if (SETTING_IDS.indexOf(opt.id) !== -1) settingItems.push(opt);
+      else optionItems.push(opt);
+    });
+
+    // ── Left card: Your details + Cover page ──
+    if (detailsHost) {
+      /* Only four of the eight reports carry identity fields, and the other
+         four were getting a "Your details" heading with nothing under it,
+         sitting directly on top of the Cover page heading. An empty heading
+         reads as a section that failed to load, so the card is titled for
+         what it actually contains. */
+      var dHtml = '';
+      if (settingItems.length) {
+        dHtml += '<div class="rep-config-card-head">'
+          + '<span class="rep-config-icon">📝</span>'
+          + '<span>Your details</span></div>';
+        settingItems.forEach(function (opt) { dHtml += renderOptHtml(opt); });
+        dHtml += '<div class="rep-opts-subhead-note">'
+          + 'From your report settings. Changing one here affects this report only. '
+          + '<button type="button" class="rep-remembered-clear" onclick="openReportSettings()">Edit defaults…</button>'
+          + '</div>'
+          + '<div class="rep-opts-divider"></div>';
+      }
+      dHtml += '<div class="rep-config-card-head"'
+        + (settingItems.length ? ' style="margin-top:4px"' : '') + '>'
+        + '<span class="rep-config-icon">🖼️</span>'
+        + '<span>Cover page</span></div>'
+        + '<label class="rep-check">'
+        + '<input type="checkbox" id="optCover" checked onchange="markConfigDirty()">'
+        + '<span>Include cover page</span></label>'
+        + '<div class="rep-cover-summary" id="coverSummary"></div>'
+        + '<div class="rep-logo-row">'
+        + '<button class="btn btn-secondary rep-logo-btn" onclick="openReportSettings()">Cover image &amp; defaults…</button>'
+        + '</div>';
+      detailsHost.innerHTML = dHtml;
+    }
+
+    // ── Right card: Report options ──
+    if (!optionItems.length) {
       host.innerHTML = '<div class="rep-config-card-head">'
         + '<span class="rep-config-icon">📋</span>'
         + '<span>' + WD.esc(r.docName) + ' options</span></div>'
         + '<div class="rep-empty-small">No extra options for this report.</div>';
       return;
     }
+
     var html = '<div class="rep-config-card-head">'
       + '<span class="rep-config-icon">📋</span>'
       + '<span>' + WD.esc(r.docName) + ' options</span></div>';
-    r.sidebar.forEach(function (opt) {
-      var disabled = typeof opt.disabledWhen === 'function' ? !!opt.disabledWhen(proj) : false;
-      var desc = opt.description || '';
-      var reason = disabled && opt.disabledReason ? opt.disabledReason(proj) : '';
-      if (reason) desc = (desc ? desc + ' ' : '') + '— ' + reason;
-      if (opt.type === 'grid-button') {
-        var gc = (currentOpts.segCols || '') + '';
-        var gr = (currentOpts.segRows || '') + '';
-        var gridLabel = (gc && gr) ? gc + ' × ' + gr : 'Auto';
-        if (currentOpts.cropBoxes && Object.keys(currentOpts.cropBoxes).length) gridLabel += ' (cropped)';
-        html += '<div class="rep-check with-desc">'
-          + '<span class="rep-check-body">'
-          +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
-          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
-          + '</span>'
-          + '<button type="button" class="btn btn-secondary btn-sm rep-btn-right" '
-          + 'onclick="openGridConfig()">' + gridLabel + '</button>'
-          + '</div>';
-      } else if (opt.type === 'text') {
-        var textVal = (opt.id in currentOpts) ? (currentOpts[opt.id] || '') : (opt.default || '');
-        var isSetting = SETTING_IDS.indexOf(opt.id) !== -1;
-        html += '<div class="rep-check with-desc">'
-          + '<span class="rep-check-body">'
-          +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
-          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
-          +   (isSetting ? settingBadgeHtml(opt.id) : '')
-          + '</span>'
-          + '<input type="text" id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" data-opt-type="text" '
-          + 'value="' + WD.escAttr(textVal) + '" placeholder="' + WD.escAttr(opt.placeholder || '') + '" '
-          + 'class="rep-input-text" '
-          + 'onchange="setOpt(this)" oninput="setOpt(this)">'
-          + '</div>';
-      } else if (opt.type === 'select') {
-        var selVal = (opt.id in currentOpts) ? currentOpts[opt.id] : (opt.default || '');
-        html += '<div class="rep-check with-desc">'
-          + '<span class="rep-check-body">'
-          +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
-          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
-          + '</span>'
-          + '<select id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" '
-          + 'data-opt-type="select" class="rep-input-text" onchange="setOpt(this)">'
-          + (opt.options || []).map(function (o) {
-              return '<option value="' + WD.escAttr(o.value) + '"'
-                + (String(o.value) === String(selVal) ? ' selected' : '') + '>'
-                + WD.esc(o.label) + '</option>';
-            }).join('')
-          + '</select>'
-          + '</div>';
-      } else if (opt.type === 'number') {
-        var numVal = (opt.id in currentOpts) ? currentOpts[opt.id] : (opt.default || '');
-        html += '<div class="rep-check with-desc' + (disabled ? ' is-disabled' : '') + '">'
-          + '<span class="rep-check-body">'
-          +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
-          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
-          + '</span>'
-          + '<input type="number" id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" data-opt-type="number" '
-          + 'value="' + WD.escAttr(String(numVal)) + '" min="' + (opt.min || 1) + '" max="' + (opt.max || 20) + '" '
-          + 'class="rep-input-sm" '
-          + (disabled ? 'disabled' : '')
-          + ' onchange="setOpt(this)" oninput="setOpt(this)">'
-          + '</div>';
-      } else {
-        var checked = (opt.id in currentOpts) ? currentOpts[opt.id] : !!opt.default;
-        html += '<label class="rep-check with-desc' + (disabled ? ' is-disabled' : '') + '"'
-          + (disabled ? ' title="' + WD.escAttr(reason || 'Not available for this project') + '"' : '') + '>'
-          + '<input type="checkbox" data-opt-id="' + WD.escAttr(opt.id) + '" '
-          + (checked ? 'checked' : '') + (disabled ? ' disabled' : '')
-          + ' onchange="setOpt(this)">'
-          + '<span class="rep-check-body">'
-          +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
-          +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
-          + '</span></label>';
-      }
+
+    optionItems.forEach(function (opt) { html += renderOptHtml(opt); });
+
+    var hasReportOpts = optionItems.some(function (o) {
+      return o.id.charAt(0) !== '_' && o.type !== 'text';
     });
-
-    // Shown whenever this report has fields backed by settings, so the source
-    // of the values on screen is never a guess.
-    var hasSettingFields = (r.sidebar || []).some(function (o) { return SETTING_IDS.indexOf(o.id) !== -1; });
-    if (hasSettingFields) {
-      html += '<div class="rep-remembered">'
-        + 'These come from your report settings. Changing one here affects this report only. '
-        + '<button type="button" class="rep-remembered-clear" onclick="openReportSettings()">Report settings…</button>'
-        + '</div>';
-    }
-
-    /* What the options on screen came from, and how to make them the norm.
-
-       The complaint this answers is re-ticking the same boxes on every
-       report, so the affordance has to be one press from where the boxes
-       are - not a settings page visited option by option. */
-    var savedForThis = reportOptionDefaults(currentReportId);
-    var savedCount = Object.keys(savedForThis).length;
-    var differing = optionsDifferingFromSaved().length;
-    if ((r.sidebar || []).some(function (o) {
-          return o.id.charAt(0) !== '_' && o.type !== 'text'
-              && SETTING_IDS.indexOf(o.id) === -1; })) {
+    if (hasReportOpts) {
+      var savedCount = Object.keys(reportOptionDefaults(currentReportId)).length;
       html += '<div class="rep-remembered rep-remembered-opts">'
         + '<span class="rep-remembered-state">'
-        + (savedCount
-            ? (differing
-                ? '<b>' + differing + '</b> option' + (differing === 1 ? '' : 's')
-                  + ' changed from your saved default for this report.'
-                : 'These are your saved defaults for this report.')
-            : 'Using the shipped defaults for this report.')
+        + (savedCount ? 'Your saved defaults.' : 'Using the shipped defaults.')
         + '</span>'
-        + '<button type="button" class="btn btn-secondary btn-sm" '
-        +   'onclick="saveReportOptionDefaults()">Save these as my defaults</button>'
+        + '<span id="autoSaveIndicator" class="rep-autosave-dot"></span>'
         + (savedCount ? '<button type="button" class="rep-remembered-clear" '
-            + 'onclick="clearReportOptionDefaults()">Use shipped defaults</button>' : '')
+            + 'onclick="clearReportOptionDefaults()">Reset to shipped defaults</button>' : '')
         + '</div>';
     }
-
 
     host.innerHTML = html;
   }
@@ -1658,6 +1777,9 @@
       currentOpts[id] = cb.checked;
     }
     configureDirty = true;
+    if (id.charAt(0) !== '_' && SETTING_IDS.indexOf(id) === -1 && optType !== 'text') {
+      scheduleAutoSave();
+    }
     // Re-rendering the whole card would take the focus off the control that
     // was just clicked, so only the sentence that went stale is rewritten.
     refreshRememberedState();
@@ -1665,19 +1787,22 @@
   };
 
   function refreshRememberedState() {
-    var el = document.querySelector('.rep-remembered-opts .rep-remembered-state');
-    if (!el || !currentReportId) return;
+    var wrap = document.querySelector('.rep-remembered-opts');
+    if (!wrap || !currentReportId) return;
     var savedCount = Object.keys(reportOptionDefaults(currentReportId)).length;
-    var differing = optionsDifferingFromSaved().length;
-    el.innerHTML = savedCount
-      ? (differing
-          ? '<b>' + differing + '</b> option' + (differing === 1 ? '' : 's')
-            + ' changed from your saved default for this report.'
-          : 'These are your saved defaults for this report.')
-      : (differing
-          ? '<b>' + differing + '</b> option' + (differing === 1 ? '' : 's')
-            + ' changed from the shipped defaults.'
-          : 'Using the shipped defaults for this report.');
+    var el = wrap.querySelector('.rep-remembered-state');
+    if (el) el.textContent = savedCount ? 'Your saved defaults.' : 'Using the shipped defaults.';
+    var existing = wrap.querySelector('.rep-remembered-clear');
+    if (savedCount && !existing) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'rep-remembered-clear';
+      btn.textContent = 'Reset to shipped defaults';
+      btn.setAttribute('onclick', 'clearReportOptionDefaults()');
+      wrap.appendChild(btn);
+    } else if (!savedCount && existing) {
+      existing.remove();
+    }
   }
 
   // ── Grid configuration modal ──
@@ -3512,8 +3637,6 @@
     return out;
   }
 
-  /* One page per floor, same order and same heading as the map it belongs to,
-     so a note sits with the plan it was written on. */
   /* One page per floor, same order and same heading as the map it belongs to,
      so a note sits with the plan it was written on. */
   function renderApNotesSection(fp, aps, opts, ctx, floorIdx) {

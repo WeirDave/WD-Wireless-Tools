@@ -406,8 +406,27 @@
       .then(function (r) { return r.json(); })
       .then(function (versions) {
         els.forEach(function (el) {
-          var v = versions[el.getAttribute('data-ver')];
-          if (v) el.textContent = 'v' + v;
+          var key = el.getAttribute('data-ver');
+          var v = versions[key];
+          if (!v) return;
+          el.textContent = 'v' + v;
+          /* The number on this page and the number on a release are two
+             different numbers, and not knowing that has cost real time: a fix
+             announced for suite 2.103.7 is unrecognisable to someone looking
+             at "v2.60.11" in the corner of the Report page, so they pull,
+             see the old behaviour and conclude nothing was fixed. The header
+             chip carries both, and every version on the page says which
+             suite build it came from. */
+          if (key !== 'suite' && versions.suite) {
+            el.title = 'This tool is v' + v + ', in suite v' + versions.suite
+              + '. Release notes are written against the suite version.';
+            if (el.classList.contains('ver')) {
+              var tag = document.createElement('span');
+              tag.className = 'ver-suite';
+              tag.textContent = 'suite v' + versions.suite;
+              el.appendChild(tag);
+            }
+          }
         });
       })
       .catch(function () {});

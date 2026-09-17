@@ -178,10 +178,10 @@ class StickyWiring(unittest.TestCase):
         self.assertIn("refreshRememberedState()", body)
 
     def test_both_actions_are_reachable(self):
-        self.assertIn("window.saveReportOptionDefaults", self.js)
         self.assertIn("window.clearReportOptionDefaults", self.js)
-        self.assertIn('onclick="saveReportOptionDefaults()"', self.js)
         self.assertIn('onclick="clearReportOptionDefaults()"', self.js)
+        self.assertIn("function scheduleAutoSave()", self.js)
+        self.assertIn("scheduleAutoSave()", self.js)
 
 
 if __name__ == "__main__":

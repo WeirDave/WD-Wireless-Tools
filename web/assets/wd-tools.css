@@ -8234,3 +8234,105 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 .rep-template-preview img {
   background: var(--img-checker) !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Report — the Configure step, grouped
+   ═══════════════════════════════════════════════════════════════
+   The identity fields (client, prepared by, project reference, revision) used
+   to sit at the top of the options card, which put them in the right-hand
+   column while the left held a Cover page card and then nothing. They are not
+   options - they are who the report is for - so they have their own card now,
+   with the cover controls, on the left. What is left in the options card is
+   genuinely about this one report.
+
+   The markup for that grouping shipped without its stylesheet, which is why
+   the section titles ran into their descriptions. These are the missing
+   rules. */
+
+/* "What this report produces" - the card above the two, so the choice made on
+   the previous step is restated before any option is touched. */
+.rep-preview-desc {
+  margin: 0; font-size: 12px; color: var(--text-2); line-height: 1.55;
+}
+
+.rep-preview-sections {
+  list-style: none; margin: 4px 0 0; padding: 0;
+  display: grid; gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.rep-preview-section { display: flex; gap: 8px; align-items: flex-start; }
+.rep-preview-icon { font-size: 15px; line-height: 1.35; flex: 0 0 auto; }
+
+/* The fault that made this visible: without a column here the bold title and
+   its description are two inline spans, so they render as one run-on
+   sentence - "One page per floorThe full floor plan...". */
+.rep-preview-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rep-preview-body b { font-size: 12px; font-weight: 700; color: var(--text); }
+.rep-preview-body span { font-size: 11.5px; color: var(--text-2); line-height: 1.5; }
+
+.rep-preview-meta {
+  margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 11.5px; color: var(--text-2); line-height: 1.5;
+}
+.rep-preview-meta b { color: var(--text); }
+
+/* The Template step's banner: what every report will carry, before one is
+   chosen, and the one way to change it. */
+.rep-settings-banner {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin: 0 0 16px; padding: 10px 14px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+}
+.rep-settings-banner:empty { display: none; }
+
+.rep-sb-cover { flex: 0 0 auto; display: flex; align-items: center; }
+.rep-sb-thumb {
+  max-width: 64px; max-height: 40px; display: block;
+  border: 1px solid var(--border); border-radius: 4px; padding: 2px;
+}
+.rep-sb-empty {
+  font-size: 11px; color: var(--text-3); font-style: italic;
+  padding: 10px 12px; border: 1px dashed var(--border); border-radius: 4px;
+}
+
+.rep-sb-fields {
+  display: flex; flex-wrap: wrap; gap: 6px 22px; flex: 1 1 320px; min-width: 0;
+}
+.rep-sb-field { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.rep-sb-field b { font-size: 10px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.04em; }
+.rep-sb-field .val {
+  font-size: 12px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px;
+}
+.rep-sb-field .empty { font-size: 12px; color: var(--text-3); font-style: italic; }
+
+.rep-sb-actions { margin-left: auto; flex: 0 0 auto; }
+
+/* Options save themselves, so the button that used to do it is gone and this
+   says so instead - briefly, and only after a save has actually landed. */
+.rep-autosave-dot {
+  font-size: 11px; color: var(--green, #3fb950);
+  opacity: 0; transition: opacity 160ms ease;
+}
+.rep-autosave-dot.is-saved { opacity: 1; }
+
+/* Separates the identity fields from the cover controls inside the one card. */
+.rep-opts-divider {
+  height: 1px; background: var(--border); margin: 6px 0 2px; border: 0;
+}
+.rep-opts-subhead-note {
+  font-size: 11px; color: var(--text-3); line-height: 1.5;
+}
+
+/* The suite version, beside the tool version it is nothing like. See the
+   comment in WD.applyVersions: someone reading "v2.60.11" cannot tell whether
+   the release notes for 2.103.7 are ahead of them or behind them. */
+.ver-suite {
+  margin-left: 6px; padding-left: 6px;
+  border-left: 1px solid var(--border);
+  font-size: 0.78em; font-weight: 500; color: var(--text-3);
+  white-space: nowrap;
+}

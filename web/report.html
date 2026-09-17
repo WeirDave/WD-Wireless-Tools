@@ -133,10 +133,10 @@
       <h2 class="rep-stage-title">Choose a report template</h2>
       <p class="rep-stage-sub" id="templateStageSub"></p>
     </div>
+    <div class="rep-settings-banner" id="settingsBanner"></div>
     <div class="rep-template-gallery" id="templateGallery"></div>
     <div class="rep-stage-nav">
       <button class="btn btn-secondary" onclick="loadNewFile()">&#128193; Change file</button>
-      <button class="btn btn-secondary" onclick="openReportSettings()">&#9881; Report settings</button>
       <span class="rep-stage-nav-spacer"></span>
     </div>
   </section>
@@ -147,19 +147,13 @@
       <p class="rep-stage-sub" id="configStageSub"></p>
     </div>
 
+    <div class="rep-config-card rep-config-wide" id="reportPreviewCard" hidden></div>
+
     <div class="rep-config-grid">
-      <div class="rep-config-card">
+      <div class="rep-config-card" id="reportDetailsSlot">
         <div class="rep-config-card-head">
-          <span class="rep-config-icon">🖼️</span>
-          <span>Cover page</span>
-        </div>
-        <label class="rep-check">
-          <input type="checkbox" id="optCover" checked onchange="markConfigDirty()">
-          <span>Include cover page</span>
-        </label>
-        <div class="rep-cover-summary" id="coverSummary"></div>
-        <div class="rep-logo-row">
-          <button class="btn btn-secondary rep-logo-btn" onclick="openReportSettings()">Cover image &amp; defaults…</button>
+          <span class="rep-config-icon">📝</span>
+          <span>Your details</span>
         </div>
       </div>
 
