@@ -152,19 +152,6 @@ higher.
 
 ### Suite-wide
 
-#### 10. P3 — BLOCKED ON HIM: the roll-up door colour
-
-His wall template carries Ekahau's stock `#646D7E` for every roll-up door
-variant, and so does every one of the 57 local projects that was checked. So
-his custom colour for it was never written to any file we can read, and there
-is nothing to recover it from.
-
-**Do not invent one.** It is left at Ekahau's default until he supplies the
-hex; he believes it is in OneNote. Everything else he had is back - the three
-recoloured types and all nine keyboard shortcuts were intact in
-`templates/WD Template_walltemplate.json` and are now seeded into his own
-templates folder (v2.104.7).
-
 #### 8. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
 
 A finding about going from DWG to `.esx` was established in an earlier session
@@ -229,6 +216,43 @@ so they can be answered together.
 ---
 
 ## Decisions already made — kept so they are not re-litigated
+
+### The roll-up door colour is Ekahau's, and nothing was lost
+
+`#646D7E` on every roll-up door type. **This was briefly written down as "his
+custom colour was never written anywhere, he must supply the hex from
+OneNote". That was wrong**, and the correction matters more than the fact,
+because the reasoning failed in a way that is easy to repeat.
+
+The first pass saw `#646D7E` on all 57 projects, reasoned that a value present
+everywhere must be the default, and concluded his own value had been lost. He
+pushed back - "I've got roll up doors in like a million freaking projects... and
+actually this afternoon Quick Walls had the roll up door colour correct -
+basically a blue-grey tint instead of just grey." He was right on both counts,
+and `#646D7E` **is** that blue-grey. Ubiquity was taken as evidence of being
+stock without anyone checking what Ekahau actually ships.
+
+What settles it, four ways:
+
+* **The discriminator is the steel fire door.** A project his template has been
+  applied to carries `#E85D04` there; one it has not carries Ekahau's
+  `#999999`. Across 109 projects, **56 had never had his template applied** -
+  and all 56 carry `#646D7E` on the roll-up. A colour present in projects his
+  template has never touched is not a colour his template put there.
+* **Widening the net changed nothing.** Five naming variants, 146 instances -
+  `Door, Steel Rollup`, `Steel rollup door`, the `(11dB)` forms and a `(Copy)` -
+  every one `#646D7E`, no exceptions.
+* **v2.100.5 is the control.** That commit deliberately reverted his
+  customisations to Ekahau stock. It changed exactly three colours - steel fire
+  door, elevator shaft, thick window - and did not touch the roll-up, because
+  the roll-up was already stock. The orphaned pre-restore backup agrees.
+* **Every commit since the repository was initialised** has `#646D7E` there.
+
+So the colour he calls correct is the colour that is already in both templates,
+and there is nothing to recover. `tests/test_template_store.py` pins it with
+this reasoning attached, so the question does not get reopened from the same
+wrong end.
+
 
 Not work. Recorded because each was settled once and would otherwise be
 rediscovered as an open question.

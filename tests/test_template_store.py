@@ -313,6 +313,43 @@ class TheTwoTemplatesWeActuallyShip(unittest.TestCase):
                                         "the Ekahau baseline has picked up a WD "
                                         "colour, so it is no longer a baseline")
 
+    #: Ekahau's own, confirmed four ways - see the note below. Pinned because
+    #: it was briefly mistaken for a value of his that had gone missing.
+    ROLLUP_COLOUR = "#646D7E"
+
+    def test_the_roll_up_door_keeps_the_blue_grey_it_has_always_had(self):
+        """It is Ekahau's colour, it is correct, and nothing was lost.
+
+        Written down once as "his custom roll-up colour was never saved
+        anywhere, he has to supply the hex" - which was wrong, and wrong in a
+        repeatable way: the survey saw `#646D7E` on all 57 projects, took
+        ubiquity as proof it was the default, and concluded his own value had
+        been lost. He said the opposite, and he was right: "this afternoon
+        Quick Walls had the roll up door colour correct - basically a blue-grey
+        tint instead of just grey." `#646D7E` *is* that blue-grey.
+
+        What settles it:
+
+        * Of 109 projects, **56 have never had his template applied** - their
+          steel fire door is still Ekahau's `#999999` rather than his
+          `#E85D04` - and every one of those 56 carries `#646D7E` on the
+          roll-up. His template cannot have put it there.
+        * Five naming variants, 146 instances, no exceptions.
+        * v2.100.5 reverted his customisations to Ekahau stock and changed
+          exactly three colours, leaving the roll-up alone - it was already
+          stock.
+        * Every commit since the repository was initialised has this value.
+
+        So both templates carry it and both are right. This test exists so the
+        question is not reopened from the wrong end, and so nobody "restores" a
+        guessed hex over a correct one.
+        """
+        for filename in template_module.SHIPPED_TEMPLATES:
+            types = {t["name"]: t for t in self._load(filename)["wallTypes"]}
+            with self.subTest(template=filename):
+                self.assertEqual(types["Door, Steel Rollup"]["color"].upper(),
+                                 self.ROLLUP_COLOUR)
+
     def test_the_wd_template_adds_to_ekahau_rather_than_replacing_it(self):
         wd = {t["name"] for t in self._load("WD Template_walltemplate.json")["wallTypes"]}
         ekahau = {t["name"] for t in self._load("Ekahau Default_walltemplate.json")["wallTypes"]}
