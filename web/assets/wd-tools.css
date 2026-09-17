@@ -8501,9 +8501,38 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 }
 .rename-insert-btn:hover { border-color: var(--blue); color: var(--blue); }
 
+/* The offer to take the other side with it. Not a footnote: it is ticked by
+   default and it is about to write to his live cloud, so it reads at rest. */
+.rename-pair { margin: 0 0 10px; }
+.rename-pair-toggle {
+  display: flex; align-items: baseline; gap: 8px; cursor: pointer;
+  padding: 8px 11px; border-radius: 4px;
+  border: 1px solid var(--border); border-left: 3px solid var(--blue);
+  background: var(--blue-bg); color: var(--text); font-size: 13px;
+}
+.rename-pair-toggle input { margin: 0; }
+.rename-what-partner { font-weight: 700; color: var(--blue); }
+
 .rename-preview {
   margin-top: 9px; font-size: 12px; color: var(--text-2);
   overflow-wrap: anywhere;
+}
+/* One line per side, each saying which side it is. Two names wrapping into
+   each other is exactly the thing he cannot check at a glance. */
+.rename-preview-line {
+  display: grid; grid-template-columns: 130px minmax(0, 1fr);
+  gap: 2px 10px; align-items: baseline; padding: 2px 0;
+}
+.rename-preview-side {
+  font-size: 11px; font-weight: 700; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: .4px;
+}
+/* One cell for the whole move, so a long name wraps inside it rather than
+   pushing the arrow onto a line of its own. */
+.rename-preview-move { min-width: 0; overflow-wrap: anywhere; }
+.rename-preview-kept .rename-preview-none { font-style: normal; opacity: .75; }
+@media (max-width: 640px) {
+  .rename-preview-line { grid-template-columns: minmax(0, 1fr); }
 }
 .rename-preview-from { text-decoration: line-through; opacity: .75; }
 .rename-preview-to { color: var(--text); font-weight: 700; }

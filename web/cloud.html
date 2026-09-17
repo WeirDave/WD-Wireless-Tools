@@ -238,6 +238,16 @@
          Wide, because the alternative to width is an ellipsis and an
          ellipsis is exactly the fact he came here to read. -->
     <div class="rename-what" id="renameWhat"></div>
+    <!-- "If we're going to rename one side or the other then we should ask to
+         rename both at the same time." Only shown when the thing has a
+         matched partner, and ticked by default, because keeping the pair
+         aligned is the whole point of the convention. -->
+    <div class="rename-pair" id="renamePair" hidden>
+      <label class="rename-pair-toggle">
+        <input type="checkbox" id="renamePairBoth" checked onchange="_renamePreview()">
+        <span id="renamePairLabel">Also rename the matching copy</span>
+      </label>
+    </div>
     <p class="sub" id="renameSub"></p>
     <label class="rename-field-label" for="renameInput">New name</label>
     <input type="text" id="renameInput" oninput="_renamePreview()">

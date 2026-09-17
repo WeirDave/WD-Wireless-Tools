@@ -5164,6 +5164,16 @@ function startRename(side, idOrPath, name, kind) {
      field. Part of the name - his .esx names carry the site name and then
      what kind of file it is - which is why the field opens with the caret at
      the end rather than with everything selected. */
+  /* The other half of the pair, if this thing has one. "If we're going to
+     rename one side or the other then we should ask to rename both at the
+     same time ... if they're matching to begin with, then renaming one side
+     shouldn't matter to the other side."
+
+     He has just renamed every cloud project to his site convention and is
+     working through a hundred local files by hand to match. This is the
+     offer that stops that happening a second time. */
+  const partner = _renamePartner(side, idOrPath);
+
   const where = _renameContainerName(side, idOrPath, kind);
   const whereKey = side === 'cloud' ? 'Cloud site' : 'Folder / site name';
   // Name the row after the thing on the other end of it. A cloud project is
@@ -5175,7 +5185,7 @@ function startRename(side, idOrPath, name, kind) {
   const suffix = _renameSuffix(side, kind);
   const fullPath = side === 'local' ? String(idOrPath || '').replace(/\\/g, '/') : '';
 
-  renameTarget = { side, idOrPath, kind, original: name, suffix };
+  renameTarget = { side, idOrPath, kind, original: name, suffix, partner };
 
   const row = (key, val, cls) =>
     '<div class="rename-what-row">'
@@ -5188,6 +5198,11 @@ function startRename(side, idOrPath, name, kind) {
     '<div class="rename-what-label">You are renaming</div>'
     + (where ? row(whereKey, where, 'rename-what-folder') : '')
     + row(currentKey, name + suffix, 'rename-what-name')
+    /* The other side is behind the overlay too, so its current name is a row
+       here rather than something he is asked to take on trust. */
+    + (partner ? row(_renamePartnerKey(partner, kind),
+                     partner.name + _renameSuffix(partner.side, kind),
+                     'rename-what-partner') : '')
     + (fullPath ? row('Full path', fullPath, 'rename-what-path') : '');
   document.getElementById('renameSub').textContent = '';
 
@@ -5207,6 +5222,21 @@ function startRename(side, idOrPath, name, kind) {
   } else {
     insert.hidden = true;
     insert.innerHTML = '';
+  }
+
+  /* Default on. Keeping the pair aligned is the entire point of his naming
+     convention, so the common case should not need a decision - he can still
+     say no. */
+  const pair = document.getElementById('renamePair');
+  const both = document.getElementById('renamePairBoth');
+  if (partner) {
+    pair.hidden = false;
+    both.checked = true;
+    document.getElementById('renamePairLabel').textContent =
+      'Also rename the ' + _renamePartnerNoun(partner, kind);
+  } else {
+    pair.hidden = true;
+    both.checked = false;
   }
 
   const input = document.getElementById('renameInput');
@@ -5238,6 +5268,64 @@ function _renameSuffix(side, kind) {
   return (side === 'local' && kind !== 'sites') ? '.esx' : '';
 }
 
+/* The matching thing on the other side, or null.
+
+   Only a *matched pair* has one. A local file with no cloud project has
+   nothing to keep in sync, and offering to rename a partner that does not
+   exist is worse than not offering at all. Read off `data` rather than off
+   `rowData`, because `rowData` labels every top-level pair `entityKind:
+   'sites'` whichever tab built it, and a wrong kind here would send a project
+   rename to the site endpoint.
+
+   A pair is always the same kind on both sides - a cloud project pairs with a
+   local .esx, a cloud site with a local folder - so the caller's `kind` is the
+   partner's kind too, and nothing has to be guessed. */
+function _renamePartner(side, idOrPath) {
+  if (!data) return null;
+  const norm = s => String(s || '').replace(/\\/g, '/');
+  const target = norm(idOrPath);
+  let hit = null;
+  const consider = (pr) => {
+    if (hit || !pr || !pr.cloud || !pr.local) return;
+    if (side === 'cloud' && pr.cloud.id === idOrPath) {
+      hit = { side: 'local', idOrPath: pr.local.path, name: pr.local.name };
+    } else if (side === 'local' && norm(pr.local.path) === target) {
+      hit = { side: 'cloud', idOrPath: pr.cloud.id, name: pr.cloud.name };
+    }
+  };
+  (data.matched || []).forEach(pr => {
+    consider(pr);
+    const kids = (pr.cloud && pr.cloud.children) || (pr.local && pr.local.children);
+    if (kids) (kids.matched || []).forEach(consider);
+  });
+  return hit;
+}
+
+function _renamePartnerNoun(partner, kind) {
+  if (partner.side === 'cloud') {
+    return kind === 'sites' ? 'cloud site' : 'cloud project';
+  }
+  return kind === 'sites' ? 'local folder' : 'local .esx file';
+}
+
+function _renamePartnerKey(partner, kind) {
+  return 'Matching ' + _renamePartnerNoun(partner, kind);
+}
+
+/* Is the other side already called this? Renaming a mismatched pair to the
+   name one half already has is a real case - it is half of what he is doing
+   by hand - and asking the cloud to rename something to its own name is a
+   round trip that can only fail. */
+function _renamePartnerAlreadyNamed(next) {
+  const partner = renameTarget && renameTarget.partner;
+  return !!partner && partner.name === next;
+}
+
+function _renameBothWanted() {
+  const both = document.getElementById('renamePairBoth');
+  return !!(renameTarget && renameTarget.partner && both && both.checked);
+}
+
 function _renameInsert(text) {
   const input = document.getElementById('renameInput');
   if (!input) return;
@@ -5266,7 +5354,9 @@ function _renameInsert(text) {
   _renamePreview();
 }
 
-/* "X -> Y", so the outcome is visible before committing rather than after. */
+/* "X -> Y", so the outcome is visible before committing rather than after -
+   and once there are two sides, both outcomes, each labelled. He should not
+   have to work out what will happen to the half he cannot see. */
 function _renamePreview() {
   const el = document.getElementById('renamePreview');
   if (!el || !renameTarget) return;
@@ -5274,33 +5364,140 @@ function _renamePreview() {
   const next = (input.value || '').trim();
   const from = renameTarget.original || '';
   const suffix = renameTarget.suffix || '';
+  const partner = renameTarget.partner;
+  const kind = renameTarget.kind;
+
   if (!next) {
     el.innerHTML = '<span class="rename-preview-none">Enter a name</span>';
-  } else if (next === from) {
-    el.innerHTML = '<span class="rename-preview-none">Unchanged</span>';
-  } else {
-    el.innerHTML = '<span class="rename-preview-from">' + e(from + suffix) + '</span>'
-      + ' <span class="rename-preview-arrow">&#8594;</span> '
-      + '<span class="rename-preview-to">' + e(next + suffix) + '</span>';
+    return;
   }
+
+  /* Two grid children per line and no more - the label, and one box holding
+     the whole "old -> new". Caught by looking at it: as four loose children
+     the arrow and the new name fell into the next row of the grid, so a line
+     read as a label, a name, and then an arrow hanging under the label. */
+  const line = (label, oldName, newName) =>
+    '<div class="rename-preview-line">'
+    + '<span class="rename-preview-side">' + e(label) + '</span>'
+    + '<span class="rename-preview-move">'
+    + (oldName === newName
+        ? '<span class="rename-preview-none">' + e(newName) + ' &mdash; unchanged</span>'
+        : '<span class="rename-preview-from">' + e(oldName) + '</span>'
+          + ' <span class="rename-preview-arrow">&#8594;</span> '
+          + '<span class="rename-preview-to">' + e(newName) + '</span>')
+    + '</span></div>';
+
+  if (!partner) {
+    el.innerHTML = next === from
+      ? '<span class="rename-preview-none">Unchanged</span>'
+      : line('', from + suffix, next + suffix);
+    return;
+  }
+
+  const mine = _renamePartnerNoun({ side: renameTarget.side }, kind);
+  const theirs = _renamePartnerNoun(partner, kind);
+  const pSuffix = _renameSuffix(partner.side, kind);
+
+  let html = line(_renameSentenceCase(mine), from + suffix, next + suffix);
+  if (_renameBothWanted()) {
+    html += line(_renameSentenceCase(theirs), partner.name + pSuffix, next + pSuffix);
+  } else {
+    /* Declining has a consequence, so the consequence is on screen rather
+       than being something he finds out later from a mismatch badge. */
+    html += '<div class="rename-preview-line rename-preview-kept">'
+      + '<span class="rename-preview-side">' + e(_renameSentenceCase(theirs)) + '</span>'
+      + '<span class="rename-preview-move"><span class="rename-preview-none">stays &ldquo;'
+      + e(partner.name + pSuffix) + '&rdquo;</span></span></div>';
+  }
+  el.innerHTML = html;
 }
+
+function _renameSentenceCase(s) {
+  return String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
+}
+/* One side, one call. The kind only matters to the cloud, which has separate
+   endpoints for a project and a site. */
+async function _renameOneSide(side, idOrPath, kind, name) {
+  return side === 'cloud'
+    ? pyApi('rename_cloud', kind || currentTab, idOrPath, name)
+    : pyApi('rename_local', idOrPath, name);
+}
+
 async function confirmRename() {
   const n = document.getElementById('renameInput').value.trim();
   if (!n || !renameTarget) { closeModal('renameModal'); return; }
   const rt = renameTarget;
+  const both = _renameBothWanted();
+  const partnerDone = both && _renamePartnerAlreadyNamed(n);
   closeModal('renameModal');
 
+  if (!both || partnerDone) {
+    opEnqueue({
+      title: `Renaming to "${n}"`,
+      sub: partnerDone
+        ? `The ${_renamePartnerNoun(rt.partner, rt.kind)} is already called this`
+        : '',
+      type: 'rename', pollBackend: false, undoable: false,
+      run: async () => {
+        const r = await _renameOneSide(rt.side, rt.idOrPath, rt.kind, n);
+        if (r && r.error) throw new Error(r.error);
+        _scheduleOpRefresh();
+        return r;
+      },
+    });
+    return;
+  }
+
+  /* Both sides, in one queued item rather than two.
+
+     Two reasons it is one. The side he clicked goes first, because that is
+     the one he actually asked for; and if it fails, the partner is left
+     alone - two independent items would have gone ahead and renamed the
+     other half, turning a failure into a pair that disagrees.
+
+     And a half-done pair has to *say so*. "A pair that half-renamed is worse
+     than one that didn't, because he'd believe they match." So the failure
+     message names which side is which and what each is now called, rather
+     than reporting the second error on its own. */
+  const mine = _renamePartnerNoun({ side: rt.side }, rt.kind);
+  const theirs = _renamePartnerNoun(rt.partner, rt.kind);
+  const partner = rt.partner;
+  let firstDone = false;
+
+  const renamePartner = async () => {
+    const r = await _renameOneSide(partner.side, partner.idOrPath, rt.kind, n);
+    _scheduleOpRefresh();
+    if (r && r.error) {
+      throw new Error(
+        `The ${mine} is now "${n}". The ${theirs} is still "${partner.name}" `
+        + `— renaming it failed: ${r.error}`);
+    }
+    return r;
+  };
+
   opEnqueue({
-    title: `Renaming to "${n}"`,
+    title: `Renaming both sides to "${n}"`,
+    sub: `${_renameSentenceCase(mine)} and ${theirs}`,
     type: 'rename', pollBackend: false, undoable: false,
     run: async () => {
-      const r = rt.side === 'cloud'
-        ? await pyApi('rename_cloud', rt.kind || currentTab, rt.idOrPath, n)
-        : await pyApi('rename_local', rt.idOrPath, n);
-      if (r && r.error) throw new Error(r.error);
-      _scheduleOpRefresh();
-      return r;
+      const first = await _renameOneSide(rt.side, rt.idOrPath, rt.kind, n);
+      if (first && first.error) {
+        // Nothing has moved. Say that, so a failure here does not read as
+        // the dangerous one below.
+        throw new Error(`Nothing was renamed — the ${mine} rename failed: ${first.error}`);
+      }
+      firstDone = true;
+      return renamePartner();
     },
+    // Retry picks up where it stopped rather than repeating a rename that
+    // already landed.
+    retryFn: async () => (firstDone
+      ? renamePartner()
+      : _renameOneSide(rt.side, rt.idOrPath, rt.kind, n).then(r => {
+          if (r && r.error) throw new Error(r.error);
+          firstDone = true;
+          return renamePartner();
+        })),
   });
 }
 
