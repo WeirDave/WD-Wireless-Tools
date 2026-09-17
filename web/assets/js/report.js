@@ -1198,8 +1198,14 @@
         : '';
       rows += '<tr><td class="rep-name">' + WD.esc(a.name || id) + '</td><td>' + WD.esc(bits.join(' · ')) + '</td>' + countCell + '</tr>';
     });
-    var countHeader = hasCount ? '<th>Used by</th>' : '';
-    return '<table class="rep-ap-table"><thead><tr><th>Antenna</th><th>Specs</th>' + countHeader + '</tr></thead>'
+    var countHeader = hasCount ? '<th class="rep-num">Qty</th>' : '';
+    /* The antenna name is the longest value on any of these sheets, so it is
+       given the room explicitly rather than an even share. */
+    var cols = hasCount
+      ? '<colgroup><col style="width:50%"><col style="width:35%"><col style="width:15%"></colgroup>'
+      : '<colgroup><col style="width:58%"><col style="width:42%"></colgroup>';
+    return '<table class="rep-ap-table">' + cols
+      + '<thead><tr><th>Antenna</th><th>Specs</th>' + countHeader + '</tr></thead>'
       + '<tbody>' + rows + '</tbody></table>';
   }
 
@@ -4007,8 +4013,16 @@
   }
 
   function summaryAntennas() {
+    /* It listed the models and not how many of each, while the same table in
+       the AP Installation report and the Bill of Materials both carry a
+       quantity. Someone reading the summary to size an order got the shorter
+       answer for no reason. */
     var ids = collectUsedAntennas();
-    var tbl = renderAntennaTable(ids);
+    var counts = {};
+    proj.radios.forEach(function (r) {
+      if (r.antennaTypeId) counts[r.antennaTypeId] = (counts[r.antennaTypeId] || 0) + 1;
+    });
+    var tbl = renderAntennaTable(ids, counts);
     if (!tbl) return '';
     return '<section class="rep-floor-section">'
       + '<h2 class="rep-floor-title">Antennas in use</h2>' + tbl + '</section>';
@@ -4052,6 +4066,94 @@
       + '</tr></thead><tbody>' + apRowsHtml + apTotalRow + '</tbody></table>'
       + '</section>';
 
+
+    /* Per floor, because he orders for the whole site and installs a floor at
+       a time. The project total above answers "what do I buy"; this answers
+       "what turns up on FLR3 on Tuesday", which is the count somebody was
+       doing by hand off the placement maps.
+
+       Model strings are written exactly as the project records them - a
+       prettified model name is one nobody can paste into a purchase order. */
+    var byFloorBom = groupApsByFloor(proj.accessPoints, ctx);
+    var floorOrderBom = sortedFloorOrder(byFloorBom);
+    var floorRowsHtml = '';
+    floorOrderBom.forEach(function (fp) {
+      var list = byFloorBom[fp.id];
+      if (!list || !list.length) return;
+      var groups = {};
+      list.forEach(function (a) {
+        var vendor = (a.vendor || '').trim() || '\u2014';
+        var model = (a.model || '').trim() || 'Unknown';
+        var key = vendor + '\u0000' + model;
+        if (!groups[key]) groups[key] = { vendor: vendor, model: model, count: 0 };
+        groups[key].count += 1;
+      });
+      var rows = Object.values(groups).sort(function (a, b) {
+        return a.vendor.localeCompare(b.vendor) || b.count - a.count
+            || a.model.localeCompare(b.model);
+      });
+      rows.forEach(function (g, i) {
+        floorRowsHtml += '<tr>'
+          + '<td class="rep-name">' + (i === 0 ? WD.esc(fp.name || 'Floor plan') : '') + '</td>'
+          + '<td>' + WD.esc(g.vendor) + '</td>'
+          + '<td class="rep-name">' + WD.esc(g.model) + '</td>'
+          + '<td class="rep-az">' + g.count + '</td>'
+          + '</tr>';
+      });
+      floorRowsHtml += '<tr class="rep-bom-total"><td></td><td></td>'
+        + '<td class="rep-name">' + WD.esc(fp.name || 'Floor plan') + ' total</td>'
+        + '<td class="rep-az">' + list.length + '</td></tr>';
+    });
+    var perFloorSection = floorOrderBom.length > 1
+      ? '<section class="rep-floor-section">'
+        + '<h2 class="rep-floor-title">Access points per floor</h2>'
+        + '<table class="rep-ap-table">'
+        + '<colgroup><col style="width:24%"><col style="width:20%">'
+        +   '<col style="width:41%"><col style="width:15%"></colgroup>'
+        + '<thead><tr><th>Floor</th><th>Vendor</th><th>Model</th>'
+        +   '<th class="rep-num">Qty</th></tr></thead>'
+        + '<tbody>' + floorRowsHtml + '</tbody></table>'
+        + '</section>'
+      : '';
+
+    /* Mounts are orderable parts, and Ekahau records one per radio. An AP
+       whose radio carries no mounting is counted under "Not recorded" rather
+       than dropped - a BOM that is quietly short is worse than one that says
+       where it is short. */
+    var mountGroups = {};
+    var mountMissing = 0;
+    proj.accessPoints.forEach(function (a) {
+      var r = ctx.primaryRadio(a.id);
+      var m = r && r.antennaMounting ? String(r.antennaMounting) : '';
+      if (!m) { mountMissing += 1; return; }
+      var label = m.replace(/_/g, ' ').toLowerCase();
+      label = label.charAt(0).toUpperCase() + label.slice(1);
+      mountGroups[label] = (mountGroups[label] || 0) + 1;
+    });
+    var mountRows = Object.keys(mountGroups).sort(function (a, b) {
+      return mountGroups[b] - mountGroups[a] || a.localeCompare(b);
+    });
+    var mountSection = (mountRows.length || mountMissing)
+      ? '<section class="rep-floor-section">'
+        + '<h2 class="rep-floor-title">Mount types</h2>'
+        + '<p class="rep-summary-hint">One per access point, from the mounting '
+        +   'recorded against its radio.</p>'
+        + '<table class="rep-ap-table">'
+        + '<colgroup><col style="width:70%"><col style="width:30%"></colgroup>'
+        + '<thead><tr><th>Mount</th><th class="rep-num">Qty</th></tr></thead><tbody>'
+        + mountRows.map(function (k) {
+            return '<tr><td class="rep-name">' + WD.esc(k) + '</td>'
+              + '<td class="rep-az">' + mountGroups[k] + '</td></tr>';
+          }).join('')
+        + (mountMissing
+            ? '<tr><td class="rep-name">Not recorded</td><td class="rep-az">'
+              + mountMissing + '</td></tr>'
+            : '')
+        + '<tr class="rep-bom-total"><td class="rep-name">Total access points</td>'
+        +   '<td class="rep-az">' + proj.accessPoints.length + '</td></tr>'
+        + '</tbody></table>'
+        + '</section>'
+      : '';
 
     var antGroups = {};
     var totalAntennas = 0;
@@ -4112,13 +4214,14 @@
       + '<h2 class="rep-floor-title">Notes for procurement</h2>'
       + '<ul class="rep-summary-notes">'
       + '<li>Antenna quantities count each radio-to-antenna assignment. An AP with a dual-band external antenna kit is counted per radio (2×), not per physical part — cross-check against your antenna kit\'s inclusions.</li>'
-      + '<li>Mount hardware, cable runs, cable ties, PoE injectors, and switch ports are <b>not</b> derived from Ekahau data. Add those manually per your rack/ceiling standard.</li>'
+      + '<li>The mount table above is the mounting recorded in Ekahau, which is a mount <i>type</i> and not a part number. The bracket, cable runs, cable ties, PoE injectors and switch ports are <b>not</b> in the file at all — add those per your rack/ceiling standard.</li>'
       + '<li>External-antenna APs typically ship without their antennas; verify the AP part number matches your procurement SKU (e.g. Cisco C9166I-B vs. C9166I-E for internal vs. external).</li>'
       + '<li>This BOM reflects the design shown in the .esx as of ' + WD.esc(ctx.dateStr) + '. Cross-reference with the final walked design before ordering.</li>'
       + '</ul>'
       + '</section>';
 
-    return head + apSection + antSection + notes + apNotesPages(aps, opts, ctx)
+    return head + apSection + perFloorSection + antSection + mountSection + notes
+      + apNotesPages(aps, opts, ctx)
       + REPORT_FOOTER;
   }
 
@@ -5921,9 +6024,9 @@
     bom: {
       id: 'bom',
       label: 'Bill of Materials',
-      description: 'AP and antenna quantities for procurement. Nothing else.',
+      description: 'AP, antenna and mount quantities for procurement — per model, for the project and per floor.',
       readBy: 'Whoever raises the purchase order',
-      output: 'One table, a row per AP and antenna model',
+      output: 'Model counts for the project and per floor, plus antennas and mounts',
       docName: 'Bill of Materials',
       coverBrand: 'Report · Bill of Materials',
       status: 'ready',
@@ -5932,11 +6035,15 @@
       noApFilter: true,
       sections: [
         { icon: '📦', title: 'AP quantities',
-          description: 'Grouped by vendor and model, with subtotals and a grand total.' },
+          description: 'Grouped by vendor and model, with subtotals and a grand total. An AP with no model recorded is counted as "Unknown" rather than dropped.' },
+        { icon: '🏢', title: 'Access points per floor',
+          description: 'The same model counts again, a floor at a time, with a per-floor total — you order for the site and install a floor at a time.' },
         { icon: '📡', title: 'Antenna quantities',
           description: 'Grouped by antenna model, with band, coupling type (integrated/external), and gain.' },
+        { icon: '🔩', title: 'Mount types',
+          description: 'One per access point, from the mounting recorded against its radio. Mounts with nothing recorded are counted under "Not recorded".' },
         { icon: '📝', title: 'Procurement notes',
-          description: 'What this BOM does and does not cover — mount hardware, cable runs, PoE injectors need manual work.' },
+          description: 'What this BOM does and does not cover — cable runs, PoE injectors and switch ports still need manual work.' },
       ],
       sidebar: [
         { id: 'externalOnly', label: 'Show external antennas only', default: false,
