@@ -39,6 +39,28 @@
 
   // ── what the pickers are filled from ───────────────────────────────────────
 
+  // The trim margin is ONE setting, shared with PlanTrim, not a second one
+  // that happens to offer the same words. PlanTrim already saves the chosen
+  // preset to `plantrim.margin_preset`; a Prep that opened on its own
+  // hardcoded default would crop every new site differently from the tool he
+  // set his preference in, silently, with nothing on screen saying the two
+  // disagreed. He runs Prep on every new site and cannot easily go and look.
+  function loadMargin() {
+    return WD.api('settings/get').then(function (r) {
+      var preset = r && r.settings && r.settings.plantrim
+                && r.settings.plantrim.margin_preset;
+      var sel = $('prepMargin');
+      if (preset && sel) sel.value = preset;
+    }).catch(function () { /* settings unavailable - keep the shipped default */ });
+  }
+
+  // Its own handler rather than the shared one, so picking a margin saves it
+  // and ticking an unrelated checkbox does not.
+  window.prepSetMargin = function (value) {
+    WD.api('settings/update', { patch: { plantrim: { margin_preset: value } } });
+    syncStepUi();
+  };
+
   function loadTemplates() {
     return fetch('/api/prep/templates', {
       method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
@@ -178,9 +200,11 @@
       + '&steps=' + chosenSteps().join(',')
       + '&retighten=' + ($('prepRetighten').checked ? '1' : '0');
     if ($('prepStep-trim').checked) {
-      // "legacy" is the 10-pixel margin Prep has always used, sent as the same
-      // integer it has always sent, so an untouched form produces the identical
-      // crop it did before these controls existed.
+      // A preset name, the same vocabulary PlanTrim sends, resolved against the
+      // plan's own metersPerUnit at the far end so it means a real distance
+      // rather than a pixel count. Prep used to send the bare 10-pixel
+      // DEFAULT_MARGIN here, which is the `tight` preset by another name - that
+      // is why prepared plans came back cropped hard against the building.
       q += '&margin=' + encodeURIComponent($('prepMargin').value);
       if ($('prepUseBoxes').checked) q += '&useBoxes=1';
     }
@@ -577,6 +601,7 @@
   document.addEventListener('DOMContentLoaded', function () {
     WD.applyVersions();
     loadTemplates();
+    loadMargin();
 
     $('fileInput').addEventListener('change', function (e) {
       if (e.target.files[0]) loadFile(e.target.files[0]);

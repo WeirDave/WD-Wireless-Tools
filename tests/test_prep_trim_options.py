@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import shutil
 import struct
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -265,3 +266,145 @@ class TheOptionsBelongToTheStep(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheMarginIsOneSettingNotTwo(unittest.TestCase):
+    """His ask: "I wanted to have the trim settings reflective of what's in
+    trim ... because we were cutting the plans too close to the rail for my
+    taste."
+
+    Offering the same four words in a second dropdown is not that. PlanTrim
+    saves the chosen preset; Prep opened on its own hardcoded `normal` and
+    ignored it, so a margin he had already widened in PlanTrim was thrown away
+    on every new site - and Prep is the tool he runs on every new site. Nothing
+    on screen said the two disagreed, and he reads these from a phone at work
+    where going and looking is not an option.
+
+    Driven through the real functions in Node rather than matched in the
+    source, because "the string is present" has passed here for code that was
+    never called.
+    """
+
+    PRELUDE = r"""
+    const fs = require('fs');
+    const src = fs.readFileSync(process.argv[1], 'utf8');
+    const i = src.indexOf('  function loadMargin(');
+    const j = src.indexOf('  function loadTemplates(', i);
+    if (i < 0 || j < 0) throw new Error('loadMargin is no longer where it was');
+    const saved = [];
+    let value = 'normal';
+    globalThis.window = globalThis;
+    globalThis.document = { getElementById: () => ({
+      get value() { return value; }, set value(v) { value = v; } }) };
+    globalThis.$ = document.getElementById;
+    globalThis.syncStepUi = () => {};
+    globalThis.WD = {
+      api: (path, body) => {
+        if (path === 'settings/update') { saved.push(body); return Promise.resolve({}); }
+        return Promise.resolve(globalThis.__SETTINGS__);
+      },
+    };
+    eval(src.slice(i, j));
+    """
+
+    def _node(self, settings, script):
+        prelude = ("globalThis.__SETTINGS__ = " + json.dumps(settings) + ";\n"
+                   + self.PRELUDE)
+        proc = subprocess.run(["node", "-e", prelude + script, str(PREP_JS)],
+                              capture_output=True, text=True, encoding="utf-8",
+                              timeout=120)
+        if proc.returncode != 0:
+            raise AssertionError("node failed:\n" + proc.stderr)
+        return json.loads(proc.stdout)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_prep_opens_on_the_margin_he_chose_in_plantrim(self):
+        out = self._node(
+            {"settings": {"plantrim": {"margin_preset": "extra-wide"}}},
+            "loadMargin().then(() => console.log(JSON.stringify("
+            "{ value: $().value })));")
+        self.assertEqual(out["value"], "extra-wide",
+                         "Prep ignored the margin he set in PlanTrim")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_a_margin_picked_in_prep_is_remembered(self):
+        """Otherwise he re-picks it on every site, from a phone, and the one
+        time he forgets he gets a crop he did not want and no way to tell."""
+        out = self._node(
+            {"settings": {}},
+            "prepSetMargin('wide');"
+            "console.log(JSON.stringify({ saved: saved }));")
+        self.assertEqual(len(out["saved"]), 1,
+                         "picking a margin in Prep saved nothing")
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_it_writes_the_same_key_plantrim_reads(self):
+        """A second key would look identical on screen and drift forever - the
+        exact shape of the merge-rule bug the settings registry exists for."""
+        out = self._node(
+            {"settings": {}},
+            "prepSetMargin('wide');"
+            "console.log(JSON.stringify({ saved: saved }));")
+        self.assertEqual(out["saved"][0],
+                         {"patch": {"plantrim": {"margin_preset": "wide"}}})
+
+    def test_neither_tool_invented_a_second_key(self):
+        js = PREP_JS.read_text(encoding="utf-8")
+        plantrim = (ROOT / "web" / "assets" / "js" / "plantrim.js").read_text(encoding="utf-8")
+        for src, who in ((js, "prep.js"), (plantrim, "plantrim.js")):
+            with self.subTest(file=who):
+                self.assertIn("margin_preset", src)
+                self.assertNotIn("prep_margin", src,
+                                 f"{who} saves the margin somewhere of its own")
+
+    def test_the_selector_saves_rather_than_only_redrawing(self):
+        html = PREP_HTML.read_text(encoding="utf-8")
+        sel = html[html.index('id="prepMargin"'):]
+        self.assertIn("prepSetMargin", sel[:300],
+                      "the margin dropdown does not save what he picks")
+
+    def test_the_hint_does_not_claim_the_two_tools_always_agree(self):
+        """It used to say Normal "is what PlanTrim uses", which stopped being
+        true the moment he changed it there."""
+        html = PREP_HTML.read_text(encoding="utf-8")
+        self.assertNotIn("is the default and is what PlanTrim uses", html)
+        self.assertIn("same setting as PlanTrim", html)
+
+
+class TheRangeIsUsefulAtTheGenerousEnd(unittest.TestCase):
+    """The complaint was that the crop came in too tight, so a range that only
+    goes tighter than the default answers nothing. Two settings looser than the
+    default, and the loosest has to be worth choosing."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="wd-prep-generous-"))
+        self.src = make_esx(self.tmp / "in.esx", mpu=0.05)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _width(self, margin):
+        out = self.tmp / f"g-{margin}.esx"
+        prep_pipeline.run(str(self.src), dest=str(out), steps=["trim"],
+                          margin=margin, backup=False)
+        return plan_of(out)["width"]
+
+    def test_two_presets_are_looser_than_the_default(self):
+        default = self._width(esx_trimmer.DEFAULT_MARGIN_PRESET)
+        looser = [p for p in esx_trimmer.MARGIN_PRESETS if self._width(p) > default]
+        self.assertGreaterEqual(len(looser), 2,
+                                f"only {looser} keep more than the default")
+
+    def test_the_loosest_keeps_substantially_more_than_the_default(self):
+        """A generous end that is barely distinguishable is theatre."""
+        building = 200.0                     # the ink in the fixture, in pixels
+        default = self._width(esx_trimmer.DEFAULT_MARGIN_PRESET) - building
+        loosest = self._width("extra-wide") - building
+        self.assertGreaterEqual(loosest, 3 * default,
+                                f"loosest {loosest}px vs default {default}px")
+
+    def test_the_default_is_not_the_tightest_thing_on_offer(self):
+        """Prep sent the bare 10-pixel DEFAULT_MARGIN until v2.103.0, which is
+        `tight` by another name. That is the crop he was reacting to."""
+        self.assertGreater(self._width(esx_trimmer.DEFAULT_MARGIN_PRESET),
+                           self._width("tight"))

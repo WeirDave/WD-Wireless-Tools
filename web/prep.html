@@ -195,7 +195,7 @@ body.tool-prep .dropzone-logo { background-image: url(/assets/wd-wireless-tools-
       <div class="prep-opts" id="prepTrimOpts">
         <div class="prep-row">
           <label for="prepMargin">Leave a margin of</label>
-          <select id="prepMargin" class="prep-input prep-input--sel" onchange="prepSyncStepUi()">
+          <select id="prepMargin" class="prep-input prep-input--sel" onchange="prepSetMargin(this.value)">
             <option value="tight">Tight &mdash; 10 pixels, barely any</option>
             <option value="normal" selected>Normal &mdash; 3 m, about 10 ft</option>
             <option value="wide">Wide &mdash; 6 m, about 20 ft</option>
@@ -210,8 +210,14 @@ body.tool-prep .dropzone-logo { background-image: url(/assets/wd-wireless-tools-
         <p class="prep-hint">
           The margin is measured on the plan&rsquo;s own scale, so the same setting means the
           same real distance on every sheet whatever its resolution. A plan with no scale falls
-          back to 10 pixels. <b>Normal</b> is the default and is what PlanTrim uses, so the two
-          tools crop the same way unless you change this.
+          back to 10 pixels. <b>Normal</b> is what the suite ships with; <b>Wide</b> and
+          <b>Extra wide</b> leave noticeably more paper around the building if a crop that
+          close to the walls is tighter than you like.
+        </p>
+        <p class="prep-hint">
+          This is the <b>same setting as PlanTrim&rsquo;s Margin</b>, not a separate one &mdash;
+          change it in either tool and both remember it, so a project you prepare here is
+          cropped the way you set it there.
         </p>
       </div>
 

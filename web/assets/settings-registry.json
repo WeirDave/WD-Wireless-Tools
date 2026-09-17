@@ -299,7 +299,15 @@
       "key": "plantrim.margin_preset",
       "label": "Trim margin (how much room to leave around the building)",
       "category": "preference",
-      "owner": "PlanTrim",
+      "owner": "PlanTrim, and read and written by Prep's trim step too",
+      "_comment": [
+        "Two surfaces, one store, which is the point rather than a breach of it.",
+        "The rule this file exists for is that a setting must not live in two",
+        "STORES; a second control reading and writing the same server key is how",
+        "two tools are kept from cropping the same project differently. Prep used",
+        "its own hardcoded default until v2.103.2 and cropped hard against the",
+        "building on every new site while PlanTrim honoured what he had chosen."
+      ],
       "section": "plantrim",
       "home": "plantrim-tool"
     },
