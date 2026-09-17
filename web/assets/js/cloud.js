@@ -676,6 +676,7 @@ function indexRowData() {
       localName: p.local.name, localPath: p.local.path,
       mismatch: p.namesDiffer,
       matchType: p.matchType,
+      differenceKind: p.differenceKind || null,
       /* Which side is newer, and both dates, travel with the row you can
          select. They used to exist only on the render row, so Sync - which
          reads rowData - could not see that a pair needed content moved and
@@ -1545,6 +1546,7 @@ function renderLedger(hit) {
   (data.matched || []).forEach(p => rows.push({
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'projects',
     matchType: p.matchType, staleness: p.staleness || null,
+    differenceKind: p.differenceKind || null,
     cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
   }));
   (data.cloudOnly || []).forEach(s => rows.push({ status: 'orphan', key: 'c:' + s.id, kind: 'projects', cloud: s, local: null, sort: s.name || '' }));
@@ -1612,6 +1614,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
   (data.matched || []).forEach(p => rows.push({
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'sites',
     matchType: p.matchType, staleness: p.staleness || null,
+    differenceKind: p.differenceKind || null,
     cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || ''),
     cloudCheckKey: 's-c:' + p.cloud.id, localCheckKey: 's-l:' + p.local.path,
   }));
@@ -1902,7 +1905,7 @@ async function autoAssignAllMatched() {
 function _visibleSiteRowsForBatch() {
   const rows = [];
   (data.matched || []).forEach(p => rows.push({
-    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
+    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, differenceKind: p.differenceKind || null, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
   }));
   (data.cloudOnly || []).forEach(s => rows.push({ status: 'orphan', cloud: s, local: null, sort: s.name || '' }));
   (data.localOnly || []).forEach(f => rows.push({ status: 'orphan', cloud: null, local: f, sort: f.name || '' }));
@@ -1912,7 +1915,7 @@ function _visibleSiteRowsForBatch() {
 function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteName, passFilter) {
   const rows = [];
   (children.matched || []).forEach(p => rows.push({
-    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, staleness: p.staleness || null, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
+    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, staleness: p.staleness || null, differenceKind: p.differenceKind || null, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
   }));
   (children.cloudOnly || []).forEach(c => rows.push({ status: 'orphan', cloud: c, local: null, sort: c.name || '' }));
   (children.localOnly || []).forEach(l => rows.push({ status: 'orphan', cloud: null, local: l, sort: l.name || '' }));
@@ -1999,9 +2002,25 @@ function stalenessBadgeHtml(r) {
   const s = r.staleness;
   if (!s) return '';
 
+  /* "Newer" and "renamed" are different statements and used to share one
+     label. A rename moves `history.modifiedAt`, so renaming a hundred cloud
+     projects produced a hundred rows reading "Cloud newer" - the same words
+     the tool uses for somebody having redesigned the thing. That is the
+     reason the labels stopped being trusted: one of them was not true.
+
+     The backend classifies the difference now (`differenceKind`), and the
+     evidence is in the row at rest rather than in a tooltip. */
+  const renamedOnly = r.differenceKind === 'renamed';
+
   if (s === 'cloud_newer') {
     if (canPullFromCloud(r)) {
-      return `<button class="stale-badge stale-cloud is-action" title="Sync: the cloud copy was edited more recently, so it replaces your local one. Your current copy is kept alongside it as a .previous- file." onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#11015; Cloud newer &middot; download</button>`;
+      const label = renamedOnly
+        ? '&#11015; Cloud renamed &middot; download'
+        : '&#11015; Cloud newer &middot; download';
+      const why = renamedOnly
+        ? 'The cloud copy was RENAMED, which is why its date moved - the name stored inside your local file is the old one. No design change was detected. Downloading brings the rename across and renames your local file to match. Your current copy is kept in the backups folder.'
+        : 'The cloud copy was edited more recently and the names agree, so this is a real change rather than a rename. Downloading replaces your local one. Your current copy is kept in the backups folder.';
+      return `<button class="stale-badge stale-cloud is-action${renamedOnly ? ' is-renamed' : ''}" title="${a(why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${label}</button>`;
     }
     return `<span class="stale-badge stale-cloud" title="The cloud copy was edited more recently. These two were paired on name similarity rather than a proven match, so downloading over your local file is not offered — it could overwrite a different project. Link them yourself with the &#128279; button to confirm the pair, and the download becomes available.">&#11015; Cloud newer</span>`;
   }
@@ -2055,7 +2074,7 @@ function gutCell(r) {
 
     const isNameMatch = r.matchType === 'exact' && r.cloud && r.local && kind !== 'sites';
     const verifyBtn = (isNameMatch && !r.staleness)
-      ? `<button class="gut-arrow verify-btn" title="Overwrite: take the cloud copy over your local file regardless of which is newer. These matched on name alone; this makes them byte-identical so the pair upgrades to Same file. Your current copy is kept alongside it." onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#8681;<span class="ib-label">Download over local</span></button>`
+      ? `<button class="gut-arrow verify-btn" title="Overwrite: take the cloud copy over your local file regardless of which is newer. These matched on name alone; this makes them byte-identical so the pair upgrades to Same file. Your current copy is kept in the backups folder." onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#8681;<span class="ib-label">Download over local</span></button>`
       : '';
     return `<div class="lr-gut ok">${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}${verifyBtn}</div>`;
   }
@@ -4509,6 +4528,9 @@ async function bulkSync(dir) {
   }, 0);
   const parts = [];
   if (contentPulls.length) parts.push(`Sync <b>${contentPulls.length}</b> file${contentPulls.length === 1 ? '' : 's'} — the newer cloud copy replaces the older local one`);
+  const pullRenames = contentPulls.filter(d => (d.cloudName || '').trim()
+    && (d.localName || '').trim() !== (d.cloudName || '').trim());
+  if (pullRenames.length) parts.push(`Rename <b>${pullRenames.length}</b> of those local file${pullRenames.length === 1 ? '' : 's'} to match its cloud name`);
   if (pairs.length) parts.push(`Rename <b>${pairs.length}</b> matched item${pairs.length === 1 ? '' : 's'}`);
   if (uploads.length) parts.push(`Upload <b>${uploads.length}</b> local .esx file${uploads.length === 1 ? '' : 's'} to Ekahau Cloud`);
   if (downloads.length) parts.push(`Download <b>${downloads.length}</b> cloud project${downloads.length === 1 ? '' : 's'}`);
@@ -4538,8 +4560,11 @@ async function bulkSync(dir) {
         <thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>
         <tbody>${rows}</tbody>
       </table></div>
-      <p class="sub">Your current copy of each is kept alongside it as a
-        <code>.previous-</code> file.</p>
+      <p class="sub">Your current copy of each is kept in the
+        <code>backups</code> folder, as
+        <code>backups/&lt;site&gt;/&lt;name&gt;.previous-&lt;date&gt;.esx</code>.
+        The newest three are kept per file.</p>
+      <p class="sub">${contentPulls.filter(d => d.differenceKind === 'renamed').length} of these differ only by a <b>rename</b> — the name inside your local file is the old one and no design change was detected. Those are the low-risk ones.</p>
       <p class="sub warn"><b>Two dates cannot tell you whether both sides
         changed.</b> If you edited one of these locally since it last matched
         the cloud, "cloud is newer" and "we both changed it" look identical
@@ -4598,6 +4623,25 @@ async function bulkSync(dir) {
         return r;
       },
     });
+    /* The pull replaces the bytes and keeps the filename - `verify_replace_local`
+       ends in os.replace - so a sync that only pulled left every name still
+       mismatched and needed a second run to tidy up. Renaming here is the rest
+       of the same intention, in the same pass. It is queued separately so a
+       rename that cannot land (a name already taken) reports itself without
+       calling the download a failure. */
+    if ((d.cloudName || '').trim()
+        && (d.localName || '').trim() !== (d.cloudName || '').trim()) {
+      opEnqueue({
+        title: `Renaming local to "${d.cloudName}"`,
+        type: 'rename', pollBackend: false, undoable: false,
+        run: async () => {
+          const r = await pyApi('rename_local', d.localPath, d.cloudName);
+          if (r && r.error) throw new Error(r.error);
+          _scheduleOpRefresh();
+          return r;
+        },
+      });
+    }
   }
 
   for (const d of pairs) {

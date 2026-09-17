@@ -1029,6 +1029,7 @@ def get_local_esx_files(output_dir):
                             "fsMtime": mtime,
                             "owner": em["author"],
                             "projectId": em["projectId"],
+                            "projectName": em["projectName"],
                             "projectType": _esx_project_type(f, mtime)})
         except OSError:
             continue
@@ -1062,7 +1063,8 @@ def _esx_meta(path, mtime):
     hit = _ESX_META_CACHE.get(key)
     if hit and hit[0] == mtime:
         return hit[1]
-    meta = {"author": "", "projectId": "", "internalMtime": 0}
+    meta = {"author": "", "projectId": "", "projectName": "",
+            "internalMtime": 0}
     try:
         import zipfile
         with zipfile.ZipFile(path) as z:
@@ -1073,6 +1075,12 @@ def _esx_meta(path, mtime):
                 history = proj.get("history") or {}
                 meta["author"] = (history.get("createdBy") or "").strip().lower()
                 meta["projectId"] = (proj.get("id") or "").strip().lower()
+                # The project's own name, as Ekahau stored it. A local
+                # copy records whatever the cloud called it at download
+                # time, which is what makes a later rename detectable
+                # without asking the server anything.
+                meta["projectName"] = (proj.get("name")
+                                       or proj.get("title") or "").strip()
 
 
                 iso = (history.get("modifiedAt") or "").strip()
@@ -1187,13 +1195,50 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
             return "local_newer"
         return None
 
+    def _difference(c, l, staleness):
+        """What kind of difference is this - a rename, or real work?
+
+        `_staleness` compares two `history.modifiedAt` values, and a rename
+        moves one of them. That is why renaming a cloud project used to read
+        exactly like somebody redesigning it, and why "is it safe to pull
+        these" had no answer.
+
+        The discriminator is the name **inside** the .esx. `project.json`
+        carries `project.name`, and `download_project` writes the cloud's own
+        documents verbatim - so immediately after a download the internal name
+        and the cloud name are identical. If they have since diverged, one side
+        was renamed, and the staleness direction says which:
+
+        · cloud is newer and the names diverged  -> the cloud was renamed
+        · local is newer and the names diverged  -> it was renamed in Ekahau
+
+        Returns "renamed", "content", or None when there is nothing to say.
+
+        **It does not prove the content is unchanged.** A project renamed *and*
+        edited still reports "renamed", because the rename is all this can see.
+        It separates the rename you performed from everything else, which is
+        the triage that was missing - not a content hash.
+        """
+        if not staleness:
+            return None
+        internal = (l.get("projectName") or "").strip()
+        if not internal:
+            # Older file, or one we could not read. Say nothing rather than
+            # guess - an unknown reported as "content" would be a false alarm
+            # and as "renamed" would be a false reassurance.
+            return None
+        return "renamed" if internal.casefold() != c["name"].strip().casefold() \
+            else "content"
+
     def _take(c, idx, mtype, score=1.0):
         l = unmatched_local.pop(idx)
         disp = score - 2.0 if mtype == "code" else score
+        stale = _staleness(c, l)
         matched.append({"cloud": c, "local": l, "matchType": mtype,
                         "score": round(min(disp, 1.0), 2),
                         "namesDiffer": c["name"].strip() != l["name"].strip(),
-                        "staleness": _staleness(c, l)})
+                        "staleness": stale,
+                        "differenceKind": _difference(c, l, stale)})
 
     def _norm_path(p):
         return (p or "").replace(chr(92), "/").lower()
