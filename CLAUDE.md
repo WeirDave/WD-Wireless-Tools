@@ -92,7 +92,59 @@ The audit lesson is in the method: searching a *list of known names* missed
 every real identifier that was found. Enumerating every token of the shape and
 reading all of them is what worked.
 
-## Release process — do this every time you commit to `main`
+## A version bump on `main` is a release — that part is automatic now
+
+**Bump `web/assets/versions.json` and the release publishes itself.** You do not
+tag, you do not run `gh release create`, and you must not hold a release back
+waiting for a better moment. `.github/workflows/auto-release.yml` watches that
+one file: when the `suite` value on `main` has no matching tag, it runs the full
+suite, tags **the commit that bumped it**, verifies `versions.json` *at the tag*,
+publishes, and calls `release-assets.yml` to attach the ZIP and its checksum.
+
+**Why this stopped being a manual step.** "Why were commits created with no
+releases?? That should never happen." He is right, and it was a process gap
+rather than a slip. Main went red on a test, three sessions correctly held their
+tags, two were cut afterwards and one was not; later sessions then bumped the
+version and deliberately did not tag, reasoning that pushing a tag is ceremony
+to perform only when asked. Every one of those decisions was defensible on its
+own. The result was three versions of finished work he could not install, while
+he sat at work fighting the old build and reporting bugs that were already
+fixed.
+
+**He installs what is published.** An unreleased commit is not "nearly
+shipped", it is invisible - the same problem as uncommitted work wearing a
+different hat. So the remembering is gone: green suite and a new version means
+a release exists, and a red suite means no release at all, which is the
+behaviour that saved three bad tags and is preserved deliberately.
+
+Four properties, each one a failure that has already happened here, and
+`tests/test_release_is_automatic.py` holds all of them:
+
+* it fires **only on a version change**, not on every commit
+* **a red suite publishes nothing**
+* it tags `github.sha` - **the commit the run was for** - never a moving HEAD,
+  which is how `v2.103.14` landed on another session's commit
+* it re-reads `versions.json` **at the tag** before publishing, because that is
+  what `build_release.py` reads
+
+**The one thing that is not obvious and would silently break it:** a release
+created with `GITHUB_TOKEN` does **not** fire `release: published`. GitHub
+suppresses that to stop workflows looping. So the automatic path cannot rely on
+`release.yml` noticing - it calls `release-assets.yml` itself, and both paths
+share that one workflow rather than each having their own copy of the build.
+An asset-less release is worse than no release: the updater and both install
+scripts refuse a download whose checksum does not match, so the user is stuck
+rather than merely out of date.
+
+The notes are the commit message, which in this repo is usually the better
+document anyway. Replace them with a hand-written note afterwards
+(`gh release edit`) when the release deserves the full treatment described
+below - and for a user-facing feature it does.
+
+`release.yml` remains for a release published by hand through the GitHub UI,
+and for backfilling assets onto a tag whose build failed.
+
+## Release process — the parts that are still yours
 
 1. Bump `web/assets/versions.json` — this is the single source of truth for
    every tool's version + the suite version. Every page's displayed version
@@ -130,9 +182,15 @@ reading all of them is what worked.
    package a failing tree. `tests/test_shipped_modules_are_tracked.py` now
    catches that particular shape locally, but red CI means stop, whatever it
    says.
-5. Create the GitHub release with hand-written notes, matching the
-   WaxFrame Pro style (H1 = one-line summary, `## What changed` with
-   bullets, `## Verified`, `## Files changed`):
+5. **The release publishes itself** once the bump lands and CI is green - see
+   the section above. What is still worth doing by hand is the *note*: edit it
+   afterwards with `gh release edit vX.Y.Z --notes-file notes.md`, in the
+   WaxFrame Pro style (H1 = one-line summary, `## What changed` with bullets,
+   `## Verified`, `## Files changed`).
+
+   The commands below are the manual ceremony. You should not need them, and
+   they are kept because the reasoning in them still applies to anything that
+   tags by hand:
    ```powershell
    git tag -a vX.Y.Z -m "vX.Y.Z" <the sha of your own version-bump commit>
    git show vX.Y.Z:web/assets/versions.json   # must say X.Y.Z before pushing
@@ -214,6 +272,35 @@ reading all of them is what worked.
    whether the number on their screen is newer or older than that.
 
 
+## Unrecoverable earns friction, not refusal
+
+**A guard that refuses the ordinary state of his work is a wall across the main
+road.** When an action cannot be undone, make it ask - do not make it
+impossible.
+
+The case that named this: `Local → Cloud` shipped with
+`PUSHABLE_MATCH_TYPES = {id, manual}`, so replacing a cloud project was offered
+only on a pair sharing Ekahau's id or one he had linked by hand. The reasoning
+was sound - a cloud delete cannot be undone, so the pair should be proven - and
+the effect was that the feature never worked for him. A project built locally
+and uploaded carries Ekahau's id in the **cloud** copy only; the local file does
+not have it until the project is downloaded back. "Local is newer and there is
+no shared id" is therefore the normal state of work in progress, and it was the
+one thing the guard refused. He asked for that feature about six times and every
+ask produced code he could not reach.
+
+It is allowed now and asks once, naming the cloud project it will delete. A
+*guessed* pairing - a shared site code, similar wording - is still refused,
+because there the two names are not even the same and there is nothing for him
+to confirm against. That is the line: **confirm what he can check, refuse only
+what he cannot.**
+
+The same mistake in other clothes, already paid for here: the Prep pass that
+threw away completed work because one step refused, and the delete that made him
+type `DELETE` for something a backup already covered. He has said it plainly
+more than once - a guard that fires on his normal case is worse than no guard,
+because he stops believing the ones that matter.
+
 ## Verifying a change — test servers, ports, and browsers
 
 **Sessions have hung here before. The symptom is a session that reports as
@@ -271,6 +358,27 @@ exactly like a session doing work, which is how the time gets lost.
 Make the reasonable call, do the whole task, and say in the report what you
 decided and why. A decision that turns out wrong is cheap to correct; a
 session that stopped to ask is not.
+
+### A control is verified by running its handler, not by finding its name
+
+**Asserting that the source contains `doTheThing(` proves the string exists. It
+does not prove anything happens when he clicks it.** Four defects have now
+shipped green this way, the last being a `Local → Cloud` button that rendered
+perfectly and was inert for every pair he owned.
+
+So for any control, the test renders the row with the **real** render function,
+pulls the `onclick` back **out of that HTML**, and executes it against recording
+stubs. `tests/test_cloud_push_is_reachable.py` is the pattern. It catches a
+handler that is missing, misnamed, takes different arguments, or bails before
+reaching the server - none of which a substring assertion can see. It also
+pins the argument order, which matters when one of them names the thing that
+gets deleted.
+
+And if any text in the app tells him to use a control, that control has to
+exist: `TheAppOnlyPointsAtControlsThatExistTests` fails on a bolded control name
+that nothing renders. The Sync dialog spent a release telling him to use a
+button that was greyed out for every row he had, which reads as the tool lying
+to him. Either wire it or stop naming it.
 
 ### Browser verification — Chrome, Edge and Firefox, every time
 

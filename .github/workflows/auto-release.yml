@@ -1,0 +1,165 @@
+# A version bump on main is a release. Nothing ships halfway.
+#
+# "why were commits created with no releases?? that should never happen."
+#
+# He is right, and it was a process gap rather than a one-off. Main went red on
+# a test, three sessions correctly held their tags, two were cut afterwards and
+# one was not; later sessions then bumped the version and deliberately did not
+# tag, on the reasoning that a tag push is ceremony to perform only when asked.
+# Every one of those decisions was defensible on its own. The outcome was three
+# versions of finished work he could not install while he sat at work fighting
+# the old build.
+#
+# He installs what is published. An unreleased commit is not "nearly shipped",
+# it is invisible - the same problem as uncommitted work, wearing a hat. So
+# this removes the remembering: bump the suite version on main and the release
+# happens, or the build fails and nothing is published at all.
+#
+# The five things this has to get right, each one a failure that has already
+# happened here:
+#
+#  * only on a version change, or every commit spams a release
+#  * only if the full suite passes - a red main must produce no release, which
+#    is the behaviour that saved three bad tags
+#  * tag the commit that bumped the version, never a moving HEAD; v2.103.14
+#    landed on another session's commit that way
+#  * verify versions.json *at the tag* before publishing, because that is what
+#    the packaging step reads
+#  * idempotent - if the tag exists, do nothing rather than fail
+
+name: Release on version bump
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - web/assets/versions.json
+  # For backfilling, or re-running after a failure once main is green again.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  # Never two releases at once: two pushes in quick succession would otherwise
+  # race to create the same tag.
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  decide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.read.outputs.tag }}
+      needed: ${{ steps.read.outputs.needed }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read the suite version and decide
+        id: read
+        shell: bash
+        run: |
+          version="$(python -c "import json;print(json.load(open('web/assets/versions.json'))['suite'])")"
+          tag="v${version}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          if [[ ! "$tag" =~ ^v[0-9]+(\.[0-9]+)+$ ]]; then
+            echo "versions.json suite is not a version: $version" >&2
+            exit 1
+          fi
+
+          # Asking whether the tag exists - rather than diffing against the
+          # previous commit - is what makes this idempotent and what lets it
+          # backfill. A re-run, a revert and a forgotten release all converge
+          # on the same question: is the version on main released yet?
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$tag already exists - nothing to do."
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$tag is not released yet."
+          fi
+
+  tests:
+    needs: decide
+    if: needs.decide.outputs.needed == 'true'
+    uses: ./.github/workflows/tests.yml
+
+  publish:
+    needs: [decide, tests]
+    if: needs.decide.outputs.needed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TAG: ${{ needs.decide.outputs.tag }}
+      VERSION: ${{ needs.decide.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Tag the commit that bumped the version
+        shell: bash
+        run: |
+          # `github.sha` is the commit this run was started for, not whatever
+          # main has moved on to. Naming it is the whole lesson of v2.103.14,
+          # where a bare tag landed on another session's commit.
+          sha="${{ github.sha }}"
+
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "::notice::$TAG appeared while this ran - leaving it alone."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG" "$sha"
+
+          # The cheap check, run against the tag rather than the workspace:
+          # this is exactly what build_release.py will read.
+          at_tag="$(git show "$TAG:web/assets/versions.json" | python -c "import json,sys;print(json.load(sys.stdin)['suite'])")"
+          if [[ "$at_tag" != "$VERSION" ]]; then
+            echo "versions.json at $TAG says $at_tag, expected $VERSION" >&2
+            exit 1
+          fi
+
+          git push origin "$TAG"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::notice::Release $TAG already exists."
+            exit 0
+          fi
+
+          # The commit message is the release note. These are written at
+          # length in this repo and say what changed and why, which is more
+          # use than generated notes - and a hand-written note can replace it
+          # afterwards with `gh release edit`.
+          git log -1 --pretty=%B "$TAG" > notes.md
+          {
+            echo
+            echo "---"
+            echo
+            echo "_Published automatically because \`web/assets/versions.json\` moved to ${VERSION} on main, with the full suite green._"
+          } >> notes.md
+
+          gh release create "$TAG" \
+            --title "WD Wireless Tools $TAG" \
+            --notes-file notes.md
+
+  assets:
+    needs: [decide, publish]
+    if: needs.decide.outputs.needed == 'true'
+    uses: ./.github/workflows/release-assets.yml
+    with:
+      tag: ${{ needs.decide.outputs.tag }}
