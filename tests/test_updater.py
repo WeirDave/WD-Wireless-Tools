@@ -550,6 +550,18 @@ class BlockedApiTests(unittest.TestCase):
     def setUp(self):
         from server import app
         self.client = app.test_client()
+        # `remote_branch_state` is the one call in this route that talks to the
+        # real repository, and it decides `updateAvailable` alongside the tag
+        # comparison these tests are actually about. Left unpatched it asks
+        # "how far is this checkout behind origin/main" - so the suite passed
+        # only while the commit under test happened to be the tip of the
+        # branch, and went red the moment another commit landed or an older
+        # run was re-run. It cost a release check an hour; nothing here is
+        # meant to depend on where the branch has got to.
+        self._branch = patch.object(updater, "remote_branch_state",
+                                    return_value=None)
+        self._branch.start()
+        self.addCleanup(self._branch.stop)
 
     def _status(self):
         return json.loads(self.client.get("/api/update/status").data)
