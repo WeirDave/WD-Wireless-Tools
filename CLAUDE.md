@@ -890,3 +890,14 @@ Claude Code cloud sessions have no memory of past conversations by default
 — only what's readable in the repo at session start (this file, code,
 `BACKLOG.md`). If something matters for next time, write it here rather
 than assuming it'll be remembered.
+
+**Prune stale worktrees at the start of every session too**, for the same
+reason: `git worktree prune -v`, then check whether the `.claude/worktrees/`
+directory it names is still sitting on disk (prune clears git's own
+registration; the folder itself sometimes survives that). A session that
+dies mid-task — crash, timeout, closed window — leaves both behind, and
+this repo has had one sitting abandoned (plus several more in a temp
+directory outside Dropbox that aren't even reachable from here), each with
+a stale local `claude/<name>` branch alongside it. None of that is dangerous by itself,
+but rule zero material has sat in exactly these forgotten corners before.
+Report what you found and removed rather than cleaning quietly.
