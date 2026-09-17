@@ -86,6 +86,9 @@
 
   --stripe: #131313;
   --row-hover: #1e1e1e;
+  /* +4 on each band, so the detail sits just above its parent either way */
+  --detail-row: #1a1a1a;
+  --detail-row-stripe: #171717;
   --head-bg: #0e0e0e;
 
 
@@ -145,6 +148,9 @@
 
   --stripe: #eef1f5;
   --row-hover: #e2e9f2;
+  /* Light theme goes the other way: a touch darker than the row above. */
+  --detail-row: #f4f6f9;
+  --detail-row-stripe: #e9edf2;
   --head-bg: #e9eff5;
 
   --slate-bg: #eff0f1;
@@ -2625,40 +2631,65 @@ body.tool-cloud .toolbar input.search:focus {
 /* The measured answer, beside the inferred one. Green when the contents match
    despite the dates disagreeing - that is the reassuring case and the common
    one after a bulk rename - and amber when something really did change. */
-/* The findings band: full width, under the pair it is about.
+/* The detail row: the findings and actions for the row directly above it.
 
-   Everything meaningful used to be stacked into the gutter between two name
-   columns - "you can see how we're jamming things into these lines" - and his
-   project names are long, so that lane is a few characters wide. The pair
-   identifies the row; the findings and the actions are about the row and get
-   the width. Readable and lengthy beats compact: wide desktop first, narrow
-   merely has to function. */
+   "another row underneath the file name and slightly a different color would
+   be really good."
+
+   Three things make it read as *attached* rather than as another project:
+
+   * it takes the parent row's banding and lifts it by four points, so the
+     relationship is the same whether the parent is striped or not. A fixed
+     tint would sit closer to one band than the other and the attachment would
+     come and go down the list.
+   * the parent's bottom border is removed when a detail follows it
+     (`.ledger-row.has-detail`), so there is no line between the two - the line
+     that made them look like separate entries.
+   * a status-coloured bar runs down the left edge, matching the inset bar the
+     parent row already uses.
+
+   The lift is deliberately small. He has ninety-seven local folders and the
+   list is dense; a strong contrast would read as a new record and make the
+   list harder to scan, which is the opposite of the point. Both tints stay
+   below --row-hover so hovering is still distinguishable. */
+.ledger-row.has-detail { border-bottom: 0; }
+
 .row-detail {
-  display: flex; align-items: center; gap: 10px;
-  padding: 7px 14px; font-size: 12.5px; line-height: 1.5;
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 14px 7px 14px;
+  font-size: 12.5px; line-height: 1.5;
   border-bottom: 1px solid var(--border);
-  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+  background: var(--detail-row);
+  color: var(--text-2);
 }
+.row-detail.stripe { background: var(--detail-row-stripe); }
+
 .row-detail .rd-icon { font-weight: 700; flex: 0 0 auto; }
-.row-detail .rd-text { flex: 1 1 auto; }
-.row-detail .rd-actions { flex: 0 0 auto; display: flex; gap: 6px; }
-.row-detail.rd-same .rd-icon { color: var(--green-dark, #2ea043); }
-.row-detail.rd-differs .rd-icon { color: var(--amber-dark, #d29922); }
+.row-detail .rd-text { flex: 1 1 auto; color: var(--text); }
+/* Horizontal, with room, and no wrapping at a desktop width: full labels
+   rather than truncations was the whole complaint. */
+.row-detail .rd-actions {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  white-space: nowrap;
+}
+.row-detail.rd-same .rd-icon { color: var(--green); }
+.row-detail.rd-differs .rd-icon { color: var(--amber); }
+.row-detail.rd-plain .rd-icon { color: var(--text-2); }
+
+.row-detail.status-synced { box-shadow: inset 3px 0 0 var(--green); }
+.row-detail.status-mismatch { box-shadow: inset 3px 0 0 var(--amber); }
+
 .rd-btn {
   border: 1px solid var(--border); background: transparent; color: var(--text-2);
   border-radius: 5px; padding: 3px 10px; font-size: 12px; cursor: pointer;
   white-space: nowrap;
 }
 .rd-btn:hover { color: var(--text); border-color: var(--text-2); }
-.rd-btn.primary { color: var(--text); border-color: var(--green-dark, #2ea043); }
+.rd-btn.primary { color: var(--text); border-color: var(--green); }
 
-/* Proven identical: the download is still there and stops shouting. */
-.stale-badge.is-demoted { opacity: 0.6; font-weight: 400; }
+/* Proven identical: the download stays available and stops shouting. */
+.stale-badge.is-demoted { opacity: 0.55; font-weight: 400; }
 .stale-badge.is-demoted:hover { opacity: 1; }
-
-@media (max-width: 900px) {
-  .row-detail { flex-wrap: wrap; }
-}
 
 .stale-badge.cmp-same {
   background: var(--green-dim, rgba(46, 160, 67, 0.15));
@@ -8782,6 +8813,11 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 
 @media (max-width: 1100px) {
   .ib-label { display: none; }
+  /* Same breakpoint, same block. A second `@media (max-width: 1100px)`
+     elsewhere in the file splits the narrow rules across two places and
+     leaves whichever comes first standing in for both. */
+  .row-detail { flex-wrap: wrap; }
+  .row-detail .rd-text { flex: 1 1 100%; }
   .icon-btn:has(.ib-label) {
     width: 26px; height: 26px; border-radius: 50%; padding: 0;
   }

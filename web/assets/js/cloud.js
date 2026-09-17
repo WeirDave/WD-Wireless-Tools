@@ -1704,7 +1704,11 @@ function renderLedger(hit) {
     h += _emitFlatHeader(letter, false);
     z = 0;
     groupRows.forEach(r => {
-      h += `<div class="ledger-row ${r.status}${(z++ % 2) ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${rowDetailHtml(r)}`;
+      {
+      const _stripe = (z++ % 2) === 1;
+      const _det = rowDetailHtml(r, _stripe);
+      h += `<div class="ledger-row ${r.status}${_stripe ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
+    }
     });
   });
 
@@ -1829,7 +1833,11 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
       const siteKey = r.cloud ? ('site:' + r.cloud.id) : ('folder:' + r.local.path);
       const open = !collapsed.has(siteKey);
       r.toggle = { key: siteKey, open, hasKids: kids };
-      h += `<div class="ledger-row tree-parent ${r.status}${(z++ % 2) ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${rowDetailHtml(r)}`;
+      {
+      const _stripe = (z++ % 2) === 1;
+      const _det = rowDetailHtml(r, _stripe);
+      h += `<div class="ledger-row tree-parent ${r.status}${_stripe ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
+    }
 
       if (open) h += renderTreeChildren(children, hit, passOwner, r.cloud && r.cloud.id, r.cloud && r.cloud.name, pass);
     });
@@ -1844,7 +1852,11 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
        + `</div>`;
     orphans.forEach((o, i) => {
       const r = { status: 'orphan', key: 'op:' + o.id, kind: 'projects', noCheckbox: true, cloud: o, local: null };
-      h += `<div class="ledger-row orphan${(i % 2) ? ' stripe' : ''}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${rowDetailHtml(r)}`;
+      {
+      const _stripe = (i % 2) === 1;
+      const _det = rowDetailHtml(r, _stripe);
+      h += `<div class="ledger-row orphan${_stripe ? ' stripe' : ''}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
+    }
     });
   }
 
@@ -2051,7 +2063,11 @@ function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteNa
     }
     r.parentSiteId = parentSiteId;
     r.parentSiteName = parentSiteName;
-    h += `<div class="ledger-row tree-child ${r.status}${(i % 2) ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${rowDetailHtml(r)}`;
+    {
+      const _stripe = (i % 2) === 1;
+      const _det = rowDetailHtml(r, _stripe);
+      h += `<div class="ledger-row tree-child ${r.status}${_stripe ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
+    }
   });
   return h;
 }
@@ -2302,30 +2318,61 @@ async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matc
 /* The badge used to be the whole story: it said the cloud copy was newer and
    then offered nothing to do about it. It is the thing being read, so it is
    the thing to click. */
-/* The band under a row: what the comparison found, and what to do about it.
+/* The row underneath the file name: what was found, and what to do about it.
 
-   Full width, because the middle column between two long project names is a
-   few characters wide and everything meaningful was being crammed into it.
-   Rendered only when there is something to say. */
-function rowDetailHtml(r) {
+   "yes, another row underneath the file name and slightly a different color
+   would be really good."
+
+   Everything used to be stacked into the gutter between two name columns, and
+   his project names are long, so that lane is a few characters wide - the
+   verdict, the staleness action, Check, and Re-check all wrapping over each
+   other. The pair identifies the row; the findings and the actions are *about*
+   the row, so they get their own full-width line directly beneath it.
+
+   It renders when there is something to say: a comparison has been run, or the
+   row is stale and therefore needs an action. A project that matches cleanly
+   gets nothing - adding an empty line to all ninety-seven would make the list
+   harder to scan, which is the opposite of the point.
+
+   `stripe` is the parent row's banding. The detail takes the same banding and
+   lifts it slightly, so it reads as attached to the row above rather than as
+   another project. */
+function rowDetailHtml(r, stripe) {
   const cmp = compareResultFor(r);
-  if (!cmp) return '';
-  const cls = cmp.designDiffers ? 'rd-differs' : 'rd-same';
-  const icon = cmp.designDiffers ? '\u2260' : '\u2713';
+  const stale = r.staleness;
+  if (!cmp && !stale) return '';
+
+  const kind = r.kind || currentTab;
+  if (kind === 'sites') return '';
+
+  let icon = '\u2022', cls = 'rd-plain', text = '';
+  if (cmp) {
+    icon = cmp.designDiffers ? '\u2260' : '\u2713';
+    cls = cmp.designDiffers ? 'rd-differs' : 'rd-same';
+    text = cmp.summary || '';
+  } else if (stale === 'cloud_newer') {
+    text = 'The cloud copy has a later date. Not compared yet, so whether the '
+         + 'design actually differs is unknown.';
+  } else {
+    text = 'Your local copy has a later date. Not compared yet.';
+  }
 
   const bits = [];
-  // The one action that clears an internal-name difference for good.
-  if (!cmp.designDiffers && cmp.nameState === 'internal_only'
+  // The action that clears an internal-name difference for good.
+  if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only'
       && r.cloud && r.cloud.name && r.local) {
     bits.push(`<button class="rd-btn primary" onclick="event.stopPropagation();fixInternalName('${pj(r.local.path)}','${j(r.cloud.name)}','${j(r.local.name || '')}')">Set the name inside the file to match</button>`);
   }
+  // The staleness action, with room for its full label.
+  const stalenessAction = stalenessBadgeHtml(r);
   if (r.cloud && r.local) {
-    bits.push(`<button class="rd-btn" onclick="event.stopPropagation();checkRealDifference('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name || r.local.name || '')}')">Re-check</button>`);
+    bits.push(`<button class="rd-btn" onclick="event.stopPropagation();checkRealDifference('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name || r.local.name || '')}')">${cmp ? 'Re-check' : 'Check what differs'}</button>`);
   }
-  return `<div class="row-detail ${cls}">`
+
+  return `<div class="row-detail ${cls}${stripe ? ' stripe' : ''} status-${r.status || ''}">`
     + `<span class="rd-icon">${icon}</span>`
-    + `<span class="rd-text">${e(cmp.summary || '')}</span>`
-    + `<span class="rd-actions">${bits.join('')}</span>`
+    + `<span class="rd-text">${e(text)}</span>`
+    + `<span class="rd-actions">${stalenessAction}${bits.join('')}</span>`
     + `</div>`;
 }
 
@@ -2344,8 +2391,14 @@ function stalenessBadgeHtml(r) {
      identifies the row; the findings and the actions are *about* the row and
      get the full width underneath it. `rowDetailHtml` renders that band; what
      stays here is the short badge for the collapsed case. */
-  const cmpHtml = cmp ? `<span class="stale-badge cmp-${cmp.designDiffers ? 'differs' : 'same'}" title="${a(cmp.summary || '')}">${e(cmp.designDiffers ? '\u2260 ' + cmp.summary : '\u2713 same design')}</span>` : '';
-  const checkBtn = `<button class="gut-arrow compare-btn" title="Download the cloud copy and compare the contents. Nothing is changed on either side - this only tells you what actually differs." onclick="event.stopPropagation();checkRealDifference('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name || r.local.name || '')}')">${cmp ? 'Re-check' : 'Check'}</button>`;
+  /* The verdict is the detail row's own text now, in full. Repeating a
+     short form inside the action group put "same design" right next to a
+     sentence already saying so - visible only by rendering it. */
+  const cmpHtml = '';
+  /* The check control lives in the detail row now. Leaving a copy here as
+     well put two of them side by side, one reading "Check" and one "Check what
+     differs" - found by measuring the rendered row, not by reading this. */
+  const checkBtn = '';
 
   /* "Newer" and "renamed" are different statements and used to share one
      label. A rename moves `history.modifiedAt`, so renaming a hundred cloud
@@ -2430,7 +2483,7 @@ function gutCell(r) {
   if (r.status === 'mismatch') {
     const c = r.cloud, l = r.local;
     return `<div class="lr-gut mis">
-      ${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}
+      ${matchBadgeHtml(r, kind)}
       <button class="gut-arrow" title="Cloud → Local: apply the cloud name onto the local folder" aria-label="Cloud to Local: apply the cloud name onto the local folder" onclick="syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')">&#10145;<span class="ib-label">Cloud → Local</span></button>
       <button class="gut-arrow" title="Local → Cloud: apply the local name onto the cloud site" aria-label="Local to Cloud: apply the local name onto the cloud site" onclick="syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')">&#11013;<span class="ib-label">Local → Cloud</span></button>
       <button class="gut-arrow nomatch" title="Not a match — never pair these two again" onclick="markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')">&#8800;<span class="ib-label">Not a match</span></button>
@@ -2442,7 +2495,11 @@ function gutCell(r) {
     const verifyBtn = (isNameMatch && !r.staleness)
       ? `<button class="gut-arrow verify-btn" title="Overwrite: take the cloud copy over your local file regardless of which is newer. These matched on name alone; this makes them byte-identical so the pair upgrades to Same file. Your current copy is kept in the backups folder." onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#8681;<span class="ib-label">Download over local</span></button>`
       : '';
-    return `<div class="lr-gut ok">${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}${verifyBtn}</div>`;
+    /* The staleness badge and the comparison controls moved to the detail row
+       below - this lane is a few characters wide between two long names, and
+       stacking four things into it is what he was looking at. What is left is
+       what it should always have carried: which kind of match this is. */
+    return `<div class="lr-gut ok">${matchBadgeHtml(r, kind)}${verifyBtn}</div>`;
   }
   if (r.cloud) {
 

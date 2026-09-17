@@ -77,17 +77,19 @@ const row = () => ({
   local: { path: 'C:/projects/SITE1/SITE1 New Convention.esx',
            name: 'SITE1 New Convention', mtime: 100 },
 });
+const inSyncRow = () => Object.assign(row(), { staleness: null, differenceKind: null });
 const key = api._compareKey('c1', 'C:/projects/SITE1/SITE1 New Convention.esx');
 
 const out = {};
-out.noBandBeforeChecking = api.rowDetailHtml(row());
+out.noBandBeforeChecking = api.rowDetailHtml(inSyncRow(), false);
+out.staleUncheckedBand = api.rowDetailHtml(row(), false);
 
 // his exact case: names visibly match, the one inside the file does not
 api._compareResults.set(key, {
   designDiffers: false, renamedOnly: true, nameState: 'internal_only',
   summary: 'Same design. The project name inside the file still reads the old name - the file names match.',
 });
-out.internalOnlyBand = api.rowDetailHtml(row());
+out.internalOnlyBand = api.rowDetailHtml(row(), false);
 out.internalOnlyBadge = api.stalenessBadgeHtml(row());
 
 // drive the fix out of the rendered band
@@ -104,7 +106,7 @@ api._compareResults.set(key, {
   designDiffers: true, renamedOnly: false, nameState: 'same',
   summary: 'Real changes: accessPoints (3 changed).',
 });
-out.differsBand = api.rowDetailHtml(row());
+out.differsBand = api.rowDetailHtml(row(), false);
 out.differsBadge = api.stalenessBadgeHtml(row());
 
 (async () => {
@@ -147,8 +149,19 @@ class TheFindingsGetTheFullWidthTests(unittest.TestCase):
     def setUpClass(cls):
         cls.out = probe()
 
-    def test_there_is_no_band_until_there_is_something_to_say(self):
+    def test_a_row_with_nothing_to_say_gets_no_band(self):
+        """He has ninety-seven local folders. A band on every one of them would
+        make the list harder to scan, which is the opposite of the point."""
         self.assertEqual("", self.out["noBandBeforeChecking"])
+
+    def test_a_stale_row_gets_one_even_before_it_is_compared(self):
+        """"appear when a comparison has been run, or when the row needs an
+        action" - a stale row needs an action, and the actions are what was
+        crammed into the gutter in the first place."""
+        band = self.out["staleUncheckedBand"]
+        self.assertIn("row-detail", band)
+        self.assertIn("Not compared yet", band)
+        self.assertIn("Check what differs", band)
 
     def test_the_band_is_its_own_full_width_element(self):
         """Not another thing stacked into the gutter between the names."""
