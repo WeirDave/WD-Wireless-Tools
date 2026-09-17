@@ -102,10 +102,6 @@ DEFAULTS = {
         "folder_format": "",
         "file_format": "",
         "separator": " - ",
-        # The last descriptor used on the Project Files tab. Remembered for
-        # the same reason the formats are: the tab is used in sittings, and
-        # retyping the word each time is the friction it exists to remove.
-        "esx_descriptor": "",
         "file_rules": {
             "strip_prefix": "",
             "strip_suffix": "",

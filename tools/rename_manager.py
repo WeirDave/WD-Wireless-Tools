@@ -214,103 +214,6 @@ def _check_collisions(renames: list) -> None:
                 f"Collision: multiple items would be renamed to '{r['new_name']}'")
 
 
-def _check_esx_collisions(items: list) -> None:
-    """Two files in one folder cannot both take the same name.
-
-    Judged on the rows that are ticked, because those are the ones that would
-    actually run. A row sitting there unticked - one that already carries a
-    descriptor, say - is not competing for the name, and marking it as a clash
-    would block the row next to it that is perfectly fine.
-
-    If he ticks one himself and it then collides, nothing is lost: the rename
-    refuses to write over an existing file and reports the skip with its
-    reason. This is the early warning, not the guard.
-    """
-    counts: dict[tuple, int] = {}
-    for it in items:
-        if not it["selected"]:
-            continue
-        key = (it["folder"], it["new_name"].lower())
-        counts[key] = counts.get(key, 0) + 1
-    for it in items:
-        if not it["selected"]:
-            continue
-        key = (it["folder"], it["new_name"].lower())
-        target = Path(it["path"]).parent / it["new_name"]
-        if counts.get(key, 0) > 1:
-            it["status"] = "collision"
-            it["selected"] = False
-            it["reason"] = ("Two or more files in this folder would end up "
-                            "with this same name")
-        elif target.exists() and target.name != Path(it["path"]).name:
-            it["status"] = "collision"
-            it["selected"] = False
-            it["reason"] = "A file of this name is already in this folder"
-
-
-# ── Project files: the folder is the prefix ─────────────────────────
-#
-# His convention for a .esx is <site folder name><separator><descriptor> - the
-# folder says which site it is, the descriptor says what kind of file it is.
-# The folders and site names are already renamed and correct, so the prefix
-# never has to be typed: it is read from the folder each file is sitting in.
-# What is left is a large number of files carrying the prefix and nothing
-# else, which all need the same descriptor added.
-#
-# Nothing here knows or stores a single site name. The separator and the list
-# of descriptors are both read out of the names already on disk at the moment
-# they are asked for, because his vocabulary is in his filenames and a
-# hardcoded list of guesses would be wrong the first time he invents a word.
-
-# The characters that can join a prefix to a descriptor. Deliberately narrow:
-# a run of spaces, underscores, hyphens or dots in any combination, which is
-# what " - ", "_", " -" and "." all reduce to.
-_JOIN_RE = re.compile(r"^([ \t_.\-]+)")
-
-DEFAULT_DESCRIPTOR_SEPARATOR = " - "
-
-
-def split_folder_prefix(stem: str, folder: str):
-    """Read a stem as <folder><separator><descriptor>.
-
-    Returns ``(separator, descriptor)``, ``("", "")`` when the stem is the
-    folder name and nothing else, or ``None`` when the stem is not prefixed
-    with the folder name at all.
-
-    The separator has to be there. Without that check a folder called "North"
-    would claim "Northside", and every rename built on it would have moved the
-    boundary between prefix and descriptor by four characters.
-    """
-    if not folder or not stem:
-        return None
-    if stem.strip().casefold() == folder.strip().casefold():
-        return ("", "")
-    if not stem.casefold().startswith(folder.casefold()):
-        return None
-    rest = stem[len(folder):]
-    m = _JOIN_RE.match(rest)
-    if not m:
-        return None
-    return (m.group(1), rest[m.end():])
-
-
-def _tail_after_prefix(stem: str, separator: str) -> str:
-    """What follows the prefix in a name whose prefix is the wrong site.
-
-    Split on the separator he actually uses, not on the first space in the
-    name. "Harbour Point - Predictive" splits at " - " and the tail is
-    "Predictive"; splitting at the first run of separator characters would
-    call the tail "Point - Predictive", and the dialog would then report that
-    a rename was about to lose a site name rather than a descriptor.
-    """
-    if not stem:
-        return ""
-    if separator and separator in stem:
-        return stem.split(separator, 1)[1]
-    m = re.search(r"[ \t_.\-]+", stem)
-    return stem[m.end():] if m else ""
-
-
 # ── Token-format rename ─────────────────────────────────────────────
 
 def apply_token_format(fmt: str, separator: str, values: dict) -> tuple[str, list]:
@@ -843,16 +746,6 @@ class RenameManager:
         return {"ok": True, "items": items, "count": len(items)}
 
     def execute_bulk_rename(self, items: list | None = None) -> dict:
-        return self._rename_in_place(items, "bulk")
-
-    def _rename_in_place(self, items: list | None, undo_type: str) -> dict:
-        """Rename each file where it stands, and write an undo log.
-
-        Lifted out of execute_bulk_rename unchanged so the .esx descriptor
-        pass and the cleanup-rules pass cannot drift apart on the half that
-        actually touches his files - refusing to overwrite, reporting every
-        skip with a reason, and leaving something to undo with.
-        """
         if not items:
             return {"ok": False, "error": "Nothing to rename"}
         renamed = 0
@@ -899,164 +792,11 @@ class RenameManager:
                 "renames": undo_log,
                 "timestamp": datetime.now().isoformat(),
             }
-            with open(_undo_path(undo_type), "w", encoding="utf-8") as f:
+            with open(_undo_path("bulk"), "w", encoding="utf-8") as f:
                 json.dump(undo_data, f, indent=2)
 
         return {"ok": True, "renamed": renamed, "skipped": skipped,
                 "details": details}
-
-    # ── Project files (.esx): folder as prefix, one descriptor for many ──
-
-    def _esx_site_dirs(self, root_path: Path, skip=None):
-        skip = {str(x).lower() for x in (skip or [])}
-        return [d for d in sorted(root_path.iterdir())
-                if d.is_dir() and not d.name.startswith(".")
-                and d.name.lower() not in skip]
-
-    def _esx_files(self, root: str | None, skip=None):
-        """Every .esx under root, paired with the folder it sits in.
-
-        One level down, which is the layout the rest of the suite assumes -
-        `cloud_manager.get_local_esx_files` reads exactly the same shape.
-        """
-        root_path = Path(root or "")
-        if not root_path.is_dir():
-            return None
-        found = []
-        for d in self._esx_site_dirs(root_path, skip):
-            try:
-                entries = sorted(d.glob("*.esx"), key=lambda x: x.name.lower())
-            except OSError:
-                continue
-            for f in entries:
-                if f.is_file() and not f.name.startswith("."):
-                    found.append((d.name, f))
-        return found
-
-    def detect_descriptor_separator(self, root: str | None = None,
-                                    skip=None) -> dict:
-        """Which characters he already uses to join the prefix to the rest.
-
-        Read off the files that are already named the way he wants, rather
-        than chosen. Choosing wrong here would be applied to every file in the
-        batch at once, and undoing that by hand is the tedium this exists to
-        remove.
-
-        `detect_rename_style` cannot answer this: it votes on any separator
-        anywhere in a name, and it skips .esx files entirely - which is every
-        file this is about.
-        """
-        files = self._esx_files(root, skip)
-        if files is None:
-            return {"ok": False, "error": "No valid root folder set"}
-        votes: dict[str, int] = {}
-        for folder, f in files:
-            split = split_folder_prefix(_split_ext(f.name)[0], folder)
-            if split and split[0]:
-                votes[split[0]] = votes.get(split[0], 0) + 1
-        separator = max(votes, key=votes.get) if votes else ""
-        return {"ok": True,
-                "separator": separator or DEFAULT_DESCRIPTOR_SEPARATOR,
-                "detected": bool(votes),
-                "votes": votes,
-                "sampled": len(files)}
-
-    def scan_descriptors(self, root: str | None = None, skip=None,
-                         limit: int = 12) -> dict:
-        """The descriptors he is already using, commonest first.
-
-        His vocabulary, read out of his own filenames rather than invented
-        here. Counts come back with them, so a word used once reads as a
-        one-off rather than as a recommendation.
-        """
-        files = self._esx_files(root, skip)
-        if files is None:
-            return {"ok": False, "error": "No valid root folder set"}
-        counts: dict[str, int] = {}
-        for folder, f in files:
-            split = split_folder_prefix(_split_ext(f.name)[0], folder)
-            if split and split[1]:
-                counts[split[1]] = counts.get(split[1], 0) + 1
-        ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0].lower()))
-        return {"ok": True,
-                "descriptors": [{"text": t, "count": n}
-                                for t, n in ranked[:limit]],
-                "total": len(counts)}
-
-    def preview_add_descriptor(self, root: str | None = None,
-                               descriptor: str = "",
-                               separator: str | None = None,
-                               skip=None) -> dict:
-        """Dry run: give every .esx its own folder's name, then the descriptor.
-
-        The prefix is per file, read from the folder that file is in, so one
-        descriptor typed once lands correctly across many different sites.
-
-        Four outcomes, and which of them is ticked by default is the whole
-        safety argument:
-
-        * `add` - the stem is the folder name and nothing else. That is the
-          job he described, and it is ticked.
-        * `fix_prefix` - the stem is a single token that is not the folder
-          name. The folders are authoritative now, so the file is misnamed;
-          ticked, and flagged so it is not mistaken for the row above.
-        * `replace` - the stem already carries something after a separator.
-          Applying this descriptor would throw that away, so the row says what
-          would be lost and is **not** ticked. He can tick it himself.
-        * `already_correct` - nothing to do.
-        """
-        files = self._esx_files(root, skip)
-        if files is None:
-            return {"ok": False, "error": "No valid root folder set"}
-
-        descriptor = (descriptor or "").strip()
-        if separator is None:
-            separator = self.detect_descriptor_separator(
-                root, skip).get("separator", DEFAULT_DESCRIPTOR_SEPARATOR)
-
-        items = []
-        for folder, f in files:
-            stem, ext = _split_ext(f.name)
-            target = _sanitize_name(
-                (folder + separator + descriptor) if descriptor else folder)
-            new_name = target + ext
-            split = split_folder_prefix(stem, folder)
-
-            losing = ""
-            if stem == target:
-                status, selected = "already_correct", False
-            elif split is None:
-                tail = _tail_after_prefix(stem, separator)
-                if tail:
-                    status, selected, losing = "replace", False, tail
-                else:
-                    status, selected = "fix_prefix", True
-            elif split[1] == "":
-                status, selected = "add", True
-            else:
-                status, selected, losing = "replace", False, split[1]
-
-            items.append({
-                "folder": folder,
-                "path": str(f),
-                "current": f.name,
-                "new_name": new_name,
-                "status": status,
-                "selected": selected,
-                "losing": losing,
-            })
-
-        _check_esx_collisions(items)
-        counts: dict[str, int] = {}
-        for it in items:
-            counts[it["status"]] = counts.get(it["status"], 0) + 1
-        return {"ok": True, "items": items, "separator": separator,
-                "counts": counts}
-
-    def execute_add_descriptor(self, items: list | None = None) -> dict:
-        """Rename in place. Never copy - these are his live project files, and
-        a second copy of a project is its own kind of mess."""
-        return self._rename_in_place(items, "descriptor")
 
     # ── Gap report ──
 
@@ -1147,7 +887,7 @@ class RenameManager:
                     reverted += 1
                 except OSError as e:
                     errors.append(str(e))
-        elif operation_type in ("bulk", "descriptor"):
+        elif operation_type == "bulk":
             for entry in reversed(data.get("renames", [])):
                 dst_path = Path(entry["path"])
                 src = dst_path

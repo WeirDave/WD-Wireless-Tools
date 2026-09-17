@@ -129,11 +129,7 @@ class EverythingThePageLoadsIsAlsoSaved(unittest.TestCase):
         that only matters when a rename is actually run."""
         self.assertNotIn("oninput=\"saveRenameSettings", self.src)
         body = self.src[self.src.index("async function doRename()"):]
-        # One per tab that has something worth remembering: the two token
-        # formats share a call, the cleanup rules have their own, and the
-        # Project Files tab remembers the descriptor. Still on the action.
-        self.assertEqual(body.count("await remember("), 3)
-        self.assertIn("esx_descriptor", body)
+        self.assertEqual(body.count("await remember("), 2)
 
 
 if __name__ == "__main__":

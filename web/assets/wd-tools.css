@@ -8483,19 +8483,6 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   .rename-what-row { grid-template-columns: minmax(0, 1fr); }
 }
 
-/* The mismatch flag. The colour carries the verdict; the text stays on the
-   ordinary foreground so it is readable in both themes rather than only in
-   the one it was designed in. */
-.rename-match {
-  margin: 0 0 10px; padding: 7px 11px; border-radius: 4px;
-  font-size: 13px; color: var(--text); overflow-wrap: anywhere;
-  border-left: 3px solid var(--border);
-}
-.rename-match.is-match,
-.rename-match.is-prefix-only { background: var(--green-bg); border-left-color: var(--green); }
-.rename-match.is-near { background: var(--amber-bg); border-left-color: var(--amber); }
-.rename-match.is-differs { background: var(--amber-bg); border-left-color: var(--amber); }
-
 .rename-field-label {
   display: block; font-size: 11px; font-weight: 700; color: var(--text-2);
   text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;
@@ -8513,9 +8500,6 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   overflow-wrap: anywhere; max-width: 100%;
 }
 .rename-insert-btn:hover { border-color: var(--blue); color: var(--blue); }
-/* The one his convention asks for, so it does not read as the lesser of two. */
-.rename-insert-use { border-color: var(--blue); color: var(--blue); font-weight: 600; }
-.rename-insert-use:hover { background: var(--blue); color: #fff; }
 
 .rename-preview {
   margin-top: 9px; font-size: 12px; color: var(--text-2);
@@ -8525,76 +8509,6 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 .rename-preview-to { color: var(--text); font-weight: 700; }
 .rename-preview-arrow { opacity: .7; }
 .rename-preview-none { font-style: italic; opacity: .8; }
-
-/* ---- Squirrel Rename: the Project Files (.esx) tab ----------------------
-   One row per file, and every row says the same five things in the same five
-   places: the folder the prefix comes from, the name now, the name after, what
-   kind of change it is, and what it would cost. A grid rather than a flow, so
-   the eye can run down a column of two hundred rows.
-
-   Nothing is truncated anywhere in here. "It would be better if it was easily
-   readable and lengthy than if it's brief" - and this is the screen where a
-   name cut short is a rename applied blind. */
-.rn-esx-sep-row {
-  display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap;
-}
-.rn-esx-sep-row label {
-  font-size: 11px; font-weight: 700; color: var(--text-2);
-  text-transform: uppercase; letter-spacing: .5px;
-}
-.rn-esx-sep {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  white-space: pre; color: var(--blue);
-}
-.rn-esx-bar-label { margin-right: 2px; }
-.rn-esx-count {
-  opacity: .65; font-size: 11px; font-variant-numeric: tabular-nums;
-}
-.rn-esx-actions {
-  display: flex; align-items: center; gap: 8px; margin: 12px 0 0; flex-wrap: wrap;
-}
-
-.rn-esx-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr) auto minmax(0, 1.4fr) auto;
-  gap: 4px 12px; align-items: baseline;
-  padding: 5px 9px; border-bottom: 1px solid var(--border);
-  border-left: 3px solid transparent;
-  cursor: pointer; font-size: 13px;
-}
-.rn-esx-row:hover { background: var(--row-hover); }
-.rn-esx-row.is-on { background: var(--surface-2, rgba(127,127,127,.08)); }
-.rn-esx-chk { margin: 0; align-self: center; }
-.rn-esx-folder {
-  color: var(--blue); font-weight: 700; overflow-wrap: anywhere;
-}
-.rn-esx-old { color: var(--text-2); overflow-wrap: anywhere; }
-.rn-esx-new { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
-.rn-esx-arrow { opacity: .7; }
-.rn-esx-status {
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .4px; color: var(--text-2); white-space: nowrap;
-}
-/* What a row would cost, on its own line under it rather than squeezed in
-   beside the name. A row that throws something away has to be able to say so
-   in full. */
-.rn-esx-losing {
-  grid-column: 2 / -1; font-size: 12px; color: var(--amber);
-  overflow-wrap: anywhere;
-}
-
-.rn-esx-add { border-left-color: var(--green); }
-.rn-esx-fix { border-left-color: var(--blue); }
-.rn-esx-replace { border-left-color: var(--amber); }
-.rn-esx-clash { border-left-color: var(--red); }
-.rn-esx-done { border-left-color: transparent; opacity: .55; cursor: default; }
-.rn-esx-done:hover { background: none; }
-
-@media (max-width: 900px) {
-  .rn-esx-row { grid-template-columns: auto minmax(0, 1fr); }
-  .rn-esx-arrow { display: none; }
-  .rn-esx-old, .rn-esx-new, .rn-esx-status { grid-column: 2; }
-}
 
 /* The filter cards are reachable by keyboard now, so they need a focus ring. */
 .dash-card:focus-visible {

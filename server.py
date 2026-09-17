@@ -647,15 +647,6 @@ RENAME_ACTIONS = {
                                 skip=set(d.get("skip", [])),
                                 subfolder_names=d.get("subfolder_names", [])),
     "execute_bulk_rename":  lambda d: rm.execute_bulk_rename(d.get("items")),
-    # The .esx pass: the folder supplies the prefix, he supplies the descriptor.
-    "detect_descriptor_separator": lambda d: rm.detect_descriptor_separator(
-                                d.get("root"), skip=d.get("skip")),
-    "scan_descriptors":     lambda d: rm.scan_descriptors(
-                                d.get("root"), skip=d.get("skip")),
-    "preview_add_descriptor": lambda d: rm.preview_add_descriptor(
-                                d.get("root"), d.get("descriptor", ""),
-                                d.get("separator"), skip=d.get("skip")),
-    "execute_add_descriptor": lambda d: rm.execute_add_descriptor(d.get("items")),
     "gap_report":           lambda d: rm.gap_report(d["root"]),
     "undo_last":            lambda d: rm.undo_last(d["type"]),
     "save_profile":         lambda d: rm.save_profile(
