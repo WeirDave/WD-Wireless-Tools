@@ -884,6 +884,126 @@ overflowed anyway. Column widths are the mechanism.
   ones are (re-download from cloud), so the friction is asymmetric on
   purpose.
 
+## Every session gets its own worktree
+
+**Do not work directly in the shared checkout.** Several sessions run against
+this repository at once, and until 2026-09-17 they all shared one working tree,
+one index and one HEAD. Every incident of that day traces back to that single
+fact:
+
+- a session went to stage its own CSS and found `HEAD` already contained it,
+  because another session had committed the file out from under it
+- a documentation-only commit run with no pathspec swallowed another session's
+  fully staged work - fifteen files and a version bump - and published it under
+  a message saying no version bump was needed
+- `v2.103.14` landed on somebody else's commit, because `main` moved between
+  the push and a bare `git tag`
+- `v2.102.0` shipped dead, because a module was present in the shared tree and
+  untracked, so the local suite passed and CI did not
+- and the clean-slate operation itself opened with `tools/cloud_manager.py`
+  holding another session's stale work-in-progress, six lines of committed code
+  behind the tree it was sitting in
+
+Each of those has a rule written against it elsewhere in this file - name the
+SHA, name the paths, content-based staging. Those rules exist because the tree
+is shared. Stop sharing the tree and most of them stop being load-bearing.
+
+### Where they live
+
+    .claude/worktrees/<session-name>/
+
+`.claude/` is gitignored, so nothing here can reach a commit by accident.
+
+**`.claude/worktrees` is marked Dropbox-ignored** (an NTFS alternate data
+stream, `com.dropbox.ignored`), because this repository lives inside a Dropbox
+folder and a worktree is a full second copy of the tree. Without that mark
+every session's worktree syncs to the cloud and back, and Dropbox takes file
+locks on files git is trying to write. If you create the directory fresh, set
+it again:
+
+```powershell
+Set-Content -Path .claude\worktrees -Stream com.dropbox.ignored -Value 1
+```
+
+Check it with `Get-Item .claude\worktrees -Stream *`.
+
+### How to create one
+
+```powershell
+git fetch origin
+git worktree add -b claude/<session-name> .claude\worktrees\<session-name> origin/main
+```
+
+Branch off `origin/main`, not off the shared checkout's `HEAD` - the shared
+checkout may be mid-edit, and that is the whole problem being avoided. Then
+work in there: it has its own index, its own HEAD, and its own working files,
+so `git add`, `git commit` and `git stash` all become ordinary again.
+
+### How work merges back
+
+`main` is still the only branch anybody publishes, and routine work still goes
+straight to it - no PR. From inside the worktree:
+
+```powershell
+python -m unittest discover -s tests          # green first
+git fetch origin
+git rebase origin/main                        # not interactive, no editor
+python -m unittest discover -s tests          # green again, after the rebase
+git push origin HEAD:main
+```
+
+The second run is not ceremony. A rebase replays your commits onto code you
+have not tested against, and that is exactly how a green branch turns into a
+red `main`.
+
+If the push is rejected because `main` moved, fetch and rebase again. Never
+force-push `main`. It was force-pushed once, on 2026-09-17, for the history
+rewrite, with the repository owner's explicit say-so for that one operation.
+
+Then wait for CI, and tag from the shared checkout as the release process
+describes - naming the SHA, as always.
+
+### Remove it when you are finished
+
+A worktree left behind is a stale branch, a second copy of the tree, and a
+place rule zero material sits unnoticed. From the shared checkout:
+
+```powershell
+git worktree remove .claude\worktrees\<session-name>
+git branch -d claude/<session-name>
+git worktree prune -v
+```
+
+`git worktree remove` refuses if the tree has uncommitted changes, which is the
+correct behaviour - look at what is in there before reaching for `--force`.
+
+**On this machine it also fails on a clean worktree**, with:
+
+    error: failed to delete '...\.claude\worktrees\<name>': Permission denied
+
+Measured on 2026-09-17: that is not a lock on the contents. Git deletes every
+file successfully and then cannot remove the empty directory, because Windows
+still holds a handle on it. The registration *is* cleared - `git worktree list`
+stops showing it - so the state is half-done and looks finished. Finish it:
+
+```powershell
+Remove-Item .claude\worktrees\<session-name> -Recurse -Force
+git worktree prune -v
+```
+
+This is the mechanism behind "the folder itself sometimes survives" below. It
+survives almost every time here.
+
+**And prune at the start of every session**, because a session that dies
+mid-task - crash, timeout, closed window - removes nothing. `git worktree
+prune -v` clears git's registration; the directory on disk sometimes survives
+that, so check for it separately, and check for the `claude/<name>` branch too.
+This repo has had an abandoned worktree sitting in it, plus several more in a
+temp directory outside Dropbox that are not reachable from here at all. None of
+that is dangerous by itself, but rule zero material has sat in exactly these
+forgotten corners before. Report what you found and removed rather than
+cleaning quietly.
+
 ## Memory across sessions, generally
 
 Claude Code cloud sessions have no memory of past conversations by default
@@ -892,12 +1012,5 @@ Claude Code cloud sessions have no memory of past conversations by default
 than assuming it'll be remembered.
 
 **Prune stale worktrees at the start of every session too**, for the same
-reason: `git worktree prune -v`, then check whether the `.claude/worktrees/`
-directory it names is still sitting on disk (prune clears git's own
-registration; the folder itself sometimes survives that). A session that
-dies mid-task — crash, timeout, closed window — leaves both behind, and
-this repo has had one sitting abandoned (plus several more in a temp
-directory outside Dropbox that aren't even reachable from here), each with
-a stale local `claude/<name>` branch alongside it. None of that is dangerous by itself,
-but rule zero material has sat in exactly these forgotten corners before.
-Report what you found and removed rather than cleaning quietly.
+reason — see "Every session gets its own worktree" above, which covers what to
+run and what to look for once git's own registration is cleared.
