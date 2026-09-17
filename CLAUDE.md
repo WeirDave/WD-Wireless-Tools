@@ -973,6 +973,31 @@ rewrite, with the repository owner's explicit say-so for that one operation.
 Then wait for CI, and tag from the shared checkout as the release process
 describes - naming the SHA, as always.
 
+### The one thing a worktree does not protect you from
+
+**Two sessions can pick the same version number, and git will not notice.**
+
+On 2026-09-17 two worktrees bumped `versions.json` from 2.107.0 to 2.108.0
+within minutes of each other, for different features. The second rebase applied
+cleanly and reported nothing, because both sides had written the *same* bytes -
+a conflict needs the two versions to differ. `main` ended up with two unrelated
+commits both titled v2.108.0, and the suite version no longer distinguished
+them. Nothing was lost and CI stayed green, which is what makes it easy to miss.
+
+A worktree isolates your files. It does not reserve a version number. So before
+you bump:
+
+```powershell
+git fetch origin
+git show origin/main:web/assets/versions.json
+```
+
+and bump from *that*, not from what your worktree had when you created it. If
+somebody has taken the number you were going to use, take the next one - and if
+you only notice after pushing, bump again in a follow-up commit rather than
+leaving two changes wearing one number, because the release workflow matches a
+tag to exactly one `versions.json`.
+
 ### Remove it when you are finished
 
 A worktree left behind is a stale branch, a second copy of the tree, and a
