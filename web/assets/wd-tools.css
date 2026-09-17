@@ -1861,6 +1861,13 @@ body.tool-home .topbar {
 .dashboard {
   padding: 6px 12px 8px; display: flex; gap: 6px; align-items: stretch;
   flex-shrink: 0; background: var(--surface);
+
+  /* Same fault as the toolbar, one band up: no `flex-wrap`, so the filter
+     cards squeezed instead of wrapping and clipped their own labels -
+     "Mismatches" and "Name Matches" reading as fragments at laptop width.
+     A counter whose name you cannot read is not a counter. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 body.tool-cloud .toolbar { position: relative; }
@@ -1880,7 +1887,10 @@ body.tool-cloud .dup-toolbar-btn {
 .dash-card {
   --dc: var(--border);
   --dc-active: transparent;
-  flex: 0 1 auto; min-width: 66px; padding: 3px 10px 3px 12px;
+  /* `0 1 auto` let a card shrink under its own label. Cards wrap onto a
+     second line now rather than compressing, so none of them is ever a
+     truncated word. */
+  flex: 0 0 auto; min-width: 66px; padding: 3px 10px 3px 12px;
   border-radius: 4px; cursor: pointer;
   transition: box-shadow .1s ease, background .12s ease;
   background: var(--surface);
@@ -2205,7 +2215,31 @@ body.tool-cloud .toolbar {
   padding: 8px 12px; background: var(--surface);
   border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+
+  /* **It wraps.** It did not, and `flex-wrap` defaults to `nowrap`, so the bar
+     kept its intrinsic 2342px and everything past the window edge was simply
+     unreachable: five controls cut off at 1920, twelve at 1366, fifteen at
+     1024, with the page scrolling sideways. Measured in Firefox, not guessed.
+
+     "clearly they didn't test this in different resolutions. I'm on my laptop
+     and the buttons run over and get cut off on the menu up top."
+
+     Wrapping is the right answer rather than shrinking or hiding: a second
+     line costs 27px and keeps every control reachable with its label intact.
+     He asked for those labels because he could not identify the icons, so
+     reclaiming width by dropping them would undo a fix he asked for. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
+
+/* Nothing in the bar shrinks below its label. Without this, wrapping still
+   leaves flex free to squeeze a button until its text is clipped inside it -
+   which is the same failure one level down. */
+body.tool-cloud .toolbar > * { flex-shrink: 0; }
+
+/* The spacer pushes the right-hand group over on a wide screen. Once the bar
+   wraps it must not also claim a whole line to itself. */
+body.tool-cloud .toolbar .spacer { flex: 1 1 0; min-width: 0; }
 
 body.tool-cloud .toolbar input.search {
   padding: 4px 8px; border: 1px solid var(--border);
