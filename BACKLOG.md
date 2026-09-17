@@ -163,6 +163,43 @@ history, `CLAUDE.md`, the docs or the release notes records a conversion
 finding. Someone has to supply what the finding actually was before it can be
 written down; inventing a plausible one would be worse than the gap.
 
+#### 9. P2 — AGREED: the user manual needs a content revamp
+
+Deliberately parked, not undecided. He opened the manual for the first time on
+2026-09-16, said it "sucks ass" and "it's just horrible", and then agreed the
+whole thing should be revamped - **"but put that on the back burner. I need all
+the other shit done first so that I can exit work."** So this is scheduled work
+waiting for a quieter moment, and it should be raised with him then rather than
+started off the back of this note.
+
+The two *bugs* he hit are already fixed and shipped in v2.104.1 and are not
+part of this: Home's "User Manual" link opened the Quick Walls guide, and the
+page rendered as a narrow column. `/manual` now serves the whole manual with a
+contents rail and full-width content.
+
+What is left is content, and the shape of it is his call, not ours. What a
+survey of `docs/USER_MANUAL.md` found, so the next session does not repeat it:
+
+- **Coverage is wildly uneven.** Cloud Manager runs to 1,814 words across 13
+  subsections. **PlanTrim has 50 words and no subsections; Scale has 67 and
+  none.** PlanTrim and Scale are in every job he does and Cloud Manager is
+  occasional, so the effort is inverted against how the suite is used.
+- **Guide pages cover five tools of nine** - AP Labeler, Capacity, Prep and
+  Scale have none, so the manual is now their only documentation.
+- **There is not one screenshot anywhere**, in the manual or in any guide. Only
+  the logo and the tool icons.
+- **It is ordered by tool rather than by job.** There is no start-to-finish
+  path through a site anywhere in it, and his actual sequence runs roughly
+  drawing in, Scale, PlanTrim/Prep, Quick Walls, survey, AP Labeler, Report.
+- **About a fifth of it is not workflow** - Update/Uninstall, Data & Privacy
+  and Install together run to ~2,200 of ~10,600 words, interleaved with the
+  tool sections rather than kept to the back.
+- **Troubleshooting is seven entries of about thirty words each.**
+
+Confidentiality was audited at the same time and is **clean**: every
+identifier-shaped token across the manual and all guide pages was enumerated
+and read, and the only hit is the invented `SITE1`.
+
 ---
 
 ## Awaiting a decision, not work
