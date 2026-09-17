@@ -56,6 +56,7 @@ const API_MAP = {
   verify_replace_local: ['verify_replace_local', ['cloudId', 'localPath']],
   replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId']],
   compare_with_cloud: ['compare_with_cloud', ['path', 'cloudId', 'opId']],
+  set_internal_project_name: ['set_internal_project_name', ['path', 'name', 'opId']],
   list_shares: ['list_shares', ['projectId']],
   add_share: ['add_share', ['projectId', 'email', 'role']],
   add_shares: ['add_shares', ['projectId', 'emails', 'role']],
@@ -979,6 +980,18 @@ function updateDashboard() {
   } else if (data && data.summary) {
 
     const ownerVisible = currentTab === 'sites' ? _siteOwnedVisible : _passOwnerForCounts;
+    /* "Out of sync" counted every timestamp difference, so after renaming a
+       fleet of cloud projects it read 29 - and told him the scale of a problem
+       he did not have. A row whose contents have been compared and found
+       identical is not out of sync, whatever the dates say: the comparison is
+       measured where the timestamp is inferred. */
+    const _countsAsStale = (p) => {
+      if (!p.staleness) return false;
+      const cmp = p.cloud && p.local
+        ? _compareResults.get(_compareKey(p.cloud.id, p.local.path)) : null;
+      return !(cmp && !cmp.designDiffers);
+    };
+
     let matched = 0, mismatches = 0, cloudOnly = 0, localOnly = 0, nameMatches = 0;
     let staleCount = 0;
     let externalCount = 0;
@@ -999,7 +1012,7 @@ function updateDashboard() {
       if (!kids) return;
       (kids.matched || []).forEach(p => {
         if (p.matchType === 'exact') nameMatches++;
-        if (p.staleness) staleCount++;
+        if (_countsAsStale(p)) staleCount++;
         bumpType(p.cloud, p.local);
       });
       (kids.cloudOnly || []).forEach(c => { bumpType(c, null); });
@@ -1015,7 +1028,7 @@ function updateDashboard() {
         walkKids((p.cloud && p.cloud.children) || (p.local && p.local.children));
       } else {
         if (p.matchType === 'exact') nameMatches++;
-        if (p.staleness) staleCount++;
+        if (_countsAsStale(p)) staleCount++;
         bumpType(p.cloud, p.local);
       }
     });
@@ -1691,7 +1704,7 @@ function renderLedger(hit) {
     h += _emitFlatHeader(letter, false);
     z = 0;
     groupRows.forEach(r => {
-      h += `<div class="ledger-row ${r.status}${(z++ % 2) ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>`;
+      h += `<div class="ledger-row ${r.status}${(z++ % 2) ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${rowDetailHtml(r)}`;
     });
   });
 
@@ -1816,7 +1829,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
       const siteKey = r.cloud ? ('site:' + r.cloud.id) : ('folder:' + r.local.path);
       const open = !collapsed.has(siteKey);
       r.toggle = { key: siteKey, open, hasKids: kids };
-      h += `<div class="ledger-row tree-parent ${r.status}${(z++ % 2) ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>`;
+      h += `<div class="ledger-row tree-parent ${r.status}${(z++ % 2) ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${rowDetailHtml(r)}`;
 
       if (open) h += renderTreeChildren(children, hit, passOwner, r.cloud && r.cloud.id, r.cloud && r.cloud.name, pass);
     });
@@ -1831,7 +1844,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
        + `</div>`;
     orphans.forEach((o, i) => {
       const r = { status: 'orphan', key: 'op:' + o.id, kind: 'projects', noCheckbox: true, cloud: o, local: null };
-      h += `<div class="ledger-row orphan${(i % 2) ? ' stripe' : ''}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>`;
+      h += `<div class="ledger-row orphan${(i % 2) ? ' stripe' : ''}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${rowDetailHtml(r)}`;
     });
   }
 
@@ -2038,7 +2051,7 @@ function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteNa
     }
     r.parentSiteId = parentSiteId;
     r.parentSiteName = parentSiteName;
-    h += `<div class="ledger-row tree-child ${r.status}${(i % 2) ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>`;
+    h += `<div class="ledger-row tree-child ${r.status}${(i % 2) ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${rowDetailHtml(r)}`;
   });
   return h;
 }
@@ -2179,6 +2192,55 @@ function bulkCheckDifferences() {
   toast(`Comparing ${pairs.length} file${pairs.length === 1 ? '' : 's'} — nothing will be changed`, 'info');
 }
 
+/* Write the cloud's project name into the local .esx.
+
+   The third name, and the invisible one. Renaming a file on disk does not
+   touch `project.json`, so after renaming a fleet of projects to a new
+   convention every row reports a difference over a field he cannot see - for
+   ever, because nothing he can do from the file manager will ever change it.
+
+   The previous file goes to `backups/<site>/` first; if that copy cannot be
+   written, nothing is changed. */
+function fixInternalName(localPath, cloudName, label) {
+  opEnqueue({
+    title: `Setting the project name inside "${label}" to "${cloudName}"`,
+    sub: 'Rewrites the name stored in the .esx. The previous file is backed up.',
+    type: 'rename', pollBackend: false, undoable: false,
+    run: async (opId) => {
+      const r = await pyApi('set_internal_project_name', localPath, cloudName, opId);
+      if (r && r.error) throw new Error(r.error);
+      // The stored comparison is about a file that has just changed.
+      _compareResults.delete(_compareKey('', localPath));
+      for (const key of Array.from(_compareResults.keys())) {
+        if (key.endsWith('\u0000' + String(localPath).replace(/\\/g, '/').toLowerCase())) {
+          _compareResults.delete(key);
+        }
+      }
+      _scheduleOpRefresh();
+      return r;
+    },
+  });
+}
+
+/* His fleet is in this state, not one file of it: 29 rows out of sync and 97
+   local folders. One at a time would be an afternoon, so the selection is the
+   unit - and each file is its own queued operation with its own result,
+   because a single "done" across 29 writes would hide the one that failed. */
+function bulkFixInternalNames() {
+  const rows = selectedSyncItems().filter(
+    d => d.kind === 'pair' && /\.esx$/i.test(String(d.localPath || ''))
+         && (d.cloudName || '').trim());
+  if (!rows.length) {
+    toast('Select some matched rows first', 'info');
+    return;
+  }
+  clearSelection();
+  rows.forEach(d => fixInternalName(
+    d.localPath, d.cloudName, d.localName || d.cloudName));
+  toast(`Setting the project name inside ${rows.length} file`
+    + (rows.length === 1 ? '' : 's') + ' — each is backed up first', 'info');
+}
+
 /* Send the local file up over the cloud project it is paired with.
 
    No confirm dialog for a single row: the button says what it does, and the
@@ -2240,6 +2302,33 @@ async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matc
 /* The badge used to be the whole story: it said the cloud copy was newer and
    then offered nothing to do about it. It is the thing being read, so it is
    the thing to click. */
+/* The band under a row: what the comparison found, and what to do about it.
+
+   Full width, because the middle column between two long project names is a
+   few characters wide and everything meaningful was being crammed into it.
+   Rendered only when there is something to say. */
+function rowDetailHtml(r) {
+  const cmp = compareResultFor(r);
+  if (!cmp) return '';
+  const cls = cmp.designDiffers ? 'rd-differs' : 'rd-same';
+  const icon = cmp.designDiffers ? '\u2260' : '\u2713';
+
+  const bits = [];
+  // The one action that clears an internal-name difference for good.
+  if (!cmp.designDiffers && cmp.nameState === 'internal_only'
+      && r.cloud && r.cloud.name && r.local) {
+    bits.push(`<button class="rd-btn primary" onclick="event.stopPropagation();fixInternalName('${pj(r.local.path)}','${j(r.cloud.name)}','${j(r.local.name || '')}')">Set the name inside the file to match</button>`);
+  }
+  if (r.cloud && r.local) {
+    bits.push(`<button class="rd-btn" onclick="event.stopPropagation();checkRealDifference('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name || r.local.name || '')}')">Re-check</button>`);
+  }
+  return `<div class="row-detail ${cls}">`
+    + `<span class="rd-icon">${icon}</span>`
+    + `<span class="rd-text">${e(cmp.summary || '')}</span>`
+    + `<span class="rd-actions">${bits.join('')}</span>`
+    + `</div>`;
+}
+
 function stalenessBadgeHtml(r) {
   const s = r.staleness;
   if (!s) return '';
@@ -2249,7 +2338,13 @@ function stalenessBadgeHtml(r) {
      in the row rather than a tooltip, because evidence he has waited for
      should not need hovering to read. */
   const cmp = compareResultFor(r);
-  const cmpHtml = cmp ? `<span class="stale-badge cmp-${cmp.designDiffers ? 'differs' : 'same'}" title="${a(cmp.summary || '')}">${e(cmp.designDiffers ? '\u2260 ' + cmp.summary : '= ' + cmp.summary)}</span>` : '';
+  /* The verdict and the actions used to be stacked into the middle column
+     between two wide name columns, where his long project names leave a narrow
+     lane - "you can see how we're jamming things into these lines". The pair
+     identifies the row; the findings and the actions are *about* the row and
+     get the full width underneath it. `rowDetailHtml` renders that band; what
+     stays here is the short badge for the collapsed case. */
+  const cmpHtml = cmp ? `<span class="stale-badge cmp-${cmp.designDiffers ? 'differs' : 'same'}" title="${a(cmp.summary || '')}">${e(cmp.designDiffers ? '\u2260 ' + cmp.summary : '\u2713 same design')}</span>` : '';
   const checkBtn = `<button class="gut-arrow compare-btn" title="Download the cloud copy and compare the contents. Nothing is changed on either side - this only tells you what actually differs." onclick="event.stopPropagation();checkRealDifference('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name || r.local.name || '')}')">${cmp ? 'Re-check' : 'Check'}</button>`;
 
   /* "Newer" and "renamed" are different statements and used to share one
@@ -2264,14 +2359,21 @@ function stalenessBadgeHtml(r) {
 
   if (s === 'cloud_newer') {
     if (canPullFromCloud(r)) {
-      const label = renamedOnly
-        ? '&#11015; Cloud renamed &middot; download'
-        : '&#11015; Cloud newer &middot; download';
+      /* If the contents have been compared and found identical, offering
+         "download" as the primary action contradicts the finding directly
+         above it. The comparison is measured where the date is inferred, so it
+         wins: the action is demoted to a quiet secondary. */
+      const provenSame = cmp && !cmp.designDiffers;
+      const label = provenSame
+        ? '&#11015; download anyway'
+        : renamedOnly
+          ? '&#11015; Cloud renamed &middot; download'
+          : '&#11015; Cloud newer &middot; download';
       const why = renamedOnly
         ? 'The cloud copy was RENAMED, which is why its date moved - the name stored inside your local file is the old one. No design change was detected. Downloading brings the rename across and renames your local file to match. Your current copy is kept in the backups folder.'
         : 'The cloud copy was edited more recently and the names agree, so this is a real change rather than a rename. Downloading replaces your local one. Your current copy is kept in the backups folder.';
       return cmpHtml
-        + `<button class="stale-badge stale-cloud is-action${renamedOnly ? ' is-renamed' : ''}" title="${a(why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${label}</button>`
+        + `<button class="stale-badge stale-cloud is-action${renamedOnly ? ' is-renamed' : ''}${provenSame ? ' is-demoted' : ''}" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${label}</button>`
         + checkBtn;
     }
     return `<span class="stale-badge stale-cloud" title="The cloud copy was edited more recently. These two were paired on name similarity rather than a proven match, so downloading over your local file is not offered — it could overwrite a different project. Link them yourself with the &#128279; button to confirm the pair, and the download becomes available.">&#11015; Cloud newer</span>`;

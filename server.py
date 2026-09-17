@@ -1130,6 +1130,9 @@ CLOUD_ACTIONS = {
     # delete the old. Never the other way round - see replace_cloud_project.
     # Read-only: downloads the cloud copy into memory and diffs it against
     # the local file. Writes nothing on either side.
+    # Rewrite the project name stored inside a local .esx. Backs up first.
+    "set_internal_project_name": lambda d: cm.set_internal_project_name(
+        d["path"], d.get("name"), _progress_setter(d.get("opId"))),
     "compare_with_cloud": lambda d: cm.compare_with_cloud(
         d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
     "replace_cloud_project": lambda d: cm.replace_cloud_project(

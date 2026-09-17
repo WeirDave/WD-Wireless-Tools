@@ -144,11 +144,13 @@ function work(name, opts) {
 """
 
 
-@unittest.skipIf(shutil.which("node") is None, "node is not installed")
-class RapidClicksBuildAQueueTests(unittest.TestCase):
+_PROBE = {}
 
-    @classmethod
-    def setUpClass(cls):
+
+def probe():
+    """Run the queue once and cache it at module level, so neither class
+    depends on which of them unittest happens to run first."""
+    if not _PROBE:
         with tempfile.TemporaryDirectory() as td:
             script = Path(td) / "probe.js"
             script.write_text(NODE_SCRIPT, encoding="utf-8")
@@ -157,7 +159,16 @@ class RapidClicksBuildAQueueTests(unittest.TestCase):
         if proc.returncode != 0:
             raise AssertionError(
                 "node failed: " + proc.stderr.decode("utf-8", "replace"))
-        cls.out = json.loads(proc.stdout.decode("utf-8", "replace"))
+        _PROBE.update(json.loads(proc.stdout.decode("utf-8", "replace")))
+    return _PROBE
+
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
+class RapidClicksBuildAQueueTests(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.out = probe()
 
     def test_only_one_operation_runs_at_a_time(self):
         """The whole complaint. Three clicks used to mean three concurrent
@@ -219,7 +230,7 @@ class TheWaitingCardSaysWhereItIsTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.out = RapidClicksBuildAQueueTests.out
+        cls.out = probe()
 
     def test_the_running_one_is_not_labelled_as_waiting(self):
         self.assertIn("status-running", self.out["cardRunning"])

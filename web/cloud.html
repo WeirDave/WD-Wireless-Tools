@@ -180,6 +180,7 @@
     <button class="btn btn-secondary" onclick="selectAllSide('cloud')" title="Select every cloud site/project, local side untouched">Select cloud</button>
     <button class="btn btn-secondary" onclick="selectAllSide('local')" title="Select every local folder/file, cloud side untouched">Select local</button>
     <button class="btn btn-secondary" onclick="bulkCheckDifferences()" title="Compare the selected files against their cloud copies and report what actually differs. Read-only - nothing is changed on either side.">Check differences</button>
+    <button class="btn btn-secondary" onclick="bulkFixInternalNames()" title="Set the project name stored inside each selected .esx to match its cloud project. Renaming a file on disk does not change the name inside it, which is why matched files can still report a name difference. Each file is backed up first.">Fix names inside files</button>
     <span class="selcount" id="selCount"></span>
     <button class="btn btn-secondary" id="expandAllBtn" onclick="expandAllSites()" title="Expand every site" hidden>Expand All</button>
     <button class="btn btn-secondary" id="collapseAllBtn" onclick="collapseAllSites()" title="Collapse every site" hidden>Collapse All</button>

@@ -2625,6 +2625,41 @@ body.tool-cloud .toolbar input.search:focus {
 /* The measured answer, beside the inferred one. Green when the contents match
    despite the dates disagreeing - that is the reassuring case and the common
    one after a bulk rename - and amber when something really did change. */
+/* The findings band: full width, under the pair it is about.
+
+   Everything meaningful used to be stacked into the gutter between two name
+   columns - "you can see how we're jamming things into these lines" - and his
+   project names are long, so that lane is a few characters wide. The pair
+   identifies the row; the findings and the actions are about the row and get
+   the width. Readable and lengthy beats compact: wide desktop first, narrow
+   merely has to function. */
+.row-detail {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 14px; font-size: 12.5px; line-height: 1.5;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+}
+.row-detail .rd-icon { font-weight: 700; flex: 0 0 auto; }
+.row-detail .rd-text { flex: 1 1 auto; }
+.row-detail .rd-actions { flex: 0 0 auto; display: flex; gap: 6px; }
+.row-detail.rd-same .rd-icon { color: var(--green-dark, #2ea043); }
+.row-detail.rd-differs .rd-icon { color: var(--amber-dark, #d29922); }
+.rd-btn {
+  border: 1px solid var(--border); background: transparent; color: var(--text-2);
+  border-radius: 5px; padding: 3px 10px; font-size: 12px; cursor: pointer;
+  white-space: nowrap;
+}
+.rd-btn:hover { color: var(--text); border-color: var(--text-2); }
+.rd-btn.primary { color: var(--text); border-color: var(--green-dark, #2ea043); }
+
+/* Proven identical: the download is still there and stops shouting. */
+.stale-badge.is-demoted { opacity: 0.6; font-weight: 400; }
+.stale-badge.is-demoted:hover { opacity: 1; }
+
+@media (max-width: 900px) {
+  .row-detail { flex-wrap: wrap; }
+}
+
 .stale-badge.cmp-same {
   background: var(--green-dim, rgba(46, 160, 67, 0.15));
   color: var(--green-dark, #2ea043);

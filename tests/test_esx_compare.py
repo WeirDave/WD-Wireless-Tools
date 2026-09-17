@@ -84,7 +84,53 @@ class TheComparisonTellsRenamesFromRealChangesTests(unittest.TestCase):
                             modified="2026-09-17T12:00:00Z"))
         self.assertTrue(r["renamedOnly"])
         self.assertFalse(r["designDiffers"])
-        self.assertIn("Renamed only", r["summary"])
+        self.assertIn("Same design", r["summary"])
+
+    def test_it_says_which_of_the_three_names_differs(self):
+        """"A different name on each side" was useless to him, because he was
+        looking at two identical names while being told they differed.
+
+        Three names are in play: the file on disk, the project name inside
+        `project.json`, and the cloud project's name. Renaming a file does not
+        touch the one inside it, so after renaming a fleet to a new convention
+        the two he can see agree and the hidden one does not.
+        """
+        r = compare_esx(
+            esx(project_name="SITE1 Old Name"),
+            esx(project_name="SITE1 New Convention"),
+            local_file_stem="SITE1 New Convention")
+        self.assertEqual("internal_only", r["nameState"])
+        self.assertIn("project name inside the file", r["summary"])
+        self.assertIn("file names match", r["summary"])
+
+    def test_a_file_renamed_on_disk_alone_is_named_as_that(self):
+        r = compare_esx(
+            esx(project_name="SITE1 Shared Name"),
+            esx(project_name="SITE1 Shared Name"),
+            local_file_stem="something-else")
+        self.assertEqual("file_only", r["nameState"])
+        self.assertIn("file on disk", r["summary"])
+
+    def test_both_names_differing_says_both(self):
+        r = compare_esx(
+            esx(project_name="SITE1 Old Name"),
+            esx(project_name="SITE1 New Convention"),
+            local_file_stem="SITE1 Older Still")
+        self.assertEqual("both", r["nameState"])
+
+    def test_everything_agreeing_reports_no_name_difference(self):
+        r = compare_esx(esx(project_name="SITE1 Survey"),
+                        esx(project_name="SITE1 Survey"),
+                        local_file_stem="SITE1 Survey")
+        self.assertEqual("same", r["nameState"])
+        self.assertTrue(r["identical"])
+
+    def test_without_the_file_name_it_does_not_guess(self):
+        """The caller may not know the file name. Reporting `internal_only`
+        on an assumption would be a fact he could check and find wrong."""
+        r = compare_esx(esx(project_name="A"), esx(project_name="B"))
+        self.assertIn(r["nameState"], ("internal_only", "both"))
+        self.assertTrue(r["renamedOnly"])
 
     def test_a_moved_access_point_is_a_real_change(self):
         moved = [{"id": "ap-1", "name": "AP 1", "x": 999, "y": 20},

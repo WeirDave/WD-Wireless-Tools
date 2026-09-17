@@ -140,7 +140,8 @@ def _names(doc):
     return ""
 
 
-def compare_esx(local_bytes: bytes, cloud_bytes: bytes) -> dict:
+def compare_esx(local_bytes: bytes, cloud_bytes: bytes,
+                local_file_stem: str = "") -> dict:
     """Describe how two .esx archives differ. Pure; no I/O, no disk.
 
     Returns a dict with:
@@ -148,11 +149,32 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes) -> dict:
     * `identical`      - nothing differs at all, including the name
     * `designDiffers`  - something other than metadata differs
     * `renamedOnly`    - the only difference is the project's name
+    * `nameState`      - *which* name differs; see below
     * `differences`    - per-member detail, ids and counts, never values
     * `summary`        - one sentence for the row
+
+    **`nameState` exists because "different name on each side" was useless to
+    him.** There are three names in play and they are not the same thing: the
+    file on disk, the project name stored inside `project.json`, and the cloud
+    project's name. Renaming a file on disk does not touch the one inside it,
+    so after renaming both sides to a new convention the two names he can *see*
+    match while the internal one still reads the old thing. Being told they
+    differ, while looking at two identical names, reads as the tool being
+    broken.
+
+    So it reports which:
+
+    * `internal_only` - the file names agree, the name inside the .esx does not
+    * `file_only`     - the internal names agree, the file on disk does not
+    * `both`          - neither matches
+    * `same`          - everything agrees
+
+    `local_file_stem` is the local file's name without `.esx`. Without it only
+    the internal name can be compared, and `nameState` stays `None`.
     """
     out = {"identical": False, "designDiffers": False, "renamedOnly": False,
-           "differences": [], "imagesCompared": 0, "summary": ""}
+           "differences": [], "imagesCompared": 0, "summary": "",
+           "nameState": None}
 
     try:
         lz = zipfile.ZipFile(io.BytesIO(local_bytes))
@@ -167,6 +189,19 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes) -> dict:
     local_name = _names(_as_json(local.get("project.json", b"")))
     cloud_name = _names(_as_json(cloud.get("project.json", b"")))
     renamed = bool(local_name and cloud_name and local_name != cloud_name)
+
+    def _same(a, b):
+        return a.strip().casefold() == b.strip().casefold()
+
+    if cloud_name and local_name:
+        internal_ok = _same(local_name, cloud_name)
+        file_ok = _same(local_file_stem, cloud_name) if local_file_stem else internal_ok
+        out["nameState"] = ("same" if internal_ok and file_ok else
+                            "internal_only" if file_ok else
+                            "file_only" if internal_ok else "both")
+    # Deliberately *not* returned: the cloud project's name. The caller already
+    # has it from the ledger row, and this result reaches toasts and the log -
+    # the rule-zero test caught it going in here and was right to.
 
     design_diffs = []
     meta_diffs = []
@@ -234,10 +269,28 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes) -> dict:
 
 def _summarise(out, design_diffs, renamed) -> str:
     if out["identical"]:
+        # The design and the project name agree; only the file on disk is
+        # called something else. That is not a difference in the project, but
+        # the row pairs these two by name, so saying nothing invites the
+        # question "then why does this row look odd".
+        if out.get("nameState") == "file_only":
+            return ("Identical - though the file on disk is named differently "
+                    "from the project inside it.")
         return "Identical - the cloud copy matches your local file."
     if out["renamedOnly"]:
-        return ("Renamed only - the design is identical, the project just has "
-                "a different name on each side.")
+        # Naming *which* name is the whole point. "A different name on each
+        # side" told him two visibly identical names were different.
+        state = out.get("nameState")
+        if state == "internal_only":
+            return ("Same design. The project name inside the file still reads "
+                    "the old name - the file names match.")
+        if state == "file_only":
+            return ("Same design. The file on disk has a different name from "
+                    "the project - the project names match.")
+        if state == "both":
+            return ("Same design. Both the file name and the project name "
+                    "inside it differ from the cloud.")
+        return "Same design - only the name differs."
     if not design_diffs:
         return ("No design change - only bookkeeping differs (dates, revision "
                 "history).")
