@@ -4463,8 +4463,23 @@
         + '</tr>';
     });
 
+    /* Column widths, because `table-layout: fixed` without them divides the
+       sheet evenly and Tilt gets as much room as an external antenna's part
+       number. What that looked like: "BLDG01-FL01-AP003" overflowing the AP
+       name column and printing on top of the Floor value beside it, and the
+       sign-off header clipped to "INSTALLER INITI" running into "DATE". The
+       weights are content classes, not guesses - a name and an antenna model
+       are long, a tilt is four characters. */
+    var cols = showSignOff
+      ? [5, 22, 9, 12, 6, 8, 22, 8, 8]
+      : [6, 26, 11, 14, 8, 10, 25];
+    var colGroup = '<colgroup>'
+      + cols.map(function (w) { return '<col style="width:' + w + '%">'; }).join('')
+      + '</colgroup>';
+
     var table = '<section class="rep-aim-table-section">'
       + '<table class="rep-ap-table rep-aim-table">'
+      +   colGroup
       +   '<thead><tr>'
       +     '<th class="rep-num">#</th>'
       +     '<th>AP name</th>'
@@ -4473,7 +4488,7 @@
       +     '<th>Tilt</th>'
       +     '<th>Height</th>'
       +     '<th>Antenna</th>'
-      +     (showSignOff ? '<th class="rep-aim-signoff-head">Installer initials</th><th class="rep-aim-signoff-head">Date</th>' : '')
+      +     (showSignOff ? '<th class="rep-aim-signoff-head">Initials</th><th class="rep-aim-signoff-head">Date</th>' : '')
       +   '</tr></thead>'
       +   '<tbody>' + rows + '</tbody>'
       + '</table>'

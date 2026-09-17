@@ -6181,7 +6181,9 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-aim-mark .rep-aim-tick { stroke: var(--rose); stroke-width: 2; stroke-linecap: round; }
 .rep-aim-mark .rep-aim-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
 .rep-aim-mark .rep-aim-num { fill: #fff; font-weight: 700; }
-.rep-aim-table th.rep-aim-signoff-head { width: 88px; }
+/* Widths come from the table's own colgroup in print; on screen the
+   sign-off columns still want a floor so they are writeable. */
+.rep-aim-table th.rep-aim-signoff-head { min-width: 64px; }
 .rep-aim-table td.rep-aim-signoff { border-bottom: 1px solid var(--text-3); background: rgba(0,0,0,0.02); }
 [data-theme="dark"] .rep-aim-table td.rep-aim-signoff { background: rgba(255,255,255,0.03); }
 .rep-aim-table-section { margin-bottom: 12px; }
@@ -6437,10 +6439,17 @@ body.wd-has-stale-banner { padding-top: 52px; }
     /* `overflow-wrap: anywhere` was breaking values at any character, so a
        column narrower than its content did not overflow - it wrapped one or
        two characters per line and drove the row hundreds of points tall.
-       Values now break only where a value legitimately can. */
+       Values break only where a value legitimately can...
+       ...but `normal` alone means a value with no legal break point simply
+       leaves its cell and paints over the column beside it, which is how
+       "BLDG01-FL01-AP003" came to be printed on top of the Floor value.
+       `break-word` breaks only a word that would otherwise overflow, so it is
+       the last resort rather than the rule, and `overflow: hidden` makes it
+       impossible for any cell to reach its neighbour even so. */
     white-space: normal !important;
-    overflow-wrap: normal;
+    overflow-wrap: break-word;
     word-break: normal;
+    overflow: hidden;
   }
   /* Headers are single words, so never split them - but clip rather than let
      one bleed across its neighbour, which is what an over-narrow column does

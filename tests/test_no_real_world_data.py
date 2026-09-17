@@ -47,6 +47,10 @@ ALLOWED_CODE_TOKENS = {
     "TEST1", "TEST2", "TEST3", "TEST4", "TEST5",
     "ACME1", "ACME2",
     "FLR1", "FLR2", "FLR3",
+    "BLDG01",        # invented, and deliberately generic: it is the building
+                     # part of the AP names in the synthetic report-sweep
+                     # fixture, quoted in the comments that explain what the
+                     # aim table used to print on top of itself.
     "UTF8",          # an encoding, not a site
     "IPV4",          # a protocol, not a site - and it is this file's own
                      # regex constant, so the scan reads its own source and
