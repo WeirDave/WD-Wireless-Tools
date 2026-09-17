@@ -1227,7 +1227,20 @@ body.tool-walls .btn-sm { padding: 6px 12px; font-size: 12px; }
    anyone can check. Scrolls in its own box - a long selection must not push
    the Sync button off the modal. */
 .modal .confirm-body p.sync-plan-lead { margin: 14px 0 6px; color: var(--text); font-weight: 600; }
-.modal .confirm-body .sync-plan-wrap { max-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+/* 220px showed about three rows of a twenty-seven row table, with nothing on
+   screen saying the rest was below it - so a full list read as a truncated
+   one, and he reported it as "3 of 27". It is his standing preference anyway:
+   "it would be better if it was easily readable and lengthy than if it's brief
+   in order to save screen real estate." Half the viewport, and each section
+   says how many it is showing. */
+.modal .confirm-body .sync-plan-wrap { max-height: 50vh; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.modal .confirm-body label.sync-plan-all { display: flex; align-items: center; gap: 8px; font-size: inherit; font-weight: 600; color: var(--text); cursor: pointer; text-transform: none; letter-spacing: 0; }
+.modal .confirm-body td.sync-plan-pick { width: 28px; text-align: center; }
+.modal .confirm-body td.sync-plan-pick input { cursor: pointer; }
+.modal .confirm-body td.sync-plan-verdict { white-space: normal; max-width: 260px; }
+.modal .confirm-body td.sync-plan-verdict .cmp-same { color: var(--green-dark, #2ea043); }
+.modal .confirm-body td.sync-plan-verdict .cmp-differs { color: var(--amber-dark, #d29922); }
+.modal .confirm-body .btn-inline { display: inline-block; padding: 2px 10px; font-size: 12px; margin: 0 4px; vertical-align: baseline; }
 .modal .confirm-body table.sync-plan { width: 100%; border-collapse: collapse; font-size: 12px; }
 .modal .confirm-body table.sync-plan th { position: sticky; top: 0; background: var(--surface); text-align: left; font-weight: 600; color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
 .modal .confirm-body table.sync-plan td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }

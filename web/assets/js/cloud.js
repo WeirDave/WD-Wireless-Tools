@@ -5036,6 +5036,90 @@ function _syncRowsHtml(rows, dir) {
     + '</tr>').join('');
 }
 
+/* What the content comparison found for this pair, if it has been run.
+
+   The row used to carry two dates and a paragraph explaining that two dates
+   cannot tell you whether both sides changed. They cannot - but the comparison
+   can, so where an answer exists it goes in the row and replaces the apology.
+   A row reading "name only" is one he can tick without thinking; one reading
+   "both changed" is one to leave alone. */
+function _syncVerdictCell(d) {
+  const cmp = _compareResults.get(_compareKey(d.cloudId, d.localPath));
+  if (!cmp) return '<td class="sync-plan-verdict sub">not checked</td>';
+  const cls = cmp.designDiffers ? 'cmp-differs' : 'cmp-same';
+  const text = cmp.designDiffers ? cmp.summary : (cmp.renamedOnly ? 'name only' : 'identical');
+  return '<td class="sync-plan-verdict"><span class="' + cls + '">'
+    + e(text) + '</span></td>';
+}
+
+/* Pickable rows. The checkbox carries the index into the plan array, so the
+   confirm reads the DOM rather than keeping a parallel copy of the selection
+   that could drift from what is on screen. */
+function _syncPickRowsHtml(rows, kind, dir, withVerdict) {
+  return rows.map((d, i) => '<tr>'
+    + '<td class="sync-plan-pick"><input type="checkbox" class="sync-pick" checked'
+    + ' data-kind="' + kind + '" data-idx="' + i + '" onchange="_syncPickUpdate()"></td>'
+    + '<td class="sync-plan-name">' + e(d.localName || d.cloudName || d.name) + '</td>'
+    + '<td class="sync-plan-dir">' + dir + '</td>'
+    + (withVerdict ? _syncVerdictCell(d) : '')
+    + '<td class="sync-plan-when">'
+    + (d.cloudMtime === undefined ? e(d.siteName || '')
+       : 'cloud ' + e(fmtRelDate(d.cloudMtime)) + '<br><span class="sub">local '
+         + e(fmtRelDate(d.localMtime)) + '</span>')
+    + '</td>'
+    + '</tr>').join('');
+}
+
+function _syncPickBoxes(kind) {
+  const sel = '#confirmActionBody .sync-pick'
+    + (kind ? '[data-kind="' + kind + '"]' : '');
+  return Array.from(document.querySelectorAll(sel));
+}
+
+/* The button says what will happen to how many, and stops offering to do
+   nothing. "Sync 51" when he has unticked fifty of them would be the same
+   class of lie the rest of this dialog is being fixed for. */
+function _syncPickUpdate() {
+  const n = _syncPickBoxes().filter(b => b.checked).length;
+  const btn = document.getElementById('confirmActionOkBtn');
+  if (btn) {
+    btn.textContent = n ? ('Sync ' + n) : 'Nothing selected';
+    btn.disabled = !n;
+  }
+  ['down', 'fresh'].forEach(kind => {
+    const boxes = _syncPickBoxes(kind);
+    const head = document.getElementById('syncAll-' + kind);
+    if (head && boxes.length) {
+      const on = boxes.filter(b => b.checked).length;
+      head.checked = on === boxes.length;
+      head.indeterminate = on > 0 && on < boxes.length;
+    }
+  });
+}
+
+function _syncPickAll(kind, on) {
+  _syncPickBoxes(kind).forEach(b => { b.checked = !!on; });
+  _syncPickUpdate();
+}
+
+function _syncPicked(kind) {
+  return _syncPickBoxes(kind).filter(b => b.checked)
+    .map(b => Number(b.getAttribute('data-idx')));
+}
+
+/* Compare before committing to anything. Closes the dialog because the ops
+   deck lives outside it; the answers land on the rows next time it is opened,
+   and on the ledger rows in the meantime. */
+function _syncCheckFirst() {
+  const plan = syncEverythingPlan();
+  _resolveConfirmAction(false);
+  plan.down.forEach(d => checkRealDifference(
+    d.cloudId, d.localPath, d.cloudName || d.localName || ''));
+  toast('Comparing ' + plan.down.length + ' file'
+    + (plan.down.length === 1 ? '' : 's')
+    + ' — nothing is changed. Re-open Sync all when they finish.', 'info');
+}
+
 async function syncEverything() {
   if (!data || !data.summary) { toast('Nothing loaded yet', 'info'); return; }
   const plan = syncEverythingPlan();
@@ -5053,50 +5137,69 @@ async function syncEverything() {
     return;
   }
 
-  const parts = [];
-  if (plan.down.length) {
-    parts.push('Bring down <b>' + plan.down.length + '</b> file'
-      + (plan.down.length === 1 ? '' : 's') + ' the cloud has a newer copy of');
-  }
-  if (plan.fresh.length) {
-    parts.push('Download <b>' + plan.fresh.length + '</b> cloud project'
-      + (plan.fresh.length === 1 ? '' : 's') + ' you have no local copy of');
-  }
-  let body = '<ul>' + parts.map(t => '<li>' + t + '</li>').join('') + '</ul>';
+  /* Two operations, listed separately and picked separately.
+
+     Downloading a project he has no local copy of cannot lose anything.
+     Replacing a local file can. Fusing them into one "Sync 51" button forced
+     him to accept the second to get the first, which is most of why this
+     screen was frightening. */
+  let body = '<p class="sub">Tick what you want. Nothing happens to anything '
+    + 'you untick, and nothing happens at all until you press the button.</p>';
 
   if (plan.down.length) {
-    body += '<p class="sync-plan-lead">Newer on the cloud — the local copy is replaced:</p>'
+    body += '<p class="sync-plan-lead">'
+      + '<label class="sync-plan-all"><input type="checkbox" id="syncAll-down" checked '
+      + 'onchange="_syncPickAll(\'down\', this.checked)"> '
+      + 'Replace <b>' + plan.down.length + '</b> local file'
+      + (plan.down.length === 1 ? '' : 's') + ' with the cloud copy</label></p>'
       + '<div class="sync-plan-wrap"><table class="sync-plan">'
-      + '<thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>'
-      + '<tbody>' + _syncRowsHtml(plan.down, '&#11015; cloud &rarr; local') + '</tbody>'
+      + '<thead><tr><th></th><th>File</th><th>Direction</th><th>What differs</th>'
+      + '<th>Last saved</th></tr></thead>'
+      + '<tbody>' + _syncPickRowsHtml(plan.down, 'down', '&#11015; cloud &rarr; local', true) + '</tbody>'
       + '</table></div>'
-      + '<p class="sub">Every local copy that is replaced is kept in the '
-      + '<code>backups</code> folder, as '
-      + '<code>backups/&lt;site&gt;/&lt;name&gt;.previous-&lt;date&gt;.esx</code>. '
-      + 'The newest three per file are kept, so an older state stays recoverable.</p>'
-      + '<p class="sub warn"><b>Two dates cannot tell you whether both sides '
-      + 'changed.</b> If you edited one of these locally since it last matched '
-      + 'the cloud, "cloud is newer" and "we both changed it" look identical '
-      + 'from here, and your local edit goes into the <code>.previous-</code> '
-      + 'file rather than into the result.</p>';
+      + '<p class="sub">All ' + plan.down.length + ' listed above — scroll the '
+      + 'box for the rest. The copy replaced is kept in <code>backups/&lt;site&gt;/'
+      + '&lt;name&gt;.previous-&lt;date&gt;.esx</code>. '
+      + 'The newest three per file are kept, so an older state stays recoverable.</p>';
+
+    const unchecked = plan.down.filter(
+      d => !_compareResults.get(_compareKey(d.cloudId, d.localPath))).length;
+    if (unchecked) {
+      /* Replaces the paragraph that used to apologise for not knowing. The
+         dates cannot tell him whether both sides changed; the comparison can,
+         and it is one button away. */
+      body += '<p class="sub warn"><b>' + unchecked + ' of these have not been '
+        + 'compared.</b> A later cloud date can mean real work, or just a '
+        + 'rename — the dates cannot tell them apart. '
+        + '<button type="button" class="btn btn-secondary btn-inline" '
+        + 'onclick="_syncCheckFirst()">Compare them first</button> '
+        + 'Nothing is changed by comparing.</p>';
+    }
+  }
+
+  if (plan.fresh.length) {
+    body += '<p class="sync-plan-lead">'
+      + '<label class="sync-plan-all"><input type="checkbox" id="syncAll-fresh" checked '
+      + 'onchange="_syncPickAll(\'fresh\', this.checked)"> '
+      + 'Download <b>' + plan.fresh.length + '</b> cloud project'
+      + (plan.fresh.length === 1 ? '' : 's') + ' you have no local copy of</label></p>'
+      + '<div class="sync-plan-wrap"><table class="sync-plan">'
+      + '<thead><tr><th></th><th>Project</th><th>Direction</th><th>Into</th></tr></thead>'
+      + '<tbody>' + _syncPickRowsHtml(plan.fresh, 'fresh', '&#11015; new', false) + '</tbody>'
+      + '</table></div>'
+      + '<p class="sub">All ' + plan.fresh.length + ' listed. These replace '
+      + 'nothing — there is no local copy to overwrite.</p>';
   }
 
   if (plan.up.length) {
-    /* "Cannot" was the wrong word and it said something false about his own
-       tool: Ekahau's API is not the obstacle, the code is simply not written.
-       Say which it is - one of those is a limit he has to work around, the
-       other is a job still on the list. */
-    body += '<p class="sync-plan-lead">Newer locally — these need to go up, '
-      + 'one row at a time:</p>'
+    body += '<p class="sync-plan-lead">Newer locally — not part of this run:</p>'
       + '<div class="sync-plan-wrap"><table class="sync-plan">'
       + '<thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>'
       + '<tbody>' + _syncRowsHtml(plan.up, '&#11014; local &rarr; cloud') + '</tbody>'
       + '</table></div>'
-      + '<p class="sub">They are left exactly as they are. Sync never replaces '
-      + 'the newer side with the older one, so running this cannot put your work '
-      + 'at risk — but it does not finish the job either. Replacing a cloud '
-      + 'project deletes the old one, so that direction stays one row at a '
-      + 'time: use <b>⬆ Local newer · replace cloud</b> on each.</p>';
+      + '<p class="sub">Left exactly as they are. Replacing a cloud project '
+      + 'deletes the old one, so that direction stays one row at a time: use '
+      + '<b>&#11014; Local newer &middot; replace cloud</b> on each.</p>';
   }
 
   if (plan.inSync.length) {
@@ -5104,8 +5207,27 @@ async function syncEverything() {
       + '</b> already match and are not touched.</p>';
   }
 
-  const ok = await showConfirmModal('Sync local and cloud?', body, 'Sync ' + willDo);
+  /* `showConfirmModal` empties the body when it closes, so the selection has
+     to be read on the way out rather than after the await. */
+  let _pickedDown = [], _pickedFresh = [];
+  const _grab = () => { _pickedDown = _syncPicked('down'); _pickedFresh = _syncPicked('fresh'); };
+  const _okBtn = document.getElementById('confirmActionOkBtn');
+  if (_okBtn) _okBtn.addEventListener('click', _grab, { once: true });
+  const _shown = showConfirmModal('Sync local and cloud?', body, 'Sync ' + willDo);
+  // The body is in the DOM by now, so the header checkboxes and the button can
+  // be put into agreement with it before he looks at them.
+  _syncPickUpdate();
+  const ok = await _shown;
+  if (_okBtn) _okBtn.removeEventListener('click', _grab);
   if (!ok) return;
+  /* Read the ticks back off the dialog before it goes. Anything unticked is
+     simply not in the run - it is not skipped, retried or reported, because he
+     did not ask for it. */
+  const pickedDown = _pickedDown.length ? _pickedDown : [];
+  const pickedFresh = _pickedFresh.length ? _pickedFresh : [];
+  const downRows = pickedDown.map(i => plan.down[i]).filter(Boolean);
+  const freshRows = pickedFresh.map(i => plan.fresh[i]).filter(Boolean);
+  if (!downRows.length && !freshRows.length) return;
   clearSelection();
 
   /* verify_replace_local is the same call the per-row arrow makes: it backs
@@ -5113,7 +5235,7 @@ async function syncEverything() {
      if the server disagrees about which side is newer. */
   const results = { done: 0, failed: 0, skipped: 0, backups: [] };
   const waits = [];
-  for (const d of plan.down) {
+  for (const d of downRows) {
     const { promise } = opEnqueue({
       title: 'Updating "' + (d.localName || d.cloudName) + '" from the cloud',
       type: 'verify', pollBackend: false, undoable: false,
@@ -5138,7 +5260,7 @@ async function syncEverything() {
       else results.failed++;
     }));
   }
-  for (const d of plan.fresh) {
+  for (const d of freshRows) {
     const destFolder = d.siteName || d.name;
     const { promise } = opEnqueue({
       title: d.siteName ? 'Downloading "' + d.name + '.esx" → ' + d.siteName
