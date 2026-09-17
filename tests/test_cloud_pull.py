@@ -189,13 +189,25 @@ class CloudPullWiringTests(unittest.TestCase):
         self.assertIn("verifyReplaceLocal(", body)
         self.assertIn("is-action", body)
 
-    def test_local_newer_does_not_imply_an_action_that_does_not_exist(self):
-        start = self.js.index("function stalenessBadgeHtml(")
-        body = self.js[start:self.js.index("\n}", start)]
-        local_part = body[body.index("local_newer"):]
-        self.assertNotIn("onclick", local_part,
-                         "nothing can push a local .esx over an existing cloud project")
+    def test_pushing_up_needs_a_stronger_pairing_than_pulling_down(self):
+        """This used to assert that nothing could push a local file up, which
+        was true until the row was wired to `replace_cloud_project`.
 
+        What replaces it is the rule that actually matters: the two directions
+        are not equally recoverable. A pull keeps the file it replaced in
+        `backups/<site>/`, so it is offered even on a bare name match. A push
+        deletes the old cloud project, and a cloud delete does not come back -
+        so it requires Ekahau's own id, or a pairing he made himself.
+        """
+        self.assertIn("const PUSHABLE_MATCH_TYPES = new Set(['id', 'manual'])",
+                      self.js,
+                      "replacing a cloud project on a guessed pairing would "
+                      "delete a project that was never the counterpart")
+        start = self.js.index("function stalenessBadgeHtml(")
+        body = self.js[start:self.js.index(chr(10) + "}", start)]
+        local_part = body[body.index("local_newer"):]
+        self.assertIn("canPushToCloud(r)", local_part)
+        self.assertIn("pushLocalOverCloud(", local_part)
 
 if __name__ == "__main__":
     unittest.main()

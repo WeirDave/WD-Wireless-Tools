@@ -212,11 +212,21 @@ class EachFileGoesTheWayItsDatesSay(unittest.TestCase):
         """)
 
 
-class ItIsHonestAboutTheHalfItCannotDo(unittest.TestCase):
+class ItIsHonestAboutTheHalfItDoesNotDoInBulk(unittest.TestCase):
     """His workload is new sites: build locally from DWGs, work locally, push
     up at the end. So "newer locally" is the normal state of a finished site,
-    not an edge case - and the upload direction is the half that does not
-    exist. Counting those as done would be the worst possible lie."""
+    not an edge case, and counting those as done would be the worst possible
+    lie.
+
+    The upload direction exists now - the row has a working
+    **Local newer - replace cloud** control. It is deliberately *not* part of
+    a bulk run: replacing a cloud project deletes the old one, cloud deletes do
+    not come back, and doing sixty of those behind one button is not something
+    to offer somebody who has been burned by duplicates twice.
+
+    So the honesty requirement is unchanged and its wording is not. A bulk run
+    must still refuse to count these as finished, and must now name the control
+    that does finish them instead of saying the direction does not exist."""
 
     def setUp(self):
         self.source = CLOUD_JS.read_text(encoding="utf-8")
@@ -227,33 +237,32 @@ class ItIsHonestAboutTheHalfItCannotDo(unittest.TestCase):
         self.assertIn("plan.up.length", self.body)
         self.assertIn("local &rarr; cloud", self.body)
 
-    def test_it_says_not_built_rather_than_cannot(self):
-        """"We cannot upload" says something false about his own tool: the API
-        is not the obstacle, the code is simply not written. One of those is a
-        limit to work around, the other is a job still on the list."""
-        self.assertIn("not built yet", self.body)
+    def test_it_no_longer_claims_the_direction_does_not_exist(self):
+        """It said "not built yet", which was true and stopped being true.
+
+        `replace_cloud_project` shipped in v2.104.6 and the row now calls it.
+        What the bulk confirm has to say changed with it: not that the
+        direction is missing, but that it is done one row at a time, and why.
+        """
+        self.assertNotIn("not built", self.body)
         self.assertNotIn("this cannot do it yet", self.body)
+        self.assertIn("one row at a time", self.body)
 
-    def test_the_row_badge_says_the_same_thing_the_confirm_does(self):
-        """The Sync confirm was corrected to "not built yet" and the badge on
-        the row was not, so for four releases the two surfaces disagreed - and
-        the badge is the one he reads first, because it is on the row that
-        prompted the question.
+    def test_the_row_badge_and_the_confirm_still_agree(self):
+        """The badge and the Sync confirm disagreed for four releases once
+        already, and the badge is the one he reads first because it is on the
+        row that prompted the question. They have to move together.
 
-        It said "This cannot be pushed up from here - Ekahau's upload creates a
-        new project rather than replacing an existing one", stated as a fact
-        about Ekahau. Whether the API can do it has never been tested; what is
-        known is that the upload flow this client has creates a new project.
-        The first is a wall, the second is a job on the list, and only the
-        second is true."""
+        Now that the row can actually do it, agreement means the confirm points
+        at the control rather than contradicting it.
+        """
         badge = self.source[self.source.index("function stalenessBadgeHtml"):]
         badge = badge[:badge.index("function gutCell")]
         local_newer = badge[badge.index("if (s === 'local_newer')"):]
-        self.assertIn("not built yet", local_newer)
-        for false_claim in ("cannot be pushed up",
-                            "Ekahau's upload creates a new project"):
-            with self.subTest(claim=false_claim):
-                self.assertNotIn(false_claim, local_newer)
+        self.assertNotIn("not built", local_newer)
+        self.assertIn("pushLocalOverCloud(", local_newer)
+        # and the bulk confirm names the same control rather than denying it
+        self.assertIn("replace cloud", self.body.lower())
 
     def test_the_badge_still_says_nothing_is_at_risk_and_what_to_do(self):
         """Being told a direction is missing is only half of it. Sync never
@@ -263,12 +272,12 @@ class ItIsHonestAboutTheHalfItCannotDo(unittest.TestCase):
         badge = self.source[self.source.index("function stalenessBadgeHtml"):]
         local_newer = badge[badge.index("if (s === 'local_newer')"):
                             badge.index("function gutCell")]
-        # Wording moved onto the greyed control beside the badge, where the
-        # gesture that asks the question actually lands. The two things it
-        # still has to say are unchanged.
-        self.assertIn("sync never", local_newer)
-        self.assertIn("replaces a newer file with an older one", local_newer)
-        self.assertIn("save it to the cloud from there", local_newer)
+        # Two things still have to be said, and one of them has changed.
+        # Nothing is at risk: unchanged. What to do about it: it used to be
+        # "save it from Ekahau", because there was nothing else. There is now.
+        self.assertIn("newer", local_newer)
+        self.assertIn("pushLocalOverCloud(", local_newer)
+        self.assertNotIn("save it to the cloud from there", local_newer)
 
     def test_an_otherwise_clean_run_still_mentions_what_is_waiting(self):
         """Nothing to bring down must not render as "all done" when a
@@ -276,7 +285,8 @@ class ItIsHonestAboutTheHalfItCannotDo(unittest.TestCase):
         head = self.source[self.source.index("async function syncEverything()"):]
         head = head[:head.index("const parts = [];")]
         self.assertIn("plan.up.length", head)
-        self.assertIn("uploading is not built yet", head)
+        self.assertIn("to go up", head)
+        self.assertNotIn("not built", head)
 
     def test_the_run_ends_by_saying_where_the_two_sides_stand(self):
         """"Make sure the two versions are in sync" is a step he does by hand

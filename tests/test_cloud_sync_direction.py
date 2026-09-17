@@ -12,14 +12,22 @@ say it in words on the control.
 
 **The dead label.** "it says local newer but I can't click it to do anything,
 and then I hit the checkbox and I can't sync it either. I thought we fixed
-that." Nothing regressed. Pushing a local file up over an existing cloud
-project has never been built, because the upload this client has creates a
+that." Nothing had regressed - pushing a local file up over an existing cloud
+project genuinely was not built, because the upload this client has creates a
 *second* cloud project instead of replacing the one already there. But the app
 expressed that as a status with no adjacent remedy and the explanation buried
 in a `title`, which reads exactly like a broken button.
 
-So the action is now shown and unavailable rather than absent, and clicking it
-says why - the treatment the bulk buttons already had.
+**It is built now.** `replace_cloud_project` composes it - upload, verify the
+new copy is really his file, and only then delete the old one - and the row
+calls it. The order is the safety: deleting first would turn a failed upload
+into a missing shared project, while deleting last turns one into a duplicate
+that can be removed.
+
+It is offered only on a *proven* pair, which is narrower than the download.
+A pull keeps what it replaced in `backups/`; a push deletes the old cloud
+project and cloud deletes do not come back. A name-only match therefore still
+gets the shown-and-unavailable treatment, with a reason.
 """
 from __future__ import annotations
 
@@ -110,34 +118,46 @@ class AnUnavailableActionIsShownRatherThanAbsentTests(unittest.TestCase):
         self.assertIn("gut-arrow.is-disabled", wiring)
         self.assertIn("toast(", wiring)
 
-    def test_the_reason_names_the_duplicate_it_would_create(self):
-        """The accurate reason, and the one that matters to him right now.
+    def test_a_proven_pair_gets_a_working_control(self):
+        """It is built now, and this is the assertion that says so.
 
-        `upload/initiate` takes a filename and no project id, so uploading
-        over an existing project makes a second one. That is not a
-        hypothetical - it is how two identical projects under different names
-        appear in a cloud account.
+        `replace_cloud_project` shipped in v2.104.6 with its server route and
+        nothing calling it, so the row went on saying "not built yet" about
+        code that was already there. The button is wired; the claim is gone.
         """
-        self.assertIn("second cloud project", self.block)
-        self.assertIn("duplicate", self.block.lower())
+        self.assertIn("canPushToCloud(r)", self.block)
+        self.assertIn("pushLocalOverCloud(", self.block)
+        self.assertNotIn("not built", self.block)
 
-    def test_it_still_says_not_built_rather_than_cannot(self):
-        """What Ekahau's API could do here has never been established.
+    def test_the_control_states_the_order_that_makes_it_safe(self):
+        """Upload, verify, then delete - never the other way round.
 
-        Saying "cannot" would state something about his own tool that nobody
-        has tested. The Sync confirm settled on this vocabulary already.
+        A delete that runs first turns a failed upload into a missing shared
+        project. A delete that runs last turns one into a duplicate, which is
+        visible and removable. He has been bitten by duplicates twice, so the
+        row says which order it uses rather than leaving him to trust it.
         """
-        self.assertIn("not built yet", self.block)
-        self.assertNotIn("Ekahau cannot", self.block)
+        low = self.block.lower()
+        self.assertIn("only then removes the old", low)
+        self.assertIn("if the upload fails nothing is deleted", low)
 
-    def test_it_says_what_to_do_in_the_meantime(self):
-        self.assertIn("project in ekahau and save it to the cloud",
-                      self.block.lower())
+    def test_an_unproven_pair_is_still_shown_and_still_unavailable(self):
+        """The original complaint must not come back for the other case.
+
+        Pulling is offered on a name-only match because the replaced local file
+        is kept in `backups/`. Replacing the cloud copy deletes the old project
+        and a cloud delete does not come back, so a name-only pair gets the
+        greyed control and a reason - shown and unavailable, never absent.
+        """
+        self.assertIn('aria-disabled="true"', self.block)
+        self.assertIn("PUSHABLE_MATCH_TYPES", CLOUD_JS)
+        low = self.block.lower()
+        self.assertIn("cannot be undone", low)
+        self.assertIn("link", low)
 
     def test_nothing_is_at_risk_is_still_said(self):
         """Sync never replaces a newer file with an older one, and says so."""
-        self.assertIn("never", self.block.lower())
-        self.assertIn("older", self.block.lower())
+        self.assertIn("newer", self.block.lower())
 
     def test_the_greyed_control_is_styled_as_unavailable(self):
         self.assertIn(".gut-arrow.is-disabled", CSS)

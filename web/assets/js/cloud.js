@@ -54,6 +54,7 @@ const API_MAP = {
   unmark_manual_match: ['unmark_manual_match', ['cloudId', 'localPath']],
   list_manual_matches: ['list_manual_matches', []],
   verify_replace_local: ['verify_replace_local', ['cloudId', 'localPath']],
+  replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId']],
   list_shares: ['list_shares', ['projectId']],
   add_share: ['add_share', ['projectId', 'email', 'role']],
   add_shares: ['add_shares', ['projectId', 'emails', 'role']],
@@ -2080,9 +2081,68 @@ const MATCH_BADGE_SPEC_SITE_EXACT = {
    actionable - the gate is something you can satisfy, not a wall. */
 const PULLABLE_MATCH_TYPES = new Set(['id', 'manual', 'exact']);
 
+/* Which pairings may be pushed *up* over the cloud copy.
+
+   Narrower than pulling, on purpose. A pull replaces a local file and the one
+   it replaced is kept in `backups/<site>/`; if it was the wrong pair, the copy
+   is still there. A push deletes the cloud project it replaced, and a cloud
+   delete does not come back - so the pair has to be proven rather than
+   guessed. An id match is Ekahau's own stamp and a manual match is one he made
+   deliberately; a bare name match is neither, and "SITE1 Building 2" matching
+   the wrong "SITE1 Building 2" would destroy the wrong project.
+
+   The same asymmetry the delete confirmations already use: recoverable one way,
+   not the other, so the friction is not symmetric either. */
+const PUSHABLE_MATCH_TYPES = new Set(['id', 'manual']);
+
+function canPushToCloud(r) {
+  return !!(r && r.cloud && r.local && (r.kind || currentTab) !== 'sites'
+            && /\.esx$/i.test(String(r.local.path || ''))
+            && PUSHABLE_MATCH_TYPES.has(r.matchType));
+}
+
 function canPullFromCloud(r) {
   return !!(r && r.cloud && r.local && (r.kind || currentTab) !== 'sites'
             && PULLABLE_MATCH_TYPES.has(r.matchType));
+}
+
+/* Send the local file up over the cloud project it is paired with.
+
+   No confirm dialog for a single row: the button says what it does, and the
+   backend's ordering is what makes it safe rather than a prompt. Nothing is
+   deleted until the new copy is uploaded *and* verified to be his file.
+
+   Every outcome is reported as itself. The one that matters most is the
+   partial: upload succeeded, delete of the old one did not. That leaves two
+   projects with the same name, which is precisely the duplicate situation he
+   has been bitten by twice, so it is said in words - including which of the
+   two is the good one - rather than reported as a bare failure.
+*/
+function pushLocalOverCloud(cloudId, localPath, localName, cloudName) {
+  opEnqueue({
+    title: `Replacing cloud "${cloudName || localName}" with your local copy`,
+    sub: 'Uploading, verifying, then removing the old cloud copy.',
+    type: 'push', pollBackend: true, undoable: false,
+    run: async (opId) => {
+      const r = await pyApi('replace_cloud_project', localPath, cloudId, opId);
+
+      if (r && r.error) {
+        /* `note` is where the backend says what state the cloud is actually in
+           - "nothing was deleted", or "there are now two copies and the new
+           one is good". Dropping it would turn the most important sentence
+           into a generic failure. */
+        const detail = r.note ? (r.error + ' ' + r.note) : r.error;
+        if (r.note) toast(detail, 'error');
+        throw new Error(detail);
+      }
+
+      _clearStaleness(cloudId);
+      _scheduleOpRefresh();
+      toast(`Cloud copy of "${r && r.name ? r.name : (cloudName || localName)}" replaced`
+            + (r && r.deletedOld ? ' — the old one was removed.' : '.'), 'success');
+      return r;
+    },
+  });
 }
 
 /* The badge used to be the whole story: it said the cloud copy was newer and
@@ -2120,30 +2180,40 @@ function stalenessBadgeHtml(r) {
 
        He clicked "Local newer" expecting it to do something, then ticked the
        checkbox and pressed Sync and got nothing: "I can't click it to do
-       anything... I thought we fixed that." Both readings were reasonable.
-       The label was the app stating a difference and offering no way out, and
-       the explanation was in a tooltip, which is not somewhere anyone looks
-       before concluding a button is dead.
+       anything... I thought we fixed that." The label was the app stating a
+       difference and offering no way out.
 
-       So the action is now *shown* and *unavailable*, rather than absent. It
-       greys, it is announced as disabled, and clicking it says why - the same
-       treatment the bulk buttons already get, for the same reason.
+       It is a real action now. `replace_cloud_project` landed in v2.104.6 with
+       its server route and nothing called it, so this row kept saying "not
+       built yet" about code that was sitting right there. It is built: upload,
+       verify, then delete the old - in that order, because a delete that runs
+       first turns a failed upload into a missing shared project, while a
+       delete that runs last turns one into a duplicate that can be removed.
 
-       Why it is unavailable is worth keeping accurate: the upload this client
-       has (`upload/initiate`) takes a filename and no project id, so it
-       creates a *second* cloud project rather than replacing this one. That
-       is not a hypothetical - it is exactly how two identical projects under
-       different names end up in his cloud. Whether Ekahau's API could replace
-       in place has never been established, so this says "not built", not
-       "cannot". */
-    const why = 'Local → Cloud is not built yet. The upload this tool has '
-      + 'creates a second cloud project rather than replacing this one, which '
-      + 'is how duplicate projects appear. Nothing is at risk: sync never '
-      + 'replaces a newer file with an older one. To push it up now, open the '
-      + 'project in Ekahau and save it to the cloud from there.';
+       It is offered only on a proven pair. Replacing the cloud copy deletes
+       the old project and cloud deletes do not come back, so a name-only match
+       gets the disabled control and an explanation instead. */
+    if (canPushToCloud(r)) {
+      /* What it will do, in the row, at rest - not only in the tooltip. The
+         order is the safety: nothing is removed until the replacement is up
+         and checked. */
+      const plan = 'Uploads your local file as a new cloud project, checks it '
+        + 'landed and is really your file, and only then removes the old cloud '
+        + 'copy. If the upload fails nothing is deleted; if the delete fails '
+        + 'you are told there are two and which one is good.';
+      return `<button class="stale-badge stale-local is-action" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}')">&#11014; Local newer &middot; replace cloud</button>`;
+    }
+    /* Paired on a name alone. Pulling is offered for these because it is
+       recoverable; replacing the cloud copy is not, so it asks for the pair to
+       be confirmed first rather than acting on a guess. */
+    const unproven = 'Your local copy is newer, but these two are paired on '
+      + 'their names rather than a proven match. Replacing the cloud copy '
+      + 'deletes the old one, and a cloud delete cannot be undone - so confirm '
+      + 'the pair with the \u{1F517} Link button first and this becomes '
+      + 'available.';
     return `<span class="stale-badge stale-local" title="Your local copy was edited more recently than the cloud one.">&#11014; Local newer</span>`
       + `<button class="gut-arrow push-unavailable is-disabled" aria-disabled="true"`
-      + ` title="${a(why)}" aria-label="Local to Cloud, not available">`
+      + ` title="${a(unproven)}" aria-label="Local to Cloud, confirm the pair first">`
       + `Local &#8594; Cloud</button>`;
   }
   return '';
@@ -4669,11 +4739,13 @@ async function bulkSync(dir) {
       .map(d => e(d.localName || d.cloudName || '')).join(', ');
     body += `
       <p class="sub warn"><b>${blockedPushes.length} newer local file${blockedPushes.length === 1 ? ' is' : 's are'} not sent up:</b>
-        ${names}. Sending a newer local file up to Ekahau Cloud is not built
-        yet, so ${blockedPushes.length === 1 ? 'it is' : 'they are'} left alone.
-        Sync never overwrites the newer side — to force the cloud copy down
-        over ${blockedPushes.length === 1 ? 'it' : 'them'} anyway, use the
-        <b>Cloud newer &middot; download</b> button on the row itself.</p>`;
+        ${names}. Sync never overwrites the newer side, and sending local
+        files up is not part of a bulk run — replacing a cloud project deletes
+        the old one, so it is one row at a time and deliberate. Use
+        <b>&#11014; Local newer &middot; replace cloud</b> on each row. To force
+        the cloud copy down over ${blockedPushes.length === 1 ? 'it' : 'them'}
+        instead, the <b>Cloud newer &middot; download</b> button is on the row
+        too.</p>`;
   }
 
   if (stillSkipped.length) {
@@ -4905,7 +4977,8 @@ async function syncEverything() {
     toast(plan.up.length
       ? plan.up.length + ' local file' + (plan.up.length === 1 ? '' : 's')
         + ' still ' + (plan.up.length === 1 ? 'needs' : 'need')
-        + ' to go up — uploading is not built yet. Nothing to bring down.'
+        + ' to go up — use ⬆ Local newer · replace cloud on each row. '
+        + 'Nothing to bring down.'
       : 'Local and cloud already match', plan.up.length ? 'info' : 'success');
     return;
   }
@@ -4943,16 +5016,17 @@ async function syncEverything() {
        tool: Ekahau's API is not the obstacle, the code is simply not written.
        Say which it is - one of those is a limit he has to work around, the
        other is a job still on the list. */
-    body += '<p class="sync-plan-lead">Newer locally — these need to go up, and '
-      + 'that direction is not built yet:</p>'
+    body += '<p class="sync-plan-lead">Newer locally — these need to go up, '
+      + 'one row at a time:</p>'
       + '<div class="sync-plan-wrap"><table class="sync-plan">'
       + '<thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>'
       + '<tbody>' + _syncRowsHtml(plan.up, '&#11014; local &rarr; cloud') + '</tbody>'
       + '</table></div>'
       + '<p class="sub">They are left exactly as they are. Sync never replaces '
       + 'the newer side with the older one, so running this cannot put your work '
-      + 'at risk — but it does not finish the job either. Send these up from '
-      + 'Ekahau in the meantime.</p>';
+      + 'at risk — but it does not finish the job either. Replacing a cloud '
+      + 'project deletes the old one, so that direction stays one row at a '
+      + 'time: use <b>⬆ Local newer · replace cloud</b> on each.</p>';
   }
 
   if (plan.inSync.length) {
@@ -5027,7 +5101,7 @@ function _reportSyncOutcome(results, plan) {
   let msg = bits.join(', ') || 'Nothing to do';
   if (plan.up.length) {
     if (!results.failed) tone = 'info';
-    msg += ' — ' + plan.up.length + ' still to go up (uploading not built yet)';
+    msg += ' — ' + plan.up.length + ' still to go up (one row at a time)';
   } else if (!results.failed && !results.skipped) {
     msg += ' — local and cloud now match';
   }
