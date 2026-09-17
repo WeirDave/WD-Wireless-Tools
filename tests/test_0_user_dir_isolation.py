@@ -31,13 +31,41 @@ import tempfile
 import unittest
 from pathlib import Path
 
-if not os.environ.get("WD_USER_DIR"):
-    os.environ["WD_USER_DIR"] = tempfile.mkdtemp(prefix="wd-tests-userdir-")
-
-#: Imported *after* the variable is set, deliberately.
-from tools import user_dir as user_dir_module  # noqa: E402
-
+#: Captured **before** the redirect below, or it is the scratch path and this
+#: file cheerfully asserts that scratch is not scratch.
 REAL = Path.home() / ".wd_wireless_tools"
+
+
+def _isolate() -> None:
+    """Point the home directory *and* the override at the same scratch tree.
+
+    `WD_USER_DIR` alone is not enough, and the reason is worth keeping. Several
+    modules still build `Path.home() / ".wd_wireless_tools"` for themselves
+    rather than calling `user_dir()` - `test_user_dir_is_the_only_door.py` is
+    the open ticket for that and names them. Setting only the override moves
+    the modules that honour it and leaves the others pointing at his real home,
+    so the suite ends up half-isolated: the half that ignores the override
+    still writes to his data, and tests that compare one against the other
+    start failing for a reason that has nothing to do with them.
+
+    Redirecting `HOME`/`USERPROFILE` as well covers the modules that have not
+    been migrated yet, and keeps both halves agreeing about where user data is
+    while that migration finishes.
+    """
+    if os.environ.get("WD_USER_DIR"):
+        return
+    home = tempfile.mkdtemp(prefix="wd-tests-home-")
+    os.environ["HOME"] = home
+    os.environ["USERPROFILE"] = home
+    # Same location `Path.home() / ".wd_wireless_tools"` now resolves to, so a
+    # migrated module and an unmigrated one agree.
+    os.environ["WD_USER_DIR"] = str(Path(home) / ".wd_wireless_tools")
+
+
+_isolate()
+
+#: Imported *after* the variables are set, deliberately.
+from tools import user_dir as user_dir_module  # noqa: E402
 
 
 class TheSuiteCannotReachHisRealUserDirectory(unittest.TestCase):
