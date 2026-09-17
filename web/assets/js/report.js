@@ -4538,10 +4538,17 @@
           + '</g>';
       }
       var label = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
-      var labelFont = minDim * 0.022 * Math.min(1, 3 / Math.max(3, label.length));
+      /* Same legibility floor the placement map uses, and for the same
+         reason: a fraction of the short edge is not a size on paper. On a
+         1152x506 floor this printed at 5.4pt - the map is a sanity check
+         before climbing a ladder, and a number you cannot read is not one.
+         1.35% of the long edge lands near 7pt at the width these print. */
+      var legibleFloor = Math.max(W, H) * 0.0135;
+      var labelFont = Math.max(legibleFloor,
+                               minDim * 0.022 * Math.min(1, 3 / Math.max(3, label.length)));
       var padX = minDim * 0.006;
       var boxW = Math.max(minDim * 0.03, label.length * labelFont * 0.65) + padX * 2;
-      var boxH = minDim * 0.028;
+      var boxH = Math.max(minDim * 0.028, labelFont * 1.5);
       var cornerR = minDim * 0.005;
       markers += '<rect class="rep-aim-dot" x="' + (-boxW / 2) + '" y="' + (-boxH / 2) + '" width="' + boxW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
         + '<text class="rep-aim-num" y="' + (labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">'
@@ -4688,10 +4695,13 @@
         ringsSvg += '<circle class="rep-cov-ring" cx="' + c.x + '" cy="' + c.y + '" r="' + rWeak   + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '" stroke-opacity="0.35" stroke-dasharray="' + (minDim * 0.003) + ' ' + (minDim * 0.006) + '"/>';
       }
       var covLabel = String(indexById[ap.id] || '');
-      var covFont = minDim * 0.022;
+      /* The number here is what ties a cell on the map to its row in the
+         "Cell sizing per AP" table, so it has to survive printing. Floored
+         the same way as every other marker in this file. */
+      var covFont = Math.max(Math.max(W, H) * 0.0135, minDim * 0.022);
       var covPadX = minDim * 0.006;
       var covBoxW = Math.max(minDim * 0.03, covLabel.length * covFont * 0.65) + covPadX * 2;
-      var covBoxH = minDim * 0.028;
+      var covBoxH = Math.max(minDim * 0.028, covFont * 1.5);
       var covCornerR = minDim * 0.005;
       pinsSvg += '<g class="rep-cov-mark" transform="translate(' + c.x + ',' + c.y + ')">';
       pinsSvg += '<rect class="rep-cov-dot" x="' + (-covBoxW / 2) + '" y="' + (-covBoxH / 2) + '" width="' + covBoxW + '" height="' + covBoxH + '" rx="' + covCornerR + '" ry="' + covCornerR + '" fill="' + color + '" stroke="#fff" stroke-width="' + (minDim * 0.003) + '"/>';
