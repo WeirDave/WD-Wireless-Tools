@@ -6,10 +6,18 @@ continue" at the edge where the reader runs out of paper. Standard name, dashed
 along the shared edge, labelled with the section that carries on - which is how
 a run of racking is followed from sheet to sheet.
 
-The rule that matters is which edges get one. A section with no APs is never
-given a page, so an edge onto an empty section leads nowhere: marking it would
-promise a sheet that does not exist. The building perimeter gets nothing for the
-same reason.
+Two rules matter. Which edges get one: a section with no APs is never given a
+page, so an edge onto an empty section leads nowhere, and marking it would
+promise a sheet that does not exist. The building perimeter gets nothing for
+the same reason.
+
+And where the words go. They used to be SVG text inside the plan, sized
+`min(cellW, cellH) * 0.045` - source-image pixels mapped onto the sheet, so
+about 24pt on a Letter section - placed just inside the edge it marked. On the
+bottom edge that runs straight through the AP markers and their labels, and an
+installer could not read the identifiers underneath it, which is the one thing
+the sheet exists for. The dashed line is part of the drawing and stays on it.
+The words are not, and live in the gutter outside the image.
 """
 from __future__ import annotations
 
@@ -47,8 +55,9 @@ function grid(cols, rows, filled) {
   return cells;
 }
 const at = (cells, c, r) => cells.filter(x => x.col === c && x.row === r)[0];
-const refs = (out) => (out.match(/SECTION ([A-Z]\d+)/g) || []).map(s => s.replace('SECTION ', ''));
-const lines = (out) => (out.match(/class="rep-matchline"/g) || []).length;
+const refs = (out) => (out.labels.match(/SECTION ([A-Z]\d+)/g) || []).map(s => s.replace('SECTION ', ''));
+const lines = (out) => (out.svg.match(/class="rep-matchline"/g) || []).length;
+const sides = (out) => (out.labels.match(/is-(top|bottom|left|right)/g) || []).sort().join(',');
 
 const failures = [];
 function check(what, cond) { if (!cond) failures.push(what); }
@@ -105,10 +114,10 @@ class MatchLines(unittest.TestCase):
     def test_a_single_section_plan_gets_none(self):
         self.check("""
           const cells = grid(1, 1, ['0,0']);
-          check('marked a plan that was never split',
-                matchLinesFor(at(cells, 0, 0), cells, 100, 100) === '');
-          check('no cells at all should be safe',
-                matchLinesFor({col:0,row:0,x0:0,y0:0,x1:1,y1:1}, null, 10, 10) === '');
+          const one = matchLinesFor(at(cells, 0, 0), cells, 100, 100);
+          check('marked a plan that was never split', one.svg === '' && one.labels === '');
+          const none = matchLinesFor({col:0,row:0,x0:0,y0:0,x1:1,y1:1}, null, 10, 10);
+          check('no cells at all should be safe', none.svg === '' && none.labels === '');
           done();
         """)
 
@@ -116,20 +125,27 @@ class MatchLines(unittest.TestCase):
         self.check("""
           const cells = grid(2, 1, ['0,0','1,0']);
           const out = matchLinesFor(at(cells, 0, 0), cells, 100, 100);
-          check('not labelled as a match line: ' + out, /MATCH LINE/.test(out));
-          check('does not name the continuing section: ' + out,
-                /MATCH LINE \\u2014 SECTION B1/.test(out));
+          check('not labelled as a match line: ' + out.labels, /MATCH LINE/.test(out.labels));
+          check('does not name the continuing section: ' + out.labels,
+                /MATCH LINE \\u2014 SECTION B1/.test(out.labels));
           done();
         """)
 
-    def test_the_label_reads_along_a_vertical_edge(self):
-        """A label lying across the line is how you make a drawing harder to
-        read, not easier."""
+    def test_nothing_but_the_cut_is_drawn_on_the_drawing(self):
+        """The regression this guards: words painted over the plan. The label
+        is markup outside the image now, so the SVG that sits over the plan
+        must carry the dashed line and nothing else."""
         self.check("""
-          const cells = grid(2, 1, ['0,0','1,0']);
-          const out = matchLinesFor(at(cells, 0, 0), cells, 100, 100);
-          check('vertical edge label was not rotated: ' + out,
-                /transform="rotate\\(-90/.test(out));
+          const cells = grid(3, 3, ['0,0','1,0','2,0','0,1','1,1','2,1','0,2','1,2','2,2']);
+          const out = matchLinesFor(at(cells, 1, 1), cells, 100, 100);
+          check('the overlay drawn on the plan carries text: ' + out.svg,
+                out.svg.indexOf('<text') === -1);
+          check('the overlay drawn on the plan carries words: ' + out.svg,
+                out.svg.indexOf('MATCH LINE') === -1);
+          check('a label is missing its edge: ' + sides(out),
+                sides(out) === 'is-bottom,is-left,is-right,is-top');
+          check('a label was sized in plan units again: ' + out.labels,
+                out.labels.indexOf('font-size') === -1);
           done();
         """)
 
@@ -140,8 +156,18 @@ class MatchLineStyling(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn("stroke-dasharray", js)
         block = css[css.index(".rep-matchline {"):]
-        self.assertIn("@media print", block[:1400])
-        self.assertIn(".rep-matchline-label { fill:", block[:1400])
+        self.assertIn("@media print", block[:2600])
+
+    def test_the_label_has_an_absolute_size_and_a_gutter_to_sit_in(self):
+        """A size in points rather than a fraction of the plan, or it is 24pt
+        again the next time somebody prints a large sheet. And a gutter, or
+        "outside the image" is a claim about markup rather than about pixels."""
+        css = CSS.read_text(encoding="utf-8")
+        edge = css[css.index(".rep-matchline-edge {"):]
+        self.assertRegex(edge[:400], r"font-size:\s*\d+(\.\d+)?pt")
+        for side in ("is-top", "is-bottom", "is-left", "is-right"):
+            self.assertIn(".rep-matchline-edge." + side, css)
+        self.assertIn(".rep-seg-plan-wrap", css)
 
 
 if __name__ == "__main__":

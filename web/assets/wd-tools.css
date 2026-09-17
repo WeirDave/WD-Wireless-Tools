@@ -7350,18 +7350,38 @@ body.wd-has-update-banner .wd-update-badge { display: none; }
    the section that carries on, so a run of racking can be followed sheet to
    sheet. */
 .rep-matchline { stroke: #c0392b; fill: none; opacity: 0.9; }
-.rep-matchline-label {
-  fill: #c0392b; font-family: var(--sans); font-weight: 700;
-  letter-spacing: 0.5px;
-  paint-order: stroke; stroke: rgba(255,255,255,0.85); stroke-width: 2px;
-}
 [data-theme="dark"] .rep-matchline { stroke: #ef5350; }
-[data-theme="dark"] .rep-matchline-label {
-  fill: #ef5350; stroke: rgba(15,22,32,0.85);
+
+/* The gutter the labels live in. The plan gives this width back in
+   sizeAntennaSegmentForPrint, so the wrapper still fits the sheet, and the
+   0.26in below is also the breathing space that stops the drawing being
+   butted straight against the legend under it. */
+.rep-seg-plan-wrap { position: relative; padding: 0.16in 0.26in 0.26in; }
+
+/* Absolute point size, not a fraction of the plan. The old SVG label scaled
+   with the drawing and printed at roughly 24pt; this is the size of the
+   legend text under the plan - noticeable, and no larger than it needs to be
+   to be read off a sheet. */
+.rep-matchline-edge {
+  position: absolute; margin: 0; line-height: 1;
+  font-family: var(--sans); font-size: 7pt; font-weight: 700;
+  letter-spacing: 0.4px; color: #c0392b; white-space: nowrap;
 }
+.rep-matchline-edge.is-top    { top: 0.02in;    left: 50%; transform: translateX(-50%); }
+.rep-matchline-edge.is-bottom { bottom: 0.08in; left: 50%; transform: translateX(-50%); }
+.rep-matchline-edge.is-left {
+  left: 0.04in; top: 50%; writing-mode: vertical-rl;
+  transform: translateY(-50%) rotate(180deg);
+}
+.rep-matchline-edge.is-right {
+  right: 0.04in; top: 50%; writing-mode: vertical-rl;
+  transform: translateY(-50%);
+}
+[data-theme="dark"] .rep-matchline-edge { color: #ef5350; }
+
 @media print {
   .rep-matchline { stroke: #b71c1c !important; opacity: 1 !important; }
-  .rep-matchline-label { fill: #b71c1c !important; stroke: #fff !important; }
+  .rep-matchline-edge { color: #b71c1c !important; }
 }
 .rep-seg-locator-other { fill: none; stroke: rgba(120,130,140,0.55); }
 .rep-seg-locator-label {

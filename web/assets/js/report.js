@@ -3012,42 +3012,48 @@
      given a page, so an edge onto an empty section leads nowhere and marking
      it would be a promise of a sheet that does not exist. The building
      perimeter gets nothing either, for the same reason. */
+  /* Where the label goes, and why it is not on the drawing any more.
+
+     It used to be SVG text inside the plan, sized `min(cellW, cellH) * 0.045`.
+     Those are source-image pixels mapped onto the sheet, so the size came out
+     at 4.5% of the printed plan on every sheet size - about 24pt on a Letter
+     section - and it sat just inside the edge it marked. On the bottom edge
+     that runs it straight through the AP markers and their labels, and an
+     installer cannot read the AP identifiers underneath it, which is the one
+     thing the sheet exists for.
+
+     So: the dashed line stays exactly where it is, because it marks the real
+     cut and is part of the drawing. The label is HTML in the gutter outside
+     the image, set in points so it is the same size on every sheet. Nothing
+     that is not part of the drawing gets painted over the drawing. */
   function matchLinesFor(cell, cells, cW, cH) {
-    if (!cells || cells.length < 2) return '';
+    var empty = { svg: '', labels: '' };
+    if (!cells || cells.length < 2) return empty;
     var byPos = {};
     cells.forEach(function (c) { byPos[c.col + ',' + c.row] = c; });
     var at = function (dc, dr) {
       var c = byPos[(cell.col + dc) + ',' + (cell.row + dr)];
       return (c && c.aps && c.aps.length) ? c : null;
     };
-    var font = Math.min(cW, cH) * 0.045;
     var dash = Math.min(cW, cH) * 0.035;
     var sw = Math.min(cW, cH) * 0.006;
-    var pad = font * 0.5;
-    var out = '';
+    var svg = '', labels = '';
 
-    function edge(neighbour, x1, y1, x2, y2, tx, ty, rotate, anchor) {
+    function edge(neighbour, side, x1, y1, x2, y2) {
       if (!neighbour) return;
-      out += '<line class="rep-matchline" x1="' + x1 + '" y1="' + y1
+      svg += '<line class="rep-matchline" x1="' + x1 + '" y1="' + y1
         + '" x2="' + x2 + '" y2="' + y2 + '" stroke-width="' + sw
         + '" stroke-dasharray="' + dash + ',' + (dash * 0.6) + '"/>';
-      out += '<text class="rep-matchline-label" x="' + tx + '" y="' + ty
-        + '" font-size="' + font + '" text-anchor="' + anchor + '"'
-        + (rotate ? ' transform="rotate(' + rotate + ' ' + tx + ' ' + ty + ')"' : '')
-        + '>MATCH LINE \u2014 SECTION ' + WD.esc(segCellLabel(neighbour.col, neighbour.row))
-        + '</text>';
+      labels += '<div class="rep-matchline-edge is-' + side + '">'
+        + 'MATCH LINE \u2014 SECTION '
+        + WD.esc(segCellLabel(neighbour.col, neighbour.row)) + '</div>';
     }
 
-    var midX = (cell.x0 + cell.x1) / 2, midY = (cell.y0 + cell.y1) / 2;
-    edge(at(1, 0), cell.x1, cell.y0, cell.x1, cell.y1,
-         cell.x1 - pad, midY, -90, 'middle');
-    edge(at(-1, 0), cell.x0, cell.y0, cell.x0, cell.y1,
-         cell.x0 + pad, midY, -90, 'middle');
-    edge(at(0, 1), cell.x0, cell.y1, cell.x1, cell.y1,
-         midX, cell.y1 - pad, 0, 'middle');
-    edge(at(0, -1), cell.x0, cell.y0, cell.x1, cell.y0,
-         midX, cell.y0 + pad + font * 0.8, 0, 'middle');
-    return out;
+    edge(at(1, 0),  'right',  cell.x1, cell.y0, cell.x1, cell.y1);
+    edge(at(-1, 0), 'left',   cell.x0, cell.y0, cell.x0, cell.y1);
+    edge(at(0, 1),  'bottom', cell.x0, cell.y1, cell.x1, cell.y1);
+    edge(at(0, -1), 'top',    cell.x0, cell.y0, cell.x1, cell.y0);
+    return { svg: svg, labels: labels };
   }
 
   function renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml, cells) {
@@ -3057,19 +3063,22 @@
     var vx2 = Math.min(W, cell.x1 + bleed), vy2 = Math.min(H, cell.y1 + bleed);
     var vW = vx2 - vx, vH = vy2 - vy;
     var label = segCellLabel(cell.col, cell.row);
-    var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx, cell)
-      + matchLinesFor(cell, cells, cW, cH);
+    var match = matchLinesFor(cell, cells, cW, cH);
+    var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx, cell) + match.svg;
     return '<div class="rep-overview rep-seg-cell">'
       + '<div class="rep-seg-cell-head">' + renderAntennaLocatorThumb(url, W, H, cell, opts.cropBox, cells)
       +   '<h3 class="rep-seg-cell-title">Section ' + WD.esc(label)
       +     (opts.floorName ? ' <span class="rep-seg-cell-floor">— ' + WD.esc(opts.floorName) + '</span>' : '')
       +     ' <span class="rep-seg-cell-count">— ' + cell.aps.length + ' AP' + (cell.aps.length === 1 ? '' : 's') + '</span></h3>'
       + '</div>'
-      + '<div class="rep-overview-plan" data-seg="1" data-orig-w="' + W + '" data-orig-h="' + H
-      +   '" data-seg-x0="' + vx + '" data-seg-y0="' + vy + '" data-seg-x1="' + vx2 + '" data-seg-y1="' + vy2
-      +   '" style="--w:' + vW + ';--h:' + vH + '">'
-      +   '<img src="' + url + '" alt="Floor plan section ' + WD.escAttr(label) + '">'
-      +   '<svg viewBox="' + vx + ' ' + vy + ' ' + vW + ' ' + vH + '" preserveAspectRatio="none">' + markers + '</svg>'
+      + '<div class="rep-seg-plan-wrap">'
+      +   match.labels
+      +   '<div class="rep-overview-plan" data-seg="1" data-orig-w="' + W + '" data-orig-h="' + H
+      +     '" data-seg-x0="' + vx + '" data-seg-y0="' + vy + '" data-seg-x1="' + vx2 + '" data-seg-y1="' + vy2
+      +     '" style="--w:' + vW + ';--h:' + vH + '">'
+      +     '<img src="' + url + '" alt="Floor plan section ' + WD.escAttr(label) + '">'
+      +     '<svg viewBox="' + vx + ' ' + vy + ' ' + vW + ' ' + vH + '" preserveAspectRatio="none">' + markers + '</svg>'
+      +   '</div>'
       + '</div>'
       + (keyHtml ? '<div class="rep-overview-key">' + keyHtml + '</div>' : '')
       + '</div>';
@@ -3133,11 +3142,14 @@
     var ratio = (x1 - x0) / (y1 - y0);
     if (!isFinite(ratio) || ratio <= 0) return;
 
-    // Fit both US Letter and A4 portrait after the page chrome around the map.
-    var maxWidthIn = 7.2;
+    /* Fit both US Letter and A4 portrait after the page chrome around the map,
+       less the gutter the match line labels now sit in: .rep-seg-plan-wrap
+       pads 0.26in at the sides and below and 0.16in above, and the plan has to
+       give that back or the wrapper is wider than the sheet. */
+    var maxWidthIn = 6.9;
     // The index page now carries the large floor header above the map, so it
     // has about 0.6in less to work with than it used to.
-    var maxHeightIn = overlayEl.closest('.rep-seg-index') ? 7.55 : 7.9;
+    var maxHeightIn = overlayEl.closest('.rep-seg-index') ? 7.13 : 7.48;
     var widthIn = Math.min(maxWidthIn, maxHeightIn * ratio);
     var heightIn = widthIn / ratio;
     overlayEl.style.setProperty('--print-w', widthIn.toFixed(3) + 'in');
