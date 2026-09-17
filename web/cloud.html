@@ -179,6 +179,7 @@
     <label class="selall"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> All</label>
     <button class="btn btn-secondary" onclick="selectAllSide('cloud')" title="Select every cloud site/project, local side untouched">Select cloud</button>
     <button class="btn btn-secondary" onclick="selectAllSide('local')" title="Select every local folder/file, cloud side untouched">Select local</button>
+    <button class="btn btn-secondary" onclick="bulkCheckDifferences()" title="Compare the selected files against their cloud copies and report what actually differs. Read-only - nothing is changed on either side.">Check differences</button>
     <span class="selcount" id="selCount"></span>
     <button class="btn btn-secondary" id="expandAllBtn" onclick="expandAllSites()" title="Expand every site" hidden>Expand All</button>
     <button class="btn btn-secondary" id="collapseAllBtn" onclick="collapseAllSites()" title="Collapse every site" hidden>Collapse All</button>

@@ -2609,6 +2609,22 @@ body.tool-cloud .toolbar input.search:focus {
   margin-top: 3px; font-size: 11px; opacity: 0.75; font-style: italic;
 }
 
+/* The measured answer, beside the inferred one. Green when the contents match
+   despite the dates disagreeing - that is the reassuring case and the common
+   one after a bulk rename - and amber when something really did change. */
+.stale-badge.cmp-same {
+  background: var(--green-dim, rgba(46, 160, 67, 0.15));
+  color: var(--green-dark, #2ea043);
+  border-color: var(--green-dark, #2ea043);
+}
+.stale-badge.cmp-differs {
+  background: var(--amber-dim, rgba(210, 153, 34, 0.15));
+  color: var(--amber-dark, #d29922);
+  border-color: var(--amber-dark, #d29922);
+}
+.gut-arrow.compare-btn { font-size: 0.85em; opacity: 0.9; }
+.gut-arrow.compare-btn:hover { opacity: 1; }
+
 .stale-badge.is-action {
   cursor: pointer;
   font-family: inherit;

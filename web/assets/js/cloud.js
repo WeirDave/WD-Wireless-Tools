@@ -55,6 +55,7 @@ const API_MAP = {
   list_manual_matches: ['list_manual_matches', []],
   verify_replace_local: ['verify_replace_local', ['cloudId', 'localPath']],
   replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId']],
+  compare_with_cloud: ['compare_with_cloud', ['path', 'cloudId', 'opId']],
   list_shares: ['list_shares', ['projectId']],
   add_share: ['add_share', ['projectId', 'email', 'role']],
   add_shares: ['add_shares', ['projectId', 'emails', 'role']],
@@ -2106,6 +2107,63 @@ function canPullFromCloud(r) {
             && PULLABLE_MATCH_TYPES.has(r.matchType));
 }
 
+/* What a comparison found, so the row can show it at rest.
+
+   Keyed by the pair, not the row, because the ledger re-renders constantly and
+   an answer he waited on should survive that. Cleared when the pair changes on
+   either side, since the answer is then about a file that no longer exists. */
+const _compareResults = new Map();
+function _compareKey(cloudId, localPath) {
+  return String(cloudId || '') + '\u0000' + String(localPath || '').replace(/\\/g, '/').toLowerCase();
+}
+function compareResultFor(r) {
+  if (!r || !r.cloud || !r.local) return null;
+  return _compareResults.get(_compareKey(r.cloud.id, r.local.path)) || null;
+}
+
+/* Download the cloud copy and diff it against the local file.
+
+   This is the answer to "are we able to actually analyse the contents ...
+   kind of like a hashing situation". Hashing the archive cannot work - the
+   cloud assembles a ZIP on demand and stores uncompressed while a local .esx
+   is deflated - but comparing the contents is straightforward, and it turns
+   "the cloud timestamp is later" into "three access points and a floor plan
+   image differ", which is a fact rather than an inference.
+
+   It is read-only and writes nothing to disk on either side, so it is safe to
+   run across a whole selection before deciding anything. */
+function checkRealDifference(cloudId, localPath, label) {
+  const key = _compareKey(cloudId, localPath);
+  opEnqueue({
+    title: `Comparing "${label}" with the cloud copy`,
+    sub: 'Downloading the cloud copy to compare. Nothing is changed.',
+    type: 'compare', pollBackend: true, undoable: false,
+    run: async (opId) => {
+      const r = await pyApi('compare_with_cloud', localPath, cloudId, opId);
+      if (r && r.error) throw new Error(r.error);
+      _compareResults.set(key, r);
+      _scheduleOpRefresh();
+      return r;
+    },
+  });
+}
+
+/* His immediate job is sixty of these, so one at a time is not the unit. Each
+   file is its own queued operation with its own result - a single aggregate
+   "done" across sixty comparisons would hide exactly the one that differs. */
+function bulkCheckDifferences() {
+  const pairs = selectedSyncItems().filter(
+    d => d.kind === 'pair' && /\.esx$/i.test(String(d.localPath || '')));
+  if (!pairs.length) {
+    toast('Select some matched rows first', 'info');
+    return;
+  }
+  clearSelection();
+  pairs.forEach(d => checkRealDifference(
+    d.cloudId, d.localPath, d.cloudName || d.localName || ''));
+  toast(`Comparing ${pairs.length} file${pairs.length === 1 ? '' : 's'} — nothing will be changed`, 'info');
+}
+
 /* Send the local file up over the cloud project it is paired with.
 
    No confirm dialog for a single row: the button says what it does, and the
@@ -2152,6 +2210,14 @@ function stalenessBadgeHtml(r) {
   const s = r.staleness;
   if (!s) return '';
 
+  /* If he has already asked what really differs, that answer outranks
+     everything below it - it is measured where the rest is inferred. It goes
+     in the row rather than a tooltip, because evidence he has waited for
+     should not need hovering to read. */
+  const cmp = compareResultFor(r);
+  const cmpHtml = cmp ? `<span class="stale-badge cmp-${cmp.designDiffers ? 'differs' : 'same'}" title="${a(cmp.summary || '')}">${e(cmp.designDiffers ? '\u2260 ' + cmp.summary : '= ' + cmp.summary)}</span>` : '';
+  const checkBtn = `<button class="gut-arrow compare-btn" title="Download the cloud copy and compare the contents. Nothing is changed on either side - this only tells you what actually differs." onclick="event.stopPropagation();checkRealDifference('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name || r.local.name || '')}')">${cmp ? 'Re-check' : 'Check'}</button>`;
+
   /* "Newer" and "renamed" are different statements and used to share one
      label. A rename moves `history.modifiedAt`, so renaming a hundred cloud
      projects produced a hundred rows reading "Cloud newer" - the same words
@@ -2170,7 +2236,9 @@ function stalenessBadgeHtml(r) {
       const why = renamedOnly
         ? 'The cloud copy was RENAMED, which is why its date moved - the name stored inside your local file is the old one. No design change was detected. Downloading brings the rename across and renames your local file to match. Your current copy is kept in the backups folder.'
         : 'The cloud copy was edited more recently and the names agree, so this is a real change rather than a rename. Downloading replaces your local one. Your current copy is kept in the backups folder.';
-      return `<button class="stale-badge stale-cloud is-action${renamedOnly ? ' is-renamed' : ''}" title="${a(why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${label}</button>`;
+      return cmpHtml
+        + `<button class="stale-badge stale-cloud is-action${renamedOnly ? ' is-renamed' : ''}" title="${a(why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${label}</button>`
+        + checkBtn;
     }
     return `<span class="stale-badge stale-cloud" title="The cloud copy was edited more recently. These two were paired on name similarity rather than a proven match, so downloading over your local file is not offered — it could overwrite a different project. Link them yourself with the &#128279; button to confirm the pair, and the download becomes available.">&#11015; Cloud newer</span>`;
   }
@@ -2201,7 +2269,9 @@ function stalenessBadgeHtml(r) {
         + 'landed and is really your file, and only then removes the old cloud '
         + 'copy. If the upload fails nothing is deleted; if the delete fails '
         + 'you are told there are two and which one is good.';
-      return `<button class="stale-badge stale-local is-action" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}')">&#11014; Local newer &middot; replace cloud</button>`;
+      return cmpHtml
+        + `<button class="stale-badge stale-local is-action" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}')">&#11014; Local newer &middot; replace cloud</button>`
+        + checkBtn;
     }
     /* Paired on a name alone. Pulling is offered for these because it is
        recoverable; replacing the cloud copy is not, so it asks for the pair to

@@ -2569,6 +2569,73 @@ class CloudManager:
         }
 
 
+    def compare_with_cloud(self, local_path, cloud_project_id, progress_cb=None):
+        """Is the cloud copy actually different, or only differently dated?
+
+        "I don't know why we can't just compare a local file with the cloud
+        file ... seems like basic engineering, man." It is, and what had been
+        holding it up was aimed at the wrong target: the cloud does not serve a
+        stored ZIP - `download_project` assembles one - so two downloads of an
+        unchanged project need not be byte-identical, and a local .esx is
+        deflated where the cloud stores uncompressed. That rules out hashing
+        the *archive*. It says nothing about the *contents*.
+
+        So this downloads the cloud copy and compares member by member, after
+        normalising away the fields that move when the design does not.
+
+        **It writes nothing, anywhere.** The cloud copy is bytes in memory and
+        `zipfile` reads a `BytesIO`, so no extracted copy of a live project
+        ever reaches disk - and none can be left behind if this raises. Twenty
+        seven extracted copies were found sitting in a temp folder earlier
+        today; that is the failure mode being designed out rather than
+        cleaned up after.
+
+        Read-only in both directions. This is a diagnostic: it never touches
+        the local file and never writes to the cloud.
+        """
+        from tools import esx_compare
+
+        if not self._ensure():
+            return {"error": "Not connected"}
+        base = self.config.get("output_dir", "")
+        if not base:
+            return {"error": "No local folder is set"}
+        try:
+            _assert_inside(local_path, base)
+        except ValueError:
+            return {"error": "Local path is outside the configured folder"}
+        src = Path(local_path)
+        if not src.is_file():
+            return {"error": "Local file not found: %s" % local_path}
+        if not cloud_project_id:
+            return {"error": "No cloud project to compare against"}
+
+        try:
+            local_bytes = src.read_bytes()
+        except OSError as e:
+            return {"error": "Could not read the local file: %s" % e}
+
+        if progress_cb:
+            progress_cb(stage="download", current=5, total=100,
+                        message="Fetching the cloud copy to compare\u2026")
+        try:
+            got = self.api.download_project(
+                cloud_project_id, progress_cb=_remap_progress(progress_cb, 5, 85))
+        except Exception as e:
+            return {"error": "Could not fetch the cloud copy: %s" % e}
+        if isinstance(got, dict) and got.get("error"):
+            return got
+
+        if progress_cb:
+            progress_cb(stage="compare", current=90, total=100,
+                        message="Comparing contents\u2026")
+        result = esx_compare.compare_esx(local_bytes, got["esx"])
+        if progress_cb:
+            progress_cb(stage="done", current=100, total=100, message="Done.")
+        result["cloudProjectId"] = cloud_project_id
+        result["path"] = str(src)
+        return result
+
     def list_shares(self, project_id):
         if not self._ensure():
             return {"error": "Not connected"}

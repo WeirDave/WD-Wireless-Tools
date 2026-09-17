@@ -1128,6 +1128,10 @@ CLOUD_ACTIONS = {
     "create_site": lambda d: cm.create_site(d["name"]),
     # Upload a local .esx over an existing cloud project: upload, verify, then
     # delete the old. Never the other way round - see replace_cloud_project.
+    # Read-only: downloads the cloud copy into memory and diffs it against
+    # the local file. Writes nothing on either side.
+    "compare_with_cloud": lambda d: cm.compare_with_cloud(
+        d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
     "replace_cloud_project": lambda d: cm.replace_cloud_project(
         d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
     "upload_project": lambda d: cm.upload_project(d["path"], d.get("siteId"),
