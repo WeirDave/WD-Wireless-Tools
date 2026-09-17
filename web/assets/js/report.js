@@ -4045,7 +4045,9 @@
     var apTotalRow = '<tr class="rep-bom-total"><td></td><td class="rep-name">Total access points</td><td class="rep-az">' + apTotal + '</td></tr>';
     var apSection = '<section class="rep-floor-section">'
       + '<h2 class="rep-floor-title">Access point quantities</h2>'
-      + '<table class="rep-ap-table"><thead><tr>'
+      + '<table class="rep-ap-table">'
+      + '<colgroup><col style="width:28%"><col style="width:57%"><col style="width:15%"></colgroup>'
+      + '<thead><tr>'
       + '<th>Vendor</th><th>Model</th><th class="rep-num">Qty</th>'
       + '</tr></thead><tbody>' + apRowsHtml + apTotalRow + '</tbody></table>'
       + '</section>';
@@ -4090,7 +4092,13 @@
       ? '<section class="rep-floor-section">'
         + '<h2 class="rep-floor-title">Antenna quantities</h2>'
         + antIntro
-        + '<table class="rep-ap-table"><thead><tr>'
+        + '<table class="rep-ap-table">'
+        /* An antenna part number is the longest thing on this sheet and a
+           band is five characters; five equal columns is what put the name
+           on top of the coupling value. */
+        + '<colgroup><col style="width:46%"><col style="width:17%"><col style="width:12%">'
+        +   '<col style="width:13%"><col style="width:12%"></colgroup>'
+        + '<thead><tr>'
         + '<th>Antenna</th><th>Coupling</th><th>Band</th><th>Gain</th><th class="rep-num">Qty</th>'
         + '</tr></thead><tbody>' + antRowsHtml + antTotalRow + '</tbody></table>'
         + '</section>'

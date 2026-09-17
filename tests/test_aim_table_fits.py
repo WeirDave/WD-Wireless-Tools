@@ -95,5 +95,57 @@ class CellsCannotReachTheirNeighbour(unittest.TestCase):
         self.assertIn("word-break: normal", rule)
 
 
+class TheSharedNameCellWraps(unittest.TestCase):
+    """`.rep-name` is used by three tables and only one of them holds a short
+    AP name. The print rule said "the AP name is never cut" and implemented
+    that as `white-space: nowrap; overflow: visible`, which is not "never cut"
+    - it is "never wrapped, and allowed to leave the cell". That is what put
+    AP names over the floor column on the Antenna Aim Sheet and 52-character
+    antenna part numbers over the coupling column on the Bill of Materials.
+
+    Wrapping loses no characters, so it is what "never cut" actually needs.
+    """
+
+    def test_the_name_cell_wraps_instead_of_escaping_its_cell(self):
+        css = CSS.read_text(encoding="utf-8")
+        i = css.index("@media print")
+        block = css[i:]
+        rule = block[block.index(".rep-ap-table td.rep-name {"):]
+        rule = rule[:rule.index("}")]
+        rule = re.sub(r"/\*.*?\*/", "", rule, flags=re.S)
+        self.assertIn("white-space: normal", rule,
+                      "a shared name cell must wrap; nowrap makes it overflow")
+        self.assertNotIn("white-space: nowrap", rule)
+        self.assertNotIn("overflow: visible", rule,
+                         "visible overflow is how a cell reaches its neighbour")
+        self.assertIn("overflow-wrap: break-word", rule)
+
+
+class BomTablesDeclareTheirColumns(unittest.TestCase):
+    """Same fault, same cause, different table: five equal columns gave a
+    52-character antenna part number the same room as a five-character band."""
+
+    def setUp(self):
+        self.js = REPORT_JS.read_text(encoding="utf-8")
+
+    def test_both_bom_tables_have_a_colgroup(self):
+        ap = self.js[self.js.index("Access point quantities"):]
+        ap = ap[:ap.index("</table>")]
+        self.assertIn("<colgroup>", ap, "the AP quantities table has no widths")
+
+        ant = self.js[self.js.index("<th>Antenna</th><th>Coupling</th>") - 800:]
+        ant = ant[:ant.index("</table>")]
+        self.assertIn("<colgroup>", ant, "the antenna quantities table has no widths")
+
+    def test_the_antenna_name_gets_the_most_room(self):
+        i = self.js.index("<th>Antenna</th><th>Coupling</th>")
+        block = self.js[i - 800:i]
+        widths = [int(n) for n in re.findall(r"width:(\d+)%", block)]
+        self.assertEqual(len(widths), 5, "five columns, five widths")
+        self.assertEqual(sum(widths), 100)
+        self.assertEqual(max(widths), widths[0],
+                         "the antenna part number is the longest value here")
+
+
 if __name__ == "__main__":
     unittest.main()
