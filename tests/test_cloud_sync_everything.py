@@ -294,9 +294,23 @@ class ItIsHonestAboutTheHalfItCannotDo(unittest.TestCase):
         self.assertIn("results.backups", source)
         self.assertIn("previous local cop", source)
 
-    def test_backups_accumulate_rather_than_being_pruned(self):
-        """One generation is not a backup if two runs happen in a row."""
-        self.assertIn("nothing is pruned", self.body)
+    def test_more_than_one_generation_of_backup_survives(self):
+        """One generation is not a backup if two runs happen in a row.
+
+        That intent is unchanged; the sentence asserting it had gone stale.
+        This used to require the dialog to say "nothing is pruned", which was
+        written for v2.86.0 and stopped being true in v2.93.0 the following day,
+        when backups got a retention policy. For six days the dialog told him
+        every generation was kept for ever while the code was deleting all but
+        the newest three, and this test was what held the wrong sentence in
+        place.
+
+        So it asserts the property rather than the old phrasing: names are
+        timestamped so two runs cannot collide, and retention keeps more than
+        one.
+        """
+        self.assertIn("newest three per file are kept", self.body.lower())
+        self.assertNotIn("nothing is pruned", self.body)
         py = (ROOT / "tools" / "cloud_manager.py").read_text(encoding="utf-8")
         block = py[py.index("def verify_replace_local"):]
         block = block[:block.index("\n    def ", 10)] if "\n    def " in block[10:] else block

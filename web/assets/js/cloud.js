@@ -119,6 +119,9 @@ function _opIcon(op) {
 }
 function _opActionsHtml(op) {
   const btns = [];
+  if (op.status === 'queued') {
+    btns.push(`<button class="op-btn" onclick="opCancelQueued('${op.id}')" title="Take this out of the queue before it runs">Remove</button>`);
+  }
   if (op.status === 'running' && op.cancelable !== false) {
     btns.push(`<button class="op-btn" onclick="opCancel('${op.id}')">Cancel</button>`);
   }
@@ -183,9 +186,16 @@ function _opCardHtml(op) {
   const isIndeterminate = op.status === 'running' && (op.progress == null || op.progress === 0);
   const pct = Math.max(0, Math.min(100, op.progress || 0));
   const showBar = op.status === 'running' || op.status === 'queued';
+  /* A waiting item says where it is in the line. "Waiting..." on four cards
+     at once tells him nothing about which is next; "2 ahead" does, and it
+     renumbers itself when something ahead is removed. */
+  const ahead = op.status === 'queued' ? _opQueuePosition(op.id) - 1 : 0;
+  const waitText = ahead > 0
+    ? `Waiting — ${ahead} ahead`
+    : (op.status === 'queued' ? 'Waiting — next' : op.stage);
   const stageLine = op.status === 'failed' && op.error
     ? `<div class="op-stage err">${e(op.error)}</div>`
-    : (op.stage ? `<div class="op-stage">${e(op.stage)}</div>` : '');
+    : (waitText ? `<div class="op-stage">${e(waitText)}</div>` : '');
   return `
     <div class="op-card status-${op.status}" data-op-id="${op.id}">
       <span class="op-icon">${_opIcon(op)}</span>
@@ -258,11 +268,27 @@ function _verifyFailedClass(r) {
   return _verifyFailedPairs.has(_verifyFailedKey(r.cloud.id, r.local.path)) ? ' verify-failed' : '';
 }
 function _opRemove(id) {
+  /* Dismissing something that has not started yet has to take it out of the
+     queue, not merely off the screen - otherwise its turn still arrives and it
+     runs after he has told it not to. */
+  const op = _ops.get(id);
+  const pendingIdx = _opPending.indexOf(id);
+  if (pendingIdx >= 0) _opPending.splice(pendingIdx, 1);
+  if (op && op.status === 'queued' && op._release) {
+    op.status = 'cancelled';
+    const release = op._release;
+    op._release = null;
+    release();
+  }
   _ops.delete(id);
   const idx = _opOrder.indexOf(id);
   if (idx >= 0) _opOrder.splice(idx, 1);
   _deckRender();
 }
+
+/* Cancelling a queued item is the same as dismissing it: it has not started,
+   so there is nothing to interrupt and nothing to undo. */
+function opCancelQueued(id) { _opRemove(id); }
 
 function _ensureDeckTick() {
   if (_deckTickTimer) return;
@@ -322,6 +348,53 @@ function _ensureDeckPoll() {
   }, 250);
 }
 
+/* One at a time, in the order the clicks arrived.
+
+   `opEnqueue` used to start work the instant it was called, so clicking four
+   renames in four seconds sent four concurrent writes to Ekahau Cloud and they
+   landed in whatever order the network chose. The deck said "4 running", which
+   was true and was not what anybody wanted.
+
+   Concurrency is 1 on purpose. Every operation in this deck writes to a real
+   project - rename, replace, delete, upload - and overlapping two of those is
+   not throughput, it is a race. Ordered and boring is the requirement.
+
+   Raising this above 1 would also break the ordering guarantee callers already
+   rely on: bulk sync enqueues a download and then the rename that follows it,
+   and those must not overlap. */
+const OP_MAX_CONCURRENT = 1;
+const _opPending = [];
+let _opActive = 0;
+
+function _opPump() {
+  while (_opActive < OP_MAX_CONCURRENT && _opPending.length) {
+    const id = _opPending.shift();
+    const op = _ops.get(id);
+    // Removed, or cancelled, while it sat in the queue. Skip it and take the
+    // next: a dismissed item must not come back to life when its turn arrives.
+    if (!op || op.status !== 'queued' || !op._release) continue;
+    _opActive++;
+    /* Flip to running here rather than letting the op do it when its
+       continuation is scheduled. Otherwise there is a microtask in which the
+       thing that has just been handed the slot still renders as "Waiting -
+       next", which is a state that is never true. */
+    op.status = 'running';
+    op.startedAt = Date.now();
+    op.stage = 'Starting…';
+    const release = op._release;
+    op._release = null;
+    release();
+    return;
+  }
+}
+
+/* How many are ahead of this one, for the card to show. Counted off the live
+   queue rather than stored, so removing something renumbers the rest. */
+function _opQueuePosition(id) {
+  const i = _opPending.indexOf(id);
+  return i < 0 ? 0 : i + 1;
+}
+
 function opEnqueue(spec) {
   const id = newOpId();
   const op = {
@@ -331,7 +404,7 @@ function opEnqueue(spec) {
     type: spec.type || 'op',
     status: 'queued',
     progress: null,
-    stage: 'Queued…',
+    stage: 'Waiting…',
     error: null,
     undoable: !!spec.undoable,
     undoFn: spec.undoFn || null,
@@ -346,13 +419,23 @@ function opEnqueue(spec) {
   };
   _ops.set(id, op);
   _opOrder.push(id);
+  _opPending.push(id);
+
+  // The gate this op waits behind. `_opPump` releases it when a slot frees.
+  let release;
+  const myTurn = new Promise(res => { release = res; });
+  op._release = release;
+
   _deckRender();
   _ensureDeckTick();
 
   const promise = (async () => {
-    op.status = 'running';
-    op.startedAt = Date.now();
-    op.stage = 'Starting…';
+    await myTurn;
+    /* Dismissed while it sat in the queue. Settle rather than run, so a caller
+       awaiting this op is not left hanging on work that will never happen. */
+    if (op.status !== 'running') {
+      return { cancelled: true };
+    }
     if (op.pollBackend) _ensureDeckPoll();
     _deckRender();
     try {
@@ -383,8 +466,15 @@ function opEnqueue(spec) {
       _deckRender();
       _scheduleOpRefresh();
       throw err;
+    } finally {
+      /* Always, including the throw above. One failed item must not strand the
+         rest of the queue - that is the same mistake as the all-or-nothing
+         pass that threw away finished work because a later step refused. */
+      _opActive--;
+      _opPump();
     }
   })();
+  _opPump();
   return { id, promise };
 }
 
@@ -3544,7 +3634,7 @@ async function verifyReplaceLocal(cloudId, localPath, cloudName, cloudMtime, loc
     `        last edited ${staleWhen(localMtime)}`,
     `Cloud   last edited ${staleWhen(cloudMtime)}`,
     '',
-    'Your current local file is kept beside it as a .previous- copy, so this can be undone.',
+    'Your current local file is kept in the backups folder as a .previous- copy, so this can be undone.',
     'If your local copy turns out to be the newer one, nothing is changed.',
   ];
   if (!confirm(lines.join('\n'))) return;
@@ -4837,9 +4927,10 @@ async function syncEverything() {
       + '<thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>'
       + '<tbody>' + _syncRowsHtml(plan.down, '&#11015; cloud &rarr; local') + '</tbody>'
       + '</table></div>'
-      + '<p class="sub">Every local copy that is replaced is kept beside it as a '
-      + '<code>.previous-&lt;date&gt;.esx</code>, one per run — nothing is pruned, '
-      + 'so an older state stays recoverable.</p>'
+      + '<p class="sub">Every local copy that is replaced is kept in the '
+      + '<code>backups</code> folder, as '
+      + '<code>backups/&lt;site&gt;/&lt;name&gt;.previous-&lt;date&gt;.esx</code>. '
+      + 'The newest three per file are kept, so an older state stays recoverable.</p>'
       + '<p class="sub warn"><b>Two dates cannot tell you whether both sides '
       + 'changed.</b> If you edited one of these locally since it last matched '
       + 'the cloud, "cloud is newer" and "we both changed it" look identical '
