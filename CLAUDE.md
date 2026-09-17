@@ -181,6 +181,20 @@ why it costs real waiting time. Four sessions stalled on this in one day.
 - **Always tear it down**, on the failure path too. An abandoned process holds
   the port for the next session. Kill it by PID on the port, not by name — that
   would take down the user's own instance.
+- **Starting the server opens a browser window on his desktop, and nobody
+  closes it.** `main()` spawns `_open_browser()` unconditionally, so every test
+  server a session starts puts a real Firefox window on the machine pointing at
+  its port. They are never cleaned up, and Firefox keeps about ten content
+  processes per window. Measured on 2026-09-16 after a day of sessions doing
+  this: **307 Firefox processes holding 22.5 GB, with 1 GB of 32 GB free** -
+  which is most of a day's unexplained slowness. Do not run `server.py`
+  directly for a check. Extract the tree you want to a scratch directory and
+  neutralise `_open_browser` there, or import the module and replace it before
+  calling `main()`. If you find leftovers, the safe way to identify them is the
+  command line: they read `-osint -url http://localhost:<port>/`, and one whose
+  port is no longer listening cannot be anything the user is looking at. Never
+  kill `firefox.exe` by name - his own browser is in that list.
+
 - **Never block indefinitely on a bind or a browser call.** Bound the wait, and
   fail loudly if it does not come up. A failed check is visible; a stalled
   session is not, which makes the stall the worse outcome.
