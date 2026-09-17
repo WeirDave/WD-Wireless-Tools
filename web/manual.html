@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WD Wireless Tools — User Manual</title>
+<link rel="icon" href="assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/wd-wireless-tools-v8.0-32x32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/wd-wireless-tools-v8.0-180x180.png">
+<link rel="stylesheet" href="assets/wd-tools.css">
+<script>
+  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
+</script>
+</head>
+<body class="tool-guide">
+
+<!--
+  The body of this page is `docs/USER_MANUAL.md`, converted by `tools/manual.py`
+  and substituted into the two markers below by the `/manual` route in
+  `server.py`. Edit the manual, not this file - this is only the frame around it.
+-->
+
+<div class="topbar guide-topbar">
+  <div class="menu-wrap">
+    <button class="hamburger-btn" onclick="WD.toggleMenu(event,'manualMenu')" title="Menu"><span></span><span></span><span></span></button>
+    <div id="manualMenu" class="main-menu">
+      <div class="menu-section">&#9656; Navigation</div>
+      <a class="menu-item" href="/">⌂ Home</a>
+      <a class="menu-item" href="/cloud">· Cloud Manager</a>
+      <a class="menu-item" href="/walls">· Quick Walls</a>
+      <a class="menu-item" href="/report">· Report</a>
+      <a class="menu-item" href="/scale">· Scale</a>
+      <a class="menu-item" href="/plantrim">· PlanTrim</a>
+      <a class="menu-item" href="/aprename">· AP Labeler</a>
+      <a class="menu-item" href="/capacity">· Capacity</a>
+      <a class="menu-item" href="/prep">· Prep</a>
+      <a class="menu-item" href="/squirrel">· Squirrel</a>
+      <div class="menu-sep"></div>
+      <div class="menu-section">&#9656; Tools</div>
+      <a class="menu-item" href="/settings">· Suite Settings</a>
+      <div class="menu-sep"></div>
+      <div class="menu-section">&#9656; Help</div>
+      <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+      <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+      <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug</a>
+    </div>
+  </div>
+  <h1><span>WD</span> Wireless Tools — User Manual</h1>
+  <a class="back-link" href="/">Back to Home</a>
+</div>
+
+<div class="content manual-layout">
+
+  <aside class="manual-toc" id="manualToc">
+    <div class="manual-toc-head">
+      <label class="manual-toc-label" for="manualFilter">Contents</label>
+      <input id="manualFilter" class="manual-filter" type="search" placeholder="Filter sections…" autocomplete="off" spellcheck="false">
+    </div>
+    <nav class="manual-toc-list" id="manualTocList" aria-label="Manual contents">
+<!--MANUAL_TOC-->
+    </nav>
+    <p class="manual-toc-empty" id="manualTocEmpty" hidden>No section matches that.</p>
+  </aside>
+
+  <article class="guide-content manual-article" id="manualArticle">
+<!--MANUAL_BODY-->
+  </article>
+
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<script src="/assets/js/wd-shared.js"></script>
+<script src="/assets/js/manual.js"></script>
+</body>
+</html>

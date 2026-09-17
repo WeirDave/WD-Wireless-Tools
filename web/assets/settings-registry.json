@@ -416,6 +416,11 @@
         "key": "wd-create-token-",
         "category": "ui-state",
         "label": "Squirrel create-folder token (per folder, prefix key)"
+      },
+      {
+        "key": "wd-manual-at",
+        "category": "ui-state",
+        "label": "Section you were last reading in the User Manual"
       }
     ]
   },

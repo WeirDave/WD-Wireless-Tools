@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 from pathlib import Path
 
-from flask import Flask, request, jsonify, send_from_directory, redirect, send_file, make_response
+from flask import Flask, request, jsonify, send_from_directory, redirect, send_file, make_response, Response
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"
@@ -240,6 +240,19 @@ def setup():
 @app.route("/settings")
 def settings_page():
     return send_from_directory(WEB, "settings.html")
+
+
+@app.route("/manual")
+def manual():
+    """The whole user manual, rendered from `docs/USER_MANUAL.md`.
+
+    Rendered per request rather than cached: the file is 1200 lines, the
+    conversion is milliseconds, and a cache would mean editing the manual and
+    not seeing it change - which is exactly the friction that let the manual
+    drift out of date while nothing served it at all.
+    """
+    from tools import manual as manual_render
+    return Response(manual_render.render_page(), mimetype="text/html")
 
 
 @app.route("/guide")

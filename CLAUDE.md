@@ -251,7 +251,15 @@ All three are installed:
 
     Chrome   C:\Program Files\Google\Chrome\Application\chrome.exe
     Edge     C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
-    Firefox  C:\Program Files\Mozilla Firefoxirefox.exe
+    Firefox  C:\Program Files\Mozilla Firefox\firefox.exe
+
+That Firefox line carried a literal form-feed for a while, so it read
+`Mozilla Firefoxirefox.exe` - the `\f` had been interpreted rather than
+written. If a browser will not start, check the path exists before you
+believe the error: the same mistake against Edge surfaces as
+`NoSuchDriverException: Unable to obtain driver for MicrosoftEdge`, which
+reads like a missing driver while the driver sits in `~/.cache/selenium`
+the whole time.
 
 `selenium` drives all three; Selenium Manager fetches each driver itself, so
 there is nothing to install by hand. Point `options.binary_location` at the

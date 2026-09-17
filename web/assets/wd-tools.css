@@ -6430,6 +6430,11 @@ body.wd-has-stale-banner { padding-top: 52px; }
     table-layout: fixed !important; font-size: 8pt !important;
   }
   .rep-loc-table { page-break-before: always; break-before: page; }
+  /* ...except where there is no map above it, in which case the break puts a
+     heading alone on a sheet and the table on the next one. */
+  .rep-floor-nomap .rep-loc-table {
+    page-break-before: auto !important; break-before: auto !important;
+  }
   .rep-loc-table col { width: var(--print-col-w, auto) !important; }
   .rep-ap-table th { color: #555 !important; border-bottom-color: #d5d5d7 !important; }
   .rep-ap-table td { border-bottom-color: #e5e5e7 !important; color: #111 !important; }
@@ -7083,9 +7088,17 @@ body.tool-guide {
 .guide-topbar { background: var(--navy); color: #fff; padding: 14px 32px; display: flex; align-items: center; gap: 16px; }
 .guide-topbar h1 { font-size: 16px; font-weight: 700; letter-spacing: 0.3px; }
 .guide-topbar h1 span { color: var(--green); }
-.guide-topbar .back-link { color: rgba(255,255,255,0.6); text-decoration: none; font-size: 13px; margin-left: auto; }
-.guide-topbar .back-link:hover { color: #fff; }
-.guide-content { max-width: 780px; margin: 0 auto; padding: 40px 32px 80px; }
+/* White at 60% over a pale blue bar is all but invisible in light mode -
+   'Back to Home' was there and could not be read. The bar is tinted with
+   the page background either way, so the text follows the text colour
+   rather than being pinned to white. */
+.guide-topbar .back-link { color: var(--text-2); text-decoration: none; font-size: 13px; margin-left: auto; }
+.guide-topbar .back-link:hover { color: var(--text); text-decoration: underline; }
+.guide-content { max-width: 1180px; margin: 0 auto; padding: 40px 32px 80px; }
+/* 780px once, which on a large monitor is "this long narrow strip in the
+   middle of the screen". Prose still needs a measure, so this is wider
+   rather than unbounded; the full manual (/manual) is the page that uses
+   the whole width, because it has a contents rail to spend it on. */
 .guide-content .hero { margin-bottom: 36px; padding-bottom: 24px; border-bottom: 2px solid var(--border); }
 .guide-content .hero h2 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
 .guide-content .hero .subtitle { font-size: 14px; color: var(--text-2); }
@@ -8394,7 +8407,8 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   border-left: 3px solid var(--red);
   border-radius: 4px;
   background: var(--surface-2, rgba(127, 127, 127, .10));
-  max-height: 220px;
+  /* Scrolls rather than truncating - every item is present. */
+  max-height: 45vh;
   overflow-y: auto;
 }
 .delete-what-label {
@@ -8470,4 +8484,187 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 /* The filter cards are reachable by keyboard now, so they need a focus ring. */
 .dash-card:focus-visible {
   outline: 2px solid var(--blue); outline-offset: 2px;
+}
+
+/* ==========================================================================
+   User Manual (/manual)
+
+   The whole manual on one page, with a contents rail beside it. It is a
+   two-column grid rather than a centred column because the complaint that
+   produced it was that the guide pages render as "this long narrow strip in
+   the middle of the screen on my large monitor" - `.guide-content` pins prose
+   to 780px and leaves the rest of a wide display empty. Here the rail takes
+   the left edge and the article takes everything that is left.
+
+   `.manual-article` carries `.guide-content` too, so it inherits that page's
+   typography, tables, code and callouts; the only thing overridden is the
+   width that caused the complaint.
+   ========================================================================== */
+.manual-layout {
+  max-width: 1760px;
+  display: grid;
+  grid-template-columns: 290px minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+  padding: 0 28px 0 20px;
+  /* `.content` sets `overflow: auto`, which makes it the scroll container a
+     sticky child binds to - and on this page it is the window that scrolls,
+     not `.content`, so the rail bound to an element that never moves and
+     scrolled away with the article. Measured: the rail's top went to -10895
+     after jumping to a section. `visible` hands the binding back to the
+     viewport. */
+  overflow: visible;
+}
+
+.manual-toc {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 18px 8px 24px 0;
+  border-right: 1px solid var(--border);
+}
+.manual-toc-head { flex: 0 0 auto; padding: 0 8px 10px; }
+.manual-toc-label {
+  display: block; margin-bottom: 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.6px;
+  text-transform: uppercase; color: var(--text-2);
+}
+.manual-filter {
+  width: 100%; box-sizing: border-box;
+  padding: 6px 10px; font-size: 13px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+}
+.manual-filter:focus { outline: none; border-color: var(--blue); }
+.manual-toc-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.manual-toc-item {
+  display: block; padding: 5px 10px; border-left: 2px solid transparent;
+  font-size: 13.5px; line-height: 1.35; color: var(--text-2);
+  text-decoration: none; border-radius: 0 4px 4px 0;
+}
+.manual-toc-item:hover { background: var(--surface); color: var(--text); }
+.manual-toc-sub { padding-left: 24px; font-size: 12.5px; }
+.manual-toc-item.is-current {
+  border-left-color: var(--blue); background: var(--surface);
+  color: var(--text); font-weight: 600;
+}
+.manual-toc-item[hidden] { display: none; }
+.manual-toc-empty { padding: 8px 10px; font-size: 12.5px; color: var(--text-2); }
+
+.manual-article { max-width: none; margin: 0; padding: 24px 8px 96px; }
+/* `scroll-margin-top` so a heading jumped to from the rail does not land
+   underneath the sticky topbar. */
+.manual-article h1, .manual-article h2, .manual-article h3,
+.manual-article h4, .manual-article h5, .manual-article h6 { scroll-margin-top: 16px; }
+
+/* Heading sizes and body size are both up from what `.guide-content` sets.
+   A guide page is a few screens long and its 18px h2 / 15px h3 against 14.5px
+   body is enough to follow. This document is 1200 lines with 19 sections and
+   78 headings, and at those sizes an h3 and a bold paragraph look the same -
+   there is nothing to scan by. Bigger body text also buys back some of the
+   line length that comes with using the full width. */
+.manual-article h1 { font-size: 30px; font-weight: 700; margin: 8px 0 4px; }
+.manual-article h2 { font-size: 23px; margin-top: 52px; margin-bottom: 14px; }
+.manual-article h3 { font-size: 17.5px; font-weight: 700; margin-top: 30px; margin-bottom: 8px; }
+.manual-article h4 { font-size: 15px; font-weight: 700; margin: 22px 0 6px; color: var(--text); }
+.manual-article p, .manual-article li { font-size: 15.5px; line-height: 1.65; }
+.manual-article ul, .manual-article ol { margin: 12px 0 12px 30px; }
+.manual-article td, .manual-article th { font-size: 14px; }
+.manual-article img { max-width: 100%; height: auto; }
+.manual-article table { table-layout: auto; }
+.manual-article blockquote {
+  margin: 14px 0; padding: 10px 18px;
+  border-left: 4px solid var(--blue); background: var(--surface);
+  border-radius: 0 6px 6px 0; font-size: 14px;
+}
+.manual-article blockquote p:first-child { margin-top: 0; }
+.manual-article blockquote p:last-child { margin-bottom: 0; }
+.manual-article pre {
+  margin: 14px 0; padding: 14px 16px; overflow-x: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+}
+.manual-article pre code {
+  background: none; border: none; padding: 0;
+  font-size: 12.5px; line-height: 1.55; white-space: pre;
+}
+.manual-article hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+.manual-article > table:first-of-type td { text-align: center; }
+
+/* The `#` beside each heading. Visible on hover only - a document with 90 of
+   them permanently on screen reads as clutter. */
+.manual-anchor {
+  margin-left: 8px; font-weight: 400; color: var(--text-2);
+  text-decoration: none; opacity: 0;
+}
+.manual-article h1:hover .manual-anchor, .manual-article h2:hover .manual-anchor,
+.manual-article h3:hover .manual-anchor, .manual-article h4:hover .manual-anchor { opacity: 0.55; }
+.manual-anchor:hover { opacity: 1 !important; color: var(--blue); }
+
+@media (max-width: 1000px) {
+  .manual-layout { grid-template-columns: 1fr; padding: 0 16px; }
+  .manual-toc { position: static; max-height: 300px; border-right: none; border-bottom: 1px solid var(--border); padding-right: 0; }
+}
+
+/* ---- Cloud Manager: icon buttons say what they do ----------------------
+   "we've got small little icons in there to do stuff with, and until you have
+   them memorized they're difficult to figure out what it is we're doing. And
+   we have plenty of real estate and we're not using it."
+
+   So the label is a real element beside the glyph, readable at rest - not a
+   tooltip, which is hover-only and therefore no use while you are deciding
+   which button to press.
+
+   **Designed for the wide desktop he actually uses.** Below 1100px the labels
+   drop and the buttons return to circles: the narrow case only has to stay
+   functional, and letting it dictate the wide layout is what produced the
+   cramped row in the first place. */
+.ib-label {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  letter-spacing: .01em;
+}
+
+/* Round icon buttons become pills so the text has somewhere to sit. */
+.icon-btn:has(.ib-label) {
+  width: auto; height: 26px;
+  border-radius: 13px;
+  padding: 0 10px 0 8px;
+}
+
+.gut-arrow:has(.ib-label) {
+  display: inline-flex; align-items: center;
+  font-size: 17px;
+  padding: 3px 9px 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface);
+}
+/* The glyph grew a box, so the hover no longer scales it around - that read
+   as the row twitching. Colour is the hover signal instead. */
+.gut-arrow:has(.ib-label):hover {
+  transform: none;
+  border-color: currentColor;
+  background: var(--blue-bg);
+}
+.gut-arrow.nomatch:has(.ib-label) { font-size: 15px; }
+
+/* The centre gutter now holds words, so it needs room and has to wrap rather
+   than push the two file columns out of shape. */
+.lr-gut { flex-wrap: wrap; gap: 5px; }
+
+@media (max-width: 1100px) {
+  .ib-label { display: none; }
+  .icon-btn:has(.ib-label) {
+    width: 26px; height: 26px; border-radius: 50%; padding: 0;
+  }
+  .gut-arrow:has(.ib-label) {
+    border: none; background: transparent; padding: 0 4px; font-size: 24px;
+  }
+  .gut-arrow:has(.ib-label):hover { transform: scale(1.3); background: transparent; }
 }
