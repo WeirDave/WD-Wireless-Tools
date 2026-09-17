@@ -4960,8 +4960,18 @@ function bulkDelete() {
     parts.push(`<b>${localUnpaired}</b> local ${noun}`.replace('local local', 'local'));
   }
   deleteTarget = { bulk: items };
-  document.getElementById('deleteTitle').textContent = 'Delete selected?';
-  document.getElementById('deleteSub').innerHTML = `Permanently delete ${parts.join(' and ')}. This cannot be undone.`;
+  const anyCloud = items.some(d => d.kind === 'cloud');
+  document.getElementById('deleteTitle').textContent =
+    anyCloud ? 'Delete selected from Ekahau Cloud?' : 'Delete selected?';
+  // The permanence sentence used to live on the second gate. There is one
+  // dialog now, so it says it here.
+  document.getElementById('deleteSub').innerHTML =
+    `Permanently delete ${parts.join(' and ')}.`
+    + (anyCloud
+        ? ` Once this runs, none of the cloud side will exist anymore, for anyone.`
+          + ` There is no trash to recover it from. Local copies (if any) are not touched.`
+        : ` This cannot be undone.`);
+  _setDeleteBtn(anyCloud ? 'Delete from cloud' : 'Delete');
   // A count is not something anyone can check. Name them, since the list they
   // would otherwise be read from is greyed out behind this dialog.
   _setDeleteWhat('deleteWhat', _deleteWhatHtml(items.map(d =>
@@ -5003,14 +5013,104 @@ async function syncRow(dir, cloudId, name, localPath, kind) {
 
 function startRename(side, idOrPath, name, kind) {
   kind = kind || currentTab;
-  renameTarget = { side, idOrPath, kind };
+  renameTarget = { side, idOrPath, kind, original: name };
   const noun = side === 'cloud'
     ? (kind === 'sites' ? 'Cloud Site' : 'Cloud Project')
     : (kind === 'sites' ? 'Local Folder' : 'Local .esx File');
+
+  /* Where it lives, because that is what he was trying to read off the
+     greyed-out list: "it's in the correct folder so I want to use the folder
+     name as part of the name, and I can't remember the exact thing." */
+  const where = _renameContainerName(side, idOrPath, kind);
+
   document.getElementById('renameTitle').textContent = 'Rename ' + noun;
-  document.getElementById('renameSub').textContent = 'Current: ' + name;
-  document.getElementById('renameInput').value = name;
-  showModal('renameModal'); document.getElementById('renameInput').select();
+  document.getElementById('renameWhat').innerHTML =
+    '<div class="rename-what-label">You are renaming</div>'
+    + '<div class="rename-what-name">' + e(name) + '</div>'
+    + (where ? '<div class="rename-what-meta">' + e(noun.toLowerCase())
+               + ' in ' + e(where) + '</div>'
+             : '<div class="rename-what-meta">' + e(noun.toLowerCase()) + '</div>');
+  document.getElementById('renameSub').textContent = '';
+
+  /* Showing him the folder name is half the job; he wanted it *in* the new
+     name. One click puts it there, at the cursor. */
+  const insert = document.getElementById('renameInsert');
+  if (where) {
+    insert.hidden = false;
+    insert.innerHTML = '<span class="rename-insert-label">Insert</span>'
+      + '<button type="button" class="rename-insert-btn" onclick="_renameInsert('
+      + JSON.stringify(where).replace(/"/g, '&quot;') + ')">' + e(where) + '</button>';
+  } else {
+    insert.hidden = true;
+    insert.innerHTML = '';
+  }
+
+  const input = document.getElementById('renameInput');
+  input.value = name;
+  showModal('renameModal');
+  input.select();
+  _renamePreview();
+}
+
+/* The site or folder this thing sits in, from whichever tab is open. */
+function _renameContainerName(side, idOrPath, kind) {
+  if (kind === 'sites') return '';          // a site is not inside anything
+  if (side === 'cloud') {
+    const hit = _cloudDetailsById(idOrPath);
+    return (hit && hit.siteName) || '';
+  }
+  const parts = String(idOrPath || '').split(/[\/]/).filter(Boolean);
+  return parts.length >= 2 ? parts[parts.length - 2] : '';
+}
+
+function _renameInsert(text) {
+  const input = document.getElementById('renameInput');
+  if (!input) return;
+  const value = input.value;
+  let start = input.selectionStart == null ? value.length : input.selectionStart;
+  let end = input.selectionEnd == null ? start : input.selectionEnd;
+
+  /* The field opens with everything selected, so he can retype from scratch.
+     That made the first version of this button *replace* the name with the
+     folder name, which is the opposite of the request - he wants the folder
+     name as **part of** the name. A whole-value selection means "I have not
+     put the cursor anywhere yet", so append rather than overwrite. */
+  const wholeThing = start === 0 && end === value.length && value.length > 0;
+  if (wholeThing) { start = end = value.length; }
+
+  // Only when appending onto existing text, and only a single space: enough
+  // to keep two words apart, without inventing a separator he did not ask for.
+  const needsGap = start === value.length && value.length > 0
+    && !/[\s\-_.]$/.test(value);
+  const insert = (needsGap ? ' ' : '') + text;
+
+  input.value = value.slice(0, start) + insert + value.slice(end);
+  const at = start + insert.length;
+  input.focus();
+  input.setSelectionRange(at, at);
+  _renamePreview();
+}
+
+/* "X → Y", so the outcome is visible before committing rather than after. */
+function _renamePreview() {
+  const el = document.getElementById('renamePreview');
+  if (!el || !renameTarget) return;
+  const input = document.getElementById('renameInput');
+  const next = (input.value || '').trim();
+  const from = renameTarget.original || '';
+  if (!next) {
+    el.innerHTML = '<span class="rename-preview-none">Enter a name</span>';
+    return;
+  }
+  if (next === from) {
+    el.innerHTML = '<span class="rename-preview-none">Unchanged</span>';
+    return;
+  }
+  const suffix = (renameTarget.side === 'local' && renameTarget.kind !== 'sites')
+    ? '.esx' : '';
+  el.innerHTML = '<span class="rename-preview-from">' + e(from + suffix) + '</span>'
+    + ' <span class="rename-preview-arrow">→</span> '
+    + '<span class="rename-preview-to">' + e(next + suffix) + '</span>';
 }
 async function confirmRename() {
   const n = document.getElementById('renameInput').value.trim();
@@ -5034,19 +5134,18 @@ async function confirmRename() {
 
 function startDelete(side, idOrPath, name, isDir, kind) {
   kind = kind || currentTab;
-  // Stage one already names a single target in its own sentence, so the block
-  // would only repeat it. Cleared rather than left showing the last bulk set.
-  _setDeleteWhat('deleteWhat', '');
-  // `name` is carried so the second gate can say what it is deleting. Stage
-  // one already names it; stage two is the one that used to say only "this
-  // project", and it is the last thing seen before the irreversible act.
   deleteTarget = { side, idOrPath, kind, name };
   let warn;
   if (side === 'cloud') {
+    // The details go in the dialog, because the list they would otherwise be
+    // read from is greyed out behind it.
+    _setDeleteWhat('deleteWhat',
+      _deleteWhatHtml([_cloudDeleteEntry(idOrPath, name, kind === 'sites')]));
     warn = kind === 'sites'
-      ? `Permanently delete the cloud site <b>"${e(name)}"</b> from Ekahau Cloud. Projects inside it are not deleted.`
-      : `Permanently delete the cloud project <b>"${e(name)}"</b> from Ekahau Cloud. This cannot be undone.`;
+      ? `This is a <b>whole site</b>. Projects inside it are not deleted. Once this runs it will not exist on Ekahau Cloud anymore, for anyone. There is no trash to recover it from.`
+      : `Once this runs it will not exist on Ekahau Cloud anymore, for anyone. There is no trash to recover it from. Your local copy, if you have one, is not touched.`;
   } else {
+    _setDeleteWhat('deleteWhat', '');
     warn = isDir
       ? `Delete the local folder <b>"${e(name)}"</b> and <b>everything inside it</b> from disk. This cannot be undone.`
       : `Delete the local file <b>"${e(name)}.esx"</b> from disk. This cannot be undone.`;
@@ -5061,16 +5160,27 @@ function startDelete(side, idOrPath, name, isDir, kind) {
       }
     }
   }
-  document.getElementById('deleteTitle').textContent = 'Delete?';
+  document.getElementById('deleteTitle').textContent =
+    side === 'cloud' ? 'Delete from Ekahau Cloud?' : 'Delete?';
   document.getElementById('deleteSub').innerHTML = warn;
+  _setDeleteBtn(side === 'cloud' ? 'Delete from cloud' : 'Delete');
   showModal('deleteModal');
 }
-// ── Cloud-delete second confirmation ──
-// Local deletes stay one confirm, same as always — the cloud copy (if any)
-// is untouched, so it's recoverable by re-downloading. Cloud deletes are
-// not recoverable, so ANY cloud deletion (single or bulk) gets a second,
-// harder-to-click-through gate: restate exactly what's being destroyed and
-// require literally typing DELETE before the button even enables.
+
+/* The red button is the safeguard, and the only one.
+
+   Typing the word DELETE used to be required for every cloud deletion. It
+   added no information - it could not tell him *which* project he had
+   selected, which is the thing that actually protects him - and he deletes
+   routinely: "even Ekahau doesn't do that, they just put up a nice modal that
+   has a red delete button." Friction that conveys nothing trains people to
+   click through the dialogs that do convey something.
+
+   So: name the thing, say what happens to it, and offer a red button. */
+function _setDeleteBtn(label) {
+  const btn = document.getElementById('deleteBtn');
+  if (btn) btn.textContent = label;
+}
 /* ---- Saying what is about to be destroyed -------------------------------
 
    The confirm dialog greys out the list behind it, so the row he was looking
@@ -5171,40 +5281,12 @@ function _deleteWhatHtml(entries) {
     + (rest > 0 ? '<div class="delete-what-more">and ' + rest + ' more</div>' : '');
 }
 
-let _pendingCloudDelete = null;
-function _updateCloudDeleteConfirmBtn() {
-  const ok = (document.getElementById('cloudDeleteConfirmInput').value || '').trim().toUpperCase() === 'DELETE';
-  document.getElementById('cloudDeleteConfirmBtn').disabled = !ok;
-}
-function _cancelCloudDeleteStage2() {
-  _pendingCloudDelete = null;
-  document.getElementById('cloudDeleteConfirmInput').value = '';
-  document.getElementById('cloudDeleteConfirmBtn').disabled = true;
-  closeModal('cloudDeleteConfirmModal');
-}
-function _confirmCloudDeleteStage2() {
-  const fn = _pendingCloudDelete;
-  _pendingCloudDelete = null;
-  document.getElementById('cloudDeleteConfirmInput').value = '';
-  document.getElementById('cloudDeleteConfirmBtn').disabled = true;
-  closeModal('cloudDeleteConfirmModal');
-  if (fn) fn();
-}
+/* Filling the "what you are deleting" block in whichever dialog needs it. */
 function _setDeleteWhat(id, whatHtml) {
   const el = document.getElementById(id);
   if (!el) return;
   el.innerHTML = whatHtml || '';
   el.hidden = !whatHtml;
-}
-
-function _requireCloudDeleteConfirm(summaryHtml, runFn, whatHtml) {
-  _pendingCloudDelete = runFn;
-  _setDeleteWhat('cloudDeleteWhat', whatHtml);
-  document.getElementById('cloudDeleteConfirmSub').innerHTML = summaryHtml;
-  document.getElementById('cloudDeleteConfirmInput').value = '';
-  document.getElementById('cloudDeleteConfirmBtn').disabled = true;
-  showModal('cloudDeleteConfirmModal');
-  document.getElementById('cloudDeleteConfirmInput').focus();
 }
 
 // ── Styled stand-in for window.confirm() ──
@@ -5263,12 +5345,7 @@ async function confirmDelete() {
       const bits = [];
       if (nCloudSite) bits.push(`<b>${nCloudSite}</b> whole site${nCloudSite === 1 ? '' : 's'} — every project inside ${nCloudSite === 1 ? 'it' : 'them'} goes too`);
       if (nCloudProject) bits.push(`<b>${nCloudProject}</b> project${nCloudProject === 1 ? '' : 's'}`);
-      const summary = `That is ${bits.join(' and ')}. `
-        + `Once this runs, none of it will exist on Ekahau Cloud anymore, for anyone. `
-        + `There is no trash to recover it from. Local copies (if any) are not touched.`;
-      const entries = cloudItems.map(d => _cloudDeleteEntry(
-        d.id, d.name, (d.context || currentTab) === 'sites'));
-      _requireCloudDeleteConfirm(summary, runBulk, _deleteWhatHtml(entries));
+      runBulk();
     } else {
       runBulk();
     }
@@ -5292,16 +5369,7 @@ async function confirmDelete() {
       },
     });
   };
-  if (single.side === 'cloud') {
-    const isSite = (single.kind || currentTab) === 'sites';
-    const summary = isSite
-      ? `That is a <b>whole site</b> — every project inside it goes too. Once this runs, none of it will exist on Ekahau Cloud anymore, for anyone. There is no trash to recover it from. Local copies (if any) are not touched.`
-      : `Once this runs it will not exist on Ekahau Cloud anymore, for anyone. There is no trash to recover it from. Your local copy, if you have one, is not touched.`;
-    _requireCloudDeleteConfirm(summary, runSingle, _deleteWhatHtml(
-      [_cloudDeleteEntry(single.idOrPath, single.name, isSite)]));
-  } else {
-    runSingle();
-  }
+  runSingle();
 }
 
 async function createSite() {
@@ -6029,6 +6097,22 @@ function _reportMoveOutcome(results, dests) {
    document, which is what stops the inline onclick underneath from running -
    a capture listener on an ancestor fires before the target's own handlers,
    and stopPropagation there keeps it from reaching them. */
+/* The filter cards are divs with an onclick, so nothing but a mouse could
+   reach them - and a `title` that only appears on hover is not reachable
+   either. They are buttons to the accessibility tree now, and Enter or Space
+   activates the one that has focus. */
+function _wireFilterCardKeys() {
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+    const card = ev.target && ev.target.closest
+      ? ev.target.closest('.dash-card[data-filter]') : null;
+    if (!card) return;
+    ev.preventDefault();
+    card.click();
+  });
+}
+_wireFilterCardKeys();
+
 function _wireDisabledBulkReasons() {
   document.addEventListener('click', (ev) => {
     const btn = ev.target && ev.target.closest

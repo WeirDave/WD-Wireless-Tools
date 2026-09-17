@@ -49,7 +49,7 @@ function slice(from, to) {
   return source.slice(a, b);
 }
 const block = slice('function _cloudDetailsById(id)',
-                    '\nlet _pendingCloudDelete');
+                    '\nfunction _setDeleteWhat');
 
 globalThis.e = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -189,24 +189,24 @@ class TheDialogNamesWhatItWillDestroyTests(unittest.TestCase):
         self.assertIn("Riverside Block A", html)
 
 
-class BothGatesCarryItTests(unittest.TestCase):
-    """Stage one and stage two, since either can be the last thing read."""
+class TheOneDialogCarriesItTests(unittest.TestCase):
+    """There is one dialog now, and it has to hold everything."""
 
     def setUp(self):
         self.js = CLOUD_JS.read_text(encoding="utf-8")
         self.html = CLOUD_HTML.read_text(encoding="utf-8")
 
-    def test_the_markup_exists_in_both_dialogs(self):
-        self.assertIn('id="cloudDeleteWhat"', self.html)
+    def test_the_markup_exists(self):
         self.assertIn('id="deleteWhat"', self.html)
+        self.assertNotIn('id="cloudDeleteWhat"', self.html)
 
-    def test_the_second_gate_is_given_the_details(self):
-        self.assertIn("_requireCloudDeleteConfirm(summary, runSingle, _deleteWhatHtml(",
-                      self.js)
-        self.assertIn("_requireCloudDeleteConfirm(summary, runBulk, _deleteWhatHtml(",
-                      self.js)
+    def test_both_the_single_and_bulk_paths_fill_it(self):
+        self.assertGreaterEqual(
+            self.js.count("_setDeleteWhat('deleteWhat',"), 2,
+            "the single and bulk paths should both fill the block")
+        self.assertIn("_cloudDeleteEntry(idOrPath, name, kind === 'sites')", self.js)
 
-    def test_the_single_delete_carries_its_name_forward(self):
+    def test_the_single_delete_carries_its_name(self):
         self.assertIn("deleteTarget = { side, idOrPath, kind, name }", self.js)
 
     def test_the_backdrop_was_not_lightened_instead(self):
@@ -229,22 +229,50 @@ class BothGatesCarryItTests(unittest.TestCase):
         same conclusion. So the wording claims permanence, and claims no
         safety net that does not exist.
         """
+        # The wording moved into the one dialog's own copy when the second
+        # gate went, so it is asserted where it now lives.
         self.assertIn("no trash to recover it from", self.js)
-        self.assertIn("This cannot be undone", self.html)
+        self.assertIn("will not exist on Ekahau Cloud anymore", self.js)
 
     def test_it_does_not_pretend_local_copies_are_at_risk(self):
         """Being clear about what is *not* destroyed is part of the decision."""
         self.assertIn("is not touched", self.js)
 
-    def test_there_is_still_no_type_the_name_step(self):
-        """He deletes routinely; identification plus a red button is the level.
+    def test_there_is_no_type_to_confirm_step_at_all(self):
+        """Removed, not softened.
 
-        The existing gate asks for the fixed word DELETE, which predates this
-        and is left alone. Nothing here should have grown into "type the
-        project name".
+        "another thing that I can't stand is the fact that you're forcing me
+        to type 'delete'... even Ekahau doesn't do that, they just put up a
+        nice modal that has a red delete button."
+
+        It added no information. It could not tell him *which* project he had
+        picked - the thing that actually protects him - and he deletes
+        routinely. Friction that conveys nothing teaches people to click
+        through the dialogs that do convey something.
         """
-        self.assertIn("Type <b>DELETE</b> below to confirm", self.html)
-        self.assertNotIn("type the project name", self.html.lower())
+        for gone in ("cloudDeleteConfirmInput", "Type <b>DELETE</b>",
+                     "Type DELETE to confirm", "cloudDeleteConfirmModal"):
+            self.assertNotIn(gone, self.html, gone)
+        for gone in ("_updateCloudDeleteConfirmBtn", "_requireCloudDeleteConfirm",
+                     "cloudDeleteConfirmInput"):
+            self.assertNotIn(gone, self.js, gone)
+
+    def test_one_dialog_rather_than_two(self):
+        """With the typing gone, a second dialog asks the same question twice.
+
+        That is the same defect in another form: more effort, no more
+        information.
+        """
+        self.assertEqual(1, self.html.count('id="deleteModal"'))
+        self.assertNotIn("Stage2", self.js)
+
+    def test_the_action_is_a_red_button_that_says_what_it_does(self):
+        block = self.html[self.html.index('id="deleteModal"'):]
+        block = block[:block.index("modal-overlay", 10)]
+        self.assertIn("btn-red", block)
+        self.assertIn('id="deleteBtn"', block)
+        self.assertIn("_setDeleteBtn", self.js)
+        self.assertIn("Delete from cloud", self.js)
 
 
 if __name__ == "__main__":
