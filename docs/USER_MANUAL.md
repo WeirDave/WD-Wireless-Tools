@@ -144,6 +144,32 @@ that is your saved default or just this visit, an empty list names the filter
 that emptied it, and a sign-in that returns no user identity turns the filter
 off and says why.
 
+### Deleting from the cloud — what the dialog tells you
+
+Deleting a cloud project asks twice: once to confirm, and once more behind a
+box where you type **DELETE**. That second dialog is the last thing you see
+before it happens, and it now **names what it is about to destroy**.
+
+You get the **project name**, the **site it sits in**, **when it was last
+modified**, and — if anyone else has access — **who will lose it**. That is
+enough to tell apart two projects with the same name in different sites, which
+is the situation where checking actually matters and the one where the greyed
+out list behind the dialog is no help.
+
+Selecting several and deleting them together lists them all rather than saying
+"3 cloud project(s)".
+
+**File size is deliberately not shown.** Cloud projects are stored
+uncompressed and local `.esx` files are compressed, so the same project can
+read five to ten times larger in the cloud. In a dialog whose only job is "is
+this the one I mean?", a number that disagrees with the file on your disk by a
+factor of eight would do more harm than good.
+
+**There is no trash.** A cloud delete cannot be undone and the project is gone
+for everyone it was shared with. Your local copy, if you have one, is not
+touched — and a local file you delete can always be downloaded again if the
+cloud copy still exists, which is why only the cloud side asks twice.
+
 ### Finding what you never shared
 
 The **Not Shared** card on the dashboard row narrows the list to **projects you

@@ -4941,6 +4941,13 @@ function bulkDelete() {
   deleteTarget = { bulk: items };
   document.getElementById('deleteTitle').textContent = 'Delete selected?';
   document.getElementById('deleteSub').innerHTML = `Permanently delete ${parts.join(' and ')}. This cannot be undone.`;
+  // A count is not something anyone can check. Name them, since the list they
+  // would otherwise be read from is greyed out behind this dialog.
+  _setDeleteWhat('deleteWhat', _deleteWhatHtml(items.map(d =>
+    d.kind === 'cloud'
+      ? _cloudDeleteEntry(d.id, d.name, (d.context || currentTab) === 'sites')
+      : { name: d.name, siteName: '', modified: 'on this computer',
+          sharedLine: null, isSite: false })));
   showModal('deleteModal');
 }
 
@@ -5006,7 +5013,13 @@ async function confirmRename() {
 
 function startDelete(side, idOrPath, name, isDir, kind) {
   kind = kind || currentTab;
-  deleteTarget = { side, idOrPath, kind };
+  // Stage one already names a single target in its own sentence, so the block
+  // would only repeat it. Cleared rather than left showing the last bulk set.
+  _setDeleteWhat('deleteWhat', '');
+  // `name` is carried so the second gate can say what it is deleting. Stage
+  // one already names it; stage two is the one that used to say only "this
+  // project", and it is the last thing seen before the irreversible act.
+  deleteTarget = { side, idOrPath, kind, name };
   let warn;
   if (side === 'cloud') {
     warn = kind === 'sites'
@@ -5037,6 +5050,106 @@ function startDelete(side, idOrPath, name, isDir, kind) {
 // not recoverable, so ANY cloud deletion (single or bulk) gets a second,
 // harder-to-click-through gate: restate exactly what's being destroyed and
 // require literally typing DELETE before the button even enables.
+/* ---- Saying what is about to be destroyed -------------------------------
+
+   The confirm dialog greys out the list behind it, so the row he was looking
+   at is no longer readable - and he was relying on reading it to check he had
+   the right one. His report: "it greys the background out so you can't
+   remember what it is you're deleting to double check."
+
+   Naming it in the dialog is the fix rather than lightening the backdrop,
+   because a backdrop only works when the row happens to be on screen, not
+   scrolled away, and not behind the dialog itself. A confirmation for an
+   irreversible action should state what it will destroy without the reader
+   having to look anywhere else.
+
+   **Size is deliberately not shown**, for the reason `_row_meta` in
+   `tools/cloud_manager.py` already gives: cloud projects are stored
+   uncompressed and local `.esx` are ZIP-deflated, so the same project reads
+   5-10x different. In a dialog whose whole job is "is this the one I mean?",
+   a number that disagrees with the local file by a factor of eight is worse
+   than no number. The site and the modified date are the discriminators that
+   actually answer it, and they cannot mislead. */
+
+function _cloudDetailsById(id) {
+  if (!id || !data) return null;
+  let found = null;
+  const consider = (obj, siteName) => {
+    if (found || !obj || obj.id !== id) return;
+    found = { obj: obj, siteName: siteName || obj.siteName || '' };
+  };
+  // On the Projects tab a top-level entry is the project; on the Sites tab it
+  // is a site carrying children. One walk covers both.
+  const walk = (node) => {
+    if (!node) return;
+    consider(node, '');
+    const kids = node.children;
+    if (!kids) return;
+    (kids.matched || []).forEach(p => consider(p.cloud, node.name));
+    (kids.cloudOnly || []).forEach(c => consider(c, node.name));
+  };
+  (data.matched || []).forEach(p => walk(p.cloud));
+  (data.cloudOnly || []).forEach(walk);
+  return found;
+}
+
+function _sharedWithLine(cloudObj) {
+  const me = ((data && data.currentUser) || '').toLowerCase();
+  const others = ((cloudObj && cloudObj.sharedWith) || [])
+    .map(x => String(x || '').toLowerCase())
+    .filter(x => x && x !== me);
+  if (!others.length) return null;
+  // Deleting something other people are using is a different decision from
+  // deleting something only you can see, so it is called out rather than
+  // listed as one detail among several.
+  const who = others.length <= 3
+    ? others.join(', ')
+    : others.slice(0, 3).join(', ') + ' and ' + (others.length - 3) + ' more';
+  return 'Shared with ' + e(who) + ' — they will lose access';
+}
+
+function _deleteWhatRow(entry) {
+  const bits = [];
+  if (entry.siteName) bits.push('in ' + e(entry.siteName));
+  if (entry.modified) bits.push(e(entry.modified));
+  const shared = entry.sharedLine;
+  return '<div class="delete-what-item">'
+    + '<div class="delete-what-name">' + e(entry.name || 'Untitled') + '</div>'
+    + (bits.length ? '<div class="delete-what-meta">' + bits.join(' · ') + '</div>' : '')
+    + (shared ? '<div class="delete-what-shared">' + shared + '</div>' : '')
+    + '</div>';
+}
+
+function _cloudDeleteEntry(id, fallbackName, isSite) {
+  const hit = _cloudDetailsById(id);
+  const obj = hit && hit.obj;
+  return {
+    name: (obj && obj.name) || fallbackName || id,
+    siteName: isSite ? '' : (hit && hit.siteName) || '',
+    // The row's own meta line is already "when it changed", formatted the way
+    // the rest of the page formats it - so the dialog and the list agree.
+    modified: (obj && obj.meta) || '',
+    sharedLine: _sharedWithLine(obj),
+    isSite: !!isSite,
+  };
+}
+
+/* The block shown above the warning. Long selections are capped: past a
+   handful the names stop being checkable anyway, and a dialog he has to
+   scroll is a dialog he stops reading. */
+const DELETE_WHAT_MAX = 8;
+
+function _deleteWhatHtml(entries) {
+  if (!entries || !entries.length) return '';
+  const shown = entries.slice(0, DELETE_WHAT_MAX);
+  const rest = entries.length - shown.length;
+  return '<div class="delete-what-label">'
+    + (entries.length === 1 ? 'You are deleting' : 'You are deleting ' + entries.length + ' items')
+    + '</div>'
+    + shown.map(_deleteWhatRow).join('')
+    + (rest > 0 ? '<div class="delete-what-more">and ' + rest + ' more</div>' : '');
+}
+
 let _pendingCloudDelete = null;
 function _updateCloudDeleteConfirmBtn() {
   const ok = (document.getElementById('cloudDeleteConfirmInput').value || '').trim().toUpperCase() === 'DELETE';
@@ -5056,8 +5169,16 @@ function _confirmCloudDeleteStage2() {
   closeModal('cloudDeleteConfirmModal');
   if (fn) fn();
 }
-function _requireCloudDeleteConfirm(summaryHtml, runFn) {
+function _setDeleteWhat(id, whatHtml) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = whatHtml || '';
+  el.hidden = !whatHtml;
+}
+
+function _requireCloudDeleteConfirm(summaryHtml, runFn, whatHtml) {
   _pendingCloudDelete = runFn;
+  _setDeleteWhat('cloudDeleteWhat', whatHtml);
   document.getElementById('cloudDeleteConfirmSub').innerHTML = summaryHtml;
   document.getElementById('cloudDeleteConfirmInput').value = '';
   document.getElementById('cloudDeleteConfirmBtn').disabled = true;
@@ -5121,9 +5242,12 @@ async function confirmDelete() {
       const bits = [];
       if (nCloudSite) bits.push(`<b>${nCloudSite}</b> whole site${nCloudSite === 1 ? '' : 's'} — every project inside ${nCloudSite === 1 ? 'it' : 'them'} goes too`);
       if (nCloudProject) bits.push(`<b>${nCloudProject}</b> project${nCloudProject === 1 ? '' : 's'}`);
-      const summary = `You're about to permanently delete ${bits.join(' and ')} from Ekahau Cloud. `
-        + `Once this runs, none of it will exist on the cloud anymore — for anyone. Local copies (if any) are not touched.`;
-      _requireCloudDeleteConfirm(summary, runBulk);
+      const summary = `That is ${bits.join(' and ')}. `
+        + `Once this runs, none of it will exist on Ekahau Cloud anymore, for anyone. `
+        + `There is no trash to recover it from. Local copies (if any) are not touched.`;
+      const entries = cloudItems.map(d => _cloudDeleteEntry(
+        d.id, d.name, (d.context || currentTab) === 'sites'));
+      _requireCloudDeleteConfirm(summary, runBulk, _deleteWhatHtml(entries));
     } else {
       runBulk();
     }
@@ -5150,9 +5274,10 @@ async function confirmDelete() {
   if (single.side === 'cloud') {
     const isSite = (single.kind || currentTab) === 'sites';
     const summary = isSite
-      ? `You're about to permanently delete this <b>whole site</b> from Ekahau Cloud — every project inside it goes too. Once this runs, none of it will exist on the cloud anymore. Local copies (if any) are not touched.`
-      : `You're about to permanently delete this <b>project</b> from Ekahau Cloud. Once this runs, it will not exist on the cloud anymore. Local copies (if any) are not touched.`;
-    _requireCloudDeleteConfirm(summary, runSingle);
+      ? `That is a <b>whole site</b> — every project inside it goes too. Once this runs, none of it will exist on Ekahau Cloud anymore, for anyone. There is no trash to recover it from. Local copies (if any) are not touched.`
+      : `Once this runs it will not exist on Ekahau Cloud anymore, for anyone. There is no trash to recover it from. Your local copy, if you have one, is not touched.`;
+    _requireCloudDeleteConfirm(summary, runSingle, _deleteWhatHtml(
+      [_cloudDeleteEntry(single.idOrPath, single.name, isSite)]));
   } else {
     runSingle();
   }

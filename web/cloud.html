@@ -242,6 +242,9 @@
   <div class="modal">
     <h3 id="deleteTitle">Delete</h3>
     <p class="sub" id="deleteSub"></p>
+    <!-- Same reason as the cloud gate below: a bulk delete used to say only
+         "3 cloud project(s)", over a list he could no longer read. -->
+    <div class="delete-what" id="deleteWhat" hidden></div>
     <div class="modal-actions">
       <button class="btn btn-secondary" onclick="closeModal('deleteModal')">Cancel</button>
       <button class="btn btn-red" id="deleteBtn" onclick="confirmDelete()">Delete</button>
@@ -254,6 +257,11 @@
 <div class="modal-overlay" id="cloudDeleteConfirmModal">
   <div class="modal">
     <h3>&#9888; This deletes from Ekahau Cloud</h3>
+    <!-- What is about to be destroyed, named here rather than left to the
+         greyed-out list behind the overlay. Reading it off the background
+         depends on scroll position, on the row still being visible, and on
+         the backdrop being light enough - none of which hold reliably. -->
+    <div class="delete-what" id="cloudDeleteWhat"></div>
     <p class="sub" id="cloudDeleteConfirmSub"></p>
     <p class="sub">This cannot be undone. Type <b>DELETE</b> below to confirm.</p>
     <input type="text" id="cloudDeleteConfirmInput" placeholder="Type DELETE to confirm" autocomplete="off" oninput="_updateCloudDeleteConfirmBtn()">
