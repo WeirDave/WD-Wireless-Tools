@@ -203,6 +203,15 @@ why it costs real waiting time. Four sessions stalled on this in one day.
   against real data. `tests/test_ap_notes_page.py` is the pattern: it slices the
   render function out of `report.js`, runs it with stubs, and asserts on the
   HTML. No port, nothing to leak, and it runs in CI.
+- **`WD_USER_DIR` is enforced, not just available.** Set it to a scratch
+  directory before starting any server you are going to drive, and his real
+  configuration cannot be reached.
+  `tests/test_user_dir_is_the_only_door.py` imports every module that owns
+  user data with the variable set and asserts that every path it will write to
+  moved - and that nothing rebuilds `Path.home() / ".wd_wireless_tools"` for
+  itself. It is read once at import, so exporting it after a process starts
+  does nothing.
+
 - **Never bind a default or shared port.** Several sessions work in this repo at
   once, and 8675 is the user's own running instance. Pick an explicit, unusual
   high port, and pick a different one per session rather than the number
