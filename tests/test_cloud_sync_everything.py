@@ -301,7 +301,14 @@ class ItIsHonestAboutTheHalfItCannotDo(unittest.TestCase):
         block = py[py.index("def verify_replace_local"):]
         block = block[:block.index("\n    def ", 10)] if "\n    def " in block[10:] else block
         # Timestamped, so a second run cannot land on the first one's name.
-        self.assertIn('f"{src.stem}.previous-{stamp}{src.suffix}"', block)
+        # The name is built in `_backup_target` now, which also decides the
+        # folder - the copy goes to `<project folder>/backups/` rather than
+        # beside the live file.
+        self.assertIn("_backup_target(src", block)
+        py_all = (ROOT / "tools" / "cloud_manager.py").read_text(encoding="utf-8")
+        target = py_all[py_all.index("def _backup_target("):]
+        target = target[:target.index("_SKIP_DIRS")]
+        self.assertIn('f"{src.stem}.previous-{stamp}{src.suffix}"', target)
 
 
 class NoBluntDirectionalControl(unittest.TestCase):

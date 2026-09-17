@@ -825,6 +825,44 @@ def _row_meta(size, mtime, tail=None):
     return " · ".join(parts)
 
 
+#: Where a replaced local file goes. A sibling `.previous-` sat in the same
+#: directory as the live projects, which is the thing he objected to: "maybe we
+#: should back it up and put it into a special folder called backups and then
+#: that way, kind of like the recycle bin, the user can choose to delete those
+#: later - but they're not going to be included as part of the Cloud Manager
+#: sync because they'll be in a folder that's not read."
+#:
+#: It is not read: `backups` is already in `_SKIP_DIRS`, so the scan skips the
+#: whole tree before it ever descends. The site sub-folder is kept inside it so
+#: two projects of the same name from different sites do not collide, and the
+#: `<stem>.previous-<stamp><ext>` filename is unchanged - `tools/backups.py`
+#: recognises that shape and already walks recursively, so the existing purge
+#: in Settings finds these with no change at all.
+BACKUP_DIR_NAME = "backups"
+
+
+def _backup_target(src, output_dir, stamp):
+    """Where to put the copy of `src` we are about to replace.
+
+    Falls back to a sibling if the backups folder cannot be created - losing
+    the backup would be a worse outcome than putting it in the wrong place.
+    """
+    name = f"{src.stem}.previous-{stamp}{src.suffix}"
+    root = Path(output_dir) if output_dir else None
+    if not root or not root.is_dir():
+        return src.with_name(name)
+    try:
+        rel = src.parent.relative_to(root)
+    except ValueError:
+        rel = Path()
+    target_dir = root / BACKUP_DIR_NAME / rel
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return src.with_name(name)
+    return target_dir / name
+
+
 _SKIP_DIRS = {"backups", "backup", "output", "outputs", "archive", "archives", ".git"}
 
 
@@ -2203,10 +2241,12 @@ class CloudManager:
         runs both files carry the same internal project.json.id, so a pair that
         matched only by name upgrades to "Same file" on the next refresh.
 
-        The previous local file is kept alongside as
-        "<name>.previous-<timestamp>.esx" - the same convention the updater uses
-        for an install - because this overwrites someone's work and an
-        atomic replace still leaves nothing to go back to.
+        The previous local file is kept as
+        "backups/<site>/<name>.previous-<timestamp>.esx" - out of the working
+        folder, because this overwrites someone's work and an atomic replace
+        leaves nothing to go back to. `backups` is in `_SKIP_DIRS`, so nothing
+        in there is ever scanned, listed or synced: it behaves like a recycle
+        bin he empties when he chooses.
 
         Safe direction only: refuses if local's internal modifiedAt is
         meaningfully newer than cloud's. Sending local up to an existing cloud
@@ -2284,15 +2324,21 @@ class CloudManager:
         # this is the one operation here that destroys someone's work.
         from datetime import datetime as _dtn
         stamp = _dtn.now().strftime("%Y%m%d-%H%M%S")
-        backup = src.with_name(f"{src.stem}.previous-{stamp}{src.suffix}")
-        try:
-            if progress_cb:
-                progress_cb(stage="backup", current=88, total=100,
-                            message="Keeping a copy of the local file…")
-            shutil.copy2(src, backup)
-        except OSError as e:
-            return {"error": f"Could not back up the local file, so nothing was "
-                             f"replaced: {e}"}
+        keep = self.config.get("keep_local_backups")
+        keep = True if keep is None else bool(keep)
+        backup = (_backup_target(src, self.config.get("output_dir", ""), stamp)
+                  if keep else None)
+        if backup:
+            try:
+                if progress_cb:
+                    progress_cb(stage="backup", current=88, total=100,
+                                message="Keeping a copy of the local file…")
+                shutil.copy2(src, backup)
+            except OSError as e:
+                # Refusing is the right answer: a replace we cannot undo is
+                # not something to do quietly because a folder was unwritable.
+                return {"error": f"Could not back up the local file, so nothing "
+                                 f"was replaced: {e}"}
 
         tmp = src.with_suffix(src.suffix + ".wd-verify.tmp")
         try:
@@ -2303,7 +2349,7 @@ class CloudManager:
                 f.write(esx_bytes)
             os.replace(tmp, src)
         except OSError as e:
-            for leftover in (tmp, backup):
+            for leftover in (tmp, backup) if backup else (tmp,):
                 try:
                     leftover.unlink()
                 except OSError:
@@ -2314,7 +2360,7 @@ class CloudManager:
         _ESX_META_CACHE.pop(str(src), None)
         _ESX_TYPE_CACHE.pop(str(src), None)
         # The new file is in place; only now is an older generation expendable.
-        _prune_backups(src, protect=str(backup))
+        _prune_backups(src, protect=str(backup) if backup else None)
 
 
         new_fs_mtime = int(src.stat().st_mtime)
@@ -2324,7 +2370,7 @@ class CloudManager:
         return {
             "ok": True,
             "path": str(src),
-            "backup": str(backup),
+            "backup": str(backup) if backup else None,
             "newProjectId": new_meta.get("projectId"),
             "cloudProjectId": project_id,
             "cloudName": cloud_name,

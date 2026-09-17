@@ -49,6 +49,10 @@
       radios[i].checked = radios[i].value === rule;
     }
     document.getElementById('sLiveMs').value = String(c.live_interval_ms || 30000);
+    // Absent means on: the switch was added after the behaviour, and a
+    // missing key must not read as "backups are off".
+    document.getElementById('sCloudKeepBackups').checked =
+      c.keep_local_backups !== false;
 
     // Read by walls.js after a save. It had no control anywhere until now,
     // so the only way to turn it off was editing settings.json by hand.
@@ -278,7 +282,8 @@
       },
       cloud: {
         merge_rule: mergeRule,
-        live_interval_ms: parseInt(document.getElementById('sLiveMs').value, 10) || 30000
+        live_interval_ms: parseInt(document.getElementById('sLiveMs').value, 10) || 30000,
+        keep_local_backups: document.getElementById('sCloudKeepBackups').checked
       },
       walls: {
         reveal_source_after_save: document.getElementById('sWallsReveal').checked

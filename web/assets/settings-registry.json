@@ -190,6 +190,15 @@
       "control": "setowner"
     },
     {
+      "key": "cloud.keep_local_backups",
+      "label": "Keep a backup when a local file is replaced",
+      "category": "preference",
+      "owner": "Cloud Manager",
+      "section": "cloud",
+      "home": "settings",
+      "control": "sCloudKeepBackups"
+    },
+    {
       "key_prefix": "rename.",
       "label": "Rename formats and rules",
       "category": "preference",

@@ -84,7 +84,14 @@ class CloudPullTests(unittest.TestCase):
         return mgr.verify_replace_local("cloud-proj", str(self.local))
 
     def _backups(self):
-        return sorted(self.tmp.glob("*.previous-*"))
+        """Anywhere under the project folder.
+
+        The copy used to sit beside the live file; it now lands in
+        `<project folder>/backups/`, out of the working folder and out of
+        Cloud Manager's scan. Searching recursively keeps this test about
+        *whether* a backup was kept rather than about where it went.
+        """
+        return sorted(self.tmp.rglob("*.previous-*"))
 
     def assertLocalUntouched(self):
         self.assertTrue(self.local.exists(), "the local file was removed")
@@ -106,6 +113,9 @@ class CloudPullTests(unittest.TestCase):
                          "the backup is not the file that was replaced")
         self.assertEqual(backups[0].suffix, ".esx",
                          "the backup should still open as a project")
+        from tools import cloud_manager as _cm
+        self.assertIn(_cm.BACKUP_DIR_NAME, backups[0].parts,
+                      "the backup is still sitting beside the live project")
         self.assertEqual(res.get("backup"), str(backups[0]))
         self.assertEqual(list(self.tmp.glob("*.tmp")), [])
 

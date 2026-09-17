@@ -280,6 +280,19 @@
           <label><input type="radio" name="mergeRule" value="overwrite"> Overwrite local</label>
         </div>
       </div>
+
+      <div class="s-field">
+        <label class="s-check">
+          <input type="checkbox" id="sCloudKeepBackups">
+          <span>Keep a backup when a local file is replaced</span>
+        </label>
+        <div class="hint mt-4">Downloading the cloud copy over a local file keeps the
+          old one in a <b>backups</b> folder inside your project folder &mdash; like a
+          recycle bin. Cloud Manager never scans, lists or syncs anything in there, and
+          you can clear it under <b>Backups</b> below. Turn this off and a replace
+          cannot be undone.</div>
+      </div>
+
       <div class="s-field">
         <label>Live auto-refresh interval</label>
         <select id="sLiveMs">
