@@ -8446,6 +8446,13 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 /* ---- Rename: everything needed to compose the new name, in the dialog ----
    He was reading the folder name off the list behind the overlay. It is in
    here now, and one click puts it in the field. */
+
+/* "I need speed and efficiency more than I need to conserve screen real
+   estate ... it would be better if it was easily readable and lengthy than if
+   it's brief." A project path does not fit in 440px, and the answer to that is
+   a wider dialog, not a shorter string. Nothing in here truncates. */
+.modal.modal-rename { width: min(820px, 94vw); }
+
 .rename-what {
   margin: 8px 0 10px; padding: 9px 12px;
   border: 1px solid var(--border); border-left: 3px solid var(--blue);
@@ -8453,12 +8460,45 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 }
 .rename-what-label {
   font-size: 11px; font-weight: 700; color: var(--text-2);
-  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px;
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px;
 }
-.rename-what-name {
-  font-weight: 700; font-size: 14px; color: var(--text); overflow-wrap: anywhere;
+/* Label beside value, so the folder name and the current name read as two
+   named facts rather than one sentence he has to parse. */
+.rename-what-row {
+  display: grid; grid-template-columns: 170px minmax(0, 1fr);
+  gap: 2px 14px; align-items: baseline; padding: 3px 0;
 }
-.rename-what-meta { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.rename-what-key {
+  font-size: 11px; font-weight: 700; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: .5px;
+}
+.rename-what-val { font-size: 14px; color: var(--text); overflow-wrap: anywhere; }
+.rename-what-folder { font-weight: 700; color: var(--blue); }
+.rename-what-name { font-weight: 700; }
+.rename-what-path {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px; color: var(--text-2);
+}
+@media (max-width: 640px) {
+  .rename-what-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The mismatch flag. The colour carries the verdict; the text stays on the
+   ordinary foreground so it is readable in both themes rather than only in
+   the one it was designed in. */
+.rename-match {
+  margin: 0 0 10px; padding: 7px 11px; border-radius: 4px;
+  font-size: 13px; color: var(--text); overflow-wrap: anywhere;
+  border-left: 3px solid var(--border);
+}
+.rename-match.is-match { background: var(--green-bg); border-left-color: var(--green); }
+.rename-match.is-near { background: var(--amber-bg); border-left-color: var(--amber); }
+.rename-match.is-differs { background: var(--amber-bg); border-left-color: var(--amber); }
+
+.rename-field-label {
+  display: block; font-size: 11px; font-weight: 700; color: var(--text-2);
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;
+}
 
 .rename-insert { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .rename-insert-label {
@@ -8472,6 +8512,9 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   overflow-wrap: anywhere; max-width: 100%;
 }
 .rename-insert-btn:hover { border-color: var(--blue); color: var(--blue); }
+/* The one his convention asks for, so it does not read as the lesser of two. */
+.rename-insert-use { border-color: var(--blue); color: var(--blue); font-weight: 600; }
+.rename-insert-use:hover { background: var(--blue); color: #fff; }
 
 .rename-preview {
   margin-top: 9px; font-size: 12px; color: var(--text-2);

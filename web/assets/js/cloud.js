@@ -5013,33 +5013,67 @@ async function syncRow(dir, cloudId, name, localPath, kind) {
 
 function startRename(side, idOrPath, name, kind) {
   kind = kind || currentTab;
-  renameTarget = { side, idOrPath, kind, original: name };
+
   const noun = side === 'cloud'
     ? (kind === 'sites' ? 'Cloud Site' : 'Cloud Project')
     : (kind === 'sites' ? 'Local Folder' : 'Local .esx File');
 
   /* Where it lives, because that is what he was trying to read off the
      greyed-out list: "it's in the correct folder so I want to use the folder
-     name as part of the name, and I can't remember the exact thing." */
+     name as part of the name, and I can't remember the exact thing."
+
+     It is not background context. His naming convention is that a file
+     carries the name of its folder exactly - he renamed the sites and the
+     files inside them so the two could not drift apart - and "folder / site
+     name" was his own answer to which name he meant. So the folder name is
+     the string he is sitting there trying to remember. It gets a label of its
+     own, one click puts it in the field or takes it whole, and a file that
+     disagrees with its folder is said out loud rather than left to be
+     noticed. */
   const where = _renameContainerName(side, idOrPath, kind);
+  const whereKey = side === 'cloud' ? 'Cloud site' : 'Folder / site name';
+  // Name the row after the thing on the other end of it. A cloud project is
+  // not a file, and calling it one is the kind of small wrongness that makes
+  // a reader stop and wonder which of the two lists they are looking at.
+  const currentKey = kind === 'sites'
+    ? (side === 'cloud' ? 'Current site name' : 'Current folder name')
+    : (side === 'cloud' ? 'Current project name' : 'Current file name');
+  const suffix = _renameSuffix(side, kind);
+  const fullPath = side === 'local' ? String(idOrPath || '').replace(/\\/g, '/') : '';
+
+  renameTarget = { side, idOrPath, kind, original: name, folder: where, suffix };
+
+  const row = (key, val, cls) =>
+    '<div class="rename-what-row">'
+    + '<div class="rename-what-key">' + e(key) + '</div>'
+    + '<div class="rename-what-val ' + cls + '">' + e(val) + '</div>'
+    + '</div>';
 
   document.getElementById('renameTitle').textContent = 'Rename ' + noun;
   document.getElementById('renameWhat').innerHTML =
     '<div class="rename-what-label">You are renaming</div>'
-    + '<div class="rename-what-name">' + e(name) + '</div>'
-    + (where ? '<div class="rename-what-meta">' + e(noun.toLowerCase())
-               + ' in ' + e(where) + '</div>'
-             : '<div class="rename-what-meta">' + e(noun.toLowerCase()) + '</div>');
+    + (where ? row(whereKey, where, 'rename-what-folder') : '')
+    + row(currentKey, name + suffix, 'rename-what-name')
+    + (fullPath ? row('Full path', fullPath, 'rename-what-path') : '');
   document.getElementById('renameSub').textContent = '';
 
   /* Showing him the folder name is half the job; he wanted it *in* the new
-     name. One click puts it there, at the cursor. */
+     name. Insert puts it at the cursor. "Use as the whole name" is the other
+     half, and is the one his convention actually asks for - the two names are
+     meant to be the same string, so making them the same should be one click
+     rather than a word he reads here and retypes below. */
   const insert = document.getElementById('renameInsert');
   if (where) {
+    const arg = a(JSON.stringify(where));
     insert.hidden = false;
-    insert.innerHTML = '<span class="rename-insert-label">Insert</span>'
-      + '<button type="button" class="rename-insert-btn" onclick="_renameInsert('
-      + JSON.stringify(where).replace(/"/g, '&quot;') + ')">' + e(where) + '</button>';
+    insert.innerHTML =
+      '<span class="rename-insert-label">' + e(whereKey) + '</span>'
+      + '<button type="button" class="rename-insert-btn"'
+      + ' title="Add it to the name at the cursor, keeping what is already there"'
+      + ' onclick="_renameInsert(' + arg + ')">Insert &ldquo;' + e(where) + '&rdquo;</button>'
+      + '<button type="button" class="rename-insert-btn rename-insert-use"'
+      + ' title="Replace the name with the folder name, so the two match"'
+      + ' onclick="_renameUseFolder(' + arg + ')">Use as the whole name</button>';
   } else {
     insert.hidden = true;
     insert.innerHTML = '';
@@ -5059,8 +5093,14 @@ function _renameContainerName(side, idOrPath, kind) {
     const hit = _cloudDetailsById(idOrPath);
     return (hit && hit.siteName) || '';
   }
-  const parts = String(idOrPath || '').split(/[\/]/).filter(Boolean);
+  const parts = String(idOrPath || '').replace(/\\/g, '/').split('/').filter(Boolean);
   return parts.length >= 2 ? parts[parts.length - 2] : '';
+}
+
+/* He renames the file on disk, so the extension is part of both the fact and
+   the outcome. One definition, read by the fact block and by the preview. */
+function _renameSuffix(side, kind) {
+  return (side === 'local' && kind !== 'sites') ? '.esx' : '';
 }
 
 function _renameInsert(text) {
@@ -5074,7 +5114,8 @@ function _renameInsert(text) {
      That made the first version of this button *replace* the name with the
      folder name, which is the opposite of the request - he wants the folder
      name as **part of** the name. A whole-value selection means "I have not
-     put the cursor anywhere yet", so append rather than overwrite. */
+     put the cursor anywhere yet", so append rather than overwrite. Replacing
+     outright is still available, as a button of its own. */
   const wholeThing = start === 0 && end === value.length && value.length > 0;
   if (wholeThing) { start = end = value.length; }
 
@@ -5091,26 +5132,71 @@ function _renameInsert(text) {
   _renamePreview();
 }
 
-/* "X → Y", so the outcome is visible before committing rather than after. */
+/* The convention in one click: the file takes the folder's name exactly. */
+function _renameUseFolder(text) {
+  const input = document.getElementById('renameInput');
+  if (!input) return;
+  input.value = text;
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  _renamePreview();
+}
+
+/* Does the name in the field agree with the folder it sits in? That question
+   is the reason the convention exists - he renamed sites and files together
+   so a file could not drift out of alignment with its site - so it is
+   answered on screen rather than left to him to spot. Judged on what is in
+   the field rather than on what the file is called now, so clicking "Use as
+   the whole name" turns the warning into a tick and he can see that it took. */
+function _renameMatchState(proposed, folder) {
+  if (!folder || !proposed) return '';
+  if (proposed === folder) return 'match';
+  const norm = s => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return norm(proposed) === norm(folder) ? 'near' : 'differs';
+}
+
+function _renameMatch() {
+  const el = document.getElementById('renameMatch');
+  if (!el || !renameTarget) return;
+  const input = document.getElementById('renameInput');
+  const proposed = ((input && input.value) || '').trim();
+  const folder = renameTarget.folder || '';
+  const state = _renameMatchState(proposed, folder);
+  const noun = renameTarget.side === 'cloud' ? 'cloud site' : 'folder';
+
+  el.className = 'rename-match' + (state ? ' is-' + state : '');
+  if (!state) { el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  if (state === 'match') {
+    el.textContent = '✓ This name matches the ' + noun + ' name.';
+  } else if (state === 'near') {
+    el.textContent = '⚠ This name matches the ' + noun
+      + ' name apart from capitalisation or spacing — “' + proposed
+      + '” against “' + folder + '”.';
+  } else {
+    el.textContent = '⚠ This name does not match the ' + noun
+      + ' name — “' + proposed + '” against “' + folder + '”.';
+  }
+}
+
+/* "X -> Y", so the outcome is visible before committing rather than after. */
 function _renamePreview() {
   const el = document.getElementById('renamePreview');
   if (!el || !renameTarget) return;
   const input = document.getElementById('renameInput');
   const next = (input.value || '').trim();
   const from = renameTarget.original || '';
+  const suffix = renameTarget.suffix || '';
   if (!next) {
     el.innerHTML = '<span class="rename-preview-none">Enter a name</span>';
-    return;
-  }
-  if (next === from) {
+  } else if (next === from) {
     el.innerHTML = '<span class="rename-preview-none">Unchanged</span>';
-    return;
+  } else {
+    el.innerHTML = '<span class="rename-preview-from">' + e(from + suffix) + '</span>'
+      + ' <span class="rename-preview-arrow">&#8594;</span> '
+      + '<span class="rename-preview-to">' + e(next + suffix) + '</span>';
   }
-  const suffix = (renameTarget.side === 'local' && renameTarget.kind !== 'sites')
-    ? '.esx' : '';
-  el.innerHTML = '<span class="rename-preview-from">' + e(from + suffix) + '</span>'
-    + ' <span class="rename-preview-arrow">→</span> '
-    + '<span class="rename-preview-to">' + e(next + suffix) + '</span>';
+  _renameMatch();
 }
 async function confirmRename() {
   const n = document.getElementById('renameInput').value.trim();

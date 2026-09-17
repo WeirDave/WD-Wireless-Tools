@@ -21,6 +21,20 @@ sits in, which his naming convention uses - was behind the overlay. Showing it
 is half the job; the other half is letting him put it in the name without
 retyping it.
 
+Asked which name he meant, he answered "folder / site name" - the folder *is*
+the site, and his convention is that every file carries the name of the folder
+it sits in, exactly, so a file cannot drift out of alignment with its site.
+That makes three more things true of this dialog, and they are what the newer
+tests below hold:
+
+* the folder name and the current file name are both named facts, each with a
+  label, rather than one of them being a parenthetical on the other
+* taking the folder name *whole* is one click, because that is what the
+  convention asks for most of the time - insert-at-cursor alone still left him
+  clearing the old name by hand first
+* a name that disagrees with its folder says so, which is the misalignment the
+  convention exists to prevent
+
 Every name here is invented.
 """
 from __future__ import annotations
@@ -40,7 +54,13 @@ class TheRenameDialogStandsOnItsOwnTests(unittest.TestCase):
     def setUp(self):
         start = CLOUD_JS.index("function startRename(")
         self.start_rename = CLOUD_JS[start:CLOUD_JS.index(
-            "\nfunction _renameContainerName", start)]
+            "\n/* The site or folder this thing sits in", start)]
+
+    @staticmethod
+    def body(name):
+        """The source of one function, by name."""
+        fn = CLOUD_JS[CLOUD_JS.index("function %s(" % name):]
+        return fn[:fn.index("\n}")]
 
     def test_it_says_what_is_being_changed(self):
         """His phrase, and the right spec."""
@@ -50,7 +70,87 @@ class TheRenameDialogStandsOnItsOwnTests(unittest.TestCase):
     def test_it_shows_where_the_thing_lives(self):
         """The specific fact he was trying to read off the greyed-out list."""
         self.assertIn("_renameContainerName", self.start_rename)
-        self.assertIn(" in ", self.start_rename)
+
+    def test_the_folder_and_the_current_name_are_both_labelled_facts(self):
+        """"folder / site name" - his own answer to which name he meant.
+
+        Both are on screen at rest, each under a label of its own. The folder
+        used to be a lowercase aside on the end of the name line, which is
+        where a fact goes when it has been thought of as context rather than
+        as the string he is trying to type.
+        """
+        self.assertIn("Folder / site name", self.start_rename)
+        self.assertIn("Cloud site", self.start_rename)
+        for key in ("Current file name", "Current folder name",
+                    "Current project name", "Current site name"):
+            self.assertIn(key, self.start_rename)
+        self.assertIn("rename-what-key", self.start_rename)
+        self.assertIn("rename-what-folder", self.start_rename)
+        self.assertIn("rename-what-name", self.start_rename)
+
+    def test_the_current_name_carries_its_extension(self):
+        """What is on disk is `<name>.esx`, so that is what is shown."""
+        self.assertIn("name + suffix", self.start_rename)
+        self.assertIn(".esx", self.body("_renameSuffix"))
+
+    def test_a_local_item_shows_its_full_path(self):
+        """Two sites can own a folder of the same name; the path settles it."""
+        self.assertIn("Full path", self.start_rename)
+        self.assertIn("rename-what-path", self.start_rename)
+
+    def test_nothing_in_the_dialog_is_truncated(self):
+        """"it would be better if it was easily readable and lengthy than if
+        it's brief." The dialog is widened rather than the strings shortened.
+        """
+        self.assertIn(".modal.modal-rename", CSS)
+        self.assertIn('class="modal modal-rename"', CLOUD_HTML)
+        block = CSS[CSS.index(".rename-what {"):CSS.index(".rename-insert {")]
+        self.assertNotIn("text-overflow", block)
+        self.assertNotIn("white-space: nowrap", block)
+        self.assertIn("overflow-wrap: anywhere", block)
+
+    def test_the_folder_name_can_be_taken_whole_in_one_click(self):
+        """Insert-at-cursor is not the whole fix.
+
+        His convention is that the two names are the *same* string, so the
+        common case is not "add this word" but "make them match" - and doing
+        that with the insert button meant clearing the field by hand first.
+        """
+        self.assertIn("_renameUseFolder(", self.start_rename)
+        self.assertIn("Use as the whole name", self.start_rename)
+        use = self.body("_renameUseFolder")
+        self.assertIn("input.value = text;", use)
+        self.assertIn("_renamePreview()", use)
+
+    def test_a_name_that_disagrees_with_its_folder_says_so(self):
+        """The misalignment the convention exists to prevent."""
+        self.assertIn('id="renameMatch"', CLOUD_HTML)
+        match = self.body("_renameMatch")
+        self.assertIn("does not match", match)
+        self.assertIn("matches the", match)
+        self.assertIn("capitalisation or spacing", match)
+
+    def test_the_flag_judges_the_field_rather_than_the_old_name(self):
+        """So clicking "use as the whole name" visibly turns it into a tick.
+
+        Judged on the old name, the warning would sit there unchanged after
+        the button had already fixed it, which teaches him to ignore it.
+        """
+        match = self.body("_renameMatch")
+        self.assertIn("input.value", match)
+        self.assertNotIn("renameTarget.original", match)
+        self.assertIn("_renameMatch()", self.body("_renamePreview"))
+
+    def test_case_only_differences_are_not_reported_as_a_plain_mismatch(self):
+        """"NORTH CAMPUS" against "North Campus" is a different problem from
+        "Survey 30" against "North Campus", and saying which one he is looking
+        at saves him working it out from two strings.
+        """
+        state = self.body("_renameMatchState")
+        self.assertIn("toLowerCase", state)
+        self.assertIn("'near'", state)
+        self.assertIn("'differs'", state)
+        self.assertIn("'match'", state)
 
     def test_the_field_is_prefilled_so_he_edits_rather_than_retypes(self):
         self.assertIn("input.value = name;", self.start_rename)
@@ -60,8 +160,7 @@ class TheRenameDialogStandsOnItsOwnTests(unittest.TestCase):
         """Showing it saves him nothing if he still has to type it."""
         self.assertIn('id="renameInsert"', CLOUD_HTML)
         self.assertIn("_renameInsert(", CLOUD_JS)
-        insert = CLOUD_JS[CLOUD_JS.index("function _renameInsert("):]
-        insert = insert[:insert.index("\n}")]
+        insert = self.body("_renameInsert")
         self.assertIn("selectionStart", insert)
         self.assertIn("setSelectionRange", insert)
 
@@ -73,34 +172,29 @@ class TheRenameDialogStandsOnItsOwnTests(unittest.TestCase):
         "North Campus" - which is the opposite of "I want to use the folder
         name as part of the name".
         """
-        insert = CLOUD_JS[CLOUD_JS.index("function _renameInsert("):]
-        insert = insert[:insert.index("\n}")]
+        insert = self.body("_renameInsert")
         self.assertIn("wholeThing", insert)
         self.assertIn("start = end = value.length", insert)
 
     def test_there_is_a_live_preview_of_the_result(self):
         self.assertIn('id="renamePreview"', CLOUD_HTML)
         self.assertIn('oninput="_renamePreview()"', CLOUD_HTML)
-        preview = CLOUD_JS[CLOUD_JS.index("function _renamePreview("):]
-        preview = preview[:preview.index("\n}\n")]
+        preview = self.body("_renamePreview")
         self.assertIn("rename-preview-from", preview)
         self.assertIn("rename-preview-to", preview)
 
     def test_the_preview_shows_the_extension_for_a_local_file(self):
         """He renames the file on disk; the suffix is part of the outcome."""
-        preview = CLOUD_JS[CLOUD_JS.index("function _renamePreview("):]
-        preview = preview[:preview.index("\n}\n")]
-        self.assertIn(".esx", preview)
+        self.assertIn(".esx", self.body("_renameSuffix"))
+        self.assertIn("renameTarget.suffix", self.body("_renamePreview"))
 
     def test_an_unchanged_or_empty_name_says_so(self):
-        preview = CLOUD_JS[CLOUD_JS.index("function _renamePreview("):]
-        preview = preview[:preview.index("\n}\n")]
+        preview = self.body("_renamePreview")
         self.assertIn("Unchanged", preview)
         self.assertIn("Enter a name", preview)
 
     def test_a_site_is_not_described_as_being_inside_something(self):
-        fn = CLOUD_JS[CLOUD_JS.index("function _renameContainerName("):]
-        fn = fn[:fn.index("\n}")]
+        fn = self.body("_renameContainerName")
         self.assertIn("if (kind === 'sites') return '';", fn)
 
 
