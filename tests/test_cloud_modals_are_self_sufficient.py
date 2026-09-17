@@ -104,6 +104,54 @@ class TheRenameDialogStandsOnItsOwnTests(unittest.TestCase):
         self.assertIn("if (kind === 'sites') return '';", fn)
 
 
+class IconButtonsSayWhatTheyDoTests(unittest.TestCase):
+    """"we've got small little icons in there to do stuff with, and until you
+    have them memorized they're difficult to figure out what it is we're
+    doing. And we have plenty of real estate and we're not using it."
+
+    A label beside the glyph, readable at rest. Not a tooltip - hover is no
+    use while you are deciding which button to press.
+    """
+
+    def setUp(self):
+        self.buttons = re.findall(r"<button[^>]*>(?:&#\d+;)(?:<span[^>]*>[^<]*</span>)?</button>",
+                                  CLOUD_JS)
+
+    def test_no_control_is_left_as_a_bare_glyph(self):
+        bare = [b for b in self.buttons if "ib-label" not in b]
+        # The disclosure chevron and the count badge are shapes rather than
+        # actions, and carry their meaning in position and number.
+        bare = [b for b in bare
+                if "tree-chevron" not in b and "src-badge" not in b]
+        self.assertEqual([], bare, "glyph-only controls left: %s" % bare)
+
+    def test_the_sync_arrows_carry_their_direction_as_words(self):
+        """The two he misread. Words fix legibility and direction together."""
+        self.assertIn('<span class="ib-label">Cloud → Local</span>', CLOUD_JS)
+        self.assertIn('<span class="ib-label">Local → Cloud</span>', CLOUD_JS)
+
+    def test_the_everyday_pull_is_named_in_words(self):
+        """His routine operation after every design, per the workflow note."""
+        self.assertIn("Download over local", CLOUD_JS)
+
+    def test_labels_are_visible_at_rest_rather_than_on_hover(self):
+        block = CSS[CSS.index(".ib-label {"):]
+        block = block[:block.index("}")]
+        self.assertNotIn("display: none", block)
+        self.assertNotIn("opacity: 0", block)
+
+    def test_the_wide_layout_is_the_one_that_is_designed(self):
+        """"let the small screen people suffer... as long as it's functional."
+
+        Labels are the default and the narrow case is the exception, not the
+        other way round - designing for narrow first is what produced the
+        cramped row.
+        """
+        hide = CSS[CSS.index("@media (max-width: 1100px)"):]
+        hide = hide[:hide.index("\n}\n")]
+        self.assertIn(".ib-label { display: none; }", hide)
+
+
 class EveryFilterSaysWhatItSelectsTests(unittest.TestCase):
 
     def setUp(self):

@@ -137,6 +137,19 @@ class TheDialogNamesWhatItWillDestroyTests(unittest.TestCase):
         self.assertIn("lose access", html)
         self.assertIn(THEM, html)
 
+    def test_it_names_every_person_who_loses_access(self):
+        """Not three and a count - who loses access *is* the decision."""
+        data = json.loads(json.dumps(LEDGER))
+        five = ["a@example.com", "b@example.org", "c@example.net",
+                "d@example.com", "e@example.org"]
+        data["cloudOnly"][1]["children"]["cloudOnly"][0]["sharedWith"] = five
+        html = _node(
+            "console.log(JSON.stringify({h: _deleteWhatHtml("
+            "[_cloudDeleteEntry('p-b', 'Riverside Block A', false)])}));", data)["h"]
+        for address in five:
+            self.assertIn(address, html)
+        self.assertNotIn("more", html)
+
     def test_nothing_is_claimed_about_sharing_when_nobody_else_has_it(self):
         html = self._html([("p-a", "Riverside Block A")])
         self.assertNotIn("lose access", html)
@@ -168,11 +181,18 @@ class TheDialogNamesWhatItWillDestroyTests(unittest.TestCase):
         self.assertIn("North Campus", html)
         self.assertIn("South Campus", html)
 
-    def test_a_very_long_selection_is_capped_rather_than_scrolling_forever(self):
+    def test_a_long_selection_lists_every_item(self):
+        """Reversed deliberately: it used to show eight and "and 12 more".
+
+        "it would be better if it was easily readable and lengthy than if it's
+        brief in order to save screen real estate." Hiding twelve of the things
+        about to be destroyed is the compression he objected to; the block
+        scrolls instead.
+        """
         many = [("p-a", "Riverside Block A")] * 20
         html = self._html(many)
-        self.assertIn("more", html)
-        self.assertLessEqual(html.count("delete-what-item"), 8 + 1)
+        self.assertEqual(20, html.count("delete-what-item"))
+        self.assertNotIn("more</div>", html)
 
     def test_a_name_that_looks_like_markup_is_escaped(self):
         data = json.loads(json.dumps(LEDGER))

@@ -1286,13 +1286,13 @@ function renderCluster(cl) {
     h += `<div class="dup-item-date">${e(dateStr)}</div>`;
     h += `<div class="dup-item-actions">`;
     if (it.side === 'local') {
-      h += `<button class="icon-btn" title="Show in Explorer/Finder" onclick="revealInExplorer('${pj(it.path)}')">&#128193;</button>`;
+      h += `<button class="icon-btn" title="Show in Explorer/Finder" onclick="revealInExplorer('${pj(it.path)}')">&#128193;<span class="ib-label">Show</span></button>`;
     } else {
-      h += `<button class="icon-btn" title="View site contents" onclick="openCloudPeek('${j(it.id)}','${j(it.location)}')">&#128065;</button>`;
+      h += `<button class="icon-btn" title="View site contents" onclick="openCloudPeek('${j(it.id)}','${j(it.location)}')">&#128065;<span class="ib-label">View</span></button>`;
     }
 
     const iidAttr = it.side === 'local' ? pj(iid) : j(iid);
-    h += `<button class="icon-btn del" title="Delete" onclick="dupDeleteOne('${kAttr}','${iidAttr}')">&#128465;</button>`;
+    h += `<button class="icon-btn del" title="Delete" onclick="dupDeleteOne('${kAttr}','${iidAttr}')">&#128465;<span class="ib-label">Delete</span></button>`;
     h += `</div>`;
     h += `</div>`;
   });
@@ -2046,38 +2046,38 @@ function gutCell(r) {
     const c = r.cloud, l = r.local;
     return `<div class="lr-gut mis">
       ${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}
-      <button class="gut-arrow" title="Cloud → Local: apply the cloud name onto the local folder" aria-label="Cloud to Local: apply the cloud name onto the local folder" onclick="syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')">&#10145;</button>
-      <button class="gut-arrow" title="Local → Cloud: apply the local name onto the cloud site" aria-label="Local to Cloud: apply the local name onto the cloud site" onclick="syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')">&#11013;</button>
-      <button class="gut-arrow nomatch" title="Not a match — never pair these two again" onclick="markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')">&#8800;</button>
+      <button class="gut-arrow" title="Cloud → Local: apply the cloud name onto the local folder" aria-label="Cloud to Local: apply the cloud name onto the local folder" onclick="syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')">&#10145;<span class="ib-label">Cloud → Local</span></button>
+      <button class="gut-arrow" title="Local → Cloud: apply the local name onto the cloud site" aria-label="Local to Cloud: apply the local name onto the cloud site" onclick="syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')">&#11013;<span class="ib-label">Local → Cloud</span></button>
+      <button class="gut-arrow nomatch" title="Not a match — never pair these two again" onclick="markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')">&#8800;<span class="ib-label">Not a match</span></button>
     </div>`;
   }
   if (r.status === 'synced') {
 
     const isNameMatch = r.matchType === 'exact' && r.cloud && r.local && kind !== 'sites';
     const verifyBtn = (isNameMatch && !r.staleness)
-      ? `<button class="gut-arrow verify-btn" title="Overwrite: take the cloud copy over your local file regardless of which is newer. These matched on name alone; this makes them byte-identical so the pair upgrades to Same file. Your current copy is kept alongside it." onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#8681;</button>`
+      ? `<button class="gut-arrow verify-btn" title="Overwrite: take the cloud copy over your local file regardless of which is newer. These matched on name alone; this makes them byte-identical so the pair upgrades to Same file. Your current copy is kept alongside it." onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#8681;<span class="ib-label">Download over local</span></button>`
       : '';
     return `<div class="lr-gut ok">${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}${verifyBtn}</div>`;
   }
   if (r.cloud) {
 
     const linkBtn = (kind === 'projects')
-      ? `<button class="gut-arrow link-btn" title="Link this cloud project to a specific local .esx" onclick="openLinkPicker('cloud','${j(r.cloud.id)}','${j(r.cloud.name)}')">&#128279;</button>`
+      ? `<button class="gut-arrow link-btn" title="Link this cloud project to a specific local .esx" onclick="openLinkPicker('cloud','${j(r.cloud.id)}','${j(r.cloud.name)}')">&#128279;<span class="ib-label">Link</span></button>`
       : '';
     if (kind === 'sites') {
-      return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="Create the matching local folder &#8594;" onclick="createLocalFolder('${j(r.cloud.name)}')">&#10145;</button></div>`;
+      return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="Create the matching local folder &#8594;" onclick="createLocalFolder('${j(r.cloud.name)}')">&#10145;<span class="ib-label">Create local folder</span></button></div>`;
     }
     return `<div class="lr-gut orph">
-      <button class="gut-arrow orphan" title="Download .esx from Ekahau Cloud &#8594; then move into a site folder" onclick="downloadThenMove('${j(r.cloud.id)}','${j(r.cloud.name)}')">&#10145;</button>
+      <button class="gut-arrow orphan" title="Download .esx from Ekahau Cloud &#8594; then move into a site folder" onclick="downloadThenMove('${j(r.cloud.id)}','${j(r.cloud.name)}')">&#10145;<span class="ib-label">Download</span></button>
       ${linkBtn}
     </div>`;
   }
   if (kind === 'sites') {
-    return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Create a cloud site from this folder" onclick="createFromLocal('${j(r.local.name)}')">&#11013;</button></div>`;
+    return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Create a cloud site from this folder" onclick="createFromLocal('${j(r.local.name)}')">&#11013;<span class="ib-label">Create cloud site</span></button></div>`;
   }
   return `<div class="lr-gut orph">
-    <button class="gut-arrow orphan" title="← Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${pj(r.local.path)}','${j(r.local.name)}')">&#11013;</button>
-    <button class="gut-arrow link-btn" title="Link this local .esx to a specific cloud project" onclick="openLinkPicker('local','${pj(r.local.path)}','${j(r.local.name)}')">&#128279;</button>
+    <button class="gut-arrow orphan" title="← Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${pj(r.local.path)}','${j(r.local.name)}')">&#11013;<span class="ib-label">Upload</span></button>
+    <button class="gut-arrow link-btn" title="Link this local .esx to a specific cloud project" onclick="openLinkPicker('local','${pj(r.local.path)}','${j(r.local.name)}')">&#128279;<span class="ib-label">Link</span></button>
   </div>`;
 }
 function cloudCell(r, localCodes) {
@@ -2131,7 +2131,7 @@ function cloudCell(r, localCodes) {
     ? `<button class="src-badge${dsCount ? ' hasrc' : ''}" title="${dsCount ? dsCount + ' project' + (dsCount > 1 ? 's' : '') : 'No projects yet'} — click to view" onclick="event.stopPropagation();openCloudPeek('${j(c.id)}','${j(c.name)}')">&#128065;</button>`
     : '';
   const assignBtn = (!isSites && c.unassigned && r.parentSiteId)
-    ? `<button class="icon-btn assign-btn" title="Assign to &quot;${a(r.parentSiteName || '')}&quot;" onclick="assignOrphanToSite('${j(c.id)}','${j(r.parentSiteId)}','${j(c.name)}','${j(r.parentSiteName || '')}')">&#128206;</button>`
+    ? `<button class="icon-btn assign-btn" title="Assign to &quot;${a(r.parentSiteName || '')}&quot;" onclick="assignOrphanToSite('${j(c.id)}','${j(r.parentSiteId)}','${j(c.name)}','${j(r.parentSiteName || '')}')">&#128206;<span class="ib-label">Assign</span></button>`
     : '';
 
   const shareCount = (c.sharedWith || []).length;
@@ -2143,9 +2143,9 @@ function cloudCell(r, localCodes) {
     <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(c.meta || '')}</span>
     <span class="cell-actions">${cloudPeek}${assignBtn}
       ${shareBtn}
-      ${!isSites ? `<button class="icon-btn" title="Move to a site" onclick="startMoveToSite('${j(c.id)}','${j(c.name)}')">&#8618;</button>` : ''}
-      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('cloud','${j(c.id)}','${j(c.name)}','${kindAttr}')">&#9998;</button>
-      <button class="icon-btn del" title="Delete ${thing}" onclick="startDelete('cloud','${j(c.id)}','${j(c.name)}',false,'${kindAttr}')">&#128465;</button>
+      ${!isSites ? `<button class="icon-btn" title="Move to a site" onclick="startMoveToSite('${j(c.id)}','${j(c.name)}')">&#8618;<span class="ib-label">Move</span></button>` : ''}
+      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('cloud','${j(c.id)}','${j(c.name)}','${kindAttr}')">&#9998;<span class="ib-label">Rename</span></button>
+      <button class="icon-btn del" title="Delete ${thing}" onclick="startDelete('cloud','${j(c.id)}','${j(c.name)}',false,'${kindAttr}')">&#128465;<span class="ib-label">Delete</span></button>
     </span></div>`;
 }
 function localCell(r, cloudCodes) {
@@ -2184,16 +2184,16 @@ function localCell(r, cloudCodes) {
   const revealBtn = `<button class="icon-btn" title="Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}" onclick="revealInExplorer('${pj(l.path)}')">&#128193;</button>`;
 
   const moveBtn = (!isSites && !l.isDir)
-    ? `<button class="icon-btn" title="Move this .esx to another site folder" onclick="startMoveLocalToSite('${pj(l.path)}','${j(l.name)}')">&#8618;</button>`
+    ? `<button class="icon-btn" title="Move this .esx to another site folder" onclick="startMoveLocalToSite('${pj(l.path)}','${j(l.name)}')">&#8618;<span class="ib-label">Move</span></button>`
     : '';
   return `<div class="lr-cell local${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A cloud ${isSites ? 'site' : 'project'} shares code ${a(l.code)} — likely the same place"` : ''}>
     ${chk}
     <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(l.meta || '')}</span>
     <span class="cell-actions">${srcUI}${revealBtn}${flagBtn}
       ${moveBtn}
-      ${isSites ? `<button class="icon-btn" title="Merge this folder's files into another folder…" onclick="startMerge('${pj(l.path)}','${j(l.name)}')">&#8649;</button>` : ''}
-      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('local','${pj(l.path)}','${j(l.name)}','${kindAttr}')">&#9998;</button>
-      <button class="icon-btn del" title="Delete ${thing}${isSites ? ' and contents' : ''}" onclick="startDelete('local','${pj(l.path)}','${j(l.name)}',${l.isDir},'${kindAttr}')">&#128465;</button>
+      ${isSites ? `<button class="icon-btn" title="Merge this folder's files into another folder…" onclick="startMerge('${pj(l.path)}','${j(l.name)}')">&#8649;<span class="ib-label">Merge</span></button>` : ''}
+      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('local','${pj(l.path)}','${j(l.name)}','${kindAttr}')">&#9998;<span class="ib-label">Rename</span></button>
+      <button class="icon-btn del" title="Delete ${thing}${isSites ? ' and contents' : ''}" onclick="startDelete('local','${pj(l.path)}','${j(l.name)}',${l.isDir},'${kindAttr}')">&#128465;<span class="ib-label">Delete</span></button>
     </span></div>`;
 }
 
@@ -2220,7 +2220,7 @@ function previewBadge(l) {
   } else {
     tip = `${s.esx} Ekahau .esx file${s.esx > 1 ? 's' : ''} — click to view contents`;
   }
-  return `<button class="${cls}" title="${a(tip)}" onclick="event.stopPropagation();openPeek('${pj(l.path)}')">&#128065;</button>`;
+  return `<button class="${cls}" title="${a(tip)}" onclick="event.stopPropagation();openPeek('${pj(l.path)}')">&#128065;<span class="ib-label">Peek</span></button>`;
 }
 function peekFileRow(f, typeClass) {
   const when = f.mtime ? new Date(f.mtime * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
@@ -5233,10 +5233,9 @@ function _sharedWithLine(cloudObj) {
   // Deleting something other people are using is a different decision from
   // deleting something only you can see, so it is called out rather than
   // listed as one detail among several.
-  const who = others.length <= 3
-    ? others.join(', ')
-    : others.slice(0, 3).join(', ') + ' and ' + (others.length - 3) + ' more';
-  return 'Shared with ' + e(who) + ' — they will lose access';
+  // Every address, not three and a count. Who loses access is the decision,
+  // and a decision cannot be made from "and 2 more".
+  return 'Shared with ' + e(others.join(', ')) + ' — they will lose access';
 }
 
 function _deleteWhatRow(entry) {
@@ -5265,20 +5264,18 @@ function _cloudDeleteEntry(id, fallbackName, isSite) {
   };
 }
 
-/* The block shown above the warning. Long selections are capped: past a
-   handful the names stop being checkable anyway, and a dialog he has to
-   scroll is a dialog he stops reading. */
-const DELETE_WHAT_MAX = 8;
+/* Every item, however many there are.
 
+   This used to show eight and "and 12 more", which hid twelve of the things
+   about to be destroyed to save vertical space. His rule: "it would be better
+   if it was easily readable and lengthy than if it's brief in order to save
+   screen real estate." The block scrolls; nothing is withheld. */
 function _deleteWhatHtml(entries) {
   if (!entries || !entries.length) return '';
-  const shown = entries.slice(0, DELETE_WHAT_MAX);
-  const rest = entries.length - shown.length;
   return '<div class="delete-what-label">'
     + (entries.length === 1 ? 'You are deleting' : 'You are deleting ' + entries.length + ' items')
     + '</div>'
-    + shown.map(_deleteWhatRow).join('')
-    + (rest > 0 ? '<div class="delete-what-more">and ' + rest + ' more</div>' : '');
+    + entries.map(_deleteWhatRow).join('');
 }
 
 /* Filling the "what you are deleting" block in whichever dialog needs it. */
