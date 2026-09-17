@@ -20,6 +20,7 @@ from pathlib import Path
 
 import requests
 
+from tools.user_dir import user_dir
 from tools.settings import get_destinations as _get_suite_destinations
 from tools import share_recipients
 from tools.settings import load_settings as _load_suite_settings
@@ -43,7 +44,7 @@ except ImportError:
 
 EKAHAU_URL = "https://www.ekahau.cloud"
 API_BASE = "/projectapi/v1/projects"
-CONFIG_DIR = Path.home() / ".wd_wireless_tools"
+CONFIG_DIR = user_dir()
 CONFIG_FILE = CONFIG_DIR / "config.json"
 COOKIE_FILE = CONFIG_DIR / "cookies.json"
 ENCRYPTED_COOKIE_FILE = CONFIG_DIR / "cookies.enc"

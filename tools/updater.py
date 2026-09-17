@@ -45,6 +45,7 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from tools.user_dir import user_dir
 
 
 # ============================================================== app config ==
@@ -104,7 +105,7 @@ CONFIG = AppConfig(
         "install.sh",
     ),
     payload_dirs=("tools", "web", "templates", "docs"),
-    user_data_dir=Path.home() / ".wd_wireless_tools",
+    user_data_dir=user_dir(),
     launcher_win="Start WD Wireless Tools.bat",
     launcher_mac="Start WD Wireless Tools.command",
     rescuable_globs=("templates/*_walltemplate.json",),

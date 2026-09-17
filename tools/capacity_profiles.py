@@ -25,8 +25,9 @@ import json
 import re
 import zipfile
 from pathlib import Path
+from tools.user_dir import user_dir
 
-USER_DIR = Path.home() / ".wd_wireless_tools" / "capacity"
+USER_DIR = user_dir() / "capacity"
 HERE = Path(__file__).resolve().parent
 BUILTIN_DIR = HERE.parent / "templates"
 TPL_SUFFIX = "_capacitytemplate.json"

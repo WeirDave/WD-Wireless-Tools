@@ -23,8 +23,9 @@ from tools.rename_manager import (
     migrate_rename_cfg as _migrate_rename_cfg_impl,
     _split_ext,
 )
+from tools.user_dir import user_dir
 
-CONFIG_DIR = Path.home() / ".wd_wireless_tools"
+CONFIG_DIR = user_dir()
 ORGANIZER_CONFIG = CONFIG_DIR / "organizer_config.json"
 UNDO_DIR = CONFIG_DIR / "organizer_undo"
 ACORN_STATE_DIR = CONFIG_DIR / "acorn_state"

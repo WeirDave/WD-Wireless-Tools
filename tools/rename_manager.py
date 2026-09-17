@@ -15,8 +15,9 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from tools.user_dir import user_dir
 
-CONFIG_DIR = Path.home() / ".wd_wireless_tools"
+CONFIG_DIR = user_dir()
 DIRECTORY_PATH = CONFIG_DIR / "site_directory.json"
 PROFILES_PATH = CONFIG_DIR / "rename_profiles.json"
 UNDO_DIR = CONFIG_DIR / "rename_undo"

@@ -20,8 +20,9 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from tools.user_dir import user_dir
 
-USER_DIR = Path.home() / ".wd_wireless_tools"
+USER_DIR = user_dir()
 STORE = USER_DIR / "plantrim-boxes.json"
 
 #: Keep the file from growing without bound as projects come and go.
