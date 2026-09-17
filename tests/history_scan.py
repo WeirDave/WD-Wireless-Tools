@@ -55,6 +55,23 @@ def git_available() -> bool:
         return False
 
 
+def is_shallow() -> bool:
+    """True when this checkout has been truncated and history is not here.
+
+    `actions/checkout` clones with `fetch-depth: 1` by default, so CI sees one
+    commit and a history scan there would be asserting about a repository it
+    cannot see - which is how this guard failed on its first run. The workflow
+    asks for the full history now; this stays so that any other shallow
+    context skips honestly instead of reporting a clean history it never read.
+    """
+    try:
+        out = subprocess.run(["git", "rev-parse", "--is-shallow-repository"],
+                             cwd=str(ROOT), capture_output=True, timeout=30)
+        return out.stdout.decode("ascii", "replace").strip() == "true"
+    except (OSError, subprocess.SubprocessError):
+        return True
+
+
 def _git(*args: str, binary: bool = False, timeout: int = 300):
     out = subprocess.run(["git"] + list(args), cwd=str(ROOT),
                          capture_output=True, timeout=timeout)

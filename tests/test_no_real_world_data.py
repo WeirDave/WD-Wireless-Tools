@@ -251,6 +251,12 @@ class TheHistoryIsCheckedToo(unittest.TestCase):
     def setUpClass(cls):
         if not history_scan.git_available():
             raise unittest.SkipTest("not a git checkout (release ZIP or tarball)")
+        if history_scan.is_shallow():
+            # A truncated clone has no history to scan, and asserting about
+            # one would be claiming a clean result that was never read.
+            raise unittest.SkipTest(
+                "shallow clone - history is not present to scan. CI asks for "
+                "the full history in .github/workflows/tests.yml.")
         cls.baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
         cls.known_messages = set(cls.baseline["commit_messages"])
         cls.known_blobs = set(cls.baseline["blobs"])

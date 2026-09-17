@@ -29,6 +29,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          # The no-real-data guard scans commit messages and every blob ever
+          # committed. The default depth of 1 hides all of that, and the guard
+          # would skip in the one place it most needs to run.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
