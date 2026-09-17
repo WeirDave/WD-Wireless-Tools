@@ -71,7 +71,11 @@ class TheReasonIsReachable(unittest.TestCase):
         there is what keeps the real action from firing."""
         block = self.code[self.code.index("function _wireDisabledBulkReasons"):]
         block = block[:block.index("_wireDisabledBulkReasons();")]
-        self.assertIn("'.bulk-btn.is-disabled'", block)
+        self.assertIn(".bulk-btn.is-disabled", block)
+        # The same mechanism now covers the greyed push control on a
+        # "Local newer" row, which was reported as a dead button for exactly
+        # the reason this guard exists.
+        self.assertIn(".gut-arrow.is-disabled", block)
         self.assertIn("ev.stopPropagation()", block)
         self.assertIn("ev.preventDefault()", block)
         self.assertIn("}, true);", block)      # capture phase, not bubble

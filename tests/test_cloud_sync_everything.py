@@ -263,7 +263,11 @@ class ItIsHonestAboutTheHalfItCannotDo(unittest.TestCase):
         badge = self.source[self.source.index("function stalenessBadgeHtml"):]
         local_newer = badge[badge.index("if (s === 'local_newer')"):
                             badge.index("function gutCell")]
-        self.assertIn("never replaces the newer side", local_newer)
+        # Wording moved onto the greyed control beside the badge, where the
+        # gesture that asks the question actually lands. The two things it
+        # still has to say are unchanged.
+        self.assertIn("sync never", local_newer)
+        self.assertIn("replaces a newer file with an older one", local_newer)
         self.assertIn("save it to the cloud from there", local_newer)
 
     def test_an_otherwise_clean_run_still_mentions_what_is_waiting(self):

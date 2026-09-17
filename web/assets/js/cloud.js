@@ -2007,14 +2007,35 @@ function stalenessBadgeHtml(r) {
   }
 
   if (s === 'local_newer') {
-    /* Nothing behind this one anywhere in the app, and the reason matters.
-       The upload flow this client has (`upload/initiate`) creates a new cloud
-       project rather than replacing one in place - so the direction is not
-       built. Whether the API could do it has never been tested, so saying
-       Ekahau "cannot" would tell him something false about his own tool. The
-       Sync confirm settled on this vocabulary already; the badge said the
-       other thing for four releases. */
-    return `<span class="stale-badge stale-local" title="Your local copy was edited more recently than the cloud one. Sending it up is not built yet — the upload this tool has creates a new cloud project instead of replacing the one already there. Nothing here is at risk: sync never replaces the newer side with the older one. In the meantime, open the project in Ekahau and save it to the cloud from there, which is where the sync-or-overwrite prompt lives.">&#11014; Local newer</span>`;
+    /* A status with no adjacent remedy reads as a broken control.
+
+       He clicked "Local newer" expecting it to do something, then ticked the
+       checkbox and pressed Sync and got nothing: "I can't click it to do
+       anything... I thought we fixed that." Both readings were reasonable.
+       The label was the app stating a difference and offering no way out, and
+       the explanation was in a tooltip, which is not somewhere anyone looks
+       before concluding a button is dead.
+
+       So the action is now *shown* and *unavailable*, rather than absent. It
+       greys, it is announced as disabled, and clicking it says why - the same
+       treatment the bulk buttons already get, for the same reason.
+
+       Why it is unavailable is worth keeping accurate: the upload this client
+       has (`upload/initiate`) takes a filename and no project id, so it
+       creates a *second* cloud project rather than replacing this one. That
+       is not a hypothetical - it is exactly how two identical projects under
+       different names end up in his cloud. Whether Ekahau's API could replace
+       in place has never been established, so this says "not built", not
+       "cannot". */
+    const why = 'Local → Cloud is not built yet. The upload this tool has '
+      + 'creates a second cloud project rather than replacing this one, which '
+      + 'is how duplicate projects appear. Nothing is at risk: sync never '
+      + 'replaces a newer file with an older one. To push it up now, open the '
+      + 'project in Ekahau and save it to the cloud from there.';
+    return `<span class="stale-badge stale-local" title="Your local copy was edited more recently than the cloud one.">&#11014; Local newer</span>`
+      + `<button class="gut-arrow push-unavailable is-disabled" aria-disabled="true"`
+      + ` title="${a(why)}" aria-label="Local to Cloud, not available">`
+      + `Local &#8594; Cloud</button>`;
   }
   return '';
 }
@@ -2025,8 +2046,8 @@ function gutCell(r) {
     const c = r.cloud, l = r.local;
     return `<div class="lr-gut mis">
       ${matchBadgeHtml(r, kind)}${stalenessBadgeHtml(r)}
-      <button class="gut-arrow" title="Apply cloud name onto the local folder" onclick="syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')">&#10145;</button>
-      <button class="gut-arrow" title="Apply local name onto the cloud site" onclick="syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')">&#11013;</button>
+      <button class="gut-arrow" title="Cloud → Local: apply the cloud name onto the local folder" aria-label="Cloud to Local: apply the cloud name onto the local folder" onclick="syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')">&#10145;</button>
+      <button class="gut-arrow" title="Local → Cloud: apply the local name onto the cloud site" aria-label="Local to Cloud: apply the local name onto the cloud site" onclick="syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')">&#11013;</button>
       <button class="gut-arrow nomatch" title="Not a match — never pair these two again" onclick="markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')">&#8800;</button>
     </div>`;
   }
@@ -4297,11 +4318,11 @@ function updateBulkBar() {
       : (disabledTitle || el.dataset.baseTitle);
   };
   const syncFromTip = currentTab === 'projects'
-    ? 'Push local → cloud: renames matched cloud projects to the local name, and uploads local-only .esx files to Ekahau Cloud'
-    : 'Push local → cloud: renames matched cloud sites, and creates a cloud site for any local-only site, moving the .esx files inside it up with it';
+    ? 'Local → Cloud: renames matched cloud projects to the local name, and uploads local-only .esx files to Ekahau Cloud'
+    : 'Local → Cloud: renames matched cloud sites, and creates a cloud site for any local-only site, moving the .esx files inside it up with it';
   const syncToTip = currentTab === 'projects'
-    ? 'Pull cloud → local: renames matched local files to the cloud name, and downloads cloud-only projects as .esx files'
-    : 'Pull cloud → local: renames matched local folders, and creates a local folder for any cloud-only site, downloading the projects inside it';
+    ? 'Cloud → Local: renames matched local files to the cloud name, and downloads cloud-only projects as .esx files'
+    : 'Cloud → Local: renames matched local folders, and creates a local folder for any cloud-only site, downloading the projects inside it';
   setBtn('bulkSyncTo', true, planToLocal.total > 0,
     currentTab === 'sites'
       ? 'Sync → needs matched sites, or cloud-only sites to create locally'
@@ -6011,7 +6032,7 @@ function _reportMoveOutcome(results, dests) {
 function _wireDisabledBulkReasons() {
   document.addEventListener('click', (ev) => {
     const btn = ev.target && ev.target.closest
-      ? ev.target.closest('.bulk-btn.is-disabled') : null;
+      ? ev.target.closest('.bulk-btn.is-disabled, .gut-arrow.is-disabled') : null;
     if (!btn) return;
     ev.preventDefault();
     ev.stopPropagation();
