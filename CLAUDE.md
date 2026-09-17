@@ -47,6 +47,29 @@ absent from the release payload, and has no network imports at all, and
 never build a fixture from it. Every address in this repo is invented at an
 RFC 2606 documentation domain.
 
+**The guard covers the history now, not just the working tree.** For a long
+time `tests/test_no_real_world_data.py` read `git ls-files` - the files checked
+out right now - and nothing else. The repository is public, so every commit
+message and every blob ever committed is published too, and none of that was
+being checked. A survey on 2026-09-17 found site-code-shaped tokens still in
+both, on `main`, long after the tree had been cleaned - including in the
+message of the commit that did the cleaning, which is the scrub-without-quoting
+trap.
+
+`TheHistoryIsCheckedToo` closes it, and it is **a ratchet rather than a gate**.
+What is already published is listed by object id in
+`tests/no_real_world_data_baseline.json` and skipped; anything new fails. That
+split is deliberate: failing on the existing history would pin CI red until
+somebody rewrote published history, and that is a decision to take on purpose,
+not one a test should force. Cleaning the working tree afterwards does not
+unpublish a blob, so the check is on the commit.
+
+**Nothing prints the value.** A failure names the commit or blob id and the
+path and stops there - a CI transcript is as public as the thing it is
+complaining about. Regenerate the baseline with
+`python scripts/refresh_history_baseline.py` after a deliberate rewrite; it
+should only ever get shorter.
+
 ### Why this is rule zero rather than a guideline
 
 It was escalated as an emergency, in those words, because it had already gone

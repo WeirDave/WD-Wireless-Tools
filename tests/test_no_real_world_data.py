@@ -25,12 +25,18 @@ That has two consequences, both deliberate:
 """
 from __future__ import annotations
 
+import json
 import re
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Test support, kept beside the test rather than in tools/, which ships.
+sys.path.insert(0, str(ROOT / "tests"))
+import history_scan  # noqa: E402
 
 #: Vendored third-party bundles. Minified code throws off every heuristic here
 #: - an AWS key prefix once turned up as a mangled variable name in pdf.js -
@@ -75,6 +81,41 @@ CREDENTIAL = re.compile(
 
 #: Loopback and the unspecified address are not infrastructure.
 ALLOWED_IPS = {"127.0.0.1", "0.0.0.0", "255.255.255.255"}
+
+
+#: Where the already-published findings are recorded. See TheHistoryIsCheckedToo
+#: for why the history guard is a ratchet rather than a gate, and
+#: scripts/refresh_history_baseline.py for how to regenerate it.
+BASELINE_PATH = ROOT / "tests" / "no_real_world_data_baseline.json"
+
+_ALLOWED_CODE_UPPER = {t.upper() for t in ALLOWED_CODE_TOKENS}
+
+
+def detect_findings(text):
+    """{category: {offending values}} for one piece of text.
+
+    The same rules the working-tree tests apply, in one callable, so the
+    history scan cannot drift away from them. It returns the values rather
+    than a count so a caller can count distinct ones - and it is the caller's
+    job never to print them.
+    """
+    hits = {}
+
+    def add(category, value):
+        hits.setdefault(category, set()).add(value)
+
+    for token in CODE_TOKEN.findall(text):
+        if token.upper() not in _ALLOWED_CODE_UPPER:
+            add("site-code-shaped token", token)
+    for domain in EMAIL.findall(text):
+        if domain.lower() not in ALLOWED_EMAIL_DOMAINS:
+            add("email at a non-documentation domain", domain)
+    for addr in IPV4.findall(text):
+        if addr not in ALLOWED_IPS:
+            add("infrastructure address", addr)
+    if CREDENTIAL.search(text):
+        add("credential shape", "<not recorded>")
+    return hits
 
 
 def _candidate_paths():
@@ -179,6 +220,123 @@ class NothingTraceableToARealPlace(unittest.TestCase):
             if m:
                 found.setdefault(rel, m.group(0)[:12] + "...")
         self.assertEqual(found, {}, f"Credential-shaped strings: {found}")
+
+
+class TheHistoryIsCheckedToo(unittest.TestCase):
+    """The working tree is not the exposure. The repository is.
+
+    Everything above reads `git ls-files` - the files checked out right now.
+    That was the whole check for a long time, and it missed two surfaces that
+    are just as public: **every commit message**, and **every version of every
+    file ever committed**. A survey on 2026-09-17 found site-code-shaped
+    tokens in both, on `main`, long after the working tree had been cleaned.
+
+    One of them was in the message of the commit that did the cleaning. A
+    commit message naming the identifier it just removed republishes it, and
+    no amount of tidying the tree takes that back.
+
+    **This is a ratchet, not a gate.** What is already published is recorded in
+    `no_real_world_data_baseline.json` by object id and skipped; anything else
+    fails. Failing on the existing history would pin CI red until somebody
+    rewrote published history, and that is the owner's decision to take
+    deliberately - not something a test should force on a Tuesday. Meanwhile a
+    new commit carrying workplace data cannot land, which is the part that was
+    missing.
+
+    Rewriting history is the only thing that clears the baseline. After that,
+    run `scripts/refresh_history_baseline.py` and it gets shorter.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not history_scan.git_available():
+            raise unittest.SkipTest("not a git checkout (release ZIP or tarball)")
+        cls.baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+        cls.known_messages = set(cls.baseline["commit_messages"])
+        cls.known_blobs = set(cls.baseline["blobs"])
+        cls.messages = history_scan.scan_commit_messages("HEAD", detect_findings)
+        cls.blobs = history_scan.scan_blobs("HEAD", detect_findings)
+
+    def test_no_commit_message_carries_workplace_data(self):
+        """The surface the file-content check could never see.
+
+        Commit messages were catalogued as carrying workplace identifiers and
+        nothing in the suite could tell. This is what tells.
+        """
+        new = {sha: cats for sha, cats in self.messages.items()
+               if sha not in self.known_messages}
+        self.assertEqual(
+            {}, new,
+            "commit message(s) contain workplace data: "
+            + ", ".join("%s (%s)" % (sha, ", ".join(sorted(cats)))
+                        for sha, cats in sorted(new.items()))
+            + ". The values are deliberately not printed - read it with "
+              "`git show -s <sha>`. A pushed message cannot be edited without "
+              "rewriting history, so this has to fail before the push.")
+
+    def test_nothing_new_is_committed_into_a_file(self):
+        """Catches it in the commit even if the tree is cleaned afterwards.
+
+        Cleaning the tree later does not unpublish the blob, which is exactly
+        the shape of what already happened here.
+        """
+        new = {sha: info for sha, info in self.blobs.items()
+               if sha not in self.known_blobs}
+        self.assertEqual(
+            {}, new,
+            "blob(s) committed with workplace data: "
+            + "; ".join("%s in %s (%s)"
+                        % (sha, ", ".join(info["paths"][:3]),
+                           ", ".join(sorted(info["categories"])))
+                        for sha, info in sorted(new.items()))
+            + ". Values deliberately not printed - `git cat-file -p <sha>`.")
+
+    def test_the_baseline_records_object_ids_and_not_values(self):
+        """A baseline quoting the values would republish them.
+
+        The file is tracked, so anything written into it is exactly as public
+        as the history it describes.
+        """
+        raw = BASELINE_PATH.read_text(encoding="utf-8")
+        for token in CODE_TOKEN.findall(raw):
+            self.assertIn(
+                token.upper(), _ALLOWED_CODE_UPPER,
+                "the baseline itself contains a site-code-shaped token - it "
+                "must record object ids only")
+        for domain in EMAIL.findall(raw):
+            self.assertIn(domain.lower(), ALLOWED_EMAIL_DOMAINS)
+        for entry in sorted(self.known_messages | self.known_blobs):
+            self.assertRegex(entry, r"^[0-9a-f]{7,40}$",
+                             "baseline entries are object ids")
+
+    def test_the_baseline_only_lists_things_that_are_really_there(self):
+        """A record of debt, not a place to silence a finding.
+
+        An id that no longer resolves means the history moved - after a
+        rewrite, most likely - and the file should be regenerated so what is
+        left is honest.
+        """
+        stale = [e for e in sorted(self.known_messages | self.known_blobs)
+                 if subprocess.run(["git", "cat-file", "-e", e], cwd=str(ROOT),
+                                   capture_output=True).returncode != 0]
+        self.assertEqual(
+            [], stale,
+            "baseline entries no longer exist in this repository: "
+            + ", ".join(stale[:10])
+            + ". Run scripts/refresh_history_baseline.py to re-record what is "
+              "actually left.")
+
+    def test_the_scan_really_walked_the_history(self):
+        """A history check that silently scanned nothing is a comment.
+
+        `setUpClass` skips when git is missing, which is right for a release
+        ZIP and wrong everywhere else. The baseline is not empty, so a scan
+        that found nothing did not run.
+        """
+        self.assertGreater(
+            len(self.messages) + len(self.blobs), 0,
+            "the history scan found nothing, so it did not run - the "
+            "baseline is not empty")
 
 
 class TheRuleItselfIsStillThere(unittest.TestCase):
