@@ -111,12 +111,24 @@ reading all of them is what worked.
    WaxFrame Pro style (H1 = one-line summary, `## What changed` with
    bullets, `## Verified`, `## Files changed`):
    ```powershell
-   git tag -a vX.Y.Z -m "vX.Y.Z"
+   git tag -a vX.Y.Z -m "vX.Y.Z" <the sha of your own version-bump commit>
+   git show vX.Y.Z:web/assets/versions.json   # must say X.Y.Z before pushing
    git push origin vX.Y.Z
    gh release create vX.Y.Z --title "WD Wireless Tools vX.Y.Z" --notes "..."
    ```
+   **Name the SHA. Never tag HEAD.** Several sessions share this one working
+   tree, so `main` can move between your push and your tag — and a bare
+   `git tag` then puts your version number on somebody else's commit. That
+   happened to v2.103.14: another session committed v2.103.15 in the seconds
+   between, the tag landed on their commit, the release build correctly refused
+   it (`Requested release 2.103.14 does not match suite version '2.103.15'`),
+   and the release had notes and no ZIP. The tag and release were deleted and
+   the change shipped inside v2.103.15, whose ZIP already contained it. The
+   `git show` line above is the cheap check: it reads `versions.json` **at the
+   tag**, which is exactly what the workflow will read.
+
    The release workflow (`.github/workflows/release.yml`) triggers on
-   `release: [published]`, runs tests, builds the ZIP via
+   `release: [published]`, checks out the tag, runs tests, builds the ZIP via
    `scripts/build_release.py`, and uploads it as a release asset.
    `build_release.py` raises if the tag doesn't match `versions.json`'s
    `"suite"` value — so the version bump commit MUST land before the
