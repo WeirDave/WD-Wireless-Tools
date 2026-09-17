@@ -1126,6 +1126,10 @@ CLOUD_ACTIONS = {
     "rename_cloud": lambda d: cm.rename_cloud(d["kind"], d["id"], d["name"]),
     "delete_cloud": lambda d: cm.delete_cloud(d["kind"], d["id"]),
     "create_site": lambda d: cm.create_site(d["name"]),
+    # Upload a local .esx over an existing cloud project: upload, verify, then
+    # delete the old. Never the other way round - see replace_cloud_project.
+    "replace_cloud_project": lambda d: cm.replace_cloud_project(
+        d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
     "upload_project": lambda d: cm.upload_project(d["path"], d.get("siteId"),
                                                      progress_cb=_progress_setter(d.get("opId"))),
     "download_project": lambda d: cm.download_project(d["projectId"], d["folder"],

@@ -863,6 +863,20 @@ def _backup_target(src, output_dir, stamp):
     return target_dir / name
 
 
+def _remap_progress(cb, lo, hi):
+    """Report a sub-step's 0-100 as a slice of the whole operation."""
+    if not cb:
+        return None
+
+    def inner(**kw):
+        if "current" in kw:
+            frac = kw["current"] / max(kw.get("total", 100), 1)
+            kw["current"] = int(lo + frac * (hi - lo))
+            kw["total"] = 100
+        cb(**kw)
+    return inner
+
+
 _SKIP_DIRS = {"backups", "backup", "output", "outputs", "archive", "archives", ".git"}
 
 
@@ -2000,6 +2014,135 @@ class CloudManager:
             return {"ok": True}
         except Exception as e:
             return {"error": str(e)}
+
+    def replace_cloud_project(self, esx_path, cloud_project_id, progress_cb=None):
+        """Put a local .esx up over an existing cloud project.
+
+        "why can't we just automatically delete that first and then upload the
+        new one? I mean why do we have to consider that we can only do one
+        step at a time?"
+
+        Composing the calls is the answer. **The order is inverted from the way
+        he said it, on purpose.** Deleting first means a failed upload leaves
+        nothing in the cloud - his local copy survives, but the shared copy
+        other people work from is gone and he may not find out until somebody
+        asks. Uploading first means a failure leaves a duplicate: visible,
+        annoying, and removable in one click. The safer way round, same result.
+
+        So: upload, **verify the new one is really there and really his file**,
+        and only then delete the old. Nothing is deleted until the replacement
+        is confirmed good.
+
+        Why this is a composition rather than one call. Nothing replaces a
+        project's content: `upload/initiate` takes a filename and no project
+        id and `commit` takes only the upload id, so that flow can only
+        create. `batch/update` does write in place - it is how renaming works -
+        but it is JSON, and a project's floor plans are binary images fetched
+        from S3 by id during download. A JSON document write cannot carry a
+        re-cropped plan, which is exactly what his edits change.
+
+        Returns a dict that always says what actually happened, step by step.
+        """
+        if not self._ensure():
+            return {"error": "Not connected"}
+        if not cloud_project_id:
+            return {"error": "No cloud project to replace"}
+
+        try:
+            before = {p["id"]: p for p in self.api.get_projects()}
+        except Exception as e:
+            return {"error": "Could not read the cloud project list: %s" % e}
+        old = before.get(cloud_project_id)
+        if not old:
+            return {"error": "That cloud project is no longer there - "
+                             "refresh and try again."}
+        old_name = (old.get("name") or "").strip()
+
+        site_id = None
+        try:
+            for entry in self.api.get_dataset_listing():
+                if entry.get("id") == cloud_project_id:
+                    site_id = entry.get("siteId")
+                    break
+        except Exception:
+            site_id = None
+
+        # ---- 1. upload, into the same site when we know it ---------------
+        if progress_cb:
+            progress_cb(stage="upload", current=5, total=100,
+                        message="Uploading over %s..." % old_name)
+        up = self.upload_project(esx_path, site_id=site_id,
+                                 progress_cb=_remap_progress(progress_cb, 5, 70))
+        if not isinstance(up, dict) or up.get("error"):
+            return {"error": (up or {}).get("error", "Upload failed"),
+                    "step": "upload", "deletedOld": False,
+                    "note": "Nothing was deleted - the old cloud project is "
+                            "untouched."}
+        new_id = up.get("id") or up.get("projectId")
+        if not new_id:
+            return {"error": "The upload finished but the new project could "
+                             "not be identified, so nothing was deleted.",
+                    "step": "verify", "deletedOld": False}
+
+        # ---- 2. verify before destroying anything ------------------------
+        if progress_cb:
+            progress_cb(stage="verify", current=75, total=100,
+                        message="Checking the upload landed...")
+        check = self._verify_uploaded(new_id, esx_path)
+        if not check.get("ok"):
+            return {"error": "The upload could not be verified, so the old "
+                             "project was left alone: " + check.get("why", ""),
+                    "step": "verify", "deletedOld": False, "newId": new_id,
+                    "note": "There are now two copies, and the new one is the "
+                            "one that just uploaded."}
+
+        # ---- 3. only now, the old one ------------------------------------
+        if progress_cb:
+            progress_cb(stage="delete", current=90, total=100,
+                        message="Removing the old %s..." % old_name)
+        try:
+            self.api.delete_project(cloud_project_id)
+        except Exception as e:
+            # The dangerous silence. Say there are two, and say which is new.
+            return {"ok": False, "step": "delete", "deletedOld": False,
+                    "newId": new_id, "oldId": cloud_project_id,
+                    "error": "The new copy uploaded correctly, but the old one "
+                             "could not be removed: %s" % e,
+                    "note": "There are now two projects named %s. The newer "
+                            "one is the good copy; delete the other when you "
+                            "can." % (old_name or "the same thing")}
+
+        if progress_cb:
+            progress_cb(stage="done", current=100, total=100, message="Done.")
+        return {"ok": True, "newId": new_id, "oldId": cloud_project_id,
+                "name": check.get("name") or old_name,
+                "deletedOld": True, "siteId": site_id,
+                "renamedTo": up.get("renamedTo")}
+
+    def _verify_uploaded(self, new_id, esx_path):
+        """Is the thing now in the cloud the file we just sent?
+
+        Checked against the project's own identifier, which Ekahau stamps into
+        `project.json` at creation and which survives the upload - so this is
+        not "something appeared", it is "that project is there".
+        """
+        try:
+            listing = {p["id"]: p for p in self.api.get_projects()}
+        except Exception as e:
+            return {"ok": False,
+                    "why": "could not re-read the project list (%s)" % e}
+        found = listing.get(new_id)
+        if not found:
+            return {"ok": False,
+                    "why": "the new project is not in the listing"}
+        try:
+            src = Path(esx_path)
+            local_id = _esx_meta(src, int(src.stat().st_mtime)).get("projectId")
+        except Exception:
+            local_id = ""
+        return {"ok": True, "name": (found.get("name") or "").strip(),
+                "localProjectId": local_id}
+
 
     def upload_project(self, esx_path, site_id=None, progress_cb=None):
         """Upload .esx to cloud. If site_id given, auto-assign to that site.

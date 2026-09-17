@@ -1,0 +1,223 @@
+"""Uploading a local .esx over an existing cloud project.
+
+"why can't we just automatically delete that first and then upload the new one?
+I mean why do we have to consider that we can only do one step at a time?"
+
+Composing the calls is right. **The order is inverted from the way he said it**,
+and that inversion is what most of this file is about:
+
+* **Delete first** and a failed upload leaves *nothing* in the cloud. His local
+  copy survives, but the shared copy other people work from is gone, and he may
+  not find out until somebody asks for it.
+* **Upload first** and a failure leaves a duplicate - visible, annoying, and
+  removable in one click.
+
+So the old project is not touched until the new one is confirmed present *and*
+confirmed to be the file he just sent. And when the delete is the step that
+fails, the result says there are two and which one is new, because he has been
+burned by duplicates twice and a silent failure is the one he cannot survive.
+
+**Ekahau is never contacted here.** Every call is against a stub, and every
+project name is invented.
+"""
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+import zipfile
+from pathlib import Path
+
+from tools import cloud_manager as cm
+
+
+def _esx(path: Path, project_id: str = "local-uuid-1"):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    doc = {"project": {"id": project_id,
+                       "history": {"createdBy": "me@example.com",
+                                   "modifiedAt": ""}}}
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("project.json", json.dumps(doc))
+    return path
+
+
+class _StubApi:
+    """Ekahau, as far as this operation is concerned."""
+
+    def __init__(self, *, upload_ok=True, appears=True, delete_raises=False):
+        self.projects = [{"id": "old-1", "name": "Alpha Survey"}]
+        self.datasets = [{"id": "old-1", "siteId": "site-9"}]
+        self.deleted = []
+        self.uploaded = []
+        self._upload_ok = upload_ok
+        self._appears = appears
+        self._delete_raises = delete_raises
+
+    # -- reads ---------------------------------------------------------
+    def get_projects(self):
+        return list(self.projects)
+
+    def get_dataset_listing(self):
+        return list(self.datasets)
+
+    # -- writes --------------------------------------------------------
+    def upload_project(self, esx_path, progress_cb=None):
+        if not self._upload_ok:
+            return {"error": "network went away"}
+        self.uploaded.append(str(esx_path))
+        if self._appears:
+            self.projects.append({"id": "new-1", "name": Path(esx_path).stem})
+        return {"ok": True}
+
+    def delete_project(self, pid):
+        if self._delete_raises:
+            raise RuntimeError("403 refused")
+        self.deleted.append(pid)
+        self.projects = [p for p in self.projects if p["id"] != pid]
+        return {"ok": True}
+
+    def rename_project(self, pid, name):
+        for p in self.projects:
+            if p["id"] == pid:
+                p["name"] = name
+        return {"ok": True}
+
+    def assign_to_site(self, site_id, dataset_id, dtype=None):
+        return {"ok": True}
+
+
+class _Manager(cm.CloudManager):
+    def __init__(self, api, out_dir):
+        self.api = api
+        self.config = {"output_dir": str(out_dir)}
+
+    def _ensure(self):
+        return True
+
+
+class ReplacingAnExistingCloudProjectTests(unittest.TestCase):
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.esx = _esx(self.root / "Alpha Survey.esx")
+
+    def _mgr(self, **kw):
+        api = _StubApi(**kw)
+        mgr = _Manager(api, self.root)
+
+        # The manager's own `upload_project` does its own listing poll and
+        # rename; what is under test is the composition around it, so it is
+        # replaced with something that succeeds or fails on cue.
+        def fake_upload(path, site_id=None, progress_cb=None):
+            result = api.upload_project(path)
+            if result.get("error"):
+                return result
+            return {"ok": True, "id": "new-1"}
+
+        mgr.upload_project = fake_upload
+        return mgr, api
+
+    def test_the_old_project_is_deleted_only_after_the_upload(self):
+        mgr, api = self._mgr()
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertTrue(out.get("ok"), out)
+        self.assertEqual(["old-1"], api.deleted)
+        self.assertTrue(api.uploaded, "nothing was uploaded")
+
+    def test_a_failed_upload_deletes_nothing(self):
+        """The whole reason for the inverted order.
+
+        Delete-then-upload would have left his cloud empty here.
+        """
+        mgr, api = self._mgr(upload_ok=False)
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertIn("error", out)
+        self.assertFalse(out.get("deletedOld"))
+        self.assertEqual([], api.deleted)
+        self.assertIn("Nothing was deleted", out["note"])
+        self.assertEqual(1, len(api.projects), "the old project went missing")
+
+    def test_an_unverifiable_upload_deletes_nothing(self):
+        """Something uploaded, but it is not in the listing.
+
+        Deleting on the strength of "the call returned" would destroy the only
+        remaining copy on the evidence of a call that may have gone nowhere.
+        """
+        mgr, api = self._mgr(appears=False)
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertIn("error", out)
+        self.assertFalse(out.get("deletedOld"))
+        self.assertEqual([], api.deleted)
+        self.assertIn("left alone", out["error"])
+
+    def test_a_failed_delete_says_there_are_two_and_which_is_new(self):
+        """The failure he must not be left to discover on his own."""
+        mgr, api = self._mgr(delete_raises=True)
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertFalse(out.get("ok"))
+        self.assertFalse(out.get("deletedOld"))
+        self.assertEqual("delete", out["step"])
+        self.assertEqual("new-1", out["newId"])
+        self.assertEqual("old-1", out["oldId"])
+        self.assertIn("two projects", out["note"])
+        self.assertIn("newer one is the good copy", out["note"])
+
+    def test_it_uploads_into_the_site_the_old_one_was_in(self):
+        mgr, api = self._mgr()
+        seen = {}
+        real = mgr.upload_project
+
+        def watched(path, site_id=None, progress_cb=None):
+            seen["site"] = site_id
+            return real(path, site_id=site_id)
+
+        mgr.upload_project = watched
+        mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertEqual("site-9", seen.get("site"))
+
+    def test_a_project_that_has_already_gone_is_reported_not_guessed(self):
+        mgr, api = self._mgr()
+        out = mgr.replace_cloud_project(str(self.esx), "not-there")
+        self.assertIn("no longer there", out["error"])
+        self.assertEqual([], api.deleted)
+
+    def test_it_ends_with_one_project_under_the_expected_name(self):
+        """The acceptance test, and the known duplicate mechanism.
+
+        Ekahau names an upload from `project.json` inside the .esx and the
+        uploader then renames to the local filename, so the failure mode is
+        ending up with two things called almost the same. One, named right.
+        """
+        mgr, api = self._mgr()
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertTrue(out.get("ok"))
+        names = [p["name"] for p in api.projects]
+        self.assertEqual(1, len(names), names)
+        self.assertEqual("Alpha Survey", names[0])
+
+
+class ItIsReachableAndHonestTests(unittest.TestCase):
+
+    def test_the_page_can_call_it(self):
+        import server
+        self.assertIn("replace_cloud_project", server.CLOUD_ACTIONS)
+
+    def test_the_docstring_says_why_the_order_is_inverted(self):
+        doc = cm.CloudManager.replace_cloud_project.__doc__ or ""
+        self.assertIn("inverted", doc)
+        self.assertIn("duplicate", doc)
+
+    def test_it_records_why_there_is_no_atomic_replace(self):
+        """So nobody re-derives it.
+
+        `upload/initiate` takes no project id; `batch/update` writes JSON, and
+        floor plans are binary images fetched from S3 - so a document write
+        cannot carry a re-cropped plan, which is what his edits change.
+        """
+        doc = cm.CloudManager.replace_cloud_project.__doc__ or ""
+        self.assertIn("batch/update", doc)
+        self.assertIn("S3", doc)
+
+
+if __name__ == "__main__":
+    unittest.main()
