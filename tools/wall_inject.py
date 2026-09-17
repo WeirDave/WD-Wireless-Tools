@@ -158,8 +158,45 @@ def inject_into_members(members: dict, wall_types: list) -> dict:
         used_ids.add(wt["id"])
         existing.append(wt)
 
+    _resolve_keybind_collisions(existing, plan["add"])
+
     members[MEMBER] = (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     return plan
+
+
+def _resolve_keybind_collisions(existing: list, added: list) -> None:
+    """One number key, one wall type. The incoming type wins.
+
+    Adding types without touching this leaves two wall types claiming the same
+    slot, and in Ekahau a number key can only draw one of them - so a shortcut
+    he has used for months silently starts drawing something else, or nothing.
+
+    Found by applying his template to a project holding Ekahau's stock types:
+    the project's "Wall, Concrete" carried Ekahau's slot 5, his template put
+    "Door, Steel Fire/Exit" on 5, and the result had two types on 5 and nothing
+    on 2. Nothing errored, and the file opened.
+
+    Quick Walls has always done this - `mergeTemplateTypes` in `walls.js` drops
+    the older binding with the same reasoning written beside it. Injection is
+    the other way his template reaches a project, through Prep, and it did not.
+    Keeping the two in step matters more than which rule wins: a shortcut that
+    depends on which tool applied the template is not a shortcut.
+
+    Only bindings the *incoming* types claim are resolved. A collision already
+    sitting in the project is his and is left alone - this adds types, it does
+    not tidy up after Ekahau.
+    """
+    incoming = {id(w) for w in existing[len(existing) - len(added):]} if added else set()
+    claimed = {}
+    for wt in existing:
+        if id(wt) in incoming:
+            num = wt.get("keybindNumber")
+            if isinstance(num, int) and 1 <= num <= 9:
+                claimed[num] = id(wt)
+    for wt in existing:
+        num = wt.get("keybindNumber")
+        if num in claimed and id(wt) != claimed[num]:
+            wt.pop("keybindNumber", None)
 
 
 def plan_injection(esx_path, wall_types: list) -> dict:

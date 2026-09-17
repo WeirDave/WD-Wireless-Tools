@@ -1378,12 +1378,29 @@ async function refreshTemplateBar() {
     html += `<option value="${escAttr(wd.name)}"${selected}>${esc(wd.name)} (${wd.wallTypes.length} types) ⭐</option>`;
   }
 
-  if (_ekahauDefaults) {
+  // The two he asked for sit together at the top: his curated set, and
+  // Ekahau's stock types as the baseline to come back to.
+  //
+  // `Ekahau Default` is now a real template file, seeded into his own
+  // templates folder like any other, so it is exportable, backed up and his.
+  // It replaces the synthetic `Ekahau Defaults` entry that used to be built
+  // here out of `ekahau_defaults.json` - listing both would put two almost
+  // identically named Ekahau rows in one dropdown.
+  //
+  // The **Ekahau Defaults button** is untouched and still does something this
+  // option deliberately does not: it starts the wall list over, and asks
+  // first. Choosing this option applies additively, like every other template.
+  const ekahau = tpls.find(t => t.name === 'Ekahau Default');
+  if (ekahau) {
+    const selected = (def === ekahau.name || def === 'Ekahau Defaults') ? ' selected' : '';
+    html += `<option value="${escAttr(ekahau.name)}"${selected}>${esc(ekahau.name)} (${ekahau.wallTypes.length} types)</option>`;
+  } else if (_ekahauDefaults) {
     const selected = def === 'Ekahau Defaults' ? ' selected' : '';
     html += `<option value="Ekahau Defaults"${selected}>Ekahau Defaults (${_ekahauDefaults.wallTypes.length} types)</option>`;
   }
 
-  const userTpls = tpls.filter(t => t.name !== 'WD Template');
+  const pinned = ['WD Template', 'Ekahau Default'];
+  const userTpls = tpls.filter(t => pinned.indexOf(t.name) === -1);
   if (userTpls.length > 0) {
     html += '<option disabled>───────────────</option>';
     userTpls.forEach(t => {

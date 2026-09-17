@@ -197,3 +197,72 @@ class WallInjection(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OneNumberKeyDrawsOneWallType(unittest.TestCase):
+    """A shortcut that depends on which tool applied the template is not one.
+
+    Found by applying his own template to a project holding Ekahau's stock
+    types. The project's "Wall, Concrete" carried Ekahau's slot 5; his template
+    puts "Door, Steel Fire/Exit" on 5. Injection added the door without
+    touching the existing type, so the project came out with two wall types on
+    key 5 - and in Ekahau a number key draws one of them. Nothing errored and
+    the file opened, which is why this needs a test rather than a look.
+
+    Quick Walls has always resolved this (`mergeTemplateTypes` in `walls.js`):
+    the incoming type wins and the older binding is dropped. Prep reaches the
+    same project by a different road and did not.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _bound(self, name, slot, wt_id=None):
+        wt = wall_type(name, wt_id=wt_id)
+        wt["keybindNumber"] = slot
+        return wt
+
+    def _apply(self, existing, incoming):
+        src = self.tmp / "p.esx"
+        make_esx(src, existing)
+        dest = self.tmp / "out.esx"
+        wall_inject.inject(src, incoming, dest=dest, backup=False)
+        return read_member(dest, "wallTypes.json")["wallTypes"]
+
+    def test_the_incoming_type_takes_the_slot_and_the_old_one_loses_it(self):
+        types = self._apply([self._bound("Wall, Concrete", 5)],
+                            [self._bound("Door, Steel Fire/Exit", 5)])
+        by_name = {t["name"]: t for t in types}
+        self.assertEqual(by_name["Door, Steel Fire/Exit"]["keybindNumber"], 5)
+        self.assertNotIn("keybindNumber", by_name["Wall, Concrete"],
+                         "two wall types are still claiming key 5")
+
+    def test_no_slot_is_claimed_twice_afterwards(self):
+        types = self._apply(
+            [self._bound("Wall, Concrete", 5), self._bound("Wall, Dry", 1)],
+            [self._bound("Door, Steel Fire/Exit", 5),
+             self._bound("Framery Pod", 8),
+             self._bound("Elevator Shaft", 9)])
+        slots = [t["keybindNumber"] for t in types if t.get("keybindNumber")]
+        self.assertEqual(sorted(slots), sorted(set(slots)),
+                         f"a number key draws two wall types: {sorted(slots)}")
+
+    def test_a_binding_nothing_incoming_wants_is_left_alone(self):
+        """This adds types. It does not tidy up his project for him."""
+        types = self._apply([self._bound("Wall, Dry", 1)],
+                            [self._bound("Framery Pod", 8)])
+        by_name = {t["name"]: t for t in types}
+        self.assertEqual(by_name["Wall, Dry"]["keybindNumber"], 1)
+        self.assertEqual(by_name["Framery Pod"]["keybindNumber"], 8)
+
+    def test_a_collision_already_in_the_project_is_his_and_is_kept(self):
+        types = self._apply(
+            [self._bound("Wall, Dry", 3, wt_id="a"),
+             self._bound("Wall, Brick", 3, wt_id="b")],
+            [self._bound("Framery Pod", 8)])
+        slots = sorted(t["keybindNumber"] for t in types if t.get("keybindNumber"))
+        self.assertEqual(slots, [3, 3, 8],
+                         "injection has started editing bindings it was not asked about")

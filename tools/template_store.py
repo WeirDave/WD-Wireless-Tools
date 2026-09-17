@@ -21,12 +21,13 @@ tombstone rather than removing a shipped file.
 import json
 import shutil
 from pathlib import Path
+from tools.user_dir import user_dir
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 
 BUILTIN_DIR = PROJECT_ROOT / "templates"
-USER_DIR = Path.home() / ".wd_wireless_tools" / "templates"
+USER_DIR = user_dir() / "templates"
 
 TPL_SUFFIX = "_walltemplate.json"
 DEFAULTS_FILE = BUILTIN_DIR / "ekahau_defaults.json"
@@ -62,13 +63,76 @@ def _save_hidden(hidden: set) -> None:
         json.dump({"hidden": sorted(hidden)}, f, indent=2)
 
 
+#: The template files this repository ships, by name. **A list, not a scan.**
+#:
+#: It used to be a scan of `BUILTIN_DIR`, and that made the migration below a
+#: guaranteed no-op: it computed "what we ship" by listing the very directory
+#: it then walked, so "skip the ones we ship" skipped every single file. It
+#: reported success and wrote its own done-marker, and nobody's template ever
+#: moved. Reading it, the bug is invisible - both halves look right.
+#:
+#: `tests/test_template_store.py` asserts this list matches what is actually in
+#: `templates/`, so adding a shipped template and forgetting this line fails
+#: loudly rather than silently turning somebody's template into "user work".
+SHIPPED_TEMPLATES = (
+    "Ekahau Default_walltemplate.json",
+    "WD Template_walltemplate.json",
+)
+
+
 def builtin_names() -> set:
-    """Filenames the app ships.  In a clean checkout these are exactly the
-    tracked files in templates/, so anything else found there is user work."""
+    """Filenames the app ships, so anything else in `templates/` is user work."""
+    return set(SHIPPED_TEMPLATES)
+
+
+def present_builtin_names() -> set:
+    """Shipped templates actually on disk in this install."""
     if not BUILTIN_DIR.is_dir():
         return set()
     return {p.name for p in BUILTIN_DIR.iterdir()
             if p.is_file() and p.name.lower().endswith(TPL_SUFFIX)}
+
+
+def seed_user_templates() -> dict:
+    """Give the user their own copy of each shipped template.
+
+    **Why this exists, and why it overrides the note below it.** His wall
+    template went missing, and the answer to "how did we lose it" was that it
+    had never been his: his colours and his nine keyboard shortcuts lived only
+    inside the repository's own tracked `WD Template_walltemplate.json`. His
+    templates folder had held nothing but a `.migrated` marker since 2
+    September. So every session that edited that file edited *his* template -
+    which is exactly what happened on 14 September, when his three recoloured
+    wall types were replaced with Ekahau's greys and had to be put back.
+
+    A file the project owns is a file the project can overwrite, and a
+    reinstall restores it to ours. Seeding a copy into his folder is what makes
+    it his.
+
+    The cost is real and is the reason `migrate_legacy_templates()` refused to
+    do this: a seeded copy shadows the shipped one by filename, so improvements
+    we make upstream stop reaching him. That trade is now deliberate. Somebody
+    whose template stops changing under him can ask for the new version; the
+    reverse - a template that silently changes under somebody who calibrated it
+    - is the failure we already had.
+
+    Never overwrites an existing user file, and never resurrects one that was
+    deliberately deleted (`hidden.json` holds those tombstones).
+    """
+    USER_DIR.mkdir(parents=True, exist_ok=True)
+    hidden = _load_hidden()
+    seeded = []
+    for name in SHIPPED_TEMPLATES:
+        src = BUILTIN_DIR / name
+        dest = USER_DIR / name
+        if not src.is_file() or dest.exists() or name in hidden:
+            continue
+        try:
+            shutil.copy2(src, dest)
+            seeded.append(name)
+        except OSError:
+            continue
+    return {"seeded": seeded}
 
 
 def migrate_legacy_templates() -> dict:
@@ -78,13 +142,12 @@ def migrate_legacy_templates() -> dict:
     they were never at risk from a pull — this just relocates them so the whole
     install tree becomes disposable.
 
-    Shipped names are deliberately left alone.  Copying them would freeze a
-    private duplicate of every built-in and cut users off from upstream
-    template improvements.  The one case that genuinely needs rescuing — a
-    user who edited a *shipped* template in place, making a tracked file dirty
-    — is handled by the updater instead (see rescue_dirty_builtin), which runs
-    at the only moment the pristine version is still available to compare
-    against.
+    Shipped names are left alone *here* — `seed_user_templates()` copies those,
+    for the reasons in its docstring, and `rescue_dirty_builtin()` handles the
+    user who edited a shipped template in place.  This function's only job is
+    relocating templates the user made themselves, which is why the shipped set
+    is now a manifest (`SHIPPED_TEMPLATES`) rather than a listing of the folder
+    being walked.
     """
     if _migrated_marker().exists():
         return {"migrated": [], "already": True}
@@ -161,6 +224,11 @@ class TemplateStore:
     def scan(self) -> dict:
         """Built-in templates overlaid by user templates of the same filename."""
         migrate_legacy_templates()
+        # Every shipped template becomes his, on first sight, once. Cheap
+        # enough to do on every scan and it is the only thing that runs on a
+        # machine whose `.migrated` marker was written by the broken migration
+        # - which is every machine that ran a build between 2 and 16 September.
+        seed_user_templates()
         USER_DIR.mkdir(parents=True, exist_ok=True)
         hidden = _load_hidden()
 

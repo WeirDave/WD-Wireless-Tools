@@ -74,12 +74,18 @@ class TemplateStoreTests(unittest.TestCase):
         self.store.delete(f"Anything{SUFFIX}")
         self.assertEqual(sorted(p.name for p in self.builtin.iterdir()), before)
 
-    def test_builtin_is_listed_and_marked(self):
+    def test_a_template_we_do_not_ship_is_treated_as_the_users_own(self):
+        """`templates/` holding something off the manifest means user work.
+
+        It is listed once and relocated into the user folder, which is the
+        whole point of the migration - the install tree has to stay disposable.
+        """
         self._write_builtin("Shipped", [{"name": "Brick"}])
         templates = self.store.scan()["templates"]
         self.assertEqual(len(templates), 1)
         self.assertEqual(templates[0]["name"], "Shipped")
-        self.assertTrue(templates[0]["builtin"])
+        self.assertFalse(templates[0]["builtin"])
+        self.assertTrue((self.folder / f"Shipped{SUFFIX}").is_file())
 
     def test_user_copy_shadows_builtin_without_editing_it(self):
         builtin_path = self._write_builtin("Shipped", [{"name": "Brick"}])
@@ -129,32 +135,73 @@ class TemplateStoreTests(unittest.TestCase):
         self.assertEqual(len(templates), 1)
         self.assertEqual(templates[0]["wallTypes"], [{"name": "Mine"}])
 
-    def test_migration_leaves_shipped_templates_as_builtins(self):
-        """Copying shipped names would freeze a private duplicate and cut the
-        user off from upstream template updates."""
+    def test_shipped_templates_become_the_users_own_copy(self):
+        """This reverses an earlier decision, deliberately. Read before undoing.
+
+        The rule used to be that shipped names are never copied, because a
+        private duplicate cuts the user off from upstream template
+        improvements. That is a real cost and it was the wrong side of the
+        trade. The consequence was that his wall template was never his: his
+        three recoloured types and his nine keyboard shortcuts lived only in
+        the repository's own tracked file, so a commit on 14 September replaced
+        his colours with Ekahau's greys and he lost his template without
+        anything being deleted.
+
+        A template the project owns is a template the project overwrites. So
+        the shipped set is seeded into the user folder and shadowed from there.
+        """
         self._write_builtin("WD Template", [{"name": "Shipped"}])
-        result = template_module.migrate_legacy_templates()
-        self.assertEqual(result["migrated"], [])
-        self.assertFalse((self.folder / f"WD Template{SUFFIX}").exists())
+        template_module.migrate_legacy_templates()
+        self.assertEqual(template_module.seed_user_templates()["seeded"],
+                         [f"WD Template{SUFFIX}"])
+        self.assertTrue((self.folder / f"WD Template{SUFFIX}").is_file())
         templates = self.store.scan()["templates"]
-        self.assertTrue(templates[0]["builtin"])
+        self.assertEqual(len(templates), 1, "seeding must shadow, not duplicate")
+        self.assertFalse(templates[0]["builtin"])
+
+    def test_seeding_never_overwrites_what_is_already_his(self):
+        self._write_builtin("WD Template", [{"name": "Shipped"}])
+        mine = self.folder / f"WD Template{SUFFIX}"
+        self.folder.mkdir(parents=True, exist_ok=True)
+        mine.write_text(json.dumps({"name": "WD Template",
+                                    "wallTypes": [{"name": "My calibration"}]}),
+                        encoding="utf-8")
+        self.assertEqual(template_module.seed_user_templates()["seeded"], [])
+        self.assertEqual(json.loads(mine.read_text(encoding="utf-8"))["wallTypes"],
+                         [{"name": "My calibration"}])
+
+    def test_seeding_does_not_resurrect_one_he_deleted(self):
+        """A tombstone is a decision, and seeding must not overrule it."""
+        self._write_builtin("WD Template", [{"name": "Shipped"}])
+        self.store.scan()
+        self.store.delete(f"WD Template{SUFFIX}")
+        self.assertEqual(self.store.scan()["templates"], [])
+        self.assertEqual(template_module.seed_user_templates()["seeded"], [])
+        self.assertEqual(self.store.scan()["templates"], [])
 
     def test_migration_relocates_user_created_templates_once(self):
+        """Runs the real `builtin_names()`. That is the point of this test.
+
+        It used to patch `builtin_names` out and hand the migration a fixed
+        set - which is why fifteen green tests sat on top of a migration that
+        could never migrate anything. The real function listed the directory
+        it was about to walk, so "skip what we ship" skipped every file;
+        mocking it was the only reason this test passed. A mock of the
+        function under test is a hole in exactly the shape of the bug.
+        """
         self._write_builtin("WD Template", [{"name": "Shipped"}])
         stray = self.builtin / f"My Site{SUFFIX}"
         stray.write_text(json.dumps({"name": "My Site", "wallTypes": [{"name": "Mine"}]}),
                          encoding="utf-8")
 
-        with patch.object(template_module, "builtin_names",
-                          return_value={f"WD Template{SUFFIX}"}):
-            result = template_module.migrate_legacy_templates()
-            self.assertFalse(result["already"])
-            self.assertEqual(result["migrated"], [f"My Site{SUFFIX}"])
-            self.assertTrue((self.folder / f"My Site{SUFFIX}").is_file())
+        result = template_module.migrate_legacy_templates()
+        self.assertFalse(result["already"])
+        self.assertEqual(result["migrated"], [f"My Site{SUFFIX}"])
+        self.assertTrue((self.folder / f"My Site{SUFFIX}").is_file())
 
-            again = template_module.migrate_legacy_templates()
-            self.assertTrue(again["already"])
-            self.assertEqual(again["migrated"], [])
+        again = template_module.migrate_legacy_templates()
+        self.assertTrue(again["already"])
+        self.assertEqual(again["migrated"], [])
 
     def test_migration_never_overwrites_an_existing_user_file(self):
         stray = self.builtin / f"My Site{SUFFIX}"
@@ -164,8 +211,7 @@ class TemplateStoreTests(unittest.TestCase):
         mine = self.folder / f"My Site{SUFFIX}"
         mine.write_text(json.dumps({"name": "My Site", "wallTypes": [{"name": "Mine"}]}),
                         encoding="utf-8")
-        with patch.object(template_module, "builtin_names", return_value=set()):
-            template_module.migrate_legacy_templates()
+        template_module.migrate_legacy_templates()
         kept = json.loads(mine.read_text(encoding="utf-8"))
         self.assertEqual(kept["wallTypes"], [{"name": "Mine"}])
 
@@ -193,3 +239,83 @@ class TemplateStoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheTwoTemplatesWeActuallyShip(unittest.TestCase):
+    """Against the real files in `templates/`, not fixtures.
+
+    Every test above this one builds its own templates in a temp directory, so
+    all of them stayed green through the release that replaced his three wall
+    colours with Ekahau's greys. Nothing asserted anything about the file we
+    actually ship. This does.
+
+    He asked for two, in these words: "we should have both the default Ekahau
+    template and the WD recommendations." Ekahau Default is the baseline he can
+    return to; WD Template is the curated set.
+    """
+
+    ROOT = Path(__file__).resolve().parent.parent
+    BUILTIN = ROOT / "templates"
+
+    #: Three of Ekahau's own types, recoloured because Ekahau's greys for them
+    #: are hard to tell apart on a plan. Removed once by a release that read
+    #: "don't change Ekahau's defaults" as covering them; he asked for them
+    #: back - "get them back to where they were for my template."
+    HIS_COLOURS = {
+        "Door, Steel Fire/Exit": "#E85D04",
+        "Window, Thick": "#0093EA",
+        "Elevator Shaft": "#5FAB4F",
+    }
+
+    def _load(self, filename):
+        return json.loads((self.BUILTIN / filename).read_text(encoding="utf-8"))
+
+    def test_the_manifest_matches_what_is_on_disk(self):
+        """A shipped template missing from the manifest is read as user work."""
+        self.assertEqual(set(template_module.SHIPPED_TEMPLATES),
+                         template_module.present_builtin_names(),
+                         "SHIPPED_TEMPLATES and templates/ disagree - add the "
+                         "new file to the manifest, or the migration will "
+                         "treat it as somebody's own template and move it")
+
+    def test_both_templates_are_shipped(self):
+        for filename in template_module.SHIPPED_TEMPLATES:
+            with self.subTest(filename=filename):
+                self.assertTrue((self.BUILTIN / filename).is_file())
+
+    def test_the_wd_template_keeps_his_three_colours(self):
+        types = {t["name"]: t for t in self._load("WD Template_walltemplate.json")["wallTypes"]}
+        for name, colour in self.HIS_COLOURS.items():
+            with self.subTest(wall=name):
+                self.assertEqual(types[name]["color"].upper(), colour,
+                                 f"{name} is back to a colour he did not choose")
+
+    def test_the_wd_template_keeps_his_nine_keyboard_shortcuts(self):
+        """Slots 1-9, which is what he draws with. They live in the template."""
+        types = self._load("WD Template_walltemplate.json")["wallTypes"]
+        bound = {t["keybindNumber"]: t["name"] for t in types if t.get("keybindNumber")}
+        self.assertEqual(sorted(bound), list(range(1, 10)),
+                         f"the shortcut slots are not 1-9: {sorted(bound)}")
+
+    def test_the_ekahau_template_is_ekahau_unmodified(self):
+        """The baseline is only a baseline if nobody has improved it."""
+        ekahau = {t["name"]: t for t in self._load("Ekahau Default_walltemplate.json")["wallTypes"]}
+        stock = {t["name"]: t for t in
+                 json.loads((self.BUILTIN / "ekahau_defaults.json").read_text(encoding="utf-8"))["wallTypes"]}
+        self.assertEqual(set(ekahau), set(stock))
+        for name, t in stock.items():
+            with self.subTest(wall=name):
+                self.assertEqual(ekahau[name], t)
+        for name, colour in self.HIS_COLOURS.items():
+            if name in ekahau:
+                with self.subTest(wall=name):
+                    self.assertNotEqual(ekahau[name]["color"].upper(), colour,
+                                        "the Ekahau baseline has picked up a WD "
+                                        "colour, so it is no longer a baseline")
+
+    def test_the_wd_template_adds_to_ekahau_rather_than_replacing_it(self):
+        wd = {t["name"] for t in self._load("WD Template_walltemplate.json")["wallTypes"]}
+        ekahau = {t["name"] for t in self._load("Ekahau Default_walltemplate.json")["wallTypes"]}
+        self.assertEqual(ekahau - wd, set(),
+                         "the WD set has dropped an Ekahau type")
+        self.assertTrue(wd - ekahau, "the WD set adds nothing to Ekahau's")
