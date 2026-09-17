@@ -152,6 +152,19 @@ higher.
 
 ### Suite-wide
 
+#### 10. P3 — BLOCKED ON HIM: the roll-up door colour
+
+His wall template carries Ekahau's stock `#646D7E` for every roll-up door
+variant, and so does every one of the 57 local projects that was checked. So
+his custom colour for it was never written to any file we can read, and there
+is nothing to recover it from.
+
+**Do not invent one.** It is left at Ekahau's default until he supplies the
+hex; he believes it is in OneNote. Everything else he had is back - the three
+recoloured types and all nine keyboard shortcuts were intact in
+`templates/WD Template_walltemplate.json` and are now seeded into his own
+templates folder (v2.104.7).
+
 #### 8. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
 
 A finding about going from DWG to `.esx` was established in an earlier session
