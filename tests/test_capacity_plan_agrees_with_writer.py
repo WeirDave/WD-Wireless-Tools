@@ -204,7 +204,17 @@ class ThePageOffersTheRunThatCanHappen(unittest.TestCase):
         """Written-but-incomplete has to read as incomplete, on the download
         path and on the write-beside-the-original path alike - the download one
         carries its report in a header, and the refusal was missing from it."""
-        self.assertEqual(self.js.count("One part of the pass did not run"), 2)
+        # It used to be asserted by counting two copies of the sentence, one
+        # per renderer. There is one copy now, in `missedBlock`, and the
+        # stronger claim is that every renderer goes through it - including the
+        # no-change path, which had no refusal reporting at all.
+        self.assertEqual(self.js.count("One part of the pass did not run"), 1)
+        for fn in ("renderWritten", "renderResult", "renderNothingToDo"):
+            with self.subTest(renderer=fn):
+                body = self.js[self.js.index("function " + fn):]
+                body = body[:body.index("\n  }\n")]
+                self.assertIn("missedBlock", body,
+                              f"{fn} does not report a step that declined")
 
 
 if __name__ == "__main__":

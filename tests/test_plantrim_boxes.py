@@ -1061,7 +1061,12 @@ class CropMarkupTests(unittest.TestCase):
         plan back into order" - "Fit" did that, but did not say so."""
         html = PLANTRIM_HTML.read_text(encoding="utf-8")
         btn = html[html.index('id="ptbFit"'):]
-        self.assertIn("Reset view", btn[:200])
+        btn = btn[:btn.index("</button>")]
+        self.assertIn("Reset view", btn)
+        # And it says what it leaves alone, because "reset" invites the reading
+        # that a drawn rectangle goes with it. It does not - that is
+        # "Back to automatic" - and the margin is a saved preference.
+        self.assertIn("Back to automatic", btn)
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")

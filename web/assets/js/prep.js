@@ -529,21 +529,14 @@
   /* Opened from disk: the prepared copy is already sitting in the project
      folder, so the useful thing to say is where, and to offer to show it -
      the next thing he does is open it in Ekahau. */
-  function renderWritten(r) {
-    var host = $('prepResult');
-    if (!r || !r.ok) {
-      host.innerHTML = '<div class="prep-warn">'
-        + esc((r && r.error) || 'Nothing was written.') + '</div>';
-      return;
-    }
-    if (!r.written) {
-      host.innerHTML = '<div class="prep-warn">' + esc(r.note || 'Nothing needed doing.')
-        + '</div>';
-      return;
-    }
-    lastWritten = r.path || null;
-    var step = r.step || {};
-    var summary = didWhat({
+  // One summary builder for every path, because there are two report shapes
+  // and three renderers, and the shapes are not interchangeable: the download
+  // path reads a flat header, the open-from-disk path and the nothing-to-do
+  // path get the pipeline's own nested `step` object.
+  function summaryOf(r) {
+    if (!r.step) return didWhat(r);            // the flat header shape
+    var step = r.step;
+    return didWhat({
       ran: r.ran,
       failed: r.failed,
       trimmed: (step.trim || {}).trimmedCount,
@@ -553,16 +546,51 @@
       wallTypesAdded: ((step.walls || {}).add || []).map(function (x) { return x.name; }),
       wallTypesPresent: ((step.walls || {}).skip || []).length,
     });
-    // A pass that did two of three things is a success with a gap in it, and
-    // the gap has to be as visible as the success - otherwise he opens the
-    // project expecting areas that are not there.
+  }
+
+  // A pass that did two of three things is a success with a gap in it, and the
+  // gap has to be as visible as the success - otherwise he opens the project
+  // expecting areas that are not there.
+  function missedBlock(r) {
     var missed = (r.failed || []).map(function (f) {
       return '<div class="prep-sub">&bull; ' + esc(f.error) + '</div>';
     }).join('');
+    return missed ? '<div class="prep-warn" style="margin:8px 0">'
+                    + '<b>One part of the pass did not run:</b>' + missed + '</div>' : '';
+  }
+
+  // Nothing to write is an outcome, not an absence of one. It used to print a
+  // single generic line - "Nothing needed doing" - for all three steps at
+  // once, which is the exact shape of "quickwalls not working inside prep":
+  // his projects already carry his wall types, because he applies them in
+  // Quick Walls first, so the step correctly adds nothing and the page said
+  // nothing about it. Every step names itself here too.
+  function renderNothingToDo(r, where) {
+    return '<div class="prep-done"><b>Nothing needed writing.</b> '
+      + summaryOf(r) + '.'
+      + missedBlock(r)
+      + '<br><span class="prep-sub">' + esc(where) + '</span></div>';
+  }
+
+  function renderWritten(r) {
+    var host = $('prepResult');
+    if (!r || !r.ok) {
+      host.innerHTML = '<div class="prep-warn">'
+        + esc((r && r.error) || 'Nothing was written.') + '</div>';
+      return;
+    }
+    if (!r.written) {
+      host.innerHTML = renderNothingToDo(
+        r, 'The project was already prepared, so no copy was made and your '
+           + 'original is untouched.');
+      return;
+    }
+    lastWritten = r.path || null;
+    var summary = summaryOf(r);
+    var missed = missedBlock(r);
     host.innerHTML = '<div class="prep-done">Wrote <b>' + esc(r.filename || '') + '</b> — '
       + summary + '.'
-      + (missed ? '<div class="prep-warn" style="margin:8px 0">'
-                  + '<b>One part of the pass did not run:</b>' + missed + '</div>' : '')
+      + missed
       + '<br><span class="prep-sub">It is in <b>' + esc(r.dir || '') + '</b>, beside the '
       + 'original, which is unchanged. Open it in Ekahau and start drawing.</span>'
       + '<div class="prep-row" style="margin:10px 0 0">'
@@ -611,8 +639,9 @@
       return;
     }
     if (!blob) {
-      host.innerHTML = '<div class="prep-warn">' + esc(r.note || 'Nothing needed doing.')
-        + '</div>';
+      host.innerHTML = renderNothingToDo(
+        r, 'The project was already prepared, so there was nothing to download '
+           + 'and your original is untouched.');
       return;
     }
 
@@ -623,16 +652,9 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
 
-    // The same gap has to be visible on this path as on the write-to-disk one:
-    // two of three steps is a success with something missing from it, and he
-    // opens the project expecting all three.
-    var missed = (r.failed || []).map(function (f) {
-      return '<div class="prep-sub">&bull; ' + esc(f.error) + '</div>';
-    }).join('');
     host.innerHTML = '<div class="prep-done">Wrote <b>' + esc(name) + '</b> — '
-      + didWhat(r) + '.'
-      + (missed ? '<div class="prep-warn" style="margin:8px 0">'
-                  + '<b>One part of the pass did not run:</b>' + missed + '</div>' : '')
+      + summaryOf(r) + '.'
+      + missedBlock(r)
       + '<br><span class="prep-sub">Your original is untouched. Open the downloaded copy '
       + 'in Ekahau and start drawing.</span></div>';
   }
