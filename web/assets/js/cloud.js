@@ -2093,8 +2093,23 @@ const PULLABLE_MATCH_TYPES = new Set(['id', 'manual', 'exact']);
    the wrong "SITE1 Building 2" would destroy the wrong project.
 
    The same asymmetry the delete confirmations already use: recoverable one way,
-   not the other, so the friction is not symmetric either. */
-const PUSHABLE_MATCH_TYPES = new Set(['id', 'manual']);
+   not the other, so the friction is not symmetric either.
+
+   **`exact` was excluded at first and that was the bug.** It made the control
+   unusable for the case he actually has. A project built locally and uploaded
+   gets Ekahau's id stamped into the *cloud* copy; the local file only carries
+   it once the project has been downloaded back. So "local is newer and there
+   is no shared id" is not an oddity, it is the normal state of a project he
+   has worked on since the last download - and it was the one thing refused.
+
+   It is allowed and it asks first, naming the cloud project it will delete.
+   Unrecoverable earns friction, not a wall. A `code` or `fuzzy` pairing is
+   still refused: there the two names do not even match, so there is nothing
+   for him to confirm against. */
+const PUSHABLE_MATCH_TYPES = new Set(['id', 'manual', 'exact']);
+
+//: Which of those are proven rather than inferred. The rest get a confirm.
+const PROVEN_MATCH_TYPES = new Set(['id', 'manual']);
 
 function canPushToCloud(r) {
   return !!(r && r.cloud && r.local && (r.kind || currentTab) !== 'sites'
@@ -2176,7 +2191,26 @@ function bulkCheckDifferences() {
    has been bitten by twice, so it is said in words - including which of the
    two is the good one - rather than reported as a bare failure.
 */
-function pushLocalOverCloud(cloudId, localPath, localName, cloudName) {
+async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matchType) {
+  /* No dialog on a proven pair - the ordering is what makes it safe, and he
+     performs this constantly. On a name-only pair the question is not whether
+     the operation is safe but whether these two are the same project, and that
+     is a question only he can answer, so it is asked once and names the
+     project that will be deleted. */
+  if (matchType && !PROVEN_MATCH_TYPES.has(matchType)) {
+    const ok = await showConfirmModal(
+      'Replace the cloud copy?',
+      '<p>Upload <b>' + e(localName || '') + '</b> and replace the cloud project '
+      + '<b>' + e(cloudName || '') + '</b>.</p>'
+      + '<p class="sub">These two are paired on their names rather than on '
+      + 'Ekahau\'s own id, so the tool cannot prove they are the same project. '
+      + 'Check the name above is the one you mean.</p>'
+      + '<p class="sub">The new copy is uploaded and checked first; the old '
+      + 'cloud project is deleted only after that succeeds. A cloud delete '
+      + 'cannot be undone.</p>',
+      'Replace it');
+    if (!ok) return;
+  }
   opEnqueue({
     title: `Replacing cloud "${cloudName || localName}" with your local copy`,
     sub: 'Uploading, verifying, then removing the old cloud copy.',
@@ -2270,17 +2304,17 @@ function stalenessBadgeHtml(r) {
         + 'copy. If the upload fails nothing is deleted; if the delete fails '
         + 'you are told there are two and which one is good.';
       return cmpHtml
-        + `<button class="stale-badge stale-local is-action" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}')">&#11014; Local newer &middot; replace cloud</button>`
+        + `<button class="stale-badge stale-local is-action" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}','${j(r.matchType || '')}')">&#11014; Local newer &middot; replace cloud</button>`
         + checkBtn;
     }
-    /* Paired on a name alone. Pulling is offered for these because it is
-       recoverable; replacing the cloud copy is not, so it asks for the pair to
-       be confirmed first rather than acting on a guess. */
-    const unproven = 'Your local copy is newer, but these two are paired on '
-      + 'their names rather than a proven match. Replacing the cloud copy '
-      + 'deletes the old one, and a cloud delete cannot be undone - so confirm '
-      + 'the pair with the \u{1F517} Link button first and this becomes '
-      + 'available.';
+    /* Only a guessed pairing reaches here now - same site code, or similar
+       words. The two names are not the same, so there is nothing to confirm
+       against and Link is the honest route. */
+    const unproven = 'Your local copy is newer, but these two were paired by '
+      + 'guesswork - a shared site code or similar wording, not the same name '
+      + 'and not Ekahau\'s id. Replacing the cloud copy deletes the old one '
+      + 'and that cannot be undone, so confirm the pair with the \u{1F517} '
+      + 'Link button first and this becomes available.';
     return `<span class="stale-badge stale-local" title="Your local copy was edited more recently than the cloud one.">&#11014; Local newer</span>`
       + `<button class="gut-arrow push-unavailable is-disabled" aria-disabled="true"`
       + ` title="${a(unproven)}" aria-label="Local to Cloud, confirm the pair first">`

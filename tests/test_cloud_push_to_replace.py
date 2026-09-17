@@ -160,11 +160,18 @@ class OnlyAProvenPairMayReplaceTheCloudCopyTests(unittest.TestCase):
         self.assertTrue(self.out["gate"]["manual"])
         self.assertIn("pushLocalOverCloud(", self.out["badge"]["manual"])
 
-    def test_a_name_only_match_may_not(self):
-        """Pulling accepts this and pushing must not: the pull keeps a backup,
-        the push deletes a cloud project that cannot be recovered."""
-        self.assertFalse(self.out["gate"]["exact"])
-        self.assertNotIn("pushLocalOverCloud(", self.out["badge"]["exact"])
+    def test_a_name_only_match_may_push_but_is_asked_first(self):
+        """This asserted the opposite and that assertion was the bug.
+
+        Excluding a name match made the control unusable for the pair he
+        actually has: a project built locally and uploaded carries Ekahau's id
+        only in the *cloud* copy, so "local is newer, no shared id" is the
+        normal state of work in progress. It is allowed now and confirms first,
+        naming the cloud project it will delete - friction rather than a wall.
+        `test_cloud_push_is_reachable.py` drives that path.
+        """
+        self.assertTrue(self.out["gate"]["exact"])
+        self.assertIn("pushLocalOverCloud(", self.out["badge"]["exact"])
 
     def test_a_guessed_match_may_not(self):
         for mt in ("code", "fuzzy"):
@@ -175,10 +182,14 @@ class OnlyAProvenPairMayReplaceTheCloudCopyTests(unittest.TestCase):
         """A site's local side is a folder, not an .esx."""
         self.assertFalse(self.out["gateSite"])
 
-    def test_an_unproven_pair_is_told_how_to_make_it_proven(self):
+    def test_a_guessed_pair_is_told_how_to_make_itself_proven(self):
         """Shown and unavailable with a route out, never absent - the original
-        complaint about this row was a control that did nothing."""
-        html = self.out["badge"]["exact"]
+        complaint about this row was a control that did nothing.
+
+        Only a *guessed* pairing lands here now: a shared site code, or similar
+        wording. The two names are not the same, so there is nothing for him to
+        confirm against and Link is the honest answer."""
+        html = self.out["badge"]["fuzzy"]
         self.assertIn('aria-disabled="true"', html)
         self.assertIn("Link", html)
         self.assertIn("cannot be undone", html)

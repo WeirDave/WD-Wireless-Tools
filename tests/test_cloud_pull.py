@@ -199,10 +199,17 @@ class CloudPullWiringTests(unittest.TestCase):
         deletes the old cloud project, and a cloud delete does not come back -
         so it requires Ekahau's own id, or a pairing he made himself.
         """
-        self.assertIn("const PUSHABLE_MATCH_TYPES = new Set(['id', 'manual'])",
+        self.assertIn(
+            "const PUSHABLE_MATCH_TYPES = new Set(['id', 'manual', 'exact'])",
+            self.js,
+            "replacing a cloud project on a *guessed* pairing would delete a "
+            "project that was never the counterpart - but a shared name is not "
+            "a guess, and excluding it made the control unusable for the case "
+            "he actually has")
+        self.assertIn("const PROVEN_MATCH_TYPES = new Set(['id', 'manual'])",
                       self.js,
-                      "replacing a cloud project on a guessed pairing would "
-                      "delete a project that was never the counterpart")
+                      "a name-only pair is allowed and asks first; the proven "
+                      "ones go straight through")
         start = self.js.index("function stalenessBadgeHtml(")
         body = self.js[start:self.js.index(chr(10) + "}", start)]
         local_part = body[body.index("local_newer"):]
