@@ -395,12 +395,11 @@
 
   /* The project segment of the file name, and where it came from.
 
-     The folder comes first, because that is where the project name actually
-     lives in practice - a job is kept in a folder called "Example Client -
-     Building 4 - 1200 Fake Rd" and the .esx inside it is called whatever the
-     site or the discipline is. Naming the report after the folder is what
-     someone would do by hand, and doing it by hand on every save is the thing
-     this replaces.
+     The folder matters because that is where the job name actually lives in
+     practice - a job is kept in a folder named for the client, the building
+     and the address, and the .esx inside it is called whatever the site or
+     the discipline is. Naming the report after both is what someone would do
+     by hand, and doing it by hand on every save is the thing this replaces.
 
      The stem is next and is kept whole - "ACME2 - SITE-03 - 100 Example St,
      Springfield, IL 62701 - B01 - PD" stays as it is. It is the answer whenever
@@ -412,17 +411,36 @@
      nothing at all the segment drops out rather than leaving a dangling
      separator behind. */
   function projectNameSource() {
-    var folder = fileSafe(projectFolder || '');
-    if (folder && !GENERIC_FOLDER.test(folder)) {
-      return { name: folder, from: 'the folder it was opened from' };
+    var folderRaw = fileSafe(projectFolder || '');
+    var folderIsGeneric = !!folderRaw && GENERIC_FOLDER.test(folderRaw);
+    var folder = (folderRaw && !folderIsGeneric) ? folderRaw : '';
+
+    var stemRaw = fileSafe(String(fileName || '').replace(/[.]esx$/i, ''));
+    var stem = (stemRaw && !GENERIC_STEM.test(stemRaw)) ? stemRaw : '';
+
+    /* Both, when both say something and neither already contains the other.
+       This used to return the folder alone, which threw away the site or the
+       discipline that the file name carries - and asked about it he wanted
+       the folder *included*, not substituted. */
+    if (folder && stem) {
+      var f = folder.toLowerCase(), t = stem.toLowerCase();
+      if (f === t || f.indexOf(t) > -1) {
+        return { name: folder, from: 'the folder it was opened from' };
+      }
+      if (t.indexOf(f) > -1) {
+        return { name: stem, from: 'the .esx file name' };
+      }
+      return { name: folder + ' - ' + stem,
+               from: 'the folder it was opened from, then the .esx file name' };
     }
-    var stem = fileSafe(String(fileName || '').replace(/[.]esx$/i, ''));
-    if (stem && !GENERIC_STEM.test(stem)) {
-      return { name: stem, from: 'the .esx file name' };
+    if (folder) return { name: folder, from: 'the folder it was opened from' };
+    if (stem) {
+      return { name: stem, from: 'the .esx file name',
+               skippedFolder: folderIsGeneric ? folderRaw : '' };
     }
     var fromFile = fileSafe(proj.projectName || '');
     if (fromFile) return { name: fromFile, from: 'the name inside the project' };
-    if (stem) return { name: stem, from: 'the .esx file name' };
+    if (stemRaw) return { name: stemRaw, from: 'the .esx file name' };
     var client = fileSafe(settingDefault('clientName') || '');
     if (client) return { name: client, from: 'the Client / company setting' };
     return { name: '', from: '' };
@@ -463,11 +481,22 @@
     var rev = revEl ? revEl.value.trim() : settingDefault('revision');
     // The real project name once one is open, so the preview is the actual
     // file name rather than a shape.
-    var site = '', from = '';
+    var site = '', from = '', why = '';
     try {
       var picked = projectNameSource();
       site = picked.name || '';
       from = picked.from || '';
+      /* The rule that decides this has been invisible, and "I can't get you
+         to include the folder name" is what that costs. Both reasons a folder
+         is missing are now printed where the name is. */
+      if (picked.skippedFolder) {
+        why = 'The folder it is in, \u201c' + picked.skippedFolder + '\u201d, is a place '
+            + 'rather than a job, so it is left out.';
+      } else if (!projectFolder) {
+        why = 'No folder is in the name because this file was dragged in \u2014 a '
+            + 'drop hands the browser a bare file name. Open it with '
+            + '\u201cOpen another\u2026\u201d and the folder comes with it.';
+      }
     } catch (e) {}
     if (!site) { site = 'Project name'; from = ''; }
     var on = buildDocTitle(docName, rev, site, true);
@@ -485,7 +514,8 @@
       // the answer changes with how the file was opened, and that is not
       // something anyone would guess from looking at the name.
       + (from ? '<div class="rep-set-name-src">Project name taken from '
-                + WD.esc(from) + '.</div>' : '');
+                + WD.esc(from) + '.'
+                + (why ? ' ' + WD.esc(why) : '') + '</div>' : '');
   }
   window.renderFilenamePreview = renderFilenamePreview;
 
@@ -1021,6 +1051,18 @@
     }
   }
 
+  /* The "#" column is 0.58in wide because it holds a number. When a name
+     carries no "APnn" this used to return the whole name, so the map marker
+     printed "Access Point" while the table printed "Access Poi" - the marker
+     pill grows to fit and a table cell clips. Both surfaces call this
+     function, so the disagreement was never in the derivation; it was that
+     the derivation could return something no "#" column can hold.
+
+     A trailing number anywhere in the name is used if there is one. Failing
+     that the name is cut here, once, so that every surface shows the same
+     cut - and the full name is beside it in the AP name column. */
+  var SHORT_LABEL_MAX = 7;
+
   function apLabel(ap, mode) {
     var n = (ap && ap.name) || '';
     if (mode === 'full') return n;
@@ -1029,8 +1071,14 @@
     // ACME1-01-00-01-AP05-001 fail to match and fall through to the whole
     // name - in a column sized for two characters, and on the map marker.
     var m = n.match(/AP[\-_\s]?(\d+[A-Za-z]?)(?:[\-_](\d+))?\s*$/i);
-    if (!m) return n;
-    return m[2] ? m[1] + '-' + m[2] : m[1];
+    if (m) return m[2] ? m[1] + '-' + m[2] : m[1];
+    // No "APnn" at all. A trailing number is still a number somebody wrote.
+    var t = n.match(/(\d+)\s*$/);
+    if (t) return t[1];
+    var trimmed = n.trim();
+    return trimmed.length > SHORT_LABEL_MAX
+      ? trimmed.slice(0, SHORT_LABEL_MAX - 1) + '\u2026'
+      : trimmed;
   }
 
   /* A floor plan imported from CAD carries a generated name like
@@ -1181,9 +1229,35 @@
     return Object.keys(used);
   }
 
+  /* An antenna code, and why the table does not print the name.
+
+     A real external antenna is called something like "Vendor ANT-4x4-D1314
+     Dual-Band Narrow Sector 13.5 dBi" - around fifty characters. The AP
+     installation table has eleven columns on a portrait sheet, and there is
+     no width at which that string fits on one line. It was truncated with an
+     ellipsis, which on screen has a tooltip behind it and on paper has
+     nothing: "Aruba ANT-4x4-D13\u2026" does not identify a part to order or to
+     check against what is in the box.
+
+     Letting it wrap was measured and is worse. With eleven columns Firefox
+     cannot satisfy `width: 100%` once a cell may wrap, so it shrinks the
+     whole sheet to 75% - every value on the page smaller, to widen one
+     column.
+
+     So the column carries a code and "Antennas in use" carries the code
+     beside the full name, which is what a drawing does with anything too long
+     for the field it belongs in. The code is assigned in the order the
+     legend lists them, from the same list, so the two cannot drift. */
+  function antennaKeys(ids) {
+    var map = {};
+    (ids || []).forEach(function (id, i) { map[id] = 'A' + (i + 1); });
+    return map;
+  }
+
   function renderAntennaTable(ids, apCountMap) {
     if (!ids.length) return '';
     var hasCount = apCountMap && Object.keys(apCountMap).length > 0;
+    var keys = antennaKeys(ids);
     var rows = '';
     ids.forEach(function (id) {
       var a = proj.antennas[id]; if (!a) return;
@@ -1196,16 +1270,20 @@
       var countCell = hasCount
         ? '<td class="rep-num">' + (apCountMap[id] || 0) + ' AP' + ((apCountMap[id] || 0) === 1 ? '' : 's') + '</td>'
         : '';
-      rows += '<tr><td class="rep-name">' + WD.esc(a.name || id) + '</td><td>' + WD.esc(bits.join(' · ')) + '</td>' + countCell + '</tr>';
+      rows += '<tr><td class="rep-az">' + WD.esc(keys[id] || '') + '</td>'
+        + '<td class="rep-name">' + WD.esc(a.name || id) + '</td><td>'
+        + WD.esc(bits.join(' · ')) + '</td>' + countCell + '</tr>';
     });
     var countHeader = hasCount ? '<th class="rep-num">Qty</th>' : '';
     /* The antenna name is the longest value on any of these sheets, so it is
        given the room explicitly rather than an even share. */
     var cols = hasCount
-      ? '<colgroup><col style="width:50%"><col style="width:35%"><col style="width:15%"></colgroup>'
-      : '<colgroup><col style="width:58%"><col style="width:42%"></colgroup>';
+      ? '<colgroup><col style="width:8%"><col style="width:47%"><col style="width:32%">'
+        + '<col style="width:13%"></colgroup>'
+      : '<colgroup><col style="width:9%"><col style="width:53%"><col style="width:38%"></colgroup>';
     return '<table class="rep-ap-table">' + cols
-      + '<thead><tr><th>Antenna</th><th>Specs</th>' + countHeader + '</tr></thead>'
+      + '<thead><tr><th class="rep-num">Code</th><th>Antenna</th><th>Specs</th>'
+      + countHeader + '</tr></thead>'
       + '<tbody>' + rows + '</tbody></table>';
   }
 
@@ -5279,6 +5357,10 @@
     var byFloor = groupApsByFloor(aps, ctx);
     var floorOrder = sortedFloorOrder(byFloor);
 
+    // One map for the whole document, from the same call the legend makes,
+    // so a code means the same antenna on every floor and in the legend.
+    var antKeys = antennaKeys(collectUsedAntennas(aps, ctx));
+
     var sections = '';
     var floorIdx = 0;
     floorOrder.forEach(function (fp) {
@@ -5288,12 +5370,18 @@
         return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
       });
       var idx = floorIdx % 5;
-      var out = '<section class="rep-floor-section" data-floor-idx="' + idx + '">'
+      /* Without a map there is nothing above the table, and the table starts
+         its own sheet - so "(No floor plan)" was printing as a heading alone
+         on an otherwise blank page. Marked here so the print rule can let the
+         table follow its heading. */
+      var noMap = fp.id === '_none';
+      var out = '<section class="rep-floor-section' + (noMap ? ' rep-floor-nomap' : '')
+        + '" data-floor-idx="' + idx + '">'
         + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
-      if (fp.id !== '_none') {
+      if (!noMap) {
         out += renderApLocationOverview(fp, sorted, opts, ctx);
       }
-      out += renderApLocationTable(sorted, fp, opts, ctx);
+      out += renderApLocationTable(sorted, fp, opts, ctx, antKeys);
       out += '</section>';
       sections += out;
       floorIdx++;
@@ -5317,7 +5405,16 @@
     return renderAntennaOverview(fp, aps, opts, ctx);
   }
 
-  function renderApLocationTable(aps, fp, opts, ctx) {
+  function renderApLocationTable(aps, fp, opts, ctx, antKeys) {
+    antKeys = antKeys || {};
+    /* The table starts its own sheet, which is right when a map sits above
+       it and wrong when nothing does - '(No floor plan)' was printing as a
+       heading alone on an otherwise blank page. Inline, because the rule it
+       has to beat is a plain stylesheet declaration and this is the one
+       place that knows whether there is a map. */
+    var breakStyle = (fp && fp.id === '_none')
+      ? ' style="page-break-before:auto;break-before:auto"'
+      : '';
     var showDir = aps.some(function (ap) { return !apIsOmniOnly(ap); });
     var showCP = opts.showChannelPower !== false;
 
@@ -5393,8 +5490,12 @@
           + '<td class="rep-nowrap-print">' + heightStr + '</td>'
           + '<td class="rep-az">' + azStr + '</td>'
           + '<td>' + tiltStr + '</td>'
-          + '<td class="rep-ellip" title="' + WD.escAttr(ant ? ant.name : '') + '">'
-          + WD.esc(ant ? ant.name : '—') + '</td>';
+          /* The code, not the name. A part number is around fifty characters
+             and this sheet has eleven columns; see `antennaKeys` for what
+             printing it here costs. "Antennas in use" carries the same code
+             beside the full name, and the tooltip still has it on screen. */
+          + '<td class="rep-az" title="' + WD.escAttr(ant ? ant.name : '') + '">'
+          + WD.esc(ant ? (antKeys[ant.id] || ant.name) : '—') + '</td>';
       }
       rows += '<tr' + (nameIssue ? ' class="rep-loc-warn-row"' : '') + '>'
         + '<td class="rep-num">' + WD.esc(lbl) + '</td>'
@@ -5412,7 +5513,7 @@
     });
 
     var dirHeaders = showDir
-      ? '<th>Mount</th><th>Height</th><th>Azimuth</th><th>Tilt</th><th>Antenna</th>'
+      ? '<th>Mount</th><th>Height</th><th>Azimuth</th><th>Tilt</th><th>Ant.</th>'
       : '';
     var cpHeaders = showCP ? '<th>TX Power</th><th>Channel</th>' : '';
     var colCount = 4 + (oneFloor ? 0 : 1) + (oneBuilding ? 0 : 1)
@@ -5441,7 +5542,11 @@
       printCols.push({ key: 'height', weight: 17 });
       printCols.push({ key: 'azimuth', weight: 12 });
       printCols.push({ key: 'tilt', weight: 8 });
-      printCols.push({ key: 'antenna', weight: 20 });
+      // An antenna part number is the longest value in the row and "14 dBm"
+      // is not, so the width follows the content rather than the header.
+      // It holds a code now, not a part number, so it needs almost nothing -
+      // and the AP name and model get the width back.
+      printCols.push({ key: 'antenna', weight: 10 });
     }
     if (opts.nameAudit) printCols.push({ key: 'audit', weight: 12 });
     var printWeight = printCols.reduce(function (sum, col) { return sum + col.weight; }, 0);
@@ -5454,7 +5559,7 @@
     // floor's table turned every other floor's too, which is the opposite of
     // what per-page orientation is for.
     var locKey = 'loc-table:' + ((fp && fp.id) || 'all');
-    return '<section class="rep-loc-page rep-oriented"'
+    return '<section class="rep-loc-page rep-oriented"' + breakStyle
       + ' data-page-key="' + WD.escAttr(locKey) + '" data-page-kind="table">'
       + orientPickerHtml(locKey, opts)
       + '<table class="rep-ap-table rep-loc-table">'

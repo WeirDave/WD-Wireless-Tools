@@ -1,6 +1,6 @@
 """The saved report file name ends with the project.
 
-    Report - AP Installation - v2.0 - Example Client - Building 4 - 1200 Fake Rd
+    Report - AP Installation - v2.0 - Northwind Traders - Building 4 - 1200 Fake Rd
 
 The project is the name of the **folder** the .esx was opened from, when that
 can be known. That is where a project name actually lives in practice: the job
@@ -106,20 +106,57 @@ class ReportFileName(unittest.TestCase):
           done();
         """)
 
-    def test_the_folder_wins_over_the_file_name(self):
-        """The whole point of the change.
+    def test_the_name_carries_the_folder_and_the_file(self):
+        """Both, because both say something different.
 
-        His folder says what the job is; the file inside says which site or
-        which discipline. They are different strings and he wants the first.
+        The folder says what the job is; the file inside says which site or
+        which discipline. This returned the folder alone for a while, which
+        threw the second one away - and asked about it he wanted the folder
+        *included*, not substituted.
         """
         self.check("""
-          projectFolder = 'Example Client - Building 4 - 1200 Fake Rd';
+          projectFolder = 'Northwind Traders - Building 4 - 1200 Fake Rd';
           fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = 'v2.0';
-          eq('the file name was used instead of the folder', reportDocTitle(),
-             'Report - AP Installation - v2.0 - Example Client - Building 4 - 1200 Fake Rd');
+          eq('the name is missing the folder or the file', reportDocTitle(),
+             'Report - AP Installation - v2.0 - '
+             + 'Northwind Traders - Building 4 - 1200 Fake Rd'
+             + ' - 400 Example St, Fairview, CA 90003 - PD');
           eq('the preview would name the wrong source',
-             projectNameSource().from, 'the folder it was opened from');
+             projectNameSource().from,
+             'the folder it was opened from, then the .esx file name');
+          done();
+        """)
+
+    def test_neither_is_repeated_when_one_contains_the_other(self):
+        """A folder named for the site and a file named the same thing is the
+        common case for a one-project folder. Printing it twice is noise."""
+        self.check("""
+          projectFolder = 'SITE1 - BLD-03';
+          fileName = 'SITE1 - BLD-03.esx';
+          currentOpts.revision = '';
+          eq('the same name was printed twice', reportDocTitle(),
+             'Report - AP Installation - SITE1 - BLD-03');
+          projectFolder = 'SITE1 - BLD-03';
+          fileName = 'SITE1 - BLD-03 - PD.esx';
+          eq('the longer of the two was not kept', reportDocTitle(),
+             'Report - AP Installation - SITE1 - BLD-03 - PD');
+          done();
+        """)
+
+    def test_a_skipped_folder_is_named_so_it_can_be_asked_about(self):
+        """Twenty of his projects sit directly in a folder called after the
+        software rather than the job, so the folder is dropped and the name
+        looks as though the feature is not working. The rule is invisible;
+        this is what makes it sayable on screen."""
+        self.check("""
+          projectFolder = 'Ekahau Projects';
+          fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
+          const src = projectNameSource();
+          eq('the generic folder leaked into the name', src.name,
+             '400 Example St, Fairview, CA 90003 - PD');
+          eq('the page cannot say which folder it ignored',
+             src.skippedFolder, 'Ekahau Projects');
           done();
         """)
 
@@ -172,12 +209,12 @@ class ReportFileName(unittest.TestCase):
         """His folders are "client - building - address". Every one of those
         separators and commas is meaning, not noise."""
         self.check("""
-          projectFolder = 'Example Client, Bldg 4 - 1200 Fake Rd, Suite 200';
+          projectFolder = 'Northwind Traders, Bldg 4 - 1200 Fake Rd, Suite 200';
           fileName = 'whatever.esx';
           currentOpts.revision = 'v1.0';
           const t = reportDocTitle();
           check('punctuation was stripped from the folder: ' + t,
-                t.indexOf('Example Client, Bldg 4 - 1200 Fake Rd, Suite 200') > -1);
+                t.indexOf('Northwind Traders, Bldg 4 - 1200 Fake Rd, Suite 200') > -1);
           done();
         """)
 
@@ -346,7 +383,7 @@ class OpenEsxRoute(unittest.TestCase):
     def setUp(self):
         import tempfile, zipfile
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-fname-"))
-        folder = self.tmp / "Example Client - Building 4 - 1200 Fake Rd"
+        folder = self.tmp / "Northwind Traders - Building 4 - 1200 Fake Rd"
         folder.mkdir()
         self.esx = folder / "400 Example St, Fairview, CA 90003 - PD.esx"
         with zipfile.ZipFile(self.esx, "w") as z:
@@ -363,7 +400,7 @@ class OpenEsxRoute(unittest.TestCase):
             self.assertEqual(r.status_code, 200)
             self.assertEqual(r.data[:2], b"PK", "that is not a zip")
             self.assertEqual(unquote(r.headers["X-WD-Project-Folder"]),
-                             "Example Client - Building 4 - 1200 Fake Rd")
+                             "Northwind Traders - Building 4 - 1200 Fake Rd")
             self.assertEqual(unquote(r.headers["X-WD-File-Name"]), self.esx.name)
         finally:
             r.close()

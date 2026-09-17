@@ -6432,7 +6432,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-loc-table { page-break-before: always; break-before: page; }
   /* ...except where there is no map above it, in which case the break puts a
      heading alone on a sheet and the table on the next one. */
-  .rep-floor-nomap .rep-loc-table {
+  .rep-floor-nomap .rep-loc-page {
     page-break-before: auto !important; break-before: auto !important;
   }
   .rep-loc-table col { width: var(--print-col-w, auto) !important; }
@@ -6472,6 +6472,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
     overflow: hidden !important;
     text-overflow: ellipsis !important;
   }
+
   /* The AP name is transcribed onto a physical label, so it is never cut.
      This used to say that with `white-space: nowrap` and `overflow: visible`,
      which is not "never cut" - it is "never wrapped, and allowed to leave the
