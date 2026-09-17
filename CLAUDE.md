@@ -127,6 +127,35 @@ reading all of them is what worked.
    `git show` line above is the cheap check: it reads `versions.json` **at the
    tag**, which is exactly what the workflow will read.
 
+   **And never run a bare `git commit`.** The index is shared too. A
+   documentation-only commit run with no paths swallowed another session's
+   fully staged margin work - fifteen files, a version bump and all - and
+   published it under a message that ended "Documentation only ... so no
+   version bump", which by then was false. Nothing was lost, but the history
+   now says something that is not true. Name the paths every time:
+   `git commit -F msg.txt -- path/one path/two`, which commits those paths
+   from the working tree and ignores whatever else is staged.
+
+   **Staging a file another session is also editing needs content-based
+   staging, not `git add`.** `git add` takes the whole file including their
+   half-finished work - and if their half references a module they have not
+   tracked yet, that is v2.102.0 again. The way that works: take `git show
+   HEAD:path`, apply your own edits to *that*, `git hash-object -w --stdin
+   --path <path>`, then `git update-index --cacheinfo 100644,<sha>,<path>`.
+   Their working tree is untouched and only your change is staged. Verify it
+   before committing by exporting the index somewhere else and running the
+   suite there: `git checkout-index -a -f --prefix=/some/dir/`. That is the
+   tree CI will see, which is the only tree whose test result means anything.
+
+   **A test that reads the live repository will go red for reasons that have
+   nothing to do with your change.** `tests/test_updater.py::BlockedApiTests`
+   patched three calls and left `remote_branch_state`, which asks how far
+   behind `origin/main` this checkout is - so it passed only while the commit
+   under test was the branch tip, and failed on a re-run after anything else
+   landed. Fixed in v2.103.17. If CI fails somewhere you did not touch, check
+   whether the test is asking the repository a question before assuming you
+   broke it.
+
    The release workflow (`.github/workflows/release.yml`) triggers on
    `release: [published]`, checks out the tag, runs tests, builds the ZIP via
    `scripts/build_release.py`, and uploads it as a release asset.
