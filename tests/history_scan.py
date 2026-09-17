@@ -80,6 +80,17 @@ def _git(*args: str, binary: bool = False, timeout: int = 300):
     return out.stdout if binary else out.stdout.decode("utf-8", "replace")
 
 
+def count_commits(rev: str) -> int:
+    """How many commits the scan had to walk.
+
+    The scan reports what it found, and after a history rewrite the honest
+    answer is nothing at all - so "did it find something" stopped being a
+    usable proxy for "did it run". This is the direct question instead.
+    """
+    out = _git("rev-list", "--count", rev).strip()
+    return int(out) if out.isdigit() else 0
+
+
 def message_body(raw: str) -> str:
     """A commit message with the machine-written identity lines removed."""
     return _TRAILER.sub("", raw)

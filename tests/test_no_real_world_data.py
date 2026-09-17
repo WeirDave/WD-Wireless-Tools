@@ -245,6 +245,12 @@ class TheHistoryIsCheckedToo(unittest.TestCase):
 
     Rewriting history is the only thing that clears the baseline. After that,
     run `scripts/refresh_history_baseline.py` and it gets shorter.
+
+    **That happened on 2026-09-17 and the baseline is empty.** Every commit and
+    every blob was rewritten with `git-filter-repo`, the findings went to zero,
+    and the file records nothing. The ratchet is at its floor: an entry
+    appearing in it again is new debt rather than inherited debt, and the right
+    response is to fix the commit, not to record it.
     """
 
     @classmethod
@@ -262,6 +268,7 @@ class TheHistoryIsCheckedToo(unittest.TestCase):
         cls.known_blobs = set(cls.baseline["blobs"])
         cls.messages = history_scan.scan_commit_messages("HEAD", detect_findings)
         cls.blobs = history_scan.scan_blobs("HEAD", detect_findings)
+        cls.walked = history_scan.count_commits("HEAD")
 
     def test_no_commit_message_carries_workplace_data(self):
         """The surface the file-content check could never see.
@@ -335,14 +342,21 @@ class TheHistoryIsCheckedToo(unittest.TestCase):
     def test_the_scan_really_walked_the_history(self):
         """A history check that silently scanned nothing is a comment.
 
+        This used to assert that the scan found *something*, reasoning that the
+        baseline was not empty so a nil result meant a nil run. The history was
+        rewritten on 2026-09-17 and the baseline is empty now, so that proxy
+        would fail for the best possible reason. Ask the direct question
+        instead: how many commits did it walk.
+
         `setUpClass` skips when git is missing, which is right for a release
-        ZIP and wrong everywhere else. The baseline is not empty, so a scan
-        that found nothing did not run.
+        ZIP and wrong everywhere else - and a shallow clone skips too, because
+        a truncated history reporting itself clean is the exact failure this
+        guards against.
         """
         self.assertGreater(
-            len(self.messages) + len(self.blobs), 0,
-            "the history scan found nothing, so it did not run - the "
-            "baseline is not empty")
+            self.walked, 100,
+            "the history scan walked %d commit(s), which is not this "
+            "repository - it did not run" % self.walked)
 
 
 class TheRuleItselfIsStillThere(unittest.TestCase):

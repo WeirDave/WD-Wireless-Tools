@@ -1,49 +1,11 @@
 {
   "_readme": "Findings already present in published history, by object id. The history guard ignores exactly these and fails on anything else, so new workplace data cannot be committed while the existing debt stays visible. Regenerate with scripts/refresh_history_baseline.py. Object ids only - never values.",
-  "recorded": "2026-09-16",
-  "commit_messages": [
-    "2a526e2b",
-    "76826bc5"
-  ],
-  "blobs": [
-    "0149d7f3",
-    "0156c697",
-    "04637595",
-    "066e3c64",
-    "12a62804",
-    "1608c620",
-    "16d02376",
-    "23d63727",
-    "2a6fd153",
-    "32008e83",
-    "38e58e27",
-    "39fcdd9d",
-    "3d0f70c1",
-    "40c15c3e",
-    "42fe1beb",
-    "4ac11bea",
-    "56a69e20",
-    "5dcbfdc4",
-    "5f961338",
-    "75d8bcec",
-    "80ceac3a",
-    "8825f983",
-    "9d93371c",
-    "a08e4122",
-    "ac262286",
-    "c450cd47",
-    "c6a4613f",
-    "d1069a7c",
-    "dc93d8da",
-    "e1cc56c6",
-    "e3d8241c",
-    "ee43201c",
-    "f425865a",
-    "fa51e26a"
-  ],
+  "recorded": "2026-09-17",
+  "commit_messages": [],
+  "blobs": [],
   "counts": {
-    "commit_messages": 2,
-    "blobs": 34,
-    "paths": 7
+    "commit_messages": 0,
+    "blobs": 0,
+    "paths": 0
   }
 }
