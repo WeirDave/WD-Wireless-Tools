@@ -88,6 +88,7 @@
       <button class="sr-tab active" data-tab="folders" onclick="switchRenameTab('folders')">Folder Convention</button>
       <button class="sr-tab" data-tab="files" onclick="switchRenameTab('files')">File Convention</button>
       <button class="sr-tab" data-tab="rules" onclick="switchRenameTab('rules')">File Cleanup Rules</button>
+      <button class="sr-tab" data-tab="esx" onclick="switchRenameTab('esx')">Project Files (.esx)</button>
     </div>
 
     <!-- Folder Convention tab -->
@@ -184,6 +185,45 @@
         <div class="org-rename-example">Example: <code>photo.jpg</code> in <code>Springfield CA/</code> → <code id="brRenameExample">photo.jpg</code></div>
       </div>
       <div class="hint">Extensions are never touched. These are the same rules Organize applies automatically.</div>
+    </div>
+
+    <!-- Project Files tab.
+
+         The one job this tab does: every .esx takes the name of the folder it
+         is sitting in, then the descriptor typed once here. The prefix is
+         never typed, because the folders and site names are already renamed
+         and correct - so a selection spanning many different sites all lands
+         right, each file reading its own folder.
+
+         The separator is read off the files already named the way he wants
+         rather than chosen, and the descriptor buttons are the words already
+         in use on disk. Nothing in here carries a list of guesses. -->
+    <div id="renameTabEsx" class="rn-tab-content" hidden>
+      <div class="sr-format-section">
+        <div class="sr-format-row">
+          <label for="rnEsxDescriptor">Descriptor:</label>
+          <input type="text" id="rnEsxDescriptor" class="sr-format-input"
+                 placeholder="what kind of file it is — e.g. the survey type or stage"
+                 oninput="updateRenamePreview()">
+        </div>
+        <div class="sr-token-hint">
+          Every selected <code>.esx</code> is renamed to
+          <b>&lt;its own folder's name&gt;</b><span id="rnEsxSepEcho" class="rn-esx-sep"> - </span><b>&lt;this descriptor&gt;</b>.
+          The prefix comes from the folder each file is in, so one descriptor
+          covers files across many sites at once.
+        </div>
+        <div class="sr-tokens" id="rnEsxDescriptorBar"></div>
+        <div class="rn-esx-sep-row">
+          <label for="rnEsxSeparator">Joined by</label>
+          <select id="rnEsxSeparator" onchange="updateRenamePreview()"></select>
+          <span id="rnEsxSepNote" class="sr-hint"></span>
+        </div>
+      </div>
+      <div class="rn-esx-actions">
+        <button type="button" class="btn btn-sec btn-sm" onclick="esxSelectAll(true)">Select all</button>
+        <button type="button" class="btn btn-sec btn-sm" onclick="esxSelectAll(false)">Select none</button>
+        <span id="rnEsxSummary" class="sr-hint"></span>
+      </div>
     </div>
 
     <!-- Preview -->

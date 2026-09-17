@@ -5022,14 +5022,19 @@ function startRename(side, idOrPath, name, kind) {
      greyed-out list: "it's in the correct folder so I want to use the folder
      name as part of the name, and I can't remember the exact thing."
 
-     It is not background context. His naming convention is that a file
-     carries the name of its folder exactly - he renamed the sites and the
-     files inside them so the two could not drift apart - and "folder / site
-     name" was his own answer to which name he meant. So the folder name is
-     the string he is sitting there trying to remember. It gets a label of its
-     own, one click puts it in the field or takes it whole, and a file that
-     disagrees with its folder is said out loud rather than left to be
-     noticed. */
+     It is not background context. His naming convention is
+     <folder name><separator><descriptor>: "they're partially named with the
+     site name / folder name, but not entirely - they're also going to have
+     information on what kind of file it is." The folders and site names are
+     already renamed and correct, so the folder is the authority for the front
+     of the name and the folder name is the string he is sitting there trying
+     to remember.
+
+     So it gets a label of its own, one click puts it at the front with the
+     caret after it, and a *prefix* that disagrees with its folder is said out
+     loud. Only the prefix: a name with more in it than the folder has is the
+     convention working, and warning about that would teach him to ignore the
+     strip that matters. */
   const where = _renameContainerName(side, idOrPath, kind);
   const whereKey = side === 'cloud' ? 'Cloud site' : 'Folder / site name';
   // Name the row after the thing on the other end of it. A cloud project is
@@ -5058,10 +5063,11 @@ function startRename(side, idOrPath, name, kind) {
   document.getElementById('renameSub').textContent = '';
 
   /* Showing him the folder name is half the job; he wanted it *in* the new
-     name. Insert puts it at the cursor. "Use as the whole name" is the other
-     half, and is the one his convention actually asks for - the two names are
-     meant to be the same string, so making them the same should be one click
-     rather than a word he reads here and retypes below. */
+     name. Insert puts it wherever the cursor is. "Use as the prefix" puts it
+     at the front, keeps whatever descriptor is already there, and leaves the
+     caret ready for the descriptor - which is the shape his convention
+     actually asks for, and the one thing he cannot do by typing because it is
+     the part he cannot remember. */
   const insert = document.getElementById('renameInsert');
   if (where) {
     const arg = a(JSON.stringify(where));
@@ -5072,8 +5078,9 @@ function startRename(side, idOrPath, name, kind) {
       + ' title="Add it to the name at the cursor, keeping what is already there"'
       + ' onclick="_renameInsert(' + arg + ')">Insert &ldquo;' + e(where) + '&rdquo;</button>'
       + '<button type="button" class="rename-insert-btn rename-insert-use"'
-      + ' title="Replace the name with the folder name, so the two match"'
-      + ' onclick="_renameUseFolder(' + arg + ')">Use as the whole name</button>';
+      + ' title="Put the folder name at the front and leave the cursor after'
+      + ' it, ready for what kind of file this is"'
+      + ' onclick="_renameUsePrefix(' + arg + ')">Use as the prefix</button>';
   } else {
     insert.hidden = true;
     insert.innerHTML = '';
@@ -5082,7 +5089,12 @@ function startRename(side, idOrPath, name, kind) {
   const input = document.getElementById('renameInput');
   input.value = name;
   showModal('renameModal');
-  input.select();
+  /* Caret at the end rather than the whole value selected. What he is doing
+     here is adding to a name that is already right as far as it goes - the
+     prefix - so the first keystroke has to extend it, not wipe it. Selecting
+     everything is the correct opening for "retype this"; this is not that. */
+  input.setSelectionRange(input.value.length, input.value.length);
+  input.focus();
   _renamePreview();
 }
 
@@ -5132,27 +5144,109 @@ function _renameInsert(text) {
   _renamePreview();
 }
 
-/* The convention in one click: the file takes the folder's name exactly. */
-function _renameUseFolder(text) {
+/* The convention in one click - but the convention is a *prefix*, not the
+   whole name. "They're partially named with the site name / folder name, but
+   not entirely - they're also going to have information on what kind of file
+   it is." So this fixes the front of the name and leaves the back of it to
+   him, with the caret waiting in the right place.
+
+   Whatever descriptor the name already carries is kept. Only the prefix is
+   replaced, which is the only part the folder is authoritative about. */
+function _renameUsePrefix(folder) {
   const input = document.getElementById('renameInput');
   if (!input) return;
-  input.value = text;
+  const sep = _renameSeparator(input.value, folder);
+  const rest = _renameDescriptor(input.value, folder);
+  input.value = rest ? (folder + sep + rest) : (folder + sep);
   input.focus();
-  input.setSelectionRange(input.value.length, input.value.length);
+  // After the prefix and its separator, so the next thing typed is the
+  // descriptor - not at the very end, where it would land after a descriptor
+  // he already has.
+  const at = rest ? input.value.length : (folder + sep).length;
+  input.setSelectionRange(at, at);
   _renamePreview();
 }
 
-/* Does the name in the field agree with the folder it sits in? That question
-   is the reason the convention exists - he renamed sites and files together
-   so a file could not drift out of alignment with its site - so it is
-   answered on screen rather than left to him to spot. Judged on what is in
-   the field rather than on what the file is called now, so clicking "Use as
-   the whole name" turns the warning into a tick and he can see that it took. */
+/* What the rest of the suite joins a prefix to a descriptor with, and what
+   tools/rename_manager.py falls back to. */
+const RENAME_SEP = ' - ';
+
+/* The characters he joins a prefix to a descriptor with, read off the name in
+   front of us when it actually shows one.
+
+   Caught by driving it: this used to fall back to the first run of separator
+   characters anywhere in the value, which on a bare prefix is the space
+   *inside the folder name*. "Riverside Depot" then produced "Riverside Depot "
+   and the button quietly proposed a space where his convention uses " - ". A
+   separator has to come after the folder name to be a separator at all. */
+function _renameSeparator(value, folder) {
+  const parts = _renameSplit(value, folder);
+  return (parts && parts.sep) ? parts.sep : RENAME_SEP;
+}
+
+/* What the name says this file *is*, once the prefix is taken off the front.
+
+   When the prefix is somebody else's site, split on the separator his
+   convention uses rather than on the first space in the name - "Old Depot
+   Name - Validation" is a wrong prefix and the descriptor "Validation", not a
+   prefix "Old" and a descriptor "Depot Name - Validation". Same rule as
+   _tail_after_prefix() in tools/rename_manager.py. */
+function _renameDescriptor(value, folder) {
+  const parts = _renameSplit(value, folder);
+  if (parts) return parts.rest;
+  const v = String(value || '');
+  const at = v.indexOf(RENAME_SEP);
+  if (at > -1) return v.slice(at + RENAME_SEP.length);
+  const m = v.match(/[ \t_.\-]+/);
+  return m ? v.slice(m.index + m[0].length) : '';
+}
+
+/* Read a name as <folder><separator><descriptor>.
+
+   The separator has to be there: without that check a folder called "North"
+   would claim "Northside" and the boundary between prefix and descriptor
+   would silently move. Same rule as split_folder_prefix() in
+   tools/rename_manager.py, which is what the bulk pass uses. */
+function _renameSplit(value, folder) {
+  const v = String(value || ''), f = String(folder || '');
+  if (!f || !v) return null;
+  if (v.trim().toLowerCase() === f.trim().toLowerCase()) return { sep: '', rest: '' };
+  if (v.toLowerCase().indexOf(f.toLowerCase()) !== 0) return null;
+  const tail = v.slice(f.length);
+  const m = tail.match(/^[ \t_.\-]+/);
+  if (!m) return null;
+  return { sep: m[0], rest: tail.slice(m[0].length) };
+}
+
+/* Does the name in the field start with the folder it sits in?
+
+   That is the question, and an earlier version of this asked a different and
+   wrong one: whether the whole name equalled the folder name. It does not and
+   should not. "They're partially named with the site name / folder name, but
+   not entirely - they're also going to have information on what kind of file
+   it is." A name with more in it than the folder has is correct, and warning
+   about it would have trained him to ignore the strip that matters.
+
+   What is worth saying is a *prefix* that disagrees with its folder, because
+   the folders are the authority now - he has already finished renaming those.
+   Judged on what is in the field rather than on what the file is called now,
+   so clicking "Use as the prefix" turns the warning into a tick and he can
+   see that it took. */
 function _renameMatchState(proposed, folder) {
   if (!folder || !proposed) return '';
-  if (proposed === folder) return 'match';
-  const norm = s => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
-  return norm(proposed) === norm(folder) ? 'near' : 'differs';
+  const parts = _renameSplit(proposed, folder);
+  if (!parts) {
+    const norm = s => String(s || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    const head = String(proposed).split(/[ \t_.\-]+/)[0] || '';
+    // A prefix that is right apart from its capitalisation or spacing is a
+    // different problem from one that names another site, and saying which
+    // saves him working it out from two strings.
+    if (norm(proposed) === norm(folder)
+        || norm(proposed).indexOf(norm(folder) + ' ') === 0
+        || norm(head) === norm(folder)) return 'near';
+    return 'differs';
+  }
+  return parts.rest ? 'match' : 'prefix-only';
 }
 
 function _renameMatch() {
@@ -5168,13 +5262,18 @@ function _renameMatch() {
   if (!state) { el.hidden = true; el.textContent = ''; return; }
   el.hidden = false;
   if (state === 'match') {
-    el.textContent = '✓ This name matches the ' + noun + ' name.';
+    const rest = (_renameSplit(proposed, folder) || {}).rest || '';
+    el.textContent = '✓ Prefixed with the ' + noun + ' name, then “'
+      + rest + '”.';
+  } else if (state === 'prefix-only') {
+    el.textContent = '✓ This is the ' + noun
+      + ' name. Add what kind of file it is after it.';
   } else if (state === 'near') {
-    el.textContent = '⚠ This name matches the ' + noun
-      + ' name apart from capitalisation or spacing — “' + proposed
+    el.textContent = '⚠ The prefix is nearly the ' + noun
+      + ' name but not exactly — “' + proposed
       + '” against “' + folder + '”.';
   } else {
-    el.textContent = '⚠ This name does not match the ' + noun
+    el.textContent = '⚠ This does not start with the ' + noun
       + ' name — “' + proposed + '” against “' + folder + '”.';
   }
 }

@@ -22,18 +22,31 @@ is half the job; the other half is letting him put it in the name without
 retyping it.
 
 Asked which name he meant, he answered "folder / site name" - the folder *is*
-the site, and his convention is that every file carries the name of the folder
-it sits in, exactly, so a file cannot drift out of alignment with its site.
-That makes three more things true of this dialog, and they are what the newer
+the site. A first pass then read too much into that and had the dialog treat
+the folder name as the *whole* name, which he corrected:
+
+    "They're partially named with the site name / folder name, but not
+    entirely - they're also going to have information on what kind of file it
+    is. But when I go to rename them, for example I had a whole bunch that
+    were named with just the prefix and didn't add additional information on
+    facilities, and now I need to do that."
+
+So the convention is **<folder name><separator><descriptor>**, and the folder
+is authoritative for the prefix only - he has already finished renaming the
+folders and site names themselves. Four things follow, and they are what the
 tests below hold:
 
 * the folder name and the current file name are both named facts, each with a
   label, rather than one of them being a parenthetical on the other
-* taking the folder name *whole* is one click, because that is what the
-  convention asks for most of the time - insert-at-cursor alone still left him
-  clearing the old name by hand first
-* a name that disagrees with its folder says so, which is the misalignment the
-  convention exists to prevent
+* one click puts the folder name at the *front* and leaves the caret after it,
+  ready for the descriptor - it does not take over the whole field, and it
+  keeps any descriptor the name already carries
+* the field opens with the caret at the end rather than with everything
+  selected, because he is extending a name that is right as far as it goes
+* a *prefix* that disagrees with its folder says so. A name with more in it
+  than the folder has does not, because that is the convention working. The
+  first version warned about exactly that and would have taught him to ignore
+  the strip that matters.
 
 Every name here is invented.
 """
@@ -109,29 +122,69 @@ class TheRenameDialogStandsOnItsOwnTests(unittest.TestCase):
         self.assertNotIn("white-space: nowrap", block)
         self.assertIn("overflow-wrap: anywhere", block)
 
-    def test_the_folder_name_can_be_taken_whole_in_one_click(self):
-        """Insert-at-cursor is not the whole fix.
+    def test_the_folder_name_goes_in_as_a_prefix_in_one_click(self):
+        """A prefix, not the whole name - and the caret lands after it.
 
-        His convention is that the two names are the *same* string, so the
-        common case is not "add this word" but "make them match" - and doing
-        that with the insert button meant clearing the field by hand first.
+        The button used to replace the field outright, which was built on
+        reading "folder / site name" as the complete name. It is not: the
+        folder supplies the front of the name and he supplies what kind of
+        file it is.
         """
-        self.assertIn("_renameUseFolder(", self.start_rename)
-        self.assertIn("Use as the whole name", self.start_rename)
-        use = self.body("_renameUseFolder")
-        self.assertIn("input.value = text;", use)
+        self.assertIn("_renameUsePrefix(", self.start_rename)
+        self.assertIn("Use as the prefix", self.start_rename)
+        self.assertNotIn("Use as the whole name", self.start_rename)
+        use = self.body("_renameUsePrefix")
+        self.assertIn("folder + sep", use)
+        self.assertIn("setSelectionRange", use)
         self.assertIn("_renamePreview()", use)
 
-    def test_a_name_that_disagrees_with_its_folder_says_so(self):
-        """The misalignment the convention exists to prevent."""
+    def test_taking_the_prefix_keeps_the_descriptor_already_there(self):
+        """Half his files already say what they are. Fixing the front of the
+        name must not throw away the back of it."""
+        use = self.body("_renameUsePrefix")
+        self.assertIn("_renameDescriptor(", use)
+        self.assertIn("rest ? (folder + sep + rest)", use)
+
+    def test_a_prefix_that_disagrees_with_its_folder_says_so(self):
+        """The misalignment worth flagging, now that the folders are the
+        authority: he has already finished renaming those."""
         self.assertIn('id="renameMatch"', CLOUD_HTML)
         match = self.body("_renameMatch")
-        self.assertIn("does not match", match)
-        self.assertIn("matches the", match)
-        self.assertIn("capitalisation or spacing", match)
+        self.assertIn("does not start with", match)
+        self.assertIn("Prefixed with the", match)
+
+    def test_extra_information_after_the_prefix_is_not_a_mismatch(self):
+        """The correction. "They're partially named with the site name /
+        folder name, but not entirely."
+
+        A name that is the folder plus a descriptor is the convention working,
+        so it gets a tick that names the descriptor - not a warning.
+        """
+        state = self.body("_renameMatchState")
+        self.assertIn("_renameSplit(proposed, folder)", state)
+        self.assertIn("parts.rest ? 'match' : 'prefix-only'", state)
+        match = self.body("_renameMatch")
+        self.assertIn("prefix-only", match)
+        self.assertIn("Add what kind of file it is after it", match)
+
+    def test_the_prefix_split_needs_a_separator_to_be_a_split(self):
+        """Otherwise a folder called "North" claims "Northside", and the
+        boundary between prefix and descriptor moves by four characters.
+
+        The same rule as split_folder_prefix() in tools/rename_manager.py,
+        which is what the bulk pass on the Rename page uses - the two have to
+        agree about where a prefix ends or the dialog and the batch will
+        disagree about the same file.
+        """
+        split = self.body("_renameSplit")
+        self.assertIn("if (!m) return null;", split)
+        self.assertIn("toLowerCase", split)
+        rm = (ROOT / "tools" / "rename_manager.py").read_text(encoding="utf-8")
+        self.assertIn("def split_folder_prefix(", rm)
+        self.assertIn("casefold", rm)
 
     def test_the_flag_judges_the_field_rather_than_the_old_name(self):
-        """So clicking "use as the whole name" visibly turns it into a tick.
+        """So clicking "use as the prefix" visibly turns it into a tick.
 
         Judged on the old name, the warning would sit there unchanged after
         the button had already fixed it, which teaches him to ignore it.
@@ -141,10 +194,10 @@ class TheRenameDialogStandsOnItsOwnTests(unittest.TestCase):
         self.assertNotIn("renameTarget.original", match)
         self.assertIn("_renameMatch()", self.body("_renamePreview"))
 
-    def test_case_only_differences_are_not_reported_as_a_plain_mismatch(self):
+    def test_a_nearly_right_prefix_is_not_reported_as_a_plain_mismatch(self):
         """"NORTH CAMPUS" against "North Campus" is a different problem from
-        "Survey 30" against "North Campus", and saying which one he is looking
-        at saves him working it out from two strings.
+        "Riverside Depot" against "North Campus", and saying which one he is
+        looking at saves him working it out from two strings.
         """
         state = self.body("_renameMatchState")
         self.assertIn("toLowerCase", state)
@@ -152,9 +205,18 @@ class TheRenameDialogStandsOnItsOwnTests(unittest.TestCase):
         self.assertIn("'differs'", state)
         self.assertIn("'match'", state)
 
-    def test_the_field_is_prefilled_so_he_edits_rather_than_retypes(self):
+    def test_the_field_is_prefilled_and_the_caret_waits_at_the_end(self):
+        """Not select-all. He is adding to a name, not replacing one.
+
+        "I had a whole bunch that were named with just the prefix and didn't
+        add additional information on facilities, and now I need to do that."
+        With the whole value selected, the first character typed deletes the
+        prefix that was already correct.
+        """
         self.assertIn("input.value = name;", self.start_rename)
-        self.assertIn("input.select();", self.start_rename)
+        self.assertNotIn("input.select();", self.start_rename)
+        self.assertIn("input.setSelectionRange(input.value.length, input.value.length);",
+                      self.start_rename)
 
     def test_the_container_name_can_be_inserted_not_just_read(self):
         """Showing it saves him nothing if he still has to type it."""

@@ -26,6 +26,7 @@ async function initRename() {
   const rnSettings = (settings.ok && settings.settings && settings.settings.rename) || {};
   document.getElementById('rnFolderFormat').value = rnSettings.folder_format || '';
   document.getElementById('rnFileFormat').value = rnSettings.file_format || '';
+  document.getElementById('rnEsxDescriptor').value = rnSettings.esx_descriptor || '';
 
   const rn = rnSettings.file_rules || {};
   document.getElementById('brCase').value = rn.case || '';
@@ -114,7 +115,9 @@ function switchRenameTab(tab) {
   document.getElementById('renameTabFolders').hidden = tab !== 'folders';
   document.getElementById('renameTabFiles').hidden = tab !== 'files';
   document.getElementById('renameTabRules').hidden = tab !== 'rules';
+  document.getElementById('renameTabEsx').hidden = tab !== 'esx';
   _renderManualFields();
+  if (tab === 'esx') _esxOnOpen();
   updateRenamePreview();
 }
 
@@ -254,6 +257,20 @@ async function _runRenamePreview() {
       root: _renameState.root,
       format: fmt,
     });
+  } else if (tab === 'esx') {
+    const d = document.getElementById('rnEsxDescriptor').value.trim();
+    if (!d) {
+      list.innerHTML = '<div class="org-extract-empty">Type what kind of file these are — the part that goes after the site name. Every selected <code>.esx</code> then gets its own folder\'s name in front of it, and the full before-and-after list appears here.</div>';
+      document.getElementById('renamePreviewCount').textContent = '';
+      document.getElementById('rnEsxSummary').textContent = '';
+      document.getElementById('renameApplyBtn').disabled = true;
+      return;
+    }
+    r = await renameApi('preview_add_descriptor', {
+      root: _renameState.root,
+      descriptor: d,
+      separator: _esxSeparator(),
+    });
   } else {
     r = await renameApi('preview_bulk_rename', {
       root: _renameState.root,
@@ -268,7 +285,11 @@ async function _runRenamePreview() {
     return;
   }
 
-  if (tab === 'rules') {
+  if (tab === 'esx') {
+    _renameState.items = r.items || [];
+    _renameState.esxSeparator = r.separator || ' - ';
+    _renderEsxPreview(r.counts || {});
+  } else if (tab === 'rules') {
     _renameState.items = r.items || [];
     _renderRulesPreview();
   } else {
@@ -367,7 +388,17 @@ async function doRename() {
     }
   };
 
-  if (tab === 'rules') {
+  if (tab === 'esx') {
+    /* Only the ticked rows. Everything else in the list is there to be read -
+       a file that already has a descriptor, or one whose prefix names another
+       site - and reading it is the point of showing it. */
+    const picked = _renameState.items.filter(x => x.selected
+                                             && x.status !== 'already_correct'
+                                             && x.status !== 'collision');
+    if (!picked.length) { btn.textContent = originalLabel; btn.disabled = false; return; }
+    await remember({ esx_descriptor: document.getElementById('rnEsxDescriptor').value.trim() });
+    r = await renameApi('execute_add_descriptor', { items: picked });
+  } else if (tab === 'rules') {
     await remember({ file_rules: _getRuleValues() });
     r = await renameApi('execute_bulk_rename', { items: _renameState.items });
   } else {
@@ -394,7 +425,7 @@ async function doRename() {
 
 // Bug 8 fix: map tab to correct undo type
 async function renameUndo() {
-  const typeMap = { folders: 'folders', files: 'files', rules: 'bulk' };
+  const typeMap = { folders: 'folders', files: 'files', rules: 'bulk', esx: 'descriptor' };
   const type = typeMap[_renameState.tab] || _renameState.tab;
   const r = await renameApi('undo_last', { type });
   if (r.error) { toast(r.error, 'error'); return; }
@@ -662,4 +693,156 @@ async function doCsvHelperPrefill() {
 function copyCsvHelper() {
   const el = document.getElementById('csvHelperOutput');
   navigator.clipboard.writeText(el.value).then(() => toast('Copied to clipboard'));
+}
+
+
+/* ── Project Files (.esx): the folder is the prefix ──────────────────
+
+   "They're partially named with the site name / folder name, but not
+   entirely - they're also going to have information on what kind of file it
+   is. But when I go to rename them, for example I had a whole bunch that were
+   named with just the prefix and didn't add additional information on
+   facilities, and now I need to do that." And then: "I've already done it for
+   the folders / site names."
+
+   So the folders are the authority and the prefix never needs typing. He
+   types the descriptor once; each file takes the name of the folder it is
+   sitting in, which is why a selection spanning many sites all lands right.
+
+   Nothing here hardcodes a descriptor or a separator. Both are read off the
+   names already on disk each time the tab is opened. */
+
+const _ESX_SEPARATORS = [
+  { value: ' - ', label: 'Site - Descriptor  (spaced dash)' },
+  { value: '_',   label: 'Site_Descriptor  (underscore)' },
+  { value: '-',   label: 'Site-Descriptor  (dash)' },
+  { value: ' ',   label: 'Site Descriptor  (space)' },
+  { value: '.',   label: 'Site.Descriptor  (dot)' },
+];
+
+function _esxSeparator() {
+  const el = document.getElementById('rnEsxSeparator');
+  return el && el.value !== '' ? el.value : (_renameState.esxSeparator || ' - ');
+}
+
+/* Opening the tab asks the disk two questions: how he already joins a prefix
+   to a descriptor, and which descriptors he already uses. Both answers are
+   his own, which is the only way this can be right about a vocabulary nobody
+   here has seen. */
+async function _esxOnOpen() {
+  if (!_renameState.root) return;
+  const sel = document.getElementById('rnEsxSeparator');
+  const note = document.getElementById('rnEsxSepNote');
+
+  const sep = await renameApi('detect_descriptor_separator', { root: _renameState.root });
+  const detected = (sep && sep.ok && sep.separator) || ' - ';
+  _renameState.esxSeparator = detected;
+
+  const options = _ESX_SEPARATORS.slice();
+  if (!options.some(o => o.value === detected)) {
+    options.unshift({ value: detected, label: 'Site' + detected + 'Descriptor' });
+  }
+  sel.innerHTML = options.map(o =>
+    '<option value="' + esc(o.value) + '"' + (o.value === detected ? ' selected' : '') + '>'
+    + esc(o.label) + '</option>').join('');
+  note.textContent = (sep && sep.detected)
+    ? 'Read from the files you have already named this way.'
+    : 'Nothing on disk to read it from yet — this is the suite default.';
+  _esxEchoSeparator();
+
+  const d = await renameApi('scan_descriptors', { root: _renameState.root });
+  const bar = document.getElementById('rnEsxDescriptorBar');
+  const list = (d && d.ok && d.descriptors) || [];
+  bar.innerHTML = list.length
+    ? '<span class="sr-hint rn-esx-bar-label">Already in use:</span> ' + list.map(x =>
+        '<button type="button" class="sr-token-btn" title="Used on '
+        + x.count + ' file' + (x.count === 1 ? '' : 's') + ' already"'
+        + ' onclick="_esxUseDescriptor(' + escAttr(JSON.stringify(x.text)) + ')">'
+        + esc(x.text) + ' <span class="rn-esx-count">' + x.count + '</span></button>').join(' ')
+    : '<span class="sr-hint">No descriptors on disk yet — type the first one.</span>';
+}
+
+function _esxUseDescriptor(text) {
+  const el = document.getElementById('rnEsxDescriptor');
+  el.value = text;
+  el.focus();
+  el.setSelectionRange(el.value.length, el.value.length);
+  updateRenamePreview();
+}
+
+function _esxEchoSeparator() {
+  const echo = document.getElementById('rnEsxSepEcho');
+  if (echo) echo.textContent = _esxSeparator();
+}
+
+function esxSelectAll(on) {
+  _renameState.items.forEach(it => {
+    if (it.status === 'already_correct' || it.status === 'collision') return;
+    it.selected = !!on;
+  });
+  _renderEsxPreview(_renameState.esxCounts || {});
+}
+
+function esxToggle(i) {
+  const it = _renameState.items[i];
+  if (!it) return;
+  it.selected = !it.selected;
+  _renderEsxPreview(_renameState.esxCounts || {});
+}
+
+/* What each row means, in words, next to the row. The status is the whole
+   safety story of this screen, so it is never left as a colour. */
+const _ESX_STATUS = {
+  add: { label: 'Descriptor added', cls: 'rn-esx-add' },
+  fix_prefix: { label: 'Prefix corrected', cls: 'rn-esx-fix' },
+  replace: { label: 'Replaces what is there', cls: 'rn-esx-replace' },
+  already_correct: { label: 'Already correct', cls: 'rn-esx-done' },
+  collision: { label: 'Name already taken', cls: 'rn-esx-clash' },
+};
+
+function _renderEsxPreview(counts) {
+  _renameState.esxCounts = counts;
+  const items = _renameState.items;
+  const list = document.getElementById('renamePreviewList');
+  const countEl = document.getElementById('renamePreviewCount');
+  const summary = document.getElementById('rnEsxSummary');
+  _esxEchoSeparator();
+
+  const picked = items.filter(x => x.selected && x.status !== 'already_correct'
+                                && x.status !== 'collision');
+  countEl.textContent = items.length
+    ? '(' + picked.length + ' of ' + items.length + ' selected)' : '';
+  document.getElementById('renameApplyBtn').disabled = picked.length === 0;
+
+  const parts = [];
+  if (counts.add) parts.push(counts.add + ' to add a descriptor to');
+  if (counts.fix_prefix) parts.push(counts.fix_prefix + ' with a prefix that is not its folder');
+  if (counts.replace) parts.push(counts.replace + ' that already say something (not selected)');
+  if (counts.already_correct) parts.push(counts.already_correct + ' already correct');
+  if (counts.collision) parts.push(counts.collision + ' blocked by a name already in the folder');
+  summary.textContent = parts.join(' · ');
+
+  if (!items.length) {
+    list.innerHTML = '<div class="org-extract-empty">No <code>.esx</code> files under this folder.</div>';
+    return;
+  }
+
+  list.innerHTML = items.map((it, i) => {
+    const st = _ESX_STATUS[it.status] || _ESX_STATUS.add;
+    const fixed = it.status === 'already_correct' || it.status === 'collision';
+    return '<label class="rn-esx-row ' + st.cls + (it.selected ? ' is-on' : '') + '">'
+      + '<input type="checkbox" class="rn-esx-chk"' + (it.selected ? ' checked' : '')
+      + (fixed ? ' disabled' : '') + ' onchange="esxToggle(' + i + ')">'
+      + '<span class="rn-esx-folder" title="The folder this file is in — where its prefix comes from">'
+      + esc(it.folder) + '</span>'
+      + '<span class="rn-esx-old">' + esc(it.current) + '</span>'
+      + '<span class="rn-esx-arrow">&#8594;</span>'
+      + '<span class="rn-esx-new">' + esc(it.new_name) + '</span>'
+      + '<span class="rn-esx-status">' + esc(st.label) + '</span>'
+      + (it.losing
+          ? '<span class="rn-esx-losing">loses &ldquo;' + esc(it.losing) + '&rdquo;</span>'
+          : '')
+      + (it.reason ? '<span class="rn-esx-losing">' + esc(it.reason) + '</span>' : '')
+      + '</label>';
+  }).join('');
 }
