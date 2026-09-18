@@ -117,91 +117,78 @@
     <div class="tab" id="tabDuplicates" onclick="switchTab('duplicates')" title="Files with the same normalized name — spot accidental copies">Duplicate Projects</div>
   </div>
 
-  <div class="dashboard">
-    <div class="dash-card allcard" data-filter="all" role="button" tabindex="0" onclick="setFilter('all')" title="Every row on this tab — matched pairs, cloud-only and local-only together. Clears any other filter.">
-      <div class="number" id="dAll">-</div><div class="label">All</div>
-    </div>
-    <div class="dash-card cloud-only" data-filter="orphans-cloud" role="button" tabindex="0" onclick="setFilter('orphans-cloud')" title="Projects that exist on Ekahau Cloud with no matching local .esx in your project folder.">
-      <div class="number" id="dCloudOnly">-</div><div class="label">Cloud Only</div>
-    </div>
-    <div class="dash-card type-design" data-filter="type-design" role="button" tabindex="0" onclick="setFilter('type-design')" id="dTypeDesignCard" hidden title="Predictive projects — Ekahau's SIMULATED_PROJECT. Designed from a plan, with no survey walked yet.">
-      <div class="number" id="dTypeDesign">-</div><div class="label">Design</div>
-    </div>
-    <div class="dash-card type-hybrid" data-filter="type-hybrid" role="button" tabindex="0" onclick="setFilter('type-hybrid')" id="dTypeHybridCard" hidden title="Projects holding both a predictive design and walked survey data — Ekahau's HYBRID_PROJECT.">
-      <div class="number" id="dTypeHybrid">-</div><div class="label">Hybrid</div>
-    </div>
-    <div class="dash-card local-only" data-filter="orphans-local" role="button" tabindex="0" onclick="setFilter('orphans-local')" title="Local .esx files in your project folder with no matching project on Ekahau Cloud.">
-      <div class="number" id="dLocalOnly">-</div><div class="label">Local Only</div>
-    </div>
-    <div class="dash-card type-measured" data-filter="type-measured" role="button" tabindex="0" onclick="setFilter('type-measured')" id="dTypeMeasuredCard" hidden title="Survey projects — Ekahau's MEASURED_PROJECT. Built from measurements actually taken on site.">
-      <div class="number" id="dTypeMeasured">-</div><div class="label">Measured</div>
-    </div>
-    <div class="dash-card mismatches" data-filter="mismatches" role="button" tabindex="0" onclick="setFilter('mismatches')" title="Pairs matched to each other whose names differ, so one side needs renaming to match the other.">
-      <div class="number" id="dMismatches">-</div><div class="label">Mismatches</div>
-    </div>
-    <div class="dash-card stale" data-filter="stale" role="button" tabindex="0" onclick="setFilter('stale')" id="dStaleCard" hidden title="Pairs where one side was edited more recently than the other. The badge on each row says which side.">
-      <div class="number" id="dStale">-</div><div class="label">Out of Sync</div>
-    </div>
-    <div class="dash-card name-matches" data-filter="name-matches" role="button" tabindex="0" onclick="setFilter('name-matches')" id="dNameMatchesCard" hidden title="Pairs matched on an exact name only. The files have not been proven identical — same name is not the same file.">
-      <div class="number" id="dNameMatches">-</div><div class="label">Name Matches</div>
-    </div>
-    <div class="dash-card unassigned" data-filter="unassigned" role="button" tabindex="0" onclick="setFilter('unassigned')" id="dUnassignedCard" hidden title="Cloud projects that are not filed under any site.">
-      <div class="number" id="dUnassigned">-</div><div class="label">No Site</div>
-    </div>
-    <div class="dash-card orphans" data-filter="orphans" role="button" tabindex="0" onclick="setFilter('orphans')" title="Everything unpaired — cloud-only and local-only — except projects owned by someone else.">
-      <div class="number" id="dOrphans">-</div><div class="label">Orphans</div>
-    </div>
-    <div class="dash-card external" data-filter="external" role="button" tabindex="0" onclick="setFilter('external')" id="dExternalCard" hidden title="Projects owned by somebody else's Ekahau account rather than yours — shared with you, not yours to delete.">
-      <div class="number" id="dExternal">-</div><div class="label">External</div>
-    </div>
-    <div class="dash-card unshared" data-filter="unshared" role="button" tabindex="0" onclick="setFilter('unshared')" id="dUnsharedCard"
-         title="Projects you own that nobody else has access to — finished work you have not sent to anyone." hidden>
-      <div class="number" id="dUnshared">-</div><div class="label">Not Shared</div>
-    </div>
-    <div class="dash-card dup-all" data-filter="dup-all" role="button" tabindex="0" onclick="setFilter('dup-all')" id="dDupAllCard" hidden title="Groups of two or more projects whose names normalise to the same thing, on either side.">
-      <div class="number" id="dDupAll">-</div><div class="label">Clusters</div>
-    </div>
-    <div class="dash-card dup-cloud" data-filter="dup-cloud" role="button" tabindex="0" onclick="setFilter('dup-cloud')" id="dDupCloudCard" hidden title="Duplicate groups that exist only on Ekahau Cloud.">
-      <div class="number" id="dDupCloud">-</div><div class="label">Cloud-Only Clusters</div>
-    </div>
-    <div class="dash-card dup-local" data-filter="dup-local" role="button" tabindex="0" onclick="setFilter('dup-local')" id="dDupLocalCard" hidden title="Duplicate groups that exist only in your local project folder.">
-      <div class="number" id="dDupLocal">-</div><div class="label">Local-Only Clusters</div>
-    </div>
-    <div class="dash-card dup-mixed" data-filter="dup-mixed" role="button" tabindex="0" onclick="setFilter('dup-mixed')" id="dDupMixedCard" hidden title="Duplicate groups containing both cloud and local copies.">
-      <div class="number" id="dDupMixed">-</div><div class="label">Mixed Clusters</div>
+  <div class="dashboard" id="dashboard">
+    <!-- The counts are information first and filters second, so they read as a
+         sentence rather than as nine chips competing with the toolbar beneath
+         them. Same ids as the cards they replace: updateCounts() writes into
+         these untouched. -->
+    <div class="summary-line" role="group" aria-label="Filters and counts">
+      <button class="sum-count" data-filter="all" onclick="setFilter('all')" title="Every row on this tab — matched pairs, cloud-only and local-only together. Clears any other filter."><span class="sum-n" id="dAll">-</span> <span class="sum-l">items</span></button>
+      <span class="sum-sep">&middot;</span>
+      <button class="sum-count" data-filter="stale" onclick="setFilter('stale')" id="dStaleCard" title="Pairs where one side was edited more recently than the other. The badge on each row says which side."><span class="sum-n" id="dStale">-</span> <span class="sum-l">out of sync</span></button>
+      <button class="sum-count" data-filter="mismatches" onclick="setFilter('mismatches')" title="Pairs matched to each other whose names differ, so one side needs renaming to match the other."><span class="sum-n" id="dMismatches">-</span> <span class="sum-l">name mismatches</span></button>
+      <button class="sum-count" data-filter="name-matches" onclick="setFilter('name-matches')" id="dNameMatchesCard" title="Pairs matched on an exact name only. The files have not been proven identical — same name is not the same file."><span class="sum-n" id="dNameMatches">-</span> <span class="sum-l">name matches</span></button>
+      <span class="sum-sep">&middot;</span>
+      <button class="sum-count" data-filter="orphans" onclick="setFilter('orphans')" title="Everything unpaired — cloud-only and local-only — except projects owned by someone else."><span class="sum-n" id="dOrphans">-</span> <span class="sum-l">unpaired</span></button>
+      <button class="sum-count" data-filter="external" onclick="setFilter('external')" id="dExternalCard" title="Projects owned by somebody else's Ekahau account rather than yours — shared with you, not yours to delete."><span class="sum-n" id="dExternal">-</span> <span class="sum-l">external</span></button>
+      <button class="sum-count" data-filter="unshared" onclick="setFilter('unshared')" id="dUnsharedCard" title="Projects you own that nobody else has access to — finished work you have not sent to anyone."><span class="sum-n" id="dUnshared">-</span> <span class="sum-l">not shared</span></button>
+
+      <details class="wd-menu sum-more">
+        <summary class="wd-menu-btn">More filters</summary>
+        <div class="wd-menu-items">
+      <button class="wd-menu-item" data-filter="orphans-cloud" onclick="setFilter('orphans-cloud')" title="Projects that exist on Ekahau Cloud with no matching local .esx in your project folder."><span class="wd-menu-n" id="dCloudOnly">-</span> Cloud only</button>
+      <button class="wd-menu-item" data-filter="orphans-local" onclick="setFilter('orphans-local')" title="Local .esx files in your project folder with no matching project on Ekahau Cloud."><span class="wd-menu-n" id="dLocalOnly">-</span> Local only</button>
+      <button class="wd-menu-item" data-filter="unassigned" onclick="setFilter('unassigned')" title="Cloud projects that are not filed under any site."><span class="wd-menu-n" id="dUnassigned">-</span> No site</button>
+          <div class="wd-menu-sep"></div>
+      <button class="wd-menu-item" data-filter="type-design" onclick="setFilter('type-design')" title="Predictive projects — Ekahau's SIMULATED_PROJECT. Designed from a plan, with no survey walked yet."><span class="wd-menu-n" id="dTypeDesign">-</span> Design projects</button>
+      <button class="wd-menu-item" data-filter="type-measured" onclick="setFilter('type-measured')" title="Survey projects — Ekahau's MEASURED_PROJECT. Built from measurements actually taken on site."><span class="wd-menu-n" id="dTypeMeasured">-</span> Measured projects</button>
+      <button class="wd-menu-item" data-filter="type-hybrid" onclick="setFilter('type-hybrid')" title="Projects holding both a predictive design and walked survey data — Ekahau's HYBRID_PROJECT."><span class="wd-menu-n" id="dTypeHybrid">-</span> Hybrid projects</button>
+          <div class="wd-menu-sep"></div>
+      <button class="wd-menu-item" data-filter="dup-all" onclick="setFilter('dup-all')" title="Groups of two or more projects whose names normalise to the same thing, on either side."><span class="wd-menu-n" id="dDupAll">-</span> Duplicate clusters</button>
+      <button class="wd-menu-item" data-filter="dup-cloud" onclick="setFilter('dup-cloud')" title="Duplicate groups that exist only on Ekahau Cloud."><span class="wd-menu-n" id="dDupCloud">-</span> Cloud-only clusters</button>
+      <button class="wd-menu-item" data-filter="dup-local" onclick="setFilter('dup-local')" title="Duplicate groups that exist only in your local project folder."><span class="wd-menu-n" id="dDupLocal">-</span> Local-only clusters</button>
+      <button class="wd-menu-item" data-filter="dup-mixed" onclick="setFilter('dup-mixed')" title="Duplicate groups containing both cloud and local copies."><span class="wd-menu-n" id="dDupMixed">-</span> Mixed clusters</button>
+        </div>
+      </details>
     </div>
   </div>
 
+  <!-- What he reaches for constantly stays a button. The sets are named
+       dropdowns. Nothing that needs a selection is here at all. -->
   <div class="toolbar">
     <input type="text" class="search" id="searchBox" placeholder="Search...">
     <button class="clear-search" onclick="clearSearch()" title="Clear search">&#215;</button>
-    <button class="btn-info-chip" id="matchHelpChip" onclick="openMatchHelp()" title="How does WD decide two files are the same project?">&#9432; How matching works</button>
-    <label class="selall"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> All</label>
-    <button class="btn btn-secondary" onclick="selectAllSide('cloud')" title="Select every cloud site/project, local side untouched">Select cloud</button>
-    <button class="btn btn-secondary" onclick="selectAllSide('local')" title="Select every local folder/file, cloud side untouched">Select local</button>
-    <button class="btn btn-secondary" onclick="bulkCheckDifferences()" title="Compare the selected files against their cloud copies and report what actually differs. Read-only - nothing is changed on either side.">Check differences</button>
-    <button class="btn btn-secondary" onclick="bulkFixInternalNames()" title="Set the project name stored inside each selected .esx to match its cloud project. Renaming a file on disk does not change the name inside it, which is why matched files can still report a name difference. Each file is backed up first.">Fix names inside files</button>
-    <span class="selcount" id="selCount"></span>
-    <button class="btn btn-secondary" id="expandAllBtn" onclick="expandAllSites()" title="Expand every site" hidden>Expand All</button>
-    <button class="btn btn-secondary" id="collapseAllBtn" onclick="collapseAllSites()" title="Collapse every site" hidden>Collapse All</button>
-    <!-- Not a bulk-btn: it needs no selection, which is the point. Not
-         directional either - it works out per file which side is newer. -->
+
     <button class="btn btn-blue" id="syncAllBtn" onclick="syncEverything()"
             title="Works out for each file which side is newer and does that, or nothing when the two already match. It never replaces a newer file with an older one, so it cannot overwrite work. Shows what it will do before it does it, and says what still needs to go up.">&#8645; Sync everything</button>
-    <button class="btn btn-secondary bulk-btn" id="bulkSyncTo" onclick="bulkSync('to-local')" title="Copy cloud names onto matched local (for selected matched rows)">Cloud &#8594; Local</button>
-    <button class="btn btn-secondary bulk-btn" id="bulkSyncFrom" onclick="bulkSync('to-cloud')" title="Copy local names onto matched cloud (for selected matched rows)">Local &#8594; Cloud</button>
-    <button class="btn btn-secondary bulk-btn" id="compareBtn" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
-    <button class="btn btn-blue bulk-btn" id="bulkMoveBtn" onclick="bulkMoveToSite()" title="Move all selected to a site">Move to site&hellip;</button>
-    <button class="btn btn-secondary bulk-btn" id="bulkVerifyBtn" onclick="bulkVerifyNameMatches()" title="Escape hatch, not the everyday route — use Sync everything for that. For selected 'Name matches' pairs this forces the cloud copy down so the pair becomes 'Same file'. A pair where local is newer is still refused, and the copy it replaces is kept as a .previous- file.">Overwrite from cloud&hellip;</button>
-    <button class="btn btn-secondary bulk-btn" id="bulkShareBtn" onclick="openBulkShare()" title="Share all selected cloud projects with people or your Sharing Group in one action">Share&hellip;</button>
-    <button class="btn btn-red bulk-btn" id="bulkDeleteBtn" onclick="bulkDelete()">Delete selected</button>
-    <span class="spacer"></span>
+
+    <details class="wd-menu">
+      <summary class="wd-menu-btn">Select</summary>
+      <div class="wd-menu-items">
+        <label class="wd-menu-item selall"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> Everything on this tab</label>
+        <button class="wd-menu-item" onclick="selectAllSide('cloud')" title="Select every cloud site/project, local side untouched">Select cloud side</button>
+        <button class="wd-menu-item" onclick="selectAllSide('local')" title="Select every local folder/file, cloud side untouched">Select local side</button>
+      </div>
+    </details>
+
+    <details class="wd-menu">
+      <summary class="wd-menu-btn">View</summary>
+      <div class="wd-menu-items">
+        <button class="wd-menu-item" id="expandAllBtn" onclick="expandAllSites()" title="Expand every site">Expand all sites</button>
+        <button class="wd-menu-item" id="collapseAllBtn" onclick="collapseAllSites()" title="Collapse every site">Collapse all sites</button>
+        <div class="wd-menu-sep"></div>
+        <button class="wd-menu-item" id="matchHelpChip" onclick="openMatchHelp()" title="How does WD decide two files are the same project?">&#9432; How matching works</button>
+      </div>
+    </details>
+
     <button class="btn btn-amber dup-toolbar-btn" id="dupDeleteAllToolbarBtn"
             onclick="dupDeleteAllExtras()" hidden
             title="Deletes every unmatched item across all clusters. Matched pairs stay intact.">
       &#128465; Delete all <span id="dupDeleteAllToolbarCount">0</span> extras
     </button>
+
     <span class="spacer"></span>
+
     <span class="owner-toggle" id="ownerToggle" role="group" aria-label="Filter by owner" hidden>
       <span class="owner-toggle-label">Owner:</span>
       <button class="owner-btn" data-owner="all" title="Show projects whoever owns them."    onclick="setOwnerFilterUI('all')">All</button>
@@ -211,6 +198,31 @@
     <button class="btn btn-blue" id="addNewBtn" onclick="showModal('createModal')">+ New Site</button>
     <button class="btn" id="liveBtn" onclick="toggleLive()" title="Live: auto-refresh from Ekahau Cloud (pauses while selecting or a dialog is open)">Live</button>
     <button class="btn-icon-only" onclick="openSettings()" title="Settings" aria-label="Settings">&#9881;</button>
+  </div>
+
+  <!-- Not present until something is ticked. This is the half of the old
+       toolbar that was meaningless with an empty selection, and the half whose
+       ~900px pushed everything else off a laptop screen. -->
+  <div class="selection-bar" id="selectionBar" hidden>
+    <span class="selcount" id="selCount"></span>
+    <button class="btn btn-secondary" onclick="bulkCheckDifferences()" title="Compare the selected files against their cloud copies and report what actually differs. Read-only - nothing is changed on either side.">Check differences</button>
+    <button class="btn btn-secondary" onclick="bulkFixInternalNames()" title="Set the project name stored inside each selected .esx to match its cloud project. Renaming a file on disk does not change the name inside it, which is why matched files can still report a name difference. Each file is backed up first.">Fix names inside files</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkSyncTo" onclick="bulkSync('to-local')" title="Copy cloud names onto matched local (for selected matched rows)">Cloud &#8594; Local</button>
+    <button class="btn btn-secondary bulk-btn" id="bulkSyncFrom" onclick="bulkSync('to-cloud')" title="Copy local names onto matched cloud (for selected matched rows)">Local &#8594; Cloud</button>
+    <button class="btn btn-secondary bulk-btn" id="compareBtn" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
+
+    <details class="wd-menu">
+      <summary class="wd-menu-btn">Move, share, overwrite</summary>
+      <div class="wd-menu-items">
+        <button class="wd-menu-item bulk-btn" id="bulkMoveBtn" onclick="bulkMoveToSite()" title="Move all selected to a site">Move to site&hellip;</button>
+        <button class="wd-menu-item bulk-btn" id="bulkShareBtn" onclick="openBulkShare()" title="Share all selected cloud projects with people or your Sharing Group in one action">Share&hellip;</button>
+        <button class="wd-menu-item bulk-btn" id="bulkVerifyBtn" onclick="bulkVerifyNameMatches()" title="Escape hatch, not the everyday route - use Sync everything for that. For selected 'Name matches' pairs this forces the cloud copy down so the pair becomes 'Same file'. A pair where local is newer is still refused, and the copy it replaces is kept as a .previous- file.">Overwrite from cloud&hellip;</button>
+      </div>
+    </details>
+
+    <span class="spacer"></span>
+    <button class="btn btn-red bulk-btn" id="bulkDeleteBtn" onclick="bulkDelete()">Delete selected</button>
+    <button class="btn btn-secondary" onclick="clearSelection()" title="Untick everything">Clear selection</button>
   </div>
 
   <div class="jump-nav" id="jumpNav" aria-label="Jump to letter"></div>

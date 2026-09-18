@@ -239,8 +239,14 @@ class IconButtonsSayWhatTheyDoTests(unittest.TestCase):
 class EveryFilterSaysWhatItSelectsTests(unittest.TestCase):
 
     def setUp(self):
+        # The filters were `.dash-card` divs until the header redesign; they
+        # are now buttons on the summary line and inside the "More filters"
+        # menu. What is being checked is unchanged and is the point: every
+        # filter says what it selects, because "I forgot what hybrid meant, or
+        # external for that matter."
         self.cards = re.findall(
-            r'<div class="dash-card [^"]*" data-filter="([a-z-]+)"([^>]*)>',
+            r'<button class="(?:sum-count|wd-menu-item)"[^>]*?'
+            r'data-filter="([a-z-]+)"([^>]*)>',
             CLOUD_HTML)
 
     def test_there_are_cards_to_check(self):
@@ -286,14 +292,30 @@ class EveryFilterSaysWhatItSelectsTests(unittest.TestCase):
                 self.assertIsNotNone(m, owner)
                 self.assertIn("title=", m.group(1))
 
-    def test_a_tooltip_is_reachable_without_a_mouse(self):
-        """The cards were plain divs, so nothing but a pointer could reach them."""
-        for key, attrs in self.cards:
-            with self.subTest(filter=key):
-                self.assertIn('tabindex="0"', attrs)
-                self.assertIn('role="button"', attrs)
-        self.assertIn("_wireFilterCardKeys", CLOUD_JS)
-        self.assertIn(".dash-card:focus-visible", CSS)
+    def test_a_filter_is_reachable_without_a_mouse(self):
+        """The requirement is unchanged; the mechanism got simpler.
+
+        The filters were plain `<div>`s, so reaching them without a pointer
+        needed `tabindex="0"`, `role="button"`, a key handler in JS and a focus
+        style - four things standing in for what an element already does. They
+        are real `<button>`s since the header redesign, which are focusable and
+        activatable by Enter and Space with no help at all, so the scaffolding
+        went with them.
+
+        What is still asserted is the property: every filter is a control the
+        keyboard can reach, and focus is visible when it gets there.
+        """
+        markup = re.findall(
+            r'(<button class="(?:sum-count|wd-menu-item)"[^>]*?'
+            r'data-filter="[a-z-]+"[^>]*>)', CLOUD_HTML)
+        self.assertEqual(len(self.cards), len(markup),
+                         "every filter must be a real button")
+        for tag in markup:
+            with self.subTest(tag=tag[:60]):
+                self.assertNotIn('role="button"', tag,
+                                 "a <button> does not need to claim it is one")
+        self.assertIn(".sum-count:focus-visible", CSS)
+        self.assertIn(".wd-menu-item:focus-visible", CSS)
 
 
 if __name__ == "__main__":

@@ -4660,6 +4660,24 @@ function refreshSelAll() {
   const sa = document.getElementById('selAll');
   if (sa) sa.checked = boxes.length > 0 && [...boxes].every(b => b.checked);
 }
+/* A <details> menu stays open after a click, leaving it covering the row the
+   action just ran on. Close it on any activation inside, and on a click
+   anywhere else. Escape closes them all. */
+document.addEventListener('click', (ev) => {
+  const inside = ev.target.closest ? ev.target.closest('.wd-menu') : null;
+  document.querySelectorAll('.wd-menu[open]').forEach(m => {
+    if (m !== inside) m.open = false;
+  });
+  if (inside && ev.target.closest('.wd-menu-item')) {
+    setTimeout(() => { inside.open = false; }, 0);
+  }
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') {
+    document.querySelectorAll('.wd-menu[open]').forEach(m => { m.open = false; });
+  }
+});
+
 function clearSelection() {
   selected.clear();
   lastChkIndex = null;
@@ -4669,6 +4687,12 @@ function clearSelection() {
 function updateBulkBar() {
   const n = selected.size;
   document.getElementById('selCount').textContent = n ? n + ' selected' : '';
+
+  /* The selection bar is not there until there is a selection. Half the old
+     toolbar only meant anything with something ticked, and it was the half
+     whose width pushed everything else off a laptop screen. */
+  const selBar = document.getElementById('selectionBar');
+  if (selBar) selBar.hidden = n === 0;
 
   let deletableCount = 0, movableCount = 0, localFolderCount = 0;
   let verifyableCount = 0;

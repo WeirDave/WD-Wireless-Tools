@@ -1858,6 +1858,90 @@ body.tool-home .topbar {
 
 [data-theme="light"] .tab-group.active .view-btn.active { color: var(--blue); }
 
+/* ---- Cloud Manager header ------------------------------------------------
+
+   "you can see how we're jamming things into these lines" and "no, but you can
+   make a drop down and redesign the whole thing."
+
+   Three bands, each with one job: what is in the list, what he can do now, and
+   what he can do to a selection. The third does not exist until there is one. */
+
+/* The counts read as a sentence rather than as nine chips arguing with the
+   toolbar beneath them. Information first, filters second: they keep their
+   numbers and lose their boxes. Same ids as the cards they replace. */
+.summary-line {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 2px 4px; padding: 7px 12px 6px;
+  font-size: 12.5px; color: var(--text-2);
+}
+.sum-count {
+  background: none; border: 1px solid transparent; border-radius: 5px;
+  padding: 2px 7px; cursor: pointer; font: inherit; color: inherit;
+  white-space: nowrap;
+}
+.sum-count:hover { background: var(--row-hover); color: var(--text); }
+.sum-count.is-active { border-color: var(--blue); color: var(--text); }
+.sum-n { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.sum-sep { color: var(--border); padding: 0 2px; }
+/* Focus has to be visible: these are keyboard-reachable by being real
+   buttons, which is worthless if you cannot see where you are. */
+.sum-count:focus-visible,
+.wd-menu > summary:focus-visible,
+.wd-menu-item:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 1px;
+}
+.summary-line .sum-more { margin-left: 4px; }
+
+/* Dropdowns are <details>/<summary>: click to open, keyboard reachable, and
+   nothing appears on hover - hover-to-reveal would break the standing rule
+   about decision-relevant information being visible at rest. */
+.wd-menu { position: relative; display: inline-block; }
+.wd-menu > summary {
+  list-style: none; cursor: pointer; user-select: none;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text);
+  font-size: 12px; white-space: nowrap;
+}
+.wd-menu > summary::-webkit-details-marker { display: none; }
+.wd-menu > summary::after { content: '▾'; font-size: 10px; color: var(--text-2); }
+.wd-menu > summary:hover { border-color: var(--text-2); }
+.wd-menu[open] > summary { border-color: var(--blue); }
+.wd-menu-items {
+  position: absolute; z-index: 40; top: calc(100% + 4px); left: 0;
+  min-width: 215px; padding: 5px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 7px; box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+  display: flex; flex-direction: column; gap: 1px;
+}
+/* Near the right edge it opens leftwards rather than off the screen. */
+.selection-bar .wd-menu-items { left: auto; right: 0; }
+.wd-menu-item {
+  display: flex; align-items: center; gap: 8px; text-align: left;
+  background: none; border: 0; border-radius: 5px; cursor: pointer;
+  padding: 6px 9px; font-size: 12.5px; color: var(--text);
+  white-space: nowrap; font-family: inherit;
+}
+.wd-menu-item:hover { background: var(--row-hover); }
+.wd-menu-item.is-disabled { opacity: 0.45; cursor: default; }
+.wd-menu-n {
+  font-weight: 700; font-variant-numeric: tabular-nums;
+  min-width: 2.2em; text-align: right; color: var(--text-2);
+}
+.wd-menu-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+
+/* Appears with a selection and takes its own line, so the resting toolbar
+   never carries it. Roughly 900px of the old bar lived here. */
+.selection-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px; row-gap: 6px;
+  padding: 7px 12px; background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+.selection-bar[hidden] { display: none; }
+.selection-bar > * { flex-shrink: 0; }
+.selection-bar .selcount { font-weight: 700; color: var(--text); font-size: 12.5px; padding-right: 4px; }
+
 .dashboard {
   padding: 6px 12px 8px; display: flex; gap: 6px; align-items: stretch;
   flex-shrink: 0; background: var(--surface);
