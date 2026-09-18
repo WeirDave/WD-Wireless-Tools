@@ -1336,6 +1336,29 @@ did not merely avoid the sync traffic, it removed the failure. Keep the
 `Remove-Item` line anyway: a virus scanner or an open editor can hold a handle
 just as well.
 
+**And most often it is your own session holding it.** On 2026-09-18 a teardown
+failed this way outside Dropbox entirely, with `Remove-Item -Force` *also*
+failing on a directory that was already empty. The holder was a `python.exe`
+this session had started itself, hours earlier, as a long-running background
+command that never returned - its working directory was inside the worktree,
+so an empty folder could not be removed while it lived.
+
+Nothing about that is visible from git, from the error, or from listing the
+folder. What finds it is asking which processes are running out of the path:
+
+```powershell
+Get-CimInstance Win32_Process |
+  Where-Object { $_.CommandLine -like "*<worktree-name>*" } |
+  Select-Object ProcessId, Name, CommandLine
+```
+
+Stop the ones that are yours - check the command line rather than the name,
+for the same reason as `firefox.exe` - and the removal then succeeds. **A
+backgrounded command that has not returned is still a live process**, so kill
+it before teardown rather than discovering it as a permission error. The dev
+toolbar's housekeeping action lists exactly these, which is the other half of
+why it exists.
+
 ### Prune does not clean up after an abandoned session
 
 **`git worktree prune` cannot see the failure mode that actually happens.**
