@@ -1,172 +1,222 @@
 /* ============================================================
    WD Wireless Tools - wd-dev-actions.js
 
-   Every dev-toolbar action is registered here, and this is the only
-   file that has to be edited to add one. WaxFrame keeps the same
-   convention for the same reason: a toolbar whose handlers are
-   scattered across the app grows dead buttons, and a button that
-   calls nothing is worse than no button.
+   **Every dev-toolbar button's markup and handler lives here**, which
+   is WaxFrame's convention for `wf-debug.js`, adopted for the reason
+   WaxFrame gives: a toolbar whose handlers are scattered across the
+   app grows dead buttons, and a button that calls nothing is worse
+   than no button.
 
-   Loaded after wd-dev.js, which owns `WD.Dev.register`.
+   The buttons are written as markup - emoji, short label, `title` -
+   and wired declaratively with `data-action="call"` and
+   `data-fn="WD.Dev.something"`, resolved by the dispatcher in
+   wd-dev.js. That is WaxFrame's `data-fn="WF_DEBUG.bundleForScout"`
+   shape, one for one.
+
+   Two groups, separated by `|` the way WaxFrame separates its Deep
+   Dive / Bundle / Clear cluster from its Force Truncate / Refresh
+   Pricing one. The Cloud group uses a hover flyout, which is what
+   WaxFrame does with its five Scenes buttons.
+
+   Adding an action: one button in `toolbarInnerHtml`, one handler
+   below it. An action that writes gets two buttons - a preview and a
+   live one rendered `disabled` - because the live one must not be
+   pressable until its own preview has come back clean.
    ============================================================ */
 (function () {
   'use strict';
 
   var WD = window.WD;
   if (!WD || !WD.Dev) return;
+  var Dev = WD.Dev;
 
   function esc(s) { return WD.esc(s); }
-
-  /* ── Cloud Manager: realign renamed projects ──────────────────
-     The first action, and the reason the toolbar exists now.
-
-     Roughly ninety pairs read "cloud newer" because the cloud
-     projects were renamed and the local copies were not. Ekahau
-     stamps `history.modifiedAt` on a rename, that stamp is what
-     Cloud Manager compares, and so a batch of identical designs
-     all started claiming there was work to pull.
-
-     The server side is `tools/cloud_realign.py`. It proves each
-     pair identical by unzipping both copies and comparing them -
-     not by the name heuristic, which its own docstring says does
-     not prove content - and skips anything that genuinely differs.
-     ──────────────────────────────────────────────────────────── */
-
-  function call(dryRun) {
-    return WD.api('cloud/realign_renamed', { dryRun: dryRun });
-  }
 
   function plural(n, one, many) {
     return n + ' ' + (n === 1 ? one : many);
   }
 
-  function fileLine(f, extra) {
-    return '<li class="wd-dev-file">' +
-      '<span class="wd-dev-file-name">' + esc(f.name || '(unnamed)') + '</span>' +
-      (f.folder ? '<span class="wd-dev-file-folder">' + esc(f.folder) + '</span>' : '') +
-      (extra || '') +
-    '</li>';
+  /* ── the strip ───────────────────────────────────────────────
+     WaxFrame writes this into index.html; there is no single page
+     here, so it is a string. Same elements, same attributes. */
+  Dev.toolbarInnerHtml = function () {
+    return '' +
+      '<div class="dev-flyout">' +
+        '<button class="dev-flyout-trigger" type="button" ' +
+                'title="Cloud Manager maintenance — hover for menu">' +
+          '☁ Cloud</button>' +
+        '<div class="dev-flyout-panel">' +
+          '<button id="wdRealignPreviewBtn" type="button" ' +
+                  'data-action="call" data-fn="WD.Dev.realignPreview" ' +
+                  'title="Work out which pairs read ‘cloud newer’ only because ' +
+                  'the cloud project was renamed, and report what would change. ' +
+                  'Downloads each cloud copy to prove the designs are identical. ' +
+                  'Writes nothing.">' +
+            '🔍 Preview Realign</button>' +
+          '<button id="wdRealignRunBtn" type="button" disabled ' +
+                  'data-action="call" data-fn="WD.Dev.realignRun" ' +
+                  'title="Preview first. Rewrites the project name and modified date ' +
+                  'inside the local .esx files the preview listed, backing each one ' +
+                  'up first. Nothing is uploaded or deleted.">' +
+            '✅ Align For Real</button>' +
+        '</div>' +
+      '</div>' +
+      '<span class="dev-toolbar-sep">|</span>' +
+      '<button id="wdHousekeepLookBtn" type="button" ' +
+              'data-action="call" data-fn="WD.Dev.housekeepLook" ' +
+              'title="Inventory what our tooling has left behind — worktrees, ' +
+              'scratch folders, leaked temp directories, drivers, downloaded ' +
+              'release ZIPs. Marks anything in use, counts anything carrying ' +
+              'workplace data, and writes nothing.">' +
+        '🔎 Look</button>' +
+      '<button id="wdHousekeepSweepBtn" type="button" disabled ' +
+              'data-action="call" data-fn="WD.Dev.housekeepSweep" ' +
+              'title="Look first. Deletes the items marked safe to remove. Never ' +
+              'touches Dropbox, your project folders, ~/.wd_wireless_tools, your ' +
+              'Desktop, or anything a session is using.">' +
+        '🗑 Delete Listed</button>' +
+      '<span class="dev-toolbar-sep">|</span>' +
+      '<button id="wdDevAboutBtn" type="button" ' +
+              'data-action="call" data-fn="WD.Dev.showWhereIAm" ' +
+              'title="What dev mode is, how it was turned on, and how to leave it.">' +
+        'ℹ About Dev</button>';
+  };
+
+  /* Re-assert every button's armed state whenever the toolbar mounts.
+     A page navigation rebuilds the strip, and a live button must come
+     back disabled - the preview it was armed by belongs to the page
+     that has gone. */
+  Dev.onMounted = function () {
+    Dev.setEnabled('wdRealignRunBtn', false);
+    Dev.setEnabled('wdHousekeepSweepBtn', false);
+  };
+
+  function busy(id, on, label) {
+    var btn = document.getElementById(id);
+    if (!btn) return;
+    btn.disabled = !!on;
+    if (on) {
+      btn.dataset.wasLabel = btn.textContent;
+      btn.textContent = label || 'Working…';
+    } else if (btn.dataset.wasLabel) {
+      btn.textContent = btn.dataset.wasLabel;
+    }
   }
 
-  function renderReport(r, isPreview) {
-    if (!r) return '<p class="wd-dev-error">No answer from the server.</p>';
+  function fail(title, e) {
+    Dev.showResult(title,
+      '<p class="dev-result-error">' + esc((e && e.message) || e) + '</p>');
+  }
 
-    var aligned = r.aligned || [];
-    var skipped = r.skipped || [];
-    var failed = r.failed || [];
-    var parts = [];
+  /* ── Cloud: realign renamed projects ─────────────────────────
+     Roughly ninety pairs read "cloud newer" because the cloud
+     projects were renamed and the local copies were not. The server
+     side is `tools/cloud_realign.py`; it proves each pair identical
+     by comparing contents, not names. */
 
-    parts.push('<p class="wd-dev-headline">' +
-      (isPreview
-        ? 'Examined ' + plural(r.examined || 0, 'pair', 'pairs') + '. ' +
-          'Nothing has been changed.'
-        : 'Examined ' + plural(r.examined || 0, 'pair', 'pairs') + '.') +
-      '</p>');
+  function realignCall(dryRun) {
+    return WD.api('cloud/realign_renamed', { dryRun: dryRun });
+  }
 
-    parts.push('<ul class="wd-dev-tally">' +
+  function realignReport(r, isPreview) {
+    if (!r) return '<p class="dev-result-error">No answer from the server.</p>';
+    var aligned = r.aligned || [], skipped = r.skipped || [], failed = r.failed || [];
+    var out = [];
+
+    out.push('<p class="dev-result-lead">' +
+      'Examined ' + plural(r.examined || 0, 'pair', 'pairs') + '.' +
+      (isPreview ? ' Nothing has been changed.' : '') + '</p>');
+
+    out.push('<ul class="dev-result-tally">' +
       '<li><strong>' + aligned.length + '</strong> ' +
         (isPreview ? 'would be aligned' : 'aligned') + '</li>' +
       '<li><strong>' + skipped.length + '</strong> skipped</li>' +
-      '<li><strong>' + failed.length + '</strong> failed</li>' +
-    '</ul>');
+      '<li><strong>' + failed.length + '</strong> failed</li></ul>');
 
     if (aligned.length) {
-      parts.push('<h5 class="wd-dev-section">' +
-        (isPreview ? 'Would align' : 'Aligned') + '</h5><ul class="wd-dev-files">' +
+      out.push('<h4 class="dev-result-section">' +
+        (isPreview ? 'Would align' : 'Aligned') + '</h4><ul class="dev-result-list">' +
         aligned.map(function (f) {
-          var acts = (f.actions || []).map(function (a) {
-            return '<li>' + esc(a) + '</li>';
-          }).join('');
-          return fileLine(f,
-            (acts ? '<ul class="wd-dev-file-actions">' + acts + '</ul>' : '') +
-            (f.newDate ? '<span class="wd-dev-file-date">New date: ' +
+          return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
+            (f.folder ? '<span class="dev-result-sub">' + esc(f.folder) + '</span>' : '') +
+            ((f.actions || []).length
+              ? '<ul class="dev-result-acts">' + f.actions.map(function (a) {
+                  return '<li>' + esc(a) + '</li>'; }).join('') + '</ul>' : '') +
+            (f.newDate ? '<span class="dev-result-sub">New date: ' +
               esc(f.newDate) + '</span>' : '') +
-            (f.backup ? '<span class="wd-dev-file-backup">Backed up to ' +
+            (f.backup ? '<span class="dev-result-sub">Backed up to ' +
               esc(f.backup) + '</span>' : '') +
-            (f.warning ? '<span class="wd-dev-file-warn">' +
-              esc(f.warning) + '</span>' : ''));
+            (f.warning ? '<span class="dev-result-warn">' +
+              esc(f.warning) + '</span>' : '') +
+          '</li>';
         }).join('') + '</ul>');
     }
-
     if (skipped.length) {
-      parts.push('<h5 class="wd-dev-section">Skipped, and why</h5>' +
-        '<ul class="wd-dev-files">' + skipped.map(function (f) {
-          return fileLine(f, '<span class="wd-dev-file-reason">' +
-            esc(f.reason || 'No reason given.') + '</span>');
+      out.push('<h4 class="dev-result-section">Skipped, and why</h4>' +
+        '<ul class="dev-result-list">' + skipped.map(function (f) {
+          return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
+            '<span class="dev-result-sub">' +
+              esc(f.reason || 'No reason given.') + '</span></li>';
         }).join('') + '</ul>');
     }
-
     if (failed.length) {
-      parts.push('<h5 class="wd-dev-section">Failed</h5>' +
-        '<ul class="wd-dev-files">' + failed.map(function (f) {
-          return fileLine(f, '<span class="wd-dev-file-error">' +
-            esc(f.error || 'Unknown error.') + '</span>');
+      out.push('<h4 class="dev-result-section">Failed</h4>' +
+        '<ul class="dev-result-list">' + failed.map(function (f) {
+          return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
+            '<span class="dev-result-error">' +
+              esc(f.error || 'Unknown error.') + '</span></li>';
         }).join('') + '</ul>');
     }
-
     if (!aligned.length && !skipped.length && !failed.length) {
-      parts.push('<p class="wd-dev-headline">Nothing to do - no pair is ' +
+      out.push('<p class="dev-result-lead">Nothing to do — no pair is ' +
         'reporting the cloud as newer.</p>');
     }
-
-    return parts.join('');
+    return out.join('');
   }
 
-  WD.Dev.register({
-    id: 'cloud-realign-renamed',
-    group: 'Cloud Manager',
-    label: 'Realign projects the cloud only looks newer than',
+  Dev.realignPreview = function () {
+    busy('wdRealignPreviewBtn', true);
+    Dev.setEnabled('wdRealignRunBtn', false);
+    return realignCall(true).then(function (r) {
+      busy('wdRealignPreviewBtn', false);
+      if (r && r.error) { fail('Realign — preview', r.error); return; }
+      Dev.showResult('Realign — preview', realignReport(r, true));
+      // The only path that arms the live button, and only on a clean
+      // preview. A failed one leaves it dead, which is what we want on a
+      // bad day.
+      Dev.setEnabled('wdRealignRunBtn', true);
+    }).catch(function (e) {
+      busy('wdRealignPreviewBtn', false);
+      fail('Realign — preview', e);
+    });
+  };
 
-    summary: 'Renaming a cloud project moves its modified date, so a local ' +
-             'copy that never changed starts reporting "cloud newer". This ' +
-             'settles those pairs without pulling anything.',
+  Dev.realignRun = function () {
+    if (!window.confirm(
+        'This rewrites the project name and modified date inside the local ' +
+        '.esx files the preview listed, backing each one up first. ' +
+        'Nothing is uploaded or deleted. Continue?')) return;
+    busy('wdRealignRunBtn', true);
+    return realignCall(false).then(function (r) {
+      busy('wdRealignRunBtn', false);
+      Dev.setEnabled('wdRealignRunBtn', false);
+      if (r && r.error) { fail('Realign', r.error); return; }
+      Dev.showResult('Realign — done', realignReport(r, false));
+    }).catch(function (e) {
+      busy('wdRealignRunBtn', false);
+      Dev.setEnabled('wdRealignRunBtn', false);
+      fail('Realign', e);
+    });
+  };
 
-    detail: 'Each candidate is proved identical by downloading the cloud ' +
-            'copy and comparing every document and every floor plan image ' +
-            'against the local file - not by the names, which cannot prove ' +
-            'content. Pairs that genuinely differ are skipped and listed. ' +
-            'For the rest it corrects the project name stored inside the ' +
-            '.esx and sets its modified date to the cloud project’s own, ' +
-            'backing up each file it rewrites into your backups folder ' +
-            'first. Nothing is uploaded and nothing is deleted from the ' +
-            'cloud; it is safe to run again if it is interrupted.',
+  /* ── Housekeeping: what our tooling left behind ───────────────
+     "how do I know, once we've done all the work, when to be able to
+     clean stuff up?" The server side is `tools/housekeeping.py`. */
 
-    previewLabel: 'Preview - changes nothing',
-    runLabel: 'Align them for real',
-    runTitle: 'Rewrite the files the preview listed. Each one is backed up first.',
-    confirm: 'This rewrites the project name and modified date inside the ' +
-             'local .esx files the preview listed, backing each one up first. ' +
-             'Nothing is uploaded or deleted. Continue?',
-
-    preview: function () { return call(true); },
-    run: function () { return call(false); },
-    render: renderReport
-  });
-
-  /* Exposed for the tests, which render the real report and read it back
-     rather than asserting that this file contains the word "aligned". */
-  WD.Dev._renderRealignReport = renderReport;
-
-  /* ── Housekeeping: what our own tooling has left lying around ──
-     His question, and it was a fair one: "how do I know, once we've
-     done all the work, when to be able to clean stuff up? Because
-     now I feel like we've got files fucking everywhere across the
-     board, and I don't know if you clean up your own work or not."
-
-     The answer was no, we do not, reliably. So this is the surface
-     that makes it answerable in five seconds instead of a script he
-     would have to be walked through.
-
-     The server side is `tools/housekeeping.py`. Everything about
-     what is safe to remove is decided there and re-decided at sweep
-     time; this file renders the answer and sends back a list of
-     paths to act on.
-     ──────────────────────────────────────────────────────────── */
-
-  /* The paths the preview offered, kept so the live run sends exactly what
-     he was shown. Cleared at the start of every preview, so a stale list
-     from an earlier look can never be submitted. */
-  var _sweepable = [];
+  /* The paths the look offered, so the sweep sends exactly what he was
+     shown. Cleared at the start of every look, so a stale list from an
+     earlier one can never be submitted. */
+  var sweepable = [];
 
   function mb(bytes) {
     if (!bytes) return '0 MB';
@@ -182,45 +232,42 @@
     return Math.round(hours / 24) + ' days idle';
   }
 
-  function entryLine(e, showWhy) {
-    var bits = '<span class="wd-dev-file-folder">' + esc(mb(e.sizeBytes)) +
+  function line(e, showWhy) {
+    var bits = '<span class="dev-result-sub">' + esc(mb(e.sizeBytes)) +
                ' · ' + esc(idle(e.idleHours)) + '</span>';
     if (e.dataFindings) {
-      bits += '<span class="wd-dev-file-warn">Carries workplace data — ' +
+      bits += '<span class="dev-result-warn">Carries workplace data — ' +
               esc(plural(e.dataFindings, 'signal', 'signals')) + '</span>';
     }
     if (showWhy && e.liveReason) {
-      bits += '<span class="wd-dev-file-reason">' + esc(e.liveReason) + '</span>';
+      bits += '<span class="dev-result-sub">' + esc(e.liveReason) + '</span>';
     }
     if (showWhy && e.note) {
-      bits += '<span class="wd-dev-file-reason">' + esc(e.note) + '</span>';
+      bits += '<span class="dev-result-sub">' + esc(e.note) + '</span>';
     }
-    return '<li class="wd-dev-file">' +
-      '<span class="wd-dev-file-name">' + esc(e.name || e.path) + '</span>' +
-      bits + '</li>';
+    return '<li><span class="dev-result-name">' + esc(e.name || e.path) +
+           '</span>' + bits + '</li>';
   }
 
   function capped(entries, limit, render) {
     var shown = entries.slice(0, limit).map(render).join('');
     if (entries.length > limit) {
-      shown += '<li class="wd-dev-file"><span class="wd-dev-file-folder">' +
-        '… and ' + (entries.length - limit) + ' more of the same' +
-        '</span></li>';
+      shown += '<li><span class="dev-result-sub">… and ' +
+        (entries.length - limit) + ' more of the same</span></li>';
     }
     return shown;
   }
 
-  function renderSurvey(r) {
-    if (!r) return '<p class="wd-dev-error">No answer from the server.</p>';
-    var groups = r.groups || [];
+  function surveyReport(r) {
+    if (!r) return '<p class="dev-result-error">No answer from the server.</p>';
     var t = r.totals || {};
-    var parts = [];
+    var out = [];
 
-    /* The data question first, because it is the one that matters to him.
-       It is not about disk space - it is that copies of his site data
-       should not be scattered around. Counts only, never the values. */
+    /* The data question first: it is not about disk space, it is that
+       copies of his site data should not be scattered around. Counts
+       only, never the values. */
     if (t.withData) {
-      parts.push('<p class="wd-dev-headline wd-dev-error">' +
+      out.push('<p class="dev-result-lead dev-result-error">' +
         '<strong>' + plural(t.withData, 'item carries', 'items carry') +
         ' workplace data</strong> — ' +
         plural(t.dataFindings || 0, 'signal', 'signals') + ' in total. ' +
@@ -229,143 +276,147 @@
           ? ' The scan hit its time budget, so treat this as a floor.' : '') +
         '</p>');
     } else {
-      parts.push('<p class="wd-dev-headline">No workplace data found in ' +
+      out.push('<p class="dev-result-lead">No workplace data found in ' +
         'anything listed here.' +
         (r.dataScanComplete === false
           ? ' The scan hit its time budget, so that is a partial answer.' : '') +
         '</p>');
     }
 
-    parts.push('<ul class="wd-dev-tally">' +
+    out.push('<ul class="dev-result-tally">' +
       '<li><strong>' + (t.count || 0) + '</strong> items</li>' +
       '<li><strong>' + esc(mb(t.sizeBytes)) + '</strong> total</li>' +
-      '<li><strong>' + (t.deletable || 0) + '</strong> safe to remove ' +
-        '(' + esc(mb(t.deletableBytes)) + ')</li>' +
-      '<li><strong>' + (t.live || 0) + '</strong> in use, left alone</li>' +
-    '</ul>');
+      '<li><strong>' + (t.deletable || 0) + '</strong> safe to remove (' +
+        esc(mb(t.deletableBytes)) + ')</li>' +
+      '<li><strong>' + (t.live || 0) + '</strong> in use, left alone</li></ul>');
 
-    groups.forEach(function (g) {
+    (r.groups || []).forEach(function (g) {
       var gt = g.totals || {};
-      parts.push('<h5 class="wd-dev-section">' + esc(g.title) + ' — ' +
-        gt.count + ', ' + esc(mb(gt.sizeBytes)) + '</h5>');
+      out.push('<h4 class="dev-result-section">' + esc(g.title) + ' — ' +
+        gt.count + ', ' + esc(mb(gt.sizeBytes)) + '</h4>');
       var del = g.entries.filter(function (e) { return e.deletable; });
       var keep = g.entries.filter(function (e) { return !e.deletable; });
       if (del.length) {
-        parts.push('<ul class="wd-dev-files">' +
-          capped(del, 8, function (e) { return entryLine(e, false); }) +
-        '</ul>');
+        out.push('<ul class="dev-result-list">' +
+          capped(del, 8, function (e) { return line(e, false); }) + '</ul>');
       }
       if (keep.length) {
-        parts.push('<p class="wd-dev-action-detail">Kept:</p>' +
-          '<ul class="wd-dev-files">' +
-          capped(keep, 6, function (e) { return entryLine(e, true); }) +
-        '</ul>');
+        out.push('<p class="dev-result-sub">Kept:</p><ul class="dev-result-list">' +
+          capped(keep, 6, function (e) { return line(e, true); }) + '</ul>');
       }
     });
 
     var procs = r.processes || [];
     if (procs.length) {
-      parts.push('<h5 class="wd-dev-section">Processes still running</h5>' +
-        '<ul class="wd-dev-files">' + procs.map(function (p) {
-          return '<li class="wd-dev-file">' +
-            '<span class="wd-dev-file-name">' + esc(p.name) +
-            ' (pid ' + esc(p.pid) + ')</span>' +
-            '<span class="wd-dev-file-reason">' + esc(p.why) + '</span>' +
-          '</li>';
+      out.push('<h4 class="dev-result-section">Processes still running</h4>' +
+        '<ul class="dev-result-list">' + procs.map(function (p) {
+          return '<li><span class="dev-result-name">' + esc(p.name) +
+            ' (pid ' + esc(p.pid) + ')</span><span class="dev-result-sub">' +
+            esc(p.why) + '</span></li>';
         }).join('') + '</ul>');
     }
-
     if (!t.count && !procs.length) {
-      parts.push('<p class="wd-dev-headline">Nothing to clean up.</p>');
+      out.push('<p class="dev-result-lead">Nothing to clean up.</p>');
     }
-    return parts.join('');
+    return out.join('');
   }
 
-  function renderSweep(r) {
-    if (!r) return '<p class="wd-dev-error">No answer from the server.</p>';
+  function sweepReport(r) {
+    if (!r) return '<p class="dev-result-error">No answer from the server.</p>';
     var removed = r.removed || [], skipped = r.skipped || [], failed = r.failed || [];
-    var parts = ['<p class="wd-dev-headline">Removed ' +
+    var out = ['<p class="dev-result-lead">Removed ' +
       plural(removed.length, 'item', 'items') + ', freeing ' +
       esc(mb(r.freedBytes)) + '.</p>'];
 
-    parts.push('<ul class="wd-dev-tally">' +
+    out.push('<ul class="dev-result-tally">' +
       '<li><strong>' + removed.length + '</strong> removed</li>' +
       '<li><strong>' + skipped.length + '</strong> skipped</li>' +
       '<li><strong>' + failed.length + '</strong> failed</li></ul>');
 
     if (skipped.length) {
-      parts.push('<h5 class="wd-dev-section">Skipped, and why</h5>' +
-        '<ul class="wd-dev-files">' + capped(skipped, 10, function (e) {
-          return '<li class="wd-dev-file">' +
-            '<span class="wd-dev-file-name">' + esc(e.name || e.path) + '</span>' +
-            '<span class="wd-dev-file-reason">' +
-              esc(e.reason || 'No reason given.') + '</span></li>';
+      out.push('<h4 class="dev-result-section">Skipped, and why</h4>' +
+        '<ul class="dev-result-list">' + capped(skipped, 10, function (e) {
+          return '<li><span class="dev-result-name">' +
+            esc(e.name || e.path) + '</span><span class="dev-result-sub">' +
+            esc(e.reason || 'No reason given.') + '</span></li>';
         }) + '</ul>');
     }
     if (failed.length) {
-      parts.push('<h5 class="wd-dev-section">Failed</h5>' +
-        '<ul class="wd-dev-files">' + capped(failed, 10, function (e) {
-          return '<li class="wd-dev-file">' +
-            '<span class="wd-dev-file-name">' + esc(e.name || e.path) + '</span>' +
-            '<span class="wd-dev-file-error">' +
-              esc(e.error || 'Unknown error.') + '</span></li>';
+      out.push('<h4 class="dev-result-section">Failed</h4>' +
+        '<ul class="dev-result-list">' + capped(failed, 10, function (e) {
+          return '<li><span class="dev-result-name">' +
+            esc(e.name || e.path) + '</span><span class="dev-result-error">' +
+            esc(e.error || 'Unknown error.') + '</span></li>';
         }) + '</ul>');
     }
-    return parts.join('');
+    return out.join('');
   }
 
-  WD.Dev.register({
-    id: 'housekeeping',
-    group: 'Housekeeping',
-    label: 'Find what our tooling has left lying around',
-
-    summary: 'Inventories worktrees, scratch folders, leaked temp ' +
-             'directories, browser drivers and downloaded release ZIPs, ' +
-             'newest first, and says which are safe to remove.',
-
-    detail: 'Anything a running session is using is marked and never ' +
-            'offered — a registered worktree, or something changed in ' +
-            'the last few minutes. Items carrying your workplace data are ' +
-            'counted and reported first; the values are never shown. It ' +
-            'only ever removes things our own tooling created: nothing in ' +
-            'Dropbox, nothing in your project folders, nothing in ' +
-            '~/.wd_wireless_tools, and nothing from your Desktop — ' +
-            'those are listed so you can deal with them yourself. The ' +
-            'list is worked out again at delete time rather than trusted.',
-
-    previewLabel: 'Look - changes nothing',
-    runLabel: 'Delete what it listed',
-    runTitle: 'Remove the items the preview marked safe. Re-checked first.',
-    confirm: 'This permanently deletes the items the preview marked safe to ' +
-             'remove. Nothing of yours, nothing in use, and nothing from ' +
-             'your Desktop. Continue?',
-
-    preview: function () {
-      _sweepable = [];
-      return WD.api('dev/housekeeping_survey', {}).then(function (r) {
-        if (r && r.groups) {
-          r.groups.forEach(function (g) {
-            (g.entries || []).forEach(function (e) {
-              if (e.deletable) _sweepable.push(e.path);
-            });
-          });
-        }
-        return r;
+  Dev.housekeepLook = function () {
+    sweepable = [];
+    busy('wdHousekeepLookBtn', true);
+    Dev.setEnabled('wdHousekeepSweepBtn', false);
+    return WD.api('dev/housekeeping_survey', {}).then(function (r) {
+      busy('wdHousekeepLookBtn', false);
+      if (r && r.error) { fail('Housekeeping', r.error); return; }
+      (r && r.groups ? r.groups : []).forEach(function (g) {
+        (g.entries || []).forEach(function (e) {
+          if (e.deletable) sweepable.push(e.path);
+        });
       });
-    },
+      Dev.showResult('Housekeeping', surveyReport(r));
+      Dev.setEnabled('wdHousekeepSweepBtn', true);
+    }).catch(function (e) {
+      busy('wdHousekeepLookBtn', false);
+      fail('Housekeeping', e);
+    });
+  };
 
-    run: function () {
-      return WD.api('dev/housekeeping_sweep', { paths: _sweepable });
-    },
+  Dev.housekeepSweep = function () {
+    if (!window.confirm(
+        'This permanently deletes the items the look marked safe to remove. ' +
+        'Nothing of yours, nothing in use, and nothing from your Desktop. ' +
+        'Continue?')) return;
+    busy('wdHousekeepSweepBtn', true);
+    return WD.api('dev/housekeeping_sweep', { paths: sweepable })
+      .then(function (r) {
+        busy('wdHousekeepSweepBtn', false);
+        Dev.setEnabled('wdHousekeepSweepBtn', false);
+        if (r && r.error) { fail('Housekeeping — delete', r.error); return; }
+        Dev.showResult('Housekeeping — done', sweepReport(r));
+      }).catch(function (e) {
+        busy('wdHousekeepSweepBtn', false);
+        Dev.setEnabled('wdHousekeepSweepBtn', false);
+        fail('Housekeeping — delete', e);
+      });
+  };
 
-    render: function (result, isPreview) {
-      return isPreview ? renderSurvey(result) : renderSweep(result);
-    }
-  });
+  /* ── About dev mode ──────────────────────────────────────────── */
 
-  /* Both renderers, plus the pending list, for the tests that run them
-     against real payloads rather than reading this file. */
-  WD.Dev._renderHousekeepingSurvey = renderSurvey;
-  WD.Dev._renderHousekeepingSweep = renderSweep;
-  WD.Dev._housekeepingPending = function () { return _sweepable.slice(); };
+  Dev.showWhereIAm = function () {
+    Dev.showResult('Dev mode',
+      '<p class="dev-result-lead">You are in dev mode. The tools themselves ' +
+      'are unchanged — this strip is the only difference.</p>' +
+      '<ul class="dev-result-list">' +
+        '<li><span class="dev-result-name">How it was turned on</span>' +
+        '<span class="dev-result-sub">Menu → Advanced → Dev Tools, ' +
+        'with the password; or <code>?dev=1</code> on any page.</span></li>' +
+        '<li><span class="dev-result-name">How to leave</span>' +
+        '<span class="dev-result-sub">Menu → Advanced → Exit Dev ' +
+        'Mode, or <code>?dev=0</code> on any page.</span></li>' +
+        '<li><span class="dev-result-name">Moving the strip</span>' +
+        '<span class="dev-result-sub">Drag it by the ⚙ DEV label. Where ' +
+        'you leave it is remembered.</span></li>' +
+        '<li><span class="dev-result-name">Anything that writes</span>' +
+        '<span class="dev-result-sub">Previews first. The live button stays ' +
+        'dead until its own preview has come back clean.</span></li>' +
+      '</ul>');
+  };
+
+  /* Exposed for the tests, which run the real renderers against real
+     payloads rather than reading this file. */
+  Dev._realignReport = realignReport;
+  Dev._surveyReport = surveyReport;
+  Dev._sweepReport = sweepReport;
+  Dev._housekeepingPending = function () { return sweepable.slice(); };
 })();

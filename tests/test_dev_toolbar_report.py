@@ -64,7 +64,8 @@ eval(slice(shared, '  WD.esc = function', '  WD.escAttr'));
 globalThis.WD = WD;
 
 // the genuine renderer and its helpers, straight out of the shipped file
-eval(slice(actions, '  function esc(s)', '  WD.Dev.register('));
+eval(slice(actions, '  function esc(s)', '  Dev.toolbarInnerHtml'));
+eval(slice(actions, '  function realignReport(', '  Dev.realignPreview'));
 """
 
 
@@ -80,7 +81,7 @@ def node(body: str):
 def render(result, is_preview):
     """Run the real renderer and hand back the HTML plus its plain text."""
     body = """
-    const html = renderReport(%s, %s);
+    const html = realignReport(%s, %s);
     const text = html.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').trim();
     process.stdout.write(JSON.stringify({ html: html, text: text }));
     """ % (json.dumps(result), "true" if is_preview else "false")
@@ -163,8 +164,13 @@ class ItNamesEveryFileAndWhatHappensToIt(unittest.TestCase):
         out = render(report(skipped=[SKIPPED], failed=[FAILED]), False)
         self.assertIn("Skipped", out["text"])
         self.assertIn("Failed", out["text"])
-        self.assertIn("wd-dev-file-reason", out["html"])
-        self.assertIn("wd-dev-file-error", out["html"])
+        # The property is the distinction, not the class names - see the
+        # same change in test_housekeeping_report.py.
+        import re
+        skip = re.search(r'<span class="([^"]+)">The designs genuinely', out["html"])
+        fail = re.search(r'<span class="([^"]+)">Could not fetch', out["html"])
+        self.assertTrue(skip and fail)
+        self.assertNotEqual(skip.group(1), fail.group(1))
 
     def test_a_backup_location_is_shown_for_a_file_that_was_rewritten(self):
         """He has been sent to the wrong place for an overwritten file
@@ -202,7 +208,7 @@ class TheTallyAndTheEdges(unittest.TestCase):
 
     def test_a_missing_answer_is_not_rendered_as_success(self):
         body = """
-        const html = renderReport(null, true);
+        const html = realignReport(null, true);
         process.stdout.write(JSON.stringify({ html: html, text: html }));
         """
         out = node(body)

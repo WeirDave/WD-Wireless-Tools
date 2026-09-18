@@ -1085,51 +1085,99 @@ handler check.
   ones are (re-download from cloud), so the friction is asymmetric on
   purpose.
 
-## The dev toolbar — where maintenance actions live now
+## The dev toolbar — WaxFrame Professional's method, ported
 
-**There is one, it is off unless you ask for it, and adding to it is one
-`register` call.** Before this the suite had no developer surface at all, so a
-one-off repair had nowhere to live except a script he would have to be talked
-through running. It is modelled on WaxFrame Professional's `dev-toolbar`,
-which is where the shape came from.
+**This is WaxFrame's dev toolbar, not an interpretation of it.** The first
+build reshaped it into a vertical panel of named actions and dropped the
+password gate. Both were reasoned and both were wrong to decide here, and he
+said so plainly: *"That is NOT what I asked for. I asked for the method that we
+used in WaxFrame Pro to be used in this project."* He has two products and
+wants them to work the same way; consistency across them beats either
+individual layout choice.
 
-    web/assets/js/wd-dev.js          the toolbar: gate, panel, registry
-    web/assets/js/wd-dev-actions.js  every action, and the only file to edit
-    wd-tools.css                     `.wd-dev-*`, at the end
+**The rule that follows from that:** where something in WaxFrame genuinely
+cannot carry over, raise it rather than substituting an answer. "WaxFrame does
+X, it cannot work here because Y, so I propose Z" is the shape. Silently
+improving on an established pattern of his is the failure.
 
-**Turning it on.** `?dev=1` on any page; `?dev=0`, or the labelled Exit
-button, turns it off. The flag lives in `localStorage['wd-dev']` so it follows
-him between tools. There is deliberately **no key chord** - the requirement
-was that he never lands in it by accident mid-job.
+    web/assets/js/wd-dev.js          gate, dispatcher, drag, mount
+    web/assets/js/wd-dev-actions.js  every button's markup and handler
+    wd-tools.css                     `.dev-toolbar`, `.dev-flyout`, at the end
 
-**Why pink.** No tool uses `--pink` for its chrome, so the toolbar cannot be
-mistaken for part of one. `--lime` marks the half of each action that writes
-nothing. It looks the same in both themes on purpose: a maintenance surface
-that blended into the light theme would be doing the opposite of its job.
+### The method, part by part
 
-**Dry run is structural, not a habit.** Each action renders two controls and
-**the live one is disabled until a preview has returned cleanly** - a failed
-preview leaves it dead, and a completed run disarms it again. That is the
-property to keep if this gets rewritten; it is what stands between a mis-click
-and ninety rewritten project files.
+* **Gate** — `localStorage['wd_dev'] === '1'`, set by a SHA-256 password
+  modal. WaxFrame: `waxframe_dev`, `DEV_PW_HASH`, `submitDevPassword`. A wrong
+  password **closes the modal and says nothing** - telling a guesser they were
+  close is worse than silence.
+* **Entry point** — a nav item under an **Advanced** heading opens the modal,
+  and a second item, hidden until dev mode is on, leaves it. WaxFrame:
+  `#navDevSection`, `.active` to reveal.
+* **Layout** — one horizontal strip: a `⚙ DEV` label that is also the drag
+  handle, buttons carrying an emoji, a short label and a `title`, `|`
+  separators grouping them, and a hover flyout for a cluster. WaxFrame does the
+  flyout with its five Scenes buttons; the Cloud pair uses it here.
+* **Registration** — declarative, in markup:
+  `data-action="call" data-fn="WD.Dev.housekeepLook"`, run by one delegated
+  click listener that walks up to the nearest `[data-action]`. The name is
+  resolved by walking a dotted path over `window` and binding the result -
+  **a lookup, not `eval`**, so it stays safe under a strict CSP. WaxFrame:
+  `callAction` / `resolveDotted` in `helper-handlers.js`. `data-arg`,
+  `data-arg-this`, `data-arg-event`, `data-stop`, `data-prevent` and
+  `call-chain` all carry over.
+* **Drag** — by the label, position in `localStorage['wd_dev_toolbar_pos']`,
+  restored on load and cleared on exit. WaxFrame: `attachDevToolbarDrag`.
+* **Detail goes in a modal**, not in the strip. WaxFrame shows a
+  Troubleshooting Card; this shows `#devResultModal`. Either way the strip
+  stays a strip.
 
-**Adding an action.** One `register({...})` in `wd-dev-actions.js` with `id`,
-`group`, `label`, `summary`, `detail`, `preview`, and optionally `run` and
-`render`. An action with no `run` renders one button and is a read-only
-diagnostic. `label`/`summary`/`detail` are not decoration - they are the
-self-documentation, and this project's rule that every control says what it is
-applies here too.
+### The one thing that could not carry over
+
+**WaxFrame is one page; this suite is nineteen.** WaxFrame writes the toolbar,
+the modal and the nav entries straight into `index.html`. Copying that here
+would mean the same block in nineteen files, drifting the moment one is edited,
+and there is no server-side include to share it. So the *identical markup* is
+injected once from `wd-dev.js` - same elements, same classes, same data
+attributes, same dispatcher. Only where the string lives differs.
+
+The dispatcher is also **scoped to `#wdDevRoot`**. The rest of this suite wires
+its controls with inline `onclick`, and a document-wide `[data-action]` walk
+would eventually pick up a click meant for a tool. Converting the whole app to
+the WaxFrame dispatcher is a separate job with its own risk.
+
+### What is his rather than WaxFrame's, and is kept
+
+* `--pink` and `--lime` instead of WaxFrame's amber. No tool in this suite uses
+  pink for its chrome, so the strip cannot be mistaken for part of one, and
+  lime marks the half of each pair that writes nothing.
+* **`?dev=1`, and deliberately no key chord.** He was explicit about never
+  landing in dev mode by accident. Both routes in are deliberate; the password
+  modal is WaxFrame's and the query parameter is his.
+* **The two-stage dry run**, expressed in WaxFrame's idiom: the live button is
+  rendered `disabled` and only its own preview turns it on. A failed preview
+  leaves it dead and a completed run disarms it. That is what stands between a
+  mis-click and ninety rewritten project files.
+
+**The password is `wdtools`**, and its SHA-256 is in `wd-dev.js`. This
+repository is public and **so is WaxFrame's**, so in both it is obfuscation
+rather than security - it keeps a curious user out of a maintenance surface on
+a localhost-bound server, and nothing more. To change it, hash a new value and
+replace the constant; the test carries the password too and must be updated
+with it.
+
+**Adding an action:** one button in `Dev.toolbarInnerHtml` and one handler
+below it in `wd-dev-actions.js`. WaxFrame's convention is that every
+dev-toolbar button's handler lives in one file - `wf-debug.js` - so nothing in
+that file is dead and no button calls something that is gone.
 
 **Testing it.** `tests/test_dev_toolbar_browser.py` drives the real toolbar in
-Firefox, Chrome and Edge over a plain `http.server` on the `web/` directory -
-never `server.py`, which opens a browser window nobody closes. It stubs
-`WD.api`, which is the seam the action uses, so the whole
-register → button → handler path runs and the `dryRun` argument is pinned.
-It skips where selenium or a browser is missing, so CI stays green;
-`tests/test_dev_toolbar_report.py` covers the renderer in Node and does run
-there. **Selenium Manager drops `geckodriver/` and `se-metadata.json` into the
-working directory** on first use - both are gitignored now, and a 4 MB binary
-is one `git add -A` from the repository if that entry ever goes.
+Firefox, Chrome and Edge over a plain `http.server` on `web/` - never
+`server.py`, which opens a browser window nobody closes. It works the password
+gate, the dispatcher, the flyout, the drag and both actions, and stubs `WD.api`
+because that is the seam the handlers use. **Selenium Manager drops
+`geckodriver/` and `se-metadata.json` into the working directory** on first
+use; both are gitignored, and a 4 MB binary is one `git add -A` from the
+repository if those entries ever go.
 
 ### The first action, and the trap in it
 

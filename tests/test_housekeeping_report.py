@@ -60,12 +60,12 @@ eval(slice(shared, '  WD.esc = function', '  WD.escAttr'));
 globalThis.WD = WD;
 
 // esc/plural from the top of the file, then the housekeeping renderers.
-eval(slice(actions, '  function esc(s)', '  function fileLine('));
+eval(slice(actions, '  function esc(s)', '  Dev.toolbarInnerHtml'));
 // Single-line markers only: the checked-out file has CRLF endings, so a
 // marker spanning two lines silently never matches. `indexOf(to, a)`
 // searches forward from the start marker, so the bare register line finds
 // the housekeeping one rather than the realign one above it.
-eval(slice(actions, '  function mb(bytes)', '  WD.Dev.register({'));
+eval(slice(actions, '  function mb(bytes)', '  Dev.housekeepLook'));
 """
 
 
@@ -129,30 +129,30 @@ class TheDataQuestionComesFirst(unittest.TestCase):
     not be scattered around, and that is the line he should read first."""
 
     def test_it_leads_with_the_workplace_data_count(self):
-        out = render("renderSurvey", survey([group(entries=[
+        out = render("surveyReport", survey([group(entries=[
             entry(dataFindings=3, name="wd-cloud-pull-flagged")])]))
         lead = out["text"].split(" items ")[0]
         self.assertIn("workplace data", lead)
         self.assertIn("1 item carries", out["text"])
 
     def test_it_counts_the_signals_without_printing_them(self):
-        out = render("renderSurvey", survey([group(entries=[
+        out = render("surveyReport", survey([group(entries=[
             entry(dataFindings=7)])]))
         self.assertIn("7 signals", out["text"])
         self.assertIn("values are deliberately not shown", out["text"])
 
     def test_a_clean_machine_says_so_plainly(self):
-        out = render("renderSurvey", survey([group(entries=[entry()])]))
+        out = render("surveyReport", survey([group(entries=[entry()])]))
         self.assertIn("No workplace data found", out["text"])
 
     def test_a_truncated_scan_is_reported_as_a_floor(self):
         """A count that stopped early must not read as a total."""
-        out = render("renderSurvey", survey(
+        out = render("surveyReport", survey(
             [group(entries=[entry(dataFindings=2)])], complete=False))
         self.assertIn("floor", out["text"])
 
     def test_a_truncated_scan_with_no_findings_is_still_qualified(self):
-        out = render("renderSurvey", survey(
+        out = render("surveyReport", survey(
             [group(entries=[entry()])], complete=False))
         self.assertIn("partial answer", out["text"])
 
@@ -161,21 +161,21 @@ class TheDataQuestionComesFirst(unittest.TestCase):
 class ItSaysWhatIsKeptAndWhy(unittest.TestCase):
 
     def test_a_live_item_is_shown_with_its_reason(self):
-        out = render("renderSurvey", survey([group(entries=[
+        out = render("surveyReport", survey([group(entries=[
             entry(name="live-session", live=True, deletable=False,
                   liveReason="Registered as a worktree - a session may be using it.")])]))
         self.assertIn("Kept", out["text"])
         self.assertIn("Registered as a worktree", out["text"])
 
     def test_a_desktop_item_says_it_will_not_be_deleted_from_there(self):
-        out = render("renderSurvey", survey([group(
+        out = render("surveyReport", survey([group(
             key="listed", title="Ours, but somewhere we will not delete from",
             entries=[entry(name="cloud-flat-1920.png", deletable=False,
                            note="On your Desktop - listed only, never deleted from here.")])]))
         self.assertIn("never deleted from here", out["text"])
 
     def test_the_tally_separates_safe_from_in_use(self):
-        out = render("renderSurvey", survey([group(entries=[
+        out = render("surveyReport", survey([group(entries=[
             entry(name="a"), entry(name="b", live=True, deletable=False)])]))
         self.assertIn("1 safe to remove", out["text"])
         self.assertIn("1 in use, left alone", out["text"])
@@ -183,16 +183,16 @@ class ItSaysWhatIsKeptAndWhy(unittest.TestCase):
     def test_a_long_list_is_capped_rather_than_dumped(self):
         """Three thousand lines is not a report he can read on a phone."""
         many = [entry(name="wd-cloud-pull-%d" % i) for i in range(40)]
-        out = render("renderSurvey", survey([group(entries=many)]))
+        out = render("surveyReport", survey([group(entries=many)]))
         self.assertIn("more of the same", out["text"])
         self.assertLess(out["text"].count("wd-cloud-pull-"), 20)
 
     def test_an_empty_machine_says_nothing_to_clean_up(self):
-        out = render("renderSurvey", survey([]))
+        out = render("surveyReport", survey([]))
         self.assertIn("Nothing to clean up", out["text"])
 
     def test_sizes_are_human_readable(self):
-        out = render("renderSurvey", survey([group(entries=[
+        out = render("surveyReport", survey([group(entries=[
             entry(sizeBytes=2_500_000_000)])]))
         self.assertIn("GB", out["text"])
 
@@ -201,7 +201,7 @@ class ItSaysWhatIsKeptAndWhy(unittest.TestCase):
 class ProcessesAreListedWithAReason(unittest.TestCase):
 
     def test_a_process_says_what_it_is(self):
-        out = render("renderSurvey", survey([], processes=[
+        out = render("surveyReport", survey([], processes=[
             {"pid": 4242, "name": "geckodriver.exe",
              "why": "A WebDriver executable, started by a test run."}]))
         self.assertIn("geckodriver.exe", out["text"])
@@ -220,33 +220,44 @@ class TheSweepReportAccountsForEverything(unittest.TestCase):
                 "freedBytes": freed}
 
     def test_it_says_how_much_was_freed(self):
-        out = render("renderSweep", self.sweep(
+        out = render("sweepReport", self.sweep(
             removed=[entry()], freed=1_500_000_000))
         self.assertIn("Removed 1 item", out["text"])
         self.assertIn("1.40 GB", out["text"])
 
     def test_a_skip_carries_its_reason(self):
-        out = render("renderSweep", self.sweep(skipped=[
+        out = render("sweepReport", self.sweep(skipped=[
             dict(entry(name="woke-up"),
                  reason="Changed 2 minutes ago - assumed to be in use.")]))
         self.assertIn("woke-up", out["text"])
         self.assertIn("assumed to be in use", out["text"])
 
     def test_a_failure_carries_its_error(self):
-        out = render("renderSweep", self.sweep(failed=[
+        out = render("sweepReport", self.sweep(failed=[
             dict(entry(name="stuck"), error="in use by another process")]))
         self.assertIn("stuck", out["text"])
         self.assertIn("in use by another process", out["text"])
 
     def test_a_skip_and_a_failure_are_told_apart(self):
-        out = render("renderSweep", self.sweep(
+        out = render("sweepReport", self.sweep(
             skipped=[dict(entry(name="s"), reason="because")],
             failed=[dict(entry(name="f"), error="boom")]))
-        self.assertIn("wd-dev-file-reason", out["html"])
-        self.assertIn("wd-dev-file-error", out["html"])
+        # The property is that the two are told apart, not what the classes
+        # are called. Pinning a class name is how a rename turns a real test
+        # into a red herring - assert the distinction instead.
+        skip_cls = self._class_around(out["html"], "because")
+        fail_cls = self._class_around(out["html"], "boom")
+        self.assertTrue(skip_cls and fail_cls)
+        self.assertNotEqual(skip_cls, fail_cls)
+
+    @staticmethod
+    def _class_around(html, text):
+        import re
+        m = re.search(r'<span class="([^"]+)">' + re.escape(text) + r'</span>', html)
+        return m.group(1) if m else None
 
     def test_a_missing_answer_is_not_rendered_as_success(self):
-        for fn in ("renderSurvey", "renderSweep"):
+        for fn in ("surveyReport", "sweepReport"):
             with self.subTest(fn=fn):
                 out = render(fn, None)
                 self.assertIn("No answer from the server", out["text"])
@@ -257,7 +268,7 @@ class NamesAreEscaped(unittest.TestCase):
     """A path is data and this is HTML."""
 
     def test_angle_brackets_in_a_name_do_not_become_markup(self):
-        out = render("renderSurvey", survey([group(entries=[
+        out = render("surveyReport", survey([group(entries=[
             entry(name="<script>alert(1)</script>")])]))
         self.assertNotIn("<script>", out["html"])
         self.assertIn("&lt;script&gt;", out["html"])

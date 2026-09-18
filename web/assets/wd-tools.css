@@ -9508,317 +9508,247 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 }
 
 /* ══════════════════════════════════════════════════════════════
-   DEV TOOLBAR - dev mode only, off unless ?dev=1 has been used
+   DEV TOOLBAR - WaxFrame Professional's method, in this suite
    ══════════════════════════════════════════════════════════════
-   Pink is the whole point of the colour choice. No tool in the
-   suite uses --pink for its chrome, so the moment this is on the
-   screen it cannot be mistaken for part of a tool - which was the
-   requirement: unobtrusive, clearly separate, and obvious when he
-   is in it. --lime marks the safe half of each action, the
-   preview that writes nothing.
+   A fixed horizontal strip: a label that is also the drag handle,
+   buttons, `|` separators, and a hover flyout for a cluster. Every
+   rule below has a counterpart in WaxFrame's `.dev-toolbar` block,
+   and the structure is deliberately the same so the two products
+   behave alike.
 
-   It is deliberately the same in both themes. A maintenance
-   surface that restyled itself to blend into the light theme
-   would be doing the opposite of its job.
+   Two things differ, and both are his rather than WaxFrame's.
+   The accent is `--pink` instead of WaxFrame's amber, because no
+   tool in this suite uses pink for its chrome and the strip must be
+   impossible to mistake for part of one. And `--lime` marks the
+   half of each pair that writes nothing.
+
+   It looks the same in both themes on purpose: a maintenance
+   surface that blended into the light theme would be doing the
+   opposite of its job.
    ══════════════════════════════════════════════════════════════ */
-.wd-dev {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 99999;
-  width: min(460px, calc(100vw - 32px));
-  background: #090909;
-  border: 2px solid var(--pink);
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 10px 32px rgba(0, 0, 0, 0.65);
-  color: #ededf0;
-  font-size: 13px;
-}
+.is-hidden { display: none !important; }
 
-.wd-dev-bar {
+.dev-toolbar {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  z-index: 99999;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-}
-
-.wd-dev-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #090909;
-  background: var(--pink);
-  border-radius: 4px;
-  padding: 3px 8px;
-  cursor: grab;
-  user-select: none;
-  flex: none;
-}
-.wd-dev-label:active { cursor: grabbing; }
-
-.wd-dev-btn {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: #ededf0;
-  background: #1c1c1c;
-  border: 1px solid #3d3d3d;
+  gap: 6px;
+  background: rgba(9, 9, 9, 0.94);
+  border: 1px solid var(--pink);
   border-radius: 6px;
-  padding: 5px 10px;
-  cursor: pointer;
-}
-.wd-dev-btn:hover:not(:disabled) { background: #282828; border-color: var(--pink); }
-.wd-dev-btn:focus-visible { outline: 2px solid var(--pink); outline-offset: 1px; }
-.wd-dev-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-.wd-dev-toggle { margin-left: auto; }
-.wd-dev-exit { border-color: #3d3d3d; color: #a0a4ab; }
-.wd-dev-exit:hover { color: #ededf0; }
-
-.wd-dev-panel {
-  border-top: 1px solid #2a2a2a;
-  padding: 10px 12px 14px;
-  max-height: min(70vh, 640px);
-  overflow-y: auto;
-}
-.wd-dev-panel[hidden] { display: none; }
-
-.wd-dev-note {
-  margin: 0 0 10px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: #a0a4ab;
+  padding: 4px 8px;
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.3);
+  pointer-events: all;
+  user-select: none;
 }
 
-.wd-dev-empty { margin: 0; color: #6e7279; font-size: 12px; }
-
-.wd-dev-group + .wd-dev-group { margin-top: 14px; }
-.wd-dev-group-name {
-  margin: 0 0 8px;
+.dev-toolbar-label {
   font-size: 11px;
   font-weight: 700;
+  color: var(--pink);
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--pink);
+  padding-right: 6px;
+  border-right: 1px solid var(--border-strong);
+  margin-right: 2px;
+  cursor: grab;
+}
+.dev-toolbar-label:active { cursor: grabbing; }
+
+.dev-toolbar button {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.dev-toolbar button:hover:not(:disabled) {
+  background: var(--pink);
+  color: #090909;
+  border-color: var(--pink);
+}
+.dev-toolbar button:focus-visible {
+  outline: 2px solid var(--pink);
+  outline-offset: 1px;
+}
+.dev-toolbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.dev-toolbar button.active {
+  background: var(--pink);
+  color: #090909;
+  border-color: var(--pink);
+  box-shadow: 0 0 8px rgba(236, 72, 153, 0.45);
 }
 
-.wd-dev-action {
-  border: 1px solid #2a2a2a;
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: #131313;
-}
-.wd-dev-action + .wd-dev-action { margin-top: 10px; }
-
-.wd-dev-action-name {
-  margin: 0 0 4px;
-  font-size: 13px;
-  font-weight: 700;
-  color: #ededf0;
-}
-.wd-dev-action-summary {
-  margin: 0 0 6px;
-  font-size: 12px;
-  line-height: 1.45;
-  color: #d0d3d8;
-}
-.wd-dev-action-detail {
-  margin: 0 0 10px;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: #9aa0a6;
+.dev-toolbar-sep {
+  color: var(--border-strong);
+  padding: 0 2px;
+  font-weight: 400;
+  user-select: none;
 }
 
-.wd-dev-action-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.dev-toolbar-empty { font-size: 11px; color: var(--text-3); }
 
-.wd-dev-preview {
+/* A preview writes nothing, and says so in lime. WaxFrame tints its
+   Deep Dive toggle the same way, for the same reason: the button whose
+   consequences differ should not look like the ones beside it. */
+.dev-toolbar button#wdRealignPreviewBtn,
+.dev-toolbar button#wdHousekeepLookBtn {
   border-color: var(--lime);
   color: var(--lime);
 }
-.wd-dev-preview:hover:not(:disabled) {
+.dev-toolbar button#wdRealignPreviewBtn:hover:not(:disabled),
+.dev-toolbar button#wdHousekeepLookBtn:hover:not(:disabled) {
   background: var(--lime);
   border-color: var(--lime);
   color: #090909;
 }
-.wd-dev-run { border-color: var(--pink); color: var(--pink); }
-.wd-dev-run:hover:not(:disabled) {
+
+/* ── Flyout, WaxFrame's Scenes menu ───────────────────────────
+   Pure CSS hover, no JS. The wrapper is the hover target so the
+   panel does not close while the pointer travels into it. */
+.dev-flyout { position: relative; display: inline-block; }
+.dev-flyout-trigger::after {
+  content: ' \25BE';
+  opacity: 0.7;
+  margin-left: 2px;
+  font-size: 10px;
+}
+.dev-flyout-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  margin-top: 2px;
+  background: rgba(9, 9, 9, 0.97);
+  border: 1px solid var(--pink);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px rgba(236, 72, 153, 0.3);
+  z-index: 100000;
+  white-space: nowrap;
+  min-width: 170px;
+}
+.dev-flyout-panel button { text-align: left; width: 100%; }
+.dev-flyout:hover .dev-flyout-panel { display: flex; }
+.dev-flyout:hover .dev-flyout-trigger {
   background: var(--pink);
-  border-color: var(--pink);
   color: #090909;
+  border-color: var(--pink);
 }
-.wd-dev-run:disabled { border-color: #3d3d3d; color: #6e7279; }
 
-.wd-dev-result {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed #2a2a2a;
-  font-size: 12px;
+/* ── Password modal, WaxFrame's dev-pw-modal ──────────────────── */
+.dev-pw-modal { max-width: 340px; }
+.dev-pw-input {
+  width: 100%;
+  padding: 8px 10px;
+  margin: 10px 0 4px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+}
+.dev-pw-input:focus { border-color: var(--pink); outline: none; }
+
+/* ── Result modal ─────────────────────────────────────────────
+   WaxFrame shows an action's detail in a modal too - the
+   Troubleshooting Card - rather than growing the strip into a panel.
+   Same idea: the strip stays a strip. */
+.dev-result-modal {
+  max-width: 720px;
+  width: min(720px, calc(100vw - 48px));
+}
+.dev-result-body {
+  max-height: min(62vh, 560px);
+  overflow-y: auto;
+  font-size: 12.5px;
   line-height: 1.5;
+  margin: 10px 0 4px;
+  padding-right: 4px;
 }
-.wd-dev-result[hidden] { display: none; }
-.wd-dev-result.is-preview { border-top-color: var(--lime); }
-.wd-dev-result.is-done { border-top-color: var(--pink); }
-.wd-dev-result.is-error { border-top-color: #dc2626; }
+.dev-result-lead { margin: 0 0 10px; color: var(--text); }
+.dev-result-error { color: #f87171; margin: 0; }
+.dev-result-warn { color: #f0b85f; font-size: 11.5px; }
 
-.wd-dev-headline { margin: 0 0 8px; color: #ededf0; }
-.wd-dev-error { margin: 0; color: #f87171; }
-
-.wd-dev-tally {
+.dev-result-tally {
   list-style: none;
   margin: 0 0 10px;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  color: #a0a4ab;
+  gap: 14px;
+  color: var(--text-2);
 }
-.wd-dev-tally strong { color: #ededf0; }
+.dev-result-tally strong { color: var(--text); }
 
-.wd-dev-section {
-  margin: 12px 0 6px;
+.dev-result-section {
+  margin: 14px 0 6px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #a0a4ab;
+  color: var(--pink);
 }
 
-.wd-dev-files { list-style: none; margin: 0; padding: 0; }
-.wd-dev-file {
+.dev-result-list { list-style: none; margin: 0; padding: 0; }
+.dev-result-list > li {
   padding: 6px 0;
-  border-bottom: 1px solid #1f1f1f;
+  border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.wd-dev-file:last-child { border-bottom: 0; }
-.wd-dev-file-name { color: #ededf0; font-weight: 600; word-break: break-word; }
-.wd-dev-file-folder { color: #6e7279; font-size: 11px; }
-.wd-dev-file-actions {
+.dev-result-list > li:last-child { border-bottom: 0; }
+.dev-result-name {
+  color: var(--text);
+  font-weight: 600;
+  word-break: break-word;
+}
+.dev-result-sub {
+  color: var(--text-3);
+  font-size: 11.5px;
+  word-break: break-word;
+}
+.dev-result-acts {
   list-style: disc;
   margin: 2px 0 0;
   padding-left: 18px;
   color: var(--lime);
   font-size: 11.5px;
 }
-.wd-dev-file-date { color: #9aa0a6; font-size: 11px; }
-.wd-dev-file-backup { color: #6e7279; font-size: 11px; word-break: break-all; }
-.wd-dev-file-warn { color: #f0b85f; font-size: 11px; }
-.wd-dev-file-reason { color: #9aa0a6; font-size: 11.5px; }
-.wd-dev-file-error { color: #f87171; font-size: 11.5px; }
-
-.wd-dev-raw {
-  margin: 0;
-  max-height: 260px;
-  overflow: auto;
-  font-size: 11px;
-  color: #a0a4ab;
-  white-space: pre-wrap;
-  word-break: break-word;
+.dev-result-body code {
+  background: var(--surface-2);
+  border-radius: 3px;
+  padding: 1px 4px;
 }
 
-/* ---------------------------------------------------------------------
-   The filter chips
+/* ── Nav entries, WaxFrame's Advanced section ─────────────────── */
+.nav-dev-section { display: none; }
+.nav-dev-section.active { display: block; }
+.menu-item.nav-item-dev { color: var(--pink); }
+.menu-item.nav-item-exit-dev { color: var(--text-2); }
 
-   "if we need multiple rows in order for it to fit on smaller screens then
-   that's when we should have CSS be adaptive and make the buttons fall on
-   multiple rows in order to fit - but on a larger screen then make it one
-   row."
-
-   One row at desktop width, wrapping onto a second as the window narrows.
-   No overflow menu, no truncation, no sideways scroll: the counts are the
-   reason the filters exist, and a control that hides them is worse than one
-   that takes an extra line. */
-.summary-line {
-  display: flex; flex-wrap: wrap; align-items: center;
-  gap: 4px 2px;
-  padding: 6px 12px 5px;
+@media (max-width: 720px) {
+  /* The strip is wider than a phone. Let it wrap rather than run off. */
+  .dev-toolbar {
+    right: 8px;
+    left: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
 }
-
-.sum-count {
-  display: inline-flex; align-items: baseline; gap: 5px;
-  padding: 3px 9px; border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  background: none; color: var(--text-2);
-  font-size: 12.5px; line-height: 1.35; white-space: nowrap;
-  cursor: pointer;
-  transition: background .12s ease, color .12s ease, border-color .12s ease;
-}
-.sum-count:hover { background: var(--row-hover); color: var(--text); }
-.sum-count:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-.sum-count .sum-n {
-  font-weight: 700; color: var(--text);
-  font-variant-numeric: tabular-nums;
-}
-.sum-count .sum-l { color: var(--text-2); }
-
-/* Single select, and shaped so it reads that way.
-
-   Clicking a chip applies it; clicking the active one clears it back to All.
-   Nothing combines, so the active chip is a filled state rather than a tick or
-   a box - either of those would invite him to try selecting two. */
-.sum-count.active {
-  background: var(--accent-fill); border-color: var(--accent-fill);
-}
-.sum-count.active .sum-n,
-.sum-count.active .sum-l { color: var(--accent-ink); }
-.sum-count.active:hover { background: var(--accent-fill-hi); border-color: var(--accent-fill-hi); }
-
-/* The groups the dropdown used to imply - which side a row is missing from,
-   what kind of project, duplicate sets - survive as a thin rule. */
-.sum-sep {
-  display: inline-block; width: 1px; height: 15px;
-  margin: 0 7px; background: var(--border-strong);
-  /* It is punctuation, not content. */
-  overflow: hidden; text-indent: -999px;
-}
-
-/* A wrapped second row should read as a continuation, not a new band. */
-@media (max-width: 1500px) {
-  .sum-sep { margin: 0 5px; }
-  .sum-count { padding: 3px 7px; }
-}
-
-/* Expand and Collapse sit in the toolbar rather than behind a menu.
-
-   "I feel like expand all and collapse could just be buttons, I'm pretty sure
-   we've got plenty of space for that." There is space, and a menu only earns
-   its click when there is too much to show. They hide themselves on the Flat
-   tab, where there is nothing to expand. */
-#expandAllBtn, #collapseAllBtn { white-space: nowrap; }
-
-/* Where a project lives, on the Flat tab - shown when the two sides
-   disagree, which is the one thing this view can tell him that the tree
-   cannot. It reads as an exception because it is one.
-
-   "it's kind of a hot mess ... like we're trying to squeeze too much on a
-   single line." The site name was on the row three times - in the project's
-   own name and on the end of both metas - which wrapped the name and made
-   every other row two lines tall.
-
-   It is one element now, on each side, quiet enough to scan past and present
-   enough to compare: a cloud project's site against a local file's folder. If
-   those disagree, that is the thing Flat is for. */
-.lr-cell .cell-where {
-  display: inline-flex; align-items: center; gap: 4px;
-  flex: 0 1 auto; min-width: 0;
-  padding: 1px 6px; border-radius: var(--r-sm);
-  background: var(--surface-raised);
-  color: var(--text-3); font-size: 11px;
-  /* Wrapping beats an ellipsis: a half-named site is worse than a tall row,
-     and "which site is this in" is the question the Flat tab is for. */
-  white-space: normal; overflow-wrap: anywhere;
-}
-.lr-cell .cell-where .ic { width: 11px; height: 11px; opacity: 0.8; }
-.lr-cell .cell-where.is-none { color: var(--attn); background: none; font-style: italic; }
-
-/* The name is never cut.
-
-   The first attempt at making Flat rows one line clipped the project name with
-   an ellipsis, which trades "too much on one line" for "you cannot read the
-   thing that identifies the row" - the mistake facing the other way. Space
-   comes from dropping what is redundant (the size, the repeated site name),
-   and a name long enough to need a second line gets one. */
-.lr-cell .cell-name { white-space: normal; }

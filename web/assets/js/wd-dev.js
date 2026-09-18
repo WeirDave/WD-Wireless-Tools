@@ -1,77 +1,81 @@
 /* ============================================================
    WD Wireless Tools - wd-dev.js
 
-   A developer toolbar for the suite. Modelled on WaxFrame
-   Professional's `dev-toolbar`, which this suite did not have an
-   equivalent of: a surface that is off by default, unlocked
-   deliberately, obviously different from the tools when it is on,
-   and cheap to add the next action to.
+   **This is WaxFrame Professional's dev-toolbar method, ported.**
+   Not an interpretation of it. An earlier version of this file
+   reshaped the toolbar into a vertical list of named actions and
+   dropped the password gate, both for defensible reasons, and both
+   were wrong to decide here: he has two products and wants them to
+   work the same way. What WaxFrame does is what this does.
 
-   What was taken from WaxFrame, and what was not
+   The method, and where each part came from
+   ----------------------------------------
+   * The gate is `localStorage['wd_dev'] === '1'`, set by a SHA-256
+     password modal - `waxframe_dev` and `DEV_PW_HASH` in app.js. A
+     wrong password closes the modal and says nothing, exactly as
+     WaxFrame's does.
+   * The modal is opened from a nav item under an **Advanced**
+     heading, and a second nav item - hidden until dev mode is on -
+     exits it. WaxFrame: `#navDevSection`, `.active` to reveal.
+   * The toolbar is **one horizontal strip**: a `⚙ DEV` label that
+     is also the drag handle, buttons carrying an emoji, a short
+     label and a `title`, `|` separators grouping them, and a hover
+     flyout for a cluster of related actions.
+   * It is **dragged by its label**, and the position is remembered
+     in `localStorage['wd_dev_toolbar_pos']`. WaxFrame:
+     `attachDevToolbarDrag`, `waxframe_dev_toolbar_pos`.
+   * Actions are registered **declaratively in markup** and run by a
+     single delegated click listener:
+     `data-action="call" data-fn="WD.Dev.someHandler"`. The name is
+     resolved by walking a dotted path over `window` - a lookup, not
+     `eval`, so it is safe under a strict CSP. WaxFrame:
+     `callAction` / `resolveDotted` in helper-handlers.js.
+   * A toggle button carries `.active` for its state, and a button
+     that is not yet safe to press carries `disabled`.
+
+   The one thing that could not carry over
+   ---------------------------------------
+   **WaxFrame is one page and this suite is nineteen.** WaxFrame
+   writes the toolbar, the modal and the nav entries straight into
+   `index.html`. Copying that here would mean the same block
+   duplicated across nineteen files, drifting the moment one is
+   edited. So the *identical markup* is injected once from here -
+   same elements, same classes, same data attributes, same
+   dispatcher. The method is unchanged; only where the string lives
+   differs, because there is no single page to put it on and this
+   suite has no server-side include.
+
+   What is his rather than WaxFrame's, and is kept
    ----------------------------------------------
-   Taken: the gate (a flag in localStorage, hidden until it is set),
-   the floating panel dragged by its own label with the position
-   remembered, declarative registration rather than hand-written
-   markup, and a `title` on every control that says what it does.
-
-   Not taken: its horizontal strip of icon buttons. That shape had
-   already needed a hover flyout at nine buttons, and this one is
-   built to hold many more than nine. So the actions render as a
-   vertical list where each one carries its name, a sentence, and
-   the detail - which is also this project's rule that every
-   control says what it is, rather than being an emoji you have to
-   remember. Its password modal was left out too: this server binds
-   localhost and the password protected nothing that reaching the
-   machine did not already give you.
-
-   Unlocking
-   ---------
-   Add `?dev=1` to any page. `?dev=0` locks it again, as does the
-   labelled Exit button on the toolbar itself. Nothing else turns
-   it on - there is no key chord, deliberately, because the one
-   requirement was that he never lands in here by accident while
-   working.
-
-   Registering an action
-   ---------------------
-       WD.Dev.register({
-         id:      'cloud-realign',            // unique, stable
-         group:   'Cloud Manager',            // heading to sit under
-         label:   'Realign renamed projects', // the control's name
-         summary: 'One line, shown always.',
-         detail:  'The long version, shown always. Say what it '
-                + 'will not do as well as what it will.',
-         previewLabel: 'Preview - changes nothing',
-         runLabel:     'Run for real',
-         preview: function () { return Promise -> result },
-         run:     function () { return Promise -> result },
-         render:  function (result, isPreview) { return html }
-       });
-
-   `preview` is mandatory and `run` is optional; an action with no
-   `run` is a read-only diagnostic and renders one button. Where
-   both exist the live button stays **disabled until a preview has
-   been run in this session**, which is how "dry run by default"
-   is made structural rather than a habit - see `_renderAction`.
+   `--pink` and `--lime` instead of WaxFrame's amber accent; `?dev=1`
+   with deliberately no key chord, because he was explicit about
+   never landing in this by accident; and the two-stage dry run on
+   any action that writes.
    ============================================================ */
 (function () {
   'use strict';
 
   var WD = window.WD = window.WD || {};
-  var KEY = 'wd-dev';
-  var POS_KEY = 'wd-dev-pos';
+  var Dev = WD.Dev = WD.Dev || {};
 
-  var actions = [];
-  var mounted = false;
+  /* WaxFrame: `waxframe_dev` / `waxframe_dev_toolbar_pos`. */
+  var LS_DEV = 'wd_dev';
+  var LS_POS = 'wd_dev_toolbar_pos';
 
-  function esc(s) {
-    return (WD.esc ? WD.esc(s) : String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;'));
-  }
+  /* SHA-256 of the dev password, the same shape as WaxFrame's
+     DEV_PW_HASH. **This repository is public, and so is WaxFrame's**, so
+     this is obfuscation rather than security in both - it keeps a curious
+     user out of a maintenance surface, and nothing more. It guards a
+     toolbar on a server bound to localhost, which is the only reason that
+     trade is acceptable.
 
-  function read(key, fallback) {
-    try { return localStorage.getItem(key); } catch (e) { return fallback; }
+     To change it: `python -c "import hashlib;
+     print(hashlib.sha256(b'NEW').hexdigest())"` and paste the result here. */
+  var DEV_PW_HASH =
+    'b62953849ec2565da27c080a91ea2dfdf351580b7a059f5447ad372bae393385';
+
+  function read(key) {
+    try { return localStorage.getItem(key); } catch (e) { return null; }
   }
   function write(key, value) {
     try { localStorage.setItem(key, value); } catch (e) { /* private mode */ }
@@ -80,296 +84,378 @@
     try { localStorage.removeItem(key); } catch (e) { /* private mode */ }
   }
 
-  var Dev = WD.Dev = {
+  /* ── the gate ────────────────────────────────────────────────
+     WaxFrame: hashString / showDevModal / hideDevModal /
+     submitDevPassword / exitDevMode, in app.js. */
 
-    /* Is the toolbar unlocked right now? Everything else reads this
-       rather than localStorage, so there is one answer. */
-    isOn: function () {
-      return read(KEY, null) === '1';
-    },
+  function hashString(str) {
+    return crypto.subtle
+      .digest('SHA-256', new TextEncoder().encode(str))
+      .then(function (buf) {
+        return Array.prototype.map
+          .call(new Uint8Array(buf),
+                function (b) { return b.toString(16).padStart(2, '0'); })
+          .join('');
+      });
+  }
 
-    /* Register an action. Returns the action, so a caller can keep a
-       handle on it. A duplicate id replaces rather than appends: a
-       page loaded twice in a hot-reload should not grow the list. */
-    register: function (action) {
-      if (!action || !action.id) throw new Error('A dev action needs an id');
-      if (typeof action.preview !== 'function') {
-        throw new Error('A dev action needs a preview function: ' + action.id);
+  Dev.isOn = function () { return read(LS_DEV) === '1'; };
+
+  Dev.showDevModal = function () {
+    var modal = document.getElementById('devModal');
+    var input = document.getElementById('devPwInput');
+    if (modal) modal.classList.add('active');
+    setTimeout(function () { if (input) input.focus(); }, 100);
+  };
+
+  Dev.hideDevModal = function () {
+    var modal = document.getElementById('devModal');
+    var input = document.getElementById('devPwInput');
+    if (modal) modal.classList.remove('active');
+    if (input) input.value = '';
+  };
+
+  Dev.submitDevPassword = function () {
+    var input = document.getElementById('devPwInput');
+    var val = (input && input.value) || '';
+    return hashString(val).then(function (hash) {
+      if (hash !== DEV_PW_HASH) {
+        // WaxFrame says nothing on a wrong password - it just closes.
+        // Telling a guesser they were close is worse than saying nothing.
+        Dev.hideDevModal();
+        return false;
       }
-      var i;
-      for (i = 0; i < actions.length; i++) {
-        if (actions[i].id === action.id) { actions[i] = action; return action; }
-      }
-      actions.push(action);
-      if (mounted) Dev.refresh();
-      return action;
-    },
-
-    /* The registered actions, for tests and for anything that wants to
-       enumerate them. A copy, so a caller cannot reorder the real list. */
-    actions: function () { return actions.slice(); },
-
-    unlock: function () {
-      write(KEY, '1');
+      write(LS_DEV, '1');
+      Dev.hideDevModal();
       Dev.mount();
-      if (WD.toast) WD.toast('Dev mode is on. The tools are unchanged.', 'ok');
-    },
+      if (WD.toast) WD.toast('Dev mode enabled', 'ok');
+      return true;
+    });
+  };
 
-    lock: function () {
-      drop(KEY);
-      var root = document.getElementById('wdDev');
-      if (root) root.remove();
-      mounted = false;
-      document.documentElement.removeAttribute('data-wd-dev');
-      if (WD.toast) WD.toast('Dev mode is off.');
-    },
+  Dev.exitDevMode = function () {
+    drop(LS_DEV);
+    drop(LS_POS);
+    var tb = document.getElementById('devToolbar');
+    if (tb) tb.classList.add('is-hidden');
+    var nav = document.getElementById('navDevSection');
+    if (nav) nav.classList.remove('active');
+    document.documentElement.removeAttribute('data-wd-dev');
+    if (WD.toast) WD.toast('Dev mode disabled');
+  };
 
-    /* Build the toolbar if it is unlocked and not already there. Safe to
-       call repeatedly - that is how `register` after mount works. */
-    mount: function () {
-      if (!Dev.isOn()) return;
-      document.documentElement.setAttribute('data-wd-dev', 'on');
-      if (document.getElementById('wdDev')) { Dev.refresh(); return; }
+  /* ── the delegated dispatcher ────────────────────────────────
+     WaxFrame: helper-handlers.js. Scoped to the dev toolbar and its
+     modals here rather than migrated across the whole suite - the
+     rest of this app wires controls with inline `onclick`, and
+     converting all of it is a separate job with its own risk. */
 
-      var root = document.createElement('div');
-      root.id = 'wdDev';
-      root.className = 'wd-dev';
-      root.setAttribute('role', 'region');
-      root.setAttribute('aria-label', 'Developer tools');
-      root.innerHTML =
-        '<div class="wd-dev-bar">' +
-          '<span class="wd-dev-label" id="wdDevDrag" ' +
-                'title="Drag to move this toolbar">DEV MODE</span>' +
-          '<button type="button" class="wd-dev-btn wd-dev-toggle" id="wdDevToggle" ' +
-                  'aria-expanded="false" aria-controls="wdDevPanel" ' +
-                  'title="Show or hide the list of developer actions">' +
-            'Open Dev Tools</button>' +
-          '<button type="button" class="wd-dev-btn wd-dev-exit" id="wdDevExit" ' +
-                  'title="Turn dev mode off. Add ?dev=1 to any page to bring it back.">' +
-            'Exit Dev Mode</button>' +
-        '</div>' +
-        '<div class="wd-dev-panel" id="wdDevPanel" hidden>' +
-          '<p class="wd-dev-note">These are maintenance actions, not tools. ' +
-          'Each one previews first and changes nothing until you run it for real.</p>' +
-          '<div class="wd-dev-actions" id="wdDevActions"></div>' +
-        '</div>';
-      document.body.appendChild(root);
+  function resolveDotted(name) {
+    if (!name) return undefined;
+    var parts = String(name).split('.');
+    var parent = null;
+    var cur = window;
+    for (var i = 0; i < parts.length; i++) {
+      if (cur == null) return undefined;
+      parent = cur;
+      cur = cur[parts[i]];
+    }
+    // Bound, so `WD.Dev.foo` keeps its `this`. Not eval: this only ever
+    // looks a name up in a known scope.
+    if (typeof cur === 'function' && parts.length > 1) return cur.bind(parent);
+    return cur;
+  }
+  Dev._resolveDotted = resolveDotted;
 
-      document.getElementById('wdDevToggle')
-        .addEventListener('click', Dev.togglePanel);
-      document.getElementById('wdDevExit')
-        .addEventListener('click', Dev.lock);
-      _attachDrag(root);
-      _restorePosition(root);
-      Dev.refresh();
-      mounted = true;
-    },
+  function callAction(el, e) {
+    var fn = resolveDotted(el.dataset.fn);
+    if (typeof fn !== 'function') return;
+    if (e && el.dataset.prevent === '1') e.preventDefault();
+    if (el.dataset.argValue === '1') fn(el.value);
+    else if (el.dataset.argThis === '1') fn(el);
+    else if (el.dataset.argEvent === '1') fn(e);
+    else if ('arg' in el.dataset) fn(el.dataset.arg);
+    else fn();
+    if (e && el.dataset.stop === '1') e.stopPropagation();
+  }
 
-    togglePanel: function () {
-      var panel = document.getElementById('wdDevPanel');
-      var btn = document.getElementById('wdDevToggle');
-      if (!panel || !btn) return;
-      var opening = panel.hasAttribute('hidden');
-      if (opening) panel.removeAttribute('hidden'); else panel.setAttribute('hidden', '');
-      btn.setAttribute('aria-expanded', opening ? 'true' : 'false');
-      btn.textContent = opening ? 'Close Dev Tools' : 'Open Dev Tools';
-    },
-
-    /* Re-render the action list from the registry. */
-    refresh: function () {
-      var host = document.getElementById('wdDevActions');
-      if (!host) return;
-      if (!actions.length) {
-        host.innerHTML = '<p class="wd-dev-empty">No actions are registered on this page.</p>';
-        return;
+  var ACTIONS = {
+    'call': callAction,
+    'call-chain': function (el) {
+      var names = (el.dataset.fn || '').split(',')
+        .map(function (s) { return s.trim(); })
+        .filter(Boolean);
+      for (var i = 0; i < names.length; i++) {
+        var fn = resolveDotted(names[i]);
+        if (typeof fn === 'function') fn(el);
       }
-      var groups = [];
-      var byGroup = {};
-      actions.forEach(function (a) {
-        var g = a.group || 'General';
-        if (!byGroup[g]) { byGroup[g] = []; groups.push(g); }
-        byGroup[g].push(a);
-      });
-      host.innerHTML = groups.map(function (g) {
-        return '<section class="wd-dev-group">' +
-          '<h3 class="wd-dev-group-name">' + esc(g) + '</h3>' +
-          byGroup[g].map(_renderAction).join('') +
-        '</section>';
-      }).join('');
-      groups.forEach(function (g) {
-        byGroup[g].forEach(function (a) { _wire(a); });
-      });
+    },
+    'backdrop-call': function (el, e) {
+      if (e.target !== el) return;
+      var fn = resolveDotted(el.dataset.fn);
+      if (typeof fn === 'function') fn();
+    },
+    'noop': function (_, e) { if (e) e.stopPropagation(); }
+  };
+
+  var KEY_ACTIONS = {
+    'enter-call': function (el, e) {
+      if (e.key !== 'Enter') return;
+      var fn = resolveDotted(el.dataset.fn);
+      if (typeof fn === 'function') fn();
     }
   };
 
-  /* One action's card. The live button is rendered disabled and stays
-     that way until a preview has run - `_wire` is the only thing that
-     enables it, and only from the preview's own success path. */
-  function _renderAction(a) {
-    var hasRun = typeof a.run === 'function';
-    return '<article class="wd-dev-action" data-action-id="' + esc(a.id) + '">' +
-      '<h4 class="wd-dev-action-name">' + esc(a.label || a.id) + '</h4>' +
-      (a.summary ? '<p class="wd-dev-action-summary">' + esc(a.summary) + '</p>' : '') +
-      (a.detail ? '<p class="wd-dev-action-detail">' + esc(a.detail) + '</p>' : '') +
-      '<div class="wd-dev-action-controls">' +
-        '<button type="button" class="wd-dev-btn wd-dev-preview" ' +
-                'data-dev-preview="' + esc(a.id) + '" ' +
-                'title="Work out what this would do and report it. Writes nothing.">' +
-          esc(a.previewLabel || 'Preview - changes nothing') + '</button>' +
-        (hasRun ?
-          '<button type="button" class="wd-dev-btn wd-dev-run" disabled ' +
-                  'data-dev-run="' + esc(a.id) + '" ' +
-                  'title="Preview first. This button turns on once a preview has run.">' +
-            esc(a.runLabel || 'Run for real') + '</button>' : '') +
+  /* One listener, walking up from the target to the nearest
+     [data-action] - WaxFrame's shape exactly. Scoped to `#wdDevRoot`
+     so it can never pick up a click meant for a tool's own control. */
+  document.addEventListener('click', function (e) {
+    var node = e.target;
+    while (node && node !== document) {
+      if (node.dataset && node.dataset.action && _isOurs(node)) {
+        var fn = ACTIONS[node.dataset.action];
+        if (fn) fn(node, e);
+        return;
+      }
+      node = node.parentNode;
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    var el = e.target;
+    if (!el || !el.dataset || !el.dataset.keyAction) return;
+    if (!_isOurs(el)) return;
+    var fn = KEY_ACTIONS[el.dataset.keyAction];
+    if (fn) fn(el, e);
+  });
+
+  function _isOurs(node) {
+    return !!(node.closest && node.closest('#wdDevRoot'));
+  }
+
+  /* ── the markup ──────────────────────────────────────────────
+     Identical in shape to WaxFrame's `#devToolbar`, `#devModal` and
+     the Advanced nav block; injected because this suite has no single
+     page to write it on. */
+
+  function toolbarHtml() {
+    var inner = (typeof Dev.toolbarInnerHtml === 'function')
+      ? Dev.toolbarInnerHtml()
+      : '<span class="dev-toolbar-empty">No actions are registered.</span>';
+    return '' +
+      '<div class="dev-toolbar is-hidden" id="devToolbar">' +
+        '<span class="dev-toolbar-label" title="Drag to move this toolbar">' +
+          '⚙ DEV</span>' +
+        inner +
+      '</div>';
+  }
+
+  function modalHtml() {
+    return '' +
+      '<div class="modal-overlay dev-pw-overlay" id="devModal" ' +
+           'data-action="backdrop-call" data-fn="WD.Dev.hideDevModal">' +
+        '<div class="modal dev-pw-modal">' +
+          '<h3 class="modal-title">Dev Tools</h3>' +
+          '<input class="dev-pw-input" id="devPwInput" type="password" ' +
+                 'placeholder="Password" autocomplete="off" ' +
+                 'data-key-action="enter-call" ' +
+                 'data-fn="WD.Dev.submitDevPassword">' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn" ' +
+                    'title="Close without entering dev mode" ' +
+                    'data-action="call" data-fn="WD.Dev.hideDevModal">' +
+              '✕ Cancel</button>' +
+            '<button type="button" class="btn btn-primary" ' +
+                    'title="Submit dev password to enter Dev Mode" ' +
+                    'data-action="call" data-fn="WD.Dev.submitDevPassword">' +
+              'Unlock</button>' +
+          '</div>' +
+        '</div>' +
       '</div>' +
-      '<div class="wd-dev-result" data-dev-result="' + esc(a.id) + '" hidden></div>' +
-    '</article>';
+      /* Where an action's report is shown. WaxFrame renders detail in a
+         modal too - the Troubleshooting Card - rather than growing the
+         strip into a panel. */
+      '<div class="modal-overlay dev-result-overlay" id="devResultModal" ' +
+           'data-action="backdrop-call" data-fn="WD.Dev.closeResult">' +
+        '<div class="modal dev-result-modal">' +
+          '<h3 class="modal-title" id="devResultTitle">Result</h3>' +
+          '<div class="dev-result-body" id="devResultBody"></div>' +
+          '<div class="modal-actions">' +
+            '<button type="button" class="btn" title="Close this report" ' +
+                    'data-action="call" data-fn="WD.Dev.closeResult">' +
+              '✕ Close</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
   }
 
-  function _wire(a) {
-    var card = document.querySelector('[data-action-id="' + a.id + '"]');
-    if (!card) return;
-    var previewBtn = card.querySelector('[data-dev-preview]');
-    var runBtn = card.querySelector('[data-dev-run]');
-    var out = card.querySelector('[data-dev-result]');
-
-    function show(html, cls) {
-      out.className = 'wd-dev-result' + (cls ? ' ' + cls : '');
-      out.innerHTML = html;
-      out.removeAttribute('hidden');
-    }
-
-    function busy(btn, on, restore) {
-      if (!btn) return;
-      btn.disabled = !!on;
-      if (on) { btn.dataset.wasLabel = btn.textContent; btn.textContent = 'Working...'; }
-      else if (restore !== false && btn.dataset.wasLabel) {
-        btn.textContent = btn.dataset.wasLabel;
-      }
-    }
-
-    function finish(result, isPreview) {
-      if (result && result.error) {
-        show('<p class="wd-dev-error">' + esc(result.error) + '</p>', 'is-error');
-        return false;
-      }
-      var html = (typeof a.render === 'function')
-        ? a.render(result, isPreview)
-        : '<pre class="wd-dev-raw">' + esc(JSON.stringify(result, null, 2)) + '</pre>';
-      show(html, isPreview ? 'is-preview' : 'is-done');
-      return true;
-    }
-
-    previewBtn.addEventListener('click', function () {
-      busy(previewBtn, true);
-      if (runBtn) runBtn.disabled = true;
-      Promise.resolve()
-        .then(function () { return a.preview(); })
-        .then(function (result) {
-          var ok = finish(result, true);
-          busy(previewBtn, false);
-          // The only path that arms the live button, and it needs the
-          // preview to have come back clean. A failed preview leaves it
-          // disabled, which is the behaviour we want on a bad day.
-          if (ok && runBtn) {
-            runBtn.disabled = false;
-            runBtn.title = a.runTitle ||
-              'Apply what the preview listed. This writes to your files.';
-          }
-        })
-        .catch(function (e) {
-          show('<p class="wd-dev-error">' + esc(e && e.message || e) + '</p>', 'is-error');
-          busy(previewBtn, false);
-        });
+  /* WaxFrame's Advanced nav section: one item to open the modal, and one
+     hidden until dev mode is on that leaves it. */
+  function injectNavItems() {
+    var menu = document.getElementById('mainMenu');
+    if (!menu || menu.querySelector('.nav-item-dev')) return;
+    var sep = document.createElement('div');
+    sep.className = 'menu-sep';
+    var head = document.createElement('div');
+    head.className = 'menu-section';
+    head.innerHTML = '▸ Advanced';
+    var open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'menu-item nav-item-dev';
+    open.title = 'Open Developer Tools — for testing and maintenance';
+    open.textContent = '· 🛠 Dev Tools';
+    open.addEventListener('click', function () {
+      if (typeof closeMainMenu === 'function') closeMainMenu();
+      Dev.showDevModal();
     });
-
-    if (runBtn) {
-      runBtn.addEventListener('click', function () {
-        var question = a.confirm ||
-          ('This changes files on disk. ' +
-           'Run "' + (a.label || a.id) + '" for real?');
-        if (!window.confirm(question)) return;
-        busy(runBtn, true);
-        previewBtn.disabled = true;
-        Promise.resolve()
-          .then(function () { return a.run(); })
-          .then(function (result) {
-            finish(result, false);
-            busy(runBtn, false);
-            previewBtn.disabled = false;
-            // Disarm afterwards. The report on screen describes a run that
-            // has happened; clicking again should mean deciding again.
-            runBtn.disabled = true;
-          })
-          .catch(function (e) {
-            show('<p class="wd-dev-error">' + esc(e && e.message || e) + '</p>', 'is-error');
-            busy(runBtn, false);
-            previewBtn.disabled = false;
-            runBtn.disabled = true;
-          });
-      });
-    }
+    var wrap = document.createElement('div');
+    wrap.className = 'nav-dev-section';
+    wrap.id = 'navDevSection';
+    var exit = document.createElement('button');
+    exit.type = 'button';
+    exit.className = 'menu-item nav-item-exit-dev';
+    exit.title = 'Exit Dev Mode and return to normal use';
+    exit.textContent = '· 🚪 Exit Dev Mode';
+    exit.addEventListener('click', function () {
+      if (typeof closeMainMenu === 'function') closeMainMenu();
+      Dev.exitDevMode();
+    });
+    wrap.appendChild(exit);
+    menu.appendChild(sep);
+    menu.appendChild(head);
+    menu.appendChild(open);
+    menu.appendChild(wrap);
   }
 
-  /* Dragged by its label, like WaxFrame's. Position is remembered so it
-     stays out of the way of whatever page he left it on. */
-  function _attachDrag(root) {
-    var handle = root.querySelector('.wd-dev-label');
-    if (!handle) return;
-    handle.addEventListener('mousedown', function (e) {
+  /* ── drag, WaxFrame's attachDevToolbarDrag ───────────────────── */
+
+  function attachDevToolbarDrag() {
+    var tb = document.getElementById('devToolbar');
+    if (!tb || tb.dataset.dragAttached === '1') return;
+    var label = tb.querySelector('.dev-toolbar-label');
+    if (!label) return;
+    tb.dataset.dragAttached = '1';
+    label.addEventListener('mousedown', function (e) {
       e.preventDefault();
-      var rect = root.getBoundingClientRect();
-      root.style.right = 'auto';
-      root.style.bottom = 'auto';
-      root.style.left = rect.left + 'px';
-      root.style.top = rect.top + 'px';
+      // Convert a right-anchored position to explicit left/top first:
+      // Chrome and Edge both fight the drag if `right` is still set.
+      var rect = tb.getBoundingClientRect();
+      tb.style.right = 'auto';
+      tb.style.bottom = 'auto';
+      tb.style.left = rect.left + 'px';
+      tb.style.top = rect.top + 'px';
       var offX = e.clientX - rect.left;
       var offY = e.clientY - rect.top;
-      function move(ev) {
-        var l = Math.max(0, Math.min(window.innerWidth - root.offsetWidth, ev.clientX - offX));
-        var t = Math.max(0, Math.min(window.innerHeight - root.offsetHeight, ev.clientY - offY));
-        root.style.left = l + 'px';
-        root.style.top = t + 'px';
+      function onMove(ev) {
+        var l = Math.max(0, Math.min(window.innerWidth - tb.offsetWidth,
+                                     ev.clientX - offX));
+        var t = Math.max(0, Math.min(window.innerHeight - tb.offsetHeight,
+                                     ev.clientY - offY));
+        tb.style.left = l + 'px';
+        tb.style.top = t + 'px';
       }
-      function up() {
-        document.removeEventListener('mousemove', move);
-        document.removeEventListener('mouseup', up);
-        write(POS_KEY, JSON.stringify({
-          left: parseInt(root.style.left, 10), top: parseInt(root.style.top, 10)
+      function onUp() {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        write(LS_POS, JSON.stringify({
+          top: parseInt(tb.style.top, 10), left: parseInt(tb.style.left, 10)
         }));
       }
-      document.addEventListener('mousemove', move);
-      document.addEventListener('mouseup', up);
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
     });
   }
 
-  function _restorePosition(root) {
+  function restorePosition(tb) {
     var saved = null;
-    try { saved = JSON.parse(read(POS_KEY, null) || 'null'); } catch (e) { saved = null; }
+    try { saved = JSON.parse(read(LS_POS) || 'null'); } catch (e) { saved = null; }
     if (!saved) return;
-    // Clamp on restore as well as on drag: he may have saved a position on a
-    // wider monitor than the one he is reading this on.
-    var l = Math.max(0, Math.min(window.innerWidth - 60, saved.left));
+    // Clamped on restore as well as on drag: a position saved on a wider
+    // monitor must not put the toolbar off the screen he is using now.
+    var l = Math.max(0, Math.min(window.innerWidth - 80, saved.left));
     var t = Math.max(0, Math.min(window.innerHeight - 40, saved.top));
-    root.style.right = 'auto';
-    root.style.bottom = 'auto';
-    root.style.left = l + 'px';
-    root.style.top = t + 'px';
+    tb.style.right = 'auto';
+    tb.style.bottom = 'auto';
+    tb.style.left = l + 'px';
+    tb.style.top = t + 'px';
   }
 
-  /* `?dev=1` unlocks, `?dev=0` locks. Reading it before DOMContentLoaded
-     would be too early for `document.body`, so both run on the event. */
-  function _readUrl() {
+  /* ── result modal ────────────────────────────────────────────── */
+
+  Dev.showResult = function (title, html) {
+    var t = document.getElementById('devResultTitle');
+    var b = document.getElementById('devResultBody');
+    var m = document.getElementById('devResultModal');
+    if (t) t.textContent = title;
+    if (b) b.innerHTML = html;
+    if (m) m.classList.add('active');
+  };
+
+  Dev.closeResult = function () {
+    var m = document.getElementById('devResultModal');
+    if (m) m.classList.remove('active');
+  };
+
+  /* Enable or disable a toolbar button by its id. This is how the
+     two-stage dry run is expressed in WaxFrame's idiom: the live button
+     is rendered `disabled` and only its own preview turns it on. */
+  Dev.setEnabled = function (id, on) {
+    var btn = document.getElementById(id);
+    if (btn) btn.disabled = !on;
+  };
+
+  Dev.setActive = function (id, on) {
+    var btn = document.getElementById(id);
+    if (btn) btn.classList.toggle('active', !!on);
+  };
+
+  /* ── mount ───────────────────────────────────────────────────── */
+
+  Dev.mount = function () {
+    var root = document.getElementById('wdDevRoot');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'wdDevRoot';
+      document.body.appendChild(root);
+    }
+    if (!document.getElementById('devToolbar')) {
+      root.innerHTML = toolbarHtml() + modalHtml();
+    }
+    injectNavItems();
+
+    var tb = document.getElementById('devToolbar');
+    var nav = document.getElementById('navDevSection');
+    if (!Dev.isOn()) {
+      if (tb) tb.classList.add('is-hidden');
+      if (nav) nav.classList.remove('active');
+      document.documentElement.removeAttribute('data-wd-dev');
+      return;
+    }
+    document.documentElement.setAttribute('data-wd-dev', 'on');
+    if (nav) nav.classList.add('active');
+    if (tb) {
+      tb.classList.remove('is-hidden');
+      restorePosition(tb);
+      attachDevToolbarDrag();
+    }
+    if (typeof Dev.onMounted === 'function') Dev.onMounted();
+  };
+
+  /* `?dev=1` unlocks without the password, `?dev=0` locks. His, not
+     WaxFrame's: he asked for a way in that he could never hit by
+     accident, and was explicit that it must not be a key chord. The
+     password modal is the WaxFrame route and both are deliberate. */
+  function readUrl() {
     var value;
     try {
       value = new URLSearchParams(window.location.search).get('dev');
     } catch (e) { return; }
-    if (value === '1') write(KEY, '1');
-    else if (value === '0') { drop(KEY); drop(POS_KEY); }
+    if (value === '1') write(LS_DEV, '1');
+    else if (value === '0') { drop(LS_DEV); drop(LS_POS); }
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    _readUrl();
+    readUrl();
     Dev.mount();
   });
 })();
