@@ -475,6 +475,11 @@
     if (m) m.classList.add('active');
   };
 
+  Dev.setPanelTitle = function (title) {
+    var t = document.getElementById('devResultTitle');
+    if (t) t.textContent = title;
+  };
+
   /* Replace only the output area of an open panel, leaving the explanation
      and the controls where they are. */
   Dev.setPanelOutput = function (html) {

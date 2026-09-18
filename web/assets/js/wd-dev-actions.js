@@ -210,8 +210,63 @@
     if (btn) { btn.textContent = labelFor(last.result); delete btn.dataset.wasLabel; }
   }
 
-  function realignCall(dryRun) {
-    return WD.api('cloud/realign_renamed', { dryRun: dryRun });
+  /* ── progress, while it runs ─────────────────────────────────
+     **The server was already reporting this and nothing was listening.**
+     `cloud_realign.realign` calls its `progress_cb` once per pair - "Checking
+     34 of 90" - and `server.py` wires that to `/api/cloud/progress` keyed by
+     an `opId`. The toolbar was not sending an `opId`, so ninety cloud
+     downloads happened behind a button that said "Aligning..." and nothing
+     else. On a fleet this size that is minutes of a screen that looks
+     identical to a hung one.
+
+     Same shape Cloud Manager uses: make an id, send it, poll every 250 ms,
+     stop when the call returns. */
+  var poller = null;
+
+  function stopPolling() {
+    if (poller) { clearInterval(poller); poller = null; }
+  }
+
+  function progressHtml(pct, message) {
+    return '' +
+      '<div class="progress-wrap">' +
+        '<div class="progress-track">' +
+          '<div class="progress-fill' + (pct == null ? ' indeterminate' : '') +
+               '"' + (pct == null ? '' : ' style="width:' + pct + '%"') +
+          '></div>' +
+        '</div>' +
+        '<div class="progress-label">' +
+          '<span class="stage">' + esc(message || 'Working…') + '</span>' +
+          '<span class="pct">' + (pct == null ? '' : pct + '%') + '</span>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function startPolling(opId, lead) {
+    stopPolling();
+    Dev.setPanelOutput('<p class="dev-result-lead">' + esc(lead) + '</p>' +
+                       progressHtml(null, 'Starting…'));
+    poller = setInterval(function () {
+      fetch('/api/cloud/progress?id=' + encodeURIComponent(opId))
+        .then(function (r) { return r.json(); })
+        .then(function (p) {
+          if (!poller || !p) return;
+          var pct = (typeof p.current === 'number' && p.total)
+            ? Math.round(100 * p.current / p.total) : null;
+          Dev.setPanelOutput('<p class="dev-result-lead">' + esc(lead) +
+                             '</p>' + progressHtml(pct, p.message));
+        })
+        .catch(function () { /* a dropped poll is not a failed operation */ });
+    }, 250);
+  }
+
+  function realignCall(dryRun, lead) {
+    var opId = 'dev-realign-' + Date.now() + '-' +
+               Math.random().toString(16).slice(2, 8);
+    startPolling(opId, lead);
+    return WD.api('cloud/realign_renamed', { dryRun: dryRun, opId: opId })
+      .then(function (r) { stopPolling(); return r; })
+      .catch(function (e) { stopPolling(); throw e; });
   }
 
   /* The report he decides on, at his scale - around ninety pairs.
@@ -222,9 +277,34 @@
     var aligned = r.aligned || [], skipped = r.skipped || [], failed = r.failed || [];
     var out = [];
 
-    out.push('<p class="dev-result-lead">' +
-      'Examined ' + plural(r.examined || 0, 'pair', 'pairs') + '.' +
-      (isPreview ? ' <strong>Nothing has been changed.</strong>' : '') + '</p>');
+    /* **"How will I know when it is done?"** A report appearing where a
+       progress bar was is a weak signal, so the finished state says so in
+       words, at the top, and says what it means for him - the whole reason he
+       ran it was to stop those rows claiming there was work to pull. */
+    if (isPreview) {
+      out.push('<p class="dev-result-lead">' +
+        'Checked ' + plural(r.examined || 0, 'pair', 'pairs') + '. ' +
+        '<strong>Nothing has been changed.</strong></p>');
+    } else {
+      var done = aligned.length;
+      out.push('<p class="dev-result-done">' +
+        '<strong>Finished.</strong> ' +
+        (done
+          ? plural(done, 'project is', 'projects are') + ' now in step with ' +
+            'the cloud — those rows will stop reporting the cloud as ' +
+            'newer. Nothing was uploaded, and nothing was deleted from the ' +
+            'cloud.'
+          : 'No project needed changing.') +
+        (failed.length
+          ? ' ' + (failed.length === 1
+                    ? 'One failed and is listed below'
+                    : failed.length + ' failed and are listed below') +
+            ' — running this again picks up what is left.'
+          : '') +
+        '</p>');
+      out.push('<p class="dev-result-lead">Checked ' +
+        plural(r.examined || 0, 'pair', 'pairs') + '.</p>');
+    }
 
     out.push('<ul class="dev-result-tally">' +
       '<li><strong>' + aligned.length + '</strong> ' +
@@ -299,9 +379,10 @@
   Dev.realignPreview = function () {
     busy('wdRealignPreviewBtn', true, 'Comparing…');
     Dev.setEnabled('wdRealignRunBtn', false);
-    Dev.setPanelOutput('<p class="dev-result-lead">Downloading each cloud ' +
-      'copy and comparing it. This takes a moment per project.</p>');
-    return realignCall(true).then(function (r) {
+    return realignCall(true,
+        'Downloading each cloud copy and comparing it. This takes a moment ' +
+        'per project, so a large fleet takes a few minutes.'
+      ).then(function (r) {
       busy('wdRealignPreviewBtn', false);
       if (r && r.error) { fail(r.error); return; }
       Dev.setPanelOutput(realignReport(r, true));
@@ -331,13 +412,17 @@
         '.esx files the preview listed, backing each one up first. ' +
         'Nothing is uploaded or deleted. Continue?')) return;
     busy('wdRealignRunBtn', true, 'Aligning…');
-    return realignCall(false).then(function (r) {
+    return realignCall(false,
+        'Re-checking each pair and writing the ones that are still identical. ' +
+        'Every file is backed up before it is touched.'
+      ).then(function (r) {
       busy('wdRealignRunBtn', false);
       Dev.setEnabled('wdRealignRunBtn', false);
       if (r && r.error) { fail(r.error); return; }
       lastRun.realign = { result: r, isPreview: false, at: Date.now(),
                           armable: false };
       Dev.setPanelOutput(realignReport(r, false));
+      Dev.setPanelTitle('Realign — finished');
     }).catch(function (e) {
       busy('wdRealignRunBtn', false);
       Dev.setEnabled('wdRealignRunBtn', false);

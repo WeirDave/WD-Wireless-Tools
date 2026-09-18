@@ -1287,6 +1287,36 @@ a preview is the fix, keeping a list that has already been acted on is not.
 `test_reopening_the_panel_keeps_the_result_and_stays_armed` hold both, and both
 go red on the old behaviour.
 
+### Knowing it is running, and knowing it is done
+
+*"How will I know after the alignment is complete?"* Fair question, and the
+answer was "you won't, until it finishes".
+
+**The server was already reporting progress and nothing was listening.**
+`cloud_realign.realign` calls its `progress_cb` once per pair - "Checking 34 of
+90" - and `server.py` exposes that at `/api/cloud/progress`, keyed by an
+`opId`. The toolbar sent no `opId`, so ninety cloud downloads happened behind a
+button reading "Aligning..." and nothing else. On a fleet that size that is
+minutes of a screen indistinguishable from a hung one.
+
+It sends one now and polls every 250 ms, same shape Cloud Manager's ops deck
+uses, into the suite's existing `.progress-track` / `.progress-fill`. The
+poller stops when the call returns, or it would keep overwriting the report he
+is trying to read.
+
+**The finished state says so in words.** A report appearing where a progress
+bar was is a weak signal, so a live run leads with a lime banner - "Finished.
+71 projects are now in step with the cloud - those rows will stop reporting the
+cloud as newer. Nothing was uploaded, and nothing was deleted from the cloud."
+- and the panel retitles itself to "Realign - finished". A preview never says
+"Finished"; the two states must not read alike.
+
+One wording trap worth keeping in mind: `plural(n, 'one', 'some')` produced
+**"3 some failed"**, which read fine in the source and not on screen. It was
+caught by photographing the finished state rather than by any assertion, and
+`test_a_finished_run_reads_as_a_sentence` exists because that class of mistake
+survives a read-through.
+
 **Adding an action:** one button in `Dev.toolbarInnerHtml` and one handler
 below it in `wd-dev-actions.js`. WaxFrame's convention is that every
 dev-toolbar button's handler lives in one file - `wf-debug.js` - so nothing in

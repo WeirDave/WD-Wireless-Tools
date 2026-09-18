@@ -208,9 +208,31 @@ class ItNamesEveryFileAndWhatHappensToIt(unittest.TestCase):
         skipped = [dict(SKIPPED, name="Site %02d Walkthrough" % i)
                    for i in range(60, 90)]
         out = render(report(aligned=aligned, skipped=skipped), True)
-        self.assertIn("Examined 90 pairs", out["text"])
+        # The property is that it states how many pairs it looked at, not
+        # the verb it uses to say so. Pinning the sentence pins the bug
+        # with it - see CLAUDE.md on the backups wording.
+        self.assertIn("90 pairs", out["text"])
         for f in aligned + skipped:
             self.assertIn(f["name"], out["text"])
+
+    def test_a_finished_run_reads_as_a_sentence(self):
+        """"3 some failed" shipped in a draft of this. A count and a quantity
+        word in the same slot is the mistake; the test is here because it is
+        the kind that survives a read-through."""
+        out = render(report(aligned=[ALIGNED], failed=[FAILED, FAILED],
+                            dryRun=False), False)
+        self.assertIn("2 failed and are listed below", out["text"])
+        self.assertNotIn("some failed", out["text"])
+
+    def test_one_failure_is_singular(self):
+        out = render(report(aligned=[ALIGNED], failed=[FAILED], dryRun=False),
+                     False)
+        self.assertIn("One failed and is listed below", out["text"])
+
+    def test_a_clean_finished_run_does_not_mention_failures(self):
+        out = render(report(aligned=[ALIGNED], dryRun=False), False)
+        self.assertIn("Finished.", out["text"])
+        self.assertNotIn("listed below", out["text"])
 
     def test_a_backup_location_is_shown_for_a_file_that_was_rewritten(self):
         """He has been sent to the wrong place for an overwritten file
@@ -234,7 +256,7 @@ class TheTallyAndTheEdges(unittest.TestCase):
     def test_the_tally_matches_the_lists(self):
         out = render(report(aligned=[ALIGNED], skipped=[SKIPPED],
                             failed=[FAILED]), True)
-        self.assertRegex(out["text"], r"Examined 3 pairs")
+        self.assertIn("3 pairs", out["text"])
 
     def test_one_pair_is_singular(self):
         """A tool that says "1 pairs" reads as unfinished."""

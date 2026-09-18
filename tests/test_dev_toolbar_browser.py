@@ -733,6 +733,122 @@ class ToolbarInABrowser(unittest.TestCase):
         self.wait_for(lambda: not self.find("#wdRealignRunBtn").is_enabled(),
                       "it to disarm")
 
+    # ══ knowing it is running, and knowing it is done ═════════════
+    def slow_realign(self):
+        """A realign that does not answer immediately, with the server's
+        progress endpoint answering as the real one does. Ninety cloud
+        downloads take minutes; this is the shape of that wait."""
+        self.driver.execute_script("""
+          window.__devCalls = [];
+          window.__resolve = null;
+          window.WD.api = function (a, b) {
+            window.__devCalls.push({ action: a, body: b });
+            return new Promise(function (res) { window.__resolve = res; });
+          };
+          var realFetch = window.fetch;
+          window.fetch = function (url) {
+            if (String(url).indexOf('/api/cloud/progress') === 0) {
+              return Promise.resolve({ json: function () {
+                return Promise.resolve({ current: 34, total: 90,
+                  message: 'Checking 34 of 90…' });
+              } });
+            }
+            return realFetch.apply(this, arguments);
+          };
+        """)
+
+    def test_it_says_where_it_has_got_to_while_it_runs(self):
+        """**The server was already reporting this and nothing listened.**
+        `cloud_realign` calls its progress callback once per pair and
+        `server.py` exposes it at `/api/cloud/progress`; the toolbar sent no
+        `opId`, so ninety downloads happened behind a button reading
+        "Aligning..." and nothing else. On a fleet this size that is minutes
+        of a screen indistinguishable from a hung one."""
+        self.unlocked()
+        self.slow_realign()
+        self.open_realign()
+        self.click("#wdRealignPreviewBtn")
+        self.wait_for(lambda: "Checking 34 of 90" in self.panel_text(),
+                      "the progress line")
+        # Scoped to the panel: Cloud Manager's own ops deck has a
+        # `.progress-fill` too, and an unscoped query finds that one instead.
+        pct = self.driver.execute_script(
+            "var f = document.getElementById('devPanelOut')"
+            "          .querySelector('.progress-fill');"
+            "return f ? f.style.width : null;")
+        self.assertEqual(pct, "38%")
+
+    def test_the_request_carries_an_op_id_so_progress_can_be_found(self):
+        """The id is what ties the poll to the run. Without it the server
+        writes progress into a slot nobody reads."""
+        self.unlocked()
+        self.slow_realign()
+        self.open_realign()
+        self.click("#wdRealignPreviewBtn")
+        self.wait_for(lambda: len(self.calls()) == 1, "the call")
+        self.assertTrue(self.calls()[0]["body"].get("opId"),
+                        "no opId sent, so nothing can report progress")
+
+    def test_the_polling_stops_when_the_run_returns(self):
+        """A poller left running would keep overwriting the report he is
+        trying to read."""
+        self.unlocked()
+        self.slow_realign()
+        self.open_realign()
+        self.click("#wdRealignPreviewBtn")
+        self.wait_for(lambda: "Checking 34 of 90" in self.panel_text(), "progress")
+        self.driver.execute_script("""
+          window.__resolve({ ok: true, dryRun: true, examined: 1,
+            aligned: [{ name: 'Maple Depot Survey', folder: 'Maple Depot',
+                        actions: ['Set the modified date to the cloud’s'] }],
+            skipped: [], failed: [],
+            counts: { aligned: 1, skipped: 0, failed: 0 } });
+        """)
+        self.wait_for(lambda: "Maple Depot Survey" in self.panel_text(), "the report")
+        time.sleep(0.6)      # longer than the 250ms poll interval
+        self.assertIn("Maple Depot Survey", self.panel_text())
+        self.assertNotIn("Checking 34 of 90", self.panel_text())
+
+    def test_a_finished_run_says_so_in_words(self):
+        """"How will I know after the alignment is complete?" A report
+        appearing where a progress bar was is a weak signal."""
+        self.unlocked()
+        self.stub()
+        self.open_realign()
+        self.click("#wdRealignPreviewBtn")
+        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
+        self.driver.execute_script("window.confirm = function () { return true; };")
+        self.click("#wdRealignRunBtn")
+        self.wait_for(lambda: "Finished" in self.panel_text(), "the done banner")
+        text = self.panel_text()
+        self.assertIn("in step with the cloud", text)
+        self.assertIn("stop reporting the cloud as newer", text)
+        self.assertIn("Nothing was uploaded", text)
+
+    def test_the_finished_run_retitles_the_panel(self):
+        """The heading agrees with the banner, so a glance is enough."""
+        self.unlocked()
+        self.stub()
+        self.open_realign()
+        self.click("#wdRealignPreviewBtn")
+        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
+        self.driver.execute_script("window.confirm = function () { return true; };")
+        self.click("#wdRealignRunBtn")
+        self.wait_for(
+            lambda: "finished" in self.find("#devResultTitle").text.lower(),
+            "the retitled panel")
+
+    def test_a_preview_never_claims_to_have_finished_anything(self):
+        """The two states must not read alike - that is the whole point of
+        the banner."""
+        self.unlocked()
+        self.stub()
+        self.open_realign()
+        self.click("#wdRealignPreviewBtn")
+        self.wait_for(lambda: "Nothing has been changed" in self.panel_text(),
+                      "the preview")
+        self.assertNotIn("Finished", self.panel_text())
+
     # ══ housekeeping ══════════════════════════════════════════════
     def test_the_housekeeping_delete_button_is_dead_until_it_has_looked(self):
         self.unlocked()
