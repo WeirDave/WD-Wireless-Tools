@@ -86,9 +86,25 @@ class TheDirectionIsReadableWithoutHoveringTests(unittest.TestCase):
                 self.assertTrue(label, "nothing but an arrow")
                 self.assertNotEqual("Sync", label)
 
-    def test_the_row_arrows_lead_with_the_direction_too(self):
-        self.assertIn("Cloud → Local: apply the cloud name", CLOUD_JS)
-        self.assertIn("Local → Cloud: apply the local name", CLOUD_JS)
+    def test_the_row_actions_lead_with_the_direction_too(self):
+        """This asserted a *tooltip* inside a class called "readable without
+        hovering", which was the one place the direction could not be read
+        without hovering. It is the button's own face now:
+
+            [→ Cloud → Local]   [← Local → Cloud]   [≠ Not a match]
+
+        so the assertion moved to the label and the call beside it, which pins
+        the pairing a tooltip never could - a label reading one direction over
+        a handler doing the other is the defect worth catching.
+        """
+        band = CLOUD_JS[CLOUD_JS.index("function rowDetailHtml("):]
+        band = band[:band.index("\nfunction stalenessBadgeHtml(")]
+        to_local = band.index("'Cloud \u2192 Local'")
+        to_cloud = band.index("'Local \u2192 Cloud'")
+        self.assertIn("syncRow('to-local'", band[to_local:to_local + 400])
+        self.assertIn("syncRow('to-cloud'", band[to_cloud:to_cloud + 400])
+        self.assertLess(to_local, to_cloud,
+                        "the recommended direction is no longer first")
 
     def test_the_old_vocabulary_is_gone_from_the_tooltips(self):
         """Two names for one direction is how the confusion started."""
@@ -99,13 +115,20 @@ class TheDirectionIsReadableWithoutHoveringTests(unittest.TestCase):
 class AnUnavailableActionIsShownRatherThanAbsentTests(unittest.TestCase):
 
     def setUp(self):
-        start = CLOUD_JS.index("if (s === 'local_newer')")
+        """The refused action is drawn by a shared helper now.
+
+        `rdUnavailable` and `rdConfirmPair` are used by both staleness
+        branches, so they sit above them - and a slice starting at
+        `local_newer` cut them off, which made a passing property look like a
+        regression. The slice starts at the helpers.
+        """
+        start = CLOUD_JS.index("function rdUnavailable(")
         self.block = CLOUD_JS[start:CLOUD_JS.index("function gutCell", start)]
 
     def test_the_row_offers_a_push_control_at_all(self):
         """The whole complaint: a status with nothing beside it to click."""
         self.assertIn("<button", self.block)
-        self.assertIn("Local &#8594; Cloud", self.block)
+        self.assertIn("Local \u2192 Cloud", self.block)
 
     def test_it_is_marked_unavailable_rather_than_merely_looking_dead(self):
         self.assertIn('aria-disabled="true"', self.block)
@@ -154,6 +177,18 @@ class AnUnavailableActionIsShownRatherThanAbsentTests(unittest.TestCase):
         low = self.block.lower()
         self.assertIn("cannot be undone", low)
         self.assertIn("link", low)
+
+    def test_the_control_that_lifts_the_refusal_is_beside_it(self):
+        """Stronger than the tooltip this replaces, and the fix for a real
+        defect: the old message said to "confirm the pair with the Link
+        button", and Link is only ever drawn on an *unpaired* row. On a
+        guessed pair it named a control that was not on screen anywhere.
+
+        Confirm this pair is rendered in the same band as the refusal, and it
+        is the call that promotes a guess to a match he made himself.
+        """
+        self.assertIn("Confirm this pair", self.block)
+        self.assertIn("markManualMatch(", self.block)
 
     def test_nothing_is_at_risk_is_still_said(self):
         """Sync never replaces a newer file with an older one, and says so."""

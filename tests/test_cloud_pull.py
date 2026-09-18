@@ -187,7 +187,13 @@ class CloudPullWiringTests(unittest.TestCase):
         start = self.js.index("function stalenessBadgeHtml(")
         body = self.js[start:self.js.index("\n}", start)]
         self.assertIn("verifyReplaceLocal(", body)
-        self.assertIn("is-action", body)
+        # `is-action` was the class that distinguished a clickable pill from a
+        # decorative one, back when both were pills. Everything in the band is
+        # a button now, so the property is that this one is pressable and
+        # wired - not that it carries a class telling the stylesheet so.
+        i = body.index("verifyReplaceLocal(")
+        self.assertIn("<button", body[:i])
+        self.assertIn("onclick=", body[:i])
 
     def test_pushing_up_needs_a_stronger_pairing_than_pulling_down(self):
         """This used to assert that nothing could push a local file up, which

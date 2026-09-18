@@ -48,7 +48,12 @@ function slice(from, to) {
   if (a < 0 || b < 0) throw new Error('could not find ' + from);
   return source.slice(a, b);
 }
-const block = slice('const MATCH_BADGE_SPEC = {', '\nfunction gutCell(r)');
+// A row's controls are built from the shared icon helpers, and those sit
+// above the badges. Slicing from the badges alone compiles and then throws
+// `ic is not defined` on the first render - so the slice starts higher
+// rather than the helper being stubbed, because a stub would test the stub.
+const block = slice('const ICONS = {', '\nfunction siteDigest(')
+            + slice('const MATCH_BADGE_SPEC = {', '\nfunction gutCell(r)');
 
 const WD = { esc: s => String(s == null ? '' : s),
              escAttr: s => String(s == null ? '' : s),

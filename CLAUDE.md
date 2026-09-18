@@ -823,6 +823,37 @@ overflowed anyway. Column widths are the mechanism.
 
 ## Known gotchas
 
+- **Write the character, not an escape for it - and never let a patch script
+  decide how many backslashes that takes.** This file is UTF-8 and the source
+  is full of arrows, ticks, stars and em dashes written literally; a tooltip
+  already says "Cloud → Local: apply the cloud name". An escape buys
+  nothing, hides what the string says from anyone reading it, and has now gone
+  wrong three ways in one session:
+
+  - a patch written in a Python raw string put `\\u2019` into `cloud.js`, so a
+    tooltip would have read "the two files\u2019 contents" - valid JavaScript,
+    green tests, visible only to him
+  - a bash heredoc read `\25BE` as an octal escape and a chevron rendered as
+    "BE"
+  - a test looking for the arrow could not find it, because the test wrote the
+    character and the source wrote the escape
+
+  None of those breaks a build. `tests/test_cloud_list_design.py::
+  EscapeSequencesDoNotReachTheScreenTests` fails on a double-escaped sequence
+  in any file that renders text. And **if a patch script keeps mangling
+  backslashes, stop using the shell heredoc** and write the file with the
+  editing tools instead - that is what finally worked both times.
+
+- **A Node probe must be told its encoding, or it passes in CI and fails on his
+  machine.** `subprocess.run(..., text=True)` decodes the child's stdout with
+  the *locale* encoding, which is cp1252 on Windows and UTF-8 in GitHub
+  Actions. A probe that renders a label containing an arrow therefore comes
+  back mangled locally and intact in CI - the exact inversion of the usual
+  failure, and the one that wastes the most time, because the machine reporting
+  the fault is the one nobody trusts. Pass `encoding="utf-8"` to every
+  `subprocess.run` that reads node's output.
+
+
 - **A wall template updates every type it carries, including the ones Ekahau
   ships - and three of those are recoloured on purpose.** `Elevator Shaft`
   green, `Door, Steel Fire/Exit` orange, `Window, Thick` `#0093EA`, because

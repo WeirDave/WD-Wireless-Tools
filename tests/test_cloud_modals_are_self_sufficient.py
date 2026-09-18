@@ -209,10 +209,31 @@ class IconButtonsSayWhatTheyDoTests(unittest.TestCase):
                 if "tree-chevron" not in b and "src-badge" not in b]
         self.assertEqual([], bare, "glyph-only controls left: %s" % bare)
 
-    def test_the_sync_arrows_carry_their_direction_as_words(self):
-        """The two he misread. Words fix legibility and direction together."""
-        self.assertIn('<span class="ib-label">Cloud → Local</span>', CLOUD_JS)
-        self.assertIn('<span class="ib-label">Local → Cloud</span>', CLOUD_JS)
+    def test_the_sync_actions_carry_their_direction_as_words(self):
+        """The two he misread. Words fix legibility and direction together.
+
+        `ib-label` was a span revealed beside an emoji arrow in the middle
+        lane. Both directions are full-width labelled buttons in the band under
+        the row now, so the words are the control rather than an annotation on
+        one - which is what this test was asking for in the first place.
+        """
+        self.assertIn("'Cloud \u2192 Local'", CLOUD_JS)
+        self.assertIn("'Local \u2192 Cloud'", CLOUD_JS)
+
+    def test_no_row_action_is_an_icon_with_no_word(self):
+        """"I forgot what hybrid meant, or external for that matter."
+
+        The row menus replaced about a dozen emoji circles a side. The menu's
+        own button is the single exception and carries a title and an
+        aria-label; everything inside it has to be a word.
+        """
+        import re as _re
+        items = _re.findall(r"menuItem\('([a-z]+)',\s*(.+?),", CLOUD_JS, _re.S)
+        self.assertGreater(len(items), 10)
+        for icon, label in items:
+            with self.subTest(item=label[:40]):
+                self.assertNotEqual("", label.strip())
+                self.assertGreater(len(label.strip()), 4)
 
     def test_the_everyday_pull_is_named_in_words(self):
         """His routine operation after every design, per the workflow note."""

@@ -133,6 +133,28 @@
   --z-swap: 500;
   --z-toast: 9999;
   --z-emergency: 10000;
+
+  /* --- the list's semantic four ------------------------------------------
+     Six colours were each doing three jobs: green meant the local column, and
+     "in sync", and "same file", and a primary button's border - so at a glance
+     no colour meant anything. Four, each with one meaning, and the list stops
+     inventing its own. */
+  --ok:     #3fb950;   /* in sync, proven, nothing to do */
+  --attn:   #d29922;   /* wants a decision */
+  --danger: #f85149;   /* removes something */
+  --accent: #2f81f7;   /* interactive - and the site names, which he chose */
+  --accent-soft:    #a5a5f0;
+  --accent-fill:    #1f6feb;
+  --accent-fill-hi: #388bfd;
+  --accent-ink:     #ffffff;
+
+  /* One control height and one row height, so the list has a rhythm rather
+     than a ragged edge. */
+  --ctl-h: 26px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --row-h: 34px;
+
 }
 
 [data-theme="light"] {
@@ -166,6 +188,16 @@
 
   --btn-sec: #dfe2e6;
   --btn-sec-h: #c9cdd2;
+
+  --ok:     #1a7f37;
+  --attn:   #9a6700;
+  --danger: #cf222e;
+  --accent: #0969da;
+  --accent-soft:    #6639ba;
+  --accent-fill:    #0969da;
+  --accent-fill-hi: #0550ae;
+  --accent-ink:     #ffffff;
+
 }
 
 body.tool-walls {
@@ -2635,19 +2667,15 @@ body.tool-cloud .toolbar input.search:focus {
 }
 
 .lr-cell .cell-meta {
-  flex: 0 0 auto; color: var(--text-2); font-size: 10px;
-  white-space: nowrap; transition: opacity 0.12s;
+  flex: 0 0 auto; color: var(--text-3);
+  font-size: 11px; font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.lr-cell .cell-actions {
-  position: absolute; right: 8px; top: 0; bottom: 0;
-  display: flex; align-items: center; gap: 2px;
-  opacity: 0; transition: opacity 0.12s;
-}
-
-.lr-cell:hover .cell-actions { opacity: 1; }
-
-.lr-cell:hover .cell-meta { opacity: 0; }
+/* `.cell-actions` is gone: every row action is in `.row-menu` now, in words.
+   What was here swapped content in and out under the cursor - the date faded
+   away so that seven round buttons could fade in, on every row, on every pass
+   of the mouse. Nothing in this list moves on hover any more. */
 
 
 
@@ -2692,36 +2720,46 @@ body.tool-cloud .toolbar input.search:focus {
   border-left: 1px solid var(--border); border-right: 1px solid var(--border);
 }
 
+/* A verdict is something to read, not something to shout.
+
+   These were filled pills in five saturated colours - green, cyan, amber,
+   slate, violet - one on every row of a list that runs to a hundred. Set
+   against the buttons they sat next to, the chip was always the louder thing
+   on the row, so the eye was drawn to the label rather than to the decision.
+
+   A coloured dot and quiet text carry exactly the same information and leave
+   the weight for what needs pressing. The colour still distinguishes them; it
+   just stops filling a box to do it. */
 .match-badge {
-  display: inline-flex; align-items: center;
-  padding: 2px 8px; border-radius: var(--radius-pill);
-  font-size: 11px; font-weight: 700; line-height: 1.4;
-  letter-spacing: 0.2px; white-space: nowrap;
-  border: 1px solid transparent;
-  cursor: default;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0; border: 0; background: none;
+  font-size: 11.5px; font-weight: 500; line-height: 1.4;
+  letter-spacing: 0; white-space: nowrap;
+  color: var(--text-2); cursor: default;
 }
 
-.match-badge.clickable { cursor: pointer; }
+.match-badge .mb-dot,
+.match-badge::before {
+  content: ''; flex: 0 0 auto;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: currentColor;
+}
+.match-badge .mb-dot { display: none; }
 
-.match-badge.clickable:hover { filter: brightness(1.15); }
+.match-badge.clickable { cursor: pointer; text-decoration-color: transparent; }
 
-.match-badge.mb-id { background: rgba( 21,128,61, 0.18); color: var(--green);  border-color: rgba( 21,128,61, 0.35); }
+.match-badge.clickable:hover { color: var(--text); text-decoration: underline dotted; }
 
-.match-badge.mb-exact { background: rgba( 14,165,233, 0.20); color: var(--blue-soft);       border-color: rgba( 14,165,233, 0.45); }
-
-.match-badge.mb-code { background: rgba(217, 119,   6, 0.20); color: var(--amber);  border-color: rgba(217, 119,   6, 0.40); }
-
-.match-badge.mb-fuzzy { background: rgba(107, 118, 132, 0.22); color: var(--text-2); border-color: rgba(107, 118, 132, 0.40); }
-
-.match-badge.mb-manual { background: rgba(180, 140, 232, 0.20); color: var(--purple-soft);       border-color: rgba(180, 140, 232, 0.45); }
+.match-badge.mb-id     { color: var(--ok); }
+.match-badge.mb-exact  { color: var(--text-2); }
+.match-badge.mb-code   { color: var(--attn); }
+.match-badge.mb-fuzzy  { color: var(--text-3); }
+.match-badge.mb-manual { color: var(--accent-soft); }
+.match-badge.mb-orphan { color: var(--text-3); }
 
 [data-theme="light"] .match-badge.mb-id { color: var(--green-dark); }
 
-[data-theme="light"] .match-badge.mb-exact { color: var(--blue-dark); }
-
 [data-theme="light"] .match-badge.mb-code { color: var(--amber-dark); }
-
-[data-theme="light"] .match-badge.mb-fuzzy { color: var(--text-2); }
 
 [data-theme="light"] .match-badge.mb-manual { color: #6f42c1; }
 
@@ -2818,13 +2856,41 @@ body.tool-cloud .toolbar input.search:focus {
 .row-detail.status-synced { box-shadow: inset 3px 0 0 var(--green); }
 .row-detail.status-mismatch { box-shadow: inset 3px 0 0 var(--amber); }
 
+/* One button, three weights. The band used to mix a filled pill, an outlined
+   button and a bare-text button on the same line, which is what made it read
+   as three features that had each added a control without looking at the
+   others. What makes the recommended one primary is emphasis, not a different
+   species of control. */
 .rd-btn {
-  border: 1px solid var(--border); background: transparent; color: var(--text-2);
-  border-radius: 5px; padding: 3px 10px; font-size: 12px; cursor: pointer;
-  white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: var(--ctl-h); padding: 0 10px;
+  border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text-2);
+  font-size: 12px; font-weight: 500; line-height: 1;
+  white-space: nowrap; cursor: pointer;
+  transition: background .12s ease, border-color .12s ease, color .12s ease;
 }
-.rd-btn:hover { color: var(--text); border-color: var(--text-2); }
-.rd-btn.primary { color: var(--text); border-color: var(--green); }
+.rd-btn:hover { color: var(--text); border-color: var(--text-3); background: var(--row-hover); }
+.rd-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.rd-btn.primary {
+  color: var(--accent-ink); background: var(--accent-fill);
+  border-color: var(--accent-fill); font-weight: 600;
+}
+.rd-btn.primary:hover { background: var(--accent-fill-hi); border-color: var(--accent-fill-hi); color: var(--accent-ink); }
+
+.rd-btn.quiet { border-color: transparent; background: transparent; color: var(--text-3); }
+.rd-btn.quiet:hover { border-color: var(--border-strong); color: var(--text); background: var(--row-hover); }
+
+.rd-btn.danger:hover { color: var(--danger); border-color: var(--danger); background: var(--red-bg); }
+
+/* A statement, not a control: same metrics as the buttons beside it so the row
+   keeps its rhythm, but nothing to press. */
+.rd-note {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: var(--ctl-h); padding: 0 2px;
+  font-size: 12px; color: var(--text-3); white-space: nowrap;
+}
 
 /* Proven identical: the download stays available and stops shouting. */
 .stale-badge.is-demoted { opacity: 0.55; font-weight: 400; }
@@ -3296,8 +3362,10 @@ body.tool-cloud .toolbar input.search:focus {
 
 .ghost-add {
   background: transparent; border: 1px dashed var(--border);
-  color: var(--text-2); border-radius: 4px; padding: 1px 9px;
-  font-size: 10px; cursor: pointer; opacity: 0.6; transition: all 0.12s;
+  color: var(--text-2); border-radius: var(--r-sm);
+  display: inline-flex; align-items: center; gap: 6px;
+  height: var(--ctl-h); padding: 0 10px;
+  font-size: 11.5px; cursor: pointer; opacity: 0.55; transition: all 0.12s;
 }
 
 .lr-cell.empty:hover .ghost-add, .ghost-add:hover { opacity: 1; border-color: var(--blue); color: var(--blue); }
@@ -8984,3 +9052,261 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   }
   .gut-arrow:has(.ib-label):hover { transform: scale(1.3); background: transparent; }
 }
+
+
+/* =====================================================================
+   Cloud Manager - the list, designed rather than accumulated
+   =====================================================================
+
+   "it just needs to look and feel Pro level."
+
+   It sits next to Ekahau AI Pro on his screen all day, and it was losing that
+   comparison for reasons that were structural rather than decorative:
+
+   * emoji were standing in for an icon set, at 24px next to 12px type
+   * rows swapped their content on hover - the date out, seven buttons in
+   * the middle lane stacked up to four controls, so a row that needed a
+     decision was three times the height of its neighbours
+   * six colours were each doing three jobs, so no colour meant anything
+
+   The tokens below are the fix for the last of those: four semantic colours,
+   one spacing step, one control height, one radius. Everything in the list
+   uses them and nothing in the list invents its own.
+
+   What is deliberately unchanged, because he chose it: sites in blue with the
+   border above them, files in white, a bold rule between sites and a hairline
+   under a file for its detail row. */
+
+/* ---------------------------------------------------------------- icons
+   One set, one grid, one weight, inheriting colour from whatever they sit in
+   so a disabled or muted control mutes its icon with it. */
+.ic {
+  width: 14px; height: 14px; flex: 0 0 auto;
+  stroke: currentColor; stroke-width: 1.5; fill: none;
+  stroke-linecap: round; stroke-linejoin: round;
+  vertical-align: -2px;
+}
+.row-menu-btn .ic { stroke-width: 2.2; }
+
+/* ------------------------------------------------------------ row menus
+   One control per side at rest, opening on a click, holding labelled words.
+   Not hover: a menu that opens because the pointer crossed it is unusable in
+   a dense list, and decision-relevant text must be readable without hovering
+   anything. */
+.row-menu { position: relative; flex: 0 0 auto; }
+
+.row-menu > summary {
+  list-style: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: var(--r-sm);
+  color: var(--text-3); border: 1px solid transparent;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.row-menu > summary::-webkit-details-marker { display: none; }
+.row-menu > summary:hover { background: var(--row-hover); color: var(--text); border-color: var(--border-strong); }
+.row-menu > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row-menu[open] > summary { background: var(--surface-raised); color: var(--text); border-color: var(--border-strong); }
+
+/* At rest the button is nearly invisible, so a hundred rows do not read as a
+   hundred buttons - but it is *there*, it holds its space, and nothing moves
+   when the pointer arrives. Keyboard focus and an open menu both show it. */
+.lr-cell .row-menu > summary { opacity: 0.35; }
+.lr-cell:hover .row-menu > summary,
+.lr-cell .row-menu > summary:focus-visible,
+.lr-cell .row-menu[open] > summary { opacity: 1; }
+
+.row-menu-items {
+  position: absolute; z-index: 60; top: calc(100% + 4px); right: 0;
+  min-width: 232px; padding: 5px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong); border-radius: var(--r-md);
+  box-shadow: 0 10px 28px rgba(0,0,0,.4);
+  display: flex; flex-direction: column; gap: 1px;
+}
+
+.row-menu-item {
+  display: flex; align-items: center; gap: 9px;
+  width: 100%; padding: 6px 9px;
+  background: none; border: 0; border-radius: var(--r-sm);
+  color: var(--text); font-size: 12.5px; text-align: left;
+  white-space: nowrap; cursor: pointer;
+}
+.row-menu-item:hover { background: var(--row-hover); }
+.row-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.row-menu-item .ic { color: var(--text-3); }
+.row-menu-item:hover .ic { color: var(--text-2); }
+.row-menu-item.danger { color: var(--danger); }
+.row-menu-item.danger .ic, .row-menu-item.danger:hover .ic { color: var(--danger); }
+.row-menu-item.danger:hover { background: var(--red-bg); }
+
+/* --------------------------------------------------------- the row grid
+   One height for every row, so the list has a rhythm instead of a ragged
+   edge. This is only possible because the middle lane stopped stacking
+   controls and the actions moved to the band underneath. */
+.ledger-row { min-height: var(--row-h); }
+.ledger-row.tree-child { min-height: var(--row-h); }
+
+.lr-cell { gap: 8px; padding: 0 10px; }
+.lr-cell .cell-name { font-size: 12.5px; line-height: 1.35; }
+
+/* The verdict lane: one line, always. */
+.lr-gut {
+  flex: 0 0 152px; display: flex; align-items: center;
+  justify-content: center; gap: 6px;
+  border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  padding: 0 8px; min-width: 0;
+}
+.ledger-row.tree-child .lr-gut { flex-basis: 152px; }
+.ledger-head .lh-gut { flex: 0 0 152px; }
+.ledger-group-head .glh-gap { flex: 0 0 152px; }
+
+/* ------------------------------------------------------------ the sites
+   Closed by default, so the line has to say whether there is anything inside
+   worth opening. The digest is that sentence. */
+.site-digest {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-variant-numeric: tabular-nums;
+}
+.site-digest.is-clear { color: var(--text-3); }
+.site-digest.is-clear .ic { color: var(--ok); }
+.site-digest.is-attention { color: var(--attn); font-weight: 500; }
+.site-digest.is-empty { color: var(--text-3); font-style: italic; }
+
+.tree-chevron {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; margin-right: 0;
+  border-radius: var(--r-sm); color: var(--text-3);
+  transition: transform .14s ease, color .12s ease, background .12s ease;
+}
+.tree-chevron:hover { color: var(--accent); background: var(--row-hover); }
+.tree-chevron:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tree-chevron.open { transform: rotate(90deg); }
+
+/* ------------------------------------------------------- the detail band
+   Text left, actions right, one line of controls, all the same height. */
+.row-detail { gap: 14px; padding: 5px 12px; font-size: 12.5px; }
+.row-detail .rd-icon { display: inline-flex; align-items: center; }
+.row-detail.rd-same .rd-icon { color: var(--ok); }
+.row-detail.rd-differs .rd-icon { color: var(--attn); }
+.row-detail.rd-plain .rd-icon { color: var(--text-3); }
+.row-detail .rd-text { color: var(--text-2); }
+.row-detail .rd-actions { gap: 6px; }
+
+.row-detail.status-synced { box-shadow: inset 3px 0 0 var(--ok); }
+.row-detail.status-mismatch { box-shadow: inset 3px 0 0 var(--attn); }
+.row-detail.status-orphan { box-shadow: inset 3px 0 0 var(--danger); }
+
+/* ------------------------------------------------------ quieter chrome
+   Nothing in a list of a hundred rows should bounce, grow or lift. The
+   buttons used to scale to 1.3 and translate upwards with a drop shadow,
+   which is a fine gesture on a landing page and reads as a toy in a tool. */
+.gut-arrow:hover { transform: none; }
+.icon-btn:hover { transform: none; box-shadow: none; }
+
+.lr-cell.empty:hover .ghost-add, .ghost-add:hover {
+  opacity: 1; border-style: solid; border-color: var(--accent); color: var(--accent);
+}
+
+/* The empty half of a pair was a diagonal hatch, which is a lot of texture to
+   put on screen when the only thing it has to say is "nothing here". */
+.lr-cell.empty, .ledger-row.stripe .lr-cell.empty { background: none; }
+
+/* The status bar down the left edge carries the same four colours as
+   everything else now, rather than its own. */
+.ledger-row.synced .lr-cell:not(.empty) { box-shadow: inset 3px 0 0 var(--ok); }
+.ledger-row.mismatch .lr-cell:not(.empty) { box-shadow: inset 3px 0 0 var(--attn); }
+.ledger-row.orphan .lr-cell:not(.empty) { box-shadow: inset 3px 0 0 var(--danger); }
+
+/* ------------------------------------------------------- the column heads
+   Uppercase, letterspaced, 800 weight and a 3px underline in two saturated
+   colours: a header shouting louder than anything it heads. */
+.ledger-head {
+  font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0.2px;
+  box-shadow: 0 1px 0 var(--border-strong);
+}
+.ledger-head .lh-cell { padding: 7px 10px; border-bottom: 1px solid var(--border-strong); }
+.ledger-head .lh-cell.cloud { color: var(--text-2); border-bottom-color: var(--border-strong); }
+.ledger-head .lh-cell.local { color: var(--text-2); border-bottom-color: var(--border-strong); }
+
+/* The site name keeps its blue and the row keeps its rule: he asked for both,
+   and they are the strongest signal in the list. The weight comes down a
+   little because everything around it got quieter. */
+.ledger.tree .tree-parent .lr-cell.cloud, .ledger.tree .tree-parent .lr-cell.local { font-weight: 600; }
+.ledger.tree .tree-parent .lr-cell .cell-name { font-size: 13px; letter-spacing: -0.1px; }
+.ledger.tree .tree-parent .lr-cell.local .cell-name { color: var(--text); }
+
+/* The alphabet dividers were 18px, 900 weight, 3px letterspaced and filled
+   with colour - louder than the site names they were dividing. */
+.ledger-group-head .glh-letter { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; padding: 5px 14px; }
+.ledger-group-head .glh-letter.cloud { color: var(--text-3); background: none; }
+.ledger-group-head .glh-letter.local { background: none; }
+[data-theme="light"] .ledger-group-head .glh-letter.cloud { background: none; }
+
+/* Narrow: the actions wrap under their sentence rather than squeezing it. */
+@media (max-width: 1100px) {
+  .lr-gut, .ledger-row.tree-child .lr-gut,
+  .ledger-head .lh-gut, .ledger-group-head .glh-gap { flex-basis: 128px; }
+}
+
+/* A file's type is context, not its identity. It was set at the same size as
+   the name with a filled background, on every row. */
+.lr-cell .ptype-tag {
+  background: none; border: 1px solid var(--border-strong);
+  color: var(--text-3); font-size: 10.5px; font-weight: 500;
+  padding: 0 5px; border-radius: 4px;
+}
+.lr-cell .owner-tag { font-size: 11px; }
+.lr-cell .shared-tag { font-size: 10.5px; color: var(--text-3); }
+
+/* Every project-type tag reads the same, because the distinction it draws is
+   not one he acts on from this list - the type filter above is. It was three
+   different saturated colours, once per row. */
+.lr-cell .ptype-tag,
+.lr-cell .ptype-tag.pt-design,
+.lr-cell .ptype-tag.pt-measured,
+.lr-cell .ptype-tag.pt-hybrid,
+.lr-cell .ptype-tag.pt-plan {
+  background: none; border: 1px solid var(--border-strong);
+  color: var(--text-3); font-weight: 500;
+}
+.lr-cell .ptype-tag.pt-unassigned { border-color: var(--attn); color: var(--attn); }
+
+/* A site that matched is the unmarkable case: the digest beside it already
+   says what is inside, and green here competed with the blue name that is the
+   strongest signal in the list. Green is left to mean one thing - a file
+   proven identical. */
+.ledger.tree .tree-parent .match-badge.mb-id,
+.ledger.tree .tree-parent .match-badge.mb-exact { color: var(--text-3); }
+
+/* The band belongs to the row above it, so its sentence starts on the same
+   column as that row's file name and its icon sits in the checkbox column.
+   It used to hang four characters to the left of everything else in the list,
+   which is most of why it read as a separate entry rather than a continuation
+   of the row above. */
+.row-detail { padding-left: 76px; }
+.row-detail .rd-icon { margin-left: -38px; width: 16px; }
+
+/* And the last row closes the list. */
+.ledger.tree > .ledger-row:last-child { border-bottom: 1px solid var(--border); }
+
+/* Every site header is the same height. One of them was two pixels taller
+   because the side with no folder holds a "+ Local folder" button and the
+   others hold text - invisible on its own, and the thing that stops a list
+   of a hundred having a rhythm. */
+.ledger.tree .tree-parent { min-height: 46px; }
+.ledger.tree .tree-parent .lr-cell { padding-top: 0; padding-bottom: 0; }
+.ledger.tree .tree-parent .ghost-add { height: 24px; }
+
+/* Unavailable, and saying so. Not `disabled`: the click has to reach
+   `_wireDisabledBulkReasons`, which is what turns "this does nothing" into a
+   sentence explaining what would make it work. */
+.rd-btn.is-disabled {
+  opacity: 0.45; cursor: help;
+  border-style: dashed; background: transparent; color: var(--text-3);
+}
+.rd-btn.is-disabled:hover { opacity: 0.7; background: transparent; color: var(--text-3); }
+
+/* Demoted rather than removed: the comparison says the two are identical, so
+   downloading is still allowed and stops being the thing the eye lands on. */
+.rd-btn.is-demoted { opacity: 0.6; }
+.rd-btn.is-demoted:hover { opacity: 1; }

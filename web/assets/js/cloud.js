@@ -23,6 +23,7 @@ let deleteTarget = null;
 let rowData = {};
 let selected = new Set();
 let collapsed = new Set();
+let _searching = false;
 let mergeState = {};
 const PROJECT_DIR_STORAGE_KEY = 'wd-project-directory';
 
@@ -702,10 +703,30 @@ function switchTab(kind) {
 
 function expandAllSites() {
   collapsed.clear();
+  _treeClosedFor = null;
   renderRows();
+}
+
+/* Which data set the sites were last closed for.
+
+   The list opens site-first, so every site starts closed - but only once per
+   data set. Closing them again on each background refresh would shut whatever
+   he had just opened, every few seconds, while he was reading it. */
+let _treeClosedFor = null;
+
+function closeSitesOnFirstSight() {
+  if (!data) return;
+  const stamp = currentTab + ':' + ((data.matched || []).length + ':'
+    + (data.cloudOnly || []).length + ':' + (data.localOnly || []).length);
+  if (_treeClosedFor === stamp) return;
+  _treeClosedFor = stamp;
+  (data.matched || []).forEach(p => collapsed.add('site:' + p.cloud.id));
+  (data.cloudOnly || []).forEach(s => collapsed.add('site:' + s.id));
+  (data.localOnly || []).forEach(f => collapsed.add('folder:' + f.path));
 }
 function collapseAllSites() {
   if (!data) return;
+  _treeClosedFor = null;
   (data.matched || []).forEach(p => collapsed.add('site:' + p.cloud.id));
   (data.cloudOnly || []).forEach(s => collapsed.add('site:' + s.id));
   (data.localOnly || []).forEach(f => collapsed.add('folder:' + f.path));
@@ -742,6 +763,7 @@ function onData(kind, jsonStr) {
   }
   indexRowData();
   reconcileOwnerFilterWithData();
+  closeSitesOnFirstSight();
   updateDashboard(); renderRows();
 }
 
@@ -1148,6 +1170,10 @@ function renderRows() {
   const el = document.getElementById('rowsContainer');
   const q = document.getElementById('searchBox').value.toLowerCase();
   const hit = n => !q || (n || '').toLowerCase().includes(q);
+  /* A closed site would hide its own search hits, which reads as the search
+     being broken. Searching opens whatever matched, for as long as the box has
+     something in it. */
+  _searching = !!q;
 
   const legend = document.querySelector('.col-legend');
   if (legend) legend.style.display = 'none';
@@ -1831,7 +1857,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
       const children = childrenOf(r);
       const kids = hasKids(children);
       const siteKey = r.cloud ? ('site:' + r.cloud.id) : ('folder:' + r.local.path);
-      const open = !collapsed.has(siteKey);
+      const open = (_searching && childHit(children)) || !collapsed.has(siteKey);
       r.toggle = { key: siteKey, open, hasKids: kids };
       {
       const _stripe = (z++ % 2) === 1;
@@ -2072,6 +2098,136 @@ function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteNa
   return h;
 }
 
+
+/* One icon set, drawn on one grid, at one weight.
+
+   What was here before was emoji: ⮕ at 24px next to 12px text, plus a bin,
+   a paperclip, an eye, a flag, a pair of people and a link, each of them
+   rendered by whatever font the operating system chose. Two of them were
+   colour-emoji on Windows and monochrome on macOS. They never shared a stroke
+   weight or an optical size with each other or with the type around them,
+   which is most of why this list read as something assembled rather than
+   designed.
+
+   These are 16-unit paths stroked at 1.5 in `currentColor`, so they inherit
+   the colour and the disabled state of whatever they sit in, and they scale
+   with the type rather than fighting it.
+
+   **None of them appears alone.** Every one sits beside its own text label or
+   inside a menu item that is text - "I forgot what hybrid meant, or external
+   for that matter" applies just as much to a glyph with no word next to it.
+   The single exception is the row menu's own ⋯, which is the one symbol
+   with a settled meaning across every application he uses, and it carries a
+   title and an aria-label. */
+const ICONS = {
+  chevron:   'M6 3.4 10.6 8 6 12.6',
+  rename:    'M11.1 2.6a1.65 1.65 0 0 1 2.3 2.3L5.9 12.4 2.8 13.2l.8-3.1z',
+  trash:     'M2.8 4.4h10.4M6.3 4.4V2.9h3.4v1.5M4.3 4.4l.6 8.3a1 1 0 0 0 1 .9h4.2a1 1 0 0 0 1-.9l.6-8.3',
+  move:      'M2.4 8h8.2M8.1 5.1 11 8l-2.9 2.9M13.4 2.9v10.2',
+  share:     'M6 7.4a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM2.4 13.1c0-2 1.6-3.3 3.6-3.3s3.6 1.3 3.6 3.3M11 4.1a1.7 1.7 0 1 1 0 3.4M12.1 9.8c1.2.3 2 1.2 2 2.5',
+  folder:    'M1.9 12.6V3.7h4L7.3 5.5h6.8v7.1z',
+  eye:       'M1.5 8S3.8 4.2 8 4.2 14.5 8 14.5 8 12.2 11.8 8 11.8 1.5 8 1.5 8ZM8 9.6a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z',
+  flag:      'M3.9 13.6V2.6h8.2l-1.6 2.7 1.6 2.7H3.9',
+  merge:     'M3.9 2.6v3.8a3 3 0 0 0 3 3h5.4M9.8 6.5l2.9 2.9-2.9 2.9',
+  link:      'M6.4 9.6 9.6 6.4M6.7 4.5 8.3 2.9a2.7 2.7 0 0 1 3.8 3.8l-1.6 1.6M9.3 11.5l-1.6 1.6a2.7 2.7 0 0 1-3.8-3.8l1.6-1.6',
+  down:      'M8 2.9v8.2M4.9 8 8 11.1 11.1 8M2.8 13.4h10.4',
+  up:        'M8 13.1V4.9M4.9 8 8 4.9 11.1 8M2.8 2.6h10.4',
+  plus:      'M8 3.2v9.6M3.2 8h9.6',
+  more:      'M4 8h.01M8 8h.01M12 8h.01',
+  check:     'M2.9 8.4 6.2 11.7 13.1 4.8',
+  alert:     'M8 2.6 14.4 13.4H1.6zM8 6.6v3.1M8 11.6v.01',
+  arrowR:    'M2.6 8h10.8M9.9 4.5 13.4 8l-3.5 3.5',
+  arrowL:    'M13.4 8H2.6M6.1 4.5 2.6 8l3.5 3.5',
+  notEqual:  'M3.2 6.4h9.6M3.2 9.6h9.6M10.4 2.6 5.6 13.4',
+  swap:      'M2.6 5.6h9.2L9.3 3.1M13.4 10.4H4.2l2.5 2.5',
+};
+
+function ic(name, cls) {
+  const d = ICONS[name];
+  if (!d) return '';
+  return `<svg class="ic${cls ? ' ' + cls : ''}" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="${d}"/></svg>`;
+}
+
+/* Every action a row can take, in one menu, in words.
+
+   Each side of a row carried up to seven circular buttons that appeared on
+   hover - and to make room for them the file's date was faded out, so mousing
+   down the list swapped content in and out on every line. That flicker was the
+   loudest thing on the page.
+
+   One control at rest per side. It opens on a click, never on hover, and every
+   item inside it is a labelled word: rename, move, share, delete. `<details>`
+   gives that for nothing and is keyboard reachable without a line of script.
+   The date stays where it is. */
+function rowMenu(items, label) {
+  const body = items.filter(Boolean).join('');
+  if (!body) return '';
+  const l = label || 'More actions';
+  return `<details class="row-menu"><summary class="row-menu-btn" title="${a(l)}" aria-label="${a(l)}">${ic('more')}</summary>`
+       + `<div class="row-menu-items">${body}</div></details>`;
+}
+
+function menuItem(icon, label, call, opts) {
+  const o = opts || {};
+  return `<button class="row-menu-item${o.danger ? ' danger' : ''}" onclick="event.stopPropagation();${call}"`
+       + `${o.title ? ` title="${a(o.title)}"` : ''}>${ic(icon)}<span>${label}</span></button>`;
+}
+
+/* An action in the detail row: an icon, a full label, one height, one shape.
+
+   The row underneath used to mix a filled pill, an outlined button and a
+   bare-text button side by side, which is what made it look like three
+   different features had each added a control and none of them had looked at
+   the others. */
+function rdAction(icon, label, call, opts) {
+  const o = opts || {};
+  return `<button class="rd-btn${o.primary ? ' primary' : ''}${o.danger ? ' danger' : ''}${o.quiet ? ' quiet' : ''}"`
+       + `${o.title ? ` title="${a(o.title)}"` : ''} onclick="event.stopPropagation();${call}">`
+       + `${ic(icon)}<span>${label}</span></button>`;
+}
+
+
+/* What is inside this site, and how much of it wants him.
+
+   "the user doesn't really care about all of the files all at once - they only
+   care about individual sites and files", and he works one site at a time. So
+   the sites are closed when the page opens and the flat list is an index
+   rather than the workspace.
+
+   A closed site has to earn being opened, which means its one line must answer
+   "is there anything for me in here". It counts what is inside: a pair whose
+   names disagree, or whose dates have moved, or that only exists on one side,
+   is something he has to decide about; everything else is done. When there is
+   nothing, the line says so quietly and he moves on. */
+function siteDigest(children) {
+  if (!children) return null;
+  const matched = children.matched || [];
+  const unpaired = (children.cloudOnly || []).length + (children.localOnly || []).length;
+  let attention = 0;
+  matched.forEach(p => { if (p.namesDiffer || p.staleness) attention++; });
+  const total = matched.length + unpaired;
+  return { total, attention, unpaired, ok: total - attention - unpaired };
+}
+
+function siteDigestHtml(r) {
+  const children = (r.cloud && r.cloud.children) || (r.local && r.local.children) || null;
+  const d = siteDigest(children);
+  if (!d || !d.total) {
+    return `<span class="cell-meta site-digest is-empty">empty</span>`;
+  }
+  const files = `${d.total} file${d.total === 1 ? '' : 's'}`;
+  const needs = d.attention + d.unpaired;
+  if (!needs) {
+    return `<span class="cell-meta site-digest is-clear" title="Every file in this site is paired and up to date on both sides.">`
+         + `${ic('check')}${files} · all in sync</span>`;
+  }
+  const parts = [];
+  if (d.attention) parts.push(`${d.attention} need${d.attention === 1 ? 's' : ''} a decision`);
+  if (d.unpaired) parts.push(`${d.unpaired} unpaired`);
+  return `<span class="cell-meta site-digest is-attention" title="${a('Open this site to deal with ' + (needs === 1 ? 'it' : 'them') + '.')}">`
+       + `${ic('alert')}${files} · ${parts.join(' · ')}</span>`;
+}
+
 function matchBadgeHtml(r, kind) {
 
   const rowKind = kind || r.kind;
@@ -2087,17 +2243,23 @@ function matchBadgeHtml(r, kind) {
   const cursor = isManual ? ' clickable' : '';
   return `<span class="match-badge mb-${spec.cls}${cursor}" title="${a(spec.title)}"${onclick ? ' ' + onclick : ''}>${spec.label}</span>`;
 }
+/* The label is words; the coloured dot in front of it is the marker.
+
+   These each carried a glyph of their own - a tick, a tilde, a question mark,
+   a star - from when the chip was a filled pill and the glyph was the only
+   thing distinguishing one colour from another at a glance. With a dot in
+   front of every one of them, the row read "* / Same file". */
 const MATCH_BADGE_SPEC = {
-  manual: { cls: 'manual', label: '★ You matched', title: 'You linked these manually. Click to unlink and go back to auto-matching.' },
-  id:     { cls: 'id',     label: '✓ Same file',   title: 'Same Ekahau project — proven by a hidden ID stamped inside both .esx files. This is one project, just stored in two places.' },
-  exact:  { cls: 'exact',  label: '✓ Name matches', title: 'Both files have the exact same name, but no hidden-ID link — very likely the same project, not proven.' },
-  code:   { cls: 'code',   label: '~ Same site',   title: 'Same site code plus similar names. Probably the same project.' },
-  fuzzy:  { cls: 'fuzzy',  label: '? Similar name', title: 'Some words in common. Our best guess — worth a look before syncing.' },
+  manual: { cls: 'manual', label: 'You matched',   title: 'You linked these manually. Click to unlink and go back to auto-matching.' },
+  id:     { cls: 'id',     label: 'Same file',     title: 'Same Ekahau project — proven by a hidden ID stamped inside both .esx files. This is one project, just stored in two places.' },
+  exact:  { cls: 'exact',  label: 'Name matches',  title: 'Both files have the exact same name, but no hidden-ID link — very likely the same project, not proven.' },
+  code:   { cls: 'code',   label: 'Same site code', title: 'Same site code plus similar names. Probably the same project.' },
+  fuzzy:  { cls: 'fuzzy',  label: 'Similar name',  title: 'Some words in common. Our best guess — worth a look before syncing.' },
 };
 
 const MATCH_BADGE_SPEC_SITE_EXACT = {
   cls: 'id',
-  label: '✓ Same site',
+  label: 'Same site',
   title: 'Both sites share the same name. Sites don\'t have a stronger identity to compare (folders have no internal ID), so this is as matched as a site pair gets.',
 };
 
@@ -2337,43 +2499,136 @@ async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matc
    `stripe` is the parent row's banding. The detail takes the same banding and
    lifts it slightly, so it reads as attached to the row above rather than as
    another project. */
-function rowDetailHtml(r, stripe) {
-  const cmp = compareResultFor(r);
-  const stale = r.staleness;
-  if (!cmp && !stale) return '';
 
+function rowDetailHtml(r, stripe) {
+  /* The row that needs him, and what he can do about it.
+
+     This band began as somewhere to put a comparison result - "another row
+     underneath the file name and slightly a different color would be really
+     good" - and it turned out to be the answer to the crowded middle column as
+     well. A decision needs a sentence and two or three labelled buttons; there
+     is no width for that between two project names, and there is plenty of it
+     across the whole row.
+
+     So the two mechanisms are one. Anything that asks something of him renders
+     here: names that disagree, a copy that only exists on one side, a date that
+     has moved, a comparison he has run. A row with nothing to say has no band
+     at all, which is what keeps a list of ninety-seven folders scannable - the
+     ones that need him are the ones with a second line. */
   const kind = r.kind || currentTab;
   if (kind === 'sites') return '';
 
-  let icon = '\u2022', cls = 'rd-plain', text = '';
+  const cmp = compareResultFor(r);
+  const stale = r.staleness;
+  const c = r.cloud, l = r.local;
+  const sentences = [];
+  const acts = [];
+  let tone = 'rd-plain', icon = 'alert';
+
+  if (r.status === 'mismatch' && c && l) {
+    tone = 'rd-differs'; icon = 'notEqual';
+    sentences.push('The names disagree. Pick the one to keep, or say these are not the same project.');
+    acts.push(rdAction('arrowR', 'Cloud → Local',
+      `syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')`,
+      { primary: true, title: 'Rename the local file so it matches the cloud project.' }));
+    acts.push(rdAction('arrowL', 'Local → Cloud',
+      `syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')`,
+      { title: 'Rename the cloud project so it matches your local file.' }));
+    acts.push(rdAction('notEqual', 'Not a match',
+      `markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')`,
+      { quiet: true, title: 'Never pair these two again.' }));
+  } else if (r.status === 'orphan' && c && !l) {
+    icon = 'down';
+    sentences.push(kind === 'sites'
+      ? 'This cloud site has no matching folder on disk.'
+      : 'This cloud project has nothing matching it on disk.');
+    acts.push(rdAction('down', 'Download',
+      `downloadThenMove('${j(c.id)}','${j(c.name)}')`,
+      { primary: true, title: 'Download the .esx from Ekahau Cloud, then move it into a site folder.' }));
+    acts.push(rdAction('link', 'Link to a local file…',
+      `openLinkPicker('cloud','${j(c.id)}','${j(c.name)}')`,
+      { quiet: true, title: 'Pair this cloud project with a local .esx yourself.' }));
+  } else if (r.status === 'orphan' && l && !c) {
+    icon = 'up';
+    sentences.push('This local file has nothing matching it in Ekahau Cloud.');
+    acts.push(rdAction('up', 'Upload',
+      `uploadFromLocal('${pj(l.path)}','${j(l.name)}')`,
+      { primary: true, title: 'Upload this .esx to Ekahau Cloud as a new project.' }));
+    acts.push(rdAction('link', 'Link to a cloud project…',
+      `openLinkPicker('local','${pj(l.path)}','${j(l.name)}')`,
+      { quiet: true, title: 'Pair this local file with a cloud project yourself.' }));
+  }
+
+  /* A measured comparison outranks anything inferred from a date, so it speaks
+     first and the download it contradicts is demoted rather than removed. */
   if (cmp) {
-    icon = cmp.designDiffers ? '\u2260' : '\u2713';
-    cls = cmp.designDiffers ? 'rd-differs' : 'rd-same';
-    text = cmp.summary || '';
+    tone = cmp.designDiffers ? 'rd-differs' : 'rd-same';
+    icon = cmp.designDiffers ? 'notEqual' : 'check';
+    if (cmp.summary) sentences.push(cmp.summary);
   } else if (stale === 'cloud_newer') {
-    text = 'The cloud copy has a later date. Not compared yet, so whether the '
-         + 'design actually differs is unknown.';
-  } else {
-    text = 'Your local copy has a later date. Not compared yet.';
+    sentences.push('The cloud copy has a later date. Not compared yet, so whether the design actually differs is unknown.');
+  } else if (stale === 'local_newer') {
+    sentences.push('Your local copy has a later date. Not compared yet.');
   }
 
-  const bits = [];
-  // The action that clears an internal-name difference for good.
-  if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only'
-      && r.cloud && r.cloud.name && r.local) {
-    bits.push(`<button class="rd-btn primary" onclick="event.stopPropagation();fixInternalName('${pj(r.local.path)}','${j(r.cloud.name)}','${j(r.local.name || '')}')">Set the name inside the file to match</button>`);
+  if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only' && c && c.name && l) {
+    acts.push(rdAction('rename', 'Set the name inside the file to match',
+      `fixInternalName('${pj(l.path)}','${j(c.name)}','${j(l.name || '')}')`,
+      { primary: true, title: 'Renaming a file on disk does not change the project name stored inside it. This does, and backs the file up first.' }));
   }
-  // The staleness action, with room for its full label.
+
+  /* The staleness control keeps its own wording and its own reasoning - it is
+     the one action here that deletes or replaces something. */
   const stalenessAction = stalenessBadgeHtml(r);
-  if (r.cloud && r.local) {
-    bits.push(`<button class="rd-btn" onclick="event.stopPropagation();checkRealDifference('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name || r.local.name || '')}')">${cmp ? 'Re-check' : 'Check what differs'}</button>`);
+
+  /* Matched on name alone, both sides current: the overwrite that upgrades the
+     pair to a proven one. It used to hang off the middle lane. */
+  if (!stale && r.status === 'synced' && r.matchType === 'exact' && c && l) {
+    acts.push(rdAction('down', 'Download over local',
+      `verifyReplaceLocal('${j(c.id)}','${pj(l.path)}','${j(c.name)}',${Number(c.mtime) || 0},${Number(l.mtime) || 0})`,
+      { quiet: true, title: 'These matched on name alone. Taking the cloud copy over your local file makes them byte-identical, so the pair upgrades to Same file. Your current copy is kept in the backups folder.' }));
+    if (!sentences.length) {
+      sentences.push('Matched by name only — nothing has proved these are the same file.');
+    }
   }
 
-  return `<div class="row-detail ${cls}${stripe ? ' stripe' : ''} status-${r.status || ''}">`
-    + `<span class="rd-icon">${icon}</span>`
-    + `<span class="rd-text">${e(text)}</span>`
-    + `<span class="rd-actions">${stalenessAction}${bits.join('')}</span>`
+  /* A row with nothing to say gets no band at all, and that is the rule the
+     whole list leans on: a second line means this one wants something.
+
+     Comparing is offered on every pair, so adding it here unconditionally gave
+     every in-sync row a band holding a warning icon, no sentence and one
+     button - which is exactly the noise this band was built to remove. It
+     lives in the row menu instead, where it is always reachable, and it joins
+     the band only once the band exists for another reason. */
+  if (!sentences.length && !stalenessAction && !acts.length) return '';
+
+  if (c && l) {
+    acts.push(rdAction('swap', cmp ? 'Re-check' : 'Check what differs',
+      `checkRealDifference('${j(c.id)}','${pj(l.path)}','${j(c.name || l.name || '')}')`,
+      { quiet: true, title: 'Compare the two files’ contents and report what actually differs. Read-only — nothing is changed on either side.' }));
+  }
+
+  return `<div class="row-detail ${tone}${stripe ? ' stripe' : ''} status-${r.status || ''}">`
+    + `<span class="rd-icon">${ic(icon)}</span>`
+    + `<span class="rd-text">${e(sentences.join(' '))}</span>`
+    + `<span class="rd-actions">${stalenessAction}${acts.join('')}</span>`
     + `</div>`;
+}
+/* The action that is refused, drawn as itself: named, greyed, and carrying
+   its own reason. It is not disabled in the HTML sense - a disabled button
+   swallows the click, and the click is how he asks why. It is marked
+   unavailable, and `_wireDisabledBulkReasons` turns the click into the
+   explanation. */
+function rdUnavailable(icon, label, why) {
+  return `<button class="rd-btn is-disabled" aria-disabled="true" title="${a(why)}">`
+       + `${ic(icon)}<span>${label}</span></button>`;
+}
+
+//: And the one control that lifts it, so the key sits beside the lock.
+function rdConfirmPair(r, unlocks) {
+  return `<button class="rd-btn" title="${a('Say these two really are the same project. That promotes the pair to a match you made yourself, and ' + unlocks + ' becomes available. You can undo it from the badge in the middle column.')}" `
+       + `onclick="event.stopPropagation();markManualMatch('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name || '')}','${j(r.local.name || '')}')">`
+       + `${ic('link')}<span>Confirm this pair</span></button>`;
 }
 
 function stalenessBadgeHtml(r) {
@@ -2418,18 +2673,26 @@ function stalenessBadgeHtml(r) {
          wins: the action is demoted to a quiet secondary. */
       const provenSame = cmp && !cmp.designDiffers;
       const label = provenSame
-        ? '&#11015; download anyway'
+        ? 'Download anyway'
         : renamedOnly
-          ? '&#11015; Cloud renamed &middot; download'
-          : '&#11015; Cloud newer &middot; download';
+          ? 'Cloud renamed · download'
+          : 'Cloud newer · download';
       const why = renamedOnly
         ? 'The cloud copy was RENAMED, which is why its date moved - the name stored inside your local file is the old one. No design change was detected. Downloading brings the rename across and renames your local file to match. Your current copy is kept in the backups folder.'
         : 'The cloud copy was edited more recently and the names agree, so this is a real change rather than a rename. Downloading replaces your local one. Your current copy is kept in the backups folder.';
       return cmpHtml
-        + `<button class="stale-badge stale-cloud is-action${renamedOnly ? ' is-renamed' : ''}${provenSame ? ' is-demoted' : ''}" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${label}</button>`
+        + `<button class="rd-btn${provenSame ? ' quiet is-demoted' : ' primary'}${renamedOnly ? ' is-renamed' : ''}" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${ic('down')}<span>${label}</span></button>`
         + checkBtn;
     }
-    return `<span class="stale-badge stale-cloud" title="The cloud copy was edited more recently. These two were paired on name similarity rather than a proven match, so downloading over your local file is not offered — it could overwrite a different project. Link them yourself with the &#128279; button to confirm the pair, and the download becomes available.">&#11015; Cloud newer</span>`;
+    /* Shown and unavailable, never absent - and the thing that lifts the
+       refusal sits next to it rather than being described in a tooltip. */
+    const noPull = 'The cloud copy was edited more recently, but these two were '
+      + 'paired on name similarity rather than a proven match. Downloading over '
+      + 'your local file is not offered here because it could overwrite a '
+      + 'different project. Confirm the pair and it becomes available.';
+    return `<span class="rd-note" title="Your cloud copy was edited more recently than the local one.">${ic('down')}<span>Cloud newer</span></span>`
+      + rdUnavailable('down', 'Download over local', noPull)
+      + rdConfirmPair(r, 'the download');
   }
 
   if (s === 'local_newer') {
@@ -2459,69 +2722,61 @@ function stalenessBadgeHtml(r) {
         + 'copy. If the upload fails nothing is deleted; if the delete fails '
         + 'you are told there are two and which one is good.';
       return cmpHtml
-        + `<button class="stale-badge stale-local is-action" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}','${j(r.matchType || '')}')">&#11014; Local newer &middot; replace cloud</button>`
+        + `<button class="rd-btn primary" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}','${j(r.matchType || '')}')">${ic('up')}<span>Local newer · replace cloud</span></button>`
         + checkBtn;
     }
     /* Only a guessed pairing reaches here now - same site code, or similar
        words. The two names are not the same, so there is nothing to confirm
        against and Link is the honest route. */
+    /* Only a guessed pairing reaches here - same site code, or similar
+       wording. Replacing the cloud copy deletes the old one and that does not
+       come back, so it stays refused; but the control that lifts the refusal
+       sits right here rather than being described in a tooltip. The old text
+       pointed at a "Link button" that is only ever drawn on an *unpaired* row,
+       so on this row it named a control that did not exist. */
     const unproven = 'Your local copy is newer, but these two were paired by '
       + 'guesswork - a shared site code or similar wording, not the same name '
-      + 'and not Ekahau\'s id. Replacing the cloud copy deletes the old one '
-      + 'and that cannot be undone, so confirm the pair with the \u{1F517} '
-      + 'Link button first and this becomes available.';
-    return `<span class="stale-badge stale-local" title="Your local copy was edited more recently than the cloud one.">&#11014; Local newer</span>`
-      + `<button class="gut-arrow push-unavailable is-disabled" aria-disabled="true"`
-      + ` title="${a(unproven)}" aria-label="Local to Cloud, confirm the pair first">`
-      + `Local &#8594; Cloud</button>`;
+      + 'and not Ekahau\'s id. Replacing the cloud copy deletes the old one and '
+      + 'that cannot be undone, so it is not offered until you confirm the pair. '
+      + 'Confirm this pair, or Link them yourself, and it becomes available.';
+    return `<span class="rd-note" title="Your local copy was edited more recently than the cloud one.">${ic('up')}<span>Local newer</span></span>`
+      + rdUnavailable('arrowL', 'Local → Cloud', unproven)
+      + rdConfirmPair(r, 'replacing the cloud copy');
   }
   return '';
 }
 
+
 function gutCell(r) {
+  /* The verdict, and nothing else.
+
+     "the new process flow has a little Check Link in the center column, which
+     by the way is getting rather crowded now."
+
+     He was looking at a lane a few characters wide between two long names,
+     with up to four controls stacked into it - so a row that needed a decision
+     stood three times the height of the ones around it, and the list had a
+     ragged edge down its middle that no amount of colour was going to fix.
+
+     Every action moved to the row underneath, which is full width and already
+     existed for exactly this purpose. What is left here is the one thing this
+     column is for: which kind of match WD thinks this is. One line, every row,
+     every state. */
   const kind = r.kind || currentTab;
-  if (r.status === 'mismatch') {
-    const c = r.cloud, l = r.local;
-    return `<div class="lr-gut mis">
-      ${matchBadgeHtml(r, kind)}
-      <button class="gut-arrow" title="Cloud → Local: apply the cloud name onto the local folder" aria-label="Cloud to Local: apply the cloud name onto the local folder" onclick="syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')">&#10145;<span class="ib-label">Cloud → Local</span></button>
-      <button class="gut-arrow" title="Local → Cloud: apply the local name onto the cloud site" aria-label="Local to Cloud: apply the local name onto the cloud site" onclick="syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')">&#11013;<span class="ib-label">Local → Cloud</span></button>
-      <button class="gut-arrow nomatch" title="Not a match — never pair these two again" onclick="markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')">&#8800;<span class="ib-label">Not a match</span></button>
-    </div>`;
+  if (r.status === 'mismatch' || r.status === 'synced') {
+    return `<div class="lr-gut">${matchBadgeHtml(r, kind)}</div>`;
   }
-  if (r.status === 'synced') {
-
-    const isNameMatch = r.matchType === 'exact' && r.cloud && r.local && kind !== 'sites';
-    const verifyBtn = (isNameMatch && !r.staleness)
-      ? `<button class="gut-arrow verify-btn" title="Overwrite: take the cloud copy over your local file regardless of which is newer. These matched on name alone; this makes them byte-identical so the pair upgrades to Same file. Your current copy is kept in the backups folder." onclick="verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">&#8681;<span class="ib-label">Download over local</span></button>`
-      : '';
-    /* The staleness badge and the comparison controls moved to the detail row
-       below - this lane is a few characters wide between two long names, and
-       stacking four things into it is what he was looking at. What is left is
-       what it should always have carried: which kind of match this is. */
-    return `<div class="lr-gut ok">${matchBadgeHtml(r, kind)}${verifyBtn}</div>`;
-  }
-  if (r.cloud) {
-
-    const linkBtn = (kind === 'projects')
-      ? `<button class="gut-arrow link-btn" title="Link this cloud project to a specific local .esx" onclick="openLinkPicker('cloud','${j(r.cloud.id)}','${j(r.cloud.name)}')">&#128279;<span class="ib-label">Link</span></button>`
-      : '';
-    if (kind === 'sites') {
-      return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="Create the matching local folder &#8594;" onclick="createLocalFolder('${j(r.cloud.name)}')">&#10145;<span class="ib-label">Create local folder</span></button></div>`;
-    }
-    return `<div class="lr-gut orph">
-      <button class="gut-arrow orphan" title="Download .esx from Ekahau Cloud &#8594; then move into a site folder" onclick="downloadThenMove('${j(r.cloud.id)}','${j(r.cloud.name)}')">&#10145;<span class="ib-label">Download</span></button>
-      ${linkBtn}
-    </div>`;
-  }
-  if (kind === 'sites') {
-    return `<div class="lr-gut orph"><button class="gut-arrow orphan" title="← Create a cloud site from this folder" onclick="createFromLocal('${j(r.local.name)}')">&#11013;<span class="ib-label">Create cloud site</span></button></div>`;
-  }
-  return `<div class="lr-gut orph">
-    <button class="gut-arrow orphan" title="← Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${pj(r.local.path)}','${j(r.local.name)}')">&#11013;<span class="ib-label">Upload</span></button>
-    <button class="gut-arrow link-btn" title="Link this local .esx to a specific cloud project" onclick="openLinkPicker('local','${pj(r.local.path)}','${j(r.local.name)}')">&#128279;<span class="ib-label">Link</span></button>
-  </div>`;
+  const side = r.cloud ? 'cloud' : 'local';
+  const label = (kind === 'sites')
+    ? (r.cloud ? 'Cloud site only' : 'Local folder only')
+    : (r.cloud ? 'Cloud only' : 'Local only');
+  return `<div class="lr-gut"><span class="match-badge mb-orphan" title="${a(
+      r.cloud
+        ? 'This exists in Ekahau Cloud with nothing matching it on disk.'
+        : 'This exists on disk with nothing matching it in Ekahau Cloud.'
+    )}"><span class="mb-dot"></span>${label}</span></div>`;
 }
+
 function cloudCell(r, localCodes) {
   const isSites = (r.kind || currentTab) === 'sites';
   const kindAttr = r.kind || currentTab;
@@ -2530,13 +2785,13 @@ function cloudCell(r, localCodes) {
   const chk = r.noCheckbox ? '' : `<input type="checkbox" class="rowchk" data-k="${e(chkKey)}" ${selected.has(chkKey) ? 'checked' : ''}>`;
   const indentCls = r.indent ? ' child-row' : '';
   const chevron = r.toggle
-    ? `<button class="tree-chevron${r.toggle.open ? ' open' : ''}" onclick="event.stopPropagation();toggleFolder('${j(r.toggle.key)}')" title="${r.toggle.open ? 'Collapse' : 'Expand'}">&#9656;</button>`
+    ? `<button class="tree-chevron${r.toggle.open ? ' open' : ''}" onclick="event.stopPropagation();toggleFolder('${j(r.toggle.key)}')" title="${r.toggle.open ? 'Collapse this site' : 'Expand this site'}" aria-expanded="${r.toggle.open}">${ic('chevron')}</button>`
     : '';
   if (!r.cloud) {
     if (isSites) {
-      return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Create a cloud site from this folder" onclick="createFromLocal('${j(r.local.name)}')">+ Cloud site</button></div>`;
+      return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Create a cloud site from this folder" onclick="createFromLocal('${j(r.local.name)}')">${ic('plus')}<span>Cloud site</span></button></div>`;
     }
-    return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${pj(r.local.path)}','${j(r.local.name)}')">+ Upload</button></div>`;
+    return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${pj(r.local.path)}','${j(r.local.name)}')">${ic('up')}<span>Upload</span></button></div>`;
   }
   const c = r.cloud, isMis = r.status === 'mismatch', thing = isSites ? 'cloud site' : 'cloud project';
   const me = ((data && data.currentUser) || '').toLowerCase();
@@ -2546,8 +2801,16 @@ function cloudCell(r, localCodes) {
   const ownerTitle = createdBy && createdBy !== owner
     ? `Current owner (from Ekahau share list). Originally created by ${createdBy}.`
     : 'Current owner (from Ekahau share list)';
-  const ownerHtml = (!isSites && owner)
-    ? ` <span class="owner-tag${owner !== me ? ' other' : ''}" title="${a(ownerTitle)}">(${e(owner)})</span>`
+  /* Only when it is not him.
+
+     This rendered on every row that had an owner, and every project he owns
+     has one - so a hundred rows each carried the same thirty-character address
+     of the person reading them, which at 1366 pushed the file name onto a
+     second line. An owner tag is worth the space when the answer is somebody
+     else; when the answer is "you", it is the most predictable string on the
+     page. The Owner toggle above the list is how he asks the other question. */
+  const ownerHtml = (!isSites && owner && owner !== me)
+    ? ` <span class="owner-tag other" title="${a(ownerTitle)}">${e(owner)}</span>`
     : '';
 
   const typeHtml = (!isSites && c.projectType)
@@ -2559,7 +2822,7 @@ function cloudCell(r, localCodes) {
     : '';
   const shared = (!isSites && c.sharedWith) || [];
   const sharedHtml = shared.length
-    ? ` <span class="shared-tag" title="Also shared with: ${a(shared.join(', '))}">+${shared.length} shared</span>`
+    ? ` <span class="shared-tag" title="Also shared with: ${a(shared.join(', '))}">${shared.length} shared</span>`
     : '';
 
   const iOwnCloud = owner && me && owner === me;
@@ -2568,28 +2831,38 @@ function cloudCell(r, localCodes) {
     : '';
   const nameHtml = (isMis ? charDiff(c.name, r.local.name).a : e(c.name)) + (isSites ? '' : '.esx') + typeHtml + planHtml + unassignedHtml + ownerHtml + sharedHtml + dupHintFor(c.id);
   const dup = r.status === 'orphan' && c.code && localCodes.has(c.code);
-  const dsCount = (c.datasets && c.datasets.length) || 0;
-  const cloudPeek = isSites
-    ? `<button class="src-badge${dsCount ? ' hasrc' : ''}" title="${dsCount ? dsCount + ' project' + (dsCount > 1 ? 's' : '') : 'No projects yet'} — click to view" onclick="event.stopPropagation();openCloudPeek('${j(c.id)}','${j(c.name)}')">&#128065;</button>`
-    : '';
-  const assignBtn = (!isSites && c.unassigned && r.parentSiteId)
-    ? `<button class="icon-btn assign-btn" title="Assign to &quot;${a(r.parentSiteName || '')}&quot;" onclick="assignOrphanToSite('${j(c.id)}','${j(r.parentSiteId)}','${j(c.name)}','${j(r.parentSiteName || '')}')">&#128206;<span class="ib-label">Assign</span></button>`
-    : '';
 
-  const shareCount = (c.sharedWith || []).length;
-  const shareBtn = !isSites
-    ? `<button class="icon-btn share-btn" title="Manage sharing (${shareCount} user${shareCount === 1 ? '' : 's'})" onclick="openManageShares('${j(c.id)}','${j(c.name)}')">&#128101;${shareCount ? `<span class="share-badge-count">${shareCount}</span>` : ''}</button>`
-    : '';
-  return `<div class="lr-cell cloud${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A local ${isSites ? 'folder' : '.esx'} shares code ${a(c.code)} — likely the same place"` : ''}>
-    ${chevron}${chk}
-    <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(c.meta || '')}</span>
-    <span class="cell-actions">${cloudPeek}${assignBtn}
-      ${shareBtn}
-      ${!isSites ? `<button class="icon-btn" title="Move to a site" onclick="startMoveToSite('${j(c.id)}','${j(c.name)}')">&#8618;<span class="ib-label">Move</span></button>` : ''}
-      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('cloud','${j(c.id)}','${j(c.name)}','${kindAttr}')">&#9998;<span class="ib-label">Rename</span></button>
-      <button class="icon-btn del" title="Delete ${thing}" onclick="startDelete('cloud','${j(c.id)}','${j(c.name)}',false,'${kindAttr}')">&#128465;<span class="ib-label">Delete</span></button>
-    </span></div>`;
+  /* On a site row the meta is the digest: what is inside, and how much of it
+     wants him. That is the whole point of closing the sites by default - the
+     line has to answer "is there anything for me in here" without being
+     opened. On a file row it stays the date, and it stays put: it used to fade
+     out to make room for the hover buttons. */
+  const meta = isSites ? siteDigestHtml(r) : `<span class="cell-meta">${e(c.meta || '')}</span>`;
+
+  const menu = rowMenu([
+    isSites && (c.datasets && c.datasets.length)
+      ? menuItem('eye', 'View the projects in this site', `openCloudPeek('${j(c.id)}','${j(c.name)}')`,
+          { title: `${c.datasets.length} project${c.datasets.length > 1 ? 's' : ''} in Ekahau Cloud` })
+      : '',
+    (!isSites && c.unassigned && r.parentSiteId)
+      ? menuItem('plus', `Assign to “${e(r.parentSiteName || '')}”`,
+          `assignOrphanToSite('${j(c.id)}','${j(r.parentSiteId)}','${j(c.name)}','${j(r.parentSiteName || '')}')`)
+      : '',
+    !isSites ? menuItem('share', `Sharing…${(c.sharedWith || []).length ? ` (${(c.sharedWith || []).length})` : ''}`,
+          `openManageShares('${j(c.id)}','${j(c.name)}')`, { title: 'Manage who this cloud project is shared with' }) : '',
+    !isSites ? menuItem('move', 'Move to a site…', `startMoveToSite('${j(c.id)}','${j(c.name)}')`) : '',
+    (!isSites && r.local) ? menuItem('swap', 'Check what differs…',
+        `checkRealDifference('${j(c.id)}','${pj(r.local.path)}','${j(c.name || '')}')`,
+        { title: 'Compare this against the local file and report what actually differs. Read-only.' }) : '',
+    menuItem('rename', `Rename this ${thing}…`, `startRename('cloud','${j(c.id)}','${j(c.name)}','${kindAttr}')`),
+    menuItem('trash', `Delete this ${thing}`, `startDelete('cloud','${j(c.id)}','${j(c.name)}',false,'${kindAttr}')`,
+      { danger: true, title: 'A cloud delete cannot be undone.' }),
+  ], `Actions for this ${thing}`);
+
+  return `<div class="lr-cell cloud${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A local ${isSites ? 'folder' : '.esx'} shares code ${a(c.code)} — likely the same place"` : ''}>`
+    + `${chevron}${chk}<span class="cell-name">${nameHtml}</span>${meta}${menu}</div>`;
 }
+
 function localCell(r, cloudCodes) {
   const isSites = (r.kind || currentTab) === 'sites';
   const kindAttr = r.kind || currentTab;
@@ -2599,7 +2872,7 @@ function localCell(r, cloudCodes) {
   const indentCls = r.indent ? ' child-row' : '';
   if (!r.local) {
     return isSites
-      ? `<div class="lr-cell local empty${indentCls}"><button class="ghost-add" title="Create a matching local folder" onclick="createLocalFolder('${j(r.cloud.name)}')">+ Local folder</button></div>`
+      ? `<div class="lr-cell local empty${indentCls}"><button class="ghost-add" title="Create a matching local folder" onclick="createLocalFolder('${j(r.cloud.name)}')">${ic('plus')}<span>Local folder</span></button></div>`
       : `<div class="lr-cell local empty${indentCls}"></div>`;
   }
   const l = r.local, isMis = r.status === 'mismatch', thing = isSites ? 'local folder' : '.esx file';
@@ -2607,8 +2880,9 @@ function localCell(r, cloudCodes) {
   const owner = (l.owner || '').toLowerCase();
 
   const localIsOther = owner && owner.indexOf('@') > -1 && owner !== me;
-  const ownerHtml = (!isSites && owner)
-    ? ` <span class="owner-tag${localIsOther ? ' other' : ''}" title="Author (from project.history.createdBy)">(${e(owner)})</span>`
+  //: Same reasoning as the cloud side: his own name on every row says nothing.
+  const ownerHtml = (!isSites && localIsOther)
+    ? ` <span class="owner-tag other" title="Author (from project.history.createdBy)">${e(owner)}</span>`
     : '';
 
   const localTypeHtml = (!isSites && l.projectType)
@@ -2616,29 +2890,28 @@ function localCell(r, cloudCodes) {
     : '';
   const nameHtml = (isMis ? charDiff(r.cloud.name, l.name).b : e(l.name)) + (l.isDir ? '' : '.esx') + localTypeHtml + ownerHtml + dupHintFor(l.path);
   const dup = r.status === 'orphan' && l.code && cloudCodes.has(l.code);
-  const hasSrc = isSites && l.hasSource;
   const hasContents = isSites && l.src && l.src.total > 0;
   const flagged = l.name.charAt(0) === '!';
   const srcUI = hasContents ? previewBadge(l) : '';
-  const flagBtn = isSites
-    ? `<button class="icon-btn${flagged ? ' flagged' : ''}" title="${flagged ? 'Un-flag (remove the ! prefix)' : 'Flag this folder for review — adds a ! prefix so it sorts to the top here and in Explorer'}" onclick="flagReview('${pj(l.path)}','${j(l.name)}')">${flagged ? '&#9873;' : '&#9872;'}</button>`
-    : '';
-  const revealBtn = `<button class="icon-btn" title="Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}" onclick="revealInExplorer('${pj(l.path)}')">&#128193;</button>`;
+  const meta = isSites ? `<span class="cell-meta">${e(l.meta || '')}</span>` : `<span class="cell-meta">${e(l.meta || '')}</span>`;
 
-  const moveBtn = (!isSites && !l.isDir)
-    ? `<button class="icon-btn" title="Move this .esx to another site folder" onclick="startMoveLocalToSite('${pj(l.path)}','${j(l.name)}')">&#8618;<span class="ib-label">Move</span></button>`
-    : '';
-  return `<div class="lr-cell local${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A cloud ${isSites ? 'site' : 'project'} shares code ${a(l.code)} — likely the same place"` : ''}>
-    ${chk}
-    <span class="cell-name">${nameHtml}</span><span class="cell-meta">${e(l.meta || '')}</span>
-    <span class="cell-actions">${srcUI}${revealBtn}${flagBtn}
-      ${moveBtn}
-      ${isSites ? `<button class="icon-btn" title="Merge this folder's files into another folder…" onclick="startMerge('${pj(l.path)}','${j(l.name)}')">&#8649;<span class="ib-label">Merge</span></button>` : ''}
-      <button class="icon-btn" title="Rename ${thing}" onclick="startRename('local','${pj(l.path)}','${j(l.name)}','${kindAttr}')">&#9998;<span class="ib-label">Rename</span></button>
-      <button class="icon-btn del" title="Delete ${thing}${isSites ? ' and contents' : ''}" onclick="startDelete('local','${pj(l.path)}','${j(l.name)}',${l.isDir},'${kindAttr}')">&#128465;<span class="ib-label">Delete</span></button>
-    </span></div>`;
+  const menu = rowMenu([
+    menuItem('folder', `Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}`, `revealInExplorer('${pj(l.path)}')`),
+    isSites ? menuItem('flag', flagged ? 'Remove the review flag' : 'Flag this folder for review',
+        `flagReview('${pj(l.path)}','${j(l.name)}')`,
+        { title: flagged ? 'Removes the ! prefix' : 'Adds a ! prefix so it sorts to the top here and in Explorer' }) : '',
+    (!isSites && !l.isDir) ? menuItem('move', 'Move to another site folder…',
+        `startMoveLocalToSite('${pj(l.path)}','${j(l.name)}')`) : '',
+    isSites ? menuItem('merge', 'Merge into another folder…', `startMerge('${pj(l.path)}','${j(l.name)}')`) : '',
+    menuItem('rename', `Rename this ${thing}…`, `startRename('local','${pj(l.path)}','${j(l.name)}','${kindAttr}')`),
+    menuItem('trash', `Delete this ${thing}${isSites ? ' and its contents' : ''}`,
+      `startDelete('local','${pj(l.path)}','${j(l.name)}',${l.isDir},'${kindAttr}')`,
+      { danger: true, title: 'A local delete can be undone by downloading the cloud copy again.' }),
+  ], `Actions for this ${thing}`);
+
+  return `<div class="lr-cell local${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A cloud ${isSites ? 'site' : 'project'} shares code ${a(l.code)} — likely the same place"` : ''}>`
+    + `${chk}<span class="cell-name">${nameHtml}</span>${srcUI}${meta}${menu}</div>`;
 }
-
 function localByPath(path) {
 
   const norm = s => String(s || '').replace(/\\/g, '/');
@@ -6965,7 +7238,10 @@ _wireFilterCardKeys();
 function _wireDisabledBulkReasons() {
   document.addEventListener('click', (ev) => {
     const btn = ev.target && ev.target.closest
-      ? ev.target.closest('.bulk-btn.is-disabled, .gut-arrow.is-disabled') : null;
+      /* `.rd-btn.is-disabled` joined this when the refused actions moved out
+         of the middle lane and into the band under the row. A disabled
+         attribute would swallow the click, and the click is how he asks why. */
+      ? ev.target.closest('.bulk-btn.is-disabled, .gut-arrow.is-disabled, .rd-btn.is-disabled') : null;
     if (!btn) return;
     ev.preventDefault();
     ev.stopPropagation();
