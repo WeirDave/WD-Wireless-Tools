@@ -1085,6 +1085,76 @@ handler check.
   ones are (re-download from cloud), so the friction is asymmetric on
   purpose.
 
+## The dev toolbar — where maintenance actions live now
+
+**There is one, it is off unless you ask for it, and adding to it is one
+`register` call.** Before this the suite had no developer surface at all, so a
+one-off repair had nowhere to live except a script he would have to be talked
+through running. It is modelled on WaxFrame Professional's `dev-toolbar`,
+which is where the shape came from.
+
+    web/assets/js/wd-dev.js          the toolbar: gate, panel, registry
+    web/assets/js/wd-dev-actions.js  every action, and the only file to edit
+    wd-tools.css                     `.wd-dev-*`, at the end
+
+**Turning it on.** `?dev=1` on any page; `?dev=0`, or the labelled Exit
+button, turns it off. The flag lives in `localStorage['wd-dev']` so it follows
+him between tools. There is deliberately **no key chord** - the requirement
+was that he never lands in it by accident mid-job.
+
+**Why pink.** No tool uses `--pink` for its chrome, so the toolbar cannot be
+mistaken for part of one. `--lime` marks the half of each action that writes
+nothing. It looks the same in both themes on purpose: a maintenance surface
+that blended into the light theme would be doing the opposite of its job.
+
+**Dry run is structural, not a habit.** Each action renders two controls and
+**the live one is disabled until a preview has returned cleanly** - a failed
+preview leaves it dead, and a completed run disarms it again. That is the
+property to keep if this gets rewritten; it is what stands between a mis-click
+and ninety rewritten project files.
+
+**Adding an action.** One `register({...})` in `wd-dev-actions.js` with `id`,
+`group`, `label`, `summary`, `detail`, `preview`, and optionally `run` and
+`render`. An action with no `run` renders one button and is a read-only
+diagnostic. `label`/`summary`/`detail` are not decoration - they are the
+self-documentation, and this project's rule that every control says what it is
+applies here too.
+
+**Testing it.** `tests/test_dev_toolbar_browser.py` drives the real toolbar in
+Firefox, Chrome and Edge over a plain `http.server` on the `web/` directory -
+never `server.py`, which opens a browser window nobody closes. It stubs
+`WD.api`, which is the seam the action uses, so the whole
+register → button → handler path runs and the `dryRun` argument is pinned.
+It skips where selenium or a browser is missing, so CI stays green;
+`tests/test_dev_toolbar_report.py` covers the renderer in Node and does run
+there. **Selenium Manager drops `geckodriver/` and `se-metadata.json` into the
+working directory** on first use - both are gitignored now, and a 4 MB binary
+is one `git add -A` from the repository if that entry ever goes.
+
+### The first action, and the trap in it
+
+`tools/cloud_realign.py` settles the pairs that read "cloud newer" only
+because the cloud project was renamed. Roughly ninety of them, from a rename
+we did. It proves each pair identical with `esx_compare.compare_esx` -
+**not** with `build_matches`'s rename heuristic, whose own docstring says it
+does not prove content - then corrects the name inside the .esx and the date,
+backing up each file it rewrites.
+
+**The trap: `os.utime` is not enough and looks like it is.**
+`get_local_esx_files` reports a local file's `mtime` as
+`internalMtime or fs_mtime` - the `history.modifiedAt` written inside
+`project.json` - because a filesystem date resets on copy or sync and the
+internal one does not. So setting only the disk timestamp leaves every row
+still saying "cloud newer" while every filesystem assertion passes. Both are
+set. `test_the_date_the_tool_compares_is_the_one_that_moves` asserts on what
+`get_local_esx_files` returns, which is the number the row is built from, and
+that test fails on the `os.utime`-only version.
+
+`_rewrite_project_json` in `cloud_manager.py` is the shared back-up, rebuild,
+replace-atomically, prune path, extracted from `set_internal_project_name`
+when this became its second caller. It writes nothing when the mutation
+changes nothing, which is what makes both callers safe to re-run.
+
 ## Every session gets its own worktree
 
 **Do not work directly in the shared checkout.** Several sessions run against

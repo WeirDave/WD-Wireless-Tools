@@ -9516,3 +9516,214 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 @media (prefers-reduced-motion: reduce) {
   .rd-busy::before { animation: none; border-top-color: transparent; }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   DEV TOOLBAR - dev mode only, off unless ?dev=1 has been used
+   ══════════════════════════════════════════════════════════════
+   Pink is the whole point of the colour choice. No tool in the
+   suite uses --pink for its chrome, so the moment this is on the
+   screen it cannot be mistaken for part of a tool - which was the
+   requirement: unobtrusive, clearly separate, and obvious when he
+   is in it. --lime marks the safe half of each action, the
+   preview that writes nothing.
+
+   It is deliberately the same in both themes. A maintenance
+   surface that restyled itself to blend into the light theme
+   would be doing the opposite of its job.
+   ══════════════════════════════════════════════════════════════ */
+.wd-dev {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 99999;
+  width: min(460px, calc(100vw - 32px));
+  background: #090909;
+  border: 2px solid var(--pink);
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 10px 32px rgba(0, 0, 0, 0.65);
+  color: #ededf0;
+  font-size: 13px;
+}
+
+.wd-dev-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.wd-dev-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #090909;
+  background: var(--pink);
+  border-radius: 4px;
+  padding: 3px 8px;
+  cursor: grab;
+  user-select: none;
+  flex: none;
+}
+.wd-dev-label:active { cursor: grabbing; }
+
+.wd-dev-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #ededf0;
+  background: #1c1c1c;
+  border: 1px solid #3d3d3d;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.wd-dev-btn:hover:not(:disabled) { background: #282828; border-color: var(--pink); }
+.wd-dev-btn:focus-visible { outline: 2px solid var(--pink); outline-offset: 1px; }
+.wd-dev-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.wd-dev-toggle { margin-left: auto; }
+.wd-dev-exit { border-color: #3d3d3d; color: #a0a4ab; }
+.wd-dev-exit:hover { color: #ededf0; }
+
+.wd-dev-panel {
+  border-top: 1px solid #2a2a2a;
+  padding: 10px 12px 14px;
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+.wd-dev-panel[hidden] { display: none; }
+
+.wd-dev-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #a0a4ab;
+}
+
+.wd-dev-empty { margin: 0; color: #6e7279; font-size: 12px; }
+
+.wd-dev-group + .wd-dev-group { margin-top: 14px; }
+.wd-dev-group-name {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pink);
+}
+
+.wd-dev-action {
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #131313;
+}
+.wd-dev-action + .wd-dev-action { margin-top: 10px; }
+
+.wd-dev-action-name {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #ededf0;
+}
+.wd-dev-action-summary {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #d0d3d8;
+}
+.wd-dev-action-detail {
+  margin: 0 0 10px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #9aa0a6;
+}
+
+.wd-dev-action-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.wd-dev-preview {
+  border-color: var(--lime);
+  color: var(--lime);
+}
+.wd-dev-preview:hover:not(:disabled) {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: #090909;
+}
+.wd-dev-run { border-color: var(--pink); color: var(--pink); }
+.wd-dev-run:hover:not(:disabled) {
+  background: var(--pink);
+  border-color: var(--pink);
+  color: #090909;
+}
+.wd-dev-run:disabled { border-color: #3d3d3d; color: #6e7279; }
+
+.wd-dev-result {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #2a2a2a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.wd-dev-result[hidden] { display: none; }
+.wd-dev-result.is-preview { border-top-color: var(--lime); }
+.wd-dev-result.is-done { border-top-color: var(--pink); }
+.wd-dev-result.is-error { border-top-color: #dc2626; }
+
+.wd-dev-headline { margin: 0 0 8px; color: #ededf0; }
+.wd-dev-error { margin: 0; color: #f87171; }
+
+.wd-dev-tally {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: #a0a4ab;
+}
+.wd-dev-tally strong { color: #ededf0; }
+
+.wd-dev-section {
+  margin: 12px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #a0a4ab;
+}
+
+.wd-dev-files { list-style: none; margin: 0; padding: 0; }
+.wd-dev-file {
+  padding: 6px 0;
+  border-bottom: 1px solid #1f1f1f;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.wd-dev-file:last-child { border-bottom: 0; }
+.wd-dev-file-name { color: #ededf0; font-weight: 600; word-break: break-word; }
+.wd-dev-file-folder { color: #6e7279; font-size: 11px; }
+.wd-dev-file-actions {
+  list-style: disc;
+  margin: 2px 0 0;
+  padding-left: 18px;
+  color: var(--lime);
+  font-size: 11.5px;
+}
+.wd-dev-file-date { color: #9aa0a6; font-size: 11px; }
+.wd-dev-file-backup { color: #6e7279; font-size: 11px; word-break: break-all; }
+.wd-dev-file-warn { color: #f0b85f; font-size: 11px; }
+.wd-dev-file-reason { color: #9aa0a6; font-size: 11.5px; }
+.wd-dev-file-error { color: #f87171; font-size: 11.5px; }
+
+.wd-dev-raw {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  font-size: 11px;
+  color: #a0a4ab;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

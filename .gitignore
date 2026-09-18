@@ -55,3 +55,12 @@ NUL
 logs/
 *.log
 share_recipients.json
+
+# Selenium Manager's downloads. `webdriver.Firefox()` fetches geckodriver on
+# first use and drops it, plus its metadata, into the working directory - a
+# 4 MB binary one `git add -A` away from the repository. The browser tests in
+# tests/test_dev_toolbar_browser.py are what triggers this.
+geckodriver/
+chromedriver/
+msedgedriver/
+se-metadata.json

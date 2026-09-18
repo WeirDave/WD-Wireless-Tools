@@ -1691,6 +1691,94 @@ def _prune_backups(target, protect=None):
         return None
 
 
+def _rewrite_project_json(src, mutate, output_dir, keep_backups=True):
+    """Rewrite `project.json` inside a .esx, copying every other member across
+    byte for byte, in its original order.
+
+    `mutate(proj, doc)` edits the `project` record in place and returns True
+    when it changed something. **Returning False writes nothing at all** - no
+    backup, no temp file, no replace - which is what lets every caller be
+    re-run after an interruption without doing a second round of work or
+    stacking up a second backup of a file that is already correct.
+
+    The previous file goes to `backups/<site>/` first, on the same terms as a
+    cloud-over-local replace: if the backup cannot be written, nothing is
+    changed. Losing the old copy is the one outcome worse than leaving the
+    wrong value in place.
+
+    Extracted from `set_internal_project_name` when a second caller needed the
+    same careful part - back up, rebuild preserving every entry's own
+    metadata, replace atomically, drop the caches, prune. Two copies of that
+    would have been two chances to get the backup-before-write order wrong.
+    """
+    import zipfile
+
+    src = Path(src)
+    try:
+        with zipfile.ZipFile(src) as zf:
+            if "project.json" not in zf.namelist():
+                return {"error": "That .esx has no project.json"}
+            members = [(i, zf.read(i.filename)) for i in zf.infolist()]
+    except (OSError, zipfile.BadZipFile) as e:
+        return {"error": "Could not read the .esx: %s" % e}
+
+    changed = False
+    rebuilt = []
+    for info, raw in members:
+        if info.filename == "project.json":
+            try:
+                doc = json.loads(raw.decode("utf-8"))
+            except (ValueError, UnicodeDecodeError) as e:
+                return {"error": "project.json could not be read: %s" % e}
+            proj = doc.get("project")
+            if not isinstance(proj, dict):
+                return {"error": "project.json has no project record"}
+            try:
+                changed = bool(mutate(proj, doc))
+            except ValueError as e:
+                return {"error": str(e)}
+            if changed:
+                raw = json.dumps(doc, ensure_ascii=False).encode("utf-8")
+        rebuilt.append((info, raw))
+
+    if not changed:
+        return {"ok": True, "unchanged": True, "path": str(src), "backup": None}
+
+    from datetime import datetime as _dtn
+    stamp = _dtn.now().strftime("%Y%m%d-%H%M%S")
+    backup = (_backup_target(src, output_dir, stamp) if keep_backups else None)
+    if backup:
+        try:
+            shutil.copy2(src, backup)
+        except OSError as e:
+            return {"error": "Could not back the file up, so nothing was "
+                             "changed: %s" % e}
+
+    tmp = src.with_suffix(src.suffix + ".wd-rename.tmp")
+    try:
+        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
+            for info, raw in rebuilt:
+                # Carry the original entry across rather than letting
+                # zipfile invent one: same name, same date, same compression.
+                keep_info = zipfile.ZipInfo(info.filename, info.date_time)
+                keep_info.compress_type = info.compress_type
+                keep_info.external_attr = info.external_attr
+                out.writestr(keep_info, raw)
+        os.replace(tmp, src)
+    except OSError as e:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        return {"error": "Write failed, the file is untouched: %s" % e}
+
+    _ESX_META_CACHE.pop(str(src), None)
+    _ESX_TYPE_CACHE.pop(str(src), None)
+    _prune_backups(src, protect=str(backup) if backup else None)
+    return {"ok": True, "unchanged": False, "path": str(src),
+            "backup": str(backup) if backup else None}
+
+
 def _parse_cloud_mtime(pr):
     """Best-effort extraction of a modification timestamp from a project dict.
     Returns unix seconds (int) or 0. Ekahau nests the real dates inside
@@ -2587,12 +2675,47 @@ class CloudManager:
         a cloud-over-local replace: if the backup cannot be written, nothing is
         changed.
         """
-        import zipfile
-
         if not new_name or not str(new_name).strip():
             return {"error": "No name given"}
         new_name = str(new_name).strip()
 
+        src = self._local_esx(local_path)
+        if isinstance(src, dict):
+            return src
+
+        seen = {}
+
+        def _rename(proj, doc):
+            seen["old"] = (proj.get("name") or proj.get("title") or "").strip()
+            if seen["old"] == new_name:
+                return False
+            proj["name"] = new_name
+            if "title" in proj:
+                proj["title"] = new_name
+            return True
+
+        keep = self.config.get("keep_local_backups")
+        keep = True if keep is None else bool(keep)
+        out = _rewrite_project_json(src, _rename, self.config.get("output_dir", ""),
+                                    keep_backups=keep)
+        if out.get("error"):
+            return out
+        if out.get("unchanged"):
+            return {"ok": True, "unchanged": True, "name": new_name,
+                    "path": str(src)}
+        return {"ok": True, "path": str(src), "name": new_name,
+                "previousName": seen.get("old", ""),
+                "backup": out.get("backup")}
+
+    def _local_esx(self, local_path):
+        """Resolve a caller-supplied path to a local .esx we are allowed to
+        touch, or return the error dict to hand straight back.
+
+        The containment check is the point. `_assert_inside` is what stops a
+        path from the page naming a file outside the configured folder, and
+        every writer needs it - so it lives in one place rather than being
+        re-typed at each one.
+        """
         base = self.config.get("output_dir", "")
         if not base:
             return {"error": "No local folder is set"}
@@ -2603,74 +2726,7 @@ class CloudManager:
         src = Path(local_path)
         if not src.is_file():
             return {"error": "Local file not found: %s" % local_path}
-
-        try:
-            with zipfile.ZipFile(src) as zf:
-                names = zf.namelist()
-                if "project.json" not in names:
-                    return {"error": "That .esx has no project.json to rename"}
-                members = [(i, zf.read(i.filename)) for i in zf.infolist()]
-        except (OSError, zipfile.BadZipFile) as e:
-            return {"error": "Could not read the .esx: %s" % e}
-
-        old_name = ""
-        rebuilt = []
-        for info, raw in members:
-            if info.filename == "project.json":
-                try:
-                    doc = json.loads(raw.decode("utf-8"))
-                except (ValueError, UnicodeDecodeError) as e:
-                    return {"error": "project.json could not be read: %s" % e}
-                proj = doc.get("project")
-                if not isinstance(proj, dict):
-                    return {"error": "project.json has no project record"}
-                old_name = (proj.get("name") or proj.get("title") or "").strip()
-                if old_name == new_name:
-                    return {"ok": True, "unchanged": True, "name": new_name,
-                            "path": str(src)}
-                proj["name"] = new_name
-                if "title" in proj:
-                    proj["title"] = new_name
-                raw = json.dumps(doc, ensure_ascii=False).encode("utf-8")
-            rebuilt.append((info, raw))
-
-        from datetime import datetime as _dtn
-        stamp = _dtn.now().strftime("%Y%m%d-%H%M%S")
-        keep = self.config.get("keep_local_backups")
-        keep = True if keep is None else bool(keep)
-        backup = (_backup_target(src, self.config.get("output_dir", ""), stamp)
-                  if keep else None)
-        if backup:
-            try:
-                shutil.copy2(src, backup)
-            except OSError as e:
-                return {"error": "Could not back the file up, so nothing was "
-                                 "changed: %s" % e}
-
-        tmp = src.with_suffix(src.suffix + ".wd-rename.tmp")
-        try:
-            with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
-                for info, raw in rebuilt:
-                    # Carry the original entry across rather than letting
-                    # zipfile invent one: same name, same date, same compression.
-                    keep_info = zipfile.ZipInfo(info.filename, info.date_time)
-                    keep_info.compress_type = info.compress_type
-                    keep_info.external_attr = info.external_attr
-                    out.writestr(keep_info, raw)
-            os.replace(tmp, src)
-        except OSError as e:
-            try:
-                tmp.unlink()
-            except OSError:
-                pass
-            return {"error": "Write failed, the file is untouched: %s" % e}
-
-        _ESX_META_CACHE.pop(str(src), None)
-        _ESX_TYPE_CACHE.pop(str(src), None)
-        _prune_backups(src, protect=str(backup) if backup else None)
-        return {"ok": True, "path": str(src), "name": new_name,
-                "previousName": old_name,
-                "backup": str(backup) if backup else None}
+        return src
 
     def compare_with_cloud(self, local_path, cloud_project_id, progress_cb=None):
         """Is the cloud copy actually different, or only differently dated?

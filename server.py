@@ -34,6 +34,7 @@ from tools.folder_organizer import FolderOrganizer
 from tools.rename_manager import RenameManager
 from tools.template_store import TemplateStore
 from tools import capacity_profiles
+from tools import cloud_realign
 from tools import report_store
 from tools import settings as suite_settings
 from tools import settings_backup
@@ -1135,6 +1136,13 @@ CLOUD_ACTIONS = {
         d["path"], d.get("name"), _progress_setter(d.get("opId"))),
     "compare_with_cloud": lambda d: cm.compare_with_cloud(
         d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
+    # Dev toolbar. Aligns local files whose cloud twin was renamed and is
+    # therefore reported newer. The default here is the safe one on purpose:
+    # `bool(d.get("dryRun"))` would have made an absent field mean "write to
+    # his projects", so only an explicit `false` starts a live run.
+    "realign_renamed": lambda d: cloud_realign.realign(
+        cm, dry_run=d.get("dryRun", True) is not False,
+        progress_cb=_progress_setter(d.get("opId")), limit=d.get("limit")),
     "replace_cloud_project": lambda d: cm.replace_cloud_project(
         d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
     "upload_project": lambda d: cm.upload_project(d["path"], d.get("siteId"),
