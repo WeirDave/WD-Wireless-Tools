@@ -601,10 +601,14 @@ function renderWallCard(wt, i) {
         </div>
       </div>
       <div class="wall-actions">
-        <button class="btn btn-icon btn-sm" onclick="showKeybindMenu(event, ${i})" title="Assign shortcut">#</button>
-        <button class="btn btn-icon btn-sm" onclick="openEditModal(${i})" title="Edit">&#9998;</button>
-        <button class="btn btn-icon btn-sm" onclick="cloneWall(${i})" title="Clone — duplicate as a new wall type to tweak"><svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="1.5" y="1.5" width="7" height="8"/><rect x="5.5" y="4.5" width="7" height="8"/></svg></button>
-        <button class="btn btn-icon btn-sm btn-danger" onclick="deleteWall(${i})" title="Delete">&times;</button>
+        <button class="btn btn-sm wall-act" onclick="showKeybindMenu(event, ${i})"
+                title="Give this wall type a number key, so you can pick it in Ekahau without the menu">Shortcut</button>
+        <button class="btn btn-sm wall-act" onclick="openEditModal(${i})"
+                title="Change this wall type's name, colour, thickness or attenuation">Edit</button>
+        <button class="btn btn-sm wall-act" onclick="cloneWall(${i})"
+                title="Duplicate this wall type as a new one to tweak">Clone</button>
+        <button class="btn btn-sm wall-act btn-danger" onclick="deleteWall(${i})"
+                title="Remove this wall type from the list">Delete</button>
       </div>
     </div>`;
 }

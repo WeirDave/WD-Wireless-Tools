@@ -114,7 +114,10 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 [data-theme="light"] .tool-aprename .ar-stem-line.is-new .ar-stem-val { color:#4338ca; }
 .tool-aprename .ar-stem-tail { color:var(--text-3,#666); font-weight:400; }
 .tool-aprename .ar-stem-none { color:var(--text-3,#666); font-weight:400; font-style:italic; font-family:var(--sans,sans-serif); font-size:12px; }
-.tool-aprename .ar-preview td.ar-cur, .tool-aprename .ar-preview td.ar-new { white-space:nowrap; font-family:var(--mono,monospace); max-width:0; overflow:hidden; text-overflow:ellipsis; }
+/* The two name columns size to their content. They were max-width:0 with an
+   ellipsis, so the value a rename is judged on could be cut to a stub with
+   the rest only in a tooltip - and a tooltip is not where a decision goes. */
+.tool-aprename .ar-preview td.ar-cur, .tool-aprename .ar-preview td.ar-new { white-space:nowrap; font-family:var(--mono,monospace); }
 .tool-aprename .ar-preview td.ar-new { color:var(--indigo,#6366f1); font-weight:600; }
 [data-theme="light"] .tool-aprename .ar-preview td.ar-new { color:#4338ca; }
 .tool-aprename .ar-preview .ar-stem-mute { color:var(--text-3,#666); font-weight:400; }

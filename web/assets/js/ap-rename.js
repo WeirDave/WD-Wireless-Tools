@@ -2161,9 +2161,13 @@
     }
     var html = '';
     var manual = $('arOrder').value === 'manual';
-    var PREVIEW_CAP = 5;
-    var showAll = S._showAllPreview;
-    var visCount = (showAll || items.length <= PREVIEW_CAP + 1) ? items.length : PREVIEW_CAP;
+    // Every AP, every time. It used to show five and hide the rest behind
+    // "Show all 39 (34 more)", which is a truncated list standing between him
+    // and the only question this panel answers - is this the rename I want? -
+    // and the panel already scrolls, so nothing was gained by the cut.
+    // "It would be better if it was easily readable and lengthy than if it's
+    // brief in order to save screen real estate."
+    var visCount = items.length;
     items.forEach(function (it, i) {
       if (i >= visCount) return;
       var isDiff = it.oldName !== it.newName;
@@ -2199,14 +2203,6 @@
         '</tr>';
     });
 
-    if (visCount < items.length) {
-      html += '<tr><td colspan="4" style="text-align:center;padding:6px">'
-        + '<button type="button" class="ar-show-all-btn" onclick="window._arShowAll()">'
-        + 'Show all ' + items.length + ' (' + (items.length - visCount) + ' more)</button></td></tr>';
-    } else if (showAll && items.length > PREVIEW_CAP + 1) {
-      html += '<tr><td colspan="4" style="text-align:center;padding:6px">'
-        + '<button type="button" class="ar-show-all-btn" onclick="window._arShowAll()">Collapse</button></td></tr>';
-    }
     body.innerHTML = html;
   }
 
@@ -2240,11 +2236,12 @@
     var warn = $('arDupeWarn');
     if (warn) {
       if (dupes.length) {
-        var shown = dupes.slice(0, 4).map(esc).join(', ');
+        // All of them. A collision you cannot see is one you cannot fix, and
+        // four was an arbitrary place to stop reading out the names.
+        var shown = dupes.map(esc).join(', ');
         warn.innerHTML = '<b>' + dupes.length + ' name'
           + (dupes.length === 1 ? '' : 's')
           + ' would be used more than once</b> — ' + shown
-          + (dupes.length > 4 ? ' and ' + (dupes.length - 4) + ' more' : '')
           + '. Ekahau will take them, and you will not be able to tell those '
           + 'APs apart afterwards. Add a Floor segment, or switch Scope to '
           + '"All APs" so the counter keeps going instead of restarting.';

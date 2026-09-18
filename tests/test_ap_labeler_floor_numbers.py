@@ -231,7 +231,18 @@ class TheWarningIsOnScreenAndSaysWhatToDo(unittest.TestCase):
         self.assertIn("updateDownloadBtn()", update_all)
 
     def test_it_names_the_colliding_names(self):
-        self.assertIn("dupes.slice(0, 4)", self.body)
+        """Every one of them, not the first four.
+
+        This used to assert the literal `dupes.slice(0, 4)`, which is the shape
+        that has shipped five defects this week: the string was present and the
+        behaviour it stood for was the defect. A collision you cannot see is
+        one you cannot fix, so the claim is now that nothing is left out.
+        """
+        self.assertIn("dupes.map(esc).join", self.body)
+        self.assertNotIn("dupes.slice(", self.body,
+                         "the warning still stops short of naming them all")
+        self.assertNotIn("more'", self.body.split("Ekahau will take them")[0],
+                         "it still trails off with 'and N more'")
 
     def test_it_says_both_ways_out(self):
         self.assertIn("Add a Floor segment", self.body)

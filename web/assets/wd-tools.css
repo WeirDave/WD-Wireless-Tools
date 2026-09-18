@@ -4093,11 +4093,21 @@ body.tool-walls .toolbar {
 
 .wall-meta .label { color: var(--text-3); }
 
+/* Visible at rest, and each one says what it does.
+   They were `opacity: 0` until the row was hovered, and what appeared then was
+   four unlabelled glyphs - `#`, a pencil, an SVG and a cross - one of which
+   deletes the wall type. Twenty-six rows of that is a hundred and four
+   controls you have to have memorised, and a control nobody can see is not
+   discoverable at any price. His rule about screen space applies exactly here:
+   "it would be better if it was easily readable and lengthy than if it's brief
+   in order to save screen real estate." */
 .wall-actions {
-  display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s;
+  display: flex; gap: 4px; flex-wrap: wrap; align-items: center;
 }
 
-.wall-card:hover .wall-actions { opacity: 1; }
+.wall-act {
+  font-size: 11px; padding: 3px 9px; white-space: nowrap;
+}
 
 .keybind-menu {
   display: none; position: absolute; right: 0; top: 100%; margin-top: 4px;
@@ -4723,10 +4733,13 @@ body.tool-scale {
   color: var(--text); overflow-wrap: anywhere; user-select: all;
 }
 
+/* It says "Copy" now. It used to be U+2398, which renders as a small box in
+   most UI fonts and as nothing at all in some - a control whose meaning could
+   only be learned by pressing it and seeing what happened. */
 .scale-copy {
   background: transparent; border: 1px solid var(--border);
-  color: var(--text-2); font-size: 16px; line-height: 1;
-  padding: 4px 8px; border-radius: 6px; cursor: pointer;
+  color: var(--text-2); font-size: 11px; font-weight: 600; line-height: 1;
+  letter-spacing: 0.02em; padding: 5px 9px; border-radius: 6px; cursor: pointer;
   transition: all 0.12s ease;
 }
 
