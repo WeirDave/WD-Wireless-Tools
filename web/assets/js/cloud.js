@@ -765,14 +765,66 @@ function refreshData(silent) {
       .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
   } else {
     pyApi('get_data', tab)
-      .then(d => onData(tab, JSON.stringify(d)))
+      .then(d => onData(tab, JSON.stringify(d), { background: !!silent }))
       .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
 
     refreshDupIndex();
   }
 }
 
-function onData(kind, jsonStr) {
+/* What the last background poll found and has not been allowed to apply. */
+let _pendingData = null;
+
+/* Everything the list actually draws from, as one comparable string.
+
+   The whole payload is not usable for this: `get_data` returns fresh
+   timestamps and re-derived ids on every call, so comparing it raw reports a
+   change every nine seconds and the bar never goes away. What matters is what
+   he would see differently. */
+function _viewFingerprint(d) {
+  if (!d) return '';
+  const sig = [];
+  const pair = (p) => (p.cloud && p.cloud.id) + '|' + (p.local && p.local.path)
+    + '|' + (p.namesDiffer ? 'n' : '') + '|' + (p.staleness || '')
+    + '|' + (p.matchType || '');
+  const kids = (c) => {
+    if (!c) return;
+    (c.matched || []).forEach(p => sig.push('m' + pair(p)));
+    (c.cloudOnly || []).forEach(x => sig.push('c' + x.id));
+    (c.localOnly || []).forEach(x => sig.push('l' + x.path));
+    (c.heldBack || []).forEach(h => sig.push('h' + (h.cloud && h.cloud.id)
+      + '|' + (h.local && h.local.path)));
+  };
+  (d.matched || []).forEach(p => { sig.push('M' + pair(p));
+    kids((p.cloud && p.cloud.children) || (p.local && p.local.children)); });
+  (d.cloudOnly || []).forEach(x => { sig.push('C' + x.id); kids(x.children); });
+  (d.localOnly || []).forEach(x => { sig.push('L' + x.path); kids(x.children); });
+  kids(d.orphans);
+  (d.heldBack || []).forEach(h => sig.push('H' + (h.cloud && h.cloud.id)
+    + '|' + (h.local && h.local.path)));
+  return sig.join(',');
+}
+
+/* Apply what the last poll found, because he asked for it. */
+function applyPendingData() {
+  if (!_pendingData) return;
+  const payload = _pendingData;
+  _pendingData = null;
+  _showRefreshBar(false);
+  onData(currentTab, payload, { force: true });
+}
+
+function _showRefreshBar(on, what) {
+  const el = document.getElementById('staleDataBar');
+  if (!el) return;
+  el.hidden = !on;
+  if (on) {
+    const msg = el.querySelector('.sdb-text');
+    if (msg) msg.textContent = what || 'Ekahau Cloud has changed since this list was drawn.';
+  }
+}
+
+function onData(kind, jsonStr, opts) {
   if (kind !== currentTab) return;
   try {
     data = JSON.parse(jsonStr);
@@ -781,11 +833,67 @@ function onData(kind, jsonStr) {
     document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">' + e(data.error) + '</div>';
     toast(data.error, 'error'); return;
   }
-  indexRowData();
-  reconcileOwnerFilterWithData();
-  closeSitesOnFirstSight();
-  updateDashboard(); renderRows();
+  /* A poll he did not ask for does not rewrite the page.
+
+     It arrives, it is compared against what is drawn, and if it differs it
+     waits behind a bar he can press. "I was reading through them and then it
+     automatically just had those files go away" is what the other behaviour
+     looks like from his side - and the held-back candidates are exactly the
+     thing the matcher can recompute differently between two polls. */
+  if (opts && opts.background && !(opts && opts.force)) {
+    const now = _viewFingerprint(data);
+    if (now === _drawnFingerprint) { _pendingData = null; _showRefreshBar(false); return; }
+    _pendingData = jsonStr;
+    data = _drawnData;          // keep drawing what he is looking at
+    _showRefreshBar(true);
+    return;
+  }
+
+  _drawnData = data;
+  _drawnFingerprint = _viewFingerprint(data);
+  _pendingData = null;
+  _showRefreshBar(false);
+
+  /* Each step on its own, so one of them cannot cost him the others.
+
+     v2.113.0 put a stale element id inside `updateDashboard`, which sits
+     between the data arriving and the list being drawn - so a counter he
+     barely looks at took the whole tool down, and the page sat on "Loading"
+     with a header above it. Four releases. The list is the product; nothing
+     decorative above it gets to veto drawing it. */
+  _step('indexing the rows', indexRowData);
+  _step('the owner filter', reconcileOwnerFilterWithData);
+  _step('opening the sites that need you', closeSitesOnFirstSight);
+  _step('the counters', updateDashboard);
+  _step('the list', renderRows);
 }
+
+/* Run one step of the load. A step that throws is reported once and skipped;
+   everything after it still runs.
+
+   It is deliberately noisy in the console and quiet on screen: a fault that
+   nothing reports is how a broken counter survived four releases, and a fault
+   that shouts at him mid-job is how he stops reading them. */
+let _stepFailures = new Set();
+function _step(what, fn) {
+  try {
+    fn();
+    _stepFailures.delete(what);
+  } catch (err) {
+    console.error('[wd] Cloud Manager could not finish ' + what + ':', err);
+    if (!_stepFailures.has(what)) {
+      _stepFailures.add(what);
+      try {
+        toast('Part of the page (' + what + ') could not be drawn — the rest '
+              + 'still works. Details are in the browser console.', 'error');
+      } catch (e) { /* a toast is not worth a second failure */ }
+    }
+  }
+}
+
+//: What is on screen, so a poll can tell whether it would change anything.
+let _drawnData = null;
+let _drawnFingerprint = '';
 
 function onDuplicates(kind, jsonStr) {
   if (kind !== currentTab) return;
@@ -1231,6 +1339,10 @@ function charDiff(a, b) {
 
 function renderRows() {
   if (currentTab === 'duplicates') { renderDuplicates(); return; }
+  /* Rebuilding the list scrolls him back to the top of ninety-eight sites,
+     which is its own way of losing his place. */
+  const _scroller = document.scrollingElement || document.documentElement;
+  const _wasAt = _scroller ? _scroller.scrollTop : 0;
   lastChkIndex = null;
   const el = document.getElementById('rowsContainer');
   const q = document.getElementById('searchBox').value.toLowerCase();
@@ -1245,6 +1357,7 @@ function renderRows() {
   el.innerHTML = renderLedger(hit);
   updateBulkBar(); refreshSelAll();
   _renderJumpNav();
+  if (_scroller && _wasAt) _scroller.scrollTop = _wasAt;
 }
 
 let _jumpNavPresentCache = new Set();
@@ -1310,7 +1423,13 @@ function refreshDupIndex() {
       if (!d || d.error) return;
       buildDupIndexFromData(d);
 
-      if (currentTab !== 'duplicates') renderRows();
+      /* Not a reason to redraw the list. This exists to colour duplicate
+         hints; on v2.113.0-v2.117.0 it was accidentally the only thing that
+         ever rendered the ledger, because `updateDashboard` threw before
+         `onData` reached `renderRows()`. Whether the page came up at all then
+         depended on which of two parallel requests answered first, which is
+         exactly the intermittency he described. */
+      if (currentTab !== 'duplicates' && !_pendingData) renderRows();
     })
     .catch(() => {});
 }
@@ -1930,7 +2049,18 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
       {
       const _stripe = (z++ % 2) === 1;
       const _det = rowDetailHtml(r, _stripe);
-      h += `<div class="ledger-row tree-parent ${r.status}${_stripe ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
+      /* The whole row opens the site.
+
+         "it seems the only way I can expand a site is to use the chevron,
+         which really seems crazy." A 20px target, ninety-eight times, for the
+         most frequent action in the layout. The row carries a checkbox for
+         selecting, so the row body is free to mean "open this"; the chevron
+         stays as the affordance that shows which way it is. */
+      h += `<div class="ledger-row tree-parent is-openable ${r.status}${_stripe ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}"`
+         + ` data-toggle="${a(r.toggle.key)}" role="button" tabindex="0"`
+         + ` aria-expanded="${r.toggle.open}"`
+         + ` title="${r.toggle.open ? 'Collapse' : 'Expand'} this site \u2014 click anywhere on the row">`
+         + `${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
     }
 
       if (open) h += renderTreeChildren(children, hit, passOwner, r.cloud && r.cloud.id, r.cloud && r.cloud.name, pass);
@@ -4970,11 +5100,36 @@ function loadDefaultOwnerFilter() {
 function setOwnerFilterUI(v) {
   const want = _validOwnerFilter(v) || 'all';
   setOwnerFilter(want);
-  _ownerFilterOverridden = (want !== _ownerFilterDefault);
   _ownerFilterForcedReason = '';
+
+  /* It sticks now.
+
+     "every time I load a new version on my work computer ... it does not save
+     my choice of the owner being on Mine, which is really frustrating."
+
+     It was in-memory on purpose: a per-browser copy had once got stuck on
+     "Mine" and looked like missing data. What made that dangerous was that
+     nothing said the filter was on - and since v2.51.0 something does.
+     `#ownerFilterNotice` names any filter narrower than All, in words, above
+     the list. A saved filter cannot be silently stuck while a banner is
+     naming it, so the reason for not saving it has gone and the papercut he
+     has been re-fixing after every update goes with it. */
+  _ownerFilterDefault = want;
+  _ownerFilterOverridden = false;
   syncOwnerToggle();
   updateDashboard();
   renderRows();
+
+  /* Through the helper that already writes cloud preferences, not a second
+     route of its own. Losing the preference is survivable and losing the page
+     is not, so a failure only stops it being remembered - the filter is on
+     screen and in force either way, and the notice then says it is just for
+     this visit rather than claiming to be saved. */
+  _persistCloudPref({ default_owner_filter: want }).then(ok => {
+    if (ok) return;
+    _ownerFilterOverridden = true;
+    syncOwnerToggle();
+  });
 }
 
 /* Ekahau Cloud tells us who owns a project only when the listing comes back
@@ -7598,6 +7753,47 @@ function _wireFilterCardKeys() {
   });
 }
 _wireFilterCardKeys();
+
+/* Opening a site, from anywhere on its row.
+
+   Delegated rather than per-row: the list is rebuilt constantly and
+   ninety-eight inline handlers would be ninety-eight things to keep in step.
+
+   What it must not swallow: the checkbox, the row menu, and every button or
+   link inside the row. Those already mean something, and a control that
+   sometimes does its own job and sometimes opens a site is worse than no
+   control. */
+function _wireRowToggle() {
+  const owns = (target) => {
+    if (!target || !target.closest) return null;
+    if (target.closest('input, button, a, label, summary, details, .row-menu')) return null;
+    const row = target.closest('.ledger-row.is-openable');
+    return (row && row.dataset.toggle) ? row : null;
+  };
+
+  document.addEventListener('click', (ev) => {
+    const row = owns(ev.target);
+    if (!row) return;
+    ev.preventDefault();
+    toggleFolder(row.dataset.toggle);
+  });
+
+  /* A single click toggles, so a double click would toggle twice and land
+     back where it started - which reads as the row being broken. */
+  document.addEventListener('dblclick', (ev) => {
+    if (owns(ev.target)) { ev.preventDefault(); ev.stopPropagation(); }
+  });
+
+  //: It is the primary control on the page, so it answers the keyboard.
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+    const row = owns(ev.target);
+    if (!row) return;
+    ev.preventDefault();
+    toggleFolder(row.dataset.toggle);
+  });
+}
+_wireRowToggle();
 
 function _wireDisabledBulkReasons() {
   document.addEventListener('click', (ev) => {

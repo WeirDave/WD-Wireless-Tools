@@ -203,6 +203,14 @@
   <!-- Not present until something is ticked. This is the half of the old
        toolbar that was meaningless with an empty selection, and the half whose
        ~900px pushed everything else off a laptop screen. -->
+  <!-- A poll found something and is waiting to be let in. Never applied
+       on its own: the list must hold still while it is being read. -->
+  <div class="stale-bar" id="staleDataBar" hidden role="status">
+    <span class="sdb-dot"></span>
+    <span class="sdb-text">Ekahau Cloud has changed since this list was drawn.</span>
+    <button class="btn btn-blue btn-sm" onclick="applyPendingData()">Show the changes</button>
+    <button class="btn btn-secondary btn-sm" onclick="_showRefreshBar(false)" title="Keep looking at what is on screen. The next check will offer again.">Not now</button>
+  </div>
   <div class="selection-bar" id="selectionBar" hidden>
     <span class="selcount" id="selCount"></span>
     <button class="btn btn-secondary" onclick="bulkCheckDifferences()" title="Compare the selected files against their cloud copies and report what actually differs. Read-only - nothing is changed on either side.">Check differences</button>

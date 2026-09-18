@@ -9458,3 +9458,40 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   .hbc-reason { white-space: normal; }
   .hbc-actions { margin-left: 0; }
 }
+
+/* "Updated" is an offer, not an event.
+
+   The list used to be rebuilt under him every nine seconds by a poll he never
+   asked for - "I was reading through them and then it automatically just had
+   those files go away". A background check now says what it found and waits. */
+.stale-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 7px 12px; margin: 0 0 6px;
+  border: 1px solid var(--accent); border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  font-size: 12.5px; color: var(--text);
+}
+.stale-bar > * { flex-shrink: 0; }
+.stale-bar .sdb-text { flex: 1 1 260px; min-width: 0; color: var(--text-2); }
+.stale-bar .sdb-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+}
+
+/* The site row is the control.
+
+   "it seems the only way I can expand a site is to use the chevron, which
+   really seems crazy." It is discoverable only if it looks pressable, so the
+   row takes a pointer and lifts slightly under it - the one place in this
+   list where a hover change is earning its keep, because it is the difference
+   between a row and a button. */
+.ledger-row.is-openable { cursor: pointer; }
+.ledger-row.is-openable:hover { background: var(--row-hover); }
+.ledger-row.is-openable:hover .tree-chevron { color: var(--accent); }
+.ledger-row.is-openable:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: -2px;
+}
+/* The things inside it that mean something else keep their own cursor. */
+.ledger-row.is-openable input,
+.ledger-row.is-openable button,
+.ledger-row.is-openable .row-menu { cursor: default; }
+.ledger-row.is-openable button { cursor: pointer; }

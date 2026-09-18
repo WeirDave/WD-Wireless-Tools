@@ -65,6 +65,15 @@ globalThis.activeFilter = 'all';
 globalThis.data = null;
 globalThis.currentTab = 'sites';
 globalThis.updateDashboard = () => {};
+/* The toolbar saves the filter now, through the same helper every other cloud
+   preference uses. It lives outside this slice, so the probe supplies it and
+   records what was asked for. */
+globalThis.saved = [];
+globalThis._persistCloudPref = (patch) => {
+  globalThis.saved.push(patch);
+  return Promise.resolve(globalThis.persistOk !== false);
+};
+globalThis.persistOk = true;
 globalThis.renderRows = () => {};
 let apiReply = () => Promise.resolve({ ok: true, settings: { cloud: {} } });
 globalThis.WD = { api: (...a) => apiReply(...a) };
@@ -115,12 +124,25 @@ class OwnerFilterBehaviour(unittest.TestCase):
         """)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
-    def test_the_toolbar_is_a_visit_long_override_not_a_new_default(self):
-        """The historic bug, from the other side.
+    def test_the_toolbar_choice_is_remembered(self):
+        """This asserted the opposite until v2.119.0, and it was right to.
 
-        Clicking Others must change the screen and nothing else; reloading has
-        to come back to whatever Settings says. If this ever inverts, a stray
-        click becomes permanent again.
+        The toolbar toggle was deliberately in-memory: a per-browser copy had
+        once got stuck on "Mine" and looked like missing data, and the test
+        warned that "if this ever inverts, a stray click becomes permanent
+        again."
+
+        It is inverted now because the other side of that trade was costing him
+        every single update - "it does not save my choice of the owner being on
+        Mine, which is really frustrating" - and because the thing that made a
+        stuck filter dangerous has been fixed separately. It was never the
+        saving; it was that a saved filter could be *silently* in force. Since
+        v2.51.0 a narrowed view announces itself above the list, so a stray
+        click is a sentence at the top of the page rather than three sites
+        going missing.
+
+        That announcement is therefore the other half of this contract, and it
+        is asserted here rather than left to the neighbouring test.
         """
         self.run_block("""
           apiReply = () => Promise.resolve(
@@ -129,12 +151,34 @@ class OwnerFilterBehaviour(unittest.TestCase):
             setOwnerFilterUI('others');
             check('the toolbar did not change the screen',
                   ownerFilter() === 'others');
-            check('the toolbar rewrote the saved default',
-                  defaultOwnerFilter() === 'mine');
-            return loadDefaultOwnerFilter();      // a reload
+            check('the choice was not written: ' + JSON.stringify(saved),
+                  saved.length === 1 && saved[0].default_owner_filter === 'others');
+            check('the toolbar did not become the new default',
+                  defaultOwnerFilter() === 'others');
+            check('a narrowed view that is now saved does not say so',
+                  notice.hidden === false
+                  && /saved default/i.test(String(notice.innerHTML)));
+            done();
+          });
+        """)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_a_filter_that_could_not_be_saved_says_it_is_only_for_this_visit(self):
+        """Losing the preference is survivable; claiming to have saved it is
+        not. The filter is applied either way - only the remembering failed -
+        so the notice has to stop calling it the saved default."""
+        self.run_block("""
+          apiReply = () => Promise.resolve(
+            { ok: true, settings: { cloud: { default_owner_filter: 'all' } } });
+          persistOk = false;
+          loadDefaultOwnerFilter().then(() => {
+            setOwnerFilterUI('mine');
+            return new Promise(r => setTimeout(r, 0));
           }).then(() => {
-            check('the override survived a reload: ' + ownerFilter(),
+            check('the filter was not applied: ' + ownerFilter(),
                   ownerFilter() === 'mine');
+            check('a filter that was not saved still claims to be the default',
+                  !/saved default/i.test(String(notice.innerHTML)));
             done();
           });
         """)
@@ -201,9 +245,15 @@ class OwnerFilterBehaviour(unittest.TestCase):
             check('it did not offer a way back to everything',
                   /setOwnerFilterUI/.test(notice.innerHTML));
 
+            /* A toolbar choice is saved now, so it says so. The "this
+               visit" wording has not gone - it belongs to the case that is
+               still temporary, a save that did not go through, and that is
+               asserted in test_a_filter_that_could_not_be_saved... above. */
             setOwnerFilterUI('others');
-            check('a hand-made override was described as permanent',
-                  /this visit/i.test(notice.innerHTML));
+            check('a saved override was not described as saved',
+                  /saved default/i.test(notice.innerHTML));
+            check('the notice no longer names the filter in force',
+                  /Owner filter: Others/.test(notice.innerHTML));
 
             setOwnerFilterUI('all');
             check('the notice stayed up when nothing was being hidden',
