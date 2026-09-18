@@ -138,8 +138,7 @@
     drop(LS_POS);
     var tb = document.getElementById('devToolbar');
     if (tb) tb.classList.add('is-hidden');
-    var nav = document.getElementById('navDevSection');
-    if (nav) nav.classList.remove('active');
+    setNavActive(false);
     document.documentElement.removeAttribute('data-wd-dev');
     if (WD.toast) WD.toast('Dev mode disabled');
   };
@@ -290,41 +289,84 @@
   }
 
   /* WaxFrame's Advanced nav section: one item to open the modal, and one
-     hidden until dev mode is on that leaves it. */
+     hidden until dev mode is on that leaves it.
+
+     **Every nav menu on the page, not one id.** The first version looked for
+     `#mainMenu`, which is what Cloud Manager calls its hamburger menu - and
+     only three of the nineteen pages use that id. Home calls it `homeMenu`,
+     Scale `scaleMenu`, each guide its own, and the drop-zone tools have two
+     menus apiece (`dzMenu` before a file is loaded, `helpMenu` after). So on
+     sixteen pages the entry silently never appeared, and that is exactly what
+     he reported: "I see no link in nav hamburger menu."
+
+     The *classes* are the stable thing. `WD.toggleMenu` in wd-shared.js
+     already treats `.main-menu`, `.help-menu` and `.wd-menu` as the set of
+     menus on a page, so this uses the same set rather than inventing a fourth
+     opinion about what a menu is. */
+  var MENU_SELECTOR = '.main-menu, .help-menu, .wd-menu';
+
+  function navMenus() {
+    return Array.prototype.slice.call(document.querySelectorAll(MENU_SELECTOR));
+  }
+
+  function closeAllMenus() {
+    /* Generic, because the closer is page-specific: Cloud Manager has
+       `closeMainMenu`, Quick Walls has `toggleDzMenu` and `toggleHelpMenu`,
+       and most pages have neither. `open` is the class all of them use. */
+    navMenus().forEach(function (m) { m.classList.remove('open'); });
+  }
+
   function injectNavItems() {
-    var menu = document.getElementById('mainMenu');
-    if (!menu || menu.querySelector('.nav-item-dev')) return;
-    var sep = document.createElement('div');
-    sep.className = 'menu-sep';
-    var head = document.createElement('div');
-    head.className = 'menu-section';
-    head.innerHTML = '▸ Advanced';
-    var open = document.createElement('button');
-    open.type = 'button';
-    open.className = 'menu-item nav-item-dev';
-    open.title = 'Open Developer Tools — for testing and maintenance';
-    open.textContent = '· 🛠 Dev Tools';
-    open.addEventListener('click', function () {
-      if (typeof closeMainMenu === 'function') closeMainMenu();
-      Dev.showDevModal();
+    navMenus().forEach(function (menu) {
+      if (menu.querySelector('.nav-item-dev')) return;
+      /* The drop-zone tools style their rows `help-menu-item`; everything else
+         uses `menu-item`. Matching the menu we are in keeps the entry looking
+         like the rows above it rather than like a stray button. */
+      var itemClass = menu.classList.contains('help-menu')
+        ? 'help-menu-item' : 'menu-item';
+
+      var sep = document.createElement('div');
+      sep.className = 'menu-sep';
+      var head = document.createElement('div');
+      head.className = 'menu-section';
+      head.innerHTML = '▸ Advanced';
+
+      var open = document.createElement('button');
+      open.type = 'button';
+      open.className = itemClass + ' nav-item-dev';
+      open.title = 'Open Developer Tools — for testing and maintenance';
+      open.textContent = '· 🛠 Dev Tools';
+      open.addEventListener('click', function () {
+        closeAllMenus();
+        Dev.showDevModal();
+      });
+
+      /* A class, not an id: a page can carry two menus, and two elements
+         sharing an id is how the second one stops being findable. */
+      var wrap = document.createElement('div');
+      wrap.className = 'nav-dev-section';
+      var exit = document.createElement('button');
+      exit.type = 'button';
+      exit.className = itemClass + ' nav-item-exit-dev';
+      exit.title = 'Exit Dev Mode and return to normal use';
+      exit.textContent = '· 🚪 Exit Dev Mode';
+      exit.addEventListener('click', function () {
+        closeAllMenus();
+        Dev.exitDevMode();
+      });
+      wrap.appendChild(exit);
+
+      menu.appendChild(sep);
+      menu.appendChild(head);
+      menu.appendChild(open);
+      menu.appendChild(wrap);
     });
-    var wrap = document.createElement('div');
-    wrap.className = 'nav-dev-section';
-    wrap.id = 'navDevSection';
-    var exit = document.createElement('button');
-    exit.type = 'button';
-    exit.className = 'menu-item nav-item-exit-dev';
-    exit.title = 'Exit Dev Mode and return to normal use';
-    exit.textContent = '· 🚪 Exit Dev Mode';
-    exit.addEventListener('click', function () {
-      if (typeof closeMainMenu === 'function') closeMainMenu();
-      Dev.exitDevMode();
+  }
+
+  function setNavActive(on) {
+    document.querySelectorAll('.nav-dev-section').forEach(function (el) {
+      el.classList.toggle('active', !!on);
     });
-    wrap.appendChild(exit);
-    menu.appendChild(sep);
-    menu.appendChild(head);
-    menu.appendChild(open);
-    menu.appendChild(wrap);
   }
 
   /* ── drag, WaxFrame's attachDevToolbarDrag ───────────────────── */
@@ -424,15 +466,14 @@
     injectNavItems();
 
     var tb = document.getElementById('devToolbar');
-    var nav = document.getElementById('navDevSection');
     if (!Dev.isOn()) {
       if (tb) tb.classList.add('is-hidden');
-      if (nav) nav.classList.remove('active');
+      setNavActive(false);
       document.documentElement.removeAttribute('data-wd-dev');
       return;
     }
     document.documentElement.setAttribute('data-wd-dev', 'on');
-    if (nav) nav.classList.add('active');
+    setNavActive(true);
     if (tb) {
       tb.classList.remove('is-hidden');
       restorePosition(tb);

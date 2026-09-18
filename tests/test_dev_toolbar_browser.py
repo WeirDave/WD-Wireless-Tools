@@ -271,12 +271,16 @@ class ToolbarInABrowser(unittest.TestCase):
         self.assertIn("Dev Tools", item.get_attribute("textContent"))
 
     def test_the_exit_item_is_hidden_until_dev_mode_is_on(self):
-        """WaxFrame's `#navDevSection`, `.active` to reveal."""
+        """WaxFrame's `#navDevSection`, `.active` to reveal - but a class here
+        rather than an id, because a page can carry two menus and two elements
+        sharing an id is how the second one stops being findable."""
         self.locked()
-        self.assertFalse(self.visible("#navDevSection"))
+        self.assertFalse(self.visible(".nav-dev-section"))
         self.unlocked()
-        self.assertTrue(self.find("#navDevSection")
-                        .get_attribute("class").find("active") >= 0)
+        sections = self.driver.find_elements(By.CSS_SELECTOR, ".nav-dev-section")
+        self.assertTrue(sections)
+        for section in sections:
+            self.assertIn("active", section.get_attribute("class"))
 
     def test_the_nav_item_opens_the_password_modal(self):
         self.locked()

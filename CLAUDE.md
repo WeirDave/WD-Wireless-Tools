@@ -1131,6 +1131,48 @@ improving on an established pattern of his is the failure.
   Troubleshooting Card; this shows `#devResultModal`. Either way the strip
   stays a strip.
 
+### Injecting into nineteen pages means finding nineteen menus
+
+**The entry went into `#mainMenu`, and only three pages call it that.** Cloud
+Manager, Squirrel and Rename use that id; Home is `homeMenu`, Scale is
+`scaleMenu`, each guide has its own, and the drop-zone tools carry **two**
+menus apiece - `dzMenu` before a file is loaded and `helpMenu` after. So on
+sixteen of nineteen pages the Dev Tools entry silently never appeared, and he
+reported it the only way it looks from outside: *"I see no link in nav
+hamburger menu."*
+
+The fix is to target the **classes**, which is what `WD.toggleMenu` already
+does: `.main-menu, .help-menu, .wd-menu`. Every menu on the page gets an
+entry, the row class matches the menu it lands in (`help-menu-item` in a
+`help-menu`, `menu-item` elsewhere), and the exit wrapper is a **class** not
+an id, because a page with two menus would otherwise have two elements sharing
+`#navDevSection` and only the first would ever be found.
+
+**The testing lesson is the bigger one.** `test_dev_toolbar_browser.py` drives
+`cloud.html` and nothing else, and `cloud.html` is one of the three pages that
+happened to work. One page tested, nineteen shipped.
+`tests/test_dev_nav_on_every_page.py` now walks every page that loads
+`wd-dev.js`, reading that list off disk rather than from a hand-written array,
+and checks the entry is present, in every menu, visible with dev mode off, and
+that clicking it opens the modal. Reverting the injection to the single id
+fails it on sixteen pages by name.
+
+Two things that page needs to know, both found by driving it:
+
+* **Some pages hide their whole app screen until the tool is in use.** Cloud
+  Manager's `#appScreen` is `display: none` until it has a session, so on the
+  login screen the topbar and its hamburger are not on the page at all. A
+  visibility check has to reveal that first, or it is asserting about a menu he
+  cannot see yet either.
+* **The entry must be visible while dev mode is OFF**, because it is the way
+  *in*. Only the exit item is hidden until dev mode is on. Getting those two
+  backwards leaves `?dev=1` as the only route, which looks exactly like the bug
+  above.
+
+**`setup.html` has no hamburger at all** and that is fine - it is the first-run
+screen. `?dev=1` works there, and the test records the absence as intended
+rather than leaving it to look like a gap.
+
 ### The one thing that could not carry over
 
 **WaxFrame is one page; this suite is nineteen.** WaxFrame writes the toolbar,
