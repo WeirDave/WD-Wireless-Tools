@@ -433,26 +433,44 @@ A matched pair whose two copies differ in age carries a badge:
 - **⇩ Cloud newer · download** — the cloud copy was edited more recently. Click
   the badge to bring it down over your local file. Your current copy is kept
   beside it as a `.previous-<timestamp>.esx`.
-- **⇧ Local newer** — your copy is the newer one. **Sending it up is not built
-  yet.** The upload this tool has creates a *new* cloud project rather than
-  replacing the one already there, so the direction is a job still on the list
-  rather than something Ekahau forbids. Nothing is at risk in the meantime:
-  sync never replaces the newer side with the older one. Open the project in
-  Ekahau and save it to the cloud from there — that is where Ekahau's own
-  sync-or-overwrite prompt lives.
+- **⇧ Local newer · replace cloud** — your copy is the newer one. Click it to
+  send it up. Your file is uploaded as a new cloud project and checked first;
+  the old cloud project is deleted only once that has succeeded, so a failed
+  upload deletes nothing and a failed delete leaves two copies and tells you
+  which one is good. **A cloud delete cannot be undone**, which is why the
+  order is that way round.
 
-The download is only offered for a pair that is **proven** or that you linked
-yourself. A pair matched on name similarity alone says so and offers the 🔗
-button to confirm the link, which makes the download available. Overwriting a
-file on a guess is how the wrong project gets lost.
+Both directions work in bulk as well as on the row. Tick the files and use
+**Cloud → Local** or **Local → Cloud** in the selection bar, or press
+**⇅ Sync everything** and each file goes whichever way its dates say. The plan
+is shown before anything runs, and any file being sent up is listed beside the
+name of the cloud project it will replace.
+
+Neither direction is offered for a pair the tool only *guessed* at — a shared
+site code, or similar wording. Replacing either copy on a guess is how the
+wrong project gets lost. The row says so and offers **Confirm this pair**,
+which records that the two really are the same project and makes both
+directions available; you can undo that from the badge in the middle column.
+A pair carrying Ekahau's own id, or one you confirmed yourself, needs no
+confirmation and moves without a dialog.
 
 ### Sync everything
 
 **⇅ Sync everything** needs no selection, which is the point. It works out for
 each file which side is newer and does that, or nothing when the two already
 match, and shows the whole plan before it runs. It never replaces a newer file
-with an older one. When it finishes it says where local and cloud stand,
-including anything still waiting to go up.
+with an older one.
+
+The plan is three lists you tick separately — files coming down, files going
+up, and cloud projects you have no local copy of — because they are not the
+same risk. Downloading a project you do not have cannot lose anything; sending
+a file up deletes the cloud project it replaces. Anything going up is listed
+against the cloud project it will replace, and a pair matched on its name
+rather than on Ekahau's id arrives **unticked**, so you read the name before it
+moves rather than after.
+
+When it finishes it says where local and cloud stand, including anything left
+unticked and anything still needing its pair confirmed.
 
 ### Move projects into a site
 

@@ -40,10 +40,18 @@ NODE_TIMEOUT_S = 120
 NODE_PRELUDE = r"""
 const fs = require('fs');
 const source = fs.readFileSync(process.argv[1], 'utf8');
+// See the note in test_cloud_sync_plan.py: the planner asks the row's
+// question now, and the sets that answer it sit above the slice.
+const ca = source.indexOf('const PULLABLE_MATCH_TYPES');
+const cb = source.indexOf('function canPushToCloud(');
+if (ca < 0 || cb < 0) throw new Error('the match-type sets moved');
+
 const a = source.indexOf('function syncEverythingPlan() {');
 const b = source.indexOf('function _syncRowsHtml(');
 if (a < 0 || b < 0) throw new Error('the planner moved');
-eval(source.slice(a, b));
+// One evaluation, not two: `const` is block-scoped to its own eval, so
+// splitting these leaves the planner unable to see the sets.
+eval(source.slice(ca, cb) + source.slice(a, b));
 
 const failures = [];
 function check(what, cond) { if (!cond) failures.push(what); }
@@ -52,16 +60,89 @@ function done() {
   process.exit(0);
 }
 // A matched file pair. A site's local side would be a folder, not an .esx.
-function pair(name, staleness) {
+// See the note on the same helper in test_cloud_sync_plan.py.
+function pair(name, staleness, matchType) {
   return {
     cloud: { id: 'c-' + name, name: name, mtime: 200 },
     local: { name: name, path: '/local/' + name + '.esx', mtime: 100 },
+    matchType: matchType || 'id',
     staleness: staleness || null,
   };
 }
 function cloudOnly(id) { return { id: id, name: id, mtime: 200 }; }
 function names(list, key) { return list.map(x => x[key]).sort().join(','); }
 """
+
+
+def _run_js(prelude_extra: str, body: str) -> str:
+    """Slice a function out of cloud.js, run it, and return what it produced.
+
+    The same pattern the rest of this file uses for the planner, pointed at the
+    two pieces that speak to him: the dialog row and the closing toast.
+    """
+    program = ("""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function cut(from, to) {
+  const a = source.indexOf(from), b = source.indexOf(to, a);
+  if (a < 0 || b < 0) throw new Error('could not find ' + from);
+  return source.slice(a, b);
+}
+function e(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function fmtRelDate(t) { return String(t == null ? '' : t); }
+const said = [];
+function toast(msg) { said.push(msg); }
+""" + prelude_extra + "\n" + body)
+    r = subprocess.run(["node", "-e", program, str(CLOUD_JS)],
+                       capture_output=True, text=True, encoding="utf-8",
+                       timeout=NODE_TIMEOUT_S)
+    if r.returncode != 0:
+        raise AssertionError((r.stdout + r.stderr).strip())
+    return r.stdout
+
+
+def _run_push(match_type: str, answer: bool):
+    """Call the row's handler with a recording `_enqueuePushLocalOverCloud`.
+
+    This is the control that was asserted-about rather than run for four
+    releases while he could not use it, so it is run.
+    """
+    out = _run_js(
+        # `_enqueuePushLocalOverCloud` sits above the handler and is the thing
+        # being stubbed, so the slice starts after it.
+        "eval(cut('const PULLABLE_MATCH_TYPES', 'function canPushToCloud(')"
+        " + cut('async function pushLocalOverCloud(', 'function rowDetailHtml('));",
+        "const asked = [], enqueued = [];\n"
+        "function _enqueuePushLocalOverCloud(a, b, c, d) { enqueued.push([a,b,c,d]); "
+        "return { promise: Promise.resolve() }; }\n"
+        "async function showConfirmModal(title, body) { asked.push(body); return "
+        + ("true" if answer else "false") + "; }\n"
+        "pushLocalOverCloud('c-1', '/l/a.esx', 'a', 'Cloud A', "
+        + json.dumps(match_type) + ")\n"
+        "  .then(() => console.log(JSON.stringify({ asked, enqueued })));")
+    return json.loads(out.strip().splitlines()[-1])
+
+
+def _render_push_rows(rows):
+    """Render the dialog's push table with the real function."""
+    out = _run_js(
+        "eval(cut('const PULLABLE_MATCH_TYPES', 'function canPushToCloud(')"
+        " + cut('function _syncPushRowsHtml(', 'function _syncPickBoxes('));",
+        "const html = _syncPushRowsHtml(" + json.dumps(rows) + ");\n"
+        "const cells = html.split('</tr>').filter(x => x.indexOf('<tr>') > -1);\n"
+        "console.log(JSON.stringify(cells.map(h => "
+        "({ checked: / checked/.test(h.split('</td>')[0]), html: h }))));")
+    return json.loads(out.strip().splitlines()[-1])
+
+
+def _run_outcome(results, plan, ran):
+    """Run the closing report and return the sentence it says."""
+    out = _run_js(
+        "eval(cut('function _reportSyncOutcome(', 'if (typeof window'));",
+        "_reportSyncOutcome(" + json.dumps(results) + ", " + json.dumps(plan)
+        + ", " + json.dumps(ran) + ");\nconsole.log(JSON.stringify(said));")
+    return " | ".join(json.loads(out.strip().splitlines()[-1]))
 
 
 def _js(text: str) -> str:
@@ -233,36 +314,117 @@ class ItIsHonestAboutTheHalfItDoesNotDoInBulk(unittest.TestCase):
         start = self.source.index("async function syncEverything()")
         self.body = self.source[start:self.source.index("clearSelection();", start)]
 
-    def test_files_waiting_to_go_up_are_listed_by_name(self):
-        self.assertIn("plan.up.length", self.body)
-        self.assertIn("local &rarr; cloud", self.body)
+    def test_what_is_left_over_is_still_reported(self):
+        """The requirement underneath the old wording, which has not changed:
+        a run must never let him believe he is in sync when he is not.
+
+        What can be left over has changed. Files going up are in the run, so
+        what remains is what he unticked and what cannot move until its pair is
+        confirmed - and the closing line names both rather than counting them
+        as done."""
+        # Run it. What this has to get right is the sentence he reads at the
+        # end of a run, and only running it produces the sentence.
+        confirmed = _run_outcome(
+            {"done": 3, "failed": 0, "skipped": 0, "backups": []},
+            {"up": [], "upBlocked": [{}, {}], "downBlocked": [], "inSync": []},
+            {"pushed": 0})
+        self.assertIn("2 still need the pair confirmed", confirmed)
+
+        unticked = _run_outcome(
+            {"done": 1, "failed": 0, "skipped": 0, "backups": []},
+            {"up": [{}, {}, {}], "upBlocked": [], "downBlocked": [], "inSync": []},
+            {"pushed": 1})
+        self.assertIn("2 left unticked and not sent up", unticked)
+
+        finished = _run_outcome(
+            {"done": 4, "failed": 0, "skipped": 0, "backups": []},
+            {"up": [{}, {}], "upBlocked": [], "downBlocked": [], "inSync": []},
+            {"pushed": 2})
+        self.assertIn("local and cloud now match", finished)
+        self.assertNotIn("still", finished)
 
     def test_it_no_longer_claims_the_direction_does_not_exist(self):
-        """It said "not built yet", which was true and stopped being true.
+        """Two sentences that were each true when written and then were not.
 
-        `replace_cloud_project` shipped in v2.104.6 and the row now calls it.
-        What the bulk confirm has to say changed with it: not that the
-        direction is missing, but that it is done one row at a time, and why.
+        "not built yet" outlived `replace_cloud_project` shipping in v2.104.6.
+        "one row at a time" replaced it and outlived the planner being taught
+        the same rule in v2.117.0 - and in between it sent him off to press a
+        button on each of six files for no reason at all.
+
+        Neither may come back. A limitation described in prose has to be a
+        limitation of the operation, not of whichever code path has not caught
+        up yet.
         """
         self.assertNotIn("not built", self.body)
         self.assertNotIn("this cannot do it yet", self.body)
-        self.assertIn("one row at a time", self.body)
+        self.assertNotIn("one row at a time", self.body)
 
-    def test_the_row_badge_and_the_confirm_still_agree(self):
+    def test_the_files_going_up_are_offered_rather_than_described(self):
+        """The whole point: they are in the run now, pickable like everything
+        else, and the cloud project each one replaces is on screen."""
+        self.assertIn("plan.up.length", self.body)
+        self.assertIn("_syncPushRowsHtml(plan.up)", self.body)
+        self.assertIn("Replaces this cloud project", self.body)
+
+    def test_a_pair_matched_on_its_name_alone_arrives_unticked(self):
+        """Every other section of this dialog arrives ticked. This is the one
+        operation in it that deletes something which does not come back, and a
+        name-only pair is the one case where "is this the same project" is a
+        real question. Ticking it for him would be answering it for him.
+
+        Rendered rather than read: the source can show that *a* condition is
+        applied, and only running it shows which row got which answer - which
+        is the half that matters when the wrong one deletes a project.
+        """
+        rows = _render_push_rows([
+            {"matchType": "id", "localName": "Proven", "cloudName": "Proven cloud"},
+            {"matchType": "exact", "localName": "Guessy", "cloudName": "Guessy cloud"},
+            {"matchType": "manual", "localName": "Mine", "cloudName": "Mine cloud"},
+        ])
+        self.assertEqual([True, False, True],
+                         [r["checked"] for r in rows],
+                         "the wrong rows are ticked: " + repr(rows))
+        # and the one that is not ticked says why, on the row
+        self.assertIn("matched by name only", rows[1]["html"])
+        self.assertNotIn("matched by name only", rows[0]["html"])
+        # every row names the cloud project it would delete
+        for r in rows:
+            with self.subTest(row=r["html"][:40]):
+                self.assertIn("cloud", r["html"])
+
+    def test_the_row_badge_and_the_bulk_run_do_the_same_thing(self):
         """The badge and the Sync confirm disagreed for four releases once
-        already, and the badge is the one he reads first because it is on the
-        row that prompted the question. They have to move together.
+        already, and then disagreed again in a worse way: the row performed the
+        operation while the planner called the same file blocked.
 
-        Now that the row can actually do it, agreement means the confirm points
-        at the control rather than contradicting it.
+        Agreement used to mean the confirm *named* the row's control. It means
+        something stronger now - both call the one function that does it, so
+        there is no second implementation to drift. That is what stopped this
+        being fixable by editing a sentence.
         """
         badge = self.source[self.source.index("function stalenessBadgeHtml"):]
         badge = badge[:badge.index("function gutCell")]
         local_newer = badge[badge.index("if (s === 'local_newer')"):]
         self.assertNotIn("not built", local_newer)
         self.assertIn("pushLocalOverCloud(", local_newer)
-        # and the bulk confirm names the same control rather than denying it
-        self.assertIn("replace cloud", self.body.lower())
+
+        # Run the row's handler against a recording stub rather than reading
+        # it. A proven pair goes straight through; a guessed one asks first.
+        proven = _run_push("id", answer=True)
+        self.assertEqual([["c-1", "/l/a.esx", "a", "Cloud A"]], proven["enqueued"])
+        self.assertEqual([], proven["asked"])
+
+        asked = _run_push("exact", answer=True)
+        self.assertEqual(1, len(asked["asked"]), "a name-only pair was not asked about")
+        self.assertIn("Cloud A", asked["asked"][0],
+                      "the question does not name the project it will delete")
+        self.assertEqual([["c-1", "/l/a.esx", "a", "Cloud A"]], asked["enqueued"])
+
+        refused = _run_push("exact", answer=False)
+        self.assertEqual([], refused["enqueued"], "saying no still ran it")
+
+        # and exactly one place issues the call the operation is made of
+        self.assertEqual(1, self.source.count("pyApi('replace_cloud_project'"))
 
     def test_the_badge_still_says_nothing_is_at_risk_and_what_to_do(self):
         """Being told a direction is missing is only half of it. Sync never
@@ -287,14 +449,6 @@ class ItIsHonestAboutTheHalfItDoesNotDoInBulk(unittest.TestCase):
         self.assertIn("plan.up.length", head)
         self.assertIn("to go up", head)
         self.assertNotIn("not built", head)
-
-    def test_the_run_ends_by_saying_where_the_two_sides_stand(self):
-        """"Make sure the two versions are in sync" is a step he does by hand
-        at the end of every site; a run should answer it."""
-        source = self.source[self.source.index("function _reportSyncOutcome"):]
-        source = source[:source.index("if (typeof window")]
-        self.assertIn("local and cloud now match", source)
-        self.assertIn("still to go up", source)
 
     def test_where_the_backups_went_is_reported(self):
         """The local copy is his backup of the cloud, so a replaced one has to

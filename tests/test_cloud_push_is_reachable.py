@@ -227,16 +227,25 @@ class TheAppOnlyPointsAtControlsThatExistTests(unittest.TestCase):
     from it.
     """
 
-    #: A control named in prose is bolded and carries its arrow glyph. Keying
-    #: off "use <b>" does not work: the sentence is assembled from several
-    #: string literals, so "use " and the tag land in different ones.
+    #: A control named in prose is bolded. Two shapes count as naming one:
+    #: it carries an arrow glyph, or the sentence says "Use" immediately
+    #: before it. The arrow rule came first, when every control the prose
+    #: pointed at was a glyph-and-words badge; v2.117.0 replaced the last of
+    #: those instructions with "Use <b>Confirm this pair</b>", and keying only
+    #: on arrows left the guard matching nothing at all - which it reported,
+    #: because a guard with no subjects is not a passing guard.
     NAMED = re.compile(r"<b>((?:&#\d+;|[^<])*?)</b>")
+    USE_NAMED = re.compile(r"[Uu]se <b>((?:&#\d+;|[^<])*?)</b>")
     ARROWS = ("&#11014;", "&#11015;")
 
     def test_every_control_the_text_names_is_a_real_label(self):
         js = CLOUD_JS.read_text(encoding="utf-8")
         named = {m.strip() for m in self.NAMED.findall(js)
                  if any(arrow in m for arrow in self.ARROWS)}
+        named |= {m.strip() for m in self.USE_NAMED.findall(js)}
+        # A bolded template expression is not a control name; what it renders
+        # to is pinned where that label is defined.
+        named = {n for n in named if "${" not in n}
         self.assertTrue(named, "no instructional references found at all - "
                                "has the phrasing changed?")
         missing = [n for n in named if (">" + n + "<") not in js]

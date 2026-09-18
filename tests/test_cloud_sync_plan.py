@@ -36,7 +36,14 @@ function slice(from, to) {
   if (a < 0 || b < 0) throw new Error('could not find ' + from);
   return source.slice(a, b);
 }
-eval(slice('function syncPlan(items, dir) {', 'function selectedSyncItems'));
+// Both planners now ask the same question the row asks - may this pair
+// move in this direction - and the answer is these two sets. They sit
+// above the planner, so a slice that starts at the planner throws
+// ReferenceError instead of answering. Stubbing them would test the stub.
+// One evaluation, not two: `const` is block-scoped to its own eval, so
+// splitting these leaves the planner unable to see the sets.
+eval(slice('const PULLABLE_MATCH_TYPES', 'function canPushToCloud(')
+   + slice('function syncPlan(items, dir) {', 'function selectedSyncItems'));
 
 // Only orphan rows consult this; pairs never reach it.
 globalThis.isProjectSyncItem = () => true;
@@ -47,11 +54,17 @@ function done() {
   if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
   process.exit(0);
 }
-function pair(name, staleness) {
+// `matchType` defaults to Ekahau's own id, which is what these fixtures have
+// always meant by "a matched pair". The planner asks for it now - a pair it
+// cannot vouch for is refused in both directions, same as on the row - so
+// leaving it undefined would quietly turn every fixture into a guessed pair.
+function pair(name, staleness, matchType) {
   return { kind: 'pair', cloudId: 'c-' + name, cloudName: name,
            localName: name, localPath: '/l/' + name + '.esx',
+           matchType: matchType || 'id',
            staleness: staleness || null, cloudMtime: 200, localMtime: 100 };
 }
+const _code = 'code';   // a pairing WD guessed at, never proven
 function names(list) { return list.map(d => d.cloudName).sort().join(','); }
 """
 
@@ -106,15 +119,59 @@ class SyncMovesContent(unittest.TestCase):
         """)
 
     def test_a_locally_newer_pair_is_never_silently_overwritten(self):
-        """The direction that does not exist. It must not fall into the pull
-        bucket, and must not be quietly dropped either."""
+        """It must not fall into the pull bucket, and must not be quietly
+        dropped either.
+
+        "Blocked" used to be the only answer available, because neither
+        direction could send a newer local file up. It is not refused - it is
+        simply not this direction's business - so it is reported as `wrongWay`
+        and the confirm points at the run that does move it.
+        """
         self.run_block("""
           var plan = syncPlan([pair('a','local_newer')], 'to-local');
           check('not pulled down over the newer local file',
                 plan.contentPulls.length === 0);
           check('not silently renamed instead', plan.pairs.length === 0);
-          check('reported as blocked so the confirm can name it',
-                plan.blockedPushes.length === 1);
+          check('reported so the confirm can name it',
+                plan.wrongWay.length === 1);
+          check('not called refused, because it is not',
+                plan.blockedPushes.length === 0);
+          done();
+        """)
+
+    def test_and_the_other_direction_actually_sends_it_up(self):
+        """The half of his report that was still broken: "I hit the checkbox
+        and I can't sync it either."
+
+        The row has drawn a working Local newer button since v2.104.6 and the
+        planner refused the same file, so ticking it and pressing Sync did
+        nothing at all.
+        """
+        self.run_block("""
+          var plan = syncPlan([pair('a','local_newer')], 'to-cloud');
+          check('planned as a push: ' + plan.contentPushes.length,
+                plan.contentPushes.length === 1);
+          check('and counted as work: ' + plan.total, plan.total === 1);
+          check('not renamed instead', plan.pairs.length === 0);
+          done();
+        """)
+
+    def test_a_guessed_pairing_is_refused_in_both_directions(self):
+        """The row will not overwrite either copy on a pairing WD only guessed
+        at - a shared site code, or similar wording. The planner had no such
+        test in either direction: it refused every push including the proven
+        ones, and permitted every pull including the guessed ones.
+
+        The pull half is the more dangerous of the two. It overwrote a local
+        file the row would not have touched.
+        """
+        self.run_block("""
+          var up = syncPlan([pair('a','local_newer',_code)], 'to-cloud');
+          check('no push planned', up.contentPushes.length === 0);
+          check('and it is named as refused', up.blockedPushes.length === 1);
+          var down = syncPlan([pair('b','cloud_newer',_code)], 'to-local');
+          check('no pull planned', down.contentPulls.length === 0);
+          check('and it is named as refused', down.blockedPulls.length === 1);
           done();
         """)
 
@@ -126,12 +183,16 @@ class SyncMovesContent(unittest.TestCase):
           var plan = syncPlan(items, 'to-local');
           check('two come down: ' + names(plan.contentPulls),
                 names(plan.contentPulls) === 'down1,down2');
-          check('one is blocked: ' + names(plan.blockedPushes),
-                names(plan.blockedPushes) === 'up1');
+          check('one belongs to the other direction: ' + names(plan.wrongWay),
+                names(plan.wrongWay) === 'up1');
           check('one is a plain rename: ' + names(plan.pairs),
                 names(plan.pairs) === 'same');
-          check('the blocked one is not counted as work: ' + plan.total,
+          check('the other direction is not counted as this run: ' + plan.total,
                 plan.total === 3);
+
+          var back = syncPlan(items, 'to-cloud');
+          check('and running it sends that one up: ' + names(back.contentPushes),
+                names(back.contentPushes) === 'up1');
           done();
         """)
 

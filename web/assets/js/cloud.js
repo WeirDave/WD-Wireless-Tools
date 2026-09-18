@@ -2431,27 +2431,16 @@ function bulkFixInternalNames() {
    has been bitten by twice, so it is said in words - including which of the
    two is the good one - rather than reported as a bare failure.
 */
-async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matchType) {
-  /* No dialog on a proven pair - the ordering is what makes it safe, and he
-     performs this constantly. On a name-only pair the question is not whether
-     the operation is safe but whether these two are the same project, and that
-     is a question only he can answer, so it is asked once and names the
-     project that will be deleted. */
-  if (matchType && !PROVEN_MATCH_TYPES.has(matchType)) {
-    const ok = await showConfirmModal(
-      'Replace the cloud copy?',
-      '<p>Upload <b>' + e(localName || '') + '</b> and replace the cloud project '
-      + '<b>' + e(cloudName || '') + '</b>.</p>'
-      + '<p class="sub">These two are paired on their names rather than on '
-      + 'Ekahau\'s own id, so the tool cannot prove they are the same project. '
-      + 'Check the name above is the one you mean.</p>'
-      + '<p class="sub">The new copy is uploaded and checked first; the old '
-      + 'cloud project is deleted only after that succeeds. A cloud delete '
-      + 'cannot be undone.</p>',
-      'Replace it');
-    if (!ok) return;
-  }
-  opEnqueue({
+/* The operation itself, with no question attached.
+
+   It is split out because the bulk run has already asked - once, in the plan
+   dialog, naming every cloud project it will delete - and asking again per
+   file would be the Prep pass all over again. Writing a second copy of the
+   upload-verify-delete sequence for the bulk path is how this repo grows two
+   implementations of one operation, and the row and the planner disagreeing is
+   exactly what this commit is fixing. */
+function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName) {
+  return opEnqueue({
     title: `Replacing cloud "${cloudName || localName}" with your local copy`,
     sub: 'Uploading, verifying, then removing the old cloud copy.',
     type: 'push', pollBackend: true, undoable: false,
@@ -2475,6 +2464,29 @@ async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matc
       return r;
     },
   });
+}
+
+async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matchType) {
+  /* No dialog on a proven pair - the ordering is what makes it safe, and he
+     performs this constantly. On a name-only pair the question is not whether
+     the operation is safe but whether these two are the same project, and that
+     is a question only he can answer, so it is asked once and names the
+     project that will be deleted. */
+  if (matchType && !PROVEN_MATCH_TYPES.has(matchType)) {
+    const ok = await showConfirmModal(
+      'Replace the cloud copy?',
+      '<p>Upload <b>' + e(localName || '') + '</b> and replace the cloud project '
+      + '<b>' + e(cloudName || '') + '</b>.</p>'
+      + '<p class="sub">These two are paired on their names rather than on '
+      + 'Ekahau\'s own id, so the tool cannot prove they are the same project. '
+      + 'Check the name above is the one you mean.</p>'
+      + '<p class="sub">The new copy is uploaded and checked first; the old '
+      + 'cloud project is deleted only after that succeeds. A cloud delete '
+      + 'cannot be undone.</p>',
+      'Replace it');
+    if (!ok) return;
+  }
+  _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName);
 }
 
 /* The badge used to be the whole story: it said the cloud copy was newer and
@@ -5158,19 +5170,63 @@ function syncPlan(items, dir) {
   const isFilePair = (d) => d.kind === 'pair'
     && /\.esx$/i.test(String(d.localPath || ''));
 
+  /* The same two questions the row asks, asked here.
+
+     They were not, and the two halves of the tool disagreed in both
+     directions:
+
+     * **A push the row offers, the planner called blocked.** `syncPlan` tested
+       only `staleness === 'local_newer'` and never looked at `matchType`, so a
+       pair carrying Ekahau's own id - the pair whose row draws a working
+       "Local newer · replace cloud" button - came back as `total: 0,
+       blockedPushes: 1`. That is the second half of his report: "I hit the
+       checkbox and I can't sync it either."
+
+     * **A pull the row refuses, the planner performed.** `canPullFromCloud`
+       requires `PULLABLE_MATCH_TYPES`, so the row will not bring a cloud copy
+       down over a local file on a pairing WD merely guessed at. The planner
+       had no such test, so ticking that row and pressing Sync overwrote it.
+       `verify_replace_local` keeps a backup so nothing was lost, but the
+       permissive side of a disagreement about overwriting his work is the
+       wrong side to be on.
+
+     One predicate each, shared with the row, so there is one answer to "may
+     this pair move in this direction" rather than two. */
+  const mayPull = (d) => isFilePair(d) && PULLABLE_MATCH_TYPES.has(d.matchType);
+  const mayPush = (d) => isFilePair(d) && PUSHABLE_MATCH_TYPES.has(d.matchType);
+
+  const stale = (d, which) => isFilePair(d) && d.staleness === which;
+
   // Content first: a pair that is stale is not merely misnamed.
   const contentPulls = dir === 'to-local'
-    ? allPairs.filter(d => isFilePair(d) && d.staleness === 'cloud_newer')
+    ? allPairs.filter(d => stale(d, 'cloud_newer') && mayPull(d))
     : [];
-  const pulling = new Set(contentPulls);
+  const contentPushes = dir === 'to-cloud'
+    ? allPairs.filter(d => stale(d, 'local_newer') && mayPush(d))
+    : [];
 
-  // The other direction, recognised and reported rather than silently dropped.
-  const blockedPushes = allPairs.filter(
-    d => !pulling.has(d) && isFilePair(d) && d.staleness === 'local_newer');
-  const blocked = new Set(blockedPushes);
+  /* Refused, and reported as refused. Only a guessed pairing reaches these -
+     a shared site code or similar wording, where the two names are not even
+     the same - and the refusal is the same one the row makes. */
+  const blockedPulls = dir === 'to-local'
+    ? allPairs.filter(d => stale(d, 'cloud_newer') && !mayPull(d))
+    : [];
+  const blockedPushes = dir === 'to-cloud'
+    ? allPairs.filter(d => stale(d, 'local_newer') && !mayPush(d))
+    : [];
+
+  /* Newer on the side this run is not writing to. Not refused - Sync never
+     replaces a newer file with an older one - and now genuinely a matter of
+     running the other direction, which is something he can do. */
+  const wrongWay = dir === 'to-local'
+    ? allPairs.filter(d => stale(d, 'local_newer'))
+    : allPairs.filter(d => stale(d, 'cloud_newer'));
+
+  const moving = new Set([...contentPulls, ...contentPushes,
+                          ...blockedPulls, ...blockedPushes, ...wrongWay]);
 
   // What is left of the matched rows is the old behaviour: names only.
-  const pairs = allPairs.filter(d => !pulling.has(d) && !blocked.has(d));
+  const pairs = allPairs.filter(d => !moving.has(d));
 
   const uploads = dir === 'to-cloud'
     ? items.filter(d => isProjectSyncItem(d) && d.kind === 'local' && !d.isDir)
@@ -5188,10 +5244,12 @@ function syncPlan(items, dir) {
   const skipped = items.filter(d => !handled.has(d) && !creating.has(d));
   return {
     pairs: pairs, uploads: uploads, downloads: downloads,
-    contentPulls: contentPulls, blockedPushes: blockedPushes,
+    contentPulls: contentPulls, contentPushes: contentPushes,
+    blockedPushes: blockedPushes, blockedPulls: blockedPulls,
+    wrongWay: wrongWay,
     siteCreates: siteCreates, skipped: skipped,
     total: pairs.length + uploads.length + downloads.length
-         + contentPulls.length + siteCreates.length,
+         + contentPulls.length + contentPushes.length + siteCreates.length,
   };
 }
 
@@ -5232,7 +5290,10 @@ async function bulkSync(dir) {
   const downloads = plan.downloads;
   const siteCreates = plan.siteCreates;
   const contentPulls = plan.contentPulls;
-  const blockedPushes = plan.blockedPushes;
+  const contentPushes = plan.contentPushes || [];
+  const blockedPushes = plan.blockedPushes || [];
+  const blockedPulls = plan.blockedPulls || [];
+  const wrongWay = plan.wrongWay || [];
   const stillSkipped = plan.skipped;
 
   if (!plan.total) {
@@ -5248,9 +5309,10 @@ async function bulkSync(dir) {
   }, 0);
   const parts = [];
   if (contentPulls.length) parts.push(`Sync <b>${contentPulls.length}</b> file${contentPulls.length === 1 ? '' : 's'} — the newer cloud copy replaces the older local one`);
+  if (contentPushes.length) parts.push(`Send <b>${contentPushes.length}</b> newer local file${contentPushes.length === 1 ? '' : 's'} up — each replaces its cloud project`);
   const pullRenames = contentPulls.filter(d => (d.cloudName || '').trim()
     && (d.localName || '').trim() !== (d.cloudName || '').trim());
-  if (pullRenames.length) parts.push(`Rename <b>${pullRenames.length}</b> of those local file${pullRenames.length === 1 ? '' : 's'} to match its cloud name`);
+  if (pullRenames.length) parts.push(`Rename <b>${pullRenames.length}</b> of those local files to match ${pullRenames.length === 1 ? 'its' : 'their'} cloud name${pullRenames.length === 1 ? '' : 's'}`);
   if (pairs.length) parts.push(`Rename <b>${pairs.length}</b> matched item${pairs.length === 1 ? '' : 's'}`);
   if (uploads.length) parts.push(`Upload <b>${uploads.length}</b> local .esx file${uploads.length === 1 ? '' : 's'} to Ekahau Cloud`);
   if (downloads.length) parts.push(`Download <b>${downloads.length}</b> cloud project${downloads.length === 1 ? '' : 's'}`);
@@ -5292,20 +5354,78 @@ async function bulkSync(dir) {
         file rather than into the result.</p>`;
   }
 
-  /* The direction that does not exist yet. Saying so, by name, beats letting
-     him count three selected files and watch two of them happen. */
+  /* Going up, named one by one.
+
+     This section used to be an apology: "sending local files up is not part of
+     a bulk run ... it is one row at a time and deliberate." The row has done
+     it since v2.104.6 and only the planner had not caught up, so the sentence
+     was describing a limitation in the code rather than a decision about the
+     operation - with six of his files waiting behind it.
+
+     Every cloud project that will be deleted is named here, before he presses
+     anything. That is the question the row asks per file, asked once for the
+     batch, which is the right place for it: he is looking at the whole list. */
+  if (contentPushes.length) {
+    const rows = contentPushes.map(d => `
+      <tr>
+        <td class="sync-plan-name">${e(d.localName || d.cloudName || '')}</td>
+        <td class="sync-plan-dir">&#11014; up</td>
+        <td class="sync-plan-name">${e(d.cloudName || '')}</td>
+        <td class="sync-plan-when">local ${e(fmtRelDate(d.localMtime))}<br>
+          <span class="sub">cloud ${e(fmtRelDate(d.cloudMtime))}</span></td>
+      </tr>`).join('');
+    body += `
+      <p class="sync-plan-lead">Send <b>${contentPushes.length}</b> newer local
+        file${contentPushes.length === 1 ? '' : 's'} up:</p>
+      <div class="sync-plan-wrap"><table class="sync-plan">
+        <thead><tr><th>Your file</th><th>Direction</th><th>Replaces this cloud project</th><th>Last saved</th></tr></thead>
+        <tbody>${rows}</tbody></table></div>
+      <p class="sub warn">Each one is uploaded and checked first; the cloud
+        project named above is deleted only after that succeeds. <b>A cloud
+        delete cannot be undone</b> — read that column before you press Sync.</p>`;
+    const unproven = contentPushes.filter(d => !PROVEN_MATCH_TYPES.has(d.matchType));
+    if (unproven.length) {
+      body += `
+      <p class="sub warn"><b>${unproven.length} of these ${unproven.length === 1 ? 'is' : 'are'} paired on ${unproven.length === 1 ? 'its name' : 'their names'}</b> rather than on Ekahau's own id, so the tool cannot prove ${unproven.length === 1 ? 'it is' : 'they are'} the same project:
+        ${unproven.map(d => e(d.cloudName || d.localName || '')).join(', ')}.
+        Check ${unproven.length === 1 ? 'that name is the one' : 'those names are the ones'} you mean.</p>`;
+    }
+  }
+
+  /* Refused, and it is the same refusal the row makes. Only a guessed pairing
+     reaches here - a shared site code, or similar wording - where the two
+     names are not even the same and there is nothing to confirm against. */
   if (blockedPushes.length) {
     const names = blockedPushes
       .map(d => e(d.localName || d.cloudName || '')).join(', ');
     body += `
       <p class="sub warn"><b>${blockedPushes.length} newer local file${blockedPushes.length === 1 ? ' is' : 's are'} not sent up:</b>
-        ${names}. Sync never overwrites the newer side, and sending local
-        files up is not part of a bulk run — replacing a cloud project deletes
-        the old one, so it is one row at a time and deliberate. Use
-        <b>&#11014; Local newer &middot; replace cloud</b> on each row. To force
-        the cloud copy down over ${blockedPushes.length === 1 ? 'it' : 'them'}
-        instead, the <b>Cloud newer &middot; download</b> button is on the row
-        too.</p>`;
+        ${names}. These were paired by guesswork — a shared site code or
+        similar wording — so replacing the cloud copy would risk deleting a
+        project that was never the counterpart, and that cannot be undone.
+        Use <b>Confirm this pair</b> on the row, and ${blockedPushes.length === 1 ? 'it joins' : 'they join'} the run.</p>`;
+  }
+
+  if (blockedPulls.length) {
+    const names = blockedPulls
+      .map(d => e(d.localName || d.cloudName || '')).join(', ');
+    body += `
+      <p class="sub warn"><b>${blockedPulls.length} newer cloud cop${blockedPulls.length === 1 ? 'y is' : 'ies are'} not brought down:</b>
+        ${names}. Same reason in the other direction — these were paired by
+        guesswork, so downloading over your local file could overwrite a
+        different project. Use <b>Confirm this pair</b> on the row.</p>`;
+  }
+
+  /* Newer on the other side. Not refused, and no longer a dead end: the other
+     direction is a button away and does the whole batch. */
+  if (wrongWay.length) {
+    const other = dir === 'to-local' ? 'Local → Cloud' : 'Cloud → Local';
+    const which = dir === 'to-local' ? 'newer locally' : 'newer in the cloud';
+    body += `
+      <p class="sub"><b>${wrongWay.length} file${wrongWay.length === 1 ? ' is' : 's are'} ${which}</b>
+        and ${wrongWay.length === 1 ? 'is' : 'are'} left exactly as ${wrongWay.length === 1 ? 'it is' : 'they are'} — Sync never overwrites the newer side.
+        Run <b>${other}</b> on the same selection to move
+        ${wrongWay.length === 1 ? 'it' : 'them'}.</p>`;
   }
 
   if (stillSkipped.length) {
@@ -5364,6 +5484,13 @@ async function bulkSync(dir) {
         },
       });
     }
+  }
+
+  /* Same call the row's button makes, through the same helper, so the two
+     paths cannot drift apart again. The confirm has already happened once, in
+     the dialog above, where every project it will delete was named. */
+  for (const d of contentPushes) {
+    _enqueuePushLocalOverCloud(d.cloudId, d.localPath, d.localName, d.cloudName);
   }
 
   for (const d of pairs) {
@@ -5469,7 +5596,8 @@ async function bulkSync(dir) {
    up, never quietly counted as done: believing you are in sync when you are
    not is worse than the friction of being told you are not. */
 function syncEverythingPlan() {
-  const down = [], up = [], inSync = [], fresh = [];
+  const down = [], up = [], upBlocked = [], inSync = [], fresh = [];
+  const downBlocked = [];
   const seenPair = new Set(), seenCloud = new Set();
 
   const isFile = (l) => /\.esx$/i.test(String((l && l.path) || ''));
@@ -5487,10 +5615,16 @@ function syncEverythingPlan() {
       localPath: pr.local.path,
       cloudMtime: Number(pr.cloud.mtime) || 0,
       localMtime: Number(pr.local.mtime) || 0,
+      /* Without this the whole-account planner could not ask the question the
+         row asks, which is how a pair the row happily pushes ended up in a
+         list headed "not part of this run". */
+      matchType: pr.matchType,
     };
-    if (pr.staleness === 'cloud_newer') down.push(row);
-    else if (pr.staleness === 'local_newer') up.push(row);
-    else inSync.push(row);
+    if (pr.staleness === 'cloud_newer') {
+      (PULLABLE_MATCH_TYPES.has(pr.matchType) ? down : downBlocked).push(row);
+    } else if (pr.staleness === 'local_newer') {
+      (PUSHABLE_MATCH_TYPES.has(pr.matchType) ? up : upBlocked).push(row);
+    } else inSync.push(row);
   };
 
   const takeCloud = (c, siteName) => {
@@ -5514,7 +5648,7 @@ function syncEverythingPlan() {
   (data.localOnly || []).forEach(l => walkKids(l.children, l.name));
   if (data.orphans) (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
 
-  return { down, up, fresh, inSync };
+  return { down, up, upBlocked, downBlocked, fresh, inSync };
 }
 
 function _syncRowsHtml(rows, dir) {
@@ -5560,6 +5694,25 @@ function _syncPickRowsHtml(rows, kind, dir, withVerdict) {
     + '</tr>').join('');
 }
 
+/* The push rows, which need one column the others do not: the name of the
+   cloud project that gets deleted. A pull replaces a local file and keeps a
+   backup; this does not come back, so the thing being replaced is on screen
+   rather than implied. */
+function _syncPushRowsHtml(rows) {
+  return rows.map((d, i) => '<tr>'
+    + '<td class="sync-plan-pick"><input type="checkbox" class="sync-pick"'
+    + (PROVEN_MATCH_TYPES.has(d.matchType) ? ' checked' : '')
+    + ' data-kind="up" data-idx="' + i + '" onchange="_syncPickUpdate()"></td>'
+    + '<td class="sync-plan-name">' + e(d.localName || d.cloudName || '') + '</td>'
+    + '<td class="sync-plan-dir">&#11014; up</td>'
+    + '<td class="sync-plan-name">' + e(d.cloudName || '')
+    + (PROVEN_MATCH_TYPES.has(d.matchType) ? ''
+       : ' <span class="sub">(matched by name only)</span>') + '</td>'
+    + '<td class="sync-plan-when">local ' + e(fmtRelDate(d.localMtime)) + '<br>'
+    + '<span class="sub">cloud ' + e(fmtRelDate(d.cloudMtime)) + '</span></td>'
+    + '</tr>').join('');
+}
+
 function _syncPickBoxes(kind) {
   const sel = '#confirmActionBody .sync-pick'
     + (kind ? '[data-kind="' + kind + '"]' : '');
@@ -5576,7 +5729,7 @@ function _syncPickUpdate() {
     btn.textContent = n ? ('Sync ' + n) : 'Nothing selected';
     btn.disabled = !n;
   }
-  ['down', 'fresh'].forEach(kind => {
+  ['down', 'fresh', 'up'].forEach(kind => {
     const boxes = _syncPickBoxes(kind);
     const head = document.getElementById('syncAll-' + kind);
     if (head && boxes.length) {
@@ -5613,17 +5766,17 @@ function _syncCheckFirst() {
 async function syncEverything() {
   if (!data || !data.summary) { toast('Nothing loaded yet', 'info'); return; }
   const plan = syncEverythingPlan();
-  const willDo = plan.down.length + plan.fresh.length;
+  const willDo = plan.down.length + plan.fresh.length + plan.up.length;
 
   if (!willDo) {
     // Still say what is waiting to go up - that is the half of the loop this
     // cannot finish yet, and silence would read as "all done".
-    toast(plan.up.length
-      ? plan.up.length + ' local file' + (plan.up.length === 1 ? '' : 's')
-        + ' still ' + (plan.up.length === 1 ? 'needs' : 'need')
-        + ' to go up — use ⬆ Local newer · replace cloud on each row. '
-        + 'Nothing to bring down.'
-      : 'Local and cloud already match', plan.up.length ? 'info' : 'success');
+    const stuck = plan.upBlocked.length + plan.downBlocked.length;
+    toast(stuck
+      ? stuck + ' file' + (stuck === 1 ? '' : 's') + ' need' + (stuck === 1 ? 's' : '')
+        + ' the pair confirmed before they can move — use Confirm this pair on '
+        + 'the row. Nothing else to do.'
+      : 'Local and cloud already match', stuck ? 'info' : 'success');
     return;
   }
 
@@ -5681,15 +5834,49 @@ async function syncEverything() {
       + 'nothing — there is no local copy to overwrite.</p>';
   }
 
+  /* The half of the loop this could not finish. It can now.
+
+     This section used to be a table of files under the heading "not part of
+     this run", followed by a sentence sending him off to press a button on
+     each row - with six of them waiting. The operation was built; only the
+     planner had not caught up. */
   if (plan.up.length) {
-    body += '<p class="sync-plan-lead">Newer locally — not part of this run:</p>'
+    const unproven = plan.up.filter(d => !PROVEN_MATCH_TYPES.has(d.matchType));
+    body += '<p class="sync-plan-lead">'
+      + '<label class="sync-plan-all"><input type="checkbox" id="syncAll-up" '
+      + (unproven.length === plan.up.length ? '' : 'checked ')
+      + 'onchange="_syncPickAll(\'up\', this.checked)"> '
+      + 'Send <b>' + plan.up.length + '</b> newer local file'
+      + (plan.up.length === 1 ? '' : 's') + ' up</label></p>'
       + '<div class="sync-plan-wrap"><table class="sync-plan">'
-      + '<thead><tr><th>File</th><th>Direction</th><th>Last saved</th></tr></thead>'
-      + '<tbody>' + _syncRowsHtml(plan.up, '&#11014; local &rarr; cloud') + '</tbody>'
+      + '<thead><tr><th></th><th>Your file</th><th>Direction</th>'
+      + '<th>Replaces this cloud project</th><th>Last saved</th></tr></thead>'
+      + '<tbody>' + _syncPushRowsHtml(plan.up) + '</tbody>'
       + '</table></div>'
-      + '<p class="sub">Left exactly as they are. Replacing a cloud project '
-      + 'deletes the old one, so that direction stays one row at a time: use '
-      + '<b>&#11014; Local newer &middot; replace cloud</b> on each.</p>';
+      + '<p class="sub warn">Each is uploaded and checked first; the cloud '
+      + 'project named above is deleted only after that succeeds. '
+      + '<b>A cloud delete cannot be undone.</b></p>';
+    if (unproven.length) {
+      const one = unproven.length === 1;
+      body += '<p class="sub warn"><b>' + unproven.length
+        + (one ? ' of these is paired on its name' : ' of these are paired on their names')
+        + '</b> rather than on Ekahau\'s own id, so the tool cannot prove '
+        + (one ? 'it is' : 'they are') + ' the same project. '
+        + (one ? 'It arrives' : 'Those arrive') + ' unticked — check the cloud '
+        + 'name beside ' + (one ? 'it' : 'each') + ' is the one you mean, then '
+        + 'tick it.</p>';
+    }
+  }
+
+  if (plan.upBlocked.length || plan.downBlocked.length) {
+    const n = plan.upBlocked.length + plan.downBlocked.length;
+    const names = [...plan.upBlocked, ...plan.downBlocked]
+      .map(d => e(d.localName || d.cloudName || '')).join(', ');
+    body += '<p class="sub warn"><b>' + n + ' file' + (n === 1 ? '' : 's')
+      + ' cannot move either way yet:</b> ' + names + '. These were paired by '
+      + 'guesswork — a shared site code or similar wording — so neither side '
+      + 'can safely replace the other. Use <b>Confirm this pair</b> on the '
+      + 'row and they join the next run.</p>';
   }
 
   if (plan.inSync.length) {
@@ -5699,8 +5886,12 @@ async function syncEverything() {
 
   /* `showConfirmModal` empties the body when it closes, so the selection has
      to be read on the way out rather than after the await. */
-  let _pickedDown = [], _pickedFresh = [];
-  const _grab = () => { _pickedDown = _syncPicked('down'); _pickedFresh = _syncPicked('fresh'); };
+  let _pickedDown = [], _pickedFresh = [], _pickedUp = [];
+  const _grab = () => {
+    _pickedDown = _syncPicked('down');
+    _pickedFresh = _syncPicked('fresh');
+    _pickedUp = _syncPicked('up');
+  };
   const _okBtn = document.getElementById('confirmActionOkBtn');
   if (_okBtn) _okBtn.addEventListener('click', _grab, { once: true });
   const _shown = showConfirmModal('Sync local and cloud?', body, 'Sync ' + willDo);
@@ -5715,9 +5906,11 @@ async function syncEverything() {
      did not ask for it. */
   const pickedDown = _pickedDown.length ? _pickedDown : [];
   const pickedFresh = _pickedFresh.length ? _pickedFresh : [];
+  const pickedUp = _pickedUp.length ? _pickedUp : [];
   const downRows = pickedDown.map(i => plan.down[i]).filter(Boolean);
   const freshRows = pickedFresh.map(i => plan.fresh[i]).filter(Boolean);
-  if (!downRows.length && !freshRows.length) return;
+  const upRows = pickedUp.map(i => plan.up[i]).filter(Boolean);
+  if (!downRows.length && !freshRows.length && !upRows.length) return;
   clearSelection();
 
   /* verify_replace_local is the same call the per-row arrow makes: it backs
@@ -5763,16 +5956,26 @@ async function syncEverything() {
                       .catch(() => { results.failed++; }));
   }
 
+  /* Same helper the row's button uses. The question it would ask per file was
+     asked once, in the dialog, where every project it will delete was named
+     and the unproven ones arrived unticked. */
+  for (const d of upRows) {
+    const { promise } = _enqueuePushLocalOverCloud(
+      d.cloudId, d.localPath, d.localName, d.cloudName);
+    waits.push(promise.then(() => { results.done++; })
+                      .catch(() => { results.failed++; }));
+  }
+
   await Promise.all(waits);
   _scheduleOpRefresh();
-  _reportSyncOutcome(results, plan);
+  _reportSyncOutcome(results, plan, { pushed: upRows.length });
 }
 
 /* What actually happened, not what was planned. "Make sure the two versions
    are in sync" is a step he performs by hand at the end of every site, so a
    run ends by saying where the two sides now stand - not by reporting that
    some downloads succeeded. */
-function _reportSyncOutcome(results, plan) {
+function _reportSyncOutcome(results, plan, ran) {
   const bits = [];
   if (results.done) bits.push(results.done + ' updated');
   if (results.skipped) bits.push(results.skipped + ' skipped');
@@ -5781,9 +5984,17 @@ function _reportSyncOutcome(results, plan) {
 
   let tone = results.failed ? 'error' : 'success';
   let msg = bits.join(', ') || 'Nothing to do';
-  if (plan.up.length) {
+  /* What is left, and whether anything is left. The old line said "N still to
+     go up (one row at a time)" whether or not he had just sent them up, because
+     nothing here could. */
+  const left = (plan.upBlocked || []).length + (plan.downBlocked || []).length;
+  const notPicked = plan.up.length - ((ran && ran.pushed) || 0);
+  if (left) {
     if (!results.failed) tone = 'info';
-    msg += ' — ' + plan.up.length + ' still to go up (one row at a time)';
+    msg += ' — ' + left + ' still need the pair confirmed';
+  } else if (notPicked > 0) {
+    if (!results.failed) tone = 'info';
+    msg += ' — ' + notPicked + ' left unticked and not sent up';
   } else if (!results.failed && !results.skipped) {
     msg += ' — local and cloud now match';
   }

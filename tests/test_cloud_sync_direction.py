@@ -315,10 +315,15 @@ class TheBulkPathAgreesWithTheRow(unittest.TestCase):
     contains `canPushToCloud(r)` and `pushLocalOverCloud(`, both of which are
     true; nothing ever asked the planner what it does with the same row.
 
-    Marked expected-failure rather than left out, so it is recorded without
-    turning main red - and so that fixing it reports an unexpected success and
-    forces this marker off. `syncPlan` needs the same `PUSHABLE_MATCH_TYPES`
-    test the row uses; it belongs to whoever owns cloud.js.
+    Fixed in v2.117.0: both planners take the same two predicates the row
+    takes, so there is one answer to "may this pair move in this direction"
+    rather than two. The expected-failure marker is off; if the planner ever
+    stops asking, this goes red where it used to go quietly green.
+
+    Checking the rest of the agreement, as the report asked, found the mirror
+    image and it was the more dangerous one: the bulk *pull* had no match-type
+    test at all, so ticking a guessed pair and pressing Sync pulled the cloud
+    copy down over a local file the row would have refused to touch.
     """
 
     def _plan(self, match_type: str) -> dict:
@@ -327,8 +332,13 @@ class TheBulkPathAgreesWithTheRow(unittest.TestCase):
           const src = fs.readFileSync(process.argv[1], 'utf8');
           const a = src.indexOf('function syncPlan(items, dir) {');
           const b = src.indexOf('function selectedSyncItems(');
+          // The planner consults the same sets the row does, and they sit
+          // above it - see the note in test_cloud_sync_plan.py.
+          const ca = src.indexOf('const PULLABLE_MATCH_TYPES');
+          const cb = src.indexOf('function canPushToCloud(');
           function isProjectSyncItem(d) { return d && !d.isDir; }
-          eval(src.slice(a, b));
+          // One evaluation: `const` is block-scoped to its own eval.
+          eval(src.slice(ca, cb) + src.slice(a, b));
           const row = { kind: 'pair', matchType: process.argv[2],
                         staleness: 'local_newer',
                         localPath: 'C:/Projects/Ridge/Ridge.esx', name: 'Ridge' };
@@ -343,7 +353,6 @@ class TheBulkPathAgreesWithTheRow(unittest.TestCase):
             raise AssertionError((r.stdout + r.stderr).strip())
         return json.loads(r.stdout.strip().splitlines()[-1])
 
-    @unittest.expectedFailure
     def test_a_pair_the_row_can_push_is_not_blocked_in_bulk(self):
         plan = self._plan("id")
         self.assertEqual(
@@ -358,6 +367,19 @@ class TheBulkPathAgreesWithTheRow(unittest.TestCase):
         plan = self._plan("code")
         self.assertEqual(plan["blocked"], 1)
         self.assertEqual(plan["total"], 0)
+
+    def test_a_name_matched_pair_moves_in_bulk_exactly_as_it_does_on_the_row(self):
+        """`exact` is the case the row was originally refused for, and the one
+        that made the feature unreachable: a project built locally and uploaded
+        carries Ekahau's id in the *cloud* copy only, so "newer locally, no
+        shared id" is the ordinary state of work in progress.
+
+        The row allows it and asks once. The plan allows it and asks once, in
+        the dialog, where every project it will delete is named.
+        """
+        plan = self._plan("exact")
+        self.assertEqual(plan["blocked"], 0)
+        self.assertGreater(plan["total"], 0, plan)
 
 
 class TheDirectionIsReadableWithoutHovering(unittest.TestCase):
