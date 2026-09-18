@@ -1235,15 +1235,63 @@ did not merely avoid the sync traffic, it removed the failure. Keep the
 `Remove-Item` line anyway: a virus scanner or an open editor can hold a handle
 just as well.
 
-**And prune at the start of every session**, because a session that dies
-mid-task - crash, timeout, closed window - removes nothing. `git worktree
-prune -v` clears git's registration; the directory on disk sometimes survives
-that, so check `C:\wd-worktrees` separately, and check for the
-`claude/<name>` branch too. This repo has had an abandoned worktree sitting in
-it, plus several more in a temp directory that are not reachable from here at
-all. None of that is dangerous by itself, but rule zero material has sat in
-exactly these forgotten corners before. Report what you found and removed
-rather than cleaning quietly.
+### Prune does not clean up after an abandoned session
+
+**`git worktree prune` cannot see the failure mode that actually happens.**
+An earlier version of this note said to prune at the start of every session and
+left it there. That instruction is not wrong, it is inert: prune only clears
+registrations whose *directory has gone missing*. A session that dies mid-task
+leaves the directory sitting there intact, so prune looks straight past it,
+exits 0 and prints nothing.
+
+Measured on 2026-09-18, on a worktree created and then abandoned without
+teardown:
+
+    git worktree prune -v     # exit 0, no output
+    git worktree list         # still lists it
+    Test-Path <dir>           # still True
+
+So a green prune at session start is not evidence that `C:\wd-worktrees` is
+clean. On 2026-09-18 that folder held six entries: three live, and three that
+several sessions had each reported removing on completion. Nothing had errored.
+The teardown step simply never ran, and prune could not tell anyone.
+
+**Reconcile the directory against git instead.** At the start of a session, and
+again when you finish:
+
+```powershell
+git fetch origin
+git worktree prune -v
+foreach ($d in Get-ChildItem C:\wd-worktrees -Directory) {
+    $reg  = (git worktree list) -match [regex]::Escape($d.Name)
+    $age  = (New-TimeSpan -Start $d.LastWriteTime).TotalHours
+    "{0,-22} registered={1,-5} idleHours={2:N1}" -f $d.Name, [bool]$reg, $age
+}
+```
+
+Anything idle for hours is a candidate. Anything **not registered** is not a
+worktree at all and no git command will ever clean it - see below. Do not
+delete another session's work on a timer: confirm it is finished before
+removing it, then tear it down properly. `git branch -d` (not `-D`) is the
+check that matters - it refuses unless the branch is merged, so a clean
+`-d` is your evidence the work shipped.
+
+### `C:\wd-worktrees` holds worktrees and nothing else
+
+Two of the six entries found on 2026-09-18 - `manual-review` and
+`ux-sweep-work` - were **not worktrees**. They were ordinary folders a session
+had created next to the real ones to hold screenshots, audit scripts, browser
+profiles and a draft commit message. `git worktree list` never showed them,
+`git worktree remove` did not apply, and prune had nothing to prune. They were
+invisible to every step of this convention while sitting in the middle of it.
+
+Session scratch goes in your scratchpad or inside your own worktree, where it
+leaves with the worktree. If you put a loose folder or a stray `.txt` in
+`C:\wd-worktrees`, nothing in this file will ever clean it up and it becomes
+David's problem on his own C: drive.
+
+**Report what you found and removed rather than cleaning quietly** - rule zero
+material has sat in exactly these forgotten corners before.
 
 ## Memory across sessions, generally
 
@@ -1252,6 +1300,9 @@ Claude Code cloud sessions have no memory of past conversations by default
 `BACKLOG.md`). If something matters for next time, write it here rather
 than assuming it'll be remembered.
 
-**Prune stale worktrees at the start of every session too**, for the same
-reason — see "Every session gets its own worktree" above, which covers what to
-run and what to look for once git's own registration is cleared.
+**Reconcile `C:\wd-worktrees` at the start of every session too**, for the same
+reason — see "Every session gets its own worktree" above. Note that `git
+worktree prune` on its own will not tell you the folder is dirty: it only
+clears registrations whose directory is already gone, so an abandoned worktree
+and a loose scratch folder both survive it silently. Compare the directory
+listing against `git worktree list`, not prune's exit code.
