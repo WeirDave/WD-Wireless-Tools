@@ -2849,7 +2849,17 @@ body.tool-cloud .toolbar input.search:focus {
 .row-detail.stripe { background: var(--detail-row-stripe); }
 
 .row-detail .rd-icon { font-weight: 700; flex: 0 0 auto; }
-.row-detail .rd-text { flex: 1 1 auto; color: var(--text); }
+/* The answer sits beside the question, not at the other end of the row.
+
+   `flex: 1 1 auto` made the sentence fill the band and pushed the buttons to
+   the far right edge - a metre of empty space between "is that a real change,
+   or just a rename?" and the two controls that answer it, on a wide screen.
+   He read them as a separate band and asked what the decision even was.
+
+   The text takes the width it needs and the actions follow it. A long
+   sentence still pushes them right, which is the same layout as before for
+   the rows that earned it. */
+.row-detail .rd-text { flex: 0 1 auto; color: var(--text); }
 /* Horizontal, with room, and no wrapping at a desktop width: full labels
    rather than truncations was the whole complaint. */
 .row-detail .rd-actions {
@@ -9191,6 +9201,10 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 .site-digest.is-clear .ic { color: var(--ok); }
 .site-digest.is-attention { color: var(--attn); font-weight: 500; }
 .site-digest.is-empty { color: var(--text-3); font-style: italic; }
+/* Showing a selection of the site, and nothing in the selection needs him.
+   Quiet, because the interesting case is the one wearing --attn. */
+.site-digest.is-filtered { color: var(--text-3); }
+.site-digest.is-filtered .ic { color: var(--text-3); }
 
 .tree-chevron {
   display: inline-flex; align-items: center; justify-content: center;
@@ -9370,6 +9384,31 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
    So: its own region with a border round it, its own shape that looks nothing
    like a ledger row, the file named once as a heading, and the candidates
    indented under it as a list of answers to one question. */
+/* The whole open question, once, above the list it is about.
+
+   Same shape as the held-back band - a bordered strip carrying a sentence and
+   one control - because it is the same kind of thing: a statement about the
+   list rather than about any row in it. Sits above the ledger so it cannot be
+   read as a row, which is the mistake the held-back band made first. */
+.uncompared-bar {
+  display: flex; align-items: center; gap: 12px;
+  margin: 0 0 10px;
+  padding: 9px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  font-size: 12.5px; line-height: 1.5;
+}
+.uncompared-bar .ub-icon { flex: 0 0 auto; color: var(--accent); display: inline-flex; }
+.uncompared-bar .ub-text { flex: 1 1 auto; color: var(--text-2); }
+.uncompared-bar .ub-text b { color: var(--text); }
+.uncompared-bar .rd-btn { flex: 0 0 auto; }
+
+@media (max-width: 900px) {
+  .uncompared-bar { flex-wrap: wrap; }
+  .uncompared-bar .ub-text { flex: 1 1 100%; }
+}
+
 .hb-section {
   margin: 18px 0 8px;
   border: 1px solid var(--attn);

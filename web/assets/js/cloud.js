@@ -1967,7 +1967,8 @@ function renderLedger(hit) {
     .sort((x, y) => x.sort.localeCompare(y.sort, undefined, { sensitivity: 'base' }));
   const nCloud = visible.filter(r => r.cloud).length, nLocal = visible.filter(r => r.local).length;
 
-  let h = `<div class="ledger">`;
+  let h = uncomparedBandHtml(collectUncomparedStale(visible));
+  h += `<div class="ledger">`;
   h += `<div class="ledger-head"><div class="lh-cell cloud">Cloud Projects (${nCloud})</div><div class="lh-gut"></div><div class="lh-cell local">Local .esx (${nLocal})</div></div>`;
   if (!visible.length) { h += emptyLedgerMessage() + `</div>`; return h; }
   const groupOf = (s) => {
@@ -2094,7 +2095,25 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
   const nCloud = visible.filter(r => r.cloud).length + orphans.length;
   const nLocal = visible.filter(r => r.local).length;
 
-  let h = `<div class="ledger tree">`;
+  /* The same set the Flat view offers, gathered out of the sites - a pair
+     asking an unanswered question is the same pair whichever view he is in. */
+  const childPairs = [];
+  visible.forEach(r => {
+    const kids = childrenOf(r);
+    if (!kids) return;
+    (kids.matched || []).forEach(p => {
+      const row = { status: p.namesDiffer ? 'mismatch' : 'synced',
+                    cloud: p.cloud, local: p.local, matchType: p.matchType,
+                    staleness: p.staleness || null,
+                    differenceKind: p.differenceKind || null };
+      if (passOwner && !passOwner(row)) return;
+      if (activeFilter !== 'all' && !pass(row.status, row)) return;
+      childPairs.push(row);
+    });
+  });
+
+  let h = uncomparedBandHtml(collectUncomparedStale(childPairs));
+  h += `<div class="ledger tree">`;
 
   const autoAssignable = _collectAutoAssignable(visible, passOwner);
   if (autoAssignable.length) {
@@ -2149,6 +2168,14 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
       const siteKey = r.cloud ? ('site:' + r.cloud.id) : ('folder:' + r.local.path);
       const open = (_searching && childHit(children)) || !collapsed.has(siteKey);
       r.toggle = { key: siteKey, open, hasKids: kids };
+      /* The digest is computed here because this is where the predicates
+         live, and it is given exactly the two `renderTreeChildren` filters
+         its rows with - so the header counts the rows underneath it rather
+         than the contents of the site. */
+      r.digest = siteDigest(children, {
+        passOwner,
+        passFilter: activeFilter === 'all' ? null : pass,
+      });
       {
       const _stripe = (z++ % 2) === 1;
       const _det = rowDetailHtml(r, _stripe);
@@ -2538,6 +2565,8 @@ const ICONS = {
   move:      'M2.4 8h8.2M8.1 5.1 11 8l-2.9 2.9M13.4 2.9v10.2',
   share:     'M6 7.4a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM2.4 13.1c0-2 1.6-3.3 3.6-3.3s3.6 1.3 3.6 3.3M11 4.1a1.7 1.7 0 1 1 0 3.4M12.1 9.8c1.2.3 2 1.2 2 2.5',
   folder:    'M1.9 12.6V3.7h4L7.3 5.5h6.8v7.1z',
+  //: A funnel, for the one line that says it is showing a selection.
+  filter:    'M2.4 3.2h11.2L9.3 8.1v4.9l-2.6-1.5V8.1z',
   eye:       'M1.5 8S3.8 4.2 8 4.2 14.5 8 14.5 8 12.2 11.8 8 11.8 1.5 8 1.5 8ZM8 9.6a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z',
   flag:      'M3.9 13.6V2.6h8.2l-1.6 2.7 1.6 2.7H3.9',
   merge:     'M3.9 2.6v3.8a3 3 0 0 0 3 3h5.4M9.8 6.5l2.9 2.9-2.9 2.9',
@@ -2611,23 +2640,75 @@ function rdAction(icon, label, call, opts) {
    names disagree, or whose dates have moved, or that only exists on one side,
    is something he has to decide about; everything else is done. When there is
    nothing, the line says so quietly and he moves on. */
-function siteDigest(children) {
+/* `opts.passFilter` / `opts.passOwner` are the *same* predicates the children
+   are drawn with, so the digest describes the rows he can see.
+
+   "at the top it says three files, one needs a decision, and I only see one
+   file. So where are the three files?"
+
+   It counted the whole site while the list underneath showed the rows that
+   survived the filter, so with "out of sync" applied the header said three and
+   the list said one, and the two other files - correctly hidden, because they
+   are in sync - existed only as a number he could not reconcile against
+   anything. The header was true about the site and false about the screen, and
+   the screen is what he is reading.
+
+   Both counts are kept: `shown` is what is on screen and `total` is what is in
+   the site, so the line can say "1 of 3" rather than quietly dropping the
+   context. */
+function siteDigest(children, opts) {
   if (!children) return null;
-  const matched = children.matched || [];
-  const unpaired = (children.cloudOnly || []).length + (children.localOnly || []).length;
-  let attention = 0;
-  matched.forEach(p => { if (p.namesDiffer || p.staleness) attention++; });
-  const total = matched.length + unpaired;
-  return { total, attention, unpaired, ok: total - attention - unpaired };
+  const o = opts || {};
+  const rows = [];
+  (children.matched || []).forEach(p => rows.push({
+    status: p.namesDiffer ? 'mismatch' : 'synced', cloud: p.cloud, local: p.local,
+    matchType: p.matchType, staleness: p.staleness || null,
+    namesDiffer: !!p.namesDiffer, paired: true,
+  }));
+  (children.cloudOnly || []).forEach(c => rows.push({
+    status: 'orphan', cloud: c, local: null, paired: false }));
+  (children.localOnly || []).forEach(l => rows.push({
+    status: 'orphan', cloud: null, local: l, paired: false }));
+
+  const total = rows.length;
+  let visible = o.passOwner ? rows.filter(o.passOwner) : rows;
+  if (o.passFilter) visible = visible.filter(r => o.passFilter(r.status, r));
+
+  let attention = 0, unpaired = 0;
+  visible.forEach(r => {
+    if (!r.paired) unpaired++;
+    else if (r.namesDiffer || r.staleness) attention++;
+  });
+  const shown = visible.length;
+  return { total, shown, narrowed: shown !== total,
+           attention, unpaired, ok: shown - attention - unpaired };
 }
 
 function siteDigestHtml(r) {
+  /* `renderSitesTree` computes this where the filter predicates are in
+     scope and hangs it on the row, the same way it hangs `toggle`. Falling
+     back to the unfiltered count keeps the function usable on its own. */
   const children = (r.cloud && r.cloud.children) || (r.local && r.local.children) || null;
-  const d = siteDigest(children);
+  const d = r.digest || siteDigest(children);
   if (!d || !d.total) {
     return `<span class="cell-meta site-digest is-empty">empty</span>`;
   }
-  const files = `${d.total} file${d.total === 1 ? '' : 's'}`;
+
+  const plural = (n) => `${n} file${n === 1 ? '' : 's'}`;
+  if (d.narrowed) {
+    const title = d.shown
+      ? `This site holds ${plural(d.total)}; ${d.shown} of them match the filter you have on.`
+      : `This site holds ${plural(d.total)}, none of which match the filter you have on.`;
+    const parts = [`${d.shown} of ${plural(d.total)}`];
+    if (d.attention) parts.push(`${d.attention} need${d.attention === 1 ? 's' : ''} a decision`);
+    if (d.unpaired) parts.push(`${d.unpaired} unpaired`);
+    /* No "all in sync" under a filter. That is a claim about the site, and
+       what is on screen is a selection from it. */
+    return `<span class="cell-meta site-digest ${d.attention + d.unpaired ? 'is-attention' : 'is-filtered'}" title="${a(title)}">`
+         + `${ic(d.attention + d.unpaired ? 'alert' : 'filter')}${parts.join(' · ')}</span>`;
+  }
+
+  const files = plural(d.total);
   const needs = d.attention + d.unpaired;
   if (!needs) {
     return `<span class="cell-meta site-digest is-clear" title="Every file in this site is paired and up to date on both sides.">`
@@ -2871,6 +2952,68 @@ function checkRealDifference(cloudId, localPath, label) {
       return r;
     },
   });
+}
+
+/* Every row on screen that is asking a question nothing has answered.
+
+   "not compared yet" is honest and it is not a place to leave him across
+   ninety projects - he has already said he will not recheck things twice, and
+   being told the answer is unknown, row after row, is a version of that. So
+   the whole set is offered as one action.
+
+   **It is offered rather than done.** A comparison downloads the cloud copy of
+   the project to compare it member by member, so running it automatically over
+   a list this size would pull tens or hundreds of megabytes off Ekahau, on a
+   work network, without being asked. Read-only is not the same as free. The
+   band says how many and what it costs; the click is his.
+
+   Filled at render time, because that is when the filter predicates exist and
+   it is exactly the set he can see. */
+let _uncomparedNow = [];
+
+function collectUncomparedStale(rows) {
+  const out = [];
+  (rows || []).forEach(r => {
+    if (!r || !r.cloud || !r.local || !r.staleness) return;
+    if (r.differenceKind === 'renamed') return;   // already classified
+    if (compareResultFor(r)) return;              // already answered
+    out.push({ cloudId: r.cloud.id, localPath: r.local.path,
+               label: r.cloud.name || r.local.name || '' });
+  });
+  return out;
+}
+
+function uncomparedBandHtml(pairs) {
+  _uncomparedNow = pairs || [];
+  const n = _uncomparedNow.length;
+  if (n < 2) return '';   // one row's own button is closer than a banner
+  return `<div class="uncompared-bar">`
+    + `<span class="ub-icon">${ic('swap')}</span>`
+    + `<span class="ub-text"><b>${n} of these have a date difference that has not been checked.</b> `
+    + `Whether the design really changed, or something was only renamed, is still unknown on each of them.</span>`
+    + `<button class="rd-btn primary" onclick="checkAllUncompared()" `
+    + `title="Compares each pair's contents and reports what actually differs. Read-only — nothing is changed on either side. Each one downloads the cloud copy to compare it.">`
+    + `${ic('swap')}<span>Check all ${n}</span></button>`
+    + `</div>`;
+}
+
+async function checkAllUncompared() {
+  const pairs = _uncomparedNow.slice();
+  if (!pairs.length) { toast('Nothing left to check', 'info'); return; }
+  /* Naming the cost, because read-only is not the same as cheap and he works
+     on a network he does not control. */
+  const ok = await showConfirmModal(
+    `Check all ${pairs.length}?`,
+    '<p>Compares each pair and reports what actually differs.</p>'
+    + '<p class="sub"><b>Nothing is changed</b> on either side — not the cloud, '
+    + 'not your local files.</p>'
+    + '<p class="sub">Each comparison downloads that project\'s cloud copy to '
+    + 'compare it, so ' + pairs.length + ' downloads will run. They are queued '
+    + 'and each reports its own result.</p>',
+    `Check all ${pairs.length}`);
+  if (!ok) return;
+  pairs.forEach(p => checkRealDifference(p.cloudId, p.localPath, p.label));
+  toast(`Comparing ${pairs.length} file${pairs.length === 1 ? '' : 's'} — nothing will be changed`, 'info');
 }
 
 /* His immediate job is sixty of these, so one at a time is not the unit. Each
@@ -3135,9 +3278,32 @@ function rowDetailHtml(r, stripe) {
       sentences.push(cmp.summary);
     }
   } else if (stale === 'cloud_newer') {
-    sentences.push('The cloud copy has a later date. Not compared yet, so whether the design actually differs is unknown.');
+    /* "what is the decision? Is that the last line where it says the cloud
+       copy has a later date...?"
+
+       He had to ask, and the sentence is why: it described a situation and
+       stopped. "Not compared yet, so whether the design actually differs is
+       unknown" states an open question without asking it, names no option and
+       recommends nothing, while two buttons sat at the far end of the same
+       line. So it asks the question and names the answer: the recommended
+       action is the read-only one, because it is cheap and it settles the
+       thing the row is actually uncertain about. */
+    sentences.push(r.differenceKind === 'renamed'
+      /* Already classified by the backend, so there is no question left to
+         ask and asking one anyway would send him to compare something we
+         have told him we know. */
+      ? 'The cloud copy was renamed — that is what moved its date, and no '
+        + 'design change was detected. Downloading brings the new name across.'
+      /* Short, because it repeats down the whole filtered list and the button
+         beside it is the rest of the sentence. Measured at his density: the
+         long form put the same two lines of prose on seven consecutive rows,
+         which is the noise this band exists to avoid. */
+      : 'The cloud copy has a later date. A real change, or just a rename?');
   } else if (stale === 'local_newer') {
-    sentences.push('Your local copy has a later date. Not compared yet.');
+    sentences.push(r.differenceKind === 'renamed'
+      ? 'Your local copy was renamed — that is what moved its date, and no '
+        + 'design change was detected.'
+      : 'Your local copy has a later date. A real change, or only the name?');
   }
 
   if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only' && c && c.name && l) {
@@ -3183,16 +3349,35 @@ function rowDetailHtml(r, stripe) {
 
   if (!sentences.length && !stalenessAction && !acts.length) return '';
 
+  /* The recommended answer to the question the row just asked.
+
+     A date difference that has not been compared is the one case where the
+     read-only action is strictly better: it is cheap, it changes nothing, and
+     it settles whether the other action is even wanted. Presenting it as an
+     equal alternative to a download that overwrites his local file was the
+     tool declining to have an opinion where it has one.
+
+     Once the comparison exists, or the backend has already classified the
+     difference as a rename, the question is answered and Re-check goes back to
+     being the quiet one. */
+  const asksToCompare = !!(c && l && stale && !cmp && r.differenceKind !== 'renamed');
   if (c && l) {
     acts.push(rdAction('swap', cmp ? 'Re-check' : 'Check what differs',
       `checkRealDifference('${j(c.id)}','${pj(l.path)}','${j(c.name || l.name || '')}')`,
-      { quiet: true, title: 'Compare the two files’ contents and report what actually differs. Read-only — nothing is changed on either side.' }));
+      { primary: asksToCompare, quiet: !asksToCompare,
+        title: 'Compare the two files’ contents and report what actually differs. Read-only — nothing is changed on either side.' }));
   }
+
+  /* Order is the recommendation. When the read-only check is the advice it
+     comes first, and the action that overwrites something follows it. */
+  const actions = asksToCompare
+    ? acts.join('') + stalenessAction
+    : stalenessAction + acts.join('');
 
   return `<div class="row-detail ${tone}${stripe ? ' stripe' : ''} status-${r.status || ''}">`
     + `<span class="rd-icon">${ic(icon)}</span>`
     + `<span class="rd-text">${e(sentences.join(' '))}</span>`
-    + `<span class="rd-actions">${stalenessAction}${acts.join('')}</span>`
+    + `<span class="rd-actions">${actions}</span>`
     + `</div>`;
 }
 /* The action that is refused, drawn as itself: named, greyed, and carrying
@@ -3270,8 +3455,17 @@ function stalenessBadgeHtml(r) {
       const why = renamedOnly
         ? 'The cloud copy was RENAMED, which is why its date moved - the name stored inside your local file is the old one. No design change was detected. Downloading brings the rename across and renames your local file to match. Your current copy is kept in the backups folder.'
         : 'The cloud copy was edited more recently and the names agree, so this is a real change rather than a rename. Downloading replaces your local one. Your current copy is kept in the backups folder.';
+      /* Primary only once the question is settled. A date on its own does not
+         say the design changed - it is the whole reason Check exists - so
+         while nothing has been compared and the backend has not classified
+         this as a rename, the emphasis belongs on the read-only action and
+         this one is the alternative. Offering an overwrite as the
+         recommendation on evidence we have said is inconclusive is the tool
+         pushing him at the irreversible option. */
+      const answered = renamedOnly || !!cmp;
+      const weight = provenSame ? ' quiet is-demoted' : (answered ? ' primary' : ' quiet');
       return cmpHtml
-        + `<button class="rd-btn${provenSame ? ' quiet is-demoted' : ' primary'}${renamedOnly ? ' is-renamed' : ''}" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${ic('down')}<span>${label}</span></button>`
+        + `<button class="rd-btn${weight}${renamedOnly ? ' is-renamed' : ''}" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${ic('down')}<span>${label}</span></button>`
         + checkBtn;
     }
     /* Shown and unavailable, never absent - and the thing that lifts the
@@ -3311,8 +3505,12 @@ function stalenessBadgeHtml(r) {
         + 'landed and is really your file, and only then removes the old cloud '
         + 'copy. If the upload fails nothing is deleted; if the delete fails '
         + 'you are told there are two and which one is good.';
+      /* Same reasoning as the download, and more so: this one deletes the old
+         cloud project. It is the recommendation once something has actually
+         been compared, not on a date alone. */
+      const weight = cmp ? ' primary' : ' quiet';
       return cmpHtml
-        + `<button class="rd-btn primary" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}','${j(r.matchType || '')}')">${ic('up')}<span>Local newer · replace cloud</span></button>`
+        + `<button class="rd-btn${weight}" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}','${j(r.matchType || '')}')">${ic('up')}<span>Local newer · replace cloud</span></button>`
         + checkBtn;
     }
     /* Only a guessed pairing reaches here now - same site code, or similar

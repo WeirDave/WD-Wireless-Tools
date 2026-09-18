@@ -70,6 +70,9 @@ const out = {};
 // gutter between the two name columns - that lane is a few characters wide
 // with his project names in it.
 out.beforeChecking = api.rowDetailHtml(row(), false);
+// The genuinely open case: a date difference the backend has NOT classified,
+// which is the row he was looking at when he asked "what is the decision?".
+out.beforeCheckingUnknown = api.rowDetailHtml(row({ differenceKind: null }), false);
 
 const key = api._compareKey('c1', 'C:/x/a.esx');
 api._compareResults.set(key, { designDiffers: false, renamedOnly: true,
@@ -113,10 +116,46 @@ class TheMeasuredAnswerShowsInTheRowTests(unittest.TestCase):
         self.assertIn("checkRealDifference(", self.out["beforeChecking"])
         self.assertIn("Check what differs", self.out["beforeChecking"])
 
-    def test_an_unchecked_row_says_the_answer_is_unknown(self):
+    def test_an_unchecked_row_asks_the_question_and_names_the_answer(self):
         """A later date is not a design change, and saying nothing at all would
-        leave the date to imply that it is."""
-        self.assertIn("Not compared yet", self.out["beforeChecking"])
+        leave the date to imply that it is.
+
+        The wording is not pinned - what is pinned is that the row poses the
+        open question and names the control that settles it. It used to state
+        the situation and stop - "Not compared yet, so whether the design
+        actually differs is unknown" - and he had to ask what he was being
+        asked: "what is the decision? Is that the last line where it says...".
+        """
+        band = self.out["beforeCheckingUnknown"]
+        self.assertIn("?", band, "the row states a situation without asking anything")
+        self.assertIn("Check what differs", band,
+                      "the question names no way of answering it")
+
+    def test_the_read_only_answer_is_the_recommended_one(self):
+        """Check is cheap, read-only, and settles whether the download is even
+        wanted. Offering it as an equal alternative to overwriting his local
+        file was the tool declining to have an opinion where it has one."""
+        band = self.out["beforeCheckingUnknown"]
+        # The button, not the mention of it in the sentence.
+        check = band.index("<span>Check what differs</span>")
+        download = band.index("<span>Cloud newer")
+        self.assertLess(check, download,
+                        "the overwrite is offered before the read-only check")
+        # Walk back to the button this label belongs to.
+        check_btn = band.rindex("<button", 0, check)
+        download_btn = band.rindex("<button", 0, download)
+        self.assertIn("rd-btn primary", band[check_btn:check],
+                      "the check is not the emphasised action")
+        self.assertNotIn("primary", band[download_btn:download],
+                         "the overwrite is still the emphasised action")
+
+    def test_a_row_the_backend_has_already_classified_asks_nothing(self):
+        """`differenceKind: 'renamed'` is an answer. Asking him to go and
+        compare something we have just told him we know is the recheck-twice
+        complaint in a new place."""
+        band = self.out["beforeChecking"]
+        self.assertIn("renamed", band)
+        self.assertNotIn("Is that a real change", band)
 
     def test_a_clean_result_is_shown_in_the_row(self):
         html = self.out["afterSame"]

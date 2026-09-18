@@ -177,7 +177,10 @@ class TheFindingsGetTheFullWidthTests(unittest.TestCase):
         crammed into the gutter in the first place."""
         band = self.out["staleUncheckedBand"]
         self.assertIn("row-detail", band)
-        self.assertIn("Not compared yet", band)
+        # The property, not the sentence: the row says what moved the date and
+        # offers the read-only check. Pinning the phrasing pins the wording he
+        # could not make sense of along with it.
+        self.assertIn("date", band)
         self.assertIn("Check what differs", band)
 
     def test_the_band_is_its_own_full_width_element(self):
