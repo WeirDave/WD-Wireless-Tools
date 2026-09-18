@@ -1072,6 +1072,39 @@ function _passOwnerForCounts(cloudObj, localObj) {
 }
 
 
+/* Is this pair out of sync? One answer, for the chip and for the list.
+
+   "3 out of sync" over a list of six rows, every one of them wanting an
+   action. The chip and the filter were asking different questions:
+
+   * the chip skipped any pair whose comparison came back `!designDiffers`;
+   * the filter kept every pair with a `staleness` flag, compared or not.
+
+   Three of his six had been compared and found to hold the same design under
+   different names - so they vanished from the number and stayed in the list,
+   and the header contradicted the thing it was sitting on top of. This is the
+   same shape as "0 unpaired" over two rows, and the same rule applies: a
+   count is the length of its own list.
+
+   Which of the two was right? Neither. `designDiffers` is the wrong question,
+   because "the design matches, the name inside the file does not" is not
+   settled - it is the pair that has a **`Set the name inside the file to
+   match`** button on it, and dropping those from the count hid the work rather
+   than the noise. `identical` is the settled one: contents, metadata and name
+   all agree, and the row itself says "Nothing to do".
+
+   That still answers the complaint this test was written for - renaming a
+   fleet of cloud projects used to read 29 out of sync over pure date drift.
+   Once each rename is applied the pair is `identical` and drops out. Until
+   then it is 29 files wanting one click each, which is a true number. */
+function isOutOfSync(row) {
+  if (!row || !row.staleness) return false;
+  const cmp = (row.cloud && row.local)
+    ? _compareResults.get(_compareKey(row.cloud.id, row.local.path)) : null;
+  return !(cmp && cmp.identical);
+}
+
+
 function _isExternal(cloudObj, localObj) {
   const me = ((data && data.currentUser) || '').toLowerCase();
   if (!me) return false;
@@ -1194,17 +1227,7 @@ function updateDashboard() {
   } else if (data && data.summary) {
 
     const ownerVisible = currentTab === 'sites' ? _siteOwnedVisible : _passOwnerForCounts;
-    /* "Out of sync" counted every timestamp difference, so after renaming a
-       fleet of cloud projects it read 29 - and told him the scale of a problem
-       he did not have. A row whose contents have been compared and found
-       identical is not out of sync, whatever the dates say: the comparison is
-       measured where the timestamp is inferred. */
-    const _countsAsStale = (p) => {
-      if (!p.staleness) return false;
-      const cmp = p.cloud && p.local
-        ? _compareResults.get(_compareKey(p.cloud.id, p.local.path)) : null;
-      return !(cmp && !cmp.designDiffers);
-    };
+    const _countsAsStale = isOutOfSync;
 
     let matched = 0, mismatches = 0, cloudOnly = 0, localOnly = 0, nameMatches = 0;
     let staleCount = 0;
@@ -1884,7 +1907,9 @@ function renderLedger(hit) {
   };
   const directIsNameMatch = (row) =>
     !!(row && row.cloud && row.local && row.matchType === 'exact');
-  const directIsStale = (row) => !!(row && row.staleness);
+  //: The same predicate the chip counts with - see `isOutOfSync`. Two
+  //: spellings of this is what made the header say three over a list of six.
+  const directIsStale = isOutOfSync;
 
   const anyChildMatches = (row, predicate) => {
     const kids = (row && row.cloud && row.cloud.children)
@@ -2620,11 +2645,40 @@ function menuItem(icon, label, call, opts) {
    bare-text button side by side, which is what made it look like three
    different features had each added a control and none of them had looked at
    the others. */
+/* `opts.writes` is the side this action **changes**, and it decides which
+   lane of the band the button is drawn in - see `rowDetailHtml`.
+
+   It is the side written to, never the side the value is read from. "Set the
+   name inside the file to match" takes its new name from the cloud project and
+   writes it into the local .esx: it reads cloud, it writes local, and it is a
+   local action. Getting that backwards is the whole reason the option exists.
+
+   Omitting it means the action changes neither file - a comparison, a pairing,
+   a refusal to pair - and those stay with the sentence on the left. */
 function rdAction(icon, label, call, opts) {
   const o = opts || {};
+  const side = o.writes === 'cloud' || o.writes === 'local' ? o.writes : '';
   return `<button class="rd-btn${o.primary ? ' primary' : ''}${o.danger ? ' danger' : ''}${o.quiet ? ' quiet' : ''}"`
+       + `${side ? ` data-writes="${side}"` : ''}`
        + `${o.title ? ` title="${a(o.title)}"` : ''} onclick="event.stopPropagation();${call}">`
        + `${ic(icon)}<span>${label}</span></button>`;
+}
+
+
+/* Split a run of rendered action buttons into the two lanes.
+
+   The marker is on the rendered button (`data-writes`), so the split reads the
+   same markup the browser will, and an action added later without a side
+   simply stays on the left rather than disappearing. */
+function _rdSplitBySide(html) {
+  const out = { cloud: '', local: '', neutral: '' };
+  const re = /<button class="rd-btn[\s\S]*?<\/button>/g;
+  const found = String(html || '').match(re) || [];
+  found.forEach(btn => {
+    const m = /data-writes="(cloud|local)"/.exec(btn);
+    if (m) out[m[1]] += btn; else out.neutral += btn;
+  });
+  return out;
 }
 
 
@@ -2677,7 +2731,9 @@ function siteDigest(children, opts) {
   let attention = 0, unpaired = 0;
   visible.forEach(r => {
     if (!r.paired) unpaired++;
-    else if (r.namesDiffer || r.staleness) attention++;
+    //: `isOutOfSync` rather than the raw flag, for the same reason the chip
+    //: uses it: a pair already compared and settled is not a decision.
+    else if (r.namesDiffer || isOutOfSync(r)) attention++;
   });
   const shown = visible.length;
   return { total, shown, narrowed: shown !== total,
@@ -3231,10 +3287,10 @@ function rowDetailHtml(r, stripe) {
     sentences.push('The names disagree. Pick the one to keep, or say these are not the same project.');
     acts.push(rdAction('arrowR', 'Cloud → Local',
       `syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')`,
-      { primary: true, title: 'Rename the local file so it matches the cloud project.' }));
+      { primary: true, writes: 'local', title: 'Rename the local file so it matches the cloud project.' }));
     acts.push(rdAction('arrowL', 'Local → Cloud',
       `syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')`,
-      { title: 'Rename the cloud project so it matches your local file.' }));
+      { writes: 'cloud', title: 'Rename the cloud project so it matches your local file.' }));
     acts.push(rdAction('notEqual', 'Not a match',
       `markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')`,
       { quiet: true, title: 'Never pair these two again.' }));
@@ -3245,7 +3301,7 @@ function rowDetailHtml(r, stripe) {
       : 'This cloud project has nothing matching it on disk.');
     acts.push(rdAction('down', 'Download',
       `downloadThenMove('${j(c.id)}','${j(c.name)}')`,
-      { primary: true, title: 'Download the .esx from Ekahau Cloud, then move it into a site folder.' }));
+      { primary: true, writes: 'local', title: 'Download the .esx from Ekahau Cloud, then move it into a site folder.' }));
     acts.push(rdAction('link', 'Link to a local file…',
       `openLinkPicker('cloud','${j(c.id)}','${j(c.name)}')`,
       { quiet: true, title: 'Pair this cloud project with a local .esx yourself.' }));
@@ -3254,7 +3310,7 @@ function rowDetailHtml(r, stripe) {
     sentences.push('This local file has nothing matching it in Ekahau Cloud.');
     acts.push(rdAction('up', 'Upload',
       `uploadFromLocal('${pj(l.path)}','${j(l.name)}')`,
-      { primary: true, title: 'Upload this .esx to Ekahau Cloud as a new project.' }));
+      { primary: true, writes: 'cloud', title: 'Upload this .esx to Ekahau Cloud as a new project.' }));
     acts.push(rdAction('link', 'Link to a cloud project…',
       `openLinkPicker('local','${pj(l.path)}','${j(l.name)}')`,
       { quiet: true, title: 'Pair this local file with a cloud project yourself.' }));
@@ -3309,7 +3365,8 @@ function rowDetailHtml(r, stripe) {
   if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only' && c && c.name && l) {
     acts.push(rdAction('rename', 'Set the name inside the file to match',
       `fixInternalName('${pj(l.path)}','${j(c.name)}','${j(l.name || '')}','${j(c.id)}')`,
-      { primary: true, title: 'Renaming a file on disk does not change the project name stored inside it. This does, and backs the file up first.' }));
+      { primary: true, writes: 'local',
+        title: 'Renaming a file on disk does not change the project name stored inside it. This writes the cloud project’s name into your local .esx, and backs the file up first. Nothing on Ekahau Cloud changes.' }));
   }
 
   /* The staleness control keeps its own wording and its own reasoning - it is
@@ -3322,7 +3379,8 @@ function rowDetailHtml(r, stripe) {
   if (!stale && !_settled && r.status === 'synced' && r.matchType === 'exact' && c && l) {
     acts.push(rdAction('down', 'Download over local',
       `verifyReplaceLocal('${j(c.id)}','${pj(l.path)}','${j(c.name)}',${Number(c.mtime) || 0},${Number(l.mtime) || 0})`,
-      { quiet: true, title: 'These matched on name alone. Taking the cloud copy over your local file makes them byte-identical, so the pair upgrades to Same file. Your current copy is kept in the backups folder.' }));
+      { quiet: true, writes: 'local',
+        title: 'These matched on name alone. Taking the cloud copy over your local file makes them byte-identical, so the pair upgrades to Same file. Your current copy is kept in the backups folder.' }));
     if (!sentences.length) {
       sentences.push('Matched by name only — nothing has proved these are the same file.');
     }
@@ -3340,10 +3398,16 @@ function rowDetailHtml(r, stripe) {
      the ops deck in the corner. */
   const busy = rowIsBusy(r);
   if (busy) {
+    //: Same three lanes as the settled band below, so the row does not shift
+    //: sideways the moment he clicks something.
     return `<div class="row-detail rd-plain is-busy status-${r.status || ''}">`
-      + `<span class="rd-icon">${ic('swap')}</span>`
-      + `<span class="rd-text">${e(busy)}</span>`
-      + `<span class="rd-actions"><span class="rd-busy">Working</span></span>`
+      + `<span class="rd-lane cloud">`
+      +   `<span class="rd-icon">${ic('swap')}</span>`
+      +   `<span class="rd-text">${e(busy)}</span>`
+      +   `<span class="rd-actions"><span class="rd-busy">Working</span></span>`
+      + `</span>`
+      + `<span class="rd-gut"></span>`
+      + `<span class="rd-lane local"></span>`
       + `</div>`;
   }
 
@@ -3374,10 +3438,38 @@ function rowDetailHtml(r, stripe) {
     ? acts.join('') + stalenessAction
     : stalenessAction + acts.join('');
 
+  /* The band lines up with the row it belongs to, and each action sits under
+     the side it changes.
+
+     "the blue buttons are all on the left hand side" - and one of them was
+     `Set the name inside the file to match`, which writes the cloud project's
+     name into his **local** .esx. Drawn under the Cloud column, it read as a
+     cloud action; when it then failed on a local file permission, the error
+     made no sense against the place the button was sitting. "I think that's
+     exactly backwards."
+
+     It was never a cloud lane - the band was one flex row spanning the whole
+     width, so everything in it piled up at the left margin and the entire
+     right half was empty. That is worse than a wrong label: it looks like a
+     column and is not one, so it invites exactly the reading he gave it.
+
+     Three lanes now, on the same widths as the row above (`flex: 1`, a fixed
+     140px gutter, `flex: 1`). The sentence and anything read-only stay left,
+     because a comparison changes nothing and has no side. Everything that
+     writes is drawn beneath the side it writes to. */
+  const split = _rdSplitBySide(actions);
+  const left = split.cloud + split.neutral;
+
   return `<div class="row-detail ${tone}${stripe ? ' stripe' : ''} status-${r.status || ''}">`
-    + `<span class="rd-icon">${ic(icon)}</span>`
-    + `<span class="rd-text">${e(sentences.join(' '))}</span>`
-    + `<span class="rd-actions">${actions}</span>`
+    + `<span class="rd-lane cloud">`
+    +   `<span class="rd-icon">${ic(icon)}</span>`
+    +   `<span class="rd-text">${e(sentences.join(' '))}</span>`
+    +   `<span class="rd-actions">${left}</span>`
+    + `</span>`
+    + `<span class="rd-gut"></span>`
+    + `<span class="rd-lane local">`
+    +   `<span class="rd-actions">${split.local}</span>`
+    + `</span>`
     + `</div>`;
 }
 /* The action that is refused, drawn as itself: named, greyed, and carrying
@@ -3385,8 +3477,12 @@ function rowDetailHtml(r, stripe) {
    swallows the click, and the click is how he asks why. It is marked
    unavailable, and `_wireDisabledBulkReasons` turns the click into the
    explanation. */
-function rdUnavailable(icon, label, why) {
-  return `<button class="rd-btn is-disabled" aria-disabled="true" title="${a(why)}">`
+function rdUnavailable(icon, label, why, writes) {
+  //: A control that is unavailable still belongs in the lane it would write
+  //: to. Moving when it becomes available would be worse than useless - he
+  //: would have to find it twice.
+  const side = writes === 'cloud' || writes === 'local' ? ` data-writes="${writes}"` : '';
+  return `<button class="rd-btn is-disabled" aria-disabled="true"${side} title="${a(why)}">`
        + `${ic(icon)}<span>${label}</span></button>`;
 }
 
@@ -3465,7 +3561,7 @@ function stalenessBadgeHtml(r) {
       const answered = renamedOnly || !!cmp;
       const weight = provenSame ? ' quiet is-demoted' : (answered ? ' primary' : ' quiet');
       return cmpHtml
-        + `<button class="rd-btn${weight}${renamedOnly ? ' is-renamed' : ''}" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${ic('down')}<span>${label}</span></button>`
+        + `<button class="rd-btn${weight}${renamedOnly ? ' is-renamed' : ''}" data-writes="local" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${ic('down')}<span>${label}</span></button>`
         + checkBtn;
     }
     /* Shown and unavailable, never absent - and the thing that lifts the
@@ -3475,7 +3571,7 @@ function stalenessBadgeHtml(r) {
       + 'your local file is not offered here because it could overwrite a '
       + 'different project. Confirm the pair and it becomes available.';
     return `<span class="rd-note" title="Your cloud copy was edited more recently than the local one.">${ic('down')}<span>Cloud newer</span></span>`
-      + rdUnavailable('down', 'Download over local', noPull)
+      + rdUnavailable('down', 'Download over local', noPull, 'local')
       + rdConfirmPair(r, 'the download');
   }
 
@@ -3510,7 +3606,7 @@ function stalenessBadgeHtml(r) {
          been compared, not on a date alone. */
       const weight = cmp ? ' primary' : ' quiet';
       return cmpHtml
-        + `<button class="rd-btn${weight}" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}','${j(r.matchType || '')}')">${ic('up')}<span>Local newer · replace cloud</span></button>`
+        + `<button class="rd-btn${weight}" data-writes="cloud" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}','${j(r.matchType || '')}')">${ic('up')}<span>Local newer · replace cloud</span></button>`
         + checkBtn;
     }
     /* Only a guessed pairing reaches here now - same site code, or similar
@@ -3528,7 +3624,7 @@ function stalenessBadgeHtml(r) {
       + 'that cannot be undone, so it is not offered until you confirm the pair. '
       + 'Confirm this pair, or Link them yourself, and it becomes available.';
     return `<span class="rd-note" title="Your local copy was edited more recently than the cloud one.">${ic('up')}<span>Local newer</span></span>`
-      + rdUnavailable('arrowL', 'Local → Cloud', unproven)
+      + rdUnavailable('arrowL', 'Local → Cloud', unproven, 'cloud')
       + rdConfirmPair(r, 'replacing the cloud copy');
   }
   return '';

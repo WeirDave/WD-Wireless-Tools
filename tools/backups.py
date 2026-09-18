@@ -41,9 +41,88 @@ _DIR_RE = re.compile(r"^(?P<stem>.+)\.previous-v(?P<version>[^-]*)-(?P<stamp>\d{
 DEFAULT_KEEP = 3
 
 
+# Windows refuses a path of 260 characters or more unless it is asked in the
+# one form that turns the limit off. See `long_path`.
+MAX_PATH = 260
+
+
+def long_path(p):
+    r"""The same path, in the form Windows accepts past its 260-character limit.
+
+    **This is not a hypothetical.** A backup is `<stem>.previous-<stamp><ext>`,
+    which adds 25 characters to a name that is already the longest thing in the
+    tree, and a survey project is named after its site. A real one measured 232
+    characters as the `.esx` and **265** as the backup. Opening the project
+    worked, creating `backups/<site>/` worked - only the copy failed, with
+    `[WinError 3] The system cannot find the path specified`, which reads like
+    a missing folder and is nothing of the kind. Nothing was written, which was
+    the correct refusal and also a dead end: every retry failed the same way,
+    so the feature simply did not work for the projects with the longest names.
+
+    `\\?\` lifts the limit to about 32,767, but only for a **fully qualified**
+    path with backslashes and no `.` or `..` - the prefix turns off the
+    normalisation that would otherwise fix those up - so `abspath` runs first.
+    A UNC path takes the `\\?\UNC\server\share` form rather than keeping `\\`.
+
+    Why this was never seen here: the limit is off by default, and a machine
+    with `LongPathsEnabled=1` in the registry - a developer's, typically -
+    copies a 295-character path without complaint. The machine that reported
+    it has the default. So the length is what has to be handled; the registry
+    setting is not something this can rely on.
+    """
+    if os.name != "nt":
+        return str(p)
+    s = os.path.abspath(str(p))
+    if s.startswith("\\\\?\\"):
+        return s
+    if s.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + s[2:]
+    return "\\\\?\\" + s
+
+
+def _try_both(op, *paths):
+    """Run `op` on the paths as given; on failure, run it on their long forms.
+
+    Plain first, deliberately. The prefixed form is accepted everywhere that
+    matters, but it is not identical - it bypasses normalisation, and some
+    network redirectors dislike it - so the ordinary case keeps the ordinary
+    path and only a path that has actually failed takes the other route.
+    """
+    try:
+        return op(*paths)
+    except OSError:
+        if os.name != "nt":
+            raise
+        return op(*[long_path(p) for p in paths])
+
+
+def copy_for_backup(src, dest):
+    r"""Copy `src` to `dest` for safekeeping, working past MAX_PATH.
+
+    Returns `dest` **as it was given**, not the prefixed form: the caller shows
+    that path to the person whose file it is and hands it to `prune_for`, and
+    `\\?\C:\...` is not a path to tell anyone to go and look for.
+
+    The name is never shortened to make it fit. `classify` reads the owner back
+    out of the filename, so a trimmed stem would name a file that does not
+    exist, `prune_for` would never match it again, and the backup would be
+    correct, invisible to retention, and kept for ever.
+    """
+    _try_both(shutil.copy2, str(src), str(dest))
+    return dest
+
+
 def _stat(path: Path):
     try:
         st = path.stat()
+        return st.st_size, int(st.st_mtime)
+    except OSError:
+        pass
+    #: A backup long enough to need the prefix still has to be counted and
+    #: still has to be prunable - otherwise retention silently stops applying
+    #: to exactly the projects that generate the biggest files.
+    try:
+        st = os.stat(long_path(path))
         return st.st_size, int(st.st_mtime)
     except OSError:
         return 0, 0
@@ -173,7 +252,7 @@ def prune_for(target, keep=DEFAULT_KEEP, protect=None):
         if item["path"] in keepset:
             continue
         try:
-            os.unlink(item["path"])
+            _try_both(os.unlink, item["path"])
             deleted.append(item["path"])
             freed += item["bytes"]
         except OSError:
@@ -200,9 +279,9 @@ def purge(roots, keep=0, include_install=False):
         for item in items[max(0, int(keep)):]:
             try:
                 if kind == "install":
-                    shutil.rmtree(item["path"])
+                    _try_both(shutil.rmtree, item["path"])
                 else:
-                    os.unlink(item["path"])
+                    _try_both(os.unlink, item["path"])
                 deleted.append(item["path"])
                 freed += item["bytes"]
             except OSError:

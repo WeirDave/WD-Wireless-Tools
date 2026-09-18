@@ -59,7 +59,11 @@ function dupHintFor(){return '';}
 function previewBadge(){return '';}
 function canPullFromCloud(r){return ['id','manual','exact'].includes(r.matchType);}
 
-const block = slice('const ICONS = {', '\nfunction localByPath(');
+// `siteDigest` asks `isOutOfSync` whether a pair still counts as wanting
+// something, so the real one comes along rather than a stub - the count is the
+// whole point of the digest.
+const block = slice('function isOutOfSync(', '\nfunction _isExternal(')
+            + slice('const ICONS = {', '\nfunction localByPath(');
 const api = {};
 eval(block + '\nObject.assign(api,{ic,rowMenu,menuItem,rdAction,siteDigest,siteDigestHtml,'
    + 'matchBadgeHtml,gutCell,cloudCell,localCell,rowDetailHtml,_compareKey});');

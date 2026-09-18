@@ -238,7 +238,8 @@ def inject(esx_path, wall_types: list, dest=None, backup: bool = True) -> dict:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         backup_path = path.with_name(f"{path.stem}.previous-{stamp}{path.suffix}")
         try:
-            shutil.copy2(path, backup_path)
+            from tools import backups as _bk
+            _bk.copy_for_backup(path, backup_path)
         except OSError as exc:
             return {"error": f"Could not back the project up, so nothing was "
                              f"changed: {exc}"}

@@ -1030,7 +1030,11 @@ def apply_to(src_path, dest_path, template, occupants,
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             backup_path = dest_path.with_name(
                 "%s.backup-%s%s" % (dest_path.stem, stamp, dest_path.suffix))
-            shutil.copy2(str(dest_path), str(backup_path))
+            #: Past MAX_PATH too - see `backups.copy_for_backup`. A sibling
+            #: backup is the source path plus 25 characters, and a project
+            #: named after its site starts long.
+            from tools import backups as _bk
+            _bk.copy_for_backup(dest_path, backup_path)
         os.replace(tmp_name, str(dest_path))
         # Only once the new file is in place.
         if backup_path:

@@ -2450,7 +2450,27 @@ body.tool-cloud .toolbar input.search:focus {
   font-family: var(--mono); opacity: 0.75;
 }
 
-.ledger-head .lh-gut { border-bottom: 3px solid transparent; flex: 0 0 140px; }
+.ledger-head .lh-gut { border-bottom: 3px solid transparent; flex: 0 0 var(--ledger-gutter); }
+
+/* The ledger's centre gutter, in one place.
+
+   Five rules carried this number - the row's gutter, the header's, the
+   A-Z band's, and each responsive override - and the detail band added a
+   sixth. It was written as 140px there while the row had grown to 152px, so
+   the band's divider sat two pixels off the row's at desktop and ten off it
+   below 1100px, which is precisely the kind of not-quite-aligned that reads
+   as a rendering fault rather than a layout one. A token cannot drift. */
+:root {
+  --ledger-gutter: 152px;
+  /* The row's cells are not symmetric - the child indent is on the cloud side
+     only - so a band whose lanes merely split the width evenly lands its
+     divider in a different place from the row's. The lanes use these, and
+     they are the same numbers `.lr-cell` uses. */
+  --ledger-cell-pad-x: 10px;
+  --ledger-child-indent: 54px;
+}
+@media (max-width: 1100px) { :root { --ledger-gutter: 128px; } }
+@media (max-width: 720px)  { :root { --ledger-gutter: 40px; } }
 
 .ledger-row {
   display: flex; align-items: stretch;
@@ -2486,7 +2506,7 @@ body.tool-cloud .toolbar input.search:focus {
 }
 
 .ledger-group-head .glh-gap {
-  flex: 0 0 140px;
+  flex: 0 0 var(--ledger-gutter);
 }
 
 [data-theme="light"] .ledger-group-head .glh-letter.cloud {
@@ -2706,7 +2726,7 @@ body.tool-cloud .toolbar input.search:focus {
 @keyframes wd-icon-tip-in { to { opacity: 1; } }
 
 .lr-gut {
-  flex: 0 0 140px; display: flex; align-items: center;
+  flex: 0 0 var(--ledger-gutter); display: flex; align-items: center;
   justify-content: center; gap: 6px;
   border-left: 1px solid var(--border); border-right: 1px solid var(--border);
 }
@@ -2848,6 +2868,28 @@ body.tool-cloud .toolbar input.search:focus {
 }
 .row-detail.stripe { background: var(--detail-row-stripe); }
 
+/* The band is laid out on the row's own columns, so an action sits under the
+   side it changes. Same three widths as `.ledger-row`: two flexible cells with
+   a fixed 140px gutter between them. Change one and change the other. */
+.row-detail .rd-lane {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;
+  /* At 1366 the sentence and up to three buttons have to share half the width
+     they used to have. Measured: without this the longest verdict - the one
+     that lists eight changed collections - wrapped to five lines and made the
+     band taller than the two rows it describes. The buttons drop to their own
+     line instead, which costs one row and keeps the sentence readable. */
+  flex-wrap: wrap; row-gap: 6px;
+}
+/* The local lane's controls sit against the gutter rather than out at the far
+   edge, so they stay beside the pair they belong to on a wide screen - the
+   same reasoning as `.rd-text` below. */
+.row-detail .rd-lane.local { justify-content: flex-start; }
+.row-detail .rd-gut {
+  flex: 0 0 var(--ledger-gutter);
+  border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  align-self: stretch;
+}
+
 .row-detail .rd-icon { font-weight: 700; flex: 0 0 auto; }
 /* The answer sits beside the question, not at the other end of the row.
 
@@ -2859,7 +2901,11 @@ body.tool-cloud .toolbar input.search:focus {
    The text takes the width it needs and the actions follow it. A long
    sentence still pushes them right, which is the same layout as before for
    the rows that earned it. */
-.row-detail .rd-text { flex: 0 1 auto; color: var(--text); }
+/* `0 1 auto` let the sentence be squeezed to nothing before the nowrap buttons
+   gave up any width, which is how it reached five lines. Asking for 30rem
+   makes the actions wrap first, and it still shrinks below that when there is
+   genuinely no room. */
+.row-detail .rd-text { flex: 1 1 30rem; max-width: 100%; color: var(--text); }
 /* Horizontal, with room, and no wrapping at a desktop width: full labels
    rather than truncations was the whole complaint. */
 .row-detail .rd-actions {
@@ -3442,14 +3488,14 @@ body.tool-cloud .toolbar input.search:focus {
 
 .lr-cell.child-row {
 
-  padding-left: 54px;
+  padding-left: var(--ledger-child-indent);
 }
 
 .lr-cell.child-row .cell-name { font-size: 12px; }
 
 .ledger-row.tree-child { min-height: 28px; }
 
-.ledger-row.tree-child .lr-gut { flex-basis: 140px; }
+.ledger-row.tree-child .lr-gut { flex-basis: var(--ledger-gutter); }
 
 .tree-child-empty {
   border-bottom: 1px solid var(--border); background: var(--surface);
@@ -4585,9 +4631,9 @@ body.tool-cloud .topbar { padding: 5px 8px; }
 
 .tabs { padding: 4px 8px 0; }
 
-.ledger-head .lh-gut { flex: 0 0 40px; }
 
-.lr-gut { flex: 0 0 40px; font-size: 14px; }}
+
+.lr-gut { font-size: 14px; }}
 
 @media (min-width: 1200px) {.columns { grid-template-columns: 300px 1fr; }
 
@@ -9176,19 +9222,19 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 .ledger-row { min-height: var(--row-h); }
 .ledger-row.tree-child { min-height: var(--row-h); }
 
-.lr-cell { gap: 8px; padding: 0 10px; }
+.lr-cell { gap: 8px; padding: 0 var(--ledger-cell-pad-x); }
 .lr-cell .cell-name { font-size: 12.5px; line-height: 1.35; }
 
 /* The verdict lane: one line, always. */
 .lr-gut {
-  flex: 0 0 152px; display: flex; align-items: center;
+  flex: 0 0 var(--ledger-gutter); display: flex; align-items: center;
   justify-content: center; gap: 6px;
   border-left: 1px solid var(--border); border-right: 1px solid var(--border);
   padding: 0 8px; min-width: 0;
 }
-.ledger-row.tree-child .lr-gut { flex-basis: 152px; }
-.ledger-head .lh-gut { flex: 0 0 152px; }
-.ledger-group-head .glh-gap { flex: 0 0 152px; }
+.ledger-row.tree-child .lr-gut { flex-basis: var(--ledger-gutter); }
+.ledger-head .lh-gut { flex: 0 0 var(--ledger-gutter); }
+.ledger-group-head .glh-gap { flex: 0 0 var(--ledger-gutter); }
 
 /* ------------------------------------------------------------ the sites
    Closed by default, so the line has to say whether there is anything inside
@@ -9218,7 +9264,11 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 
 /* ------------------------------------------------------- the detail band
    Text left, actions right, one line of controls, all the same height. */
-.row-detail { gap: 14px; padding: 5px 12px; font-size: 12.5px; }
+/* Vertical padding only. Anything horizontal here narrows the band's two
+   lanes relative to the row's two cells, which is what put the divider
+   four pixels out - the side padding lives on the lanes instead. */
+.row-detail { gap: 0; padding: 5px 0; font-size: 12.5px; }
+.row-detail .rd-lane.local { padding-right: 12px; }
 .row-detail .rd-icon { display: inline-flex; align-items: center; }
 .row-detail.rd-same .rd-icon { color: var(--ok); }
 .row-detail.rd-differs .rd-icon { color: var(--attn); }
@@ -9277,10 +9327,7 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 [data-theme="light"] .ledger-group-head .glh-letter.cloud { background: none; }
 
 /* Narrow: the actions wrap under their sentence rather than squeezing it. */
-@media (max-width: 1100px) {
-  .lr-gut, .ledger-row.tree-child .lr-gut,
-  .ledger-head .lh-gut, .ledger-group-head .glh-gap { flex-basis: 128px; }
-}
+
 
 /* A file's type is context, not its identity. It was set at the same size as
    the name with a filled background, on every row. */
@@ -9320,8 +9367,23 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
    It used to hang four characters to the left of everything else in the list,
    which is most of why it read as a separate entry rather than a continuation
    of the row above. */
-.row-detail { padding-left: 76px; }
-.row-detail .rd-icon { margin-left: -38px; width: 16px; }
+/* The indent goes on the cloud lane, not on the band.
+
+   As band padding it was asymmetric - 76px one side, 12px the other - so the
+   band's two lanes were not the row's two cells and its divider sat four
+   pixels off the row's. Inside the lane, the lanes keep exactly the row's
+   widths and the gutters line up at every breakpoint. Measured, because the
+   drift was small enough to look like a rendering artefact and stay. */
+.row-detail { padding-left: 0; }
+/* Exactly `.lr-cell`'s padding, including the child indent, so the two lanes
+   come out the same widths as the two cells and the dividers line up. */
+.row-detail .rd-lane.cloud {
+  padding: 0 var(--ledger-cell-pad-x) 0 var(--ledger-child-indent);
+}
+.row-detail .rd-lane.local { padding: 0 var(--ledger-cell-pad-x); }
+/* The icon still sits out in the checkbox column, where it reads as belonging
+   to the row above rather than starting a new one. */
+.row-detail .rd-icon { margin-left: -26px; width: 16px; }
 
 /* And the last row closes the list. */
 .ledger.tree > .ledger-row:last-child { border-bottom: 1px solid var(--border); }

@@ -864,6 +864,44 @@ def _backup_target(src, output_dir, stamp):
     return target_dir / name
 
 
+def _b_mod():
+    """`tools.backups`, imported where it is used.
+
+    `_prune_backups` already imports it this way, and the reason holds here:
+    `backups` reads settings, and settings reads the user directory, so a
+    module-level import would pull that in for anything that merely imports
+    this file.
+    """
+    from tools import backups as _b
+    return _b
+
+
+def _backup_failure(target, exc):
+    """What went wrong, and - if the answer is the path length - say so.
+
+    `[WinError 3] The system cannot find the path specified` is what Windows
+    returns for a path at or past 260 characters, and read plainly it sends
+    someone to look for a missing folder that is sitting right there. The
+    length is the fact that explains it, so the length is in the message.
+
+    This is a backstop. `copy_for_backup` retries past the limit and so should
+    not reach here at all; if it does, the sentence has to be one that leads
+    somewhere rather than one that reads like a bug in the tool.
+    """
+    detail = str(exc)
+    try:
+        n = len(str(target))
+    except Exception:
+        return detail
+    from tools import backups as _b
+    if os.name == "nt" and n >= _b.MAX_PATH:
+        return (f"{detail} — the backup path is {n} characters and Windows "
+                f"stops at {_b.MAX_PATH}. Shortening the project or folder "
+                f"name, or moving the folder nearer the top of the drive, "
+                f"brings it back under.")
+    return detail
+
+
 def _remap_progress(cb, lo, hi):
     """Report a sub-step's 0-100 as a slice of the whole operation."""
     if not cb:
@@ -1757,10 +1795,10 @@ def _rewrite_project_json(src, mutate, output_dir, keep_backups=True):
     backup = (_backup_target(src, output_dir, stamp) if keep_backups else None)
     if backup:
         try:
-            shutil.copy2(src, backup)
+            _b_mod().copy_for_backup(src, backup)
         except OSError as e:
             return {"error": "Could not back the file up, so nothing was "
-                             "changed: %s" % e}
+                             "changed: %s" % _backup_failure(backup, e)}
 
     tmp = src.with_suffix(src.suffix + ".wd-rename.tmp")
     try:
@@ -2772,12 +2810,12 @@ class CloudManager:
                 if progress_cb:
                     progress_cb(stage="backup", current=88, total=100,
                                 message="Keeping a copy of the local file…")
-                shutil.copy2(src, backup)
+                _b_mod().copy_for_backup(src, backup)
             except OSError as e:
                 # Refusing is the right answer: a replace we cannot undo is
                 # not something to do quietly because a folder was unwritable.
                 return {"error": f"Could not back up the local file, so nothing "
-                                 f"was replaced: {e}"}
+                                 f"was replaced: {_backup_failure(backup, e)}"}
 
         tmp = src.with_suffix(src.suffix + ".wd-verify.tmp")
         try:

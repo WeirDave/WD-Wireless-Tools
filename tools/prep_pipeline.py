@@ -417,7 +417,11 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             backup_path = target.with_name(
                 f"{target.stem}.previous-{stamp}{target.suffix}")
-            shutil.copy2(target, backup_path)
+            #: Past MAX_PATH too - see `backups.copy_for_backup`. A sibling
+            #: backup is the source path plus 25 characters, and a project
+            #: named after its site starts long.
+            from tools import backups as _bk
+            _bk.copy_for_backup(target, backup_path)
 
         shutil.move(str(cur), str(target))
         # Written; an older generation is expendable now, not before.

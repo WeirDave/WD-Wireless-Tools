@@ -252,8 +252,15 @@ class IconButtonsSayWhatTheyDoTests(unittest.TestCase):
         other way round - designing for narrow first is what produced the
         cramped row.
         """
-        hide = CSS[CSS.index("@media (max-width: 1100px)"):]
-        hide = hide[:hide.index("\n}\n")]
+        #: The block about labels, not merely the first one at this width.
+        #: The ledger gutter token has a 1100px rule of its own now, and "the
+        #: first @media at 1100" was never what this test meant.
+        blocks, rest = [], CSS
+        marker = "@media (max-width: 1100px)"
+        while marker in rest:
+            rest = rest[rest.index(marker) + len(marker):]
+            blocks.append(rest[:rest.index("\n}\n")] if "\n}\n" in rest else rest)
+        hide = next((b for b in blocks if ".ib-label" in b), "")
         self.assertIn(".ib-label { display: none; }", hide)
 
 
