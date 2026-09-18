@@ -9606,41 +9606,6 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   color: #090909;
 }
 
-/* ── Flyout, WaxFrame's Scenes menu ───────────────────────────
-   Pure CSS hover, no JS. The wrapper is the hover target so the
-   panel does not close while the pointer travels into it. */
-.dev-flyout { position: relative; display: inline-block; }
-.dev-flyout-trigger::after {
-  content: ' \25BE';
-  opacity: 0.7;
-  margin-left: 2px;
-  font-size: 10px;
-}
-.dev-flyout-panel {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  display: none;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px;
-  margin-top: 2px;
-  background: rgba(9, 9, 9, 0.97);
-  border: 1px solid var(--pink);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 0 0 12px rgba(236, 72, 153, 0.3);
-  z-index: 100000;
-  white-space: nowrap;
-  min-width: 170px;
-}
-.dev-flyout-panel button { text-align: left; width: 100%; }
-.dev-flyout:hover .dev-flyout-panel { display: flex; }
-.dev-flyout:hover .dev-flyout-trigger {
-  background: var(--pink);
-  color: #090909;
-  border-color: var(--pink);
-}
-
 /* ── Password modal, WaxFrame's dev-pw-modal ──────────────────── */
 .dev-pw-modal { max-width: 340px; }
 .dev-pw-input {
@@ -9661,11 +9626,14 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
    Troubleshooting Card - rather than growing the strip into a panel.
    Same idea: the strip stays a strip. */
 .dev-result-modal {
-  max-width: 720px;
-  width: min(720px, calc(100vw - 48px));
+  /* Wider and taller than a normal modal: the realign preview is the screen
+     he makes the decision on, and at ninety pairs a narrow column of
+     truncated names is not a thing anyone can read. */
+  max-width: 860px;
+  width: min(860px, calc(100vw - 48px));
 }
 .dev-result-body {
-  max-height: min(62vh, 560px);
+  max-height: min(70vh, 680px);
   overflow-y: auto;
   font-size: 12.5px;
   line-height: 1.5;
@@ -9747,4 +9715,108 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
     flex-wrap: wrap;
     justify-content: flex-start;
   }
+}
+
+/* ── Action panel ─────────────────────────────────────────────
+   WaxFrame puts detail in a modal and keeps the strip a strip; this is
+   that modal, carrying the action's explanation and its controls as well
+   as its output.
+
+   The explanation is here rather than in a `title` because a tooltip is
+   hover-to-reveal, and nothing a decision rests on is allowed to hide
+   behind a hover. He opened the first build and said "there are items in
+   here and I don't know what they do" - this is the answer to that. */
+.dev-panel-lead {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.dev-panel-facts {
+  margin: 0 0 14px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(120px, 170px) 1fr;
+  gap: 6px 14px;
+  align-items: start;
+}
+.dev-panel-facts dt {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pink);
+  padding-top: 1px;
+}
+.dev-panel-facts dd {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.dev-panel-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.dev-panel-controls:empty { display: none; }
+
+.dev-panel-out { margin-top: 12px; }
+.dev-panel-out:empty { margin-top: 0; }
+
+/* Read-only versus writes, said in colour as well as in words. Lime is the
+   control that changes nothing; pink is the one that writes, and it is
+   rendered `disabled` until its own preview has come back clean. */
+.dev-btn {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text);
+  transition: all 0.15s;
+}
+.dev-btn:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+
+.dev-btn-safe { border-color: var(--lime); color: var(--lime); }
+.dev-btn-safe:hover:not(:disabled) {
+  background: var(--lime);
+  border-color: var(--lime);
+  color: #090909;
+}
+
+.dev-btn-write { border-color: var(--pink); color: var(--pink); }
+.dev-btn-write:hover:not(:disabled) {
+  background: var(--pink);
+  border-color: var(--pink);
+  color: #090909;
+}
+
+.dev-btn:disabled {
+  border-color: var(--border-strong);
+  color: var(--text-3);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* A skipped group's reason is the heading he scans, so it reads as one
+   rather than as another list row. Ninety pairs listed one by one is a
+   wall; grouped by reason it is four lines and a count. */
+.dev-result-reason {
+  margin: 10px 0 4px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.dev-result-count {
+  color: var(--text-3);
+  font-size: 11.5px;
+  white-space: nowrap;
 }

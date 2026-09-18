@@ -1200,12 +1200,55 @@ the WaxFrame dispatcher is a separate job with its own risk.
   leaves it dead and a completed run disarms it. That is what stands between a
   mis-click and ninety rewritten project files.
 
-**The password is `wdtools`**, and its SHA-256 is in `wd-dev.js`. This
-repository is public and **so is WaxFrame's**, so in both it is obfuscation
-rather than security - it keeps a curious user out of a maintenance surface on
-a localhost-bound server, and nothing more. To change it, hash a new value and
-replace the constant; the test carries the password too and must be updated
-with it.
+**The dev password is the same one WaxFrame Professional uses**, and only
+the hash lives here: *"The password should use the same hash I currently use
+on WaxFrame Pro."* An earlier build generated its own, reasoning that a
+password should not be shared between two products. He overruled that - it is
+his password and his two products, and he would rather remember one.
+
+**The plaintext is in neither repository**, and `tests/test_dev_password_hash.py`
+holds that: it checks the constant here matches WaxFrame's `DEV_PW_HASH` by
+reading both files (skipped where WaxFrame is not installed), and scans the
+gate, its tests and this file for anything shaped like a password being written
+down - naming the file and line, never the value.
+
+Both repositories are public, so the hash now appears in two public places.
+That is no more exposed than it already was, but one recovered password opens
+both products rather than one. The gate is obfuscation, not security: it keeps
+a curious user out of a maintenance surface on a localhost-bound server, and
+anyone with a console can set the flag directly.
+
+**Testing the gate without the secret.** `WD.Dev._hash` and
+`WD.Dev._expectedHash` are exposed so a test can hash a string it invented,
+point the gate at that digest, and drive the real submit path - the input is
+read, hashed with the real SHA-256, compared, and on a match the flag is
+written and the toolbar mounts. Neither seam weakens anything: the constant is
+readable in the file and the flag is settable from any console.
+
+### The labels have to say what the button does
+
+He opened the first WaxFrame-method build and said: *"there are items in here
+and I don't know what they do."* The buttons were emoji plus a short phrase
+with the explanation in a `title`, which is hover-to-reveal - and his standing
+rules are that every control carries a text label and that nothing a decision
+rests on hides behind a hover.
+
+So the strip carries readable names, **nothing in the strip writes to
+anything**, and each button opens a panel - WaxFrame's modal, where WaxFrame
+already puts detail. The panel states in plain words what the action looks at,
+what it changes, what it backs up, what it will not do, and that the preview
+changes nothing; the controls sit underneath that. The hover flyout went with
+it, being the thing the rule rules out.
+
+Read-only versus writing stays visible in colour as well as words: the preview
+control is lime and says it changes nothing, the live one is pink and stays
+`disabled` until its own preview comes back clean. The live button **names the
+count** once it arms - "Align 87 projects for real" rather than "Align them for
+real", because that is the moment the number matters.
+
+**The preview report is the screen he decides on**, at around ninety pairs, so
+it gets the room: a wider modal, full names never truncated, and the skipped
+ones grouped by reason with a count per group rather than ninety flat rows.
 
 **Adding an action:** one button in `Dev.toolbarInnerHtml` and one handler
 below it in `wd-dev-actions.js`. WaxFrame's convention is that every

@@ -1,27 +1,37 @@
 /* ============================================================
    WD Wireless Tools - wd-dev-actions.js
 
-   **Every dev-toolbar button's markup and handler lives here**, which
-   is WaxFrame's convention for `wf-debug.js`, adopted for the reason
-   WaxFrame gives: a toolbar whose handlers are scattered across the
-   app grows dead buttons, and a button that calls nothing is worse
-   than no button.
+   **Every dev-toolbar button's markup and handler lives here**, which is
+   WaxFrame's convention for `wf-debug.js`, adopted for the reason WaxFrame
+   gives: a toolbar whose handlers are scattered across the app grows dead
+   buttons, and a button that calls nothing is worse than no button.
 
-   The buttons are written as markup - emoji, short label, `title` -
-   and wired declaratively with `data-action="call"` and
-   `data-fn="WD.Dev.something"`, resolved by the dispatcher in
-   wd-dev.js. That is WaxFrame's `data-fn="WF_DEBUG.bundleForScout"`
-   shape, one for one.
+   The buttons are wired declaratively - `data-action="call"` with
+   `data-fn="WD.Dev.openRealign"` - and run by the dispatcher in wd-dev.js.
+   That is WaxFrame's `data-fn="WF_DEBUG.bundleForScout"` shape, one for one.
 
-   Two groups, separated by `|` the way WaxFrame separates its Deep
-   Dive / Bundle / Clear cluster from its Force Truncate / Refresh
-   Pricing one. The Cloud group uses a hover flyout, which is what
-   WaxFrame does with its five Scenes buttons.
+   Why the labels are words rather than emoji with a tooltip
+   ---------------------------------------------------------
+   He opened the first build of this and said: *"there are items in here and I
+   don't know what they do."* Fair. The buttons were `🔍 Preview Realign` and
+   `✅ Align For Real` with the explanation in a `title`, and his standing
+   rules are that every control says what it is and that nothing a decision
+   depends on hides behind a hover.
 
-   Adding an action: one button in `toolbarInnerHtml`, one handler
-   below it. An action that writes gets two buttons - a preview and a
-   live one rendered `disabled` - because the live one must not be
-   pressable until its own preview has come back clean.
+   So: **the strip carries readable names, and nothing in the strip writes to
+   anything.** Each button opens a panel - WaxFrame's modal, which is where
+   WaxFrame already puts detail - and that panel explains in plain words what
+   the action looks at, what it changes, what it backs up, and that the
+   preview changes nothing. The controls live under that explanation, so he
+   cannot reach a destructive one without having scrolled past what it does.
+
+   The hover flyout went with it. It was WaxFrame's answer to nine buttons,
+   and hover-to-reveal is exactly what he ruled out for anything a decision
+   rests on.
+
+   Read-only versus writes stays visible: the preview control is lime and says
+   it changes nothing, the live one is pink and stays `disabled` until its own
+   preview has come back clean.
    ============================================================ */
 (function () {
   'use strict';
@@ -37,59 +47,59 @@
   }
 
   /* ── the strip ───────────────────────────────────────────────
-     WaxFrame writes this into index.html; there is no single page
-     here, so it is a string. Same elements, same attributes. */
+     WaxFrame writes this into index.html; there is no single page here, so
+     it is a string. Same elements, same attributes. Every label is a phrase
+     a person can read cold, and the trailing ellipsis is the usual signal
+     that the control opens something rather than doing something. */
   Dev.toolbarInnerHtml = function () {
     return '' +
-      '<div class="dev-flyout">' +
-        '<button class="dev-flyout-trigger" type="button" ' +
-                'title="Cloud Manager maintenance — hover for menu">' +
-          '☁ Cloud</button>' +
-        '<div class="dev-flyout-panel">' +
-          '<button id="wdRealignPreviewBtn" type="button" ' +
-                  'data-action="call" data-fn="WD.Dev.realignPreview" ' +
-                  'title="Work out which pairs read ‘cloud newer’ only because ' +
-                  'the cloud project was renamed, and report what would change. ' +
-                  'Downloads each cloud copy to prove the designs are identical. ' +
-                  'Writes nothing.">' +
-            '🔍 Preview Realign</button>' +
-          '<button id="wdRealignRunBtn" type="button" disabled ' +
-                  'data-action="call" data-fn="WD.Dev.realignRun" ' +
-                  'title="Preview first. Rewrites the project name and modified date ' +
-                  'inside the local .esx files the preview listed, backing each one ' +
-                  'up first. Nothing is uploaded or deleted.">' +
-            '✅ Align For Real</button>' +
-        '</div>' +
-      '</div>' +
+      '<button id="wdRealignOpenBtn" type="button" ' +
+              'data-action="call" data-fn="WD.Dev.openRealign" ' +
+              'title="Open the realign panel">' +
+        'Realign renamed cloud projects…</button>' +
       '<span class="dev-toolbar-sep">|</span>' +
-      '<button id="wdHousekeepLookBtn" type="button" ' +
-              'data-action="call" data-fn="WD.Dev.housekeepLook" ' +
-              'title="Inventory what our tooling has left behind — worktrees, ' +
-              'scratch folders, leaked temp directories, drivers, downloaded ' +
-              'release ZIPs. Marks anything in use, counts anything carrying ' +
-              'workplace data, and writes nothing.">' +
-        '🔎 Look</button>' +
-      '<button id="wdHousekeepSweepBtn" type="button" disabled ' +
-              'data-action="call" data-fn="WD.Dev.housekeepSweep" ' +
-              'title="Look first. Deletes the items marked safe to remove. Never ' +
-              'touches Dropbox, your project folders, ~/.wd_wireless_tools, your ' +
-              'Desktop, or anything a session is using.">' +
-        '🗑 Delete Listed</button>' +
+      '<button id="wdHousekeepOpenBtn" type="button" ' +
+              'data-action="call" data-fn="WD.Dev.openHousekeeping" ' +
+              'title="Open the clean-up panel">' +
+        'Clean up leftover files…</button>' +
       '<span class="dev-toolbar-sep">|</span>' +
       '<button id="wdDevAboutBtn" type="button" ' +
               'data-action="call" data-fn="WD.Dev.showWhereIAm" ' +
-              'title="What dev mode is, how it was turned on, and how to leave it.">' +
-        'ℹ About Dev</button>';
+              'title="What dev mode is and how to leave it">' +
+        'About dev mode</button>';
   };
 
-  /* Re-assert every button's armed state whenever the toolbar mounts.
-     A page navigation rebuilds the strip, and a live button must come
-     back disabled - the preview it was armed by belongs to the page
-     that has gone. */
-  Dev.onMounted = function () {
-    Dev.setEnabled('wdRealignRunBtn', false);
-    Dev.setEnabled('wdHousekeepSweepBtn', false);
-  };
+  /* Nothing in the strip is armed, so there is no per-page state to reset;
+     each panel arms its own live control when its own preview succeeds. */
+  Dev.onMounted = function () {};
+
+  /* One shape for every panel: a plain-language explanation, then the
+     controls, then the output. `intro` is a list of {q, a} - the question he
+     would ask, and the answer - because a wall of prose is not something
+     anyone reads before clicking. */
+  function panel(opts) {
+    return '' +
+      '<p class="dev-panel-lead">' + esc(opts.lead) + '</p>' +
+      '<dl class="dev-panel-facts">' +
+        opts.facts.map(function (f) {
+          return '<dt>' + esc(f.q) + '</dt><dd>' + esc(f.a) + '</dd>';
+        }).join('') +
+      '</dl>' +
+      '<div class="dev-panel-controls">' + opts.controls + '</div>' +
+      '<div class="dev-panel-out" id="devPanelOut"></div>';
+  }
+
+  function safeBtn(id, fn, label, title) {
+    return '<button type="button" class="dev-btn dev-btn-safe" id="' + id + '" ' +
+           'data-action="call" data-fn="' + fn + '" title="' + esc(title) + '">' +
+           esc(label) + '</button>';
+  }
+
+  function writeBtn(id, fn, label, title) {
+    return '<button type="button" class="dev-btn dev-btn-write" id="' + id + '" ' +
+           'disabled data-action="call" data-fn="' + fn + '" ' +
+           'title="' + esc(title) + '">' + esc(label) + '</button>';
+  }
 
   function busy(id, on, label) {
     var btn = document.getElementById(id);
@@ -103,21 +113,62 @@
     }
   }
 
-  function fail(title, e) {
-    Dev.showResult(title,
-      '<p class="dev-result-error">' + esc((e && e.message) || e) + '</p>');
+  function fail(e) {
+    Dev.setPanelOutput('<p class="dev-result-error">' +
+      esc((e && e.message) || e) + '</p>');
   }
 
-  /* ── Cloud: realign renamed projects ─────────────────────────
-     Roughly ninety pairs read "cloud newer" because the cloud
-     projects were renamed and the local copies were not. The server
-     side is `tools/cloud_realign.py`; it proves each pair identical
-     by comparing contents, not names. */
+  /* ── Realign renamed cloud projects ──────────────────────────
+     Roughly ninety pairs read "cloud newer" because the cloud projects were
+     renamed and the local copies were not. Server side is
+     `tools/cloud_realign.py`; it proves each pair identical by comparing
+     contents, not names. */
+
+  Dev.openRealign = function () {
+    Dev.showResult('Realign renamed cloud projects', panel({
+      lead: 'Renaming a project in Ekahau Cloud moves its modified date. ' +
+            'The local copy did not change, so Cloud Manager starts ' +
+            'reporting "cloud newer" on files whose designs are identical. ' +
+            'This settles those pairs without pulling anything down.',
+      facts: [
+        { q: 'What it looks at',
+          a: 'Every matched pair where the cloud side reads newer. For each ' +
+             'one it downloads the cloud copy and compares every document ' +
+             'and every floor plan image against your local file - not the ' +
+             'names, which cannot prove the contents match.' },
+        { q: 'What it changes',
+          a: 'On pairs proved identical: the project name stored inside the ' +
+             '.esx, and the file’s modified date, set to the cloud ' +
+             'project’s own date. Nothing else in the file is touched.' },
+        { q: 'What it backs up',
+          a: 'Every file it rewrites, into your backups folder, before it ' +
+             'writes. If the backup cannot be written the file is left alone.' },
+        { q: 'What it will not do',
+          a: 'Nothing is uploaded and nothing is deleted from the cloud. ' +
+             'Pairs whose designs genuinely differ are skipped and listed ' +
+             'with the reason. It is safe to run again if it is interrupted.' },
+        { q: 'Before you press anything',
+          a: 'Preview first. It does the same downloading and comparing and ' +
+             'then writes nothing, so what it lists is what the live run ' +
+             'would do. The live button stays dead until a preview succeeds.' }
+      ],
+      controls:
+        safeBtn('wdRealignPreviewBtn', 'WD.Dev.realignPreview',
+                'Preview — changes nothing',
+                'Work out what would change and report it. Writes nothing.') +
+        writeBtn('wdRealignRunBtn', 'WD.Dev.realignRun',
+                 'Align them for real',
+                 'Preview first. This rewrites the files the preview listed.')
+    }));
+  };
 
   function realignCall(dryRun) {
     return WD.api('cloud/realign_renamed', { dryRun: dryRun });
   }
 
+  /* The report he decides on, at his scale - around ninety pairs.
+     Full names, never truncated, and the skipped ones grouped by reason so
+     the shape of the problem is visible without reading ninety lines. */
   function realignReport(r, isPreview) {
     if (!r) return '<p class="dev-result-error">No answer from the server.</p>';
     var aligned = r.aligned || [], skipped = r.skipped || [], failed = r.failed || [];
@@ -125,7 +176,7 @@
 
     out.push('<p class="dev-result-lead">' +
       'Examined ' + plural(r.examined || 0, 'pair', 'pairs') + '.' +
-      (isPreview ? ' Nothing has been changed.' : '') + '</p>');
+      (isPreview ? ' <strong>Nothing has been changed.</strong>' : '') + '</p>');
 
     out.push('<ul class="dev-result-tally">' +
       '<li><strong>' + aligned.length + '</strong> ' +
@@ -135,7 +186,9 @@
 
     if (aligned.length) {
       out.push('<h4 class="dev-result-section">' +
-        (isPreview ? 'Would align' : 'Aligned') + '</h4><ul class="dev-result-list">' +
+        (isPreview ? 'Would align — ' : 'Aligned — ') +
+        plural(aligned.length, 'project', 'projects') +
+        '</h4><ul class="dev-result-list">' +
         aligned.map(function (f) {
           return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
             (f.folder ? '<span class="dev-result-sub">' + esc(f.folder) + '</span>' : '') +
@@ -151,22 +204,43 @@
           '</li>';
         }).join('') + '</ul>');
     }
+
     if (skipped.length) {
-      out.push('<h4 class="dev-result-section">Skipped, and why</h4>' +
-        '<ul class="dev-result-list">' + skipped.map(function (f) {
-          return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
-            '<span class="dev-result-sub">' +
-              esc(f.reason || 'No reason given.') + '</span></li>';
-        }).join('') + '</ul>');
+      /* Grouped, because ninety pairs skipped one-by-one is a wall. The
+         reason is the thing he is scanning for, so it is the heading. */
+      var byReason = {};
+      var order = [];
+      skipped.forEach(function (f) {
+        var key = f.reason || 'No reason given.';
+        if (!byReason[key]) { byReason[key] = []; order.push(key); }
+        byReason[key].push(f);
+      });
+      out.push('<h4 class="dev-result-section">Skipped — ' +
+        plural(skipped.length, 'project', 'projects') + '</h4>');
+      order.forEach(function (reason) {
+        var group = byReason[reason];
+        out.push('<p class="dev-result-reason">' + esc(reason) +
+          ' <span class="dev-result-count">' +
+          plural(group.length, 'project', 'projects') + '</span></p>' +
+          '<ul class="dev-result-list">' + group.map(function (f) {
+            return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
+              (f.folder ? '<span class="dev-result-sub">' + esc(f.folder) +
+                '</span>' : '') + '</li>';
+          }).join('') + '</ul>');
+      });
     }
+
     if (failed.length) {
-      out.push('<h4 class="dev-result-section">Failed</h4>' +
-        '<ul class="dev-result-list">' + failed.map(function (f) {
+      out.push('<h4 class="dev-result-section">Failed — ' +
+        plural(failed.length, 'project', 'projects') +
+        '</h4><ul class="dev-result-list">' +
+        failed.map(function (f) {
           return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
             '<span class="dev-result-error">' +
               esc(f.error || 'Unknown error.') + '</span></li>';
         }).join('') + '</ul>');
     }
+
     if (!aligned.length && !skipped.length && !failed.length) {
       out.push('<p class="dev-result-lead">Nothing to do — no pair is ' +
         'reporting the cloud as newer.</p>');
@@ -175,19 +249,29 @@
   }
 
   Dev.realignPreview = function () {
-    busy('wdRealignPreviewBtn', true);
+    busy('wdRealignPreviewBtn', true, 'Comparing…');
     Dev.setEnabled('wdRealignRunBtn', false);
+    Dev.setPanelOutput('<p class="dev-result-lead">Downloading each cloud ' +
+      'copy and comparing it. This takes a moment per project.</p>');
     return realignCall(true).then(function (r) {
       busy('wdRealignPreviewBtn', false);
-      if (r && r.error) { fail('Realign — preview', r.error); return; }
-      Dev.showResult('Realign — preview', realignReport(r, true));
+      if (r && r.error) { fail(r.error); return; }
+      Dev.setPanelOutput(realignReport(r, true));
       // The only path that arms the live button, and only on a clean
-      // preview. A failed one leaves it dead, which is what we want on a
-      // bad day.
-      Dev.setEnabled('wdRealignRunBtn', true);
+      // preview. A failed one leaves it dead, which is what we want.
+      var n = (r && r.aligned && r.aligned.length) || 0;
+      Dev.setEnabled('wdRealignRunBtn', n > 0);
+      var btn = document.getElementById('wdRealignRunBtn');
+      if (btn && n > 0) {
+        // Name the number. "Align them for real" and "Align 87 projects for
+        // real" are different amounts of information at the moment it counts.
+        btn.textContent = 'Align ' + plural(n, 'project', 'projects') +
+                          ' for real';
+        delete btn.dataset.wasLabel;
+      }
     }).catch(function (e) {
       busy('wdRealignPreviewBtn', false);
-      fail('Realign — preview', e);
+      fail(e);
     });
   };
 
@@ -196,27 +280,61 @@
         'This rewrites the project name and modified date inside the local ' +
         '.esx files the preview listed, backing each one up first. ' +
         'Nothing is uploaded or deleted. Continue?')) return;
-    busy('wdRealignRunBtn', true);
+    busy('wdRealignRunBtn', true, 'Aligning…');
     return realignCall(false).then(function (r) {
       busy('wdRealignRunBtn', false);
       Dev.setEnabled('wdRealignRunBtn', false);
-      if (r && r.error) { fail('Realign', r.error); return; }
-      Dev.showResult('Realign — done', realignReport(r, false));
+      if (r && r.error) { fail(r.error); return; }
+      Dev.setPanelOutput(realignReport(r, false));
     }).catch(function (e) {
       busy('wdRealignRunBtn', false);
       Dev.setEnabled('wdRealignRunBtn', false);
-      fail('Realign', e);
+      fail(e);
     });
   };
 
-  /* ── Housekeeping: what our tooling left behind ───────────────
-     "how do I know, once we've done all the work, when to be able to
-     clean stuff up?" The server side is `tools/housekeeping.py`. */
+  /* ── Clean up leftover files ─────────────────────────────────
+     "how do I know, once we've done all the work, when to be able to clean
+     stuff up?" Server side is `tools/housekeeping.py`. */
 
-  /* The paths the look offered, so the sweep sends exactly what he was
-     shown. Cleared at the start of every look, so a stale list from an
-     earlier one can never be submitted. */
   var sweepable = [];
+
+  Dev.openHousekeeping = function () {
+    sweepable = [];
+    Dev.showResult('Clean up leftover files', panel({
+      lead: 'Development sessions leave things behind - worktrees, scratch ' +
+            'folders, temp directories, browser drivers, downloaded release ' +
+            'ZIPs. This inventories them and says which are safe to remove.',
+      facts: [
+        { q: 'What it looks at',
+          a: 'Only what our own tooling creates, matched by name. Anything ' +
+             'it does not recognise is left out of the list entirely.' },
+        { q: 'What it will not touch',
+          a: 'Nothing in Dropbox, nothing in your project folders, nothing ' +
+             'in ~/.wd_wireless_tools, and nothing on your Desktop - those ' +
+             'are listed so you can deal with them yourself, never deleted.' },
+        { q: 'What it leaves alone',
+          a: 'Anything a running session is using: a registered worktree, or ' +
+             'anything changed in the last few minutes. Each one is listed ' +
+             'with the reason it was kept.' },
+        { q: 'Your workplace data',
+          a: 'Items carrying site codes, project names or work addresses are ' +
+             'counted and reported first. The values themselves are never ' +
+             'shown.' },
+        { q: 'Before you press anything',
+          a: 'Look first. The delete button stays dead until it has. The ' +
+             'list is worked out again at delete time rather than trusted, ' +
+             'so anything that became busy in between is skipped.' }
+      ],
+      controls:
+        safeBtn('wdHousekeepLookBtn', 'WD.Dev.housekeepLook',
+                'Look — changes nothing',
+                'Inventory what is there. Writes nothing.') +
+        writeBtn('wdHousekeepSweepBtn', 'WD.Dev.housekeepSweep',
+                 'Delete what it listed',
+                 'Look first. Deletes the items marked safe to remove.')
+    }));
+  };
 
   function mb(bytes) {
     if (!bytes) return '0 MB';
@@ -263,9 +381,6 @@
     var t = r.totals || {};
     var out = [];
 
-    /* The data question first: it is not about disk space, it is that
-       copies of his site data should not be scattered around. Counts
-       only, never the values. */
     if (t.withData) {
       out.push('<p class="dev-result-lead dev-result-error">' +
         '<strong>' + plural(t.withData, 'item carries', 'items carry') +
@@ -301,7 +416,8 @@
           capped(del, 8, function (e) { return line(e, false); }) + '</ul>');
       }
       if (keep.length) {
-        out.push('<p class="dev-result-sub">Kept:</p><ul class="dev-result-list">' +
+        out.push('<p class="dev-result-reason">Kept</p>' +
+          '<ul class="dev-result-list">' +
           capped(keep, 6, function (e) { return line(e, true); }) + '</ul>');
       }
     });
@@ -354,21 +470,27 @@
 
   Dev.housekeepLook = function () {
     sweepable = [];
-    busy('wdHousekeepLookBtn', true);
+    busy('wdHousekeepLookBtn', true, 'Looking…');
     Dev.setEnabled('wdHousekeepSweepBtn', false);
     return WD.api('dev/housekeeping_survey', {}).then(function (r) {
       busy('wdHousekeepLookBtn', false);
-      if (r && r.error) { fail('Housekeeping', r.error); return; }
+      if (r && r.error) { fail(r.error); return; }
       (r && r.groups ? r.groups : []).forEach(function (g) {
         (g.entries || []).forEach(function (e) {
           if (e.deletable) sweepable.push(e.path);
         });
       });
-      Dev.showResult('Housekeeping', surveyReport(r));
-      Dev.setEnabled('wdHousekeepSweepBtn', true);
+      Dev.setPanelOutput(surveyReport(r));
+      Dev.setEnabled('wdHousekeepSweepBtn', sweepable.length > 0);
+      var btn = document.getElementById('wdHousekeepSweepBtn');
+      if (btn && sweepable.length) {
+        btn.textContent = 'Delete ' +
+          plural(sweepable.length, 'item', 'items');
+        delete btn.dataset.wasLabel;
+      }
     }).catch(function (e) {
       busy('wdHousekeepLookBtn', false);
-      fail('Housekeeping', e);
+      fail(e);
     });
   };
 
@@ -377,44 +499,46 @@
         'This permanently deletes the items the look marked safe to remove. ' +
         'Nothing of yours, nothing in use, and nothing from your Desktop. ' +
         'Continue?')) return;
-    busy('wdHousekeepSweepBtn', true);
+    busy('wdHousekeepSweepBtn', true, 'Deleting…');
     return WD.api('dev/housekeeping_sweep', { paths: sweepable })
       .then(function (r) {
         busy('wdHousekeepSweepBtn', false);
         Dev.setEnabled('wdHousekeepSweepBtn', false);
-        if (r && r.error) { fail('Housekeeping — delete', r.error); return; }
-        Dev.showResult('Housekeeping — done', sweepReport(r));
+        if (r && r.error) { fail(r.error); return; }
+        Dev.setPanelOutput(sweepReport(r));
       }).catch(function (e) {
         busy('wdHousekeepSweepBtn', false);
         Dev.setEnabled('wdHousekeepSweepBtn', false);
-        fail('Housekeeping — delete', e);
+        fail(e);
       });
   };
 
   /* ── About dev mode ──────────────────────────────────────────── */
 
   Dev.showWhereIAm = function () {
-    Dev.showResult('Dev mode',
-      '<p class="dev-result-lead">You are in dev mode. The tools themselves ' +
-      'are unchanged — this strip is the only difference.</p>' +
-      '<ul class="dev-result-list">' +
-        '<li><span class="dev-result-name">How it was turned on</span>' +
-        '<span class="dev-result-sub">Menu → Advanced → Dev Tools, ' +
-        'with the password; or <code>?dev=1</code> on any page.</span></li>' +
-        '<li><span class="dev-result-name">How to leave</span>' +
-        '<span class="dev-result-sub">Menu → Advanced → Exit Dev ' +
-        'Mode, or <code>?dev=0</code> on any page.</span></li>' +
-        '<li><span class="dev-result-name">Moving the strip</span>' +
-        '<span class="dev-result-sub">Drag it by the ⚙ DEV label. Where ' +
-        'you leave it is remembered.</span></li>' +
-        '<li><span class="dev-result-name">Anything that writes</span>' +
-        '<span class="dev-result-sub">Previews first. The live button stays ' +
-        'dead until its own preview has come back clean.</span></li>' +
-      '</ul>');
+    Dev.showResult('About dev mode', panel({
+      lead: 'You are in dev mode. The tools themselves are unchanged — ' +
+            'this strip is the only difference, and nothing on it writes to ' +
+            'anything until you open a panel and press a live control.',
+      facts: [
+        { q: 'How it was turned on',
+          a: 'Menu → Advanced → Dev Tools, with the password; or ' +
+             '?dev=1 on the end of any page address.' },
+        { q: 'How to leave',
+          a: 'Menu → Advanced → Exit Dev Mode, or ?dev=0 on any ' +
+             'page. It stays off until you turn it back on.' },
+        { q: 'Moving the strip',
+          a: 'Drag it by the DEV label. Where you leave it is remembered.' },
+        { q: 'Anything that writes',
+          a: 'Previews first. The live control stays dead until its own ' +
+             'preview has come back clean, and disarms again after a run.' }
+      ],
+      controls: '',
+    }));
   };
 
-  /* Exposed for the tests, which run the real renderers against real
-     payloads rather than reading this file. */
+  /* Exposed for the tests, which run the real renderers against real payloads
+     rather than reading this file. */
   Dev._realignReport = realignReport;
   Dev._surveyReport = surveyReport;
   Dev._sweepReport = sweepReport;

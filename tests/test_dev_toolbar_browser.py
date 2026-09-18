@@ -12,8 +12,8 @@ The properties, and where each comes from:
   opened from an Advanced nav item, with a second nav item to leave; a wrong
   password closes the modal and says nothing (WaxFrame `submitDevPassword`)
 * **the strip** - one horizontal row, a `⚙ DEV` label that is also the drag
-  handle, buttons with emoji + short label + `title`, `|` separators, and a
-  hover flyout for a cluster (WaxFrame `.dev-toolbar`, `.dev-flyout`)
+  handle, `|` separators, and buttons whose labels read as plain language,
+  each opening a panel rather than doing anything itself
 * **declarative registration** - `data-action="call"` + `data-fn="a.b.c"`,
   run by one delegated listener, resolved by walking a dotted path over
   `window` rather than by `eval` (WaxFrame `callAction` / `resolveDotted`)
@@ -47,10 +47,18 @@ WEB = ROOT / "web"
 #: An unusual port. 8675 is his own running instance and must never be bound.
 PORT_HINT = 8791
 
-#: The password whose SHA-256 is `DEV_PW_HASH` in `wd-dev.js`. In the test
-#: because the gate cannot be driven without it; it is not a secret - the
-#: hash sits in a public repository, exactly as WaxFrame's does.
-DEV_PASSWORD = "wdtools"
+#: **There is no password in this file, deliberately.** The gate uses the same
+#: hash as WaxFrame Professional now - his password, shared across both
+#: products at his request - and the plaintext belongs in neither repository.
+#:
+#: So the positive path is driven without knowing it: the test hashes a string
+#: it chose, points `WD.Dev._expectedHash` at that value, and submits. Every
+#: line of the real submit path runs - the input is read, hashed with the real
+#: SHA-256, compared, and on a match the flag is written and the toolbar
+#: mounts. What is not asserted is that one particular secret opens it, and
+#: that was never the interesting claim. That the shipped constant is the one
+#: WaxFrame uses is checked separately, by comparing the two files.
+TEST_PASSPHRASE = "a-string-this-test-invented"
 
 try:  # pragma: no cover - availability varies by machine
     from selenium import webdriver
@@ -300,23 +308,57 @@ class ToolbarInABrowser(unittest.TestCase):
         self.assertIsNone(self.driver.execute_script(
             "return localStorage.getItem('wd_dev');"))
 
-    def test_the_right_password_unlocks_it(self):
+    def arm_with_a_known_phrase(self):
+        """Point the gate at a hash this test knows, computed by the page's
+        own SHA-256. Nothing about the real constant is needed, or learned.
+
+        An async script, because hashing returns a promise - `execute_script`
+        would hand back `undefined` before it resolved and the test would then
+        be asserting about a gate that had not been re-pointed at all.
+        """
+        self.driver.set_script_timeout(20)
+        return self.driver.execute_async_script("""
+          var phrase = arguments[0], done = arguments[1];
+          window.WD.Dev._hash(phrase).then(function (h) {
+            window.WD.Dev._expectedHash = function () { return h; };
+            done(h);
+          });
+        """, TEST_PASSPHRASE)
+
+    def test_a_matching_password_unlocks_it(self):
+        """The whole submit path, run for real, without the secret."""
         self.locked()
         self.click(".menu-item.nav-item-dev")
         self.wait_for(lambda: self.visible("#devModal"), "the modal")
-        self.find("#devPwInput").send_keys(DEV_PASSWORD)
+        self.arm_with_a_known_phrase()
+        self.find("#devPwInput").send_keys(TEST_PASSPHRASE)
         self.click("#devModal .btn-primary")
         self.wait_for(lambda: self.visible("#devToolbar"), "the toolbar")
         self.assertEqual(self.driver.execute_script(
             "return localStorage.getItem('wd_dev');"), "1")
+
+    def test_the_input_is_hashed_rather_than_compared_as_text(self):
+        """The gate compares a SHA-256, not the string. Typing the hash
+        itself must not open it - if it did, the comparison would be against
+        whatever was typed rather than against a digest of it."""
+        self.locked()
+        self.click(".menu-item.nav-item-dev")
+        self.wait_for(lambda: self.visible("#devModal"), "the modal")
+        digest = self.arm_with_a_known_phrase()
+        self.assertRegex(digest, r"^[0-9a-f]{64}$")
+        self.find("#devPwInput").send_keys(digest)
+        self.click("#devModal .btn-primary")
+        self.wait_for(lambda: not self.visible("#devModal"), "the modal to close")
+        self.assertFalse(self.visible("#devToolbar"))
 
     def test_enter_submits_the_password(self):
         """WaxFrame wires the input with `data-key-action="enter-call"`."""
         self.locked()
         self.click(".menu-item.nav-item-dev")
         self.wait_for(lambda: self.visible("#devModal"), "the modal")
+        self.arm_with_a_known_phrase()
         field = self.find("#devPwInput")
-        field.send_keys(DEV_PASSWORD)
+        field.send_keys(TEST_PASSPHRASE)
         field.send_keys("\ue007")          # Enter
         self.wait_for(lambda: self.visible("#devToolbar"), "the toolbar")
 
@@ -365,22 +407,15 @@ class ToolbarInABrowser(unittest.TestCase):
         seps = self.driver.find_elements(By.CSS_SELECTOR, ".dev-toolbar-sep")
         self.assertGreaterEqual(len(seps), 1)
 
-    def test_there_is_a_hover_flyout_holding_a_cluster(self):
-        """WaxFrame collapses its five Scenes buttons into one. The panel is
-        pure CSS hover - no JS - so this checks it is present and closed."""
-        self.unlocked()
-        self.assertIsNotNone(self.find(".dev-flyout-trigger"))
-        panel = self.find(".dev-flyout-panel")
-        self.assertIsNotNone(panel)
-        self.assertEqual(self.driver.execute_script(
-            "return getComputedStyle(arguments[0]).display;", panel), "none")
-
     def test_every_button_carries_a_title_and_a_label(self):
         """WaxFrame puts a `title` on every dev-toolbar button, and this
-        project's own rule is that every control says what it is."""
+        project's own rule is that every control says what it is. The label
+        is what has to carry the meaning now - see
+        `test_every_strip_button_reads_as_plain_language` - and the title is
+        a courtesy on top of it."""
         self.unlocked()
         buttons = self.driver.find_elements(By.CSS_SELECTOR, "#devToolbar button")
-        self.assertGreaterEqual(len(buttons), 4)
+        self.assertGreaterEqual(len(buttons), 3)
         for b in buttons:
             label = (b.get_attribute("textContent") or "").strip()
             self.assertTrue(label, "a dev toolbar button has no label")
@@ -500,16 +535,114 @@ class ToolbarInABrowser(unittest.TestCase):
         self.assertIsNone(self.driver.execute_script(
             "return localStorage.getItem('wd_dev_toolbar_pos');"))
 
+    # ══ the strip says what it is ═════════════════════════════════
+    def test_every_strip_button_reads_as_plain_language(self):
+        """He opened the first build and said "there are items in here and I
+        don't know what they do." A label has to be a phrase, not an emoji
+        with the explanation hidden in a tooltip - his rule is that every
+        control says what it is, and that nothing a decision rests on hides
+        behind a hover."""
+        self.unlocked()
+        buttons = self.driver.find_elements(By.CSS_SELECTOR, "#devToolbar button")
+        self.assertGreaterEqual(len(buttons), 3)
+        for b in buttons:
+            label = (b.get_attribute("textContent") or "").strip()
+            words = [w for w in label.replace("\u2026", " ").split()
+                     if any(c.isalpha() for c in w)]
+            self.assertGreaterEqual(
+                len(words), 2,
+                "a dev toolbar button is not a readable phrase: %r" % label)
+
+    def test_nothing_in_the_strip_writes_to_anything(self):
+        """Every strip button opens a panel. The controls that write live
+        inside it, under the explanation, so he cannot reach one without
+        having scrolled past what it does."""
+        self.unlocked()
+        self.stub()
+        for btn in self.driver.find_elements(By.CSS_SELECTOR, "#devToolbar button"):
+            self.driver.execute_script("arguments[0].click();", btn)
+            self.wait_for(lambda: self.visible("#devResultModal"),
+                          "a panel for " + (btn.get_attribute("id") or "?"))
+            self.click("#devResultModal .btn")
+            self.wait_for(lambda: not self.visible("#devResultModal"), "it to close")
+        self.assertEqual(self.calls(), [],
+                         "a strip button reached the server on its own")
+
+    # ══ the panels explain themselves ═════════════════════════════
+    def open_realign(self):
+        self.click("#wdRealignOpenBtn")
+        self.wait_for(lambda: self.find("#wdRealignPreviewBtn") is not None,
+                      "the realign panel")
+
+    def open_housekeeping(self):
+        self.click("#wdHousekeepOpenBtn")
+        self.wait_for(lambda: self.find("#wdHousekeepLookBtn") is not None,
+                      "the housekeeping panel")
+
+    def panel_text(self):
+        body = self.find("#devResultBody")
+        return body.text if body else ""
+
+    def test_the_realign_panel_explains_itself_before_he_can_run_it(self):
+        """It rewrites ninety live project files. He should not have to ask
+        anyone what it does."""
+        self.unlocked()
+        self.open_realign()
+        text = self.panel_text().lower()
+        for needed in ("cloud newer", "backups folder", "nothing is uploaded",
+                       "preview", "modified date"):
+            self.assertIn(needed, text,
+                          "the realign panel never says %r" % needed)
+
+    def test_the_realign_panel_is_readable_without_hovering(self):
+        """Nothing that matters may live in a `title`."""
+        self.unlocked()
+        self.open_realign()
+        facts = self.driver.find_elements(By.CSS_SELECTOR, ".dev-panel-facts dd")
+        self.assertGreaterEqual(len(facts), 4)
+        for f in facts:
+            self.assertTrue(f.is_displayed())
+            self.assertGreater(len(f.text.strip()), 30)
+
+    def test_the_housekeeping_panel_explains_what_it_will_not_touch(self):
+        self.unlocked()
+        self.open_housekeeping()
+        text = self.panel_text().lower()
+        for needed in ("dropbox", "desktop", "project folders", "look first"):
+            self.assertIn(needed, text)
+
+    def test_read_only_and_writing_controls_look_different(self):
+        """Lime for the one that changes nothing, pink for the one that
+        writes. The distinction was his, and it survives the rebuild."""
+        self.unlocked()
+        self.open_realign()
+        safe = self.driver.execute_script(
+            "return getComputedStyle(document.getElementById("
+            "'wdRealignPreviewBtn')).borderTopColor;")
+        write = self.driver.execute_script(
+            "return getComputedStyle(document.getElementById("
+            "'wdRealignRunBtn')).borderTopColor;")
+        self.assertNotEqual(safe, write)
+        self.assertEqual(safe.replace(" ", ""), "rgb(132,204,22)")   # --lime
+
+    def test_the_safe_control_says_it_changes_nothing(self):
+        self.unlocked()
+        self.open_realign()
+        label = self.find("#wdRealignPreviewBtn").text.lower()
+        self.assertIn("changes nothing", label)
+
     # ══ realign, and the two-stage dry run ════════════════════════
     def test_the_realign_live_button_is_dead_until_a_preview_runs(self):
-        """His requirement, expressed in WaxFrame's idiom: the live button
-        is rendered `disabled` and only its own preview turns it on."""
+        """His requirement, in WaxFrame's idiom: the live control is rendered
+        `disabled` and only its own preview turns it on."""
         self.unlocked()
+        self.open_realign()
         self.assertFalse(self.find("#wdRealignRunBtn").is_enabled())
 
     def test_the_realign_preview_asks_for_a_dry_run(self):
         self.unlocked()
         self.stub()
+        self.open_realign()
         self.click("#wdRealignPreviewBtn")
         self.wait_for(lambda: len(self.calls()) == 1, "the preview call")
         call = self.calls()[0]
@@ -519,19 +652,42 @@ class ToolbarInABrowser(unittest.TestCase):
     def test_the_realign_preview_shows_its_report(self):
         self.unlocked()
         self.stub()
+        self.open_realign()
         self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: "Maple Depot Survey" in self.result_text(),
+        self.wait_for(lambda: "Maple Depot Survey" in self.panel_text(),
                       "the preview report")
-        text = self.result_text()
+        text = self.panel_text()
         self.assertIn("Nothing has been changed", text)
         self.assertIn("genuinely differ", text)
 
-    def test_a_clean_preview_arms_the_realign_live_button(self):
+    def test_a_clean_preview_arms_the_realign_live_button_and_names_the_count(self):
+        """"Align 1 project for real" tells him more than "Align them for
+        real" at the moment it matters."""
         self.unlocked()
         self.stub()
+        self.open_realign()
         self.click("#wdRealignPreviewBtn")
         self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(),
                       "the live button to arm")
+        self.assertIn("1 project", self.find("#wdRealignRunBtn").text)
+
+    def test_a_preview_with_nothing_to_do_leaves_the_live_button_dead(self):
+        """Arming a button that would rewrite nothing is an invitation to
+        press it and wonder what happened."""
+        self.unlocked()
+        self.driver.execute_script("""
+          window.__devCalls = [];
+          window.WD.api = function (a, b) {
+            window.__devCalls.push({ action: a, body: b });
+            return Promise.resolve({ ok: true, dryRun: true, examined: 0,
+              aligned: [], skipped: [], failed: [],
+              counts: { aligned: 0, skipped: 0, failed: 0 } });
+          };
+        """)
+        self.open_realign()
+        self.click("#wdRealignPreviewBtn")
+        self.wait_for(lambda: "Nothing to do" in self.panel_text(), "the report")
+        self.assertFalse(self.find("#wdRealignRunBtn").is_enabled())
 
     def test_a_failed_preview_leaves_the_realign_live_button_dead(self):
         self.unlocked()
@@ -539,14 +695,15 @@ class ToolbarInABrowser(unittest.TestCase):
             "window.__devCalls = [];"
             "window.WD.api = function () {"
             "  return Promise.resolve({ error: 'Not connected' }); };")
+        self.open_realign()
         self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: "Not connected" in self.result_text(),
-                      "the error")
+        self.wait_for(lambda: "Not connected" in self.panel_text(), "the error")
         self.assertFalse(self.find("#wdRealignRunBtn").is_enabled())
 
     def test_the_realign_live_run_sends_dry_run_false(self):
         self.unlocked()
         self.stub()
+        self.open_realign()
         self.click("#wdRealignPreviewBtn")
         self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
         self.driver.execute_script("window.confirm = function () { return true; };")
@@ -557,6 +714,7 @@ class ToolbarInABrowser(unittest.TestCase):
     def test_a_declined_confirm_sends_no_realign(self):
         self.unlocked()
         self.stub()
+        self.open_realign()
         self.click("#wdRealignPreviewBtn")
         self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
         self.driver.execute_script("window.confirm = function () { return false; };")
@@ -566,6 +724,7 @@ class ToolbarInABrowser(unittest.TestCase):
     def test_the_realign_live_button_disarms_after_a_run(self):
         self.unlocked()
         self.stub()
+        self.open_realign()
         self.click("#wdRealignPreviewBtn")
         self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
         self.driver.execute_script("window.confirm = function () { return true; };")
@@ -577,11 +736,13 @@ class ToolbarInABrowser(unittest.TestCase):
     # ══ housekeeping ══════════════════════════════════════════════
     def test_the_housekeeping_delete_button_is_dead_until_it_has_looked(self):
         self.unlocked()
+        self.open_housekeeping()
         self.assertFalse(self.find("#wdHousekeepSweepBtn").is_enabled())
 
     def test_looking_asks_the_survey_endpoint(self):
         self.unlocked()
         self.stub()
+        self.open_housekeeping()
         self.click("#wdHousekeepLookBtn")
         self.wait_for(lambda: len(self.calls()) == 1, "the survey call")
         self.assertEqual(self.calls()[0]["action"], "dev/housekeeping_survey")
@@ -589,9 +750,10 @@ class ToolbarInABrowser(unittest.TestCase):
     def test_the_look_leads_with_the_workplace_data_count(self):
         self.unlocked()
         self.stub()
+        self.open_housekeeping()
         self.click("#wdHousekeepLookBtn")
-        self.wait_for(lambda: "workplace data" in self.result_text(), "the report")
-        text = self.result_text()
+        self.wait_for(lambda: "workplace data" in self.panel_text(), "the report")
+        text = self.panel_text()
         self.assertIn("1 item carries", text)
         self.assertIn("4 signals", text)
         self.assertIn("live-one", text)
@@ -602,6 +764,7 @@ class ToolbarInABrowser(unittest.TestCase):
         server re-checks anyway - this is the near guard, not the only one."""
         self.unlocked()
         self.stub()
+        self.open_housekeeping()
         self.click("#wdHousekeepLookBtn")
         self.wait_for(lambda: self.find("#wdHousekeepSweepBtn").is_enabled(), "arm")
         self.driver.execute_script("window.confirm = function () { return true; };")
@@ -613,22 +776,24 @@ class ToolbarInABrowser(unittest.TestCase):
         self.assertIn("C:/Temp/wd-cloud-pull-aaa", paths)
         self.assertNotIn("C:/wd-worktrees/live-one", paths)
 
-    def test_a_second_look_replaces_the_list_rather_than_adding_to_it(self):
+    def test_reopening_the_panel_clears_the_pending_list(self):
         """A stale path from an earlier look must never reach a delete."""
         self.unlocked()
         self.stub()
+        self.open_housekeeping()
         self.click("#wdHousekeepLookBtn")
-        self.wait_for(lambda: self.find("#wdHousekeepSweepBtn").is_enabled(), "one")
-        self.click("#wdHousekeepLookBtn")
-        self.wait_for(lambda: len(self.calls()) == 2, "two")
-        self.wait_for(lambda: self.find("#wdHousekeepSweepBtn").is_enabled(), "re-arm")
-        pending = self.driver.execute_script(
-            "return window.WD.Dev._housekeepingPending();")
-        self.assertEqual(len(pending), 2)
+        self.wait_for(lambda: self.find("#wdHousekeepSweepBtn").is_enabled(), "arm")
+        self.click("#devResultModal .btn")
+        self.open_housekeeping()
+        self.assertEqual(
+            self.driver.execute_script(
+                "return window.WD.Dev._housekeepingPending();"), [])
+        self.assertFalse(self.find("#wdHousekeepSweepBtn").is_enabled())
 
     def test_a_declined_confirm_sends_no_sweep(self):
         self.unlocked()
         self.stub()
+        self.open_housekeeping()
         self.click("#wdHousekeepLookBtn")
         self.wait_for(lambda: self.find("#wdHousekeepSweepBtn").is_enabled(), "arm")
         self.driver.execute_script("window.confirm = function () { return false; };")
@@ -641,28 +806,28 @@ class ToolbarInABrowser(unittest.TestCase):
             "window.__devCalls = [];"
             "window.WD.api = function () {"
             "  return Promise.resolve({ error: 'Could not read the folder' }); };")
+        self.open_housekeeping()
         self.click("#wdHousekeepLookBtn")
-        self.wait_for(lambda: "Could not read" in self.result_text(), "the error")
+        self.wait_for(lambda: "Could not read" in self.panel_text(), "the error")
         self.assertFalse(self.find("#wdHousekeepSweepBtn").is_enabled())
 
-    # ══ the result modal ══════════════════════════════════════════
-    def test_a_report_opens_in_a_modal_and_closes_again(self):
+    # ══ the panel modal ═══════════════════════════════════════════
+    def test_a_panel_opens_and_closes_again(self):
         """WaxFrame shows detail in a modal rather than growing the strip."""
         self.unlocked()
         self.stub()
-        self.click("#wdHousekeepLookBtn")
-        self.wait_for(lambda: self.visible("#devResultModal"), "the modal")
+        self.open_housekeeping()
+        self.assertTrue(self.visible("#devResultModal"))
         self.click("#devResultModal .btn")
         self.wait_for(lambda: not self.visible("#devResultModal"), "it to close")
 
     def test_about_dev_says_how_to_leave(self):
-        """`TheAppOnlyPointsAtControlsThatExistTests` in spirit: if the app
-        tells him how to get out, that route has to work."""
+        """If the app tells him how to get out, that route has to work."""
         self.unlocked()
         self.click("#wdDevAboutBtn")
-        self.wait_for(lambda: "Exit Dev Mode" in self.result_text(),
+        self.wait_for(lambda: "Exit Dev Mode" in self.panel_text(),
                       "the about panel")
-        self.assertIn("?dev=1", self.result_text())
+        self.assertIn("?dev=1", self.panel_text())
 
 
 class FirefoxToolbarTests(ToolbarInABrowser):

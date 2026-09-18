@@ -62,17 +62,35 @@
   var LS_DEV = 'wd_dev';
   var LS_POS = 'wd_dev_toolbar_pos';
 
-  /* SHA-256 of the dev password, the same shape as WaxFrame's
-     DEV_PW_HASH. **This repository is public, and so is WaxFrame's**, so
-     this is obfuscation rather than security in both - it keeps a curious
-     user out of a maintenance surface, and nothing more. It guards a
-     toolbar on a server bound to localhost, which is the only reason that
-     trade is acceptable.
+  /* **The same hash WaxFrame Professional uses**, copied across at his
+     request: one dev password to remember across both products, and the same
+     muscle memory in each. An earlier build here generated its own, on the
+     reasoning that a password should not be shared between two things - he
+     overruled that, and it is his password and his two products.
 
-     To change it: `python -c "import hashlib;
-     print(hashlib.sha256(b'NEW').hexdigest())"` and paste the result here. */
+     Only the hash moves. The plaintext is not in this repository, not in the
+     tests, and not in any commit message.
+
+     **Both repositories are public**, so this value now appears in two public
+     places. That is no more exposed than it already was - it is the same hash
+     either way - but one recovered password opens both products' dev modes
+     rather than one. Worth knowing, and it does not change what the gate is:
+     obfuscation, not security. It keeps a curious user out of a maintenance
+     surface on a localhost-bound server, and nothing more. Anyone with a
+     browser console can set the flag directly.
+
+     To change it, in both products: hash a new value and replace the constant
+     here and in WaxFrame's `app.js`. */
   var DEV_PW_HASH =
-    'b62953849ec2565da27c080a91ea2dfdf351580b7a059f5447ad372bae393385';
+    'c930f4bedafc8f8dc0fc0b00f85851668dd60cc56c39ae8e1b09f5b2ea1e1902';
+
+  /* Exposed so the gate can be exercised without the plaintext. A test stubs
+     `_expectedHash` to the hash of a string it chose and drives the real
+     submit path; `_hash` is plain SHA-256 and carries no secret. Neither
+     weakens anything - the constant above is readable in this file, and the
+     flag is settable from any console. */
+  Dev._hash = function (s) { return hashString(s); };
+  Dev._expectedHash = function () { return DEV_PW_HASH; };
 
   function read(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }
@@ -119,7 +137,7 @@
     var input = document.getElementById('devPwInput');
     var val = (input && input.value) || '';
     return hashString(val).then(function (hash) {
-      if (hash !== DEV_PW_HASH) {
+      if (hash !== Dev._expectedHash()) {
         // WaxFrame says nothing on a wrong password - it just closes.
         // Telling a guesser they were close is worse than saying nothing.
         Dev.hideDevModal();
@@ -422,7 +440,21 @@
     tb.style.top = t + 'px';
   }
 
-  /* ── result modal ────────────────────────────────────────────── */
+  /* ── the action panel ────────────────────────────────────────────
+     WaxFrame puts detail in a modal rather than growing the strip, and this
+     is that modal - but it holds the action's *controls* as well as its
+     output, not just a report.
+
+     That is the answer to "there are items in here and I don't know what they
+     do". A strip button cannot carry a sentence, and a `title` tooltip is
+     hover-to-reveal, which is not an acceptable way to tell him what a button
+     that rewrites ninety project files is about to do. So the strip button
+     opens this, the panel explains in plain words, and the controls are in
+     here underneath the explanation. Nothing in the strip writes to anything.
+
+     Whatever is put in `#devResultBody` is inside `#wdDevRoot`, so the
+     delegated dispatcher picks up `data-action="call"` on controls rendered
+     into it exactly as it does for the strip. */
 
   Dev.showResult = function (title, html) {
     var t = document.getElementById('devResultTitle');
@@ -431,6 +463,13 @@
     if (t) t.textContent = title;
     if (b) b.innerHTML = html;
     if (m) m.classList.add('active');
+  };
+
+  /* Replace only the output area of an open panel, leaving the explanation
+     and the controls where they are. */
+  Dev.setPanelOutput = function (html) {
+    var out = document.getElementById('devPanelOut');
+    if (out) out.innerHTML = html;
   };
 
   Dev.closeResult = function () {

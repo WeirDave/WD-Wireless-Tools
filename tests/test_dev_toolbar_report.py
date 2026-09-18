@@ -159,18 +159,58 @@ class ItNamesEveryFileAndWhatHappensToIt(unittest.TestCase):
         self.assertIn("timed out", out["text"])
 
     def test_a_skip_and_a_failure_are_told_apart(self):
-        """Different headings and different classes, because "we chose not
-        to" and "we could not" call for different responses from him."""
+        """Different headings, because "we chose not to" and "we could not"
+        call for different responses from him."""
         out = render(report(skipped=[SKIPPED], failed=[FAILED]), False)
         self.assertIn("Skipped", out["text"])
         self.assertIn("Failed", out["text"])
-        # The property is the distinction, not the class names - see the
-        # same change in test_housekeeping_report.py.
-        import re
-        skip = re.search(r'<span class="([^"]+)">The designs genuinely', out["html"])
-        fail = re.search(r'<span class="([^"]+)">Could not fetch', out["html"])
-        self.assertTrue(skip and fail)
-        self.assertNotEqual(skip.group(1), fail.group(1))
+        self.assertIn("The designs genuinely differ", out["text"])
+        self.assertIn("Could not fetch", out["text"])
+        # A failure's error keeps its own class; a skip's reason is now a
+        # heading over its group. The property is that they are distinct, not
+        # what either is called.
+        self.assertIn("dev-result-error", out["html"])
+        self.assertIn("dev-result-reason", out["html"])
+
+    def test_skipped_projects_are_grouped_by_reason(self):
+        """At ninety pairs, a flat list of skips is a wall. The reason is
+        what he is scanning for, so it is the heading and the projects sit
+        under it with a count."""
+        same = [dict(SKIPPED, name="Birch Yard Walkthrough"),
+                dict(SKIPPED, name="Cedar Annexe Survey"),
+                dict(SKIPPED, name="Alder Court Survey")]
+        other = dict(SKIPPED, name="Elm Row Survey",
+                     reason="Already aligned - nothing to change.")
+        out = render(report(skipped=same + [other]), True)
+        text = out["text"]
+        # Two reasons, each stated once, with its own count.
+        self.assertEqual(text.count("The designs genuinely differ"), 1)
+        self.assertIn("3 projects", text)
+        self.assertIn("Already aligned", text)
+        self.assertIn("1 project", text)
+        # And every name still appears - grouping must not drop any.
+        for f in same + [other]:
+            self.assertIn(f["name"], text)
+
+    def test_no_project_name_is_truncated(self):
+        """He reads this at ninety pairs and decides from it. A name cut
+        short is a name he cannot match to a file."""
+        long_name = "Willow Industrial Park Phase Two Predictive Design Rev C"
+        out = render(report(aligned=[dict(ALIGNED, name=long_name)],
+                            skipped=[dict(SKIPPED, name=long_name + " B")]), True)
+        self.assertIn(long_name, out["text"])
+        self.assertIn(long_name + " B", out["text"])
+        self.assertNotIn("…", out["text"].replace("… and", ""))
+
+    def test_a_ninety_pair_report_lists_every_one(self):
+        """The real scale. Nothing is capped away on this screen."""
+        aligned = [dict(ALIGNED, name="Site %02d Survey" % i) for i in range(60)]
+        skipped = [dict(SKIPPED, name="Site %02d Walkthrough" % i)
+                   for i in range(60, 90)]
+        out = render(report(aligned=aligned, skipped=skipped), True)
+        self.assertIn("Examined 90 pairs", out["text"])
+        for f in aligned + skipped:
+            self.assertIn(f["name"], out["text"])
 
     def test_a_backup_location_is_shown_for_a_file_that_was_rewritten(self):
         """He has been sent to the wrong place for an overwritten file
