@@ -73,11 +73,18 @@ class NoPathIsEscapedIntoAMessage(unittest.TestCase):
         self.assertNotIn("PPPP", msg)
         self.assertNotIn("C:\\", msg)
 
-    def test_it_still_says_why_and_what_to_do(self):
+    def test_it_still_says_why(self):
         """Stripping the path must not strip the explanation with it."""
         dest = "C:\\a\\" + ("P" * 280) + ".esx"
+        self.assertIn("The system cannot find the path specified",
+                      self._failure_message(dest))
+
+    @unittest.skipUnless(os.name == "nt", "260 is a Windows limit")
+    def test_and_on_windows_says_what_to_do_about_the_length(self):
+        """The length advice is Windows-only on purpose: POSIX has no such
+        limit, and telling a Mac user to shorten a path would be noise."""
+        dest = "C:\\a\\" + ("P" * 280) + ".esx"
         msg = self._failure_message(dest)
-        self.assertIn("The system cannot find the path specified", msg)
         self.assertIn(str(len(dest)), msg)
         self.assertIn(str(B.MAX_PATH), msg)
         self.assertRegex(msg, r"shorten|nearer the top")
