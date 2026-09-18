@@ -25,6 +25,7 @@ test - anything the code reaches for and the page does not have, fails here.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import unittest
@@ -130,6 +131,8 @@ function _compareKey(c, l) {
 }
 function ownerFilter() { return 'all'; }
 function renderOwnerFilterNotice() {}
+// setFilter redraws the list; the shim has no list, only the header.
+function renderRows() {}
 
 function cloudOf(id, name, extra) {
   return Object.assign({ id, name, mtime: 200, owner: OWNER, siteName: '' }, extra || {});
@@ -206,8 +209,51 @@ run('no-current-user', () => {
   data = listing({ currentUser: '' });
 });
 
+/* Clicking a filter is what he actually does, so that is what is run. */
+out.clicks = [];
+function clickFilter(key) {
+  setFilter(key);
+  out.clicks.push({
+    key,
+    active: ELS.filter(e => e._classes.has('active') && e.dataset.filter)
+               .map(e => e.dataset.filter),
+    /* Through `.sum-more` itself: the shim resolves a descendant against an
+       element, not a two-part selector string. */
+    menuLabel: (() => {
+      const more = document.querySelector('.sum-more');
+      const btn = more && more.querySelector('.wd-menu-btn');
+      return btn ? String(btn.textContent) : '';
+    })(),
+  });
+}
+activeFilter = 'all';
+eval(cut('function setFilter(f) {', '\nfunction charDiff('));
+clickFilter('stale');
+clickFilter('mismatches');
+clickFilter('orphans-cloud');     // one that lives in the dropdown
+clickFilter('orphans-cloud');     // clicking it again clears it
+
 console.log(JSON.stringify(out));
 """
+
+
+def probe():
+    """Run the header once and share the result.
+
+    Module-level and cached, rather than one class's setUpClass reading an
+    attribute off another test class - that only works while the classes happen
+    to run in alphabetical order, and this repo has fallen into it three times.
+    (Described rather than written out: the guard against that form matches its
+    own documentation, which is how this docstring failed the first time.)
+    """
+    if getattr(probe, "_cache", None) is None:
+        r = subprocess.run(["node", "-e", PROGRAM, str(CLOUD_JS), str(CLOUD_HTML)],
+                           capture_output=True, text=True, encoding="utf-8",
+                           timeout=NODE_TIMEOUT_S)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).strip())
+        probe._cache = json.loads(r.stdout.strip().splitlines()[-1])
+    return probe._cache
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
@@ -215,12 +261,7 @@ class TheCountersActuallyReachThePage(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        r = subprocess.run(["node", "-e", PROGRAM, str(CLOUD_JS), str(CLOUD_HTML)],
-                           capture_output=True, text=True, encoding="utf-8",
-                           timeout=NODE_TIMEOUT_S)
-        if r.returncode != 0:
-            raise AssertionError((r.stdout + r.stderr).strip())
-        cls.runs = json.loads(r.stdout.strip().splitlines()[-1])["runs"]
+        cls.runs = probe()["runs"]
 
     def test_it_does_not_throw_on_any_tab(self):
         """The whole defect in one assertion.
@@ -288,6 +329,106 @@ class TheCountersActuallyReachThePage(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class ClickingAFilterMovesTheHighlight(unittest.TestCase):
+    """"when you click those it doesn't highlight that you're on those either
+    ... some buttons where the highlights don't move."
+
+    He read that as a half-finished design. It was a defect in the v2.118.0
+    fix: the dead `.dash-card` line existed in *three* places and I converted
+    two. The one I missed was `setFilter`, which is the one that runs on every
+    click - so the highlight was painted correctly on load and then never moved
+    again.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.clicks = probe()["clicks"]
+
+    def test_the_clicked_filter_becomes_the_marked_one(self):
+        self.assertEqual(["stale"], self.clicks[0]["active"])
+        self.assertEqual(["mismatches"], self.clicks[1]["active"])
+
+    def test_only_one_filter_is_ever_marked(self):
+        for c in self.clicks:
+            with self.subTest(clicked=c["key"]):
+                self.assertLessEqual(len(c["active"]), 1, c)
+
+    def test_a_filter_chosen_in_the_dropdown_shows_on_the_closed_control(self):
+        """"if you use the dropdown filters you don't know where you are."
+
+        The menu wears the filter chosen inside it, or picking one narrows the
+        list and the only evidence is behind a closed dropdown.
+        """
+        self.assertEqual(["orphans-cloud"], self.clicks[2]["active"])
+        self.assertNotIn("More filters", self.clicks[2]["menuLabel"] or "")
+        self.assertTrue((self.clicks[2]["menuLabel"] or "").strip())
+
+    def test_clicking_it_again_clears_it_and_the_control_goes_back(self):
+        self.assertEqual(["all"], self.clicks[3]["active"])
+        self.assertEqual("More filters", (self.clicks[3]["menuLabel"] or "").strip())
+
+
+class NoSelectorAddressesSomethingThatIsNotThere(unittest.TestCase):
+    """Why a fix aimed at exactly this bug missed three of its five sites.
+
+    A class name in JavaScript is a relationship between two files, and every
+    test in this suite reads one file at a time. `.dash-card` was removed from
+    the markup in v2.113.0 and left in five places in the code, where it went
+    on matching nothing - silently, because matching nothing is what
+    `querySelectorAll` does when it has nothing to say.
+
+    This checks the relationship instead: every class the ledger code selects
+    on has to exist in the page it selects from.
+    """
+
+    JS = CLOUD_JS.read_text(encoding="utf-8")
+    HTML = CLOUD_HTML.read_text(encoding="utf-8")
+
+    @staticmethod
+    def _code_only(js: str) -> str:
+        """Comments explain what a selector used to be, which is not a use.
+
+        This module's own note about `querySelectorAll('.dash-card')` was the
+        first thing the check reported, which is funny once and useless twice.
+        """
+        js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+        return re.sub(r"(?m)^\s*//.*$", "", js)
+
+    def test_no_dead_class_is_selected_on(self):
+        """Every class the code looks for has to be one that exists.
+
+        Deliberately not an allowlist of "classes we render" - that rots, and a
+        rotted allowlist is how `.dash-card` survived. A class exists if the
+        page carries it or if this file writes it, and both halves are read
+        from the source rather than maintained by hand.
+        """
+        code = self._code_only(self.JS)
+        written = set(re.findall(r"class=\"([^\"$]*)", code))
+        written |= set(re.findall(r"class=\"([^\"$]*)", self.HTML))
+        exists = set()
+        for chunk in written:
+            exists.update(chunk.split())
+        # `classList.add('x')` and friends put a class on an element too.
+        exists.update(re.findall(r"classList\.(?:add|toggle)\(\s*'([\w-]+)'", code))
+
+        selected = set()
+        for m in re.finditer(r"querySelector(?:All)?\(\s*'([^']+)'", code):
+            selected.update(re.findall(r"\.([a-zA-Z][\w-]*)", m.group(1)))
+
+        dead = sorted(selected - exists)
+        self.assertEqual(
+            [], dead,
+            "the code selects on classes nothing ever has, so these match "
+            "nothing and fail silently: " + ", ".join(dead))
+
+    def test_dash_card_in_particular_is_gone(self):
+        """The one that cost him the counters, the filter highlight, the
+        keyboard route and the Duplicates tab's filter list."""
+        live = [ln.strip() for ln in self._code_only(self.JS).splitlines()
+                if "dash-card" in ln and "querySelector" in ln]
+        self.assertEqual([], live, "; ".join(live))
+
+
 class NoCountGoesThroughAnUncheckedElement(unittest.TestCase):
     """The shape of the bug, banned rather than fixed once.
 

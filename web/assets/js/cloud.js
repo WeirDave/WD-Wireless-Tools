@@ -1165,11 +1165,14 @@ function updateDashboard() {
   const isDup = currentTab === 'duplicates';
   const isProj = currentTab === 'projects';
 
-  const stdCards = ['allcard', 'mismatches', 'orphans', 'cloud-only', 'local-only'];
-  stdCards.forEach(cls => {
-    document.querySelectorAll('.dash-card.' + cls).forEach(el => {
-      el.style.display = isDup ? 'none' : '';
-    });
+  /* The everyday filters, hidden where they mean nothing.
+
+     This matched `.dash-card`, which the redesign removed, so since v2.113.0
+     "items", "name mismatches" and the rest went on being offered on the
+     Duplicates tab - where none of them applies. Addressed by what they filter
+     now, like everything else. */
+  ['all', 'mismatches', 'orphans', 'orphans-cloud', 'orphans-local'].forEach(key => {
+    _showFilter(key, !isDup);
   });
 
   ['dup-all', 'dup-mixed', 'dup-local', 'dup-cloud'].forEach(key => {
@@ -1307,7 +1310,17 @@ function setFilter(f) {
 
   if (f === 'synced') f = 'all';
   activeFilter = activeFilter === f ? 'all' : f;
-  document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
+  /* The third copy of this rule, and the one that runs when he clicks.
+
+     It read `.dash-card`, which the v2.113.0 header redesign removed. v2.118.0
+     converted the two copies in the tab switcher and in `updateDashboard` and
+     missed this one - so the highlight was painted on load and then never
+     moved, which is exactly what he reported: "when you click those it doesn't
+     highlight that you're on those either."
+
+     One rule, one copy. That was the point of `_markActiveFilter` and it only
+     works if every caller uses it. */
+  _markActiveFilter();
   renderRows();
 }
 
@@ -7868,9 +7881,12 @@ function _reportMoveOutcome(results, dests) {
 function _wireFilterCardKeys() {
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter' && ev.key !== ' ' && ev.key !== 'Spacebar') return;
+    /* `.dash-card` again: this has matched nothing since v2.113.0, so the
+       keyboard route these were given has been dead for as long as the
+       filters have been buttons. A filter is found by what it filters. */
     const card = ev.target && ev.target.closest
-      ? ev.target.closest('.dash-card[data-filter]') : null;
-    if (!card) return;
+      ? ev.target.closest('[data-filter]') : null;
+    if (!card || typeof card.click !== 'function') return;
     ev.preventDefault();
     card.click();
   });
