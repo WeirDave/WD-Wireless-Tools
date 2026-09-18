@@ -198,9 +198,21 @@ class TheMiddleLaneIsOneLineTests(unittest.TestCase):
             with self.subTest(state=key):
                 self.assertNotIn("<button", self.out[key])
 
-    def test_the_lane_still_says_which_kind_of_match_it_is(self):
+    def test_the_lane_says_what_was_determined_not_how_sure_it_feels(self):
+        """"instead of 'same file' we should have, you know, exact match."
+
+        He is right, and it ran through the whole vocabulary. "Same file" was
+        the name of a *pairing* - both copies carry Ekahau's project id - and
+        nothing had been compared, so the label claimed more than was known.
+        It says what it established: same project.
+
+        `Exact match` is reserved for the finding that earns it, a content
+        comparison that came back identical, and this asserts it is *not* used
+        for a mere pairing - which is the mistake being corrected.
+        """
         self.assertIn("match-badge", self.out["gutSynced"])
-        self.assertIn("Same file", strip(self.out["gutSynced"]))
+        self.assertIn("Same project", strip(self.out["gutSynced"]))
+        self.assertNotIn("Exact match", strip(self.out["gutSynced"]))
 
     def test_an_unpaired_row_says_which_side_it_is_on(self):
         self.assertIn("Cloud only", strip(self.out["gutOrphan"]))

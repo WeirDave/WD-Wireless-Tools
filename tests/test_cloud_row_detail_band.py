@@ -67,13 +67,20 @@ function toast() {}
 async function pyApi(...args) { calls.push(args); return { ok: true, name: 'SITE1 New Convention' }; }
 async function showConfirmModal() { return true; }
 function _clearStaleness() {}
+/* An action redraws its own row now - that is the fix, not an incidental - so
+   the probe needs something for it to call, and counts the redraws. */
+globalThis.rendered = 0;
+function renderRows() { globalThis.rendered++; }
 function _scheduleOpRefresh() {}
 function selectedSyncItems() { return []; }
 function clearSelection() {}
 
-const fn = new Function('WD','e','a','j','pj','currentTab','opEnqueue','toast','pyApi','showConfirmModal','_clearStaleness','_scheduleOpRefresh','selectedSyncItems','clearSelection',
-  block + '\nreturn { stalenessBadgeHtml, rowDetailHtml, fixInternalName, _compareResults, _compareKey };');
-const api = fn(WD,e,a,j,pj,currentTab,opEnqueue,toast,pyApi,showConfirmModal,_clearStaleness,_scheduleOpRefresh,selectedSyncItems,clearSelection);
+// `renderRows` joined the list because an action redraws its own row now -
+// that is the fix rather than a side effect, so the probe supplies one and
+// counts the redraws.
+const fn = new Function('WD','e','a','j','pj','currentTab','opEnqueue','toast','pyApi','showConfirmModal','_clearStaleness','_scheduleOpRefresh','selectedSyncItems','clearSelection','renderRows',
+  block + '\nreturn { stalenessBadgeHtml, rowDetailHtml, fixInternalName, _setRowBusy, _compareResults, _compareKey };');
+const api = fn(WD,e,a,j,pj,currentTab,opEnqueue,toast,pyApi,showConfirmModal,_clearStaleness,_scheduleOpRefresh,selectedSyncItems,clearSelection,renderRows);
 
 const row = () => ({
   kind: 'projects', matchType: 'id', staleness: 'cloud_newer',
@@ -104,6 +111,10 @@ if (m) {
   const invoke = new Function('fixInternalName', 'return ' + m[1] + ';');
   invoke(api.fixInternalName);
   out.queuedTitle = queued.length ? queued[0].title : '';
+  /* The click has landed, so the row says it is working. Captured here
+     because the next render deliberately shows a different state. */
+  out.busyBand = api.rowDetailHtml(row(), false);
+  api._setRowBusy('c1', 'C:/projects/SITE1/SITE1 New Convention.esx', null);
 }
 
 // a real difference offers no name fix
@@ -117,6 +128,7 @@ out.differsBadge = api.stalenessBadgeHtml(row());
 (async () => {
   if (queued.length) { out.runResult = await queued[0].run('op1'); }
   out.calls = calls.slice();
+  out.rendered = globalThis.rendered;
   process.stdout.write(JSON.stringify(out));
   process.exit(0);
 })().catch(err => { process.stderr.write(String(err && err.stack || err)); process.exit(1); });
@@ -188,10 +200,26 @@ class TheFindingsGetTheFullWidthTests(unittest.TestCase):
         """Executed out of the rendered band, not matched as a string."""
         self.assertTrue(self.out["foundHandler"])
         calls = self.out["calls"]
-        self.assertEqual(1, len(calls))
         self.assertEqual("set_internal_project_name", calls[0][0])
         self.assertEqual("C:/projects/SITE1/SITE1 New Convention.esx", calls[0][1])
         self.assertEqual("SITE1 New Convention", calls[0][2])
+
+    def test_and_then_confirms_the_result_without_being_asked(self):
+        """"obviously I shouldn't have to recheck twice - once to tell me
+        what's wrong and another one after I've done the action."
+
+        He had to, because the row went on showing the state he had just
+        changed until a background poll noticed. The action re-compares its own
+        pair and renders the answer, so the second check is the tool's job now.
+        That is the second server call, and it is the point of the change
+        rather than an extra.
+        """
+        calls = self.out["calls"]
+        self.assertEqual(2, len(calls), calls)
+        self.assertEqual("compare_with_cloud", calls[1][0])
+        self.assertEqual("C:/projects/SITE1/SITE1 New Convention.esx", calls[1][2])
+        self.assertGreater(self.out["rendered"], 0,
+                           "the row was never redrawn, so he would not see it")
 
     def test_the_queued_operation_says_what_it_will_do(self):
         title = self.out["queuedTitle"]
@@ -203,6 +231,17 @@ class TheFindingsGetTheFullWidthTests(unittest.TestCase):
         self.assertNotIn("Set the name inside the file",
                          self.out["differsBand"])
         self.assertIn("accessPoints (3 changed)", self.out["differsBand"])
+
+    def test_a_row_mid_action_says_so_instead_of_its_old_state(self):
+        """"you don't have any idea if it worked or didn't work or did
+        something or didn't do something."
+
+        The click has to be visible where he is looking, which is the row - not
+        only in the ops deck in the corner.
+        """
+        self.assertIn("is-busy", self.out["busyBand"])
+        self.assertIn("Working", self.out["busyBand"])
+        self.assertNotIn("Cloud newer", self.out["busyBand"])
 
 
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")

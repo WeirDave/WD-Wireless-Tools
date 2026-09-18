@@ -9495,3 +9495,24 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 .ledger-row.is-openable button,
 .ledger-row.is-openable .row-menu { cursor: default; }
 .ledger-row.is-openable button { cursor: pointer; }
+
+/* A row that is mid-action says so, where he is looking.
+
+   "you don't have any idea if it worked or didn't work or did something or
+   didn't do something." The ops deck in the corner knew; the row did not, and
+   the row is what he is reading. */
+.row-detail.is-busy .rd-text { color: var(--text-2); }
+.rd-busy {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: var(--ctl-h); font-size: 12px; color: var(--accent);
+}
+.rd-busy::before {
+  content: ''; width: 11px; height: 11px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-top-color: var(--accent);
+  animation: wd-spin .7s linear infinite;
+}
+@keyframes wd-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .rd-busy::before { animation: none; border-top-color: transparent; }
+}

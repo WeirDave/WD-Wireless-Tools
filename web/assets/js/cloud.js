@@ -2526,18 +2526,25 @@ function matchBadgeHtml(r, kind) {
    a star - from when the chip was a filled pill and the glyph was the only
    thing distinguishing one colour from another at a glance. With a dot in
    front of every one of them, the row read "* / Same file". */
+/* Each label says what was *determined*, not how sure it feels.
+
+   "instead of 'same file' we should have, you know, exact match." He is right,
+   and the same vagueness ran through all of them. "Same file" was the name of
+   a *pairing* - the two carry Ekahau's id - and nothing had been compared, so
+   it claimed more than was known. `Exact match` is reserved for the finding
+   that earns it: a content comparison that came back identical. */
 const MATCH_BADGE_SPEC = {
-  manual: { cls: 'manual', label: 'You matched',   title: 'You linked these manually. Click to unlink and go back to auto-matching.' },
-  id:     { cls: 'id',     label: 'Same file',     title: 'Same Ekahau project — proven by a hidden ID stamped inside both .esx files. This is one project, just stored in two places.' },
-  exact:  { cls: 'exact',  label: 'Name matches',  title: 'Both files have the exact same name, but no hidden-ID link — very likely the same project, not proven.' },
-  code:   { cls: 'code',   label: 'Same site code', title: 'Same site code plus similar names. Probably the same project.' },
-  fuzzy:  { cls: 'fuzzy',  label: 'Similar name',  title: 'Some words in common. Our best guess — worth a look before syncing.' },
+  manual: { cls: 'manual', label: 'You linked it', title: 'You paired these by hand. Click to unlink and go back to auto-matching.' },
+  id:     { cls: 'id',     label: 'Same project',  title: 'One project in two places: both .esx files carry the same Ekahau project ID. That is who they are — it does not say the contents match. Use Check what differs for that.' },
+  exact:  { cls: 'exact',  label: 'Same name',     title: 'The two names are identical. Nothing else has been checked — no shared Ekahau ID, and the contents have not been compared.' },
+  code:   { cls: 'code',   label: 'Same site code', title: 'The site codes match and the names are close. Probably the same project; nothing is proven.' },
+  fuzzy:  { cls: 'fuzzy',  label: 'Similar name',  title: 'Some words in common. A guess from the wording alone — worth a look before syncing.' },
 };
 
 const MATCH_BADGE_SPEC_SITE_EXACT = {
   cls: 'id',
-  label: 'Same site',
-  title: 'Both sites share the same name. Sites don\'t have a stronger identity to compare (folders have no internal ID), so this is as matched as a site pair gets.',
+  label: 'Same name',
+  title: 'The two names match. A site has no stronger identity to compare - a folder carries no internal ID - so for a site pair this is as far as matching goes.',
 };
 
 /* Which pairings may be overwritten from the cloud.
@@ -2615,6 +2622,75 @@ function compareResultFor(r) {
 
    It is read-only and writes nothing to disk on either side, so it is safe to
    run across a whole selection before deciding anything. */
+/* Rows that are mid-action, so the click is visible the instant it lands. */
+const _rowBusy = new Map();
+
+function _rowKey(cloudId, localPath) { return _compareKey(cloudId, localPath); }
+
+function rowIsBusy(r) {
+  if (!r || !r.cloud || !r.local) return null;
+  return _rowBusy.get(_rowKey(r.cloud.id, r.local.path)) || null;
+}
+
+/* Long enough that a slow upload is not interrupted, short enough that he is
+   never left watching a spinner with nothing behind it. */
+const ROW_BUSY_CEILING_MS = 30000;
+const _rowBusyTimers = new Map();
+
+function _setRowBusy(cloudId, localPath, what) {
+  const k = _rowKey(cloudId, localPath);
+  const timer = _rowBusyTimers.get(k);
+  if (timer) { clearTimeout(timer); _rowBusyTimers.delete(k); }
+
+  if (what) {
+    _rowBusy.set(k, what);
+    /* A row that says "Working" forever is the original complaint wearing a
+       spinner. If nothing settles it, it stops claiming and says so. */
+    _rowBusyTimers.set(k, setTimeout(() => {
+      _rowBusyTimers.delete(k);
+      if (_rowBusy.get(k) !== what) return;
+      _rowBusy.delete(k);
+      toast('That is taking longer than expected — the row no longer says it '
+            + 'is working. Use Re-check to find out where it got to.', 'error');
+      renderRows();
+    }, ROW_BUSY_CEILING_MS));
+  } else {
+    _rowBusy.delete(k);
+  }
+  renderRows();
+}
+
+/* Re-evaluate one pair and draw what it now is.
+
+   This is the whole answer to "you don't have any idea if it worked". An
+   action owns the state it changed: it re-runs the comparison for its own pair
+   - one call, not ninety-eight - and renders the result, so the row he is
+   looking at states the outcome of the thing he just did. He never has to
+   press Check a second time to find out whether the first one worked, and he
+   never waits on a background poll to be told what he already did. */
+async function settlePair(cloudId, localPath, opts) {
+  const o = opts || {};
+  try {
+    const r = await pyApi('compare_with_cloud', cloudId, localPath);
+    if (r && !r.error) {
+      _compareResults.set(_compareKey(cloudId, localPath), r);
+      /* A comparison is measured where a date is inferred, so a proven
+         identical pair stops being reported as out of sync. Nothing is
+         rewritten on disk - this is the tool declining to keep asking a
+         question it has just answered. */
+      if (!r.designDiffers && r.nameState !== 'internal_only') {
+        _clearStaleness(cloudId);
+      }
+    } else if (r && r.error && !o.quiet) {
+      toast('Could not confirm the result: ' + r.error, 'error');
+    }
+  } catch (err) {
+    if (!o.quiet) toast('Could not confirm the result: ' + err.message, 'error');
+  } finally {
+    _setRowBusy(cloudId, localPath, null);
+  }
+}
+
 function checkRealDifference(cloudId, localPath, label) {
   const key = _compareKey(cloudId, localPath);
   opEnqueue({
@@ -2656,8 +2732,12 @@ function bulkCheckDifferences() {
 
    The previous file goes to `backups/<site>/` first; if that copy cannot be
    written, nothing is changed. */
-function fixInternalName(localPath, cloudName, label) {
-  opEnqueue({
+/* The action he walked through end to end, and the one that sent him round
+   the loop twice. It now finishes by saying what is true. */
+function fixInternalName(localPath, cloudName, label, cloudId) {
+  //: The click landed. Visibly, now, rather than in nine seconds.
+  if (cloudId) _setRowBusy(cloudId, localPath, 'Setting the name inside the file\u2026');
+  const { promise } = opEnqueue({
     title: `Setting the project name inside "${label}" to "${cloudName}"`,
     sub: 'Rewrites the name stored in the .esx. The previous file is backed up.',
     type: 'rename', pollBackend: false, undoable: false,
@@ -2674,6 +2754,17 @@ function fixInternalName(localPath, cloudName, label) {
       _scheduleOpRefresh();
       return r;
     },
+  });
+
+  /* The action owns the row it changed. It re-runs the comparison for this one
+     pair and renders the answer, so the row states the outcome of what he just
+     did - instead of going on asserting the state he changed until a poll
+     notices. "I shouldn't have to recheck twice." */
+  promise.then(() => {
+    if (cloudId) return settlePair(cloudId, localPath);
+    _scheduleOpRefresh();
+  }).catch(() => {
+    if (cloudId) _setRowBusy(cloudId, localPath, null);
   });
 }
 
@@ -2853,7 +2944,18 @@ function rowDetailHtml(r, stripe) {
   if (cmp) {
     tone = cmp.designDiffers ? 'rd-differs' : 'rd-same';
     icon = cmp.designDiffers ? 'notEqual' : 'check';
-    if (cmp.summary) sentences.push(cmp.summary);
+    /* Settled, and saying so. A comparison that came back identical in content
+       *and* name is the end of the question, so the row states the finding
+       rather than describing what was inspected - and the actions that no
+       longer apply are not offered. */
+    //: The comparison's own verdict - design, metadata and name all the
+    //: same. Deriving it from two other fields called "renamed only"
+    //: settled, and that is a pair whose rename still has to be applied.
+    if (cmp.identical) {
+      sentences.push('Exact match — the contents and the name are the same on both sides. Nothing to do.');
+    } else if (cmp.summary) {
+      sentences.push(cmp.summary);
+    }
   } else if (stale === 'cloud_newer') {
     sentences.push('The cloud copy has a later date. Not compared yet, so whether the design actually differs is unknown.');
   } else if (stale === 'local_newer') {
@@ -2862,7 +2964,7 @@ function rowDetailHtml(r, stripe) {
 
   if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only' && c && c.name && l) {
     acts.push(rdAction('rename', 'Set the name inside the file to match',
-      `fixInternalName('${pj(l.path)}','${j(c.name)}','${j(l.name || '')}')`,
+      `fixInternalName('${pj(l.path)}','${j(c.name)}','${j(l.name || '')}','${j(c.id)}')`,
       { primary: true, title: 'Renaming a file on disk does not change the project name stored inside it. This does, and backs the file up first.' }));
   }
 
@@ -2872,7 +2974,8 @@ function rowDetailHtml(r, stripe) {
 
   /* Matched on name alone, both sides current: the overwrite that upgrades the
      pair to a proven one. It used to hang off the middle lane. */
-  if (!stale && r.status === 'synced' && r.matchType === 'exact' && c && l) {
+  const _settled = !!(cmp && cmp.identical);
+  if (!stale && !_settled && r.status === 'synced' && r.matchType === 'exact' && c && l) {
     acts.push(rdAction('down', 'Download over local',
       `verifyReplaceLocal('${j(c.id)}','${pj(l.path)}','${j(c.name)}',${Number(c.mtime) || 0},${Number(l.mtime) || 0})`,
       { quiet: true, title: 'These matched on name alone. Taking the cloud copy over your local file makes them byte-identical, so the pair upgrades to Same file. Your current copy is kept in the backups folder.' }));
@@ -2889,6 +2992,17 @@ function rowDetailHtml(r, stripe) {
      button - which is exactly the noise this band was built to remove. It
      lives in the row menu instead, where it is always reachable, and it joins
      the band only once the band exists for another reason. */
+  /* Mid-action, and saying so on the row he is looking at rather than only in
+     the ops deck in the corner. */
+  const busy = rowIsBusy(r);
+  if (busy) {
+    return `<div class="row-detail rd-plain is-busy status-${r.status || ''}">`
+      + `<span class="rd-icon">${ic('swap')}</span>`
+      + `<span class="rd-text">${e(busy)}</span>`
+      + `<span class="rd-actions"><span class="rd-busy">Working</span></span>`
+      + `</div>`;
+  }
+
   if (!sentences.length && !stalenessAction && !acts.length) return '';
 
   if (c && l) {
@@ -2960,7 +3074,16 @@ function stalenessBadgeHtml(r) {
          "download" as the primary action contradicts the finding directly
          above it. The comparison is measured where the date is inferred, so it
          wins: the action is demoted to a quiet secondary. */
+      /* Proven identical, name and all: there is nothing to download.
+
+         It used to be demoted to "Download anyway", which he hit three times
+         and asked the only sensible question about - "which of those things is
+         right?". A quieter wrong option is still a wrong option, and "anyway"
+         implies overriding advice nobody gave. A settled row says it is
+         settled and offers Recheck. */
       const provenSame = cmp && !cmp.designDiffers;
+      const settled = provenSame && cmp.nameState !== 'internal_only';
+      if (settled) return '';
       const label = provenSame
         ? 'Download anyway'
         : renamedOnly
