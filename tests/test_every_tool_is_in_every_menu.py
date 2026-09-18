@@ -113,6 +113,74 @@ class EveryToolIsInEveryMenu(unittest.TestCase):
                     f"{f.name} has no navigation menu")
 
 
+class AMenuItemThatLeavesTheAppSaysWhereItGoes(unittest.TestCase):
+    """"We need to change in the navigation bar 'View issues' to 'View issues
+    on GitHub'."
+
+    The two entries at the bottom of Help & Support are the only things in any
+    menu that hand him to another website - one that needs an account he may
+    not be signed into, on a machine whose network may not reach it. "View
+    Issues" said none of that; it read like a panel inside the app.
+
+    The rule is about the destination, not the wording: an item that opens an
+    external site names that site. Nothing else in these menus leaves the app,
+    so nothing else is caught by this.
+    """
+
+    EXTERNAL = re.compile(
+        r'<a\s+class="(?:menu-item|help-menu-item)"([^>]*href="(https?://[^"]+)"[^>]*)>'
+        r'(.*?)</a>', re.S)
+
+    def _external_items(self):
+        for path in sorted(WEB.rglob("*.html")):
+            src = path.read_text(encoding="utf-8")
+            for m in self.EXTERNAL.finditer(src):
+                label = re.sub(r"<[^>]+>", "", m.group(3)).strip().lstrip("\u00b7 ")
+                yield path.name, label, m.group(2), m.group(1)
+
+    def test_the_issue_list_names_github(self):
+        found = [(f, label) for f, label, href, _ in self._external_items()
+                 if href.rstrip("/").endswith("/issues")]
+        self.assertTrue(found, "the issue list link has gone")
+        for filename, label in found:
+            with self.subTest(page=filename):
+                self.assertEqual("View Issues on GitHub", label)
+
+    # A ratchet, not a gate - the same shape as the no-real-data baseline.
+    # "Report a Bug" has exactly the gap he pointed at on its neighbour, and
+    # it is on eighteen pages, but the labels are his and he has not asked for
+    # that one. It is listed here so it stays visible, and so that anything
+    # *new* is still caught. See BACKLOG.md.
+    LABELS_HE_HAS_NOT_RULED_ON = {"Report a Bug"}
+
+    def test_every_outbound_item_names_the_site_it_opens(self):
+        """Generalised, because the next one added would have the same gap."""
+        for filename, label, href, _ in self._external_items():
+            if label in self.LABELS_HE_HAS_NOT_RULED_ON:
+                continue
+            with self.subTest(page=filename, label=label):
+                host = href.split("/")[2].lower()
+                site = "GitHub" if "github" in host else host
+                self.assertIn(site.lower(), label.lower(),
+                              f"{label!r} opens {host} without saying so")
+
+    def test_the_exemption_list_only_holds_labels_that_are_really_there(self):
+        """A stale exemption is a rule quietly switched off. If he renames one
+        of these, or it goes, this says so rather than leaving the entry to
+        rot."""
+        live = {label for _, label, _, _ in self._external_items()}
+        stale = self.LABELS_HE_HAS_NOT_RULED_ON - live
+        self.assertEqual(set(), stale,
+                         f"exempted labels that no longer exist: {stale}")
+
+    def test_an_outbound_item_opens_a_tab_rather_than_navigating_away(self):
+        """Losing the page he was working on to a bug report is its own bug."""
+        for filename, label, _, attrs in self._external_items():
+            with self.subTest(page=filename, label=label):
+                self.assertIn('target="_blank"', attrs)
+                self.assertIn("noopener", attrs)
+
+
 class EveryMenuButtonIsWiredToSomething(unittest.TestCase):
     """The Rename page's button had markup and no handler. A button that takes
     a click and does nothing produces no error, so only this catches it."""

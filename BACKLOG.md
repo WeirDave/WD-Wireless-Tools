@@ -9,6 +9,9 @@ Last reviewed against **v2.100.12**, 2026-09-14 — the second pass that day was
 verification sweep, run in Chrome, Edge and Firefox against a real project
 rather than read off the source. What it closed is noted on each item.
 
+The navigation labels were swept separately on 2026-09-18; what that found is
+under "Awaiting a decision, not work".
+
 > **What the 2026-09-14 review found.** The previous review was against
 > v2.69.0 — twenty-nine releases stale — and the problem was the opposite of
 > the one expected. Nothing in here had already shipped. What it did was
@@ -174,6 +177,40 @@ so they can be answered together.
   **AP Notes** at his request. The label page beside it still says **AP Label
   Reference**, so two sibling pages are named two different ways. Options:
   leave it, `AP Labels`, or `AP Label Key`.
+
+- **"Report a Bug" has the same gap "View Issues" had.** He asked for
+  **View Issues** → **View Issues on GitHub**, which shipped in v2.119.1. Its
+  neighbour in the same Help & Support section is the *only* other menu item
+  in the whole suite that leaves the app, it goes to the same GitHub
+  repository, and it says so no more than the one he corrected did. It is on
+  eighteen pages, so it is a find-and-replace rather than a decision about
+  effort. Options: leave it, `Report a Bug on GitHub`, or `Report a Bug
+  (GitHub)`. Until he says, it is exempted by name in
+  `tests/test_every_tool_is_in_every_menu.py` so that the rule still catches
+  any *new* outbound link.
+
+- **"User Guide" and "User Manual" sit next to each other and do not say which
+  is which.** Both are in Help & Support on the same pages, both are
+  in-app documents, and the names are near-synonyms. The Guide is the
+  per-tool walkthrough (`/guide-cloud`, `/guide-report`, …) and opens in a new
+  tab; the Manual is the one long suite-wide document and jumps to that tool's
+  anchor (`/manual#cloud-manager`). Nothing on screen carries that
+  distinction. Options: leave it, or make the Guide name its tool
+  (`Cloud Manager Guide`), or rename the pair to something like
+  `Walkthrough` / `Full Manual`.
+
+- **"Suite Settings" goes to five different places.** Most pages link
+  `/settings`, but Cloud Manager, Squirrel, Report and Quick Walls link
+  `/settings#cloud`, `#organizer`, `#report` and `#walls` — a jump to that
+  tool's own section, which the label does not mention. It is arguably right
+  as it is (it lands where you would want), and it is only worth changing if
+  the jump has ever surprised him. Options: leave it, or
+  `Suite Settings — Cloud` on the pages that deep-link.
+
+  *All three found by a sweep of every `menu-item` / `help-menu-item` in
+  `web/**.html` on 2026-09-18, done alongside the View Issues rename. Nothing
+  else in any menu is ambiguous about where it goes: everything else is either
+  a tool page, an in-app dialog, or an action with no destination.*
 
 
 ---
