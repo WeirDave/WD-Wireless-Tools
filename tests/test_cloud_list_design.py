@@ -308,12 +308,24 @@ class ASiteSaysWhetherItIsWorthOpeningTests(unittest.TestCase):
     def test_an_empty_site_says_empty_rather_than_zero_files(self):
         self.assertIn("empty", strip(self.out["siteEmpty"]))
 
-    def test_the_sites_start_closed(self):
+    def test_the_page_does_not_open_on_everything_at_once(self):
+        """It closed every site, and that went too far.
+
+        "At least before I understood what was going on even if it was ugly."
+        Opening on a list of site names is not the work - the digest says a
+        site is worth opening, not what is in it - and opening all of them is
+        the wall this change existed to remove.
+
+        So the split is by whether there is anything to do. A site holding a
+        decision opens itself; a site where everything is in sync stays shut.
+        The first thing on screen is the work that wants him.
+        """
         block = JS[JS.index("function closeSitesOnFirstSight()"):]
-        block = block[:block.index("\n}")]
-        self.assertIn("collapsed.add('site:'", block)
-        self.assertIn("onData", JS[:JS.index("function closeSitesOnFirstSight()")]
-                      + JS[JS.index("function closeSitesOnFirstSight()"):])
+        block = block[:block.index("\n}\n")]
+        self.assertIn("collapsed.add(", block)
+        self.assertIn("siteDigest(", block),
+        self.assertIn("attention", block)
+        self.assertIn("unpaired", block)
 
     def test_closing_them_happens_once_and_not_on_every_refresh(self):
         """Live refresh runs every few seconds. Re-closing the sites each time

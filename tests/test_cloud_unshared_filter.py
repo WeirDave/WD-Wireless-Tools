@@ -148,21 +148,36 @@ class TheCardBehavesLikeTheOthersTests(unittest.TestCase):
         """Not a one-off control in its own style."""
         self.assertIn('data-filter="unshared"', self.html)
         self.assertIn("setFilter('unshared')", self.html)
-        self.assertIn('id="dUnsharedCard"', self.html)
+        # It is found by what it filters now, not by the id of the box round
+        # it - see the note on the hiding test below.
+        self.assertIn('data-filter="unshared"', self.html)
 
     def test_it_shows_a_count(self):
         self.assertIn('id="dUnshared"', self.html)
         self.assertIn("dUnshared", self.js)
 
     def test_the_count_is_taken_through_the_owner_filter(self):
-        """Otherwise the number on the card and the rows in the list disagree."""
+        """Otherwise the number on the control and the rows in the list
+        disagree, which is the same lie in a smaller place."""
         window = self.js[self.js.index("let unsharedCount = 0;"):]
-        window = window[:window.index("const dUns =")]
+        window = window[:window.index("_setCount('dUnshared'")]
         self.assertIn("_passOwnerForCounts", window)
 
     def test_it_hides_itself_when_it_cannot_answer(self):
-        window = self.js[self.js.index("const dUnsCard ="):]
-        window = window[:window.index("document.getElementById('dTypeDesign')")]
+        """This read a local variable, `dUnsCard`, which was the id of the box
+        the old design drew round this filter. The box is gone and the
+        behaviour is not, so the assertion moved to the behaviour: it is
+        *driven* in test_cloud_dashboard_reaches_the_page.py, which runs
+        updateDashboard against the real cloud.html and checks the control is
+        actually hidden when there is no current user.
+
+        What stays here is that the hiding is keyed on knowing who he is - an
+        unshared filter with no answer to "yours" would silently mean something
+        else.
+        """
+        window = self.js[self.js.index("let unsharedCount = 0;"):]
+        window = window[:window.index("_setCount('dTypeDesign'")]
+        self.assertIn("_showFilter('unshared'", window)
         self.assertIn("currentUser", window)
 
     def test_the_filter_turns_itself_off_without_a_current_user(self):

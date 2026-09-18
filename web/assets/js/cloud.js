@@ -689,7 +689,7 @@ function _syncTabUI(kind) {
 
   const dupTbBtn = document.getElementById('dupDeleteAllToolbarBtn');
   if (dupTbBtn && kind !== 'duplicates') dupTbBtn.hidden = true;
-  document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
+  _markActiveFilter();
 }
 function switchTab(kind) {
   if (kind === currentTab) return;
@@ -720,9 +720,29 @@ function closeSitesOnFirstSight() {
     + (data.cloudOnly || []).length + ':' + (data.localOnly || []).length);
   if (_treeClosedFor === stamp) return;
   _treeClosedFor = stamp;
-  (data.matched || []).forEach(p => collapsed.add('site:' + p.cloud.id));
-  (data.cloudOnly || []).forEach(s => collapsed.add('site:' + s.id));
-  (data.localOnly || []).forEach(f => collapsed.add('folder:' + f.path));
+
+  /* A site that wants something opens; a site that is finished stays shut.
+
+     Closing all of them made the page open on a list of names rather than on
+     his work - "at least before I understood what was going on even if it was
+     ugly" - and the digest line does not make up for it: "2 need a decision"
+     says a site is worth opening, not what is inside it.
+
+     Opening all of them is the wall the site-first change was for. So the
+     split is by whether there is anything to do: the first thing on screen is
+     the work that wants him, and the sites with nothing to say keep quiet.
+     Expand all and Collapse all still override this. */
+  const wantsHim = (children) => {
+    const d = siteDigest(children);
+    return !!d && (d.attention > 0 || d.unpaired > 0);
+  };
+  const shut = (key, children) => {
+    if (!wantsHim(children)) collapsed.add(key);
+  };
+  (data.matched || []).forEach(p => shut('site:' + p.cloud.id,
+    (p.cloud && p.cloud.children) || (p.local && p.local.children)));
+  (data.cloudOnly || []).forEach(s => shut('site:' + s.id, s.children));
+  (data.localOnly || []).forEach(f => shut('folder:' + f.path, f.children));
 }
 function collapseAllSites() {
   if (!data) return;
@@ -890,6 +910,39 @@ function indexRowData() {
   (data.localOnly || []).forEach(f => indexChildren(f.children, f.name, null));
 }
 
+/* Which filter looks like the one in force.
+
+   This was `document.querySelectorAll('.dash-card')`, written twice - once
+   here and once in the tab switcher - and the header redesign removed the
+   cards. So from v2.113.0 nothing on the page showed which filter was on: he
+   could narrow a hundred rows down to seven and have no way to see that he
+   had, which is the list telling him something untrue about his account.
+
+   Addressing the control by `data-filter` rather than by the class of the box
+   round it means the markup can change shape without this going quiet again -
+   and there is one copy of it now, because two copies is how the first attempt
+   at this fix went into the wrong one. */
+function _markActiveFilter() {
+  document.querySelectorAll('[data-filter]').forEach(el => {
+    const on = el.dataset.filter === activeFilter;
+    el.classList.toggle('active', on);
+    if (el.tagName === 'BUTTON') el.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+
+  /* The menu holding the rarely-used filters wears the one chosen inside it.
+     Otherwise picking "Cloud only" narrows the list and the only evidence is
+     behind a closed dropdown. */
+  const more = document.querySelector('.sum-more');
+  if (!more) return;
+  const inside = more.querySelector('[data-filter].active');
+  more.classList.toggle('has-active', !!inside);
+  const label = more.querySelector('.wd-menu-btn');
+  if (label) {
+    const words = inside && inside.querySelector('.wd-menu-l');
+    label.textContent = words ? words.textContent.trim() : 'More filters';
+  }
+}
+
 function _passOwnerForCounts(cloudObj, localObj) {
   const own = ownerFilter();
   if (own === 'all') return true;
@@ -978,6 +1031,28 @@ function _siteOwnedVisible(cloudObj, localObj) {
       || (children.localOnly || []).some(l => _passOwnerForCounts(null, l));
 }
 
+/* A filter is identified by what it filters, not by the furniture round it.
+
+   These used to be `document.getElementById('dDupAllCard').hidden = ...`, and
+   when the header redesign replaced those wrappers the getElementById returned
+   null, the assignment threw, and every count below it silently stopped being
+   written. Addressing the control by `data-filter` means the markup can change
+   shape - card, chip, button, menu item - without the counting code caring, and
+   `_setCount` writing through one place means a control that genuinely is not
+   on this page costs that one number rather than all twenty-one. */
+function _filterEls(key) {
+  return document.querySelectorAll('[data-filter="' + key + '"]');
+}
+
+function _showFilter(key, visible) {
+  _filterEls(key).forEach(el => { el.hidden = !visible; });
+}
+
+function _setCount(id, n) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = n;
+}
+
 function updateDashboard() {
   const isDup = currentTab === 'duplicates';
   const isProj = currentTab === 'projects';
@@ -989,16 +1064,16 @@ function updateDashboard() {
     });
   });
 
-  ['dDupAllCard', 'dDupMixedCard', 'dDupLocalCard', 'dDupCloudCard'].forEach(id => {
-    document.getElementById(id).hidden = !isDup;
+  ['dup-all', 'dup-mixed', 'dup-local', 'dup-cloud'].forEach(key => {
+    _showFilter(key, isDup);
   });
 
   if (isDup) {
     const s = (dupData && dupData.summary) || { total: 0, mixed: 0, localOnly: 0, cloudOnly: 0 };
-    document.getElementById('dDupAll').textContent = s.total;
-    document.getElementById('dDupMixed').textContent = s.mixed;
-    document.getElementById('dDupLocal').textContent = s.localOnly;
-    document.getElementById('dDupCloud').textContent = s.cloudOnly;
+    _setCount('dDupAll', s.total);
+    _setCount('dDupMixed', s.mixed);
+    _setCount('dDupLocal', s.localOnly);
+    _setCount('dDupCloud', s.cloudOnly);
   } else if (data && data.summary) {
 
     const ownerVisible = currentTab === 'sites' ? _siteOwnedVisible : _passOwnerForCounts;
@@ -1068,21 +1143,17 @@ function updateDashboard() {
       if (isSitesTab) walkKids(l.children);
       else bumpType(null, l);
     });
-    document.getElementById('dAll').textContent = matched + cloudOnly + localOnly;
-    document.getElementById('dMismatches').textContent = mismatches;
-    document.getElementById('dStale').textContent = staleCount;
-    const dStaleCard = document.getElementById('dStaleCard');
-    if (dStaleCard) dStaleCard.hidden = isDup || staleCount === 0;
-    document.getElementById('dNameMatches').textContent = nameMatches;
+    _setCount('dAll', matched + cloudOnly + localOnly);
+    _setCount('dMismatches', mismatches);
+    _setCount('dStale', staleCount);
+    _showFilter('stale', !isDup && staleCount > 0);
+    _setCount('dNameMatches', nameMatches);
 
-
-    document.getElementById('dOrphans').textContent = Math.max(0, cloudOnly + localOnly - externalOrphans);
-    document.getElementById('dCloudOnly').textContent = cloudOnly;
-    document.getElementById('dLocalOnly').textContent = localOnly;
-    const dExt = document.getElementById('dExternal');
-    if (dExt) dExt.textContent = externalCount;
-    const dExtCard = document.getElementById('dExternalCard');
-    if (dExtCard) dExtCard.hidden = isDup || externalCount === 0;
+    _setCount('dOrphans', Math.max(0, cloudOnly + localOnly - externalOrphans));
+    _setCount('dCloudOnly', cloudOnly);
+    _setCount('dLocalOnly', localOnly);
+    _setCount('dExternal', externalCount);
+    _showFilter('external', !isDup && externalCount > 0);
 
     // Counted through the owner filter, like every other card, so the number
     // on the card is the number of rows the list will actually show.
@@ -1093,27 +1164,21 @@ function updateDashboard() {
     (data.cloudOnly || []).forEach(c => {
       if (_isUnshared(c) && _passOwnerForCounts(c, null)) unsharedCount++;
     });
-    const dUns = document.getElementById('dUnshared');
-    if (dUns) dUns.textContent = unsharedCount;
-    const dUnsCard = document.getElementById('dUnsharedCard');
+    _setCount('dUnshared', unsharedCount);
     // Hidden when there are none to find, and when we do not know who he is -
     // without that, "yours" is unanswerable and the filter would silently
     // mean something else.
-    if (dUnsCard) {
-      dUnsCard.hidden = isDup || !((data && data.currentUser) || '')
-                     || unsharedCount === 0;
-    }
-    document.getElementById('dTypeDesign').textContent = typeCount.Design;
-    document.getElementById('dTypeMeasured').textContent = typeCount.Measured;
-    document.getElementById('dTypeHybrid').textContent = typeCount.Hybrid;
+    _showFilter('unshared', !isDup && !!((data && data.currentUser) || '')
+                         && unsharedCount > 0);
+    _setCount('dTypeDesign', typeCount.Design);
+    _setCount('dTypeMeasured', typeCount.Measured);
+    _setCount('dTypeHybrid', typeCount.Hybrid);
   }
 
-  ['dNameMatchesCard', 'dTypeDesignCard', 'dTypeMeasuredCard', 'dTypeHybridCard'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.hidden = isDup;
+  ['name-matches', 'type-design', 'type-measured', 'type-hybrid'].forEach(key => {
+    _showFilter(key, !isDup);
   });
-  const uCard = document.getElementById('dUnassignedCard');
-  uCard.hidden = !isProj;
+  _showFilter('unassigned', isProj);
   if (isProj && data) {
     let noSite = 0;
     (data.matched || []).forEach(p => {
@@ -1122,13 +1187,13 @@ function updateDashboard() {
     (data.cloudOnly || []).forEach(c => {
       if (!c.hasSite && _passOwnerForCounts(c, null)) noSite++;
     });
-    document.getElementById('dUnassigned').textContent = noSite;
+    _setCount('dUnassigned', noSite);
   }
   if (!isProj && activeFilter === 'unassigned') { activeFilter = 'all'; }
   if (activeFilter === 'unshared' && !((data && data.currentUser) || '')) {
     activeFilter = 'all';
   }
-  document.querySelectorAll('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.filter === activeFilter));
+  _markActiveFilter();
 }
 function setFilter(f) {
 
@@ -1738,9 +1803,12 @@ function renderLedger(hit) {
     });
   });
 
+  /* Outside the ledger, not at the end of it. Appending the band inside
+     `<div class="ledger">` made the DOM say these rows were part of the list,
+     which is exactly how they were read. */
+  h += `</div>`;
   const heldBack = _collectHeldBack(passOwner);
   if (heldBack.length && !activeLetter) h += renderHeldBackSection(heldBack);
-  h += `</div>`;
   return h;
 }
 
@@ -1886,12 +1954,13 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
     });
   }
 
+  //: Outside the tree - see the note on the same move in renderLedger.
+  h += `</div>`;
+
   const heldBack = _collectHeldBack(passOwner);
   if (heldBack.length && !activeLetter) {
     h += renderHeldBackSection(heldBack);
   }
-
-  h += `</div>`;
   return h;
 }
 
@@ -1921,40 +1990,118 @@ function _collectHeldBack(passOwner) {
   return out;
 }
 
+/* One file, its candidates, and the answer that is usually right.
+
+   Grouped by the local file rather than by the pairing, because the pairing is
+   not the subject: he is looking at one file and being asked which cloud
+   project it is, if any. Five rows repeating the same filename is what made
+   this read as five files.
+
+   `heldBack` entries that share a local path are one question. Anything with
+   no local side falls back to its own group so nothing is dropped. */
+function _groupHeldBack(heldBack) {
+  const byLocal = new Map();
+  heldBack.forEach(h => {
+    const key = (h.local && h.local.path) || ('cloud:' + (h.cloud && h.cloud.id));
+    if (!byLocal.has(key)) byLocal.set(key, { local: h.local, kind: h.kind, candidates: [] });
+    byLocal.get(key).candidates.push(h);
+  });
+  return [...byLocal.values()];
+}
+
 function renderHeldBackSection(heldBack) {
-  const rows = heldBack.map((h, i) => {
-    const c = h.cloud, l = h.local;
-    const label = h.kind === 'sites' ? 'site' : 'project';
-    return `<div class="hb-row${(i % 2) ? ' stripe' : ''}">
-      <div class="hb-side hb-cloud">
-        <span class="hb-tag cloud">CLOUD</span>
-        <span class="hb-name">${e(c.name)}</span>
-      </div>
-      <div class="hb-mid">
-        <div class="hb-reason" title="${a(h.reason)}">${e(h.reason)}</div>
-        <div class="hb-actions">
-          <button class="btn btn-blue btn-sm" title="Link these two as the same ${label}"
-                  onclick="markManualMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')">Link anyway</button>
+  const groups = _groupHeldBack(heldBack);
+  const nFiles = groups.length;
+
+  const body = groups.map((g, gi) => {
+    const l = g.local;
+    const label = g.kind === 'sites' ? 'site' : 'project';
+    const name = l ? e(l.name) + (l.isDir ? '' : '.esx') : '(no local file)';
+
+    const candidates = g.candidates.map(h => {
+      const c = h.cloud;
+      return `<li class="hbc-row">
+        <span class="hbc-name" title="${a(c.name)}">${e(c.name)}</span>
+        <span class="hbc-reason" title="Why WD did not pair these automatically">${e(h.reason)}</span>
+        <span class="hbc-actions">
+          <button class="btn btn-blue btn-sm" title="Say this cloud ${label} is the same one as ${a(name)}"
+                  onclick="markManualMatch('${j(c.id)}','${pj(l && l.path)}','${j(c.name)}','${j(l && l.name)}')">This is the one</button>
           <button class="btn btn-secondary btn-sm" title="Never suggest this pair again"
-                  onclick="markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')">Not a match</button>
-        </div>
+                  onclick="markNotMatch('${j(c.id)}','${pj(l && l.path)}','${j(c.name)}','${j(l && l.name)}')">Not this one</button>
+        </span>
+      </li>`;
+    }).join('');
+
+    const n = g.candidates.length;
+    /* The answer that is usually right, as one button. Every candidate here
+       was rejected for a stated reason, so "none of them" is the likely
+       truth - and dismissing five rows one at a time to say it is exactly the
+       tedium he keeps hitting. */
+    const none = (l && n)
+      ? `<button class="btn btn-secondary btn-sm hb-none"
+                 title="Dismiss all ${n} suggestion${n === 1 ? '' : 's'} for this file. It stays unpaired and WD stops offering ${n === 1 ? 'this one' : 'these'}."
+                 onclick="heldBackNoneOfThese('${pj(l.path)}')">None of these</button>`
+      : '';
+
+    return `<div class="hb-group${(gi % 2) ? ' stripe' : ''}">
+      <div class="hb-file">
+        <span class="hb-tag local">LOCAL FILE</span>
+        <span class="hb-name" title="${a((l && l.path) || '')}">${name}</span>
+        ${none}
       </div>
-      <div class="hb-side hb-local">
-        <span class="hb-tag local">LOCAL</span>
-        <span class="hb-name">${e(l.name)}${l.isDir ? '' : '.esx'}</span>
-      </div>
+      <div class="hb-q">WD found <b>${n}</b> possible ${label}${n === 1 ? '' : 's'} in the cloud and was not confident enough to pair ${n === 1 ? 'it' : 'any of them'}. Pick one, or none.</div>
+      <ul class="hbc-list">${candidates}</ul>
     </div>`;
   }).join('');
+
   const isOpen = _heldBackOpen();
-  return `<div class="ledger-group-head hb-head" role="separator" aria-label="Held back — pairs we didn't auto-match"
-               onclick="toggleHeldBack()">
-      <span class="glh-letter hb-toggle${isOpen ? ' open' : ''}">&#9656;</span>
-      <span class="glh-letter hb-title">&#9888; Held back — pairs we didn't auto-match (${heldBack.length})</span>
-      <span class="glh-gap"></span>
-      <span class="glh-letter"></span>
-    </div>
-    <div class="hb-list"${isOpen ? '' : ' hidden'}>${rows}</div>`;
+  /* Its own region, outside the tree.
+
+     It used to be appended inside `.ledger.tree` immediately after the sites,
+     in the ledger's own column shape, which is what made it look like the
+     contents of the site above it. Nothing here belongs to a site - these are
+     questions about what pairs with what. */
+  return `<div class="hb-section${isOpen ? ' open' : ''}">
+      <button class="hb-head" onclick="toggleHeldBack()" aria-expanded="${isOpen}">
+        <span class="hb-toggle${isOpen ? ' open' : ''}">&#9656;</span>
+        <span class="hb-title">Not paired yet \u2014 ${nFiles} local file${nFiles === 1 ? '' : 's'} we could not match on ${nFiles === 1 ? 'its' : 'their'} own</span>
+        <span class="hb-sub">These are not part of any site above. Each one is a question: which cloud project is it?</span>
+      </button>
+      <div class="hb-list"${isOpen ? '' : ' hidden'}>${body}</div>
+    </div>`;
 }
+
+/* "None of these", once per file.
+
+   Every candidate was already rejected by the matcher for a stated reason, so
+   this is the likely answer and it should cost one click rather than five.
+   Each dismissal is the same `markNotMatch` the individual button makes - one
+   operation, not a second implementation of it. */
+async function heldBackNoneOfThese(localPath) {
+  const group = _groupHeldBack(_collectHeldBack(buildPassOwner(ownerFilter(),
+    (data && data.currentUser) || ''))).find(g => g.local && g.local.path === localPath);
+  if (!group || !group.candidates.length) return;
+
+  const n = group.candidates.length;
+  const ok = await showConfirmModal(
+    'None of these?',
+    '<p>Stop suggesting ' + (n === 1 ? 'this pairing' : 'these ' + n + ' pairings')
+    + ' for <b>' + e(group.local.name) + '</b>.</p>'
+    + '<p class="sub">The file stays where it is and stays unpaired. Nothing is '
+    + 'uploaded, downloaded, renamed or deleted. You can undo it from '
+    + '<b>Not a match</b> in Settings if you change your mind.</p>',
+    'None of these');
+  if (!ok) return;
+
+  for (const h of group.candidates) {
+    await markNotMatch(h.cloud.id, group.local.path, h.cloud.name, group.local.name,
+                       { silent: true });
+  }
+  toast('Dismissed ' + n + ' suggestion' + (n === 1 ? '' : 's') + ' for "'
+        + group.local.name + '"', 'success');
+  refreshData(true);
+}
+
 function _heldBackOpen() {
   try { return localStorage.getItem('wd-heldback-open') !== '0'; } catch (e) { return true; }
 }
@@ -3102,11 +3249,17 @@ async function flagReview(path, name) {
   } catch (e) { toast('Flag failed: ' + e.message, 'error'); }
 }
 
-async function markNotMatch(cloudId, localPath, cloudName, localName) {
-  if (!confirm(`Mark as NOT a match?\n\nCloud:  ${cloudName}\nLocal:  ${localName}\n\nThey'll be split into orphans and never auto-paired again. You can undo this from the menu → Manage Not-a-Match.`)) return;
+async function markNotMatch(cloudId, localPath, cloudName, localName, opts) {
+  /* `opts.silent` is for "None of these", which is this call five times over.
+     It suppresses the asking and the reporting - never the work - so the batch
+     can ask once and report once instead of raising five dialogs and five full
+     reloads. The request, the error handling and the result are the same. */
+  const quiet = !!(opts && opts.silent);
+  if (!quiet && !confirm(`Mark as NOT a match?\n\nCloud:  ${cloudName}\nLocal:  ${localName}\n\nThey'll be split into orphans and never auto-paired again. You can undo this from the menu → Manage Not-a-Match.`)) return;
   try {
     const r = await pyApi('mark_not_match', cloudId, localPath, cloudName, localName);
     if (r && r.error) { toast(r.error, 'error'); return; }
+    if (quiet) return;
     toast('Marked as not a match', 'success');
     refreshData();
   } catch (e) { toast('Failed: ' + e.message, 'error'); }

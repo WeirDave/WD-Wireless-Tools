@@ -2750,12 +2750,28 @@ body.tool-cloud .toolbar input.search:focus {
 
 .match-badge.clickable:hover { color: var(--text); text-decoration: underline dotted; }
 
-.match-badge.mb-id     { color: var(--ok); }
-.match-badge.mb-exact  { color: var(--text-2); }
-.match-badge.mb-code   { color: var(--attn); }
-.match-badge.mb-fuzzy  { color: var(--text-3); }
-.match-badge.mb-manual { color: var(--accent-soft); }
-.match-badge.mb-orphan { color: var(--text-3); }
+/* The words stay quiet; the dot carries the state.
+
+   Reducing five filled pills to a dot and quiet text was right - one per row
+   over a hundred rows was louder than the decisions beside them. Giving three
+   of the six states the same grey was not: "Name matches", "Similar name" and
+   "Cloud only" became one shape at a glance, and he had to read each row to
+   learn what he could previously see across it.
+
+   A 6px disc is not what was shouting, so the disc keeps its colour and the
+   label stays at --text-2 throughout. Six states, six dots, one text weight. */
+.match-badge { color: var(--text-2); }
+
+.match-badge.mb-id::before     { background: var(--ok); }
+.match-badge.mb-exact::before  { background: var(--accent); }
+.match-badge.mb-code::before   { background: var(--attn); }
+.match-badge.mb-fuzzy::before  { background: var(--text-3); }
+.match-badge.mb-manual::before { background: var(--accent-soft); }
+.match-badge.mb-orphan::before { background: var(--danger); }
+
+/* Proven identical is the one state worth reading without looking for it - it
+   is the answer to "is this done". */
+.match-badge.mb-id { color: var(--ok); }
 
 [data-theme="light"] .match-badge.mb-id { color: var(--green-dark); }
 
@@ -9288,6 +9304,9 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
    says what is inside, and green here competed with the blue name that is the
    strongest signal in the list. Green is left to mean one thing - a file
    proven identical. */
+/* A matched site is the unremarkable case and its digest says more, so the
+   label stays muted here - but the dot still distinguishes a proven pair from
+   a name-only one, which is the part that was lost. */
 .ledger.tree .tree-parent .match-badge.mb-id,
 .ledger.tree .tree-parent .match-badge.mb-exact { color: var(--text-3); }
 
@@ -9323,3 +9342,119 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
    downloading is still allowed and stops being the thing the eye lands on. */
 .rd-btn.is-demoted { opacity: 0.6; }
 .rd-btn.is-demoted:hover { opacity: 1; }
+
+/* Which filter is on.
+
+   `.dash-card.active` styled the cards the header redesign removed, so from
+   v2.113.0 nothing on the page showed which filter was in force. He could
+   narrow a hundred rows down to seven and have no way to see that he had -
+   which is the list telling him something untrue about his account.
+
+   The count is what he reads, so the count is what changes: it takes the
+   accent, the label follows it, and a rule under the whole control says "this
+   one". Quiet is fine; invisible is not. */
+.sum-count.active {
+  background: var(--surface-raised);
+  box-shadow: inset 0 -2px 0 var(--accent);
+  border-radius: var(--r-sm);
+}
+.sum-count.active .sum-n { color: var(--accent); font-weight: 700; }
+.sum-count.active .sum-l { color: var(--text); }
+
+.wd-menu-item.active { background: var(--row-hover); }
+.wd-menu-item.active .wd-menu-l { color: var(--accent); font-weight: 600; }
+
+/* And the menu wears the filter chosen inside it, so closing it does not hide
+   the fact that a filter is on. */
+.sum-more.has-active > .wd-menu-btn {
+  color: var(--accent); border-color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.wd-menu-item .wd-menu-l { flex: 1 1 auto; }
+
+/* ---------------------------------------------------------------------
+   Not paired yet - one file, its candidates
+
+   "I can't tell if the files that are listed beneath this are actually part
+   of the site that is listed, or do they need to be moved to a different
+   site, or what the deal is."
+
+   The old band drew one row per candidate *pairing*, in the ledger's own
+   three-column shape, inside the ledger's own container, directly beneath a
+   site. Five candidates for one file therefore drew five rows with that same
+   filename repeated down the right-hand side - visually identical to five
+   files belonging to the site above.
+
+   So: its own region with a border round it, its own shape that looks nothing
+   like a ledger row, the file named once as a heading, and the candidates
+   indented under it as a list of answers to one question. */
+.hb-section {
+  margin: 18px 0 8px;
+  border: 1px solid var(--attn);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.hb-section > .hb-head {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  width: 100%; text-align: left; cursor: pointer;
+  padding: 10px 14px; border: 0;
+  background: color-mix(in srgb, var(--attn) 12%, var(--surface));
+  color: var(--text);
+}
+.hb-section > .hb-head:hover { background: color-mix(in srgb, var(--attn) 18%, var(--surface)); }
+.hb-section > .hb-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+.hb-title { color: var(--attn); font-weight: 700; font-size: 13px; }
+.hb-sub { color: var(--text-2); font-size: 12px; flex: 1 1 100%; }
+
+.hb-toggle {
+  display: inline-block; color: var(--attn);
+  transition: transform .14s ease;
+}
+.hb-toggle.open { transform: rotate(90deg); }
+
+.hb-list { border-top: 1px solid var(--border); }
+
+.hb-group { padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.hb-group:last-child { border-bottom: 0; }
+.hb-group.stripe { background: var(--stripe); }
+
+/* The file, named once, as the thing being asked about. */
+.hb-file { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hb-file .hb-name {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  overflow-wrap: anywhere; min-width: 0;
+}
+.hb-none { margin-left: auto; }
+
+.hb-q { color: var(--text-2); font-size: 12px; margin: 4px 0 8px; }
+
+/* The candidates: a list of answers, indented under the question, and shaped
+   nothing like a ledger row so it cannot be read as one. */
+.hbc-list { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--border-strong); }
+
+.hbc-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 6px 0;
+}
+.hbc-row + .hbc-row { border-top: 1px dashed var(--border); }
+
+.hbc-name {
+  flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere;
+  font-size: 12.5px; color: var(--accent);
+}
+[data-theme="light"] .hbc-name { color: var(--accent); }
+
+.hbc-reason {
+  flex: 0 1 auto; font-size: 11.5px; color: var(--attn);
+  white-space: nowrap;
+}
+.hbc-actions { flex: 0 0 auto; display: flex; gap: 6px; margin-left: auto; }
+
+@media (max-width: 1100px) {
+  .hbc-reason { white-space: normal; }
+  .hbc-actions { margin-left: 0; }
+}
