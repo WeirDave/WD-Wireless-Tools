@@ -1446,9 +1446,11 @@ function _renderJumpNav() {
 
   if (!activeLetter) {
     const fresh = new Set();
+    //: Every band in the list now has rows under it, so every band is a
+    //: letter he has. The `empty-letter` exclusion that used to be here went
+    //: with the placeholders it existed to skip.
     container.querySelectorAll('[data-jump-letter]').forEach(el => {
-
-      if (!el.classList.contains('empty-letter')) fresh.add(el.dataset.jumpLetter);
+      fresh.add(el.dataset.jumpLetter);
     });
     if (fresh.size) _jumpNavPresentCache = fresh;
   }
@@ -1979,29 +1981,29 @@ function renderLedger(hit) {
     if (!flatByLetter.has(g)) flatByLetter.set(g, []);
     flatByLetter.get(g).push(r);
   });
-  const _emitFlatHeader = (g, isEmpty) => {
-    const cls = 'ledger-group-head' + (isEmpty ? ' empty-letter' : '');
-    return `<div class="${cls}" role="separator" data-jump-letter="${e(g)}" aria-label="Section ${e(g)}${isEmpty ? ' (empty)' : ''}">`
-         +   `<span class="glh-letter cloud">${e(g)}</span>`
-         +   `<span class="glh-gap"></span>`
-         +   `<span class="glh-letter local">${e(g)}</span>`
-         + `</div>`;
-  };
+  const _emitFlatHeader = (g) =>
+      `<div class="ledger-group-head" role="separator" data-jump-letter="${e(g)}" aria-label="Section ${e(g)}">`
+    +   `<span class="glh-letter cloud">${e(g)}</span>`
+    +   `<span class="glh-gap"></span>`
+    +   `<span class="glh-letter local">${e(g)}</span>`
+    + `</div>`;
   const allFlatLetters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
-
-  const showEmptyPlaceholders = activeFilter === 'all' && !activeLetter;
 
   const letterFilter = (L) => !activeLetter || L === activeLetter;
   let z = 0;
   allFlatLetters.forEach(letter => {
     if (!letterFilter(letter)) return;
     const groupRows = flatByLetter.get(letter);
-    if (!groupRows || !groupRows.length) {
-      if (showEmptyPlaceholders) h += _emitFlatHeader(letter, true);
-      z = 0;
-      return;
-    }
-    h += _emitFlatHeader(letter, false);
+    /* A letter with nothing under it emits nothing. It used to emit a faded
+       band anyway, and it is the A-Z bar that answers "which letters do I
+       have" - that bar already greys the absent ones, and it deliberately
+       ignored these placeholders when working out which letters exist, so
+       they carried no information at all. What they did carry was length:
+       site codes cluster on a handful of first letters, so a real list opens
+       on three or four empty bands before its first row and scatters another
+       twenty through the rest. */
+    if (!groupRows || !groupRows.length) { z = 0; return; }
+    h += _emitFlatHeader(letter);
     z = 0;
     groupRows.forEach(r => {
       {
@@ -2117,15 +2119,12 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
   h += `<div class="ledger-head"><div class="lh-cell cloud">Cloud Sites (${nCloud})</div><div class="lh-gut"></div><div class="lh-cell local"${_outputDir ? ` title="${a(_outputDir)}"` : ''}>Local Folders (${nLocal})${localPath}</div></div>`;
   if (!visible.length && !orphans.length) { h += emptyLedgerMessage() + `</div>`; return h; }
 
-  const populatedLetters = new Set(visible.map(r => treeGroupOf(r.sort)));
-  const _emitHeader = (g, isEmpty) => {
-    const cls = 'ledger-group-head' + (isEmpty ? ' empty-letter' : '');
-    return `<div class="${cls}" role="separator" data-jump-letter="${e(g)}" aria-label="Section ${e(g)}${isEmpty ? ' (empty)' : ''}">`
-         +   `<span class="glh-letter cloud">${e(g)}</span>`
-         +   `<span class="glh-gap"></span>`
-         +   `<span class="glh-letter local">${e(g)}</span>`
-         + `</div>`;
-  };
+  const _emitHeader = (g) =>
+      `<div class="ledger-group-head" role="separator" data-jump-letter="${e(g)}" aria-label="Section ${e(g)}">`
+    +   `<span class="glh-letter cloud">${e(g)}</span>`
+    +   `<span class="glh-gap"></span>`
+    +   `<span class="glh-letter local">${e(g)}</span>`
+    + `</div>`;
   const allLetters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')];
   const visibleByLetter = new Map();
   visible.forEach(r => {
@@ -2134,18 +2133,15 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
     visibleByLetter.get(g).push(r);
   });
 
-  const showEmptyPlaceholders = activeFilter === 'all' && !activeLetter;
   const letterFilter = (L) => !activeLetter || L === activeLetter;
   let z = 0;
   allLetters.forEach(letter => {
     if (!letterFilter(letter)) return;
     const groupRows = visibleByLetter.get(letter);
-    if (!groupRows || !groupRows.length) {
-      if (showEmptyPlaceholders) h += _emitHeader(letter, true);
-      z = 0;
-      return;
-    }
-    h += _emitHeader(letter, false);
+    //: Same as Flat - see the note there. A band with nothing under it is
+    //: length rather than information, and the A-Z bar is the index.
+    if (!groupRows || !groupRows.length) { z = 0; return; }
+    h += _emitHeader(letter);
     z = 0;
     groupRows.forEach(r => {
       const children = childrenOf(r);

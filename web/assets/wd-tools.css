@@ -2392,15 +2392,6 @@ body.tool-cloud .toolbar input.search:focus {
 
 .rows-container { padding: 0 12px 12px; flex: 1; overflow-y: auto; }
 
-.ledger-group-head.empty-letter {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.ledger-group-head.empty-letter .glh-letter {
-  color: var(--text-3);
-}
-
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
 
 .split.one { grid-template-columns: 1fr; }
