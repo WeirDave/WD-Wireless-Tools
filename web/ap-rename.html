@@ -114,10 +114,15 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 [data-theme="light"] .tool-aprename .ar-stem-line.is-new .ar-stem-val { color:#4338ca; }
 .tool-aprename .ar-stem-tail { color:var(--text-3,#666); font-weight:400; }
 .tool-aprename .ar-stem-none { color:var(--text-3,#666); font-weight:400; font-style:italic; font-family:var(--sans,sans-serif); font-size:12px; }
-/* The two name columns size to their content. They were max-width:0 with an
-   ellipsis, so the value a rename is judged on could be cut to a stub with
-   the rest only in a tooltip - and a tooltip is not where a decision goes. */
-.tool-aprename .ar-preview td.ar-cur, .tool-aprename .ar-preview td.ar-new { white-space:nowrap; font-family:var(--mono,monospace); }
+/* The two name columns show the whole name, wrapping rather than being cut.
+   They were max-width:0 with an ellipsis, so the value a rename is judged on
+   could be reduced to a stub with the rest only in a tooltip - and a tooltip
+   is not where a decision goes. The panel is narrow and these names are long,
+   so the choice is between two lines and a missing end; two lines wins. */
+.tool-aprename .ar-preview td.ar-cur, .tool-aprename .ar-preview td.ar-new {
+  font-family:var(--mono,monospace); white-space:normal; overflow-wrap:anywhere;
+  word-break:break-word; line-height:1.35;
+}
 .tool-aprename .ar-preview td.ar-new { color:var(--indigo,#6366f1); font-weight:600; }
 [data-theme="light"] .tool-aprename .ar-preview td.ar-new { color:#4338ca; }
 .tool-aprename .ar-preview .ar-stem-mute { color:var(--text-3,#666); font-weight:400; }
@@ -203,6 +208,9 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
    scrollbar across the settings and ate a strip of height with it. */
 .tool-aprename .ar-seg-row { display:flex; flex-wrap:wrap; gap:5px; align-items:center; padding:5px 7px; background:var(--bg-3,#252538); border:1px solid var(--border,#444); border-radius:5px; min-width:0; }
 .tool-aprename .ar-seg-row > * { min-width:0; }
+/* A hint long enough to explain itself has to be allowed onto its own line;
+   at the dock's width it was running underneath the remove button. */
+.tool-aprename .ar-seg-lbl.ar-seg-hint { flex:1 0 100%; white-space:normal; line-height:1.35; }
 .tool-aprename .ar-seg-row:hover { border-color:hsla(239,84%,67%,.3); }
 [data-theme="light"] .tool-aprename .ar-seg-row { background:var(--bg-3,#f0f0f4); }
 .tool-aprename .ar-seg-handle { cursor:grab; color:var(--text-3,#555); font-size:13px; padding:0 2px; user-select:none; line-height:1; }

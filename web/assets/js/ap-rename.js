@@ -179,13 +179,32 @@
     return s;
   }
 
-  function buildStructuredName(floor, num) {
+  /* One part of one AP's existing name, read back out of it.
+
+     `keep` segments need this: the value is the AP's own, so it can only come
+     from the name it already has. An AP whose name does not follow the shape
+     has no own value here - those are the ones the scheme was not read from,
+     they are counted and reported on screen, and they fall back to the sample
+     rather than losing a component and colliding with somebody. */
+  function keptPart(seg, ap) {
+    if (seg.value) return seg.value;            // he typed a literal: use it
+    var name = (ap && ap.name) || '';
+    var parts = name.split(seg.sep || '-');
+    var i = seg.index || 0;
+    if (i < parts.length && parts[i]) return parts[i];
+    return seg.sample || '';
+  }
+
+  function buildStructuredName(floor, num, ap) {
     var sep = $('arSepStructured').value;
     var parts = [];
     for (var i = 0; i < _segments.length; i++) {
       var seg = _segments[i];
       if (seg.type === 'text') {
         if (seg.value) parts.push(seg.value);
+      } else if (seg.type === 'keep') {
+        var kept = keptPart(seg, ap);
+        if (kept) parts.push(kept);
       } else if (seg.type === 'floor') {
         parts.push(seg.value ? seg.value : getFloorNumber(floor));
       } else if (seg.type === 'counter') {
@@ -320,13 +339,29 @@
 
     if (counterAt < 0) return null;             // no number means no scheme
 
-    // Exactly one counter. If a scheme somehow produced two, the later one is
-    // the AP number and the earlier is treated as the text it looks like.
+    /* Exactly one counter: the last one is the AP number. What happens to
+       the others is where this went wrong.
+
+       They used to become `{ type: 'text', value: _modal(col).value }` - the
+       most common value in that column, standing in for every AP. That is
+       only harmless if the column is constant, and a column that reached this
+       branch is a column that varied: it got here by looking like TAG+digits
+       across differing values. So a project named STE100 / STE101 / STE102
+       inferred "STE100" for all three, and offered to rename two APs' suite
+       to a suite they are not in. Those numbers say where an installer has to
+       stand; collapsing them destroys the only copy.
+
+       Constant column, and the literal is correct - it is the same value the
+       column already holds. Varying column, and the segment keeps each AP's
+       own value, with `value` left empty so he can still type a literal over
+       it if he really does mean to move them all into one suite. */
     for (var j = 0; j < segments.length; j++) {
-      if (segments[j].type === 'counter' && j !== counterAt) {
-        var col = matched.map(function (e) { return partAt(e, j); });
-        segments[j] = { type: 'text', value: _modal(col).value };
-      }
+      if (segments[j].type !== 'counter' || j === counterAt) continue;
+      var col = matched.map(function (e) { return partAt(e, j); });
+      var same = _modal(col);
+      segments[j] = same.n === col.length
+        ? { type: 'text', value: same.value }
+        : { type: 'keep', index: j, sep: det.sep, value: '', sample: same.value };
     }
 
     /* A scheme has to look deliberate before it is allowed to replace what he
@@ -401,6 +436,9 @@
     _segments = read.segments.map(function (seg) {
       if (seg.type === 'text')    return { type: 'text', value: seg.value };
       if (seg.type === 'floor')   return { type: 'floor', value: '' };
+      if (seg.type === 'keep')    return { type: 'keep', index: seg.index,
+                                           sep: seg.sep, value: '',
+                                           sample: seg.sample };
       return { type: 'counter', tag: seg.tag, start: seg.start, digits: seg.digits };
     });
     padSegments();
@@ -498,6 +536,7 @@
       badge.className = 'ar-seg-type';
       if (seg.type === 'text')    { badge.classList.add('t-text'); badge.textContent = 'Text'; }
       else if (seg.type === 'floor') { badge.classList.add('t-floor'); badge.textContent = 'Floor'; }
+      else if (seg.type === 'keep')  { badge.classList.add('t-floor'); badge.textContent = 'Each AP'; }
       else                        { badge.classList.add('t-counter'); badge.textContent = 'AP #'; }
       row.appendChild(badge);
 
@@ -546,6 +585,26 @@
         meta.className = 'ar-seg-meta';
         meta.textContent = '→ ' + padNum(seg.start || 1, seg.digits || 3);
         row.appendChild(meta);
+      } else if (seg.type === 'keep') {
+        /* Same shape as Floor, and for the same reason: the value is read per
+           AP, and typing one overrides it for all of them. That override is
+           the deliberate act - moving a whole building into one suite is a
+           thing he might really want, and it stays available. What it is not
+           allowed to be is the default, which is what it used to be. */
+        var keepIn = document.createElement('input');
+        keepIn.className = 'ar-seg-input ar-seg-input-bordered';
+        keepIn.value = seg.value || '';
+        keepIn.placeholder = seg.sample || '';
+        keepIn.title = 'Each AP keeps its own value here (e.g. ' + (seg.sample || '')
+          + '). Type a value to give every AP the same one instead.';
+        keepIn.addEventListener('input', function () { seg.value = this.value; updateAll(); });
+        row.appendChild(keepIn);
+        var keepHint = document.createElement('span');
+        keepHint.className = 'ar-seg-lbl ar-seg-hint';
+        keepHint.textContent = seg.value
+          ? 'every AP gets this — clear it to keep each AP’s own'
+          : 'each AP keeps its own — type to give them all the same';
+        row.appendChild(keepHint);
       } else if (seg.type === 'floor') {
         var floorIn = document.createElement('input');
         floorIn.className = 'ar-seg-input ar-seg-input-bordered';
@@ -557,9 +616,8 @@
         floorIn.addEventListener('input', function () { seg.value = this.value; updateAll(); });
         row.appendChild(floorIn);
         var floorHint = document.createElement('span');
-        floorHint.className = 'ar-seg-lbl';
+        floorHint.className = 'ar-seg-lbl ar-seg-hint';
         floorHint.textContent = 'auto from .esx — type to override';
-        floorHint.style.flex = '1';
         row.appendChild(floorHint);
       } else {
         var inp = document.createElement('input');
@@ -736,6 +794,10 @@
         var o = { type: s.type };
         if (s.type === 'text')    o.value = s.value || '';
         if (s.type === 'floor' && s.value)  o.value = s.value;
+        if (s.type === 'keep') {
+          o.index = s.index || 0; o.sep = s.sep || '-'; o.sample = s.sample || '';
+          if (s.value) o.value = s.value;
+        }
         if (s.type === 'counter') { o.tag = s.tag || ''; o.start = s.start || 1; o.digits = s.digits || 3; }
         return o;
       }),
@@ -766,6 +828,9 @@
       _segments = s.segments.map(function (o) {
         if (o.type === 'text')    return { type: 'text', value: o.value || '' };
         if (o.type === 'floor')   return { type: 'floor', value: o.value || '' };
+        if (o.type === 'keep')    return { type: 'keep', index: o.index || 0,
+                                           sep: o.sep || '-', value: o.value || '',
+                                           sample: o.sample || '' };
         if (o.type === 'counter') return { type: 'counter', tag: o.tag || '', start: o.start || 1, digits: o.digits || 3 };
         return { type: 'text', value: '' };
       });
@@ -1807,8 +1872,8 @@
     return s;
   }
 
-  function generateName(settings, floor, num) {
-    if (settings.mode === 'structured') return buildStructuredName(floor, num);
+  function generateName(settings, floor, num, ap) {
+    if (settings.mode === 'structured') return buildStructuredName(floor, num, ap);
     if (settings.mode === 'mac')        return buildMacName(num);
     return settings.prefix + settings.sep + padNum(num, settings.digits);
   }
@@ -1898,7 +1963,7 @@
       lastFloorId = step.floor.id;
       numbered[step.ap.id] = 1;
       var item = { ap: step.ap, oldName: step.ap.name,
-                   newName: generateName(settings, step.floor, num),
+                   newName: generateName(settings, step.floor, num, step.ap),
                    floorId: step.floor.id, num: num };
       num++;
       /* Colour-major is listed in the order it will number, because that
@@ -2192,8 +2257,17 @@
       }
       var curTxt = it.oldName || '—';
       var newTxt = it.newName || '';
-      var curShown = (stemOld && curTxt.indexOf(stemOld) === 0) ? curTxt.slice(stemOld.length) : curTxt;
-      var newShown = (stemNew && newTxt.indexOf(stemNew) === 0) ? newTxt.slice(stemNew.length) : newTxt;
+      /* The whole name, both sides.
+
+         The rows used to fold each side's common prefix away, so a row read
+         `EXMPL-B1-F01-STE101-AP002 -> AP002` and the fact that the suite was
+         being rewritten to STE100 lived only in the banner above and in a
+         tooltip. Folding is fine when what is folded is identical on both
+         sides; it is exactly wrong when the folded part is the part that
+         changes, which is the case worth seeing. The banner still summarises
+         the stems - the row no longer depends on anyone having read it. */
+      var curShown = curTxt;
+      var newShown = newTxt;
       html += '<tr class="' + (isDiff ? 'changed' : '') +
         (it.unnumbered ? ' unnumbered' : '') + '">' +
         '<td class="ar-num">' + seq + '</td>' +
