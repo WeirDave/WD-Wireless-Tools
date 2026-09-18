@@ -91,12 +91,27 @@ class NothingWasLostInTheRestructureTests(unittest.TestCase):
         """"I forgot what hybrid meant, or external for that matter." The
         restructure dropped these once; a test caught it."""
         controls = re.findall(
-            r'<button class="(?:sum-count|wd-menu-item)"[^>]*?'
-            r'data-filter="([a-z-]+)"([^>]*)>', HTML)
+            r'<button class="sum-count"[^>]*?data-filter="([a-z-]+)"([^>]*)>', HTML)
         self.assertEqual(17, len(controls))
         for key, attrs in controls:
             with self.subTest(filter=key):
                 self.assertIn("title=", attrs)
+
+    def test_every_filter_shows_its_count(self):
+        """The reason the dropdown had to go.
+
+        "29 out of sync, 5 name matches" is what tells him where his work is
+        before he clicks anything, and a menu shows none of it until opened.
+        A filter without its number on it is a filter that has stopped doing
+        its job.
+        """
+        chips = re.findall(r'<button class="sum-count".*?</button>', HTML, re.S)
+        self.assertEqual(17, len(chips))
+        for chip in chips:
+            label = re.search(r'<span class="sum-l">([^<]+)</span>', chip)
+            with self.subTest(chip=(label.group(1) if label else chip[:40])):
+                self.assertRegex(chip, r'<span class="sum-n" id="d[A-Za-z]+">')
+                self.assertIsNotNone(label, "a chip with a number and no words")
 
 
 class TheSelectionBarIsNotThereUntilItIsNeededTests(unittest.TestCase):
@@ -127,20 +142,45 @@ class TheDropdownsAreUsableTests(unittest.TestCase):
         """`<details>` opens on a click and is keyboard reachable for free.
         Nothing here appears on hover: hover-to-reveal would break the standing
         rule about decision-relevant information being visible at rest."""
-        self.assertGreaterEqual(len(re.findall(r'<details class="wd-menu[ "]', HTML)), 4)
+        self.assertGreaterEqual(len(re.findall(r'<details class="wd-menu[ "]', HTML)), 2)
         self.assertNotIn(".wd-menu:hover .wd-menu-items", CSS)
+
+    def test_no_filter_is_behind_a_menu(self):
+        """The counts are the point, and a menu hides them until it is opened.
+
+        "some buttons where the highlights don't move, and other filters in a
+        dropdown where you can't tell which filter you're on. That whole system
+        is clunky at best."
+
+        Half the filters wearing their counts and half hiding them is the
+        hybrid he was describing. Select and View stay dropdowns - they hold
+        actions, which have nothing to show at rest - but a filter carries a
+        number he reads before deciding, so it is always a chip.
+        """
+        # Stated as "every filter is a chip" rather than as two absences:
+        # a string not appearing is weak evidence, and the thing that matters
+        # is what each filter *is*, not what the markup no longer says.
+        carriers = re.findall(r'<(\w+) class="([^"]*)"[^>]*data-filter=', HTML)
+        self.assertEqual(17, len(carriers))
+        for tag, classes in carriers:
+            with self.subTest(carrier=classes):
+                self.assertEqual("button", tag)
+                self.assertIn("sum-count", classes.split())
+                self.assertNotIn("wd-menu-item", classes.split())
 
     def test_the_menus_are_named_in_words(self):
         """A dropdown full of icons repeats the mistake that got the labels put
         on in the first place."""
-        for name in ("More filters", "Select", "View", "Move, share, overwrite"):
+        for name in ("Select", "View", "Move, share, overwrite"):
             with self.subTest(menu=name):
                 self.assertIn(">%s</summary>" % name, HTML)
 
     def test_every_item_keeps_its_full_label(self):
         items = re.findall(r'<button class="wd-menu-item"[^>]*>(.*?)</button>',
                            HTML, re.S)
-        self.assertGreater(len(items), 10)
+        # Ten of these were filters and became chips; what is left is Select
+        # and View, which hold actions.
+        self.assertGreater(len(items), 3)
         for text in items:
             plain = re.sub(r"<[^>]+>", "", text).strip()
             with self.subTest(item=plain[:30]):

@@ -9361,16 +9361,6 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 .sum-count.active .sum-n { color: var(--accent); font-weight: 700; }
 .sum-count.active .sum-l { color: var(--text); }
 
-.wd-menu-item.active { background: var(--row-hover); }
-.wd-menu-item.active .wd-menu-l { color: var(--accent); font-weight: 600; }
-
-/* And the menu wears the filter chosen inside it, so closing it does not hide
-   the fact that a filter is on. */
-.sum-more.has-active > .wd-menu-btn {
-  color: var(--accent); border-color: var(--accent);
-  box-shadow: inset 0 -2px 0 var(--accent);
-}
-
 .wd-menu-item .wd-menu-l { flex: 1 1 auto; }
 
 /* ---------------------------------------------------------------------
@@ -9726,4 +9716,67 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   color: #a0a4ab;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ---------------------------------------------------------------------
+   The filter chips
+
+   "if we need multiple rows in order for it to fit on smaller screens then
+   that's when we should have CSS be adaptive and make the buttons fall on
+   multiple rows in order to fit - but on a larger screen then make it one
+   row."
+
+   One row at desktop width, wrapping onto a second as the window narrows.
+   No overflow menu, no truncation, no sideways scroll: the counts are the
+   reason the filters exist, and a control that hides them is worse than one
+   that takes an extra line. */
+.summary-line {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 4px 2px;
+  padding: 6px 12px 5px;
+}
+
+.sum-count {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 9px; border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  background: none; color: var(--text-2);
+  font-size: 12.5px; line-height: 1.35; white-space: nowrap;
+  cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.sum-count:hover { background: var(--row-hover); color: var(--text); }
+.sum-count:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.sum-count .sum-n {
+  font-weight: 700; color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.sum-count .sum-l { color: var(--text-2); }
+
+/* Single select, and shaped so it reads that way.
+
+   Clicking a chip applies it; clicking the active one clears it back to All.
+   Nothing combines, so the active chip is a filled state rather than a tick or
+   a box - either of those would invite him to try selecting two. */
+.sum-count.active {
+  background: var(--accent-fill); border-color: var(--accent-fill);
+}
+.sum-count.active .sum-n,
+.sum-count.active .sum-l { color: var(--accent-ink); }
+.sum-count.active:hover { background: var(--accent-fill-hi); border-color: var(--accent-fill-hi); }
+
+/* The groups the dropdown used to imply - which side a row is missing from,
+   what kind of project, duplicate sets - survive as a thin rule. */
+.sum-sep {
+  display: inline-block; width: 1px; height: 15px;
+  margin: 0 7px; background: var(--border-strong);
+  /* It is punctuation, not content. */
+  overflow: hidden; text-indent: -999px;
+}
+
+/* A wrapped second row should read as a continuation, not a new band. */
+@media (max-width: 1500px) {
+  .sum-sep { margin: 0 5px; }
+  .sum-count { padding: 3px 7px; }
 }

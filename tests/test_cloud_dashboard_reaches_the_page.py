@@ -353,19 +353,20 @@ class ClickingAFilterMovesTheHighlight(unittest.TestCase):
             with self.subTest(clicked=c["key"]):
                 self.assertLessEqual(len(c["active"]), 1, c)
 
-    def test_a_filter_chosen_in_the_dropdown_shows_on_the_closed_control(self):
+    def test_a_filter_that_used_to_live_in_the_dropdown_marks_itself(self):
         """"if you use the dropdown filters you don't know where you are."
 
-        The menu wears the filter chosen inside it, or picking one narrows the
-        list and the only evidence is behind a closed dropdown.
+        There is no dropdown. Every filter is a chip carrying its own count,
+        and the one in force is the one that is highlighted - which is the
+        answer he was asking for rather than a label on a closed menu.
         """
         self.assertEqual(["orphans-cloud"], self.clicks[2]["active"])
-        self.assertNotIn("More filters", self.clicks[2]["menuLabel"] or "")
-        self.assertTrue((self.clicks[2]["menuLabel"] or "").strip())
 
-    def test_clicking_it_again_clears_it_and_the_control_goes_back(self):
+    def test_clicking_it_again_clears_it(self):
+        """Single select: the active chip is a toggle back to All. He did not
+        ask to combine filters, and the chips are shaped so they do not look
+        as though he could."""
         self.assertEqual(["all"], self.clicks[3]["active"])
-        self.assertEqual("More filters", (self.clicks[3]["menuLabel"] or "").strip())
 
 
 class NoSelectorAddressesSomethingThatIsNotThere(unittest.TestCase):

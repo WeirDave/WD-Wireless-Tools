@@ -1037,18 +1037,12 @@ function _markActiveFilter() {
     if (el.tagName === 'BUTTON') el.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
 
-  /* The menu holding the rarely-used filters wears the one chosen inside it.
-     Otherwise picking "Cloud only" narrows the list and the only evidence is
-     behind a closed dropdown. */
-  const more = document.querySelector('.sum-more');
-  if (!more) return;
-  const inside = more.querySelector('[data-filter].active');
-  more.classList.toggle('has-active', !!inside);
-  const label = more.querySelector('.wd-menu-btn');
-  if (label) {
-    const words = inside && inside.querySelector('.wd-menu-l');
-    label.textContent = words ? words.textContent.trim() : 'More filters';
-  }
+  /* There used to be a second half here that wrote the chosen filter onto the
+     closed "More filters" button, because a filter inside a dropdown is
+     invisible the moment it shuts. Every filter is a chip with its count on
+     it now, so the highlight is the whole answer and there is nothing left to
+     annotate. Code for a control that no longer exists is how `.dash-card`
+     went on matching nothing for four releases. */
 }
 
 function _passOwnerForCounts(cloudObj, localObj) {
