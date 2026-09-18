@@ -776,13 +776,110 @@ class ToolbarInABrowser(unittest.TestCase):
         self.assertIn("C:/Temp/wd-cloud-pull-aaa", paths)
         self.assertNotIn("C:/wd-worktrees/live-one", paths)
 
-    def test_reopening_the_panel_clears_the_pending_list(self):
-        """A stale path from an earlier look must never reach a delete."""
+    def test_reopening_the_panel_keeps_the_result_and_stays_armed(self):
+        """**This used to clear itself, and he said so plainly:** he looked,
+        closed the panel, came back, and had to look again from scratch with
+        the delete button greyed out - "this is counterproductive".
+
+        Keeping it is safe because the client is not the guard: `sweep`
+        re-derives the whole list at write time and skips anything that is no
+        longer deletable. Disarming on close bought nothing and cost him the
+        run.
+        """
         self.unlocked()
         self.stub()
         self.open_housekeeping()
         self.click("#wdHousekeepLookBtn")
         self.wait_for(lambda: self.find("#wdHousekeepSweepBtn").is_enabled(), "arm")
+        before = self.driver.execute_script(
+            "return window.WD.Dev._housekeepingPending();")
+
+        self.click("#devResultModal .btn")
+        self.open_housekeeping()
+
+        self.assertEqual(
+            self.driver.execute_script(
+                "return window.WD.Dev._housekeepingPending();"), before)
+        self.assertTrue(self.find("#wdHousekeepSweepBtn").is_enabled())
+        self.assertIn("Delete 2 items", self.find("#wdHousekeepSweepBtn").text)
+
+    def test_a_remembered_result_says_when_it_was_taken(self):
+        """Showing an old answer as though it were fresh would be worse than
+        clearing it. It says when, and that the server re-checks anyway."""
+        self.unlocked()
+        self.stub()
+        self.open_housekeeping()
+        self.click("#wdHousekeepLookBtn")
+        self.wait_for(lambda: self.find("#wdHousekeepSweepBtn").is_enabled(), "arm")
+        self.click("#devResultModal .btn")
+        self.open_housekeeping()
+        text = self.panel_text()
+        self.assertIn("just now", text)
+        self.assertIn("re-checks every file", text)
+
+    def test_the_realign_preview_survives_closing_the_panel_too(self):
+        """The expensive one. A realign preview downloads ninety cloud
+        projects to prove them identical; throwing that away because he shut
+        a dialog is the costliest version of this bug."""
+        self.unlocked()
+        self.stub()
+        self.open_realign()
+        self.click("#wdRealignPreviewBtn")
+        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
+        self.click("#devResultModal .btn")
+        self.open_realign()
+        self.assertTrue(self.find("#wdRealignRunBtn").is_enabled())
+        self.assertIn("1 project", self.find("#wdRealignRunBtn").text)
+        self.assertIn("Maple Depot Survey", self.panel_text())
+
+    def test_the_controls_stay_on_screen_however_long_the_report_is(self):
+        """**The other half of what he hit.** The controls used to sit inside
+        the scrolling body above the output. A housekeeping report is six
+        screens tall, so once he scrolled down to read it the armed button was
+        off the top with nothing to say it existed - "there was no way to make
+        it run for real". A control he has to scroll back up to find is a
+        control he does not have.
+        """
+        self.unlocked()
+        self.stub()
+        self.open_housekeeping()
+        self.click("#wdHousekeepLookBtn")
+        self.wait_for(lambda: self.find("#wdHousekeepSweepBtn").is_enabled(), "arm")
+
+        # The footer is outside the scroll, which is what makes this hold at
+        # any report length.
+        self.assertFalse(self.driver.execute_script(
+            "return !!document.getElementById('devResultBody')"
+            "  .querySelector('#wdHousekeepSweepBtn');"),
+            "the live control is inside the scrolling body again")
+
+        # Scroll the report to its end, the way he does after reading it.
+        self.driver.execute_script(
+            "var b = document.getElementById('devResultBody');"
+            "b.scrollTop = b.scrollHeight;")
+        time.sleep(0.2)
+        on_screen = self.driver.execute_script("""
+          var r = document.getElementById('wdHousekeepSweepBtn')
+                    .getBoundingClientRect();
+          return r.width > 0 && r.height > 0 &&
+                 r.top >= 0 && r.bottom <= window.innerHeight;
+        """)
+        self.assertTrue(on_screen,
+                        "the delete control is off screen once the report is "
+                        "scrolled - he cannot reach it")
+
+    def test_a_finished_sweep_does_not_leave_a_reusable_list(self):
+        """Keeping a *preview* is the fix; keeping a spent delete list is not.
+        After a sweep the pending list is empty and the button is dead until
+        the next Look."""
+        self.unlocked()
+        self.stub()
+        self.open_housekeeping()
+        self.click("#wdHousekeepLookBtn")
+        self.wait_for(lambda: self.find("#wdHousekeepSweepBtn").is_enabled(), "arm")
+        self.driver.execute_script("window.confirm = function () { return true; };")
+        self.click("#wdHousekeepSweepBtn")
+        self.wait_for(lambda: len(self.calls()) == 2, "the sweep call")
         self.click("#devResultModal .btn")
         self.open_housekeeping()
         self.assertEqual(

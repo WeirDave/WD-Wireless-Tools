@@ -9632,7 +9632,13 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   max-width: 860px;
   width: min(860px, calc(100vw - 48px));
 }
+.dev-result-modal {
+  display: flex;
+  flex-direction: column;
+}
 .dev-result-body {
+  flex: 1 1 auto;
+  min-height: 0;
   max-height: min(70vh, 680px);
   overflow-y: auto;
   font-size: 12.5px;
@@ -9756,15 +9762,32 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   color: var(--text-2);
 }
 
-.dev-panel-controls {
+/* The controls sit in the modal's own footer, outside the scrolling body,
+   so however long the report gets they stay on screen. The housekeeping
+   report runs to six screens; with the controls inside the scroll, the armed
+   "Delete 4,084 items" button was off the top and he reported it as there
+   being no way to run it. */
+.dev-panel-footer {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 12px 0;
+  padding: 12px 0 4px;
   border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  flex: none;
 }
-.dev-panel-controls:empty { display: none; }
+.dev-panel-footer:empty { display: none; }
+
+/* When a remembered result is shown rather than a fresh one, say so. */
+.dev-panel-stamp {
+  margin: 0 0 10px;
+  padding: 7px 10px;
+  border-left: 2px solid var(--lime);
+  background: var(--surface-2);
+  border-radius: 0 4px 4px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
 
 .dev-panel-out { margin-top: 12px; }
 .dev-panel-out:empty { margin-top: 0; }

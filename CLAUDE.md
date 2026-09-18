@@ -1250,6 +1250,43 @@ real", because that is the moment the number matters.
 it gets the room: a wider modal, full names never truncated, and the skipped
 ones grouped by reason with a count per group rather than ninety flat rows.
 
+### The client is not the guard, so stop making him pay for it
+
+He ran the clean-up, got a result, and reported: *"there was no way to make it
+run for real and then when I went back it needed for me to do it again to do a
+preview and run for real was grayed out. This is counterproductive."* Two
+separate faults, and both were self-inflicted friction rather than safety.
+
+**The control was armed; it was just off screen.** The panel's buttons sat
+inside the scrolling body, above the output. A housekeeping report on his
+machine is **six screens tall**, so the moment he scrolled down to read it the
+armed "Delete 4,084 items" button was above the fold with nothing to indicate
+it existed. The controls live in the modal's own footer now, outside the
+scroll. **A control he has to scroll back up to find is a control he does not
+have.**
+
+**Closing the panel threw the result away.** Reopening reset the pending list
+and disarmed the live button, so he had to re-run the whole thing. That
+mattered most for realign, which downloads ninety cloud projects to prove them
+identical before it will offer to write.
+
+Keeping the result is safe, and this is the load-bearing part: **the button
+state is not the safety mechanism.** `housekeeping.sweep` looks every path up
+in a fresh survey and skips anything no longer deletable;
+`cloud_realign.realign` re-downloads and re-compares each pair before touching
+it. Both re-derive their work at write time. The armed button is a
+convenience; the server is the guard. Disarming on close bought nothing and
+cost him the run.
+
+A remembered result says so - when it was taken, and that the server re-checks
+anyway - because showing a stale answer as though it were fresh would be worse
+than clearing it. A *spent* delete list is still cleared after a sweep: keeping
+a preview is the fix, keeping a list that has already been acted on is not.
+
+`test_the_controls_stay_on_screen_however_long_the_report_is` and
+`test_reopening_the_panel_keeps_the_result_and_stays_armed` hold both, and both
+go red on the old behaviour.
+
 **Adding an action:** one button in `Dev.toolbarInnerHtml` and one handler
 below it in `wd-dev-actions.js`. WaxFrame's convention is that every
 dev-toolbar button's handler lives in one file - `wf-debug.js` - so nothing in

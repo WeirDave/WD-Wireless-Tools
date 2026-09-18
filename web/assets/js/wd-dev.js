@@ -297,6 +297,14 @@
         '<div class="modal dev-result-modal">' +
           '<h3 class="modal-title" id="devResultTitle">Result</h3>' +
           '<div class="dev-result-body" id="devResultBody"></div>' +
+          /* **The controls live outside the scrolling body, deliberately.**
+             They used to sit inside it, above the output. A housekeeping
+             report is six screens tall, so once he scrolled down to read it
+             the armed "Delete 4,084 items" button was off the top and there
+             was no sign it existed - he reported it as "no way to make it run
+             for real". A control he has to scroll back up to find is a
+             control he does not have. */
+          '<div class="dev-panel-footer" id="devPanelFooter"></div>' +
           '<div class="modal-actions">' +
             '<button type="button" class="btn" title="Close this report" ' +
                     'data-action="call" data-fn="WD.Dev.closeResult">' +
@@ -456,12 +464,14 @@
      delegated dispatcher picks up `data-action="call"` on controls rendered
      into it exactly as it does for the strip. */
 
-  Dev.showResult = function (title, html) {
+  Dev.showResult = function (title, html, controls) {
     var t = document.getElementById('devResultTitle');
     var b = document.getElementById('devResultBody');
+    var f = document.getElementById('devPanelFooter');
     var m = document.getElementById('devResultModal');
     if (t) t.textContent = title;
-    if (b) b.innerHTML = html;
+    if (b) { b.innerHTML = html; b.scrollTop = 0; }
+    if (f) f.innerHTML = controls || '';
     if (m) m.classList.add('active');
   };
 

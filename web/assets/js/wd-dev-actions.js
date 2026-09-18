@@ -73,10 +73,37 @@
      each panel arms its own live control when its own preview succeeds. */
   Dev.onMounted = function () {};
 
-  /* One shape for every panel: a plain-language explanation, then the
-     controls, then the output. `intro` is a list of {q, a} - the question he
-     would ask, and the answer - because a wall of prose is not something
-     anyone reads before clicking. */
+  /* What each panel found last time it ran, kept for as long as the page is
+     open.
+
+     **Closing the panel used to throw this away.** He looked, closed it, came
+     back, and had to look again from scratch with the live button greyed out -
+     "this is counterproductive", and he was right. Re-deriving a five-second
+     survey is annoying; re-running a realign preview that downloads ninety
+     cloud projects to prove them identical is worse.
+
+     Keeping it is safe because **the client is not the guard**. Both
+     endpoints re-derive their work at write time: `housekeeping.sweep` looks
+     every path up in a fresh survey and skips anything that is no longer
+     deletable, and `cloud_realign.realign` re-downloads and re-compares each
+     pair before touching it. The armed button is a convenience; the server is
+     the safety. Disarming on close bought nothing and cost him the result. */
+  var lastRun = { realign: null, housekeeping: null };
+
+  function stamp(at) {
+    var mins = Math.floor((Date.now() - at) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins === 1) return 'a minute ago';
+    if (mins < 60) return mins + ' minutes ago';
+    var hrs = Math.round(mins / 60);
+    return hrs === 1 ? 'an hour ago' : hrs + ' hours ago';
+  }
+
+  /* One shape for every panel: a plain-language explanation, then the output.
+     The controls are returned separately and go in the footer, outside the
+     scroll, so they are reachable however long the report gets. `facts` is a
+     list of {q, a} - the question he would ask, and the answer - because a
+     wall of prose is not something anyone reads before clicking. */
   function panel(opts) {
     return '' +
       '<p class="dev-panel-lead">' + esc(opts.lead) + '</p>' +
@@ -85,7 +112,6 @@
           return '<dt>' + esc(f.q) + '</dt><dd>' + esc(f.a) + '</dd>';
         }).join('') +
       '</dl>' +
-      '<div class="dev-panel-controls">' + opts.controls + '</div>' +
       '<div class="dev-panel-out" id="devPanelOut"></div>';
   }
 
@@ -152,15 +178,37 @@
              'then writes nothing, so what it lists is what the live run ' +
              'would do. The live button stays dead until a preview succeeds.' }
       ],
-      controls:
-        safeBtn('wdRealignPreviewBtn', 'WD.Dev.realignPreview',
-                'Preview — changes nothing',
-                'Work out what would change and report it. Writes nothing.') +
-        writeBtn('wdRealignRunBtn', 'WD.Dev.realignRun',
-                 'Align them for real',
-                 'Preview first. This rewrites the files the preview listed.')
-    }));
+    }),
+    safeBtn('wdRealignPreviewBtn', 'WD.Dev.realignPreview',
+            'Preview — changes nothing',
+            'Work out what would change and report it. Writes nothing.') +
+    writeBtn('wdRealignRunBtn', 'WD.Dev.realignRun',
+             'Align them for real',
+             'Preview first. This rewrites the files the preview listed.'));
+
+    // Put back what the last preview found, if there was one, so closing the
+    // panel does not cost him the run.
+    restore('realign', 'wdRealignRunBtn', function (r) {
+      return 'Align ' + plural(r.aligned.length, 'project', 'projects') +
+             ' for real';
+    }, realignReport);
   };
+
+  /* Re-render a remembered result and re-arm its live control. */
+  function restore(key, runBtnId, labelFor, render) {
+    var last = lastRun[key];
+    if (!last) return;
+    Dev.setPanelOutput(
+      '<p class="dev-panel-stamp">Showing the ' +
+      (last.isPreview ? 'check' : 'run') + ' from ' + esc(stamp(last.at)) +
+      '. Run it again if anything has changed since — either way, the ' +
+      'server re-checks every file before it writes.</p>' +
+      render(last.result, last.isPreview));
+    if (!last.isPreview || !last.armable) return;
+    Dev.setEnabled(runBtnId, true);
+    var btn = document.getElementById(runBtnId);
+    if (btn) { btn.textContent = labelFor(last.result); delete btn.dataset.wasLabel; }
+  }
 
   function realignCall(dryRun) {
     return WD.api('cloud/realign_renamed', { dryRun: dryRun });
@@ -260,6 +308,8 @@
       // The only path that arms the live button, and only on a clean
       // preview. A failed one leaves it dead, which is what we want.
       var n = (r && r.aligned && r.aligned.length) || 0;
+      lastRun.realign = { result: r, isPreview: true, at: Date.now(),
+                          armable: n > 0 };
       Dev.setEnabled('wdRealignRunBtn', n > 0);
       var btn = document.getElementById('wdRealignRunBtn');
       if (btn && n > 0) {
@@ -285,6 +335,8 @@
       busy('wdRealignRunBtn', false);
       Dev.setEnabled('wdRealignRunBtn', false);
       if (r && r.error) { fail(r.error); return; }
+      lastRun.realign = { result: r, isPreview: false, at: Date.now(),
+                          armable: false };
       Dev.setPanelOutput(realignReport(r, false));
     }).catch(function (e) {
       busy('wdRealignRunBtn', false);
@@ -300,7 +352,8 @@
   var sweepable = [];
 
   Dev.openHousekeeping = function () {
-    sweepable = [];
+    // Deliberately does *not* clear `sweepable` - see `lastRun` above. A new
+    // Look replaces it; reopening the panel keeps it.
     Dev.showResult('Clean up leftover files', panel({
       lead: 'Development sessions leave things behind - worktrees, scratch ' +
             'folders, temp directories, browser drivers, downloaded release ' +
@@ -326,14 +379,19 @@
              'list is worked out again at delete time rather than trusted, ' +
              'so anything that became busy in between is skipped.' }
       ],
-      controls:
-        safeBtn('wdHousekeepLookBtn', 'WD.Dev.housekeepLook',
-                'Look — changes nothing',
-                'Inventory what is there. Writes nothing.') +
-        writeBtn('wdHousekeepSweepBtn', 'WD.Dev.housekeepSweep',
-                 'Delete what it listed',
-                 'Look first. Deletes the items marked safe to remove.')
-    }));
+    }),
+    safeBtn('wdHousekeepLookBtn', 'WD.Dev.housekeepLook',
+            'Look — changes nothing',
+            'Inventory what is there. Writes nothing.') +
+    writeBtn('wdHousekeepSweepBtn', 'WD.Dev.housekeepSweep',
+             'Delete what it listed',
+             'Look first. Deletes the items marked safe to remove.'));
+
+    restore('housekeeping', 'wdHousekeepSweepBtn', function () {
+      return 'Delete ' + plural(sweepable.length, 'item', 'items');
+    }, function (r, isPreview) {
+      return isPreview ? surveyReport(r) : sweepReport(r);
+    });
   };
 
   function mb(bytes) {
@@ -480,6 +538,8 @@
           if (e.deletable) sweepable.push(e.path);
         });
       });
+      lastRun.housekeeping = { result: r, isPreview: true, at: Date.now(),
+                               armable: sweepable.length > 0 };
       Dev.setPanelOutput(surveyReport(r));
       Dev.setEnabled('wdHousekeepSweepBtn', sweepable.length > 0);
       var btn = document.getElementById('wdHousekeepSweepBtn');
@@ -505,6 +565,10 @@
         busy('wdHousekeepSweepBtn', false);
         Dev.setEnabled('wdHousekeepSweepBtn', false);
         if (r && r.error) { fail(r.error); return; }
+        // The list it acted on is spent; the next Look builds a new one.
+        sweepable = [];
+        lastRun.housekeeping = { result: r, isPreview: false, at: Date.now(),
+                                 armable: false, sweep: true };
         Dev.setPanelOutput(sweepReport(r));
       }).catch(function (e) {
         busy('wdHousekeepSweepBtn', false);
@@ -543,4 +607,5 @@
   Dev._surveyReport = surveyReport;
   Dev._sweepReport = sweepReport;
   Dev._housekeepingPending = function () { return sweepable.slice(); };
+  Dev._lastRun = function (k) { return lastRun[k]; };
 })();
