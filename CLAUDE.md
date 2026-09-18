@@ -1087,6 +1087,37 @@ handler check.
 
 ## The dev toolbar — WaxFrame Professional's method, ported
 
+**The toolbar is permanent. Do not remove it.** *"I always like to keep a dev
+toolbar on all of my projects, hence me making you copy it to this one from
+WaxFrame Professional."* It is standing furniture in his products, not
+scaffolding put up for one job, and it was asked for on its own terms.
+
+That matters because of how it arrived here: the first thing it hosted was a
+one-off repair, and he has said the repair itself is disposable - *"once it's
+done then we're going to pull all this code out because it's only a one shot
+deal"*. **That applies to the realign action, not to the toolbar.** A future
+session reading the history could easily reach the opposite conclusion, which
+is the whole reason this paragraph is at the top of the section.
+
+What is disposable, and what is not:
+
+* **`tools/cloud_realign.py`, its endpoint, its button and its tests** - the
+  one-off. The ninety-project event came from a single bulk cloud rename. Once
+  he has run it, it can come out in one commit. See "The first action" below
+  for what is safe to delete with it.
+* **The toolbar itself** - permanent.
+* **`tools/housekeeping.py`** - also not a one-off. Session debris accumulates
+  continuously; that action is what recovered 12.73 GB and found twenty-seven
+  files of his workplace data sitting in `%TEMP%`.
+
+**The underlying condition the realign action fixes is not a one-off either**,
+even though the bulk event was. Renaming any cloud project without pulling
+leaves that pair reading "cloud newer", because Ekahau stamps `modifiedAt` on a
+rename and the local copy does not move. One or two at a time is already
+handled by `fixInternalName` in `cloud.js`, which has named the difference and
+offered to correct it since v2.112.0. The bulk tool exists because ninety at
+once is not a per-row job.
+
 **This is WaxFrame's dev toolbar, not an interpretation of it.** The first
 build reshaped it into a vertical panel of named actions and dropped the
 password gate. Both were reasoned and both were wrong to decide here, and he
@@ -1094,6 +1125,21 @@ said so plainly: *"That is NOT what I asked for. I asked for the method that we
 used in WaxFrame Pro to be used in this project."* He has two products and
 wants them to work the same way; consistency across them beats either
 individual layout choice.
+
+**It is written to be copied again**, since he keeps one in every project, and
+the split is the same shape the updater uses - see "Porting the updater to the
+other apps".
+
+* **`wd-dev.js` is the portable half.** The only app-specific things in it are
+  `LS_DEV` / `LS_POS` (`wd_dev`, `wd_dev_toolbar_pos`) and `DEV_PW_HASH` -
+  and the hash is the one thing that should *not* change, since he wants one
+  dev password across products.
+* **`wd-dev-actions.js` is entirely this app's**, 37 references to its
+  endpoints. That is the file a new project replaces wholesale.
+* **What it needs from the host**, checked rather than assumed: `WD.toast` and
+  `WD.toggleMenu`. It also renders into the suite's `.modal` / `.btn` /
+  `.progress-track` classes, so a new project supplies those or the
+  `.dev-*` block in `wd-tools.css` comes across with it.
 
 **The rule that follows from that:** where something in WaxFrame genuinely
 cannot carry over, raise it rather than substituting an answer. "WaxFrame does
@@ -1332,6 +1378,27 @@ use; both are gitignored, and a 4 MB binary is one `git add -A` from the
 repository if those entries ever go.
 
 ### The first action, and the trap in it
+
+**This one is disposable - see the top of this section.** When he has run it
+against his fleet and is satisfied, it comes out: `tools/cloud_realign.py`,
+`CLOUD_ACTIONS["realign_renamed"]` in `server.py`, the `wdRealignOpenBtn`
+button and the `Dev.openRealign` / `realignPreview` / `realignRun` /
+`realignReport` block in `wd-dev-actions.js`, `tests/test_cloud_realign.py`,
+`tests/test_dev_toolbar_report.py`, and the realign tests inside
+`tests/test_dev_toolbar_browser.py`. Nothing else depends on it.
+
+Two things to keep on the way out. `_rewrite_project_json` in
+`cloud_manager.py` was extracted for this, but `set_internal_project_name` is
+its other caller - **it stays**. And the progress polling in
+`wd-dev-actions.js` is generic; any future action that runs for minutes wants
+it.
+
+Three more files mention it and none of them depend on it - the references are
+prose in comments: `tools/housekeeping.py` twice ("same rule as the realign
+action", about re-deriving before writing) and one slice-marker comment in
+`tests/test_housekeeping_report.py`. Reword them; nothing breaks either way.
+The slice markers themselves (`function mb(bytes)` to `Dev.housekeepLook`)
+survive the removal untouched.
 
 `tools/cloud_realign.py` settles the pairs that read "cloud newer" only
 because the cloud project was renamed. Roughly ninety of them, from a rename
