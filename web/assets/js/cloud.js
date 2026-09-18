@@ -3378,9 +3378,26 @@ function gutCell(r) {
    His projects are named after their site, so a tag repeating it is the same
    crowding in a smaller font. What Flat can say that the tree cannot is when
    the two *disagree* - a .esx in the wrong folder, a project assigned to the
-   wrong site - so that is when the location is worth the row. */
+   wrong site - so that is when the location is worth the row.
+
+   **The tab decides this, not the row.** It used to read `r.kind`, and
+   `renderTreeChildren` sets `kind: 'projects'` on every child so that the row
+   menu offers project actions rather than site actions. So the Flat-only tag
+   rendered on every row of the Tree as well, and it had nothing true to say
+   there: `build_sites_data` gives a tree child a `folder` and no `siteName`,
+   because on the Tree the site *is* the row above it. Every child therefore
+   compared '' against its folder, disagreed, and drew both halves - the folder
+   name again on the local side, and on the cloud side the words **no site**,
+   underneath the very site it is filed in. "they weren't assigned to a site on
+   the cloud and yet they're listed underneath the site on the cloud side."
+
+   A project genuinely filed under no site still says so, and says it in the
+   place that can act on it: the `Not assigned` tag on its name, the
+   `Assign to "<site>"` item in its menu, and the auto-assign banner above the
+   list. Those are about assignment. This tag was about location, and on the
+   Tree the location is not in question. */
 function locationDiffers(r) {
-  if ((r.kind || currentTab) !== 'projects') return false;
+  if (currentTab !== 'projects') return false;
   if (!r.cloud || !r.local) return false;
   const site = String((r.cloud && r.cloud.siteName) || '').trim().toLowerCase();
   const folder = String((r.local && r.local.folder) || '').trim().toLowerCase();
