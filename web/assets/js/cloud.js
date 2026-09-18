@@ -2764,11 +2764,39 @@ function compareResultFor(r) {
 /* Rows that are mid-action, so the click is visible the instant it lands. */
 const _rowBusy = new Map();
 
-function _rowKey(cloudId, localPath) { return _compareKey(cloudId, localPath); }
+/* Keyed on whichever side exists.
+
+   This used to build the key from both, and `rowIsBusy` returned null unless
+   the row had both - so an unpaired row could never say it was working. The
+   actions that were still silent are exactly the ones that operate on unpaired
+   rows: download a cloud project with no local copy, link a local file with no
+   project. The mechanism was excluding its own remaining cases. */
+function _rowKey(cloudId, localPath) {
+  return _compareKey(cloudId || '', localPath || '');
+}
 
 function rowIsBusy(r) {
-  if (!r || !r.cloud || !r.local) return null;
-  return _rowBusy.get(_rowKey(r.cloud.id, r.local.path)) || null;
+  if (!r) return null;
+  const id = (r.cloud && r.cloud.id) || '';
+  const path = (r.local && r.local.path) || '';
+  if (!id && !path) return null;
+  return _rowBusy.get(_rowKey(id, path)) || null;
+}
+
+/* Mark a row for as long as something is running on it.
+
+   Takes the promise the action already has and clears the mark when it
+   settles, whichever way it settles. An action that forgets to clear its own
+   mark is the stuck spinner, which is the failure this exists to prevent. */
+function _busyWhile(cloudId, localPath, label, promise) {
+  _setRowBusy(cloudId, localPath, label);
+  const done = () => _setRowBusy(cloudId, localPath, null);
+  if (promise && typeof promise.then === 'function') {
+    promise.then(done, done);
+  } else {
+    done();
+  }
+  return promise;
 }
 
 /* Long enough that a slow upload is not interrupted, short enough that he is
@@ -3702,13 +3730,19 @@ async function markNotMatch(cloudId, localPath, cloudName, localName, opts) {
      reloads. The request, the error handling and the result are the same. */
   const quiet = !!(opts && opts.silent);
   if (!quiet && !confirm(`Mark as NOT a match?\n\nCloud:  ${cloudName}\nLocal:  ${localName}\n\nThey'll be split into orphans and never auto-paired again. You can undo this from the menu → Manage Not-a-Match.`)) return;
+  //: After the question, never before it.
+  if (!quiet) _setRowBusy(cloudId, localPath, 'Splitting these two apart…');
   try {
     const r = await pyApi('mark_not_match', cloudId, localPath, cloudName, localName);
     if (r && r.error) { toast(r.error, 'error'); return; }
     if (quiet) return;
     toast('Marked as not a match', 'success');
     refreshData();
-  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+  } catch (e) {
+    toast('Failed: ' + e.message, 'error');
+  } finally {
+    if (!quiet) _setRowBusy(cloudId, localPath, null);
+  }
 }
 
 async function openNotMatchManager() {
@@ -3753,12 +3787,19 @@ async function undoNotMatch(cloudId, localPath) {
 }
 
 async function markManualMatch(cloudId, localPath, cloudName, localName) {
+  _setRowBusy(cloudId, localPath, 'Linking these two…');
   try {
     const r = await pyApi('mark_manual_match', cloudId, localPath, cloudName || '', localName || '');
     if (r && r.error) { toast(r.error, 'error'); return; }
     toast('Linked', 'success');
     refreshData();
-  } catch (e) { toast('Link failed: ' + e.message, 'error'); }
+  } catch (e) {
+    toast('Link failed: ' + e.message, 'error');
+  } finally {
+    /* `finally`, not the success path: a mark an action can forget to clear
+       is the stuck spinner this mechanism exists to prevent. */
+    _setRowBusy(cloudId, localPath, null);
+  }
 }
 
 const SHARE_ROLE_LABEL = {
@@ -7405,6 +7446,9 @@ async function downloadThenMove(projectId, projectName) {
     ? `Download "${projectName}" into local folder "${siteName}"?`
     : `Download "${projectName}" from Ekahau Cloud? You'll pick a site folder next.`;
   if (!confirm(promptMsg)) return;
+  /* An unpaired cloud project: the row has no local side, which is why this
+     could not be marked at all until `_rowKey` stopped requiring both. */
+  _setRowBusy(projectId, '', 'Downloading from Ekahau Cloud…');
   try {
     const r = await runWithProgress(
       { title: `Downloading "${projectName}"`,
@@ -7422,7 +7466,11 @@ async function downloadThenMove(projectId, projectName) {
       _moveToSiteTargets = [{ kind: 'local', path: r.path, name: r.name || projectName }];
       await _openMoveToSitePicker();
     }
-  } catch (err) { toast(err.message || 'Download failed', 'error'); }
+  } catch (err) {
+    toast(err.message || 'Download failed', 'error');
+  } finally {
+    _setRowBusy(projectId, '', null);
+  }
 }
 
 async function pickFolder() {
