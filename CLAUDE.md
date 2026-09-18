@@ -821,6 +821,68 @@ no characters, which is what "never cut" actually asks for. `overflow: hidden`
 on a table cell is not a reliable backstop on its own - the BOM had it and
 overflowed anyway. Column widths are the mechanism.
 
+## A test that would pass with the feature deleted is not a test
+
+**Five shipped defects were green the entire time they were broken**, and all
+five were the same shape: the test asserted that the *source contained*
+something rather than that the *code did* something.
+
+- **Apply-to-all** reported "Applied to 1 floor" while discarding the work.
+- **The match line label** test asserted the label was *rotated*. It passed for
+  the whole period the installer sheets were unusable.
+- **`↑ Local newer · replace cloud`** - the tests asserted the markup contained
+  `pushLocalOverCloud(`, and it did. He could not use it for days.
+- **Prep's wall step** was verified 1 → 26 on fixtures while doing nothing
+  visible on his machine.
+- **The backups wording** was pinned by a test requiring a particular sentence,
+  so five dialogs told him the wrong place to find a file he had just
+  overwritten. A test that pins the phrasing pins the bug with it.
+
+A survey on 2026-09-17 found **358 assertions against the text of a source
+file, across 61 of 107 test files** - 120 of them in 22 files that never
+execute anything at all.
+
+### What to write instead
+
+**Render the real thing, pull the handler back out of the rendered markup, run
+it, and assert the call that arrives** - its name, its arguments, their order,
+and what happens on the path that is supposed to refuse.
+`tests/test_cloud_sync_direction.py` is the worked example: it evaluates the
+`onclick` it finds in the output, with `pushLocalOverCloud` and friends
+stubbed, and checks the five arguments. It uses the **real** `WD.escJsStr`,
+because a project named with an apostrophe or a path with a backslash is
+exactly what turns a present button into a dead one.
+
+For anything visual, **measure the rendered result** rather than asserting the
+rule exists - see the report section above, which prints the PDF and reads back
+point sizes and bounding boxes.
+
+**Where a property genuinely matters, assert the property rather than the
+phrasing.** The backups case is the rule: require that the dialog names the
+location `_backup_target` actually uses, not that it contains a given
+sentence. Wording changes; being wrong about where his file went does not
+become acceptable because the sentence was updated.
+
+**Check your test can fail.** Mutate the thing it covers and watch it go red.
+Swapping the first two arguments of `pushLocalOverCloud` fails the new test and
+passed every one of the assertions it replaced.
+
+### The ratchet
+
+`tests/test_a_test_must_be_able_to_fail.py` holds two properties:
+
+- **every handler named in an event attribute is defined somewhere** - 299
+  checked, and a name in an `onclick` is a string until something calls it;
+- **no test file gains assertions against its own source.** Existing debt is
+  recorded per file in `tests/source_string_assertion_baseline.json` and
+  tolerated; growth fails, and so does leaving a stale number in place after
+  converting a file. Lower a number, never raise one.
+
+`scripts/audit_source_string_tests.py` prints the inventory,
+`scripts/audit_tests_that_never_run_anything.py` splits it into files that
+execute and files that do not, and `scripts/audit_handlers_exist.py` is the
+handler check.
+
 ## Known gotchas
 
 - **Write the character, not an escape for it - and never let a patch script
