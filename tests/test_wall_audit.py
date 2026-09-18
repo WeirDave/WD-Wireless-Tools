@@ -59,6 +59,7 @@ def _project(path: Path, types, segment_counts):
 class AuditTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-wallaudit-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -149,6 +150,7 @@ class AuditTests(unittest.TestCase):
 class RepairTests(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-wallfix-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.p = self.tmp / "warehouse.esx"
         _project(self.p, [_wall_type("Shelf, Warehouse", 18.0, 1.5, tid="sw"),
                           _wall_type("Wall, Concrete", 24.0, 0.5, tid="c")],

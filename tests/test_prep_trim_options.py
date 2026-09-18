@@ -88,6 +88,7 @@ def plan_of(path):
 class MarginChangesTheCrop(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-prep-margin-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.src = make_esx(self.tmp / "in.esx")
 
     def tearDown(self):
@@ -148,6 +149,7 @@ class UntouchedFormChangesNothing(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-prep-default-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.src = make_esx(self.tmp / "in.esx")
 
     def tearDown(self):
@@ -201,6 +203,7 @@ class SavedBoxesAreOfferedNotAssumed(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-prep-boxes-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.src = make_esx(self.tmp / "in.esx")
         self.client = app.test_client()
 

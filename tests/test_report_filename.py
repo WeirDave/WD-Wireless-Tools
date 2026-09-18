@@ -383,6 +383,7 @@ class OpenEsxRoute(unittest.TestCase):
     def setUp(self):
         import tempfile, zipfile
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-fname-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         folder = self.tmp / "Northwind Traders - Building 4 - 1200 Fake Rd"
         folder.mkdir()
         self.esx = folder / "400 Example St, Fairview, CA 90003 - PD.esx"

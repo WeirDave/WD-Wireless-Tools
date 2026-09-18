@@ -180,6 +180,7 @@ class PrepAndQuickWallsReadTheSameTemplates(unittest.TestCase):
         if tpl is None:
             self.skipTest("no wall template on this install")
         tmp = Path(tempfile.mkdtemp(prefix="wd-prep-walls-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
         try:
             src = make_esx(tmp / "in.esx")
             with zipfile.ZipFile(src) as z:
@@ -259,6 +260,7 @@ class ThePreviewIsTheCropNotAnImpressionOfIt(unittest.TestCase):
         """Measured, both ways, rather than inferred from the source."""
         from tools import esx_trimmer
         tmp = Path(tempfile.mkdtemp(prefix="wd-preview-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
         try:
             src = make_esx(tmp / "in.esx", mpu=0.5)
             for preset in esx_trimmer.MARGIN_PRESET_FEET:
@@ -275,6 +277,7 @@ class ThePreviewIsTheCropNotAnImpressionOfIt(unittest.TestCase):
     def test_a_different_margin_is_a_different_preview(self):
         from tools import esx_trimmer
         tmp = Path(tempfile.mkdtemp(prefix="wd-preview2-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
         try:
             src = make_esx(tmp / "in.esx", mpu=0.5)
             sizes = {esx_trimmer.analyze(src, margin=p).floors[0].new_size

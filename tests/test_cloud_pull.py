@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import shutil
 import tempfile
 import unittest
 import zipfile
@@ -62,7 +63,11 @@ LOCAL_OLD = "2026-08-01T08:00:00.000Z"
 
 class CloudPullTests(unittest.TestCase):
     def setUp(self):
+        # `addCleanup`, not a bare mkdtemp. Without it this leaked one
+        # directory per test method: 1,314 of them were on his machine when
+        # the housekeeping action first counted, from this line alone.
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-cloud-pull-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.local = self.tmp / "Example St - PD.esx"
         _esx(self.local, "Example St - PD", LOCAL_OLD)
         self.original = self.local.read_bytes()
@@ -160,7 +165,9 @@ class CloudPullTests(unittest.TestCase):
         self.assertLocalUntouched()
 
     def test_path_outside_the_configured_folder_is_refused(self):
-        outside = Path(tempfile.mkdtemp(prefix="wd-cloud-outside-")) / "elsewhere.esx"
+        _outside_dir = Path(tempfile.mkdtemp(prefix="wd-cloud-outside-"))
+        self.addCleanup(shutil.rmtree, _outside_dir, True)
+        outside = _outside_dir / "elsewhere.esx"
         _esx(outside, "Elsewhere", LOCAL_OLD)
         mgr = cm.CloudManager.__new__(cm.CloudManager)
         mgr.config = {"output_dir": str(self.tmp)}

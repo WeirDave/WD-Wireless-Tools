@@ -18,6 +18,7 @@ how a cleanup feature stops being trustworthy.
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -29,6 +30,7 @@ class ClassifyingWhatIsOnDisk(unittest.TestCase):
 
     def setUp(self):
         self.d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.d, True)
 
     def _f(self, name, size=10):
         p = self.d / name
@@ -82,6 +84,7 @@ class PruningKeepsTheOneThatMatters(unittest.TestCase):
 
     def setUp(self):
         self.d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.d, True)
         self.target = self.d / "Site.esx"
         self.target.write_bytes(b"live")
         self.gens = []
@@ -143,6 +146,7 @@ class PurgingAcrossEverything(unittest.TestCase):
 
     def setUp(self):
         self.d = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.d, True)
         (self.d / "site-a").mkdir()
         (self.d / "site-b").mkdir()
         for i, stamp in enumerate(("20260901-120000", "20260902-120000")):

@@ -431,6 +431,191 @@ class ToolbarInABrowser(unittest.TestCase):
             card.find_elements(By.CSS_SELECTOR, "[data-dev-run]"), [])
 
 
+    # ── the housekeeping action, driven ──────────────────────────
+    #
+    # Its own stub, because the two actions send different bodies and the
+    # point of these is what the click actually puts on the wire.
+    HK_STUB = """
+    window.__devCalls = [];
+    window.WD.api = function (action, body) {
+      window.__devCalls.push({ action: action, body: body });
+      if (action === 'dev/housekeeping_survey') {
+        return Promise.resolve({
+          ok: true, dataScanComplete: true, liveWindowMinutes: 20,
+          totals: { count: 3, sizeBytes: 5000000, deletable: 2,
+                    deletableBytes: 4000000, live: 1, withData: 1,
+                    dataFindings: 4 },
+          processes: [{ pid: 4242, name: 'geckodriver.exe',
+                        why: 'A WebDriver executable, started by a test run.' }],
+          groups: [{
+            key: 'tests', title: 'Test suite leftovers',
+            totals: { count: 3, sizeBytes: 5000000, deletable: 2,
+                      deletableBytes: 4000000, live: 1, withData: 1,
+                      dataFindings: 4 },
+            entries: [
+              { path: 'C:/Temp/wd-cloud-pull-aaa', name: 'wd-cloud-pull-aaa',
+                sizeBytes: 2000000, idleHours: 30, live: false, liveReason: '',
+                dataFindings: 0, deletable: true, note: 'A temp directory.' },
+              { path: 'C:/Temp/wd-cloud-pull-bbb', name: 'wd-cloud-pull-bbb',
+                sizeBytes: 2000000, idleHours: 40, live: false, liveReason: '',
+                dataFindings: 4, deletable: true, note: 'A temp directory.' },
+              { path: 'C:/wd-worktrees/live-one', name: 'live-one',
+                sizeBytes: 1000000, idleHours: 0.1, live: true,
+                liveReason: 'Registered as a worktree - a session may be using it.',
+                dataFindings: 0, deletable: false, note: 'A registered worktree.' }
+            ]
+          }]
+        });
+      }
+      return Promise.resolve({
+        ok: true, freedBytes: 4000000,
+        removed: [{ path: 'C:/Temp/wd-cloud-pull-aaa',
+                    name: 'wd-cloud-pull-aaa', sizeBytes: 4000000 }],
+        skipped: [], failed: [],
+        counts: { removed: 1, skipped: 0, failed: 0 }
+      });
+    };
+    """
+
+    def hk_stub(self):
+        self.driver.execute_script(self.HK_STUB)
+
+    def hk_card(self):
+        return self.find('[data-action-id="housekeeping"]')
+
+    def hk_preview(self):
+        return self.hk_card().find_element(By.CSS_SELECTOR, "[data-dev-preview]")
+
+    def hk_run(self):
+        return self.hk_card().find_element(By.CSS_SELECTOR, "[data-dev-run]")
+
+    def hk_result(self):
+        node = self.hk_card().find_elements(
+            By.CSS_SELECTOR, ".wd-dev-result:not([hidden])")
+        return node[0].text if node else ""
+
+    def test_the_housekeeping_action_is_on_the_toolbar_with_its_explanation(self):
+        self.unlocked()
+        self.open_panel()
+        card = self.hk_card()
+        self.assertIsNotNone(card, "the housekeeping action is not registered")
+        text = card.text
+        self.assertIn("lying around", text)
+        self.assertIn("Dropbox", text)
+        self.assertIn("Desktop", text)
+
+    def test_its_live_button_is_dead_until_it_has_looked(self):
+        """Same structural rule as the realign action. This one deletes
+        thousands of things, so it matters more here, not less."""
+        self.unlocked()
+        self.open_panel()
+        self.assertFalse(self.hk_run().is_enabled())
+
+    def test_looking_asks_the_survey_endpoint_and_writes_nothing(self):
+        self.unlocked()
+        self.hk_stub()
+        self.open_panel()
+        self.hk_preview().click()
+        self.wait_for(lambda: len(self.calls()) == 1, "the survey call")
+        self.assertEqual(self.calls()[0]["action"], "dev/housekeeping_survey")
+
+    def test_the_report_leads_with_the_workplace_data_count(self):
+        self.unlocked()
+        self.hk_stub()
+        self.open_panel()
+        self.hk_preview().click()
+        self.wait_for(lambda: "workplace data" in self.hk_result(),
+                      "the survey report")
+        text = self.hk_result()
+        self.assertIn("1 item carries", text)
+        self.assertIn("4 signals", text)
+
+    def test_the_report_names_what_is_kept_and_why(self):
+        self.unlocked()
+        self.hk_stub()
+        self.open_panel()
+        self.hk_preview().click()
+        self.wait_for(lambda: "live-one" in self.hk_result(), "the kept item")
+        self.assertIn("Registered as a worktree", self.hk_result())
+
+    def test_the_report_lists_a_process_it_could_stop(self):
+        self.unlocked()
+        self.hk_stub()
+        self.open_panel()
+        self.hk_preview().click()
+        self.wait_for(lambda: "geckodriver" in self.hk_result(), "the process")
+        self.assertIn("4242", self.hk_result())
+
+    def test_the_sweep_sends_only_the_paths_the_preview_offered(self):
+        """The live one is in the report and must not be in the request.
+        The server checks again anyway - this is the near guard, not the
+        only one."""
+        self.unlocked()
+        self.hk_stub()
+        self.open_panel()
+        self.hk_preview().click()
+        self.wait_for(lambda: self.hk_run().is_enabled(), "the button to arm")
+        self.driver.execute_script("window.confirm = function () { return true; };")
+        self.hk_run().click()
+        self.wait_for(lambda: len(self.calls()) == 2, "the sweep call")
+        call = self.calls()[1]
+        self.assertEqual(call["action"], "dev/housekeeping_sweep")
+        paths = call["body"]["paths"]
+        self.assertIn("C:/Temp/wd-cloud-pull-aaa", paths)
+        self.assertIn("C:/Temp/wd-cloud-pull-bbb", paths)
+        self.assertNotIn("C:/wd-worktrees/live-one", paths)
+
+    def test_a_declined_confirm_sends_nothing(self):
+        self.unlocked()
+        self.hk_stub()
+        self.open_panel()
+        self.hk_preview().click()
+        self.wait_for(lambda: self.hk_run().is_enabled(), "the button to arm")
+        self.driver.execute_script("window.confirm = function () { return false; };")
+        self.hk_run().click()
+        self.assertEqual(len(self.calls()), 1,
+                         "a declined confirm still sent a delete request")
+
+    def test_a_second_look_replaces_the_list_rather_than_adding_to_it(self):
+        """A stale path from an earlier look must never reach a delete. Two
+        previews in a row have to leave exactly one list behind."""
+        self.unlocked()
+        self.hk_stub()
+        self.open_panel()
+        self.hk_preview().click()
+        self.wait_for(lambda: self.hk_run().is_enabled(), "the first look")
+        self.hk_preview().click()
+        self.wait_for(lambda: len(self.calls()) == 2, "the second look")
+        self.wait_for(lambda: self.hk_run().is_enabled(), "the button to re-arm")
+        pending = self.driver.execute_script(
+            "return window.WD.Dev._housekeepingPending();")
+        self.assertEqual(len(pending), 2)
+
+    def test_the_sweep_report_says_what_was_freed(self):
+        self.unlocked()
+        self.hk_stub()
+        self.open_panel()
+        self.hk_preview().click()
+        self.wait_for(lambda: self.hk_run().is_enabled(), "the button to arm")
+        self.driver.execute_script("window.confirm = function () { return true; };")
+        self.hk_run().click()
+        self.wait_for(lambda: "Removed" in self.hk_result(), "the sweep report")
+        self.assertIn("freeing", self.hk_result())
+
+    def test_a_failed_look_leaves_the_delete_button_dead(self):
+        self.unlocked()
+        self.driver.execute_script(
+            "window.__devCalls = [];"
+            "window.WD.api = function () {"
+            "  return Promise.resolve({ error: 'Could not read the folder' }); };")
+        self.open_panel()
+        self.hk_preview().click()
+        self.wait_for(lambda: "Could not read" in self.hk_result(),
+                      "the error to show")
+        self.assertFalse(self.hk_run().is_enabled())
+
+
+
 class FirefoxToolbarTests(ToolbarInABrowser):
     """His browser, and the one that decides a disagreement."""
     kind, binary = BROWSERS[0]

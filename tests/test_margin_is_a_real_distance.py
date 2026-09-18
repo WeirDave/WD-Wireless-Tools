@@ -57,6 +57,7 @@ class EveryPresetIsTheDistanceOnItsLabel(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-margin-real-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.src = make_esx(self.tmp / "in.esx", mpu=COARSE)
 
     def tearDown(self):
@@ -144,6 +145,7 @@ class AMarginNeverInventsPaper(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-margin-clamp-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -197,6 +199,7 @@ class TheWireCanCarryATypedDistance(unittest.TestCase):
     def test_a_typed_distance_crops_to_that_distance_through_the_route(self):
         """End to end: the page sends metres, the file comes back that size."""
         tmp = Path(tempfile.mkdtemp(prefix="wd-margin-wire-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
         try:
             src = make_esx(tmp / "in.esx", mpu=COARSE)
             client = app.test_client()
@@ -230,6 +233,7 @@ class TheSheetSaysHowMuchSiteItCarries(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-clearance-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)

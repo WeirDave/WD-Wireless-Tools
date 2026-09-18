@@ -74,6 +74,7 @@ def read_member(path, name):
 class WallInjection(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-inject-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.esx = make_esx(self.tmp / "Project.esx",
                             [wall_type("Concrete", 30.0), wall_type("Drywall", 3.0)])
 
@@ -216,6 +217,7 @@ class OneNumberKeyDrawsOneWallType(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)

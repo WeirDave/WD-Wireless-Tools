@@ -13,6 +13,7 @@ import logging
 import logging.handlers
 import subprocess
 import sys
+import shutil
 import tempfile
 import threading
 import unittest
@@ -28,6 +29,7 @@ class _Isolated(unittest.TestCase):
 
     def setUp(self):
         self.home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.home, True)
         self._patch = patch.object(applog, "user_dir", lambda: self.home)
         self._patch.start()
         self.addCleanup(self._patch.stop)

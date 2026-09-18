@@ -23,6 +23,7 @@ project name is invented.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 import zipfile
@@ -99,6 +100,7 @@ class ReplacingAnExistingCloudProjectTests(unittest.TestCase):
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
         self.esx = _esx(self.root / "Alpha Survey.esx")
 
     def _mgr(self, **kw):

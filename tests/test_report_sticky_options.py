@@ -32,6 +32,7 @@ import copy
 import re
 import json
 import sys
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -45,7 +46,9 @@ from tools import settings as suite_settings  # noqa: E402
 
 class StickyStorage(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="wd-sticky-")) / "settings.json"
+        _dir = Path(tempfile.mkdtemp(prefix="wd-sticky-"))
+        self.addCleanup(shutil.rmtree, _dir, True)
+        self.tmp = _dir / "settings.json"
 
     def test_it_ships_empty_so_nothing_needs_migrating(self):
         """An absent entry falls back to the option's own shipped default, so a

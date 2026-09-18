@@ -35,6 +35,7 @@ from tools.rename_manager import RenameManager
 from tools.template_store import TemplateStore
 from tools import capacity_profiles
 from tools import cloud_realign
+from tools import housekeeping
 from tools import report_store
 from tools import settings as suite_settings
 from tools import settings_backup
@@ -1223,6 +1224,59 @@ def api_cloud(action):
                     _progress.pop(op_id, None)
     except KeyError as e:
         return jsonify({"error": f"missing field: {e}"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+def _session_paths():
+    """Paths belonging to this running server, which must never be offered
+    for deletion. The log directory is the obvious one: it is inside the
+    user directory, and during a test run `WD_USER_DIR` points it at a temp
+    folder that would otherwise look exactly like debris."""
+    out = []
+    try:
+        out.append(str(applog.log_dir()))
+    except Exception:
+        pass
+    return [p for p in out if p]
+
+
+def _project_folders():
+    """The folder Cloud Manager is pointed at, so housekeeping refuses to
+    scan or touch it. Failing quietly is correct - `SAFE_ROOTS` is what
+    actually bounds deletion, and this is the extra guard on top."""
+    try:
+        folder = (cm.config or {}).get("output_dir", "")
+        return [folder] if folder else []
+    except Exception:
+        return []
+
+
+#: Dev toolbar actions that are not about the cloud. Same shape as
+#: CLOUD_ACTIONS, and separate because a housekeeping sweep has nothing to do
+#: with Ekahau and should not be reachable at a URL that says it does.
+DEV_ACTIONS = {
+    "housekeeping_survey": lambda d: housekeeping.survey(
+        own_paths=_session_paths(), project_folders=_project_folders()),
+    # The list is re-derived inside `sweep`; what arrives here is a request,
+    # not an instruction. See the module docstring.
+    "housekeeping_sweep": lambda d: housekeeping.sweep(
+        d.get("paths") or [], own_paths=_session_paths(),
+        project_folders=_project_folders()),
+    "housekeeping_stop": lambda d: {
+        "ok": True,
+        "stopped": [pid for pid in (d.get("pids") or [])
+                    if housekeeping.stop_process(pid)]},
+}
+
+
+@app.route("/api/dev/<action>", methods=["POST"])
+def api_dev(action):
+    fn = DEV_ACTIONS.get(action)
+    if not fn:
+        return jsonify({"error": f"unknown action: {action}"}), 404
+    try:
+        return jsonify(fn(request.get_json(silent=True) or {}))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

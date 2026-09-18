@@ -17,6 +17,7 @@ Every project and folder name below is invented.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import unittest
 import zipfile
@@ -40,6 +41,7 @@ class TheCopyGoesInTheBackupsFolderTests(unittest.TestCase):
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
         self.site = self.root / "North Campus"
         self.esx = _esx(self.site / "Alpha Survey.esx")
 
@@ -73,6 +75,7 @@ class NothingInThereIsEverScannedTests(unittest.TestCase):
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
         _esx(self.root / "North Campus" / "Alpha Survey.esx")
         _esx(self.root / cm.BACKUP_DIR_NAME / "North Campus"
              / "Alpha Survey.previous-20260917-120000.esx")

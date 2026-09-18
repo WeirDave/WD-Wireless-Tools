@@ -198,6 +198,7 @@ class OrderIsEnforcedByBehaviour(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-prep-t-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -259,6 +260,7 @@ class OrderIsEnforcedByBehaviour(unittest.TestCase):
 class OnePassOneSave(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-prep-o-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
         self.esx = make_esx(self.tmp / "Project.esx")
 
     def tearDown(self):
@@ -402,6 +404,7 @@ class RunningItAgain(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-prep-r-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -475,6 +478,7 @@ class RunningItAgain(unittest.TestCase):
 class Refusals(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-prep-x-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)

@@ -57,6 +57,11 @@ ALLOWED_CODE_TOKENS = {
                      # part of the AP names in the synthetic report-sweep
                      # fixture, quoted in the comments that explain what the
                      # aim table used to print on top of itself.
+    "ABCD7", "WXYZ9",  # invented, and deliberately unmistakable: they are
+                     # consecutive letters of the alphabet. The housekeeping
+                     # scanner's fixtures need tokens of the site-code *shape*
+                     # to prove it flags them, so these exist precisely to be
+                     # matched by a detector.
     "UTF8",          # an encoding, not a site
     "IPV4",          # a protocol, not a site - and it is this file's own
                      # regex constant, so the scan reads its own source and
@@ -67,6 +72,14 @@ ALLOWED_CODE_TOKENS = {
 #: Reserved-for-documentation domains (RFC 2606) plus the generic stand-in.
 ALLOWED_EMAIL_DOMAINS = {"example.com", "example.org", "example.net",
                          "example.invalid", "company.com"}
+
+#: RFC 2606 reserves these top-level domains as well, and they can never be
+#: registered - so an address at one cannot be traceable to a real employer,
+#: which is the only question this file asks. `.test` was added when the
+#: housekeeping scanner needed a fixture domain that is plainly a stand-in and
+#: is *not* on its own documentation-domain list, so that it would flag it.
+#: Widening this set is only ever safe for a name nobody can own.
+ALLOWED_EMAIL_TLDS = (".test", ".example", ".invalid", ".localhost")
 
 CODE_TOKEN = re.compile(r"\b[A-Z]{3,5}[0-9]{1,2}\b")
 EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
@@ -108,8 +121,10 @@ def detect_findings(text):
         if token.upper() not in _ALLOWED_CODE_UPPER:
             add("site-code-shaped token", token)
     for domain in EMAIL.findall(text):
-        if domain.lower() not in ALLOWED_EMAIL_DOMAINS:
-            add("email at a non-documentation domain", domain)
+        low = domain.lower()
+        if low in ALLOWED_EMAIL_DOMAINS or low.endswith(ALLOWED_EMAIL_TLDS):
+            continue
+        add("email at a non-documentation domain", domain)
     for addr in IPV4.findall(text):
         if addr not in ALLOWED_IPS:
             add("infrastructure address", addr)
@@ -191,8 +206,12 @@ class NothingTraceableToARealPlace(unittest.TestCase):
         found = {}
         for rel, text in self.files:
             for domain in EMAIL.findall(text):
-                if domain.lower() not in ALLOWED_EMAIL_DOMAINS:
-                    found.setdefault(domain, []).append(rel)
+                low = domain.lower()
+                if low in ALLOWED_EMAIL_DOMAINS:
+                    continue
+                if low.endswith(ALLOWED_EMAIL_TLDS):
+                    continue
+                found.setdefault(domain, []).append(rel)
         self.assertEqual(
             found, {},
             "Real-looking email domain(s): "
@@ -220,6 +239,66 @@ class NothingTraceableToARealPlace(unittest.TestCase):
             if m:
                 found.setdefault(rel, m.group(0)[:12] + "...")
         self.assertEqual(found, {}, f"Credential-shaped strings: {found}")
+
+
+class TheTwoScansAgree(unittest.TestCase):
+    """`detect_findings` says it applies "the same rules the working-tree
+    tests apply ... so the history scan cannot drift away from them". That is
+    a claim two copies of the logic have to keep making true, and it was
+    already broken once: widening the working-tree email rule to accept
+    RFC 2606 reserved TLDs left `detect_findings` rejecting them, so a value
+    the tree blessed would have failed the history ratchet on the next commit
+    that added one - red CI for something deliberately allowed.
+
+    So the agreement is checked rather than asserted in a docstring.
+    """
+
+    #: The "must be flagged" fixtures are assembled at runtime rather than
+    #: written out. A literal would be a token in a tracked file, so the
+    #: working-tree test would flag it and the only way to go green would be
+    #: to allowlist it - which would make the fixture clean and the test
+    #: meaningless. This is not evading the checker: both values are invented
+    #: and meaningless, and the whole point is that they are *not* on the
+    #: allowlist. Compare the `IPV4` entry in ALLOWED_CODE_TOKENS, which is
+    #: the opposite case and is correctly allowlisted rather than exempted.
+    NOT_RESERVED = "not-a-" + "reserved-name" + ".com"
+    NOT_ALLOWLISTED = "QQ" + "RS4"
+
+    @property
+    def cases(self):
+        return [
+            ("engineer@example.com", True),
+            ("engineer@a-stand-in.test", True),
+            ("engineer@a-stand-in.invalid", True),
+            ("engineer@" + self.NOT_RESERVED, False),
+        ]
+
+    def test_both_paths_agree_about_email_domains(self):
+        for address, expected_clean in self.cases:
+            with self.subTest(address=address):
+                tree_clean = self._tree_clean(address)
+                scan_clean = "email at a non-documentation domain" not in                     detect_findings(address)
+                self.assertEqual(tree_clean, expected_clean)
+                self.assertEqual(scan_clean, expected_clean)
+
+    @staticmethod
+    def _tree_clean(text):
+        """The working-tree test's own rule, run on one string."""
+        for domain in EMAIL.findall(text):
+            low = domain.lower()
+            if low in ALLOWED_EMAIL_DOMAINS or low.endswith(ALLOWED_EMAIL_TLDS):
+                continue
+            return False
+        return True
+
+    def test_both_paths_agree_about_site_code_tokens(self):
+        for token, expected_clean in (("SITE1", True), ("ABCD7", True),
+                                      (self.NOT_ALLOWLISTED, False)):
+            with self.subTest(token=token):
+                tree_clean = token.upper() in _ALLOWED_CODE_UPPER
+                scan_clean = "site-code-shaped token" not in detect_findings(token)
+                self.assertEqual(tree_clean, expected_clean)
+                self.assertEqual(scan_clean, expected_clean)
 
 
 class TheHistoryIsCheckedToo(unittest.TestCase):

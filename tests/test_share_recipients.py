@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,6 +25,7 @@ from tools import share_recipients as sr
 class _Isolated(unittest.TestCase):
     def setUp(self):
         self.home = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.home, True)
         patcher = patch.object(sr, "user_dir", lambda: self.home)
         patcher.start()
         self.addCleanup(patcher.stop)

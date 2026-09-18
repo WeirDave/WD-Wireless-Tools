@@ -1154,6 +1154,37 @@ that test fails on the `os.utime`-only version.
 replace-atomically, prune path, extracted from `set_internal_project_name`
 when this became its second caller. It writes nothing when the mutation
 changes nothing, which is what makes both callers safe to re-run.
+### The second action
+
+`tools/housekeeping.py` answers "is there junk everywhere", and the rule it is
+built on is in the section below: artifacts go in one place. Three things about
+it are worth knowing before changing it.
+
+**It flags on what is inside an `.esx`, not on the extension.** The first
+version counted every `.esx` in a temp folder as his data and lit up 2,226
+entries - all of them fixtures the suite had written. The second counted every
+archive it could not open and lit up 683 - stub files the suite writes to
+exercise error paths. It now reads `project.json` and runs the detector over
+the name and author, with a size floor so a genuinely truncated project still
+gets listed. **A flag that fires on everything is one he learns to scroll
+past**, and this is the category he actually cares about.
+
+**Bound every quantifier in a scanning regex.** The obvious email pattern
+backtracks quadratically on long runs of its own character class with no `@` -
+which is what a log file is. One 393 KB file took **163 seconds**, and the
+first real survey never finished. The bounded form is 0.005 s on the same
+input. `tests/test_no_real_world_data.py` carries the same unbounded pattern
+and has not been bitten because it only reads small tracked files; if it ever
+starts reading logs, bound it there too.
+
+**The registration lookup must name its repository.** `git worktree list` run
+outside a repository exits non-zero and returns nothing, so every worktree
+looked abandoned - including live ones. The server is started from wherever the
+launcher is, so the default `cwd` was wrong. **The failure direction is toward
+deleting more**, which is why it has its own test. Found by driving the real
+action against the real machine, not by any unit test, which is the argument
+for doing that once per feature.
+
 
 ## Every session gets its own worktree
 
@@ -1358,10 +1389,80 @@ invisible to every step of this convention while sitting in the middle of it.
 Session scratch goes in your scratchpad or inside your own worktree, where it
 leaves with the worktree. If you put a loose folder or a stray `.txt` in
 `C:\wd-worktrees`, nothing in this file will ever clean it up and it becomes
-David's problem on his own C: drive.
+David's problem on his own C: drive - and see the rule below, which covers
+every other place this has gone wrong.
 
 **Report what you found and removed rather than cleaning quietly** - rule zero
 material has sat in exactly these forgotten corners before.
+
+## Session artifacts go in one place, and nowhere else
+
+**One root per session, and that root is your scratchpad.** Screenshots,
+scratch scripts, probe output, downloaded ZIPs, audit results, draft commit
+messages - all of it, under the scratchpad directory the session is given, or
+inside your own worktree where it leaves with the worktree. Nothing else is a
+legal destination.
+
+**Not his Desktop.** That is the example to name, because it is the one he can
+see: `cloud-flat-1920.png`, `cloud-flat-before.png`, `cloud-heldback-1366x900.png`
+and six more sat on his Desktop on 2026-09-18, written there by sessions taking
+UI screenshots. Nobody was going to clean those up, he did not put them there,
+and they are the first thing he looks at every morning.
+
+Not `~/Downloads`. Not the repository root. Not a sibling folder next to your
+worktree. Not a hand-rolled directory in `%TEMP%` - use the scratchpad, which is
+already per-session and already isolated.
+
+### Why this is a rule and not a preference
+
+A disk sweep on 2026-09-17 recovered **12.73 GB** of session debris: roughly
+7,900 leaked temp directories and 7,000 abandoned repository clones. **Twenty
+seven files carrying real workplace data** were sitting in `%TEMP%` - rule zero
+material, in a forgotten corner, exactly where it has been found before. Four
+worktrees outlived the sessions that reported removing them, and 21 orphaned
+Firefox processes were found in one sweep.
+
+He asked the question that produced this rule: *"how do I know, once we've done
+all the work, when to be able to clean stuff up? Because now I feel like we've
+got files fucking everywhere across the board, and I don't know if you clean up
+your own work or not."* The honest answer was that we did not.
+
+Scattering is what made that unanswerable. Debris in one known root can be
+listed, counted and cleared; debris across `%TEMP%`, the Desktop, Downloads and
+the repo cannot be, and nothing can ever tell him whether the machine is clean.
+
+### The suite cleans up after itself, and a test holds it
+
+**The biggest single leaker was this test suite**, which is worth knowing
+because it was not carelessness - it was two defensible decisions:
+
+* `tests/test_cloud_pull.py` had a `setUp` with `mkdtemp` and no `tearDown`.
+  One directory per test method: **1,314** of them.
+* `tests/__init__.py` created one per run and left it deliberately, so the
+  evidence survived a failure, reasoning that "the OS clears the temp tree
+  anyway". **It does not on Windows.** 143 of them.
+
+Both are fixed, and `WD_KEEP_TEST_USER_DIR=1` keeps the evidence when you
+actually want it. Measured either side of the fix: **116 directories leaked per
+suite run before, 1 after** - and that one is Chrome's, not ours.
+
+`TheSuiteCleansUpAfterItself` in `tests/test_housekeeping.py` is the ratchet. It
+walks the AST for `mkdtemp` **calls** and fails if the enclosing function has no
+cleanup in it. Calls, not the substring - matching text made the checker fail on
+its own source, and a checker that has to exempt itself has a hole in it.
+
+### And there is now a button for the rest
+
+`tools/housekeeping.py`, reachable from the dev toolbar, inventories what our
+tooling leaves behind and says what is safe to remove. It is what turns "I
+wonder if there is junk everywhere" into a five-second answer. Read its module
+docstring before changing it - particularly the part about why it flags on what
+is *inside* an `.esx` rather than on the extension, which is the difference
+between a useful list and 2,226 false alarms.
+
+It only ever deletes inside roots we own, never from the Desktop, and it
+re-derives the list at delete time instead of trusting what the page sends.
+
 
 ## Memory across sessions, generally
 

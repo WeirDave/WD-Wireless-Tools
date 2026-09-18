@@ -26,6 +26,8 @@ mechanism.
 """
 from __future__ import annotations
 
+import shutil
+import atexit
 import os
 import tempfile
 import unittest
@@ -55,6 +57,10 @@ def _isolate() -> None:
     if os.environ.get("WD_USER_DIR"):
         return
     home = tempfile.mkdtemp(prefix="wd-tests-home-")
+    # This one lives as long as the process, so `atexit` rather than
+    # `addCleanup`. Leaving it behind put one directory on his disk per suite
+    # run; `%TEMP%` is not cleared on Windows and nothing else was going to.
+    atexit.register(shutil.rmtree, home, True)
     os.environ["HOME"] = home
     os.environ["USERPROFILE"] = home
     # Same location `Path.home() / ".wd_wireless_tools"` now resolves to, so a
