@@ -182,6 +182,20 @@ and for backfilling assets onto a tag whose build failed.
    package a failing tree. `tests/test_shipped_modules_are_tracked.py` now
    catches that particular shape locally, but red CI means stop, whatever it
    says.
+
+   **The corollary, and it has now cost a release of its own: `git add` new
+   files *before* you run the suite locally.** Several tests ask `git ls-files`
+   what exists rather than walking the working tree - `test_no_real_world_data`
+   is the important one, because it is rule zero's enforcement. A brand new
+   test file that is not yet staged is **invisible to that scan**, so the local
+   run is green on a tree the scan never looked at, and CI - which checks out a
+   clean tree where the file is tracked - reads it and fails. That is how
+   v2.136.0 went out red: two new test files carrying an invented site code
+   that was not on `ALLOWED_CODE_TOKENS`.
+
+   Same lesson as v2.102.0 pointing the other way: an untracked file made the
+   local suite pass then and fail now, and both times the local suite was
+   answering a different question from the one CI asks. Stage first, then run.
 5. **The release publishes itself** once the bump lands and CI is green - see
    the section above. What is still worth doing by hand is the *note*: edit it
    afterwards with `gh release edit vX.Y.Z --notes-file notes.md`, in the
