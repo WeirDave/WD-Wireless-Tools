@@ -1255,20 +1255,46 @@ function updateDashboard() {
     _setCount('dNameMatches', nameMatches);
 
     _setCount('dOrphans', Math.max(0, cloudOnly + localOnly - externalOrphans));
-    _setCount('dCloudOnly', cloudOnly);
+    /* A cloud project Ekahau has filed under no site is still a cloud project
+       with nothing matching it on disk, and the list has always drawn it here.
+       The count was the only thing that did not look. */
+    let looseCloud = 0;
+    if (isSitesTab) {
+      ((data.orphans && data.orphans.cloudOnly) || []).forEach(c => {
+        if (_passOwnerForCounts(c, null)) looseCloud++;
+      });
+    }
+    _setCount('dCloudOnly', cloudOnly + looseCloud);
     _setCount('dLocalOnly', localOnly);
     _setCount('dExternal', externalCount);
     _showFilter('external', !isDup && externalCount > 0);
 
     // Counted through the owner filter, like every other card, so the number
     // on the card is the number of rows the list will actually show.
+    /* Sharing is a property of a project. "you don't actually share sites on
+       Ekahau" - and counting a site because something inside it was unshared
+       gave him 97, the number of his folders, and then listed folders he
+       cannot share. On this tab the rows that answer this question are the
+       projects, so those are what is counted. */
     let unsharedCount = 0;
-    (data.matched || []).forEach(p => {
-      if (_isUnshared(p.cloud) && _passOwnerForCounts(p.cloud, p.local)) unsharedCount++;
-    });
-    (data.cloudOnly || []).forEach(c => {
-      if (_isUnshared(c) && _passOwnerForCounts(c, null)) unsharedCount++;
-    });
+    const countUnshared = (c, l) => {
+      if (_isUnshared(c) && _passOwnerForCounts(c, l)) unsharedCount++;
+    };
+    if (isSitesTab) {
+      const walkForShares = (kids) => {
+        if (!kids) return;
+        (kids.matched || []).forEach(p => countUnshared(p.cloud, p.local));
+        (kids.cloudOnly || []).forEach(c => countUnshared(c, null));
+      };
+      (data.matched || []).forEach(p => walkForShares(
+        (p.cloud && p.cloud.children) || (p.local && p.local.children)));
+      (data.cloudOnly || []).forEach(c => walkForShares(c.children));
+      (data.localOnly || []).forEach(l => walkForShares(l.children));
+      ((data.orphans && data.orphans.cloudOnly) || []).forEach(c => countUnshared(c, null));
+    } else {
+      (data.matched || []).forEach(p => countUnshared(p.cloud, p.local));
+      (data.cloudOnly || []).forEach(c => countUnshared(c, null));
+    }
     _setCount('dUnshared', unsharedCount);
     // Hidden when there are none to find, and when we do not know who he is -
     // without that, "yours" is unanswerable and the filter would silently
@@ -1283,15 +1309,29 @@ function updateDashboard() {
   ['name-matches', 'type-design', 'type-measured', 'type-hybrid'].forEach(key => {
     _showFilter(key, !isDup);
   });
-  _showFilter('unassigned', isProj);
-  if (isProj && data) {
+  /* Offered wherever those rows can appear. It was Projects-only, while the
+     rows themselves render on the Sites tab - so on the tab where he could see
+     them, nothing selected them and the wrong chip did. */
+  _showFilter('unassigned', !isDup);
+  if (!isDup && data) {
     let noSite = 0;
-    (data.matched || []).forEach(p => {
-      if (p.cloud && !p.cloud.hasSite && _passOwnerForCounts(p.cloud, p.local)) noSite++;
-    });
-    (data.cloudOnly || []).forEach(c => {
-      if (!c.hasSite && _passOwnerForCounts(c, null)) noSite++;
-    });
+    if (isProj) {
+      (data.matched || []).forEach(p => {
+        if (p.cloud && !p.cloud.hasSite && _passOwnerForCounts(p.cloud, p.local)) noSite++;
+      });
+      (data.cloudOnly || []).forEach(c => {
+        if (!c.hasSite && _passOwnerForCounts(c, null)) noSite++;
+      });
+    } else {
+      /* On the Sites tab the same question has a different shape: the backend
+         has already set these aside as the projects it could not file under
+         any site. Counting the set the list actually draws is what keeps the
+         number and the rows agreeing - counting it a second way is how they
+         came apart. */
+      ((data.orphans && data.orphans.cloudOnly) || []).forEach(c => {
+        if (_passOwnerForCounts(c, null)) noSite++;
+      });
+    }
     _setCount('dUnassigned', noSite);
   }
   if (!isProj && activeFilter === 'unassigned') { activeFilter = 'all'; }
@@ -1788,6 +1828,10 @@ function renderLedger(hit) {
 
   const showSynced = activeFilter === 'all' || activeFilter === 'stale';
   const showMis = activeFilter === 'all' || activeFilter === 'mismatches' || activeFilter === 'stale';
+  /* `orphans` is no longer a filter he can choose - "cloud only" and "local
+     only" say which side is missing, and an umbrella over them was a third
+     word for the same axis. The value is still accepted so an old bookmark or
+     a saved state does not land on an empty list. */
   const showOrph = activeFilter === 'all' || activeFilter === 'orphans';
   const showOrphCloud = activeFilter === 'orphans-cloud';
   const showOrphLocal = activeFilter === 'orphans-local';
@@ -1839,6 +1883,10 @@ function renderLedger(hit) {
     if (showNameMatches) return rowIsNameMatch(row);
     if (showUnassigned) return row && row.cloud && !row.cloud.hasSite;
     if (showUnshared) {
+      /* A site is never the answer here - sharing is a project. The site row
+         survives so its projects have somewhere to hang, and
+         `_siteMatchesFilterAlone` returns false for this filter so the
+         children are filtered rather than shown wholesale. */
       return isSites
         ? _siteHasUnshared(row && row.cloud, row && row.local)
         : _isUnshared(row && row.cloud);
@@ -1985,8 +2033,25 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
 
 
 
-  const orphans = ((data.orphans && data.orphans.cloudOnly) || [])
-    .filter(o => pass('orphan', { cloud: o, local: null }) && hit(o.name) && passOwner({ cloud: o, local: null })
+  /* Cloud projects Ekahau has filed under no site.
+
+     These used to be selected by `pass('orphan', ...)`, which is the *pairing*
+     test - "this has no counterpart on the other side". They are a different
+     thing: they have no **site**, which is Ekahau's own idea and Ekahau's own
+     word. Sharing the test meant the "unpaired" chip counted one set and
+     displayed another, so it read 0 and then showed two rows.
+
+     They answer to the filter that names them, and to All. */
+  /* Those projects are both things at once: filed under no site, and present
+     in the cloud with nothing matching on disk. Both filters select them, and
+     both counts include them - "which is correct, which means the number
+     should actually be 2, not 0". */
+  const showUnassigned = activeFilter === 'all' || activeFilter === 'unassigned'
+                      || activeFilter === 'orphans-cloud';
+  const orphans = (showUnassigned
+    ? ((data.orphans && data.orphans.cloudOnly) || [])
+    : [])
+    .filter(o => hit(o.name) && passOwner({ cloud: o, local: null })
       && (!activeLetter || treeGroupOf(o.name) === activeLetter));
 
   const nCloud = visible.filter(r => r.cloud).length + orphans.length;
@@ -2070,7 +2135,22 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
          + `${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
     }
 
-      if (open) h += renderTreeChildren(children, hit, passOwner, r.cloud && r.cloud.id, r.cloud && r.cloud.name, pass);
+      /* Does this site match on its own account, or only through its
+         children?
+
+         "I'm just seeing 3 folders that don't have projects underneath them."
+         A site owned by somebody else matches "external" by itself, and then
+         the same test was applied to every project inside it - all of which
+         are his - so the row survived and its contents did not.
+
+         Matched by itself: show everything in it. Matched through a child:
+         show the children that matched. */
+      const siteMatchesAlone = _siteMatchesFilterAlone(r);
+      if (open) {
+        h += renderTreeChildren(children, hit, passOwner,
+                                r.cloud && r.cloud.id, r.cloud && r.cloud.name,
+                                siteMatchesAlone ? null : pass);
+      }
     });
   });
 
@@ -2337,6 +2417,22 @@ function _visibleSiteRowsForBatch() {
   (data.cloudOnly || []).forEach(s => rows.push({ status: 'orphan', cloud: s, local: null, sort: s.name || '' }));
   (data.localOnly || []).forEach(f => rows.push({ status: 'orphan', cloud: null, local: f, sort: f.name || '' }));
   return rows;
+}
+
+/* Whether a site satisfies the active filter without help from its
+   contents. Only the filters that can be true of a site itself are asked -
+   everything else is a question about a file, and a site can only answer it
+   through its children. */
+function _siteMatchesFilterAlone(r) {
+  const c = r && r.cloud, l = r && r.local;
+  switch (activeFilter) {
+    case 'external':  return _isExternal(c, l);
+    case 'unshared':  return _isUnshared(c);
+    case 'mismatches': return r && r.status === 'mismatch';
+    case 'orphans-cloud': return !!(c && !l);
+    case 'orphans-local': return !!(l && !c);
+    default: return false;
+  }
 }
 
 function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteName, passFilter) {

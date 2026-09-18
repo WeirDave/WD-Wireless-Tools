@@ -277,8 +277,9 @@ class TheCountersActuallyReachThePage(unittest.TestCase):
     def test_no_counter_is_left_as_a_dash_on_its_own_tab(self):
         """`-` is the markup's placeholder. A number means the code reached it."""
         expected = {
-            "sites": ["dAll", "dMismatches", "dStale", "dNameMatches", "dOrphans",
+            "sites": ["dAll", "dMismatches", "dStale", "dNameMatches",
                       "dCloudOnly", "dLocalOnly", "dExternal", "dUnshared",
+                      "dUnassigned",
                       "dTypeDesign", "dTypeMeasured", "dTypeHybrid"],
             "projects": ["dAll", "dUnassigned"],
             "duplicates": ["dDupAll", "dDupMixed", "dDupLocal", "dDupCloud"],
@@ -308,10 +309,19 @@ class TheCountersActuallyReachThePage(unittest.TestCase):
             with self.subTest(filter=key):
                 self.assertIn(key, hidden)
 
-    def test_no_site_filter_is_offered_where_it_means_nothing(self):
-        """`unassigned` is a projects-tab question - a site has no site."""
-        self.assertIn("unassigned", self.runs["sites"]["hiddenFilters"])
+    def test_not_assigned_is_offered_wherever_those_rows_can_appear(self):
+        """It was Projects-only on the reasoning that "a site has no site".
+
+        True, and beside the point: the rows it selects - cloud projects Ekahau
+        has filed under no site - are drawn on the **Sites** tab, under their
+        own heading. So on the tab where he could see them, nothing selected
+        them, and the chip that did show them was the wrong one entirely:
+        "it says zero unpaired and when I click it there's two unassigned
+        projects on the cloud side."
+        """
+        self.assertNotIn("unassigned", self.runs["sites"]["hiddenFilters"])
         self.assertNotIn("unassigned", self.runs["projects"]["hiddenFilters"])
+        self.assertIn("unassigned", self.runs["duplicates"]["hiddenFilters"])
 
     def test_not_shared_hides_when_we_do_not_know_who_he_is(self):
         """Without a current user "yours" is unanswerable, so the filter would
