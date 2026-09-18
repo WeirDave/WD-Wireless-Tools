@@ -2996,6 +2996,11 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName) {
       _scheduleOpRefresh();
       toast(`Cloud copy of "${r && r.name ? r.name : (cloudName || localName)}" replaced`
             + (r && r.deletedOld ? ' — the old one was removed.' : '.'), 'success');
+      /* A `note` on a *successful* replace is the consequence he did not ask
+         for: the old project's shares went with it, because a share belongs
+         to the project id and this makes a new project. Success is not a
+         reason to drop the one sentence he has to act on. */
+      if (r && r.note) toast(r.note, 'warn');
       return r;
     },
   });

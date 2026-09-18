@@ -2220,11 +2220,58 @@ class CloudManager:
                     "step": "upload", "deletedOld": False,
                     "note": "Nothing was deleted - the old cloud project is "
                             "untouched."}
-        new_id = up.get("id") or up.get("projectId")
+        uploaded_as = up.get("renamedTo") or Path(esx_path).stem
+
+        # The key this function reads has to be the key the upload writes.
+        #
+        # It read `id` / `projectId`. `upload_project` has only ever returned
+        # the new project under `datasetId` - on all three of its success
+        # paths - so this branch fired on every successful upload, and the
+        # replace could never have completed for anybody. Not a race, not a
+        # stale internal name, not the owner filter: two functions in this
+        # file disagreeing about one key.
+        #
+        # It survived its tests because they replaced `mgr.upload_project`
+        # with a stub returning `{"ok": True, "id": "new-1"}` - a shape the
+        # real function does not produce. A stub that invents the contract
+        # tests the stub.
+        new_id = (up.get("datasetId") or up.get("id")
+                  or up.get("projectId") or "")
+
+        # And when the upload genuinely could not name it - its own listing
+        # poll timed out - ask the listing again rather than giving up on one
+        # read. Ekahau's project list is not instantly consistent after a
+        # commit, and the cost of being early is a duplicate this tool created
+        # and then could not see.
         if not new_id:
-            return {"error": "The upload finished but the new project could "
-                             "not be identified, so nothing was deleted.",
-                    "step": "verify", "deletedOld": False}
+            if progress_cb:
+                progress_cb(stage="verify", current=72, total=100,
+                            message="Waiting for Ekahau to list the upload...")
+            internal = ""
+            try:
+                internal = (_esx_meta(Path(esx_path),
+                                      int(Path(esx_path).stat().st_mtime))
+                            .get("projectName") or "")
+            except Exception:
+                internal = ""
+            found = self._await_new_project(
+                set(before), esx_path,
+                expect_names=(uploaded_as, internal, old_name))
+            new_id = found.get("id") or ""
+            if found.get("name"):
+                uploaded_as = found["name"]
+
+        if not new_id:
+            return {"error": "The upload finished, but Ekahau has not listed "
+                             "the new project yet, so the old one was left "
+                             "alone.",
+                    "step": "verify", "deletedOld": False,
+                    "uploadedAs": uploaded_as, "oldId": cloud_project_id,
+                    "note": "Your local file was uploaded as \"%s\". There are "
+                            "almost certainly two copies in the cloud now - "
+                            "the older one, and this upload. Refresh in a "
+                            "moment, check which is which, and remove the one "
+                            "you do not want." % uploaded_as}
 
         # ---- 2. verify before destroying anything ------------------------
         if progress_cb:
@@ -2235,8 +2282,13 @@ class CloudManager:
             return {"error": "The upload could not be verified, so the old "
                              "project was left alone: " + check.get("why", ""),
                     "step": "verify", "deletedOld": False, "newId": new_id,
-                    "note": "There are now two copies, and the new one is the "
-                            "one that just uploaded."}
+                    "uploadedAs": uploaded_as, "oldId": cloud_project_id,
+                    # Name it. "Something unidentifiable exists" is the one
+                    # thing he cannot act on, and it is the report he got.
+                    "note": "There are now two copies. The new one is your "
+                            "local file, uploaded as \"%s\"; the other is the "
+                            "older cloud copy. Nothing was deleted."
+                            % uploaded_as}
 
         # ---- 3. only now, the old one ------------------------------------
         if progress_cb:
@@ -2256,27 +2308,129 @@ class CloudManager:
 
         if progress_cb:
             progress_cb(stage="done", current=100, total=100, message="Done.")
-        return {"ok": True, "newId": new_id, "oldId": cloud_project_id,
-                "name": check.get("name") or old_name,
-                "deletedOld": True, "siteId": site_id,
-                "renamedTo": up.get("renamedTo")}
+
+        # A share is keyed to the project id, and this operation deliberately
+        # creates a new project rather than editing the old one in place - so
+        # whoever the old copy was shared with loses it, silently, at the
+        # moment the replace succeeds. Nothing here re-applies them: sharing
+        # people's projects on their behalf is not a side effect an upload
+        # should have. It is said instead, with the names, so the loss is
+        # visible at the moment it happens rather than when somebody asks
+        # why they cannot open it.
+        lost = [s for s in (old.get("sharedWith") or []) if s]
+        out = {"ok": True, "newId": new_id, "oldId": cloud_project_id,
+               "name": check.get("name") or old_name,
+               "deletedOld": True, "siteId": site_id,
+               "renamedTo": up.get("renamedTo")}
+        if lost:
+            out["lostShares"] = lost
+            out["note"] = ("The old copy was shared with %d %s. A share belongs "
+                           "to the project it was made on, so the new copy does "
+                           "not carry them - re-share it with %s."
+                           % (len(lost), "person" if len(lost) == 1 else "people",
+                              ", ".join(lost)))
+        return out
+
+    # How long to keep asking Ekahau's listing about something we know we
+    # just wrote. Short, rising gaps rather than one long sleep: the usual
+    # case answers on the first read and costs nothing.
+    _LISTING_BACKOFF_S = (0.0, 1.0, 2.0, 3.0, 5.0)
+
+    def _await_new_project(self, before_ids, esx_path, expect_names=()):
+        """The project this upload created, once the listing admits it exists.
+
+        Only reached when the upload could not name what it made, and the
+        alternative is telling him something unidentifiable is in his account.
+
+        **It has to be the right one, because what happens next is a delete.**
+        "a project that was not there a minute ago" is not good enough on an
+        account other people also write to - the upload of a large file is a
+        long window, and taking the first new row would eventually delete his
+        old project on the strength of somebody else's new one. So a candidate
+        is accepted on evidence:
+
+        * the local file's own internal project id. `upload_project` has
+          already downloaded the cloud copy back over it, so the id inside it
+          now names the project that was just created. This is positive
+          identification and is tried first.
+        * failing that, **exactly one** new project, whose name is one we
+          expect - what he called the file, or the name Ekahau would have
+          taken from inside it.
+
+        Anything else returns nothing, and the caller says so rather than
+        guessing. Refusing costs him a duplicate to tidy; guessing costs him
+        a project.
+        """
+        wanted = ""
+        try:
+            src = Path(esx_path)
+            wanted = (_esx_meta(src, int(src.stat().st_mtime))
+                      .get("projectId") or "")
+        except Exception:
+            wanted = ""
+        names = {n.strip().lower() for n in expect_names if n and n.strip()}
+
+        for wait in self._LISTING_BACKOFF_S:
+            if wait:
+                time.sleep(wait)
+            try:
+                fresh = [p for p in self.api.get_projects()
+                         if p.get("id") not in before_ids]
+            except Exception:
+                continue
+            if not fresh:
+                continue
+            if wanted:
+                # `_esx_meta` lowercases the id it reads out of the .esx and
+                # Ekahau's listing does not, so this compares folded or it
+                # silently never matches.
+                for p in fresh:
+                    if (p.get("id") or "").strip().lower() == wanted:
+                        return {"id": p.get("id"),
+                                "name": (p.get("name") or "").strip(),
+                                "how": "the id inside the local file"}
+            if len(fresh) == 1:
+                p = fresh[0]
+                if (p.get("name") or "").strip().lower() in names:
+                    return {"id": p.get("id") or "",
+                            "name": (p.get("name") or "").strip(),
+                            "how": "the only new project, and it is named "
+                                   "what we uploaded"}
+            # More than one new project, or one we cannot account for: keep
+            # looking until the budget runs out, then refuse.
+        return {}
 
     def _verify_uploaded(self, new_id, esx_path):
-        """Is the thing now in the cloud the file we just sent?
+        """Is the project the upload says it created actually in the listing?
 
-        Checked against the project's own identifier, which Ekahau stamps into
-        `project.json` at creation and which survives the upload - so this is
-        not "something appeared", it is "that project is there".
+        Scope, stated plainly because the docstring here used to claim more
+        than the code does: this confirms **that id is present**. It does not
+        compare contents, and it cannot compare the .esx's own internal
+        project id against it, because Ekahau assigns a fresh id on upload -
+        the local file only carries it after the sync-back, and that is used
+        for identification in `_await_new_project`, not here.
+
+        Asked more than once, because a listing that has not caught up yet and
+        an upload that failed are the same answer on a single read - and they
+        have opposite consequences. Being early used to mean refusing to
+        delete a project that was perfectly replaceable, which leaves him with
+        the duplicate he fears.
         """
-        try:
-            listing = {p["id"]: p for p in self.api.get_projects()}
-        except Exception as e:
-            return {"ok": False,
-                    "why": "could not re-read the project list (%s)" % e}
-        found = listing.get(new_id)
+        found = None
+        why = "the new project is not in the listing"
+        for wait in self._LISTING_BACKOFF_S:
+            if wait:
+                time.sleep(wait)
+            try:
+                listing = {p["id"]: p for p in self.api.get_projects()}
+            except Exception as e:
+                why = "could not re-read the project list (%s)" % e
+                continue
+            found = listing.get(new_id)
+            if found:
+                break
         if not found:
-            return {"ok": False,
-                    "why": "the new project is not in the listing"}
+            return {"ok": False, "why": why}
         try:
             src = Path(esx_path)
             local_id = _esx_meta(src, int(src.stat().st_mtime)).get("projectId")

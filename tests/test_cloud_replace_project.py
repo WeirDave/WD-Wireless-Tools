@@ -108,13 +108,24 @@ class ReplacingAnExistingCloudProjectTests(unittest.TestCase):
         mgr = _Manager(api, self.root)
 
         # The manager's own `upload_project` does its own listing poll and
-        # rename; what is under test is the composition around it, so it is
-        # replaced with something that succeeds or fails on cue.
+        # rename; what is under test here is the composition around it, so it
+        # is replaced with something that succeeds or fails on cue.
+        #
+        # **It has to return the shape the real one returns.** This stub said
+        # `{"ok": True, "id": "new-1"}`, and the real function publishes the
+        # new project under `datasetId`. So these tests passed for a year
+        # against a contract nothing implemented, while the first real run of
+        # Local -> Cloud stopped at "the new project could not be identified"
+        # for every file, every time. A stub that invents the contract tests
+        # the stub.
+        #
+        # The end-to-end version, with only Ekahau faked, is
+        # `tests/test_cloud_replace_reads_what_the_upload_returns.py`.
         def fake_upload(path, site_id=None, progress_cb=None):
             result = api.upload_project(path)
             if result.get("error"):
                 return result
-            return {"ok": True, "id": "new-1"}
+            return {"ok": True, "uploaded": True, "datasetId": "new-1"}
 
         mgr.upload_project = fake_upload
         return mgr, api
