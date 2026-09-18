@@ -57,11 +57,15 @@ ALLOWED_CODE_TOKENS = {
                      # part of the AP names in the synthetic report-sweep
                      # fixture, quoted in the comments that explain what the
                      # aim table used to print on top of itself.
-    "ABCD7", "WXYZ9",  # invented, and deliberately unmistakable: they are
-                     # consecutive letters of the alphabet. The housekeeping
-                     # scanner's fixtures need tokens of the site-code *shape*
-                     # to prove it flags them, so these exist precisely to be
-                     # matched by a detector.
+    "ABCD1", "ABCD7", "WXYZ9",  # invented, and deliberately unmistakable:
+                     # they are consecutive letters of the alphabet. The
+                     # housekeeping scanner's fixtures need tokens of the
+                     # site-code *shape* to prove it flags them, so these
+                     # exist precisely to be matched by a detector.
+                     # `ABCD1` names the fixture site in the long-path backup
+                     # and detail-band tests, where the whole point is a
+                     # project named after its site and long enough to cross
+                     # Windows' 260-character limit.
     "UTF8",          # an encoding, not a site
     "IPV4",          # a protocol, not a site - and it is this file's own
                      # regex constant, so the scan reads its own source and
