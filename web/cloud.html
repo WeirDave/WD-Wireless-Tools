@@ -110,8 +110,8 @@
     <div class="tab-group active" id="tabFilesGroup">
       <span class="tab-group-label" id="tabFiles" onclick="switchTab(lastFilesKind())">Files</span>
       <span class="view-toggle" role="group" aria-label="View mode">
-        <button class="view-btn" id="viewTreeBtn" onclick="switchTab('sites')" title="Grouped by site, with each site's projects nested underneath">Tree</button>
-        <button class="view-btn" id="viewFlatBtn" onclick="switchTab('projects')" title="Every project in one flat list, no site grouping">Flat</button>
+        <button class="view-btn" id="viewTreeBtn" onclick="switchTab('sites')" title="Sites matched to your local folders, with each site's projects nested inside. This is the view for working through one site at a time.">Tree</button>
+        <button class="view-btn" id="viewFlatBtn" onclick="switchTab('projects')" title="Every cloud project matched straight to its local .esx, in one alphabetical list, whichever site or folder each one sits in. Tree pairs sites with folders; this pairs the files themselves, so a .esx filed in the wrong folder still finds its project here. When the Ekahau site and the local folder disagree, the row says both.">Flat</button>
       </span>
     </div>
     <div class="tab" id="tabDuplicates" onclick="switchTab('duplicates')" title="Files with the same normalized name — spot accidental copies">Duplicate Projects</div>
@@ -165,15 +165,9 @@
       </div>
     </details>
 
-    <details class="wd-menu">
-      <summary class="wd-menu-btn">View</summary>
-      <div class="wd-menu-items">
-        <button class="wd-menu-item" id="expandAllBtn" onclick="expandAllSites()" title="Expand every site">Expand all sites</button>
-        <button class="wd-menu-item" id="collapseAllBtn" onclick="collapseAllSites()" title="Collapse every site">Collapse all sites</button>
-        <div class="wd-menu-sep"></div>
-        <button class="wd-menu-item" id="matchHelpChip" onclick="openMatchHelp()" title="How does WD decide two files are the same project?">&#9432; How matching works</button>
-      </div>
-    </details>
+    <button class="btn" id="expandAllBtn" onclick="expandAllSites()" title="Open every site in the list">Expand all</button>
+    <button class="btn" id="collapseAllBtn" onclick="collapseAllSites()" title="Close every site in the list">Collapse all</button>
+    <button class="btn-icon-only" id="matchHelpChip" onclick="openMatchHelp()" title="How does WD decide that two files are the same project?" aria-label="How matching works">&#9432;</button>
 
     <button class="btn btn-amber dup-toolbar-btn" id="dupDeleteAllToolbarBtn"
             onclick="dupDeleteAllExtras()" hidden

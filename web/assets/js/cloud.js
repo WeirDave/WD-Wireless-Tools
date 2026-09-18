@@ -3292,6 +3292,45 @@ function gutCell(r) {
     )}"><span class="mb-dot"></span>${label}</span></div>`;
 }
 
+/* Where this project lives, on this side.
+
+   Only the Flat tab shows it, and only because that is what the Flat tab is
+   *for*: it pairs a cloud project with a local .esx wherever either one
+   happens to be, so the place each one sits is the question rather than a
+   detail. On the Tree tab the answer is the row above and repeating it would
+   be noise.
+
+   Two icons rather than one word, because the two sides mean different things
+   and he has to be able to see that they disagree: a cloud project belongs to
+   a **site**, a local file sits in a **folder**. */
+/* Do the two sides agree about where this project lives?
+
+   His projects are named after their site, so a tag repeating it is the same
+   crowding in a smaller font. What Flat can say that the tree cannot is when
+   the two *disagree* - a .esx in the wrong folder, a project assigned to the
+   wrong site - so that is when the location is worth the row. */
+function locationDiffers(r) {
+  if ((r.kind || currentTab) !== 'projects') return false;
+  if (!r.cloud || !r.local) return false;
+  const site = String((r.cloud && r.cloud.siteName) || '').trim().toLowerCase();
+  const folder = String((r.local && r.local.folder) || '').trim().toLowerCase();
+  return site !== folder;
+}
+
+function locationHtml(where, side) {
+  const name = String(where || '').trim();
+  if (!name) {
+    return `<span class="cell-where is-none" title="${
+      side === 'cloud' ? 'Not assigned to a site in Ekahau.'
+                       : 'Loose in the project folder, not inside a site folder.'
+    }">${side === 'cloud' ? 'no site' : 'no folder'}</span>`;
+  }
+  return `<span class="cell-where" title="${a(
+    side === 'cloud' ? 'The Ekahau site this project is assigned to'
+                     : 'The folder this .esx sits in')}">${
+    ic(side === 'cloud' ? 'eye' : 'folder')}${e(name)}</span>`;
+}
+
 function cloudCell(r, localCodes) {
   const isSites = (r.kind || currentTab) === 'sites';
   const kindAttr = r.kind || currentTab;
@@ -3352,7 +3391,11 @@ function cloudCell(r, localCodes) {
      line has to answer "is there anything for me in here" without being
      opened. On a file row it stays the date, and it stays put: it used to fade
      out to make room for the hover buttons. */
-  const meta = isSites ? siteDigestHtml(r) : `<span class="cell-meta">${e(c.meta || '')}</span>`;
+  /* On Flat, where the project lives is the point of the view, so it is
+     shown; on Tree the site is the row above. */
+  const where = locationDiffers(r) ? locationHtml(c.siteName, 'cloud') : '';
+  const meta = isSites ? siteDigestHtml(r)
+    : `${where}<span class="cell-meta">${e(c.meta || '')}</span>`;
 
   const menu = rowMenu([
     isSites && (c.datasets && c.datasets.length)
@@ -3408,7 +3451,8 @@ function localCell(r, cloudCodes) {
   const hasContents = isSites && l.src && l.src.total > 0;
   const flagged = l.name.charAt(0) === '!';
   const srcUI = hasContents ? previewBadge(l) : '';
-  const meta = isSites ? `<span class="cell-meta">${e(l.meta || '')}</span>` : `<span class="cell-meta">${e(l.meta || '')}</span>`;
+  const where = locationDiffers(r) ? locationHtml(l.folder, 'local') : '';
+  const meta = `${where}<span class="cell-meta">${e(l.meta || '')}</span>`;
 
   const menu = rowMenu([
     menuItem('folder', `Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}`, `revealInExplorer('${pj(l.path)}')`),

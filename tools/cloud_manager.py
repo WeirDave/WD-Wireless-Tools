@@ -1478,7 +1478,8 @@ def build_sites_data(api, output_dir):
 
                  "projectId": f.get("projectId") or "",
                  "projectType": f.get("projectType"),
-                 "meta": _row_meta(int(f.get("size") or 0), int(f.get("mtime") or 0))}
+                 #: Same reasoning as the cloud side above - no size.
+              "meta": _row_meta(0, int(f.get("mtime") or 0))}
         esx_by_folder.setdefault(f["folder"], []).append(item)
 
     local = []
@@ -1637,7 +1638,14 @@ def build_projects_data(api, output_dir):
         dm = dataset_meta.get(pid) or {}
         owner = dm.get("currentOwner") or created_by
 
-        meta = _row_meta(size, mtime, tail=site_name or None)
+        # The site is rendered as its own thing on the row - see `locationHtml`
+        # in cloud.js. Repeating it here put the site name on the row three
+        # times over: in the project's name, on the cloud meta and on the local
+        # meta, which is what wrapped the name onto a second line.
+        # No size: it is the same number on both sides of every row and is
+        # not what he decides with. The name, where it lives and when it was
+        # saved are the row; the rest is in the menu.
+        meta = _row_meta(0, mtime)
         cloud.append({"id": pid, "name": name,
                       "code": extract_site_code(name), "meta": meta,
                       "size": size, "mtime": mtime,
@@ -1656,8 +1664,8 @@ def build_projects_data(api, output_dir):
               "owner": f.get("owner") or "",
               "projectId": f.get("projectId") or "",
               "projectType": f.get("projectType"),
-              "meta": _row_meta(int(f.get("size") or 0), int(f.get("mtime") or 0),
-                                tail=f["folder"])}
+              #: Same reasoning as the cloud side above.
+              "meta": _row_meta(int(f.get("size") or 0), int(f.get("mtime") or 0))}
              for f in get_local_esx_files(output_dir)]
     mm_map, _ = manual_matches_map()
     return build_matches(cloud, local, not_matches_set(), mm_map)

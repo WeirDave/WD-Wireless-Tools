@@ -175,15 +175,22 @@ class TheDropdownsAreUsableTests(unittest.TestCase):
     def test_the_menus_are_named_in_words(self):
         """A dropdown full of icons repeats the mistake that got the labels put
         on in the first place."""
-        for name in ("Select", "View", "Move, share, overwrite"):
+        # View went the way of More filters: once Expand and Collapse
+        # became buttons it held one item, and a dropdown with one thing
+        # in it is a click in front of a button.
+        for name in ("Select", "Move, share, overwrite"):
             with self.subTest(menu=name):
                 self.assertIn(">%s</summary>" % name, HTML)
 
     def test_every_item_keeps_its_full_label(self):
-        items = re.findall(r'<button class="wd-menu-item"[^>]*>(.*?)</button>',
+        # `class="wd-menu-item bulk-btn"` is still a menu item; keying on the
+        # exact attribute missed the three in "Move, share, overwrite" and left
+        # the check counting two things.
+        items = re.findall(r'<button class="wd-menu-item[^"]*"[^>]*>(.*?)</button>',
                            HTML, re.S)
-        # Ten of these were filters and became chips; what is left is Select
-        # and View, which hold actions.
+        # Ten were filters and became chips; View dissolved into two buttons
+        # and a circled-i. What is left is Select and the selection bar's
+        # overflow, which hold actions.
         self.assertGreater(len(items), 3)
         for text in items:
             plain = re.sub(r"<[^>]+>", "", text).strip()

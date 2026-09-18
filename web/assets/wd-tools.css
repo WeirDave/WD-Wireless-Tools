@@ -9780,3 +9780,45 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
   .sum-sep { margin: 0 5px; }
   .sum-count { padding: 3px 7px; }
 }
+
+/* Expand and Collapse sit in the toolbar rather than behind a menu.
+
+   "I feel like expand all and collapse could just be buttons, I'm pretty sure
+   we've got plenty of space for that." There is space, and a menu only earns
+   its click when there is too much to show. They hide themselves on the Flat
+   tab, where there is nothing to expand. */
+#expandAllBtn, #collapseAllBtn { white-space: nowrap; }
+
+/* Where a project lives, on the Flat tab - shown when the two sides
+   disagree, which is the one thing this view can tell him that the tree
+   cannot. It reads as an exception because it is one.
+
+   "it's kind of a hot mess ... like we're trying to squeeze too much on a
+   single line." The site name was on the row three times - in the project's
+   own name and on the end of both metas - which wrapped the name and made
+   every other row two lines tall.
+
+   It is one element now, on each side, quiet enough to scan past and present
+   enough to compare: a cloud project's site against a local file's folder. If
+   those disagree, that is the thing Flat is for. */
+.lr-cell .cell-where {
+  display: inline-flex; align-items: center; gap: 4px;
+  flex: 0 1 auto; min-width: 0;
+  padding: 1px 6px; border-radius: var(--r-sm);
+  background: var(--surface-raised);
+  color: var(--text-3); font-size: 11px;
+  /* Wrapping beats an ellipsis: a half-named site is worse than a tall row,
+     and "which site is this in" is the question the Flat tab is for. */
+  white-space: normal; overflow-wrap: anywhere;
+}
+.lr-cell .cell-where .ic { width: 11px; height: 11px; opacity: 0.8; }
+.lr-cell .cell-where.is-none { color: var(--attn); background: none; font-style: italic; }
+
+/* The name is never cut.
+
+   The first attempt at making Flat rows one line clipped the project name with
+   an ellipsis, which trades "too much on one line" for "you cannot read the
+   thing that identifies the row" - the mistake facing the other way. Space
+   comes from dropping what is redundant (the size, the repeated site name),
+   and a name long enough to need a second line gets one. */
+.lr-cell .cell-name { white-space: normal; }
