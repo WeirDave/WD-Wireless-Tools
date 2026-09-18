@@ -168,6 +168,29 @@ function payload(heldBackIds) {
         self.assertNotIn("hb", out["showing"])
         self.assertTrue(out["bar"])
 
+    def test_the_refresh_that_follows_his_own_action_renders(self):
+        """The regression v2.119.0 introduced, and the reason item 1 was only
+        half fixed.
+
+        Every action ends in `_scheduleOpRefresh()`, which calls
+        `refreshData(true)` - and `silent` was being read as "this is a
+        background poll". So from v2.119.0, pressing Download over local left
+        the row showing its old state with a bar above the list offering to
+        show him the consequence of the thing he had just done.
+
+        `silent` means "do not flash Loading…". Whether he asked for it is a
+        separate question, and it is the one that decides.
+        """
+        src = CLOUD_JS.read_text(encoding="utf-8")
+        block = src[src.index("function _scheduleOpRefresh()"):]
+        block = block[:block.index(chr(10) + chr(125))]
+        self.assertIn("background: false", block,
+                      "an action's own refresh still queues behind the bar")
+
+        head = src[src.index("function refreshData(silent, opts)"):]
+        head = head[:head.index(chr(10) + chr(125))]
+        self.assertIn("opts ? !!opts.background : !!silent", head)
+
     def test_a_load_he_asked_for_still_renders_immediately(self):
         """Switching tab, pressing refresh, finishing an operation - those are
         his own actions and must not queue up behind a bar."""

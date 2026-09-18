@@ -103,7 +103,10 @@ function _scheduleOpRefresh() {
   _postOpRefreshTimer = setTimeout(() => {
     _postOpRefreshTimer = null;
 
-    if (typeof refreshData === 'function') refreshData(true);
+    /* His action, so it lands on screen. Quiet - no "Loading…" flash over a
+       list he is reading - but not queued behind the bar that exists for polls
+       he did not ask for. */
+    if (typeof refreshData === 'function') refreshData(true, { background: false });
   }, _POST_OP_REFRESH_MS);
 }
 
@@ -753,7 +756,16 @@ function collapseAllSites() {
   renderRows();
 }
 
-function refreshData(silent) {
+/* `silent` means "do not flash Loading…". It has never meant "this is a
+   background poll", and since v2.119.0 the difference matters: a background
+   poll queues behind the changed-since-drawn bar instead of redrawing.
+
+   An action's own follow-up refresh is not a poll - he pressed the button, and
+   the result of pressing it should not need a second click to appear. So the
+   two are separate now: `quiet` suppresses the flicker, `background` decides
+   whether he is asked. */
+function refreshData(silent, opts) {
+  const background = opts ? !!opts.background : !!silent;
   if (!silent) {
     clearSelection();
     document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">Loading…</div>';
@@ -765,7 +777,7 @@ function refreshData(silent) {
       .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
   } else {
     pyApi('get_data', tab)
-      .then(d => onData(tab, JSON.stringify(d), { background: !!silent }))
+      .then(d => onData(tab, JSON.stringify(d), { background }))
       .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
 
     refreshDupIndex();
@@ -2779,12 +2791,15 @@ function _setRowBusy(cloudId, localPath, what) {
       _rowBusy.delete(k);
       toast('That is taking longer than expected — the row no longer says it '
             + 'is working. Use Re-check to find out where it got to.', 'error');
-      renderRows();
+      if (typeof renderRows === 'function') renderRows();
     }, ROW_BUSY_CEILING_MS));
   } else {
     _rowBusy.delete(k);
   }
-  renderRows();
+  /* Marking a row must never be able to break the action it is decorating.
+     This is decoration on top of an operation; if the list is not there to
+     redraw, the operation still runs. */
+  if (typeof renderRows === 'function') renderRows();
 }
 
 /* Re-evaluate one pair and draw what it now is.
@@ -2935,7 +2950,8 @@ function bulkFixInternalNames() {
    implementations of one operation, and the row and the planner disagreeing is
    exactly what this commit is fixing. */
 function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName) {
-  return opEnqueue({
+  _setRowBusy(cloudId, localPath, 'Uploading your local copy and replacing the cloud project…');
+  const handle = opEnqueue({
     title: `Replacing cloud "${cloudName || localName}" with your local copy`,
     sub: 'Uploading, verifying, then removing the old cloud copy.',
     type: 'push', pollBackend: true, undoable: false,
@@ -2959,6 +2975,12 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName) {
       return r;
     },
   });
+
+  /* Same contract as the pull: the pair is re-evaluated and the row says what
+     is now true, rather than waiting for a poll to notice. */
+  handle.promise.then(() => settlePair(cloudId, localPath))
+        .catch(() => _setRowBusy(cloudId, localPath, null));
+  return handle;
 }
 
 async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matchType) {
@@ -4834,7 +4856,11 @@ async function verifyReplaceLocal(cloudId, localPath, cloudName, cloudMtime, loc
   ];
   if (!confirm(lines.join('\n'))) return;
 
-  opEnqueue({
+  /* After the question, never before it: marking the row busy above the
+     confirm left it saying "Working" over an action he had just declined. */
+  _setRowBusy(cloudId, localPath, 'Taking the cloud copy over your local file…');
+
+  const { promise } = opEnqueue({
     title: `Downloading "${cloudName}" over local`,
     type: 'verify', pollBackend: false, undoable: false,
     run: async () => {
@@ -4856,6 +4882,12 @@ async function verifyReplaceLocal(cloudId, localPath, cloudName, cloudMtime, loc
       return r;
     },
   });
+
+  /* Taking the cloud copy changes what a comparison would say about this pair,
+     so the pair is re-evaluated and the row drawn from that - the same
+     contract the internal-name fix has. "I shouldn't have to recheck twice." */
+  promise.then(() => settlePair(cloudId, localPath))
+         .catch(() => _setRowBusy(cloudId, localPath, null));
 }
 window.verifyReplaceLocal = verifyReplaceLocal;
 

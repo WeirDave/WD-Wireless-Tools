@@ -176,7 +176,16 @@ class TheControlIsReachableAndRunsTests(unittest.TestCase):
         order; getting them the wrong way round would look identical in the
         markup and destroy the wrong thing."""
         calls = self.out["exactCalls"]
-        self.assertEqual(1, len(calls), "the server was not called once")
+        # Two calls now, and the second one is the point: the action
+        # re-compares its own pair so the row can state the outcome.
+        # "I shouldn't have to recheck twice."
+        ops = [c for c in calls if c[0] == "replace_cloud_project"]
+        self.assertEqual(1, len(ops), "the operation did not run exactly once")
+        # Presence, not order: this probe resolves the queue before it invokes
+        # `run`, so the confirmation lands first here and second in a browser.
+        self.assertIn("compare_with_cloud", [c[0] for c in calls],
+                      "the action did not confirm its own result")
+        calls = ops
         self.assertEqual("replace_cloud_project", calls[0][0])
         self.assertEqual("C:/projects/SITE1/SITE1 Survey.esx", calls[0][1])
         self.assertEqual("c1", calls[0][2])
@@ -198,7 +207,8 @@ class TheControlIsReachableAndRunsTests(unittest.TestCase):
         kind of guard he has said is worse than useless."""
         self.assertEqual(0, self.out["idAsked"])
         self.assertEqual(1, self.out["idQueued"])
-        self.assertEqual("replace_cloud_project", self.out["idCalls"][0][0])
+        ops = [c for c in self.out["idCalls"] if c[0] == "replace_cloud_project"]
+        self.assertEqual(1, len(ops), self.out["idCalls"])
 
     def test_the_run_reports_success_to_him(self):
         joined = " ".join(self.out["exactToasts"])
