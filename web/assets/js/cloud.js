@@ -1210,21 +1210,29 @@ function updateDashboard() {
 
     const isSitesTab = currentTab === 'sites';
     const rowIsExternal = (c, l) => isSitesTab ? _siteHasExternal(c, l) : _isExternal(c, l);
+    /* On the Sites tab every count is about the projects inside the sites.
+
+       "sites should not be counted in those - we should only have a button for
+       unmatched sites." Two of these already walked in and counted files;
+       mismatches, cloud-only and local-only counted folders, which is what had
+       "cloud only" reading 0 while showing two projects. */
+    let kidMismatches = 0, kidCloudOnly = 0, kidLocalOnly = 0;
     const walkKids = (kids) => {
       if (!kids) return;
       (kids.matched || []).forEach(p => {
         if (p.matchType === 'exact') nameMatches++;
         if (_countsAsStale(p)) staleCount++;
+        if (p.namesDiffer) kidMismatches++;
         bumpType(p.cloud, p.local);
       });
-      (kids.cloudOnly || []).forEach(c => { bumpType(c, null); });
-      (kids.localOnly || []).forEach(l => { bumpType(null, l); });
+      (kids.cloudOnly || []).forEach(c => { kidCloudOnly++; bumpType(c, null); });
+      (kids.localOnly || []).forEach(l => { kidLocalOnly++; bumpType(null, l); });
     };
     let externalOrphans = 0;
     (data.matched || []).forEach(p => {
       if (!ownerVisible(p.cloud, p.local)) return;
       matched++;
-      if (p.namesDiffer) mismatches++;
+      if (p.namesDiffer && !isSitesTab) mismatches++;
       if (rowIsExternal(p.cloud, p.local)) externalCount++;
       if (isSitesTab) {
         walkKids((p.cloud && p.cloud.children) || (p.local && p.local.children));
@@ -1248,8 +1256,14 @@ function updateDashboard() {
       if (isSitesTab) walkKids(l.children);
       else bumpType(null, l);
     });
+    /* A site with nothing on the other side. The only site-level question
+       left, and the only chip that asks one. */
+    const unmatchedSites = isSitesTab ? (cloudOnly + localOnly) : 0;
+
     _setCount('dAll', matched + cloudOnly + localOnly);
-    _setCount('dMismatches', mismatches);
+    _setCount('dMismatches', isSitesTab ? kidMismatches : mismatches);
+    _setCount('dUnmatchedSites', unmatchedSites);
+    _showFilter('unmatched-sites', isSitesTab);
     _setCount('dStale', staleCount);
     _showFilter('stale', !isDup && staleCount > 0);
     _setCount('dNameMatches', nameMatches);
@@ -1258,14 +1272,17 @@ function updateDashboard() {
     /* A cloud project Ekahau has filed under no site is still a cloud project
        with nothing matching it on disk, and the list has always drawn it here.
        The count was the only thing that did not look. */
+    /* Cloud-only and local-only are about *projects* here, so they count the
+       files inside the sites plus the ones Ekahau filed under no site - not
+       the sites themselves, which "unmatched sites" now covers. */
     let looseCloud = 0;
     if (isSitesTab) {
       ((data.orphans && data.orphans.cloudOnly) || []).forEach(c => {
         if (_passOwnerForCounts(c, null)) looseCloud++;
       });
     }
-    _setCount('dCloudOnly', cloudOnly + looseCloud);
-    _setCount('dLocalOnly', localOnly);
+    _setCount('dCloudOnly', isSitesTab ? (kidCloudOnly + looseCloud) : cloudOnly);
+    _setCount('dLocalOnly', isSitesTab ? kidLocalOnly : localOnly);
     _setCount('dExternal', externalCount);
     _showFilter('external', !isDup && externalCount > 0);
 
@@ -1835,6 +1852,7 @@ function renderLedger(hit) {
   const showOrph = activeFilter === 'all' || activeFilter === 'orphans';
   const showOrphCloud = activeFilter === 'orphans-cloud';
   const showOrphLocal = activeFilter === 'orphans-local';
+  const showUnmatchedSites = activeFilter === 'unmatched-sites';
   const showUnassigned = activeFilter === 'unassigned';
   const showNameMatches = activeFilter === 'name-matches';
   const showExternal = activeFilter === 'external';
@@ -1881,6 +1899,11 @@ function renderLedger(hit) {
     if (typeFilter) return rowMatchesType(row);
     if (showStale) return rowIsStale(row);
     if (showNameMatches) return rowIsNameMatch(row);
+    /* A site with nothing on the other side, either way round. The only
+       filter on this tab that asks about folders rather than files. */
+    if (showUnmatchedSites) {
+      return isSites && !!(row && ((row.cloud && !row.local) || (row.local && !row.cloud)));
+    }
     if (showUnassigned) return row && row.cloud && !row.cloud.hasSite;
     if (showUnshared) {
       /* A site is never the answer here - sharing is a project. The site row
@@ -2429,8 +2452,9 @@ function _siteMatchesFilterAlone(r) {
     case 'external':  return _isExternal(c, l);
     case 'unshared':  return _isUnshared(c);
     case 'mismatches': return r && r.status === 'mismatch';
-    case 'orphans-cloud': return !!(c && !l);
-    case 'orphans-local': return !!(l && !c);
+    case 'unmatched-sites': return !!((c && !l) || (l && !c));
+    case 'orphans-cloud': return false;   // a question about the files inside
+    case 'orphans-local': return false;
     default: return false;
   }
 }

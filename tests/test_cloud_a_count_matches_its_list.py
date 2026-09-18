@@ -251,6 +251,23 @@ data.matched = [
 data.orphans = { cloudOnly: [] };
 out.unsharedCount = countsFor('unshared').dUnshared;
 
+/* "sites should not be counted in those - we should only have a button for
+   unmatched sites." Two sites, one of them with no local folder; inside the
+   matched one, a project whose names differ and a project with no local copy. */
+data.matched = [
+  { cloud: cl('s1', 'Site One', { children: {
+      matched: [{ cloud: cl('a1', 'A One'), local: lo('A One v2'),
+                  matchType: 'exact', staleness: null, namesDiffer: true }],
+      cloudOnly: [cl('a2', 'A Two')], localOnly: [], heldBack: [] } }),
+    local: lo('Site One', { isDir: true }),
+    matchType: 'exact', namesDiffer: true, staleness: null }];
+data.cloudOnly = [cl('s2', 'Site Two', { children: {
+    matched: [], cloudOnly: [], localOnly: [], heldBack: [] } })];
+data.localOnly = [lo('Folder Three', { isDir: true, children: {
+    matched: [], cloudOnly: [], localOnly: [], heldBack: [] } })];
+data.orphans = { cloudOnly: [] };
+out.siteTab = countsFor('all');
+
 out.filtersOffered = ELS.filter(x => x.dataset.filter && !x.hidden)
                         .map(x => x.dataset.filter);
 console.log(JSON.stringify(out));
@@ -311,6 +328,30 @@ class ACountIsTheLengthOfItsOwnList(unittest.TestCase):
         One site holding one unshared project is one answer, not two.
         """
         self.assertEqual("1", self.out["unsharedCount"])
+
+    def test_name_mismatches_counts_projects_not_sites(self):
+        """"sites should not be counted in those."
+
+        One site whose name differs from its folder, holding one project whose
+        name differs from its file. The answer is one - the project - and the
+        site is not part of it.
+        """
+        self.assertEqual("1", self.out["siteTab"]["dMismatches"])
+
+    def test_cloud_only_counts_projects_not_sites(self):
+        """One cloud-only project inside a matched site, and one cloud-only
+        *site*. The site is not the answer here."""
+        self.assertEqual("1", self.out["siteTab"]["dCloudOnly"])
+        self.assertEqual("0", self.out["siteTab"]["dLocalOnly"])
+
+    def test_unmatched_sites_is_the_one_chip_that_counts_sites(self):
+        """"we should only have a button for unmatched sites that would show
+        sites on cloud that don't have a folder equivalent or vice versa."
+
+        Both directions, one number: a cloud site with no folder, and a folder
+        with no cloud site.
+        """
+        self.assertEqual("2", self.out["siteTab"]["dUnmatchedSites"])
 
     def test_not_assigned_is_offered_on_the_sites_tab(self):
         """It was Projects-only, while these rows render on Sites - so on the

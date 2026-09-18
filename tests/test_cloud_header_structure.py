@@ -74,6 +74,7 @@ class NothingWasLostInTheRestructureTests(unittest.TestCase):
     #: disagreed: "it says zero unpaired and when I click it there's two".
     COUNTERS = ["dAll", "dStale", "dMismatches", "dNameMatches",
                 "dExternal", "dUnshared", "dCloudOnly", "dLocalOnly",
+                "dUnmatchedSites",
                 "dUnassigned", "dTypeDesign", "dTypeMeasured", "dTypeHybrid",
                 "dDupAll", "dDupCloud", "dDupLocal", "dDupMixed"]
 
@@ -96,7 +97,7 @@ class NothingWasLostInTheRestructureTests(unittest.TestCase):
         restructure dropped these once; a test caught it."""
         controls = re.findall(
             r'<button class="sum-count"[^>]*?data-filter="([a-z-]+)"([^>]*)>', HTML)
-        self.assertEqual(16, len(controls))
+        self.assertEqual(17, len(controls))
         for key, attrs in controls:
             with self.subTest(filter=key):
                 self.assertIn("title=", attrs)
@@ -110,7 +111,7 @@ class NothingWasLostInTheRestructureTests(unittest.TestCase):
         its job.
         """
         chips = re.findall(r'<button class="sum-count".*?</button>', HTML, re.S)
-        self.assertEqual(16, len(chips))
+        self.assertEqual(17, len(chips))
         for chip in chips:
             label = re.search(r'<span class="sum-l">([^<]+)</span>', chip)
             with self.subTest(chip=(label.group(1) if label else chip[:40])):
@@ -165,7 +166,7 @@ class TheDropdownsAreUsableTests(unittest.TestCase):
         # a string not appearing is weak evidence, and the thing that matters
         # is what each filter *is*, not what the markup no longer says.
         carriers = re.findall(r'<(\w+) class="([^"]*)"[^>]*data-filter=', HTML)
-        self.assertEqual(16, len(carriers))
+        self.assertEqual(17, len(carriers))
         for tag, classes in carriers:
             with self.subTest(carrier=classes):
                 self.assertEqual("button", tag)
