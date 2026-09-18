@@ -1105,6 +1105,35 @@ function isOutOfSync(row) {
 }
 
 
+/* Is this cloud project filed under no site in Ekahau?
+
+   "I clicked on not assigned because it says two not assigned, and the whole
+   entire list is still just there."
+
+   The filter read `!row.cloud.hasSite`, and `hasSite` is a **project** field:
+   `build_sites_data` never puts one on a site, so every site row evaluated
+   `!undefined` - true - and the filter selected all ninety-nine of them. The
+   chip counted the two projects the backend had actually set aside, so the
+   number and the list were answers to different questions again.
+
+   Absence is not evidence here, which is why this tests for the fact rather
+   than for the missing field: `unassigned` is set by the backend on a project
+   it moved into a site because the local .esx lives there, and `hasSite` is an
+   explicit `false` on one it could not file at all. A project that simply has
+   neither field - every ordinary child of a site - is assigned. */
+function _isUnassignedProject(cloudObj) {
+  return !!(cloudObj && (cloudObj.unassigned === true || cloudObj.hasSite === false));
+}
+
+/* A site is never unassigned - assignment is something a project has. It is
+   listed here when it holds one, the same shape as External. */
+function _siteHasUnassigned(cloudObj, localObj) {
+  const kids = (cloudObj && cloudObj.children) || (localObj && localObj.children) || null;
+  if (!kids) return false;
+  return (kids.matched || []).some(pr => _isUnassignedProject(pr.cloud))
+      || (kids.cloudOnly || []).some(_isUnassignedProject);
+}
+
 function _isExternal(cloudObj, localObj) {
   const me = ((data && data.currentUser) || '').toLowerCase();
   if (!me) return false;
@@ -1383,6 +1412,27 @@ function updateDashboard() {
       ((data.orphans && data.orphans.cloudOnly) || []).forEach(c => {
         if (_passOwnerForCounts(c, null)) noSite++;
       });
+      /* And the ones the backend filed *inside* a site because their local
+         .esx lives in that site's folder - they are still assigned to no site
+         in Ekahau, they are what the auto-assign banner offers to fix, and the
+         filter shows the sites holding them. Leaving them out of the count was
+         the other half of the number disagreeing with the list. */
+      const _seenUn = new Set();
+      const _walkUn = (kids) => {
+        if (!kids) return;
+        (kids.matched || []).forEach(pr => {
+          if (_isUnassignedProject(pr.cloud) && _passOwnerForCounts(pr.cloud, pr.local)
+              && !_seenUn.has(pr.cloud.id)) { _seenUn.add(pr.cloud.id); noSite++; }
+        });
+        (kids.cloudOnly || []).forEach(c => {
+          if (_isUnassignedProject(c) && _passOwnerForCounts(c, null)
+              && !_seenUn.has(c.id)) { _seenUn.add(c.id); noSite++; }
+        });
+      };
+      (data.matched || []).forEach(pr => _walkUn(
+        (pr.cloud && pr.cloud.children) || (pr.local && pr.local.children)));
+      (data.cloudOnly || []).forEach(c => _walkUn(c.children));
+      (data.localOnly || []).forEach(l => _walkUn(l.children));
     }
     _setCount('dUnassigned', noSite);
   }
@@ -1943,7 +1993,10 @@ function renderLedger(hit) {
     if (showUnmatchedSites) {
       return isSites && !!(row && ((row.cloud && !row.local) || (row.local && !row.cloud)));
     }
-    if (showUnassigned) return row && row.cloud && !row.cloud.hasSite;
+    if (showUnassigned) {
+      return isSites ? _siteHasUnassigned(row && row.cloud, row && row.local)
+                     : _isUnassignedProject(row && row.cloud);
+    }
     if (showUnshared) {
       /* A site is never the answer here - sharing is a project. The site row
          survives so its projects have somewhere to hang, and

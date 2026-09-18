@@ -877,29 +877,34 @@ def _b_mod():
 
 
 def _backup_failure(target, exc):
-    """What went wrong, and - if the answer is the path length - say so.
+    r"""What went wrong, in a sentence, with the path kept out of it.
 
-    `[WinError 3] The system cannot find the path specified` is what Windows
-    returns for a path at or past 260 characters, and read plainly it sends
-    someone to look for a missing folder that is sitting right there. The
-    length is the fact that explains it, so the length is in the message.
+    `[WinError 3] The system cannot find the path specified` read plainly sends
+    someone to look for a missing folder that is sitting right there, so the
+    length is what the message needs to carry.
 
-    This is a backstop. `copy_for_backup` retries past the limit and so should
-    not reach here at all; if it does, the sentence has to be one that leads
-    somewhere rather than one that reads like a bug in the tool.
+    What it must **not** carry is the path. This returned `str(exc)`, and
+    `OSError.__str__` appends its filename through `repr` - so a Windows path
+    arrived with every backslash doubled, and when the failure came from the
+    long-path retry the `\\?\` prefix doubled too:
+
+        ... path specified: '\\\\?\\C:\\Users\\...\\backups\\...'
+
+    An internal path form, escaped twice, in a toast, on top of a 265-character
+    string nobody can read in a notification. The full path goes to the log,
+    where it can be read at leisure and copied.
+
+    This is a backstop either way: `copy_for_backup` retries past the limit, so
+    reaching here means something other than length is usually wrong.
     """
-    detail = str(exc)
-    try:
-        n = len(str(target))
-    except Exception:
-        return detail
     from tools import backups as _b
-    if os.name == "nt" and n >= _b.MAX_PATH:
-        return (f"{detail} — the backup path is {n} characters and Windows "
-                f"stops at {_b.MAX_PATH}. Shortening the project or folder "
-                f"name, or moving the folder nearer the top of the drive, "
-                f"brings it back under.")
-    return detail
+    try:
+        from tools import applog
+        applog.note_failure(f"backup to {target}", exc)
+    except Exception:
+        #: Logging the reason must never become the reason there is no message.
+        pass
+    return _b.describe_failure(exc, target)
 
 
 def _remap_progress(cb, lo, hi):
@@ -1761,7 +1766,7 @@ def _rewrite_project_json(src, mutate, output_dir, keep_backups=True):
 
     src = Path(src)
     try:
-        with zipfile.ZipFile(src) as zf:
+        with zipfile.ZipFile(_b_mod().write_path(src)) as zf:
             if "project.json" not in zf.namelist():
                 return {"error": "That .esx has no project.json"}
             members = [(i, zf.read(i.filename)) for i in zf.infolist()]
@@ -1801,8 +1806,13 @@ def _rewrite_project_json(src, mutate, output_dir, keep_backups=True):
                              "changed: %s" % _backup_failure(backup, e)}
 
     tmp = src.with_suffix(src.suffix + ".wd-rename.tmp")
+    #: The temp file is the .esx path plus 14 characters, so on the projects
+    #: whose names are longest it is the thing that crosses MAX_PATH even when
+    #: the .esx itself did not. See `backups.write_path`.
+    _bm = _b_mod()
+    tmp_w, src_w = _bm.write_path(tmp), _bm.write_path(src)
     try:
-        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
+        with zipfile.ZipFile(tmp_w, "w", zipfile.ZIP_DEFLATED) as out:
             for info, raw in rebuilt:
                 # Carry the original entry across rather than letting
                 # zipfile invent one: same name, same date, same compression.
@@ -1810,13 +1820,17 @@ def _rewrite_project_json(src, mutate, output_dir, keep_backups=True):
                 keep_info.compress_type = info.compress_type
                 keep_info.external_attr = info.external_attr
                 out.writestr(keep_info, raw)
-        os.replace(tmp, src)
+        os.replace(tmp_w, src_w)
     except OSError as e:
         try:
-            tmp.unlink()
+            os.unlink(tmp_w)
         except OSError:
             pass
-        return {"error": "Write failed, the file is untouched: %s" % e}
+        #: `describe_failure` rather than `%s` - see its own docstring. This
+        #: was the message that reached him as
+        #: "[Errno 2] No such file or directory: 'C:\Users\...'".
+        return {"error": "Write failed, the file is untouched. "
+                         + _bm.describe_failure(e, tmp)}
 
     _ESX_META_CACHE.pop(str(src), None)
     _ESX_TYPE_CACHE.pop(str(src), None)
@@ -2818,20 +2832,24 @@ class CloudManager:
                                  f"was replaced: {_backup_failure(backup, e)}"}
 
         tmp = src.with_suffix(src.suffix + ".wd-verify.tmp")
+        #: Same length problem as the rename path - see `backups.write_path`.
+        _bm = _b_mod()
+        tmp_w, src_w = _bm.write_path(tmp), _bm.write_path(src)
         try:
             if progress_cb:
                 progress_cb(stage="save", current=95, total=100,
                             message="Replacing local file…")
-            with open(tmp, "wb") as f:
+            with open(tmp_w, "wb") as f:
                 f.write(esx_bytes)
-            os.replace(tmp, src)
+            os.replace(tmp_w, src_w)
         except OSError as e:
             for leftover in (tmp, backup) if backup else (tmp,):
                 try:
-                    leftover.unlink()
+                    os.unlink(_bm.write_path(leftover))
                 except OSError:
                     pass
-            return {"error": f"Write failed, local file untouched: {e}"}
+            return {"error": "Write failed, local file untouched. "
+                             + _bm.describe_failure(e, tmp)}
 
 
         _ESX_META_CACHE.pop(str(src), None)

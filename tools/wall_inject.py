@@ -241,8 +241,10 @@ def inject(esx_path, wall_types: list, dest=None, backup: bool = True) -> dict:
             from tools import backups as _bk
             _bk.copy_for_backup(path, backup_path)
         except OSError as exc:
-            return {"error": f"Could not back the project up, so nothing was "
-                             f"changed: {exc}"}
+            #: See `backups.describe_failure` - `{exc}` doubles every
+            #: backslash in the path it names.
+            return {"error": "Could not back the project up, so nothing was "
+                             "changed. " + _bk.describe_failure(exc, backup_path)}
 
     tmp = target.with_suffix(target.suffix + ".wd-inject.tmp")
     try:

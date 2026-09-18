@@ -93,7 +93,18 @@ def _try_both(op, *paths):
     except OSError:
         if os.name != "nt":
             raise
-        return op(*[long_path(p) for p in paths])
+        try:
+            return op(*[long_path(p) for p in paths])
+        except OSError as exc:
+            #: The retry's exception names the prefixed path, and `OSError`
+            #: puts its filename through `repr`. Between them that turns
+            #: C:\Users\… into '\\\\?\\C:\\Users\\…' in anything that prints
+            #: the error - four backslashes where the path has one, which is
+            #: what "a lot of extra backslashes" looked like on screen.
+            #: Re-point it at the path the caller actually asked for.
+            exc.filename = str(paths[-1])
+            exc.filename2 = None
+            raise
 
 
 def copy_for_backup(src, dest):
@@ -110,6 +121,61 @@ def copy_for_backup(src, dest):
     """
     _try_both(shutil.copy2, str(src), str(dest))
     return dest
+
+
+def write_path(p):
+    r"""The form to create or replace a file at `p` with.
+
+    `copy_for_backup` can try the plain path and retry, because a failed copy
+    leaves nothing behind. A *write* cannot: by the time it fails there may be
+    a half-built archive at the destination, and retrying would have to reason
+    about clearing it. So this decides up front, on the one thing that is known
+    before any I/O happens - the length.
+
+    This is the half that v2.136.1 missed. The backup was fixed and the write
+    was not, so on the longest-named projects the backup now succeeded and the
+    rewrite then failed with `[Errno 2] No such file or directory` on
+    `<project>.esx.wd-rename.tmp` - 14 characters longer again than the .esx it
+    sits beside. The file was left untouched, correctly, and the feature was
+    still unusable, which is the same dead end wearing a different message.
+    """
+    s = str(p)
+    if os.name == "nt" and len(s) >= MAX_PATH:
+        return long_path(p)
+    return s
+
+
+def describe_failure(exc, dest):
+    r"""Why a backup could not be written, in a sentence someone can act on.
+
+    **Never `str(exc)`.** `OSError.__str__` appends its filename through
+    `repr`, so every backslash in a Windows path is doubled before it reaches
+    the screen - and if the path is the `\\?\` retry form, the prefix's own two
+    become four. The first report of this fix read
+
+        [Errno 2] The system cannot find the path specified:
+        '\\\\?\\C:\\Users\\...\\backups\\...'
+
+    which is an internal path form, escaped twice, in a toast. The reason and
+    the length are what matter; the path itself is 265 characters and belongs
+    in the log, not in a notification.
+
+    `strerror` is the clean half of the exception - "The system cannot find the
+    path specified" with no filename attached - so that is what is quoted.
+    """
+    reason = (getattr(exc, "strerror", None) or "").strip()
+    if not reason:
+        #: Some OSErrors carry no strerror. `repr` of the exception still beats
+        #: `str`, which is the one that drags the escaped filename along.
+        reason = exc.__class__.__name__
+    reason = reason.rstrip(".")
+
+    n = len(str(dest))
+    if os.name == "nt" and n >= MAX_PATH:
+        return (f"{reason}. The backup path is {n} characters and Windows "
+                f"stops at {MAX_PATH} - shorten the project or folder name, "
+                f"or move the folder nearer the top of the drive.")
+    return f"{reason}."
 
 
 def _stat(path: Path):

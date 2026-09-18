@@ -299,8 +299,11 @@ def repair_project(path: Path, heights: dict[str, float],
             from tools import backups as _bk
             _bk.copy_for_backup(path, backup_path)
         except OSError as e:
-            return {"error": f"Could not back the project up, so nothing was "
-                             f"changed: {e}"}
+            #: `describe_failure`, not `{e}` - `OSError.__str__` reprs its
+            #: filename, so a Windows path arrives with every backslash
+            #: doubled. See `backups.describe_failure`.
+            return {"error": "Could not back the project up, so nothing was "
+                             "changed. " + _bk.describe_failure(e, backup_path)}
 
     members["wallTypes.json"] = (json.dumps(doc, indent=2, ensure_ascii=False)
                                  + "\n").encode("utf-8")
