@@ -1229,6 +1229,41 @@ function _siteHasUnassigned(cloudObj, localObj) {
   return _siteHoldsVisible(cloudObj, localObj, (r) => _isUnassignedProject(r.cloud));
 }
 
+/* Ekahau will not let him change somebody else's project, so nor will this.
+
+   "I was on All when I see those things, so maybe those particular esx files
+   are actually someone else's, and I can't assign them to my site - which
+   makes sense absolutely. But it also shouldn't try to auto-assign them if
+   they're somebody else's files."
+
+   Auto-assign offered three assignments and Ekahau answered `403 Forbidden`
+   to all three, because the candidate set was gated on the **owner filter**
+   and he had it on All. A filter is a view, not a permission: All is the
+   correct thing to be on when you want to see everything, and it must not
+   become consent to act on it.
+
+   `''` means allowed; a non-empty string is the reason it is not, shown on
+   the control rather than discovered a second later in an error panel.
+
+   The unknown case is deliberately permissive. A project with no owner
+   recorded is not evidence that it is someone else's, and refusing on
+   missing data is the guard-that-fires-on-his-normal-case failure. */
+function ownershipBlock(cloudObj) {
+  //: `typeof` because this is sliced out of the file by several probes, and
+  //: a bare reference to an undeclared `data` is a ReferenceError rather
+  //: than undefined.
+  const d = (typeof data !== 'undefined' && data) || null;
+  const me = ((d && d.currentUser) || '').toLowerCase();
+  const owner = (cloudObj && cloudObj.owner || '').toLowerCase();
+  if (!me || !owner || owner.indexOf('@') < 0 || owner === me) return '';
+  return 'Owned by ' + (cloudObj.owner || 'someone else')
+       + '. Ekahau only lets the owner change a project.';
+}
+
+function iOwn(cloudObj) {
+  return !ownershipBlock(cloudObj);
+}
+
 function _isExternal(cloudObj, localObj) {
   const me = ((data && data.currentUser) || '').toLowerCase();
   if (!me) return false;
@@ -3069,7 +3104,12 @@ function _collectAutoAssignable(visibleSiteRows, passOwner) {
     const children = (r.cloud && r.cloud.children) || (r.local && r.local.children);
     if (!children || !children.matched) return;
     children.matched.forEach(p => {
-      if (p.cloud && p.cloud.unassigned && p.cloud.id && pass({ cloud: p.cloud, local: p.local })) {
+      /* `iOwn`, as well as the view filter. The view filter was the only
+         gate here, so on All the banner proposed three assignments Ekahau
+         refused with 403 - "it also shouldn't try to auto-assign them if
+         they're somebody else's files". */
+      if (p.cloud && p.cloud.unassigned && p.cloud.id && iOwn(p.cloud)
+          && pass({ cloud: p.cloud, local: p.local })) {
         out.push({ projectId: p.cloud.id, projectName: p.cloud.name || '', siteId, siteName: siteName || '' });
       }
     });
@@ -3240,8 +3280,23 @@ function rowMenu(items, label) {
        + `<div class="row-menu-items">${body}</div></details>`;
 }
 
+/* `opts.blocked` is a reason the action cannot succeed.
+
+   "technically we should block all items that are not things that you should
+   be able to do... I don't want the user to be the bug catcher."
+
+   The item stays on the menu, named and greyed, carrying its reason - rather
+   than vanishing, which leaves him hunting for a control he has used before,
+   or staying live and returning a 403. It is not `disabled` in the HTML
+   sense: a disabled button swallows the click, and the click is how he asks
+   why. `_wireDisabledBulkReasons` turns the click into the explanation, the
+   same as `rdUnavailable`. */
 function menuItem(icon, label, call, opts) {
   const o = opts || {};
+  if (o.blocked) {
+    return `<button class="row-menu-item is-disabled" aria-disabled="true"`
+         + ` title="${a(o.blocked)}">${ic(icon)}<span>${label}</span></button>`;
+  }
   return `<button class="row-menu-item${o.danger ? ' danger' : ''}" onclick="event.stopPropagation();${call}"`
        + `${o.title ? ` title="${a(o.title)}"` : ''}>${ic(icon)}<span>${label}</span></button>`;
 }
@@ -3465,9 +3520,13 @@ const PUSHABLE_MATCH_TYPES = new Set(['id', 'manual', 'exact']);
 //: Which of those are proven rather than inferred. The rest get a confirm.
 const PROVEN_MATCH_TYPES = new Set(['id', 'manual']);
 
+/* Replacing the cloud copy uploads and then **deletes** the old project, so
+   it needs ownership as well as a proven pair. Pulling does not: a download
+   writes only to his disk. */
 function canPushToCloud(r) {
   return !!(r && r.cloud && r.local && (r.kind || currentTab) !== 'sites'
             && /\.esx$/i.test(String(r.local.path || ''))
+            && iOwn(r.cloud)
             && PUSHABLE_MATCH_TYPES.has(r.matchType));
 }
 
@@ -4225,6 +4284,18 @@ function stalenessBadgeHtml(r) {
        sits right here rather than being described in a tooltip. The old text
        pointed at a "Link button" that is only ever drawn on an *unpaired* row,
        so on this row it named a control that did not exist. */
+    /* Two different reasons reach here and they have different remedies, so
+       the row must not offer the wrong one. Confirming the pair lifts a
+       guessed pairing; it does nothing about a project belonging to somebody
+       else, and offering it there would send him round a loop that ends in
+       the 403 anyway. */
+    const notMine = ownershipBlock(r.cloud);
+    if (notMine) {
+      return `<span class="rd-note" title="Your local copy was edited more recently than the cloud one.">${ic('up')}<span>Local newer</span></span>`
+        + rdUnavailable('arrowL', 'Local → Cloud',
+            notMine + ' Replacing it would delete their project, which Ekahau '
+            + 'refuses. Your local copy is yours to keep or rename.', 'cloud');
+    }
     const unproven = 'Your local copy is newer, but these two were paired by '
       + 'guesswork - a shared site code or similar wording, not the same name '
       + 'and not Ekahau\'s id. Replacing the cloud copy deletes the old one and '
@@ -4390,6 +4461,11 @@ function cloudCell(r, localCodes) {
   const meta = isSites ? siteDigestHtml(r)
     : `${where}<span class="cell-meta">${e(c.meta || '')}</span>`;
 
+  /* Everything below that writes to Ekahau is refused up front on a project
+     somebody else owns. `Check what differs` is not - it downloads a copy and
+     compares it, and reading someone's project is exactly what being shared
+     it allows. */
+  const notMine = isSites ? '' : ownershipBlock(c);
   const menu = rowMenu([
     isSites && (c.datasets && c.datasets.length)
       ? menuItem('eye', 'View the projects in this site', `openCloudPeek('${j(c.id)}','${j(c.name)}')`,
@@ -4397,17 +4473,21 @@ function cloudCell(r, localCodes) {
       : '',
     (!isSites && c.unassigned && r.parentSiteId)
       ? menuItem('plus', `Assign to “${e(r.parentSiteName || '')}”`,
-          `assignOrphanToSite('${j(c.id)}','${j(r.parentSiteId)}','${j(c.name)}','${j(r.parentSiteName || '')}')`)
+          `assignOrphanToSite('${j(c.id)}','${j(r.parentSiteId)}','${j(c.name)}','${j(r.parentSiteName || '')}')`,
+          { blocked: notMine })
       : '',
     !isSites ? menuItem('share', `Sharing…${(c.sharedWith || []).length ? ` (${(c.sharedWith || []).length})` : ''}`,
-          `openManageShares('${j(c.id)}','${j(c.name)}')`, { title: 'Manage who this cloud project is shared with' }) : '',
-    !isSites ? menuItem('move', 'Move to a site…', `startMoveToSite('${j(c.id)}','${j(c.name)}')`) : '',
+          `openManageShares('${j(c.id)}','${j(c.name)}')`,
+          { title: 'Manage who this cloud project is shared with', blocked: notMine }) : '',
+    !isSites ? menuItem('move', 'Move to a site…', `startMoveToSite('${j(c.id)}','${j(c.name)}')`,
+          { blocked: notMine }) : '',
     (!isSites && r.local) ? menuItem('swap', 'Check what differs…',
         `checkRealDifference('${j(c.id)}','${pj(r.local.path)}','${j(c.name || '')}')`,
         { title: 'Compare this against the local file and report what actually differs. Read-only.' }) : '',
-    menuItem('rename', `Rename this ${thing}…`, `startRename('cloud','${j(c.id)}','${j(c.name)}','${kindAttr}')`),
+    menuItem('rename', `Rename this ${thing}…`, `startRename('cloud','${j(c.id)}','${j(c.name)}','${kindAttr}')`,
+      { blocked: notMine }),
     menuItem('trash', `Delete this ${thing}`, `startDelete('cloud','${j(c.id)}','${j(c.name)}',false,'${kindAttr}')`,
-      { danger: true, title: 'A cloud delete cannot be undone.' }),
+      { danger: true, title: 'A cloud delete cannot be undone.', blocked: notMine }),
   ], `Actions for this ${thing}`);
 
   return `<div class="lr-cell cloud${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A local ${isSites ? 'folder' : '.esx'} shares code ${a(c.code)} — likely the same place"` : ''}>`
@@ -6345,8 +6425,12 @@ async function saveSettings() {
 const OWNER_FILTERS = ['all', 'mine', 'others'];
 const OWNER_FILTER_LABEL = { all: 'All', mine: 'Mine', others: 'Others' };
 
-let _ownerFilterDefault = 'all';      // what Settings says to open on
-let _ownerFilterState = 'all';        // what is on screen right now
+/* Mine, matching the shipped default in `tools/settings.py`. These two
+   disagreeing would mean the page opened on All for the moment before the
+   settings call came back, which is a flash of other people's projects and,
+   on a slow read, a list he might act on. */
+let _ownerFilterDefault = 'mine';     // what Settings says to open on
+let _ownerFilterState = 'mine';       // what is on screen right now
 let _ownerFilterOverridden = false;   // moved off the default by hand
 let _ownerFilterForcedReason = '';    // why we put it back to All ourselves
 
@@ -6458,12 +6542,35 @@ function renderOwnerFilterNotice() {
   if (currentTab === 'duplicates') { el.hidden = true; return; }
   const cur = ownerFilter();
 
+  /* **All** is the state worth explaining now, not Mine.
+
+     Mine is the shipped default, so a banner explaining it would fire on
+     every load of the ordinary case - which is how a notice stops being
+     read. All is the unusual one, and it is the one with a consequence: the
+     list carries other people's projects, and Ekahau will not let him change
+     those, so the actions on those rows are unavailable. Saying that once
+     above the list beats discovering it per row. */
   if (cur === 'all') {
-    if (!_ownerFilterForcedReason) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false;
     el.className = 'owner-notice is-info';
     el.innerHTML = '<span class="own-note-icon">&#9432;</span>'
-      + '<span class="own-note-text">' + e(_ownerFilterForcedReason) + '</span>';
+      + '<span class="own-note-text">'
+      + (_ownerFilterForcedReason
+          ? e(_ownerFilterForcedReason) + ' '
+          : '<b>Showing every owner.</b> ')
+      + 'Projects owned by other people are listed; renaming, deleting, '
+      + 'assigning, sharing and replacing are unavailable on those, because '
+      + 'Ekahau only lets the owner change a project.</span>'
+      + '<button class="btn btn-secondary own-note-btn" onclick="setOwnerFilterUI(\'mine\')">'
+      + 'Show only mine</button>';
+    return;
+  }
+
+  /* Mine is the default, so it only needs saying when he has moved off the
+     default himself - and Others always does, being genuinely unusual. */
+  if (cur === 'mine' && !_ownerFilterOverridden) {
+    el.hidden = true;
+    el.innerHTML = '';
     return;
   }
 

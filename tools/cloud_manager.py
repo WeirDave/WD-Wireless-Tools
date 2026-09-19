@@ -392,8 +392,27 @@ class EkahauAPI:
 
             body = (r.text or "").strip()
             snippet = body[:300] + ("…" if len(body) > 300 else "") if body else "no response body"
+            # Lead with what it means, not with the status and the path.
+            #
+            # "I got the failures that are listed there and I don't know what
+            # those failures are all about." What he was shown was
+            # `403 Forbidden on POST /site-management-api/v1/...` - which
+            # reads like a fault in this tool, and is not one: Ekahau
+            # understood the request and refused it. The plain sentence goes
+            # first and the endpoint stays afterwards, because it is still
+            # what makes a report diagnosable.
+            plain = {
+                401: "Ekahau did not accept the sign-in. Reconnect and try again.",
+                403: ("Ekahau refused this. The usual reason is that the "
+                      "project belongs to someone else - only its owner can "
+                      "change a project."),
+                404: "Ekahau no longer has that item. Refresh the list.",
+                409: "Ekahau says that conflicts with something already there.",
+                429: "Ekahau is rate-limiting; wait a moment and try again.",
+            }.get(r.status_code)
+            lead = (plain + " ") if plain else ""
             raise requests.HTTPError(
-                f"{r.status_code} {r.reason} on {method} {path} — {snippet}",
+                f"{lead}[{r.status_code} {r.reason} on {method} {path} — {snippet}]",
                 response=r,
             )
         return r

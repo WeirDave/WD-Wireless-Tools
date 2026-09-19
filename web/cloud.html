@@ -187,9 +187,13 @@
 
     <span class="owner-toggle" id="ownerToggle" role="group" aria-label="Filter by owner" hidden>
       <span class="owner-toggle-label">Owner:</span>
-      <button class="owner-btn" data-owner="all" title="Show projects whoever owns them."    onclick="setOwnerFilterUI('all')">All</button>
-      <button class="owner-btn" data-owner="mine" title="Show only projects your own Ekahau account owns."   onclick="setOwnerFilterUI('mine')">Mine</button>
+      <!-- Narrowest first: "it should go: your files, other users' files, and
+           then all files - not the other way around." The common case is the
+           one he lands on, and All is the deliberate end of the scale rather
+           than the starting point. -->
+      <button class="owner-btn" data-owner="mine" title="Show only projects your own Ekahau account owns." onclick="setOwnerFilterUI('mine')">Mine</button>
       <button class="owner-btn" data-owner="others" title="Show only projects owned by somebody else and shared with you." onclick="setOwnerFilterUI('others')">Others</button>
+      <button class="owner-btn" data-owner="all" title="Show projects whoever owns them. Actions that change a project are unavailable on other people&rsquo;s." onclick="setOwnerFilterUI('all')">All</button>
     </span>
     <button class="btn btn-blue" id="addNewBtn" onclick="showModal('createModal')">+ New Site</button>
     <button class="btn" id="liveBtn" onclick="toggleLive()" title="Live: auto-refresh from Ekahau Cloud (pauses while selecting or a dialog is open)">Live</button>

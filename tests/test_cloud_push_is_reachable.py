@@ -52,7 +52,12 @@ function slice(from, to) {
 // above the badges. Slicing from the badges alone compiles and then throws
 // `ic is not defined` on the first render - so the slice starts higher
 // rather than the helper being stubbed, because a stub would test the stub.
-const block = slice('const ICONS = {', '\nfunction siteDigest(')
+// `canPushToCloud` asks whether he owns the project, because replacing the
+// cloud copy deletes it. That pair of functions lives above the icons, so it
+// is sliced in rather than stubbed - a stub here would decide the answer this
+// file exists to check.
+const block = slice('function ownershipBlock(', '\nfunction _isExternal(')
+            + slice('const ICONS = {', '\nfunction siteDigest(')
             + slice('const MATCH_BADGE_SPEC = {', '\nfunction gutCell(r)');
 
 const WD = { esc: s => String(s == null ? '' : s),

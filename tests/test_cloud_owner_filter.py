@@ -238,26 +238,29 @@ class OwnerFilterBehaviour(unittest.TestCase):
             { ok: true, settings: { cloud: { default_owner_filter: 'mine' } } });
           loadDefaultOwnerFilter().then(() => {
             syncOwnerToggle();
-            check('a saved narrowing said nothing',
-                  notice.hidden === false && /Owner filter: Mine/.test(notice.innerHTML));
-            check('it did not say the narrowing is the saved default',
-                  /saved default/.test(notice.innerHTML));
+            /* Mine is the shipped default now, so announcing it would fire
+               on every load of the ordinary case - which is how a notice
+               stops being read at all. */
+            check('the ordinary default was announced anyway',
+                  notice.hidden === true);
+
+            setOwnerFilterUI('others');
+            check('a genuinely unusual narrowing said nothing',
+                  notice.hidden === false && /Owner filter: Others/.test(notice.innerHTML));
+            check('a saved override was not described as saved',
+                  /saved default/i.test(notice.innerHTML));
             check('it did not offer a way back to everything',
                   /setOwnerFilterUI/.test(notice.innerHTML));
 
-            /* A toolbar choice is saved now, so it says so. The "this
-               visit" wording has not gone - it belongs to the case that is
-               still temporary, a save that did not go through, and that is
-               asserted in test_a_filter_that_could_not_be_saved... above. */
-            setOwnerFilterUI('others');
-            check('a saved override was not described as saved',
-                  /saved default/i.test(notice.innerHTML));
-            check('the notice no longer names the filter in force',
-                  /Owner filter: Others/.test(notice.innerHTML));
-
+            /* All is the state worth flagging now. Nothing is hidden, but
+               the list carries other people's projects and the actions that
+               change a project are unavailable on those - which is better
+               said once above the list than discovered per row. */
             setOwnerFilterUI('all');
-            check('the notice stayed up when nothing was being hidden',
-                  notice.hidden === true);
+            check('showing every owner said nothing about it',
+                  notice.hidden === false);
+            check('it did not say why some actions will be unavailable',
+                  /only lets the owner change a project/.test(notice.innerHTML));
             done();
           });
         """)
@@ -282,12 +285,29 @@ class OwnerFilterBehaviour(unittest.TestCase):
 
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_the_page_opens_on_his_own_work_before_the_server_answers(self):
+        """Run, not read.
+
+        The page holds its own copy of the default for the moment before the
+        settings call returns. If that copy said `all` while the server
+        shipped `mine`, every load would flash the whole account - and on a
+        slow read, that is a list he might act on.
+        """
+        self.run_block("""
+          check('the page starts on something other than his own work',
+                ownerFilter() === 'mine' && defaultOwnerFilter() === 'mine');
+          done();
+        """)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
     def test_the_notice_stays_off_the_duplicates_tab(self):
         """Duplicates is a different list, which this filter does not touch."""
         self.run_block("""
           apiReply = () => Promise.resolve(
             { ok: true, settings: { cloud: { default_owner_filter: 'mine' } } });
           loadDefaultOwnerFilter().then(() => {
+            //: Others, because Mine is the default and says nothing.
+            setOwnerFilterUI('others');
             globalThis.currentTab = 'duplicates';
             syncOwnerToggle();
             check('a banner about hidden sites appeared over the duplicate list',
@@ -306,14 +326,22 @@ class OwnerFilterWiring(unittest.TestCase):
         self.js = CLOUD_JS.read_text(encoding="utf-8")
         self.html = CLOUD_HTML.read_text(encoding="utf-8")
 
-    def test_the_shipped_default_is_all(self):
-        """Everyone else's app must open exactly as it did before.
+    def test_the_shipped_default_is_mine(self):
+        """"the default for this whole entire thing should always be the
+        user's files, not everyone else's files."
 
-        "Mine" is one person's preference; making it the built-in would hide
-        shared work from every other installation on first launch.
+        This asserted `all`, on the reasoning that Mine was one person's
+        preference and the built-in should hide nothing. Two things overturned
+        it. He has been re-setting it on every launch for months - "I've hated
+        it - that's why I always hit it on Mine" - and All turned out not to
+        be neutral: it is the state in which the list carries colleagues'
+        projects, so it is the state in which an offered action can be refused
+        by Ekahau. Auto-assign proposed three and got three 403s.
         """
-        text = SETTINGS_PY.read_text(encoding="utf-8")
-        self.assertIn('"default_owner_filter": "all",', text)
+        from tools import settings as st
+        self.assertEqual("mine",
+                         st.DEFAULTS["cloud"]["default_owner_filter"])
+
 
     def test_the_default_is_not_kept_per_browser(self):
         """localStorage is how two machines came to disagree in the first place."""

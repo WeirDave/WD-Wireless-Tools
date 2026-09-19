@@ -423,6 +423,50 @@ that nothing renders. The Sync dialog spent a release telling him to use a
 button that was greyed out for every row he had, which reads as the tool lying
 to him. Either wire it or stop naming it.
 
+### A control that exists is a control that works
+
+**"I don't want the user to be the bug catcher."** That is the standard, in
+his words, said while he was working through the tool before a Monday looking
+for exactly these.
+
+Wherever the tool **can know in advance** that an operation will fail, it must
+not offer it. Not offered and then refused; not queued and then reported as an
+error. The control stays visible and named, marked unavailable, carrying the
+reason - vanishing is its own problem, because he goes looking for a control
+he has used before.
+
+Three of these turned up in one day, which is what made it a rule:
+
+* the Sync dialog naming a control that was greyed out for every row he had;
+* a download offered as the recommended action *after* a comparison had proved
+  the two files identical;
+* **Auto-assign proposing three assignments Ekahau answered `403 Forbidden`
+  to**, because the candidate set was gated on the **owner filter** rather
+  than on ownership, and he had it on All.
+
+That last one is the general trap and worth stating on its own: **a filter is
+a view, not a permission.** All is the correct thing to be on when you want to
+see everything, and it must never become consent to act on everything. Gate an
+action on the fact, not on what happens to be on screen.
+
+`ownershipBlock()` / `iOwn()` in `cloud.js` are the ownership half:
+non-empty means refused, and the string is the reason shown on the control.
+Ekahau only lets a project's owner change it, so assign, move, rename, delete,
+share and replace-cloud all need it. **Reads do not** - comparing, downloading
+and every local-side action work fine on a project shared with him, and
+refusing those would be the guard firing on a case that works, which is the
+failure described under "Unrecoverable earns friction" above.
+
+`tests/test_cloud_offers_only_what_can_work.py` holds both halves: nothing is
+refused on his own project, and nothing that needs ownership is offered on
+anyone else's.
+
+**Where the tool genuinely cannot know in advance**, the failure explains
+itself in plain language and shows the server's message in full. A raw status
+and an endpoint path reads as a fault in this tool, and a message clipped at
+`{"s…` - which is what he was shown - is no better than a silent failure. He
+had to work out the cause himself from what the tool would not display.
+
 ### Browser verification — Chrome, Edge and Firefox, every time
 
 **Standing rule from the user: anything user-facing is checked in all three.**

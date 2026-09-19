@@ -82,6 +82,9 @@ function rdAction(icon, label, call, opts) {
 
 // `stalenessBadgeHtml` asks this whether the row has anything left to do.
 eval(slice(src, 'function comparisonIsSettled(', 'function isOutOfSync('));
+// `canPushToCloud` asks whether he owns the project, so the ownership pair
+// comes in too - stubbing it would decide the answer under test.
+eval(slice(src, 'function ownershipBlock(', '\nfunction _isExternal('));
 eval(slice(src, 'const PULLABLE_MATCH_TYPES', 'function compareResultFor('));
 eval(slice(src, 'function rdUnavailable(', 'function stalenessBadgeHtml('));
 eval(slice(src, 'function stalenessBadgeHtml(', '\nfunction gutCell'));

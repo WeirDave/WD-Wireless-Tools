@@ -1149,7 +1149,19 @@ body.tool-walls .btn-sm { padding: 6px 12px; font-size: 12px; }
   margin-top: 3px;
 }
 
-.op-stage.err { color: var(--red-light); }
+/* A failure wraps. A progress line is transient and one line of it is
+   enough, but `403 Forbidden on POST /site-management-api/v1/sites/{id}/
+   datasets - {"s...` cut off exactly where the server's explanation starts,
+   and an error he cannot read is no better than a silent one - he had to
+   work out the cause himself from what the tool would not show him. */
+.op-stage.err {
+  color: var(--red-light);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  max-height: 9em;
+  overflow-y: auto;
+}
 
 .op-bar {
   position: relative; height: 6px;

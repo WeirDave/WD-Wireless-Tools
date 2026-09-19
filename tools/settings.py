@@ -96,7 +96,16 @@ DEFAULTS = {
         # full site list looked like three sites.  Choosing what to look at
         # for a minute and choosing what to open on are different decisions,
         # and only the second one is recorded.
-        "default_owner_filter": "all",
+        # "the default for this whole entire thing should always be the user's
+        # files, not everyone else's files... I've hated it - that's why I
+        # always hit it on Mine."
+        #
+        # It is also the safer default, which is what settled it: on All the
+        # list carries colleagues' projects, and an action offered on one of
+        # those is an action Ekahau refuses. Auto-assign proposed three and
+        # got three 403s. Opening on his own work is both what he wants and
+        # the state in which every offered action can succeed.
+        "default_owner_filter": "mine",
     },
     "rename": {
         "folder_format": "",
