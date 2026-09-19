@@ -1,6 +1,6 @@
 {
   "note": "Per-file counts of assertions made against the text of a source file, as at the sweep that introduced this ratchet. Existing debt is tolerated; growth is not. Lower a number when you convert a test to one that executes - never raise one.",
-  "total": 352,
+  "total": 351,
   "files": {
     "test_aim_table_fits.py": 2,
     "test_ap_color_order.py": 21,
@@ -24,7 +24,7 @@
     "test_cloud_row_detail_band.py": 6,
     "test_cloud_sync_all_dialog.py": 2,
     "test_cloud_sync_everything.py": 2,
-    "test_cloud_unshared_filter.py": 8,
+    "test_cloud_unshared_filter.py": 7,
     "test_color_contrast.py": 4,
     "test_compass_page.py": 3,
     "test_empty_ap_reason.py": 2,

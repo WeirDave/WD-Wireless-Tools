@@ -187,13 +187,46 @@ class TheCardBehavesLikeTheOthersTests(unittest.TestCase):
     def test_an_empty_list_says_what_emptied_it(self):
         self.assertIn("Everything you own has been shared", self.js)
 
-    def test_the_sites_tab_matches_a_site_by_its_children(self):
+    def _site_has_unshared(self, kids):
+        """Run the real predicate rather than read it.
+
+        This used to assert that the source of `_siteHasUnshared` contained
+        the strings `kids.matched` and `kids.cloudOnly`, which pinned one
+        implementation of the walk and would have passed with the answer
+        inverted. It executes now. The owner test the real one applies is
+        stubbed open, so this file keeps asking only its own question.
+        """
+        script = (
+            "globalThis._passOwnerForCounts = () => true;\n"
+            "eval(slice('function _siteHoldsVisible', "
+            "'\\nfunction _siteHasUnassigned'));\n"
+            "eval(slice('function _siteHasUnshared', "
+            "'\\n/* And a site is not external'));\n"
+            "console.log(JSON.stringify({v: "
+            "_siteHasUnshared({children: data.probe}, null)}));"
+        )
+        return _node(script, {"currentUser": ME, "probe": kids})["v"]
+
+    def test_a_site_holding_an_unshared_project_matches(self):
         """A site row is shown when a project inside it is unshared."""
-        self.assertIn("_siteHasUnshared", self.js)
-        window = self.js[self.js.index("function _siteHasUnshared"):]
-        window = window[:window.index("function _siteHasExternal")]
-        self.assertIn("kids.matched", window)
-        self.assertIn("kids.cloudOnly", window)
+        self.assertTrue(self._site_has_unshared(
+            {"matched": [{"cloud": _cloud(shared=[]), "local": None}],
+             "cloudOnly": [], "localOnly": []}))
+        self.assertTrue(self._site_has_unshared(
+            {"matched": [], "cloudOnly": [_cloud(shared=[])],
+             "localOnly": []}))
+
+    def test_a_site_whose_projects_are_all_shared_does_not(self):
+        them = ["colleague@example.org"]
+        self.assertFalse(self._site_has_unshared(
+            {"matched": [{"cloud": _cloud(shared=them), "local": None}],
+             "cloudOnly": [_cloud(shared=them)], "localOnly": []}))
+
+    def test_a_site_is_never_unshared_on_its_own_account(self):
+        """"you don't actually share sites on Ekahau." Sharing belongs to a
+        project, so a site with nothing in it answers this with no."""
+        self.assertFalse(self._site_has_unshared(
+            {"matched": [], "cloudOnly": [], "localOnly": []}))
 
 
 if __name__ == "__main__":

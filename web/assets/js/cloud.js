@@ -1197,11 +1197,36 @@ function _isUnassignedProject(cloudObj) {
 
 /* A site is never unassigned - assignment is something a project has. It is
    listed here when it holds one, the same shape as External. */
-function _siteHasUnassigned(cloudObj, localObj) {
+/* Does this site hold a project that matches, *and that he can see*?
+
+   Every site-level question in this file is really this one question with a
+   different predicate, and each copy of it had the same hole: it walked the
+   children and never asked the owner filter, while `renderTreeChildren` draws
+   them through `passOwner`. So on Mine, a colleague's project inside one of
+   his sites made the site match, made the chip count it, and was then not
+   drawn - "it says there's three items, and when I click it there's only two
+   ESX files showing", and "local only, which also has a three, and quite
+   literally nothing shows".
+
+   One helper, because three copies of a rule is three chances to fix two of
+   them. `pred(cloud, local)` is the project-level question. */
+function _siteHoldsVisible(cloudObj, localObj, pred) {
   const kids = (cloudObj && cloudObj.children) || (localObj && localObj.children) || null;
   if (!kids) return false;
-  return (kids.matched || []).some(pr => _isUnassignedProject(pr.cloud))
-      || (kids.cloudOnly || []).some(_isUnassignedProject);
+  const ok = (row) => _passOwnerForCounts(row.cloud, row.local) && pred(row);
+  return (kids.matched || []).some(p => ok({
+           status: p.namesDiffer ? 'mismatch' : 'synced', cloud: p.cloud,
+           local: p.local, matchType: p.matchType,
+           staleness: p.staleness || null, namesDiffer: !!p.namesDiffer,
+           differenceKind: p.differenceKind || null }))
+      || (kids.cloudOnly || []).some(c => ok({
+           status: 'orphan', cloud: c, local: null }))
+      || (kids.localOnly || []).some(l => ok({
+           status: 'orphan', cloud: null, local: l }));
+}
+
+function _siteHasUnassigned(cloudObj, localObj) {
+  return _siteHoldsVisible(cloudObj, localObj, (r) => _isUnassignedProject(r.cloud));
 }
 
 function _isExternal(cloudObj, localObj) {
@@ -1250,21 +1275,27 @@ function _isUnshared(cloudObj) {
   return others.length === 0;
 }
 
+/* A site is not unshared, because a site is not shared. It survives this
+   filter only as somewhere to hang the projects that match. */
 function _siteHasUnshared(cloudObj, localObj) {
-  if (_isUnshared(cloudObj)) return true;
-  const kids = (cloudObj && cloudObj.children) || (localObj && localObj.children) || null;
-  if (!kids) return false;
-  return (kids.matched || []).some(p => _isUnshared(p.cloud))
-      || (kids.cloudOnly || []).some(c => _isUnshared(c));
+  return _siteHoldsVisible(cloudObj, localObj, (r) => _isUnshared(r.cloud));
 }
 
+/* And a site is not external either.
+
+   "the weird thing about the three external is that the site names are
+   exactly that - just site names. So site names should not be external. We
+   should only be concerned with projects."
+
+   He is right, and it is the same category error as sharing. Ekahau shares
+   *projects*; a site in an account belongs to that account. This used to open
+   with `if (_isExternal(cloudObj, localObj)) return true`, which asked a
+   project question of a site, and the chip then counted the site as one
+   external item - so "3 external" was three sites, a number no list of
+   projects could ever add up to. The site survives the filter only as
+   somewhere to hang the projects that match. */
 function _siteHasExternal(cloudObj, localObj) {
-  if (_isExternal(cloudObj, localObj)) return true;
-  const kids = (cloudObj && cloudObj.children) || (localObj && localObj.children) || null;
-  if (!kids) return false;
-  return (kids.matched || []).some(p => _isExternal(p.cloud, p.local))
-      || (kids.cloudOnly || []).some(c => _isExternal(c, null))
-      || (kids.localOnly || []).some(l => _isExternal(null, l));
+  return _siteHoldsVisible(cloudObj, localObj, (r) => _isExternal(r.cloud, r.local));
 }
 
 function _siteOwnedVisible(cloudObj, localObj) {
@@ -1399,7 +1430,9 @@ function updateDashboard() {
 
 
     const isSitesTab = currentTab === 'sites';
-    const rowIsExternal = (c, l) => isSitesTab ? _siteHasExternal(c, l) : _isExternal(c, l);
+    /* On the Sites tab the external count is `kidExternal` - the projects,
+       gathered by `walkKids`. A site is never itself external. */
+    const rowIsExternal = (c, l) => !isSitesTab && _isExternal(c, l);
     /* On the Sites tab every count is about the projects inside the sites.
 
        "sites should not be counted in those - we should only have a button for
@@ -1407,16 +1440,37 @@ function updateDashboard() {
        mismatches, cloud-only and local-only counted folders, which is what had
        "cloud only" reading 0 while showing two projects. */
     let kidMismatches = 0, kidCloudOnly = 0, kidLocalOnly = 0;
+    let kidExternal = 0;
+    /* Through the owner filter, the same as the rows.
+
+       This walked every child of every visible site and counted the lot.
+       `renderTreeChildren` draws them through `passOwner`, so on any setting
+       but All the chip and the list were counting different sets - which is
+       "cloud only says three and two show", and "local only says three and
+       nothing shows" for a site whose loose files belong to a colleague. */
     const walkKids = (kids) => {
       if (!kids) return;
+      const mine = (c, l) => _passOwnerForCounts(c, l);
       (kids.matched || []).forEach(p => {
+        if (!mine(p.cloud, p.local)) return;
         if (p.matchType === 'exact') nameMatches++;
         if (_countsAsStale(p)) staleCount++;
         if (p.namesDiffer) kidMismatches++;
+        if (_isExternal(p.cloud, p.local)) kidExternal++;
         bumpType(p.cloud, p.local);
       });
-      (kids.cloudOnly || []).forEach(c => { kidCloudOnly++; bumpType(c, null); });
-      (kids.localOnly || []).forEach(l => { kidLocalOnly++; bumpType(null, l); });
+      (kids.cloudOnly || []).forEach(c => {
+        if (!mine(c, null)) return;
+        kidCloudOnly++;
+        if (_isExternal(c, null)) kidExternal++;
+        bumpType(c, null);
+      });
+      (kids.localOnly || []).forEach(l => {
+        if (!mine(null, l)) return;
+        kidLocalOnly++;
+        if (_isExternal(null, l)) kidExternal++;
+        bumpType(null, l);
+      });
     };
     let externalOrphans = 0;
     (data.matched || []).forEach(p => {
@@ -1467,13 +1521,18 @@ function updateDashboard() {
        the sites themselves, which "unmatched sites" now covers. */
     let looseCloud = 0;
     if (isSitesTab) {
+      /* The no-site band holds projects too, and the list draws them under
+         every project filter they answer - so they are counted under each
+         one as well, not only under cloud-only. */
       ((data.orphans && data.orphans.cloudOnly) || []).forEach(c => {
-        if (_passOwnerForCounts(c, null)) looseCloud++;
+        if (!_passOwnerForCounts(c, null)) return;
+        looseCloud++;
+        if (_isExternal(c, null)) kidExternal++;
       });
     }
     _setCount('dCloudOnly', isSitesTab ? (kidCloudOnly + looseCloud) : cloudOnly);
     _setCount('dLocalOnly', isSitesTab ? kidLocalOnly : localOnly);
-    _setCount('dExternal', externalCount);
+    _setCount('dExternal', isSitesTab ? kidExternal : externalCount);
     _showFilter('external', cloudy && externalCount > 0);
 
     // Counted through the owner filter, like every other card, so the number
@@ -1562,7 +1621,14 @@ function updateDashboard() {
     }
     _setCount('dUnassigned', noSite);
   }
-  if (!isProj && activeFilter === 'unassigned') { activeFilter = 'all'; }
+  /* `unassigned` is offered on both cloud tabs, so it is not reset on either.
+
+     This read `!isProj`, and he works on the Sites tab - so every call to
+     `updateDashboard` silently put him back on All: "I clicked one and it
+     took me out of the filter and put me back to All, which is bad
+     behaviour." A filter lasts until he changes it. The guard below stays
+     because that one is about a filter whose question cannot be asked at
+     all - no signed-in user means no "mine" to compare against. */
   if (activeFilter === 'unshared' && !((data && data.currentUser) || '')) {
     activeFilter = 'all';
   }
@@ -2447,71 +2513,63 @@ function renderLedger(hit) {
   //: spellings of this is what made the header say three over a list of six.
   const directIsStale = isOutOfSync;
 
-  const anyChildMatches = (row, predicate) => {
-    const kids = (row && row.cloud && row.cloud.children)
-              || (row && row.local && row.local.children) || null;
-    if (!kids) return false;
-    const check = (arr) => (arr || []).some(p => predicate({
-      cloud: p.cloud, local: p.local, matchType: p.matchType, staleness: p.staleness,
-    }));
-    return check(kids.matched) || check(kids.cloudOnly) || check(kids.localOnly);
-  };
-  const rowMatchesType = (row) =>
-    directMatchesType(row) || anyChildMatches(row, directMatchesType);
+  /* `anyChildMatches` and the three `rowIs…` wrappers that used it are gone.
+     Each one existed to let a site answer a project's question, and
+     `_siteHoldsVisible` is that idea done once and through the owner
+     filter. */
+  /* One question about a project, asked of a project.
 
-  const hasKids = (row) =>
-    !!((row && row.cloud && row.cloud.children) || (row && row.local && row.local.children));
-  const rowIsNameMatch = (row) => {
-    if (!hasKids(row)) return directIsNameMatch(row);
-    return anyChildMatches(row, directIsNameMatch);
+     "the unit of work in this tool is the project. Sites are how projects are
+     organised." Every filter but one is a question about a project, so this
+     is that question - and a **site** is visible under it exactly when it
+     holds at least one project that answers it and that he can see.
+
+     That single rule replaces a per-filter site clause each of which had its
+     own idea of what a site was: three of them let a site answer on its own
+     behalf, and none of them asked the owner filter, which is how a chip came
+     to count rows the list would not draw. */
+  const projPass = (st, row) => {
+    if (typeFilter) return directMatchesType(row);
+    if (showStale) return directIsStale(row);
+    if (showNameMatches) return directIsNameMatch(row);
+    if (showUnassigned) return _isUnassignedProject(row && row.cloud);
+    if (showUnshared) return _isUnshared(row && row.cloud);
+    if (showExternal) return _isExternal(row && row.cloud, row && row.local);
+    if (showOrphCloud) return st === 'orphan' && !!(row && row.cloud && !row.local);
+    if (showOrphLocal) return st === 'orphan' && !!(row && row.local && !row.cloud);
+    if (showMis && st === 'mismatch') return true;
+    if (showOrph && st === 'orphan'
+        && _isExternal(row && row.cloud, row && row.local)) return false;
+    return (st === 'synced' && showSynced) || (st === 'mismatch' && showMis)
+        || (st === 'orphan' && showOrph);
   };
-  const rowIsStale = (row) => {
-    if (directIsStale(row)) return true;
-    if (!hasKids(row)) return false;
-    return anyChildMatches(row, directIsStale);
-  };
+
   const pass = (st, row) => {
-    if (typeFilter) return rowMatchesType(row);
-    if (showStale) return rowIsStale(row);
-    if (showNameMatches) return rowIsNameMatch(row);
-    /* A site with nothing on the other side, either way round. The only
-       filter on this tab that asks about folders rather than files. */
+    /* A site with nothing on the other side, either way round. The one chip
+       that asks about folders and sites, and it says so in its name. */
     if (showUnmatchedSites) {
       return isSites && !!(row && ((row.cloud && !row.local) || (row.local && !row.cloud)));
     }
-    if (showUnassigned) {
-      return isSites ? _siteHasUnassigned(row && row.cloud, row && row.local)
-                     : _isUnassignedProject(row && row.cloud);
-    }
-    if (showUnshared) {
-      /* A site is never the answer here - sharing is a project. The site row
-         survives so its projects have somewhere to hang, and
-         `_siteMatchesFilterAlone` returns false for this filter so the
-         children are filtered rather than shown wholesale. */
-      return isSites
-        ? _siteHasUnshared(row && row.cloud, row && row.local)
-        : _isUnshared(row && row.cloud);
-    }
-    if (showExternal) {
+    if (!isSites) return projPass(st, row);
 
-
-      return isSites
-        ? _siteHasExternal(row && row.cloud, row && row.local)
-        : _isExternal(row && row.cloud, row && row.local);
-    }
-    if (showOrphCloud) return st === 'orphan' && row && row.cloud && !row.local;
-    if (showOrphLocal) return st === 'orphan' && row && row.local && !row.cloud;
-
-
-    if (showOrph && st === 'orphan' && _isExternal(row && row.cloud, row && row.local)) return false;
-    return (st === 'synced' && showSynced) || (st === 'mismatch' && showMis) || (st === 'orphan' && showOrph);
+    /* Under All a site stands on its own - an empty site is still a site he
+       may want to file something into. Under any narrower filter it earns its
+       place by holding a matching project. */
+    if (activeFilter === 'all') return projPass(st, row);
+    return _siteHoldsVisible(row && row.cloud, row && row.local,
+                             (kid) => projPass(kid.status, kid));
   };
 
   const own = ownerFilter();
   const me = ((data && data.currentUser) || '').toLowerCase();
   const passOwner = buildPassOwner(own, me);
 
-  if (isSites) return renderSitesTree(hit, pass, passOwner, own !== 'all' && !!me);
+  /* `projPass` goes through too. `pass` answers "should this *site* be
+     drawn"; the rows inside a site are projects and are filtered by the
+     project question itself. Handing the site predicate to the children
+     asked each project whether it contained a matching project, which
+     nothing does, so every child disappeared. */
+  if (isSites) return renderSitesTree(hit, pass, passOwner, own !== 'all' && !!me, projPass);
 
   const rows = [];
   (data.matched || []).forEach(p => rows.push({
@@ -2588,7 +2646,7 @@ function renderLedger(hit) {
   return h;
 }
 
-function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
+function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
   const rows = [];
   (data.matched || []).forEach(p => rows.push({
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'sites',
@@ -2648,13 +2706,16 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
      in the cloud with nothing matching on disk. Both filters select them, and
      both counts include them - "which is correct, which means the number
      should actually be 2, not 0". */
-  const showUnassigned = activeFilter === 'all' || activeFilter === 'unassigned'
-                      || activeFilter === 'orphans-cloud';
-  const orphans = (showUnassigned
-    ? ((data.orphans && data.orphans.cloudOnly) || [])
-    : [])
+  /* A cloud project filed under no site is a project like any other, so it
+     answers to the project filter rather than to a list of two filters that
+     were remembered. Naming the filters here meant "not shared" counted
+     these and then drew none of them, because the band was only rendered for
+     `unassigned` and `orphans-cloud`. */
+  const orphans = ((data.orphans && data.orphans.cloudOnly) || [])
     .filter(o => hit(o.name) && passOwner({ cloud: o, local: null })
-      && (!activeLetter || treeGroupOf(o.name) === activeLetter));
+      && (!activeLetter || treeGroupOf(o.name) === activeLetter)
+      && (activeFilter === 'all' || !projPass
+          || projPass('orphan', { cloud: o, local: null })));
 
   const nCloud = visible.filter(r => r.cloud).length + orphans.length;
   const nLocal = visible.filter(r => r.local).length;
@@ -2671,7 +2732,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
                     staleness: p.staleness || null,
                     differenceKind: p.differenceKind || null };
       if (passOwner && !passOwner(row)) return;
-      if (activeFilter !== 'all' && !pass(row.status, row)) return;
+      if (activeFilter !== 'all' && !(projPass || pass)(row.status, row)) return;
       childPairs.push(row);
     });
   });
@@ -2736,9 +2797,13 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
          live, and it is given exactly the two `renderTreeChildren` filters
          its rows with - so the header counts the rows underneath it rather
          than the contents of the site. */
+      /* `projPass`, not `pass`. The digest counts the rows drawn underneath,
+         and those are projects - handing it the site predicate asks each
+         project whether it contains a matching project, which reads 0 for
+         every site. */
       r.digest = siteDigest(children, {
         passOwner,
-        passFilter: activeFilter === 'all' ? null : pass,
+        passFilter: activeFilter === 'all' ? null : (projPass || pass),
       });
       {
       const _stripe = (z++ % 2) === 1;
@@ -2771,7 +2836,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive) {
       if (open) {
         h += renderTreeChildren(children, hit, passOwner,
                                 r.cloud && r.cloud.id, r.cloud && r.cloud.name,
-                                siteMatchesAlone ? null : pass);
+                                siteMatchesAlone ? null : (projPass || pass));
       }
     });
   });
@@ -3045,17 +3110,20 @@ function _visibleSiteRowsForBatch() {
    contents. Only the filters that can be true of a site itself are asked -
    everything else is a question about a file, and a site can only answer it
    through its children. */
+/* Can a site be the answer to this filter, on its own?
+
+   "site names should not be considered projects." For all but one filter the
+   answer is no: the unit of work is the project, and a site appears only as
+   the heading its matching projects hang under. A site that answered a
+   project filter by itself put a row in front of him he could not act on in
+   the way the filter implied, and added itself to a count of projects.
+
+   `unmatched-sites` is the exception, deliberately and by name - it is the
+   one chip that asks a question about folders and sites. */
 function _siteMatchesFilterAlone(r) {
   const c = r && r.cloud, l = r && r.local;
-  switch (activeFilter) {
-    case 'external':  return _isExternal(c, l);
-    case 'unshared':  return _isUnshared(c);
-    case 'mismatches': return r && r.status === 'mismatch';
-    case 'unmatched-sites': return !!((c && !l) || (l && !c));
-    case 'orphans-cloud': return false;   // a question about the files inside
-    case 'orphans-local': return false;
-    default: return false;
-  }
+  if (activeFilter === 'unmatched-sites') return !!((c && !l) || (l && !c));
+  return false;
 }
 
 function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteName, passFilter) {

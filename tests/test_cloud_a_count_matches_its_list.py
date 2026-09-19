@@ -296,17 +296,18 @@ class ACountIsTheLengthOfItsOwnList(unittest.TestCase):
         """Filing nothing away: All means all."""
         self.assertEqual(2, self.out["underAll"]["unassignedRows"])
 
-    def test_a_site_that_matched_on_its_own_keeps_its_contents(self):
-        """"I'm just seeing 3 folders that don't have projects underneath
-        them."
-
-        A site owned by somebody else satisfies "external" by itself. The same
-        test was then applied to every project inside it - all of which are his
-        - so the folder survived the filter and everything in it did not.
-        """
-        self.assertEqual(1, self.out["external"]["siteRows"])
-        self.assertEqual(2, self.out["external"]["childRows"],
-                         "the site matched on its own account and was emptied")
+    # `test_a_site_that_matched_on_its_own_keeps_its_contents` was here, and
+    # it asserted the behaviour that "site names should not be external" has
+    # since replaced: a site owned by somebody else satisfied `external` by
+    # itself, the same test was applied to each project inside it - all of
+    # which are his - and the folder survived while its contents did not.
+    # Showing the contents fixed the symptom and kept the category error.
+    #
+    # It is not rewritten in place because this probe hands `renderSitesTree`
+    # a predicate it writes itself, so it cannot exercise the real rule - the
+    # weakness that let the owner-filter defect through here too.
+    # `test_cloud_a_chip_agrees_with_its_list_for_every_owner.py` drives the
+    # real `renderLedger` and holds the new rule.
 
     def test_cloud_only_counts_the_site_less_projects_it_shows(self):
         """"it says zero cloud only and it shows me two unassigned projects on

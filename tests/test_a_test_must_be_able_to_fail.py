@@ -88,7 +88,7 @@ class TheSourceStringShapeDoesNotGrow(unittest.TestCase):
             "these test files gained assertions that read a source file "
             "instead of running it - see this module's docstring for the "
             "pattern to use instead: "
-            + ", ".join("%s %d→%d" % (k, v[0], v[1])
+            + ", ".join("%s %d -> %d" % (k, v[0], v[1])
                         for k, v in sorted(worse.items())))
 
     def test_the_baseline_is_not_quietly_raised(self):
@@ -108,7 +108,7 @@ class TheSourceStringShapeDoesNotGrow(unittest.TestCase):
                   for name, n in self.baseline["files"].items()
                   if n > now.get(name, 0)}
         if better:
-            note = ", ".join("%s %d→%d" % (k, v[0], v[1])
+            note = ", ".join("%s %d -> %d" % (k, v[0], v[1])
                              for k, v in sorted(better.items()))
             print("  baseline slack, lower these when convenient: " + note)
 
