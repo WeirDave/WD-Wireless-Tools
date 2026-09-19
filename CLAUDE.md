@@ -897,6 +897,71 @@ passed every one of the assertions it replaced.
 execute and files that do not, and `scripts/audit_handlers_exist.py` is the
 handler check.
 
+## The backups folder, and the two things that were wrong with it
+
+**Cloud Manager's Backup Folder tab is the only window onto what the suite
+keeps.** Six places copy a file aside before overwriting it, every one of them
+reports a path, and until v2.137.0 there was no way to open any of it from
+inside the tool - *"I know we have no window to it right now."* The tab sits
+next to Duplicate Projects, groups every copy under the file it was taken of,
+and each row restores, shows in Explorer, or deletes.
+
+Two defects were found while building it, and both had been silent.
+
+**Retention was inert, and had been since the backups folder existed.** Cloud
+Manager stopped writing a sibling `.previous-` copy and started filing it under
+`<project folder>/backups/<site>/`, which is what he asked for. `prune_for`
+went on looking in `target.parent`, where there is now nothing at all. So "keep
+3" kept every generation ever taken, of every project a sync had replaced,
+since the day the folder appeared, and the number in Settings did nothing.
+Measured on a fixture: four generations written with keep=2 left four on disk.
+`prune_for` takes `extra_dirs` now and `_prune_backups` passes the folder the
+backup actually went into.
+
+**And `classify`'s owner is not where a filed backup came from.** For
+`backups/<site>/Survey.previous-<stamp>.esx` it reports
+`backups/<site>/Survey.esx` - a path that has never existed - because that
+value groups generations for retention rather than naming a live file. A
+restore that trusted it would write the recovered project into the folder the
+sync deliberately does not read, and report success: the file safe, invisible,
+and not where he went to look for it. `restore_target` walks the mapping
+backwards, and `BACKUP_DIR_NAME` is defined in `tools/backups.py` with
+`cloud_manager`'s copy asserted equal to it, because a drift between those two
+names would silently send every restore into the backups folder.
+
+Three decisions in the feature itself, each one an existing rule applied:
+
+* **Restoring keeps what it replaces.** The live file is copied into the
+  backups folder first, so a restore of the wrong generation is one more
+  restore away from being undone - and the backup being restored is left on
+  disk rather than consumed.
+* **The confirm names the destination**, read off the same `restoreTo` the
+  server writes to. Not a sentence pinned by a test; the backups wording is
+  what that rule was written against.
+* **The server re-derives what may go.** `remove` looks every path the page
+  sends up in a fresh scan and skips anything that is no longer a backup under
+  a root we own - same rule as the realign action and the housekeeping sweep.
+
+An install backup is listed and is **not** restorable from here: rolling an
+install back has to stop the server first, so the row points at About instead
+of offering a button that cannot work.
+
+`tests/test_backup_folder.py` drives the files on disk; `tests/
+test_backup_folder_page.py` renders the real rows, pulls each `onclick` back
+out of the markup and executes it. Both go red under mutation - the row index
+drifting by one, the confirm dropping the path, the restore never reaching the
+server, `restore_target` losing the folder mapping.
+
+**One tab-wide trap worth knowing, because Duplicates had it too.** Neither
+local-folder tab draws through `renderRows` on the way in - each goes straight
+to its own renderer - so anything `renderRows` takes down stays up. The A-Z
+rail did exactly that, and four filter chips set from inside the cloud-count
+branch kept whatever they last said, so arriving at the Backup Folder tab could
+greet him with "29 out of sync" about a list that was no longer there. Both are
+handled in `_syncTabUI` and `updateDashboard` now, keyed off `isLocalOnlyTab`
+and `cloudy` rather than off `!isDup`, which is the form that had already been
+missed once.
+
 ## Known gotchas
 
 - **Write the character, not an escape for it - and never let a patch script

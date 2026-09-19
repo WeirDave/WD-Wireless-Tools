@@ -1759,19 +1759,28 @@ def _dup_key(name):
     return re.sub(r"\s+", " ", stem).strip()
 
 
-def _prune_backups(target, protect=None):
+def _prune_backups(target, protect=None, extra_dir=None):
     """Trim old backups of `target` to the configured count.
 
     Called only after the new file is safely in place, and never allowed to
     fail the operation: a project that was written correctly must not report
     an error because tidying up afterwards did not work.
+
+    `extra_dir` is the folder the backup was actually filed in, and passing it
+    is not optional bookkeeping - it is the whole of retention. Backups moved
+    out of the project folder and into `backups/<site>/`, and this went on
+    looking beside the live `.esx`, where there is now nothing. "Keep 3" kept
+    everything, of every project, for as long as that folder had existed.
+    `tests/test_backup_folder.py` writes four generations with keep=2 and
+    counts what is left, which is the assertion the old code fails.
     """
     try:
         from tools import backups as _b
         from tools import settings as _s
         keep = (_s.load_settings().get("global") or {}).get("backup_keep")
         keep = _b.DEFAULT_KEEP if keep is None else int(keep)
-        return _b.prune_for(target, keep=keep, protect=protect)
+        return _b.prune_for(target, keep=keep, protect=protect,
+                            extra_dirs=(extra_dir,) if extra_dir else ())
     except Exception:
         return None
 
@@ -1868,7 +1877,8 @@ def _rewrite_project_json(src, mutate, output_dir, keep_backups=True):
 
     _ESX_META_CACHE.pop(str(src), None)
     _ESX_TYPE_CACHE.pop(str(src), None)
-    _prune_backups(src, protect=str(backup) if backup else None)
+    _prune_backups(src, protect=str(backup) if backup else None,
+                   extra_dir=(backup.parent if backup else None))
     return {"ok": True, "unchanged": False, "path": str(src),
             "backup": str(backup) if backup else None}
 
@@ -2889,7 +2899,8 @@ class CloudManager:
         _ESX_META_CACHE.pop(str(src), None)
         _ESX_TYPE_CACHE.pop(str(src), None)
         # The new file is in place; only now is an older generation expendable.
-        _prune_backups(src, protect=str(backup) if backup else None)
+        _prune_backups(src, protect=str(backup) if backup else None,
+                       extra_dir=(backup.parent if backup else None))
 
 
         new_fs_mtime = int(src.stat().st_mtime)

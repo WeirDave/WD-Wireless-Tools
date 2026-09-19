@@ -767,9 +767,82 @@ SETTINGS_ACTIONS = {
                                      or ("settings", "files", "browser")),
 }
 
+def _backups_list(_d):
+    """Everything kept, grouped by the file it was taken of.
+
+    Cloud Manager's Backup Folder tab is the only window onto this. Until it
+    existed the backups were written, counted in one line in Settings, and
+    otherwise unreachable from inside the tool - so the copy taken before a
+    sync replaced a project could only be found by opening a file manager and
+    knowing where to look. The retention number is sent with the list because
+    the first question anyone asks a list like this is why there are three of
+    something and not thirty.
+    """
+    from tools import backups as _b
+    roots = _backup_roots()
+    found = _b.browse(roots)
+    keep = (suite_settings.load_settings().get("global") or {}).get("backup_keep")
+    return {"ok": True, "groups": found["groups"], "count": found["count"],
+            "bytes": found["bytes"], "human": _b.human_size(found["bytes"]),
+            "roots": found["roots"],
+            "keep": _b.DEFAULT_KEEP if keep is None else int(keep)}
+
+
+def _backups_restore(d):
+    """Put one backup back over the file it was taken of."""
+    from tools import backups as _b
+    path = (d.get("path") or "").strip()
+    if not path:
+        return {"error": "No backup was named."}
+    res = _b.restore(path, _backup_roots())
+    if res.get("ok"):
+        res["human"] = _b.human_size(res.get("bytes") or 0)
+    return res
+
+
+def _backups_delete(d):
+    """Delete the backups the page named, re-checking each one here.
+
+    The list the browser holds can be minutes old. `remove` looks every path
+    up in a fresh scan and skips whatever is no longer a backup under a root
+    we own, so a stale page cannot delete a file that has changed underneath
+    it - the same rule the realign action and the housekeeping sweep follow.
+    """
+    from tools import backups as _b
+    paths = d.get("paths") or ([d["path"]] if d.get("path") else [])
+    res = _b.remove(paths, _backup_roots())
+    res["human"] = _b.human_size(res.get("freed") or 0)
+    return res
+
+
+def _backups_reveal(d):
+    """Open the folder a backup sits in.
+
+    Its own root check rather than Cloud Manager's: `reveal_in_explorer` asks
+    whether the path is inside the *project* folder, which is true of every
+    project backup and false of the previous-install folders the updater
+    keeps beside the install. The tab lists both, so a Show button that
+    worked on some rows and refused others would read as a fault.
+    """
+    from tools import backups as _b
+    path = (d.get("path") or "").strip()
+    if not path:
+        return {"error": "No path was named."}
+    if not _b.inside_roots(path, _backup_roots()):
+        return {"error": "That file is not in a folder this tool looks after."}
+    target = Path(path)
+    if not target.exists():
+        return {"error": "That file is no longer on disk. Refresh the list."}
+    return reveal_tool.reveal(target)
+
+
 BACKUP_ACTIONS = {
-    "scan":  _backups_scan,
-    "purge": _backups_purge,
+    "scan":    _backups_scan,
+    "purge":   _backups_purge,
+    "list":    _backups_list,
+    "restore": _backups_restore,
+    "delete":  _backups_delete,
+    "reveal":  _backups_reveal,
 }
 
 

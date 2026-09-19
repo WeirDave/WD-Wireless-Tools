@@ -41,6 +41,14 @@ SELECTION_ONLY = [
     "bulkShareBtn", "bulkVerifyBtn", "bulkDeleteBtn",
 ]
 
+#: How many filter chips the summary line carries. Counted rather than
+#: listed, because the point of these three tests is that none of them goes
+#: missing in a restructure - and a count is the one assertion a rearrangement
+#: cannot satisfy by accident. Raise it when a tab brings its own filters
+#: with it: 17 for the cloud and duplicate sets, 21 since the Backup Folder
+#: tab added four of its own.
+FILTER_CHIPS = 21
+
 
 def band(name: str) -> str:
     """The markup of one header band."""
@@ -97,7 +105,7 @@ class NothingWasLostInTheRestructureTests(unittest.TestCase):
         restructure dropped these once; a test caught it."""
         controls = re.findall(
             r'<button class="sum-count"[^>]*?data-filter="([a-z-]+)"([^>]*)>', HTML)
-        self.assertEqual(17, len(controls))
+        self.assertEqual(FILTER_CHIPS, len(controls))
         for key, attrs in controls:
             with self.subTest(filter=key):
                 self.assertIn("title=", attrs)
@@ -111,7 +119,7 @@ class NothingWasLostInTheRestructureTests(unittest.TestCase):
         its job.
         """
         chips = re.findall(r'<button class="sum-count".*?</button>', HTML, re.S)
-        self.assertEqual(17, len(chips))
+        self.assertEqual(FILTER_CHIPS, len(chips))
         for chip in chips:
             label = re.search(r'<span class="sum-l">([^<]+)</span>', chip)
             with self.subTest(chip=(label.group(1) if label else chip[:40])):
@@ -166,7 +174,7 @@ class TheDropdownsAreUsableTests(unittest.TestCase):
         # a string not appearing is weak evidence, and the thing that matters
         # is what each filter *is*, not what the markup no longer says.
         carriers = re.findall(r'<(\w+) class="([^"]*)"[^>]*data-filter=', HTML)
-        self.assertEqual(17, len(carriers))
+        self.assertEqual(FILTER_CHIPS, len(carriers))
         for tag, classes in carriers:
             with self.subTest(carrier=classes):
                 self.assertEqual("button", tag)
