@@ -766,17 +766,38 @@ def fuzzy_similarity(a, b):
     return len(aw & bw) / len(aw | bw)
 
 
+#: **The word boundary after the keyword is load-bearing, and so is the
+#: unbounded digit run.** This was `(?:bldg|bld|building)\.?\s*(\d{1,2}|[A-Za-z])`.
+#: On "Bldg 100" the two-digit cap made the digit branch fail its lookahead,
+#: the engine backtracked into the `bld` alternative, and `[A-Za-z]` then
+#: matched the **g** of "Bldg". Every three-digit building therefore read as
+#: "G", two different buildings at one address produced the same token, the
+#: guard saw no conflict, and they auto-paired - which is the one case the
+#: guard exists for. "Building 100" came back as nothing at all by the same
+#: route. "Bldg 3" against "Bldg 5" was unaffected, which is why it looked
+#: correct.
+_BUILDING_RE = re.compile(
+    r'\b(?:building|bldg|bld)\b\.?\s*(\d+|[A-Za-z])(?![A-Za-z0-9])', re.I)
+
+
 def _building_token(name):
-
-
-    m = re.search(r'\b(?:bldg|bld|building)\.?\s*(\d{1,2}|[A-Za-z])(?![A-Za-z0-9])', name, re.I)
+    m = _BUILDING_RE.search(name)
     return m.group(1).upper() if m else None
+
+
+#: A year is not a street number. The first run of 3-6 digits was taken as
+#: one, so "Survey 2025" and "Survey 2026" - two ordinary survey names a year
+#: apart - were held back with "Street numbers don't match", a refusal he then
+#: has to overrule by hand on a pair that was never in doubt.
+_YEARISH = re.compile(r'^(?:19|20)\d{2}$')
 
 
 def _street_number(name):
     stripped = re.sub(r'^\s*[A-Za-z]{2,}\d+', '', name.strip())
-    m = re.search(r'\b(\d{3,6})\b', stripped)
-    return m.group(1) if m else None
+    for m in re.finditer(r'\b(\d{3,6})\b', stripped):
+        if not _YEARISH.match(m.group(1)):
+            return m.group(1)
+    return None
 
 
 _SURVEY_PHASE_TOKENS = [
@@ -1085,6 +1106,9 @@ def get_local_esx_files(output_dir):
 
 
 _ESX_META_CACHE = {}
+#: Generous enough that a full scan of a large project folder never evicts
+#: mid-pass, small enough that it cannot grow without limit.
+_ESX_CACHE_MAX = 5000
 
 
 def _esx_meta(path, mtime):
@@ -1106,9 +1130,22 @@ def _esx_meta(path, mtime):
       written to disk." Filesystem mtime resets on copy/sync/OneDrive touch;
       the internal one doesn't, so it's the truthful date to compare across
       cloud (server) and local (disk)."""
+    #: **Size as well as the second.** The key was the path and a whole-second
+    #: mtime, so a rewrite landing in the same second as the previous scan -
+    #: or arriving from a sync client that preserves the original timestamp,
+    #: which is the ordinary way this happens here - was served from the
+    #: cache. What came back was the *previous* project id, name and internal
+    #: date, which is what the id pass matches on and what the row's date is
+    #: drawn from. A size that has not changed either is a file that has
+    #: almost certainly not changed.
     key = str(path)
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        size = -1
+    stamp = (mtime, size)
     hit = _ESX_META_CACHE.get(key)
-    if hit and hit[0] == mtime:
+    if hit and hit[0] == stamp:
         return hit[1]
     meta = {"author": "", "projectId": "", "projectName": "",
             "internalMtime": 0}
@@ -1142,7 +1179,11 @@ def _esx_meta(path, mtime):
                         pass
     except Exception:
         pass
-    _ESX_META_CACHE[key] = (mtime, meta)
+    #: Bounded, because it is keyed per path and a long-running server walking
+    #: a large project folder would otherwise hold every file it ever read.
+    if len(_ESX_META_CACHE) > _ESX_CACHE_MAX:
+        _ESX_META_CACHE.clear()
+    _ESX_META_CACHE[key] = (stamp, meta)
     return meta
 
 
@@ -1287,6 +1328,33 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
                         "staleness": stale,
                         "differenceKind": _difference(c, l, stale)})
 
+    def _resolve_pass(cands, conflicts, mtype, base):
+        """Take the strongest candidates first, whoever Ekahau listed first.
+
+        Each pass used to walk the cloud projects in listing order and let
+        every one take its own best local file as it was reached. There is no
+        global view in that: a weaker claimant considered earlier took a file
+        a later one matched far better. And `get_projects` returns the listing
+        unsorted, so the order moves whenever any project is saved - same data,
+        different pairing, with nothing on screen to explain the change.
+
+        Scoring every candidate and taking them strongest-first makes the
+        answer a property of the names. Ties break on the two names, so it is
+        stable rather than merely better.
+        """
+        taken_cloud, taken_local = set(), set()
+        cands.sort(key=lambda t: (-t[0], str(t[1].get("name") or ""),
+                                  str(t[2].get("name") or "")))
+        for sim, c, l in cands:
+            if id(c) in taken_cloud or id(l) in taken_local:
+                continue
+            idx = next((i for i, x in enumerate(unmatched_local) if x is l), None)
+            if idx is None:
+                continue
+            taken_cloud.add(id(c))
+            taken_local.add(id(l))
+            _take(c, idx, mtype, base + sim)
+
     def _norm_path(p):
         return (p or "").replace(chr(92), "/").lower()
 
@@ -1309,67 +1377,98 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
     for c in pending:
         cid = (c.get("id") or "").strip().lower()
         if cid:
+            #: **The id outranks a not-a-match, deliberately.** A not-a-match
+            #: is his statement about two particular files, keyed on cloud id
+            #: and local path, and nothing prunes it when the file at that path
+            #: goes. Delete a local .esx and download the cloud project into
+            #: the same folder and the new file carries Ekahau's own project
+            #: id - which is proof that these are one project record, not a
+            #: heuristic - and the entry went on refusing the pair with
+            #: nothing on screen saying why. Every weaker pass still honours
+            #: it; there is nothing stronger than the id to overrule it with.
             hit = next((i for i, l in enumerate(unmatched_local)
-                        if (l.get("projectId") or "").strip().lower() == cid
-                        and not _blocked(c, l)), None)
+                        if (l.get("projectId") or "").strip().lower() == cid),
+                       None)
             if hit is not None:
                 _take(c, hit, "id")
                 continue
         still_after_id.append(c)
 
 
+    #: Case and run-of-spaces folded, which is what this pass has always
+    #: claimed to do - "exact name equality (case + whitespace normalized)".
+    #: It compared the raw strings, so a pair differing only in capitals fell
+    #: through to `fuzzy`, and `fuzzy` is excluded from both PUSHABLE and
+    #: PULLABLE - so Local -> Cloud was greyed out for two names that read the
+    #: same word for word. `namesDiffer` still reports the real spelling
+    #: difference, so the rename is still offered.
+    def _norm_name(s):
+        return re.sub(r'\s+', ' ', str(s or '')).strip().casefold()
+
     pending = []
     for c in still_after_id:
-        cn = c["name"].strip()
+        cn = _norm_name(c["name"])
         hit = next((i for i, l in enumerate(unmatched_local)
-                    if cn == l["name"].strip() and not _blocked(c, l)), None)
+                    if cn == _norm_name(l["name"]) and not _blocked(c, l)), None)
         if hit is not None:
             _take(c, hit, "exact", 3.0)
         else:
             pending.append(c)
 
 
+    #: A shared site code says these two are at the same place. It does not
+    #: say they are the same project, and nothing checked the second half -
+    #: so "SITE2 Rooftop Antenna Replacement" paired with "SITE2 Basement
+    #: Parking Garage" at a name similarity of 0.14, while the badge told him
+    #: "the site codes match and the names are close". Those pairs carry
+    #: `namesDiffer`, so Sync then offered to rename one to the other.
+    #:
+    #: The floor is well under the fuzzy pass's 0.5, because the shared code
+    #: is real evidence and this pass should stay more generous than matching
+    #: on wording alone - it only has to exclude the pairs with nothing in
+    #: common at all.
+    _CODE_SIM_FLOOR = 0.3
+
     still = []
+    code_cands, code_conflicts = [], {}
     for c in pending:
         cloud_code = c.get("code") or extract_site_code(c["name"])
-        best, best_score = None, 0
-        best_conflict = None
-        best_conflict_score = 0
-        if cloud_code:
-            for i, l in enumerate(unmatched_local):
-                if _blocked(c, l):
-                    continue
-                lcode = l.get("code") or extract_site_code(l["name"])
-                if not (lcode and lcode == cloud_code):
-                    continue
-                reason = discriminators_reason(c["name"], l["name"])
-                score = 2.0 + fuzzy_similarity(c["name"], l["name"])
-                if reason:
+        if not cloud_code:
+            continue
+        for l in unmatched_local:
+            if _blocked(c, l):
+                continue
+            lcode = l.get("code") or extract_site_code(l["name"])
+            if not (lcode and lcode == cloud_code):
+                continue
+            sim = fuzzy_similarity(c["name"], l["name"])
+            reason = discriminators_reason(c["name"], l["name"])
+            if not reason and sim < _CODE_SIM_FLOOR:
+                reason = ("Same site code, but the names have nothing else in "
+                          "common")
+            if reason:
+                prev = code_conflicts.get(id(c))
+                if not prev or sim > prev[2]:
+                    code_conflicts[id(c)] = (c, l, sim, reason)
+                continue
+            code_cands.append((sim, c, l))
 
+    _resolve_pass(code_cands, code_conflicts, "code", 2.0)
 
-                    if score > best_conflict_score:
-                        best_conflict = (i, reason)
-                        best_conflict_score = score
-                    continue
-                if score > best_score:
-                    best, best_score = i, score
-        if best is not None:
-            _take(c, best, "code", best_score)
-        else:
-            if best_conflict is not None:
-                l = unmatched_local[best_conflict[0]]
-                held_back.append({"cloud": c, "local": l,
-                                  "reason": best_conflict[1],
-                                  "via": "code"})
-            still.append(c)
+    for c in pending:
+        if any(m["cloud"] is c for m in matched):
+            continue
+        held = code_conflicts.get(id(c))
+        if held and held[1] in unmatched_local:
+            held_back.append({"cloud": c, "local": held[1],
+                              "reason": held[3], "via": "code"})
+        still.append(c)
 
 
     unmatched_cloud = []
+    fuzzy_cands, fuzzy_conflicts = [], {}
     for c in still:
-        best, best_score = None, 0
-        best_conflict = None
-        best_conflict_score = 0
-        for i, l in enumerate(unmatched_local):
+        for l in unmatched_local:
             if _blocked(c, l):
                 continue
             sim = fuzzy_similarity(c["name"], l["name"])
@@ -1377,26 +1476,29 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
                 continue
             reason = discriminators_reason(c["name"], l["name"])
             if reason:
-                if sim > best_conflict_score:
-                    best_conflict = (i, reason)
-                    best_conflict_score = sim
+                prev = fuzzy_conflicts.get(id(c))
+                if not prev or sim > prev[2]:
+                    fuzzy_conflicts[id(c)] = (c, l, sim, reason)
                 continue
-            if sim > best_score:
-                best, best_score = i, sim
-        if best is not None:
-            _take(c, best, "fuzzy", best_score)
-        else:
-            if best_conflict is not None:
-                l = unmatched_local[best_conflict[0]]
+            fuzzy_cands.append((sim, c, l))
 
-                already = any(h["cloud"].get("id") == c.get("id")
-                              and h["local"].get("path") == l.get("path")
-                              for h in held_back)
-                if not already:
-                    held_back.append({"cloud": c, "local": l,
-                                      "reason": best_conflict[1],
-                                      "via": "fuzzy"})
-            unmatched_cloud.append(c)
+    #: Strongest-first, so the answer does not depend on Ekahau's listing
+    #: order - see `_resolve_pass`.
+    _resolve_pass(fuzzy_cands, fuzzy_conflicts, "fuzzy", 0.0)
+
+    for c in still:
+        if any(m["cloud"] is c for m in matched):
+            continue
+        held = fuzzy_conflicts.get(id(c))
+        if held and held[1] in unmatched_local:
+            l = held[1]
+            already = any(h["cloud"].get("id") == c.get("id")
+                          and h["local"].get("path") == l.get("path")
+                          for h in held_back)
+            if not already:
+                held_back.append({"cloud": c, "local": l,
+                                  "reason": held[3], "via": "fuzzy"})
+        unmatched_cloud.append(c)
 
 
     matched.sort(key=lambda e: e["cloud"]["name"].lower())
