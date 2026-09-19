@@ -263,7 +263,18 @@ are not touched."*
 
 ## P2 — the tool states something untrue
 
-### A7. The Auto-assign banner counts the filtered list; the button acts on everything [measured]
+> **All twelve are closed, in v2.143.0**, across seven commits, each carrying
+> a test that fails against the code before it. Four of the `[reported]` ones
+> were confirmed by measurement on the way in; none turned out to be wrong.
+>
+> One decision worth keeping rather than rediscovering: the chips still count
+> the account rather than the search (A10). Making them follow it would put a
+> second spelling of the search predicate into the counting code, which is the
+> shape of defect this file has already paid for twice — so the narrowing is
+> stated above the list instead, the way the owner filter has always stated
+> its own.
+
+### A7. The Auto-assign banner counts the filtered list; the button acts on everything [measured] — **fixed in v2.143.0**
 
 `cloud.js:2778` builds the banner from the rows that survived the filter and
 search. `cloud.js:3125` runs the action from `_visibleSiteRowsForBatch()`
@@ -280,7 +291,7 @@ This writes to Ekahau. Two projects he never saw, in a site he had filtered
 away, are assigned — and the ops deck shows three operations for a button that
 said one.
 
-### A8. The External chip can never be reached on the Sites tab [measured]
+### A8. The External chip can never be reached on the Sites tab [measured] — **fixed in v2.143.0**
 
 `cloud.js:1570-1571`:
 
@@ -304,7 +315,7 @@ The Sites tab is the default view (`lastFilesKind()`), and the chip's own
 tooltip in `web/cloud.html:133` describes Sites-tab behaviour he cannot
 invoke.
 
-### A9. The search box filters sites but not the projects inside them [measured]
+### A9. The search box filters sites but not the projects inside them [measured] — **fixed in v2.143.0**
 
 `renderTreeChildren` (`cloud.js:3169`) takes `hit` as its second parameter and
 **never references it**. A site survives via `childHit`, `_searching` forces it
@@ -318,7 +329,7 @@ project rows drawn : 2   (expected 1)
 
 On a real site of a dozen surveys, searching for one gives him all twelve.
 
-### A10. No chip count accounts for the search box, and the ledger head ignores the A-Z letter [reported]
+### A10. No chip count accounts for the search box, and the ledger head ignores the A-Z letter [reported] — **fixed in v2.143.0**
 
 `updateDashboard` never reads `#searchBox`; `renderLedger` filters on it.
 Nothing on screen says the search is narrowing the list (the owner filter has
@@ -328,7 +339,7 @@ are computed before the letter filter is applied — and on the tree, orphans
 filter states. Selecting a letter with no rows under it reportedly yields zero
 rows, no group headings and **no message at all**.
 
-### A11. `_share_message_is_failure` decides success by looking for nine English words [measured]
+### A11. `_share_message_is_failure` decides success by looking for nine English words [measured] — **fixed in v2.143.0**
 
 `tools/cloud_manager.py:2097-2105`. Run against realistic messages:
 
@@ -349,7 +360,7 @@ Wrong in both directions. A failed share is toasted as *"Shared with …"*, and
 the address is persisted into Recent Recipients — the one thing that store
 exists to avoid.
 
-### A12. A successful ownership transfer is reported as a failure [traced]
+### A12. A successful ownership transfer is reported as a failure [traced] — **fixed in v2.143.0**
 
 `EkahauAPI.transfer_ownership` (`:500-512`) returns
 `{"status": r.status_code, "result": data}` with `data = {}` on an empty body.
@@ -362,7 +373,7 @@ The transfer has happened and is irreversible from this tool. The UI says it
 failed, leaves the armed button in place, and a second click reports *"Only
 the owner (…) can transfer this project"* — because it now is not his.
 
-### A13. A cached comparison is never invalidated, and a settled row hides a newer cloud copy [reported]
+### A13. A cached comparison is never invalidated, and a settled row hides a newer cloud copy [reported] — **fixed in v2.143.0**
 
 `_compareResults` is written at `cloud.js:3645` and `:3672` and deleted only by
 `fixInternalName`. Nothing clears it after the local file is rewritten and
@@ -371,7 +382,7 @@ nothing validates it against the mtimes a refresh just returned.
 renders **no action at all** — so a genuinely newer cloud copy becomes
 invisible until the page is reloaded.
 
-### A14. The bulk planners offer a push the row itself refuses [reported]
+### A14. The bulk planners offer a push the row itself refuses [reported] — **fixed in v2.143.0**
 
 `canPushToCloud` requires `iOwn(r.cloud)`; the row renders a disabled control
 for a colleague's project. `syncPlan`'s `mayPush` and `syncEverythingPlan`'s
@@ -379,7 +390,7 @@ for a colleague's project. `syncPlan`'s `mayPush` and `syncEverythingPlan`'s
 the shared account followed by a 403 on the delete — unattended, inside a Sync
 all run.
 
-### A15. Bulk share reports success when the share entirely failed [traced]
+### A15. Bulk share reports success when the share entirely failed [traced] — **fixed in v2.143.0**
 
 `cloud_manager.py:3227-3260` catches every exception into
 `results["emailError"]` / `results["groupError"]` and then sets
@@ -400,13 +411,13 @@ The group path is OFF-then-ON across all selected ids. If the OFF succeeds and
 the ON raises, the group is **removed** from every selected project and the
 toast still says it was shared.
 
-### A16. `change_share_role` is remove-then-add and never checks the add [reported]
+### A16. `change_share_role` is remove-then-add and never checks the add [reported] — **fixed in v2.143.0**
 
 `cloud_manager.py:3532-3551` checks the remove step and returns `ok: True`
 whatever the add said. A rejected re-add leaves the colleague with **no
 access**, reported as the new role.
 
-### A17. Paired rename leaves the name inside the file stale [reported]
+### A17. Paired rename leaves the name inside the file stale [reported] — **fixed in v2.143.0**
 
 `confirmRename` calls only `rename_cloud` / `rename_local`; nothing touches
 `project.json`. Ekahau stamps `modifiedAt` on a rename while the local
@@ -415,7 +426,7 @@ access**, reported as the new role.
 exists to clean up afterwards. `set_internal_project_name` already does this
 correctly elsewhere.
 
-### A18. Move-to-site: a typed destination that was never clicked is discarded [reported]
+### A18. Move-to-site: a typed destination that was never clicked is discarded [reported] — **fixed in v2.143.0**
 
 `_resolveDest` reads only `t.destValue`, written only by `_taPick` /
 `_taPickNew`. Typing a site name in full and clicking Move uses the previous

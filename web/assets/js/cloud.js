@@ -2803,42 +2803,43 @@ function _activeFilterLabel() {
 function emptyLedgerMessage() {
   const cur = ownerFilter();
   const alsoNarrowed = activeFilter !== 'all' || !!activeLetter || cur !== 'all';
-  const btn = (label, call) =>
-    '<br><button class="btn btn-secondary own-empty-btn" onclick="' + call + '">'
-    + label + '</button>';
   const term = _activeSearchTerm();
-
+  /* Each button carries its handler's name written out in full, rather than
+     coming from a helper that takes the call as a parameter. The ratchet that
+     checks every event attribute names something that exists reads the
+     source, so an event attribute whose opening quote is in one string
+     literal and whose value arrives by concatenation leaves it scanning past
+     the closing quote and reporting every word it meets as a missing handler.
+     A helper here costs that check its coverage of the whole file. */
   if (term) {
     return '<div class="empty-msg">Nothing here matches <b>' + e(term) + '</b>'
       + (alsoNarrowed ? ', with the other filters you have on' : '') + '.'
-      + btn('Clear search', 'clearSearch()') + '</div>';
+      + '<br><button class="btn btn-secondary own-empty-btn" onclick="clearSearch()">Clear search</button></div>';
   }
   if (activeLetter) {
     return '<div class="empty-msg">Nothing here starts with <b>'
       + e(activeLetter) + '</b>.'
-      + btn('Show every letter', '_clearJumpLetter()') + '</div>';
+      + '<br><button class="btn btn-secondary own-empty-btn" onclick="_clearJumpLetter()">Show every letter</button></div>';
   }
   /* Only sayable when nothing else is narrowing the list - otherwise it is a
      claim about his whole account made from a filtered view, and the chip
      above it may be saying a different number. */
   if (activeFilter === 'unshared') {
-    return '<div class="empty-msg">Everything you own has been shared with '
-      + 'someone.' + btn('Show all projects', 'setFilter(&quot;unshared&quot;)')
-      + '</div>';
+    return '<div class="empty-msg">Everything you own has been shared with someone.'
+      + '<br><button class="btn btn-secondary own-empty-btn" onclick="setFilter(&quot;unshared&quot;)">Show all projects</button></div>';
   }
   if (activeFilter !== 'all') {
     const lbl = _activeFilterLabel();
     return '<div class="empty-msg">Nothing here matches the <b>'
       + e(lbl || 'selected') + '</b> filter.'
-      + btn('Show everything', 'setFilter(&quot;' + e(activeFilter) + '&quot;)')
-      + '</div>';
+      + '<br><button class="btn btn-secondary own-empty-btn" onclick="setFilter(&quot;all&quot;)">Show everything</button></div>';
   }
   if (cur === 'all') return '<div class="empty-msg">Nothing here yet.</div>';
   return '<div class="empty-msg">Nothing here owned by '
     + (cur === 'mine' ? 'you' : 'anyone else')
     + ' — the owner filter is on <b>' + e(OWNER_FILTER_LABEL[cur]) + '</b>'
     + (_ownerFilterOverridden ? '' : ', your saved default')
-    + '.' + btn('Show all owners', "setOwnerFilterUI('all')") + '</div>';
+    + '.<br><button class="btn btn-secondary own-empty-btn" onclick="setOwnerFilterUI(\'all\')">Show all owners</button></div>';
 }
 
 function buildPassOwner(own, me) {

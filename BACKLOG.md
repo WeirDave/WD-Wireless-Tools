@@ -131,14 +131,27 @@ written down is the one a later session removes as redundant.
   control**~~ — each side has its own key, as the Sites tab and nested rows
   always did, and a mixed selection no longer claims local copies are safe.
 
-Two systemic items are still open, and are worth doing before the P2 list
-because they are cheap and everything else depends on them:
+**The twelve P2 items are closed as well, in v2.143.0** — seven commits, each
+carrying a test that fails against the code before it. In short: Auto-assign
+files away only the projects it listed; the External chip can be reached on the
+Sites tab; the search reaches the projects inside a site and says what it is
+hiding; the head counts what the letter left and an empty list names what
+emptied it; sharing reports what Ekahau did, including when it will not say;
+the bulk planners refuse the push the row refuses; a stored comparison retires
+when the pair moves; a rename brings the name inside the file with it; and a
+typed destination is where the file goes. The audit has the detail per item,
+including the one deliberate non-change: the chips count the account rather
+than the search, and say so above the list.
 
-* **CI never installs Node**, so roughly 30 cloud test files skip silently.
-  They pass today only because the runner image happens to ship Node.
-* **The untested surface is the destructive one** — cloud/local delete, the
-  whole Duplicates tab, all of sharing, transfer ownership and folder merge
-  have no test that could fail if they broke.
+One systemic item from the audit is still open:
+
+* **The untested surface is the destructive one** — cloud and local delete,
+  the whole Duplicates tab, transfer ownership and folder merge still have no
+  test that could fail if they broke. Sharing and the merge's emptiness check
+  have tests now; the rest of that list does not.
+
+*(CI installing Node — the other systemic item — was closed separately in
+`claude/ci-installs-node`.)*
 
 ---
 
