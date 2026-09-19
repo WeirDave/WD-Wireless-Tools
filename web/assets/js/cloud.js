@@ -129,7 +129,15 @@ function _opActionsHtml(op) {
   if (op.status === 'queued') {
     btns.push(`<button class="op-btn" onclick="opCancelQueued('${op.id}')" title="Take this out of the queue before it runs">Remove</button>`);
   }
-  if (op.status === 'running' && op.cancelable !== false) {
+  /* **Opt-in, not opt-out.** Nothing forwards the cancel flag to the request
+     and Ekahau has no cancel for an upload or a delete, so a running cloud
+     write finishes whatever this button does. Offered by default, it told him
+     an irreversible operation had been called off while the old cloud project
+     was already gone - the worst version of a control that does nothing.
+
+     Queued work is genuinely removable and still says so, above. An operation
+     that can really be stopped says `cancelable: true` and stops. */
+  if (op.status === 'running' && op.cancelable === true) {
     btns.push(`<button class="op-btn" onclick="opCancel('${op.id}')">Cancel</button>`);
   }
   if (op.status === 'failed' && op.retryFn) {
@@ -417,7 +425,10 @@ function opEnqueue(spec) {
     undoFn: spec.undoFn || null,
     retryFn: spec.retryFn || null,
     pollBackend: spec.pollBackend !== false,
-    cancelable: spec.cancelable !== false,
+    //: Opt in, not opt out. Every caller left this at its default and none of
+    //: them read the flag, so every running upload, replace and cloud delete
+    //: offered a Cancel that stopped nothing - see `_opActionsHtml`.
+    cancelable: spec.cancelable === true,
     cancelFlag: { aborted: false },
     startedAt: null,
     finishedAt: null,
@@ -456,9 +467,19 @@ function opEnqueue(spec) {
         _scheduleOpRefresh();
         return result;
       }
-      op.status = op.cancelFlag.aborted ? 'cancelled' : 'done';
+      /* **A run that returned did its work.** The upload happened, the
+         project was deleted, the file was written. This read the cancel flag
+         *after* awaiting the run, so setting it mid-flight relabelled
+         completed, irreversible work as "Cancelled" - and the run body had
+         already toasted that the old cloud copy was removed. The card and the
+         toast disagreed, and the card was the one that was wrong.
+
+         A genuine cancellation stops the work, and stopping it means the run
+         throws; that is the `catch` below, which is where `cancelled` belongs
+         once any operation can honour it. */
+      op.status = 'done';
       op.progress = 100;
-      op.stage = op.cancelFlag.aborted ? 'Cancelled' : 'Done';
+      op.stage = 'Done';
       op.finishedAt = Date.now();
       if (op.undoable && op.undoFn && op.status === 'done') {
         op.undoExpiresAt = Date.now() + _UNDO_WINDOW_MS;
@@ -467,8 +488,13 @@ function opEnqueue(spec) {
       _scheduleOpRefresh();
       return result;
     } catch (err) {
-      op.status = 'failed';
-      op.error = (err && err.message) || String(err) || 'Failed';
+      /* Work that was genuinely stopped did not fail - it was stopped, and
+         saying "Failed" about it would be its own small lie. Only an op that
+         opted in to being cancellable can get here this way. */
+      const stopped = op.cancelFlag.aborted && op.cancelable === true;
+      op.status = stopped ? 'cancelled' : 'failed';
+      op.stage = stopped ? 'Cancelled' : op.stage;
+      op.error = stopped ? '' : ((err && err.message) || String(err) || 'Failed');
       op.finishedAt = Date.now();
       _deckRender();
       _scheduleOpRefresh();
@@ -488,6 +514,9 @@ function opEnqueue(spec) {
 function opCancel(id) {
   const op = _ops.get(id);
   if (!op || op.status !== 'running') return;
+  /* Only an operation that said it can be stopped may claim to be stopping.
+     Setting the flag on anything else changed nothing except the label. */
+  if (op.cancelable !== true) return;
   op.cancelFlag.aborted = true;
   op.stage = 'Cancelling…';
   _deckRender();

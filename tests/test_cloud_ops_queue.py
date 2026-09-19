@@ -56,7 +56,7 @@ const stubs = `
 
 const fn = new Function(stubs + block + `
   return { opEnqueue, _opRemove, _ops, _opOrder, _opPending: _opPending,
-           opCancelQueued, OP_MAX_CONCURRENT, _opCardHtml };
+           opCancelQueued, opCancel, OP_MAX_CONCURRENT, _opCardHtml };
 `);
 const api = fn();
 
@@ -130,6 +130,20 @@ function work(name, opts) {
   out.cardBehind = cardFor('L');
   await Promise.allSettled([j1.promise, j2.promise, j3.promise]);
   out.cardDone = cardFor('J');
+
+  // --- cancelling work that is already running ---------------------------
+  // Nothing forwards the flag to the request and the server has no cancel for
+  // a cloud write, so a running upload, replace or delete completes whatever
+  // this does. The question is what the card claims afterwards.
+  const m = work('M', { ms: 40 });
+  let mOp = null;
+  for (const [, op] of api._ops) if (op.title === 'M') mOp = op;
+  out.runningCardOffersCancel = /opCancel\(/.test(api._opCardHtml(mOp));
+  api.opCancel(mOp.id);
+  await Promise.allSettled([m.promise]);
+  out.statusAfterCancellingWorkThatFinished = mOp.status;
+  out.cardAfterCancellingWorkThatFinished = api._opCardHtml(mOp);
+  out.cancelledWorkStillRan = log.some(x => x === 'start:M');
 
   process.stdout.write(JSON.stringify(out));
   /* The sliced block carries the real `_ensureDeckTick`, which starts a
@@ -248,6 +262,30 @@ class TheWaitingCardSaysWhereItIsTests(unittest.TestCase):
         """He can change his mind about something that has not started."""
         self.assertIn("opCancelQueued", self.out["cardNext"])
         self.assertIn("Remove", self.out["cardNext"])
+
+    def test_a_running_write_does_not_offer_a_cancel_it_cannot_honour(self):
+        """Nothing forwards the cancel flag to the request, and Ekahau has no
+        cancel for an upload or a delete, so a running cloud write finishes
+        whatever the button does.
+
+        A button that stops nothing on an irreversible operation is worse than
+        no button: it is the tool saying the delete was called off. Queued work
+        is genuinely removable and still offers it - that is the difference.
+        """
+        self.assertFalse(self.out["runningCardOffersCancel"],
+                         "a running write offered Cancel: "
+                         + self.out["cardAfterCancellingWorkThatFinished"])
+
+    def test_work_that_finished_is_never_reported_as_cancelled(self):
+        """The status was assigned after the run had already returned, so a
+        completed upload-verify-delete was labelled Cancelled while the old
+        cloud project was gone."""
+        self.assertTrue(self.out["cancelledWorkStillRan"],
+                        "the fixture did not actually run the work")
+        self.assertEqual("done",
+                         self.out["statusAfterCancellingWorkThatFinished"])
+        self.assertNotIn("Cancelled",
+                         self.out["cardAfterCancellingWorkThatFinished"])
 
     def test_a_finished_item_is_reported_per_item(self):
         self.assertIn("status-done", self.out["cardDone"])
