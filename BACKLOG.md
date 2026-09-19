@@ -78,6 +78,49 @@ The cheap open route is `docs/reverse-engineering/capture_project_fields.js`,
 which reads the project *listing* and would settle whether a project record
 carries a revision or etag.
 
+#### 4a. P1 — Findings from the full Cloud Manager audit, 2026-09-18
+
+A whole-tool audit against v2.139.0 — every filter, every list, every action
+across `cloud.html`, `cloud.js`, `cloud_manager.py` and the 46 `CLOUD_ACTIONS`.
+**Full detail, with the evidence for each item, is in
+`docs/audits/cloud-manager-2026-09-18.md`.** Findings there are marked
+`[measured]` (the real function was executed), `[traced]` (read through the
+call chain) or `[reported]` (not independently re-executed — confirm first).
+
+One defect was fixed on the spot and shipped in **v2.139.1**: `settlePair`
+sent its two arguments the wrong way round, so every action's "did it land"
+confirmation had failed since v2.120.0 — and the test covering it was pinning
+the swap by asserting a positional argument.
+
+The P1 items, all still open:
+
+* **The upload identifies the project it just made as "the first id that was
+  not in the listing a moment ago"** (`cloud_manager.py:2611`), then renames
+  it, files it, downloads it over the local `.esx`, and — in
+  `replace_cloud_project` — deletes the old cloud project. `_await_new_project`
+  exists precisely to forbid this and is only used on the fallback path.
+* **The push overwrites the local `.esx` with no backup** (`:2691`), the only
+  local overwrite in the file that does not back up first.
+* **`replace_cloud_project` never re-checks direction before deleting** — no
+  `modifiedAt` comparison anywhere in it, so a cloud copy saved after the
+  ledger was drawn is deleted in favour of an older local file.
+* **Cancel on a running cloud write does nothing and then reports success as
+  "Cancelled"** — nothing reads `cancelFlag`.
+* **Merge's "delete the source folder afterwards" is ticked by default** and
+  judges the folder empty with a walk that skips `archive/` and `output/`.
+* **On the Projects tab the cloud and local checkboxes are the same control**,
+  so a cloud-side tick deletes the local file too — while the dialog says
+  local copies are not touched.
+
+Two systemic items worth doing before the rest, because they are cheap and
+everything else depends on them:
+
+* **CI never installs Node**, so roughly 30 cloud test files skip silently.
+  They pass today only because the runner image happens to ship Node.
+* **The untested surface is the destructive one** — cloud/local delete, the
+  whole Duplicates tab, all of sharing, transfer ownership and folder merge
+  have no test that could fail if they broke.
+
 ---
 
 ### Report
