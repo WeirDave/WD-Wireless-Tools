@@ -1536,8 +1536,15 @@ function updateDashboard() {
     }
     _setCount('dCloudOnly', isSitesTab ? (kidCloudOnly + looseCloud) : cloudOnly);
     _setCount('dLocalOnly', isSitesTab ? kidLocalOnly : localOnly);
-    _setCount('dExternal', isSitesTab ? kidExternal : externalCount);
-    _showFilter('external', cloudy && externalCount > 0);
+    /* One number decides both, or the chip disagrees with itself.
+       `externalCount` is only ever incremented through `rowIsExternal`, which
+       begins `!isSitesTab` - so on the Sites tab it is always zero, and the
+       chip was hidden however many external projects the count beside it had
+       just been given. That is the default view, and the chip's own tooltip
+       describes Sites-tab behaviour nobody could reach. */
+    const externalShown = isSitesTab ? kidExternal : externalCount;
+    _setCount('dExternal', externalShown);
+    _showFilter('external', cloudy && externalShown > 0);
 
     // Counted through the owner filter, like every other card, so the number
     // on the card is the number of rows the list will actually show.
@@ -2396,7 +2403,20 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
   let h = uncomparedBandHtml(collectUncomparedStale(childPairs));
   h += `<div class="ledger tree">`;
 
+  /* Stored at render time, and the button runs exactly this set.
+
+     `autoAssignAllMatched` used to rebuild it from `data` through
+     `_visibleSiteRowsForBatch()`, which applied no filter, no search and no
+     letter - "visible" in name only. A search that narrowed the banner to one
+     project therefore left the button assigning every unassigned project in
+     the account, to Ekahau, with none of the others named anywhere on screen.
+
+     Same shape as `_uncomparedNow` above: captured where the filter
+     predicates exist, which is the only place that knows what is on screen.
+     Assigned unconditionally, so a render that draws no banner clears it
+     rather than leaving the previous one armed. */
   const autoAssignable = _collectAutoAssignable(visible, passOwner);
+  _autoAssignNow = autoAssignable;
   if (autoAssignable.length) {
 
     const n = autoAssignable.length;
@@ -2489,8 +2509,15 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
          Matched by itself: show everything in it. Matched through a child:
          show the children that matched. */
       const siteMatchesAlone = _siteMatchesFilterAlone(r);
+      /* The search gets the same treatment as the filter, one line above:
+         a site matched by its own name shows everything in it, and a site
+         that is only here because a project inside it matched shows the
+         projects that matched. `renderTreeChildren` took `hit` and never
+         looked at it, so searching for one survey in a site of a dozen
+         returned all twelve. */
+      const siteNameHit = hit(r.cloud && r.cloud.name) || hit(r.local && r.local.name);
       if (open) {
-        h += renderTreeChildren(children, hit, passOwner,
+        h += renderTreeChildren(children, siteNameHit ? null : hit, passOwner,
                                 r.cloud && r.cloud.id, r.cloud && r.cloud.name,
                                 siteMatchesAlone ? null : (projPass || pass));
       }
@@ -2715,6 +2742,11 @@ function buildPassOwner(own, me) {
   };
 }
 
+/* Every unassigned project the banner is currently offering, filled at render
+   time - see the note at the call site. Read by `autoAssignAllMatched`, so
+   what the button does is what the list says. */
+let _autoAssignNow = [];
+
 function _collectAutoAssignable(visibleSiteRows, passOwner) {
   const out = [];
   const pass = passOwner || (() => true);
@@ -2740,11 +2772,9 @@ function _collectAutoAssignable(visibleSiteRows, passOwner) {
 
 async function autoAssignAllMatched() {
 
-  const own = ownerFilter();
-  const me = ((data && data.currentUser) || '').toLowerCase();
-  const passOwner = buildPassOwner(own, me);
-  const visible = _visibleSiteRowsForBatch();
-  const items = _collectAutoAssignable(visible, passOwner);
+  /* The set the banner drew, not a fresh sweep of everything. See the note
+     where it is stored. */
+  const items = _autoAssignNow.slice();
   if (!items.length) { toast('Nothing to auto-assign', 'info'); return; }
   toast(`Assigning ${items.length} project${items.length === 1 ? '' : 's'}…`, 'info');
   for (const it of items) {
@@ -2755,16 +2785,6 @@ async function autoAssignAllMatched() {
       run: async () => pyApi('assign_to_site', it.siteId, it.projectId),
     });
   }
-}
-
-function _visibleSiteRowsForBatch() {
-  const rows = [];
-  (data.matched || []).forEach(p => rows.push({
-    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, differenceKind: p.differenceKind || null, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
-  }));
-  (data.cloudOnly || []).forEach(s => rows.push({ status: 'orphan', cloud: s, local: null, sort: s.name || '' }));
-  (data.localOnly || []).forEach(f => rows.push({ status: 'orphan', cloud: null, local: f, sort: f.name || '' }));
-  return rows;
 }
 
 /* Whether a site satisfies the active filter without help from its
@@ -2797,12 +2817,19 @@ function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteNa
   const totalBeforeOwner = rows.length;
   const rows2 = passOwner ? rows.filter(passOwner) : rows;
 
-  const rows3 = (passFilter && activeFilter !== 'all')
+  const rowsFiltered = (passFilter && activeFilter !== 'all')
     ? rows2.filter(r => passFilter(r.status, r))
     : rows2;
+  /* `hit` is null when the site matched the search by its own name - then its
+     whole contents are what was asked for. Otherwise only the projects that
+     matched are drawn. */
+  const rows3 = hit
+    ? rowsFiltered.filter(r => hit(r.cloud && r.cloud.name) || hit(r.local && r.local.name))
+    : rowsFiltered;
   if (!rows3.length) {
     let msg;
-    if (rows2.length && !rows3.length) msg = 'No projects here match this filter.';
+    if (rowsFiltered.length && !rows3.length) msg = 'No projects here match your search.';
+    else if (rows2.length && !rowsFiltered.length) msg = 'No projects here match this filter.';
     else if (totalBeforeOwner) msg = 'No projects match the owner filter.';
     else msg = 'No projects here yet.';
     return `<div class="ledger-row tree-child-empty"><div class="lr-cell child-row empty-child">${msg}</div></div>`;
