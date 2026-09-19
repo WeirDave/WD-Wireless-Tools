@@ -353,13 +353,26 @@ for a colleague's project. `syncPlan`'s `mayPush` and `syncEverythingPlan`'s
 the shared account followed by a 403 on the delete — unattended, inside a Sync
 all run.
 
-### A15. Bulk share reports success when the share entirely failed [reported]
+### A15. Bulk share reports success when the share entirely failed [traced]
 
 `cloud_manager.py:3227-3260` catches every exception into
-`results["emailError"]` and then unconditionally sets `results["ok"] = True`.
-The client only tests `r.error`. The group path is OFF-then-ON, so if the OFF
-succeeds and the ON raises, the group is **removed** from every selected
-project and the toast says it was shared.
+`results["emailError"]` / `results["groupError"]` and then sets
+`results["ok"] = True` unconditionally — there is no `error` key on any
+failure path. The client tests only `r.error` (`cloud.js:5736`), falls
+through, and toasts:
+
+```js
+const who = _shareNameList(r.emailsAdded || emails);
+toast(`Shared with ${who} on ${n} project${n === 1 ? '' : 's'}`, 'success');
+```
+
+`emailsAdded` is set only on success, so on failure it falls back to the full
+typed list — the toast names every recipient and claims the share landed on
+every project.
+
+The group path is OFF-then-ON across all selected ids. If the OFF succeeds and
+the ON raises, the group is **removed** from every selected project and the
+toast still says it was shared.
 
 ### A16. `change_share_role` is remove-then-add and never checks the add [reported]
 
