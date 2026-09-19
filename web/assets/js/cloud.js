@@ -455,6 +455,20 @@ function opEnqueue(spec) {
       return { cancelled: true };
     }
     if (op.pollBackend) _ensureDeckPoll();
+    /* The row's "taking longer than expected" clock starts when the work
+       starts, not when it was queued.
+
+       Callers mark the row busy and then enqueue, and only one op runs at a
+       time - so during a bulk run the rows behind the first hit their own
+       30-second ceiling while still waiting their turn, each one clearing its
+       mark and toasting that it had taken too long, about work that had not
+       begun and would go on to succeed. Twenty-nine rows, roughly two dozen
+       error toasts. Re-marking here restarts the clock at the only moment
+       that means anything. */
+    if (spec.busyRow && typeof _setRowBusy === 'function') {
+      _setRowBusy(spec.busyRow.cloudId, spec.busyRow.localPath,
+                  spec.busyRow.label);
+    }
     _deckRender();
     try {
       const result = await spec.run(id, op.cancelFlag);
@@ -522,9 +536,23 @@ function opCancel(id) {
   _deckRender();
 }
 
+/* Nothing supplies `undoFn` today - every `opEnqueue` call site passes
+   `undoable: false` - so this cannot currently be reached. It is left in
+   place rather than deleted because the deck is built around it, and the
+   expiry re-check below is the part that would have been wrong the first time
+   something wired it up: `_opActionsHtml` only draws the button while
+   `Date.now() < op.undoExpiresAt`, and the card is redrawn once a second, so
+   a click landing in the second after the window closes used to run the undo
+   anyway. The button's own condition is the one that has to hold. */
 async function opUndo(id) {
   const op = _ops.get(id);
   if (!op || !op.undoable || !op.undoFn) return;
+  if (op.undoExpiresAt && Date.now() >= op.undoExpiresAt) {
+    op.undoable = false;
+    op.undoFn = null;
+    _deckRender();
+    return;
+  }
   const fn = op.undoFn;
   const title = 'Undo: ' + op.title;
 
@@ -884,13 +912,44 @@ function _showRefreshBar(on, what) {
 
 function onData(kind, jsonStr, opts) {
   if (kind !== currentTab) return;
+  /* Parsed into a local until it is known to be good.
+
+     This assigned straight into `data`, and the error branch returned with
+     the error object still sitting there. An error object has no `matched`,
+     so every later re-render - typing in the search box, a filter chip, a row
+     marking itself busy - quietly drew an empty list, while the selection bar
+     went on reporting rows nobody could see. */
+  let next;
   try {
-    data = JSON.parse(jsonStr);
+    next = JSON.parse(jsonStr);
   } catch (err) { toast('Bad data payload', 'error'); return; }
-  if (data.error) {
-    document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">' + e(data.error) + '</div>';
-    toast(data.error, 'error'); return;
+
+  const background = !!(opts && opts.background) && !(opts && opts.force);
+
+  if (next && next.error) {
+    /* And a poll he did not ask for does not get to take the list away. The
+       whole point of the deferred apply below is that an unrequested refresh
+       never rewrites what he is reading; an unrequested one that *failed* has
+       even less claim to. It says so once and leaves the list alone. */
+    if (!_drawnData) {
+      //: Nothing has ever been drawn, so there is nothing to keep - but an
+      //: empty shape rather than the error object, so renders stay safe.
+      data = { matched: [], cloudOnly: [], localOnly: [], orphans: { cloudOnly: [] } };
+    }
+    if (!background) {
+      const el = document.getElementById('rowsContainer');
+      if (el) el.innerHTML = '<div class="empty-msg">' + e(next.error) + '</div>';
+      toast(next.error, 'error');
+    } else if (next.error !== _lastPollError) {
+      //: Once per run of the same failure. With Live on this arrives every 30
+      //: seconds, and a toast that repeats itself is one he stops reading.
+      toast(next.error, 'error');
+    }
+    _lastPollError = next.error;
+    return;
   }
+  _lastPollError = '';
+  data = next;
   /* A poll he did not ask for does not rewrite the page.
 
      It arrives, it is compared against what is drawn, and if it differs it
@@ -898,7 +957,7 @@ function onData(kind, jsonStr, opts) {
      automatically just had those files go away" is what the other behaviour
      looks like from his side - and the held-back candidates are exactly the
      thing the matcher can recompute differently between two polls. */
-  if (opts && opts.background && !(opts && opts.force)) {
+  if (background) {
     const now = _viewFingerprint(data);
     if (now === _drawnFingerprint) { _pendingData = null; _showRefreshBar(false); return; }
     _pendingData = jsonStr;
@@ -952,6 +1011,10 @@ function _step(what, fn) {
 //: What is on screen, so a poll can tell whether it would change anything.
 let _drawnData = null;
 let _drawnFingerprint = '';
+/* The last error a background poll reported, so a failure that repeats every
+   30 seconds is said once rather than every tick. Cleared by the next good
+   poll. */
+let _lastPollError = '';
 
 function onDuplicates(kind, jsonStr) {
   if (kind !== currentTab) return;
@@ -2044,8 +2107,42 @@ function _findCluster(key) {
 
 async function _bulkDeleteItems(items, clusterKey) {
   if (!items.length) return;
-  const lines = items.map(it => `• [${it.side}] ${it.name} (${fmtBytes(it.size)})`).join('\n');
-  if (!confirm(`Delete these ${items.length} file${items.length !== 1 ? 's' : ''}?\n\n${lines}\n\nThis is permanent.`)) return;
+  /* The same dialog the rest of the tool deletes through.
+
+     This was `confirm()` with a newline-joined list of names and sizes - for
+     the same `delete_cloud` the main list wraps in a dialog naming the site,
+     the date and who else has access. Three things were wrong with that on a
+     delete nobody can undo: browsers truncate a long native dialog, so "keep
+     newest, delete the rest" across every cluster could be deciding on a list
+     it was not showing him; a size is the one field `_row_meta` deliberately
+     leaves off, because cloud projects are stored uncompressed and local .esx
+     are deflated, so the same project reads several times different; and
+     nothing said who would lose access. */
+  const anyCloud = items.some(it => it.side === 'cloud');
+  const entries = items.map(it => (it.side === 'cloud'
+    ? _cloudDeleteEntry(it.id, it.name, false)
+    //: A local duplicate's whole point is that the same name exists in more
+    //: than one folder, so the folder is the only thing that tells them apart.
+    : { name: it.name,
+        siteName: String(it.path || '').replace(/\\/g, '/')
+                    .split('/').slice(-2, -1)[0] || '',
+        modified: 'on this computer', sharedLine: '' }));
+  const nCloud = items.filter(it => it.side === 'cloud').length;
+  const nLocal = items.length - nCloud;
+  const parts = [];
+  if (nCloud) parts.push(`<b>${nCloud}</b> cloud project${nCloud === 1 ? '' : 's'}`);
+  if (nLocal) parts.push(`<b>${nLocal}</b> local .esx file${nLocal === 1 ? '' : 's'}`);
+  const body = `<p>Permanently delete ${parts.join(' and ')}.`
+    + (anyCloud
+        ? ' Once this runs, the cloud side will not exist anymore, for anyone.'
+          + ' There is no trash to recover it from.'
+        : ' This cannot be undone.')
+    + '</p>' + _deleteWhatHtml(entries);
+  const go = await showConfirmModal(
+    anyCloud ? 'Delete from Ekahau Cloud?' : 'Delete?',
+    body,
+    anyCloud && !nLocal ? 'Delete from cloud' : 'Delete');
+  if (!go) return;
   let ok = 0, fail = 0;
   for (const it of items) {
     try {
@@ -3580,6 +3677,8 @@ function fixInternalName(localPath, cloudName, label, cloudId) {
     title: `Setting the project name inside "${label}" to "${cloudName}"`,
     sub: 'Rewrites the name stored in the .esx. The previous file is backed up.',
     type: 'rename', pollBackend: false, undoable: false,
+    //: The row's ceiling starts when this starts, not when it was queued.
+    busyRow: { cloudId, localPath, label: 'Setting the name inside the file…' },
     run: async (opId) => {
       const r = await pyApi('set_internal_project_name', localPath, cloudName, opId);
       if (r && r.error) throw new Error(r.error);
@@ -3652,6 +3751,8 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName) {
     title: `Replacing cloud "${cloudName || localName}" with your local copy`,
     sub: 'Uploading, verifying, then removing the old cloud copy.',
     type: 'push', pollBackend: true, undoable: false,
+    busyRow: { cloudId, localPath,
+               label: 'Uploading your local copy and replacing the cloud project…' },
     run: async (opId) => {
       const r = await pyApi('replace_cloud_project', localPath, cloudId, opId);
 
@@ -5738,6 +5839,8 @@ async function verifyReplaceLocal(cloudId, localPath, cloudName, cloudMtime, loc
   const { promise } = opEnqueue({
     title: `Downloading "${cloudName}" over local`,
     type: 'verify', pollBackend: false, undoable: false,
+    busyRow: { cloudId, localPath,
+               label: 'Taking the cloud copy over your local file…' },
     run: async () => {
       const r = await pyApi('verify_replace_local', cloudId, localPath);
       if (r && r.error) {
@@ -5938,11 +6041,16 @@ function _lpFilter(q) {
   }).join('');
 }
 
+/* The ⓘ beside the list, explaining how two files come to be called the same
+   project.
+
+   This also wrote `wd-match-help-seen` and hid `#matchHelpHint`. Nothing ever
+   read that key and no element has that id - both were left over from a
+   first-visit hint that is not in the page. The chip is permanent, which is
+   the right shape for an explanation he may want again, so there is nothing
+   to remember and nothing to hide. */
 function openMatchHelp() {
   showModal('matchHelpModal');
-  try { localStorage.setItem('wd-match-help-seen', '1'); } catch (e) {}
-  const hint = document.getElementById('matchHelpHint');
-  if (hint) hint.style.display = 'none';
 }
 function _lpPick(oppIdOrPath, oppName) {
   const ctx = _linkPickerCtx;
