@@ -1694,6 +1694,10 @@ function renderRows() {
      early, so the rail was drawn for the ledger and then left standing over a
      list it does not index - twenty-six letters that select nothing. */
   _renderJumpNav();
+  /* Before the dispatch, for the same reason the rail is: Duplicates returns
+     early, so a notice left standing there would describe a list that is no
+     longer on screen. `renderSearchNotice` hides itself on that tab. */
+  renderSearchNotice();
   if (currentTab === 'duplicates') { renderDuplicates(); return; }
   /* Rebuilding the list scrolls him back to the top of ninety-eight sites,
      which is its own way of losing his place. */
@@ -1711,6 +1715,8 @@ function renderRows() {
   const legend = document.querySelector('.col-legend');
   if (legend) legend.style.display = 'none';
   el.innerHTML = renderLedger(hit);
+  //: After the render, because it reports what the render actually drew.
+  renderSearchNotice();
   updateBulkBar(); refreshSelAll();
   _renderJumpNav();
   if (_scroller && _wasAt) _scroller.scrollTop = _wasAt;
@@ -2134,6 +2140,14 @@ function toggleFolder(fn) {
   if (collapsed.has(fn)) collapsed.delete(fn); else collapsed.add(fn);
   renderRows();
 }
+/* How much the search box is hiding, filled by whichever view drew the list.
+   The chips count the account rather than the search - making them follow it
+   would mean a second spelling of the search predicate living in the counting
+   code, which is the shape of bug this file has paid for more than once - so
+   the narrowing is stated in words above the list instead. */
+let _searchTotalBeforeSearch = 0;
+let _searchShownNow = 0;
+
 function renderLedger(hit) {
   const isSites = currentTab === 'sites';
 
@@ -2247,19 +2261,28 @@ function renderLedger(hit) {
   const cloudCodes = new Set(rows.map(r => r.cloud && r.cloud.code).filter(Boolean));
   const localCodes = new Set(rows.map(r => r.local && r.local.code).filter(Boolean));
 
-  const visible = rows
-    .filter(r => pass(r.status, r) && passOwner(r) && (hit(r.cloud && r.cloud.name) || hit(r.local && r.local.name)))
+  //: Split for the same reason as the tree view - see the note there.
+  const passesButForSearch = rows.filter(r => pass(r.status, r) && passOwner(r));
+  const visible = passesButForSearch
+    .filter(r => hit(r.cloud && r.cloud.name) || hit(r.local && r.local.name))
     .sort((x, y) => x.sort.localeCompare(y.sort, undefined, { sensitivity: 'base' }));
-  const nCloud = visible.filter(r => r.cloud).length, nLocal = visible.filter(r => r.local).length;
-
-  let h = uncomparedBandHtml(collectUncomparedStale(visible));
-  h += `<div class="ledger">`;
-  h += `<div class="ledger-head"><div class="lh-cell cloud">Cloud Projects (${nCloud})</div><div class="lh-gut"></div><div class="lh-cell local">Local .esx (${nLocal})</div></div>`;
-  if (!visible.length) { h += emptyLedgerMessage() + `</div>`; return h; }
+  _searchTotalBeforeSearch = passesButForSearch.length;
   const groupOf = (s) => {
     const ch = String(s || '').trim().charAt(0).toUpperCase();
     return (ch >= 'A' && ch <= 'Z') ? ch : '#';
   };
+  /* The letter narrows the list, so it narrows the number over the list and
+     decides whether the list is empty. Counting before it meant the head said
+     three over one row, and a letter matching nothing drew no rows, no
+     headings and no message. */
+  const shown = visible.filter(r => !activeLetter || groupOf(r.sort) === activeLetter);
+  _searchShownNow = shown.length;
+  const nCloud = shown.filter(r => r.cloud).length, nLocal = shown.filter(r => r.local).length;
+
+  let h = uncomparedBandHtml(collectUncomparedStale(shown));
+  h += `<div class="ledger">`;
+  h += `<div class="ledger-head"><div class="lh-cell cloud">Cloud Projects (${nCloud})</div><div class="lh-gut"></div><div class="lh-cell local">Local .esx (${nLocal})</div></div>`;
+  if (!shown.length) { h += emptyLedgerMessage() + `</div>`; return h; }
 
   const flatByLetter = new Map();
   visible.forEach(r => {
@@ -2341,11 +2364,17 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
         || (children.localOnly || []).some(l => passOwner({ cloud: null, local: l }));
   };
 
-  const visible = rows
-    .filter(r => pass(r.status, r)
-      && (hit(r.cloud && r.cloud.name) || hit(r.local && r.local.name) || childHit(childrenOf(r)))
-      && childOwnerHit(childrenOf(r)))
+  /* Split in two so the search's effect can be stated rather than guessed at.
+     The chips count the account; the search narrows the list without touching
+     them, so something has to say so - the same reason the owner filter has a
+     notice above the list. */
+  const passesButForSearch = rows.filter(r => pass(r.status, r)
+      && childOwnerHit(childrenOf(r)));
+  const visible = passesButForSearch
+    .filter(r => hit(r.cloud && r.cloud.name) || hit(r.local && r.local.name)
+      || childHit(childrenOf(r)))
     .sort((x, y) => x.sort.localeCompare(y.sort, undefined, { sensitivity: 'base' }));
+  _searchTotalBeforeSearch = passesButForSearch.length;
 
   const treeGroupOf = (s) => {
     const ch = String(s || '').trim().charAt(0).toUpperCase();
@@ -2380,8 +2409,18 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
       && (activeFilter === 'all' || !projPass
           || projPass('orphan', { cloud: o, local: null })));
 
-  const nCloud = visible.filter(r => r.cloud).length + orphans.length;
-  const nLocal = visible.filter(r => r.local).length;
+  /* The A-Z letter applies here too, or the head counts one set and the list
+     draws another. `orphans` above is already letter-filtered, so the two
+     halves of this number were built from different filter states: with a
+     letter selected the head said "Cloud Sites (3)" over a single row.
+
+     It also decides the empty state below, so a letter that selects nothing
+     now says so instead of rendering zero rows, zero headings and nothing
+     else at all. */
+  const shown = visible.filter(r => !activeLetter || treeGroupOf(r.sort) === activeLetter);
+  _searchShownNow = shown.length + orphans.length;
+  const nCloud = shown.filter(r => r.cloud).length + orphans.length;
+  const nLocal = shown.filter(r => r.local).length;
 
   /* The same set the Flat view offers, gathered out of the sites - a pair
      asking an unanswered question is the same pair whichever view he is in. */
@@ -2437,7 +2476,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
   }
   const localPath = _outputDir ? ` <span class="lh-path">- ${e(_outputDir)}</span>` : '';
   h += `<div class="ledger-head"><div class="lh-cell cloud">Cloud Sites (${nCloud})</div><div class="lh-gut"></div><div class="lh-cell local"${_outputDir ? ` title="${a(_outputDir)}"` : ''}>Local Folders (${nLocal})${localPath}</div></div>`;
-  if (!visible.length && !orphans.length) { h += emptyLedgerMessage() + `</div>`; return h; }
+  if (!shown.length && !orphans.length) { h += emptyLedgerMessage() + `</div>`; return h; }
 
   const _emitHeader = (g) =>
       `<div class="ledger-group-head" role="separator" data-jump-letter="${e(g)}" aria-label="Section ${e(g)}">`
@@ -2712,20 +2751,92 @@ function toggleHeldBack() {
    the emptying is one the page applied by itself at startup: an account with
    no projects of its own opens on Mine, sees nothing, and has no reason to
    suspect a filter. Name it, and offer the way out. */
+/* What the search box is hiding, in words, above the list.
+
+   The chips count the account and the search does not change them, so while a
+   search is active the number on a chip and the length of the list under it
+   are answers to different questions. The owner filter has had a notice for
+   exactly this reason; this is the same thing for the other narrowing that was
+   visible nowhere. */
+function renderSearchNotice() {
+  const el = document.getElementById('searchNotice');
+  if (!el) return;
+  const term = _activeSearchTerm();
+  const hiddenN = Math.max(0, _searchTotalBeforeSearch - _searchShownNow);
+  if (!term || isLocalOnlyTab(currentTab) || !hiddenN) {
+    el.hidden = true; el.innerHTML = ''; return;
+  }
+  const noun = currentTab === 'sites' ? 'site' : 'project';
+  el.hidden = false;
+  el.className = 'owner-notice is-info';
+  el.innerHTML = 'Showing <b>' + _searchShownNow + '</b> of <b>'
+    + _searchTotalBeforeSearch + '</b> ' + noun
+    + (_searchTotalBeforeSearch === 1 ? '' : 's')
+    + ' — <b>' + e(term) + '</b> is hiding ' + hiddenN
+    + '. The counts above are for everything.'
+    + ' <button class="btn btn-secondary own-empty-btn" onclick="clearSearch()">Clear search</button>';
+}
+
+/* Whatever is in the search box right now, or ''. */
+function _activeSearchTerm() {
+  const box = document.getElementById('searchBox');
+  return box ? String(box.value || '').trim() : '';
+}
+
+/* The words on the active chip, so an empty list can name the filter the way
+   its control is labelled rather than by its internal key. */
+function _activeFilterLabel() {
+  const el = document.querySelector('[data-filter="' + activeFilter + '"] .sum-l');
+  return el ? String(el.textContent || '').trim() : '';
+}
+
+/* An empty list has to name the thing that emptied it, and there are four
+   candidates. This looked only at the owner filter and at `unshared`, so a
+   list emptied by the search or by a chip was blamed on the owner filter -
+   offering a button that would not bring the rows back - and a letter that
+   matched nothing produced no message at all.
+
+   Narrowest cause first, because the last thing narrowed is the first thing
+   worth undoing. */
 function emptyLedgerMessage() {
   const cur = ownerFilter();
+  const alsoNarrowed = activeFilter !== 'all' || !!activeLetter || cur !== 'all';
+  const btn = (label, call) =>
+    '<br><button class="btn btn-secondary own-empty-btn" onclick="' + call + '">'
+    + label + '</button>';
+  const term = _activeSearchTerm();
+
+  if (term) {
+    return '<div class="empty-msg">Nothing here matches <b>' + e(term) + '</b>'
+      + (alsoNarrowed ? ', with the other filters you have on' : '') + '.'
+      + btn('Clear search', 'clearSearch()') + '</div>';
+  }
+  if (activeLetter) {
+    return '<div class="empty-msg">Nothing here starts with <b>'
+      + e(activeLetter) + '</b>.'
+      + btn('Show every letter', '_clearJumpLetter()') + '</div>';
+  }
+  /* Only sayable when nothing else is narrowing the list - otherwise it is a
+     claim about his whole account made from a filtered view, and the chip
+     above it may be saying a different number. */
   if (activeFilter === 'unshared') {
     return '<div class="empty-msg">Everything you own has been shared with '
-      + 'someone.<br><button class="btn btn-secondary own-empty-btn" '
-      + 'onclick="setFilter(&quot;unshared&quot;)">Show all projects</button></div>';
+      + 'someone.' + btn('Show all projects', 'setFilter(&quot;unshared&quot;)')
+      + '</div>';
   }
-  if (cur === 'all') return '<div class="empty-msg">Nothing here for this filter.</div>';
+  if (activeFilter !== 'all') {
+    const lbl = _activeFilterLabel();
+    return '<div class="empty-msg">Nothing here matches the <b>'
+      + e(lbl || 'selected') + '</b> filter.'
+      + btn('Show everything', 'setFilter(&quot;' + e(activeFilter) + '&quot;)')
+      + '</div>';
+  }
+  if (cur === 'all') return '<div class="empty-msg">Nothing here yet.</div>';
   return '<div class="empty-msg">Nothing here owned by '
     + (cur === 'mine' ? 'you' : 'anyone else')
     + ' — the owner filter is on <b>' + e(OWNER_FILTER_LABEL[cur]) + '</b>'
     + (_ownerFilterOverridden ? '' : ', your saved default')
-    + '.<br><button class="btn btn-secondary own-empty-btn" '
-    + 'onclick="setOwnerFilterUI(\'all\')">Show all owners</button></div>';
+    + '.' + btn('Show all owners', "setOwnerFilterUI('all')") + '</div>';
 }
 
 function buildPassOwner(own, me) {

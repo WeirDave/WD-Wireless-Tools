@@ -259,6 +259,39 @@ function externalChip(tab, rows) {
   out.searchOneProject = searchTree('bravo phase 2');
   out.searchSiteName = searchTree('bravo works');
 
+  // ---- the head, the letter, and what an empty list says ------------------
+  function view(term, letter) {
+    __set('data', { currentUser: ME, summary: { matched: 3 },
+      matched: [site('Alpha Depot', ['Alpha Baseline']),
+                site('Bravo Works', ['Bravo Baseline']),
+                site('Charlie Yard', ['Charlie Baseline'])],
+      cloudOnly: [], localOnly: [], orphans: { cloudOnly: [] } });
+    __set('currentTab', 'sites');
+    __set('activeFilter', 'all');
+    __set('activeLetter', letter || '');
+    setOwnerFilter('all');
+    const box = byId.get('searchBox');
+    if (box) box.value = term || '';
+    __set('_searching', !!term);
+    updateDashboard();
+    const markup = renderLedger(n => !term ||
+      String(n || '').toLowerCase().includes(term.toLowerCase()));
+    renderSearchNotice();
+    const notice = byId.get('searchNotice');
+    return {
+      head: Number((/Cloud Sites \((\d+)\)/.exec(markup) || [])[1]),
+      siteRows: (markup.match(/ledger-row tree-parent/g) || []).length,
+      empty: (/class="empty-msg">([\s\S]*?)<\/div>/.exec(markup) || [])[1] || '',
+      noticeHidden: notice ? !!notice.hidden : null,
+      notice: notice ? String(notice.innerHTML || '') : '',
+    };
+  }
+  out.viewPlain = view('', '');
+  out.viewLetterB = view('', 'B');
+  out.viewLetterZ = view('', 'Z');
+  out.viewSearch = view('bravo', '');
+  out.viewSearchNone = view('zzzz', '');
+
   out.externalSites = externalChip('sites', [siteHoldingTheirProject()]);
   const theirProject = siteHoldingTheirProject().cloud.children.matched[0];
   out.externalProjects = externalChip('projects', [theirProject]);
@@ -309,6 +342,82 @@ class AutoAssignActsOnWhatItOffered(unittest.TestCase):
 
     def test_the_project_assigned_is_the_one_that_was_listed(self):
         self.assertEqual(["u-Alpha Depot-0"], self.out["searched"]["assigned"])
+
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
+class TheNumberOverTheListCountsTheList(unittest.TestCase):
+    """And an empty list names the thing that emptied it.
+
+    `Cloud Sites (N)` was computed before the A-Z letter was applied, while the
+    no-site band below it was computed after - so one number was built from two
+    filter states and read "3" over a single row. The same count decided
+    whether the list was empty, so a letter matching nothing drew zero rows,
+    zero headings and no message at all.
+
+    `emptyLedgerMessage` looked only at the owner filter and at `unshared`, so
+    a list emptied by the search was blamed on the owner filter and offered a
+    button that would not bring the rows back.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.out = probe()
+
+    def test_the_head_counts_what_the_letter_left(self):
+        got = self.out["viewLetterB"]
+        self.assertEqual(1, got["siteRows"], got)
+        self.assertEqual(1, got["head"],
+                         "the head counted every site while one was drawn: "
+                         + repr(got))
+
+    def test_a_letter_that_matches_nothing_says_so(self):
+        got = self.out["viewLetterZ"]
+        self.assertEqual(0, got["siteRows"], got)
+        self.assertIn("starts with", got["empty"],
+                      "an empty list said nothing at all: " + repr(got))
+        self.assertIn("Z", got["empty"])
+
+    def test_a_search_that_matches_nothing_blames_the_search(self):
+        got = self.out["viewSearchNone"]
+        self.assertIn("zzzz", got["empty"], got)
+        self.assertIn("Clear search", got["empty"], got)
+        self.assertNotIn("owner filter", got["empty"],
+                         "the owner filter was blamed for the search: "
+                         + repr(got))
+
+    def test_an_unfiltered_view_counts_everything_and_says_nothing(self):
+        got = self.out["viewPlain"]
+        self.assertEqual(3, got["head"], got)
+        self.assertEqual(3, got["siteRows"], got)
+        self.assertTrue(got["noticeHidden"],
+                        "a notice appeared with no search on: " + repr(got))
+
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
+class TheSearchSaysWhatItIsHiding(unittest.TestCase):
+    """The chips count the account; the search narrows the list and leaves them
+    alone. That is a defensible split - making the counts follow the search
+    would put a second spelling of the search predicate in the counting code -
+    but it is only honest if something says so, which is why the owner filter
+    has had a notice above the list all along."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.out = probe()
+
+    def test_a_search_states_how_many_it_is_hiding(self):
+        got = self.out["viewSearch"]
+        self.assertFalse(got["noticeHidden"], got)
+        self.assertIn("Showing", got["notice"])
+        self.assertIn("1", got["notice"])
+        self.assertIn("3", got["notice"])
+
+    def test_it_says_the_counts_above_are_not_narrowed(self):
+        self.assertIn("counts above are for everything",
+                      self.out["viewSearch"]["notice"])
+
+    def test_it_offers_the_way_out(self):
+        self.assertIn("clearSearch()", self.out["viewSearch"]["notice"])
 
 
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")

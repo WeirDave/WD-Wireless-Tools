@@ -56,7 +56,16 @@ const notice = { hidden: true, className: '', innerHTML: '' };
 globalThis.document = {
   getElementById: (id) => (id === 'ownerFilterNotice' ? notice : null),
   querySelectorAll: () => [],
+  querySelector: () => null,
 };
+/* `emptyLedgerMessage` names the narrowest thing that emptied the list, and
+   both the search box and the A-Z letter come ahead of the owner filter in
+   that order. Neither is on here, which is what keeps these tests on the
+   branch they are about - the same reason `activeFilter` is pinned below.
+   Both live outside this slice, so the probe supplies them. */
+globalThis.activeLetter = null;
+globalThis._activeSearchTerm = () => '';
+globalThis._activeFilterLabel = () => '';
 globalThis.e = (s) => String(s);
 // `emptyLedgerMessage` also names the Not Shared filter when that is what
 // emptied the list, so the block reaches for this too. 'all' keeps these
