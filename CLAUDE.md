@@ -954,6 +954,25 @@ become acceptable because the sentence was updated.
 Swapping the first two arguments of `pushLocalOverCloud` fails the new test and
 passed every one of the assertions it replaced.
 
+**And the harness can be the thing that cannot fail, not the assertions.** A
+Node probe whose checks are `await`ed has to `await` its exit with them: `node
+-e` reaches the end of the script while the async IIFE is still pending, exits
+0, and the failures list is never read. Six tests written that way in
+`test_report_filename.py` passed with four deliberate breakages of the code
+under test in place - every assertion was correct and none of them was ever
+looked at. Nothing about it reads as wrong; mutation is what found it.
+`run_drop` in that file carries the two lines that fix it, and the same trap
+waits for any probe that grows an `async` wrapper.
+
+The second half is the same lesson wearing a browser. A Selenium harness that
+serves `web/` over `http.server` without answering `/api/settings/get` leaves
+`settingsAvailable` **false**, so the page concludes it is the hosted build and
+skips every server-backed path in it. The first run of
+`test_report_filename_browser.py` did exactly that and reported a passing page
+in all three browsers while the feature under test was never reached. **If a
+stub server is standing in for `server.py`, it has to answer the call the page
+uses to decide a server exists at all.**
+
 ### The ratchet
 
 `tests/test_a_test_must_be_able_to_fail.py` holds two properties:
