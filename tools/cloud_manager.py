@@ -2353,7 +2353,8 @@ class CloudManager:
     # case answers on the first read and costs nothing.
     _LISTING_BACKOFF_S = (0.0, 1.0, 2.0, 3.0, 5.0)
 
-    def _await_new_project(self, before_ids, esx_path, expect_names=()):
+    def _await_new_project(self, before_ids, esx_path, expect_names=(),
+                           progress_cb=None):
         """The project this upload created, once the listing admits it exists.
 
         Only reached when the upload could not name what it made, and the
@@ -2387,9 +2388,14 @@ class CloudManager:
             wanted = ""
         names = {n.strip().lower() for n in expect_names if n and n.strip()}
 
+        waited = 0.0
         for wait in self._LISTING_BACKOFF_S:
             if wait:
                 time.sleep(wait)
+                waited += wait
+                if progress_cb:
+                    progress_cb(message="Waiting for the cloud listing to "
+                                        "show the upload (%ds)…" % int(waited))
             try:
                 fresh = [p for p in self.api.get_projects()
                          if p.get("id") not in before_ids]
@@ -2508,21 +2514,40 @@ class CloudManager:
                 return result
 
 
-            new_id = None
-            new_project = None
-            for i in range(12):
-                time.sleep(0.5)
-                after = self.api.get_projects()
-                new_ones = [p for p in after if p["id"] not in before_ids]
-                if new_ones:
-                    new_project = new_ones[0]
-                    new_id = new_project["id"]
-                    break
-                if progress_cb:
+            #: **Identified on evidence, never on "it was not there a minute
+            #: ago".** `_await_new_project` states the rule and the reason it
+            #: exists; this used to take `new_ones[0]` instead, which is the
+            #: thing that docstring forbids in those words.
+            #:
+            #: The diff is taken before the upload and read after it, so the
+            #: window is as long as a multi-megabyte transfer. On an account
+            #: other people also write to, the first new row is as likely to
+            #: be a colleague's upload as ours - and what follows renames it
+            #: to his filename, files it into his site, downloads it back over
+            #: his local .esx, and, when the caller is `replace_cloud_project`,
+            #: deletes the project it is supposedly replacing. Refusing costs
+            #: a duplicate to tidy; guessing costs a project.
+            #:
+            #: Both spellings of the name count, because Ekahau names the new
+            #: project from `project.json` inside the .esx while the rename
+            #: below moves it to the filename - so at this moment it may
+            #: legitimately be called either.
+            expect = [Path(esx_path).stem]
+            try:
+                src = Path(esx_path)
+                internal = (_esx_meta(src, int(src.stat().st_mtime))
+                            .get("projectName") or "")
+            except Exception:
+                internal = ""
+            if internal:
+                expect.append(internal)
 
-
-                    progress_cb(current=55 + i // 3,
-                                message=f"Waiting for cloud listing to update ({(i + 1) // 2}s)…")
+            found = self._await_new_project(
+                before_ids, esx_path, expect_names=expect,
+                progress_cb=progress_cb) or {}
+            new_id = found.get("id") or None
+            new_project = ({"id": new_id, "name": found.get("name") or ""}
+                           if new_id else None)
 
 
             renamed_to = None
@@ -2560,8 +2585,19 @@ class CloudManager:
             elif not new_id:
 
 
+                #: The upload itself succeeded - the file is in the account.
+                #: What could not be established is *which* project it is, so
+                #: nothing was renamed, nothing was filed into a site, and
+                #: nothing was written back over the local file. Say that,
+                #: rather than "not yet visible", which invites a retry that
+                #: would upload it a second time.
                 return {"ok": True, "uploaded": True,
-                        "warning": "Uploaded but not yet visible in cloud listing — may take another moment to appear."}
+                        "identified": False,
+                        "warning": "Uploaded, but the new project could not be "
+                                   "identified in the cloud listing — so it has "
+                                   "not been renamed, filed into a site, or "
+                                   "synced back. Check Ekahau Cloud before "
+                                   "uploading it again."}
             else:
                 ret = {"ok": True, "uploaded": True, "datasetId": new_id}
                 if renamed_to:

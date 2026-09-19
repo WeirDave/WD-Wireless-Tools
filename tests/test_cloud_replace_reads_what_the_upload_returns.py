@@ -256,17 +256,40 @@ class TheKeyContractTests(_Base):
         So the happy path must never reach it. With the key mismatch in place
         it reached it every single time, which is how a 100%-reproducible
         defect could hide behind a passing suite.
+
+        **`upload_project` calls it too now, and that is not this.** The
+        upload identifies what it created on evidence rather than taking the
+        first new row in the listing, so one call from inside the upload is
+        correct and expected. What must not happen is a call *after* the
+        upload has returned - that one is the replace deciding for itself
+        which project to delete. So the order is asserted, not the count.
         """
         mgr, api = self._mgr()
-        calls = []
-        real = mgr._await_new_project
-        mgr._await_new_project = lambda *a, **k: (calls.append(a), real(*a, **k))[1]
+        events = []
+        real_await = mgr._await_new_project
+        real_upload = mgr.upload_project
+
+        def spy_await(*a, **k):
+            events.append("await")
+            return real_await(*a, **k)
+
+        def spy_upload(*a, **k):
+            events.append("upload:start")
+            try:
+                return real_upload(*a, **k)
+            finally:
+                events.append("upload:end")
+
+        mgr._await_new_project = spy_await
+        mgr.upload_project = spy_upload
 
         out = mgr.replace_cloud_project(str(self.esx), "old-1")
 
         self.assertTrue(out.get("ok"), out)
-        self.assertEqual(
-            [], calls,
+        self.assertIn("upload:end", events, events)
+        after_upload = events[events.index("upload:end"):]
+        self.assertNotIn(
+            "await", after_upload,
             "the replace had to go looking for the project the upload just "
             "made - the upload's return key and the replace's lookup disagree",
         )
