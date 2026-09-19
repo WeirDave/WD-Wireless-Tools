@@ -26,7 +26,6 @@ function against real files on disk and reads the bytes back afterwards.
 """
 from __future__ import annotations
 
-import os
 import shutil
 import tempfile
 import unittest
@@ -324,7 +323,11 @@ class ThroughTheServerTests(BackupFolderTestCase):
 
     def setUp(self):
         super().setUp()
-        os.environ.setdefault("WD_USER_DIR", tempfile.mkdtemp(prefix="wd-user-"))
+        #: `WD_USER_DIR` is already set, by `tests/__init__.py`, before a single
+        #: test module is imported - which is the whole point of it living
+        #: there. Setting it again here would be redundant, and the obvious
+        #: `setdefault(..., mkdtemp())` form leaks a directory per test,
+        #: because the argument is built whether or not it is used.
         import server
         self.server = server
         self._roots = server._backup_roots
