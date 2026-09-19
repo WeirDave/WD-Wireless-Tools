@@ -7719,7 +7719,14 @@ function startRename(side, idOrPath, name, kind) {
                      partner.name + _renameSuffix(partner.side, kind),
                      'rename-what-partner') : '')
     + (fullPath ? row('Full path', fullPath, 'rename-what-path') : '');
-  document.getElementById('renameSub').textContent = '';
+  /* The third name, said out loud. It is written too, and it is the one he
+     cannot see anywhere on the row - leaving it unmentioned would make the
+     dialog understate what the button does. */
+  document.getElementById('renameSub').textContent =
+    _renameLocalEsx(renameTarget)
+      ? 'The project name stored inside the .esx is set to match as well, so '
+        + 'the pair does not go on reporting a difference afterwards.'
+      : '';
 
   /* Showing him the folder name is half the job; he wanted it *in* the new
      name - "I want to use the folder name as part of the name". One click
@@ -7938,10 +7945,51 @@ async function _renameOneSide(side, idOrPath, kind, name) {
     : pyApi('rename_local', idOrPath, name);
 }
 
+/* The local .esx on this row, if there is one. A project row has three names -
+   the file on disk, the project in Ekahau, and `project.name` inside the
+   archive. A site row has two. */
+function _renameLocalEsx(rt) {
+  if (!rt || rt.kind === 'sites') return '';
+  const here = rt.side === 'local' ? rt.idOrPath : '';
+  const there = (rt.partner && rt.partner.side === 'local') ? rt.partner.idOrPath : '';
+  const p = String(here || there || '');
+  return /\.esx$/i.test(p) ? p : '';
+}
+
+/* Bring the third name with the other two.
+
+   The rename moved the file and the cloud project and left `project.name`
+   inside the archive as it was, so the comparison reported "renamed" the
+   moment it finished - and because Ekahau stamps `modifiedAt` on its own
+   rename while the local file's internal date does not move, the row read
+   "cloud newer" as well. A hundred pairs renamed to a new convention left a
+   hundred rows complaining about a field he cannot see, which is the
+   condition `tools/cloud_realign.py` exists to clear up afterwards.
+
+   Runs only once the renames have landed: a failed rename leaves the pair
+   alone, and the third name must not go on ahead of them. A failure here is
+   reported and changes nothing else - the two visible names are already
+   correct, and the row still offers "Set the name inside the file to match". */
+async function _alignInternalName(localPath, newName) {
+  if (!localPath) return;
+  try {
+    const r = await pyApi('set_internal_project_name', localPath, newName);
+    if (r && r.error) {
+      toast('Renamed, but the name inside the file could not be updated: '
+            + r.error + ' Use "Set the name inside the file to match" on the row.',
+            'warn');
+    }
+  } catch (err) {
+    toast('Renamed, but the name inside the file could not be updated: '
+          + err.message, 'warn');
+  }
+}
+
 async function confirmRename() {
   const n = document.getElementById('renameInput').value.trim();
   if (!n || !renameTarget) { closeModal('renameModal'); return; }
   const rt = renameTarget;
+  const localEsx = _renameLocalEsx(rt);
   const both = _renameBothWanted();
   const partnerDone = both && _renamePartnerAlreadyNamed(n);
   closeModal('renameModal');
@@ -7956,6 +8004,7 @@ async function confirmRename() {
       run: async () => {
         const r = await _renameOneSide(rt.side, rt.idOrPath, rt.kind, n);
         if (r && r.error) throw new Error(r.error);
+        await _alignInternalName(localEsx, n);
         _scheduleOpRefresh();
         return r;
       },
@@ -7987,6 +8036,8 @@ async function confirmRename() {
         `The ${mine} is now "${n}". The ${theirs} is still "${partner.name}" `
         + `— renaming it failed: ${r.error}`);
     }
+    //: Both visible names have landed, so the third one follows them.
+    await _alignInternalName(localEsx, n);
     return r;
   };
 

@@ -346,7 +346,7 @@ class TheOrderOfTheTwoWrites(unittest.TestCase):
         els.renameInput.value = 'Riverside Depot - Validation';
         confirmRename();
         setTimeout(() => console.log(JSON.stringify({
-          calls: calls.filter(c => c.fn !== 'refresh').map(c => c.fn),
+          calls: calls.filter(c => /^rename_/.test(c.fn || '')).map(c => c.fn),
           title: queued[0].title, sub: queued[0].sub,
           error: queued[0].error })), 20);
         """)
@@ -360,7 +360,7 @@ class TheOrderOfTheTwoWrites(unittest.TestCase):
         els.renameInput.value = 'Riverside Depot - Validation';
         confirmRename();
         setTimeout(() => console.log(JSON.stringify({
-          calls: calls.filter(c => c.fn !== 'refresh').map(c => c.fn) })), 20);
+          calls: calls.filter(c => /^rename_/.test(c.fn || '')).map(c => c.fn) })), 20);
         """)
         self.assertEqual(["rename_cloud", "rename_local"], got["calls"])
 
@@ -390,7 +390,7 @@ class TheOrderOfTheTwoWrites(unittest.TestCase):
         els.renamePairBoth.checked = false;
         confirmRename();
         setTimeout(() => console.log(JSON.stringify({
-          calls: calls.filter(c => c.fn !== 'refresh').map(c => c.fn),
+          calls: calls.filter(c => /^rename_/.test(c.fn || '')).map(c => c.fn),
           title: queued[0].title })), 20);
         """)
         self.assertEqual(["rename_local"], got["calls"])
@@ -406,7 +406,7 @@ class TheOrderOfTheTwoWrites(unittest.TestCase):
         els.renameInput.value = 'Harbour Point Phase 2';
         confirmRename();
         setTimeout(() => console.log(JSON.stringify({
-          calls: calls.filter(c => c.fn !== 'refresh').map(c => c.fn),
+          calls: calls.filter(c => /^rename_/.test(c.fn || '')).map(c => c.fn),
           sub: queued[0].sub })), 20);
         """)
         self.assertEqual(["rename_local"], got["calls"])
@@ -427,7 +427,7 @@ class AHalfRenamedPairSaysSo(unittest.TestCase):
         els.renameInput.value = 'Riverside Depot - Validation';
         confirmRename();
         setTimeout(() => console.log(JSON.stringify({
-          calls: calls.filter(c => c.fn !== 'refresh').map(c => c.fn),
+          calls: calls.filter(c => /^rename_/.test(c.fn || '')).map(c => c.fn),
           error: queued[0].error })), 20);
         """)
         self.assertEqual(["rename_local"], got["calls"])
@@ -482,7 +482,7 @@ class AHalfRenamedPairSaysSo(unittest.TestCase):
           calls.length = 0;
           Promise.resolve().then(() => queued[0].spec.retryFn()).then(() => {
             console.log(JSON.stringify({
-              calls: calls.filter(c => c.fn !== 'refresh').map(c => c.fn) }));
+              calls: calls.filter(c => /^rename_/.test(c.fn || '')).map(c => c.fn) }));
           });
         }, 20);
         """)
@@ -540,6 +540,80 @@ class TheOfferIsInTheDialogItself(unittest.TestCase):
         block = block[:block.index("}")]
         self.assertNotIn("display: none", block)
         self.assertNotIn("opacity: 0", block)
+
+
+class TheThirdNameIsBroughtWithThem(unittest.TestCase):
+    """There are three names on a row and renaming moved only two of them.
+
+    The file on disk, the project in Ekahau, and `project.name` *inside* the
+    .esx. A paired rename changed the first two and left the third, so the
+    comparison reported "renamed" the moment it finished - and Ekahau stamps
+    `modifiedAt` on its own rename while the local file's internal date does
+    not move, so the row read "cloud newer" as well. The feature built to stop
+    him hand-matching a hundred pairs left all hundred of them complaining,
+    which is what `tools/cloud_realign.py` was then written to clean up.
+
+    `set_internal_project_name` already existed for exactly this, wired to the
+    row's own "Set the name inside the file to match". The rename never called
+    it.
+    """
+
+    def _rename_both(self, extra=""):
+        return run_node(FIXTURE + """
+        const out = {};
+        startRename('local', 'C:/Surveys/Riverside Depot/Riverside Depot.esx',
+                    'Riverside Depot', 'projects');
+        els.renameInput.value = 'SITE1 Riverside Depot';
+        els.renamePairBoth.checked = true;
+        """ + extra + """
+        confirmRename();
+        setTimeout(() => {
+          out.calls = calls.filter(c => c.fn).map(c => ({ fn: c.fn, args: c.args }));
+          console.log(JSON.stringify(out));
+        }, 20);
+        """)
+
+    def test_the_name_inside_the_file_is_set_to_match(self):
+        got = self._rename_both()
+        internal = [c for c in got["calls"]
+                    if c["fn"] == "set_internal_project_name"]
+        self.assertEqual(1, len(internal),
+                         "the name inside the .esx was left as it was: "
+                         + repr([c["fn"] for c in got["calls"]]))
+        self.assertEqual("C:/Surveys/Riverside Depot/Riverside Depot.esx",
+                         internal[0]["args"][0])
+        self.assertEqual("SITE1 Riverside Depot", internal[0]["args"][1])
+
+    def test_it_happens_after_both_renames_not_before(self):
+        """A failed rename leaves the pair alone, so the third name must not
+        move ahead of them."""
+        got = self._rename_both()
+        order = [c["fn"] for c in got["calls"] if c["fn"] != "refresh"]
+        self.assertIn("set_internal_project_name", order, order)
+        self.assertLess(order.index("rename_local"),
+                        order.index("set_internal_project_name"), order)
+        self.assertLess(order.index("rename_cloud"),
+                        order.index("set_internal_project_name"), order)
+
+    def test_a_failed_rename_does_not_rewrite_the_file(self):
+        got = self._rename_both("failOn = { fn: 'rename_local', error: 'nope' };")
+        self.assertNotIn("set_internal_project_name",
+                         [c["fn"] for c in got["calls"]],
+                         "the file was rewritten for a rename that failed")
+
+    def test_a_site_row_has_no_third_name_to_set(self):
+        """A folder and a cloud site have two names, not three."""
+        got = run_node(FIXTURE + """
+        const out = {};
+        startRename('cloud', 'site-1', 'Riverside Depot', 'sites');
+        els.renameInput.value = 'SITE1 Riverside Depot';
+        confirmRename();
+        setTimeout(() => {
+          out.calls = calls.filter(c => c.fn).map(c => c.fn);
+          console.log(JSON.stringify(out));
+        }, 20);
+        """)
+        self.assertNotIn("set_internal_project_name", got["calls"], got["calls"])
 
 
 class TheLiveCloudIsNeverTouchedHere(unittest.TestCase):
