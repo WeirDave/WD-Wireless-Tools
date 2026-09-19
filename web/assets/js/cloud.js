@@ -2188,8 +2188,20 @@ function bakExplainHtml() {
   const retention = keep > 0
     ? `Settings keeps the newest <b>${keep}</b> of each file and deletes the rest as new ones are taken.`
     : `Retention is off in Settings, so every copy ever taken is kept until you delete it here.`;
+  /* A place the scan could not read makes the total a floor rather than the
+     answer, so it says so. The count only - never the path: the first report
+     of this arrived as a Windows error with a profile SID in it, pasted
+     across the page where the list should have been. */
+  const blocked = (bakData && bakData.unreadable) || 0;
+  const blockedNote = blocked
+    ? `<div class="bak-blocked-note">${blocked} ${blocked === 1 ? 'place' : 'places'}
+        could not be read, so the total below is at least this much rather than
+        all of it. That is usually a cloud-storage folder whose provider is not
+        running. The path is in the log &mdash; About &rarr; Diagnostics.</div>`
+    : '';
   return `<div class="dup-explain bak-explain">
     <div class="dup-explain-title">What am I looking at?</div>
+    ${blockedNote}
     <div class="dup-explain-body">
       Every copy the suite kept before it overwrote one of your files &mdash; a sync
       replacing a local project, a name written into the <code>.esx</code>, a Prep or

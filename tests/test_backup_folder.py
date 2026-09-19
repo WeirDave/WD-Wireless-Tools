@@ -29,6 +29,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from tools import backups
@@ -311,6 +312,195 @@ class BrowseTests(BackupFolderTestCase):
         res = backups.restore(str(install), [str(self.root)])
         self.assertIn("error", res)
         self.assertTrue(install.is_dir())
+
+
+class TheScanStaysInsideWhatItWasAskedForTests(BackupFolderTestCase):
+    """The first run on a real machine, and what it walked into.
+
+    The install's parent is scanned for the folder the updater keeps, and that
+    folder is a direct child of it. The parent of `C:\\WD-Wireless-Tools` is
+    `C:\\`, so walking it to the bottom walked the disk - into `$Recycle.Bin`,
+    where it stopped on a file the OS would not describe:
+
+        [WinError 1920] The file cannot be accessed by the system: '...'
+
+    Two separate faults, and each has a test here that fails without its fix.
+    """
+
+    def test_a_shallow_root_finds_the_install_backup_beside_it(self):
+        install = self.root / "WD-Wireless-Tools.previous-v2.136.4-20260101-090000"
+        (install / "web").mkdir(parents=True)
+        (install / "web" / "cloud.html").write_bytes(b"x" * 40)
+
+        found = backups.scan([(str(self.root), 1)])
+        self.assertEqual([i["kind"] for i in found["items"]], ["install"])
+
+    def test_a_shallow_root_does_not_walk_the_rest_of_the_drive(self):
+        """The whole point. A backup-shaped file two folders down is somebody
+        else's business when the root is the parent of an install."""
+        deep = self.root / "SomeoneElsesFolder" / "Deeper"
+        deep.mkdir(parents=True)
+        (deep / "Their Project.previous-20260101-090000.esx").write_bytes(b"x")
+
+        self.assertEqual(backups.scan([(str(self.root), 1)])["items"], [])
+        # ... and the same root walked to the bottom does find it, so the
+        # difference is the depth and not the file.
+        self.assertEqual(len(backups.scan([str(self.root)])["items"]), 1)
+
+    def test_a_file_the_system_will_not_describe_does_not_stop_the_scan(self):
+        """`Path.is_dir()` lets WinError 1920 through - it ignores 1921 and a
+        short list of others, and not that one. One unreadable file left the
+        tab with an error where the list should have been.
+
+        What is asserted is that the scan *finishes and still lists the
+        backups that are readable* - not that the awkward one disappears.
+        `is_dir_safe` answers False when the OS will not say, and a name is
+        enough to classify a file by, so it is listed with what is known
+        about it. Getting fewer facts about one file is the degradation
+        wanted here; losing the whole list is not.
+        """
+        good = self.take("20260101-090000")
+        real_is_dir = Path.is_dir
+        bad = self.root / "backups" / "NORTHWIND" / "Ghost.previous-20260102-090000.esx"
+        bad.write_bytes(b"x")
+
+        def refuse(path, *a, **kw):
+            if Path(path) == bad:
+                raise OSError(1920, "The file cannot be accessed by the system")
+            return real_is_dir(path, *a, **kw)
+
+        with unittest.mock.patch.object(Path, "is_dir", refuse):
+            found = backups.scan([str(self.root)])
+
+        listed = {i["path"] for i in found["items"]}
+        self.assertIn(str(good), listed)
+
+    def test_a_file_that_cannot_be_a_backup_is_never_touched(self):
+        """The name is tested before the disk is.
+
+        The path that broke this was `...\\$Recycle.Bin\\...\\.bin\\nanoid` -
+        a file with no extension and nothing backup-shaped about it, which
+        the old code asked the OS about anyway. Most of what a walk sees is
+        like that, and every one of them was a chance to raise.
+        """
+        self.take("20260101-090000")
+        for name in ("nanoid", "readme.txt", "Survey.esx", "notes.previous.esx"):
+            (self.site / name).write_bytes(b"x")
+
+        asked = []
+        real_classify = backups.classify
+
+        def watch(path):
+            asked.append(Path(path).name)
+            return real_classify(path)
+
+        with unittest.mock.patch.object(backups, "classify", watch):
+            backups.scan([str(self.root)])
+
+        self.assertNotIn("nanoid", asked)
+        self.assertNotIn("readme.txt", asked)
+        self.assertNotIn("Survey.esx", asked)
+        self.assertIn("Northwind Survey.previous-20260101-090000.esx", asked)
+
+    def test_a_directory_the_system_will_not_describe_does_not_stop_the_scan(self):
+        """This is the loop that actually crashed.
+
+        The file loop is guarded twice - a name test before any I/O, and a
+        `try` around `classify` - so removing `is_dir_safe` does not show
+        there. The *directory* loop has only `is_dir_safe` between it and the
+        same `OSError`, and every entry in `dirnames` goes through it looking
+        for an install backup. Delete the guard and this is what goes red.
+        """
+        good = self.take("20260101-090000")
+        awkward = self.root / "Awkward"
+        awkward.mkdir()
+        real_is_dir = Path.is_dir
+
+        def refuse(path, *a, **kw):
+            if Path(path) == awkward:
+                raise OSError(1920, "The file cannot be accessed by the system")
+            return real_is_dir(path, *a, **kw)
+
+        with unittest.mock.patch.object(Path, "is_dir", refuse):
+            found = backups.scan([str(self.root)])
+
+        self.assertEqual([i["path"] for i in found["items"]], [str(good)])
+
+    def test_the_scan_survives_a_file_it_cannot_even_name(self):
+        """The belt to the other's braces: if `classify` itself raises, that
+        one file is counted and the walk carries on."""
+        good = self.take("20260101-090000")
+        bad = self.root / "backups" / "NORTHWIND" / "Ghost.previous-20260102-090000.esx"
+        bad.write_bytes(b"x")
+        real_classify = backups.classify
+
+        def refuse(path):
+            if Path(path) == bad:
+                raise OSError(1920, "The file cannot be accessed by the system")
+            return real_classify(path)
+
+        with unittest.mock.patch.object(backups, "classify", refuse):
+            found = backups.scan([str(self.root)])
+
+        self.assertEqual([i["path"] for i in found["items"]], [str(good)])
+        self.assertEqual(found["unreadable"], 1)
+
+    def test_what_could_not_be_read_is_a_count_and_never_a_path(self):
+        """The first report of this arrived as a Windows profile SID pasted
+        across the page. The reason belongs on screen; the path does not."""
+        found = backups.scan([str(self.root)])
+        self.assertIsInstance(found["unreadable"], int)
+        for value in found.values():
+            self.assertNotIsInstance(value, str)
+
+    def test_a_directory_that_cannot_be_listed_is_stepped_over(self):
+        self.take("20260101-090000")
+        blocked = self.root / "Blocked"
+        blocked.mkdir()
+        real_walk = backups.os.walk
+
+        def walk(top, onerror=None, **kw):
+            for dirpath, dirnames, filenames in real_walk(top, onerror=onerror, **kw):
+                if Path(dirpath) == blocked and onerror:
+                    onerror(OSError(5, "Access is denied"))
+                    continue
+                yield dirpath, dirnames, filenames
+
+        with unittest.mock.patch.object(backups.os, "walk", walk):
+            found = backups.scan([str(self.root)])
+        self.assertEqual(len(found["items"]), 1)
+        self.assertEqual(found["unreadable"], 1)
+
+    def test_a_restore_refuses_a_target_it_cannot_describe(self):
+        """Read as "not there", a file that is there gets replaced with no
+        copy kept. That is the one place guessing destroys something."""
+        backup = self.take("20260101-090000")
+        target = backups.restore_target(backup, [str(self.root)])
+        real_exists = Path.exists
+
+        def refuse(path, *a, **kw):
+            if Path(path) == target:
+                raise OSError(1920, "The file cannot be accessed by the system")
+            return real_exists(path, *a, **kw)
+
+        with unittest.mock.patch.object(Path, "exists", refuse):
+            res = backups.restore(str(backup), [str(self.root)])
+        self.assertIn("error", res)
+        # Untouched: the restore refused rather than writing over it.
+        self.assertEqual(self.live.read_bytes(), b"the original")
+
+
+class TheSkippedPlacesTests(BackupFolderTestCase):
+
+    def test_the_system_folders_are_never_descended_into(self):
+        """`$Recycle.Bin` is where this went wrong, and nothing of ours is
+        ever in it."""
+        for name in ("$Recycle.Bin", "System Volume Information", "node_modules"):
+            d = self.root / name
+            d.mkdir()
+            (d / "Something.previous-20260101-090000.esx").write_bytes(b"x")
+
+        self.assertEqual(backups.scan([str(self.root)])["items"], [])
 
 
 class ThroughTheServerTests(BackupFolderTestCase):

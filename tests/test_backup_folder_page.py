@@ -285,6 +285,17 @@ async function click(html, pattern) {
   await click(html, /onclick="(bakToggleGroup\([^"]*\))"/);
   out.openAfter = (drawn.match(/bak-group expanded/g) || []).length;
 
+  // ── a place that could not be read is admitted to, as a count ─────────────
+  listing.unreadable = 2;
+  html = draw();
+  out.blockedNote = /bak-blocked-note/.test(html);
+  out.blockedSaysHowMany = /2 places/.test(html);
+  out.blockedNamesNoPath = !/\$Recycle|S-1-5-21|C:\\/.test(
+    (/<div class="bak-blocked-note">[\s\S]*?<\/div>/.exec(html) || [''])[0]);
+  listing.unreadable = 0;
+  html = draw();
+  out.noNoteWhenNothingBlocked = !/bak-blocked-note/.test(html);
+
   // ── the filters pick the rows they say they do ────────────────────────────
   api.setFilter_('bak-install');
   api.renderBackups();
@@ -428,6 +439,20 @@ class BackupFolderPageTests(unittest.TestCase):
         self.assertEqual(self.out["installFilterRows"], 1)
         self.assertEqual(self.out["missingFilterRows"], 1)
         self.assertEqual(self.out["projectFilterRows"], 3)
+
+    def test_a_place_that_could_not_be_read_is_admitted_to(self):
+        """A scan that skipped something and said nothing reports a total
+        that is quietly too low, which is worse than a larger number."""
+        self.assertTrue(self.out["blockedNote"])
+        self.assertTrue(self.out["blockedSaysHowMany"])
+
+    def test_the_blocked_note_is_a_count_and_never_a_path(self):
+        """The first report of this arrived as a Windows profile SID pasted
+        across the page. The reason belongs on screen; the path does not."""
+        self.assertTrue(self.out["blockedNamesNoPath"])
+
+    def test_nothing_is_said_when_everything_was_readable(self):
+        self.assertTrue(self.out["noNoteWhenNothingBlocked"])
 
     def test_the_path_on_a_row_drops_the_part_every_row_shares(self):
         self.assertEqual(self.out["shortened"], "O'Brien's Site")

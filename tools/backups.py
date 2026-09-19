@@ -40,6 +40,25 @@ _DIR_RE = re.compile(r"^(?P<stem>.+)\.previous-v(?P<version>[^-]*)-(?P<stamp>\d{
 
 DEFAULT_KEEP = 3
 
+#: How deep a root is worth walking. A root given as a plain path is walked to
+#: the bottom; a root given as `(path, depth)` stops there.
+#:
+#: **This exists because one of the roots is very often the root of a drive.**
+#: The install's parent is scanned for the `<install>.previous-v<version>-<stamp>`
+#: folder the updater keeps, and that folder is always a *direct child* of it -
+#: but the parent of `C:\WD-Wireless-Tools` is `C:\`, so walking it to the
+#: bottom means walking the whole disk. On the machine that reported it, the
+#: scan reached `C:\$Recycle.Bin` and died on a file inside it. Nothing about
+#: that is exotic; it is what the code was asking for.
+UNLIMITED = 0
+
+#: Places no backup of ours is ever in, and that reading costs time or raises.
+#: Matched case-folded on the directory's own name.
+_SKIP_DIR_NAMES = {
+    "$recycle.bin", "$recycle bin", "recycler", "system volume information",
+    "$windows.~ws", "$windows.~bt", "windows", "node_modules", ".git",
+}
+
 #: The folder Cloud Manager files a replaced project under, inside the project
 #: folder. It is the canonical copy of the name: `cloud_manager.BACKUP_DIR_NAME`
 #: is the same string and `tests/test_backup_folder.py` asserts they agree,
@@ -213,6 +232,52 @@ def _dir_size(path: Path) -> int:
     return total
 
 
+def is_dir_safe(path) -> bool:
+    r"""`path.is_dir()`, for a path the OS may refuse to answer about.
+
+    **`Path.is_dir()` does not swallow every error, and the one it lets
+    through is the one that got out.** It ignores a known list of Windows
+    errors - not ready, invalid name, cannot resolve filename - and 1920,
+    `ERROR_CANT_ACCESS_FILE`, is not on it. 1921 is, which is how this reads
+    like it should already be handled.
+
+    A cloud-storage placeholder whose provider is not running raises exactly
+    that, and so does a reparse point inside `$Recycle.Bin`. The first run of
+    the Backup Folder tab on a real machine hit one and put
+
+        [WinError 1920] The file cannot be accessed by the system: '...'
+
+    on screen in place of the list. One unreadable file, no list.
+
+    Nothing here needs to know *why* a path cannot be described. If the answer
+    cannot be had, it is not a directory we can walk and not a backup we can
+    offer, and that is the whole of what the caller wanted.
+    """
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def exists_safe(path) -> bool:
+    """`path.exists()`, with the same refusal handled the same way.
+
+    The Backup Folder tab asks this of every file a backup was taken of, to
+    say whether a restore replaces a copy or puts one back. An unreadable
+    answer is not "the file is there".
+    """
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
+def _looks_like_a_backup(name: str) -> bool:
+    """Could a file with this name be one of ours? Name only, no I/O."""
+    stem, dot, _ext = name.rpartition(".")
+    return bool(_FILE_RE.match(stem if dot else name))
+
+
 def classify(path: Path):
     """A backup's identity, or None if this is an ordinary file.
 
@@ -220,7 +285,7 @@ def classify(path: Path):
     counts against, so five backups of one project do not hide a single
     backup of another.
     """
-    if path.is_dir():
+    if is_dir_safe(path):
         m = _DIR_RE.match(path.name)
         if not m:
             return None
@@ -233,24 +298,80 @@ def classify(path: Path):
     return {"kind": "file", "owner": str(owner), "stamp": m.group("stamp")}
 
 
+def as_roots(roots):
+    """Accept a plain path or a `(path, depth)` pair; yield `(Path, depth)`.
+
+    Every entry point takes the same `roots` argument, so the depth travels
+    with the root rather than being a separate list somebody has to remember
+    to thread through - which is how the install's parent came to be walked
+    to the bottom in the first place.
+    """
+    out = []
+    for entry in roots or ():
+        if not entry:
+            continue
+        if isinstance(entry, (tuple, list)):
+            if not entry or not entry[0]:
+                continue
+            path, depth = entry[0], int(entry[1]) if len(entry) > 1 else UNLIMITED
+        else:
+            path, depth = entry, UNLIMITED
+        out.append((Path(path), max(0, depth)))
+    return out
+
+
+def root_paths(roots):
+    """Just the paths, for the checks that only ask "is it under one of these"."""
+    return [p for p, _depth in as_roots(roots)]
+
+
+def _rel_depth(dirpath, root) -> int:
+    """How many folders below `root` this is. The root itself is 0."""
+    try:
+        rel = os.path.relpath(str(dirpath), str(root))
+    except ValueError:
+        return 0
+    return 0 if rel == os.curdir else rel.count(os.sep) + 1
+
+
 def scan(roots, include_install=True):
     """Every backup under `roots`, newest first, with what it costs.
 
-    Returns {"items": [...], "bytes": int, "count": int}. Each item carries
-    path, owner, stamp, bytes and kind, so the caller can group by owner or
-    show the biggest offenders without walking the disk again.
+    Returns {"items": [...], "bytes": int, "count": int, "unreadable": int}.
+    Each item carries path, owner, stamp, bytes and kind, so the caller can
+    group by owner or show the biggest offenders without walking the disk
+    again.
+
+    **`unreadable` is a count and never a path.** A place the OS would not
+    describe is worth telling someone about - it means the total is a floor
+    rather than the whole answer - but the path itself is not. The first
+    report of this arrived as a Windows profile SID pasted across the page,
+    which is the failure `describe_failure` already exists to prevent.
     """
     seen, items = set(), []
-    for root in roots:
-        if not root:
+    counter = {"unreadable": 0}
+
+    def _blocked(_exc):
+        """A folder the walk could not list. Counted, never named."""
+        counter["unreadable"] += 1
+
+    for root, depth in as_roots(roots):
+        if not is_dir_safe(root):
             continue
-        root = Path(root)
-        if not root.is_dir():
-            continue
-        for dirpath, dirnames, filenames in os.walk(root):
+        for dirpath, dirnames, filenames in os.walk(root, onerror=_blocked):
             here = Path(dirpath)
+            # Nothing of ours is ever in these, and reading them costs time or
+            # raises. `$Recycle.Bin` is the one that started this.
+            dirnames[:] = [d for d in dirnames if d.lower() not in _SKIP_DIR_NAMES]
+
             # An install backup is a directory; do not also walk into it and
             # count every file inside as a separate find.
+            #
+            # **This runs before the depth cut, not after.** Clearing
+            # `dirnames` first is how the first draft of the depth limit made
+            # a shallow root find nothing at all: the install backup *is* one
+            # of those names, so removing them before looking removed the only
+            # thing that root is scanned for.
             for name in list(dirnames):
                 cand = here / name
                 info = classify(cand)
@@ -263,9 +384,24 @@ def scan(roots, include_install=True):
                     items.append({"path": str(cand), "owner": info["owner"],
                                   "stamp": info["stamp"], "kind": "install",
                                   "bytes": _dir_size(cand), "mtime": mtime})
+
+            # Now stop at the depth this root asked for. `dirnames` is edited
+            # in place, which is what os.walk reads to decide where to go next.
+            if depth and _rel_depth(here, root) >= depth - 1:
+                dirnames[:] = []
             for name in filenames:
                 cand = here / name
-                info = classify(cand)
+                #: A name is matched before the disk is touched. Most of what
+                #: a walk sees is not backup-shaped, and asking the OS about
+                #: every one of them is what made an unreadable file able to
+                #: stop the scan at all.
+                if not _looks_like_a_backup(name):
+                    continue
+                try:
+                    info = classify(cand)
+                except OSError:
+                    counter["unreadable"] += 1
+                    continue
                 if not info or str(cand) in seen:
                     continue
                 seen.add(str(cand))
@@ -275,7 +411,7 @@ def scan(roots, include_install=True):
                               "bytes": size, "mtime": mtime})
     items.sort(key=lambda i: i["stamp"], reverse=True)
     return {"items": items, "bytes": sum(i["bytes"] for i in items),
-            "count": len(items)}
+            "count": len(items), "unreadable": counter["unreadable"]}
 
 
 def prune_for(target, keep=DEFAULT_KEEP, protect=None, extra_dirs=()):
@@ -428,8 +564,8 @@ def inside_roots(path, roots):
     would resolve somewhere outside the root it was legitimately reached by,
     and be refused.
     """
-    for root in roots or ():
-        if root and _under(path, root):
+    for root in root_paths(roots):
+        if _under(path, root):
             return str(root)
     return None
 
@@ -458,9 +594,7 @@ def restore_target(path, roots):
     if not info:
         return None
     owner = Path(info["owner"])
-    for root in roots or ():
-        if not root:
-            continue
+    for root in root_paths(roots):
         holder = Path(root) / BACKUP_DIR_NAME
         if _under(owner, holder):
             try:
@@ -494,7 +628,7 @@ def browse(roots, include_install=True):
                 "target": str(target),
                 "name": target.name,
                 "folder": str(target.parent),
-                "exists": target.exists(),
+                "exists": exists_safe(target),
                 "kind": item["kind"],
                 "items": [], "bytes": 0, "count": 0,
             }
@@ -525,7 +659,8 @@ def browse(roots, include_install=True):
         g["newestWhen"] = g["items"][0]["when"] if g["items"] else 0
     out.sort(key=lambda g: (g["newest"], g["name"]), reverse=True)
     return {"groups": out, "bytes": found["bytes"], "count": found["count"],
-            "roots": [str(r) for r in roots if r]}
+            "unreadable": found.get("unreadable", 0),
+            "roots": [str(r) for r in root_paths(roots)]}
 
 
 def restore(path, roots, stamp=None):
@@ -565,8 +700,20 @@ def restore(path, roots, stamp=None):
     from datetime import datetime as _dt
     stamp = stamp or _dt.now().strftime("%Y%m%d-%H%M%S")
 
+    #: Deliberately not `exists_safe` here. Everywhere else an unreadable
+    #: answer is worth degrading for - a row says the original is gone, a scan
+    #: skips a file. This is the one place where guessing wrong destroys
+    #: something: read as "not there", a file that *is* there gets replaced
+    #: with no copy kept. So a target we cannot describe stops the restore and
+    #: says so, rather than being written over on an assumption.
+    try:
+        target_is_there = target.exists()
+    except OSError as exc:
+        return {"error": "The file this would replace could not be read, so "
+                         "nothing was written. " + describe_failure(exc, target)}
+
     kept = None
-    if target.exists():
+    if target_is_there:
         kept = path.with_name(f"{target.stem}.previous-{stamp}{target.suffix}")
         try:
             copy_for_backup(target, kept)

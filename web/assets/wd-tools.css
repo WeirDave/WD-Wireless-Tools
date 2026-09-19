@@ -2463,6 +2463,12 @@ body.tool-cloud .dup-toolbar-btn {
 
 .bak-warn { color: var(--amber); font-weight: 600; }
 
+.bak-blocked-note {
+  margin: 0 auto 10px; max-width: 900px; padding: 8px 12px;
+  background: rgba(217,119,6,0.14); border: 1px solid rgba(217,119,6,0.35);
+  border-radius: 4px; color: var(--text); font-size: 12px; line-height: 1.6;
+}
+
 .sum-static { cursor: default; color: var(--text-2); font-weight: 600; }
 .sum-static:hover { background: none; }
 

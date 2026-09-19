@@ -702,15 +702,31 @@ def api_templates(action):
 
 
 def _backup_roots():
-    """Where the suite's backups can be. The project folder is where every
-    per-file backup lands; the install's parent is where the updater puts the
-    folder it keeps so an update can be rolled back."""
+    r"""Where the suite's backups can be, and how deep each is worth walking.
+
+    The project folder holds every per-file backup, under `backups/<site>/`,
+    so it is walked to the bottom.
+
+    The install's **parent** is where the updater puts the
+    `<install>.previous-v<version>-<stamp>` folder it keeps so an update can
+    be rolled back - and that folder is always a *direct child* of it. It is
+    given a depth of one for a reason that is not a micro-optimisation: the
+    parent of `C:\WD-Wireless-Tools` is `C:\`. Walked to the bottom, this
+    scanned the entire drive. On the first run of the Backup Folder tab on a
+    real machine it reached `C:\$Recycle.Bin` and stopped on an unreadable
+    file inside it, putting a Windows error and a profile SID on screen where
+    the list should have been.
+
+    The same roots feed Settings' "Check usage" and "Clean up", so the whole
+    disk was in range of a purge as well. Nothing was ever deleted that was
+    not backup-shaped, and that is not a reason to have been looking there.
+    """
     roots = []
     out = (suite_settings.load_settings().get("global") or {}).get("output_dir")
     if out:
         roots.append(out)
     try:
-        roots.append(str(Path(__file__).resolve().parent.parent))
+        roots.append((str(Path(__file__).resolve().parent.parent), 1))
     except Exception:
         pass
     return roots
@@ -722,7 +738,9 @@ def _backups_scan(_d):
     installs = [i for i in found["items"] if i["kind"] == "install"]
     return {"ok": True, "count": found["count"], "bytes": found["bytes"],
             "human": _b.human_size(found["bytes"]),
-            "installCount": len(installs), "roots": _backup_roots()}
+            "installCount": len(installs),
+            "unreadable": found.get("unreadable", 0),
+            "roots": [str(r) for r in _b.root_paths(_backup_roots())]}
 
 
 def _backups_purge(d):
