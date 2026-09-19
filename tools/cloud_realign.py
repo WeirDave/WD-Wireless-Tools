@@ -52,7 +52,7 @@ of writing.
 the local copy, so an aligned pair drops out of the candidate set on the next
 run. `_rewrite_project_json` writes nothing when the mutation changes nothing,
 so a re-run after an interruption finishes the remainder without touching what
-is already done and without stacking a second backup.
+is already done.
 """
 from __future__ import annotations
 
@@ -144,9 +144,6 @@ def realign(cm, dry_run=True, progress_cb=None, limit=None):
     output_dir = cm.config.get("output_dir", "")
     if not output_dir:
         return {"error": "No local folder is set"}
-
-    keep_backups = cm.config.get("keep_local_backups")
-    keep_backups = True if keep_backups is None else bool(keep_backups)
 
     def _say(**kw):
         if progress_cb:
@@ -259,8 +256,7 @@ def realign(cm, dry_run=True, progress_cb=None, limit=None):
                 changed = True
             return changed
 
-        out = _rewrite_project_json(src, _fix, output_dir,
-                                    keep_backups=keep_backups)
+        out = _rewrite_project_json(src, _fix)
         if out.get("error"):
             failed.append({**entry, "error": out["error"]})
             continue
@@ -274,7 +270,6 @@ def realign(cm, dry_run=True, progress_cb=None, limit=None):
             planned["warning"] = "Contents updated, but the file's date on " \
                                  "disk could not be set: %s" % e
 
-        planned["backup"] = out.get("backup")
         aligned.append(planned)
 
     _say(stage="done", current=100, total=100, message="Done.")

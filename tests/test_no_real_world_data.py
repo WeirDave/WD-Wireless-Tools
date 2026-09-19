@@ -62,8 +62,8 @@ ALLOWED_CODE_TOKENS = {
                      # housekeeping scanner's fixtures need tokens of the
                      # site-code *shape* to prove it flags them, so these
                      # exist precisely to be matched by a detector.
-                     # `ABCD1` names the fixture site in the long-path backup
-                     # and detail-band tests, where the whole point is a
+                     # `ABCD1` names the fixture site in the long-path and
+                     # detail-band tests, where the whole point is a
                      # project named after its site and long enough to cross
                      # Windows' 260-character limit.
 }

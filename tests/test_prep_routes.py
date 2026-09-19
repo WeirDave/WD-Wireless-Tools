@@ -155,7 +155,7 @@ class PrepRouteTests(unittest.TestCase):
         self.assertEqual(self.esx.read_bytes(), self.bytes)
         self.assertEqual([p.name for p in self.esx.parent.iterdir()
                           if p.suffix == ".esx"], ["Project.esx"],
-                         "the route left a backup or a copy behind")
+                         "the route left a copy behind")
 
     def test_an_already_prepared_project_comes_back_as_a_message_not_a_file(self):
         first = self.post("run", f"steps=trim,walls&wallTemplate={self.wall_file}")

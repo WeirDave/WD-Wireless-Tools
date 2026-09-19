@@ -43,22 +43,6 @@ LIKELY_PROFILE_FILES = (
 )
 
 
-def _prune_backups(target, protect=None):
-    """Trim old backups of `target` to the configured count, after the write.
-
-    Never allowed to fail the operation: a project written correctly must not
-    report an error because tidying up afterwards did not work.
-    """
-    try:
-        from tools import backups as _b
-        from tools import settings as _s
-        keep = (_s.load_settings().get("global") or {}).get("backup_keep")
-        keep = _b.DEFAULT_KEEP if keep is None else int(keep)
-        return _b.prune_for(target, keep=keep, protect=protect)
-    except Exception:
-        return None
-
-
 def _read_members(zf: zipfile.ZipFile) -> dict:
     """Every JSON member of the archive, parsed, keyed by name."""
     out = {}
@@ -856,18 +840,18 @@ def _missing_message(missing) -> str:
 
 
 def apply_to(src_path, dest_path, template, occupants,
-             replace_existing=False, backup=True):
+             replace_existing=False):
     """Write the template into a project. The only function here that writes.
 
-    `src_path` is read and never modified. When `dest_path` is an existing
-    file it is copied aside first, and the new project is moved into place in
-    one step, so an interrupted write cannot leave a half-written .esx where a
-    real project used to be.
+    `src_path` is read and never modified - the written project is a separate
+    file, which is the whole of the safety here: the original keeps its own
+    name and needs no restoring. The new project is built in a temp file and
+    moved into place in one step, so an interrupted write cannot leave a
+    half-written .esx where a real project used to be.
     """
     import os
     import shutil
     import tempfile
-    from datetime import datetime
 
     src_path = Path(src_path)
     dest_path = Path(dest_path)
@@ -888,7 +872,7 @@ def apply_to(src_path, dest_path, template, occupants,
         # template's profiles injects any the project lacks, and a run that
         # writes no areas must not leave new profiles behind to explain.
         return {
-            "ok": True, "source": src_path.name, "written": None, "backup": None,
+            "ok": True, "source": src_path.name, "written": None,
             "occupants": counts["occupants"], "totalDevices": counts["totalDevices"],
             "rows": counts["rows"], "floorsWritten": [],
             "floorsSkipped": [f["floorName"] or f["floorPlanId"] for f in plan["floors"]],
@@ -1014,7 +998,6 @@ def apply_to(src_path, dest_path, template, occupants,
     # through never lands on top of a real project.
     tmp_fd, tmp_name = tempfile.mkstemp(suffix=".esx", dir=str(dest_path.parent))
     os.close(tmp_fd)
-    backup_path = None
     try:
         with zipfile.ZipFile(src_path) as zin, \
                 zipfile.ZipFile(tmp_name, "w", zipfile.ZIP_DEFLATED) as zout:
@@ -1025,20 +1008,9 @@ def apply_to(src_path, dest_path, template, occupants,
             for name, body in members.items():
                 zout.writestr(name, json.dumps(body, indent=2))
 
-        backup_path = None
-        if backup and dest_path.exists():
-            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            backup_path = dest_path.with_name(
-                "%s.backup-%s%s" % (dest_path.stem, stamp, dest_path.suffix))
-            #: Past MAX_PATH too - see `backups.copy_for_backup`. A sibling
-            #: backup is the source path plus 25 characters, and a project
-            #: named after its site starts long.
-            from tools import backups as _bk
-            _bk.copy_for_backup(dest_path, backup_path)
+        #: Built in a temp file and renamed over the top, so the destination
+        #: is either entirely the old file or entirely the new one.
         os.replace(tmp_name, str(dest_path))
-        # Only once the new file is in place.
-        if backup_path:
-            _prune_backups(dest_path, protect=str(backup_path))
     finally:
         if os.path.exists(tmp_name):
             os.unlink(tmp_name)
@@ -1047,7 +1019,6 @@ def apply_to(src_path, dest_path, template, occupants,
         "ok": True,
         "source": src_path.name,
         "written": str(dest_path),
-        "backup": str(backup_path) if backup_path else None,
         "occupants": counts["occupants"],
         "totalDevices": counts["totalDevices"],
         "rows": counts["rows"],

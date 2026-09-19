@@ -96,7 +96,6 @@ def main() -> int:
         names = ", ".join(f"{c['name']} -> {c['upperEdge']:.2f} m"
                           for c in res["changed"])
         print(f"  {r.path.name}: {names}")
-        print(f"     kept {Path(res['backup']).name}")
 
     if unreadable:
         print(f"\n{len(unreadable)} project(s) could not be read and were left "

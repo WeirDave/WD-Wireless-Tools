@@ -135,15 +135,22 @@ class TheRowSaysWhichKindOfDifferenceTests(unittest.TestCase):
     def test_a_pair_in_sync_renders_nothing(self):
         self.assertEqual("", self.out["inSync"])
 
-    def test_the_backups_location_is_stated_correctly(self):
-        """The old wording said the previous copy is kept "alongside it as a
-        .previous- file". It has not been alongside since backups moved into
-        their own folder, and telling someone the wrong place to look for the
-        copy of the file you just overwrote is the worst line in the dialog to
-        have wrong."""
+    def test_the_badge_says_what_happens_to_the_local_file(self):
+        """This line has been wrong twice and both times in the same place.
+
+        It said the previous copy is kept "alongside it as a .previous- file";
+        it had moved to a backups folder. Then backups were removed altogether
+        in v2.141.0 and the sentence became untrue rather than merely
+        misplaced. What is true now is that the cloud is holding the copy, so
+        that is what the badge says - a replace with no stated safety net reads
+        as data loss, and the safety net is the reason this is safe.
+        """
         for key in ("renamed", "content"):
-            self.assertIn("backups folder", self.out[key])
-            self.assertNotIn("alongside it", self.out[key])
+            text = self.out[key]
+            self.assertIn("Ekahau is holding", text)
+            for gone in ("alongside it", "backups folder", ".previous-"):
+                self.assertNotIn(gone, text,
+                                 f"the {key} badge still promises a copy: {gone}")
 
 
 if __name__ == "__main__":

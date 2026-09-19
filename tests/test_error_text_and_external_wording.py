@@ -42,7 +42,7 @@ CLOUD_JS = ROOT / "web" / "assets" / "js" / "cloud.js"
 CLOUD_HTML = ROOT / "web" / "cloud.html"
 CLOUD_PY = ROOT / "tools" / "cloud_manager.py"
 
-from tools import backups as B
+from tools import longpath as L
 
 
 class NoPathIsEscapedIntoAMessage(unittest.TestCase):
@@ -50,25 +50,25 @@ class NoPathIsEscapedIntoAMessage(unittest.TestCase):
 
     def _failure_message(self, dest, prefixed=False):
         exc = OSError(errno.ENOENT, "The system cannot find the path specified",
-                      B.long_path(dest) if prefixed else str(dest))
-        return B.describe_failure(exc, dest)
+                      L.long_path(dest) if prefixed else str(dest))
+        return L.describe_failure(exc, dest)
 
     def test_a_message_never_carries_a_doubled_backslash(self):
-        dest = "C:\\Users\\someone\\Projects\\backups\\" + ("P" * 200) + ".esx"
+        dest = "C:\\Users\\someone\\Projects\\" + ("P" * 200) + ".esx"
         for prefixed in (False, True):
             msg = self._failure_message(dest, prefixed)
             self.assertNotIn("\\\\", msg,
                              f"doubled backslash reached the message: {msg}")
 
     def test_a_message_never_carries_the_internal_path_form(self):
-        dest = "C:\\Users\\someone\\Projects\\backups\\" + ("P" * 200) + ".esx"
+        dest = "C:\\Users\\someone\\Projects\\" + ("P" * 200) + ".esx"
         msg = self._failure_message(dest, prefixed=True)
         self.assertNotIn("?\\", msg, "the \\\\?\\ prefix leaked into the message")
 
     def test_a_message_never_carries_the_path_at_all(self):
         """265 characters of path in a notification is not information. The
         full path goes to the log, where it can be read and copied."""
-        dest = "C:\\Users\\someone\\Projects\\backups\\" + ("P" * 200) + ".esx"
+        dest = "C:\\Users\\someone\\Projects\\" + ("P" * 200) + ".esx"
         msg = self._failure_message(dest)
         self.assertNotIn("PPPP", msg)
         self.assertNotIn("C:\\", msg)
@@ -86,43 +86,25 @@ class NoPathIsEscapedIntoAMessage(unittest.TestCase):
         dest = "C:\\a\\" + ("P" * 280) + ".esx"
         msg = self._failure_message(dest)
         self.assertIn(str(len(dest)), msg)
-        self.assertIn(str(B.MAX_PATH), msg)
+        self.assertIn(str(L.MAX_PATH), msg)
         self.assertRegex(msg, r"shorten|nearer the top")
 
     def test_a_short_path_gets_the_reason_without_the_length_lecture(self):
-        msg = B.describe_failure(OSError(13, "Permission denied"), "C:\\a.esx")
+        msg = L.describe_failure(OSError(13, "Permission denied"), "C:\\a.esx")
         self.assertIn("Permission denied", msg)
-        self.assertNotIn(str(B.MAX_PATH), msg)
-
-
-class TheRetryReportsThePathTheCallerAsked(unittest.TestCase):
-    """The exception that escapes names the plain path, not the prefixed one.
-
-    This is the fix at its source: every caller formatting an error benefits,
-    rather than each one having to remember to strip a prefix.
-    """
-
-    @unittest.skipUnless(os.name == "nt", "the prefix is a Windows idea")
-    def test_both_attempts_failing_still_names_the_ordinary_path(self):
-        real = shutil.copy2
-        self.addCleanup(setattr, shutil, "copy2", real)
-
-        def always_fail(s, d):
-            raise OSError(errno.ENOENT, "The system cannot find the path specified", str(d))
-
-        shutil.copy2 = always_fail
-        dest = "C:\\Users\\someone\\a.previous-20260918-160000.esx"
-        with self.assertRaises(OSError) as caught:
-            B.copy_for_backup("C:\\Users\\someone\\a.esx", dest)
-        self.assertEqual(dest, caught.exception.filename)
-        self.assertNotIn("\\\\?\\", str(caught.exception))
+        self.assertNotIn(str(L.MAX_PATH), msg)
 
 
 class TheEndToEndMessageIsReadable(unittest.TestCase):
-    """The whole sentence, as `set_internal_project_name` would return it."""
+    """The whole sentence, as `set_internal_project_name` would return it.
 
-    @unittest.skipUnless(os.name == "nt", "path lengths are a Windows problem")
-    def test_a_failed_backup_produces_no_escaped_path(self):
+    The failure is staged on the temp file the rewrite writes, because that is
+    the path that fails in real life: it is the .esx path plus 14 characters,
+    so on the longest-named projects it is the first thing in the operation to
+    cross `MAX_PATH` even when the .esx itself did not.
+    """
+
+    def test_a_failed_write_produces_no_escaped_path(self):
         from tools import cloud_manager as cm
         import zipfile
 
@@ -135,22 +117,32 @@ class TheEndToEndMessageIsReadable(unittest.TestCase):
         with zipfile.ZipFile(src, "w") as z:
             z.writestr("project.json", json.dumps({"project": {"name": "Old"}}))
 
-        real = shutil.copy2
-        self.addCleanup(setattr, shutil, "copy2", real)
+        real = zipfile.ZipFile
+        self.addCleanup(setattr, zipfile, "ZipFile", real)
 
-        def always_fail(s, d):
-            raise OSError(errno.ENOENT, "The system cannot find the path specified", str(d))
+        def fail_on_write(path, mode="r", *a, **kw):
+            if mode == "w":
+                raise OSError(errno.ENOENT,
+                              "The system cannot find the path specified",
+                              str(path))
+            return real(path, mode, *a, **kw)
 
-        shutil.copy2 = always_fail
+        zipfile.ZipFile = fail_on_write
         out = cm._rewrite_project_json(
-            src, lambda proj, doc: (proj.__setitem__("name", "New"), True)[1],
-            str(root), keep_backups=True)
+            src, lambda proj, doc: (proj.__setitem__("name", "New"), True)[1])
 
         msg = out.get("error", "")
         self.assertTrue(msg, "the failure produced no message at all")
         self.assertNotIn("\\\\", msg, f"doubled backslash on screen: {msg}")
         self.assertNotIn("?\\", msg, f"the internal path form on screen: {msg}")
         self.assertIn("The system cannot find the path specified", msg)
+        self.assertIn("the file is untouched", msg)
+
+        # And it really is untouched.
+        zipfile.ZipFile = real
+        with real(src) as z:
+            self.assertEqual("Old",
+                             json.loads(z.read("project.json"))["project"]["name"])
 
 
 class ASiteIsNeverSomebodyElses(unittest.TestCase):

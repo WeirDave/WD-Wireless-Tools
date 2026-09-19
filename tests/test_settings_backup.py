@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tools import backups, settings, settings_backup
+from tools import settings, settings_backup
 
 
 class Harness(unittest.TestCase):
@@ -69,7 +69,7 @@ class TheRoundTripReturnsEveryValue(Harness):
     def test_export_then_wreck_then_import(self):
         original = self.write_settings(**{
             "global.output_dir": str(self.root / "Projects"),
-            "global.backup_keep": 5,
+            "global.create_folder_template": "{site_code}",
             "walls.units": "imperial",
             "walls.default_template": "My Walls",
             "walls.auto_apply_template": True,
@@ -85,7 +85,7 @@ class TheRoundTripReturnsEveryValue(Harness):
         # Now do what the sweep did: overwrite everything and delete the
         # template, shortcuts and all.
         self.write_settings(**{
-            "global.backup_keep": 0,
+            "global.create_folder_template": "",
             "walls.units": "metric",
             "walls.default_template": "",
             "walls.auto_apply_template": False,
@@ -100,7 +100,7 @@ class TheRoundTripReturnsEveryValue(Harness):
                                      root=self.root)
 
         restored = settings.load_settings(_path=self.settings_file)
-        for dotted in ("global.backup_keep", "walls.units",
+        for dotted in ("global.create_folder_template", "walls.units",
                        "walls.default_template", "walls.auto_apply_template",
                        "walls.reveal_source_after_save", "cloud.merge_rule",
                        "cloud.live_interval_ms",
@@ -282,27 +282,38 @@ class ItBacksUpBeforeItWrites(Harness):
         self.assertEqual(saved["walls"]["units"], "metric",
                          "the backup holds what was there before the import")
 
-    def test_the_backup_uses_the_suites_own_naming_and_retention(self):
-        """So one purge screen covers these too, rather than a second scheme
-        nobody remembers to clean up."""
+    def test_the_copy_is_named_so_its_own_pruning_can_find_it(self):
+        """`_prune_copies` matches `<stem>.backup-<stamp><ext>` beside the
+        file. Get the name wrong - the stamp after the extension, say - and
+        nothing ever matches it again, so every copy is kept for ever. This
+        module is the last thing in the suite that copies a file aside, so
+        there is no shared retention left to lean on."""
         self.write_settings()
         result = settings_backup.backup_current(root=self.root)
-        name = Path(result["backup"]).name
-        self.assertIsNotNone(backups.classify(Path(result["backup"])),
-                             f"{name} is not recognised by tools/backups.py")
+        dest = Path(result["backup"])
+        self.assertTrue(dest.exists())
+        self.assertEqual(".json", dest.suffix)
+        self.assertRegex(dest.stem, r"^settings\.backup-\d{8}-\d{6}$")
+        self.assertEqual(self.root, dest.parent)
 
-    def test_turning_backups_off_still_leaves_one_step_back(self):
-        """backup_keep=0 is about routine backups piling up. An import is a
-        deliberate destructive act and its undo is part of the act."""
-        self.write_settings(**{"global.backup_keep": 0})
-        result = settings_backup.backup_current(root=self.root)
+    def test_asking_for_none_still_leaves_one_step_back(self):
+        """keep=0 is about routine copies piling up. An import is a deliberate
+        destructive act and its undo is part of the act, so this one is floored
+        at one however low the caller goes."""
+        self.write_settings()
+        result = settings_backup.backup_current(root=self.root, keep=0)
         self.assertEqual(result["keep"], 1)
         self.assertTrue(Path(result["backup"]).exists())
 
-    def test_his_retention_number_is_otherwise_respected(self):
-        self.write_settings(**{"global.backup_keep": 2})
-        result = settings_backup.backup_current(root=self.root)
+    def test_a_number_the_caller_gives_is_otherwise_respected(self):
+        self.write_settings()
+        result = settings_backup.backup_current(root=self.root, keep=2)
         self.assertEqual(result["keep"], 2)
+
+    def test_the_default_is_the_modules_own_constant(self):
+        self.write_settings()
+        result = settings_backup.backup_current(root=self.root)
+        self.assertEqual(settings_backup.KEEP_COPIES, result["keep"])
 
 
 class TheBundleIsReadable(Harness):
@@ -413,31 +424,34 @@ class AnAutomaticDumpBeforeSomethingRisky(Harness):
         self.assertIn("templates/My Walls_walltemplate.json", saved["files"])
         self.assertEqual(saved["takenBecause"], "update")
 
-    def test_the_off_switch_really_switches_it_off(self):
-        """These are the accumulating kind, which is what that setting is for."""
-        self.write_settings(**{"global.backup_keep": 0})
-        r = settings_backup.auto_dump("update", root=self.root)
+    def test_zero_really_switches_it_off(self):
+        """These are the accumulating kind, so unlike `backup_current` this one
+        honours a zero rather than flooring it at one."""
+        self.write_settings()
+        r = settings_backup.auto_dump("update", root=self.root, keep=0)
         self.assertIsNone(r["written"])
         self.assertFalse((self.root / settings_backup.AUTO_DIR_NAME).exists())
 
-    def test_retention_applies_and_the_suite_can_see_them(self):
+    def test_retention_applies_and_the_names_can_be_pruned(self):
         import time
-        self.write_settings(**{"global.backup_keep": 2})
+        self.write_settings()
         for _ in range(4):
-            settings_backup.auto_dump("update", root=self.root)
+            settings_backup.auto_dump("update", root=self.root, keep=2)
             time.sleep(1.05)
         kept = sorted((self.root / settings_backup.AUTO_DIR_NAME).glob("*.json"))
         self.assertEqual(len(kept), 2)
         for f in kept:
             with self.subTest(file=f.name):
-                self.assertIsNotNone(backups.classify(f))
+                self.assertRegex(
+                    f.stem, r"^settings-update\.backup-\d{8}-\d{6}$",
+                    "a name this shape is what _prune_copies matches on")
 
     def test_one_reason_does_not_evict_another(self):
         """A run of updates must not push out the dump taken before the last
-        import - the same rule backups.py applies per owner."""
-        self.write_settings(**{"global.backup_keep": 1})
-        settings_backup.auto_dump("import", root=self.root)
-        settings_backup.auto_dump("update", root=self.root)
+        import: five copies of one must not hide the only copy of another."""
+        self.write_settings()
+        settings_backup.auto_dump("import", root=self.root, keep=1)
+        settings_backup.auto_dump("update", root=self.root, keep=1)
         names = sorted(p.name for p in
                        (self.root / settings_backup.AUTO_DIR_NAME).glob("*.json"))
         self.assertTrue(any("import" in n for n in names), names)

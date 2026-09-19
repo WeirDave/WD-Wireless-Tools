@@ -188,9 +188,11 @@ class EachFileGoesTheWayItsDatesSay(unittest.TestCase):
         """)
 
     def test_a_newer_local_file_is_never_in_the_download_set(self):
-        """Not a warning he can click through - it simply cannot happen. His
-        local copy is both the working file and the backup, so replacing it
-        with an older cloud copy can destroy the only copy of a state."""
+        """Not a warning he can click through - it simply cannot happen.
+
+        Nothing is copied aside, so his local file is the only copy of whatever
+        work is newer than the cloud. Replacing it with an older cloud copy
+        would destroy that state outright."""
         self.run_block("""
           data = { summary: {}, matched: [pair('mine','local_newer')] };
           var p = syncEverythingPlan();
@@ -325,19 +327,19 @@ class ItIsHonestAboutTheHalfItDoesNotDoInBulk(unittest.TestCase):
         # Run it. What this has to get right is the sentence he reads at the
         # end of a run, and only running it produces the sentence.
         confirmed = _run_outcome(
-            {"done": 3, "failed": 0, "skipped": 0, "backups": []},
+            {"done": 3, "failed": 0, "skipped": 0},
             {"up": [], "upBlocked": [{}, {}], "downBlocked": [], "inSync": []},
             {"pushed": 0})
         self.assertIn("2 still need the pair confirmed", confirmed)
 
         unticked = _run_outcome(
-            {"done": 1, "failed": 0, "skipped": 0, "backups": []},
+            {"done": 1, "failed": 0, "skipped": 0},
             {"up": [{}, {}, {}], "upBlocked": [], "downBlocked": [], "inSync": []},
             {"pushed": 1})
         self.assertIn("2 left unticked and not sent up", unticked)
 
         finished = _run_outcome(
-            {"done": 4, "failed": 0, "skipped": 0, "backups": []},
+            {"done": 4, "failed": 0, "skipped": 0},
             {"up": [{}, {}], "upBlocked": [], "downBlocked": [], "inSync": []},
             {"pushed": 2})
         self.assertIn("local and cloud now match", finished)
@@ -450,43 +452,24 @@ class ItIsHonestAboutTheHalfItDoesNotDoInBulk(unittest.TestCase):
         self.assertIn("to go up", head)
         self.assertNotIn("not built", head)
 
-    def test_where_the_backups_went_is_reported(self):
-        """The local copy is his backup of the cloud, so a replaced one has to
-        be findable without asking."""
-        source = self.source[self.source.index("function _reportSyncOutcome"):]
-        source = source[:source.index("if (typeof window")]
-        self.assertIn("results.backups", source)
-        self.assertIn("previous local cop", source)
+    def test_the_confirm_says_what_happens_to_the_local_file(self):
+        """This sentence has now been wrong twice, both times about a copy.
 
-    def test_more_than_one_generation_of_backup_survives(self):
-        """One generation is not a backup if two runs happen in a row.
+        It said every generation was kept for ever while retention was deleting
+        all but the newest three; a test pinning that phrasing was what held
+        the wrong sentence in place for six days. Backups were then removed
+        altogether in v2.141.0, and any promise of a copy became untrue rather
+        than merely out of date.
 
-        That intent is unchanged; the sentence asserting it had gone stale.
-        This used to require the dialog to say "nothing is pruned", which was
-        written for v2.86.0 and stopped being true in v2.93.0 the following day,
-        when backups got a retention policy. For six days the dialog told him
-        every generation was kept for ever while the code was deleting all but
-        the newest three, and this test was what held the wrong sentence in
-        place.
-
-        So it asserts the property rather than the old phrasing: names are
-        timestamped so two runs cannot collide, and retention keeps more than
-        one.
+        What is true is that the cloud keeps its project when a pull replaces
+        the local file, so that is the fact the confirm has to carry - and it
+        must not promise a copy on disk that nobody writes.
         """
-        self.assertIn("newest three per file are kept", self.body.lower())
-        self.assertNotIn("nothing is pruned", self.body)
-        py = (ROOT / "tools" / "cloud_manager.py").read_text(encoding="utf-8")
-        block = py[py.index("def verify_replace_local"):]
-        block = block[:block.index("\n    def ", 10)] if "\n    def " in block[10:] else block
-        # Timestamped, so a second run cannot land on the first one's name.
-        # The name is built in `_backup_target` now, which also decides the
-        # folder - the copy goes to `<project folder>/backups/` rather than
-        # beside the live file.
-        self.assertIn("_backup_target(src", block)
-        py_all = (ROOT / "tools" / "cloud_manager.py").read_text(encoding="utf-8")
-        target = py_all[py_all.index("def _backup_target("):]
-        target = target[:target.index("_SKIP_DIRS")]
-        self.assertIn('f"{src.stem}.previous-{stamp}{src.suffix}"', target)
+        self.assertIn("that cloud copy stays there afterwards", self.body)
+        for gone in ("nothing is pruned", "newest three per file",
+                     ".previous-", "backups folder"):
+            self.assertNotIn(gone, self.body.lower().replace("&mdash;", ""),
+                             f"the confirm still promises a copy: {gone}")
 
 
 class NoBluntDirectionalControl(unittest.TestCase):

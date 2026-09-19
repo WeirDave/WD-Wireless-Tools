@@ -32,11 +32,6 @@ DEFAULTS = {
             "reports": "reports",
         },
         "custom_destinations": [],
-        # How many generations of "<name>.previous-<date>.esx" to keep beside
-        # a project. 0 turns backups off entirely - he asked for that, and an
-        # .esx is big enough that keeping every one of them forever fills a
-        # disk rather than protecting anything.
-        "backup_keep": 3,
         # When Settings was last exported to a file, so the page can say
         # how stale the backup is. A record rather than a choice - it is
         # in the registry's "internal" list and has no control.
@@ -78,12 +73,6 @@ DEFAULTS = {
     },
     "cloud": {
         "merge_rule": "ask",
-        # Downloading the cloud copy over a local file keeps the old one under
-        # `<output folder>/backups/`. On by default and switchable, because he
-        # asked for the switch - "I wish I can turn off once I've proven that
-        # everything works OK" - and because the day he needs it is the day it
-        # has to have been on. Off means the replace is irreversible.
-        "keep_local_backups": True,
         "live_interval_ms": 30000,
         # Which owner filter the Files list opens on: "all", "mine" or
         # "others".  Only the *starting* point.  Clicking the toolbar toggle

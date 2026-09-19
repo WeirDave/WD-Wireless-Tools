@@ -26,7 +26,6 @@ import re
 import shutil
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
 
 FT = 0.3048
@@ -99,22 +98,6 @@ class ProjectReport:
     @property
     def severity(self) -> float:
         return sum(f.severity for f in self.findings)
-
-
-def _prune_backups(target, protect=None):
-    """Trim old backups of `target` to the configured count, after the write.
-
-    Never allowed to fail the operation: a project written correctly must not
-    report an error because tidying up afterwards did not work.
-    """
-    try:
-        from tools import backups as _b
-        from tools import settings as _s
-        keep = (_s.load_settings().get("global") or {}).get("backup_keep")
-        keep = _b.DEFAULT_KEEP if keep is None else int(keep)
-        return _b.prune_for(target, keep=keep, protect=protect)
-    except Exception:
-        return None
 
 
 def _five_ghz_db_per_m(wall_type: dict) -> float:
@@ -231,13 +214,17 @@ def audit_folder(folder: Path) -> list[ProjectReport]:
     return hits
 
 
-def repair_project(path: Path, heights: dict[str, float],
-                   backup: bool = True) -> dict:
+def repair_project(path: Path, heights: dict[str, float]) -> dict:
     """Set ``upperEdge`` on the named wall types, and nothing else.
 
     ``heights`` maps wall-type name to metres.  A type already carrying a
     height is left alone; a name that is not in the file is reported rather
     than ignored, because a silent no-op looks like success.
+
+    Rewritten through a temp file that is renamed over the top, with no copy
+    kept: the change is one number on the named wall types, every other member
+    is passed through byte-identical, and a name that is not in the file is
+    refused rather than guessed at.
     """
     path = Path(path)
     if not path.is_file():
@@ -291,20 +278,6 @@ def repair_project(path: Path, heights: dict[str, float],
                          "a height in this project.", "skipped": skipped,
                 "notFound": missing}
 
-    backup_path = None
-    if backup:
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup_path = path.with_name(f"{path.stem}.previous-{stamp}{path.suffix}")
-        try:
-            from tools import backups as _bk
-            _bk.copy_for_backup(path, backup_path)
-        except OSError as e:
-            #: `describe_failure`, not `{e}` - `OSError.__str__` reprs its
-            #: filename, so a Windows path arrives with every backslash
-            #: doubled. See `backups.describe_failure`.
-            return {"error": "Could not back the project up, so nothing was "
-                             "changed. " + _bk.describe_failure(e, backup_path)}
-
     members["wallTypes.json"] = (json.dumps(doc, indent=2, ensure_ascii=False)
                                  + "\n").encode("utf-8")
     tmp = path.with_suffix(path.suffix + ".wd-audit.tmp")
@@ -315,16 +288,9 @@ def repair_project(path: Path, heights: dict[str, float],
         tmp.replace(path)
     except OSError as e:
         tmp.unlink(missing_ok=True)
-        if backup_path:
-            backup_path.unlink(missing_ok=True)
         return {"error": f"Write failed, the project was not changed: {e}"}
 
-    # Written; only now is an older generation expendable.
-    if backup_path:
-        _prune_backups(path, protect=str(backup_path))
-
     return {"ok": True, "path": str(path),
-            "backup": str(backup_path) if backup_path else None,
             "changed": changed, "skipped": skipped, "notFound": missing}
 
 
@@ -383,7 +349,6 @@ def _cli(argv: list[str]) -> int:
         else:
             for c in res["changed"]:
                 print(f"  {r.path.name}: {c['name']} -> {c['upperEdge']:.2f} m")
-            print(f"     kept {Path(res['backup']).name}")
     return 1 if failed else 0
 
 
