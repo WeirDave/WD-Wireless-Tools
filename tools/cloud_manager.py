@@ -924,12 +924,25 @@ def folder_inventory(folder):
     images, CAD — none of which live on Ekahau Cloud), and guard deletes.
     Skips backup/output subfolders."""
     esx_files, plans, images, other = [], [], [], []
+    #: What the listing deliberately leaves out, counted rather than ignored.
+    #: The skip is right for the peek and the badge - he does not want a year
+    #: of archived surveys listed every time he looks at a site folder - but
+    #: this inventory also feeds the delete confirmation, whose whole job is
+    #: to say what is about to be destroyed. Counting zero for a folder full
+    #: of archived work made that sentence wrong in the one direction that
+    #: matters, and since v2.141.0 nothing copies a file aside first.
+    tucked_n, tucked_bytes = 0, 0
     try:
         for f in folder.rglob("*"):
             if not f.is_file():
                 continue
             rel_parts = [p.lower() for p in f.relative_to(folder).parts[:-1]]
             if any(part in _SKIP_DIRS for part in rel_parts):
+                tucked_n += 1
+                try:
+                    tucked_bytes += f.stat().st_size
+                except OSError:
+                    pass
                 continue
             ext = f.suffix.lower()
             try:
@@ -957,6 +970,7 @@ def folder_inventory(folder):
         "esx": len(esx_files), "plans": len(plans), "images": len(images), "other": len(other),
         "srcCount": len(source), "srcSizeH": human_size(sum(r["size"] for r in source)),
         "total": len(allfiles), "files": slim,
+        "tuckedCount": tucked_n, "tuckedSizeH": human_size(tucked_bytes),
     }
 
 
@@ -3638,8 +3652,24 @@ class CloudManager:
                         skipped += 1
                 except Exception as e:
                     errors.append(f"{rel}: {e}")
+            #: **Every file, including the ones a scan skips.** This answer is
+            #: what the page acts on: with "Delete the source folder afterward"
+            #: ticked - and it ships ticked - `srcEmpty` sends the folder
+            #: straight to `delete_local`, which is `shutil.rmtree` on a
+            #: directory, with no dialog naming anything.
+            #:
+            #: `_walk_files` deliberately skips `output`, `archive` and
+            #: `backups` so a scan does not report finished exports as work to
+            #: do. Right for a scan, wrong for this: a folder holding nothing
+            #: but `Output/` and `Archive/` answered "empty" and was then
+            #: deleted whole. Since v2.141.0 nothing copies a file aside
+            #: first, so there is no other copy of any of it.
+            #:
+            #: Deleting a folder that really is empty loses nothing, so the
+            #: measurement is what changes rather than a prompt being added in
+            #: front of it.
             try:
-                src_empty = not any(True for _ in _walk_files(src))
+                src_empty = not any(p.is_file() for p in src.rglob("*"))
             except OSError:
                 src_empty = False
             return {"ok": True, "moved": moved, "overwritten": overwritten,

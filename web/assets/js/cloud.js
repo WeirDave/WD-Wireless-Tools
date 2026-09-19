@@ -7806,6 +7806,13 @@ function startDelete(side, idOrPath, name, isDir, kind) {
         if (s.other) bits.push(`${s.other} other file${s.other > 1 ? 's' : ''}`);
         warn += `<div class="del-warn">&#9888; This folder holds <b>${s.srcCount} source file${s.srcCount > 1 ? 's' : ''}</b> (${bits.join(', ')} · ${e(s.srcSizeH)}) that are <b>not on Ekahau Cloud</b>. Deleting removes the only copy.</div>`;
       }
+      /* The listing above deliberately skips archive, output and backup
+         subfolders, so a folder whose remaining content is a year of archived
+         surveys counted zero source files and this dialog said nothing about
+         them at all. They go with the folder like everything else. */
+      if (s && s.tuckedCount) {
+        warn += `<div class="del-warn">&#9888; It also holds <b>${s.tuckedCount} file${s.tuckedCount > 1 ? 's' : ''}</b> (${e(s.tuckedSizeH)}) in archive, output or backup subfolders, not listed above. Those are deleted too.</div>`;
+      }
     }
   }
   document.getElementById('deleteTitle').textContent =
