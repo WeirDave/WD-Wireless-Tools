@@ -98,32 +98,41 @@ sent its two arguments the wrong way round, so every action's "did it land"
 confirmation had failed since v2.120.0 — and the test covering it was pinning
 the swap by asserting a positional argument.
 
-The P1 items, all still open:
+**Every P1 item is now closed — six of them in v2.142.0, one commit and one
+failing-first test each.** They are kept listed here, and in full in the audit,
+because the reasoning is why each guard exists, and a guard whose reason is not
+written down is the one a later session removes as redundant.
 
-* **The upload identifies the project it just made as "the first id that was
-  not in the listing a moment ago"** (`cloud_manager.py:2611`), then renames
-  it, files it, downloads it over the local `.esx`, and — in
-  `replace_cloud_project` — deletes the old cloud project. `_await_new_project`
-  exists precisely to forbid this and is only used on the fallback path.
+* ~~**The upload identifies the project it just made as "the first id that was
+  not in the listing a moment ago"**~~ (`cloud_manager.py:2611`) — it applied
+  `_await_new_project`'s evidence rule on the fallback path only, while the
+  primary path did the thing that docstring forbids in those words. Both paths
+  use it now, and an upload that cannot identify what it made renames nothing,
+  files nothing and writes nothing back over the local file.
 * ~~**The push overwrites the local `.esx` with no backup**~~ — **closed by
   v2.141.0, which removed backups suite-wide.** It was a finding about
   *inconsistency*: every other local overwrite in the file backed one up first
   and this one did not. None of them do now, deliberately, and the writes rest
   on atomic replace instead. Read `CLAUDE.md` § "Backups were removed, and that
-  is the design" before treating an unprotected write here as a defect.
-* **`replace_cloud_project` never re-checks direction before deleting** — no
-  `modifiedAt` comparison anywhere in it, so a cloud copy saved after the
-  ledger was drawn is deleted in favour of an older local file.
-* **Cancel on a running cloud write does nothing and then reports success as
-  "Cancelled"** — nothing reads `cancelFlag`.
-* **Merge's "delete the source folder afterwards" is ticked by default** and
-  judges the folder empty with a walk that skips `archive/` and `output/`.
-* **On the Projects tab the cloud and local checkboxes are the same control**,
-  so a cloud-side tick deletes the local file too — while the dialog says
-  local copies are not touched.
+  is the design" before treating an unprotected write here as a defect. Its
+  live half was the item above, and that is what closed it.
+* ~~**`replace_cloud_project` never re-checks direction before deleting**~~ —
+  it re-reads both dates before anything is uploaded, and refuses with both of
+  them named. Same guard the pull direction has always had, and a missing date
+  still counts as "Ekahau did not say" rather than "newer".
+* ~~**Cancel on a running cloud write does nothing and then reports success as
+  "Cancelled"**~~ — Cancel is opt-in now and nothing opts in, so no running
+  write offers it; queued work still offers Remove, which always worked. Work
+  that returns is Done.
+* ~~**Merge's "delete the source folder afterwards" is ticked by default**~~ —
+  "empty" is measured over every file rather than the scan's skip list, and the
+  local delete dialog names what is tucked away in `archive/` and `output/`.
+* ~~**On the Projects tab the cloud and local checkboxes are the same
+  control**~~ — each side has its own key, as the Sites tab and nested rows
+  always did, and a mixed selection no longer claims local copies are safe.
 
-Two systemic items worth doing before the rest, because they are cheap and
-everything else depends on them:
+Two systemic items are still open, and are worth doing before the P2 list
+because they are cheap and everything else depends on them:
 
 * **CI never installs Node**, so roughly 30 cloud test files skip silently.
   They pass today only because the runner image happens to ship Node.

@@ -113,7 +113,15 @@ the keys `server.py` reads rather than by position. It fails on the old code.
 
 ## P1 — can destroy work that cannot be recovered
 
-### A1. The uploaded project is identified as "the first id that was not in the listing a moment ago" [traced]
+> **All six are closed, in v2.142.0.** Each is a separate commit carrying a
+> test that fails against the code before it. They are left here in full
+> rather than deleted, because the reasoning is why each guard exists — and a
+> guard whose reason is not written down is the one a later session removes as
+> redundant.
+>
+> A2 needed no code of its own; its live half was A1. See the note under it.
+
+### A1. The uploaded project is identified as "the first id that was not in the listing a moment ago" [traced] — **fixed in v2.142.0**
 
 `tools/cloud_manager.py:2611-2617`:
 
@@ -170,7 +178,15 @@ nothing in `backups/`.
 > now the only copy. See "Backups were removed, and that is the design" in
 > CLAUDE.md before reading this as an argument for putting them back.
 
-### A3. `replace_cloud_project` never re-checks direction before deleting [measured]
+> **Closed in v2.142.0, by A1 rather than by a backup.** The remaining half —
+> "a push writes over a local file on a project identified by the first new
+> row" — is exactly what A1's fix removes: the sync-back is reached only for a
+> project positively identified as the one just uploaded, and when nothing can
+> be identified the upload renames nothing, files nothing and writes nothing
+> back. The write itself was already atomic (temp file, then `os.replace`), so
+> it cannot truncate. Nothing was added that copies a file aside.
+
+### A3. `replace_cloud_project` never re-checks direction before deleting [measured] — **fixed in v2.142.0**
 
 `tools/cloud_manager.py:2275-2445` contains **zero** references to
 `modifiedAt`, `_NEWER_TOLERANCE_S` or `local_newer` (grepped: 0 matches). The
@@ -182,7 +198,7 @@ copy is saved at 08:58; Local → Cloud runs at 09:00. The newer cloud project i
 deleted and replaced with the older local file. The only thing standing in
 front of that delete is a client-side snapshot.
 
-### A4. Cancel on a running cloud write does nothing, then reports it as cancelled [measured]
+### A4. Cancel on a running cloud write does nothing, then reports it as cancelled [measured] — **fixed in v2.142.0**
 
 `cloud.js:488-494`. `opCancel` sets `op.cancelFlag.aborted = true`. Every
 occurrence of `cancelFlag`/`aborted` in the whole file:
@@ -205,7 +221,7 @@ the verify and **the cloud delete** all complete. The card reads *Cancelled*,
 and the run body still toasts *"the old one was removed"*. A cancel button on
 an irreversible delete that does nothing and then claims it worked.
 
-### A5. Merge's "delete the source folder afterwards" is ticked by default and judges "empty" with a walk that skips `archive/` and `output/` [reported]
+### A5. Merge's "delete the source folder afterwards" is ticked by default and judges "empty" with a walk that skips `archive/` and `output/` [reported] — **confirmed, and fixed in v2.142.0**
 
 `web/cloud.html:372` — `<input type="checkbox" id="mergeDeleteSrc" checked>`.
 `cloud.js:6337-6350` goes straight to `pyApi('delete_local', …)` with no
@@ -222,7 +238,7 @@ the *same* skip list, so it says zero.
 **Not independently verified — confirm before acting.** It is the single most
 destructive path found.
 
-### A6. On the Projects tab the cloud and local checkboxes are the same control [measured]
+### A6. On the Projects tab the cloud and local checkboxes are the same control [measured] — **fixed in v2.142.0**
 
 `cloud.js:2610` builds matched Projects-tab rows with `key: 'p:' + p.cloud.id`
 and **no** `cloudCheckKey` / `localCheckKey`. Both the Sites tab (`:2691`) and
