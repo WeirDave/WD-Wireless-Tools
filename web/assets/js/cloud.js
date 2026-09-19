@@ -8717,12 +8717,37 @@ function _taShow(input) {
   _taHighlight = -1;
   input.select();
 }
+/* Take what he typed as the answer, when he typed one and never clicked a row.
+
+   The destination was read from `destValue`, which only `_taPick` and
+   `_taPickNew` ever wrote - so typing a site name in full and pressing Move
+   used whatever the picker had guessed instead, while the field on screen
+   still showed the typed name. `_taBlur` then rewrote the text back, so
+   nothing on screen ever admitted it.
+
+   An exact name is that site; anything else is a new one, which is what the
+   list itself offers while he is typing. Called on blur, and again at confirm
+   time - the blur is on a 150ms timer and a click on Move lands well inside
+   it, which is the case that actually bit. */
+function _taCommitTyped(idx, text) {
+  const target = _taTargetFor(idx);
+  if (!target) return;
+  const typed = String(text == null ? '' : text).trim();
+  //: An empty box is not an instruction to forget the destination.
+  if (!typed || typed === String(_taDisplayText(target) || '').trim()) return;
+  const i = _moveToSiteSites.findIndex(s =>
+    String(s.name || '').trim().toLowerCase() === typed.toLowerCase());
+  if (i >= 0) _taPick(idx, 'i:' + i);
+  else _taPickNew(idx, typed);
+}
+
 function _taBlur(input) {
 
   const idx = input.dataset.idx;
   setTimeout(() => {
     const list = _taGetList(idx);
     if (list) list.hidden = true;
+    _taCommitTyped(idx, input.value);
     const target = _taTargetFor(idx);
     if (target) input.value = _taDisplayText(target);
   }, 150);
@@ -8903,6 +8928,13 @@ function _refreshPathPreview() {
 
 async function confirmMoveToSite() {
   const n = _moveToSiteTargets.length;
+  /* Anything still sitting in a box counts. Blur commits it too, but on a
+     150ms timer, and a click on Move lands well inside that - so a typed
+     destination was read as whatever the picker had guessed. */
+  _taCommitTyped('global', (_taGetInput('global') || {}).value);
+  _moveToSiteTargets.forEach((t, i) => {
+    _taCommitTyped(String(i), (_taGetInput(String(i)) || {}).value);
+  });
   const plans = _moveToSiteTargets.map(t => ({ t, dest: _resolveDest(t) }));
   const notReady = plans.filter(p => !p.dest.ready);
   if (notReady.length) {
