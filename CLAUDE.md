@@ -1750,6 +1750,34 @@ stack** is shared, so a bare `git stash pop` in a worktree can still take
 somebody else's entry - prefer a throwaway WIP commit, or `git stash push -m
 "<unique tag>"` and `git stash apply <sha>` by id.
 
+### Your copy goes stale while you work, and nothing tells you
+
+**A worktree is only current at the moment it is created.** It is branched from
+`origin/main`, which is correct - and from that second onward, every other
+session's finished work lands on `main` and yours does not move. Nothing warns
+you. No command you run in your own worktree behaves any differently. The copy
+you are reasoning about is simply, silently, no longer what is on `main`.
+
+The instruction below - fetch and rebase before pushing - is correct and it is
+**late**. It catches the problem at the last possible moment, after all the work
+is done, which is the most expensive place to discover that somebody deleted a
+module you spent the afternoon calling.
+
+So: **`git fetch origin && git rebase origin/main` at the start of the session,
+and again before starting any large change** - not only at push time. Then
+re-read this file, because it is the thing most likely to have changed
+underneath you, and a stale copy of it is how a session confidently rebuilds
+something another session has just deliberately removed.
+
+Measured on 2026-09-19, which is why this is here. One branch held finished work
+for thirteen hours while `main` moved five times - a bug fix, a release, two
+documentation passes and an edit to this file. Every rebase was clean, so
+nothing was lost. What it cost was a version number: two sessions independently
+wrote `2.140.0` into `versions.json`, git saw identical bytes and therefore no
+conflict, and the collision was caught by eye rather than by any tool. **A
+rebase you do early is a rebase against a small difference.** See "The one thing
+a worktree does not protect you from" below for the version half of that.
+
 ### How work merges back
 
 `main` is still the only branch anybody publishes, and routine work still goes
