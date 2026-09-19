@@ -115,6 +115,7 @@
       </span>
     </div>
     <div class="tab" id="tabDuplicates" onclick="switchTab('duplicates')" title="Files with the same normalized name — spot accidental copies">Duplicate Projects</div>
+    <div class="tab" id="tabBackups" onclick="switchTab('backups')" title="Every copy the suite kept before it overwrote one of your files — a sync that replaced a project, a name change, a prep run. Nothing here is read by the sync, and any of it can be put back.">Backup Folder</div>
   </div>
 
   <div class="dashboard" id="dashboard">
@@ -145,6 +146,12 @@
       <button class="sum-count" data-filter="dup-cloud" onclick="setFilter('dup-cloud')" title="Duplicate groups that exist only on Ekahau Cloud."><span class="sum-n" id="dDupCloud">-</span> <span class="sum-l">cloud-only sets</span></button>
       <button class="sum-count" data-filter="dup-local" onclick="setFilter('dup-local')" title="Duplicate groups that exist only in your local project folder."><span class="sum-n" id="dDupLocal">-</span> <span class="sum-l">local-only sets</span></button>
       <button class="sum-count" data-filter="dup-mixed" onclick="setFilter('dup-mixed')" title="Duplicate groups containing both cloud and local copies."><span class="sum-n" id="dDupMixed">-</span> <span class="sum-l">mixed sets</span></button>
+      <button class="sum-count" data-filter="bak-all" onclick="setFilter('bak-all')" title="Every copy kept before something overwrote a file — whichever tool took it."><span class="sum-n" id="dBakAll">-</span> <span class="sum-l">backup copies</span></button>
+      <button class="sum-count" data-filter="bak-project" onclick="setFilter('bak-project')" title="Backups of Ekahau projects — the copy taken before a sync, a rename or a prep run replaced the .esx."><span class="sum-n" id="dBakProject">-</span> <span class="sum-l">project backups</span></button>
+      <button class="sum-count" data-filter="bak-missing" onclick="setFilter('bak-missing')" title="Backups whose original is no longer where it was. Restoring one of these puts a file back rather than replacing one."><span class="sum-n" id="dBakMissing">-</span> <span class="sum-l">original gone</span></button>
+      <button class="sum-count" data-filter="bak-install" onclick="setFilter('bak-install')" title="Copies of the whole app folder that the updater keeps so a bad update can be rolled back. Never pruned automatically."><span class="sum-n" id="dBakInstall">-</span> <span class="sum-l">previous installs</span></button>
+      <span class="sum-sep" id="dBakSizeSep" hidden>&middot;</span>
+      <span class="sum-count sum-static" id="dBakSize" hidden title="What every backup listed on this tab is using on disk."></span>
     </div>
   </div>
 
@@ -157,7 +164,7 @@
     <button class="btn btn-blue" id="syncAllBtn" onclick="syncEverything()"
             title="Works out for each file which side is newer and does that, or nothing when the two already match. It never replaces a newer file with an older one, so it cannot overwrite work. Shows what it will do before it does it, and says what still needs to go up.">&#8645; Sync everything</button>
 
-    <details class="wd-menu">
+    <details class="wd-menu" id="selectMenu">
       <summary class="wd-menu-btn">Select</summary>
       <div class="wd-menu-items">
         <label class="wd-menu-item selall"><input type="checkbox" id="selAll" onchange="toggleSelectAll()"> Everything on this tab</label>

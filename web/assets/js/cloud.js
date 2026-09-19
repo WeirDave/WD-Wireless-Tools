@@ -648,6 +648,12 @@ function toggleLive() {
   }
 }
 function liveBusy() {
+  /* Live means "re-pull from Ekahau". The Backup Folder tab has nothing to
+     re-pull: it walks the project folder on disk, which only changes when he
+     does something here - and each of those actions refreshes the list
+     itself. Polling it would be a recursive scan of every project folder
+     every nine seconds, to redraw the same rows. */
+  if (currentTab === 'backups') return true;
   if (document.querySelector('.modal-overlay.active')) return true;
   if (selected.size > 0) return true;
   const sb = document.getElementById('searchBox');
@@ -678,17 +684,44 @@ function setupSkip() { goToDashboard(document.getElementById('setupEmail').textC
 function lastFilesKind() {
   try { return localStorage.getItem('wd-files-kind') || 'sites'; } catch (e) { return 'sites'; }
 }
+/* The tabs that are not the cloud/local file lists. Both of them hide the
+   owner toggle, the site controls and the cloud-shaped filters, so asking the
+   question once is what keeps a third tab from being added to four of the six
+   places that care and missed by the other two. */
+function isLocalOnlyTab(kind) { return kind === 'duplicates' || kind === 'backups'; }
+
 function _syncTabUI(kind) {
-  document.getElementById('tabFilesGroup').classList.toggle('active', kind !== 'duplicates');
+  document.getElementById('tabFilesGroup').classList.toggle('active', !isLocalOnlyTab(kind));
   document.getElementById('viewTreeBtn').classList.toggle('active', kind === 'sites');
   document.getElementById('viewFlatBtn').classList.toggle('active', kind === 'projects');
   document.getElementById('tabDuplicates').classList.toggle('active', kind === 'duplicates');
+  const bakTab = document.getElementById('tabBackups');
+  if (bakTab) bakTab.classList.toggle('active', kind === 'backups');
   document.getElementById('addNewBtn').style.display = kind === 'sites' ? '' : 'none';
   document.getElementById('expandAllBtn').hidden = kind !== 'sites';
   document.getElementById('collapseAllBtn').hidden = kind !== 'sites';
   const ownerEl = document.getElementById('ownerToggle');
-  if (ownerEl) ownerEl.hidden = (kind === 'duplicates');
+  if (ownerEl) ownerEl.hidden = isLocalOnlyTab(kind);
   renderOwnerFilterNotice();
+
+  /* Nothing on the Backup Folder tab talks to Ekahau, so the controls that do
+     are taken away rather than left to act on a list he is not looking at.
+     `Sync everything` is the one that matters: it works from the ledger data,
+     which is still in memory, so pressing it here would start syncing cloud
+     projects from a screen showing local file copies. Live goes too - it is
+     paused on this tab, and a countdown ticking next to a list it is not
+     re-reading says something untrue. */
+  ['syncAllBtn', 'liveBtn', 'matchHelpChip', 'selectMenu'].forEach(id => {
+    const node = document.getElementById(id);
+    if (node) node.hidden = (kind === 'backups');
+  });
+
+  /* And the A-Z rail, which indexes site names. Neither of these two tabs
+     draws through `renderRows` on the way in - each goes straight to its own
+     renderer - so the rail the ledger put up stayed up, twenty-six letters
+     over a list that none of them selects. */
+  const jump = document.getElementById('jumpNav');
+  if (jump && isLocalOnlyTab(kind)) jump.style.display = 'none';
 
   const dupTbBtn = document.getElementById('dupDeleteAllToolbarBtn');
   if (dupTbBtn && kind !== 'duplicates') dupTbBtn.hidden = true;
@@ -700,6 +733,11 @@ function switchTab(kind) {
   if (kind === 'sites' || kind === 'projects') {
     try { localStorage.setItem('wd-files-kind', kind); } catch (e) {}
   }
+  /* A filter chosen on the tab you are leaving does not mean anything on the
+     one you are arriving at, and `updateDashboard` hides the chip rather than
+     clearing it - so it would go on filtering invisibly. */
+  if (activeFilter.indexOf('bak-') === 0 && kind !== 'backups') activeFilter = 'all';
+  if (activeFilter.indexOf('dup-') === 0 && kind !== 'duplicates') activeFilter = 'all';
   _syncTabUI(kind);
   refreshData();
 }
@@ -771,7 +809,14 @@ function refreshData(silent, opts) {
     document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">Loading…</div>';
   }
   const tab = currentTab;
-  if (tab === 'duplicates') {
+  if (tab === 'backups') {
+    /* Its own call, and not through `pyApi`: nothing on this tab talks to
+       Ekahau, so the list still draws when the cloud session has dropped -
+       which is exactly when someone comes looking for the copy of a file. */
+    bakApi('list')
+      .then(d => onBackups(tab, d))
+      .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
+  } else if (tab === 'duplicates') {
     pyApi('get_duplicates')
       .then(d => onDuplicates(tab, JSON.stringify(d)))
       .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
@@ -1256,7 +1301,12 @@ function _setCount(id, n) {
 
 function updateDashboard() {
   const isDup = currentTab === 'duplicates';
+  const isBak = currentTab === 'backups';
   const isProj = currentTab === 'projects';
+  //: Every filter on the summary line belongs to exactly one of the three
+  //: lists. `cloudy` is the everyday set, and naming it once is what stops a
+  //: fourth tab from being added to some of the rules and not the others.
+  const cloudy = !isDup && !isBak;
 
   /* The everyday filters, hidden where they mean nothing.
 
@@ -1265,12 +1315,63 @@ function updateDashboard() {
      Duplicates tab - where none of them applies. Addressed by what they filter
      now, like everything else. */
   ['all', 'mismatches', 'orphans', 'orphans-cloud', 'orphans-local'].forEach(key => {
-    _showFilter(key, !isDup);
+    _showFilter(key, cloudy);
   });
 
   ['dup-all', 'dup-mixed', 'dup-local', 'dup-cloud'].forEach(key => {
     _showFilter(key, isDup);
   });
+
+  ['bak-all', 'bak-project', 'bak-missing', 'bak-install'].forEach(key => {
+    _showFilter(key, isBak);
+  });
+
+  /* These four are shown from inside the cloud-count branch, which does not
+     run on the other two tabs at all - so whatever they last said stayed on
+     screen. Arriving at the Backup Folder tab to be told "29 out of sync" is
+     a number about a list that is no longer there. */
+  if (!cloudy) {
+    ['stale', 'external', 'unshared', 'unmatched-sites'].forEach(key => {
+      _showFilter(key, false);
+    });
+  }
+
+  /* The dots between the groups of chips. They are punctuation for a line
+     that is not there on these two tabs, and they were reading as "· · ·"
+     floating above the list. */
+  document.querySelectorAll('.sum-sep').forEach(el => { el.hidden = !cloudy; });
+
+  if (isBak) {
+    /* Copies rather than sets. "4 project backups" and a list showing four
+       rows agree with each other; counting the files they were taken of would
+       put a number on screen that nothing in the list adds up to. */
+    const groups = (bakData && bakData.groups) || [];
+    const copies = (gs) => gs.reduce((n, g) => n + ((g.items || []).length), 0);
+    _setCount('dBakAll', copies(groups));
+    _setCount('dBakProject', copies(groups.filter(g => bakIsProject(g))));
+    _setCount('dBakMissing', copies(groups.filter(g => g.kind !== 'install' && !g.exists)));
+    _setCount('dBakInstall', copies(groups.filter(g => g.kind === 'install')));
+    /* The size is the thing he is deciding on, so it is not hidden behind a
+       chip that also filters - it is a plain reading on the line. */
+    const sizeEl = document.getElementById('dBakSize');
+    const sepEl = document.getElementById('dBakSizeSep');
+    const total = (bakData && bakData.bytes) || 0;
+    if (sizeEl) {
+      sizeEl.textContent = (bakData && bakData.human) || fmtBytes(total);
+      sizeEl.hidden = !total;
+      sizeEl.title = 'What every backup listed on this tab is using on disk.';
+    }
+    if (sepEl) sepEl.hidden = !total;
+    /* A hidden chip still filters. Arriving here holding a `dup-` filter
+       would empty the list with nothing on screen explaining why, so anything
+       that is not one of this tab's own filters falls back to All. */
+    if (activeFilter.indexOf('bak-') !== 0 && activeFilter !== 'all') activeFilter = 'all';
+  } else {
+    const sizeEl = document.getElementById('dBakSize');
+    const sepEl = document.getElementById('dBakSizeSep');
+    if (sizeEl) sizeEl.hidden = true;
+    if (sepEl) sepEl.hidden = true;
+  }
 
   if (isDup) {
     const s = (dupData && dupData.summary) || { total: 0, mixed: 0, localOnly: 0, cloudOnly: 0 };
@@ -1278,7 +1379,7 @@ function updateDashboard() {
     _setCount('dDupMixed', s.mixed);
     _setCount('dDupLocal', s.localOnly);
     _setCount('dDupCloud', s.cloudOnly);
-  } else if (data && data.summary) {
+  } else if (!isBak && data && data.summary) {
 
     const ownerVisible = currentTab === 'sites' ? _siteOwnedVisible : _passOwnerForCounts;
     const _countsAsStale = isOutOfSync;
@@ -1354,7 +1455,7 @@ function updateDashboard() {
     _setCount('dUnmatchedSites', unmatchedSites);
     _showFilter('unmatched-sites', isSitesTab);
     _setCount('dStale', staleCount);
-    _showFilter('stale', !isDup && staleCount > 0);
+    _showFilter('stale', cloudy && staleCount > 0);
     _setCount('dNameMatches', nameMatches);
 
     _setCount('dOrphans', Math.max(0, cloudOnly + localOnly - externalOrphans));
@@ -1373,7 +1474,7 @@ function updateDashboard() {
     _setCount('dCloudOnly', isSitesTab ? (kidCloudOnly + looseCloud) : cloudOnly);
     _setCount('dLocalOnly', isSitesTab ? kidLocalOnly : localOnly);
     _setCount('dExternal', externalCount);
-    _showFilter('external', !isDup && externalCount > 0);
+    _showFilter('external', cloudy && externalCount > 0);
 
     // Counted through the owner filter, like every other card, so the number
     // on the card is the number of rows the list will actually show.
@@ -1405,7 +1506,7 @@ function updateDashboard() {
     // Hidden when there are none to find, and when we do not know who he is -
     // without that, "yours" is unanswerable and the filter would silently
     // mean something else.
-    _showFilter('unshared', !isDup && !!((data && data.currentUser) || '')
+    _showFilter('unshared', cloudy && !!((data && data.currentUser) || '')
                          && unsharedCount > 0);
     _setCount('dTypeDesign', typeCount.Design);
     _setCount('dTypeMeasured', typeCount.Measured);
@@ -1413,13 +1514,13 @@ function updateDashboard() {
   }
 
   ['name-matches', 'type-design', 'type-measured', 'type-hybrid'].forEach(key => {
-    _showFilter(key, !isDup);
+    _showFilter(key, cloudy);
   });
   /* Offered wherever those rows can appear. It was Projects-only, while the
      rows themselves render on the Sites tab - so on the tab where he could see
      them, nothing selected them and the wrong chip did. */
-  _showFilter('unassigned', !isDup);
-  if (!isDup && data) {
+  _showFilter('unassigned', cloudy);
+  if (cloudy && data) {
     let noSite = 0;
     if (isProj) {
       (data.matched || []).forEach(p => {
@@ -1512,6 +1613,11 @@ function charDiff(a, b) {
 }
 
 function renderRows() {
+  /* Before the dispatch, not after it. Both of the local-folder tabs return
+     early, so the rail was drawn for the ledger and then left standing over a
+     list it does not index - twenty-six letters that select nothing. */
+  _renderJumpNav();
+  if (currentTab === 'backups') { renderBackups(); return; }
   if (currentTab === 'duplicates') { renderDuplicates(); return; }
   /* Rebuilding the list scrolls him back to the top of ninety-eight sites,
      which is its own way of losing his place. */
@@ -1538,7 +1644,7 @@ let _jumpNavPresentCache = new Set();
 function _renderJumpNav() {
   const nav = document.getElementById('jumpNav');
   if (!nav) return;
-  if (currentTab === 'duplicates') { nav.style.display = 'none'; return; }
+  if (isLocalOnlyTab(currentTab)) { nav.style.display = 'none'; return; }
   nav.style.display = '';
   const container = document.getElementById('rowsContainer');
 
@@ -1918,6 +2024,349 @@ function dupDeleteOne(key, iid) {
   const it = cl.items.find(i => norm(i.id || i.path) === target);
   if (it) _bulkDeleteItems([it], key);
   else toast('Could not locate that item', 'error');
+}
+
+/* ── The Backup Folder tab ─────────────────────────────────────────────────
+
+   Six places in this suite copy a file aside before overwriting it, and every
+   one of them has been reporting a path into a folder there was no way to open
+   from inside the tool: "I know we have no window to it right now."
+
+   So this is the window, and it is a file manager rather than a report. The
+   list groups every copy under the file it was taken of, newest first, and
+   each row can be put back, shown in Explorer, or deleted. Restoring is the
+   whole point of the tab - a backup nobody can reach is not a backup, it is
+   disk usage - so it is the first control on the row rather than the last.
+
+   Three things about it that are decisions rather than defaults:
+
+   * **The destination is named before anything is written.** The confirm
+     quotes the exact path the restore will land on, taken from the server's
+     own `restoreTo`. Five dialogs once told him the wrong place to find a
+     file he had just overwritten; a sentence in a test cannot stop that
+     happening again, but reading the path out of the same field the write
+     uses can.
+   * **Restoring keeps what it replaces.** The live file is copied into the
+     backups folder first, so a restore of the wrong generation is one more
+     restore away from being undone, and the backup being restored is left on
+     disk rather than consumed.
+   * **Deleting asks once and says what goes.** Unrecoverable earns friction,
+     not refusal - a count and a size in a confirm, not a word to type out. */
+
+let bakData = null;
+//: What each row's handlers refer to. Paths carry apostrophes, spaces and
+//: backslashes, and a Windows path inside a quoted onclick is the exact shape
+//: that turns a rendered control into a dead one - so the markup carries the
+//: row's position in this array and the path never goes near the attribute.
+let bakIndex = [];
+//: Group keys that are shut. Groups start open - the generations are the
+//: reason to be on the tab, and a list of names would just be a list of names.
+let bakClosed = new Set();
+let bakChecked = new Set();
+
+function bakApi(action, body) { return WD.api('backups/' + action, body || {}); }
+
+function onBackups(kind, payload) {
+  if (kind !== currentTab) return;
+  let d = payload;
+  if (typeof payload === 'string') {
+    try { d = JSON.parse(payload); }
+    catch (err) { toast('Bad data payload', 'error'); return; }
+  }
+  if (!d || d.error) {
+    document.getElementById('rowsContainer').innerHTML =
+      '<div class="empty-msg">' + e((d && d.error) || 'Could not read the backups folder') + '</div>';
+    if (d && d.error) toast(d.error, 'error');
+    return;
+  }
+  bakData = d;
+  //: A group that has gone keeps neither its open state nor its ticks, or a
+  //: refresh after a delete leaves a checkbox selecting a file that is not
+  //: there and "3 selected" over two rows.
+  const live = new Set();
+  (d.groups || []).forEach(g => (g.items || []).forEach(i => live.add(i.path)));
+  Array.from(bakChecked).forEach(p => { if (!live.has(p)) bakChecked.delete(p); });
+  updateDashboard();
+  renderBackups();
+}
+
+function bakRefresh() {
+  bakApi('list').then(d => onBackups('backups', d))
+    .catch(err => toast('Load failed: ' + err.message, 'error'));
+}
+
+/* Every copy on the tab, in the order they are drawn, whatever the filter. */
+function bakVisibleGroups() {
+  const groups = (bakData && bakData.groups) || [];
+  let out = groups;
+  if (activeFilter === 'bak-project') out = groups.filter(g => bakIsProject(g));
+  else if (activeFilter === 'bak-missing') out = groups.filter(g => g.kind !== 'install' && !g.exists);
+  else if (activeFilter === 'bak-install') out = groups.filter(g => g.kind === 'install');
+
+  const q = (document.getElementById('searchBox').value || '').toLowerCase();
+  if (q) {
+    out = out.filter(g => (g.name || '').toLowerCase().includes(q)
+                       || (g.folder || '').toLowerCase().includes(q));
+  }
+  return out;
+}
+
+function bakIsProject(g) {
+  return g.kind !== 'install' && /\.esx$/i.test(g.name || '');
+}
+
+/* The part of a path worth reading. The project folder is the same forty
+   characters on every row, and repeating it pushes the part that differs off
+   the end of the column. */
+function bakShortPath(path) {
+  const roots = (bakData && bakData.roots) || [];
+  const norm = s => String(s || '').replace(/\\/g, '/');
+  const p = norm(path);
+  let best = '';
+  roots.forEach(r => {
+    const rn = norm(r).replace(/\/+$/, '');
+    if (rn && p.toLowerCase().startsWith(rn.toLowerCase() + '/') && rn.length > best.length) best = rn;
+  });
+  if (!best) return path;
+  const rest = p.slice(best.length + 1);
+  return rest || path;
+}
+
+function renderBackups() {
+  const el = document.getElementById('rowsContainer');
+  const legend = document.querySelector('.col-legend');
+  if (legend) legend.style.display = 'none';
+  //: Deleting the eightieth copy in a list and being returned to the top of
+  //: it is the same lost place the ledger scrolls around.
+  const _scroller = document.scrollingElement || document.documentElement;
+  const _wasAt = _scroller ? _scroller.scrollTop : 0;
+  const _restoreScroll = () => { if (_scroller && _wasAt) _scroller.scrollTop = _wasAt; };
+
+  const all = (bakData && bakData.groups) || [];
+  const groups = bakVisibleGroups();
+
+  bakIndex = [];
+  groups.forEach(g => (g.items || []).forEach(it => {
+    //: The file's name travels with the row so a delete confirm can say
+    //: which project each copy belongs to - the backup's own filename is the
+    //: project name plus a timestamp, which reads as noise in a list of eight.
+    bakIndex.push(Object.assign({}, it, { groupName: g.name }));
+  }));
+
+  let h = bakExplainHtml();
+
+  if (!groups.length) {
+    h += `<div class="dup-empty">
+      <div class="dup-empty-icon">&#128230;</div>
+      <div class="dup-empty-title">${all.length
+        ? 'No backups match this filter'
+        : 'Nothing has been backed up yet'}</div>
+      <div class="dup-empty-sub">${all.length
+        ? 'Clear the search or pick a different filter to see the rest.'
+        : 'A copy is kept here whenever something in the suite is about to overwrite one of your files &mdash; a sync replacing a local project, a name change written into the .esx, a Prep or Quick Walls run. Nothing has done that yet.'}</div>
+    </div>`;
+    el.innerHTML = h;
+    _restoreScroll();
+    return;
+  }
+
+  h += bakBulkBarHtml();
+  h += '<div class="bak-container">';
+  let n = 0;
+  groups.forEach(g => { h += bakGroupHtml(g, n); n += (g.items || []).length; });
+  h += '</div>';
+  el.innerHTML = h;
+  bakSyncBulkBar();
+  _restoreScroll();
+}
+
+function bakExplainHtml() {
+  const keep = bakData && bakData.keep != null ? bakData.keep : 3;
+  const roots = (bakData && bakData.roots) || [];
+  const where = roots.length
+    ? `<code>${e(roots[0])}</code>` : 'your project folder';
+  const retention = keep > 0
+    ? `Settings keeps the newest <b>${keep}</b> of each file and deletes the rest as new ones are taken.`
+    : `Retention is off in Settings, so every copy ever taken is kept until you delete it here.`;
+  return `<div class="dup-explain bak-explain">
+    <div class="dup-explain-title">What am I looking at?</div>
+    <div class="dup-explain-body">
+      Every copy the suite kept before it overwrote one of your files &mdash; a sync
+      replacing a local project, a name written into the <code>.esx</code>, a Prep or
+      Quick Walls run. They live in a <b>backups</b> folder inside ${where}, which the
+      sync deliberately never reads, so nothing here is matched against Ekahau Cloud or
+      counted as a duplicate.
+      ${retention}
+      Previous copies of the app itself are listed too and are <b>never</b> deleted
+      automatically &mdash; that folder is the way back from a bad update.
+    </div>
+    <div class="dup-explain-legend">
+      <b>Restore</b> puts a copy back over the original and keeps the file that is
+      there now as a fresh backup first, so it can be undone the same way &nbsp;&middot;&nbsp;
+      <b>Show</b> opens the folder it sits in &nbsp;&middot;&nbsp;
+      <b>Delete</b> removes that one copy, and cannot be undone
+    </div>
+  </div>`;
+}
+
+function bakBulkBarHtml() {
+  return `<div id="bakBulkBar" class="dup-bulk-bar bak-bulk-bar">
+    <label class="dup-bulk-selall"><input type="checkbox" id="bakSelAll" onchange="bakSelectAll(this.checked)"> Select every copy shown</label>
+    <span class="spacer"></span>
+    <span id="bakBulkCount" class="dup-bulk-count">0 selected</span>
+    <button class="btn btn-red btn-sm" onclick="bakDeleteChecked()">Delete checked</button>
+  </div>`;
+}
+
+function bakGroupHtml(g, base) {
+  const key = g.key;
+  const open = !bakClosed.has(key);
+  const items = g.items || [];
+  const isInstall = g.kind === 'install';
+  const where = bakShortPath(g.folder);
+
+  let h = `<div class="bak-group ${open ? 'expanded' : ''}" data-key="${a(key)}">`;
+  h += `<div class="bak-head" onclick="bakToggleGroup('${j(key)}')">`;
+  h += `<span class="dup-chevron">&#9656;</span>`;
+  h += `<span class="bak-title">${e(g.name)}</span>`;
+  if (isInstall) h += `<span class="bak-pill install" title="A copy of the whole app folder, kept by the updater. Deleting it removes the way back from a bad update.">previous install</span>`;
+  else if (!g.exists) h += `<span class="bak-pill missing" title="Nothing is at that path any more. Restoring one of these puts the file back rather than replacing it.">original gone</span>`;
+  h += `<span class="bak-where" title="${a(g.folder)}">${e(where)}</span>`;
+  h += `<span class="bak-counts"><b>${items.length}</b> cop${items.length === 1 ? 'y' : 'ies'} &middot; ${e(fmtBytes(g.bytes))}</span>`;
+  h += `</div>`;
+
+  h += `<div class="bak-body">`;
+  items.forEach((it, idx) => {
+    const i = base + idx;
+    const checked = bakChecked.has(it.path) ? ' checked' : '';
+    h += `<div class="bak-item" data-bid="${i}">`;
+    h += `<input type="checkbox" class="bak-item-check" onchange="bakCheck(${i}, this.checked)"${checked}>`;
+    h += `<div class="bak-item-when">
+            <div class="bak-item-date">${e(fmtExactDate(it.when) || it.stamp)}</div>
+            <div class="bak-item-rel">${e(fmtRelDate(it.when))}</div>
+          </div>`;
+    h += `<div class="bak-item-size">${e(fmtBytes(it.bytes))}</div>`;
+    h += `<div class="bak-item-actions">`;
+    if (isInstall) {
+      h += `<span class="bak-item-note" title="Rolling an install back is done from About &rarr; Update, which knows how to stop the server first.">restore from About</span>`;
+    } else {
+      h += `<button class="btn btn-blue btn-sm" onclick="bakRestore(${i})" title="Put this copy back at ${a(it.restoreTo)}">&#8630; Restore</button>`;
+    }
+    h += `<button class="icon-btn" title="Show in Explorer/Finder" onclick="bakReveal(${i})">&#128193;<span class="ib-label">Show</span></button>`;
+    h += `<button class="icon-btn danger" title="Delete this copy" onclick="bakDeleteOne(${i})">&#128465;<span class="ib-label">Delete</span></button>`;
+    h += `</div></div>`;
+  });
+  h += `</div></div>`;
+  return h;
+}
+
+function bakToggleGroup(key) {
+  if (bakClosed.has(key)) bakClosed.delete(key); else bakClosed.add(key);
+  renderBackups();
+}
+
+function bakCheck(i, on) {
+  const it = bakIndex[i];
+  if (!it) return;
+  if (on) bakChecked.add(it.path); else bakChecked.delete(it.path);
+  bakSyncBulkBar();
+}
+
+function bakSelectAll(on) {
+  bakIndex.forEach(it => { if (on) bakChecked.add(it.path); else bakChecked.delete(it.path); });
+  document.querySelectorAll('#rowsContainer .bak-item-check').forEach(c => { c.checked = !!on; });
+  bakSyncBulkBar();
+}
+
+function bakCheckedItems() {
+  return bakIndex.filter(it => bakChecked.has(it.path));
+}
+
+function bakSyncBulkBar() {
+  const items = bakCheckedItems();
+  const bytes = items.reduce((n, it) => n + (it.bytes || 0), 0);
+  const out = document.getElementById('bakBulkCount');
+  if (out) {
+    out.textContent = items.length
+      ? `${items.length} selected · ${fmtBytes(bytes)}`
+      : '0 selected';
+  }
+  const all = document.getElementById('bakSelAll');
+  if (all) all.checked = bakIndex.length > 0 && items.length === bakIndex.length;
+}
+
+async function bakRestore(i) {
+  const it = bakIndex[i];
+  if (!it) { toast('That copy is no longer listed — refresh and try again', 'error'); return; }
+  /* The path in the dialog is the one the write will use. It is read off the
+     same field the server restores to rather than rebuilt here, because a
+     dialog that names the wrong folder is worse than one that names none. */
+  const when = fmtExactDate(it.when) || it.stamp;
+  const body = it.targetExists
+    ? `<p>The copy taken on <b>${e(when)}</b> goes back to:</p>
+       <p class="bak-confirm-path">${e(it.restoreTo)}</p>
+       <p>The file that is there now is kept: it is copied into the backups folder
+          first, under today's date, so this can be undone the same way.</p>`
+    : `<p>Nothing is at that path any more, so the copy taken on <b>${e(when)}</b>
+          is put back at:</p>
+       <p class="bak-confirm-path">${e(it.restoreTo)}</p>
+       <p>The folder is recreated if it has gone too. Nothing is overwritten.</p>`;
+  const ok = await showConfirmModal('Put this copy back?', body, 'Restore');
+  if (!ok) return;
+
+  const r = await bakApi('restore', { path: it.path });
+  if (!r || r.error) { toast((r && r.error) || 'The restore did not happen', 'error'); return; }
+  toast(r.replaced
+    ? `Restored to ${r.restored} — the copy it replaced was kept as a new backup`
+    : `Restored to ${r.restored}`, 'success');
+  bakRefresh();
+}
+
+async function bakReveal(i) {
+  const it = bakIndex[i];
+  if (!it) { toast('That copy is no longer listed — refresh and try again', 'error'); return; }
+  const r = await bakApi('reveal', { path: it.path });
+  if (r && r.error) toast(r.error, 'error');
+}
+
+function bakDeleteOne(i) {
+  const it = bakIndex[i];
+  if (!it) { toast('That copy is no longer listed — refresh and try again', 'error'); return; }
+  return bakDelete([it]);
+}
+
+function bakDeleteChecked() {
+  const items = bakCheckedItems();
+  if (!items.length) { toast('Tick the copies you want to delete first', 'info'); return; }
+  return bakDelete(items);
+}
+
+async function bakDelete(items) {
+  const bytes = items.reduce((n, it) => n + (it.bytes || 0), 0);
+  const installs = items.filter(it => it.kind === 'install');
+  const list = items.slice(0, 8).map(it =>
+    `<li>${e(it.groupName || it.name)} &mdash; ${e(fmtExactDate(it.when) || it.stamp)} &middot; ${e(fmtBytes(it.bytes))}</li>`).join('');
+  const more = items.length > 8 ? `<p>&hellip; and ${items.length - 8} more.</p>` : '';
+  const warn = installs.length
+    ? `<p class="bak-warn">${installs.length === 1 ? 'One of these is' : installs.length + ' of these are'}
+       a previous copy of the app itself. Deleting it removes the way back from a bad update.</p>`
+    : '';
+  const ok = await showConfirmModal(
+    items.length === 1 ? 'Delete this backup copy?' : `Delete ${items.length} backup copies?`,
+    `<p>This frees <b>${e(fmtBytes(bytes))}</b> and <b>cannot be undone</b>. The files
+        these were taken of are not touched.</p>
+     <ul class="bak-confirm-list">${list}</ul>${more}${warn}`,
+    items.length === 1 ? 'Delete it' : `Delete ${items.length}`);
+  if (!ok) return;
+
+  const r = await bakApi('delete', { paths: items.map(it => it.path) });
+  if (!r || r.error) { toast((r && r.error) || 'Nothing was deleted', 'error'); return; }
+  items.forEach(it => bakChecked.delete(it.path));
+  const skipped = (r.skipped || []).length;
+  toast(`Deleted ${r.count} cop${r.count === 1 ? 'y' : 'ies'}, freeing ${r.human}`
+        + (skipped ? ` — ${skipped} were left alone because they had already changed` : ''),
+        skipped ? 'warn' : 'success');
+  bakRefresh();
 }
 
 function fmtBytes(b) {
