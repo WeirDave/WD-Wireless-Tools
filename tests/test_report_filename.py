@@ -1,6 +1,6 @@
 """The saved report file name is the report, then the site.
 
-    AP Placement Map - Northwind Traders - Building 4 - 1200 Fake Rd
+    Report - AP Placement Map - Northwind Traders - Building 4 - 1200 Fake Rd
 
 The site is the name of the **folder** the .esx was opened from. That is where
 a project name actually lives in practice: the job is kept in a folder called
@@ -10,16 +10,21 @@ what someone does by hand, and doing it by hand on every save is what this
 replaces.
 
 That name was asked for three times and delivered none of them, and each miss
-is a rule below. It led with the literal word "Report", which says nothing the
-report name does not already say and files every report in the folder under R.
-It put the revision third, between the report name and the site. And it
-appended the .esx stem after the folder, on the reading that the stem carried a
-discipline worth keeping - so the name ran on past the site into a repeat of
-most of it.
+is a rule below. It put the revision third, between the report name and the
+site, so typing one pushed the site away from the name it is meant to follow.
+And it appended the .esx stem after the folder, on the reading that the stem
+carried a discipline worth keeping - so the name ran on past the site into a
+repeat of most of it.
+
+"Report" leads, and that is deliberate rather than left over. v2.140.0 removed
+it, reading "the report name and then a dash and then the folder" as describing
+the whole name; asked directly, he wants it kept - it says what the file is
+before it says which report - and it is where the convention came from
+(v1.7.1, matching how Ekahau names its own).
 
 When the folder cannot be known the .esx stem answers instead:
 
-    AP Placement Map - 400 Example St, Fairview, CA 90003 - PD
+    Report - AP Placement Map - 400 Example St, Fairview, CA 90003 - PD
 
 That used to be every drag-and-drop, because a browser file input hands over a
 bare file name with no path at all - and the drop zone is the front page of the
@@ -118,14 +123,21 @@ class ReportFileName(unittest.TestCase):
           projectFolder = 'Northwind Traders - Building 4 - 1200 Fake Rd';
           fileName = 'B04 - PD.esx';
           currentOpts.revision = '';
-          eq('the name is not <report> - <site>', reportDocTitle(),
-             'AP Placement Map - Northwind Traders - Building 4 - 1200 Fake Rd');
+          eq('the name is not Report - <report> - <site>', reportDocTitle(),
+             'Report - AP Placement Map - '
+             + 'Northwind Traders - Building 4 - 1200 Fake Rd');
           done();
         """)
 
-    def test_nothing_is_put_in_front_of_the_report_name(self):
-        """It used to lead with the literal word "Report", which says nothing
-        the report name does not and files every report in the folder under R."""
+    def test_the_name_says_it_is_a_report_before_it_says_which(self):
+        """"Report" leads, and the report name is what follows it.
+
+        v2.140.0 took the prefix off, reading "the report name and then a dash
+        and then the folder" as describing the whole name. Asked directly he
+        wants it kept - it says what the file is before it says which report,
+        which is what someone handed the PDF needs - and it is where the
+        convention came from (v1.7.1, matching Ekahau's own naming).
+        """
         self.check("""
           projectFolder = 'Northwind Traders - Building 4';
           fileName = 'B04 - PD.esx';
@@ -134,8 +146,8 @@ class ReportFileName(unittest.TestCase):
            'Bill of Materials'].forEach(function (name) {
             docName = name;
             const t = reportDocTitle();
-            check('"' + name + '" does not lead the name: ' + t,
-                  t.indexOf(name) === 0);
+            check('"' + name + '" is not announced as a report: ' + t,
+                  t.indexOf('Report - ' + name + ' - ') === 0);
           });
           done();
         """)
@@ -147,7 +159,7 @@ class ReportFileName(unittest.TestCase):
           fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = '';
           eq('the saved name lost the project', reportDocTitle(),
-             'AP Installation - 400 Example St, Fairview, CA 90003 - PD');
+             'Report - AP Installation - 400 Example St, Fairview, CA 90003 - PD');
           done();
         """)
 
@@ -165,7 +177,8 @@ class ReportFileName(unittest.TestCase):
           fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = '';
           eq('the .esx stem is still in the name', reportDocTitle(),
-             'AP Installation - Northwind Traders - Building 4 - 1200 Fake Rd');
+             'Report - AP Installation - '
+             + 'Northwind Traders - Building 4 - 1200 Fake Rd');
           eq('the preview would name the wrong source',
              projectNameSource().from, 'the folder it was opened from');
           done();
@@ -182,7 +195,7 @@ class ReportFileName(unittest.TestCase):
            'Survey final.esx'].forEach(function (f) {
             fileName = f;
             eq('"' + f + '" changed the site', reportDocTitle(),
-               'AP Installation - SITE1 - BLD-03');
+               'Report - AP Installation - SITE1 - BLD-03');
           });
           done();
         """)
@@ -215,7 +228,8 @@ class ReportFileName(unittest.TestCase):
           fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = 'v2.0';
           eq('a drop lost the project', reportDocTitle(),
-             'AP Installation - 400 Example St, Fairview, CA 90003 - PD - v2.0');
+             'Report - AP Installation - '
+             + '400 Example St, Fairview, CA 90003 - PD - v2.0');
           eq('the preview would name the wrong source',
              projectNameSource().from, 'the .esx file name');
           done();
@@ -236,7 +250,7 @@ class ReportFileName(unittest.TestCase):
             projectFolder = f;
             const t = reportDocTitle();
             check('"' + f + '" was treated as a project name: ' + t,
-                  t === 'AP Installation - '
+                  t === 'Report - AP Installation - '
                       + '400 Example St, Fairview, CA 90003 - PD');
           });
           ['Downtown Campus', 'Project Falcon', 'Documents Warehouse'].forEach(function (f) {
@@ -283,11 +297,13 @@ class ReportFileName(unittest.TestCase):
 
           includeRevisionInName = true;
           eq('with the version', reportDocTitle(),
-             'AP Installation - 400 Example St, Fairview, CA 90003 - PD - v2.0');
+             'Report - AP Installation - '
+             + '400 Example St, Fairview, CA 90003 - PD - v2.0');
 
           includeRevisionInName = false;
           eq('without the version', reportDocTitle(),
-             'AP Installation - 400 Example St, Fairview, CA 90003 - PD');
+             'Report - AP Installation - '
+             + '400 Example St, Fairview, CA 90003 - PD');
           done();
         """)
 
@@ -296,7 +312,7 @@ class ReportFileName(unittest.TestCase):
           fileName = 'Example.esx';
           currentOpts.revision = '';
           eq('an empty piece left its separator behind', reportDocTitle(),
-             'AP Installation - Example');
+             'Report - AP Installation - Example');
           done();
         """)
 
@@ -331,12 +347,12 @@ class ReportFileName(unittest.TestCase):
 
           fileName = 'final.esx';
           eq('a placeholder name was used as the project', reportDocTitle(),
-             'AP Installation - Example Court - v1.0');
+             'Report - AP Installation - Example Court - v1.0');
 
           fileName = 'Final Example St - PD.esx';
           eq('a real name starting with a placeholder word was thrown away',
              reportDocTitle(),
-             'AP Installation - Final Example St - PD - v1.0');
+             'Report - AP Installation - Final Example St - PD - v1.0');
           done();
         """)
 
@@ -368,7 +384,7 @@ class FileNameAssembly(unittest.TestCase):
         computations in Cloud Manager. A second name assembler would let the
         segment go missing on one path with every test above still green."""
         self.assertEqual(self.js.count("function buildDocTitle("), 1)
-        self.assertEqual(self.js.count("[docName, siteLabel"), 1,
+        self.assertEqual(self.js.count("['Report', docName, siteLabel"), 1,
                          "the segment list belongs to buildDocTitle alone")
         callers = self.js.count("buildDocTitle(")
         self.assertLessEqual(callers, 4,

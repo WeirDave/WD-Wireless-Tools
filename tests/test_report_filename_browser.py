@@ -220,7 +220,7 @@ class DroppedFileNamesTheReport(unittest.TestCase):
         for kind, driver in self._each_browser():
             with self.subTest(browser=kind):
                 title, asked = self._drop(driver, {"ok": True, "folder": SITE})
-                self.assertEqual(title, "AP Installation - " + SITE)
+                self.assertEqual(title, "Report - AP Installation - " + SITE)
                 self.assertTrue(asked, "the drop never looked the folder up")
 
     def test_it_asks_with_the_name_and_the_byte_size(self):
@@ -246,7 +246,7 @@ class DroppedFileNamesTheReport(unittest.TestCase):
             for answer, phrase in cases:
                 with self.subTest(browser=kind, reason=answer["reason"]):
                     title, asked = self._drop(driver, answer)
-                    self.assertEqual(title, "AP Installation - B04 - PD")
+                    self.assertEqual(title, "Report - AP Installation - B04 - PD")
                     self.assertTrue(asked, "the drop never looked the folder up")
                     preview = driver.execute_script(PREVIEW_JS)
                     self.assertIn(phrase, preview)

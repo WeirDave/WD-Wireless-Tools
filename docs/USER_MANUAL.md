@@ -801,14 +801,16 @@ step in a job.
 6. Use the browser print dialog to print or save the result as PDF.
 
 **The saved file name is the report, then the site.** It comes out as
-`<template> - <site>`, for example
-`AP Placement Map - Northwind Traders - Building 4 - 1200 Fake Rd`. The site is
+`Report - <template> - <site>`, for example
+`Report - AP Placement Map - Northwind Traders - Building 4 - 1200 Fake Rd`.
+The leading word says what the file is before it says which report. The site is
 the name of the **folder the `.esx` was in** — that folder is usually the job
 itself (client, building, address) while the file inside it is named after the
 site or the discipline, so the folder is the one worth printing.
 
 A revision, when one is typed in Report settings, goes on the end:
-`AP Placement Map - Northwind Traders - Building 4 - v2.0`. Turn it off with
+`Report - AP Placement Map - Northwind Traders - Building 4 - v2.0`. Turn it
+off with
 **Include the revision in the file name** in Report settings, which also shows
 the exact name it will offer, with and without.
 

@@ -372,20 +372,26 @@
       .trim();
   }
 
-  /* <report name> - <site> - [<revision>].
+  /* Report - <report name> - <site> - [<revision>].
 
-     The site follows the report name directly, because that is the name that
-     was asked for: "AP Placement Map - <site>.pdf". Two things used to sit
-     between them and both are gone. The literal word "Report" led every name,
-     which says nothing that the report name does not already say and sorted
-     every report in the folder under R. The revision sat third, which pushed
-     the site away from the report name the moment one was typed, so it moved
-     to the end where it reads as a suffix on a finished name.
+     The site follows the report name directly. That is the whole point of the
+     name and it took three asks to arrive: the revision used to sit third, so
+     typing one pushed the site away from the name it is supposed to follow,
+     and the .esx stem used to be appended after the folder so the name ran on
+     past the site into a repeat of most of it. The revision is a suffix on a
+     finished name now, and the folder is the whole site.
+
+     "Report" leads, and it is deliberate rather than left over. v2.140.0 took
+     it off, reading "the report name and then a dash and then the folder" as
+     the whole name; asked directly, he wants it kept - it says what the file
+     is before it says which report, which is the clarification someone handed
+     the PDF needs. It also matches how Ekahau names its own, which is where
+     the convention came from in the first place (v1.7.1).
 
      Empty pieces drop out entirely, so turning the revision off - or leaving
      it blank - leaves no dangling separator behind. */
   function buildDocTitle(docName, revision, siteLabel, withRevision) {
-    return [docName, siteLabel, withRevision ? revision : '']
+    return ['Report', docName, siteLabel, withRevision ? revision : '']
       .map(fileSafe)
       .filter(Boolean)
       .join(' - ');
