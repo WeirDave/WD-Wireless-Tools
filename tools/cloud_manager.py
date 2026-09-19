@@ -2013,12 +2013,41 @@ def pick_folder_dialog(initial=""):
 _SHARE_FAILURE_WORDS = ("not found", "invalid", "error", "failed", "cannot",
                         "could not", "unable", "does not exist", "denied")
 
+#: Ekahau's own wording when it has done the thing. "Invitation sent" is how it
+#: answers a share with somebody outside the account - a success whose text
+#: also contains "not found", which is why success is looked for first.
+_SHARE_SUCCESS_WORDS = ("invitation sent", "invite sent", "added", "shared",
+                        "success")
 
-def _share_message_is_failure(message) -> bool:
+
+def share_message_verdict(message) -> str:
+    """`ok`, `failed` or `unknown` for one address's reply.
+
+    This used to answer a plain boolean by searching for the nine failure
+    words above and calling everything else a success. That is wrong in both
+    directions, and quietly so:
+
+    * "Access is forbidden", "No such user", "403 Forbidden" and "Share limit
+      reached" contain none of the nine, so a refused share was reported as
+      done - and the address was then written into Recent Recipients, which is
+      the one thing that store exists to prevent.
+    * "User not found - invitation sent" contains "not found", so Ekahau's
+      external-invite *success* was reported as a failure.
+
+    The answer is not a longer word list, because there is no published list of
+    what this endpoint can say. It is to stop rounding: a reply nobody
+    recognises is `unknown`, the caller says so, and Ekahau's own words are
+    carried through to the person who can read them. An empty reply stays the
+    quiet success it has always been, which is what the ordinary case sends.
+    """
     text = str(message or "").strip().lower()
     if not text:
-        return False
-    return any(word in text for word in _SHARE_FAILURE_WORDS)
+        return "ok"
+    if any(word in text for word in _SHARE_SUCCESS_WORDS):
+        return "ok"
+    if any(word in text for word in _SHARE_FAILURE_WORDS):
+        return "failed"
+    return "unknown"
 
 
 class CloudManager:
@@ -3110,9 +3139,13 @@ class CloudManager:
             message = per_email.get(email, "")
             # Ekahau reports a per-address problem as text against that
             # address. An empty entry is the quiet success case, which is what
-            # the single-recipient path has always treated it as.
-            ok = not _share_message_is_failure(message)
-            results.append({"email": email, "ok": ok, "message": message})
+            # the single-recipient path has always treated it as. Anything it
+            # says that we do not recognise is `unknown` - reported as not
+            # shared, with its words kept, rather than rounded to yes.
+            verdict = share_message_verdict(message)
+            ok = verdict == "ok"
+            results.append({"email": email, "ok": ok, "verdict": verdict,
+                            "message": message})
             if ok:
                 succeeded.append(email)
         for email in invalid:
@@ -3224,6 +3257,25 @@ class CloudManager:
             except Exception as e:
                 results["groupError"] = str(e)
 
+        #: **`ok` means something happened.** Every failure above is caught
+        #: into `emailError` / `groupError`, and this used to set `ok: True`
+        #: regardless and never set `error` - which is the only key the page
+        #: tests. A rate-limited or rejected bulk share therefore toasted
+        #: "Shared with A and B on 8 projects", naming everyone, having shared
+        #: with nobody.
+        #:
+        #: Both halves asked for and both refused is a failure, and says so.
+        #: One of two working is a partial, which keeps `ok` and carries the
+        #: error alongside so the page can show it.
+        wanted_email = bool(emails)
+        wanted_group = bool(share_with_group and group_id)
+        email_failed = wanted_email and "emailError" in results
+        group_failed = wanted_group and "groupError" in results
+        nothing_worked = ((email_failed or not wanted_email)
+                          and (group_failed or not wanted_group))
+        if nothing_worked:
+            why = results.get("emailError") or results.get("groupError") or "unknown"
+            return {"error": "Nothing was shared: %s" % why, **results}
         results["ok"] = True
         return results
 
@@ -3255,15 +3307,26 @@ class CloudManager:
             if my_email and my_email != current_owner_email:
                 return {"error": f"Only the owner ({current_owner_email}) can transfer this project"}
             result = self.api.transfer_ownership(project_id, current_owner_email, new_owner_email)
-            status = result.get("result", {}).get(project_id)
-            if status == "SUCCESS":
+            #: **An empty body on a 2xx is Ekahau agreeing.** This endpoint
+            #: answers with no body, so `.get(project_id)` was `None` and a
+            #: transfer that had *happened* - and that this tool cannot undo -
+            #: was announced as a failure. The armed button stayed on screen,
+            #: and pressing it again reported "Only the owner can transfer this
+            #: project", because by then that was true. Every other write
+            #: helper in this file already allows for the empty body; this one
+            #: did not. The body may also be a list, which used to raise
+            #: `AttributeError` and surface as one.
+            status_code = result.get("status") if isinstance(result, dict) else None
+            body = result.get("result") if isinstance(result, dict) else None
+            per_project = body.get(project_id) if isinstance(body, dict) else None
+            http_ok = not isinstance(status_code, int) or 200 <= status_code < 300
+            if http_ok and (per_project == "SUCCESS" or not per_project):
                 return {"ok": True,
                         "message": f"Ownership transferred to {new_owner_email}",
                         "previousOwner": current_owner_email,
                         "newOwner": new_owner_email}
 
-
-            return {"error": f"Transfer failed: {status or result}"}
+            return {"error": f"Transfer failed: {per_project or result}"}
         except Exception as e:
             return {"error": str(e)}
 
@@ -3512,10 +3575,33 @@ class CloudManager:
             first = (rm or [{}])[0] or {}
             if first.get("success") is False:
                 return {"error": "Remove step failed: " + (first.get("message") or "unknown")}
-            add = self.api.add_project_share(project_id, email, new_role)
+            #: **The add is checked too, because the remove already happened.**
+            #: Only the remove step was inspected, so a refused re-add left the
+            #: colleague with no access at all and reported the new role as
+            #: though it had been applied. That is the worst outcome available
+            #: here: the tool removed somebody's access and said it had
+            #: changed it.
+            try:
+                add = self.api.add_project_share(project_id, email, new_role)
+            except Exception as e:
+                return {"error": "%s now has no access to this project. Their "
+                                 "old access was removed and the new role "
+                                 "could not be applied: %s. Share with them "
+                                 "again to put it back." % (email, e),
+                        "removed": True, "email": email}
             per_email = ((add or [{}])[0] or {}).get("responsePerEmailAddress", {})
+            message = per_email.get(email, "")
+            verdict = share_message_verdict(message)
+            if verdict != "ok":
+                return {"error": "%s now has no access to this project. Their "
+                                 "old access was removed and Ekahau did not "
+                                 "confirm the new role%s Share with them again "
+                                 "to put it back."
+                                 % (email, (": \"%s\"." % message) if message else "."),
+                        "removed": True, "email": email,
+                        "verdict": verdict, "message": message}
             return {"ok": True, "email": email, "role": new_role,
-                    "message": per_email.get(email, "")}
+                    "message": message}
         except Exception as e:
             return {"error": str(e)}
 

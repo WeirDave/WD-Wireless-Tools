@@ -5508,9 +5508,19 @@ async function _shareAdd() {
     if (isBulk) {
       const n = r.ownedCount || 0;
       const skipped = (r.skipped || []).length;
-      const who = _shareNameList(r.emailsAdded || emails);
-      toast(`Shared with ${who} on ${n} project${n === 1 ? '' : 's'}`
-            + (skipped ? ` (${skipped} skipped — not owner)` : ''), 'success');
+      /* Only the addresses the server says went out. This fell back to the
+         list he typed, so a partial run - the group share landing and the
+         email share refused - named everybody as shared. */
+      const who = _shareNameList(r.emailsAdded || []);
+      if (who) {
+        toast(`Shared with ${who} on ${n} project${n === 1 ? '' : 's'}`
+              + (skipped ? ` (${skipped} skipped — not owner)` : ''), 'success');
+      }
+      if (r.emailError) toast('Not shared by email: ' + r.emailError, 'error');
+      if (r.groupShared && !who) {
+        toast(`Group added to ${n} project${n === 1 ? '' : 's'}`, 'success');
+      }
+      if (r.groupError) toast('Group share failed: ' + r.groupError, 'error');
       _shareChipsReset();
     } else {
       // Per recipient, because the request is one call but the outcome is not
@@ -5521,7 +5531,14 @@ async function _shareAdd() {
       const failed = results.filter(function (x) { return !x.ok; });
       if (ok.length) toast('Shared with ' + _shareNameList(ok), 'success');
       failed.forEach(function (x) {
-        toast(x.email + ' — ' + (x.message || 'could not be added'), 'error');
+        /* `unknown` is Ekahau saying something we do not recognise. Reporting
+           it as "could not be added" would be guessing in the other
+           direction; what he needs is its words and somewhere to look. */
+        const why = x.verdict === 'unknown'
+          ? 'Ekahau did not confirm this one — it said "' + (x.message || '')
+            + '". Check the sharing list before assuming either way.'
+          : (x.message || 'could not be added');
+        toast(x.email + ' — ' + why, 'error');
       });
       if (!ok.length && !failed.length) toast('Shared', 'success');
 
