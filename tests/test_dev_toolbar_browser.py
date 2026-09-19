@@ -589,7 +589,7 @@ class ToolbarInABrowser(unittest.TestCase):
         self.unlocked()
         self.open_realign()
         text = self.panel_text().lower()
-        for needed in ("cloud newer", "backups folder", "nothing is uploaded",
+        for needed in ("cloud newer", "no copy is kept", "nothing is uploaded",
                        "preview", "modified date"):
             self.assertIn(needed, text,
                           "the realign panel never says %r" % needed)

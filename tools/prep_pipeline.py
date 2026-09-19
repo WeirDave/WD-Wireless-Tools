@@ -49,7 +49,6 @@ import json
 import shutil
 import tempfile
 import zipfile
-from datetime import datetime
 from pathlib import Path
 
 from tools import capacity_profiles, esx_trimmer, wall_inject
@@ -71,22 +70,6 @@ ORDER_RULES = (
 
 class PrepOrderError(RuntimeError):
     """The steps were about to run in an order that would break one of them."""
-
-
-def _prune_backups(target, protect=None):
-    """Trim old backups of `target` to the configured count, after the write.
-
-    Never allowed to fail the operation: a project written correctly must not
-    report an error because tidying up afterwards did not work.
-    """
-    try:
-        from tools import backups as _b
-        from tools import settings as _s
-        keep = (_s.load_settings().get("global") or {}).get("backup_keep")
-        keep = _b.DEFAULT_KEEP if keep is None else int(keep)
-        return _b.prune_for(target, keep=keep, protect=protect)
-    except Exception:
-        return None
 
 
 def _check_order(sequence) -> None:
@@ -269,7 +252,7 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
 
 def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
         occupants=None, margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET,
-        boxes=None, retighten: bool = True, backup: bool = True) -> dict:
+        boxes=None, retighten: bool = True) -> dict:
     """Do the whole pass and write once.
 
     Each step reads the file the previous step produced, which is what makes
@@ -353,8 +336,7 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                         staged = out
                 out = nxt()
                 report = capacity_profiles.apply_to(
-                    staged, out, template, occupants, replace_existing=False,
-                    backup=False)
+                    staged, out, template, occupants, replace_existing=False)
                 if not report.get("ok"):
                     # `cur` is left where it was, so the staged removal above is
                     # abandoned with everything else this step touched.
@@ -385,7 +367,7 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                                     "types were added.")
                     continue
                 out = nxt()
-                report = wall_inject.inject(cur, wall_types, dest=out, backup=False)
+                report = wall_inject.inject(cur, wall_types, dest=out)
                 if report.get("error"):
                     refuse("walls", report["error"], report)
                     continue
@@ -403,32 +385,21 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                 # Not "already prepared" - it could not be prepared, and saying
                 # the first when the second is true is how a broken run reads as
                 # a successful one.
-                result.update(ok=False, written=False, path=None, backup=None,
+                result.update(ok=False, written=False, path=None,
                               error="; ".join(f["error"] for f in result["failed"]))
                 return result
-            result.update(written=False, path=None, backup=None,
+            result.update(written=False, path=None,
                           note="This project is already prepared - nothing to "
                                "trim, no areas to add and no wall types "
                                "missing - so it was left as it is.")
             return result
 
-        backup_path = None
-        if backup and target.exists():
-            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-            backup_path = target.with_name(
-                f"{target.stem}.previous-{stamp}{target.suffix}")
-            #: Past MAX_PATH too - see `backups.copy_for_backup`. A sibling
-            #: backup is the source path plus 25 characters, and a project
-            #: named after its site starts long.
-            from tools import backups as _bk
-            _bk.copy_for_backup(target, backup_path)
-
+        #: The prepared project is a *new file* - Prep is always given a
+        #: destination, so the source is still sitting where it was. That is
+        #: the whole of the safety here, and it is better than a copy aside:
+        #: the original keeps its own name and needs no restoring.
         shutil.move(str(cur), str(target))
-        # Written; an older generation is expendable now, not before.
-        if backup_path:
-            _prune_backups(target, protect=str(backup_path))
-        result.update(written=True, path=str(target),
-                      backup=str(backup_path) if backup_path else None)
+        result.update(written=True, path=str(target))
         return result
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

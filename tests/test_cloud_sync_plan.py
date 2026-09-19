@@ -248,8 +248,15 @@ class TheConfirmNamesWhatItWillDestroy(unittest.TestCase):
         changed it", and the person clicking Sync is the one who needs to know."""
         self.assertIn("Two dates cannot tell you whether both sides", self.body)
 
-    def test_the_backup_is_promised_where_the_overwrite_is_confirmed(self):
-        self.assertIn(".previous-", self.body)
+    def test_the_confirm_says_where_the_other_copy_is(self):
+        """It used to promise a `.previous-` file. Backups went in v2.141.0, so
+        that promise became untrue - and saying nothing at all would leave a
+        bulk overwrite reading as data loss. What is true is that the cloud
+        keeps the project it hands down, and that is what has to be on the
+        screen where the overwrite is confirmed."""
+        self.assertIn("which stays on the cloud afterwards", self.body)
+        self.assertIn("No separate copy is kept", self.body)
+        self.assertNotIn(".previous-", self.body)
 
     def test_it_speaks_ekahau_s_vocabulary(self):
         """He already has a mental model from Ekahau's own save prompt: sync
@@ -267,7 +274,7 @@ class ThereIsStillOneDownloadImplementation(unittest.TestCase):
 
     def test_bulk_sync_reuses_verify_replace_local(self):
         """Not a second download-and-replace path. The existing one already
-        backs up, replaces atomically, and refuses the unsafe direction."""
+        replaces atomically and refuses the unsafe direction."""
         source = CLOUD_JS.read_text(encoding="utf-8")
         start = source.index("for (const d of contentPulls)")
         block = source[start:source.index("for (const d of pairs)", start)]

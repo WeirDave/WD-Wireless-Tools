@@ -27,10 +27,10 @@ import base64
 import copy
 import datetime as _dt
 import json
+import re
 import shutil
 from pathlib import Path
 
-from tools import backups as _backups
 from tools import settings as _settings
 
 SCHEMA_VERSION = 1
@@ -367,40 +367,81 @@ def _describe(payload: dict | None) -> str:
 
 # ── writing it back ───────────────────────────────────────────────────────
 
+
+#: How many dated copies of one settings file to keep.
+#:
+#: **This module is the last thing in the suite that copies a file aside, and
+#: that is deliberate.** Project backups were removed in v2.141.0 - the tools
+#: that derive a project write it under a new name, so the original is its own
+#: safety net and needs no restoring. Settings cannot work that way: an import
+#: has to land on `settings.json` itself, and there is no second copy of it
+#: anywhere. So the one dated copy stays, and this module prunes its own.
+KEEP_COPIES = 3
+
+
+def _prune_copies(owner: Path, keep: int, protect: Path | None = None) -> list:
+    """Keep the newest `keep` dated copies of `owner`; delete the rest.
+
+    Matches `<stem>.backup-<stamp><ext>` beside `owner`, which is the shape
+    both writers above use. `protect` is the copy just taken and is never
+    deleted, whatever the count says - pruning runs after a successful write,
+    and removing the generation belonging to the operation in progress would
+    defeat the reason it was taken.
+    """
+    owner = Path(owner)
+    pattern = re.compile(
+        r"^%s\.backup-(\d{8}-\d{6})$" % re.escape(owner.stem))
+    mine = []
+    try:
+        for cand in owner.parent.iterdir():
+            if not cand.is_file() or cand.suffix != owner.suffix:
+                continue
+            m = pattern.match(cand.stem)
+            if m:
+                mine.append((m.group(1), cand))
+    except OSError:
+        return []
+
+    mine.sort(reverse=True)
+    protect = Path(protect) if protect else None
+    survivors, deleted = [], []
+    if protect:
+        survivors.append(protect)
+    for _stamp_, cand in mine:
+        if protect and cand == protect:
+            continue
+        if len(survivors) < max(0, int(keep)):
+            survivors.append(cand)
+            continue
+        try:
+            cand.unlink()
+            deleted.append(str(cand))
+        except OSError:
+            pass
+    return deleted
+
 def backup_current(root: Path | None = None, keep: int | None = None) -> dict:
     """Copy settings.json aside before anything overwrites it.
 
-    Uses the same `.backup-<stamp>` convention and the same retention code as
-    every other backup in the suite, so one purge screen covers them all.
-
-    Retention here is `max(1, backup_keep)` on purpose. Turning backups off is
-    about routine ones accumulating; an import is a deliberate destructive
-    action and its one step back is part of the action rather than clutter.
+    Retention here is floored at one on purpose: an import is a deliberate
+    destructive action and its one step back is part of the action rather than
+    clutter, so there is always at least one copy however low `keep` goes.
     """
     root = Path(root) if root else _user_dir()
     live = root / "settings.json"
     if not live.is_file():
         return {"ok": True, "backup": None, "note": "nothing to back up yet"}
 
-    if keep is None:
-        try:
-            keep = int((_settings.load_settings().get("global") or {})
-                       .get("backup_keep", _backups.DEFAULT_KEEP))
-        except Exception:
-            keep = _backups.DEFAULT_KEEP
-    keep = max(1, int(keep or 0))
+    keep = max(1, int(KEEP_COPIES if keep is None else (keep or 0)))
 
-    # `settings.backup-<stamp>.json`, not `settings.json.backup-<stamp>`.
-    # tools/backups.py matches on `path.stem`, so the stamp has to sit before
-    # the extension or classify() returns None - and a backup it cannot
-    # classify is one the purge screen never sees and retention never prunes,
-    # which is precisely the accumulation he asked for a switch against.
+    # `settings.backup-<stamp>.json`, not `settings.json.backup-<stamp>`:
+    # `_prune_copies` matches on the stem, so the stamp sits before the
+    # extension or nothing ever prunes it.
     dest = live.with_name(f"{live.stem}.backup-{_stamp()}{live.suffix}")
     shutil.copy2(live, dest)
-    # prune_for takes one path to protect, not a list - the backup just made.
-    pruned = _backups.prune_for(live, keep=keep, protect=dest)
-    return {"ok": True, "backup": str(dest), "keep": keep,
-            "pruned": pruned.get("deleted") if isinstance(pruned, dict) else None}
+    # One path to protect, not a list - the copy just made.
+    pruned = _prune_copies(live, keep=keep, protect=dest)
+    return {"ok": True, "backup": str(dest), "keep": keep, "pruned": pruned}
 
 
 #: Where automatic dumps go. Their own folder so a directory listing reads as
@@ -416,35 +457,25 @@ def auto_dump(reason: str, root: Path | None = None, keep: int | None = None,
     an update, and an import. Roughly 5 KB, so the cheapest insurance in the
     suite.
 
-    Retention is his `backup_keep`, and **0 genuinely means off here** - these
-    are the accumulating kind, which is what that switch is for. The one
-    exception is the dump taken immediately before an import, which is the undo
-    for an action he just asked for rather than a copy piling up, and is kept
-    by `backup_current` regardless.
+    Retention is `KEEP_COPIES`, and **0 genuinely means off here** - these are
+    the accumulating kind. The one exception is the dump taken immediately
+    before an import, which is the undo for an action he just asked for rather
+    than a copy piling up, and is kept by `backup_current` regardless.
 
     Pruned per reason, so a run of updates cannot evict the dump taken before
-    the last import - the same "five backups of one file do not hide a single
-    backup of another" rule `tools/backups.py` already applies.
+    the last import: five copies of one do not hide the only copy of another.
     """
     root = Path(root) if root else _user_dir()
-    if keep is None:
-        try:
-            keep = int((_settings.load_settings().get("global") or {})
-                       .get("backup_keep", _backups.DEFAULT_KEEP))
-        except Exception:
-            keep = _backups.DEFAULT_KEEP
-    keep = int(keep or 0)
+    keep = int(KEEP_COPIES if keep is None else (keep or 0))
     if keep <= 0:
         return {"ok": True, "written": None, "reason": reason,
-                "note": "automatic settings backups are switched off "
-                        '("Backup copies to keep" is set to Off)'}
+                "note": "automatic settings copies are switched off"}
 
     safe = "".join(c for c in str(reason) if c.isalnum() or c in "-_") or "auto"
     folder = root / AUTO_DIR_NAME
     folder.mkdir(parents=True, exist_ok=True)
-    # `settings-<reason>.backup-<stamp>.json` - the stamp before the extension,
-    # so tools/backups.py classify() recognises it and the Clean up button on
-    # the Settings page can see and prune these too.
+    # `settings-<reason>.backup-<stamp>.json` - the stamp before the
+    # extension, so `_prune_copies` recognises it.
     owner = folder / f"settings-{safe}.json"
     dest = folder / f"settings-{safe}.backup-{_stamp()}.json"
     try:
@@ -457,9 +488,9 @@ def auto_dump(reason: str, root: Path | None = None, keep: int | None = None,
         return {"ok": False, "written": None, "reason": reason,
                 "error": f"{type(exc).__name__}: {exc}"}
 
-    pruned = _backups.prune_for(owner, keep=keep, protect=dest)
+    pruned = _prune_copies(owner, keep=keep, protect=dest)
     return {"ok": True, "written": str(dest), "reason": reason, "keep": keep,
-            "pruned": (pruned or {}).get("deleted")}
+            "pruned": pruned}
 
 
 def apply_import(bundle: dict, sections=("settings", "files"),

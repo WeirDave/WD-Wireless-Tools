@@ -253,42 +253,55 @@ class TheWaitingCardSaysWhereItIsTests(unittest.TestCase):
         self.assertIn("status-done", self.out["cardDone"])
 
 
-class TheBackupLocationIsDescribedCorrectlyTests(unittest.TestCase):
-    """Five places told him the replaced copy sits next to the original.
+class NothingPromisesACopyThatIsNoLongerKeptTests(unittest.TestCase):
+    """The app must not tell him a copy was kept when none is.
 
-    It has not since backups moved into their own folder, and one of them also
-    said "nothing is pruned" while three per file are kept. Pointing someone at
-    the wrong place to find the copy of the file they just overwrote is the
-    worst sentence in the app to have wrong, and it drifted because the same
-    claim was written out longhand in five dialogs.
+    This started life the other way round. Five dialogs said the replaced copy
+    sat next to the original; it had moved into a backups folder, and pointing
+    someone at the wrong place to find the file they just overwrote is the
+    worst sentence in the app to have wrong. Backups were removed entirely in
+    v2.141.0, and the same sentences became worse than misplaced - they became
+    untrue. A promise of a copy that does not exist is how somebody overwrites
+    a file believing they can get it back.
 
-    This is a wording check, so it reads the source deliberately - there is no
-    behaviour to drive. It fails on the phrasing, not on the location, so
-    moving the folder again means updating one list here.
+    The replacement for a copy is that a pull takes a project Ekahau is still
+    holding, so the cloud *is* the other copy. That is what the dialogs say
+    now, and what this holds them to.
+
+    It reads the source because these are sentences rather than behaviour.
+    The phrases are the ones that shipped, so a reworded dialog that still
+    promises a copy needs adding here - the shape to look for is any sentence
+    telling him something is kept.
     """
 
+    #: Every form the old promise took, plus the folder it named.
     WRONG = [
         "alongside it",
         "beside it as a",
         "kept beside it",
         "nothing is pruned",
+        ".previous-",
+        "backups folder",
+        "backups/&lt;site&gt;/",
+        "previous copy kept",
+        "previous local cop",
     ]
 
-    def test_no_dialog_says_the_backup_sits_next_to_the_original(self):
+    def test_no_dialog_promises_a_copy_of_the_file_it_replaces(self):
         text = CLOUD_JS.read_text(encoding="utf-8")
         found = [phrase for phrase in self.WRONG if phrase in text]
         self.assertEqual(
             [], found,
-            "cloud.js still describes the backup as sitting next to the file, "
-            "or as never pruned: " + ", ".join(found)
-            + ". Backups live in backups/<site>/ and the newest three per file "
-              "are kept.")
+            "cloud.js still promises a copy of the replaced file, which the "
+            "suite no longer takes: " + ", ".join(found))
 
-    def test_the_dialogs_that_mention_backups_name_the_folder(self):
-        """A dialog that mentions the copy at all has to say where it is."""
+    def test_the_dialogs_say_where_the_other_copy_actually_is(self):
+        """Saying nothing is not enough. A replace with no stated safety net
+        reads as data loss, and the answer - Ekahau still has it - is the
+        reason this is safe at all, so it has to be on screen."""
         text = CLOUD_JS.read_text(encoding="utf-8")
-        self.assertIn("backups folder", text)
-        self.assertIn("backups/&lt;site&gt;/", text)
+        self.assertIn("No second copy is kept - the cloud one is it.", text)
+        self.assertIn("which Ekahau still holds", text)
 
 
 if __name__ == "__main__":

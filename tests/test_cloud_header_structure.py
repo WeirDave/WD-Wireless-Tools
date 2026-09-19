@@ -45,9 +45,10 @@ SELECTION_ONLY = [
 #: listed, because the point of these three tests is that none of them goes
 #: missing in a restructure - and a count is the one assertion a rearrangement
 #: cannot satisfy by accident. Raise it when a tab brings its own filters
-#: with it: 17 for the cloud and duplicate sets, 21 since the Backup Folder
-#: tab added four of its own.
-FILTER_CHIPS = 21
+#: with it: 17 for the cloud and duplicate sets. It was 21 while the Backup
+#: Folder tab carried four of its own, and back to 17 since v2.141.0 removed
+#: it along with the rest of the backup feature.
+FILTER_CHIPS = 17
 
 
 def band(name: str) -> str:

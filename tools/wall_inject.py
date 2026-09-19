@@ -19,9 +19,9 @@ it, which is a design change wearing the clothes of a setup step. The skip is
 reported rather than done quietly.
 
 Same posture as everything else here that writes to an .esx: ``metersPerUnit``
-and every other member are passed through byte-identical, a backup is taken
-before the file is replaced, and anything that cannot be verified is refused
-rather than guessed at.
+and every other member are passed through byte-identical, the rebuild goes to
+a temp file that is renamed over the top, and anything that cannot be verified
+is refused rather than guessed at.
 """
 from __future__ import annotations
 
@@ -29,26 +29,9 @@ import json
 import shutil
 import uuid
 import zipfile
-from datetime import datetime
 from pathlib import Path
 
 MEMBER = "wallTypes.json"
-
-
-def _prune_backups(target, protect=None):
-    """Trim old backups of `target` to the configured count, after the write.
-
-    Never allowed to fail the operation: a project written correctly must not
-    report an error because tidying up afterwards did not work.
-    """
-    try:
-        from tools import backups as _b
-        from tools import settings as _s
-        keep = (_s.load_settings().get("global") or {}).get("backup_keep")
-        keep = _b.DEFAULT_KEEP if keep is None else int(keep)
-        return _b.prune_for(target, keep=keep, protect=protect)
-    except Exception:
-        return None
 
 
 def _key(name) -> str:
@@ -210,12 +193,17 @@ def plan_injection(esx_path, wall_types: list) -> dict:
     return plan_into_members(members, wall_types)
 
 
-def inject(esx_path, wall_types: list, dest=None, backup: bool = True) -> dict:
+def inject(esx_path, wall_types: list, dest=None) -> dict:
     """Write the types into the project.
 
     ``dest`` writes a copy and leaves the source alone, which is how the
-    preparation pass chains steps without a backup per step. Writing in place
-    takes one first.
+    preparation pass chains steps. With no ``dest`` the project is rewritten
+    in place, through a temp file that is renamed over the top - so the `.esx`
+    is either entirely the old one or entirely the new one.
+
+    **Nothing is copied aside first.** Quick Walls, the only thing a person
+    drives this from, hands the result back as a browser download under a new
+    name and never touches the original at all.
     """
     path = Path(esx_path)
     if not path.is_file():
@@ -233,18 +221,6 @@ def inject(esx_path, wall_types: list, dest=None, backup: bool = True) -> dict:
                 "note": "Every type in the template is already in this project."}
 
     target = Path(dest) if dest else path
-    backup_path = None
-    if backup and not dest:
-        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        backup_path = path.with_name(f"{path.stem}.previous-{stamp}{path.suffix}")
-        try:
-            from tools import backups as _bk
-            _bk.copy_for_backup(path, backup_path)
-        except OSError as exc:
-            #: See `backups.describe_failure` - `{exc}` doubles every
-            #: backslash in the path it names.
-            return {"error": "Could not back the project up, so nothing was "
-                             "changed. " + _bk.describe_failure(exc, backup_path)}
 
     tmp = target.with_suffix(target.suffix + ".wd-inject.tmp")
     try:
@@ -254,13 +230,6 @@ def inject(esx_path, wall_types: list, dest=None, backup: bool = True) -> dict:
         tmp.replace(target)
     except OSError as exc:
         tmp.unlink(missing_ok=True)
-        if backup_path:
-            backup_path.unlink(missing_ok=True)
         return {"error": f"Write failed, the project was not changed: {exc}"}
 
-    # Written; only now is an older generation expendable.
-    if backup_path:
-        _prune_backups(target, protect=str(backup_path))
-
-    return {**report, "ok": True, "written": True, "path": str(target),
-            "backup": str(backup_path) if backup_path else None}
+    return {**report, "ok": True, "written": True, "path": str(target)}

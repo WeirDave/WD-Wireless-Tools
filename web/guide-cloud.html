@@ -143,40 +143,32 @@
     <tr><th>Tab</th><th>Purpose</th></tr>
     <tr><td><strong>Files</strong></td><td>The main ledger view — cloud vs. local side by side. This is where you manage, rename, delete, create, and merge projects. The <strong>Tree</strong> / <strong>Flat</strong> toggle beside the tab name switches between sites with their projects nested inside, and every project in one alphabetical list.</td></tr>
     <tr><td><strong>Duplicate Projects</strong></td><td>Clusters of files whose names normalise to the same thing, with at least one extra copy beyond the normal cloud&harr;local pair. This is where accidental second copies get found and removed.</td></tr>
-    <tr><td><strong>Backup Folder</strong></td><td>Every copy the suite kept before it overwrote one of your files, and the only place any of them can be put back. See below.</td></tr>
   </table>
 
-  <h2>The Backup Folder</h2>
+  <h2>What happens to a file that gets replaced</h2>
 
-  <p>Several things in this suite overwrite a file you already have — a sync replacing a
-  local project with the cloud copy, a name written into the <code>.esx</code>, a Prep or
-  Quick Walls run. Every one of them copies the old file aside first, into a
-  <strong>backups</strong> folder inside your project folder. The sync deliberately never
-  reads that folder, so nothing in it is matched against Ekahau Cloud or counted as a
-  duplicate.</p>
+  <p>Nothing in this suite keeps a copy of a file before overwriting it, and that is
+  deliberate. Every tool that <em>derives</em> a project &mdash; Prep, Quick Walls,
+  PlanTrim, Capacity &mdash; writes it under a new name, so your original is still
+  sitting there under its own name and needs no restoring. If you want to overwrite,
+  you pick the old file yourself.</p>
 
-  <p>The <strong>Backup Folder</strong> tab is the window onto it. Copies are grouped
-  under the file they were taken of, newest first, and each row carries three controls:</p>
+  <p>Cloud Manager is the one place that does replace a file you already have, and there
+  the copy is Ekahau&rsquo;s: <strong>&#11015; Cloud newer &middot; download</strong>
+  replaces your local file with the project the cloud is holding, and that cloud project
+  is still there afterwards. Download it again and you are back where you were. A copy on
+  your disk would be a copy of a copy.</p>
 
-  <table>
-    <tr><th>Control</th><th>What it does</th></tr>
-    <tr><td><strong>&#8630; Restore</strong></td><td>Puts that copy back over the original. The confirm names the exact path it will write to before anything happens. The file that is there now is <em>not</em> thrown away — it is copied into the backups folder first, under today&rsquo;s date, so a restore of the wrong generation is one more restore away from being undone. The copy you restored stays on disk too.</td></tr>
-    <tr><td><strong>Show</strong></td><td>Opens the folder that copy sits in, in Explorer or Finder.</td></tr>
-    <tr><td><strong>Delete</strong></td><td>Removes that one copy. It asks once, naming what goes and how much it frees, and it cannot be undone. Tick several rows and use <strong>Delete checked</strong> at the top to clear a batch.</td></tr>
-  </table>
-
-  <p>Two row states are worth knowing. <strong>Original gone</strong> means nothing is at
-  that path any more, so restoring puts the file back rather than replacing one — the
-  folder is recreated if it has gone too. <strong>Previous install</strong> is a copy of
-  the whole app folder that the updater keeps; those are never deleted automatically and
-  are not restorable from here, because rolling an install back has to stop the server
-  first. That is done from <strong>About &rarr; Update</strong>.</p>
+  <p>The asymmetry is on purpose, and it is why the two directions are guarded
+  differently. Replacing a <em>cloud</em> project deletes the old one, and a cloud delete
+  does not come back &mdash; so that one names the project it will delete and asks first,
+  and is offered only on a pairing the tool can prove.</p>
 
   <div class="tip-box">
-    <strong>Tip:</strong> How many generations of each file are kept is
-    <strong>Backup copies to keep</strong>, in <strong>Settings &rarr; General</strong>,
-    and the number is quoted at the top of the tab so you can see what it is set to
-    without leaving. Set it to <b>Off</b> and nothing is pruned automatically — every copy is kept until you delete it here.
+    <strong>If you have a <code>backups</code> folder inside your project folder,</strong>
+    it is from a version before 2.141.0, and it is yours to keep or delete. Nothing writes
+    to it any more, and the sync still ignores it &mdash; so the projects inside it are not
+    matched against Ekahau Cloud, counted as duplicates, or listed anywhere in the tool.
   </div>
 
   <h2>Managing Sites</h2>

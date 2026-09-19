@@ -970,122 +970,131 @@ passed every one of the assertions it replaced.
 execute and files that do not, and `scripts/audit_handlers_exist.py` is the
 handler check.
 
-## The backups folder, and the two things that were wrong with it
+## Backups were removed, and that is the design
 
-**Cloud Manager's Backup Folder tab is the only window onto what the suite
-keeps.** Six places copy a file aside before overwriting it, every one of them
-reports a path, and until v2.137.0 there was no way to open any of it from
-inside the tool - *"I know we have no window to it right now."* The tab sits
-next to Duplicate Projects, groups every copy under the file it was taken of,
-and each row restores, shows in Explorer, or deletes.
+**Nothing in this suite copies a file aside before overwriting it any more.**
+v2.141.0 deleted `tools/backups.py`, the Backup Folder tab, the four
+`/api/backups/*` endpoints, the two Settings controls and roughly 1,900 lines
+with them. `tools/settings_backup.py` is the one exception and the section
+below says why.
 
-Two defects were found while building it, and both had been silent.
+**Do not put it back without reading this.** It was built, shipped in
+v2.137.0, fixed in v2.137.1, reviewed on his work machine and then removed
+whole - so the next session to notice that a write is unprotected is retracing
+a route that has already been walked to the end.
 
-**Retention was inert, and had been since the backups folder existed.** Cloud
-Manager stopped writing a sibling `.previous-` copy and started filing it under
-`<project folder>/backups/<site>/`, which is what he asked for. `prune_for`
-went on looking in `target.parent`, where there is now nothing at all. So "keep
-3" kept every generation ever taken, of every project a sync had replaced,
-since the day the folder appeared, and the number in Settings did nothing.
-Measured on a fixture: four generations written with keep=2 left four on disk.
-`prune_for` takes `extra_dirs` now and `_prune_backups` passes the folder the
-backup actually went into.
+### Why
 
-**And `classify`'s owner is not where a filed backup came from.** For
-`backups/<site>/Survey.previous-<stamp>.esx` it reports
-`backups/<site>/Survey.esx` - a path that has never existed - because that
-value groups generations for retention rather than naming a live file. A
-restore that trusted it would write the recovered project into the folder the
-sync deliberately does not read, and report success: the file safe, invisible,
-and not where he went to look for it. `restore_target` walks the mapping
-backwards, and `BACKUP_DIR_NAME` is defined in `tools/backups.py` with
-`cloud_manager`'s copy asserted equal to it, because a drift between those two
-names would silently send every restore into the backups folder.
+His argument, and it is the right one: *"if we do need backups because we are
+forcing a user into a situation where they're not sure if the data is accurate
+or not or if we're unsure of our results and we need to make a backup because
+of that - that doesn't put a lot of faith in the programming."*
 
-Three decisions in the feature itself, each one an existing rule applied:
+That separates the two reasons a backup gets written, and only one of them is
+real:
 
-* **Restoring keeps what it replaces.** The live file is copied into the
-  backups folder first, so a restore of the wrong generation is one more
-  restore away from being undone - and the backup being restored is left on
-  disk rather than consumed.
-* **The confirm names the destination**, read off the same `restoreTo` the
-  server writes to. Not a sentence pinned by a test; the backups wording is
-  what that rule was written against.
-* **The server re-derives what may go.** `remove` looks every path the page
-  sends up in a fresh scan and skips anything that is no longer a backup under
-  a root we own - same rule as the realign action and the housekeeping sweep.
+* **Doubt** - "this might go wrong". Not a reason for a backup. It is a reason
+  to fix the code, or to refuse the operation. A copy aside is doubt made
+  permanent, and it is doubt the user pays for in disk and in clutter.
+* **Undo** - "this was the wrong thing to do, put it back". Legitimate, and
+  already covered everywhere it arises.
 
-An install backup is listed and is **not** restorable from here: rolling an
-install back has to stop the server first, so the row points at About instead
-of offering a button that cannot work.
+And the undo case was already answered without a backup, in two different
+ways. **Every tool that derives a project writes it under a new name** -
+Prep, Quick Walls, PlanTrim, Capacity all take a destination, so the original
+is still sitting there under its own name and needs no restoring. *"When I do
+something like Quick Walls I bring the file in, I trust our work and I just
+save right over the original copy."* If he wants to overwrite, he picks the
+old file himself, which is a decision he can see. **And Cloud Manager's local
+copy is a copy already** - a pull replaces it with a project Ekahau is still
+holding afterwards, so a third copy on disk is a backup of a backup. *"If
+someone's primary is the Ekahau cloud then there isn't any reason to be
+concerned with keeping a backup of a backup."*
 
-`tests/test_backup_folder.py` drives the files on disk; `tests/
-test_backup_folder_page.py` renders the real rows, pulls each `onclick` back
-out of the markup and executes it. Both go red under mutation - the row index
-drifting by one, the confirm dropping the path, the restore never reaching the
-server, `restore_target` losing the folder mapping.
+The call-site research is what settled it, and it is worth repeating because
+reading the signatures gets it wrong. Five tools had a `backup=` parameter and
+it looked like five tools took backups. Every one of their real callers passed
+a `dest` and `backup=False`, or was a browser download. **Only Cloud
+Manager's two callers ever wrote one** - and those are the two where the cloud
+is holding the other copy.
 
-### What the first real run found, ten minutes after it shipped
+### What the writes rest on instead
 
-Two faults, and the second is why the first was ever reached. Both were in
-v2.137.0 and fixed in v2.137.1.
+Atomicity, which was always the better half: build in a temp file, rename over
+the top, so the file is either entirely the old one or entirely the new one and
+never half of either. **A copy aside protects a write that has already gone
+wrong; this stops it going wrong.** `_rewrite_project_json` also writes nothing
+at all when the mutation changes nothing - no temp file, no replace - which is
+what makes every caller free to re-run after an interruption.
 
-**The scan was walking his whole C: drive.** `_backup_roots()` hands back the
-project folder *and the install's parent*, because the updater's
-`<install>.previous-v<version>-<stamp>` folder is a sibling of the install.
-That folder is always a **direct child** of the parent - but nothing said so,
-so the parent was walked to the bottom, and the parent of
-`C:\WD-Wireless-Tools` is `C:\`. A root now carries how deep it is worth
-walking (`(path, depth)`, see `as_roots`), the install parent gets 1, and
-`_SKIP_DIR_NAMES` keeps the walk out of `$Recycle.Bin` and friends besides.
+### The half that was dangerous to remove
 
-This was not new. The same roots feed Settings' **Check usage** and **Clean
-up**, so the whole disk had been in range of a purge since that screen shipped.
-Nothing was ever deleted that was not backup-shaped, and that is luck rather
-than design.
+**The code was the easy part. The sentences were not.** Eight places in
+`cloud.js` told him a copy was kept, and a promise of a copy that nobody writes
+is worse than no promise at all: it is how somebody overwrites a file believing
+they can get it back. Every one of them now names the cloud as the other copy -
+"Your local file is replaced by the copy Ekahau is holding. No second copy is
+kept - the cloud one is it." Saying nothing would have been the other failure,
+because a replace with no stated safety net reads as data loss.
 
-**And `Path.is_dir()` does not swallow every error.** It ignores a fixed list
-of Windows errors - not ready, invalid name, cannot resolve filename - and
-**1920, `ERROR_CANT_ACCESS_FILE`, is not on it. 1921 is**, which is exactly why
-this reads like it should already be handled. A cloud-storage placeholder whose
-provider is not running raises 1920, and so does a reparse point inside
-`$Recycle.Bin`. One of them stopped the whole scan and put
+That sentence has now been wrong twice in the same place, which is why three
+tests hold it rather than one. It said the copy sat next to the original after
+it had moved into a folder; then it promised a copy after there was none.
+`NothingPromisesACopyThatIsNoLongerKeptTests` in `tests/test_cloud_ops_queue.py`
+fails on any of the old phrasings, and the paired test requires the true one -
+a guard against removing the promise and leaving a bare overwrite behind.
+
+### What survived, and where it went
+
+* **`tools/longpath.py`** - `MAX_PATH`, `long_path`, `write_path`,
+  `describe_failure`. None of it was ever about backups: the limit is hit by
+  `<project>.esx.wd-rename.tmp`, which is the .esx path plus 14 characters, on
+  a project named after its site. `tests/test_long_paths.py` holds it.
+* **`tools/settings_backup.py`** - kept, and it is the one genuine exception.
+  Settings cannot use the new-filename pattern: an import has to land on
+  `settings.json` itself, and there is no second copy of it anywhere. So it
+  keeps three dated copies and prunes its own, with `KEEP_COPIES` and
+  `_prune_copies` self-contained in that module now.
+* **`backups` stays in `_SKIP_DIRS`.** Nothing writes that folder any more,
+  but it exists on every install that ran a sync before v2.141.0, full of real
+  projects. A scan that suddenly descended into it would report every one of
+  them as a local-only project needing attention. It is his folder to delete
+  when he is ready, not ours to start reading.
+
+### Two defects the feature carried, recorded because the shapes recur
+
+Both were silent, both shipped green, and neither is about backups
+specifically.
+
+**A retention policy that looked in the wrong folder did nothing at all, for
+as long as the folder existed.** Cloud Manager filed its copy under
+`<project folder>/backups/<site>/`; `prune_for` went on looking in
+`target.parent`, where there was nothing. "Keep 3" kept every generation ever
+taken and the number in Settings was inert. The general shape: **when a
+feature moves where it writes, every reader of that location is part of the
+change** - and a reader that finds nothing reports success.
+
+**And a scan walked his whole C: drive.** The roots were the project folder
+*and the install's parent*, because the updater's backup folder is a sibling of
+the install - and the parent of `C:\WD-Wireless-Tools` is `C:\`. The fix was a
+depth per root, but the lesson is the one that outlives the feature: **a root
+that is "the parent of X" is the whole drive when X is near the top.** Those
+same roots fed Settings' Check usage and Clean up, so the whole disk had been
+in range of a purge since that screen shipped. Nothing was ever deleted that
+was not backup-shaped, and that is luck rather than design.
+
+**One more, because it will bite something else.** `Path.is_dir()` ignores a
+fixed list of Windows errors - not ready, invalid name, cannot resolve filename
+- and **1920, `ERROR_CANT_ACCESS_FILE`, is not on it. 1921 is**, which is
+exactly why this reads like it should already be handled. A cloud-storage
+placeholder whose provider is not running raises 1920, and so does a reparse
+point inside `$Recycle.Bin`. One of them put
 
     [WinError 1920] The file cannot be accessed by the system: '...'
 
-on screen where the list should have been - with his Windows profile SID in it,
-which is the thing `describe_failure` exists to keep out of the UI.
-
-`is_dir_safe` and `exists_safe` are the guards. Three things about them:
-
-* **`restore` deliberately does not use `exists_safe`.** Everywhere else an
-  unreadable answer degrades safely - a row says the original is gone, a scan
-  skips a file. There it destroys something: read as "not there", a file that
-  *is* there gets replaced with no copy kept. So a target that cannot be
-  described stops the restore and says so.
-* **The file loop tests the name before it touches the disk**
-  (`_looks_like_a_backup`). Most of what a walk sees can't be a backup, and
-  asking the OS about every one of them is what gave an unreadable file the
-  chance to raise at all. The path that broke it - `...\.bin\nanoid` - is not
-  backup-shaped and is never opened now.
-* **The directory loop has only `is_dir_safe` between it and the same error**,
-  which is worth knowing because the file loop is guarded twice and therefore
-  stays green when the guard is removed. `test_a_directory_the_system_will_not_
-  describe_does_not_stop_the_scan` is the one that goes red.
-
-`scan` returns `unreadable` - **a count, never a path** - and the tab says so
-in a line above the list, because a total that quietly skipped something is
-worse than a larger number.
-
-**One tab-wide trap worth knowing, because Duplicates had it too.** Neither
-local-folder tab draws through `renderRows` on the way in - each goes straight
-to its own renderer - so anything `renderRows` takes down stays up. The A-Z
-rail did exactly that, and four filter chips set from inside the cloud-count
-branch kept whatever they last said, so arriving at the Backup Folder tab could
-greet him with "29 out of sync" about a list that was no longer there. Both are
-handled in `_syncTabUI` and `updateDashboard` now, keyed off `isLocalOnlyTab`
-and `cloudy` rather than off `!isDup`, which is the form that had already been
-missed once.
+on screen where a list should have been, with his Windows profile SID in it.
+Anything that walks a tree he owns needs to survive a directory the system will
+not describe.
 
 ## Known gotchas
 

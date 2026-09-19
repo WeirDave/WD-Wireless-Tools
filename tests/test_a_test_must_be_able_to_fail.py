@@ -13,7 +13,10 @@ that the *code did* something:
     visible on his machine.
   * **The backups wording** was pinned by a test requiring a particular
     sentence, so five dialogs told him the wrong place to find a file he had
-    just overwritten. A test that pins the phrasing pins the bug with it.
+    just overwritten. A test that pins the phrasing pins the bug with it. The
+    sequel makes the point twice over: backups were removed entirely in
+    v2.141.0, and the same sentences went from naming the wrong folder to
+    promising a copy that nobody writes.
 
 This file holds the two properties that keep the shape from spreading. It does
 not try to fix the existing debt - `tests/source_string_assertion_baseline.json`

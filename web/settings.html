@@ -180,31 +180,6 @@
         <div class="hint">Root folder where your Ekahau site folders live.</div>
       </div>
 
-      <div class="s-field">
-        <label>Backup copies to keep</label>
-        <div class="s-row">
-          <select id="sBackupKeep">
-            <option value="0">Off &mdash; keep none</option>
-            <option value="1">1 copy</option>
-            <option value="2">2 copies</option>
-            <option value="3">3 copies</option>
-            <option value="5">5 copies</option>
-            <option value="10">10 copies</option>
-          </select>
-          <button class="btn" id="sBackupScanBtn" onclick="SP.scanBackups()"
-                  title="Count the backup copies on disk and add up what they are using">Check usage</button>
-          <button class="btn btn-red" id="sBackupPurgeBtn" onclick="SP.purgeBackups()"
-                  title="Delete backup copies, keeping the number set above" hidden>Clean up</button>
-        </div>
-        <div class="hint">Before a tool overwrites a project it copies the old one
-          into a <b>backups</b> folder inside your local project folder, as
-          <code>&lt;name&gt;.previous-&lt;date&gt;.esx</code>. Older copies past this
-          count are removed automatically after each write &mdash; the copy from the run
-          that just happened is never removed. Set to <b>Off</b> to stop keeping them at
-          all. To read through what is kept, and to put one back, use the
-          <b>Backup Folder</b> tab in Cloud Manager.</div>
-        <div class="hint" id="sBackupUsage" hidden></div>
-      </div>
 
     </div>
   </details>
@@ -283,17 +258,6 @@
         </div>
       </div>
 
-      <div class="s-field">
-        <label class="s-check">
-          <input type="checkbox" id="sCloudKeepBackups">
-          <span>Keep a backup when a local file is replaced</span>
-        </label>
-        <div class="hint mt-4">Downloading the cloud copy over a local file keeps the
-          old one in a <b>backups</b> folder inside your project folder &mdash; like a
-          recycle bin. Cloud Manager never scans, lists or syncs anything in there, and
-          you can clear it under <b>Backups</b> below. Turn this off and a replace
-          cannot be undone.</div>
-      </div>
 
       <div class="s-field">
         <label>Live auto-refresh interval</label>
@@ -388,10 +352,12 @@
         <div class="hint">Before an update, and before an import, a copy of your
           settings is written to
           <code>~/.wd_wireless_tools/settings-backups/</code> without being
-          asked for. How many are kept follows <b>Backup copies to keep</b>
-          above, and setting that to <b>Off</b> stops the automatic ones
-          &mdash; except the one taken immediately before an import, which is
-          the undo for something you just did and is always kept.</div>
+          asked for. The newest three of each kind are kept and older ones are
+          removed automatically. Settings are the only thing in the suite
+          copied aside like this &mdash; an import has to land on
+          <code>settings.json</code> itself, so there is nothing else to fall
+          back on. Projects work the other way: every tool that derives one
+          writes it under a new name, leaving your original untouched.</div>
       </div>
     </div>
   </details>

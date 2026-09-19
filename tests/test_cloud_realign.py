@@ -3,8 +3,8 @@
 It rewrites his live project files, so every property he asked for is checked
 by doing the thing and reading the result back - not by finding a call in the
 source. The archives here are real ZIPs written to a temp folder, the
-comparison is the real `esx_compare`, the backup is the real `_backup_target`,
-and the assertions are on the bytes and the timestamps afterwards.
+comparison is the real `esx_compare`, and the assertions are on the bytes and
+the timestamps afterwards.
 
 Every project name, site folder and address in this file is invented.
 
@@ -139,8 +139,7 @@ class RealignHarness(unittest.TestCase):
     def build(self, *, local_name=OLD_NAME, cloud_name=NEW_NAME,
               local_iso=LOCAL_ISO, cloud_iso=CLOUD_ISO,
               local_aps=2, cloud_aps=2,
-              local_image=b"floor-plan-bytes", cloud_image=b"floor-plan-bytes",
-              keep_backups=True):
+              local_image=b"floor-plan-bytes", cloud_image=b"floor-plan-bytes"):
         """One pair. The cloud copy is an archive in memory, as the API
         returns it; the local copy is a file on disk, as he has it."""
         self.local_path = self.site / ("%s.esx" % local_name)
@@ -161,8 +160,7 @@ class RealignHarness(unittest.TestCase):
         self.api = RecordingAPI([project], {"cloud-1": cloud_bytes})
         self.cm = cloud_manager.CloudManager()
         self.cm.api = self.api
-        self.cm.config = {"output_dir": str(self.output),
-                          "keep_local_backups": keep_backups}
+        self.cm.config = {"output_dir": str(self.output)}
         return self.local_path
 
     # ── helpers ──────────────────────────────────────────────────
@@ -180,9 +178,16 @@ class RealignHarness(unittest.TestCase):
         self.assertEqual(len(files), 1)
         return files[0]["mtime"]
 
-    def backups(self):
-        folder = self.output / cloud_manager.BACKUP_DIR_NAME
-        return sorted(folder.rglob("*.esx")) if folder.exists() else []
+    def strays(self):
+        """Every file under the local folder that is not the project itself.
+
+        Nothing is copied aside, so a run adds no file at all - which makes a
+        stray the whole of what there is to look for. A surviving
+        `.wd-rename.tmp` would be picked up by the next scan as a project
+        nobody made, and it is the path that crosses MAX_PATH first.
+        """
+        return sorted(p for p in self.output.rglob("*")
+                      if p.is_file() and p != self.local_path)
 
 
 class TheDryRunChangesNothing(RealignHarness):
@@ -215,12 +220,12 @@ class TheDryRunChangesNothing(RealignHarness):
         self.assertIn("date", joined)
         self.assertIn("2026-04-15", entry["newDate"])
 
-    def test_a_dry_run_writes_no_backup_either(self):
-        """A preview that quietly filled the backups folder would be a write
+    def test_a_dry_run_leaves_no_file_behind_either(self):
+        """A preview that quietly wrote anything to his folder would be a write
         by another name."""
         self.build()
         cloud_realign.realign(self.cm, dry_run=True)
-        self.assertEqual(self.backups(), [])
+        self.assertEqual(self.strays(), [])
 
     def test_the_dry_run_really_compared_rather_than_guessed(self):
         """The preview is only worth trusting if it did the same work. It has
@@ -246,7 +251,7 @@ class ItOnlyTouchesProvenIdenticalPairs(RealignHarness):
         self.assertEqual(skipped["name"], OLD_NAME)
         self.assertIn("differ", skipped["reason"].lower())
         self.assertEqual(self.local_path.read_bytes(), before)
-        self.assertEqual(self.backups(), [])
+        self.assertEqual(self.strays(), [])
 
     def test_a_recropped_floor_plan_is_a_difference(self):
         """The image hash is what catches a re-cropped plan. A document-only
@@ -333,37 +338,35 @@ class ItFixesTheThingsHeAskedFor(RealignHarness):
         self.assertEqual(before, after)
 
 
-class EveryFileItReplacesIsBackedUp(RealignHarness):
+class ItWritesOneFileAndNothingElse(RealignHarness):
+    """No copy is kept, so the write itself has to be the safety.
 
-    def test_the_previous_file_is_kept_in_the_backups_folder(self):
+    That is defensible here and nowhere else in the suite's rewriting: this
+    only ever runs on a pair `esx_compare` has just proved byte-identical, and
+    the one field it changes is the project name, which the cloud is holding a
+    copy of. Every other member is passed through unchanged - which is the
+    property below, and it fails if the rebuild starts inventing entries.
+    """
+
+    def test_the_folder_gains_no_file_when_it_rewrites(self):
         self.build()
-        before = self.local_path.read_bytes()
-
-        report = cloud_realign.realign(self.cm, dry_run=False)
-
-        copies = self.backups()
-        self.assertEqual(len(copies), 1)
-        self.assertEqual(copies[0].read_bytes(), before)
-        self.assertEqual(report["aligned"][0]["backup"], str(copies[0]))
-
-    def test_the_backup_goes_where_the_report_says_it_does(self):
-        """The backups-wording defect in this repo was a dialog naming the
-        wrong place. Assert the location `_backup_target` actually chose,
-        rather than a sentence about it."""
-        self.build()
-        cloud_realign.realign(self.cm, dry_run=False)
-        copies = self.backups()
-        expected_dir = (self.output / cloud_manager.BACKUP_DIR_NAME
-                        / "Maple Depot")
-        self.assertEqual(copies[0].parent, expected_dir)
-
-    def test_backups_can_be_turned_off_by_his_setting(self):
-        """`keep_local_backups` is his, and this respects it rather than
-        inventing its own policy."""
-        self.build(keep_backups=False)
         report = cloud_realign.realign(self.cm, dry_run=False)
         self.assertEqual(report["counts"]["aligned"], 1)
-        self.assertEqual(self.backups(), [])
+        self.assertNotIn("backup", report["aligned"][0])
+        self.assertEqual(self.strays(), [])
+
+    def test_the_project_still_opens_and_kept_every_other_member(self):
+        """An atomic replace that produced an unreadable archive would pass a
+        count-the-files check and lose the project."""
+        self.build()
+        with zipfile.ZipFile(self.local_path) as z:
+            before = {n: z.read(n) for n in z.namelist() if n != "project.json"}
+
+        cloud_realign.realign(self.cm, dry_run=False)
+
+        with zipfile.ZipFile(self.local_path) as z:
+            after = {n: z.read(n) for n in z.namelist() if n != "project.json"}
+        self.assertEqual(before, after)
 
 
 class ItIsSafeToRunAgain(RealignHarness):
@@ -379,13 +382,14 @@ class ItIsSafeToRunAgain(RealignHarness):
         self.assertEqual(second["counts"]["aligned"], 0)
         self.assertEqual(second["counts"]["failed"], 0)
 
-    def test_a_second_run_does_not_stack_a_second_backup(self):
-        """An interrupted run re-run must not fill the backups folder with
-        copies of a file that is already correct."""
+    def test_a_second_run_writes_nothing_to_the_folder(self):
+        """An interrupted run re-run must not litter the folder with anything
+        - `_rewrite_project_json` writes nothing at all when the mutation
+        changes nothing, which is what makes a re-run free."""
         self.build()
         cloud_realign.realign(self.cm, dry_run=False)
         cloud_realign.realign(self.cm, dry_run=False)
-        self.assertEqual(len(self.backups()), 1)
+        self.assertEqual(self.strays(), [])
 
     def test_a_second_run_leaves_the_bytes_alone(self):
         self.build()

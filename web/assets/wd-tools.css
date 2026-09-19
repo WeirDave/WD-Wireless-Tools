@@ -1826,11 +1826,6 @@ body.tool-home .topbar {
 
 #tabDuplicates { border-top-color: rgba(217,119,6,0.55); }
 
-/* Each tab is coloured by what it holds - blue for the cloud ledger, amber
-   for the extra copies to deal with, green for the ones that are doing their
-   job. Without a rule of its own a tab goes grey when selected, which reads
-   as nothing being selected at all. */
-#tabBackups { border-top-color: rgba(21,128,61,0.55); }
 
 .tab.active {
   color: #fff; font-weight: 800; border-color: transparent;
@@ -1855,7 +1850,6 @@ body.tool-home .topbar {
 
 #tabDuplicates.active { background: var(--amber); border-top-color: #fde3b4; }
 
-#tabBackups.active { background: var(--green); border-top-color: #bfe8c8; }
 
 .tab-group {
   display: flex; align-items: center; gap: 10px;
@@ -2360,129 +2354,6 @@ body.tool-cloud .dup-toolbar-btn {
 
 [data-theme="light"] .dup-explain-tag.cloud-only { color: var(--blue-dark); }
 
-/* ── Backup Folder tab ─────────────────────────────────────────────────────
-   Built on the Duplicates furniture (`.dup-explain`, `.dup-bulk-bar`,
-   `.dup-chevron`) rather than beside it, so the two local-folder tabs read as
-   the same tool. What differs is deliberate: the accent is green rather than
-   amber, because amber on Duplicates means "this is an extra copy, deal with
-   it" and every row here is a copy that is doing its job. */
-
-.bak-container { padding: 0 16px 24px; }
-
-.bak-group {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 10px; margin-bottom: 12px; overflow: hidden;
-  transition: border-color 0.15s;
-}
-
-.bak-group:hover { border-color: var(--border-strong); }
-
-.bak-head {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 16px; cursor: pointer; user-select: none;
-  background:
-    linear-gradient(rgba(21,128,61,0.10), rgba(21,128,61,0.10)),
-    var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.bak-head:hover { filter: brightness(1.15); }
-
-.bak-title {
-  color: var(--text); font-weight: 700;
-  /* The name is the one thing that must survive a narrow window, so it takes
-     the space and the columns after it stay at their own size. */
-  flex: 1 1 auto; min-width: 0;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-.bak-where {
-  color: var(--text-3); font-size: 11px; font-family: var(--mono);
-  max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-.bak-counts { color: var(--text-2); font-size: 12px; white-space: nowrap; }
-.bak-counts b { color: var(--text); }
-
-.bak-pill {
-  padding: 2px 7px; border-radius: var(--radius-pill);
-  font-size: 9px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.bak-pill.missing { background: rgba(217,119,6,0.18); color: var(--amber); }
-.bak-pill.install { background: rgba(14,165,233,0.18); color: var(--blue-soft); }
-
-/* The pills sit on the group header, which is tinted green - so in light mode
-   the dark-theme soft blue is pale-on-pale and the word disappears. Read off
-   the rendered page rather than assumed: the install pill was the one that
-   went. */
-[data-theme="light"] .bak-pill.missing { background: rgba(217,119,6,0.22); color: var(--amber-dark); }
-[data-theme="light"] .bak-pill.install { background: rgba(14,165,233,0.22); color: var(--blue-dark); }
-
-.bak-body { display: none; }
-.bak-group.expanded .bak-body { display: block; }
-
-.bak-item {
-  display: grid;
-  grid-template-columns: 30px 1fr 90px auto;
-  gap: 12px; align-items: center;
-  padding: 8px 16px;
-  border-top: 1px solid var(--border);
-  transition: background 0.1s;
-}
-
-.bak-item:hover { filter: brightness(1.08); }
-.bak-item-check { justify-self: center; }
-.bak-item-date { color: var(--text); font-size: 13px; }
-.bak-item-rel { color: var(--text-3); font-size: 11px; }
-.bak-item-size { color: var(--text-2); font-size: 12px; text-align: right; }
-.bak-item-note { color: var(--text-3); font-size: 11px; font-style: italic; }
-
-.bak-item-actions { display: flex; gap: 4px; align-items: center; }
-.bak-item-actions .icon-btn { padding: 4px 8px; font-size: 13px; }
-.bak-item-actions .icon-btn.danger:hover { color: var(--red-light); }
-
-.bak-bulk-bar { border-left-color: var(--green); }
-
-.bak-explain {
-  background:
-    linear-gradient(rgba(21,128,61,0.10), rgba(21,128,61,0.10)),
-    var(--surface);
-  border-color: rgba(21,128,61,0.35);
-}
-
-.bak-explain .dup-explain-title { color: var(--green-light); }
-
-[data-theme="light"] .bak-explain .dup-explain-title { color: var(--green-dark); }
-
-/* The path in a confirm is read character by character before he presses the
-   button, which is the one place in this app where a monospace line is worth
-   the width it costs. It wraps rather than scrolling: a 265-character backup
-   path exists here and half of it behind an edge would be worse than none. */
-.bak-confirm-path {
-  font-family: var(--mono); font-size: 12px;
-  padding: 8px 10px; margin: 8px 0;
-  background: var(--surface-hover); border: 1px solid var(--border);
-  border-radius: 4px; color: var(--text);
-  word-break: break-all;
-}
-
-.bak-confirm-list {
-  margin: 8px 0; padding-left: 20px;
-  font-size: 12px; color: var(--text-2); line-height: 1.7;
-}
-
-.bak-warn { color: var(--amber); font-weight: 600; }
-
-.bak-blocked-note {
-  margin: 0 auto 10px; max-width: 900px; padding: 8px 12px;
-  background: rgba(217,119,6,0.14); border: 1px solid rgba(217,119,6,0.35);
-  border-radius: 4px; color: var(--text); font-size: 12px; line-height: 1.6;
-}
-
-.sum-static { cursor: default; color: var(--text-2); font-weight: 600; }
-.sum-static:hover { background: none; }
 
 body.tool-cloud .toolbar {
   padding: 8px 12px; background: var(--surface);

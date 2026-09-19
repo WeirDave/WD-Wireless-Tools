@@ -67,7 +67,7 @@ class EveryPresetIsTheDistanceOnItsLabel(unittest.TestCase):
         """The margin actually left on the saved plan, in feet, per side."""
         out = self.tmp / f"m-{margin}.esx"
         prep_pipeline.run(str(self.src), dest=str(out), steps=["trim"],
-                          margin=margin, backup=False)
+                          margin=margin)
         plan = plan_of(out)
         px = (plan["width"] - INK_W) / 2.0
         return px * COARSE * esx_trimmer.FEET_PER_METRE
@@ -94,7 +94,7 @@ class EveryPresetIsTheDistanceOnItsLabel(unittest.TestCase):
         for i, src in enumerate((coarse, fine)):
             dest = self.tmp / f"t-{i}.esx"
             prep_pipeline.run(str(src), dest=str(dest), steps=["trim"],
-                              margin="tight", backup=False)
+                              margin="tight")
             widths.append(plan_of(dest)["width"])
         self.assertNotEqual(widths[0], widths[1],
                             "tight kept the same pixels on two different "
@@ -130,7 +130,7 @@ class EveryPresetIsTheDistanceOnItsLabel(unittest.TestCase):
             with self.subTest(preset=name):
                 out = self.tmp / f"s-{name}.esx"
                 prep_pipeline.run(str(self.src), dest=str(out), steps=["trim"],
-                                  margin=name, backup=False)
+                                  margin=name)
                 self.assertEqual(repr(plan_of(out)["metersPerUnit"]),
                                  repr(before))
 
