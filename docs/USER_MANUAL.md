@@ -800,15 +800,26 @@ step in a job.
 5. Review every generated page.
 6. Use the browser print dialog to print or save the result as PDF.
 
-**The saved file name includes the project.** It comes out as
-`Report - <template> - <revision> - <project>`, where the project is the name of
-the **folder the `.esx` was opened from** — that folder is usually the job
+**The saved file name is the report, then the site.** It comes out as
+`<template> - <site>`, for example
+`AP Placement Map - Northwind Traders - Building 4 - 1200 Fake Rd`. The site is
+the name of the **folder the `.esx` was in** — that folder is usually the job
 itself (client, building, address) while the file inside it is named after the
-site or the discipline. Opening from disk is what makes the folder knowable; a
-dragged-and-dropped file carries only its own name, so the `.esx` file name is
-used instead. If the folder name says nothing about the job — `Downloads`,
-`Desktop`, `New Folder` — it is skipped in favour of the file name. Report
-settings shows the exact name it will offer, with and without the revision.
+site or the discipline, so the folder is the one worth printing.
+
+A revision, when one is typed in Report settings, goes on the end:
+`AP Placement Map - Northwind Traders - Building 4 - v2.0`. Turn it off with
+**Include the revision in the file name** in Report settings, which also shows
+the exact name it will offer, with and without.
+
+Opening from disk knows the folder outright. A dragged-and-dropped file carries
+only its own name, so the file is looked up under **Settings → General → Local
+project folder** and the folder it is found in is used — only on a single match
+of both the name and the byte size, so two projects sharing a name are never
+guessed between. When that cannot answer, the `.esx` file name is used instead
+and Report settings says which of the reasons it was. If the folder name says
+nothing about the job — `Downloads`, `Desktop`, `New Folder` — it is skipped in
+favour of the file name.
 
 ### Available report templates
 

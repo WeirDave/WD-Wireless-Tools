@@ -140,3 +140,103 @@ def delete_cover() -> dict:
                 except OSError as e:
                     return {"ok": False, "error": f"Could not remove the image: {e}"}
     return {"ok": True, "removed": removed, "exists": False}
+
+
+# ── Finding a dropped project on disk ──────────────────────────────────────
+# The folder the .esx sits in is what names the saved report, and a browser
+# file input cannot say what it is: a drop hands the page a name and some bytes
+# and nothing else.  The native picker knows, which is why "Open another..."
+# has always produced a better file name than the drop zone on the front page
+# -- and the drop zone is the front door, so most reports were named without
+# the site in them.
+#
+# The bytes are already on the machine, so the folder is answerable here: look
+# the file up under the Local project folder and report the folder it was found
+# in.  Nothing is opened and nothing is written; only the folder *name* travels
+# back, which is the one piece the file name needs.
+#
+# It answers only when it is certain.  Two projects of the same name in two
+# folders is a real shape -- the same survey kept per building -- so a match is
+# confirmed by byte size as well as by name, and an ambiguous answer is refused
+# rather than guessed at.  A wrong site on an installer's drawing is worse than
+# no site.
+
+_LOOKUP_SKIP_DIRS = {"backups", "backup", "output", "outputs", "archive",
+                     "archives", "node_modules", "__pycache__", ".git"}
+
+# A survey tree is client / site / project deep in practice.  The cap is what
+# keeps this a lookup rather than a drive scan: a mis-set Local project folder
+# pointing at C:\ must come back with an answer, not hold the request open.
+MAX_LOOKUP_DEPTH = 4
+MAX_LOOKUP_DIRS = 4000
+
+
+def _lookup_root() -> str:
+    from tools import settings as suite_settings
+    try:
+        cfg = suite_settings.load_settings().get("global") or {}
+    except Exception:
+        return ""
+    return (cfg.get("output_dir") or "").strip()
+
+
+def locate_project_folder(file_name: str, size=None) -> dict:
+    """Name the folder a dropped .esx came from, when that can be known.
+
+    Returns ``{"ok": True, "folder": "<name>"}`` only for a single unambiguous
+    match.  Every other outcome carries a ``reason`` the page can put into
+    words, because "the site is missing from the file name" with no explanation
+    is exactly the state this is fixing.
+    """
+    name = (file_name or "").strip()
+    if not name or not name.lower().endswith(".esx"):
+        return {"ok": False, "reason": "not_a_project"}
+    root_raw = _lookup_root()
+    if not root_raw:
+        return {"ok": False, "reason": "no_root"}
+    try:
+        root = Path(root_raw).expanduser()
+        if not root.is_dir():
+            return {"ok": False, "reason": "no_root"}
+    except (OSError, ValueError):
+        return {"ok": False, "reason": "no_root"}
+
+    try:
+        want_size = int(size) if size is not None else None
+    except (TypeError, ValueError):
+        want_size = None
+
+    wanted = name.lower()
+    hits = []
+    seen_dirs = 0
+    stack = [(root, 0)]
+    while stack:
+        here, depth = stack.pop()
+        seen_dirs += 1
+        if seen_dirs > MAX_LOOKUP_DIRS:
+            return {"ok": False, "reason": "too_big"}
+        try:
+            entries = list(os.scandir(here))
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    if depth + 1 > MAX_LOOKUP_DEPTH:
+                        continue
+                    if entry.name.startswith(".") or entry.name.lower() in _LOOKUP_SKIP_DIRS:
+                        continue
+                    stack.append((Path(entry.path), depth + 1))
+                elif entry.name.lower() == wanted:
+                    if want_size is not None and entry.stat().st_size != want_size:
+                        continue
+                    hits.append(Path(entry.path))
+            except OSError:
+                continue
+
+    folders = {p.parent.name for p in hits}
+    if not folders:
+        return {"ok": False, "reason": "not_found"}
+    if len(folders) > 1:
+        return {"ok": False, "reason": "ambiguous", "count": len(folders)}
+    return {"ok": True, "folder": folders.pop()}

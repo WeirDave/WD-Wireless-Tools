@@ -132,7 +132,8 @@
     <li>Page breaks between sections — floors don't get sliced in half.</li>
     <li>Table headers repeat on each printed page.</li>
   </ul>
-  <p>The output file name is auto-filled as <code>Report - &lt;report doc name&gt; - &lt;site name&gt;.pdf</code>.</p>
+  <p>The output file name is auto-filled as <code>&lt;report name&gt; - &lt;site&gt;.pdf</code> — for example <code>AP Placement Map - Northwind Traders - Building 4.pdf</code>. The site is the name of the folder the <code>.esx</code> was in, and a revision typed in Report settings goes on the end. Report settings shows the exact name, and says where it got the site from.</p>
+  <p>A file you <em>dropped</em> on the page arrives with no folder attached — that is a browser limit, not a setting. It is looked up under <strong>Settings → General → Local project folder</strong> instead, and used when exactly one project there matches on both name and size. Failing that the <code>.esx</code> file name is used, and Report settings says why. <strong>Open from disk</strong> always knows the folder outright.</p>
 
   <div class="tip-box">
     <strong>Tip:</strong> If your browser's print dialog defaults to "Save as PDF" but strips backgrounds, look for <em>More settings → Background graphics</em> and turn it on. Without it, the cover and marker cones print blank.

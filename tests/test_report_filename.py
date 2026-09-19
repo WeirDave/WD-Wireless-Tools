@@ -1,19 +1,31 @@
-"""The saved report file name ends with the project.
+"""The saved report file name is the report, then the site.
 
-    Report - AP Installation - v2.0 - Northwind Traders - Building 4 - 1200 Fake Rd
+    AP Placement Map - Northwind Traders - Building 4 - 1200 Fake Rd
 
-The project is the name of the **folder** the .esx was opened from, when that
-can be known. That is where a project name actually lives in practice: the job
-is kept in a folder called after the client, the building and the address, and
-the file inside it is called after the site or the discipline. Naming the report
-after the folder is what someone does by hand, and doing it by hand on every
-save is what this replaces.
+The site is the name of the **folder** the .esx was opened from. That is where
+a project name actually lives in practice: the job is kept in a folder called
+after the client, the building and the address, and the file inside it is
+called after the site or the discipline. Naming the report after the folder is
+what someone does by hand, and doing it by hand on every save is what this
+replaces.
 
-The folder is only knowable through the native picker. A browser file input -
-which is what drag-and-drop and the hosted build both use - hands over a bare
-file name with no path at all, so there the .esx stem answers instead:
+That name was asked for three times and delivered none of them, and each miss
+is a rule below. It led with the literal word "Report", which says nothing the
+report name does not already say and files every report in the folder under R.
+It put the revision third, between the report name and the site. And it
+appended the .esx stem after the folder, on the reading that the stem carried a
+discipline worth keeping - so the name ran on past the site into a repeat of
+most of it.
 
-    Report - AP Installation - v2.0 - 400 Example St, Fairview, CA 90003 - PD
+When the folder cannot be known the .esx stem answers instead:
+
+    AP Placement Map - 400 Example St, Fairview, CA 90003 - PD
+
+That used to be every drag-and-drop, because a browser file input hands over a
+bare file name with no path at all - and the drop zone is the front page of the
+tool, so most reports were named without their site. The bytes are on the
+machine either way, so the folder is now looked up server-side; see
+ADroppedFileFindsItsFolder below and report_store.locate_project_folder.
 
 The project segment has gone missing once already (fixed in v2.33.0) and been
 reported missing a second time, which is what this file exists to stop. There
@@ -95,52 +107,83 @@ class ReportFileName(unittest.TestCase):
         self.assertEqual(result.returncode, 0,
                          (result.stdout + result.stderr).strip())
 
-    def test_the_project_is_the_last_segment(self):
-        """The whole of the reported bug, in one assertion."""
+    def test_the_name_is_the_report_then_the_site(self):
+        """The whole of the reported bug, in one assertion.
+
+        Asked for three times: "AP Placement - {Site Name}.pdf". The site
+        follows the report name directly, with nothing in between.
+        """
         self.check("""
-          fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
-          currentOpts.revision = 'v2.0';
-          eq('the saved name lost the project', reportDocTitle(),
-             'Report - AP Installation - v2.0 - '
-             + '400 Example St, Fairview, CA 90003 - PD');
+          docName = 'AP Placement Map';
+          projectFolder = 'Northwind Traders - Building 4 - 1200 Fake Rd';
+          fileName = 'B04 - PD.esx';
+          currentOpts.revision = '';
+          eq('the name is not <report> - <site>', reportDocTitle(),
+             'AP Placement Map - Northwind Traders - Building 4 - 1200 Fake Rd');
           done();
         """)
 
-    def test_the_name_carries_the_folder_and_the_file(self):
-        """Both, because both say something different.
+    def test_nothing_is_put_in_front_of_the_report_name(self):
+        """It used to lead with the literal word "Report", which says nothing
+        the report name does not and files every report in the folder under R."""
+        self.check("""
+          projectFolder = 'Northwind Traders - Building 4';
+          fileName = 'B04 - PD.esx';
+          currentOpts.revision = 'v2.0';
+          ['AP Installation', 'Antenna Aim Sheet', 'AP Placement Map',
+           'Bill of Materials'].forEach(function (name) {
+            docName = name;
+            const t = reportDocTitle();
+            check('"' + name + '" does not lead the name: ' + t,
+                  t.indexOf(name) === 0);
+          });
+          done();
+        """)
 
-        The folder says what the job is; the file inside says which site or
-        which discipline. This returned the folder alone for a while, which
-        threw the second one away - and asked about it he wanted the folder
-        *included*, not substituted.
+    def test_the_project_is_the_last_segment(self):
+        """No revision typed, which is the ordinary case - so the site really is
+        last, and a folder of reports sorts by report and then by site."""
+        self.check("""
+          fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
+          currentOpts.revision = '';
+          eq('the saved name lost the project', reportDocTitle(),
+             'AP Installation - 400 Example St, Fairview, CA 90003 - PD');
+          done();
+        """)
+
+    def test_the_folder_is_the_whole_site_and_the_stem_is_dropped(self):
+        """The folder is the site, and when it is known it is the whole answer.
+
+        This used to join the folder and the .esx stem with a dash, on the
+        reading that the stem carried a discipline worth keeping. The name
+        asked for is "<report name> - <site>" and nothing else, so the stem
+        goes: it repeats most of the folder, and the part it does not repeat
+        belongs to the file rather than to the sheet someone is handed.
         """
         self.check("""
           projectFolder = 'Northwind Traders - Building 4 - 1200 Fake Rd';
           fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
-          currentOpts.revision = 'v2.0';
-          eq('the name is missing the folder or the file', reportDocTitle(),
-             'Report - AP Installation - v2.0 - '
-             + 'Northwind Traders - Building 4 - 1200 Fake Rd'
-             + ' - 400 Example St, Fairview, CA 90003 - PD');
+          currentOpts.revision = '';
+          eq('the .esx stem is still in the name', reportDocTitle(),
+             'AP Installation - Northwind Traders - Building 4 - 1200 Fake Rd');
           eq('the preview would name the wrong source',
-             projectNameSource().from,
-             'the folder it was opened from, then the .esx file name');
+             projectNameSource().from, 'the folder it was opened from');
           done();
         """)
 
-    def test_neither_is_repeated_when_one_contains_the_other(self):
-        """A folder named for the site and a file named the same thing is the
-        common case for a one-project folder. Printing it twice is noise."""
+    def test_the_folder_wins_however_the_two_names_relate(self):
+        """One folder per job, with the .esx inside named after the site, the
+        discipline, or the same thing again. Every shape gives one answer now,
+        and that answer is the folder."""
         self.check("""
-          projectFolder = 'SITE1 - BLD-03';
-          fileName = 'SITE1 - BLD-03.esx';
           currentOpts.revision = '';
-          eq('the same name was printed twice', reportDocTitle(),
-             'Report - AP Installation - SITE1 - BLD-03');
           projectFolder = 'SITE1 - BLD-03';
-          fileName = 'SITE1 - BLD-03 - PD.esx';
-          eq('the longer of the two was not kept', reportDocTitle(),
-             'Report - AP Installation - SITE1 - BLD-03 - PD');
+          ['SITE1 - BLD-03.esx', 'SITE1 - BLD-03 - PD.esx', 'PD.esx',
+           'Survey final.esx'].forEach(function (f) {
+            fileName = f;
+            eq('"' + f + '" changed the site', reportDocTitle(),
+               'AP Installation - SITE1 - BLD-03');
+          });
           done();
         """)
 
@@ -172,8 +215,7 @@ class ReportFileName(unittest.TestCase):
           fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = 'v2.0';
           eq('a drop lost the project', reportDocTitle(),
-             'Report - AP Installation - v2.0 - '
-             + '400 Example St, Fairview, CA 90003 - PD');
+             'AP Installation - 400 Example St, Fairview, CA 90003 - PD - v2.0');
           eq('the preview would name the wrong source',
              projectNameSource().from, 'the .esx file name');
           done();
@@ -194,7 +236,7 @@ class ReportFileName(unittest.TestCase):
             projectFolder = f;
             const t = reportDocTitle();
             check('"' + f + '" was treated as a project name: ' + t,
-                  t === 'Report - AP Installation - '
+                  t === 'AP Installation - '
                       + '400 Example St, Fairview, CA 90003 - PD');
           });
           ['Downtown Campus', 'Project Falcon', 'Documents Warehouse'].forEach(function (f) {
@@ -227,7 +269,8 @@ class ReportFileName(unittest.TestCase):
           const t = reportDocTitle();
           check('the address was mangled: ' + t,
                 t.indexOf('100 Example Ave, Springfield, WA 90000') > -1);
-          check('the trailing code was dropped: ' + t, /- B10 - PD$/.test(t));
+          check('the trailing code was dropped: ' + t,
+                /- B10 - PD - v1[.]3$/.test(t));
           done();
         """)
 
@@ -240,11 +283,11 @@ class ReportFileName(unittest.TestCase):
 
           includeRevisionInName = true;
           eq('with the version', reportDocTitle(),
-             'Report - AP Installation - v2.0 - 400 Example St, Fairview, CA 90003 - PD');
+             'AP Installation - 400 Example St, Fairview, CA 90003 - PD - v2.0');
 
           includeRevisionInName = false;
           eq('without the version', reportDocTitle(),
-             'Report - AP Installation - 400 Example St, Fairview, CA 90003 - PD');
+             'AP Installation - 400 Example St, Fairview, CA 90003 - PD');
           done();
         """)
 
@@ -253,14 +296,18 @@ class ReportFileName(unittest.TestCase):
           fileName = 'Example.esx';
           currentOpts.revision = '';
           eq('an empty piece left its separator behind', reportDocTitle(),
-             'Report - AP Installation - Example');
+             'AP Installation - Example');
           done();
         """)
 
     def test_every_report_type_keeps_the_project(self):
         """The name is built from the report's docName, and there are a dozen
         reports. One of them getting a different assembler is exactly how this
-        would break a third time."""
+        would break a third time.
+
+        The project sits between the report name and the version here, because
+        a version is typed: the version is a suffix on a finished name rather
+        than a segment in the middle of one."""
         self.check("""
           fileName = '400 Example St, Fairview, CA 90003 - PD.esx';
           currentOpts.revision = 'v2.0';
@@ -269,8 +316,8 @@ class ReportFileName(unittest.TestCase):
             docName = name;
             const t = reportDocTitle();
             check('"' + name + '" lost the project: ' + t,
-                  /400 Example St, Fairview, CA 90003 - PD$/.test(t));
-            check('"' + name + '" lost the version: ' + t, t.indexOf(' - v2.0 - ') > -1);
+                  t.indexOf('400 Example St, Fairview, CA 90003 - PD') > -1);
+            check('"' + name + '" lost the version: ' + t, /- v2[.]0$/.test(t));
           });
           done();
         """)
@@ -284,12 +331,12 @@ class ReportFileName(unittest.TestCase):
 
           fileName = 'final.esx';
           eq('a placeholder name was used as the project', reportDocTitle(),
-             'Report - AP Installation - v1.0 - Example Court');
+             'AP Installation - Example Court - v1.0');
 
           fileName = 'Final Example St - PD.esx';
           eq('a real name starting with a placeholder word was thrown away',
              reportDocTitle(),
-             'Report - AP Installation - v1.0 - Final Example St - PD');
+             'AP Installation - Final Example St - PD - v1.0');
           done();
         """)
 
@@ -321,7 +368,7 @@ class FileNameAssembly(unittest.TestCase):
         computations in Cloud Manager. A second name assembler would let the
         segment go missing on one path with every test above still green."""
         self.assertEqual(self.js.count("function buildDocTitle("), 1)
-        self.assertEqual(self.js.count("['Report', docName"), 1,
+        self.assertEqual(self.js.count("[docName, siteLabel"), 1,
                          "the segment list belongs to buildDocTitle alone")
         callers = self.js.count("buildDocTitle(")
         self.assertLessEqual(callers, 4,
@@ -441,3 +488,305 @@ class OpenEsxRoute(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+DROP_PRELUDE = r"""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function slice(from, to) {
+  const a = source.indexOf(from);
+  const b = source.indexOf(to, a);
+  if (a < 0 || b < 0) throw new Error('could not find ' + from);
+  return source.slice(a, b);
+}
+const block =
+    slice('function folderMissingReason()', '\n  // Shows both spellings')
+  + slice('async function recoverProjectFolder(file)', '\n  async function loadFile');
+
+globalThis.projectFolder = '';
+globalThis.folderLookup = '';
+globalThis.settingsAvailable = true;
+globalThis.calls = [];
+globalThis.WD = { api: async function (action, body) {
+  calls.push([action, body]);
+  return globalThis.answer;
+} };
+
+const failures = [];
+function check(what, cond) { if (!cond) failures.push(what); }
+function eq(what, got, want) {
+  if (got !== want) failures.push(what + '\n     got:  ' + got + '\n     want: ' + want);
+}
+function done() {
+  if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
+  process.exit(0);
+}
+"""
+
+
+def run_drop(checks: str) -> subprocess.CompletedProcess:
+    """The checks are awaited, so the exit has to be awaited with them.
+
+    Written without the trailing done() and the rejection handler, every test
+    in this class exited 0 whatever it had recorded: node reached the end of
+    the script while the IIFE was still pending, and the failures list was
+    never read. Mutating the code under test is what found it - four
+    deliberate breakages stayed green. Both lines below are load-bearing.
+    """
+    program = (DROP_PRELUDE + "eval(block);\n(async function () {\n"
+               + checks + "\ndone();\n})().catch(function (e) {\n"
+               + "  console.error((e && e.stack) || e); process.exit(1);\n});")
+    try:
+        return subprocess.run(["node", "-e", program, str(REPORT_JS)],
+                              capture_output=True, text=True,
+                              encoding="utf-8", timeout=NODE_TIMEOUT_S)
+    except subprocess.TimeoutExpired as exc:
+        raise AssertionError(f"node did not finish within {NODE_TIMEOUT_S}s") from exc
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class ADroppedFileFindsItsFolder(unittest.TestCase):
+    """The drop zone is the front page, and a drop has no path in it.
+
+    Every report opened by dropping a file was therefore named without its
+    site, which is most of them. These run the real recoverProjectFolder
+    against a recording stub rather than checking that the source mentions it -
+    a handler that is never reached, or reached with the wrong fields, looks
+    identical from the source and produces the same wrong file name.
+    """
+
+    def check(self, checks: str):
+        result = run_drop(checks)
+        self.assertEqual(result.returncode, 0,
+                         (result.stdout + result.stderr).strip())
+
+    def test_the_folder_comes_back_and_lands_in_the_name(self):
+        self.check("""
+          answer = { ok: true, folder: 'Northwind Traders - Building 4' };
+          await recoverProjectFolder({ name: 'B04 - PD.esx', size: 40960 });
+          eq('the folder was not taken', projectFolder,
+             'Northwind Traders - Building 4');
+          eq('a reason was left behind on success', folderLookup, '');
+        """)
+
+    def test_it_asks_the_right_endpoint_with_the_name_and_the_size(self):
+        """The size is what makes the answer safe to use: two buildings
+        surveyed from one template share a file name, and a wrong site on an
+        installer's drawing is worse than no site."""
+        self.check("""
+          answer = { ok: true, folder: 'X' };
+          await recoverProjectFolder({ name: 'B04 - PD.esx', size: 40960 });
+          eq('the wrong endpoint was called', calls[0][0], 'report/find_folder');
+          eq('the file name was not sent', calls[0][1].name, 'B04 - PD.esx');
+          eq('the byte size was not sent', calls[0][1].size, 40960);
+        """)
+
+    def test_a_refusal_leaves_the_name_exactly_as_it_was(self):
+        """Every way this can come back empty costs nothing: the .esx stem
+        still answers, which is what happened before the lookup existed."""
+        self.check("""
+          [['not_found', 'not_found'], ['ambiguous', 'ambiguous'],
+           ['no_root', 'no_root'], ['too_big', 'too_big']].forEach(function (p) {
+            projectFolder = 'stale';
+          });
+          const reasons = ['not_found', 'ambiguous', 'no_root', 'too_big'];
+          for (const reason of reasons) {
+            projectFolder = '';
+            answer = { ok: false, reason: reason };
+            await recoverProjectFolder({ name: 'B04 - PD.esx', size: 1 });
+            eq('"' + reason + '" invented a folder', projectFolder, '');
+            eq('"' + reason + '" was not recorded', folderLookup, reason);
+          }
+        """)
+
+    def test_no_server_and_a_thrown_call_are_both_survivable(self):
+        """The hosted build has no server at all, and a server that errors must
+        not stop the file being opened."""
+        self.check("""
+          settingsAvailable = false;
+          projectFolder = '';
+          await recoverProjectFolder({ name: 'B04 - PD.esx', size: 1 });
+          eq('a call was made with no server', calls.length, 0);
+          eq('no reason was recorded', folderLookup, 'no_server');
+
+          settingsAvailable = true;
+          WD.api = async function () { throw new Error('offline'); };
+          await recoverProjectFolder({ name: 'B04 - PD.esx', size: 1 });
+          eq('a thrown call was not survived', folderLookup, 'failed');
+          eq('a thrown call invented a folder', projectFolder, '');
+        """)
+
+    def test_every_reason_says_what_to_do_about_it(self):
+        """"The site is missing and I do not know why" is the state being
+        fixed. Each reason names a way forward rather than stating a fact."""
+        self.check("""
+          const reasons = ['not_found', 'ambiguous', 'no_root', 'too_big',
+                           'failed', 'no_server', ''];
+          for (const reason of reasons) {
+            folderLookup = reason;
+            const why = folderMissingReason();
+            check('"' + reason + '" says nothing: ' + why, why.length > 40);
+            check('"' + reason + '" offers no way forward: ' + why,
+                  why.indexOf('Open another') > -1 || why.indexOf('Settings') > -1);
+          }
+          folderLookup = 'no_root';
+          check('a missing setting does not say where to set it',
+                folderMissingReason().indexOf('Local project folder') > -1);
+        """)
+
+    def test_the_lookup_runs_only_when_the_folder_is_unknown(self):
+        """The native picker already knows. Asking again would be a disk walk
+        per file open, for an answer already in hand."""
+        js = REPORT_JS.read_text(encoding="utf-8")
+        start = js.index("async function loadFile(file, folderName)")
+        body = js[start:js.index("await parseEsx();", start)]
+        self.assertIn("if (!projectFolder) await recoverProjectFolder(file)", body)
+        self.assertLess(body.index("projectFolder = folderName"),
+                        body.index("recoverProjectFolder(file)"),
+                        "the picker's answer must be taken first")
+
+
+class LocateProjectFolder(unittest.TestCase):
+    """The server half: which folder on disk a dropped .esx came from.
+
+    It answers only when it is certain. Name *and* byte size must match, and a
+    name found in two folders is refused rather than guessed at.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import sys
+        sys.path.insert(0, str(ROOT))
+
+    def setUp(self):
+        import tempfile, zipfile
+        from tools import report_store
+        self.store = report_store
+        self.tmp = Path(tempfile.mkdtemp(prefix="wd-locate-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.site = self.tmp / "ACME2 - SITE-03 - 100 Example St, Springfield, IL 62701"
+        self.site.mkdir()
+        self.esx = self.site / "SITE-03 - B01 - PD.esx"
+        with zipfile.ZipFile(self.esx, "w") as z:
+            z.writestr("project.json", "{}")
+        self.size = self.esx.stat().st_size
+        real_root = report_store._lookup_root
+        report_store._lookup_root = lambda: str(self.tmp)
+        self.addCleanup(setattr, report_store, "_lookup_root", real_root)
+
+    def test_a_single_match_names_its_folder(self):
+        self.assertEqual(
+            self.store.locate_project_folder(self.esx.name, self.size),
+            {"ok": True, "folder": self.site.name})
+
+    def test_only_the_folder_name_travels_back(self):
+        """The page needs the folder name and nothing else, and a path is not
+        something to hand out because it was asked for."""
+        got = self.store.locate_project_folder(self.esx.name, self.size)
+        self.assertNotIn("path", got)
+        self.assertNotIn(str(self.tmp), repr(got))
+
+    def test_a_different_file_of_the_same_name_is_not_a_match(self):
+        """Same name, different bytes - a copy that has moved on. Matching on
+        the name alone would put the wrong site on the sheet."""
+        got = self.store.locate_project_folder(self.esx.name, self.size + 1)
+        self.assertEqual(got, {"ok": False, "reason": "not_found"})
+
+    def test_two_folders_with_the_same_project_are_refused(self):
+        """One template surveyed into two buildings is a real shape here."""
+        import shutil as _sh
+        other = self.tmp / "ACME2 - SITE-04 - 200 Example St"
+        other.mkdir()
+        _sh.copy2(self.esx, other / self.esx.name)
+        got = self.store.locate_project_folder(self.esx.name, self.size)
+        self.assertFalse(got["ok"])
+        self.assertEqual(got["reason"], "ambiguous")
+
+    def test_the_same_project_found_twice_in_one_folder_is_still_one_answer(self):
+        """A .esx and a copy of it side by side still came from one folder, so
+        there is nothing ambiguous about the answer."""
+        import shutil as _sh
+        _sh.copy2(self.esx, self.site / ("Copy of " + self.esx.name))
+        got = self.store.locate_project_folder("Copy of " + self.esx.name, self.size)
+        self.assertEqual(got, {"ok": True, "folder": self.site.name})
+
+    def test_an_unset_local_project_folder_says_so(self):
+        self.store._lookup_root = lambda: ""
+        self.assertEqual(self.store.locate_project_folder("x.esx", 1),
+                         {"ok": False, "reason": "no_root"})
+
+    def test_it_will_not_be_pointed_at_something_that_is_not_a_project(self):
+        self.assertEqual(self.store.locate_project_folder("notes.pdf", 1),
+                         {"ok": False, "reason": "not_a_project"})
+        self.assertEqual(self.store.locate_project_folder("", 1),
+                         {"ok": False, "reason": "not_a_project"})
+
+    def test_the_walk_is_bounded_so_a_mis_set_root_cannot_hold_the_request(self):
+        """A Local project folder pointing at the drive root has to come back
+        with an answer, not sit there. The depth cap is what makes that true."""
+        deep = self.tmp
+        for part in ("a", "b", "c", "d", "e", "f"):
+            deep = deep / part
+        deep.mkdir(parents=True)
+        import zipfile
+        buried = deep / "Buried.esx"
+        with zipfile.ZipFile(buried, "w") as z:
+            z.writestr("project.json", "{}")
+        got = self.store.locate_project_folder("Buried.esx", buried.stat().st_size)
+        self.assertEqual(got, {"ok": False, "reason": "not_found"})
+
+    def test_a_backups_folder_is_not_searched(self):
+        """The suite files a copy aside under backups/ before it overwrites
+        anything. Finding the backup would name the backup folder as the site."""
+        import zipfile
+        backups = self.tmp / "backups" / "Some Site"
+        backups.mkdir(parents=True)
+        name = "Only In Backups.esx"
+        with zipfile.ZipFile(backups / name, "w") as z:
+            z.writestr("project.json", "{}")
+        size = (backups / name).stat().st_size
+        self.assertEqual(self.store.locate_project_folder(name, size),
+                         {"ok": False, "reason": "not_found"})
+
+
+class FindFolderRoute(unittest.TestCase):
+    """The endpoint the page reaches, with the real Flask app."""
+
+    @classmethod
+    def setUpClass(cls):
+        import sys
+        sys.path.insert(0, str(ROOT))
+        from server import app, API_REQUEST_HEADER
+        app.config.update(TESTING=True)
+        cls.client = app.test_client()
+        cls.header = {API_REQUEST_HEADER: "1"}
+
+    def setUp(self):
+        import tempfile, zipfile
+        from tools import report_store
+        self.tmp = Path(tempfile.mkdtemp(prefix="wd-findroute-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        site = self.tmp / "Northwind Traders - Building 4 - 1200 Fake Rd"
+        site.mkdir()
+        self.esx = site / "B04 - PD.esx"
+        with zipfile.ZipFile(self.esx, "w") as z:
+            z.writestr("project.json", "{}")
+        real_root = report_store._lookup_root
+        report_store._lookup_root = lambda: str(self.tmp)
+        self.addCleanup(setattr, report_store, "_lookup_root", real_root)
+
+    def test_the_page_gets_the_folder_back(self):
+        r = self.client.post("/api/report/find_folder",
+                             json={"name": self.esx.name,
+                                   "size": self.esx.stat().st_size},
+                             headers=self.header)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json(),
+                         {"ok": True,
+                          "folder": "Northwind Traders - Building 4 - 1200 Fake Rd"})
+
+    def test_a_request_with_nothing_in_it_is_a_sentence_not_a_traceback(self):
+        r = self.client.post("/api/report/find_folder", json={},
+                             headers=self.header)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json(), {"ok": False, "reason": "not_a_project"})

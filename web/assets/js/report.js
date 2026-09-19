@@ -12,6 +12,9 @@
   // bare file name and nothing else - so everything downstream treats it as
   // the best available answer rather than a required one.
   var projectFolder = '';
+  // Why the folder is not in the name, when it is not: '' once one is
+  // known, otherwise the reason locate_project_folder gave back.
+  var folderLookup = '';
   var proj = {
     accessPoints: [],
     radios: [],
@@ -369,11 +372,20 @@
       .trim();
   }
 
-  // Report - <report name> - [<revision>] - <project name>. Empty pieces drop
-  // out entirely, so turning the revision off - or leaving it blank - leaves no
-  // dangling separator behind.
+  /* <report name> - <site> - [<revision>].
+
+     The site follows the report name directly, because that is the name that
+     was asked for: "AP Placement Map - <site>.pdf". Two things used to sit
+     between them and both are gone. The literal word "Report" led every name,
+     which says nothing that the report name does not already say and sorted
+     every report in the folder under R. The revision sat third, which pushed
+     the site away from the report name the moment one was typed, so it moved
+     to the end where it reads as a suffix on a finished name.
+
+     Empty pieces drop out entirely, so turning the revision off - or leaving
+     it blank - leaves no dangling separator behind. */
   function buildDocTitle(docName, revision, siteLabel, withRevision) {
-    return ['Report', docName, withRevision ? revision : '', siteLabel]
+    return [docName, siteLabel, withRevision ? revision : '']
       .map(fileSafe)
       .filter(Boolean)
       .join(' - ');
@@ -393,18 +405,24 @@
   // about the job.
   var GENERIC_STEM = /^(untitled|copy|new|final|draft|test|temp|project|report)([ _-]*\d*)$/i;
 
-  /* The project segment of the file name, and where it came from.
+  /* The site segment of the file name, and where it came from.
 
-     The folder matters because that is where the job name actually lives in
-     practice - a job is kept in a folder named for the client, the building
-     and the address, and the .esx inside it is called whatever the site or
-     the discipline is. Naming the report after both is what someone would do
-     by hand, and doing it by hand on every save is the thing this replaces.
+     The folder is the site, and when it is known it is the whole answer. A job
+     is kept in a folder named for the client, the building and the address,
+     and the .esx inside it is called whatever the site or the discipline is -
+     so the folder is the one that names the report.
 
-     The stem is next and is kept whole - "ACME2 - SITE-03 - 100 Example St,
-     Springfield, IL 62701 - B01 - PD" stays as it is. It is the answer whenever
-     the folder is unknown, which is every drag-and-drop and the whole hosted
-     build, because a browser file input hands over a bare name with no path.
+     It used to return the folder *and* the .esx stem joined together, on the
+     reading that the stem carried a discipline worth keeping. Asked for
+     directly, the wanted name is "<report name> - <site>" and nothing else:
+     the stem repeats most of the folder, and the part it does not repeat
+     belongs to the file rather than to the sheet someone is handed. So the
+     folder wins outright now, and the stem is a fallback rather than an
+     addition.
+
+     The stem is the answer whenever the folder is unknown, and it is kept
+     whole - "ACME2 - SITE-03 - 100 Example St, Springfield, IL 62701 - B01 -
+     PD" stays as it is.
 
      project.json's own name catches a file renamed to something that says
      nothing. The typed Client / Company setting is the last resort, and with
@@ -418,21 +436,6 @@
     var stemRaw = fileSafe(String(fileName || '').replace(/[.]esx$/i, ''));
     var stem = (stemRaw && !GENERIC_STEM.test(stemRaw)) ? stemRaw : '';
 
-    /* Both, when both say something and neither already contains the other.
-       This used to return the folder alone, which threw away the site or the
-       discipline that the file name carries - and asked about it he wanted
-       the folder *included*, not substituted. */
-    if (folder && stem) {
-      var f = folder.toLowerCase(), t = stem.toLowerCase();
-      if (f === t || f.indexOf(t) > -1) {
-        return { name: folder, from: 'the folder it was opened from' };
-      }
-      if (t.indexOf(f) > -1) {
-        return { name: stem, from: 'the .esx file name' };
-      }
-      return { name: folder + ' - ' + stem,
-               from: 'the folder it was opened from, then the .esx file name' };
-    }
     if (folder) return { name: folder, from: 'the folder it was opened from' };
     if (stem) {
       return { name: stem, from: 'the .esx file name',
@@ -470,6 +473,35 @@
   }
   window.syncDocTitle = syncDocTitle;
 
+  /* Why the site is not in the name. A drop cannot tell the browser where the
+     file came from, so the server is asked instead — and each way that can come
+     back empty needs a different thing done about it. Saying "no folder" and
+     stopping is what made this read as broken rather than as unanswered. */
+  function folderMissingReason() {
+    if (folderLookup === 'no_root') {
+      return 'This file was dragged in, so its folder had to be looked up — and '
+           + 'no Local project folder is set. Set one in Settings → General, or '
+           + 'open the file with “Open another…” instead.';
+    }
+    if (folderLookup === 'not_found') {
+      return 'This file was dragged in and was not found under the Local project '
+           + 'folder, so which folder it came from is unknown. Open it with '
+           + '“Open another…” and the folder comes with it.';
+    }
+    if (folderLookup === 'ambiguous') {
+      return 'This file was dragged in and more than one project of that name was '
+           + 'found, so which folder it came from would be a guess. Open it with '
+           + '“Open another…” and the folder comes with it.';
+    }
+    if (folderLookup === 'too_big') {
+      return 'This file was dragged in and the Local project folder was too large '
+           + 'to search. Open it with “Open another…” and the folder comes with it.';
+    }
+    return 'No folder is in the name because this file was dragged in — a drop '
+         + 'hands the browser a bare file name. Open it with “Open another…” and '
+         + 'the folder comes with it.';
+  }
+
   // Shows both spellings at once so the effect of the switch is settled by
   // looking rather than by describing it.
   function renderFilenamePreview() {
@@ -487,15 +519,13 @@
       site = picked.name || '';
       from = picked.from || '';
       /* The rule that decides this has been invisible, and "I can't get you
-         to include the folder name" is what that costs. Both reasons a folder
-         is missing are now printed where the name is. */
+         to include the folder name" is what that costs. Every reason a folder
+         is missing is printed where the name is. */
       if (picked.skippedFolder) {
         why = 'The folder it is in, \u201c' + picked.skippedFolder + '\u201d, is a place '
             + 'rather than a job, so it is left out.';
       } else if (!projectFolder) {
-        why = 'No folder is in the name because this file was dragged in \u2014 a '
-            + 'drop hands the browser a bare file name. Open it with '
-            + '\u201cOpen another\u2026\u201d and the folder comes with it.';
+        why = folderMissingReason();
       }
     } catch (e) {}
     if (!site) { site = 'Project name'; from = ''; }
@@ -922,6 +952,34 @@
     fileInput.click();
   };
 
+  /* The folder for a file that arrived without one.
+
+     A drop hands the browser a name and some bytes, never a path, so this asks
+     the server to look the file up under the Local project folder. It answers
+     only for a single match on name *and* byte size: two buildings surveyed
+     from one template is a real shape, and a wrong site printed on an
+     installer's drawing is worse than no site at all.
+
+     Anything that fails leaves the name exactly as it was before this existed
+     - the .esx stem - so a missing setting, a moved file or no server at all
+     costs nothing. The reason is kept so the settings preview can say it out
+     loud rather than leaving him looking at a name with no site in it and no
+     way to find out why. */
+  async function recoverProjectFolder(file) {
+    if (!settingsAvailable) { folderLookup = 'no_server'; return; }
+    var res;
+    try {
+      res = await WD.api('report/find_folder',
+                         { name: file.name, size: file.size });
+    } catch (e) { folderLookup = 'failed'; return; }
+    if (res && res.ok && res.folder) {
+      projectFolder = res.folder;
+      folderLookup = '';
+      return;
+    }
+    folderLookup = (res && res.reason) || 'failed';
+  }
+
   async function loadFile(file, folderName) {
     if (!file.name.toLowerCase().endsWith('.esx')) {
       showToast('Not an .esx file', 'error'); return;
@@ -930,9 +988,14 @@
       var data = await file.arrayBuffer();
       esxZip = await JSZip.loadAsync(data);
       fileName = file.name;
-      // Only the native picker knows this. A drop or a plain file input leaves
-      // it empty and the .esx stem answers instead.
+      /* Only the native picker hands this over. A drop or a plain file input
+         leaves it empty, and the drop zone is the front page - so most reports
+         were named without their site in them. The file is on this machine
+         either way, so when the folder did not arrive with it the server is
+         asked to find it. */
       projectFolder = folderName || '';
+      folderLookup = folderName ? '' : 'pending';
+      if (!projectFolder) await recoverProjectFolder(file);
       await parseEsx();
 
       templateConfirmed = false;

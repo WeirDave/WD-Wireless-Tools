@@ -1148,6 +1148,24 @@ def api_report_cover_info():
     return jsonify(report_store.cover_info())
 
 
+@app.route("/api/report/find_folder", methods=["POST"])
+def api_report_find_folder():
+    """Name the folder a dropped .esx came from.
+
+    The drop zone is the front page of the Report tool and a browser file input
+    cannot say where the file came from, so every report opened that way was
+    named without its site. The bytes are already on this machine, so the
+    question is answerable here rather than in the page: look the file up under
+    the Local project folder and hand back the folder name.
+
+    Only the folder *name* travels back, and only when exactly one file of that
+    name and byte size was found. See report_store.locate_project_folder.
+    """
+    data = request.get_json(silent=True) or {}
+    return jsonify(report_store.locate_project_folder(
+        (data.get("name") or "").strip(), data.get("size")))
+
+
 @app.route("/api/report/open_esx", methods=["POST"])
 def api_report_open_esx():
     """Hand the Report page the bytes of an .esx the user picked themselves.
