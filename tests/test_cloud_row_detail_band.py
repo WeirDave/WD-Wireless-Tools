@@ -223,7 +223,15 @@ class TheFindingsGetTheFullWidthTests(unittest.TestCase):
         calls = self.out["calls"]
         self.assertEqual(2, len(calls), calls)
         self.assertEqual("compare_with_cloud", calls[1][0])
-        self.assertEqual("C:/projects/SITE1/SITE1 New Convention.esx", calls[1][2])
+        #: Both arguments, in the order `API_MAP` maps positionally onto
+        #: `['path', 'cloudId']`. Asserting only the second one passed just as
+        #: happily while the two were the wrong way round, which is how the
+        #: swap in `settlePair` survived from v2.120.0 - one position out of a
+        #: pair is not a contract, it pins whichever order it finds. The keys
+        #: the server actually reads are asserted in
+        #: `tests/test_cloud_settle_names_its_arguments.py`.
+        self.assertEqual("C:/projects/SITE1/SITE1 New Convention.esx", calls[1][1])
+        self.assertEqual("c1", calls[1][2])
         self.assertGreater(self.out["rendered"], 0,
                            "the row was never redrawn, so he would not see it")
 

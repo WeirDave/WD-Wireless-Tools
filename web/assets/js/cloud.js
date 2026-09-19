@@ -3640,7 +3640,12 @@ function _setRowBusy(cloudId, localPath, what) {
 async function settlePair(cloudId, localPath, opts) {
   const o = opts || {};
   try {
-    const r = await pyApi('compare_with_cloud', cloudId, localPath);
+    /* `path` first, then `cloudId` - the order `API_MAP` maps positionally
+       onto, and the order `compare_with_cloud(local_path, cloud_project_id)`
+       takes. Sent the other way round, the cloud id arrived as the local path,
+       `_assert_inside` refused it, and every confirmation this function exists
+       to make failed with "Local path is outside the configured folder". */
+    const r = await pyApi('compare_with_cloud', localPath, cloudId);
     if (r && !r.error) {
       _compareResults.set(_compareKey(cloudId, localPath), r);
       /* A comparison is measured where a date is inferred, so a proven
