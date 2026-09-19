@@ -49,9 +49,14 @@ if (ca < 0 || cb < 0) throw new Error('the match-type sets moved');
 const a = source.indexOf('function syncEverythingPlan() {');
 const b = source.indexOf('function _syncRowsHtml(');
 if (a < 0 || b < 0) throw new Error('the planner moved');
+// A push ends in a cloud delete, and Ekahau allows that only to the owner, so
+// the planner asks `iOwn` exactly as the row does. Sliced in, not stubbed.
+const oa = source.indexOf('function ownershipBlock(');
+const ob = source.indexOf('\nfunction _isExternal(');
+if (oa < 0 || ob < 0) throw new Error('the ownership helpers moved');
 // One evaluation, not two: `const` is block-scoped to its own eval, so
 // splitting these leaves the planner unable to see the sets.
-eval(source.slice(ca, cb) + source.slice(a, b));
+eval(source.slice(oa, ob) + source.slice(ca, cb) + source.slice(a, b));
 
 const failures = [];
 function check(what, cond) { if (!cond) failures.push(what); }

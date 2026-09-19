@@ -292,6 +292,32 @@ function externalChip(tab, rows) {
   out.viewSearch = view('bravo', '');
   out.viewSearchNone = view('zzzz', '');
 
+  // ---- the planner refuses what the row refuses ---------------------------
+  // A push uploads a replacement and deletes the old cloud project, and Ekahau
+  // allows that only to the owner. The row draws it unavailable; the planners
+  // asked only about match type.
+  function pushPlanFor(cloudOwner) {
+    const d = {
+      kind: 'pair', cloudId: 'c-9', cloudName: 'Their Survey',
+      localName: 'Their Survey', localPath: 'D:/E/Their Survey.esx',
+      matchType: 'id', staleness: 'local_newer',
+      cloudMtime: 100, localMtime: 900,
+      cloudOwner: cloudOwner, entityKind: 'projects',
+    };
+    __set('currentTab', 'projects');
+    const plan = syncPlan([d], 'to-cloud');
+    const row = { kind: 'projects', matchType: 'id', staleness: 'local_newer',
+                  cloud: { id: 'c-9', name: 'Their Survey', owner: cloudOwner },
+                  local: { path: 'D:/E/Their Survey.esx', name: 'Their Survey' } };
+    return { pushes: (plan.contentPushes || []).length,
+             blocked: (plan.blockedPushes || []).length,
+             rowOffers: canPushToCloud(row) };
+  }
+  __set('data', { currentUser: ME, summary: {}, matched: [], cloudOnly: [],
+                  localOnly: [], orphans: { cloudOnly: [] } });
+  out.pushMine = pushPlanFor(ME);
+  out.pushTheirs = pushPlanFor('colleague@example.invalid');
+
   out.externalSites = externalChip('sites', [siteHoldingTheirProject()]);
   const theirProject = siteHoldingTheirProject().cloud.children.matched[0];
   out.externalProjects = externalChip('projects', [theirProject]);
@@ -342,6 +368,42 @@ class AutoAssignActsOnWhatItOffered(unittest.TestCase):
 
     def test_the_project_assigned_is_the_one_that_was_listed(self):
         self.assertEqual(["u-Alpha Depot-0"], self.out["searched"]["assigned"])
+
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
+class ThePlannerRefusesWhatTheRowRefuses(unittest.TestCase):
+    """One question, one answer, whether it is asked of a row or of a run.
+
+    A push replaces the cloud project by uploading a new one and deleting the
+    old, and Ekahau allows that delete only to the owner. `canPushToCloud`
+    asks `iOwn` and the row draws a colleague's project as unavailable. The
+    bulk planners asked only about match type, so a colleague's project he had
+    downloaded and edited was queued, uploaded as a duplicate into the shared
+    account, and then took a 403 on the delete - unattended, inside a Sync all
+    run.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.out = probe()
+
+    def test_his_own_project_is_still_offered(self):
+        got = self.out["pushMine"]
+        self.assertTrue(got["rowOffers"], got)
+        self.assertEqual(1, got["pushes"], got)
+        self.assertEqual(0, got["blocked"], got)
+
+    def test_a_colleagues_project_is_refused_by_both(self):
+        got = self.out["pushTheirs"]
+        self.assertFalse(got["rowOffers"],
+                         "the fixture is wrong - the row would offer this")
+        self.assertEqual(0, got["pushes"],
+                         "the planner queued a push the row refuses: " + repr(got))
+
+    def test_and_it_is_reported_as_refused_rather_than_dropped(self):
+        """The dialog lists what it will not do, so it has to arrive there."""
+        self.assertEqual(1, self.out["pushTheirs"]["blocked"],
+                         self.out["pushTheirs"])
 
 
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")

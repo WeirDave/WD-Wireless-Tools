@@ -341,9 +341,15 @@ class TheBulkPathAgreesWithTheRow(unittest.TestCase):
           // above it - see the note in test_cloud_sync_plan.py.
           const ca = src.indexOf('const PULLABLE_MATCH_TYPES');
           const cb = src.indexOf('function canPushToCloud(');
+          /* A push ends in a cloud delete, which Ekahau allows only to the
+             owner, so the planner asks `iOwn` exactly as the row does. Sliced
+             in rather than stubbed: this file exists to check the two agree,
+             and a stub would be deciding that for them. */
+          const oa = src.indexOf('function ownershipBlock(');
+          const ob = src.indexOf('\nfunction _isExternal(');
           function isProjectSyncItem(d) { return d && !d.isDir; }
           // One evaluation: `const` is block-scoped to its own eval.
-          eval(src.slice(ca, cb) + src.slice(a, b));
+          eval(src.slice(oa, ob) + src.slice(ca, cb) + src.slice(a, b));
           const row = { kind: 'pair', matchType: process.argv[2],
                         staleness: 'local_newer',
                         localPath: 'C:/Projects/Ridge/Ridge.esx', name: 'Ridge' };

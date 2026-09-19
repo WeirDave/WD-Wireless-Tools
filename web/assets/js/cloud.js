@@ -6683,7 +6683,14 @@ function syncPlan(items, dir) {
      One predicate each, shared with the row, so there is one answer to "may
      this pair move in this direction" rather than two. */
   const mayPull = (d) => isFilePair(d) && PULLABLE_MATCH_TYPES.has(d.matchType);
-  const mayPush = (d) => isFilePair(d) && PUSHABLE_MATCH_TYPES.has(d.matchType);
+  /* Ownership too, because `canPushToCloud` asks it and this is supposed to be
+     the same question. A push replaces the cloud project by uploading a new
+     one and deleting the old, and Ekahau will not let anyone delete a project
+     they do not own - so without this the planner queued a colleague's project,
+     uploaded a duplicate into the shared account and then took a 403 on the
+     delete. The row has always drawn that as unavailable. */
+  const mayPush = (d) => isFilePair(d) && PUSHABLE_MATCH_TYPES.has(d.matchType)
+                         && iOwn({ owner: d.cloudOwner });
 
   const stale = (d, which) => isFilePair(d) && d.staleness === which;
 
@@ -7112,7 +7119,11 @@ function syncEverythingPlan() {
     if (pr.staleness === 'cloud_newer') {
       (PULLABLE_MATCH_TYPES.has(pr.matchType) ? down : downBlocked).push(row);
     } else if (pr.staleness === 'local_newer') {
-      (PUSHABLE_MATCH_TYPES.has(pr.matchType) ? up : upBlocked).push(row);
+      //: Ownership as well as match type - see the note on `mayPush`. A push
+      //: ends in a cloud delete, and Ekahau refuses that to anyone but the
+      //: owner, so an unowned pair belongs in the blocked list the dialog
+      //: shows rather than in the run.
+      (PUSHABLE_MATCH_TYPES.has(pr.matchType) && iOwn(pr.cloud) ? up : upBlocked).push(row);
     } else inSync.push(row);
   };
 

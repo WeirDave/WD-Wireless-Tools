@@ -42,7 +42,11 @@ function slice(from, to) {
 // ReferenceError instead of answering. Stubbing them would test the stub.
 // One evaluation, not two: `const` is block-scoped to its own eval, so
 // splitting these leaves the planner unable to see the sets.
-eval(slice('const PULLABLE_MATCH_TYPES', 'function canPushToCloud(')
+// A push ends in a cloud delete, and Ekahau allows that only to the owner, so
+// the planner asks `iOwn` exactly as the row does. Sliced in rather than
+// stubbed, for the same reason as the sets above.
+eval(slice('function ownershipBlock(', '\nfunction _isExternal(')
+   + slice('const PULLABLE_MATCH_TYPES', 'function canPushToCloud(')
    + slice('function syncPlan(items, dir) {', 'function selectedSyncItems'));
 
 // Only orphan rows consult this; pairs never reach it.
