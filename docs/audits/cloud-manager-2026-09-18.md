@@ -438,7 +438,26 @@ first, so the preview and the destination disagree.
 
 ## P3 — wrong, but visible or harmless
 
-* **A19. `_building_token` breaks on 3-digit building numbers [measured].**
+> **All twelve are closed, in v2.144.0**, in two commits — the matching engine
+> and the client — each with a test that fails against the code before it.
+> Six of the eight `[reported]` ones were re-measured on the way in and all
+> six held.
+>
+> Two of them were filed here and were not harmless. A26's stream of false
+> "taking longer than expected" toasts was cosmetic, but **A27** — a failed
+> background poll replacing the list and leaving `data` as an error object, so
+> every later re-render silently drew nothing — and **A30** — every
+> Duplicates-tab delete, including irreversible cloud deletes, gated only by a
+> truncatable `window.confirm()` — both belong higher than P3. Severity was
+> judged by the size of the code involved rather than by what it costs, which
+> is worth remembering the next time a list like this is triaged.
+>
+> **A28** is the one item closed without being removed. The undo path is
+> genuinely unreachable — nothing supplies an undo function — but it is the
+> deck's own machinery, so the latent expiry race was fixed and the code left
+> in place rather than deleted out from under whoever wires it up.
+
+* **A19. `_building_token` breaks on 3-digit building numbers [measured].** — **fixed in v2.144.0**
   The regex backtracks to the `bld` alternative and captures the `g`:
   ```
   'Bldg 3'   -> '3'      'Bldg 100'  -> 'G'
@@ -454,11 +473,11 @@ first, so the preview and the destination disagree.
   That is precisely the case the guard was written for. `'Bldg 3'` vs
   `'Bldg 5'` is still caught, which is why it has looked fine.
 
-* **A20. A year is read as a street number [measured].**
+* **A20. A year is read as a street number [measured].** — **fixed in v2.144.0**
   `discriminators_reason('SITE1 Survey 2025', 'SITE1 Survey 2026')` →
   *"Street numbers don't match (2025 vs 2026)"*. A false hold-back.
 
-* **A21. The site-code pass has no similarity floor [measured].** The fuzzy
+* **A21. The site-code pass has no similarity floor [measured].** — **fixed in v2.144.0** The fuzzy
   pass requires `sim > 0.5`; the code pass requires only equal site codes:
   ```
   'SITE2 Rooftop Antenna Replacement' <-> 'SITE2 Basement Parking Garage'
@@ -468,44 +487,44 @@ first, so the preview and the destination disagree.
   second half is never checked, and these land in `mismatches`, so Sync offers
   to rename one to the other.
 
-* **A22. Pairing is greedy in Ekahau's listing order [reported].** No global
+* **A22. Pairing is greedy in Ekahau's listing order [reported].** — **fixed in v2.144.0** No global
   assignment, and `get_projects()` is returned unsorted, so a weaker candidate
   considered first can take a file a later one matches far better — and the
   answer can change when an unrelated project is saved.
 
-* **A23. `exact` is case-sensitive [reported]** despite the docstring
+* **A23. `exact` is case-sensitive [reported]** — **fixed in v2.144.0** despite the docstring
   promising "case + whitespace normalized", demoting case-only differences to
   `fuzzy`, which is excluded from `PUSHABLE_MATCH_TYPES` — so Local → Cloud is
   greyed out for pairs whose names are the same word for word.
 
-* **A24. Stale not-match entries are never pruned [reported].** Nothing removes
+* **A24. Stale not-match entries are never pruned [reported].** — **fixed in v2.144.0** Nothing removes
   an entry whose path has gone, and `_blocked` is consulted in *every* pass
   including the id pass. A freshly downloaded file landing on an old path is
   silently refused a pair it can prove.
 
-* **A25. `_ESX_META_CACHE` keys on `(path, int(mtime))` [reported]** — one-second
+* **A25. `_ESX_META_CACHE` keys on `(path, int(mtime))` [reported]** — **fixed in v2.144.0** — one-second
   granularity, no size component, never evicted, unbounded.
 
 * **A26. The row-busy 30 s ceiling is measured from enqueue, not from start
-  [reported].** With `OP_MAX_CONCURRENT = 1`, a bulk run emits a stream of
+  [reported].** — **fixed in v2.144.0** With `OP_MAX_CONCURRENT = 1`, a bulk run emits a stream of
   *"That is taking longer than expected"* toasts about work that is merely
   queued.
 
-* **A27. A failed background poll wipes the list [reported].** `onData` checks
+* **A27. A failed background poll wipes the list [reported].** — **fixed in v2.144.0** `onData` checks
   `data.error` *before* the background guard, so an unrequested poll replaces
   the list with error text and leaves `data` pointing at the error object —
   after which every later re-render silently draws an empty list while the
   selection bar still says "12 selected".
 
-* **A28. The undo path is dead code [reported].** No `opEnqueue` call site
+* **A28. The undo path is dead code [reported].** — **fixed in v2.144.0** No `opEnqueue` call site
   anywhere supplies `undoFn`; every one passes `undoable: false`.
 
-* **A29. `wd-match-help-seen` is written and never read [measured].**
+* **A29. `wd-match-help-seen` is written and never read [measured].** — **fixed in v2.144.0**
   `openMatchHelp` hides `#matchHelpHint`, which does not exist in
   `web/cloud.html`. Dead, not harmful.
 
 * **A30. Duplicates-tab deletes — including irreversible cloud deletes across
-  every cluster — are gated only by `window.confirm()` [reported]**, which
+  every cluster — are gated only by `window.confirm()` [reported]** — **fixed in v2.144.0**, which
   browsers truncate, and which shows no site, no date and no "shared with".
 
 ---

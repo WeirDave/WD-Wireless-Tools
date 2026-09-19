@@ -143,12 +143,28 @@ typed destination is where the file goes. The audit has the detail per item,
 including the one deliberate non-change: the chips count the account rather
 than the search, and say so above the list.
 
+**And the twelve P3 items are closed, in v2.144.0** — two commits, the
+matching engine and the client. The matcher reads a three-digit building
+number as the number rather than as the letter "g", stops reading years as
+street numbers, will not pair two projects on a shared site code alone, gives
+the same answer whatever order Ekahau lists projects in, treats a name that
+differs only in capitals as exact, lets Ekahau's own project id outrank a
+stale not-a-match, and notices a file rewritten inside one second. On the
+client, a failed background poll no longer takes the list away, the Duplicates
+tab deletes through the real dialog instead of `window.confirm()`, and the
+row-busy clock starts when the work does.
+
+**Two of those were mis-filed as P3 and were not harmless** — the failed poll
+wiping the list, and every Duplicates-tab delete gated only by a truncatable
+native dialog. Severity was judged by how small the code was rather than by
+what it costs. Worth remembering when the next list is triaged.
+
 One systemic item from the audit is still open:
 
-* **The untested surface is the destructive one** — cloud and local delete,
-  the whole Duplicates tab, transfer ownership and folder merge still have no
-  test that could fail if they broke. Sharing and the merge's emptiness check
-  have tests now; the rest of that list does not.
+* **The untested surface is the destructive one** — cloud and local delete
+  from the main list, transfer ownership and folder merge still have no test
+  that could fail if they broke. Sharing, the merge's emptiness check and the
+  Duplicates delete dialog have tests now; the rest of that list does not.
 
 *(CI installing Node — the other systemic item — was closed separately in
 `claude/ci-installs-node`.)*
