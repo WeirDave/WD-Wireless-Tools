@@ -248,41 +248,41 @@ written down; inventing a plausible one would be worse than the gap.
 These are all small, and all blocked on a call rather than on effort. Grouped
 so they can be answered together.
 
-- **Rename the AP Label Reference page.** The notes page is now plain
-  **AP Notes** at his request. The label page beside it still says **AP Label
-  Reference**, so two sibling pages are named two different ways. Options:
-  leave it, `AP Labels`, or `AP Label Key`.
+**All four were answered on 2026-09-19 and are closed.** Shipped in v2.144.0 —
+see "Decisions already made" below for the one that was answered by leaving it
+alone. They are kept here, struck through, only until the next full pass of this
+file.
 
-- **"Report a Bug" has the same gap "View Issues" had.** He asked for
-  **View Issues** → **View Issues on GitHub**, which shipped in v2.119.1. Its
-  neighbour in the same Help & Support section is the *only* other menu item
-  in the whole suite that leaves the app, it goes to the same GitHub
-  repository, and it says so no more than the one he corrected did. It is on
-  eighteen pages, so it is a find-and-replace rather than a decision about
-  effort. Options: leave it, `Report a Bug on GitHub`, or `Report a Bug
-  (GitHub)`. Until he says, it is exempted by name in
-  `tests/test_every_tool_is_in_every_menu.py` so that the rule still catches
-  any *new* outbound link.
+- ~~**Rename the AP Label Reference page.**~~ **AP Labels**, so the printed page
+  reads like its sibling **AP Notes** rather than like a different product.
 
-- **"User Guide" and "User Manual" sit next to each other and do not say which
-  is which.** Both are in Help & Support on the same pages, both are
-  in-app documents, and the names are near-synonyms. The Guide is the
-  per-tool walkthrough (`/guide-cloud`, `/guide-report`, …) and opens in a new
-  tab; the Manual is the one long suite-wide document and jumps to that tool's
-  anchor (`/manual#cloud-manager`). Nothing on screen carries that
-  distinction. Options: leave it, or make the Guide name its tool
-  (`Cloud Manager Guide`), or rename the pair to something like
-  `Walkthrough` / `Full Manual`.
+- ~~**"Report a Bug" has the same gap "View Issues" had.**~~ **Report a Bug on
+  GitHub**, on every page, matching the *View Issues* correction from v2.119.1.
+  `LABELS_HE_HAS_NOT_RULED_ON` in `tests/test_every_tool_is_in_every_menu.py` is
+  now **empty**, so the outbound-link rule covers everything with nothing
+  excused from it.
 
-- **"Suite Settings" goes to five different places.** Most pages link
-  `/settings`, but Cloud Manager, Squirrel, Report and Quick Walls link
-  `/settings#cloud`, `#organizer`, `#report` and `#walls` — a jump to that
-  tool's own section, which the label does not mention. It is arguably right
-  as it is (it lands where you would want), and it is only worth changing if
-  the jump has ever surprised him. Options: leave it, or
-  `Suite Settings — Cloud` on the pages that deep-link.
+- ~~**"User Guide" and "User Manual" sit next to each other and do not say which
+  is which.**~~ Answered by removing one of them rather than by renaming either:
+  *"There should be one universal User guide for the entire suite with chapters
+  for each of the tools."* The five per-tool pages are merged into their chapters
+  and deleted, the document is the **User Guide**, and every menu carries one
+  item. The old `/guide…` addresses redirect to their chapter.
 
-  *All three found by a sweep of every `menu-item` / `help-menu-item` in
+  **Three factual corrections came out of the merge**, and they are the reason
+  this was worth doing rather than a tidy-up: the guide promised a
+  `.previous-<timestamp>.esx` backup that nothing had written since v2.141.0,
+  claimed a wall template never restyles a type Ekahau ships when
+  `mergeTemplateTypes` has deliberately done exactly that since v2.100.19, and
+  the Report page claimed the cover image lives in `localStorage` when it has
+  been in `~/.wd_wireless_tools/report/` throughout. Two documents answering one
+  question is how all three survived.
+
+- ~~**"Suite Settings" goes to five different places.**~~ **Left as it is,
+  deliberately.** The deep link lands where you would want and the jump has never
+  surprised anyone. Closed rather than carried.
+
+  *All four found by a sweep of every `menu-item` / `help-menu-item` in
   `web/**.html` on 2026-09-18, done alongside the View Issues rename. Nothing
   else in any menu is ambiguous about where it goes: everything else is either
   a tool page, an in-app dialog, or an action with no destination.*
