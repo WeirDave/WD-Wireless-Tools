@@ -952,6 +952,58 @@ out of the markup and executes it. Both go red under mutation - the row index
 drifting by one, the confirm dropping the path, the restore never reaching the
 server, `restore_target` losing the folder mapping.
 
+### What the first real run found, ten minutes after it shipped
+
+Two faults, and the second is why the first was ever reached. Both were in
+v2.137.0 and fixed in v2.137.1.
+
+**The scan was walking his whole C: drive.** `_backup_roots()` hands back the
+project folder *and the install's parent*, because the updater's
+`<install>.previous-v<version>-<stamp>` folder is a sibling of the install.
+That folder is always a **direct child** of the parent - but nothing said so,
+so the parent was walked to the bottom, and the parent of
+`C:\WD-Wireless-Tools` is `C:\`. A root now carries how deep it is worth
+walking (`(path, depth)`, see `as_roots`), the install parent gets 1, and
+`_SKIP_DIR_NAMES` keeps the walk out of `$Recycle.Bin` and friends besides.
+
+This was not new. The same roots feed Settings' **Check usage** and **Clean
+up**, so the whole disk had been in range of a purge since that screen shipped.
+Nothing was ever deleted that was not backup-shaped, and that is luck rather
+than design.
+
+**And `Path.is_dir()` does not swallow every error.** It ignores a fixed list
+of Windows errors - not ready, invalid name, cannot resolve filename - and
+**1920, `ERROR_CANT_ACCESS_FILE`, is not on it. 1921 is**, which is exactly why
+this reads like it should already be handled. A cloud-storage placeholder whose
+provider is not running raises 1920, and so does a reparse point inside
+`$Recycle.Bin`. One of them stopped the whole scan and put
+
+    [WinError 1920] The file cannot be accessed by the system: '...'
+
+on screen where the list should have been - with his Windows profile SID in it,
+which is the thing `describe_failure` exists to keep out of the UI.
+
+`is_dir_safe` and `exists_safe` are the guards. Three things about them:
+
+* **`restore` deliberately does not use `exists_safe`.** Everywhere else an
+  unreadable answer degrades safely - a row says the original is gone, a scan
+  skips a file. There it destroys something: read as "not there", a file that
+  *is* there gets replaced with no copy kept. So a target that cannot be
+  described stops the restore and says so.
+* **The file loop tests the name before it touches the disk**
+  (`_looks_like_a_backup`). Most of what a walk sees can't be a backup, and
+  asking the OS about every one of them is what gave an unreadable file the
+  chance to raise at all. The path that broke it - `...\.bin\nanoid` - is not
+  backup-shaped and is never opened now.
+* **The directory loop has only `is_dir_safe` between it and the same error**,
+  which is worth knowing because the file loop is guarded twice and therefore
+  stays green when the guard is removed. `test_a_directory_the_system_will_not_
+  describe_does_not_stop_the_scan` is the one that goes red.
+
+`scan` returns `unreadable` - **a count, never a path** - and the tab says so
+in a line above the list, because a total that quietly skipped something is
+worse than a larger number.
+
 **One tab-wide trap worth knowing, because Duplicates had it too.** Neither
 local-folder tab draws through `renderRows` on the way in - each goes straight
 to its own renderer - so anything `renderRows` takes down stays up. The A-Z
