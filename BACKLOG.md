@@ -12,6 +12,12 @@ rather than read off the source. What it closed is noted on each item.
 The navigation labels were swept separately on 2026-09-18; what that found is
 under "Awaiting a decision, not work".
 
+**The rest of this file has not been re-read since v2.100.12 and the suite is
+now past v2.141.** One item has been struck as closed by the backups removal;
+the others are carried forward unverified, so confirm an item against the code
+before starting it rather than trusting its wording. A full pass is itself
+outstanding work.
+
 > **What the 2026-09-14 review found.** The previous review was against
 > v2.69.0 — twenty-nine releases stale — and the problem was the opposite of
 > the one expected. Nothing in here had already shipped. What it did was
@@ -99,8 +105,12 @@ The P1 items, all still open:
   it, files it, downloads it over the local `.esx`, and — in
   `replace_cloud_project` — deletes the old cloud project. `_await_new_project`
   exists precisely to forbid this and is only used on the fallback path.
-* **The push overwrites the local `.esx` with no backup** (`:2691`), the only
-  local overwrite in the file that does not back up first.
+* ~~**The push overwrites the local `.esx` with no backup**~~ — **closed by
+  v2.141.0, which removed backups suite-wide.** It was a finding about
+  *inconsistency*: every other local overwrite in the file backed one up first
+  and this one did not. None of them do now, deliberately, and the writes rest
+  on atomic replace instead. Read `CLAUDE.md` § "Backups were removed, and that
+  is the design" before treating an unprotected write here as a defect.
 * **`replace_cloud_project` never re-checks direction before deleting** — no
   `modifiedAt` comparison anywhere in it, so a cloud copy saved after the
   ledger was drawn is deleted in favour of an older local file.
