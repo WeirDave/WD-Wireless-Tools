@@ -1331,7 +1331,20 @@ body.tool-walls .btn-sm { padding: 6px 12px; font-size: 12px; }
 
 .modal .hint { font-size: 11px; color: var(--text-3); margin-top: 2px; }
 
-.modal-actions { display: flex; gap: 6px; justify-content: flex-end; }
+/* A row of buttons is not another paragraph, so it does not sit at paragraph
+   distance from the text above it - and this rule set no top margin at all, so
+   it sat at *no* distance. Measured in all three browsers: the buttons began on
+   the exact pixel the last line ended, 0px, which is what "the text is jammed
+   up against the buttons" looks like.
+
+   It went unnoticed because the modals anyone looked at hard had each grown
+   their own spacing - the share dialog, peek, compare, and three utility
+   classes - so the ones left on the bare rule were the plain confirm dialogs,
+   which is most of them.
+
+   16px is what three of those overrides had already settled on independently,
+   which is as good a definition of the house value as any. */
+.modal-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 16px; }
 
 .modal-header {
   padding: 16px 20px; border-bottom: 1px solid var(--border);
@@ -3583,7 +3596,7 @@ body.tool-cloud .toolbar input.search:focus {
 
 .modal.peek > h3, .modal.peek > .sub, .modal.peek > input[type="text"] { flex: 0 0 auto; overflow-wrap: anywhere; }
 
-.modal.peek > .modal-actions { flex: 0 0 auto; padding-top: 14px; }
+.modal.peek > .modal-actions { flex: 0 0 auto; padding-top: 14px; margin-top: 0; }
 
 .modal.peek .modal-actions .btn { padding: 8px 22px; font-size: 13px; }
 
@@ -3916,7 +3929,7 @@ body.tool-cloud .toolbar input.search:focus {
 
 .cmp-empty { padding: 10px; color: var(--text-2); font-size: 11px; }
 
-.modal.compare .modal-actions { flex: 0 0 auto; padding-top: 12px; }
+.modal.compare .modal-actions { flex: 0 0 auto; padding-top: 12px; margin-top: 0; }
 
 .modal.compare .modal-actions .btn { padding: 8px 22px; font-size: 13px; }
 

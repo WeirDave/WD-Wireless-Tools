@@ -80,6 +80,8 @@ function rdAction(icon, label, call, opts) {
        + call + '">' + ic(icon) + '<span>' + label + '</span></button>';
 }
 
+// `stalenessBadgeHtml` asks this whether the row has anything left to do.
+eval(slice(src, 'function comparisonIsSettled(', 'function isOutOfSync('));
 eval(slice(src, 'const PULLABLE_MATCH_TYPES', 'function compareResultFor('));
 eval(slice(src, 'function rdUnavailable(', 'function stalenessBadgeHtml('));
 eval(slice(src, 'function stalenessBadgeHtml(', '\nfunction gutCell'));

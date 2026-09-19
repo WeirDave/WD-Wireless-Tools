@@ -1097,11 +1097,36 @@ function _passOwnerForCounts(cloudObj, localObj) {
    fleet of cloud projects used to read 29 out of sync over pure date drift.
    Once each rename is applied the pair is `identical` and drops out. Until
    then it is 29 files wanting one click each, which is a true number. */
+function comparisonIsSettled(cmp) {
+  /* The one definition of "there is nothing left to do here", shared by the
+     chip, the filter, the site digest and the row's own actions.
+
+     It has now been wrong in both directions in two days.
+
+     `!designDiffers` was too generous: it dropped the pairs whose design
+     matches but whose *name inside the file* is still the old one, and those
+     are precisely the rows carrying a `Set the name inside the file to match`
+     button. Three of his six vanished from the count and stayed in the list.
+
+     `identical` was too strict, which is the other end of the same mistake:
+     "No design change - only bookkeeping differs (dates, revision history)"
+     is not identical, and it is also not a decision - there is no button on
+     that row, nothing to click, nothing to choose. Making it count meant a
+     site he had just finished comparing still read "1 of 3 files - 1 needs a
+     decision", which is the tool asking for something it cannot name.
+
+     Settled is: the design matches, and the name does not need writing. That
+     is exactly the test `stalenessBadgeHtml` already used to decide whether to
+     offer any action at all, so the badge, the count and the row now agree by
+     construction rather than by three people remembering to. */
+  return !!(cmp && !cmp.designDiffers && cmp.nameState !== 'internal_only');
+}
+
 function isOutOfSync(row) {
   if (!row || !row.staleness) return false;
   const cmp = (row.cloud && row.local)
     ? _compareResults.get(_compareKey(row.cloud.id, row.local.path)) : null;
-  return !(cmp && cmp.identical);
+  return !comparisonIsSettled(cmp);
 }
 
 
@@ -3594,7 +3619,7 @@ function stalenessBadgeHtml(r) {
          implies overriding advice nobody gave. A settled row says it is
          settled and offers Recheck. */
       const provenSame = cmp && !cmp.designDiffers;
-      const settled = provenSame && cmp.nameState !== 'internal_only';
+      const settled = comparisonIsSettled(cmp);
       if (settled) return '';
       const label = provenSame
         ? 'Download anyway'

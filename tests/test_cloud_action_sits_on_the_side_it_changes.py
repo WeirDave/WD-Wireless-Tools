@@ -64,7 +64,7 @@ function fmtRelDate(t) { return String(t); }
 globalThis.data = { currentUser: 'me@example.com' };
 const navigator = { platform: 'Win32' };
 
-eval(cut('function isOutOfSync(', '\nfunction _isExternal(')
+eval(cut('function comparisonIsSettled(', '\nfunction _isExternal(')
    + cut('const PULLABLE_MATCH_TYPES', '\nfunction rowDetailHtml(')
    + cut('const ICONS = {', '\nfunction ic(')
    + 'function ic(n,c){return ICONS[n]?"<svg></svg>":"";}\n'
@@ -137,7 +137,11 @@ out.laneCounts = everyBand.map(b => b.cloud.length + b.local.length);
 
 /* --- The count and the list ask one question. ---------------------------- */
 const settled = mk('Settled', {},
-  { identical: true, designDiffers: false }, 'cloud_newer');
+  { identical: true, designDiffers: false, nameState: 'same' }, 'cloud_newer');
+/* "No design change - only bookkeeping differs (dates, revision history)."
+   Not identical, and not a decision either: there is no button on that row. */
+const bookkeeping = mk('Bookkeeping', {},
+  { identical: false, designDiffers: false, nameState: 'same' }, 'cloud_newer');
 const nameOnly = mk('NameOnly', {},
   { identical: false, designDiffers: false, nameState: 'internal_only' }, 'cloud_newer');
 const real = mk('Real', {}, { identical: false, designDiffers: true }, 'local_newer');
@@ -146,6 +150,7 @@ const current = mk('Current', {}, null, null);
 
 out.outOfSync = {
   settled: globalThis.__isOutOfSync(settled),
+  bookkeeping: globalThis.__isOutOfSync(bookkeeping),
   nameOnly: globalThis.__isOutOfSync(nameOnly),
   real: globalThis.__isOutOfSync(real),
   uncompared: globalThis.__isOutOfSync(uncompared),
@@ -230,6 +235,17 @@ class TheCountIsTheLengthOfItsOwnList(AnActionSitsUnderTheSideItChanges):
         the name inside the file does not, and that is the row carrying
         `Set the name inside the file to match` - work, not noise."""
         self.assertTrue(self.out["outOfSync"]["nameOnly"])
+
+    def test_a_pair_whose_only_difference_is_bookkeeping_is_not(self):
+        """The regression this predicate caused the day it was widened.
+
+        "I ran the comparison and now it looks like that file is the same
+        project and yet it still says 1 of 3 files needs a decision." The row
+        said "No design change - only bookkeeping differs (dates, revision
+        history)" and offered no action at all, because there is none: nothing
+        to click, nothing to choose. A count that calls that a decision is
+        asking for something it cannot name."""
+        self.assertFalse(self.out["outOfSync"]["bookkeeping"])
 
     def test_a_pair_proven_identical_is_not(self):
         """Contents, metadata and name all agree - the row itself says

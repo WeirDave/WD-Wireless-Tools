@@ -55,11 +55,45 @@ MANUAL_MATCH_FILE = CONFIG_DIR / "manual_matches.json"
 
 
 def _assert_inside(path, root):
-    """Raise ValueError if *path* resolves outside *root*."""
+    """Raise ValueError if *path* is outside *root*.
+
+    Asked two ways, because one of them refused his own project folder.
+
+    `Path.resolve()` goes to the filesystem: it opens the path to follow
+    reparse points, and a cloud-synced folder is full of them. When the file
+    resolves through one and the root does not - or when the path is long
+    enough that resolving it fails and it silently falls back to something
+    else - the two come back rooted differently and `relative_to` says a file
+    sitting inside the configured folder is outside it. "Could not confirm the
+    result: Local path is outside the configured folder", on the folder the
+    tool itself is configured with.
+
+    So the resolved comparison is tried first, because following links is the
+    stricter question and the right one when it works; and a purely textual
+    comparison of the absolute, case-folded paths is accepted as well. This is
+    a sanity check on a path this app's own page supplied, not a boundary
+    against an attacker, and a guard that refuses his normal case is worse than
+    no guard - he stops believing the ones that matter.
+    """
+    def _inside(a, b):
+        try:
+            Path(a).relative_to(Path(b))
+            return True
+        except ValueError:
+            return False
+
     try:
-        Path(path).resolve().relative_to(Path(root).resolve())
-    except ValueError:
-        raise ValueError(f"Path is outside the allowed directory: {path}")
+        if _inside(Path(path).resolve(), Path(root).resolve()):
+            return
+    except OSError:
+        pass
+    #: No filesystem access, so a reparse point cannot move one side and not
+    #: the other. `normcase` folds case and separators on Windows.
+    a = os.path.normcase(os.path.abspath(str(path)))
+    b = os.path.normcase(os.path.abspath(str(root)))
+    if _inside(a, b):
+        return
+    raise ValueError(f"Path is outside the allowed directory: {path}")
 
 
 def load_config():
