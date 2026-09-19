@@ -1001,7 +1001,13 @@ function indexRowData() {
       entityKind: 'sites',
     };
     rowData['s-l:' + p.local.path] = {
-      kind: 'local', path: p.local.path, name: p.local.name, isDir: true,
+      //: `data.matched` is sites on the Sites tab and projects on the
+      //: Projects tab, and both sides of a matched project now use these
+      //: same per-side keys - so this cannot be hardcoded true, or a delete
+      //: confirmation would call an .esx a folder. The server sets `isDir`
+      //: explicitly on both: true for a site folder, false for a project.
+      kind: 'local', path: p.local.path, name: p.local.name,
+      isDir: !!p.local.isDir,
       entityKind: 'sites',
     };
   });
@@ -2218,7 +2224,15 @@ function renderLedger(hit) {
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'projects',
     matchType: p.matchType, staleness: p.staleness || null,
     differenceKind: p.differenceKind || null,
-    cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
+    cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || ''),
+    /* One key per side, the same as the Sites tab and nested project rows.
+       Without these both cells fell back to `r.key`, so the two checkboxes
+       carried the same `data-k`: one tick selected the pair, `bulkDelete`
+       expanded that pair into a cloud item *and* a local item, and ticking
+       the cloud box deleted the local .esx while the local box beside it
+       still rendered unticked. A cloud delete cannot be undone and a local
+       one can be, so they are not one decision. */
+    cloudCheckKey: 's-c:' + p.cloud.id, localCheckKey: 's-l:' + p.local.path,
   }));
   (data.cloudOnly || []).forEach(s => rows.push({ status: 'orphan', key: 'c:' + s.id, kind: 'projects', cloud: s, local: null, sort: s.name || '' }));
   (data.localOnly || []).forEach(f => rows.push({ status: 'orphan', key: 'l:' + f.path, kind: 'projects', cloud: null, local: f, sort: f.name || '' }));
@@ -7375,17 +7389,30 @@ function bulkDelete() {
   }
   deleteTarget = { bulk: items };
   const anyCloud = items.some(d => d.kind === 'cloud');
+  const anyLocal = items.some(d => d.kind === 'local');
+  /* "Local copies are not touched" belongs to a cloud-only selection, and it
+     is worth keeping there - it is the reason he can delete a cloud project
+     without worrying about his own file. Attached to "any cloud item is
+     selected", it appeared over a selection that included local files too, so
+     the dialog said the local copy was safe and the run deleted it, in
+     adjacent sentences. A mixed selection is not a cloud delete, so it is not
+     titled or labelled as one either. */
+  const cloudOnly = anyCloud && !anyLocal;
   document.getElementById('deleteTitle').textContent =
-    anyCloud ? 'Delete selected from Ekahau Cloud?' : 'Delete selected?';
+    cloudOnly ? 'Delete selected from Ekahau Cloud?' : 'Delete selected?';
   // The permanence sentence used to live on the second gate. There is one
   // dialog now, so it says it here.
+  const cloudSentence = ` Once this runs, none of the cloud side will exist`
+    + ` anymore, for anyone. There is no trash to recover it from.`;
   document.getElementById('deleteSub').innerHTML =
     `Permanently delete ${parts.join(' and ')}.`
-    + (anyCloud
-        ? ` Once this runs, none of the cloud side will exist anymore, for anyone.`
-          + ` There is no trash to recover it from. Local copies (if any) are not touched.`
-        : ` This cannot be undone.`);
-  _setDeleteBtn(anyCloud ? 'Delete from cloud' : 'Delete');
+    + (cloudOnly
+        ? cloudSentence + ` Local copies (if any) are not touched.`
+        : anyCloud
+          ? cloudSentence + ` The local files listed below are deleted from`
+            + ` this computer as well, and no copy of them is kept.`
+          : ` This cannot be undone.`);
+  _setDeleteBtn(cloudOnly ? 'Delete from cloud' : 'Delete');
   // A count is not something anyone can check. Name them, since the list they
   // would otherwise be read from is greyed out behind this dialog.
   _setDeleteWhat('deleteWhat', _deleteWhatHtml(items.map(d =>
