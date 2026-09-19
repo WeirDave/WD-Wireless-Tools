@@ -160,6 +160,16 @@ cannot be written (`verify_replace_local:2874-2891`,
 Combined with A1, a mis-identified project is written over his local file with
 nothing in `backups/`.
 
+> **Superseded in part, v2.141.0.** Backups were removed from the whole suite,
+> so "every other local overwrite backs up first" is no longer true of any of
+> them - `verify_replace_local` and `_rewrite_project_json` both write
+> atomically and keep nothing. The *comparison* in this finding is therefore
+> void; **the finding itself is not.** What made A2 serious is A1: a push
+> writes over a local file on a project identified by "the first id that was
+> not in the listing a moment ago". That is still true, and the local file is
+> now the only copy. See "Backups were removed, and that is the design" in
+> CLAUDE.md before reading this as an argument for putting them back.
+
 ### A3. `replace_cloud_project` never re-checks direction before deleting [measured]
 
 `tools/cloud_manager.py:2275-2445` contains **zero** references to
@@ -528,7 +538,9 @@ handlers, and **25 of 46** `CLOUD_ACTIONS` are not named in any test file.
 
 Worst first: `test_cloud_modals_are_self_sufficient` (the whole file, including
 literal code strings like `input.value = name;`);
-`test_cloud_ops_queue::TheBackupLocationIsDescribedCorrectly`;
+`test_cloud_ops_queue::TheBackupLocationIsDescribedCorrectly` (rewritten in
+v2.141.0 as `NothingPromisesACopyThatIsNoLongerKeptTests`, which holds the
+property in both directions rather than one sentence);
 `test_cloud_sync_everything`; `test_cloud_sync_plan::TheConfirmNamesWhatItWillDestroy`;
 `test_cloud_replace_project` (two tests assert on `__doc__` text, so editing a
 docstring breaks the suite while deleting the safety ordering does not).
@@ -552,12 +564,14 @@ Recording these so the next pass does not re-derive them.
   to a `CLOUD_ACTIONS` entry with matching argument keys; all 60+ `pyApi` call
   sites use a known method. A0 was the only genuine mismatch.
 * **`verify_replace_local` — the one destructive local write — is right.** It
-  backs up before writing, refuses outright if the backup cannot be written,
   writes to a temp file and `os.replace`s, cleans up on failure, re-reads both
   sides server-side and refuses `local_newer` regardless of what the client
-  believed.
-* **`_rewrite_project_json`** backs up first, is atomic, and no-ops when the
-  mutation changes nothing — so `fixInternalName` is safe to re-run.
+  believed. *(As audited it also copied the file aside first; v2.141.0 removed
+  that across the suite — the cloud project it is replacing the file with is
+  the other copy. Everything else in this line still holds.)*
+* **`_rewrite_project_json`** is atomic and no-ops when the mutation changes
+  nothing — so `fixInternalName` is safe to re-run. *(It backed up first as
+  audited; see v2.141.0.)*
 * **Credentials at rest.** No path writes a plaintext credential; encrypt-then-
   verify-by-decrypting before trusting the file; the legacy readable file is
   deleted only after a verified encrypted write; corrupt, truncated and
@@ -579,7 +593,10 @@ Recording these so the next pass does not re-derive them.
   not the order.
 * **`backups.remove` re-derives** every path from a fresh scan rather than
   trusting the page. `prune_for` retention is live, and protects the
-  just-written generation.
+  just-written generation. *(`tools/backups.py` was deleted in v2.141.0; this
+  line records what was true on the audited tree. The re-derive-before-writing
+  rule it demonstrates is still the house rule - `housekeeping.sweep` and
+  `cloud_realign.realign` both follow it.)*
 * **`fuzzy_similarity`** cannot throw, divide by zero or return NaN, and is
   symmetric and bounded for every input tried including empty and 5,000-char
   names.
