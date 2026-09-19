@@ -136,10 +136,35 @@ An asset-less release is worse than no release: the updater and both install
 scripts refuse a download whose checksum does not match, so the user is stuck
 rather than merely out of date.
 
-The notes are the commit message, which in this repo is usually the better
-document anyway. Replace them with a hand-written note afterwards
-(`gh release edit`) when the release deserves the full treatment described
-below - and for a user-facing feature it does.
+**The workflow publishes the commit message as the note, and that is never the
+finished note.** Replace it with `gh release edit vX.Y.Z --notes-file …` as
+part of shipping, every time - not "when the release deserves it". That
+qualifier is why 58 of the first 60 releases went out as commit messages.
+
+The two documents have different jobs and it is worth being explicit about it,
+because the commit message in this repo is deliberately the better *record*:
+
+| | commit message | release note |
+|---|---|---|
+| read by | whoever maintains this | whoever downloads it |
+| covers | why, what was tried, what was got wrong | what changed, and its effect |
+| quotes the user | yes, that is the point | never |
+| first/second person | fine | never |
+
+See **Release notes** in the global instructions for the full standard. The
+short version: third person, no "I"/"we"/"you", describe the change and not
+the discovery, never mention screenshots or reports or conversations, group by
+tool, lead with the user-visible effect.
+
+**And it is a privacy boundary, not only a style one.** A note that narrates
+who reported something, what they were working on, how many projects they
+have or what network they were on publishes that under his name on a public
+repository - the same class as committing real data, arriving through a door
+the rule-zero scanners do not watch. `tests/test_no_real_world_data.py` reads
+tracked files and commit objects; it has never read a release body, because
+release bodies live on GitHub rather than in the tree. An audit on 2026-09-18
+found no site codes, addresses or credential shapes in any of the 60 published
+notes - but 34 of them quoted him directly. That is the exposure to keep out.
 
 `release.yml` remains for a release published by hand through the GitHub UI,
 and for backfilling assets onto a tag whose build failed.
@@ -261,6 +286,10 @@ and for backfilling assets onto a tag whose build failed.
    Claude Code **cloud** sessions (claude.ai web).
 
 6. **A release note for a user-facing feature must say how to use it.**
+   This is the one rule that makes a note longer, and it survives the
+   plain-facts standard above because it *is* a fact about the product rather
+   than a story about the work.
+
    "Added X" is not sufficient. Someone read a note, saw the feature listed,
    and still could not find the control — it was sixth in a panel of
    eighteen, and the note never said where it was. Every user-facing entry

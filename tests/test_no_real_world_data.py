@@ -66,12 +66,31 @@ ALLOWED_CODE_TOKENS = {
                      # and detail-band tests, where the whole point is a
                      # project named after its site and long enough to cross
                      # Windows' 260-character limit.
+}
+
+#: Published names of standards and formats. They are the shape of a site
+#: code and they are not one, and prose about the software uses them - the
+#: release-note audit found one in a sentence about drag events.
+#:
+#: **Only a published name of a standard or format goes in here.** Anything
+#: that is merely "probably fine" is a finding, and a real site code added to
+#: make a test pass is the failure this file exists to catch.
+#:
+#: Kept as its own set rather than mixed in above, because the list of
+#: invented placeholders and the list of real technical terms answer
+#: different questions and only one of them is ours to invent. It is unioned
+#: into ALLOWED_CODE_TOKENS below, so both the tree scan and
+#: scripts/audit_release_notes.py clear them from one place.
+ALLOWED_TECHNICAL_TERMS = {
     "UTF8",          # an encoding, not a site
     "IPV4",          # a protocol, not a site - and it is this file's own
                      # regex constant, so the scan reads its own source and
                      # flags it. Allowlisting beats exempting this file:
                      # a checker that skips itself is a checker with a hole.
+    "HTML5",         # a markup standard, in a note about drag events
 }
+
+ALLOWED_CODE_TOKENS |= ALLOWED_TECHNICAL_TERMS
 
 #: Reserved-for-documentation domains (RFC 2606) plus the generic stand-in.
 ALLOWED_EMAIL_DOMAINS = {"example.com", "example.org", "example.net",
