@@ -68,8 +68,11 @@ class _StubEkahau:
     on a busy account.
     """
 
-    def __init__(self, *, foreign=None, foreign_only=False):
-        self.projects = [{"id": "old-1", "name": FILE_STEM}]
+    def __init__(self, *, foreign=None, foreign_only=False, old_modified=None):
+        old = {"id": "old-1", "name": FILE_STEM}
+        if old_modified:
+            old["modifiedAt"] = old_modified
+        self.projects = [old]
         self.datasets = [{"id": "old-1", "siteId": "site-9"}]
         self.deleted: list[str] = []
         self.uploaded: list[str] = []
@@ -224,6 +227,55 @@ class TheOrdinaryUploadStillWorks(_Base):
         self.assertTrue(out.get("ok"), out)
         self.assertEqual(["old-1"], api.deleted)
         self.assertEqual(1, len(api.projects), api.projects)
+
+
+class TheReplaceChecksDirectionBeforeItDeletes(_Base):
+    """Local -> Cloud deletes the cloud project. It has to re-read first.
+
+    The pull direction already does this, server-side, and says why: the
+    client's idea of which side is newer is a snapshot taken when the ledger
+    was drawn, and "the server wins, it just re-read both". The push had no
+    such check at all - not one reference to `modifiedAt` anywhere in
+    `replace_cloud_project`.
+
+    The gap is an ordinary morning: the ledger is drawn at 08:55 saying the
+    local file is newer, the cloud copy is saved from Ekahau at 08:58, and
+    Local -> Cloud runs at 09:00. The newer cloud project is deleted and
+    replaced with the older local file, with no prompt and nothing kept.
+
+    The local file here carries `history.modifiedAt` of 2026-09-19.
+    """
+
+    def test_a_cloud_copy_saved_since_the_ledger_was_drawn_is_not_replaced(self):
+        mgr, api = self._mgr(old_modified="2026-09-20T00:00:00Z")
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+
+        self.assertEqual("cloud_newer", out.get("error"), out)
+        self.assertEqual([], api.deleted, "the newer cloud project was deleted")
+        self.assertEqual([], api.uploaded,
+                         "it uploaded first and refused afterwards, leaving a duplicate")
+
+    def test_the_refusal_names_both_dates_so_the_choice_is_his(self):
+        mgr, api = self._mgr(old_modified="2026-09-20T00:00:00Z")
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertTrue(out.get("cloudMtime"), out)
+        self.assertTrue(out.get("localMtime"), out)
+        self.assertGreater(out["cloudMtime"], out["localMtime"])
+
+    def test_an_older_cloud_copy_is_still_replaced(self):
+        """Refusing is only correct if it refuses the right thing."""
+        mgr, api = self._mgr(old_modified="2026-09-18T00:00:00Z")
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertTrue(out.get("ok"), out)
+        self.assertEqual(["old-1"], api.deleted)
+
+    def test_a_cloud_copy_with_no_date_is_still_replaced(self):
+        """Ekahau not saying is not the same as Ekahau saying newer, and a
+        guard that fires on a missing field would refuse his ordinary case."""
+        mgr, api = self._mgr()
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertTrue(out.get("ok"), out)
+        self.assertEqual(["old-1"], api.deleted)
 
 
 if __name__ == "__main__":

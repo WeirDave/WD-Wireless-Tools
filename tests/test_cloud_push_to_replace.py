@@ -122,6 +122,20 @@ out.gateSite = api.canPushToCloud(row({ kind: 'sites', local: { path: 'C:/x/site
   catch (err) { out.deleteFailThrew = true; out.deleteFailMsg = err.message; }
   out.deleteFailToasts = toasts.map(t => t);
 
+  // Refused before anything was uploaded, because the cloud copy moved since
+  // the list was drawn. `cloud_newer` is a code, not a sentence: what reaches
+  // the card has to be the explanation sent next to it.
+  apiResult = { error: 'cloud_newer', step: 'direction', deletedOld: false, oldId: 'c1',
+                message: 'The cloud copy of "SITE1 Survey" has been saved since this list '
+                       + 'was drawn, so it is newer than your local file. Nothing was '
+                       + 'uploaded and nothing was deleted.',
+                localMtime: 100, cloudMtime: 999 };
+  api.pushLocalOverCloud('c1', 'C:/x/a.esx', 'SITE1 Survey', 'SITE1 Survey');
+  toasts.length = 0;
+  try { await enqueued.run('op1'); out.cloudNewerThrew = false; }
+  catch (err) { out.cloudNewerThrew = true; out.cloudNewerMsg = err.message; }
+  out.cloudNewerToasts = toasts.map(t => t);
+
   out.enqueueSpec = { title: enqueued.title, sub: enqueued.sub, type: enqueued.type,
                       pollBackend: enqueued.pollBackend, undoable: enqueued.undoable };
 
@@ -254,6 +268,25 @@ class EveryOutcomeIsReportedAsItselfTests(unittest.TestCase):
         a generic failure."""
         for key in ("uploadFailMsg", "deleteFailMsg"):
             self.assertGreater(len(self.out[key]), 60, key)
+
+    def test_a_newer_cloud_copy_stops_the_replace_and_says_why(self):
+        """The server re-reads both dates before it deletes anything, because
+        the row's idea of which side is newer was taken when the list was
+        drawn. When it refuses, the refusal is the useful part.
+
+        `cloud_newer` is a machine code. On its own on a card it reads as a
+        malfunction rather than as the tool declining to throw away work, so
+        the sentence sent beside it is what has to reach him - the same shape
+        the pull direction already uses for `local_newer`.
+        """
+        self.assertTrue(self.out["cloudNewerThrew"],
+                        "the replace did not stop on a newer cloud copy")
+        msg = self.out["cloudNewerMsg"]
+        self.assertNotEqual("cloud_newer", msg,
+                            "the raw code reached the card")
+        self.assertIn("newer", msg.lower())
+        self.assertIn("nothing was deleted", msg.lower())
+        self.assertGreater(len(msg), 60, msg)
 
 
 if __name__ == "__main__":

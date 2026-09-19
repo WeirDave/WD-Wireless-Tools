@@ -3431,6 +3431,16 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName) {
       const r = await pyApi('replace_cloud_project', localPath, cloudId, opId);
 
       if (r && r.error) {
+        /* The server re-reads both dates before it deletes anything, because
+           the row's `staleness` was decided when the list was drawn.
+           `cloud_newer` is a machine code: alone on a card it reads as a
+           malfunction rather than as the tool declining to throw work away,
+           so the sentence sent beside it is what he gets. Same shape the pull
+           direction already uses for `local_newer`. */
+        if (r.error === 'cloud_newer') {
+          throw new Error('Not replaced — the cloud copy is the newer one. '
+            + (r.message || 'Nothing was uploaded and nothing was deleted.'));
+        }
         /* `note` is where the backend says what state the cloud is actually in
            - "nothing was deleted", or "there are now two copies and the new
            one is good". Dropping it would turn the most important sentence

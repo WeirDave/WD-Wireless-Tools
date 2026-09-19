@@ -2217,6 +2217,48 @@ class CloudManager:
                              "refresh and try again."}
         old_name = (old.get("name") or "").strip()
 
+        #: **Which side is newer is re-read here, not taken from the client.**
+        #: The pull direction has had this since it was written, and says why:
+        #: the ledger's `staleness` is a snapshot from when the list was
+        #: drawn, and the server wins because it just re-read both. The push
+        #: had no such check - not one reference to a date anywhere in this
+        #: function - and it is the push that deletes.
+        #:
+        #: The gap is an ordinary morning: the ledger says local is newer at
+        #: 08:55, the cloud copy is saved from Ekahau at 08:58, Local -> Cloud
+        #: runs at 09:00. Nothing is kept, and a cloud delete does not come
+        #: back.
+        #:
+        #: Refused *before* the upload, so a refusal does not also leave a
+        #: duplicate behind. Both dates are returned so the row can say which
+        #: is which rather than only that it declined.
+        try:
+            fs_mtime = int(Path(esx_path).stat().st_mtime)
+        except OSError:
+            fs_mtime = 0
+        local_internal_mtime = (_esx_meta(Path(esx_path), fs_mtime)
+                                .get("internalMtime") or fs_mtime)
+        cloud_mtime = _parse_cloud_mtime(old)
+        _NEWER_TOLERANCE_S = 60
+        #: A missing date is Ekahau not saying, which is not Ekahau saying
+        #: newer - a guard that fired on that would refuse his ordinary case.
+        if (local_internal_mtime and cloud_mtime
+                and cloud_mtime > local_internal_mtime + _NEWER_TOLERANCE_S):
+            return {
+                "error": "cloud_newer",
+                "step": "direction",
+                "deletedOld": False,
+                "oldId": cloud_project_id,
+                "message": ("The cloud copy of \"%s\" has been saved since this "
+                            "list was drawn, so it is newer than your local "
+                            "file. Replacing it would throw that away, and a "
+                            "cloud delete cannot be undone. Nothing was "
+                            "uploaded and nothing was deleted."
+                            % (old_name or "that project")),
+                "localMtime": local_internal_mtime,
+                "cloudMtime": cloud_mtime,
+            }
+
         site_id = None
         try:
             for entry in self.api.get_dataset_listing():
