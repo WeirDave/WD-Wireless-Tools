@@ -264,25 +264,24 @@ class WriterTests(unittest.TestCase):
 
     # ── overwriting a real project ───────────────────────────────────────────
 
-    def test_overwriting_an_existing_file_keeps_a_copy_of_it(self):
+    def test_overwriting_an_existing_file_replaces_it_and_keeps_no_copy(self):
+        """No copy is kept, deliberately - `src_path` is a separate file and is
+        never modified, so the thing a copy would protect is already on disk
+        under its own name. What this does have to hold is that the write is
+        all-or-nothing and adds nothing to the folder."""
         dest = self.dir / "existing.esx"
         dest.write_bytes(self.src.read_bytes())
         original = dest.read_bytes()
+        before = sorted(p.name for p in self.dir.iterdir())
+
         r, _ = self._apply(dest=dest, replace=True)
         self.assertTrue(r["ok"], r.get("error"))
-        self.assertTrue(r["backup"])
-        backup = Path(r["backup"])
-        self.assertTrue(backup.exists())
-        self.assertEqual(backup.read_bytes(), original)
+        self.assertNotIn("backup", r)
         self.assertNotEqual(dest.read_bytes(), original)
-
-    def test_backup_can_be_turned_off_deliberately(self):
-        dest = self.dir / "existing.esx"
-        dest.write_bytes(self.src.read_bytes())
-        r = cap.apply_to(self.src, dest, self.template, 100,
-                         replace_existing=True, backup=False)
-        self.assertTrue(r["ok"], r.get("error"))
-        self.assertIsNone(r["backup"])
+        self.assertEqual(sorted(p.name for p in self.dir.iterdir()), before,
+                         "the write left a file behind in the folder")
+        # The source it was built from is untouched and still opens.
+        self.assertTrue(zipfile.is_zipfile(self.src))
 
     def test_a_refusal_leaves_no_temporary_files_behind(self):
         bare = Path(build_esx(self.dir / "bare.esx", with_capacity=False))

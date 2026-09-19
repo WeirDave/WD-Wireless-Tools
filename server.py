@@ -430,7 +430,7 @@ def api_capacity(action):
             dest = Path(tmpdir) / "out.esx"
             out = capacity_profiles.apply_to(
                 str(src), str(dest), tpl, request.args.get("occupants"),
-                replace_existing=replace, backup=False)
+                replace_existing=replace)
             out["source"] = name
             if not out.get("ok"):
                 return jsonify(out), 400
@@ -701,63 +701,6 @@ def api_templates(action):
         return jsonify({"error": str(e)}), 500
 
 
-def _backup_roots():
-    r"""Where the suite's backups can be, and how deep each is worth walking.
-
-    The project folder holds every per-file backup, under `backups/<site>/`,
-    so it is walked to the bottom.
-
-    The install's **parent** is where the updater puts the
-    `<install>.previous-v<version>-<stamp>` folder it keeps so an update can
-    be rolled back - and that folder is always a *direct child* of it. It is
-    given a depth of one for a reason that is not a micro-optimisation: the
-    parent of `C:\WD-Wireless-Tools` is `C:\`. Walked to the bottom, this
-    scanned the entire drive. On the first run of the Backup Folder tab on a
-    real machine it reached `C:\$Recycle.Bin` and stopped on an unreadable
-    file inside it, putting a Windows error and a profile SID on screen where
-    the list should have been.
-
-    The same roots feed Settings' "Check usage" and "Clean up", so the whole
-    disk was in range of a purge as well. Nothing was ever deleted that was
-    not backup-shaped, and that is not a reason to have been looking there.
-    """
-    roots = []
-    out = (suite_settings.load_settings().get("global") or {}).get("output_dir")
-    if out:
-        roots.append(out)
-    try:
-        roots.append((str(Path(__file__).resolve().parent.parent), 1))
-    except Exception:
-        pass
-    return roots
-
-
-def _backups_scan(_d):
-    from tools import backups as _b
-    found = _b.scan(_backup_roots())
-    installs = [i for i in found["items"] if i["kind"] == "install"]
-    return {"ok": True, "count": found["count"], "bytes": found["bytes"],
-            "human": _b.human_size(found["bytes"]),
-            "installCount": len(installs),
-            "unreadable": found.get("unreadable", 0),
-            "roots": [str(r) for r in _b.root_paths(_backup_roots())]}
-
-
-def _backups_purge(d):
-    """Keep the newest `keep` of each project and delete the rest.
-
-    Previous *installs* are left alone: that folder is how a bad update gets
-    rolled back, and a cleanup that quietly removed it would take the way out
-    at the moment it is needed. They are counted in the total so the number is
-    honest about what is on disk.
-    """
-    from tools import backups as _b
-    keep = int(d.get("keep") or 0)
-    res = _b.purge(_backup_roots(), keep=keep, include_install=False)
-    return {"ok": True, "count": res["count"], "bytes": res["freed"],
-            "human": _b.human_size(res["freed"])}
-
-
 SETTINGS_ACTIONS = {
     "get":              lambda d: {"ok": True, "settings": suite_settings.load_settings()},
     "update":           lambda d: {"ok": True, "settings": suite_settings.update_settings(d.get("patch", {}))},
@@ -784,85 +727,6 @@ SETTINGS_ACTIONS = {
                             sections=d.get("sections")
                                      or ("settings", "files", "browser")),
 }
-
-def _backups_list(_d):
-    """Everything kept, grouped by the file it was taken of.
-
-    Cloud Manager's Backup Folder tab is the only window onto this. Until it
-    existed the backups were written, counted in one line in Settings, and
-    otherwise unreachable from inside the tool - so the copy taken before a
-    sync replaced a project could only be found by opening a file manager and
-    knowing where to look. The retention number is sent with the list because
-    the first question anyone asks a list like this is why there are three of
-    something and not thirty.
-    """
-    from tools import backups as _b
-    roots = _backup_roots()
-    found = _b.browse(roots)
-    keep = (suite_settings.load_settings().get("global") or {}).get("backup_keep")
-    return {"ok": True, "groups": found["groups"], "count": found["count"],
-            "bytes": found["bytes"], "human": _b.human_size(found["bytes"]),
-            "roots": found["roots"],
-            "keep": _b.DEFAULT_KEEP if keep is None else int(keep)}
-
-
-def _backups_restore(d):
-    """Put one backup back over the file it was taken of."""
-    from tools import backups as _b
-    path = (d.get("path") or "").strip()
-    if not path:
-        return {"error": "No backup was named."}
-    res = _b.restore(path, _backup_roots())
-    if res.get("ok"):
-        res["human"] = _b.human_size(res.get("bytes") or 0)
-    return res
-
-
-def _backups_delete(d):
-    """Delete the backups the page named, re-checking each one here.
-
-    The list the browser holds can be minutes old. `remove` looks every path
-    up in a fresh scan and skips whatever is no longer a backup under a root
-    we own, so a stale page cannot delete a file that has changed underneath
-    it - the same rule the realign action and the housekeeping sweep follow.
-    """
-    from tools import backups as _b
-    paths = d.get("paths") or ([d["path"]] if d.get("path") else [])
-    res = _b.remove(paths, _backup_roots())
-    res["human"] = _b.human_size(res.get("freed") or 0)
-    return res
-
-
-def _backups_reveal(d):
-    """Open the folder a backup sits in.
-
-    Its own root check rather than Cloud Manager's: `reveal_in_explorer` asks
-    whether the path is inside the *project* folder, which is true of every
-    project backup and false of the previous-install folders the updater
-    keeps beside the install. The tab lists both, so a Show button that
-    worked on some rows and refused others would read as a fault.
-    """
-    from tools import backups as _b
-    path = (d.get("path") or "").strip()
-    if not path:
-        return {"error": "No path was named."}
-    if not _b.inside_roots(path, _backup_roots()):
-        return {"error": "That file is not in a folder this tool looks after."}
-    target = Path(path)
-    if not target.exists():
-        return {"error": "That file is no longer on disk. Refresh the list."}
-    return reveal_tool.reveal(target)
-
-
-BACKUP_ACTIONS = {
-    "scan":    _backups_scan,
-    "purge":   _backups_purge,
-    "list":    _backups_list,
-    "restore": _backups_restore,
-    "delete":  _backups_delete,
-    "reveal":  _backups_reveal,
-}
-
 
 # Prep can work from a dropped file or from one opened through the native
 # picker, and the difference is not cosmetic. His projects run to a couple of
@@ -908,7 +772,8 @@ def api_prep(action):
     The original is never written over either way. Dropped, the result comes
     back as a download; opened from disk, it is written alongside as
     "<name> (prepared).esx" - a new file, so keeping or discarding it stays the
-    user's decision, which is also why the pipeline's own backup is off here.
+    user's decision. That naming *is* the safety here, and it is why nothing
+    in this suite copies a project aside any more.
 
     The order the steps run in is the pipeline's business, not this route's.
     Whatever set of steps arrives is passed through as a set for exactly that
@@ -1055,7 +920,7 @@ def api_prep(action):
                 }), 409
         else:
             dest = Path(tmpdir) / "out.esx"
-        out = prep_pipeline.run(str(src), dest=dest, backup=False, **common)
+        out = prep_pipeline.run(str(src), dest=dest, **common)
         out["source"] = name
         if not out.get("ok"):
             return jsonify(out), 400
@@ -1202,17 +1067,6 @@ def api_report_open_esx():
     response.headers["X-WD-File-Name"] = quote(path.name)
     response.headers["Cache-Control"] = "no-store"
     return response
-
-
-@app.route("/api/backups/<action>", methods=["POST"])
-def api_backups(action):
-    fn = BACKUP_ACTIONS.get(action)
-    if not fn:
-        return jsonify({"error": f"unknown action: {action}"}), 404
-    try:
-        return jsonify(fn(request.get_json(silent=True) or {}))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/settings/<action>", methods=["POST"])

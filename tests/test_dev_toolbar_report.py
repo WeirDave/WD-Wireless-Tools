@@ -234,14 +234,20 @@ class ItNamesEveryFileAndWhatHappensToIt(unittest.TestCase):
         self.assertIn("Finished.", out["text"])
         self.assertNotIn("listed below", out["text"])
 
-    def test_a_backup_location_is_shown_for_a_file_that_was_rewritten(self):
-        """He has been sent to the wrong place for an overwritten file
-        before. Where the copy went belongs in the report."""
+    def test_no_row_claims_a_copy_was_kept(self):
+        """The report used to name where the copy went. Backups were removed in
+        v2.141.0, and a row still saying a copy was kept would be the app
+        telling him he can undo something he cannot. A stale `backup` field on
+        an entry - from an older server, or a caller that never stopped setting
+        it - must not find its way back onto the screen."""
         entry = dict(ALIGNED,
-                     backup="C:/Projects/backups/Maple Depot/"
+                     backup="C:/Projects/Maple Depot/"
                             "Maple Depot Survey.previous-20260415-143000.esx")
         out = render(report(aligned=[entry], dryRun=False), False)
-        self.assertIn("previous-20260415-143000.esx", out["text"])
+        self.assertNotIn("previous-20260415-143000.esx", out["text"])
+        self.assertNotIn("Backed up", out["text"])
+        # The row itself is still there and still names the project.
+        self.assertIn(entry["name"], out["text"])
 
     def test_a_warning_about_the_disk_date_is_surfaced(self):
         entry = dict(ALIGNED, warning="Contents updated, but the file's date "

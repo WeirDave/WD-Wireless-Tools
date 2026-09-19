@@ -879,85 +879,22 @@ def _row_meta(size, mtime, tail=None):
     return " · ".join(parts)
 
 
-#: Where a replaced local file goes. A sibling `.previous-` sat in the same
-#: directory as the live projects, which is the thing he objected to: "maybe we
-#: should back it up and put it into a special folder called backups and then
-#: that way, kind of like the recycle bin, the user can choose to delete those
-#: later - but they're not going to be included as part of the Cloud Manager
-#: sync because they'll be in a folder that's not read."
-#:
-#: It is not read: `backups` is already in `_SKIP_DIRS`, so the scan skips the
-#: whole tree before it ever descends. The site sub-folder is kept inside it so
-#: two projects of the same name from different sites do not collide, and the
-#: `<stem>.previous-<stamp><ext>` filename is unchanged - `tools/backups.py`
-#: recognises that shape and already walks recursively, so the existing purge
-#: in Settings finds these with no change at all.
-BACKUP_DIR_NAME = "backups"
+#: `backups` stays in `_SKIP_DIRS` below even though nothing writes one any
+#: more. The folder still exists on every install that ran a sync before
+#: v2.141.0, full of real projects, and a scan that suddenly descended into it
+#: would report every one of them as a local-only project needing attention.
+#: It is his folder to delete when he is ready, not ours to start reading.
 
 
-def _backup_target(src, output_dir, stamp):
-    """Where to put the copy of `src` we are about to replace.
+def _lp():
+    """`tools.longpath`, imported where it is used.
 
-    Falls back to a sibling if the backups folder cannot be created - losing
-    the backup would be a worse outcome than putting it in the wrong place.
+    Module-level would be fine now - it reads no settings and touches no user
+    directory - but the lazy form is what the rest of this file does, and one
+    habit is easier to follow than two.
     """
-    name = f"{src.stem}.previous-{stamp}{src.suffix}"
-    root = Path(output_dir) if output_dir else None
-    if not root or not root.is_dir():
-        return src.with_name(name)
-    try:
-        rel = src.parent.relative_to(root)
-    except ValueError:
-        rel = Path()
-    target_dir = root / BACKUP_DIR_NAME / rel
-    try:
-        target_dir.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        return src.with_name(name)
-    return target_dir / name
-
-
-def _b_mod():
-    """`tools.backups`, imported where it is used.
-
-    `_prune_backups` already imports it this way, and the reason holds here:
-    `backups` reads settings, and settings reads the user directory, so a
-    module-level import would pull that in for anything that merely imports
-    this file.
-    """
-    from tools import backups as _b
-    return _b
-
-
-def _backup_failure(target, exc):
-    r"""What went wrong, in a sentence, with the path kept out of it.
-
-    `[WinError 3] The system cannot find the path specified` read plainly sends
-    someone to look for a missing folder that is sitting right there, so the
-    length is what the message needs to carry.
-
-    What it must **not** carry is the path. This returned `str(exc)`, and
-    `OSError.__str__` appends its filename through `repr` - so a Windows path
-    arrived with every backslash doubled, and when the failure came from the
-    long-path retry the `\\?\` prefix doubled too:
-
-        ... path specified: '\\\\?\\C:\\Users\\...\\backups\\...'
-
-    An internal path form, escaped twice, in a toast, on top of a 265-character
-    string nobody can read in a notification. The full path goes to the log,
-    where it can be read at leisure and copied.
-
-    This is a backstop either way: `copy_for_backup` retries past the limit, so
-    reaching here means something other than length is usually wrong.
-    """
-    from tools import backups as _b
-    try:
-        from tools import applog
-        applog.note_failure(f"backup to {target}", exc)
-    except Exception:
-        #: Logging the reason must never become the reason there is no message.
-        pass
-    return _b.describe_failure(exc, target)
+    from tools import longpath as _l
+    return _l
 
 
 def _remap_progress(cb, lo, hi):
@@ -1778,57 +1715,30 @@ def _dup_key(name):
     return re.sub(r"\s+", " ", stem).strip()
 
 
-def _prune_backups(target, protect=None, extra_dir=None):
-    """Trim old backups of `target` to the configured count.
-
-    Called only after the new file is safely in place, and never allowed to
-    fail the operation: a project that was written correctly must not report
-    an error because tidying up afterwards did not work.
-
-    `extra_dir` is the folder the backup was actually filed in, and passing it
-    is not optional bookkeeping - it is the whole of retention. Backups moved
-    out of the project folder and into `backups/<site>/`, and this went on
-    looking beside the live `.esx`, where there is now nothing. "Keep 3" kept
-    everything, of every project, for as long as that folder had existed.
-    `tests/test_backup_folder.py` writes four generations with keep=2 and
-    counts what is left, which is the assertion the old code fails.
-    """
-    try:
-        from tools import backups as _b
-        from tools import settings as _s
-        keep = (_s.load_settings().get("global") or {}).get("backup_keep")
-        keep = _b.DEFAULT_KEEP if keep is None else int(keep)
-        return _b.prune_for(target, keep=keep, protect=protect,
-                            extra_dirs=(extra_dir,) if extra_dir else ())
-    except Exception:
-        return None
-
-
-def _rewrite_project_json(src, mutate, output_dir, keep_backups=True):
+def _rewrite_project_json(src, mutate):
     """Rewrite `project.json` inside a .esx, copying every other member across
     byte for byte, in its original order.
 
     `mutate(proj, doc)` edits the `project` record in place and returns True
     when it changed something. **Returning False writes nothing at all** - no
-    backup, no temp file, no replace - which is what lets every caller be
-    re-run after an interruption without doing a second round of work or
-    stacking up a second backup of a file that is already correct.
+    temp file, no replace - which is what lets every caller be re-run after an
+    interruption without doing a second round of work on a file that is
+    already correct.
 
-    The previous file goes to `backups/<site>/` first, on the same terms as a
-    cloud-over-local replace: if the backup cannot be written, nothing is
-    changed. Losing the old copy is the one outcome worse than leaving the
-    wrong value in place.
+    Nothing is copied aside first. The rebuild goes to a temp file and is
+    renamed over the top, so the `.esx` is either entirely the old one or
+    entirely the new one, and the only field being changed is the project's
+    name - which the cloud also holds.
 
     Extracted from `set_internal_project_name` when a second caller needed the
-    same careful part - back up, rebuild preserving every entry's own
-    metadata, replace atomically, drop the caches, prune. Two copies of that
-    would have been two chances to get the backup-before-write order wrong.
+    same careful part: rebuild preserving every entry's own metadata, replace
+    atomically, drop the caches.
     """
     import zipfile
 
     src = Path(src)
     try:
-        with zipfile.ZipFile(_b_mod().write_path(src)) as zf:
+        with zipfile.ZipFile(_lp().write_path(src)) as zf:
             if "project.json" not in zf.namelist():
                 return {"error": "That .esx has no project.json"}
             members = [(i, zf.read(i.filename)) for i in zf.infolist()]
@@ -1855,23 +1765,18 @@ def _rewrite_project_json(src, mutate, output_dir, keep_backups=True):
         rebuilt.append((info, raw))
 
     if not changed:
-        return {"ok": True, "unchanged": True, "path": str(src), "backup": None}
+        return {"ok": True, "unchanged": True, "path": str(src)}
 
-    from datetime import datetime as _dtn
-    stamp = _dtn.now().strftime("%Y%m%d-%H%M%S")
-    backup = (_backup_target(src, output_dir, stamp) if keep_backups else None)
-    if backup:
-        try:
-            _b_mod().copy_for_backup(src, backup)
-        except OSError as e:
-            return {"error": "Could not back the file up, so nothing was "
-                             "changed: %s" % _backup_failure(backup, e)}
-
+    #: Written to a temp file and renamed over the top, so the .esx is either
+    #: the old one or the new one and never half of either. That atomicity is
+    #: what a copy-aside used to be insurance against, and it is the better
+    #: half of the two: a copy aside protects a write that already went
+    #: wrong; this stops it going wrong.
     tmp = src.with_suffix(src.suffix + ".wd-rename.tmp")
     #: The temp file is the .esx path plus 14 characters, so on the projects
     #: whose names are longest it is the thing that crosses MAX_PATH even when
-    #: the .esx itself did not. See `backups.write_path`.
-    _bm = _b_mod()
+    #: the .esx itself did not. See `longpath.write_path`.
+    _bm = _lp()
     tmp_w, src_w = _bm.write_path(tmp), _bm.write_path(src)
     try:
         with zipfile.ZipFile(tmp_w, "w", zipfile.ZIP_DEFLATED) as out:
@@ -1896,10 +1801,7 @@ def _rewrite_project_json(src, mutate, output_dir, keep_backups=True):
 
     _ESX_META_CACHE.pop(str(src), None)
     _ESX_TYPE_CACHE.pop(str(src), None)
-    _prune_backups(src, protect=str(backup) if backup else None,
-                   extra_dir=(backup.parent if backup else None))
-    return {"ok": True, "unchanged": False, "path": str(src),
-            "backup": str(backup) if backup else None}
+    return {"ok": True, "unchanged": False, "path": str(src)}
 
 
 def _parse_cloud_mtime(pr):
@@ -2795,18 +2697,16 @@ class CloudManager:
         runs both files carry the same internal project.json.id, so a pair that
         matched only by name upgrades to "Same file" on the next refresh.
 
-        The previous local file is kept as
-        "backups/<site>/<name>.previous-<timestamp>.esx" - out of the working
-        folder, because this overwrites someone's work and an atomic replace
-        leaves nothing to go back to. `backups` is in `_SKIP_DIRS`, so nothing
-        in there is ever scanned, listed or synced: it behaves like a recycle
-        bin he empties when he chooses.
+        **No copy of the local file is kept.** The cloud copy is what replaces
+        it, so the cloud is the other copy - keeping a third would be a backup
+        of a backup. The safe-direction refusal below is what actually
+        protects local work, and it is a refusal rather than a copy.
 
         Safe direction only: refuses if local's internal modifiedAt is
         meaningfully newer than cloud's. Sending local up to an existing cloud
         project is not implemented; the upload flow only creates new projects.
 
-        Returns {"ok": True, "path", "backup", "localMtime", "cloudMtime", ...}
+        Returns {"ok": True, "path", "localMtime", "cloudMtime", ...}
         on success, {"error": "local_newer", ...} when the safe direction does
         not apply, or {"error": <msg>} on other failures."""
         if not self._ensure():
@@ -2873,30 +2773,15 @@ class CloudManager:
         esx_bytes = result["esx"]
 
 
-        # Keep the copy being replaced. os.replace is atomic, so the file is
-        # never half-written - but atomic is not the same as recoverable, and
-        # this is the one operation here that destroys someone's work.
-        from datetime import datetime as _dtn
-        stamp = _dtn.now().strftime("%Y%m%d-%H%M%S")
-        keep = self.config.get("keep_local_backups")
-        keep = True if keep is None else bool(keep)
-        backup = (_backup_target(src, self.config.get("output_dir", ""), stamp)
-                  if keep else None)
-        if backup:
-            try:
-                if progress_cb:
-                    progress_cb(stage="backup", current=88, total=100,
-                                message="Keeping a copy of the local file…")
-                _b_mod().copy_for_backup(src, backup)
-            except OSError as e:
-                # Refusing is the right answer: a replace we cannot undo is
-                # not something to do quietly because a folder was unwritable.
-                return {"error": f"Could not back up the local file, so nothing "
-                                 f"was replaced: {_backup_failure(backup, e)}"}
-
+        #: **No copy is kept, and that is the decision rather than an
+        #: omission.** This replaces a local `.esx` with the copy Ekahau Cloud
+        #: is holding, so the cloud *is* the other copy - a backup here would
+        #: be a backup of a backup. It only runs when the cloud side is the
+        #: newer of the two; the direction that would overwrite newer local
+        #: work is refused higher up, by name.
         tmp = src.with_suffix(src.suffix + ".wd-verify.tmp")
-        #: Same length problem as the rename path - see `backups.write_path`.
-        _bm = _b_mod()
+        #: Same length problem as the rename path - see `longpath.write_path`.
+        _bm = _lp()
         tmp_w, src_w = _bm.write_path(tmp), _bm.write_path(src)
         try:
             if progress_cb:
@@ -2906,21 +2791,16 @@ class CloudManager:
                 f.write(esx_bytes)
             os.replace(tmp_w, src_w)
         except OSError as e:
-            for leftover in (tmp, backup) if backup else (tmp,):
-                try:
-                    os.unlink(_bm.write_path(leftover))
-                except OSError:
-                    pass
+            try:
+                os.unlink(_bm.write_path(tmp))
+            except OSError:
+                pass
             return {"error": "Write failed, local file untouched. "
                              + _bm.describe_failure(e, tmp)}
 
 
         _ESX_META_CACHE.pop(str(src), None)
         _ESX_TYPE_CACHE.pop(str(src), None)
-        # The new file is in place; only now is an older generation expendable.
-        _prune_backups(src, protect=str(backup) if backup else None,
-                       extra_dir=(backup.parent if backup else None))
-
 
         new_fs_mtime = int(src.stat().st_mtime)
         new_meta = _esx_meta(src, new_fs_mtime)
@@ -2929,7 +2809,6 @@ class CloudManager:
         return {
             "ok": True,
             "path": str(src),
-            "backup": str(backup) if backup else None,
             "newProjectId": new_meta.get("projectId"),
             "cloudProjectId": project_id,
             "cloudName": cloud_name,
@@ -2953,9 +2832,9 @@ class CloudManager:
         copied across byte for byte, in its original order, so the archive is
         the same project with a corrected label - not a re-save.
 
-        The previous file goes to `backups/<site>/` first, on the same terms as
-        a cloud-over-local replace: if the backup cannot be written, nothing is
-        changed.
+        Nothing is copied aside first: the rebuild is written to a temp file
+        and renamed over the top, so the archive is never half-replaced, and
+        the one field being corrected is the name the cloud also holds.
         """
         if not new_name or not str(new_name).strip():
             return {"error": "No name given"}
@@ -2976,18 +2855,14 @@ class CloudManager:
                 proj["title"] = new_name
             return True
 
-        keep = self.config.get("keep_local_backups")
-        keep = True if keep is None else bool(keep)
-        out = _rewrite_project_json(src, _rename, self.config.get("output_dir", ""),
-                                    keep_backups=keep)
+        out = _rewrite_project_json(src, _rename)
         if out.get("error"):
             return out
         if out.get("unchanged"):
             return {"ok": True, "unchanged": True, "name": new_name,
                     "path": str(src)}
         return {"ok": True, "path": str(src), "name": new_name,
-                "previousName": seen.get("old", ""),
-                "backup": out.get("backup")}
+                "previousName": seen.get("old", "")}
 
     def _local_esx(self, local_path):
         """Resolve a caller-supplied path to a local .esx we are allowed to

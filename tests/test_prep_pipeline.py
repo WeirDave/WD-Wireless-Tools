@@ -266,14 +266,22 @@ class OnePassOneSave(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def test_one_backup_for_the_whole_pass_not_one_per_step(self):
-        prep_pipeline.run(self.esx, steps=["trim", "areas", "walls"],
-                          template=TEMPLATE, occupants=40,
-                          wall_types=[wall_type("Framery Pod")])
-        backups = [p for p in self.tmp.iterdir() if p.name != "Project.esx"]
-        self.assertEqual(len(backups), 1, [p.name for p in backups])
-        self.assertEqual(read(backups[0], "floorPlans.json")["floorPlans"][0]["width"], W,
-                         "the backup is not the original")
+    def test_three_steps_write_once_and_leave_nothing_in_the_folder(self):
+        """Each step hands the next a file in a scratch directory and only the
+        last one lands. A stray intermediate in the project folder would be
+        read by the next scan as a project nobody made - and there is no copy
+        aside any more to explain one away."""
+        out = prep_pipeline.run(self.esx, steps=["trim", "areas", "walls"],
+                                template=TEMPLATE, occupants=40,
+                                wall_types=[wall_type("Framery Pod")])
+        self.assertTrue(out["ok"], out)
+        self.assertEqual([p.name for p in self.tmp.iterdir()], ["Project.esx"],
+                         [p.name for p in self.tmp.iterdir()])
+        self.assertNotIn("backup", out)
+        # And all three steps are in the one file that did land.
+        self.assertLess(read(self.esx, "floorPlans.json")["floorPlans"][0]["width"], W,
+                        "the trim step did not reach the written file")
+        self.assertEqual(len(read(self.esx, "wallTypes.json")["wallTypes"]), 2)
 
     def test_a_destination_leaves_the_source_alone(self):
         dest = self.tmp / "Prepared.esx"

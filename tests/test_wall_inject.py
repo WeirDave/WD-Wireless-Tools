@@ -128,20 +128,25 @@ class WallInjection(unittest.TestCase):
         wall_inject.inject(self.esx, [wall_type("Framery Pod")])
         self.assertEqual(read_member(self.esx, "wallSegments.json"), before)
 
-    def test_a_backup_is_taken_before_writing_in_place(self):
-        wall_inject.inject(self.esx, [wall_type("Framery Pod")])
-        backups = list(self.tmp.glob("Project.previous-*.esx"))
-        self.assertEqual(len(backups), 1, "no backup was kept")
+    def test_writing_in_place_adds_nothing_to_the_folder(self):
+        """No copy is kept and no temp file survives. The rebuild goes to
+        `.wd-*.tmp` and is renamed over the top, so the folder holds exactly
+        what it held before - a stray temp file would be read by the next scan
+        as a project nobody made."""
+        before = sorted(p.name for p in self.tmp.iterdir())
+        report = wall_inject.inject(self.esx, [wall_type("Framery Pod")])
+        self.assertTrue(report["ok"], report.get("error"))
+        self.assertNotIn("backup", report)
+        self.assertEqual(sorted(p.name for p in self.tmp.iterdir()), before)
         self.assertEqual(
-            [w["name"] for w in read_member(backups[0], "wallTypes.json")["wallTypes"]],
-            ["Concrete", "Drywall"], "the backup is not the original")
+            len(read_member(self.esx, "wallTypes.json")["wallTypes"]), 3)
 
     def test_writing_to_a_destination_leaves_the_source_untouched(self):
-        """How the preparation pass chains steps without a backup per step."""
+        """How the preparation pass chains steps - and the whole of the safety
+        now that nothing is copied aside: the original keeps its own name."""
         dest = self.tmp / "Prepared.esx"
         report = wall_inject.inject(self.esx, [wall_type("Framery Pod")], dest=dest)
         self.assertTrue(report["ok"])
-        self.assertIsNone(report["backup"])
         self.assertEqual(
             len(read_member(self.esx, "wallTypes.json")["wallTypes"]), 2)
         self.assertEqual(
@@ -231,7 +236,7 @@ class OneNumberKeyDrawsOneWallType(unittest.TestCase):
         src = self.tmp / "p.esx"
         make_esx(src, existing)
         dest = self.tmp / "out.esx"
-        wall_inject.inject(src, incoming, dest=dest, backup=False)
+        wall_inject.inject(src, incoming, dest=dest)
         return read_member(dest, "wallTypes.json")["wallTypes"]
 
     def test_the_incoming_type_takes_the_slot_and_the_old_one_loses_it(self):

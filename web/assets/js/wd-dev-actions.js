@@ -166,9 +166,12 @@
           a: 'On pairs proved identical: the project name stored inside the ' +
              '.esx, and the file’s modified date, set to the cloud ' +
              'project’s own date. Nothing else in the file is touched.' },
-        { q: 'What it backs up',
-          a: 'Every file it rewrites, into your backups folder, before it ' +
-             'writes. If the backup cannot be written the file is left alone.' },
+        { q: 'How it writes',
+          a: 'No copy is kept. The rebuilt .esx goes to a temporary file and ' +
+             'is renamed over the top, so each file is either entirely the ' +
+             'old one or entirely the new one, never half of either. The one ' +
+             'field it changes is the project name, which the cloud also ' +
+             'holds.' },
         { q: 'What it will not do',
           a: 'Nothing is uploaded and nothing is deleted from the cloud. ' +
              'Pairs whose designs genuinely differ are skipped and listed ' +
@@ -325,8 +328,6 @@
                   return '<li>' + esc(a) + '</li>'; }).join('') + '</ul>' : '') +
             (f.newDate ? '<span class="dev-result-sub">New date: ' +
               esc(f.newDate) + '</span>' : '') +
-            (f.backup ? '<span class="dev-result-sub">Backed up to ' +
-              esc(f.backup) + '</span>' : '') +
             (f.warning ? '<span class="dev-result-warn">' +
               esc(f.warning) + '</span>' : '') +
           '</li>';

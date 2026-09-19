@@ -8,10 +8,11 @@ the control that finally reaches it.
 Two things are asserted, because two things can go wrong and they are not the
 same kind of wrong.
 
-**Who may push.** Narrower than who may pull, deliberately. A pull keeps the
-file it replaced in `backups/<site>/`; a push deletes the old cloud project and
-a cloud delete does not come back. So a pull is offered on a bare name match
-and a push is not - it wants Ekahau's own id, or a pairing he made himself.
+**Who may push.** Narrower than who may pull, deliberately. A pull replaces a
+local file with a cloud project that is still there afterwards; a push deletes
+the old cloud project and a cloud delete does not come back. So a pull is
+offered on a bare name match and a push is not - it wants Ekahau's own id, or a
+pairing he made himself.
 Getting this wrong destroys a project that was never the counterpart.
 
 **What it says when it half-works.** Upload succeeded, delete of the old one

@@ -164,7 +164,8 @@ class RepairTests(unittest.TestCase):
         with zipfile.ZipFile(self.p) as z:
             return {n: z.read(n) for n in z.namelist()}
 
-    def test_it_sets_the_height_and_keeps_the_previous_copy(self):
+    def test_it_sets_the_height_and_leaves_nothing_else_in_the_folder(self):
+        before = sorted(f.name for f in self.tmp.iterdir())
         res = repair_project(self.p, {"Shelf, Warehouse": 10.0})
         self.assertTrue(res.get("ok"), res)
 
@@ -174,11 +175,10 @@ class RepairTests(unittest.TestCase):
         self.assertEqual(by_name["Shelf, Warehouse"]["upperEdge"], 10.0)
         self.assertNotIn("upperEdge", by_name["Wall, Concrete"])
 
-        backups = list(self.tmp.glob("*.previous-*"))
-        self.assertEqual(len(backups), 1)
-        with zipfile.ZipFile(backups[0]) as z:
-            kept = json.loads(z.read("wallTypes.json"))["wallTypes"]
-        self.assertNotIn("upperEdge", {w["name"]: w for w in kept}["Shelf, Warehouse"])
+        # No copy aside and no surviving `.wd-audit.tmp`: the rebuild is
+        # renamed over the top, so the folder is exactly as it was.
+        self.assertNotIn("backup", res)
+        self.assertEqual(sorted(f.name for f in self.tmp.iterdir()), before)
 
     def test_everything_except_the_wall_types_is_byte_identical(self):
         repair_project(self.p, {"Shelf, Warehouse": 10.0})

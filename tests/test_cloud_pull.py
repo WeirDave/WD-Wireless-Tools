@@ -88,41 +88,39 @@ class CloudPullTests(unittest.TestCase):
         )
         return mgr.verify_replace_local("cloud-proj", str(self.local))
 
-    def _backups(self):
-        """Anywhere under the project folder.
+    def _strays(self):
+        """Everything under the project folder that is not the live file.
 
-        The copy used to sit beside the live file; it now lands in
-        `<project folder>/backups/`, out of the working folder and out of
-        Cloud Manager's scan. Searching recursively keeps this test about
-        *whether* a backup was kept rather than about where it went.
+        Nothing is copied aside any more - the cloud project being pulled down
+        *is* the other copy - so a pull adds no file at all. That makes a stray
+        the whole of what there is to check for, and it is worth checking: a
+        surviving `.tmp` or a leftover `.previous-` from an older install would
+        be read by the next scan as a project nobody made.
         """
-        return sorted(self.tmp.rglob("*.previous-*"))
+        return sorted(p for p in self.tmp.rglob("*") if p.is_file()
+                      and p != self.local)
 
     def assertLocalUntouched(self):
         self.assertTrue(self.local.exists(), "the local file was removed")
         self.assertEqual(self.local.read_bytes(), self.original,
                          "the local file was modified on a path that should not touch it")
-        self.assertEqual(self._backups(), [], "a backup was left behind by a failed run")
-        self.assertEqual(list(self.tmp.glob("*.tmp")), [], "a temp file was left behind")
+        self.assertEqual(self._strays(), [],
+                         "a file was left behind by a failed run")
 
     # ---- the working path --------------------------------------------------
 
-    def test_cloud_newer_replaces_and_keeps_the_previous_copy(self):
+    def test_cloud_newer_replaces_the_local_file_and_keeps_no_copy(self):
+        """The replacement is the point, and so is the absence of a copy: the
+        cloud project it came from is still there, so a second copy on disk
+        would be a copy of a copy."""
         res = self._run()
         self.assertTrue(res.get("ok"), res)
         self.assertNotEqual(self.local.read_bytes(), self.original)
-
-        backups = self._backups()
-        self.assertEqual(len(backups), 1, "expected exactly one .previous- copy")
-        self.assertEqual(backups[0].read_bytes(), self.original,
-                         "the backup is not the file that was replaced")
-        self.assertEqual(backups[0].suffix, ".esx",
-                         "the backup should still open as a project")
-        from tools import cloud_manager as _cm
-        self.assertIn(_cm.BACKUP_DIR_NAME, backups[0].parts,
-                      "the backup is still sitting beside the live project")
-        self.assertEqual(res.get("backup"), str(backups[0]))
-        self.assertEqual(list(self.tmp.glob("*.tmp")), [])
+        self.assertEqual(self.local.read_bytes(), self.cloud_bytes,
+                         "the local file is not the cloud copy")
+        self.assertNotIn("backup", res)
+        self.assertEqual(self._strays(), [],
+                         "the pull left a file behind in the project folder")
 
     def test_result_carries_both_edit_times_for_the_confirm(self):
         res = self._run()
@@ -207,10 +205,11 @@ class CloudPullWiringTests(unittest.TestCase):
         was true until the row was wired to `replace_cloud_project`.
 
         What replaces it is the rule that actually matters: the two directions
-        are not equally recoverable. A pull keeps the file it replaced in
-        `backups/<site>/`, so it is offered even on a bare name match. A push
-        deletes the old cloud project, and a cloud delete does not come back -
-        so it requires Ekahau's own id, or a pairing he made himself.
+        are not equally recoverable. A pull replaces a local file with a cloud
+        project that is still sitting in the cloud afterwards, so it is offered
+        even on a bare name match. A push deletes the old cloud project, and a
+        cloud delete does not come back - so it requires Ekahau's own id, or a
+        pairing he made himself.
         """
         self.assertIn(
             "const PUSHABLE_MATCH_TYPES = new Set(['id', 'manual', 'exact'])",

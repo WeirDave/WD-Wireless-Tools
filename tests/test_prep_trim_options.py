@@ -97,7 +97,7 @@ class MarginChangesTheCrop(unittest.TestCase):
     def _trim(self, margin):
         out = self.tmp / f"out-{margin}.esx"
         prep_pipeline.run(str(self.src), dest=str(out), steps=["trim"],
-                          margin=margin, backup=False)
+                          margin=margin)
         return plan_of(out)
 
     def test_a_wider_margin_keeps_more_of_the_sheet(self):
@@ -127,7 +127,7 @@ class MarginChangesTheCrop(unittest.TestCase):
         for i, src in enumerate((coarse, fine)):
             dest = self.tmp / f"scaled-{i}.esx"
             prep_pipeline.run(str(src), dest=str(dest), steps=["trim"],
-                              margin="normal", backup=False)
+                              margin="normal")
             outs.append(plan_of(dest)["width"])
         self.assertNotEqual(outs[0], outs[1])
 
@@ -214,9 +214,9 @@ class SavedBoxesAreOfferedNotAssumed(unittest.TestCase):
         auto = self.tmp / "auto.esx"
         boxed = self.tmp / "boxed.esx"
         prep_pipeline.run(str(self.src), dest=str(auto), steps=["trim"],
-                          margin="tight", backup=False)
+                          margin="tight")
         prep_pipeline.run(str(self.src), dest=str(boxed), steps=["trim"],
-                          margin="tight", backup=False,
+                          margin="tight",
                           boxes={FLOOR: [100, 80, 900, 700]})
         self.assertEqual((plan_of(boxed)["width"], plan_of(boxed)["height"]),
                          (800.0, 620.0))

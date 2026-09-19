@@ -66,7 +66,7 @@ class ManagerHarness(cloud_manager.CloudManager):
     """The write path only needs the configured folder, not a cloud session."""
 
     def __init__(self, root):
-        self.config = {"output_dir": str(root), "keep_local_backups": True}
+        self.config = {"output_dir": str(root)}
 
 
 class TheNameInsideTheFileCanBeCorrectedTests(unittest.TestCase):
@@ -113,19 +113,24 @@ class TheNameInsideTheFileCanBeCorrectedTests(unittest.TestCase):
         self.assertEqual("2026-01-02T03:04:05Z",
                          doc["project"]["history"]["modifiedAt"])
 
-    def test_the_previous_file_is_backed_up_first(self):
+    def test_the_folder_gains_no_file(self):
+        """No copy is kept. The one thing this changes is the name inside the
+        .esx, and the cloud project it is being matched to is holding that
+        name - so a copy here would be a copy of something already elsewhere.
+        What that makes load-bearing is the rebuild adding nothing: a surviving
+        `.wd-rename.tmp` would be read by the next scan as a project nobody
+        made."""
+        folder = self.esx.parent
+        before = sorted(p.name for p in folder.iterdir())
         r = self.cm.set_internal_project_name(str(self.esx), "SITE1 New Convention")
-        backup = Path(r["backup"])
-        self.assertTrue(backup.is_file())
-        self.assertIn("backups", backup.parts)
-        self.assertIn(".previous-", backup.name)
-        # and it is the file as it was, not the file as it now is
-        doc = json.loads(read_members(backup)["project.json"].decode("utf-8"))
-        self.assertEqual("SITE1 Old Name", doc["project"]["name"])
+        self.assertTrue(r.get("ok"), r)
+        self.assertNotIn("backup", r)
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), before)
 
-    def test_nothing_is_written_when_the_backup_cannot_be(self):
-        """Same terms as replacing a local file from the cloud: a write that
-        cannot be undone is not performed because a folder was unwritable."""
+    def test_nothing_is_written_when_the_path_is_outside_the_folder(self):
+        """The containment check runs before anything is read or written: a
+        path the page names that is not under the configured folder is refused
+        outright, and the file it pointed at is left exactly as it was."""
         cm = ManagerHarness(self.root)
         cm.config["output_dir"] = str(self.root / "nope" / "missing")
         r = cm.set_internal_project_name(str(self.esx), "Whatever")
@@ -134,12 +139,16 @@ class TheNameInsideTheFileCanBeCorrectedTests(unittest.TestCase):
         self.assertEqual("SITE1 Old Name", doc["project"]["name"])
 
     def test_setting_the_name_it_already_has_is_a_no_op(self):
-        """His fleet will be part-done; running it twice must not churn files
-        or pile up backups."""
+        """His fleet will be part-done; running it twice must not churn files.
+
+        `_rewrite_project_json` writes nothing at all when the mutation changes
+        nothing - no temp file, no replace - which is what makes a re-run after
+        an interruption free."""
+        before = self.esx.read_bytes()
         r = self.cm.set_internal_project_name(str(self.esx), "SITE1 Old Name")
         self.assertTrue(r.get("ok"))
         self.assertTrue(r.get("unchanged"))
-        self.assertIsNone(r.get("backup"))
+        self.assertEqual(self.esx.read_bytes(), before)
 
     def test_it_refuses_a_path_outside_the_configured_folder(self):
         outside = Path(self._td.name).parent / "elsewhere.esx"
