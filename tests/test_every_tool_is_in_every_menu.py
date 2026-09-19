@@ -147,11 +147,15 @@ class AMenuItemThatLeavesTheAppSaysWhereItGoes(unittest.TestCase):
                 self.assertEqual("View Issues on GitHub", label)
 
     # A ratchet, not a gate - the same shape as the no-real-data baseline.
-    # "Report a Bug" has exactly the gap he pointed at on its neighbour, and
-    # it is on eighteen pages, but the labels are his and he has not asked for
-    # that one. It is listed here so it stays visible, and so that anything
-    # *new* is still caught. See BACKLOG.md.
-    LABELS_HE_HAS_NOT_RULED_ON = {"Report a Bug"}
+    #
+    # **It is empty, and that is the point.** It held "Report a Bug", which had
+    # exactly the gap he pointed at on its neighbour *View Issues* in v2.119.1:
+    # the only two items in the suite that leave the app, both going to the same
+    # GitHub repository, and only one of them saying so. It reads "Report a Bug
+    # on GitHub" now, so the rule below applies to everything with nothing
+    # excused from it. Putting a label back in here should take an argument
+    # rather than a keystroke.
+    LABELS_HE_HAS_NOT_RULED_ON: set = set()
 
     def test_every_outbound_item_names_the_site_it_opens(self):
         """Generalised, because the next one added would have the same gap."""

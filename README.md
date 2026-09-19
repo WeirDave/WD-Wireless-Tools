@@ -21,7 +21,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 
 ### [→ Install the suite](https://weirdave.github.io/WD-Wireless-Tools/)
 
-[Read the User Manual](docs/USER_MANUAL.md) · [Download the Full Suite](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) · [Report an Issue](https://github.com/WeirDave/WD-Wireless-Tools/issues)
+[Read the User Guide](docs/USER_MANUAL.md) · [Download the Full Suite](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest) · [Report an Issue](https://github.com/WeirDave/WD-Wireless-Tools/issues)
 
 </div>
 
@@ -31,7 +31,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"><br><b>Quick Walls</b><br><sub>v7.65.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.27.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"><br><b>Scale</b><br><sub>v1.5.2 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.61.1 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.61.2 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.18.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.13.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.4.0 · Desktop</sub></td>
@@ -212,7 +212,7 @@ Pick either — you can switch later from **Menu → About** without reinstallin
 
 The launcher installs missing dependencies, starts the local service, and opens `http://localhost:8675`. Keep its terminal window open while using the suite.
 
-For detailed, task-by-task instructions, see the **[WD Wireless Tools User Manual](docs/USER_MANUAL.md)**.
+For detailed, task-by-task instructions, see the **[WD Wireless Tools User Guide](docs/USER_MANUAL.md)**.
 
 ### Updating
 
@@ -232,7 +232,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.143.0
+WIRELESS TOOLS  v2.144.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
@@ -340,7 +340,7 @@ The local `.claude/` directory is development-tool configuration, not applicatio
 
 ## Help and Support
 
-- Start with the [User Manual](docs/USER_MANUAL.md) or the guide built into each tool.
+- Start with the [User Guide](docs/USER_MANUAL.md) — one document, a chapter per tool.
 - Search existing [GitHub issues](https://github.com/WeirDave/WD-Wireless-Tools/issues).
 - For a reproducible bug or focused feature request, [open an issue](https://github.com/WeirDave/WD-Wireless-Tools/issues/new) with the tool version, operating system, expected result, and actual result.
 - Never attach client `.esx` files, credentials, session data, or other confidential material to a public issue.

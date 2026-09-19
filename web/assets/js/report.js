@@ -3726,7 +3726,7 @@
       + ' data-page-key="key:' + WD.escAttr(fp.id) + '" data-page-kind="table"'
       + ' data-floor-idx="' + (floorIdx % 5) + '">'
       + orientPickerHtml('key:' + fp.id, opts)
-      + referencePageHead('AP Label Reference', fp, count);
+      + referencePageHead('AP Labels', fp, count);
     out += '<p class="rep-key-intro">The plan shows the number. Write the full name on the label.</p>'
       + scheme
       + '<table class="rep-key-table"><thead><tr>'

@@ -257,34 +257,35 @@ def manual():
     return Response(manual_render.render_page(), mimetype="text/html")
 
 
-@app.route("/guide")
-def guide():
-    return send_from_directory(WEB, "guide.html")
+# There is one guide for the whole suite, with a chapter per tool, and it is the
+# manual. These addresses used to be five separate pages covering four of the
+# ten tools, under a menu name a hair away from the manual's own - so the same
+# question had two answers and they drifted. By the time the two were merged,
+# the manual was wrong about what applying a wall template does and about a
+# backup copy that nothing had written since v2.141.0, and the guide pages were
+# right; on other points it was the other way round. One document cannot
+# disagree with itself.
+#
+# They redirect rather than 404: they were linked from every page for a long
+# time and are bookmarkable. Each lands on its own chapter, which is what the
+# reader wanted from the old address.
+GUIDE_REDIRECTS = {
+    "/guide": "/manual#quick-walls",
+    "/guide-cloud": "/manual#cloud-manager",
+    "/guide-squirrel": "/manual#squirrel",
+    "/guide-organizer": "/manual#squirrel",
+    "/guide-plantrim": "/manual#plantrim",
+    "/guide-report": "/manual#report",
+}
 
 
-@app.route("/guide-cloud")
-def guide_cloud():
-    return send_from_directory(WEB, "guide-cloud.html")
+def _guide_redirect():
+    return redirect(GUIDE_REDIRECTS[request.path], code=302)
 
 
-@app.route("/guide-squirrel")
-def guide_organizer():
-    return send_from_directory(WEB, "guide-organizer.html")
-
-
-@app.route("/guide-organizer")
-def guide_organizer_legacy_redirect():
-    return redirect("/guide-squirrel", code=302)
-
-
-@app.route("/guide-plantrim")
-def guide_plantrim():
-    return send_from_directory(WEB, "guide-plantrim.html")
-
-
-@app.route("/guide-report")
-def guide_report():
-    return send_from_directory(WEB, "guide-report.html")
+for _rule in GUIDE_REDIRECTS:
+    app.add_url_rule(_rule, "guide_redirect_" + _rule.strip("/").replace("-", "_"),
+                     _guide_redirect)
 
 
 @app.route("/assets/<path:fn>")

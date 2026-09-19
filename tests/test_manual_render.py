@@ -41,12 +41,21 @@ class TheManualIsReachable(unittest.TestCase):
     """Bug 1. A document nobody can open is not documentation."""
 
     def test_home_links_to_the_manual_and_not_to_one_tools_guide(self):
-        link = re.search(r'<a[^>]*href="([^"]+)"[^>]*>User Manual</a>', HOME)
-        self.assertIsNotNone(link, "Home has no User Manual link at all")
+        """Home reaches the guide, and reaches the whole of it.
+
+        Asserted by destination rather than by label. This pinned the words
+        "User Manual", so renaming the document to "User Guide" - which is what
+        it is, one guide with a chapter per tool - failed here while Home was
+        perfectly correct. Where the link goes is the property; what it is
+        called is not.
+        """
+        hrefs = re.findall(r'<a[^>]*href="([^"]+)"', HOME)
+        self.assertIn("/manual", hrefs,
+                      "Home does not link to the guide at all")
         self.assertEqual(
-            link.group(1), "/manual",
-            "Home's User Manual link points somewhere else. It pointed at "
-            "/guide once, which is the Quick Walls guide - one tool of nine.")
+            [h for h in hrefs if h.startswith("/guide")], [],
+            "Home links to a per-tool guide page. Those are gone - there is "
+            "one guide and it is /manual.")
 
     def test_the_server_serves_the_manual(self):
         self.assertIn('@app.route("/manual")', SERVER)
@@ -144,8 +153,14 @@ class TheConverterHandlesWhatTheManualContains(unittest.TestCase):
         self.assertEqual(broken, [], f"dead in-page links: {broken}")
 
     def test_the_contents_rail_lists_every_section(self):
-        want = {m.strip() for m in re.findall(r"^## (.+)$", MANUAL_MD, re.M)}
-        want -= {"User Manual", "Contents"}   # the title block, not a section
+        """Everything after the Contents list is a chapter and belongs in the rail.
+
+        The two headings above it are the document's own subtitle and the
+        Contents heading itself. Found by position rather than named, because
+        naming them meant renaming the document broke this test.
+        """
+        after = MANUAL_MD.split("\n## Contents\n", 1)[1]
+        want = {m.strip() for m in re.findall(r"^## (.+)$", after, re.M)}
         have = {text for level, text, _ in self.toc if level == 2}
         self.assertEqual(want - have, set(),
                          f"sections missing from the rail: {sorted(want - have)}")

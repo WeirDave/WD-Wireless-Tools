@@ -4,9 +4,10 @@
 
 # WD Wireless Tools
 
-## User Manual
+## User Guide
 
-**Practical guidance for the complete Ekahau workflow suite.**
+**Practical guidance for the complete Ekahau workflow suite — one guide, a
+chapter per tool.**
 
 ![Local First](https://img.shields.io/badge/local--first-private-5fa970?style=flat-square)
 ![No Telemetry](https://img.shields.io/badge/telemetry-none-5fa970?style=flat-square)
@@ -206,7 +207,7 @@ work from what comes down.
 
 Cloud Manager keeps a backup of the local file it replaces, in a `backups`
 folder rather than beside your live projects, so the copy you just overwrote is
-recoverable. See [Backups of your projects](#backups-of-your-projects).
+recoverable. See [What happens to a file that gets replaced](#what-happens-to-a-file-that-gets-replaced).
 
 ### 10. Run the report — Report
 
@@ -240,9 +241,15 @@ opens it, and it has three blocks:
   is reachable from every page, so you never have to go back to Home to get
   somewhere else.
 - **Tools** — Suite Settings.
-- **Help** — **User Manual** (this document, opening at the section for the tool
-  you are in), the tool's own guide page where it has one, **About & Updates**,
-  **Copy Diagnostics**, and **Report a Bug**.
+- **Help** — **User Guide** (this document, opening at the chapter for the tool
+  you are in), **About & Updates**, **Copy Diagnostics**, and **Report a Bug on
+  GitHub**.
+
+> **There used to be two.** A **User Guide** item opened a separate page for
+> four of the tools, beside a **User Manual** item opening this document — two
+> near-identical names, and only four tools covered. There is one guide now,
+> this one, with a chapter per tool. The old `/guide…` addresses still work and
+> land on the right chapter, so a bookmark is not broken.
 
 Each page shows its own version number next to the title. **That is the tool's
 version, not the suite's, and they are different numbers** — suite 2.114.0 ships
@@ -426,13 +433,78 @@ cloud name. Renaming the file on disk changes only the first of those.
 
 See also [A project has three different names](#a-project-has-three-different-names).
 
+### How matching works
+
+Every Ekahau project has a hidden ID stamped inside its `.esx` when it is first
+created, and that ID stays with it through every edit, rename, upload and
+download. When the same hidden ID turns up both on your computer and in Ekahau
+Cloud, the two are the same project — proven, not guessed.
+
+Where the IDs cannot answer — a project created locally and never uploaded, or
+two files with unrelated histories — matching falls back to the names. An exact
+name match is very reliable; a shared site code plus a similar name is likely;
+similar names alone is a guess, and the row says so.
+
+Every paired row carries a badge in the middle gutter. Hover it for the reason
+in plain words.
+
+| Badge | What it means |
+| --- | --- |
+| **★ You matched** | You linked these yourself with 🔗 Link. Overrides everything else — click the badge to unlink |
+| **✓ Same file** | The same hidden project ID inside both files. One project stored in two places |
+| **✓ Name matches** | Identical filenames but no ID link. Very likely the same project, not proven |
+| **~ Same site** | The same site code, such as `SITE1`, plus similar names. Probably the same project |
+| **? Similar name** | Some words in common. A best guess, worth a look before syncing |
+
+**Size is deliberately not used for matching, and not shown on file rows.**
+Ekahau Cloud stores `.esx` files uncompressed while your computer compresses
+them, so a cloud file six times larger than your local copy is usually the same
+project. Size still appears in the folder-peek popup and on the Duplicates tab,
+where you are comparing files of the same kind.
+
+**The date beside each file is when the project was last edited inside Ekahau**,
+not when the file was copied to your computer. Two copies showing the same date
+and time are the same version. Because it is read from inside the file, copying,
+OneDrive sync and renaming do not reset it.
+
+#### Held back — pairs that were not matched automatically
+
+Sometimes two files look related — same site code, overlapping words — but a
+hard difference stops them being paired: a different building number (Bldg 3 vs
+Bldg 5), a different street number, a different survey phase (Baseline vs
+Cleanroom). Those land in a **Held Back** section at the bottom of the list with
+the reason spelled out, and two buttons:
+
+- **Link anyway** pairs them and remembers that decision.
+- **Not a match** says the hold was right, and the pair is never suggested
+  again.
+
+#### When it gets a pairing wrong
+
+- **A pair it missed** — click 🔗 on either unpaired file and pick the
+  counterpart. Remembered from then on.
+- **A pair it should not have made** — click ≠ on the row. Never suggested
+  again.
+- **Held back when you know better** — **Link anyway** on the held-back row.
+
+The **ⓘ How matching works** chip beside the search box gives a shorter version
+of all this inside the app.
+
+#### Orphan projects
+
+A cloud project belonging to no site cannot nest under a folder, so those are
+listed together at the bottom under **Orphan Projects**. The ↪ button on an
+orphan row moves it into a site.
+
 ### Which side is newer
 
 A matched pair whose two copies differ in age carries a badge:
 
 - **⇩ Cloud newer · download** — the cloud copy was edited more recently. Click
-  the badge to bring it down over your local file. Your current copy is kept
-  beside it as a `.previous-<timestamp>.esx`.
+  the badge to bring it down over your local file. **No second copy is kept —
+  the cloud one is it**, and it is still there afterwards, so downloading again
+  puts you back where you were. See
+  [What happens to a file that gets replaced](#what-happens-to-a-file-that-gets-replaced).
 - **⇧ Local newer · replace cloud** — your copy is the newer one. Click it to
   send it up. Your file is uploaded as a new cloud project and checked first;
   the old cloud project is deleted only once that has succeeded, so a failed
@@ -547,6 +619,20 @@ matched pair deletes only that side.
 
 Cloud Manager stores an encrypted copy of the active Cloud session under `~/.wd_wireless_tools/`. Its encryption key is stored separately in Windows Credential Manager or macOS Keychain. Use **Menu → Forget Cloud Login** to remove the saved session and key.
 
+### Keyboard and mouse
+
+| Key or action | What it does |
+| --- | --- |
+| `F5` | Refresh — re-fetch the cloud sites and re-scan the local folder |
+| `F2` | Rename the selected site or folder |
+| `Delete` | Delete the selected site or folder, with a confirmation |
+| Double-click a row | Open the comparison for that project, when both sides exist |
+| Click a column header | Sort the list by that column |
+
+> **Keep your naming consistent between cloud and local.** Where the hidden ID
+> cannot answer, matching falls back to the name — so `Site-Alpha` in the cloud
+> pairs with `Site-Alpha.esx` on disk.
+
 ### Implementation note
 
 The `EkahauAPI` client in `tools/cloud_manager.py` includes reverse-engineered request flows required for operations performed by the Ekahau web application, including presigned uploads and client-side `.esx` download assembly. This is application code. A local `.claude/` directory is development-tool configuration and is not required or distributed.
@@ -569,78 +655,215 @@ the original file is never modified — you always save a copy.
 
 *The template bar sits above the wall list. Each type shows its colour, its thickness and the number key that draws it.*
 
-
 ### Remap walls
 
-1. Drop an `.esx` file onto the page, or select the drop area to browse.
-2. Review every wall type detected in the project.
-3. Choose a replacement for each type you want to change.
-4. Review the mapping, then save the updated `.esx`.
+1. **Open** — drop an `.esx` onto the editor, or click to browse.
+2. **Edit** — drag wall types onto shortcut slots, edit their properties, add or
+   remove types.
+3. **Save** — **Save .esx** writes your changes into a *copy* of the project.
+4. **Reload** — open that copy in Ekahau AI Pro, and your shortcuts are ready.
+
+### The shortcut panel
+
+The left column is slots `1` through `9`, matching Ekahau's own wall-type
+keyboard shortcuts.
+
+- **Drag** a wall type card from the list onto a slot to assign it.
+- Click **#** on any wall type to pick a slot from a menu instead.
+- Click **×** on a slot to clear it.
+- One wall type per slot — assigning to an occupied slot replaces what was
+  there.
+
+Shortcuts are stored in the `.esx` itself, so they travel with the project.
+
+> Put your most-used types on the low numbers. `1`–`3` are the easiest to reach
+> while you are drawing.
+
+### The wall type list
+
+Every wall type in the project, sorted alphabetically. Each card shows the name,
+a colour swatch, the RF attenuation for 2.4 / 5 / 6 GHz, and the thickness.
+
+| Button | What it does |
+| --- | --- |
+| `#` | Assign or change this type's keyboard shortcut |
+| `✎` | Edit the type — name, colour, thickness, height, propagation |
+| Clone | Opens the editor pre-filled from this type, with `(Copy)` on the name and the shortcut cleared |
+| `×` | Delete the type from the project |
+| **+ Add Wall Type** | A blank form, for when you have exact values from a datasheet |
+
+**Cloning is usually the fastest route:** start from a type whose numbers you
+already trust and adjust from there, rather than filling in a blank form.
+
+### What a wall type holds
+
+**Name** — the label shown in Ekahau's wall picker and on the plan (*Concrete,
+Heavy*, *Interior Office*). Match your own conventions so the same material has
+the same name across projects.
+
+**Colour** — how Ekahau draws walls of this type. Pick something distinct; a
+well-chosen palette is what lets you eyeball a plan during a survey.
+
+**Thickness** — the real-world thickness. Ekahau stores it in metres; Quick
+Walls lets you type **inches** or **metres** using the `in` / `m` pill beside
+the label, and remembers which you chose (it starts on imperial in US locales).
+It is not cosmetic: Ekahau combines thickness with the attenuation figures to
+model loss, so a 6-inch concrete wall and a 3-inch one behave differently.
+
+**Propagation, per band** — how radio behaves at 2.4, 5 and 6 GHz:
+
+- **Attenuation** — signal lost in dB passing through. Higher is more loss, and
+  this is the number that matters most for coverage.
+- **Reflection coefficient** — how much bounces back, 0 to 1. Metal is high;
+  drywall barely reflects.
+- **Diffraction coefficient** — how much bends around the edges. This is why
+  signal gets around corners.
+
+All three match Ekahau's own schema exactly, so a type saved here behaves
+identically to one authored in Ekahau AI Pro.
 
 ### Wall heights
 
 A wall type can be given a height, so a partial-height obstruction is modelled
-as one rather than as a barrier from the slab to the roof. In **Quick Walls**,
-open a wall type and set **Height**:
+as one rather than as a barrier from the slab to the roof. Open a wall type and
+set **Height**:
 
-- **Auto** is the default and means floor to ceiling. It is a real answer, not
-  an unset one, and it is what most wall types should stay on.
-- **Fixed** takes a number, entered in **feet** when the units toggle is set to
-  imperial, and metres otherwise. Thickness is in inches; height is in feet.
+- **Auto — floor to ceiling** is the default and is a real answer, not an unset
+  one. Right for walls. The card shows an *Auto* badge.
+- **Stops short of the ceiling** takes a number, in **feet** when the units
+  toggle is imperial and metres otherwise, and the card then shows it (*8.2 ft*).
+  Right for anything that stands on the floor and stops: shelving, racking,
+  cubicles, pods, counters.
+
+A type with no height set at all is Auto. There is no third state.
+
+**The difference is not cosmetic.** A warehouse shelf modelled floor-to-ceiling
+blocks signal that in reality passes straight over the top of it, and that moves
+AP counts rather than nudging a heat map.
 
 The panel says how many drawn segments the change affects, because **height
 belongs to the wall type, not to an individual segment** — changing it changes
 every wall already drawn with that type.
 
 > **The shipped template only sets a height where the name says one.**
-> `Walls, Steel 12ft` is 12 ft and `Warehouse Rack Wall - 16ft` is 16 ft. Every
-> other type ships on Auto, including `Warehouse Rack Wall`, `Cubicle` and
+> `Walls, Steel 12ft` is 12 ft and `Warehouse Rack Wall - 16ft` is 16 ft, and
+> both are exact conversions of the feet in the name rather than estimates.
+> Every other type ships on Auto, including `Warehouse Rack Wall`, `Cubicle` and
 > `Bookshelf` — a guessed height changes every project that opens the template,
 > silently, in a direction nobody chose.
 
-### Does this one reach the ceiling?
+### When a name and the file disagree
 
-When a project is open, a panel above the wall list asks about any wall type
-that is **set to Auto and describes something standing on the floor** — racking,
-shelving, cubicles. Auto means Ekahau models it from the slab to the roof, which
-is right when the racking really does run to the deck and wrong when it stops
-short, and nothing in the file records which building you have.
+When a project is open, Quick Walls checks the types actually drawn on the plan
+for one thing: a type whose *name* states a height the file does not carry —
+*Warehouse Rack Wall - 16ft* with no height set. If it finds any, a panel above
+the wall list names them.
 
-Each row names the type, how many segments are drawn with it, and its
-attenuation. Three answers:
+**Being on Auto is never flagged.** Auto is what Ekahau ships for shelving and
+racking and it is the right default; an explicit height is the exception you set
+deliberately. A freshly imported project is not questioned about the state it
+arrived in.
 
-- **Set to N ft** writes the suggested height onto the wall type.
+What is worth a line is the contradiction. If the name says 16 ft and no height
+is set, one of the two is wrong — either the height was never applied, or the
+name is left over from something else. Each row names the type, how many
+segments use it and its attenuation, and offers three answers:
+
+- **Set to _n_ ft** writes the height the name already gives.
 - **Edit…** opens the type so you can enter your own.
-- **It does reach** leaves it on Auto and stops asking for as long as the
-  project is open. Nothing is written — Auto is already what it says.
+- **Leave as is** keeps it on Auto and stops asking for as long as the project
+  is open. Nothing is written — Auto is already what it says.
 
-The panel disappears when there is nothing to ask about.
+Nothing reaches disk either way until you save, like every other change here.
+Only types you have actually drawn with are listed, and the panel disappears
+when there is nothing to ask about.
 
-### Use templates
+### Templates
 
-- Apply an included Ekahau or WD template to create a mapping quickly.
-- Save a custom mapping as a reusable JSON template.
-- Configure a default template when you want it proposed automatically on file open.
-- Use number keys `1` through `9` when working with the corresponding wall-picker positions.
+A template is a complete set of wall types plus their shortcut assignments, so
+the same setup can be put on every project.
 
-Custom templates are saved under `~/.wd_wireless_tools/templates/`, outside the application folder, so updating the suite never touches them and they are the same whichever browser you open the tools in.
+| Control | What it does |
+| --- | --- |
+| **Template dropdown** | Choose a saved template to preview or apply |
+| **Apply** | Adds the template's types to the project. Nothing is removed |
+| **Save Template** | Saves the current types and shortcuts as a new template |
+| **Ekahau Defaults** (button) | Replaces your wall types with Ekahau's factory set. Names what it will remove and asks first |
+| **Manage** | Import or export templates as `.json`, for sharing |
+| **Auto-apply on open** | Applies the last-used template automatically when a file is opened |
 
-**Applying a template adds; it never removes, and it never restyles a wall type
-Ekahau ships.** A type the template carries is added, or updated if you added it
-yourself. A type the template says nothing about is left alone, so walls already
-drawn with it still resolve. And a type that is part of Ekahau's standard set is
-left exactly as Ekahau ships it — the toast names the ones it left alone rather
-than going quiet about them.
+**Apply adds; it never deletes.** Every type in the template is added to the
+project. A type the project already has is updated to the template's version,
+keeping the identity it already had, so walls already drawn with it are
+unaffected. Anything the template says nothing about is left alone.
 
-That last rule exists because a template saved out of a project carries whatever
-that project had, including a colour somebody changed once. Until v2.100.5,
-applying the shipped template recoloured three standard types in every project
-it touched, and said nothing.
+> **Changed in v2.100.0.** Apply used to replace the whole list, which deleted
+> any type the template had no counterpart for — and walls drawn with that type
+> were left pointing at something no longer in the file. Measured across 70
+> local projects with walls drawn, the old behaviour would have stranded walls
+> in 11 of them, every time on a shelving type. On an older build, that is still
+> what Apply does.
 
-To put a standard type *back*, pick **Ekahau Defaults** in the Template dropdown
-and press **Apply** — restoring the standard values is what that one is for.
-The **Ekahau Defaults** *button* further along the bar is a different thing: it
-replaces the whole list, names what it will remove, and asks first.
+**A template updates Ekahau's own types too**, and that is how a house colour
+reaches a project — every Ekahau project already contains the standard set, so a
+template that skipped them could never change anything you can see.
+
+> **Ekahau Defaults is the one that removes things.** The **button** beside the
+> template bar is the deliberate way back to factory: it replaces your wall
+> types with Ekahau's own, names what it is about to remove, and asks first. Use
+> it to start over — not to add the defaults. For that, apply *Ekahau Defaults*
+> from the **dropdown**, which adds what is missing and removes nothing. That is
+> also how you put a single standard type back after changing one.
+
+#### WD Template
+
+The starred **WD Template** in the dropdown is one wireless engineer's own
+setup, not a universal recommendation. It adds the types Ekahau does not ship —
+framery pods, retail and warehouse shelving, cable trays, rack walls at two
+heights — and recolours three of Ekahau's own.
+
+> **The three recolours are deliberate.** **Elevator Shaft** is green, **Door,
+> Steel Fire/Exit** orange and **Window, Thick** a deeper blue, because Ekahau's
+> greys for those three are hard to tell apart on a plan. They were removed in
+> v2.100.5 by mistake and restored in v2.100.19 from the wall types inside a
+> real project that still carried them. If you would rather keep Ekahau's own
+> colours, edit the three types and save the template again.
+
+#### Where templates live, and sharing them
+
+**Manage** opens Import / Export. Export a template and send the `.json` to
+share it.
+
+Templates live in two places, and the split matters:
+
+- **Templates you create or edit** are written to
+  `~/.wd_wireless_tools/templates/` — your home folder, outside the app. So
+  updating the suite never touches them, and they are the same whichever browser
+  you open the tools in.
+- **Templates shipped with the app**, including **WD Template**, sit in
+  `templates/` inside the install folder and are read-only. Editing one creates
+  your own copy in the home folder, which then shadows the shipped one by name.
+
+> **Do not put your own files in the install folder.** User templates used to
+> live there, and a customised copy of a shipped template made `git pull` refuse
+> to update the app at all — the update would have overwritten your edits, so it
+> stopped instead. That is why anything you author goes to your home folder now.
+
+### Saving your work
+
+**Save .esx** in the template bar writes your changes into a copy of the project
+file, and a system dialog lets you choose the name and location. The original is
+never modified.
+
+> Use a naming convention like `SiteName_v2.esx` so the original is always there
+> to fall back on.
+
+### Keyboard reference
+
+| Key | Action, inside Ekahau |
+| --- | --- |
+| `1`–`9` | Draw the wall type assigned to that slot |
+| `Esc` | Cancel the wall you are drawing |
 
 ---
 
@@ -715,55 +938,158 @@ of white paper around the building. In Ekahau that means you zoom past empty
 space all day, the file is larger than it needs to be, and heat maps render
 across acres of nothing.
 
-PlanTrim crops the image on every floor and **moves everything anchored to it to
-match** — access points, walls, areas, survey routes. Nothing ends up offset.
+Think of it as scissors on a large sheet: you decide what to keep and everything
+outside that rectangle is cut away. The part that matters is what happens to
+what is already drawn on the plan. Access points, walls, areas, notes, survey
+routes and reference points all have coordinates measured from the corner of the
+sheet — move the corner and every one of them has to move with it, or your APs
+end up in the car park. PlanTrim rebases all of them in the same operation.
+
+**It leaves the scale alone.** `metersPerUnit` — how many metres one pixel is
+worth — is carried through untouched, and if that cannot be done the floor is
+refused rather than written out with a scale that has quietly shifted.
+
+> **Your original file is never modified.** Nothing is written until you press
+> save, and what you get then is a new copy. Cropping on screen is a preview of
+> what that copy will contain.
 
 ### Trimming a project
 
-1. Open the `.esx`.
-2. Choose how much room to leave around the building with **Margin**.
-3. Check each floor's proposed crop, using **Next floor →** to step through.
-4. **Save trimmed .esx**.
-
-### Margin presets
-
-The **Margin** dropdown sets how much space to leave outside the detected
-content. Each preset names its actual distance, so you are choosing a real
-distance on the ground rather than a vague size:
-
-| Preset | Distance |
-|---|---|
-| Tight | 3 ft (0.9 m) |
-| Normal | 10 ft (3 m) |
-| Wide | 20 ft (6.1 m) |
-| Extra wide | 35 ft (10.7 m) |
-| Parking lot | 200 ft (61 m) |
-| Custom… | whatever you type, in feet |
-
-**Normal** is the usual answer. **Parking lot** exists for outdoor coverage
-where the design extends well beyond the building. The margin is converted
-through each plan's own scale, so the same preset means the same real distance
-on plans drawn at different scales.
-
-Prep uses the same presets and the same saved value, so setting it in one place
-sets it in both.
-
-### When the automatic crop is not what you want
-
-- **Edit box** — drag the crop rectangle yourself.
-- **Crop to this box** — use the rectangle you drew.
-- **Suggest from the set** — take the shape suggested by the other floors, which
-  is what you want when one floor's content is unusually placed.
-- **Apply to all floors** — push the current box to every floor, for buildings
-  where the floors share a footprint.
-- **Back to automatic** — discard your rectangle and use the detected crop.
-- **Reset view** — put the zoom and position back to how the plan opened. It
-  does **not** discard a rectangle you drew, and it does not change the margin.
+1. **Open the `.esx`** — drop it on the page or click to browse. Every floor
+   plan in it is read and measured.
+2. **Read the floor list** — each floor gets a row saying what will happen to it
+   and how much it saves. Automatic is proposed for every floor.
+3. **Adjust what you want to** — happy with automatic, do nothing. Otherwise
+   draw a rectangle and press **Crop to this box**.
+4. **Cut and save** — the wide button under the plan writes the new copy, and
+   you choose where it goes.
 
 ![PlanTrim with a project open and a crop box drawn](../web/assets/manual/plantrim-loaded.png)
 
 *Each floor lists what the crop would do before you commit to it — here, 37% of each sheet is empty paper.*
 
+### The floor list
+
+The strip above the plan is the whole state of the job: one row per floor plan,
+named the way the project names it, with the row you are working on highlighted.
+Click any row to jump to that floor — nothing is locked and there is no order to
+follow.
+
+| What a row says | What it means |
+| --- | --- |
+| **Automatic** | PlanTrim found the drawing inside the sheet and will crop to it. The sizes and the percentage saved are the real numbers for that floor. |
+| **Your box** | You drew a rectangle and cropped to it. Those are your numbers, not the detector's. |
+| **Nothing to do** | The drawing already fills the sheet, so there is no margin worth cutting. The floor is copied through unchanged. |
+| **Cannot crop** | Something makes a crop unsafe — a geo-anchored plan, for example, whose coordinates are tied to the world rather than to the sheet. The reason is on the row. |
+| **· your box was not used** | You drew a rectangle on that floor and did not press Crop. A rectangle you have not cropped does nothing, and the row says so rather than letting you think it counted. |
+
+**Floor 02 — 2 of 3** under the list says which floor you are on and how far
+through you are. **Next floor →** steps to the next and greys out on the last.
+
+Each row also says **how much drawing lies beyond the building**, in feet, in
+each of the four directions. That is a fact about the sheet rather than about
+the crop, so it does not move when you change the margin. It is there so you can
+tell whether a large margin is a real choice on this drawing: if the sheet only
+carries 80 ft of site beyond the building, every margin above 80 keeps exactly
+the same thing.
+
+### Margin — how much to leave around the building
+
+The **Margin** dropdown in the bar above the plan decides how far out from the
+drawing the automatic crop stops. Every setting is a real-world distance
+measured on the plan's own scale, so the same choice means the same distance on
+the ground whatever resolution the sheet was exported at.
+
+| Setting | Keeps | For |
+| --- | --- | --- |
+| **Tight** | 3 ft (0.9 m) | Cropping hard to the building envelope |
+| **Normal** | 10 ft (3 m) | The default — room for survey paths along the exterior walls |
+| **Wide** | 20 ft (6.1 m) | Seeing some of the RF bleed outside the walls |
+| **Extra wide** | 35 ft (10.7 m) | Generous exterior coverage |
+| **Parking lot** | 200 ft (61 m) | Keeping the parking and the approaches, where APs cover outdoors |
+| **Custom…** | Whatever you type, in feet | When none of the five is the number you want. It is remembered |
+
+**A margin never invents paper.** Ask for more than the sheet has and it keeps
+everything there is and stops at the edge, so you cannot end up with blank
+canvas that was not in the drawing. If the margin ends up covering the whole
+sheet, the floor simply reports *Nothing to do*.
+
+**This is the same setting Prep uses** (Prep → *What to do* → *Leave a margin
+of*). Change it in either tool and both follow, so a project you prepare in Prep
+is cropped the way you set it here.
+
+> **Changed in v2.103.17.** These used to be 3, 6 and 10 *metres* displayed in
+> feet, which read as 10, 20 and 33 ft — and **Tight** was not a distance at all
+> but a flat ten pixels, so it meant something different on every drawing. They
+> are round numbers of feet now and every one converts through the plan's scale.
+
+### Drawing your own rectangle
+
+Automatic is a starting point, not a verdict. When you want a specific part of
+the sheet — one wing, a single conference room, the racking and nothing else —
+draw it.
+
+1. **Drag on the plan** to draw a rectangle. Everything outside it will be cut
+   away.
+2. **Adjust it.** Drag any corner, or grab anywhere along an edge to move just
+   that side. The pointer says what it is about to do: a diagonal arrow on a
+   corner, a horizontal or vertical arrow on a side, a move cursor inside the
+   box, and a crosshair on empty canvas where a drag would start a new
+   rectangle.
+3. **Press ✂ Crop to this box.** The view reframes onto what you kept, and that
+   picture is the confirmation.
+
+> **A rectangle you do not crop is ignored.** Drawing is a proposal; Crop is the
+> decision. Draw a box, change your mind and walk away and nothing happens to
+> that floor — it stays on whatever it said before, and the row reminds you the
+> box was not used.
+
+| Control | What it does |
+| --- | --- |
+| **✂ Crop to this box** | Commits the rectangle you drew. Appears only when there is one waiting |
+| **Edit box** | Puts the handles back on the same rectangle so you can adjust it. A crop is never a one-way door |
+| **Back to automatic** | Throws the rectangle away and hands the floor back to detection |
+| **↺ Reset view** | Re-frames the plan. Changes nothing about the crop — it is for when you have panned or zoomed somewhere unhelpful |
+| **Apply to all floors** | Uses this floor's rectangle on every other floor *of the same sheet size*, and carries the decision with it. Differently-sized sheets are skipped and counted, because the same pixel numbers mean a different place on a different size |
+| **Suggest from the set** | Compares the sheets in the project against each other and proposes a rectangle. It fills the editor — it never applies itself, and you can drag what it proposes |
+
+Space-drag pans the plan and the scroll wheel zooms, the same as every other
+canvas in the suite.
+
+> **Boxes are remembered.** Crop some floors, close the project, come back later
+> and those floors are still cropped — the rectangles are saved against the
+> project, outside the `.esx`. Rectangles you never cropped are not saved,
+> because they were never decisions.
+
+### Finishing
+
+The wide button under the plan changes with the work left to do. While any floor
+is still set to automatic it reads **Cut and save**, and the note beside it
+counts what will happen. Once every crop on the table is a box you drew
+yourself it reads **Save trimmed .esx** instead — the cutting decisions are all
+made and the only thing left is writing the file. The button in the top right
+does the same job from anywhere on the page.
+
+### Vector plans — DWG and PDF imports
+
+A DWG or PDF brought into Ekahau usually lands as a vector (SVG) floor plan,
+often with a raster copy of the same drawing alongside it for rendering.
+PlanTrim handles both:
+
+- The vector plan is cropped by moving its window onto the drawing rather than
+  by cutting pixels, so it stays sharp at any zoom, exactly as it was.
+- The raster companion is cropped to the same region. The two are usually
+  different pixel sizes, so the crop is scaled per axis to match and both end up
+  showing the same part of the building.
+
+Vector plans draw on the canvas like any other, so you can box them by eye the
+same way.
+
+### What travels with the crop
+
+| Carried and rebased | Left exactly alone |
+| --- | --- |
+| Access points, wall points and segments, interferers, notes and their pins, areas, attenuation areas, exclusion areas, reference points, survey route points | `metersPerUnit` (the scale), your original file, and any floor plan reported as *Nothing to do* or *Cannot crop* |
 
 ### When a floor is skipped
 
@@ -825,18 +1151,36 @@ favour of the file name.
 
 ### Available report templates
 
-- AP Placement Map
-- AP Installation
-- Antenna Aim Sheet
-- Coverage Cell Boundary
-- Site Summary Sheet
-- Interference / Rogue Devices
-- Bill of Materials
-
-The Change / Audit Report appears as **Coming soon** and cannot yet be selected.
-
 Each card says who the sheet is for and how many pages you get, because that is
 what separates templates that otherwise look alike.
+
+- **AP Placement Map** — the plan, every AP where it actually goes, and its
+  number. Large floors can be split into lettered sections with a key plan and
+  match lines. For whoever mounts the hardware and whoever signs off the design.
+  One page per floor, or several with section splitting on.
+- **AP Installation** — every AP plotted on floor-plan overlays, with direction
+  cones for directional antennas. Per-floor tables show AP name, vendor, model,
+  floor and building, and add mount, height, azimuth, tilt and antenna columns
+  automatically when directional APs are present. Omni, directional and mixed
+  buildings all in one report. Optional antenna specs reference and naming
+  audit.
+- **Antenna Aim Sheet** — one flat table for a clipboard: every directional AP
+  with azimuth, tilt, mount height and floor. Compact mini-maps below the table
+  give an at-a-glance sanity check per floor. Optional sign-off columns turn the
+  sheet into an as-built.
+- **Coverage Cell Boundary** — each AP's coverage cell drawn on the plan, so the
+  AP count explains itself. For clients and budget holders. One overlay per
+  floor.
+- **Site Summary Sheet** — a one-page executive overview: AP, floor and building
+  counts, radio band breakdown, top AP models, antennas in use.
+- **Bill of Materials** — AP quantities grouped by vendor and model, antenna
+  quantities grouped by antenna type, with an "external antennas only" filter
+  for a procurement handoff.
+- **Interference / Rogue Devices** — iPhone, Android and MiFi hotspots and
+  wide-channel rogue Wi-Fi picked up during the survey, scored by severity and
+  mapped by floor.
+
+The Change / Audit Report appears as **Coming soon** and cannot yet be selected.
 
 > **Changed:** *Predictive Design / AP Placement* no longer exists as a separate
 > template. Its only real difference from the AP Placement Map was whether large
@@ -844,6 +1188,39 @@ what separates templates that otherwise look alike.
 > Choosing it now opens the AP Placement Map, and any options you had saved
 > against it are carried over. You gain per-page orientation, the Key Plan and
 > match lines, none of which the old template had.
+
+### Choosing which APs appear
+
+The **APs to include** card on the Configure step narrows the report to the APs
+you actually want in it. Search by name, switch individual APs off, or group
+them:
+
+| Group by | What you get |
+| --- | --- |
+| **None** | A flat alphabetical list |
+| **Colour** | The colour labels you assigned in Ekahau — useful for zones or phases |
+| **Floor** | One collapsible group per floor plan |
+| **Building** | One group per building, on a multi-building site |
+| **Model** | One group per vendor and model, which is the one procurement wants |
+
+Two report-level switches decide which APs are eligible before any of that:
+
+- **Include directional APs** — APs whose antenna type has a specific azimuth.
+  On by default.
+- **Include omni APs** — APs with only omni antennas. Off by default on the aim
+  and placement reports, because those sheets are about aiming. Turn it on to
+  include ceiling omnis, which get a placeholder in the azimuth cell.
+
+### Cover page and logo
+
+Any report can start with a cover page carrying your logo, the site name, the AP
+count and the date. Add the image once with **Choose image…** in Report
+settings.
+
+**The logo belongs to the install, not to the browser.** It is kept in
+`~/.wd_wireless_tools/report/`, so clearing site data or moving between Chrome,
+Edge and Firefox does not lose it, and neither update path can reach it. It was
+once held in browser storage, which is why an older copy of this manual said so.
 
 ### Settings that stay set
 
@@ -885,7 +1262,28 @@ A floor too big to read on one sheet can be split into lettered sections. Turn o
 
 ### AP labels
 
-Floor-plan markers and AP-table labels come from the AP names inside the project. When a name ends in an AP designator such as `SITE-B1-01-AP42`, the short-label option can show `42` for quick map-to-table cross-reference. Turn off **Short number labels on the plan** when full names are preferable.
+Markers on the floor-plan overview and the **#** column of every AP table use
+each AP's own name from the `.esx`, never an invented row number. So marker
+"42" on the plan and row "42" in the table are always the *same* AP, and both
+point back at whatever you called it in Ekahau.
+
+**How the label is chosen:**
+
+| An AP name like… | shows as |
+| --- | --- |
+| `SITE1-B1-01-01-AP42` | **42** — a trailing AP designator is detected and shortened |
+| `AP-07a` | **07a** — the same rule, letter suffixes included |
+| `Conference-Room-Alpha` | **Conference-Room-Alpha** — no `APnn` suffix, so the full name is used |
+| `00:11:22:33:44:55` | **00:11:22:33:44:55** — the same. Label text scales down so a long name still fits the marker |
+
+Reports that draw floor-plan markers carry **Short number labels on the plan**
+in the sidebar, on by default. Turn it off to force the full AP name onto every
+marker whatever the naming pattern — worth doing when your names look like
+`APnn` but the digits are not the part that identifies anything, as in a scheme
+that encodes the building and floor.
+
+Each floor's overview carries a legend line underneath saying which mode is
+active, so whoever is holding the printed PDF can tell.
 
 ### AP notes
 
@@ -947,10 +1345,23 @@ not happen.
 
 ### Print cleanly
 
+Press **Print / Save PDF** on the Review step. The print stylesheet already
+forces the four things people usually have to fix by hand:
+
+- backgrounds and colours on, so your logo and the marker cones actually print;
+- the sidebar, header and navigation hidden;
+- page breaks at section boundaries, so a floor is never sliced in half;
+- table headers repeated on every page a table continues onto.
+
+> **If the cover and the marker cones print blank**, your browser's print dialog
+> has stripped the backgrounds. Look for *More settings → Background graphics*
+> and turn it on.
+
+Then, before it goes to an installer or a customer:
+
 - Confirm the expected paper size and orientation in the browser print dialog.
-- Enable background graphics if your browser offers that option.
 - Inspect page breaks, map readability, and table wrapping in the preview.
-- Save to PDF and inspect the final PDF before sending it to installers or customers.
+- Save to PDF and read the PDF itself, not the preview.
 
 ---
 
@@ -1209,23 +1620,72 @@ contents of an `.esx`.
 
 ### Organize a folder
 
-1. Choose the folder you want to scan.
-2. Review discovered projects, classifications, and proposed destinations.
-3. Adjust exclusions, naming rules, or destination folders as needed.
-4. Confirm only when the preview matches your intended structure.
-5. Review the completion summary.
+1. **Pick a folder** — **Browse** for a root folder holding site subfolders, or
+   a single folder of loose files. You can also type a path straight in
+   (`C:\Sites\ProjectAlpha`).
+2. **Scan** — every subfolder is scanned, each file classified by extension, and
+   a preview of the proposed moves is built.
+3. **Review** — check the preview and adjust any destination that is wrong.
+4. **Organize** — the files move into their destination subfolders.
+5. **Read the summary** — how many moved, how many were skipped, and anything
+   that errored.
 
-Squirrel can classify `.esx` files, images, floor plans, and reports; create project folders; apply naming rules; find duplicates; and undo supported organization operations.
+**Point it at a root folder holding several site folders** and it processes each
+one independently, which is the usual way to use it.
 
-Classification follows the extensions and keywords in **Suite Settings →
-Squirrel**: `.dwg` and the other plan types go to `floorplans/`, images to
-`images/`, and reports to `reports/`. The `.esx` itself stays where it is — it
-is the project, not material belonging to one.
+### The preview
+
+Every file found is listed with its proposed destination, grouped by the folder
+it is in. Coloured **summary chips** across the top count the breakdown: how
+many are headed for `\images`, `\floorplans` and `\reports`, and how many will
+be skipped because they are already organised or excluded.
+
+**Default classification:**
+
+| Destination | File types |
+| --- | --- |
+| `\images` | `.png`, `.jpg`, `.jpeg`, `.gif`, `.bmp`, `.tiff`, `.svg` |
+| `\floorplans` | `.dwg`, `.dxf`, and PDFs with no report keyword in the name |
+| `\reports` | `.docx`, `.xlsx`, `.pptx`, `.csv`, and PDFs with a report keyword |
+
+**PDFs are sorted by what the filename says.** A name containing *report*,
+*audit*, *coverage*, *summary* or *validation* goes to `\reports`; every other
+PDF goes to `\floorplans`. If one lands in the wrong place, change it in the
+preview — or change the keyword rules in **Suite Settings → Squirrel**, which is
+where the extensions and keywords all live.
+
+> **`.esx` files are never moved.** The project file stays exactly where it is —
+> it is the project, not material belonging to one — and it never appears in the
+> move preview.
+
+Files already sitting inside a destination subfolder are skipped automatically.
+
+### Changing where something goes
+
+Every row carries a destination dropdown: `\images`, `\floorplans`, `\reports`,
+or **Skip** to leave the file alone.
+
+For more than one at a time, **click a row to select it and `Shift`-click
+another to take the whole range**, then press a bulk destination button to set
+all of them at once. That is much the fastest way to reclassify a batch — select
+the first, `Shift`-click the last, hit the button.
+
+### What happens when you press Organize
+
+1. The destination subfolders are created if they do not already exist.
+2. Each file is moved to its assigned destination.
+3. Anything marked **Skip**, or already in the right place, is left alone.
+4. A summary reports what moved, what was skipped, and what errored.
+
+> **Files are moved, not copied.** The originals are no longer where they were,
+> so be happy with the preview first.
 
 **Undo puts everything back.** After an organize run, Undo restores every file
 to where it came from, and the menu says how many moves are available to undo.
 
-> Start with a small representative folder if you are introducing new naming rules. Once the preview is right, apply the same rules to the larger collection.
+> Start with a small representative folder if you are introducing new naming
+> rules. Once the preview is right, apply the same rules to the larger
+> collection.
 
 ### Rename
 
@@ -1363,7 +1823,6 @@ be a regression, not a feature.
 | Setting | Where | What it does |
 | --- | --- | --- |
 | **Local project folder** | Settings | The folder the suite treats as home for your `.esx` files |
-| **Backup copies to keep** | Settings | How many backups are kept per file before old ones are pruned. **0 turns backups off.** The page shows the total space used across all of them |
 
 ### Cloud Manager
 
@@ -1614,29 +2073,42 @@ install.
 
 There is no server-side file-processing service anywhere in the suite. Files are opened, changed and saved on your own machine.
 
-### Backups of your projects
+### What happens to a file that gets replaced
 
-Every tool that writes to an `.esx` takes a copy of the original first. That is
-separate from the update backup described below — this one is about your survey
-files.
+**Nothing in this suite keeps a copy of a file before overwriting it, and that
+is deliberate.** There is no backups folder, no retention setting and no
+`.previous-` copy. If you have a `backups` folder inside your project folder it
+is from a version before 2.141.0 — it is yours to keep or delete. Nothing writes
+to it any more, and the local scan still ignores it, so the projects inside are
+not matched against Ekahau Cloud, counted as duplicates, or listed anywhere.
 
-**Where the copy goes depends on which tool made it.** Most tools leave a
-`.previous-<timestamp>.esx` beside the file they replaced. **Cloud Manager puts
-it in a `backups` folder instead**, because a replaced project sitting next to
-your live ones is something Cloud Manager would then scan, compare and offer to
-sync — a backup that creates work is not a backup. The folder is skipped by the
-local scan, and you can empty it whenever you like, like a recycle bin.
+Two things stand in its place, and between them they cover the reason a backup
+would have existed.
 
-In **Settings → General**, **Backup copies to keep** controls how many are
-retained per file. Older ones are pruned automatically after a successful write,
-so the folder does not fill up.
+**Every tool that derives a project writes it under a new name.** Prep, Quick
+Walls, PlanTrim and Capacity all ask where the result goes, so your original is
+still sitting there under its own name and there is nothing to restore. If you
+want to overwrite, you pick the old file yourself, which is a decision you can
+see.
 
-- Set it to **0** to turn backups off entirely.
-- The page shows the **total space used** across every backup the suite has
-  taken, so the cost is visible rather than discovered later.
+**Cloud Manager is the one place that replaces a file you already have, and
+there the other copy is Ekahau's.** **⇩ Cloud newer · download** replaces your
+local file with the project the cloud is holding, and that cloud project is
+still there afterwards — download it again and you are back where you were. A
+copy on your disk would be a copy of a copy.
 
-Pruning never fails an operation: a project written correctly is never reported
-as an error because tidying up afterwards did not work.
+**The two directions are guarded differently, on purpose.** Replacing a *cloud*
+project deletes the old one, and a cloud delete does not come back. So that
+direction names the project it will delete, asks first, and is offered only on a
+pairing the tool can prove.
+
+The writes themselves are atomic: the new file is built alongside and then
+renamed over the top, so a file is either entirely the old one or entirely the
+new one and never half of either. That stops a write going wrong, which is
+better than keeping a copy in case it does.
+
+*The install backup taken when you update is a separate thing and still
+happens — see [Update or Uninstall](#update-or-uninstall).*
 
 ### Backing up your settings
 
@@ -1716,12 +2188,17 @@ Two moments write a copy without being asked, because both can lose settings:
 | Before an **update** | `~/.wd_wireless_tools/settings-backups/` |
 | Before an **import** | beside `settings.json`, as `settings.backup-<date>.json` |
 
-How many are kept follows **Backup copies to keep** in Settings → General, and
-the same **Check usage** and **Clean up** buttons find and prune them.
+**Three are kept**, and older ones are pruned automatically when a new one is
+written. There is no setting for it and no way to turn it off: these are the
+only automatic copies the suite still takes, and they are the exception
+described in
+[What happens to a file that gets replaced](#what-happens-to-a-file-that-gets-replaced).
+Settings cannot use the write-under-a-new-name rule that covers your projects —
+an import has to land on `settings.json` itself, and there is no second copy of
+that anywhere.
 
-Setting that to **Off** stops the automatic ones — with one exception: the copy
-taken immediately before an import is always kept, because it is the undo for
-something you just asked for rather than a copy quietly piling up.
+The copy taken immediately before an import is always kept, whatever else is
+pruned, because it is the undo for something you just asked for.
 
 An automatic copy does not reset the "Last exported" line. That line is about
 backups *you* took, and a file the suite wrote to protect itself is not one you

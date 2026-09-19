@@ -54,10 +54,12 @@ class ServerAndAssetTests(unittest.TestCase):
         return {API_REQUEST_HEADER: "1", **extra}
 
     def test_public_routes_load(self):
+        # The /guide* addresses are not here: they redirect to their chapter
+        # of the one guide now, and
+        # test_the_per_tool_guide_pages_are_gone_and_their_links_redirect
+        # asserts both the 302 and where each one lands.
         for route in ("/", "/cloud", "/walls", "/squirrel", "/scale", "/report",
-                      "/rename", "/squirrel/rename",
-                      "/guide", "/guide-cloud", "/guide-squirrel",
-                      "/guide-plantrim", "/guide-report", "/api/version"):
+                      "/rename", "/squirrel/rename", "/manual", "/api/version"):
             with self.subTest(route=route):
                 response = self.client.get(route)
                 try:
@@ -68,39 +70,79 @@ class ServerAndAssetTests(unittest.TestCase):
                     response.close()
 
 
-    def test_every_tool_page_offers_its_guide(self):
-        """A tool nobody can find the manual for is an undocumented tool.
+    def test_every_tool_page_offers_its_chapter_of_the_guide(self):
+        """A tool nobody can find the guide for is an undocumented tool.
 
         PlanTrim shipped for months with no guide at all - it appeared in the
         navigation menu of every other page, so it looked covered, while the
-        only writing about it was the release notes. Scale still has none; it
-        is listed here so the exemption is a decision on the record rather than
-        an oversight that repeats.
-        """
-        # tool page -> the guide it must link to
-        expected = {
-            "walls.html": "/guide",
-            "plantrim.html": "/guide-plantrim",
-            "organizer.html": "/guide-squirrel",
-            "cloud.html": "/guide-cloud",
-            "report.html": "/guide-report",
-        }
-        # Deliberately without a guide of their own for now. Scale is a
-        # two-field converter whose labels say what it does; the rest are
-        # newer tools whose guides have not been written yet.
-        exempt = {"scale.html", "ap-rename.html", "capacity.html", "prep.html",
-                  "rename.html", "home.html", "settings.html", "setup.html"}
+        only writing about it was the release notes.
 
-        missing = []
+        This used to map five pages to five separate guide pages and exempt the
+        other eight by name, because those tools had no guide written. There is
+        one guide now with a chapter per tool, so there is nothing left to
+        exempt and the assertion gets stronger: every tool page links into the
+        guide, and **the chapter it names has to exist**. A link to
+        `/manual#capacity` when no Capacity chapter has been written is the same
+        undocumented tool wearing a link.
+        """
+        import re as _re
+        import sys as _sys
+        _sys.path.insert(0, str(ROOT))
+        from tools import manual as manual_render
+
+        # Every anchor the rendered guide actually offers.
+        html = manual_render.render_page()
+        anchors = set(_re.findall(r'id="([^"]+)"', html))
+
+        # setup.html is the first-run screen, before any tool is in use, and
+        # manual.html is the guide itself.
+        exempt = {"setup.html", "manual.html"}
+
+        problems = []
         for page in sorted((ROOT / "web").glob("*.html")):
-            if page.name.startswith("guide") or page.name in exempt:
+            if page.name in exempt:
                 continue
-            want = expected.get(page.name)
-            if want is None:
+            text = page.read_text(encoding="utf-8")
+            links = set(_re.findall(r'href="/manual(#[a-z0-9-]+)?"', text))
+            if not links:
+                problems.append(f"{page.name} does not link to the guide")
                 continue
-            if want not in page.read_text(encoding="utf-8"):
-                missing.append(f"{page.name} does not link to {want}")
-        self.assertEqual(missing, [], "; ".join(missing))
+            for frag in links:
+                if frag and frag[1:] not in anchors:
+                    problems.append(
+                        f"{page.name} links to /manual{frag}, which is not a "
+                        f"heading in the guide")
+        self.assertEqual(problems, [], "; ".join(problems))
+
+    def test_the_per_tool_guide_pages_are_gone_and_their_links_redirect(self):
+        """One guide, and the old addresses still land somewhere useful.
+
+        The five per-tool pages covered four of the ten tools under a menu name
+        a hair away from the guide's own, and the two drifted: by the time they
+        were merged the guide was wrong about what applying a wall template does
+        and about a backup copy nothing had written since v2.141.0. They are
+        bookmarkable, so they redirect to their chapter rather than 404.
+        """
+        self.assertEqual(
+            sorted(p.name for p in (ROOT / "web").glob("guide*.html")), [],
+            "a per-tool guide page is back")
+
+        for route, chapter in (("/guide", "#quick-walls"),
+                               ("/guide-cloud", "#cloud-manager"),
+                               ("/guide-squirrel", "#squirrel"),
+                               ("/guide-organizer", "#squirrel"),
+                               ("/guide-plantrim", "#plantrim"),
+                               ("/guide-report", "#report")):
+            with self.subTest(route=route):
+                response = self.client.get(route)
+                try:
+                    self.assertEqual(response.status_code, 302)
+                    self.assertTrue(
+                        response.headers.get("Location", "").endswith(
+                            "/manual" + chapter),
+                        f"{route} went to {response.headers.get('Location')!r}")
+                finally:
+                    response.close()
 
     def test_a_guide_exists_for_every_guide_link(self):
         """A User Guide link that 404s is worse than no link."""
@@ -118,7 +160,10 @@ class ServerAndAssetTests(unittest.TestCase):
         self.assertEqual(broken, [], "; ".join(broken))
 
     def test_legacy_organizer_routes_redirect(self):
-        for old, new in (("/organizer", "/squirrel"), ("/guide-organizer", "/guide-squirrel")):
+        # /guide-organizer now lands on the Squirrel chapter of the one guide;
+        # that is covered by
+        # test_the_per_tool_guide_pages_are_gone_and_their_links_redirect.
+        for old, new in (("/organizer", "/squirrel"),):
             with self.subTest(route=old):
                 response = self.client.get(old)
                 try:
@@ -560,7 +605,7 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
                 self.assertIn(f"v{versions[tool]}", readme)
         self.assertIn("Seven report formats are available today", readme)
         self.assertIn("Change / Audit Report (coming soon)", readme)
-        self.assertIn("[User Manual](docs/USER_MANUAL.md)", readme)
+        self.assertIn("[User Guide](docs/USER_MANUAL.md)", readme)
         self.assertIn("reverse-engineered upload/download flows", readme)
         self.assertIn("development-tool configuration", readme)
         for documented_path in (
