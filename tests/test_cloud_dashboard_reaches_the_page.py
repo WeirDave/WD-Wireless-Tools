@@ -126,6 +126,11 @@ let currentTab = 'sites';
 let activeFilter = 'all';
 let dupData = null;
 const _compareResults = new Map();
+/* `isOutOfSync` reads a stored comparison through `compareResultFor`, which
+   retires one whose dates no longer match the pair. That lives outside this
+   slice, and nothing in this fixture has been compared, so there is nothing
+   cached for it to return. */
+globalThis.compareResultFor = () => null;
 function _compareKey(c, l) {
   return String(c || '') + '\u0000' + String(l || '').replace(/\\/g, '/').toLowerCase();
 }

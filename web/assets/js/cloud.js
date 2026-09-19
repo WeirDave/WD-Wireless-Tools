@@ -1176,8 +1176,10 @@ function comparisonIsSettled(cmp) {
 
 function isOutOfSync(row) {
   if (!row || !row.staleness) return false;
-  const cmp = (row.cloud && row.local)
-    ? _compareResults.get(_compareKey(row.cloud.id, row.local.path)) : null;
+  //: Through the same retirement test the row's own controls use, or the chip
+  //: would go on counting a pair as settled from a measurement that no longer
+  //: describes it.
+  const cmp = compareResultFor(row);
   return !comparisonIsSettled(cmp);
 }
 
@@ -3303,9 +3305,44 @@ const _compareResults = new Map();
 function _compareKey(cloudId, localPath) {
   return String(cloudId || '') + '\u0000' + String(localPath || '').replace(/\\/g, '/').toLowerCase();
 }
+/* The dates the pair carried when a comparison was taken, so the answer can
+   be retired when it stops being about the same two files. */
+function _pairMtimes(cloudId, localPath) {
+  const lp = String(localPath || '').replace(/\\/g, '/').toLowerCase();
+  const cid = String(cloudId || '');
+  for (const k of Object.keys(rowData)) {
+    const d = rowData[k];
+    if (!d || d.kind !== 'pair') continue;
+    if (String(d.cloudId || '') !== cid) continue;
+    if (String(d.localPath || '').replace(/\\/g, '/').toLowerCase() !== lp) continue;
+    return { c: Number(d.cloudMtime) || 0, l: Number(d.localMtime) || 0 };
+  }
+  return null;
+}
+
+/* Does a stored comparison still describe the pair in front of us?
+
+   It is a measurement of two files at a moment. The comment above this map
+   has always said it is "cleared when the pair changes on either side", and
+   nothing cleared it - so a pair compared at 09:00 and edited in Ekahau at
+   10:00 went on reporting the 09:00 answer. That answer feeds
+   `comparisonIsSettled`, which feeds `isOutOfSync` and the row's own actions,
+   and a settled row draws no action at all: the newer cloud copy became
+   invisible until the page was reloaded.
+
+   Either date moving is enough to retire it. Re-asking costs one button; not
+   asking costs him the change somebody else made. */
+function _compareStillApplies(res, r) {
+  if (!res || !res._seen) return true;
+  const c = Number(r && r.cloud && r.cloud.mtime) || 0;
+  const l = Number(r && r.local && r.local.mtime) || 0;
+  return res._seen.c === c && res._seen.l === l;
+}
+
 function compareResultFor(r) {
   if (!r || !r.cloud || !r.local) return null;
-  return _compareResults.get(_compareKey(r.cloud.id, r.local.path)) || null;
+  const res = _compareResults.get(_compareKey(r.cloud.id, r.local.path)) || null;
+  return _compareStillApplies(res, r) ? res : null;
 }
 
 /* Download the cloud copy and diff it against the local file.
@@ -3406,6 +3443,9 @@ async function settlePair(cloudId, localPath, opts) {
        to make failed with "Local path is outside the configured folder". */
     const r = await pyApi('compare_with_cloud', localPath, cloudId);
     if (r && !r.error) {
+      //: Stamped with the dates the pair carried, so the answer retires when
+      //: either side moves - see `_compareStillApplies`.
+      r._seen = _pairMtimes(cloudId, localPath);
       _compareResults.set(_compareKey(cloudId, localPath), r);
       /* A comparison is measured where a date is inferred, so a proven
          identical pair stops being reported as out of sync. Nothing is
@@ -3433,6 +3473,9 @@ function checkRealDifference(cloudId, localPath, label) {
     run: async (opId) => {
       const r = await pyApi('compare_with_cloud', localPath, cloudId, opId);
       if (r && r.error) throw new Error(r.error);
+      //: Same stamp as the settle path - the measurement is about these two
+      //: files as they are now.
+      r._seen = _pairMtimes(cloudId, localPath);
       _compareResults.set(key, r);
       _scheduleOpRefresh();
       return r;
