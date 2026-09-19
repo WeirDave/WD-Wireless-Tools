@@ -23,6 +23,51 @@ difference between a fact and a reading:
 Priorities follow `BACKLOG.md`: **P1** blocking · **P2** wanted · **P3**
 future.
 
+## How the `[measured]` findings were run, because it is reusable
+
+The repo's Node probes slice functions out of `cloud.js` with a `cut(from, to)`
+helper and stitch the pieces together. That works, but the slices have to avoid
+each other — one test carries a comment explaining that reaching from the first
+function to the last pulls `const ICONS` in twice — and anything the slice
+misses has to be re-stubbed by hand, which is how a stub comes to invent a
+contract the real function does not have.
+
+**The whole file evaluates.** Given a DOM stub of about 120 lines built by
+parsing `web/cloud.html` for its tags and ids, plus stubs for `localStorage`,
+`navigator`, `fetch`, `matchMedia` and `WD`, `cloud.js` evaluates end to end in
+Node with every one of its ~380 functions callable and wired to each other:
+
+```js
+const src = fs.readFileSync('web/assets/js/cloud.js', 'utf8');
+(0, eval)(src + tail);        // `tail` closes over the module-scope `let`s
+```
+
+Two things make it work. `cloud.js` is a classic script, not a module, so its
+top-level `function` declarations become globals — which is also why its inline
+`onclick` handlers resolve. And its module state (`data`, `currentTab`,
+`activeFilter`, `activeLetter`) is declared with `let`, so it is *not* reachable
+through `globalThis`; appending a small setter block to the source before
+evaluating puts those setters in the same scope:
+
+```js
+;globalThis.__set = (k, v) => { switch (k) { case 'data': data = v; break; /* … */ } };
+```
+
+With that, `updateDashboard()` writes real counts into the real chips parsed
+out of the real page, and `renderLedger()` builds the real `pass`/`projPass`
+predicates — so a count and its list can be compared without the test
+supplying a predicate of its own. That last point is the gap in
+`test_cloud_a_count_matches_its_list.py`, which hand-writes the `pass` it
+passes to `renderSitesTree` and therefore cannot see a divergence between what
+a chip counts and what the list actually filters on. A7, A8 and A9 were all
+found this way.
+
+Worth knowing: `node script.js a b` puts the script path in `argv[1]`, so a
+probe that reads `process.argv[1]` as its first argument reads *itself*. The
+repo's tests use `node -e PROGRAM`, where `argv[1]` is the first real argument
+— match that, and pass `encoding="utf-8"` to `subprocess.run`, or a rendered
+arrow comes back mangled on Windows and intact in CI.
+
 ---
 
 ## Already fixed
