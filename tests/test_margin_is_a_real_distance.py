@@ -16,11 +16,23 @@ He was right twice over.
    read as 10, 20 and 33 - a clean metric progression that looks arbitrary once
    rendered in the unit the person is actually working in.
 
+The metric table was replaced in v2.103.16. Storage stays metric, because the
+.esx is metric; only the choosing is done in feet.
+
 Both are fixed by the same rule, which is what this file holds: **a preset is a
 number of feet, stored as the metres that number really is, converted to pixels
 through the plan's own metersPerUnit.** So the assertion is not "wide keeps more
 than normal" - it is "the margin measured off the saved file is the distance on
 the label, to the foot".
+
+**Prep had its own copy of the same defect, and it is why this file tests both
+pages.** Prep sent the bare ten-pixel DEFAULT_MARGIN on the wire - the `tight`
+preset by another name - so prepared plans came back cropped hard against the
+building while PlanTrim, given the same project, did not. One margin format
+crossing the wire is what closes that: the page sends a preset *name* or a
+distance marked as metres, never a pixel count, and
+`ATypedDistanceLeavesThePageAsMetres` below checks the two halves of that
+format against each other rather than each against its own idea of it.
 
 The fixture is deliberately coarse (0.5 m per pixel) so that even a 200 ft
 margin fits on the sheet and every preset can be measured without clamping.

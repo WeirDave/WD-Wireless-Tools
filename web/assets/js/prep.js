@@ -227,11 +227,6 @@
       + '&steps=' + chosenSteps().join(',')
       + '&retighten=' + ($('prepRetighten').checked ? '1' : '0');
     if ($('prepStep-trim').checked) {
-      // A preset name, the same vocabulary PlanTrim sends, resolved against the
-      // plan's own metersPerUnit at the far end so it means a real distance
-      // rather than a pixel count. Prep used to send the bare 10-pixel
-      // DEFAULT_MARGIN here, which is the `tight` preset by another name - that
-      // is why prepared plans came back cropped hard against the building.
       q += '&margin=' + encodeURIComponent(marginParam());
       if ($('prepUseBoxes').checked) q += '&useBoxes=1';
     }

@@ -117,27 +117,12 @@ FEET_PER_METRE = 3.280839895013123
 #: metres that number really is, rather than as a rounded approximation.
 METRES_PER_FOOT = 0.3048
 
-# Margin presets.  **Every one of these is a real-world distance**, converted
-# to pixels per-floor through the plan's own metersPerUnit, so a preset means
-# the same thing on the ground whatever the drawing's scale or resolution.
-#
-# The values are round numbers **in feet**, because feet is what the person
-# choosing them is working in.  They were not always: until v2.103.16 the table
-# was 3 / 6 / 10 metres, which rendered as 10, 20 and 33 ft and read as a
-# progression somebody had picked at random - "it's not scaling upward
-# correctly, but what do I know", and he was right.  Storage stays metric
-# because the .esx is metric; the choosing is done in feet.
-#
-# `tight` was worse than untidy.  It was `0`, which fell through to
-# DEFAULT_MARGIN - **ten pixels**, not a distance at all.  A pixel margin is a
-# different real-world size on every drawing, so `tight` was the one preset
-# that meant something different every time it was used.  It is 3 ft now.
 MARGIN_PRESET_FEET = {
-    "tight":       3,     # a hair's breadth, but a measurable one
-    "normal":     10,     # room for survey paths along the exterior walls
-    "wide":       20,     # some exterior RF bleed
-    "extra-wide": 35,     # generous exterior coverage
-    "parking-lot": 200,   # the parking and the approaches, for outdoor APs
+    "tight":       3,
+    "normal":     10,
+    "wide":       20,
+    "extra-wide": 35,
+    "parking-lot": 200,
 }
 #: The same presets in metres, which is what the trimmer actually works in.
 MARGIN_PRESETS = {k: round(v * METRES_PER_FOOT, 4)
