@@ -21,8 +21,10 @@ from pathlib import Path
 import requests
 
 from tools.user_dir import user_dir
+from tools import sync_state
 from tools.settings import get_destinations as _get_suite_destinations
 from tools import share_recipients
+from tools import applog
 from tools.settings import load_settings as _load_suite_settings
 from tools.settings import update_settings as _update_suite_settings
 
@@ -1272,6 +1274,10 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
 
     _STALE_TOLERANCE_S = 60
 
+    #: Read once for the whole build rather than per pair - this runs over
+    #: every project in the account.
+    _sync_points = sync_state.load()
+
     def _staleness(c, l):
         cm = c.get("mtime") or 0
         lm = l.get("mtime") or 0
@@ -1322,10 +1328,18 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
         l = unmatched_local.pop(idx)
         disp = score - 2.0 if mtype == "code" else score
         stale = _staleness(c, l)
+        #: The fourth state, which two timestamps cannot produce. `unknown`
+        #: on a pair this machine has never synced, which is most of them
+        #: the first time and is why `staleness` stays exactly as it was -
+        #: this is an extra fact on the row, not a replacement for one.
+        divergence = sync_state.verdict_for(
+            _sync_points, c.get("id"), l.get("path"),
+            c.get("mtime"), l.get("mtime"))
         matched.append({"cloud": c, "local": l, "matchType": mtype,
                         "score": round(min(disp, 1.0), 2),
                         "namesDiffer": c["name"].strip() != l["name"].strip(),
                         "staleness": stale,
+                        "divergence": divergence,
                         "differenceKind": _difference(c, l, stale)})
 
     def _resolve_pass(cands, conflicts, mtype, base):
@@ -1817,6 +1831,20 @@ def build_projects_data(api, output_dir):
               "meta": _row_meta(int(f.get("size") or 0), int(f.get("mtime") or 0))}
              for f in get_local_esx_files(output_dir)]
     mm_map, _ = manual_matches_map()
+
+    #: Drop sync points for projects that are no longer in the account.
+    #:
+    #: Safe *here* and nowhere obvious else: this listing is the whole
+    #: account. The owner filter is applied in the browser, so `cloud` holds
+    #: every project the signed-in user can see - pruning against a filtered
+    #: list would throw away good records for projects that still exist.
+    #: `prune` writes only when something actually goes, so the ordinary
+    #: refresh touches no file.
+    try:
+        sync_state.prune([c.get("id") for c in cloud if c.get("id")])
+    except Exception as e:
+        applog.note_failure("pruning sync points", e)
+
     return build_matches(cloud, local, not_matches_set(), mm_map)
 
 
@@ -2521,6 +2549,23 @@ class CloudManager:
         # should have. It is said instead, with the names, so the loss is
         # visible at the moment it happens rather than when somebody asks
         # why they cannot open it.
+        #: A replace makes the two sides identical too, so it records the
+        #: same note the pull does - under the **new** id, because this
+        #: creates a project rather than writing in place. The old entry is
+        #: left for `prune` rather than deleted here: the delete above may
+        #: have failed, and forgetting a pair that still exists would be a
+        #: fact thrown away to tidy up.
+        try:
+            src_p = Path(esx_path)
+            fs_m = int(src_p.stat().st_mtime)
+            sync_state.record(new_id, str(src_p),
+                              _parse_cloud_mtime(check.get("project") or {})
+                              or fs_m,
+                              _esx_meta(src_p, fs_m).get("internalMtime") or fs_m,
+                              direction="push")
+        except Exception as e:
+            applog.note_failure("recording the sync point", e)
+
         lost = [s for s in (old.get("sharedWith") or []) if s]
         out = {"ok": True, "newId": new_id, "oldId": cloud_project_id,
                "name": check.get("name") or old_name,
@@ -3027,6 +3072,20 @@ class CloudManager:
 
         new_fs_mtime = int(src.stat().st_mtime)
         new_meta = _esx_meta(src, new_fs_mtime)
+
+        #: The two sides are identical as of this moment, which is the only
+        #: thing worth recording. Everything downstream that wants to say
+        #: "both of you changed it" compares against this pair of numbers.
+        #: A failure to write the note must not fail the download that
+        #: already succeeded - the pair simply reads `unknown` next time,
+        #: which is where it started.
+        try:
+            sync_state.record(project_id, str(src), cloud_mtime,
+                              new_meta.get("internalMtime") or new_fs_mtime,
+                              direction="pull")
+        except Exception as e:
+            applog.note_failure("recording the sync point", e)
+
         if progress_cb:
             progress_cb(stage="done", current=100, total=100, message="Done.")
         return {

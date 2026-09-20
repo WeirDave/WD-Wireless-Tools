@@ -7245,7 +7245,7 @@ async function bulkSync(dir) {
    not is worse than the friction of being told you are not. */
 function syncEverythingPlan() {
   const down = [], up = [], upBlocked = [], inSync = [], fresh = [];
-  const downBlocked = [];
+  const downBlocked = [], diverged = [];
   const seenPair = new Set(), seenCloud = new Set();
 
   const isFile = (l) => /\.esx$/i.test(String((l && l.path) || ''));
@@ -7268,7 +7268,14 @@ function syncEverythingPlan() {
          list headed "not part of this run". */
       matchType: pr.matchType,
     };
-    if (pr.staleness === 'cloud_newer') {
+    /* Both sides moved since this machine last had them the same, which
+       two dates cannot say and a recorded sync point can. It is taken out of
+       the run entirely rather than sorted into a direction: copying either
+       way discards the other side's work, and the tool has no way to merge
+       two `.esx` files. Nothing here picks a winner. */
+    if (pr.divergence === 'both_changed') {
+      diverged.push(row);
+    } else if (pr.staleness === 'cloud_newer') {
       (PULLABLE_MATCH_TYPES.has(pr.matchType) ? down : downBlocked).push(row);
     } else if (pr.staleness === 'local_newer') {
       //: Ownership as well as match type - see the note on `mayPush`. A push
@@ -7300,7 +7307,7 @@ function syncEverythingPlan() {
   (data.localOnly || []).forEach(l => walkKids(l.children, l.name));
   if (data.orphans) (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
 
-  return { down, up, upBlocked, downBlocked, fresh, inSync };
+  return { down, up, upBlocked, downBlocked, fresh, inSync, diverged };
 }
 
 function _syncRowsHtml(rows, dir) {
@@ -7528,6 +7535,22 @@ async function syncEverything() {
       + 'guesswork — a shared site code or similar wording — so neither side '
       + 'can safely replace the other. Use <b>Confirm this pair</b> on the '
       + 'row and they join the next run.</p>';
+  }
+
+  /* Named on its own rather than folded into the blocked group, because the
+     reason and the remedy are both different. A guessed pair needs
+     confirming; this one needs him to look at two files that have both moved
+     and decide which work to keep - and the tool must not imply it can do
+     that for him. */
+  if ((plan.diverged || []).length) {
+    const n = plan.diverged.length;
+    const names = plan.diverged
+      .map(d => e(d.localName || d.cloudName || '')).join(', ');
+    body += '<p class="sub warn"><b>' + n + ' file' + (n === 1 ? '' : 's')
+      + ' changed on <em>both</em> sides since the last sync:</b> ' + names
+      + '. Copying either way would discard the other side’s work, so '
+      + (n === 1 ? 'it is' : 'they are') + ' left out of this run. Use '
+      + '<b>Check what differs</b> on the row to see what each side changed.</p>';
   }
 
   if (plan.inSync.length) {
