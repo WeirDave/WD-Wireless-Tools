@@ -1915,17 +1915,30 @@ other.
 | Setting | Where | What it does |
 | --- | --- | --- |
 | **Units (inches / metres)** | Quick Walls | Thickness is entered in inches or metres. Heights are always in feet when this is imperial |
-| **Default wall template** | Quick Walls | Which template the **Apply** button offers first |
+| **Default wall template** | Settings | Which template **Auto-apply on open** puts into a project, and which one the Quick Walls picker starts on. Ships as **None** |
 | **Auto-apply the default template on open** | Quick Walls | Applies that template as soon as a project is opened, without asking |
 | **Open the source folder after saving** | Settings | Reveals the folder in Explorer or Finder once a save finishes |
 
-The first three are on the **Template** bar above the wall list in Quick Walls:
-the template picker, **Apply**, **Save Template**, **Manage**, and the
+**Default wall template** is set on the Settings page, in the **Quick Walls**
+section, from a list of the templates you have saved. **None** is one of the
+choices and means no template is applied on its own.
+
+Until version 2.151.0 it was not chosen anywhere. It silently became whichever
+template you last pressed **Apply** on, so applying **Ekahau Default** once to
+start a project's wall list over made Ekahau Default the template every project
+opened afterwards was given, with nothing on screen saying so. Pressing
+**Apply** no longer changes it. Whatever it had become is kept, so behaviour
+does not change on upgrade — check it once if **Auto-apply on open** is
+something you use.
+
+If the saved template is later deleted, the setting keeps its name and both
+screens say it no longer exists, rather than quietly switching to another one.
+
+The other template controls stay on the **Template** bar above the wall list in
+Quick Walls: the picker, **Apply**, **Save Template**, **Manage**, and the
 **Auto-apply on open** tick box. They stay there because the choice is made
-while looking at the template it applies. **Default wall template** is not a
-control at all — it records the last template you applied, and that is the one
-**Auto-apply on open** uses. Both values are shown, read-only, in the Quick
-Walls section of the Settings page.
+while looking at the template it applies. Beside that tick box, the bar names
+the template it will apply and links to the Settings page.
 
 ### Report
 

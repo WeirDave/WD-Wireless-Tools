@@ -273,7 +273,8 @@
       "category": "preference",
       "owner": "Quick Walls",
       "section": "walls",
-      "home": "walls-tool",
+      "home": "settings",
+      "control": "sWallsDefaultTpl",
       "legacy_browser_key": "ekahau-default-template"
     },
     {

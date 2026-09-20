@@ -39,7 +39,7 @@ function slice(from, to) {
 // template getters live further down the file beside the template bar.
 const block = slice('function detectDefaultUnits()', '/* Quick Walls preferences')
             + slice('const LEGACY_UNITS_KEY', '\nfunction mToDisplay')
-            + slice('// Backed by settings.json; loaded once by loadWallsPrefs().', '\nlet _ekahauDefaults');
+            + slice('function getDefaultTemplate()', '\nlet _ekahauDefaults');
 
 globalThis.store = {};
 globalThis.localStorage = {
@@ -221,12 +221,18 @@ class WallsPrefsMigration(unittest.TestCase):
         """)
 
     def test_changing_a_preference_writes_it_to_the_settings_file(self):
+        """Driven through `toggleAutoApply`, which is the writer Quick Walls
+        still owns. It used to be driven through `setLastTemplate`, and that
+        function is gone: the default template is chosen on the Settings page
+        now, and applying a template no longer writes it. See
+        `tests/test_walls_default_template_is_chosen.py`."""
         self.run_block("""
           store = {}; saved.walls = {};
-          setLastTemplate('Site B');
+          document.getElementById = () => ({ checked: true });
+          toggleAutoApply();
           setTimeout(() => {
-            check('template reached the settings file',
-                  saved.walls.default_template === 'Site B');
+            check('auto-apply reached the settings file',
+                  saved.walls.auto_apply_template === true);
             check('nothing was written to the browser',
                   Object.keys(store).length === 0);
             done();

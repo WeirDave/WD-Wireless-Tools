@@ -159,7 +159,11 @@ class TheOverviewReportsRealValues(unittest.TestCase):
 
     def test_a_setting_whose_control_is_elsewhere_says_where(self):
         walls = {r["label"]: r for r in self.rows()["walls"]}
-        self.assertEqual(walls["Default wall template"]["where"],
+        # "Default wall template" was this test's example until v2.151.0 gave
+        # it a control on the Settings page; these two are still Quick Walls'.
+        self.assertEqual(walls["Auto-apply the default template on open"]["where"],
+                         "Changed in Quick Walls.")
+        self.assertEqual(walls["Units (inches / metres)"]["where"],
                          "Changed in Quick Walls.")
         pt = {r["label"]: r for r in self.rows()["plantrim"]}
         self.assertEqual(pt["Trim margin (how much room to leave around the building)"]["where"], "Changed in PlanTrim.")
@@ -171,6 +175,10 @@ class TheOverviewReportsRealValues(unittest.TestCase):
         self.assertIsNone(rows["Client / company"]["where"])
         cloud = {r["label"]: r for r in self.rows()["cloud"]}
         self.assertIsNone(cloud["Default view (All / Mine / Others)"]["where"])
+        walls = {r["label"]: r for r in self.rows()["walls"]}
+        self.assertIsNone(walls["Default wall template"]["where"],
+                          "this one is set on the Settings page now, so "
+                          "sending him to Quick Walls for it is wrong")
 
     def test_a_family_of_settings_reports_how_many_are_saved(self):
         sq = {r["label"]: r for r in self.rows()["squirrel"]}

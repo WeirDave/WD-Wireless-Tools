@@ -1330,14 +1330,17 @@ function toggleHelpMenu(e) {
   WD.toggleMenu(e, 'helpMenu');
 }
 
-// Backed by settings.json; loaded once by loadWallsPrefs().
+/* Backed by settings.json; loaded once by loadWallsPrefs(), and set on the
+   Settings page under Quick Walls. Read here, never written here.
+
+   `setLastTemplate()` used to write it from applySelectedTemplate(), which
+   made the default whatever was last applied. That is a side effect nobody
+   asked for and nothing reported: pressing Apply on Ekahau Default once, to
+   start one project's wall list over, made Ekahau Default the template
+   Auto-apply put into every project opened afterwards. There was no control
+   anywhere to see it or put it back. */
 function getDefaultTemplate() {
   return _defaultTemplate || null;
-}
-function setLastTemplate(name) {
-  _defaultTemplate = name || null;
-  _persistWallsPref({ default_template: name || '' });
-  refreshTemplateBar();
 }
 
 function getAutoApply() {
@@ -1416,10 +1419,36 @@ async function refreshTemplateBar() {
   sel.innerHTML = html;
 
   document.getElementById('autoApplyCheck').checked = getAutoApply();
+  renderAutoApplyNote(tpls);
 
   const selected = sel.value;
   const applyBtn = document.getElementById('tplApplyBtn');
   applyBtn.disabled = !selected || selected === '';
+}
+
+/* Auto-apply puts a template into every project as it is opened, and which
+   template that is now lives on the Settings page. Naming it here is the
+   difference between a tick box whose effect can be read off the screen and
+   one whose effect has to be remembered - and the state worth saying out loud
+   is the third one: a default naming a template that has since been deleted,
+   where the tick box is on and nothing happens. */
+function renderAutoApplyNote(tpls) {
+  const host = document.getElementById('autoApplyNote');
+  if (!host) return;
+  const def = getDefaultTemplate();
+  const where = ' · <a href="/settings#walls">Settings</a>';
+  host.classList.remove('is-missing');
+  if (!def) {
+    host.innerHTML = 'No default template' + where;
+    return;
+  }
+  const known = (tpls || []).some(t => t && t.name === def) || def === 'Ekahau Defaults';
+  if (!known) {
+    host.classList.add('is-missing');
+    host.innerHTML = 'Default “' + esc(def) + '” no longer exists' + where;
+    return;
+  }
+  host.innerHTML = 'Applies “' + esc(def) + '”' + where;
 }
 
 // What the toast says about types left as Ekahau ships them. Named rather than
@@ -1469,7 +1498,8 @@ async function applySelectedTemplate() {
   showToast(parts.length
     ? `Applied "${name}" — ${parts.join(', ')}; nothing removed (${wallTypes.length} types)`
     : `"${name}" is already in this project`, 'success');
-  setLastTemplate(name);
+  // Applying a template to this project says nothing about what the next
+  // project should get. The default is set on the Settings page.
 }
 
 async function tryAutoApply() {

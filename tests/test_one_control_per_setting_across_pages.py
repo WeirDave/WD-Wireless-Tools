@@ -139,8 +139,11 @@ class SavingKeepsWhatItCannotSee(unittest.TestCase):
         Object.keys(defaults).forEach(k => { if (!(k in values)) values[k] = defaults[k]; });
         const ticked = JSON.parse(process.argv[5] || '[]');
         global.document = {
+          // `options` is read by the default-template field, which falls back
+          // to the saved value when its list has not been fetched yet.
           getElementById: (id) => ({ value: values[id] || '',
-                                     checked: ticked.indexOf(id) > -1 }),
+                                     checked: ticked.indexOf(id) > -1,
+                                     options: { length: values[id] ? 1 : 0 } }),
           querySelectorAll: (sel) => {
             if (sel.indexOf('mergeRule') > -1) {
               return ['ask', 'newer', 'both', 'skip'].map(v =>

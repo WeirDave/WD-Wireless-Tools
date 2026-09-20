@@ -14,6 +14,7 @@
       populate();
       checkCloud();
       loadOverviews();
+      loadWallTemplates();
       openHashSection();
     });
   }
@@ -277,7 +278,18 @@
         live_interval_ms: parseInt(document.getElementById('sLiveMs').value, 10) || 30000,
       },
       walls: {
-        reveal_source_after_save: document.getElementById('sWallsReveal').checked
+        reveal_source_after_save: document.getElementById('sWallsReveal').checked,
+        /* Fall back to what is saved rather than to empty. The template list
+           is fetched separately, so a slow or failed fetch leaves this select
+           with nothing in it - and writing '' then would turn his default off
+           for him. Same shape as the merge rule in v2.149.0. */
+        default_template: (function () {
+          var el = document.getElementById('sWallsDefaultTpl');
+          if (!el || !el.options.length) {
+            return (settings.walls || {}).default_template || '';
+          }
+          return el.value;
+        }())
       },
       report: {
         client_name: document.getElementById('sRepClient').value.trim(),
@@ -292,6 +304,7 @@
       if (r.ok) {
         settings = r.settings;
         loadOverviews();          // the values below the controls move too
+        loadWallTemplates();      // and the template list, in case one changed
         WD.toast('Settings saved', 'ok');
       } else {
         WD.toast(r.error || 'Save failed', 'error');
@@ -602,6 +615,68 @@
       .then(function (r) { return r.json(); })
       .then(renderOverviews)
       .catch(function () {});
+  }
+
+
+  /* ── The default wall template ────────────────────────────────────────────
+     Quick Walls' `getDefaultTemplate()` decides two things: which option its
+     picker starts on, and - the one that matters - which template
+     `Auto-apply on open` puts into every project as it is opened.
+
+     Nothing chose it. `applySelectedTemplate()` called `setLastTemplate()`, so
+     the value was whatever template was last applied: pressing Apply on
+     Ekahau Default once, to reset one project's wall list, quietly made
+     Ekahau Default the template every project opened afterwards was given.
+     Nothing said so, and there was no control anywhere to put it back.
+
+     This is that control, and Apply no longer writes the value, so there is
+     one writer rather than two.
+
+     A default naming a template that has since been deleted is kept and shown
+     as missing rather than silently replaced. Auto-apply already does nothing
+     in that state; saying so is the difference between a setting that looks
+     wrong and a setting that explains itself. */
+  function renderDefaultTemplateChoices(templates, saved) {
+    var sel = document.getElementById('sWallsDefaultTpl');
+    if (!sel) return;
+    var names = (templates || []).map(function (t) { return t && t.name; })
+                                 .filter(Boolean);
+    var html = '<option value="">None — do not apply a template on its own</option>';
+    names.forEach(function (n) {
+      html += '<option value="' + WD.escAttr(n) + '">' + WD.esc(n) + '</option>';
+    });
+    // The saved value survives a template being renamed or deleted; it is his
+    // setting, not ours to clear on his behalf.
+    var missing = saved && names.indexOf(saved) === -1;
+    if (missing) {
+      html += '<option value="' + WD.escAttr(saved) + '">' + WD.esc(saved)
+            + ' — no longer in your templates</option>';
+    }
+    sel.innerHTML = html;
+    sel.value = saved || '';
+
+    var note = document.getElementById('sWallsDefaultTplMissing');
+    if (note) {
+      note.hidden = !missing;
+      if (missing) {
+        note.textContent = 'Quick Walls has no template called “' + saved
+          + '” any more, so Auto-apply on open does nothing. Pick one that '
+          + 'exists, or None.';
+      }
+    }
+  }
+
+  function loadWallTemplates() {
+    // Its own failure, not the page's: every control above this one works
+    // whether or not the template store answers.
+    return API('templates/scan', {})
+      .then(function (r) {
+        renderDefaultTemplateChoices((r && r.templates) || [],
+                                     (settings.walls || {}).default_template || '');
+      })
+      .catch(function () {
+        renderDefaultTemplateChoices([], (settings.walls || {}).default_template || '');
+      });
   }
 
   init();

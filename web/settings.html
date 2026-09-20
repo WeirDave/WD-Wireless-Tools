@@ -48,6 +48,9 @@
 .s-ov-row .s-ov-val.is-empty { color: var(--text-3); font-family: inherit; font-style: italic; }
 .s-ov-where { flex: 0 0 100%; color: var(--text-3); font-size: 11.5px; }
 
+/* A hint that is reporting a problem rather than explaining a control. */
+.s-warn { color: var(--warn, #e0a33a); }
+
 .s-section {
   border: 1px solid var(--border); border-radius: 8px;
   margin-bottom: 12px; overflow: hidden;
@@ -375,8 +378,22 @@
           has been saved, which is otherwise awkward to find again.</div>
       </div>
       <div class="s-field">
-        <div class="hint">The wall template controls stay in Quick Walls, on the
-          <b>Template</b> bar above the wall list, because the decision is made while
+        <label for="sWallsDefaultTpl">Default wall template</label>
+        <select id="sWallsDefaultTpl">
+          <option value="">None &mdash; do not apply a template on its own</option>
+        </select>
+        <div class="hint mt-4 s-warn" id="sWallsDefaultTplMissing" hidden></div>
+        <div class="hint mt-4" id="sWallsDefaultTplNote">This is the template
+          <b>Auto-apply on open</b> puts into a project as soon as you open one, and the
+          one the picker in Quick Walls starts on. Until now it was not chosen at all: it
+          silently became whichever template you last pressed <b>Apply</b> on, so
+          applying Ekahau Default once to reset a project made that the template every
+          later project was given. Pressing <b>Apply</b> no longer changes it &mdash;
+          this is the only place it is set.</div>
+      </div>
+      <div class="s-field">
+        <div class="hint">The rest of the wall template controls stay in Quick Walls, on
+          the <b>Template</b> bar above the wall list, because the decision is made while
           looking at the template: the picker, <b>Apply</b>, <b>Save Template</b>,
           <b>Manage</b> and the <b>Auto-apply on open</b> tick box. What is saved of them
           is listed below.</div>
