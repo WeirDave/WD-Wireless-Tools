@@ -6483,7 +6483,24 @@ function renderOwnerFilterNotice() {
   if (currentTab === 'duplicates') { el.hidden = true; return; }
   const cur = ownerFilter();
 
-  /* **All** is the state worth explaining now, not Mine.
+  /* How long the current choice lasts, in one place.
+
+     The toolbar toggle is in-memory by design: it changes what is on screen
+     until the page is reloaded, and only Settings decides what the list
+     opens on. That is a real subtlety and every state has to say it, because
+     a reload is also what an upgrade looks like.
+
+     **All did not say it.** The branch below returned early with the
+     ownership warning and nothing about impermanence, so switching to All,
+     restarting and landing back on Mine looked exactly like a setting that
+     would not save. Nothing on screen had ever said it was temporary. */
+  const where = _ownerFilterOverridden
+    ? 'Just for this visit — reopening Cloud Manager goes back to “'
+      + OWNER_FILTER_LABEL[_ownerFilterDefault] + '”.'
+    : 'This is your saved default, so it will be on again next time. '
+      + 'Change it in Settings.';
+
+  /* **All** is the state worth explaining, not Mine.
 
      Mine is the shipped default, so a banner explaining it would fire on
      every load of the ordinary case - which is how a notice stops being
@@ -6501,7 +6518,12 @@ function renderOwnerFilterNotice() {
           : '<b>Showing every owner.</b> ')
       + 'Projects owned by other people are listed; renaming, deleting, '
       + 'assigning, sharing and replacing are unavailable on those, because '
-      + 'Ekahau only lets the owner change a project.</span>'
+      + 'Ekahau only lets the owner change a project. '
+      /* Not when the page forced All on itself - there it will be forced
+         again on the next load, so promising a return to the default would
+         be false, and `_ownerFilterForcedReason` has already explained. */
+      + (_ownerFilterForcedReason ? '' : e(where))
+      + '</span>'
       + '<button class="btn btn-secondary own-note-btn" onclick="setOwnerFilterUI(\'mine\')">'
       + 'Show only mine</button>';
     return;
@@ -6514,12 +6536,6 @@ function renderOwnerFilterNotice() {
     el.innerHTML = '';
     return;
   }
-
-  const where = _ownerFilterOverridden
-    ? 'Just for this visit — reopening Cloud Manager goes back to “'
-      + OWNER_FILTER_LABEL[_ownerFilterDefault] + '”.'
-    : 'This is your saved default, so it will be on again next time. '
-      + 'Change it in Settings.';
 
   el.hidden = false;
   el.className = 'owner-notice';

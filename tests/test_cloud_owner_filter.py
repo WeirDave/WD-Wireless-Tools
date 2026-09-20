@@ -275,6 +275,64 @@ class OwnerFilterBehaviour(unittest.TestCase):
         """)
 
     @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_every_notice_says_how_long_the_choice_lasts(self):
+        """The toolbar toggle is in-memory and a reload resets it - which is
+        also what an upgrade looks like.
+
+        `All` was the one state that never said so: its branch returned early
+        with the ownership warning and nothing about impermanence. Switching
+        to All, restarting and landing back on Mine was therefore
+        indistinguishable from a setting that would not save, and cost an
+        afternoon of looking for a persistence bug that does not exist.
+
+        Asserted over every state that shows a notice rather than over the
+        branch that was wrong, because the next branch added here will have
+        the same obligation.
+        """
+        self.run_block("""
+          apiReply = () => Promise.resolve(
+            { ok: true, settings: { cloud: { default_owner_filter: 'mine' } } });
+          loadDefaultOwnerFilter().then(() => {
+            ['all', 'others', 'mine'].forEach((f) => {
+              setOwnerFilterUI(f);
+              if (notice.hidden) return;          // Mine at its default says nothing
+              check('the ' + f + ' notice never says how long it lasts',
+                    /this visit|on again next time/i.test(notice.innerHTML));
+            });
+            done();
+          });
+        """)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_a_filter_the_page_forced_does_not_promise_to_go_back(self):
+        """When the listing comes back with no owner, the page turns the
+        filter off itself. It will do the same on the next load, so telling
+        him it reverts to his default would be false - and that case already
+        carries its own explanation."""
+        self.run_block("""
+          apiReply = () => Promise.resolve(
+            { ok: true, settings: { cloud: { default_owner_filter: 'mine' } } });
+          loadDefaultOwnerFilter().then(() => {
+            globalThis.data = { currentUser: '', matched: [] };
+            reconcileOwnerFilterWithData();
+            syncOwnerToggle();
+            check('the forced state did not explain itself',
+                  notice.hidden === false);
+            check('it lost the reason the filter was taken away',
+                  /did not say which account/.test(notice.innerHTML));
+            /* Neither half of the how-long sentence belongs here. "Just for
+               this visit" promises a return that will not happen, and "this
+               is your saved default" is simply false - All is not his
+               default, the page chose it. */
+            check('it promised to go back to a default it cannot go back to',
+                  /this visit/i.test(notice.innerHTML) === false);
+            check('it called All his saved default, which it is not',
+                  /saved default/i.test(notice.innerHTML) === false);
+            done();
+          });
+        """)
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
     def test_an_empty_list_names_the_filter_that_emptied_it(self):
         self.run_block("""
           apiReply = () => Promise.resolve(
