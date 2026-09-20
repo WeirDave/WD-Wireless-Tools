@@ -143,7 +143,7 @@ typed destination is where the file goes. The audit has the detail per item,
 including the one deliberate non-change: the chips count the account rather
 than the search, and say so above the list.
 
-**And the twelve P3 items are closed, in v2.144.0** — two commits, the
+**And the twelve P3 items are closed, in v2.145.0** — two commits, the
 matching engine and the client. The matcher reads a three-digit building
 number as the number rather than as the letter "g", stops reading years as
 street numbers, will not pair two projects on a shared site code alone, gives
