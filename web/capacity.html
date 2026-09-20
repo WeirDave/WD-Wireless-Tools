@@ -197,7 +197,7 @@
         below matches what you intended before saving.
       </p>
       <div id="capDerived"></div>
-      <div class="cap-row" style="margin-top:12px">
+      <div class="cap-row mt-12">
         <label for="capName">Save as</label>
         <input type="text" id="capName" class="cap-input cap-input--name" placeholder="e.g. Office, Wi-Fi 6E">
         <button class="btn btn-primary" onclick="capSave()">Save template</button>
@@ -207,12 +207,12 @@
     <div class="cap-card">
       <div class="cap-step">3 &mdash; Apply a template to this project</div>
       <div class="cap-tpl-list" id="capTemplates"></div>
-      <div class="cap-row" style="margin-top:12px">
+      <div class="cap-row mt-12">
         <label for="capHeadcount">This building is for</label>
         <input type="number" id="capHeadcount" class="cap-input cap-input--num" min="1" step="1" value="200"
                oninput="capPlan()">
         <label for="capHeadcount">people</label>
-        <label style="display:flex;align-items:center;gap:6px;margin-left:10px">
+        <label class="check-inline">
           <input type="checkbox" id="capReplace" onchange="capPlan()">
           <span>Replace requirement areas that already exist</span>
         </label>
@@ -234,7 +234,7 @@
       <div id="capResult"></div>
     </div>
 
-    <p class="cap-hint" style="text-align:center">
+    <p class="cap-hint text-center">
       Your project file is never written to. Applying builds a new copy and downloads it,
       so keeping it is your decision.
     </p>

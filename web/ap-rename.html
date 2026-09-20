@@ -570,8 +570,8 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
           </div>
 
           <div class="ar-row" id="arSpacingRow" hidden>
-            <div style="flex:1">
-              <div class="ar-field-lbl">Line Spacing <span style="opacity:.5">(px)</span></div>
+            <div class="flex-1">
+              <div class="ar-field-lbl">Line Spacing <span class="dim">(px)</span></div>
               <input type="number" id="arSpacing" value="" placeholder="Auto" min="10" step="10">
             </div>
           </div>
@@ -582,7 +582,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
           <summary>
             <span class="ar-templates-arrow">&#9656;</span> Templates &amp; Defaults
           </summary>
-          <div class="ar-preset-bar" style="margin-top:6px">
+          <div class="ar-preset-bar mt-6">
             <select id="arTemplateSelect"><option value="">&#8212; Load template &#8212;</option></select>
             <button onclick="arSaveTemplate()" title="Save current settings as a template">Save</button>
             <button onclick="arDeleteTemplate()" title="Delete selected template">Del</button>
