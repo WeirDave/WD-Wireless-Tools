@@ -134,25 +134,32 @@ class StickyWiring(unittest.TestCase):
                       "without this the saved defaults are stored and never used")
 
     def test_a_sidebar_change_is_not_a_settings_write(self):
-        """A stray click must not become permanent. Units is the one exception
-        and predates this - it is a person-level preference, not a document
-        one."""
+        """A stray click must not become permanent - and as of v2.152.0 that
+        applies to every option without exception.
+
+        Units and section size used to be the exception: they are person-level
+        preferences, so `setOpt` wrote them straight to `settings.json`. That
+        made them the one thing in this panel a single report could change for
+        every later report, silently - the same implicit write that made the
+        default wall template whatever was last applied. Both have controls on
+        the Settings page now, so this panel writes nothing at all.
+
+        `PERSON_LEVEL_OPTS` still exists and still does the other half of its
+        job: keeping those two out of the per-report store.
+        """
         start = self.js.index("window.setOpt = function (cb)")
         body = self.js[start:self.js.index("\n  };", start)]
         self.assertNotIn("settings/update", body,
                          "setOpt must not build its own settings envelope")
-        # A sidebar control may write straight to settings only if it is a
-        # person-level preference - one value that follows the person rather
-        # than belonging to this document. Those are declared in one list, and
-        # every save here must be guarded by one of them.
+        self.assertEqual(
+            body.count("pushSettings("), 0,
+            "a sidebar option is writing itself to settings; configuring one "
+            "report must not change the starting point for the next")
         declared = re.search(r"var PERSON_LEVEL_OPTS = \[([^\]]*)\]", self.js)
         self.assertIsNotNone(declared, "person-level options must be declared")
-        ids = re.findall(r"'([^']+)'", declared.group(1))
-        self.assertEqual(body.count("pushSettings("), len(ids),
-                         "a document-level option is writing itself to settings")
-        for opt_id in ids:
-            with self.subTest(option=opt_id):
-                self.assertIn("id === '" + opt_id + "'", body)
+        self.assertTrue(re.findall(r"'([^']+)'", declared.group(1)),
+                        "the list emptied; the per-report store would then "
+                        "gain a second copy of the suite settings")
 
     def test_a_person_level_option_is_not_also_stored_per_report(self):
         """The rule the registry exists for: one setting, one store. Units and

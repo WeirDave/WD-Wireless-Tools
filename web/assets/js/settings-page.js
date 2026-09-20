@@ -79,6 +79,10 @@
     document.getElementById('sRepRevision').value = rp.revision || '';
     document.getElementById('sRepIncludeRev').checked =
       rp.include_revision_in_filename !== false;
+    document.getElementById('sRepUnits').value =
+      rp.units === 'meters' ? 'meters' : 'feet';
+    document.getElementById('sRepSegGranularity').value =
+      rp.segment_granularity || 'standard';
   }
 
   var _subfolders = [];
@@ -296,7 +300,11 @@
         prepared_by: document.getElementById('sRepPreparedBy').value.trim(),
         project_ref: document.getElementById('sRepProjectRef').value.trim(),
         revision: document.getElementById('sRepRevision').value.trim(),
-        include_revision_in_filename: document.getElementById('sRepIncludeRev').checked
+        include_revision_in_filename: document.getElementById('sRepIncludeRev').checked,
+        units: document.getElementById('sRepUnits').value === 'meters'
+          ? 'meters' : 'feet',
+        segment_granularity: document.getElementById('sRepSegGranularity').value
+          || 'standard'
       }
     };
 
@@ -678,6 +686,7 @@
         renderDefaultTemplateChoices([], (settings.walls || {}).default_template || '');
       });
   }
+
 
   init();
 })();

@@ -685,7 +685,7 @@
       if (PERSON_LEVEL_OPTS.indexOf(opt.id) !== -1) return;
       if (opt.type === 'text') return;
       out[opt.id] = (opt.id in currentOpts) ? currentOpts[opt.id]
-                  : (opt.type === 'select' ? (opt.default || '') : !!opt.default);
+                  : optStartValue(opt);
     });
     return out;
   }
@@ -698,11 +698,35 @@
     });
   }
 
+  /* Units and section size are suite settings with a per-report override, so
+     "what this option starts at" is the setting rather than the value shipped
+     in the option definition. Everything else starts at its own default.
+
+     This existed implicitly and only by accident: `setOpt` wrote the suite
+     setting at the same time as the per-report value, so the two agreed for
+     the rest of the session. With that write gone, a panel reading the
+     shipped default would have shown "Feet" while the report rendered in
+     metres - the render path has always used the setting (see `buildOpts`). */
+  function suitePrefFor(id) {
+    if (id === 'units') return unitsPref;
+    if (id === 'segGranularity') return segGranularityPref;
+    return undefined;
+  }
+  function optStartValue(opt) {
+    // `suitePrefFor` is the whole gate. A separate list of which ids are
+    // suite-backed was tried and removed: it agreed with this function by
+    // hand, so the two could disagree, and adding an id to it changed nothing
+    // - which a mutation proved by passing.
+    var pref = suitePrefFor(opt.id);
+    if (pref !== undefined && pref !== null && pref !== '') return pref;
+    return opt.type === 'select' ? (opt.default || '') : !!opt.default;
+  }
+
   function shippedDefaultFor(id) {
     var r = currentReport();
     var opt = (r.sidebar || []).filter(function (o) { return o.id === id; })[0];
     if (!opt) return undefined;
-    return opt.type === 'select' ? (opt.default || '') : !!opt.default;
+    return optStartValue(opt);
   }
 
   window.saveReportOptionDefaults = function () {
@@ -1723,7 +1747,15 @@
       // Saved options are inherited, not overrides, so optOverrides stays
       // empty - the card footer is what says they came from settings.
       var saved = reportOptionDefaults(id);
-      Object.keys(saved).forEach(function (k) { currentOpts[k] = saved[k]; });
+      Object.keys(saved).forEach(function (k) {
+        // `collectSidebarValues` stops these two being written here, but a
+        // settings file from before that guard can still hold them - and a
+        // stored copy that is read is a second store however it got there.
+        // Skipping them on the way in is what makes "one copy" true of the
+        // data rather than only of the code that writes it.
+        if (PERSON_LEVEL_OPTS.indexOf(k) !== -1) return;
+        currentOpts[k] = saved[k];
+      });
     }
     templateConfirmed = true;
     configureDirty = true;
@@ -1795,7 +1827,7 @@
         + '</div>';
     }
     if (opt.type === 'select') {
-      var selVal = (opt.id in currentOpts) ? currentOpts[opt.id] : (opt.default || '');
+      var selVal = (opt.id in currentOpts) ? currentOpts[opt.id] : optStartValue(opt);
       return '<div class="rep-check with-desc">'
         + '<span class="rep-check-body">'
         +   '<label class="rep-check-label" for="opt-' + WD.escAttr(opt.id) + '">' + WD.esc(opt.label) + '</label>'
@@ -1924,23 +1956,12 @@
     if (optType === 'number') {
       currentOpts[id] = cb.value === '' ? '' : parseInt(cb.value, 10);
     } else if (optType === 'select') {
+      /* Just this report. Units and section size used to write the suite-wide
+         preference from here as well, so switching one report to metres made
+         metres the starting point for every report afterwards - the same
+         implicit write that made the default wall template whatever was last
+         applied. Both are set on the Settings page now, under Report. */
       currentOpts[id] = cb.value;
-      if (id === 'segGranularity') {
-        segGranularityPref = cb.value;
-        if (settingsAvailable) {
-          pushSettings({ segment_granularity: cb.value }).catch(function () {});
-        }
-      }
-      if (id === 'units') {
-        unitsPref = cb.value;
-        // Best effort: a report still renders correctly if this never lands.
-        // Through pushSettings so the envelope is built in exactly one place -
-        // the second hand-built one in this file dropped page_orient on every
-        // save for three releases without anything reporting a failure.
-        if (settingsAvailable) {
-          pushSettings({ units: cb.value }).catch(function () {});
-        }
-      }
     } else if (optType === 'text') {
       currentOpts[id] = cb.value;
       if (SETTING_IDS.indexOf(id) !== -1) {

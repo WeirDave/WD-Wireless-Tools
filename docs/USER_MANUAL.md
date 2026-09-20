@@ -1946,8 +1946,8 @@ the template it will apply and links to the Settings page.
 | --- | --- | --- |
 | **Client / company**, **Prepared by**, **Project reference**, **Revision** | Settings | Printed on the cover and in the footer. These are the values every report starts from |
 | **Include the revision in the saved file name** | Settings | Whether the saved PDF is named `Report - Type - v2.0 - Site` or `Report - Type - Site`. On by default |
-| **Units (feet / metres)** | Report | How lengths are written. The `.esx` always stores metres; this changes only the report |
-| **Section size on large floors** | Report | How much ground one section sheet covers when a large floor is split. Follows you, not the document |
+| **Measurement units** | Settings | How lengths are written. The `.esx` always stores metres; this changes only the report. Ships as **Feet** |
+| **Section size on large floors** | Settings | How much ground one section sheet covers when a large floor is split. Ships as **Standard** |
 
 The first five are in the **Report** section of the Settings page. They used to
 be in a window inside Report itself; a single report can still be given its own
@@ -1958,6 +1958,21 @@ What is still edited in Report is the **cover image** and the file-name
 preview, both under **Cover image…** above the report list — the preview names
 the project that is open, which the Settings page cannot know. The **⚙ Report
 settings…** button beside it opens the Settings page at the Report section.
+
+**Measurement units** and **Section size on large floors** are in the
+**Report** section of the Settings page, below the four above. They are the
+starting point for every report, and Report's **Configure** step can still be
+set to something else for one report.
+
+Until version 2.152.0 changing either in **Configure** silently changed the
+setting as well, so switching a single report to metres made metres the
+starting point for every report after it. It does not any more. Whatever the
+setting had become is kept, so nothing changes on upgrade.
+
+**Save these as my defaults** in a report's options panel does not include
+these two. It saves the options that belong to that kind of report; units and
+section size follow you, so there is one copy of each and it is on the Settings
+page.
 
 Everything else in a report's options panel is remembered **per report type**
 when you press **Save these as my defaults** — see *Settings that stay set*.

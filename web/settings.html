@@ -354,6 +354,34 @@
           work, so the effect is visible there rather than described here.</div>
       </div>
       <div class="s-field">
+        <label for="sRepUnits">Measurement units</label>
+        <select id="sRepUnits">
+          <option value="feet">Feet</option>
+          <option value="meters">Metres</option>
+        </select>
+        <div class="hint mt-4">How heights and distances are written. An <code>.esx</code>
+          always stores metres, so this is a display choice and does not change the
+          project.</div>
+      </div>
+      <div class="s-field">
+        <label for="sRepSegGranularity">Section size on large floors</label>
+        <select id="sRepSegGranularity">
+          <option value="fine">More detail &mdash; smaller sections</option>
+          <option value="standard">Standard</option>
+          <option value="coarse">Fewer pages &mdash; larger sections</option>
+          <option value="coarsest">Fewest pages &mdash; largest sections</option>
+        </select>
+        <div class="hint mt-4">How much ground one section sheet covers when a large floor
+          is split across several. Ships as <b>Standard</b>.</div>
+      </div>
+      <div class="s-field">
+        <div class="hint">Both are the starting point for every report. Changing either in
+          Report's <b>Configure</b> step now affects that one report and nothing else
+          &mdash; until v2.152.0 it quietly changed the setting here as well, so
+          switching a single report to metres made metres the default for every report
+          afterwards. There is one copy of each, here.</div>
+      </div>
+      <div class="s-field">
         <div class="hint">The report <b>cover image</b> is still chosen in Report itself &mdash;
           it is a picture rather than a preference. Open Report and use
           <b>Cover image&hellip;</b> above the report list. That panel also previews the

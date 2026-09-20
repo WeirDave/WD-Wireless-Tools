@@ -239,7 +239,8 @@
       "category": "preference",
       "owner": "Report",
       "section": "report",
-      "home": "report-tool"
+      "home": "settings",
+      "control": "sRepUnits"
     },
     {
       "key": "report.segment_granularity",
@@ -247,7 +248,8 @@
       "category": "preference",
       "owner": "Report",
       "section": "report",
-      "home": "report-tool"
+      "home": "settings",
+      "control": "sRepSegGranularity"
     },
     {
       "key": "walls.reveal_source_after_save",

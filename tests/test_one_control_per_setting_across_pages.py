@@ -283,6 +283,7 @@ class ReportDefaultsSaveFromTheirNewHome(unittest.TestCase):
           querySelectorAll: () => { const a = []; a.forEach = Array.prototype.forEach; return a; },
         };
         const renderSubfolders = () => {}, renderCustomDests = () => {};
+        const renderReportOverrideNote = () => {};
         eval(src.slice(a, b));
         populate();
         console.log(JSON.stringify({ values: values, checked: checked }));
