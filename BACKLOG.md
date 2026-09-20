@@ -409,6 +409,57 @@ Two things came out of the work that the item did not ask for:
   erroring, and a loss that leaves a file which opens and looks right is the
   worst shape a loss can take.
 
+### Suite-wide
+
+#### 8. P2 — 831 lines of CSS still live in eight pages rather than the stylesheet
+
+`style="..."` attributes were the small half of this and are dealt with: ten of
+the fifteen moved to utility classes in v2.146.1. The real remainder is eight
+embedded `<style>` blocks — 463 selectors, 831 lines — in `ap-rename.html`,
+`capacity.html`, `plantrim.html`, `prep.html`, `settings.html`, `setup.html`,
+`walls.html` and `pages/landing.html`.
+
+Measured rather than assumed, because the obvious fear turned out not to be the
+real one. Only **four** selectors collide with `wd-tools.css` (`html`,
+`body.wd-resizing`, `body.wd-resizing *`, `body.tool-plantrim`), so the move is
+more tractable than its size suggests.
+
+**The trap is elsewhere, and it is the reason this entry exists.** Eleven
+selectors are defined in *both* `settings.html` and `setup.html`, and six of
+them have **drifted — deliberately**. Setup is the first-run wizard and is
+scaled up throughout: larger type, more padding, bigger hit areas. Merging the
+two into one stylesheet rule, which is exactly what "move the CSS out of the
+pages" invites, silently shrinks Setup or inflates Settings.
+
+| selector | Settings | Setup |
+|---|---|---|
+| `.cloud-status` | gap 10px, padding 10px 12px, radius 6px | gap 12px, padding 14px 18px, radius 8px |
+| `.cloud-status .dot` | 8px | 10px |
+| `.sf-item` | gap 8px, padding 8px 10px, radius 6px | gap 10px, padding 10px 14px, radius 8px |
+| `.sf-item input[type="text"]` | padding 6px 8px, radius 4px, 13px | padding 10px 12px, radius 6px, 15px |
+| `.sf-handle` | 16px | 20px |
+| `.sf-remove` | 16px, padding 2px 4px | 20px, padding 4px 6px |
+
+The other five shared selectors are byte-identical and can merge freely. The six
+above need page-scoped selectors or distinct names — they are two components
+that happen to share a spelling, not one component defined twice.
+
+**Two more things this pass has to respect.** An inline `style` attribute
+outranks every class selector, so one may be the only thing beating a
+higher-specificity page rule: `ap-rename.html`'s `flex:0 0 100px` sits under
+`.tool-aprename .ar-row > *` at (0,0,2,1) and broke when it was moved to a
+(0,0,1,0) utility. Three `margin-bottom:0` on `.prep-row` and one `margin-top`
+on `.lp-sub` are overridden by their own page's block for the same reason, and
+are the four of the original fifteen still in place. And an embedded block wins
+ties against the linked stylesheet on document order alone, so moving a rule
+into `wd-tools.css` can flip which one applies even with no selector change.
+
+**The check that catches all of it** is not a screenshot comparison. Run a
+server on the baseline commit and one on the change, and compare
+`getComputedStyle` for every element on every page at 1920 and 1366, index
+aligned — the DOM shape is unchanged, so indices line up. The `ar-row` breakage
+above was two pixels in a full-page diff and unmissable in the computed styles.
+
 ---
 
 ## Awaiting a decision, not work
