@@ -48,6 +48,16 @@ EXPORT_FILES = (
     # exactly the small, annoying loss this export exists to prevent - and
     # because it is his own list, in a file he makes deliberately and keeps.
     "share_recipients.json",
+    # Rename's two, and they were the only user-made files this export did not
+    # carry. `site_directory.json` is a CSV of sites imported by hand;
+    # `rename_profiles.json` is the set of naming formats saved off the back of
+    # it. Both are declared in the settings registry under the `rename.` prefix
+    # and both are work, not machine state - so a wipe took them and an export
+    # could not bring them back. Found by listing every file written under the
+    # user directory and comparing it against what the bundle actually held,
+    # rather than by anybody noticing they were gone.
+    "site_directory.json",
+    "rename_profiles.json",
 )
 EXPORT_DIRS = ("templates", "capacity", "report")
 

@@ -146,6 +146,66 @@ class TheRoundTripReturnsEveryValue(Harness):
                                    "Glass": "#44AA99"})
 
 
+class EveryUserMadeFileIsCarried(Harness):
+    """The export is only a rescue if it holds everything a wipe would take.
+
+    Two files were missing for as long as the export existed - Rename's
+    imported site directory and the naming profiles saved off the back of it.
+    Both are work he did by hand, both are declared in the settings registry
+    under the `rename.` prefix, and neither was in the bundle. Nobody noticed,
+    because noticing requires listing what is written under the user directory
+    and comparing it against what comes out, which is what this does.
+
+    It runs the real export and the real import rather than reading
+    `EXPORT_FILES`, so adding a file to that tuple and getting the collection
+    wrong still fails.
+    """
+
+    #: What the suite writes that is a choice rather than machine state.
+    USER_MADE = {
+        "site_directory.json": '{"sites": [{"code": "SITE1", "name": "Example"}]}',
+        "rename_profiles.json": '{"profiles": [{"name": "By site then floor"}]}',
+        "organizer_config.json": '{"sorted": true}',
+        "plantrim-boxes.json": '{"boxes": {"a": [1, 2, 3, 4]}}',
+        "not_matches.json": '[["cloud-1", "local-1"]]',
+        "manual_matches.json": '[["cloud-2", "local-2"]]',
+        "share_recipients.json": '["someone@example.com"]',
+    }
+
+    def _plant(self):
+        for name, body in self.USER_MADE.items():
+            (self.root / name).write_text(body, encoding="utf-8")
+
+    def test_every_one_of_them_is_in_the_bundle(self):
+        self._plant()
+        bundle = settings_backup.export_bundle(browser={}, root=self.root)
+        carried = set((bundle.get("files") or {}).keys())
+        missing = sorted(set(self.USER_MADE) - carried)
+        self.assertEqual(
+            missing, [],
+            "a wipe would take these and the export could not bring them "
+            "back: " + ", ".join(missing))
+
+    def test_they_come_back_byte_for_byte_after_a_wipe(self):
+        self._plant()
+        bundle = settings_backup.export_bundle(browser={}, root=self.root)
+        before = {n: (self.root / n).read_bytes() for n in self.USER_MADE}
+
+        for name in self.USER_MADE:                      # the wipe
+            (self.root / name).unlink()
+
+        settings_backup.apply_import(bundle, sections=("settings", "files"),
+                                     root=self.root)
+        for name in self.USER_MADE:
+            with self.subTest(file=name):
+                path = self.root / name
+                self.assertTrue(path.is_file(), name + " did not come back")
+                self.assertEqual(
+                    json.loads(path.read_text(encoding="utf-8")),
+                    json.loads(before[name].decode("utf-8")),
+                    name + " came back different from what went in")
+
+
 class NothingSecretLeavesTheMachine(Harness):
 
     def test_the_saved_login_is_never_exported(self):

@@ -1886,7 +1886,7 @@ be a regression, not a feature.
 | --- | --- | --- |
 | **Merge conflict rule** | Settings | What happens when a merge finds two files with the same name |
 | **Live auto-refresh interval** | Settings | How often the listing re-reads the cloud while you watch it |
-| **Default view (All / Mine / Others)** | Cloud Manager | Which owner filter the list *opens* on. Ships as **All**. The toolbar toggle changes only the current visit and never writes here — a per-browser copy of this is how two machines once disagreed about how many sites existed |
+| **Default view (All / Mine / Others)** | Cloud Manager | Which owner filter the list *opens* on. Ships as **Mine**. The toolbar toggle changes only the current visit and never writes here — a per-browser copy of this is how two machines once disagreed about how many sites existed |
 
 ### Quick Walls
 
@@ -2166,6 +2166,50 @@ better than keeping a copy in case it does.
 *The install backup taken when you update is a separate thing and still
 happens — see [Update or Uninstall](#update-or-uninstall).*
 
+### Where your settings live
+
+Everything you configure is kept in one folder, outside the program:
+
+```
+%USERPROFILE%\.wd_wireless_tools\
+```
+
+On a typical Windows install that is `C:\Users\<you>\.wd_wireless_tools\`. On
+macOS and Linux it is `~/.wd_wireless_tools/`. Paste the line above into the
+Explorer address bar and press Enter to open it.
+
+**It is deliberately not inside the program folder, and that is what makes it
+survive.** Updating, reinstalling, switching from the ZIP download to a git
+checkout, or deleting the install folder and putting a new one in its place —
+none of them touch this directory. The program is replaced; your settings are
+not in the program.
+
+| What is in there | What it holds |
+|---|---|
+| `settings.json` | Every preference on the Settings page, and the ones kept with their own tool |
+| `templates\` | Your wall templates — **including the Quick Walls keyboard shortcuts**, which are a field on each wall type |
+| `capacity\` | Your capacity templates |
+| `report\` | Your report cover image |
+| `plantrim-boxes.json` | PlanTrim's saved crop boxes |
+| `organizer_config.json` | Squirrel's folder settings |
+| `site_directory.json` | The site directory you imported for renaming |
+| `rename_profiles.json` | Your saved rename formats |
+| `not_matches.json`, `manual_matches.json` | Cloud Manager pairs you linked, and ones you marked "not a match" |
+| `share_recipients.json` | People you have shared cloud projects with |
+| `logs\` | The application log, seven days of it |
+| `cookies.enc` | Your Ekahau Cloud sign-in, encrypted. Never exported |
+| `acorn_state\` | Where you got to in each project. Machine state, not a preference |
+
+**Two things are worth knowing.** Editing `settings.json` by hand while the
+suite is running will be overwritten the next time anything saves — use the
+Settings page. And the folder starts with a dot, so Explorer may not show it
+until you type the path directly.
+
+**To take a copy of all of it,** use **Settings → Backup & restore** rather
+than copying the folder: the export is one readable file, it leaves your
+sign-in out, and it can be imported onto another machine. That is the next
+section.
+
 ### Backing up your settings
 
 Everything you have configured can be saved to one file and restored from it.
@@ -2189,6 +2233,8 @@ there as plain JSON, with a schema version and the time it was taken.
 | Squirrel's rename rules and folder settings | |
 | PlanTrim's saved crop boxes | |
 | Cloud Manager's match decisions | The pairs you linked, and the ones you marked "not a match" |
+| Your imported **site directory** | The CSV of sites you use for renaming |
+| Your saved **rename formats** | The naming profiles built from that directory |
 | Your report details and cover image | |
 
 **Not in the file:** your saved Ekahau Cloud login, and the per-project state

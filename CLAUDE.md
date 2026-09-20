@@ -1316,22 +1316,42 @@ not describe.
   the old bug from coming back:
 
   - **What the list opens on** is `cloud.default_owner_filter` in
-    `~/.wd_wireless_tools/settings.json` (Settings → Default view). It ships
-    as `"all"`, so nobody else's install changes behaviour. It is *not* in
-    `localStorage` — a per-browser copy is exactly how two machines came to
-    disagree about how many sites there were.
+    `~/.wd_wireless_tools/settings.json` (Settings → Default view). **It ships
+    as `"mine"`** — `DEFAULTS["cloud"]["default_owner_filter"]` in
+    `tools/settings.py`, and `renderOwnerFilterNotice` says so in its own
+    comment. This note said `"all"` until 2026-09-20, which is the dangerous
+    direction for a note to be wrong in: a session trusting it would "correct"
+    a default that is not wrong. The `"all"` in the picture is the *fallback*
+    — `loadDefaultOwnerFilter` applies it when there is no server or the
+    settings file cannot be read, because showing everything is the safe way
+    to be wrong. It is *not* in `localStorage` — a per-browser copy is exactly
+    how two machines came to disagree about how many sites there were.
   - **What is on screen now** is the toolbar Owner toggle, and it lasts until
     the page is reloaded. Nothing in the toolbar writes to the settings file.
 
-  The condition attached to the old note still holds and is now enforced
-  rather than remembered: any filter narrower than All renders
-  `#ownerFilterNotice` above the list, in words, saying what is hidden and
-  whether it is the saved default or just this visit; an empty list names the
-  filter that emptied it; and a listing that comes back with no
-  `currentUser` turns the filter off and says why, because otherwise a saved
-  "Mine" would render an empty page indistinguishable from an empty cloud
-  account. `tests/test_cloud_owner_filter.py` drives all of that through the
-  real functions in Node — don't relax it.
+  **The saved half survives everything.** Measured on 2026-09-20 by writing
+  settings on one install, deleting that install outright, standing a newer
+  one up against the same user directory and reading back: every value
+  identical, nested `report_defaults` included. So a report that the filter
+  "does not survive an upgrade" is not about persistence — it is the toolbar
+  half, resetting on the reload that an upgrade happens to include.
+
+  **And the notice does not cover the case where that matters most.**
+  `renderOwnerFilterNotice` takes the `cur === 'all'` branch first and
+  **returns early**: that branch explains that other people's projects cannot
+  be edited, and never says the choice is temporary. So switching the toolbar
+  to All — the one state that is both off the shipped default and silently
+  reverting — is the one state with no "just for this visit" warning. The
+  `mine` branch hides the notice entirely when it is not an override, which is
+  deliberate. Reported to whoever owns `cloud.js`; do not write this off as
+  covered on the strength of the sentence that used to be here, which claimed
+  every filter narrower than All was explained.
+
+  An empty list does name the filter that emptied it, and a listing that comes
+  back with no `currentUser` turns the filter off and says why, because
+  otherwise a saved "Mine" would render an empty page indistinguishable from
+  an empty cloud account. `tests/test_cloud_owner_filter.py` drives that
+  through the real functions in Node — don't relax it.
 - **Every matched row gives each side its own checkbox**, on every tab:
   `s-c:`/`s-l:` for sites and for top-level projects, `ct-c:`/`ct-l:` for the
   files nested under a site. Selecting either side resolves back to the single
