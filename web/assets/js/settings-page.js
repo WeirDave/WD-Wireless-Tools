@@ -17,11 +17,18 @@
     });
   }
 
+  /* Arriving from a tool's gear button, e.g. Cloud Manager sends
+     `/settings#cloud`. Opening the section is not enough on its own: this
+     page is eight sections long, so a section that opens below the fold
+     leaves the person who clicked the gear looking at the top of the page,
+     hunting for the control they just asked for. Scroll to it as well. */
   function openHashSection() {
     var hash = location.hash.replace('#', '');
     if (!hash) return;
     var sec = document.getElementById('sec-' + hash);
-    if (sec) sec.open = true;
+    if (!sec) return;
+    sec.open = true;
+    sec.scrollIntoView({ block: 'start' });
   }
 
   function populate() {
@@ -47,6 +54,10 @@
       radios[i].checked = radios[i].value === rule;
     }
     document.getElementById('sLiveMs').value = String(c.live_interval_ms || 30000);
+    var own = c.default_owner_filter || 'mine';
+    document.querySelectorAll('input[name="setowner"]').forEach(function (r) {
+      r.checked = (r.value === own);
+    });
 
     // Read by walls.js after a save. It had no control anywhere until now,
     // so the only way to turn it off was editing settings.json by hand.
@@ -207,10 +218,26 @@
       return true;
     });
 
-    var mergeRule = 'ask';
+    /* Fall back to what is saved, not to 'ask'.
+
+       This page offered ask / skip / overwrite while the tool implements
+       ask / newer / both / skip. Two of his four legal values could not be
+       shown here, so nothing was checked - and this loop then wrote 'ask',
+       which meant saving the Settings page for any reason at all silently
+       reset a merge rule of "Keep newer" or "Keep both". `overwrite` was not
+       a legal value either: cloud.js rejects anything outside MERGE_RULES and
+       falls back to 'ask', so choosing it here did nothing and said it had.
+       The radios above are the tool's four now; this keeps the saved value
+       when none is checked rather than inventing one. */
+    var mergeRule = (settings.cloud || {}).merge_rule || 'ask';
     var radios = document.querySelectorAll('input[name="mergeRule"]');
     for (var i = 0; i < radios.length; i++) {
       if (radios[i].checked) { mergeRule = radios[i].value; break; }
+    }
+    var ownerFilter = (settings.cloud || {}).default_owner_filter || 'mine';
+    var owners = document.querySelectorAll('input[name="setowner"]');
+    for (var j = 0; j < owners.length; j++) {
+      if (owners[j].checked) { ownerFilter = owners[j].value; break; }
     }
 
     var patch = {
@@ -231,6 +258,7 @@
       },
       cloud: {
         merge_rule: mergeRule,
+        default_owner_filter: ownerFilter,
         live_interval_ms: parseInt(document.getElementById('sLiveMs').value, 10) || 30000,
       },
       walls: {

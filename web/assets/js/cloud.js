@@ -6301,50 +6301,21 @@ function closeMainMenu() {
   var m = document.getElementById('mainMenu');
   if (m) m.classList.remove('open');
 }
+/* The gear goes to the suite's Settings page rather than opening a second
+   copy of it.
+
+   Cloud Manager carried its own Settings modal holding the merge rule, the
+   default view and the live interval - all three of which are settings the
+   Settings page already owned, and two of which it rendered with a different
+   set of values. The merge rule offered ask / newer / both / skip here and
+   ask / skip / overwrite there, so his choice of "Keep newer" could not be
+   shown on the Settings page, and saving that page for any reason wrote back
+   "ask" over it. One control per setting is the rule that exists to stop
+   exactly that, and two surfaces is how they drift.
+
+   `#cloud` opens the Cloud Manager section of that page directly. */
 function openSettings() {
-  const cur = mergeRule();
-  document.querySelectorAll('input[name="setrule"]').forEach(r => { r.checked = (r.value === cur); });
-  document.getElementById('setLiveInterval').value = String(liveMs());
-  const own = defaultOwnerFilter();
-  document.querySelectorAll('input[name="setowner"]').forEach(r => { r.checked = (r.value === own); });
-  showModal('settingsModal');
-}
-async function saveSettings() {
-  const v = (document.querySelector('input[name="setrule"]:checked') || {}).value || 'ask';
-  setMergeRule(v);
-  setLiveMs(document.getElementById('setLiveInterval').value);
-  restartLive();
-
-  // The one setting on this page that is not per-browser. It decides what the
-  // list opens on, so it belongs with the rest of the suite's settings rather
-  // than in whichever browser happened to set it - the old per-browser
-  // version of this filter is exactly how one machine ended up showing a
-  // different set of sites from another.
-  const own = (document.querySelector('input[name="setowner"]:checked') || {}).value || 'all';
-  const changed = own !== defaultOwnerFilter();
-  let failed = '';
-  if (changed) {
-    try {
-      const r = await WD.api('settings/update', { patch: { cloud: { default_owner_filter: own } } });
-      if (!r || !r.ok) throw new Error((r && r.error) || 'the settings file could not be written');
-      _ownerFilterDefault = own;
-      // Nothing was clicked in the toolbar, so what is on screen follows the
-      // new default rather than quietly becoming an override of it.
-      if (!_ownerFilterOverridden) {
-        setOwnerFilter(own);
-        syncOwnerToggle();
-        updateDashboard();
-        renderRows();
-      } else {
-        _ownerFilterOverridden = (ownerFilter() !== own);
-        renderOwnerFilterNotice();
-      }
-    } catch (err) { failed = err.message || String(err); }
-  }
-
-  closeModal('settingsModal');
-  if (failed) toast('Saved, but the default owner view was not: ' + failed, 'error');
-  else toast('Settings saved', 'success');
+  window.location.href = '/settings#cloud';
 }
 
 /* Which owner filter the Files list opens on, and which one is on screen.

@@ -252,12 +252,25 @@
       <div class="s-field">
         <label>Merge conflict rule</label>
         <div class="s-radio-group">
-          <label><input type="radio" name="mergeRule" value="ask"> Ask each time</label>
-          <label><input type="radio" name="mergeRule" value="skip"> Skip conflicts</label>
-          <label><input type="radio" name="mergeRule" value="overwrite"> Overwrite local</label>
+          <label><input type="radio" name="mergeRule" value="ask"> Ask me each time</label>
+          <label><input type="radio" name="mergeRule" value="newer"> Keep newer (by timestamp)</label>
+          <label><input type="radio" name="mergeRule" value="both"> Keep both &mdash; the newer keeps its name, the older gets a date stamp</label>
+          <label><input type="radio" name="mergeRule" value="skip"> Skip existing files</label>
         </div>
+        <div class="hint">What happens when a download finds a file of the same name already there.</div>
       </div>
 
+      <div class="s-field">
+        <label>Default view</label>
+        <div class="s-radio-group">
+          <label><input type="radio" name="setowner" value="all"> All &mdash; everything you can see, yours and other people&rsquo;s</label>
+          <label><input type="radio" name="setowner" value="mine"> Mine &mdash; only projects and sites you own</label>
+          <label><input type="radio" name="setowner" value="others"> Others &mdash; only projects and sites shared with you</label>
+        </div>
+        <div class="hint">Which owners the Files list shows when Cloud Manager opens. The Owner
+          buttons in its toolbar still change what you are looking at, but only until you reload
+          &mdash; this is the one that sticks.</div>
+      </div>
 
       <div class="s-field">
         <label>Live auto-refresh interval</label>

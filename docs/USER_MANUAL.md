@@ -1874,6 +1874,13 @@ below says so.
 in the browser deliberately — syncing a collapsed panel between machines would
 be a regression, not a feature.
 
+**And one thing that looks like a setting and is not: Cloud Manager's Owner
+buttons.** The **All / Mine / Others** buttons in its toolbar change what you
+are looking at *now*. They are not saved, and reloading the page — or
+restarting the suite after an update — puts the list back on whatever
+**Settings → Default view** says. If you want a view to stick, set it there;
+the toolbar is for a look, not a preference.
+
 ### Suite
 
 | Setting | Where | What it does |
@@ -1884,9 +1891,15 @@ be a regression, not a feature.
 
 | Setting | Where | What it does |
 | --- | --- | --- |
-| **Merge conflict rule** | Settings | What happens when a merge finds two files with the same name |
+| **Merge conflict rule** | Settings | What happens when a download finds a file of the same name already there. Four choices: ask each time, keep newer, keep both, skip |
 | **Live auto-refresh interval** | Settings | How often the listing re-reads the cloud while you watch it |
-| **Default view (All / Mine / Others)** | Cloud Manager | Which owner filter the list *opens* on. Ships as **Mine**. The toolbar toggle changes only the current visit and never writes here — a per-browser copy of this is how two machines once disagreed about how many sites existed |
+| **Default view (All / Mine / Others)** | Settings | Which owner filter the Files list *opens* on. Ships as **Mine** |
+
+All three are on the Settings page now. Cloud Manager's own gear button opens
+that page at the Cloud Manager section rather than a second copy of these
+controls — it used to hold its own, and the two disagreed about which merge
+rules existed, so a rule set in one place could be replaced by saving the
+other.
 
 ### Quick Walls
 

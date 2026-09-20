@@ -35,6 +35,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CLOUD_JS = ROOT / "web" / "assets" / "js" / "cloud.js"
 CLOUD_HTML = ROOT / "web" / "cloud.html"
+SETTINGS_HTML = ROOT / "web" / "settings.html"
 SETTINGS_PY = ROOT / "tools" / "settings.py"
 
 NODE_TIMEOUT_S = 120
@@ -437,12 +438,27 @@ class OwnerFilterWiring(unittest.TestCase):
         self.assertIn('role="status"', self.html)
 
     def test_settings_offers_all_three_and_explains_the_split(self):
+        """The control moved to the Settings page in v2.149.0.
+
+        Cloud Manager used to render its own copy of this alongside the merge
+        rule and the live interval, all three of which the Settings page
+        already owned - and two of which it offered with a different set of
+        values. This asserts the one home, and that the split between the
+        saved default and the toolbar buttons is still stated where the saved
+        one is set.
+        """
+        settings_html = SETTINGS_HTML.read_text(encoding="utf-8")
         for value in ("all", "mine", "others"):
             with self.subTest(value=value):
-                self.assertIn(f'name="setowner" value="{value}"', self.html)
-        self.assertIn("until you reload", self.html,
-                      "the modal has to say that the toolbar buttons are "
-                      "temporary and this one is not")
+                self.assertIn(f'name="setowner" value="{value}"', settings_html)
+        self.assertIn("until you reload", settings_html,
+                      "the Settings page has to say that the toolbar buttons "
+                      "are temporary and this one is not")
+
+    # "Cloud Manager must not render a second copy" is not asserted here.
+    # `tests/test_one_control_per_setting_across_pages.py` checks it for every
+    # setting on every page, from the registry, rather than for this one by
+    # name - which is the check that would have caught the merge rule too.
 
 
 def _js_string(text: str) -> str:

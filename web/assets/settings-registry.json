@@ -177,7 +177,7 @@
       "category": "preference",
       "owner": "Cloud Manager",
       "section": "cloud",
-      "home": "cloud-modal",
+      "home": "settings",
       "control": "setowner"
     },
     {
