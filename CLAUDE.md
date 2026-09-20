@@ -1304,18 +1304,33 @@ not describe.
   "Mine" would render an empty page indistinguishable from an empty cloud
   account. `tests/test_cloud_owner_filter.py` drives all of that through the
   real functions in Node — don't relax it.
-- The Sites tab tree (`renderSitesTree()` / `renderTreeChildren()` in
-  `web/assets/js/cloud.js`) gives every row — top-level sites AND nested
-  project files — independent cloud-side/local-side checkboxes
-  (`s-c:`/`s-l:` for sites, `ct-c:`/`ct-l:` for nested files). Selecting
-  either side of a matched pair resolves back to the single pair record in
-  `selectedSyncItems()` for bulk Sync purposes, but is deletable
-  independently in `bulkDelete()` (kind stays `'cloud'`/`'local'`, never
-  collapses to a combined pair-delete). Any cloud-side delete (single or
-  bulk) requires typing `DELETE` in a second confirmation modal
-  (`#cloudDeleteConfirmModal`) — cloud deletes aren't recoverable, local
-  ones are (re-download from cloud), so the friction is asymmetric on
-  purpose.
+- **Every matched row gives each side its own checkbox**, on every tab:
+  `s-c:`/`s-l:` for sites and for top-level projects, `ct-c:`/`ct-l:` for the
+  files nested under a site. Selecting either side resolves back to the single
+  pair record in `selectedSyncItems()` for bulk Sync, but is deletable
+  independently in `bulkDelete()` — the kind stays `'cloud'`/`'local'` and
+  never collapses to a combined pair-delete. A cloud delete cannot be undone
+  and a local one can be (download it again), so they are not one decision.
+
+  **The Projects tab was the exception until v2.142.0**, and it is worth
+  knowing why: its rows set neither key, so both cells fell back to the row
+  key, one tick selected the pair, and ticking the cloud box deleted the local
+  `.esx` as well — while the local box beside it still rendered unticked.
+  `tests/test_cloud_each_side_has_its_own_checkbox.py` holds it now.
+
+- **There is no typed-`DELETE` gate any more, and that is deliberate.** A
+  second modal asking him to type `DELETE` used to stand in front of every
+  cloud delete. It went because the ceremony was attached to a sentence that
+  did not say what was going: the first dialog greyed out the list behind it
+  and the second said only "this project".
+
+  Naming the thing is the protection now. The dialog carries the project's
+  name, the site it is in, when it last changed and who else loses access —
+  for every item, never abbreviated to "and 12 more".
+  `tests/test_cloud_delete_identity.py` asserts the old modal's *absence* as
+  well as the new content, so putting it back fails the suite rather than
+  quietly returning. The Duplicates tab was still deleting through a bare
+  `window.confirm()` and was brought onto the same dialog in v2.145.0.
 
 ## The dev toolbar — WaxFrame Professional's method, ported
 

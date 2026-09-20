@@ -23,6 +23,23 @@ difference between a fact and a reading:
 Priorities follow `BACKLOG.md`: **P1** blocking · **P2** wanted · **P3**
 future.
 
+## Status
+
+**Every numbered finding is closed**, across v2.139.1 (A0), v2.142.0 (the six
+P1s), v2.143.0 (the twelve P2s) and v2.145.0 (the twelve P3s), plus A31 on its
+own branch and A32 in `CLAUDE.md`. Each fix carries a test that fails against
+the code before it.
+
+**One thing is not finished: A33.** Cloud and local delete from the main list,
+transfer ownership, and folder merge still have no test that could fail if they
+broke — the most destructive surface in the tool is the least covered. See the
+note there.
+
+Nothing here is deleted as it is closed. The reasoning is why each guard
+exists, and a guard whose reason is not written down is the one a later session
+removes as redundant — which has already happened twice in this repo, to the
+realign guard and to the wall-template colours.
+
 ## How the `[measured]` findings were run, because it is reusable
 
 The repo's Node probes slice functions out of `cloud.js` with a `cut(from, to)`
@@ -457,7 +474,7 @@ first, so the preview and the destination disagree.
 > deck's own machinery, so the latent expiry race was fixed and the code left
 > in place rather than deleted out from under whoever wires it up.
 
-* **A19. `_building_token` breaks on 3-digit building numbers [measured].** — **fixed in v2.145.0**
+* **(fixed v2.145.0)** **A19. `_building_token` breaks on 3-digit building numbers [measured].**
   The regex backtracks to the `bld` alternative and captures the `g`:
   ```
   'Bldg 3'   -> '3'      'Bldg 100'  -> 'G'
@@ -473,11 +490,11 @@ first, so the preview and the destination disagree.
   That is precisely the case the guard was written for. `'Bldg 3'` vs
   `'Bldg 5'` is still caught, which is why it has looked fine.
 
-* **A20. A year is read as a street number [measured].** — **fixed in v2.145.0**
+* **(fixed v2.145.0)** **A20. A year is read as a street number [measured].**
   `discriminators_reason('SITE1 Survey 2025', 'SITE1 Survey 2026')` →
   *"Street numbers don't match (2025 vs 2026)"*. A false hold-back.
 
-* **A21. The site-code pass has no similarity floor [measured].** — **fixed in v2.145.0** The fuzzy
+* **(fixed v2.145.0)** **A21. The site-code pass has no similarity floor [measured].** The fuzzy
   pass requires `sim > 0.5`; the code pass requires only equal site codes:
   ```
   'SITE2 Rooftop Antenna Replacement' <-> 'SITE2 Basement Parking Garage'
@@ -487,51 +504,51 @@ first, so the preview and the destination disagree.
   second half is never checked, and these land in `mismatches`, so Sync offers
   to rename one to the other.
 
-* **A22. Pairing is greedy in Ekahau's listing order [reported].** — **fixed in v2.145.0** No global
+* **(fixed v2.145.0)** **A22. Pairing is greedy in Ekahau's listing order [reported].** No global
   assignment, and `get_projects()` is returned unsorted, so a weaker candidate
   considered first can take a file a later one matches far better — and the
   answer can change when an unrelated project is saved.
 
-* **A23. `exact` is case-sensitive [reported]** — **fixed in v2.145.0** despite the docstring
+* **(fixed v2.145.0)** **A23. `exact` is case-sensitive [reported]** despite the docstring
   promising "case + whitespace normalized", demoting case-only differences to
   `fuzzy`, which is excluded from `PUSHABLE_MATCH_TYPES` — so Local → Cloud is
   greyed out for pairs whose names are the same word for word.
 
-* **A24. Stale not-match entries are never pruned [reported].** — **fixed in v2.145.0** Nothing removes
+* **(fixed v2.145.0)** **A24. Stale not-match entries are never pruned [reported].** Nothing removes
   an entry whose path has gone, and `_blocked` is consulted in *every* pass
   including the id pass. A freshly downloaded file landing on an old path is
   silently refused a pair it can prove.
 
-* **A25. `_ESX_META_CACHE` keys on `(path, int(mtime))` [reported]** — **fixed in v2.145.0** — one-second
+* **(fixed v2.145.0)** **A25. `_ESX_META_CACHE` keys on `(path, int(mtime))` [reported]** — one-second
   granularity, no size component, never evicted, unbounded.
 
-* **A26. The row-busy 30 s ceiling is measured from enqueue, not from start
-  [reported].** — **fixed in v2.145.0** With `OP_MAX_CONCURRENT = 1`, a bulk run emits a stream of
+* **(fixed v2.145.0)** **A26. The row-busy 30 s ceiling is measured from enqueue, not from start
+  [reported].** With `OP_MAX_CONCURRENT = 1`, a bulk run emits a stream of
   *"That is taking longer than expected"* toasts about work that is merely
   queued.
 
-* **A27. A failed background poll wipes the list [reported].** — **fixed in v2.145.0** `onData` checks
+* **(fixed v2.145.0)** **A27. A failed background poll wipes the list [reported].** `onData` checks
   `data.error` *before* the background guard, so an unrequested poll replaces
   the list with error text and leaves `data` pointing at the error object —
   after which every later re-render silently draws an empty list while the
   selection bar still says "12 selected".
 
-* **A28. The undo path is dead code [reported].** — **fixed in v2.145.0** No `opEnqueue` call site
+* **(fixed v2.145.0)** **A28. The undo path is dead code [reported].** No `opEnqueue` call site
   anywhere supplies `undoFn`; every one passes `undoable: false`.
 
-* **A29. `wd-match-help-seen` is written and never read [measured].** — **fixed in v2.145.0**
+* **(fixed v2.145.0)** **A29. `wd-match-help-seen` is written and never read [measured].**
   `openMatchHelp` hides `#matchHelpHint`, which does not exist in
   `web/cloud.html`. Dead, not harmful.
 
-* **A30. Duplicates-tab deletes — including irreversible cloud deletes across
-  every cluster — are gated only by `window.confirm()` [reported]** — **fixed in v2.145.0**, which
+* **(fixed v2.145.0)** **A30. Duplicates-tab deletes — including irreversible cloud deletes across
+  every cluster — are gated only by `window.confirm()` [reported]**, which
   browsers truncate, and which shows no site, no date and no "shared with".
 
 ---
 
 ## Systemic
 
-### A31. CI never installs Node, so roughly 30 cloud test files skip silently [measured]
+### A31. CI never installs Node, so roughly 30 cloud test files skip silently [measured] — **fixed, in `claude/ci-installs-node`**
 
 `.github/workflows/tests.yml` has `setup-python` and no `setup-node` step, and
 nothing asserts Node exists. Most cloud tests are Node probes that
@@ -543,7 +560,7 @@ reporting it.
 **This is the cheapest high-value fix in the document:** add `setup-node`, and
 make the skip an error in CI.
 
-### A32. The documentation describes a control that no longer exists [measured]
+### A32. The documentation describes a control that no longer exists [measured] — **fixed** (`CLAUDE.md` only, so no release carries it)
 
 `CLAUDE.md` still states that any cloud-side delete "requires typing `DELETE`
 in a second confirmation modal (`#cloudDeleteConfirmModal`)". That gate was
@@ -554,7 +571,23 @@ and a test now asserts its *absence*, so CLAUDE.md is describing a control that
 does not exist — the `TheAppOnlyPointsAtControlsThatExist` rule pointed at the
 repo's own notes.
 
-### A33. Where the tests cannot fail
+### A33. Where the tests cannot fail — **partly closed**
+
+> **What has since been covered**, as a by-product of fixing the findings
+> above rather than by a coverage exercise: sharing's outcome reporting, bulk
+> share, the role change and the ownership transfer; the upload's
+> identification of what it created and the replace's direction check; the
+> merge's emptiness test; the Duplicates delete confirmation; per-side
+> checkboxes and the delete dialog's wording; auto-assign's scope; the
+> comparison cache; the paired rename; the typed move destination; and the
+> whole matching engine.
+>
+> **Still uncovered, and this is the last open item in the document:** cloud
+> and local delete from the main list — `delete_cloud` and `delete_local`
+> appear in no test at all — transfer ownership as a whole flow, and folder
+> merge's `merge_preview` / `merge_execute`, which move and delete files on
+> disk. `startDelete` → `confirmDelete` → `bulkDelete` is still never
+> executed: the dialog is proven and the handler behind it is not.
 
 `scripts/audit_source_string_tests.py` reports 350 source-text assertions
 across 61 files. Three cloud files execute nothing at all:
