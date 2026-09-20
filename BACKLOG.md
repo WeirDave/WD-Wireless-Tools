@@ -5,9 +5,10 @@ history and GitHub Releases.
 
 Priorities: **P1** = blocking · **P2** = wanted · **P3** = future enhancement.
 
-Last reviewed against **v2.145.0**, 2026-09-19. Every item below was opened in
-the code and checked; what each check found is recorded on the item, including
-where the check found the item itself was wrong.
+Last reviewed against **v2.145.0**, 2026-09-19, and item 8 closed against
+v2.146.0 the same day. Every item below was opened in the code and checked;
+what each check found is recorded on the item, including where the check
+found the item itself was wrong.
 
 **Item numbers are reassigned at each pass.** A reference to one from outside
 this file has to name the pass date as well as the number, or in a month it
@@ -241,50 +242,21 @@ higher.
 
 ---
 
-### Suite-wide
-
-#### 8. P3 — BLOCKED: the DWG-to-`.esx` finding may now be written down
-
-A finding about going from DWG to `.esx` was established in an earlier session
-and never recorded. The item has stood on the grounds that nothing in the repo
-said what it was.
-
-**That is no longer quite true, and the item is narrower than it was.** Two
-places now record a DWG finding, neither of which existed when the item was
-written:
-
-- `tools/esx_trimmer.py`, module docstring, lines 27-32: a DWG import lands as
-  a vector plan; Ekahau writes a companion raster of the same drawing beside
-  it; and the two axes have to be scaled independently, because the rasteriser
-  rounds — 792x612 renders to 5000x3863 where one shared ratio would give
-  3863.6, so a single ratio would refuse every real file over the artefact.
-- `docs/USER_MANUAL.md` § "Vector plans — DWG and PDF imports", added in
-  v2.144.0, which states the same thing for a reader.
-
-**Whether that is *the* finding, only he can say.** It is a good candidate and
-it is specific, so the question to put to him is now "is this it?" rather than
-"what was it?" — which is a question he can answer in one word. Do not close
-the item on the strength of the candidate, and do not invent the remainder: a
-plausible invented finding is worse than the gap, which is why this item exists
-at all.
-
----
-
 ## Awaiting a decision, not work
 
 Blocked on a call rather than on effort, so they can be answered together.
 
-**The four menu-label questions that filled this section were all answered on
-2026-09-19** and are recorded under "Decisions already made" below. One
-question replaces them, and it came out of this pass:
+**Nothing is waiting on him right now.** The four menu-label questions were
+answered on 2026-09-19, and the DWG question that replaced them was answered
+the same day — both are under "Decisions already made" below.
 
-- **Is the DWG note in `esx_trimmer` the finding item 8 is missing?** It says a
-  DWG import lands as a vector plan with a companion raster beside it, and that
-  the two axes have to scale independently because the rasteriser rounds. If
-  that is what was established in the earlier session, item 8 closes and the
-  note is already written. If there was more to it, item 8 stays open and needs
-  the rest. **A yes or no is enough** — nothing else about item 8 can move
-  until this is answered, which is why it is here rather than only there.
+The heading stays with the section empty, deliberately. It is where an item
+blocked on his say-so goes, and
+`tests/test_server_and_assets::test_backlog_separates_work_from_decisions`
+requires all three sections to exist. That guard is why: a settled decision
+sitting in the work queue, or a question filed as though it were effort, is how
+the queue stops being trusted. The 2026-09-19 pass deleted this heading on the
+grounds that it was momentarily empty, and the test caught it.
 
 ---
 
@@ -327,6 +299,50 @@ over, and it asks first.
 The full reasoning, including how the colours were recovered from a real
 project, is in CLAUDE.md § "Known gotchas". That section has been right
 throughout; this file was the one that drifted.
+
+### What a DWG becomes inside an `.esx` — the lost finding, recovered 2026-09-19
+
+**This closes an item that was an IOU rather than a task.** It read: *"A
+finding about going from DWG to `.esx` was established in an earlier session
+and never recorded, so the next session will redo the work."* That is all it
+said. Nobody since knew what the finding was, so it stood BLOCKED — it could
+not be worked on and it could not be closed.
+
+The 2026-09-19 pass found that the substance had since been written down
+independently, in `tools/esx_trimmer.py` and the User Guide, and put the
+description to him. His answer: *"All of what you said was true and I can't
+think of anything else that goes with that."* So it is recorded here in full,
+in one place, because the failure mode this item existed to flag was the
+knowledge living nowhere.
+
+**What happens to a DWG:**
+
+* **A DWG or PDF imported into Ekahau lands as a vector (SVG) floor plan**, not
+  a raster one.
+* **Ekahau usually writes a companion raster of the same drawing beside it**,
+  for rendering. So one floor can carry two images of the same building.
+* **The two are different pixel sizes, and the ratio is not shared between
+  axes.** Ekahau renders a 792x612 plan to 5000x3863 — but 612 x (5000/792) is
+  3863.6, so the rasteriser rounded. Scaling both axes by one ratio therefore
+  disagrees with the file by a fraction of a pixel, and a tool that insists on
+  one ratio refuses every real drawing over its own rounding artefact. PlanTrim
+  scales the axes independently for exactly this reason.
+* **A vector plan is cropped by moving its window, not by cutting pixels** —
+  the `viewBox` is edited, so it stays sharp at any zoom. The companion raster
+  takes the same region in its own resolution.
+* **An SVG whose `<svg>` root cannot be read is refused**, because there is no
+  window to move.
+
+**Where it lives now**, so a future session finds it without reading this file:
+`tools/esx_trimmer.py`'s module docstring carries the mechanism and the
+rounding reasoning; `docs/USER_MANUAL.md` § "Vector plans — DWG and PDF
+imports" says the same thing for a reader.
+
+**The lesson is the item, not the finding.** A conclusion reached in
+conversation and not committed is gone the moment the session ends, and what
+survived here was a note saying something had been lost — which is better than
+nothing and much worse than the finding. Write the conclusion down where the
+code is, at the time, not a reminder to write it down later.
 
 ### Upload direction is built, and in-place replacement is ruled out — closed 2026-09-19
 
