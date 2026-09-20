@@ -25,6 +25,29 @@
 .settings-title a { color: var(--text-2); text-decoration: none; font-size: 14px; }
 .settings-title a:hover { color: var(--text); }
 
+/* The per-tool overview. One row per registered setting: what it is, what it
+   is set to, and - when the control is not on this page - which of the tool's
+   own controls owns it. Rendered from `settings-registry.json`, so a setting
+   that is registered is a setting that appears here. */
+.s-overview { margin-top: 14px; }
+.s-overview:empty { display: none; }
+.s-ov-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-3); margin-bottom: 6px;
+}
+.s-ov-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 5px 0; border-top: 1px solid var(--border);
+  font-size: 12.5px; flex-wrap: wrap;
+}
+.s-ov-row .s-ov-label { color: var(--text-2); flex: 1 1 42%; min-width: 150px; }
+.s-ov-row .s-ov-val {
+  color: var(--text); font-family: var(--mono, ui-monospace, monospace);
+  word-break: break-word;
+}
+.s-ov-row .s-ov-val.is-empty { color: var(--text-3); font-family: inherit; font-style: italic; }
+.s-ov-where { flex: 0 0 100%; color: var(--text-3); font-size: 11.5px; }
+
 .s-section {
   border: 1px solid var(--border); border-radius: 8px;
   margin-bottom: 12px; overflow: hidden;
@@ -181,7 +204,8 @@
       </div>
 
 
-    </div>
+          <div class="s-overview" data-section="general,subfolders"></div>
+</div>
   </details>
 
   <!-- Subfolder Structure -->
@@ -242,7 +266,8 @@
       <div class="s-field text-right">
         <button class="btn btn-red" onclick="SP.resetOrganizer()">Reset Organizer Defaults</button>
       </div>
-    </div>
+          <div class="s-overview" data-section="squirrel"></div>
+</div>
   </details>
 
   <!-- Cloud Manager -->
@@ -289,7 +314,8 @@
         </div>
         <button class="btn mt-8" onclick="SP.forgetLogin()">Forget Login</button>
       </div>
-    </div>
+          <div class="s-overview" data-section="cloud"></div>
+</div>
   </details>
 
   <!-- Report -->
@@ -297,14 +323,43 @@
     <summary>Report</summary>
     <div class="s-body">
       <div class="s-field">
-        <div class="hint">The cover image and the Client, Prepared by, Project reference and
-          Revision defaults are edited in the Report tool itself, under <b>Report settings</b>.
-          They are saved on this machine, not in your browser, so they survive clearing site
-          data and follow you between Chrome and Edge. The hosted version of Report has no
-          server to save to and keeps its own copy in the browser.</div>
+        <label for="sRepClient">Client / company</label>
+        <input type="text" id="sRepClient" placeholder="e.g. Acme Corp">
+      </div>
+      <div class="s-field">
+        <label for="sRepPreparedBy">Prepared by</label>
+        <input type="text" id="sRepPreparedBy" placeholder="e.g. Jane Smith">
+      </div>
+      <div class="s-field">
+        <label for="sRepProjectRef">Project reference</label>
+        <input type="text" id="sRepProjectRef" placeholder="e.g. PO-2026-0042">
+      </div>
+      <div class="s-field">
+        <label for="sRepRevision">Revision</label>
+        <input type="text" id="sRepRevision" placeholder="e.g. v2.0, Rev B, 3">
+        <div class="hint mt-4">Free-form &mdash; <code>v2.0</code>, <code>Rev B</code> and
+          <code>3</code> all work. These four are the starting values for every report; a
+          single report can still be given its own in Report's <b>Configure</b> step, and
+          doing so does not change what is saved here.</div>
+      </div>
+      <div class="s-field">
+        <label class="s-check">
+          <input type="checkbox" id="sRepIncludeRev">
+          <span>Include the revision in the saved file name</span>
+        </label>
+        <div class="hint mt-4">On by default. Report shows the file name both ways while you
+          work, so the effect is visible there rather than described here.</div>
+      </div>
+      <div class="s-field">
+        <div class="hint">The report <b>cover image</b> is still chosen in Report itself &mdash;
+          it is a picture rather than a preference. Open Report and use
+          <b>Cover image&hellip;</b> above the report list. That panel also previews the
+          saved file name, which it can do because it knows the project you have
+          open.</div>
         <a class="btn mt-8" href="/report">Open Report</a>
       </div>
-    </div>
+          <div class="s-overview" data-section="report"></div>
+</div>
   </details>
 
   <!-- Quick Walls -->
@@ -320,8 +375,31 @@
           has been saved, which is otherwise awkward to find again.</div>
       </div>
       <div class="s-field">
-        <div class="hint">Wall template preferences are managed within Quick Walls for now.</div>
+        <div class="hint">The wall template controls stay in Quick Walls, on the
+          <b>Template</b> bar above the wall list, because the decision is made while
+          looking at the template: the picker, <b>Apply</b>, <b>Save Template</b>,
+          <b>Manage</b> and the <b>Auto-apply on open</b> tick box. What is saved of them
+          is listed below.</div>
       </div>
+          <div class="s-overview" data-section="walls"></div>
+</div>
+  </details>
+
+  <!-- Every other tool: nothing here to change, but the overview says what
+       each one saves and which of its own controls owns it. -->
+  <details class="s-section" id="sec-elsewhere">
+    <summary>PlanTrim, Rename and the rest</summary>
+    <div class="s-body">
+      <div class="s-field">
+        <div class="hint">These settings are saved with all the others, in the same file,
+          and they leave with a backup. Their controls stay on the tool because each one
+          is chosen while doing the job it belongs to &mdash; the margin you are trimming
+          to, the units you are working in, the naming pattern you are building. The
+          values below are what is saved right now.</div>
+      </div>
+      <div class="s-overview" data-section="plantrim"></div>
+      <div class="s-overview" data-section="rename"></div>
+      <div class="s-overview" data-section="aprename"></div>
     </div>
   </details>
 

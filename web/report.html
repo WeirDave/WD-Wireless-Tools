@@ -208,14 +208,17 @@
 <div id="reportSettingsModal" class="grid-modal-overlay" hidden>
   <div class="grid-modal rep-settings-modal">
     <div class="grid-modal-header">
-      <h3>Report settings</h3>
+      <h3>Cover image and file name</h3>
       <button class="btn-icon" onclick="closeReportSettings()" title="Close">&times;</button>
     </div>
     <div class="grid-modal-body rep-settings-body">
       <p class="rep-set-intro">
-        These are the defaults every new report starts from. An individual report
-        can still say something different &mdash; changing a field while configuring
-        a report affects that report only and leaves these untouched.
+        The cover image is chosen here, and the saved file name is previewed here because
+        the preview names the project that is open. Everything else a report starts from
+        &mdash; Client, Prepared by, Project reference and Revision &mdash; is on the
+        <a href="/settings#report">Settings page</a>, under <b>Report</b>. An individual
+        report can still say something different: changing a field while configuring a
+        report affects that report only.
       </p>
 
       <div class="rep-set-group">
@@ -234,46 +237,25 @@
       </div>
 
       <div class="rep-set-group">
-        <h4 class="rep-set-group-title">Defaults for every report</h4>
-        <div class="rep-set-field">
-          <label for="set-clientName">Client / company</label>
-          <input type="text" id="set-clientName" class="rep-input-text" placeholder="e.g. Acme Corp">
-        </div>
-        <div class="rep-set-field">
-          <label for="set-preparedBy">Prepared by</label>
-          <input type="text" id="set-preparedBy" class="rep-input-text" placeholder="e.g. Jane Smith">
-        </div>
-        <div class="rep-set-field">
-          <label for="set-projectRef">Project reference</label>
-          <input type="text" id="set-projectRef" class="rep-input-text" placeholder="e.g. PO-2026-0042">
-        </div>
-        <div class="rep-set-field">
-          <label for="set-revision">Revision</label>
-          <input type="text" id="set-revision" class="rep-input-text"
-                 placeholder="e.g. v2.0, Rev B, 3" oninput="renderFilenamePreview()">
-        </div>
-        <div class="rep-set-hint">Free-form &mdash; <code>v2.0</code>, <code>Rev B</code> and
-          <code>3</code> all work.</div>
-      </div>
-
-      <div class="rep-set-group">
         <h4 class="rep-set-group-title">Saved file name</h4>
-        <label class="rep-set-check">
-          <input type="checkbox" id="set-includeRevision" checked onchange="renderFilenamePreview()">
-          <span>Include the revision in the file name</span>
-        </label>
         <div class="rep-set-name-preview" id="setNamePreview"></div>
+        <div class="rep-set-hint">Both spellings are shown so the effect of the revision
+          switch is settled by looking. The revision, whether it appears in the name, and
+          the Client, Prepared by and Project reference defaults are on the
+          <a href="/settings#report">Settings page</a>, under <b>Report</b>. A single
+          report can be given its own values in the <b>Configure</b> step without changing
+          what is saved there.</div>
       </div>
 
       <div class="rep-set-nowarn" id="setNoServer" hidden>
-        No local server is answering, so these settings cannot be saved from this
-        page. Open Report from the WD Wireless Tools app.
+        No local server is answering, so the cover image cannot be saved from this page.
+        Open Report from the WD Wireless Tools app.
       </div>
     </div>
     <div class="grid-modal-footer">
       <span class="rep-set-footnote">Stored on this machine, alongside your wall templates.</span>
-      <button class="btn btn-secondary" onclick="closeReportSettings()">Cancel</button>
-      <button class="btn btn-blue" onclick="saveReportSettings()">Save settings</button>
+      <button class="btn btn-secondary" onclick="closeReportSettings()">Close</button>
+      <a class="btn btn-blue" href="/settings#report">Report settings&hellip;</a>
     </div>
   </div>
 </div>

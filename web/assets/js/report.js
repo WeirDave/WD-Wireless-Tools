@@ -136,6 +136,15 @@
       if (u === 'feet' || u === 'meters') unitsPref = u;
       var sg = r.settings && r.settings.report && r.settings.report.segment_granularity;
       if (sg && SEG_GRANULARITY[sg]) segGranularityPref = sg;
+      /* The banner is rendered by the template gallery, which paints before
+         this fetch comes back, and nothing repainted it afterwards - so it
+         read "Not set" for four values that were saved. It was survivable
+         while the only way to change them was a modal on this page, because
+         saving there repainted it. They are set on the Settings page now, so
+         the first thing anyone sees on returning is this banner, and a banner
+         saying "Not set" about a value that is set reads as a save that did
+         not work. */
+      renderSettingsBanner();
     });
   }
 
@@ -515,8 +524,9 @@
     if (!host) return;
     var docName = (typeof currentReportId !== 'undefined' && currentReportId)
       ? currentReport().docName : 'AP Installation';
-    var revEl = document.getElementById('set-revision');
-    var rev = revEl ? revEl.value.trim() : settingDefault('revision');
+    // The revision is set on the Settings page now, so this reads the saved
+    // value rather than a field beside it.
+    var rev = settingDefault('revision');
     // The real project name once one is open, so the preview is the actual
     // file name rather than a shape.
     var site = '', from = '', why = '';
@@ -537,8 +547,7 @@
     if (!site) { site = 'Project name'; from = ''; }
     var on = buildDocTitle(docName, rev, site, true);
     var off = buildDocTitle(docName, rev, site, false);
-    var chk = document.getElementById('set-includeRevision');
-    var withRev = chk ? chk.checked : includeRevisionInName;
+    var withRev = includeRevisionInName;
     host.innerHTML =
       '<div class="rep-set-name-row' + (withRev ? ' is-active' : '') + '">'
       + '<span class="rep-set-name-tag">With version</span>'
@@ -576,23 +585,30 @@
                : '<span class="empty">Not set</span>')
         + '</div>';
     });
+    /* Two actions, because the two halves of this banner are now edited in
+       two places. The four values beside it are on the Settings page; the
+       cover image and the file-name preview are still here, because the
+       preview names the project that is open. One button for each, each
+       saying where it goes - a single button reading "Edit report settings"
+       would open the panel that no longer holds four of the five things
+       above it. */
     host.innerHTML =
       '<div class="rep-sb-cover">' + coverHtml + '</div>'
       + '<div class="rep-sb-fields">' + fieldsHtml + '</div>'
       + '<div class="rep-sb-actions">'
+      + '<a class="btn btn-secondary btn-sm" href="/settings#report">'
+      + '⚙ Report settings…</a>'
       + '<button type="button" class="btn btn-secondary btn-sm" onclick="openReportSettings()">'
-      + '&#9881; Edit report settings</button></div>';
+      + 'Cover image…</button></div>';
   }
 
+  /* The four identity defaults and the file-name switch moved to the Settings
+     page in v2.150.0, so this holds the cover image and the file-name preview -
+     the preview stays because it names the project that is open, which the
+     Settings page cannot know. */
   window.openReportSettings = function () {
     var modal = document.getElementById('reportSettingsModal');
     if (!modal) return;
-    SETTING_IDS.forEach(function (id) {
-      var el = document.getElementById('set-' + id);
-      if (el) el.value = settingDefault(id);
-    });
-    var chk = document.getElementById('set-includeRevision');
-    if (chk) chk.checked = includeRevisionInName;
     var warn = document.getElementById('setNoServer');
     if (warn) warn.hidden = settingsAvailable;
     setCoverStatus('');
@@ -606,29 +622,9 @@
     if (modal) modal.hidden = true;
   };
 
-  window.saveReportSettings = function () {
-    var patch = {};
-    SETTING_IDS.forEach(function (id) {
-      var el = document.getElementById('set-' + id);
-      patch[SETTING_FIELD[id]] = el ? el.value.trim() : '';
-    });
-    var chk = document.getElementById('set-includeRevision');
-    patch.include_revision_in_filename = chk ? !!chk.checked : true;
-    pushSettings(patch)
-      .then(function () {
-        // A report already open keeps whatever it deliberately overrode and
-        // picks up the new default everywhere else.
-        configureDirty = true;
-        renderReportOpts();
-        renderCoverSummary();
-        renderSettingsBanner();
-        closeReportSettings();
-        showToast('Report settings saved', 'success');
-      })
-      .catch(function (err) {
-        showToast(err && err.message ? err.message : 'Settings could not be saved', 'warn');
-      });
-  };
+  /* `saveReportSettings` was removed in v2.150.0 along with the fields it read.
+     The Settings page writes those five now, and the cover image has always
+     saved itself the moment it is chosen rather than waiting for a button. */
 
   window.pickCoverImage = function () {
     var picker = document.createElement('input');

@@ -114,7 +114,8 @@ class SavingKeepsWhatItCannotSee(unittest.TestCase):
     """The backstop. Even with the radios correct, a save must never invent a
     value for a control that happens not to be checked."""
 
-    def _save_patch(self, saved_rule: str, checked: str | None) -> dict:
+    def _save_patch(self, saved_rule: str, checked: str | None,
+                    values: dict | None = None, ticked: list | None = None) -> dict:
         program = r"""
         const fs = require('fs');
         const src = fs.readFileSync(process.argv[1], 'utf8');
@@ -127,13 +128,19 @@ class SavingKeepsWhatItCannotSee(unittest.TestCase):
         const settings = { cloud: { merge_rule: saved, default_owner_filter: 'others' } };
 
         // only the fields SP.save reads
-        const values = {
+        const values = JSON.parse(process.argv[4] || '{}');
+        const defaults = {
           sOutputDir: '', sImageExt: '', sPlanExt: '', sReportExt: '',
           sPdfKw: '', sJsonKw: '', sSkipDirs: '', sCreateTpl: '',
           sLiveMs: '30000', sWallsReveal: '',
+          sRepClient: '', sRepPreparedBy: '', sRepProjectRef: '',
+          sRepRevision: '', sRepIncludeRev: '',
         };
+        Object.keys(defaults).forEach(k => { if (!(k in values)) values[k] = defaults[k]; });
+        const ticked = JSON.parse(process.argv[5] || '[]');
         global.document = {
-          getElementById: (id) => ({ value: values[id] || '', checked: false }),
+          getElementById: (id) => ({ value: values[id] || '',
+                                     checked: ticked.indexOf(id) > -1 }),
           querySelectorAll: (sel) => {
             if (sel.indexOf('mergeRule') > -1) {
               return ['ask', 'newer', 'both', 'skip'].map(v =>
@@ -157,7 +164,8 @@ class SavingKeepsWhatItCannotSee(unittest.TestCase):
         console.log(JSON.stringify(sent));
         """
         r = subprocess.run(
-            ["node", "-e", program, str(SETTINGS_JS), saved_rule, checked or ""],
+            ["node", "-e", program, str(SETTINGS_JS), saved_rule, checked or "",
+             json.dumps(values or {}), json.dumps(ticked or [])],
             capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if r.returncode != 0:
             raise AssertionError((r.stdout + r.stderr).strip())
@@ -180,6 +188,121 @@ class SavingKeepsWhatItCannotSee(unittest.TestCase):
             patch["cloud"]["default_owner_filter"], "others",
             "the Default view was lost by a save that did not mention it")
 
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class ReportDefaultsSaveFromTheirNewHome(unittest.TestCase):
+    """The four report identity defaults and the file-name switch moved off a
+    modal inside Report and onto the Settings page. A control that renders and
+    is never read is the failure this catches: the fields would look right and
+    saving would write empty strings over whatever was there.
+    """
+
+    def _patch(self, values, ticked):
+        return SavingKeepsWhatItCannotSee._save_patch(
+            SavingKeepsWhatItCannotSee(), "ask", None, values, ticked)
+
+    def test_the_four_identity_fields_are_written(self):
+        patch = self._patch({
+            "sRepClient": "Northwind Traders",
+            "sRepPreparedBy": "A. Surveyor",
+            "sRepProjectRef": "PO-2026-0042",
+            "sRepRevision": "Rev B",
+        }, [])
+        self.assertEqual(patch["report"]["client_name"], "Northwind Traders")
+        self.assertEqual(patch["report"]["prepared_by"], "A. Surveyor")
+        self.assertEqual(patch["report"]["project_ref"], "PO-2026-0042")
+        self.assertEqual(patch["report"]["revision"], "Rev B")
+
+    def test_surrounding_whitespace_is_dropped(self):
+        """All four, not one - these end up in a printed report and in the
+        saved file name, and only one of them used to be checked."""
+        patch = self._patch({
+            "sRepClient": "  Northwind Traders  ",
+            "sRepPreparedBy": " A. Surveyor ",
+            "sRepProjectRef": "  PO-2026-0042",
+            "sRepRevision": "  Rev B  ",
+        }, [])
+        self.assertEqual(patch["report"]["client_name"], "Northwind Traders")
+        self.assertEqual(patch["report"]["prepared_by"], "A. Surveyor")
+        self.assertEqual(patch["report"]["project_ref"], "PO-2026-0042")
+        self.assertEqual(patch["report"]["revision"], "Rev B")
+
+    def test_opening_the_page_fills_them_in(self):
+        """The other half, and the dangerous one. A field that renders but is
+        never filled looks like a setting that was never saved - and the next
+        save writes that emptiness over the real value. Nothing above would
+        notice: the save reads the control, and the control would be blank."""
+        shown = self._populate({
+            "report": {"client_name": "Northwind Traders",
+                       "prepared_by": "A. Surveyor",
+                       "project_ref": "PO-2026-0042",
+                       "revision": "Rev B",
+                       "include_revision_in_filename": False},
+        })
+        self.assertEqual(shown["values"].get("sRepClient"), "Northwind Traders")
+        self.assertEqual(shown["values"].get("sRepPreparedBy"), "A. Surveyor")
+        self.assertEqual(shown["values"].get("sRepProjectRef"), "PO-2026-0042")
+        self.assertEqual(shown["values"].get("sRepRevision"), "Rev B")
+        self.assertIs(shown["checked"].get("sRepIncludeRev"), False)
+
+    def test_the_filename_switch_defaults_to_on_when_nothing_is_saved(self):
+        shown = self._populate({"report": {}})
+        self.assertIs(shown["checked"].get("sRepIncludeRev"), True,
+                      "an install that has never touched this must show it on, "
+                      "because on is what the tool does")
+
+    def _populate(self, settings: dict) -> dict:
+        program = r"""
+        const fs = require('fs');
+        const src = fs.readFileSync(process.argv[1], 'utf8');
+        const a = src.indexOf('  function populate() {');
+        if (a < 0) throw new Error('populate moved');
+        // The matching close brace, counted. Searching for a two-space
+        // `}` finds it inside a four-space one, and slicing to wherever
+        // the next function starts swallows anything inserted between
+        // them - both have already cost a green run here.
+        let b = a, depth = 0, seen = false;
+        while (b < src.length && !(seen && depth === 0)) {
+          if (src[b] === '{') { depth++; seen = true; }
+          else if (src[b] === '}') depth--;
+          b++;
+        }
+
+        const settings = JSON.parse(process.argv[2]);
+        const values = {}, checked = {};
+        const el = (id) => ({
+          set value(v) { values[id] = v; }, get value() { return values[id]; },
+          set checked(v) { checked[id] = v; }, get checked() { return checked[id]; },
+        });
+        const cache = {};
+        global.document = {
+          getElementById: (id) => (cache[id] = cache[id] || el(id)),
+          querySelectorAll: () => { const a = []; a.forEach = Array.prototype.forEach; return a; },
+        };
+        const renderSubfolders = () => {}, renderCustomDests = () => {};
+        eval(src.slice(a, b));
+        populate();
+        console.log(JSON.stringify({ values: values, checked: checked }));
+        """
+        r = subprocess.run(
+            ["node", "-e", program, str(SETTINGS_JS), json.dumps(settings)],
+            capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).strip())
+        return json.loads(r.stdout.strip().splitlines()[-1])
+
+    def test_the_filename_switch_is_written_both_ways(self):
+        on = self._patch({}, ["sRepIncludeRev"])
+        self.assertIs(on["report"]["include_revision_in_filename"], True)
+        off = self._patch({}, [])
+        self.assertIs(off["report"]["include_revision_in_filename"], False)
+
+    def test_saving_report_defaults_does_not_disturb_the_other_tools(self):
+        """One patch carries every section, so a new block is a chance to
+        drop an old one."""
+        patch = self._patch({"sRepClient": "Northwind Traders"}, [])
+        for section in ("global", "organizer", "cloud", "walls", "report"):
+            self.assertIn(section, patch, "the save dropped the %s section" % section)
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
 class TheGearLandsOnTheControls(unittest.TestCase):
@@ -220,9 +343,22 @@ class TheGearLandsOnTheControls(unittest.TestCase):
         program = r"""
         const fs = require('fs');
         const src = fs.readFileSync(process.argv[1], 'utf8');
+        // The function's own closing brace, not "wherever the next function
+        // starts": a slice that runs to the next declaration swallows anything
+        // inserted between them, which has already happened once. No line
+        // ending appears in the search, so CRLF and LF both work.
         const a = src.indexOf('  function openHashSection() {');
-        const b = src.indexOf('  function populate() {');
-        if (a < 0 || b < 0) throw new Error('openHashSection moved');
+        if (a < 0) throw new Error('openHashSection moved');
+        // The matching close brace, counted. Searching for a two-space
+        // `}` finds it inside a four-space one, and slicing to wherever
+        // the next function starts swallows anything inserted between
+        // them - both have already cost a green run here.
+        let b = a, depth = 0, seen = false;
+        while (b < src.length && !(seen && depth === 0)) {
+          if (src[b] === '{') { depth++; seen = true; }
+          else if (src[b] === '}') depth--;
+          b++;
+        }
 
         const ids = JSON.parse(process.argv[3]);
         const found = {};

@@ -194,8 +194,8 @@
       "category": "preference",
       "owner": "Report",
       "section": "report",
-      "home": "report-modal",
-      "control": "set-clientName"
+      "home": "settings",
+      "control": "sRepClient"
     },
     {
       "key": "report.prepared_by",
@@ -203,8 +203,8 @@
       "category": "preference",
       "owner": "Report",
       "section": "report",
-      "home": "report-modal",
-      "control": "set-preparedBy"
+      "home": "settings",
+      "control": "sRepPreparedBy"
     },
     {
       "key": "report.project_ref",
@@ -212,8 +212,8 @@
       "category": "preference",
       "owner": "Report",
       "section": "report",
-      "home": "report-modal",
-      "control": "set-projectRef"
+      "home": "settings",
+      "control": "sRepProjectRef"
     },
     {
       "key": "report.revision",
@@ -221,8 +221,8 @@
       "category": "preference",
       "owner": "Report",
       "section": "report",
-      "home": "report-modal",
-      "control": "set-revision"
+      "home": "settings",
+      "control": "sRepRevision"
     },
     {
       "key": "report.include_revision_in_filename",
@@ -230,8 +230,8 @@
       "category": "preference",
       "owner": "Report",
       "section": "report",
-      "home": "report-modal",
-      "control": "set-includeRevision"
+      "home": "settings",
+      "control": "sRepIncludeRev"
     },
     {
       "key": "report.units",

@@ -1874,6 +1874,15 @@ below says so.
 in the browser deliberately — syncing a collapsed panel between machines would
 be a regression, not a feature.
 
+**Every setting is listed on the Settings page, whether or not it is changed
+there.** Each tool's section ends with a **What is saved** list: every setting
+that tool has, the value it holds right now, and — for the ones whose control
+is on the tool rather than on this page — which tool to go to. The tools with
+no controls on the Settings page at all are grouped under **PlanTrim, Rename
+and the rest**, so nothing is invisible. The list is built from the same
+register the suite uses internally, so a setting cannot exist without
+appearing there.
+
 **And one thing that looks like a setting and is not: Cloud Manager's Owner
 buttons.** The **All / Mine / Others** buttons in its toolbar change what you
 are looking at *now*. They are not saved, and reloading the page — or
@@ -1910,14 +1919,32 @@ other.
 | **Auto-apply the default template on open** | Quick Walls | Applies that template as soon as a project is opened, without asking |
 | **Open the source folder after saving** | Settings | Reveals the folder in Explorer or Finder once a save finishes |
 
+The first three are on the **Template** bar above the wall list in Quick Walls:
+the template picker, **Apply**, **Save Template**, **Manage**, and the
+**Auto-apply on open** tick box. They stay there because the choice is made
+while looking at the template it applies. **Default wall template** is not a
+control at all — it records the last template you applied, and that is the one
+**Auto-apply on open** uses. Both values are shown, read-only, in the Quick
+Walls section of the Settings page.
+
 ### Report
 
 | Setting | Where | What it does |
 | --- | --- | --- |
-| **Client / company**, **Prepared by**, **Project reference**, **Revision** | Report settings | Printed on the cover and in the footer. Shared across every report template rather than saved per template |
-| **Include revision in file name** | Report settings | Whether the saved PDF is named `Report - Type - v2.0 - Site` or `Report - Type - Site` |
+| **Client / company**, **Prepared by**, **Project reference**, **Revision** | Settings | Printed on the cover and in the footer. These are the values every report starts from |
+| **Include the revision in the saved file name** | Settings | Whether the saved PDF is named `Report - Type - v2.0 - Site` or `Report - Type - Site`. On by default |
 | **Units (feet / metres)** | Report | How lengths are written. The `.esx` always stores metres; this changes only the report |
 | **Section size on large floors** | Report | How much ground one section sheet covers when a large floor is split. Follows you, not the document |
+
+The first five are in the **Report** section of the Settings page. They used to
+be in a window inside Report itself; a single report can still be given its own
+Client, Prepared by, Project reference or Revision in the **Configure** step,
+and doing that changes that report only.
+
+What is still edited in Report is the **cover image** and the file-name
+preview, both under **Cover image…** above the report list — the preview names
+the project that is open, which the Settings page cannot know. The **⚙ Report
+settings…** button beside it opens the Settings page at the Report section.
 
 Everything else in a report's options panel is remembered **per report type**
 when you press **Save these as my defaults** — see *Settings that stay set*.
@@ -1936,11 +1963,28 @@ All on the Settings page, and all about how a folder is sorted:
 | **New site folder template** | The shape of a newly created site folder |
 | **Squirrel rename rules** | Held on the Rename page itself |
 
+### PlanTrim
+
+| Setting | Where | What it does |
+| --- | --- | --- |
+| **Trim margin** | PlanTrim | How much room is left around the building when a floor plan is cropped. Prep's trim step reads and writes the same setting |
+| **Trim margin, custom distance** | PlanTrim | The distance used when the margin is set to a custom one rather than a preset |
+
+Both are chosen in PlanTrim, on the plan you are trimming, and both are listed
+under **PlanTrim, Rename and the rest** on the Settings page.
+
+### Rename
+
+Saved naming formats and the site directory you import are held on the Rename
+page, because they are built while looking at the files being renamed. How many
+are saved is shown on the Settings page, and both files leave with a settings
+backup.
+
 ### AP Labeler
 
 Its naming defaults, templates, colour sequence and floor-walking order are kept
 with the tool rather than on the Settings page, because they are edited while
-looking at the plan they apply to.
+looking at the plan they apply to. The Settings page lists how many are saved.
 
 ---
 

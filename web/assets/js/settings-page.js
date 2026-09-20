@@ -13,6 +13,7 @@
       showLastExport((r.settings.global || {}).last_settings_export);
       populate();
       checkCloud();
+      loadOverviews();
       openHashSection();
     });
   }
@@ -30,6 +31,7 @@
     sec.open = true;
     sec.scrollIntoView({ block: 'start' });
   }
+
 
   function populate() {
     var g = settings.global || {};
@@ -63,6 +65,19 @@
     // so the only way to turn it off was editing settings.json by hand.
     var w = settings.walls || {};
     document.getElementById('sWallsReveal').checked = w.reveal_source_after_save !== false;
+
+    /* The four report identity defaults and the file-name switch. They used to
+       be reachable only from a modal inside Report, which is a long way from
+       where anyone looks for something they saved. A single report can still
+       override them in Report's Configure step - that is the per-run control
+       and it has not moved. */
+    var rp = settings.report || {};
+    document.getElementById('sRepClient').value = rp.client_name || '';
+    document.getElementById('sRepPreparedBy').value = rp.prepared_by || '';
+    document.getElementById('sRepProjectRef').value = rp.project_ref || '';
+    document.getElementById('sRepRevision').value = rp.revision || '';
+    document.getElementById('sRepIncludeRev').checked =
+      rp.include_revision_in_filename !== false;
   }
 
   var _subfolders = [];
@@ -263,12 +278,20 @@
       },
       walls: {
         reveal_source_after_save: document.getElementById('sWallsReveal').checked
+      },
+      report: {
+        client_name: document.getElementById('sRepClient').value.trim(),
+        prepared_by: document.getElementById('sRepPreparedBy').value.trim(),
+        project_ref: document.getElementById('sRepProjectRef').value.trim(),
+        revision: document.getElementById('sRepRevision').value.trim(),
+        include_revision_in_filename: document.getElementById('sRepIncludeRev').checked
       }
     };
 
     API('settings/update', { patch: patch }).then(function (r) {
       if (r.ok) {
         settings = r.settings;
+        loadOverviews();          // the values below the controls move too
         WD.toast('Settings saved', 'ok');
       } else {
         WD.toast(r.error || 'Save failed', 'error');
@@ -486,6 +509,100 @@
       setTimeout(function () { location.reload(); }, 1400);
     });
   };
+
+  /* ── The per-tool overview ────────────────────────────────────────────────
+     "We need an overview of the settings for each of the tools." This is it,
+     and it is rendered from `web/assets/settings-registry.json` rather than
+     written out by hand, because a hand-written list is a list that goes
+     stale. Adding a setting to the registry is already compulsory, so a
+     registered setting appears here without anyone remembering to add it.
+
+     Three things per row: what the setting is, what it is set to right now,
+     and - only when its control is not on this page - which of the tool's own
+     controls owns it. A setting whose control is here needs no signpost; the
+     control is a few lines above.
+
+     `key_prefix` entries stand for a whole family (every saved rename
+     pattern, say). They cannot show one value, so they show how many are
+     saved, which is the useful number. */
+  var WHERE = {
+    'cloud-modal':  'Cloud Manager',
+    'report-modal': 'Report',
+    'report-tool':  'Report',
+    'walls-tool':   'Quick Walls',
+    'plantrim-tool': 'PlanTrim',
+    'organizer-tool': 'Squirrel',
+    'rename-tool':  'Rename',
+    'aprename-tool': 'AP Labeler'
+  };
+
+  function valueAt(key) {
+    var parts = key.split('.');
+    var node = settings;
+    for (var i = 0; i < parts.length; i++) {
+      if (node === null || typeof node !== 'object' || !(parts[i] in node)) return undefined;
+      node = node[parts[i]];
+    }
+    return node;
+  }
+
+  function describe(v) {
+    if (v === undefined || v === null || v === '') return null;
+    if (v === true) return 'On';
+    if (v === false) return 'Off';
+    if (Array.isArray(v)) return v.length ? v.join(', ') : null;
+    if (typeof v === 'object') {
+      var n = Object.keys(v).length;
+      return n ? n + (n === 1 ? ' saved' : ' saved') : null;
+    }
+    return String(v);
+  }
+
+  function familyCount(prefix) {
+    // `organizer.rename.` means "everything under organizer.rename".
+    var node = valueAt(prefix.replace(/\.$/, ''));
+    if (!node || typeof node !== 'object') return null;
+    var n = Array.isArray(node) ? node.length : Object.keys(node).length;
+    return n ? n + (n === 1 ? ' item saved' : ' items saved') : null;
+  }
+
+  function renderOverviews(registry) {
+    var rows = (registry && registry.settings) || [];
+    var hosts = document.querySelectorAll('.s-overview');
+    for (var h = 0; h < hosts.length; h++) {
+      var host = hosts[h];
+      var want = (host.getAttribute('data-section') || '').split(',');
+      var mine = rows.filter(function (r) {
+        return want.indexOf(r.section) !== -1;
+      });
+      if (!mine.length) { host.innerHTML = ''; continue; }
+      var html = '<div class="s-ov-title">What is saved</div>';
+      mine.forEach(function (r) {
+        var isFamily = !r.key && r.key_prefix;
+        var shown = isFamily ? familyCount(r.key_prefix) : describe(valueAt(r.key));
+        var where = (r.home && r.home !== 'settings') ? WHERE[r.home] : null;
+        html += '<div class="s-ov-row">'
+          + '<span class="s-ov-label">' + WD.esc(r.label || r.key || r.key_prefix) + '</span>'
+          + (shown === null
+              ? '<span class="s-ov-val is-empty">Not set</span>'
+              : '<span class="s-ov-val">' + WD.esc(shown) + '</span>')
+          + (where
+              ? '<span class="s-ov-where">Changed in ' + WD.esc(where) + '.</span>'
+              : '')
+          + '</div>';
+      });
+      host.innerHTML = html;
+    }
+  }
+
+  function loadOverviews() {
+    // A failure here must not take the page with it: the controls above are
+    // the point and this is a summary of them.
+    fetch('/assets/settings-registry.json')
+      .then(function (r) { return r.json(); })
+      .then(renderOverviews)
+      .catch(function () {});
+  }
 
   init();
 })();

@@ -278,6 +278,40 @@ grounds that it was momentarily empty, and the test caught it.
 it was written and sat here wrong for forty-five minor versions, so this
 section is not exempt from the next pass.
 
+#### 9. P2 — The "only name controls that exist" guard reads one file
+
+`TheAppOnlyPointsAtControlsThatExistTests`
+(`tests/test_cloud_push_is_reachable.py:229`) is the rule that stops the app
+telling someone to use a button nothing renders. It was written when the Sync
+dialog spent a release recommending a control greyed out for every row, and it
+reads **`cloud.js` and nothing else** — the one page that had the bug.
+
+It is a suite-wide rule enforced on one file, and v2.150.0 walked straight into
+the gap. The Settings page gained a line reading "Open Report and use **Edit
+report settings**", and the same change had just renamed that button to
+**Cover image…**. Instruction on one page, control on another, guard blind to
+both. It was caught by looking at a screenshot of the finished page, which is
+not a mechanism.
+
+**Two attempts at a wider version failed, and the way they failed is the
+useful part.** Both passed with the defect in place:
+
+* checking whether the named string appears anywhere in the source matched a
+  **comment** in `report.js` explaining why the button had been renamed — the
+  old name was in quotes in prose, which read as a label;
+* checking for `>Name<` across all of `web/` matched the page under test,
+  because the page itself contains `<b>Name</b>` and the corpus included it.
+
+So a real version has to exclude the instructional markup from the haystack and
+recognise a label that is **built by concatenation** — `'Cover image' + '…'
++ '</button>'` never appears as `>Cover image…<` anywhere in the source, which
+is how most labels in this suite are written. Rendering each page and reading
+the accessible labels out of it is the honest approach, and the browser harness
+in `tests/test_dev_nav_on_every_page.py` already walks every page that way.
+
+Until then the rule is enforced on Cloud Manager and nowhere else, and any
+cross-page instruction added elsewhere is unguarded.
+
 ### A wall template updates every type it carries, including Ekahau's — and the opposite was recorded here until 2026-09-19
 
 **The entry this replaces said the opposite, and it was wrong from v2.100.19
