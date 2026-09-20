@@ -1014,6 +1014,36 @@ def api_report_cover_info():
     return jsonify(report_store.cover_info())
 
 
+GRID_ACTIONS = {
+    "get": lambda d: report_store.grids_for_project(d.get("projectId")),
+    "save": lambda d: report_store.save_grid(
+        d.get("projectId"), d.get("floorId"), d.get("grid")),
+    "clear": lambda d: report_store.clear_grid(
+        d.get("projectId"), d.get("floorId")),
+}
+
+
+@app.route("/api/report/grid/<action>", methods=["POST"])
+def api_report_grid(action):
+    """The column grid calibration for a floor: two labelled intersections.
+
+    It lives on this side rather than in the .esx because Ekahau has no member
+    for it - a round trip through the cloud would drop it silently and the
+    reference would stop appearing with nothing to say why. See
+    report_store.save_grid, which re-derives every field rather than trusting
+    the payload: a calibration that is nonsense prints a wrong bay number on an
+    installer's drawing.
+    """
+    fn = GRID_ACTIONS.get(action)
+    if not fn:
+        return jsonify({"ok": False, "error": f"unknown action: {action}"}), 404
+    try:
+        return jsonify(fn(request.get_json(silent=True) or {}))
+    except Exception as e:
+        applog.note_failure("report grid " + action, e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/report/find_folder", methods=["POST"])
 def api_report_find_folder():
     """Name the folder a dropped .esx came from.

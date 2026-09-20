@@ -15,6 +15,14 @@ Two things make it impossible, and both are asserted here:
   * every column has a declared width, so no column can be starved
   * cells clip, so even a value nothing can break cannot reach its neighbour
 
+**The width assertions run the table rather than reading it.** They used to
+scrape the `cols` literals out of report.js with a regex and count them, which
+pinned the shape of the source rather than the shape of the table: adding the
+optional Grid column - a third array literal in the same block - failed this
+file while the rendered table was correct. They render the real sheet now and
+measure the colgroup that comes out, so an optional column is just another
+case rather than a broken assumption.
+
 The acceptance test is neither of those - it is that no text is printed on top
 of any other text in the PDF. That needs a browser, so it lives in the report
 sweep rather than in CI; see `analyse_pdf.py` in the session scratchpad, which
@@ -22,53 +30,80 @@ reports 24 overlapping spans on the old build and 0 on this one.
 """
 from __future__ import annotations
 
+import json
 import re
+import shutil
 import unittest
 from pathlib import Path
+
+# The same slice-and-stub harness the Grid column tests use, so there is one
+# way of rendering this table in a test rather than two that can disagree.
+from tests.test_column_grid_in_tables import run_node
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT_JS = ROOT / "web" / "assets" / "js" / "report.js"
 CSS = ROOT / "web" / "assets" / "wd-tools.css"
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
 class AimTableColumns(unittest.TestCase):
-    def setUp(self):
-        self.js = REPORT_JS.read_text(encoding="utf-8")
+    """Measured off the rendered sheet, in every combination of the two
+    optional columns - sign-off and the column grid reference."""
+
+    def widths(self, **flags):
+        """The colgroup and the header of a real Antenna Aim Sheet, paired."""
+        result = run_node("""
+          const html = renderTable('aim', %s, { signOff: %s });
+          const header = headerOf(html);
+          const widths = (html.match(/width:([\d.]+)%%/g) || [])
+            .map(function (m) { return parseFloat(/([\d.]+)/.exec(m)[1]); });
+          console.log(JSON.stringify({ header: header, widths: widths }));
+          process.exit(0);
+        """ % ("true" if flags["grid"] else "false",
+               "true" if flags["sign_off"] else "false"))
+        self.assertEqual(result.returncode, 0,
+                         (result.stdout + result.stderr).strip())
+        got = json.loads(result.stdout.strip().splitlines()[-1])
+        return got["header"], got["widths"]
 
     def test_every_column_has_a_declared_width(self):
         """Nine columns sharing the sheet evenly is what starved the AP name
-        column. The counts have to match the header row, or a width lands on
-        the wrong column - which is worse than none at all."""
-        block = self.js[self.js.index("var cols = showSignOff"):]
-        block = block[:block.index("var table =")]
-        found = re.findall(r"\[([0-9,\s]+)\]", block)
-        self.assertEqual(len(found), 2, "expected a with- and without-sign-off set")
-        with_signoff = [int(n) for n in found[0].split(",")]
-        without = [int(n) for n in found[1].split(",")]
-
-        self.assertEqual(len(with_signoff), 9,
-                         "the sign-off table has nine columns")
-        self.assertEqual(len(without), 7,
-                         "without sign-off it has seven")
-        for name, widths in (("with sign-off", with_signoff), ("without", without)):
-            self.assertEqual(sum(widths), 100,
-                             "%s: widths must be a whole sheet, got %d%%"
-                             % (name, sum(widths)))
+        column. One width per column, and they have to be a whole sheet - a
+        colgroup out of step with the header puts a width on the wrong
+        column, which is worse than none at all."""
+        for grid in (True, False):
+            for sign_off in (True, False):
+                with self.subTest(grid=grid, sign_off=sign_off):
+                    header, widths = self.widths(grid=grid, sign_off=sign_off)
+                    self.assertEqual(len(widths), len(header),
+                                     "a column with no width, or a width with "
+                                     "no column")
+                    self.assertAlmostEqual(
+                        sum(widths), 100, places=2,
+                        msg="widths must be a whole sheet, got %s%%" % sum(widths))
 
     def test_the_long_columns_get_the_room(self):
         """An AP name and an antenna model are long; a tilt is four
         characters. Widths that do not reflect that are how this broke."""
-        block = self.js[self.js.index("var cols = showSignOff"):]
-        block = block[:block.index("var table =")]
-        w = [int(n) for n in re.findall(r"\[([0-9,\s]+)\]", block)[0].split(",")]
-        num, name, floor, azimuth, tilt, height, antenna = w[:7]
-        self.assertGreater(name, tilt * 2, "AP name needs more room than Tilt")
-        self.assertGreater(antenna, tilt * 2, "Antenna model needs more room than Tilt")
-        self.assertGreater(name, num * 3, "AP name needs more room than the index")
+        # Both sign-off states, because they are two separate width lists and
+        # only one of them used to be checked - a mutation that starved the AP
+        # name in the other stayed green.
+        for grid in (True, False):
+          for sign_off in (True, False):
+            with self.subTest(grid=grid, sign_off=sign_off):
+                header, widths = self.widths(grid=grid, sign_off=sign_off)
+                by = dict(zip(header, widths))
+                self.assertGreater(by["AP name"], by["Tilt"] * 2,
+                                   "AP name needs more room than Tilt")
+                self.assertGreater(by["Antenna"], by["Tilt"] * 2,
+                                   "Antenna model needs more room than Tilt")
+                self.assertGreater(by["AP name"], by["#"] * 3,
+                                   "AP name needs more room than the index")
 
     def test_a_colgroup_is_actually_emitted(self):
-        self.assertIn("<colgroup>", self.js)
-        self.assertIn("rep-ap-table rep-aim-table", self.js)
+        header, widths = self.widths(grid=False, sign_off=True)
+        self.assertTrue(widths, "no colgroup was emitted at all")
+        self.assertIn("AP name", header)
 
 
 class CellsCannotReachTheirNeighbour(unittest.TestCase):

@@ -340,6 +340,71 @@
   </div>
 </div>
 
+<div id="gridRefModal" class="grid-modal-overlay" hidden>
+  <div class="grid-modal">
+    <div class="grid-modal-header">
+      <h3>Column grid &mdash; set up</h3>
+      <button class="btn-icon" onclick="closeGridRef()" title="Close">&times;</button>
+    </div>
+    <div class="grid-modal-body">
+      <div class="grid-modal-main">
+        <div class="grid-controls">
+          <label>Floor plan:
+            <select id="gridRefFloorSelect" onchange="gridRefFloorChanged(this)"></select>
+          </label>
+          <label>Letters run:
+            <select id="gridRefAxis" onchange="gridRefAxisChanged(this)">
+              <option value="x">Across the plan</option>
+              <option value="y">Down the plan</option>
+            </select>
+          </label>
+          <div class="grid-ref-points">
+            <div class="grid-ref-point">
+              <button type="button" id="gridRefPickA" class="btn btn-secondary btn-sm"
+                      onclick="gridRefPick('a')">1. Click an intersection</button>
+              <input type="text" id="gridRefLabelA" placeholder="A-1" maxlength="8"
+                     oninput="gridRefLabelChanged('a', this)" aria-label="Label for the first intersection">
+            </div>
+            <div class="grid-ref-point">
+              <button type="button" id="gridRefPickB" class="btn btn-secondary btn-sm"
+                      onclick="gridRefPick('b')">2. Click another</button>
+              <input type="text" id="gridRefLabelB" placeholder="G-7" maxlength="8"
+                     oninput="gridRefLabelChanged('b', this)" aria-label="Label for the second intersection">
+            </div>
+          </div>
+          <div id="gridRefStatus" class="grid-cell-count"></div>
+        </div>
+        <div id="gridRefPreviewContainer" class="grid-preview-container">
+          <div id="gridRefPreviewImage" class="grid-preview-image"></div>
+        </div>
+      </div>
+      <div class="grid-modal-help">
+        <h4>Steps</h4>
+        <dl>
+          <dt>1. Click an intersection you can name</dt>
+          <dd>Any point where a lettered line crosses a numbered one. Type what the drawing calls it &mdash; <kbd>A-1</kbd>, <kbd>A1</kbd> and <kbd>a 1</kbd> are all read the same way.</dd>
+          <dt>2. Click a second one, far away</dt>
+          <dd>It must differ in <em>both</em> directions &mdash; a different letter <em>and</em> a different number. The further apart the two are, the more accurate the rest of the grid.</dd>
+          <dt>3. Check the drawn grid</dt>
+          <dd>The grid it worked out is drawn over the plan. If it does not sit on the columns in the drawing, switch <strong>Letters run</strong> to the other axis.</dd>
+          <dt>4. Save, then do the next floor</dt>
+          <dd>Each floor is set up separately &mdash; a mezzanine rarely shares the slab&rsquo;s column lines.</dd>
+        </dl>
+        <h4>When to leave it off</h4>
+        <p>Nothing is read off the drawing, so this assumes one regular grid running square to the sheet. If the drawn grid does not line up &mdash; an interrupted bay, a rotated plan, a building carrying two grids of its own &mdash; press <strong>Turn off for this floor</strong>. A reference that is quietly wrong is worse than none, because whoever is on the ladder cannot tell.</p>
+      </div>
+    </div>
+    <div class="grid-modal-footer">
+      <button class="btn btn-secondary btn-sm" onclick="resetGridRefZoom()">Reset Zoom</button>
+      <button class="btn btn-secondary btn-sm" onclick="clearGridRefFloor()">Turn off for this floor</button>
+      <div class="grid-modal-actions">
+        <button class="btn btn-secondary btn-sm" onclick="closeGridRef()">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="gridRefSaveBtn" onclick="saveGridRefFloor()" disabled>Save this floor</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toasts" class="toasts"></div>
 
 <script src="/assets/js/wd-shared.js"></script>

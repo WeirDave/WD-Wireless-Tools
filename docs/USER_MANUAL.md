@@ -1260,6 +1260,62 @@ A floor too big to read on one sheet can be split into lettered sections. Turn o
   position the area to be covered. Sections containing no APs are drawn dashed —
   they never become sheets.
 
+### Column grid references
+
+A section page of a warehouse shows an AP floating in empty slab with nothing
+to locate it against. Crews locate everything off the column grid — lettered one
+way, numbered the other, bubbled on the drawing — so a grid reference is the
+coordinate system the person on the ladder already has.
+
+**Where it is.** **Column grid reference**, a checkbox in the options panel of
+the **Configure** step, on the **Antenna Aim Sheet** and **AP Installation**
+reports. **Off by default.** Directly beneath it is **Set up column grid…**,
+whose button reads *Not set up* until a floor is calibrated and then counts them
+— *"2 of 3 floors"*.
+
+Turning the checkbox on adds a **Grid** column to the AP table, giving each
+access point its nearest intersection: `C-4`. The column only appears when at
+least one floor has been set up, so ticking it on a project with no grid
+changes nothing rather than adding a column of dashes.
+
+**Setting a floor up is two clicks and two labels.** Nothing is read off the
+drawing — finding the bubbles automatically would need OCR, and a mis-read
+bubble produces a confidently wrong reference that nobody on site can catch.
+
+1. Press **Set up column grid…** and pick the floor.
+2. Press **1. Click an intersection**, click any point on the plan where a
+   lettered line crosses a numbered one, and type what the drawing calls it.
+   `A-1`, `A1` and `a 1` are all read the same way.
+3. Press **2. Click another** and do the same, as far from the first as you can.
+   It must differ in **both** directions — a different letter *and* a different
+   number — or there is nothing to measure the spacing against, and the panel
+   says so.
+4. **Check the grid it draws over the plan.** If it does not sit on the columns
+   in the drawing, switch **Letters run** between *Across the plan* and *Down
+   the plan*. Two points cannot say which way the letters go, so that switch is
+   the answer rather than a guess.
+5. **Save this floor.** Each floor is separate — a mezzanine rarely shares the
+   slab's column lines.
+
+Scroll to zoom and hold `Space` and drag to pan, the same as every other plan
+canvas in the suite.
+
+**When to leave it off.** This assumes one regular grid running square to the
+sheet, which is what a structural bay is. It cannot model an interrupted bay, a
+rotated or skewed grid, or a building carrying two grids with their own
+sequences — and in all three the grid drawn over the plan visibly will not fit.
+Press **Turn off for this floor**. APs there show a dash and other floors are
+unaffected. A reference that is quietly wrong is worse than none.
+
+**An AP with no grid reference shows a dash**, which happens on an uncalibrated
+floor, for an AP that was never placed on a plan, and for one outside the
+lettered area — in a yard, say. It is never guessed at.
+
+The calibration is kept in `~/.wd_wireless_tools/report/grids.json`, keyed by
+the project's own id and the floor's, so renaming either does not lose it. It is
+**not** written into the `.esx`: Ekahau has no member for it, so a round trip
+through the cloud would drop it silently.
+
 ### AP labels
 
 Markers on the floor-plan overview and the **#** column of every AP table use

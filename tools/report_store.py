@@ -12,6 +12,8 @@ a ZIP extraction can reach these files.
 """
 from __future__ import annotations
 
+import json
+import math
 import os
 import tempfile
 from pathlib import Path
@@ -240,3 +242,143 @@ def locate_project_folder(file_name: str, size=None) -> dict:
     if len(folders) > 1:
         return {"ok": False, "reason": "ambiguous", "count": len(folders)}
     return {"ok": True, "folder": folders.pop()}
+
+
+# ── Column grid calibration ────────────────────────────────────────────────
+# Two labelled intersections per floor, from which a grid reference for any
+# point on that floor follows. See the "Column grid references" block in
+# report.js for the arithmetic and for why the grid is declared rather than
+# read off the drawing.
+#
+# **It does not go in the .esx, and that is not a preference.** Ekahau has no
+# member for it, so a round trip through the cloud - or through Ekahau AI Pro
+# itself - would drop it silently, and the reference would stop appearing with
+# nothing to say why. It lives here, beside the cover image, in the one
+# directory both update paths are required to leave alone.
+#
+# Keyed by the project's own id and the floor plan's own id rather than by
+# their names, because both get renamed and neither rename should cost the
+# calibration.
+
+GRIDS_PATH = REPORT_DIR / "grids.json"
+
+# A calibration is six numbers and an axis. There is no reason for this file to
+# grow, and a cap means a corrupted or hand-edited one fails as a sentence
+# rather than as a memory error.
+MAX_GRIDS_BYTES = 2 * 1024 * 1024
+
+
+def _blank_grids() -> dict:
+    return {"version": 1, "projects": {}}
+
+
+def load_grids() -> dict:
+    """Every saved calibration, or an empty structure.
+
+    A missing, unreadable or malformed file reads as "nothing is calibrated",
+    which is the same state as a fresh install: the Grid column shows a dash
+    and the report is otherwise unchanged. Losing a calibration is an
+    inconvenience; refusing to open the tool over it would not be.
+    """
+    try:
+        if not GRIDS_PATH.is_file():
+            return _blank_grids()
+        if GRIDS_PATH.stat().st_size > MAX_GRIDS_BYTES:
+            return _blank_grids()
+        data = json.loads(GRIDS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return _blank_grids()
+    if not isinstance(data, dict) or not isinstance(data.get("projects"), dict):
+        return _blank_grids()
+    return data
+
+
+def _write_grids(data: dict) -> None:
+    """Build alongside and rename over the top, so the file is either entirely
+    the old one or entirely the new one and never half of either."""
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(REPORT_DIR), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
+        os.replace(tmp, GRIDS_PATH)
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _clean_point(raw) -> dict | None:
+    """One intersection: where it is, and what it is called.
+
+    The payload arrives from the browser, so every field is re-derived here
+    rather than trusted. A calibration that is nonsense produces a wrong bay
+    number on an installer's drawing, and that is the one failure this feature
+    is written to avoid.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        x = float(raw["x"])
+        y = float(raw["y"])
+        col = int(raw["col"])
+        row = int(raw["row"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not all(map(math.isfinite, (x, y))):
+        return None
+    if col < 0 or row < 1:
+        return None
+    return {"x": x, "y": y, "col": col, "row": row}
+
+
+def save_grid(project_id: str, floor_id: str, payload) -> dict:
+    project_id = (project_id or "").strip()
+    floor_id = (floor_id or "").strip()
+    if not project_id or not floor_id:
+        return {"ok": False, "error": "That floor could not be identified."}
+    if not isinstance(payload, dict):
+        return {"ok": False, "error": "No calibration was received."}
+
+    a = _clean_point(payload.get("a"))
+    b = _clean_point(payload.get("b"))
+    if not a or not b:
+        return {"ok": False, "error": "Two labelled intersections are needed."}
+    if a["col"] == b["col"] or a["row"] == b["row"]:
+        return {"ok": False,
+                "error": "The two intersections must differ in both directions."}
+
+    axis = "y" if payload.get("lettersAxis") == "y" else "x"
+
+    data = load_grids()
+    data.setdefault("projects", {}).setdefault(project_id, {})[floor_id] = {
+        "a": a, "b": b, "lettersAxis": axis,
+    }
+    _write_grids(data)
+    return {"ok": True, "floors": data["projects"][project_id]}
+
+
+def clear_grid(project_id: str, floor_id: str) -> dict:
+    """Turn the reference off for one floor.
+
+    Which is the documented answer for a grid this cannot model - an
+    interrupted bay, a skewed or rotated grid, a building carrying two grids of
+    its own. Printing something plausible instead is the failure.
+    """
+    data = load_grids()
+    floors = (data.get("projects") or {}).get((project_id or "").strip())
+    if not floors or floor_id not in floors:
+        return {"ok": True, "floors": floors or {}}
+    del floors[floor_id]
+    if not floors:
+        data["projects"].pop(project_id, None)
+    _write_grids(data)
+    return {"ok": True, "floors": floors}
+
+
+def grids_for_project(project_id: str) -> dict:
+    return {"ok": True,
+            "floors": (load_grids().get("projects") or {}).get(
+                (project_id or "").strip(), {})}

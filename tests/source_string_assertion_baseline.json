@@ -1,8 +1,5 @@
 {
-  "note": "Per-file counts of assertions made against the text of a source file, as at the sweep that introduced this ratchet. Existing debt is tolerated; growth is not. Lower a number when you convert a test to one that executes - never raise one.",
-  "total": 346,
   "files": {
-    "test_aim_table_fits.py": 2,
     "test_ap_color_order.py": 21,
     "test_ap_labeler_floor_numbers.py": 4,
     "test_ap_notes_page.py": 7,
@@ -61,5 +58,7 @@
     "test_wall_height_ui.py": 7,
     "test_wall_template_merge.py": 1,
     "test_walls_prefs_migration.py": 3
-  }
+  },
+  "note": "Per-file counts of assertions made against the text of a source file, as at the sweep that introduced this ratchet. Existing debt is tolerated; growth is not. Lower a number when you convert a test to one that executes - never raise one.",
+  "total": 346
 }

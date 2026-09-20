@@ -5597,6 +5597,56 @@ body.tool-report {
 #gridSvg .rep-grid-label--empty { opacity: 0.55; }
 #gridSvg .grid-crop-border { fill: none; stroke: #1d4ed8; }
 
+/* ── Column grid picker ───────────────────────────────────────────────────
+   The derived grid is drawn over a CAD plan, which is white paper *and* black
+   linework, so a single colour loses against one of them. Every line and label
+   carries a white halo underneath - the same fix the section grid and the AP
+   labels both needed. */
+#gridRefSvg .grid-ref-lines line {
+  stroke: #b4530b; fill: none; opacity: 0.85;
+  paint-order: stroke; vector-effect: non-scaling-stroke;
+}
+#gridRefSvg .grid-ref-labels text {
+  fill: #b4530b; font-family: var(--sans); font-weight: 800;
+  paint-order: stroke; stroke: rgba(255,255,255,0.92); stroke-width: 3px;
+}
+/* The two picked intersections sit on top of the grid so they stay findable
+   once the lines are drawn through them. */
+#gridRefSvg .grid-ref-pin circle {
+  fill: rgba(29,78,216,0.28); stroke: #1d4ed8; stroke-width: 2.5px;
+  vector-effect: non-scaling-stroke;
+}
+#gridRefSvg .grid-ref-pin line {
+  stroke: #1d4ed8; stroke-width: 2px; vector-effect: non-scaling-stroke;
+}
+#gridRefSvg .grid-ref-pin.is-picking circle { fill: rgba(29,78,216,0.5); }
+
+/* While a point is being placed the whole plan is a target, so it says so. */
+#gridRefPreviewContainer.is-picking { cursor: crosshair; }
+#gridRefPreviewContainer.is-picking.space-pan,
+#gridRefPreviewContainer.is-picking.pan-active { cursor: grabbing; }
+
+.grid-ref-points { display: flex; flex-direction: column; gap: 6px; }
+.grid-ref-point { display: flex; align-items: center; gap: 8px; }
+.grid-ref-point .btn { flex: 1 1 auto; text-align: left; }
+.grid-ref-point .btn.is-active {
+  outline: 2px solid var(--accent, #1d4ed8); outline-offset: 1px;
+}
+.grid-ref-point input {
+  width: 5.5rem; flex: 0 0 auto; text-align: center; font-weight: 700;
+}
+
+/* A status line that is a refusal reads differently from one that is progress,
+   because the two say opposite things about whether Save will work. */
+.grid-cell-count.is-warn { color: var(--warn, #b4530b); }
+
+/* "AA-12" at the widest. Tabular figures so a column of references lines up
+   the way an installer scans it. */
+.rep-grid-ref {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 .rep-seg-cell { page-break-inside: avoid; break-inside: avoid; margin-top: 22px; }
 
 .rep-seg-cell-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }

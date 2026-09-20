@@ -1003,6 +1003,9 @@
       folderLookup = folderName ? '' : 'pending';
       if (!projectFolder) await recoverProjectFolder(file);
       await parseEsx();
+      // Needs proj.projectId, so it cannot run before the parse. Coming back
+      // with nothing is the ordinary state, not a failure.
+      await loadFloorGrids();
 
       templateConfirmed = false;
       configureDirty = true;
@@ -1083,6 +1086,11 @@
     var pj = null;
     try { pj = await readJson('project.json'); } catch (e) {}
     proj.projectName = (pj && pj.project && (pj.project.name || pj.project.title)) || '';
+    /* Ekahau's own id for this project. It survives every rename, upload and
+       download, which is why the column grid calibration is filed under it -
+       renaming the file, or the project inside it, must not cost the two
+       clicks that set the grid up. */
+    proj.projectId = (pj && pj.project && pj.project.id) || '';
 
     proj.accessPoints = (ap && ap.accessPoints) || [];
     proj.radios = (rad && rad.simulatedRadios) || [];
@@ -1757,6 +1765,24 @@
         + 'onclick="openGridConfig()">' + gridLabel + '</button>'
         + '</div>';
     }
+    /* Says how many floors are set up, because that is the only question
+       anyone has at this control - "is this on for this project?" - and
+       because the checkbox above it does nothing until at least one is. */
+    if (opt.type === 'gridref-button') {
+      var nFloors = (proj.floorPlans || []).length;
+      var nGrid = Object.keys(_floorGrids).length;
+      var gridRefLabel = nGrid
+        ? nGrid + ' of ' + nFloors + ' floor' + (nFloors === 1 ? '' : 's')
+        : 'Not set up';
+      return '<div class="rep-check with-desc">'
+        + '<span class="rep-check-body">'
+        +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
+        +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+        + '</span>'
+        + '<button type="button" class="btn btn-secondary btn-sm rep-btn-right" '
+        + 'onclick="openGridRef()">' + WD.esc(gridRefLabel) + '</button>'
+        + '</div>';
+    }
     if (opt.type === 'text') {
       var textVal = (opt.id in currentOpts) ? (currentOpts[opt.id] || '') : (opt.default || '');
       var isSetting = SETTING_IDS.indexOf(opt.id) !== -1;
@@ -1957,6 +1983,659 @@
       existing.remove();
     }
   }
+
+  /* ── Column grid references ────────────────────────────────────────────
+
+     A warehouse section page shows an AP floating in empty slab with nothing
+     to locate it against. Construction crews locate everything off the column
+     grid - lettered one way, numbered the other, bubbled on the drawing - so a
+     grid reference is the coordinate system the person on the ladder already
+     has. This is the third of the three AEC conventions, after the Key Plan
+     (v2.60.0) and match lines (v2.62.0).
+
+     **Nothing is read off the drawing.** Finding the bubbles automatically
+     needs circle detection, OCR of the letters and numbers, and line tracing.
+     There is no OCR in this stack, and a mis-read bubble produces a
+     confidently wrong reference - which is worse than none, because the
+     installer has no way to tell. So the grid is *declared*: two clicks and
+     two labels.
+
+     Two is enough because a column grid is regular by construction - that is
+     what a structural bay is. Given intersection A-1 here and G-7 there, the
+     spacing and the origin follow, and the grid extends across the plan.
+
+     **What two points cannot settle is which axis the letters run along.**
+     A-1 and G-7 is six letter-steps and six number-steps, and that is equally
+     consistent with letters running across the plan or down it. Rather than
+     guess, the picker draws the grid it derived over the floor plan and offers
+     one switch. Being able to see it is also what covers the cases this
+     deliberately cannot model - an interrupted bay, a skewed or rotated grid,
+     a building with two grids of its own - because a grid that does not sit on
+     the drawn columns is obvious on sight, and the answer there is to turn the
+     reference off for that floor rather than print something plausible. */
+
+  // A, B ... Z, AA, AB ... - the spreadsheet sequence, which is what drawings
+  // use once a building runs past 26 lines.
+  function gridColumnIndex(label) {
+    var s = String(label == null ? '' : label).trim().toUpperCase();
+    if (!/^[A-Z]+$/.test(s)) return null;
+    var n = 0;
+    for (var i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
+    return n - 1;
+  }
+
+  function gridColumnLabel(index) {
+    var n = Math.round(index);
+    if (!isFinite(n) || n < 0) return '';
+    var out = '';
+    n += 1;
+    while (n > 0) {
+      var rem = (n - 1) % 26;
+      out = String.fromCharCode(65 + rem) + out;
+      n = Math.floor((n - 1) / 26);
+    }
+    return out;
+  }
+
+  /* Split "A-1", "A1", "a 1" into its two halves. Drawings are written every
+     one of those ways and the difference is not meaningful. */
+  function parseGridLabel(text) {
+    var m = /^\s*([A-Za-z]+)\s*[-_/ ]?\s*(\d+)\s*$/.exec(String(text || ''));
+    if (!m) return null;
+    var col = gridColumnIndex(m[1]);
+    if (col == null) return null;
+    return { col: col, row: parseInt(m[2], 10) };
+  }
+
+  /* Turn two labelled intersections into something that can answer "which
+     grid square is this point in".
+
+     Returns `{ok: false, reason}` rather than throwing, because every reason
+     is something to say on screen: a reference that is quietly wrong is the
+     failure this whole feature is written around. */
+  function buildGridSolver(a, b, lettersAxis, span) {
+    if (!a || !b) return { ok: false, reason: 'Two intersections are needed.' };
+    var dCol = b.col - a.col;
+    var dRow = b.row - a.row;
+    if (!dCol) {
+      return { ok: false, reason: 'Both points are on the same lettered line, '
+        + 'so there is nothing to measure the letter spacing against. Pick two '
+        + 'intersections that differ in both directions.' };
+    }
+    if (!dRow) {
+      return { ok: false, reason: 'Both points are on the same numbered line, '
+        + 'so there is nothing to measure the number spacing against. Pick two '
+        + 'intersections that differ in both directions.' };
+    }
+
+    var lettersAlongX = lettersAxis !== 'y';
+    var dx = b.x - a.x, dy = b.y - a.y;
+    // Letters along x means the letter step is an x distance and the number
+    // step is a y distance; along y it is the other way round.
+    var colStep = lettersAlongX ? dx / dCol : dy / dCol;
+    var rowStep = lettersAlongX ? dy / dRow : dx / dRow;
+
+    if (!isFinite(colStep) || !isFinite(rowStep) || !colStep || !rowStep) {
+      return { ok: false, reason: 'Those two points do not describe a grid.' };
+    }
+    /* Two clicks almost on top of each other, which is a mis-click rather than
+       a building: any error in either one is then multiplied across the whole
+       plan.
+
+       **Measured against the plan rather than in plan units.** A floor plan is
+       in whatever units it was authored in - a raster is in thousands of
+       pixels, a vector import can be in single figures - so "less than one
+       unit" means something different on every drawing, and on some of them it
+       means nothing at all. `span` is the floor's own width and height, and
+       the two points have to be at least a fiftieth of it apart on each axis.
+       Without a span there is no guard, because a number that cannot be
+       interpreted is worse than none. */
+    if (span && span.w && span.h) {
+      var minX = Math.abs(span.w) / 50, minY = Math.abs(span.h) / 50;
+      if (Math.abs(dx) < minX || Math.abs(dy) < minY) {
+        return { ok: false, reason: 'Those two points are too close together to '
+          + 'measure a bay from. Pick intersections further apart.' };
+      }
+    }
+
+    return {
+      ok: true,
+      lettersAlongX: lettersAlongX,
+      colStep: colStep,
+      rowStep: rowStep,
+      // Where line "A" and line "1" sit, in plan units.
+      colOrigin: (lettersAlongX ? a.x : a.y) - a.col * colStep,
+      rowOrigin: (lettersAlongX ? a.y : a.x) - (a.row - 1) * rowStep,
+    };
+  }
+
+  /* The nearest intersection, which is how a grid reference is spoken: "it is
+     at C-4" sends somebody to a column they can see and stand under. A bay is
+     forty-odd feet, so the worst case is half a bay of walking - against no
+     reference at all, which is what the section pages give them today. */
+  function gridRefForPoint(solver, x, y) {
+    if (!solver || !solver.ok) return '';
+    var along = solver.lettersAlongX ? x : y;
+    var across = solver.lettersAlongX ? y : x;
+    var col = Math.round((along - solver.colOrigin) / solver.colStep);
+    var row = Math.round((across - solver.rowOrigin) / solver.rowStep) + 1;
+    if (col < 0 || row < 1) return '';
+    var label = gridColumnLabel(col);
+    return label ? label + '-' + row : '';
+  }
+
+  /* The calibrations for the open project, and the solvers built from them.
+
+     Loaded once when a project opens and kept in memory: a report redraws on
+     every option change, and a disk round trip per redraw would be felt. The
+     picker replaces this map when it saves, so nothing has to be re-fetched. */
+  var _floorGrids = {};
+  var _floorSolvers = {};
+
+  function resetFloorGrids(map) {
+    _floorGrids = map || {};
+    _floorSolvers = {};
+  }
+
+  async function loadFloorGrids() {
+    resetFloorGrids({});
+    if (!settingsAvailable || !proj.projectId) return;
+    try {
+      var res = await WD.api('report/grid/get', { projectId: proj.projectId });
+      if (res && res.ok) resetFloorGrids(res.floors || {});
+    } catch (e) { /* uncalibrated is a legal state, not an error */ }
+  }
+
+  /* The solver for one floor, or null. Built on first use and cached, because
+     an AP table asks per row and a large floor is several hundred rows. */
+  function gridSolverForFloor(floorId) {
+    if (!floorId) return null;
+    if (Object.prototype.hasOwnProperty.call(_floorSolvers, floorId)) {
+      return _floorSolvers[floorId];
+    }
+    var saved = _floorGrids[floorId];
+    var solver = null;
+    if (saved && saved.a && saved.b) {
+      var built = buildGridSolver(saved.a, saved.b, saved.lettersAxis);
+      solver = built.ok ? built : null;
+    }
+    _floorSolvers[floorId] = solver;
+    return solver;
+  }
+
+  function anyFloorHasGrid() {
+    return Object.keys(_floorGrids).length > 0;
+  }
+
+  /* The reference for one access point, or '' - never a placeholder that could
+     be mistaken for a bay. An AP with no coordinates, on a floor with no
+     calibration, or outside the lettered area all give nothing, and the table
+     prints a dash. */
+  function gridRefForAp(ap) {
+    var loc = ap && ap.location;
+    var c = loc && loc.coord;
+    if (!c) return '';
+    var solver = gridSolverForFloor(loc.floorPlanId);
+    if (!solver) return '';
+    return gridRefForPoint(solver, c.x, c.y);
+  }
+
+  /* Whether the Grid column appears at all. Both have to be true: the option
+     is on, and at least one floor in this project has been calibrated. A
+     column of dashes on every row of every table is worse than no column,
+     because it reads as a broken feature rather than an unused one. */
+  function showsGridColumn(opts) {
+    return !!(opts && opts.gridRef) && anyFloorHasGrid();
+  }
+
+  window.WDGrid = {
+    columnIndex: gridColumnIndex,
+    columnLabel: gridColumnLabel,
+    parseLabel: parseGridLabel,
+    solver: buildGridSolver,
+    refFor: gridRefForPoint,
+  };
+
+  // ── Column grid picker ──
+  //
+  // Two clicks and two labels per floor. It shares the section-grid modal's
+  // canvas idiom - same container classes, same wheel-zoom and space-pan
+  // helpers - rather than growing a fourth way of looking at a floor plan.
+  //
+  // **The check is the drawing, not a dialog.** Once both points have labels
+  // the derived grid is drawn over the plan, so a grid that does not sit on
+  // the columns is obvious on sight. That is what covers the cases two points
+  // cannot describe - an interrupted bay, a rotated plan, a building with two
+  // grids of its own - without pretending to detect them.
+
+  var _grFloorIdx = 0;
+  var _grZoom = 1, _grPanX = 0, _grPanY = 0;
+  var _grPanState = null, _grSpaceUnsub = null;
+  var _grPicking = '';                 // 'a', 'b' or '' when not picking
+  var _grPoints = { a: null, b: null };
+  var _grAxis = 'x';
+
+  window.openGridRef = function () {
+    var modal = document.getElementById('gridRefModal');
+    if (!modal) return;
+    if (!settingsAvailable) {
+      showToast('The column grid is saved on this machine, and there is no '
+                + 'server behind this page.', 'warn');
+      return;
+    }
+    var fps = proj.floorPlans || [];
+    if (!fps.length) { showToast('No floor plans in this project.', 'warn'); return; }
+
+    var sel = document.getElementById('gridRefFloorSelect');
+    sel.innerHTML = '';
+    fps.forEach(function (f, i) {
+      var opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = (f.name || ('Floor ' + (i + 1)))
+        + (_floorGrids[f.id] ? '  ✓' : '');
+      sel.appendChild(opt);
+    });
+    _grFloorIdx = 0;
+    sel.value = '0';
+    loadGridRefFloor();
+    modal.hidden = false;
+  };
+
+  window.closeGridRef = function () {
+    var modal = document.getElementById('gridRefModal');
+    if (modal) modal.hidden = true;
+    releaseGridRefKeys();
+    _grPicking = '';
+    // The button under the checkbox counts calibrated floors, so it is stale
+    // the moment one is saved or cleared.
+    if (typeof renderReportOpts === 'function') renderReportOpts();
+  };
+
+  /* Put the floor's saved calibration back on screen, or clear the fields. */
+  function loadGridRefFloor() {
+    var fp = proj.floorPlans[_grFloorIdx];
+    _grPicking = '';
+    _grPoints = { a: null, b: null };
+    _grAxis = 'x';
+    var saved = fp && _floorGrids[fp.id];
+    if (saved) {
+      _grPoints = { a: saved.a, b: saved.b };
+      _grAxis = saved.lettersAxis === 'y' ? 'y' : 'x';
+    }
+    var axisSel = document.getElementById('gridRefAxis');
+    if (axisSel) axisSel.value = _grAxis;
+    ['a', 'b'].forEach(function (k) {
+      var input = document.getElementById('gridRefLabel' + k.toUpperCase());
+      if (!input) return;
+      var pt = _grPoints[k];
+      input.value = pt ? (gridColumnLabel(pt.col) + '-' + pt.row) : '';
+    });
+    _grZoom = 1; _grPanX = 0; _grPanY = 0;
+    updateGridRefPreview();
+  }
+
+  window.gridRefFloorChanged = function (sel) {
+    _grFloorIdx = parseInt(sel.value, 10) || 0;
+    loadGridRefFloor();
+  };
+
+  window.gridRefAxisChanged = function (sel) {
+    _grAxis = sel.value === 'y' ? 'y' : 'x';
+    updateGridRefPreview();
+  };
+
+  window.gridRefPick = function (which) {
+    _grPicking = which;
+    updateGridRefPreview();
+  };
+
+  window.gridRefLabelChanged = function (which, input) {
+    var parsed = parseGridLabel(input.value);
+    var pt = _grPoints[which];
+    if (pt && parsed) { pt.col = parsed.col; pt.row = parsed.row; }
+    else if (pt) { pt.col = null; pt.row = null; }
+    updateGridRefPreview();
+  };
+
+  /* Both points placed, both labelled, and the two labels differ in both
+     directions. Returns the solver or the reason there isn't one. */
+  function currentGridRefSolver() {
+    var a = _grPoints.a, b = _grPoints.b;
+    if (!a || !b) {
+      return { ok: false, reason: a || b
+        ? 'Click the second intersection.'
+        : 'Click an intersection on the plan, then type what the drawing calls it.' };
+    }
+    if (a.col == null || b.col == null) {
+      return { ok: false, reason: 'Both intersections need a label, such as A-1.' };
+    }
+    var fp = proj.floorPlans[_grFloorIdx];
+    return buildGridSolver(a, b, _grAxis,
+                           fp ? { w: fp.width, h: fp.height } : null);
+  }
+
+  function updateGridRefPreview() {
+    var fp = proj.floorPlans[_grFloorIdx];
+    if (!fp) return;
+    var url = floorPlanImageUrl(fp) || '';
+    var W = fp.width || 1, H = fp.height || 1;
+    var vw = 1000, vh = 1000 * (H / W);
+    var toView = function (v, span) { return v / span * (span === W ? vw : vh); };
+
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + vw + ' ' + vh + '" '
+      + 'class="grid-svg-fill" id="gridRefSvg" '
+      + 'data-dw="' + vw + '" data-dh="' + vh + '">';
+    svg += '<image href="' + WD.escAttr(url) + '" width="' + vw + '" height="' + vh + '" />';
+
+    var solved = currentGridRefSolver();
+
+    /* The derived grid, drawn so it can be compared with the columns in the
+       drawing underneath. Lines are extended across the whole sheet rather
+       than only between the two picked points, because the question being
+       answered is "does this grid fit the building", not "did the two clicks
+       land". */
+    if (solved.ok) {
+      var lineW = Math.max(1.5, vw * 0.0022);
+      var fontSize = Math.max(10, vw * 0.016);
+      var lines = '', labels = '';
+      var alongSpan = solved.lettersAlongX ? W : H;
+      var acrossSpan = solved.lettersAlongX ? H : W;
+
+      /* Which lines fall on the sheet, worked out rather than searched for.
+
+         The first version walked a fixed range with a tangle of continue and
+         break conditions, and drew any line within one bay of the edge - so a
+         spacing that does not divide the sheet evenly put columns outside the
+         drawing. Photographed on a 1600-unit plan with 183-unit bays: it drew
+         A..J, and I and J were off the plan entirely. */
+      var lineIndexes = function (origin, step, span) {
+        var first = Math.ceil((0 - origin) / step);
+        var last = Math.floor((span - origin) / step);
+        if (step < 0) { var t = first; first = last; last = t; }
+        first = Math.max(0, first);
+        // A mis-calibration must not ask for ten thousand lines.
+        last = Math.min(last, first + 200);
+        return { first: first, last: last };
+      };
+
+      var colRange = lineIndexes(solved.colOrigin, solved.colStep, alongSpan);
+      for (var ci = colRange.first; ci <= colRange.last; ci++) {
+        var at = solved.colOrigin + ci * solved.colStep;
+        var lx = solved.lettersAlongX ? toView(at, W) : 0;
+        var ly = solved.lettersAlongX ? 0 : toView(at, H);
+        lines += solved.lettersAlongX
+          ? '<line x1="' + lx + '" y1="0" x2="' + lx + '" y2="' + vh + '"/>'
+          : '<line x1="0" y1="' + ly + '" x2="' + vw + '" y2="' + ly + '"/>';
+        labels += '<text x="' + (solved.lettersAlongX ? lx + 4 : 4) + '" '
+          + 'y="' + (solved.lettersAlongX ? fontSize : ly - 4) + '" '
+          + 'font-size="' + fontSize + '">' + WD.esc(gridColumnLabel(ci)) + '</text>';
+      }
+
+      var rowRange = lineIndexes(solved.rowOrigin, solved.rowStep, acrossSpan);
+      for (var ri = rowRange.first; ri <= rowRange.last; ri++) {
+        var rat = solved.rowOrigin + ri * solved.rowStep;
+        var rx = solved.lettersAlongX ? 0 : toView(rat, W);
+        var ry = solved.lettersAlongX ? toView(rat, H) : 0;
+        lines += solved.lettersAlongX
+          ? '<line x1="0" y1="' + ry + '" x2="' + vw + '" y2="' + ry + '"/>'
+          : '<line x1="' + rx + '" y1="0" x2="' + rx + '" y2="' + vh + '"/>';
+        labels += '<text x="' + (solved.lettersAlongX ? 4 : rx + 4) + '" '
+          + 'y="' + (solved.lettersAlongX ? ry - 4 : fontSize) + '" '
+          + 'font-size="' + fontSize + '">' + (ri + 1) + '</text>';
+      }
+      svg += '<g class="grid-ref-lines" stroke-width="' + lineW + '">' + lines + '</g>'
+           + '<g class="grid-ref-labels">' + labels + '</g>';
+    }
+
+    // The two picked intersections, on top of the grid so they stay findable.
+    ['a', 'b'].forEach(function (k) {
+      var pt = _grPoints[k];
+      if (!pt) return;
+      var px = toView(pt.x, W), py = toView(pt.y, H);
+      var r = Math.max(6, vw * 0.008);
+      svg += '<g class="grid-ref-pin' + (_grPicking === k ? ' is-picking' : '') + '">'
+        + '<circle cx="' + px + '" cy="' + py + '" r="' + r + '"/>'
+        + '<line x1="' + (px - r * 2) + '" y1="' + py + '" x2="' + (px + r * 2) + '" y2="' + py + '"/>'
+        + '<line x1="' + px + '" y1="' + (py - r * 2) + '" x2="' + px + '" y2="' + (py + r * 2) + '"/>'
+        + '</g>';
+    });
+
+    svg += '</svg>';
+    document.getElementById('gridRefPreviewImage').innerHTML = svg;
+
+    var container = document.getElementById('gridRefPreviewContainer');
+    if (container) container.classList.toggle('is-picking', !!_grPicking);
+
+    // What the two buttons say, so the step you are on is on the control.
+    ['a', 'b'].forEach(function (k) {
+      var btn = document.getElementById('gridRefPick' + k.toUpperCase());
+      if (!btn) return;
+      var n = k === 'a' ? '1' : '2';
+      btn.textContent = _grPicking === k
+        ? 'Click the plan…'
+        : (_grPoints[k] ? n + '. Move this point'
+                        : n + (k === 'a' ? '. Click an intersection' : '. Click another'));
+      btn.classList.toggle('is-active', _grPicking === k);
+    });
+
+    var status = document.getElementById('gridRefStatus');
+    if (status) {
+      status.textContent = solved.ok
+        ? 'Grid drawn. Check it sits on the columns in the drawing.'
+        : (solved.reason || '');
+      status.classList.toggle('is-warn', !solved.ok);
+    }
+    var save = document.getElementById('gridRefSaveBtn');
+    if (save) save.disabled = !solved.ok;
+
+    applyGridRefZoom();
+    bindGridRefCanvas();
+  }
+
+  function applyGridRefZoom() {
+    var svgEl = document.getElementById('gridRefSvg');
+    if (!svgEl) return;
+    svgEl.style.transform = 'translate(' + _grPanX + 'px,' + _grPanY + 'px) scale(' + _grZoom + ')';
+    svgEl.style.transformOrigin = '0 0';
+  }
+
+  window.resetGridRefZoom = function () {
+    _grZoom = 1; _grPanX = 0; _grPanY = 0;
+    applyGridRefZoom();
+  };
+
+  function bindGridRefCanvas() {
+    var container = document.getElementById('gridRefPreviewContainer');
+    if (!container || container._grBound) return;
+    container._grBound = true;
+
+    container.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      var svgEl = document.getElementById('gridRefSvg');
+      if (!svgEl) return;
+      var rect = svgEl.getBoundingClientRect();
+      var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      var sx = (mx - _grPanX) / _grZoom, sy = (my - _grPanY) / _grZoom;
+      var newZoom = Math.max(1, Math.min(8, _grZoom + (e.deltaY > 0 ? -0.15 : 0.15) * _grZoom));
+      if (newZoom <= 1.01) newZoom = 1;
+      _grPanX = mx - sx * newZoom;
+      _grPanY = my - sy * newZoom;
+      _grZoom = newZoom;
+      if (_grZoom === 1) { _grPanX = 0; _grPanY = 0; }
+      applyGridRefZoom();
+    }, { passive: false });
+
+    container.addEventListener('mousedown', function (e) {
+      /* Space, middle-drag and right-drag pan, exactly as on the section grid.
+         Zoomed in to place a point precisely, panning is the whole job.
+
+         Plain left-drag pans too, but only when no point is being placed -
+         otherwise the drag that was meant to position the map would consume
+         the click. Without this the left button did nothing at all outside
+         picking mode, which is not how the other plan canvases in the suite
+         behave. */
+      if (WD.PanZoom.isPanGesture(e) || e.button !== 0 || !_grPicking) {
+        e.preventDefault();
+        startGridRefPan(e);
+      }
+    });
+    container.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+    /* A plain left click places the point being picked. It is a click rather
+       than a drag so that a click landing during a pan does not move a point:
+       the pan path above returns before this fires. */
+    container.addEventListener('click', function (e) {
+      if (!_grPicking) return;
+      if (WD.PanZoom.isHeld()) return;
+      var svgEl = document.getElementById('gridRefSvg');
+      if (!svgEl) return;
+      var fp = proj.floorPlans[_grFloorIdx];
+      if (!fp) return;
+      /* Screen point to plan coordinate, through the SVG's own matrix.
+
+         Doing this by hand needs three things at once: the viewBox scale, the
+         letterbox offset where the plan's aspect does not match the box it is
+         drawn in, and the CSS transform carrying the pan and zoom. The first
+         attempt used getBoundingClientRect and subtracted the pan - which
+         double-counts, because the rect is already transformed - and ignored
+         the letterbox entirely. Measured, that put a click at 20% of the plan
+         at 39% in Firefox, 74% in Chrome and 67% in Edge: wrong, and wrong by
+         a different amount in each, which is the signature of an aspect-ratio
+         assumption rather than an arithmetic slip.
+
+         getScreenCTM accounts for all three and is what the browser itself
+         uses, so there is nothing left to get wrong per engine. */
+      var ctm = svgEl.getScreenCTM();
+      if (!ctm) return;
+      var pt = svgEl.createSVGPoint();
+      pt.x = e.clientX;
+      pt.y = e.clientY;
+      var loc = pt.matrixTransform(ctm.inverse());
+      // The viewBox is 1000 wide for a plan that is fp.width across.
+      var vbW = parseFloat(svgEl.getAttribute('data-dw')) || 1;
+      var vbH = parseFloat(svgEl.getAttribute('data-dh')) || 1;
+      var x = loc.x / vbW * (fp.width || 1);
+      var y = loc.y / vbH * (fp.height || 1);
+      var existing = _grPoints[_grPicking];
+      _grPoints[_grPicking] = {
+        x: x, y: y,
+        col: existing ? existing.col : null,
+        row: existing ? existing.row : null,
+      };
+      // A point placed before its label is typed keeps whatever is in the box.
+      var input = document.getElementById('gridRefLabel' + _grPicking.toUpperCase());
+      if (input) {
+        var parsed = parseGridLabel(input.value);
+        if (parsed) {
+          _grPoints[_grPicking].col = parsed.col;
+          _grPoints[_grPicking].row = parsed.row;
+        }
+      }
+      _grPicking = '';
+      updateGridRefPreview();
+      if (input && !input.value) input.focus();
+    });
+
+    _grSpaceUnsub = WD.PanZoom.onChange(function (isHeld) {
+      var el = document.getElementById('gridRefPreviewContainer');
+      if (!el) return;
+      el.classList.toggle('space-pan', isHeld);
+      if (!isHeld && _grPanState && _grPanState.viaSpace) endGridRefPan();
+    });
+  }
+
+  function startGridRefPan(e) {
+    var container = document.getElementById('gridRefPreviewContainer');
+    if (container) container.classList.add('pan-active');
+    _grPanState = {
+      startX: e.clientX, startY: e.clientY,
+      origPX: _grPanX, origPY: _grPanY,
+      viaSpace: WD.PanZoom.isHeld(),
+    };
+    document.addEventListener('mousemove', onGridRefPan);
+    document.addEventListener('mouseup', endGridRefPan);
+  }
+
+  function onGridRefPan(e) {
+    if (!_grPanState) return;
+    _grPanX = _grPanState.origPX + (e.clientX - _grPanState.startX);
+    _grPanY = _grPanState.origPY + (e.clientY - _grPanState.startY);
+    applyGridRefZoom();
+  }
+
+  function endGridRefPan() {
+    _grPanState = null;
+    var container = document.getElementById('gridRefPreviewContainer');
+    if (container) container.classList.remove('pan-active');
+    document.removeEventListener('mousemove', onGridRefPan);
+    document.removeEventListener('mouseup', endGridRefPan);
+  }
+
+  // Closing hands Space back to the page; without this the key stays swallowed
+  // for the rest of the session.
+  function releaseGridRefKeys() {
+    if (_grSpaceUnsub) { _grSpaceUnsub(); _grSpaceUnsub = null; }
+    var container = document.getElementById('gridRefPreviewContainer');
+    if (container) {
+      container.classList.remove('space-pan', 'pan-active', 'is-picking');
+      container._grBound = false;
+    }
+    endGridRefPan();
+  }
+
+  window.saveGridRefFloor = async function () {
+    var fp = proj.floorPlans[_grFloorIdx];
+    var solved = currentGridRefSolver();
+    if (!fp || !solved.ok) { showToast(solved.reason || 'Not ready to save.', 'warn'); return; }
+    var res;
+    try {
+      res = await WD.api('report/grid/save', {
+        projectId: proj.projectId, floorId: fp.id,
+        grid: { a: _grPoints.a, b: _grPoints.b, lettersAxis: _grAxis },
+      });
+    } catch (e) { showToast('That could not be saved.', 'error'); return; }
+    if (!res || !res.ok) { showToast((res && res.error) || 'That could not be saved.', 'error'); return; }
+    resetFloorGrids(res.floors || {});
+    configureDirty = true;
+    showToast('Column grid saved for ' + (fp.name || 'this floor') + '.', 'success');
+    // The tick in the floor list, and the button's count, both just changed.
+    var sel = document.getElementById('gridRefFloorSelect');
+    if (sel) {
+      (proj.floorPlans || []).forEach(function (f, i) {
+        if (sel.options[i]) {
+          sel.options[i].textContent = (f.name || ('Floor ' + (i + 1)))
+            + (_floorGrids[f.id] ? '  ✓' : '');
+        }
+      });
+    }
+  };
+
+  window.clearGridRefFloor = async function () {
+    var fp = proj.floorPlans[_grFloorIdx];
+    if (!fp) return;
+    if (!_floorGrids[fp.id]) {
+      // Nothing saved, so this is the field-clearing button rather than a
+      // delete. Say nothing and just reset.
+      _grPoints = { a: null, b: null };
+      loadGridRefFloor();
+      return;
+    }
+    if (!confirm('Turn the column grid reference off for "'
+                 + (fp.name || 'this floor') + '"?\n\n'
+                 + 'APs on this floor will show a dash instead of a grid '
+                 + 'reference. Other floors are not affected.')) return;
+    var res;
+    try {
+      res = await WD.api('report/grid/clear', {
+        projectId: proj.projectId, floorId: fp.id });
+    } catch (e) { showToast('That could not be cleared.', 'error'); return; }
+    if (!res || !res.ok) { showToast((res && res.error) || 'That could not be cleared.', 'error'); return; }
+    resetFloorGrids(res.floors || {});
+    configureDirty = true;
+    loadGridRefFloor();
+    showToast('Column grid turned off for ' + (fp.name || 'this floor') + '.', 'info');
+  };
+
 
   // ── Grid configuration modal ──
 
@@ -4692,6 +5371,7 @@
     });
 
     var showSignOff = opts.signOff !== false;
+    var showGrid = showsGridColumn(opts);
     var rows = '';
     sorted.forEach(function (item, i) {
       var ap = item.ap;
@@ -4713,6 +5393,8 @@
         + '<td class="rep-num">' + WD.esc(lbl) + '</td>'
         + '<td class="rep-name">' + WD.esc(ap.name) + '</td>'
         + '<td>' + WD.esc(item.floor.name || '—') + '</td>'
+        + (showGrid ? '<td class="rep-grid-ref">'
+            + WD.esc(gridRefForAp(ap) || '—') + '</td>' : '')
         + '<td class="rep-az">' + azStr + '</td>'
         + '<td>' + tiltStr + '</td>'
         + '<td>' + heightStr + '</td>'
@@ -4731,6 +5413,16 @@
     var cols = showSignOff
       ? [5, 22, 9, 12, 6, 8, 22, 8, 8]
       : [6, 26, 11, 14, 8, 10, 25];
+    /* "AA-12" is the widest a reference gets, so the column is narrow - and it
+       is inserted where the header is rather than appended, or it would sit
+       under Azimuth. The width comes off AP name and Antenna, which are the
+       two that have any to give. */
+    if (showGrid) {
+      cols = cols.slice();
+      cols.splice(3, 0, 7);          // after Floor, which is where the header is
+      cols[1] -= 4;                  // AP name
+      cols[7] -= 3;                  // Antenna, which is index 7 either way
+    }
     var colGroup = '<colgroup>'
       + cols.map(function (w) { return '<col style="width:' + w + '%">'; }).join('')
       + '</colgroup>';
@@ -4742,6 +5434,7 @@
       +     '<th class="rep-num">#</th>'
       +     '<th>AP name</th>'
       +     '<th>Floor</th>'
+      +     (showGrid ? '<th>Grid</th>' : '')
       +     '<th>Azimuth</th>'
       +     '<th>Tilt</th>'
       +     '<th>Height</th>'
@@ -5486,6 +6179,7 @@
       : '';
     var showDir = aps.some(function (ap) { return !apIsOmniOnly(ap); });
     var showCP = opts.showChannelPower !== false;
+    var showGrid = showsGridColumn(opts);
 
     /* This table is rendered per floor and the floor name is already the
        heading directly above it, so a Floor column repeats one value on every
@@ -5575,6 +6269,8 @@
             + WD.esc(shortFloorLabel(floorName) || '—') + '</td>')
         + (oneBuilding ? '' : '<td class="rep-ellip" title="' + WD.escAttr(buildingName) + '">'
             + WD.esc(buildingName) + '</td>')
+        + (showGrid ? '<td class="rep-grid-ref">'
+            + WD.esc(gridRefForAp(ap) || '—') + '</td>' : '')
         + cpCells
         + dirCells
         + (opts.nameAudit ? '<td class="rep-loc-warn">' + WD.esc(nameIssue) + '</td>' : '')
@@ -5585,7 +6281,10 @@
       ? '<th>Mount</th><th>Height</th><th>Azimuth</th><th>Tilt</th><th>Ant.</th>'
       : '';
     var cpHeaders = showCP ? '<th>TX Power</th><th>Channel</th>' : '';
+    /* The footer spans the table, so a column added above and not counted here
+       leaves the subtotal row short and the last column hanging outside it. */
     var colCount = 4 + (oneFloor ? 0 : 1) + (oneBuilding ? 0 : 1)
+      + (showGrid ? 1 : 0)
       + (showCP ? 2 : 0) + (showDir ? 5 : 0) + (opts.nameAudit ? 1 : 0);
 
     // Relative print widths. These are normalized below so optional columns
@@ -5602,6 +6301,10 @@
     ];
     if (!oneFloor) printCols.push({ key: 'floor', weight: 16 });
     if (!oneBuilding) printCols.push({ key: 'building', weight: 14 });
+    // "AA-12" at the very widest, so it needs almost nothing. The weights are
+    // normalised below, so adding one takes a proportional slice off the rest
+    // rather than pushing the table past the sheet.
+    if (showGrid) printCols.push({ key: 'grid', weight: 8 });
     if (showCP) {
       printCols.push({ key: 'tx', weight: 20 });
       printCols.push({ key: 'channel', weight: 22 });
@@ -5637,6 +6340,7 @@
       + '<th class="rep-num">#</th><th>AP name</th><th>Vendor</th><th>Model</th>'
       + (oneFloor ? '' : '<th>Floor</th>')
       + (oneBuilding ? '' : '<th>Building</th>')
+      + (showGrid ? '<th>Grid</th>' : '')
       + cpHeaders
       + dirHeaders
       + (opts.nameAudit ? '<th>Naming issue</th>' : '')
@@ -6260,6 +6964,10 @@
           description: 'Compact floor plan per floor below the table, with AP dots and direction ticks — sanity check before climbing a ladder.' },
         { id: 'signOff',  label: 'Sign-off columns (initials + date)', default: true,
           description: 'Right side of each row keeps two blank cells so the printed sheet doubles as an as-built.' },
+        { id: 'gridRef', type: 'check', label: 'Column grid reference', default: false,
+          description: 'Adds a Grid column giving each AP its nearest column-grid intersection, such as C-4 — the coordinate system the crew on site already uses. Set the grid up first with the button below; until at least one floor is calibrated this does nothing.' },
+        { id: '_gridRefSetup', type: 'gridref-button', label: 'Set up column grid…',
+          description: 'Click two intersections you can name on each floor plan. Nothing is read off the drawing.' },
         { id: 'units', type: 'select', label: 'Measurement units', default: 'feet',
           options: [
             { value: 'feet',   label: 'Feet' },
@@ -6404,6 +7112,10 @@
           placeholder: 'e.g. Rev A' },
         { id: 'showChannelPower', label: 'Show channel & TX power columns', default: true,
           description: 'Adds per-radio TX power and channel columns to the AP table.' },
+        { id: 'gridRef', type: 'check', label: 'Column grid reference', default: false,
+          description: 'Adds a Grid column giving each AP its nearest column-grid intersection, such as C-4 — the coordinate system the crew on site already uses. Set the grid up first with the button below; until at least one floor is calibrated this does nothing.' },
+        { id: '_gridRefSetup', type: 'gridref-button', label: 'Set up column grid…',
+          description: 'Click two intersections you can name on each floor plan. Nothing is read off the drawing.' },
         { id: 'signOff', label: 'Include sign-off / approval block', default: true,
           description: 'Adds a Prepared / Reviewed / Approved signature table at the end.' },
         { id: 'confidential', label: 'Confidentiality notice in footer', default: false,
