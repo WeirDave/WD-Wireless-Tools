@@ -386,6 +386,33 @@ why it costs real waiting time. Four sessions stalled on this in one day.
   port is no longer listening cannot be anything the user is looking at. Never
   kill `firefox.exe` by name - his own browser is in that list.
 
+- **A dead port is not enough on its own, and following the rule above as
+  written would have closed his browser.** On 2026-09-20 exactly one process
+  matched `-osint -url http://localhost:8676/`, and 8676 was not listening - so
+  by the paragraph above it was safe to kill. It was the **root** Firefox
+  process, with fourteen children including one holding 940 MB. A session had
+  opened the first window months of tabs ago; every window he opened since
+  lived under it.
+
+  That is how Windows Firefox works: the `-osint -url` invocation is a request
+  to the *running* instance, and when there is no running instance the process
+  making the request becomes the one everything else attaches to. So the
+  command line records how a process was started and says nothing about what it
+  is holding now.
+
+  **Check for children before killing anything, not just the port:**
+
+  ```powershell
+  Get-CimInstance Win32_Process -Filter "Name='firefox.exe'" |
+    Select-Object ProcessId, ParentProcessId,
+                  @{n='MB';e={[int]($_.WorkingSetSize/1MB)}}
+  ```
+
+  A process other `firefox.exe` processes name as their parent is his browser,
+  whatever its own command line says. Leave it, and say so in the report rather
+  than cleaning quietly - an orphan that survives is a nuisance, and his
+  browser is not.
+
 - **Never block indefinitely on a bind or a browser call.** Bound the wait, and
   fail loudly if it does not come up. A failed check is visible; a stalled
   session is not, which makes the stall the worse outcome.
@@ -1000,6 +1027,62 @@ skips every server-backed path in it. The first run of
 in all three browsers while the feature under test was never reached. **If a
 stub server is standing in for `server.py`, it has to answer the call the page
 uses to decide a server exists at all.**
+
+**And the slice itself can be wrong, which is the same failure one layer down.**
+These probes work by cutting one function out of a source file and `eval`ing
+it, so the two indices that define the cut are load-bearing and neither is
+checked by anything. Both ends went wrong on 2026-09-20, in the same afternoon,
+and each produced a run that was green against code that did not parse:
+
+* **Slicing to "wherever the next function starts" swallows anything inserted
+  between them.** `test_one_control_per_setting_across_pages.py` took
+  `openHashSection` from `  function openHashSection() {` to
+  `  function populate() {`. A new block added between the two came along with
+  it, the eval threw on a reference that block needed, and three tests failed
+  in a way that looked like the change under test rather than the harness.
+
+* **Searching for a two-space `}` finds it inside a four-space one.** The
+  obvious fix - end the slice at the function's own closing brace, `'  }'` -
+  works only for a function with no nested blocks. `populate()` has several, so
+  the slice ended at the first inner `}` and the eval failed on an unbalanced
+  brace.
+
+**Count the braces.** No line ending appears in it, so CRLF and LF both work -
+which matters, because the working tree here is CRLF and a search for
+`'\n  }\n'` silently matches nothing:
+
+```js
+const a = src.indexOf('  function openHashSection() {');
+if (a < 0) throw new Error('openHashSection moved');
+let b = a, depth = 0, seen = false;
+while (b < src.length && !(seen && depth === 0)) {
+  if (src[b] === '{') { depth++; seen = true; }
+  else if (src[b] === '}') depth--;
+  b++;
+}
+eval(src.slice(a, b));
+```
+
+`seen` is what makes it start counting at the first brace rather than exiting
+immediately, and the `if (a < 0) throw` is not optional: without it a renamed
+function silently slices from index -1 and the probe tests something else
+entirely.
+
+**A probe's own failure has to be loud.** Every one of these should raise on
+the slice markers before it evaluates anything, and the Python side should
+raise `AssertionError((r.stdout + r.stderr).strip())` on a non-zero exit rather
+than parsing whatever came back. A probe that returns `{}` on a broken slice
+passes every assertion that checks for absence.
+
+**Where a probe needs the code to run to the end, stub everything it calls.**
+`setOpt` in `report.js` calls four helpers after the line under test; stubbing
+three of them left it throwing partway, which would have hidden a write that
+came after. The cheap way to get the list is to read it off the function
+instead of guessing:
+
+```bash
+sed -n '/function setOpt/,/^  };/p' report.js | grep -oE "\b[a-zA-Z_][a-zA-Z0-9_.]*\(" | sort -u
+```
 
 ### The ratchet
 
