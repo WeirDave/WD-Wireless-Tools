@@ -53,35 +53,40 @@ will point at something else.
 
 ### Cloud Manager
 
-#### 1. P2 — Sync has no record of what was last synced
+#### 1. ~~P2 — Sync has no record of what was last synced~~ — shipped in v2.148.0
 
-`syncEverythingPlan()` (`web/assets/js/cloud.js:7246`) sorts each pair by
-`staleness` into `cloud_newer`, `local_newer` or in-sync, and nothing else.
-Two timestamps cannot separate "they changed it" from "we both changed it",
-because that needs a third number — the state at the last sync — and nothing
-records one.
+`tools/sync_state.py` records what a pair looked like the last time this
+machine made the two sides identical, in
+`~/.wd_wireless_tools/sync_state.json`, written by a pull or a replace. Four
+states then fall out of two comparisons, and the fourth is the one two
+timestamps could never produce:
 
-**Two thirds of this item has been answered since it was written, and not by
-storing that number.** Both halves matter before starting:
+| cloud moved? | local moved? | verdict |
+| --- | --- | --- |
+| no | no | in sync |
+| yes | no | cloud changed - safe to pull |
+| no | yes | local changed - safe to push |
+| yes | yes | **diverged - left out of the run** |
 
-- **It is no longer silent.** The Sync confirm carries the warning in bold —
-  *"Two dates cannot tell you whether both sides changed"* — names the
-  consequence, and says to compare first (`cloud.js:6999`).
-- **A content comparison answers it per pair, on demand.** `compare_esx`
-  (`tools/esx_compare.py:143`) returns `identical`, `renamedOnly`,
-  `designDiffers`, a `nameState` and a per-member summary, and
-  `_syncVerdictCell` (`cloud.js:7319`) puts that verdict in the plan row —
-  "name only" against a row that is safe to tick, the summary against one that
-  is not.
+A diverged pair leaves `Sync everything` entirely and the confirm names it,
+says copying either way would discard work, and points at **Check what
+differs**. **Nothing resolves a divergence**, deliberately: merging two `.esx`
+files is not something this tool can do, and two tests fail if a later change
+adds a control that picks a side.
 
-So he is told, and he can find out. What is missing is that the **tool** still
-cannot tell, so it cannot stop on its own: comparing is something he has to
-choose to do, and the plan runs whatever the verdict said.
+The record is **per installation** rather than a shared truth - the shape that
+keeps working when a second person appears, and the reason `both_changed` can
+be represented at all. Keyed on Ekahau's project id, which survives a rename
+on either side; a local file renamed since the record was written reads
+`unknown` rather than matching the wrong pair.
 
-**Done** is: a stored record of the last synced state, a third classification
-that stops rather than copies, and both sides named with their timestamps. It
-must never auto-resolve. The record is most of the work, and it is the part
-that did not get easier.
+**What this does not do**, and was never the item: it does not compare
+contents. It answers "did both sides move", not "did both sides move in ways
+that conflict". A pair where both dates moved but only one side's design
+changed still lands in the diverged group, and `Check what differs` is how
+that gets settled. Narrowing it with a content comparison is a possible
+follow-up and would need the comparison's cost thought about first - it
+downloads the cloud copy per pair.
 
 #### 2. P2 — Bulk merge many folders into one
 
@@ -134,24 +139,28 @@ v2.143.0, the twelve P3s in v2.145.0, A31 (CI never installs Node) in
 runs `setup-node@v4` on Node 22 — and A32, the notes describing a delete gate
 that no longer exists, on 2026-09-19.
 
-What remains open is **A33: the untested surface is the destructive one**.
-Re-measured at v2.145.0 rather than carried forward, because three of the five
-behaviours the audit listed have gained real coverage since:
+**A33 - the untested surface is the destructive one - is closed as of
+v2.148.0**, and the table is kept because the shape of the gap is worth
+remembering. All five behaviours the audit listed now have coverage that
+executes them:
 
 | Behaviour | At the audit | Now |
 | --- | --- | --- |
 | Transfer ownership | no coverage | `test_cloud_sharing_says_what_happened.py` executes it through five outcomes |
 | Folder merge (`merge_execute`) | no coverage | `test_cloud_merge_empty_means_empty.py` moves a real file on disk |
 | Duplicates tab delete | no coverage | `test_cloud_duplicates_delete_says_what_goes.py` drives the real dialog |
-| `merge_preview` | no coverage | **still none** |
-| `delete_cloud` / `delete_local` executing | no coverage | **still none** — `delete_cloud` appears in one test *docstring* and nowhere else |
+| `merge_preview` | no coverage | `test_cloud_the_destructive_actions_are_executed.py` runs it, including every refusal |
+| `delete_cloud` / `delete_local` executing | no coverage | same file executes both, and checks every refusal left the file on disk |
 
-Counted the same way across the whole tool: **20 of 49** `CLOUD_ACTIONS`, 149
-of 302 top-level functions in `cloud.js`, and 42 of 58 inline handlers are not
-named in any test file. The twenty actions are `add_group_member`,
+**What is left is breadth rather than risk.** `merge_preview` has come off
+the list below; the remainder are reads and bookkeeping, and the sharing
+group is the most valuable of them. Counted at v2.145.0: **20 of 49**
+`CLOUD_ACTIONS`, 149 of 302 top-level functions in `cloud.js`, and 42 of 58
+inline handlers are not named in any test file. The actions are
+`add_group_member`,
 `create_local_folder`, `forget_all_recipients`, `get_duplicates`,
 `get_my_group`, `housekeeping_stop`, `list_manual_matches`, `list_not_matches`,
-`list_shares`, `mark_manual_match`, `mark_not_match`, `merge_preview`,
+`list_shares`, `mark_manual_match`, `mark_not_match`,
 `open_login`, `refresh_group_shares`, `remove_group_member`, `remove_share`,
 `reveal_in_explorer`, `toggle_group_share`, `unmark_manual_match` and
 `unmark_not_match`.
@@ -162,9 +171,12 @@ two are not the same measurement and the difference is not a trend. The one
 reproducible number is `scripts/audit_source_string_tests.py`: 350 assertions
 in 61 files at the audit, **346 in 58** now.
 
-**Highest value first**, and the first two are the destructive ones:
-`delete_cloud` and `delete_local` actually executing, then `merge_preview`,
-then the sharing group's six actions.
+**Highest value first**: the sharing group's six actions. The three
+destructive ones that used to head this list are done - see
+`tests/test_cloud_the_destructive_actions_are_executed.py`, which also pins
+the route table, since `CLOUD_ACTIONS` is a dictionary literal nobody
+executed and a lambda reading the wrong key is invisible to a test of the
+function it calls.
 
 Related, and already ratcheted rather than listed as work: 114 assertions in 19
 test files that execute nothing at all
