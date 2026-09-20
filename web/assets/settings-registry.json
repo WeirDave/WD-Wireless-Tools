@@ -14,7 +14,23 @@
     "to show a value that was not in force.",
     "",
     "This file is the rule. tests/test_settings_registry.py enforces it.",
-    "Adding a setting means adding it here first."
+    "Adding a setting means adding it here first.",
+    "",
+    "A setting whose value is one of a fixed set carries `values`: the stored",
+    "value mapped to the words its own control uses. The Settings page prints",
+    "those words in each tool's \"What is saved\" list, which used to print the",
+    "stored value - `coarse` for a control reading \"Fewer pages - larger",
+    "sections\" - so a setting could not be found by the words on screen.",
+    "",
+    "Those keys must be EXACTLY the values the tool accepts, and",
+    "tests/test_settings_overview_reads_in_words.py reads each tool's own list",
+    "to check it. A choice added to a tool and not to `values` fails there",
+    "rather than quietly printing raw again.",
+    "",
+    "`unit` does the same job for a number stored in one unit and read in",
+    "another: `ms` prints 30000 as \"30 seconds\", `ft` prints 2.5 as",
+    "\"2.5 feet\". A value that matches neither is printed as stored rather",
+    "than dropped - a value nobody planned for is still information."
   ],
   "categories": {
     "preference": {
@@ -159,7 +175,13 @@
       "section": "cloud",
       "home": "settings",
       "control": "mergeRule",
-      "legacy_browser_key": "wd-merge-rule"
+      "legacy_browser_key": "wd-merge-rule",
+      "values": {
+        "ask": "Ask me each time",
+        "newer": "Keep newer (by timestamp)",
+        "both": "Keep both",
+        "skip": "Skip existing files"
+      }
     },
     {
       "key": "cloud.live_interval_ms",
@@ -169,7 +191,8 @@
       "section": "cloud",
       "home": "settings",
       "control": "sLiveMs",
-      "legacy_browser_key": "wd-live-ms"
+      "legacy_browser_key": "wd-live-ms",
+      "unit": "ms"
     },
     {
       "key": "cloud.default_owner_filter",
@@ -178,7 +201,12 @@
       "owner": "Cloud Manager",
       "section": "cloud",
       "home": "settings",
-      "control": "setowner"
+      "control": "setowner",
+      "values": {
+        "all": "All",
+        "mine": "Mine",
+        "others": "Others"
+      }
     },
     {
       "key_prefix": "rename.",
@@ -240,7 +268,11 @@
       "owner": "Report",
       "section": "report",
       "home": "settings",
-      "control": "sRepUnits"
+      "control": "sRepUnits",
+      "values": {
+        "feet": "Feet",
+        "meters": "Metres"
+      }
     },
     {
       "key": "report.segment_granularity",
@@ -249,7 +281,13 @@
       "owner": "Report",
       "section": "report",
       "home": "settings",
-      "control": "sRepSegGranularity"
+      "control": "sRepSegGranularity",
+      "values": {
+        "fine": "More detail — smaller sections",
+        "standard": "Standard",
+        "coarse": "Fewer pages — larger sections",
+        "coarsest": "Fewest pages — largest sections"
+      }
     },
     {
       "key": "walls.reveal_source_after_save",
@@ -267,7 +305,11 @@
       "owner": "Quick Walls",
       "section": "walls",
       "home": "walls-tool",
-      "legacy_browser_key": "wd-walls-units"
+      "legacy_browser_key": "wd-walls-units",
+      "values": {
+        "imperial": "Inches",
+        "metric": "Metres"
+      }
     },
     {
       "key": "walls.default_template",
@@ -301,7 +343,8 @@
         "is the unit the choice is made in; the trimmer converts to metres and",
         "then to pixels through the plan's own metersPerUnit, so it is a real",
         "distance on the ground whatever the drawing's scale."
-      ]
+      ],
+      "unit": "ft"
     },
     {
       "key": "plantrim.margin_preset",
@@ -317,7 +360,15 @@
         "building on every new site while PlanTrim honoured what he had chosen."
       ],
       "section": "plantrim",
-      "home": "plantrim-tool"
+      "home": "plantrim-tool",
+      "values": {
+        "tight": "Tight — 3 ft (0.9 m)",
+        "normal": "Normal — 10 ft (3 m)",
+        "wide": "Wide — 20 ft (6.1 m)",
+        "extra-wide": "Extra wide — 35 ft (10.7 m)",
+        "parking-lot": "Parking lot — 200 ft (61 m)",
+        "custom": "Custom"
+      }
     },
     {
       "key_prefix": "aprename.",

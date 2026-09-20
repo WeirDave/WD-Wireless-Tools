@@ -1877,7 +1877,10 @@ be a regression, not a feature.
 **Every setting is listed on the Settings page, whether or not it is changed
 there.** Each tool's section ends with a **What is saved** list: every setting
 that tool has, the value it holds right now, and — for the ones whose control
-is on the tool rather than on this page — which tool to go to. The tools with
+is on the tool rather than on this page — which tool to go to. Values are
+written the way the control writes them: **Keep newer (by timestamp)** rather
+than `newer`, **30 seconds** rather than `30000`. A value the suite does not
+recognise is shown exactly as it is stored rather than hidden. The tools with
 no controls on the Settings page at all are grouped under **PlanTrim, Rename
 and the rest**, so nothing is invisible. The list is built from the same
 register the suite uses internally, so a setting cannot exist without

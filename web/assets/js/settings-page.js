@@ -546,14 +546,17 @@
      `key_prefix` entries stand for a whole family (every saved rename
      pattern, say). They cannot show one value, so they show how many are
      saved, which is the useful number. */
+  /* Every `home` the registry uses, other than `settings`, and the tool it
+     names. Three of these were written from memory and one of them was wrong:
+     the registry says `rename-page` and this said `rename-tool`, so both
+     rename rows printed no signpost at all and read as though they were set on
+     this page. `test_settings_overview_reads_in_words.py` now requires a
+     label for every home in use, and forbids one for a home that is not -
+     three keys here named modals that no longer exist. */
   var WHERE = {
-    'cloud-modal':  'Cloud Manager',
-    'report-modal': 'Report',
-    'report-tool':  'Report',
-    'walls-tool':   'Quick Walls',
+    'walls-tool':    'Quick Walls',
     'plantrim-tool': 'PlanTrim',
-    'organizer-tool': 'Squirrel',
-    'rename-tool':  'Rename',
+    'rename-page':   'Rename',
     'aprename-tool': 'AP Labeler'
   };
 
@@ -567,7 +570,22 @@
     return node;
   }
 
-  function describe(v) {
+  /* A stored value is not a readable one. This list printed `coarse` where
+     the control it describes reads "Fewer pages - larger sections", and
+     `newer` where Cloud Manager's says "Keep newer (by timestamp)" - the same
+     defect as the Report printing `#6B6B6B` as a heading while the Labeler
+     said Gray, and it means a setting cannot be searched for by the words on
+     its own control.
+
+     The labels live in `settings-registry.json` beside the setting, as
+     `values`, and a test requires that key set to be exactly what the tool
+     accepts - so a value added to the tool and not to the registry fails
+     rather than silently printing raw again.
+
+     An unrecognised value is printed as it is stored rather than dropped or
+     guessed at, which is what the Ekahau colour table settled on for the same
+     reason: a value nobody planned for is still information. */
+  function describe(v, entry) {
     if (v === undefined || v === null || v === '') return null;
     if (v === true) return 'On';
     if (v === false) return 'Off';
@@ -575,6 +593,28 @@
     if (typeof v === 'object') {
       var n = Object.keys(v).length;
       return n ? n + (n === 1 ? ' saved' : ' saved') : null;
+    }
+    var labels = entry && entry.values;
+    if (labels && Object.prototype.hasOwnProperty.call(labels, String(v))) {
+      return labels[String(v)];
+    }
+    return withUnit(v, entry && entry.unit);
+  }
+
+  /* Numbers that are stored in one unit and read in another. `30000` is the
+     interval Cloud Manager refreshes at; nobody thinks in milliseconds. */
+  function withUnit(v, unit) {
+    var n = Number(v);
+    if (unit === 'ms' && isFinite(n)) {
+      var secs = n / 1000;
+      if (secs >= 60 && secs % 60 === 0) {
+        var mins = secs / 60;
+        return mins + (mins === 1 ? ' minute' : ' minutes');
+      }
+      return (Math.round(secs * 10) / 10) + (secs === 1 ? ' second' : ' seconds');
+    }
+    if (unit === 'ft' && isFinite(n)) {
+      return n + (n === 1 ? ' foot' : ' feet');
     }
     return String(v);
   }
@@ -600,7 +640,7 @@
       var html = '<div class="s-ov-title">What is saved</div>';
       mine.forEach(function (r) {
         var isFamily = !r.key && r.key_prefix;
-        var shown = isFamily ? familyCount(r.key_prefix) : describe(valueAt(r.key));
+        var shown = isFamily ? familyCount(r.key_prefix) : describe(valueAt(r.key), r);
         var where = (r.home && r.home !== 'settings') ? WHERE[r.home] : null;
         html += '<div class="s-ov-row">'
           + '<span class="s-ov-label">' + WD.esc(r.label || r.key || r.key_prefix) + '</span>'
