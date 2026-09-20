@@ -175,52 +175,31 @@ CLAUDE.md § "A test that would pass with the feature deleted is not a test".
 
 ### Report
 
-#### 5. P2 — Column grid references on section pages
+#### 5. ~~P2 — Column grid references on section pages~~ — shipped in v2.146.0
 
-A warehouse section page shows an AP floating in empty slab with no feature to
-locate it against. Construction crews locate everything off the column grid —
-lettered one axis, numbered the other, bubbled on the drawing — so a grid
-reference is the coordinate system they already use. This is the third of the
-three AEC conventions; the Key Plan (v2.60.0) and match lines (v2.62.0)
-shipped. Nothing has been built: `gridRef`, `grid_ref`, `columnGrid` and
-`column_grid` appear nowhere in the repo.
+A **Grid** column on the Antenna Aim Sheet and AP Installation tables, giving
+each AP its nearest column-grid intersection. Two clicks and two labels per
+floor; nothing is read off the drawing. **Column grid reference** in the options
+panel of the Configure step, off by default, with **Set up column grid…**
+beneath it. Calibration in `~/.wd_wireless_tools/report/grids.json`, keyed by
+project id and floor id, never in the `.esx`.
 
-**Automatic extraction from the raster is not tractable here.** It needs circle
-detection, OCR of the bubble letters and numbers, and line tracing. There is no
-OCR in this stack, and adding one would fail silently on exactly the drawings
-that matter — a mis-read bubble produces a confidently wrong reference, which
-is worse than none. Do not attempt it.
+The three cases two points cannot describe — an interrupted bay, a rotated or
+skewed grid, a building carrying two grids — are handled the way this item asked
+for: the derived grid is drawn over the plan so a bad fit is visible, and
+**Turn off for this floor** is the answer. Nothing is guessed at.
 
-**Two clicks per floor, not a drawn grid.** Column grids are regular by
-construction — that is what a structural bay is — so the user clicks two known
-intersections and types their labels (say `A-1` and `G-7`). Spacing and origin
-follow from those two points and the grid extends across the plan. He has
-already accepted a manual step over automatic detection once, for PlanTrim's
-bounding box, for the same reason.
+**What is still open**, and was always the second half of this item: the
+reference **under the marker label on the plan**. The tables were the cheap and
+useful half and are done; drawing it on the map is a separate change to the
+placement renderer and has not been started.
 
-**What it cannot handle**, and should say so rather than guess: irregular or
-interrupted bays; skewed or rotated grids; split grids with their own sequences
-per building section. In all three the reference should be turned off for that
-floor rather than printing something plausible and wrong.
-
-**Delivery, cheapest first.** A `Grid` column on the Antenna Aim Sheet and AP
-Installation tables — that is where an installer reads a location, and it needs
-no drawing changes. Under the marker label on the plan is a second step, and
-should be optional.
-
-**Where it lives.** `~/.wd_wireless_tools`, keyed by project and floor — user
-data never goes in the install tree, and it must not go into the `.esx` either,
-since Ekahau has no member for it and a round trip would drop it.
-
-**Reuse.** The grid-config canvas (`openGridConfig()`, `report.js:1757`) already
-has picking, pan and zoom on a real floor plan. Build the two-point picker on
-that rather than a fourth canvas.
-
-**Anything drawn or printed gets an absolute size floor, in points, not a
-fraction of the drawing** — CLAUDE.md § "The rule that keeps coming back". This
-feature's entire output is small text on a drawing, so it is the rule's next
-likely victim: a grid reference an installer cannot read on paper is the same
-defect as no grid reference.
+**One decision worth revisiting if it reads wrong on site.** The reference is
+the **nearest intersection** — `C-4` — because that is how a grid reference is
+spoken and it sends somebody to a column they can stand under. On a 40-50 ft bay
+the worst case is half a bay of walking. The alternative is naming the bay
+(`C-D / 4-5`), which is precise and twice as wide in a table column. Changing it
+is a one-line change in `gridRefForPoint`.
 
 #### 6. P3 — Change / Audit report
 
