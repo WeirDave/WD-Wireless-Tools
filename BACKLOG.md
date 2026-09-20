@@ -5,25 +5,46 @@ history and GitHub Releases.
 
 Priorities: **P1** = blocking · **P2** = wanted · **P3** = future enhancement.
 
-Last reviewed against **v2.100.12**, 2026-09-14 — the second pass that day was a
-verification sweep, run in Chrome, Edge and Firefox against a real project
-rather than read off the source. What it closed is noted on each item.
+Last reviewed against **v2.145.0**, 2026-09-19. Every item below was opened in
+the code and checked; what each check found is recorded on the item, including
+where the check found the item itself was wrong.
 
-The navigation labels were swept separately on 2026-09-18; what that found is
-under "Awaiting a decision, not work".
+**Item numbers are reassigned at each pass.** A reference to one from outside
+this file has to name the pass date as well as the number, or in a month it
+will point at something else.
 
-**The rest of this file has not been re-read since v2.100.12 and the suite is
-now past v2.141.** One item has been struck as closed by the backups removal;
-the others are carried forward unverified, so confirm an item against the code
-before starting it rather than trusting its wording. A full pass is itself
-outstanding work.
-
-> **What the 2026-09-14 review found.** The previous review was against
-> v2.69.0 — twenty-nine releases stale — and the problem was the opposite of
-> the one expected. Nothing in here had already shipped. What it did was
-> *under-record*: ten open items were being carried in conversation rather
-> than in the file, which is how the same questions got asked twice in a day.
-> Everything below was checked against the code, not recalled.
+> **What the 2026-09-19 pass found.** The previous pass was against v2.100.12
+> and the file said so, in bold, at the top. The problem was the mirror image
+> of 2026-09-14's: that pass found *under-recording*, real work carried in
+> conversation instead of here. This one found **over-recording** — three
+> entries describing the tool as it was forty-five minor versions ago, two of
+> them in the section whose whole job is to be trusted without re-checking.
+>
+> **One open item had simply shipped.** *Upload direction* said Cloud Manager
+> "cannot upload over an existing cloud project" and quoted a Sync confirm
+> reading "that direction is not built yet". `replace_cloud_project` has done
+> it since v2.104.6, and that sentence is in no file in the repository. Anyone
+> picking the item up would have started by building something that exists.
+>
+> **One had shrunk without being re-measured.** *Sync cannot tell a divergence*
+> said a divergence is "silently resolved as a one-way copy ... without anyone
+> being told a choice was made". The Sync dialog now says it in bold, and a
+> content comparison answers it per row. What is left is real and is about a
+> third of what the item claimed.
+>
+> **And one settled decision had been reversed two releases after it was
+> written down.** *A template adds; it never changes a wall type Ekahau ships*
+> was recorded at v2.100.12 and undone at v2.100.19, when he asked for his
+> three wall colours back. It sat in "Decisions already made — kept so they are
+> not re-litigated" from v2.100.19 to v2.145.0, stating the opposite of both
+> the shipped template and the code. That is the worst place in the file for a
+> wrong entry, because the section exists to be acted on without checking.
+> It is rewritten below with the reversal in it.
+>
+> **The lesson is about the staleness warning itself.** It was added in
+> c11b051, it was accurate, and it stopped nothing: an item you have been told
+> to distrust reads exactly like an item you have not, once you are three
+> paragraphs into it. A warning at the top is not a substitute for a pass.
 
 ---
 
@@ -31,143 +52,124 @@ outstanding work.
 
 ### Cloud Manager
 
-#### 1. P2 — Sync cannot tell a divergence from a one-sided change
+#### 1. P2 — Sync has no record of what was last synced
 
-`syncEverythingPlan()` classifies each file as `cloud_newer` or `local_newer`
-and nothing else. There is no concept of *both sides changed since the last
-sync*, so a genuine divergence is silently resolved as a one-way copy and the
-older edit is lost without anyone being told a choice was made.
+`syncEverythingPlan()` (`web/assets/js/cloud.js:7246`) sorts each pair by
+`staleness` into `cloud_newer`, `local_newer` or in-sync, and nothing else.
+Two timestamps cannot separate "they changed it" from "we both changed it",
+because that needs a third number — the state at the last sync — and nothing
+records one.
 
-This is the last unbuilt capability in Sync — per-file direction (v2.86.0) and
-one-click pull of cloud-newer plus cloud-only files both work.
+**Two thirds of this item has been answered since it was written, and not by
+storing that number.** Both halves matter before starting:
 
-**Done** is: a third state that stops rather than copies, names both sides with
-their timestamps, and makes the user pick. It must never auto-resolve. Needs a
-record of what was last synced, which does not exist yet — that is most of the
-work.
+- **It is no longer silent.** The Sync confirm carries the warning in bold —
+  *"Two dates cannot tell you whether both sides changed"* — names the
+  consequence, and says to compare first (`cloud.js:6999`).
+- **A content comparison answers it per pair, on demand.** `compare_esx`
+  (`tools/esx_compare.py:143`) returns `identical`, `renamedOnly`,
+  `designDiffers`, a `nameState` and a per-member summary, and
+  `_syncVerdictCell` (`cloud.js:7319`) puts that verdict in the plan row —
+  "name only" against a row that is safe to tick, the summary against one that
+  is not.
+
+So he is told, and he can find out. What is missing is that the **tool** still
+cannot tell, so it cannot stop on its own: comparing is something he has to
+choose to do, and the plan runs whatever the verdict said.
+
+**Done** is: a stored record of the last synced state, a third classification
+that stops rather than copies, and both sides named with their timestamps. It
+must never auto-resolve. The record is most of the work, and it is the part
+that did not get easier.
 
 #### 2. P2 — Bulk merge many folders into one
 
-The current merge workflow accepts one local source folder and one destination.
+`merge_preview(src_path, dst_path)` and `merge_execute(src_path, dst_path,
+ops)` (`tools/cloud_manager.py:3743`, `:3785`) each take exactly one source and
+one destination, and `CLOUD_ACTIONS` exposes them that way
+(`server.py:1122-1123`). Verified unchanged.
+
 Add a bulk action that accepts multiple selected local source folders, previews
 the combined file operations, preserves per-file exclusions, and executes each
 source safely against one destination.
 
 Cloud-to-cloud merging should remain unsupported unless Ekahau provides a safe
-server-side operation. This feature needs dry-run coverage and file-count
-verification because source-folder cleanup can be destructive.
+server-side operation. This needs dry-run coverage and file-count verification
+because source-folder cleanup can be destructive — and note that
+`merge_preview` is one of the twenty server actions no test names at all (item
+4), so there is no coverage to build on.
 
 #### 3. P2 — Manual External override
 
-Automatic External detection uses project ownership metadata. Add a persistent
-per-project override so a user can mark a project as External or Mine when
-ownership metadata is missing or does not reflect operational responsibility.
+`_isExternal(cloudObj, localObj)` (`cloud.js:1339`) compares the owner email on
+either side against `data.currentUser` and does nothing else. There is no
+override anywhere in the repo: `external_override`, `externalOverride`,
+`markExternal` and `mark_external` appear in no file.
 
-The dashboard counts, filters, and row styling must all honor the same
-override. The final UI — row action, inline control, or settings list — still
-needs a design decision.
+Add a persistent per-project override so a project can be marked External or
+Mine when ownership metadata is missing or does not reflect operational
+responsibility. The dashboard counts, filters and row styling must all honor
+the same override.
 
-#### 4. P3 — Upload direction: replacing an existing cloud project
+**One case worth designing for, found while checking this.** `_isExternal`
+returns `false` for everything when `currentUser` is empty, so an account that
+comes back without one shows no External projects rather than an unknown
+number. That is the right default, and it is the case an override most
+obviously serves. Note the shape the owner filter settled on for the same
+problem (CLAUDE.md § "Known gotchas"): when a filter cannot answer, say so on
+screen rather than render a confident empty list.
 
-Cloud Manager can download and cannot upload over an existing cloud project.
-The Sync confirm says "that direction is not built yet" deliberately: the API
-is not known to be the obstacle, the code is simply not written.
+The final UI — row action, inline control, or settings list — still needs a
+design decision.
 
-**Read `CLAUDE.md` § "Uploading to Ekahau Cloud" before touching this.** It
-records what is established (the batch endpoint returns every document,
-including `projectHistorys`, so the cloud does hold the revision chain), what
-is not (whether `batch/update` accepts documents other than `project`), and
-three dead ends not to spend another session on — including that the desktop
-client's sync prompt cannot be captured from a browser.
+#### 4. P1 — One systemic finding from the Cloud Manager audit is still open
 
-The cheap open route is `docs/reverse-engineering/capture_project_fields.js`,
-which reads the project *listing* and would settle whether a project record
-carries a revision or etag.
+The whole-tool audit of 2026-09-18 is in
+`docs/audits/cloud-manager-2026-09-18.md`, with the evidence per item, each
+marked `[measured]`, `[traced]` or `[reported]`. **Thirty-one of its findings
+are closed** — A0 in v2.139.1, the six P1s in v2.142.0, the twelve P2s in
+v2.143.0, the twelve P3s in v2.145.0, A31 (CI never installs Node) in
+`claude/ci-installs-node` — verified here: `.github/workflows/tests.yml` now
+runs `setup-node@v4` on Node 22 — and A32, the notes describing a delete gate
+that no longer exists, on 2026-09-19.
 
-#### 4a. P1 — Findings from the full Cloud Manager audit, 2026-09-18
+What remains open is **A33: the untested surface is the destructive one**.
+Re-measured at v2.145.0 rather than carried forward, because three of the five
+behaviours the audit listed have gained real coverage since:
 
-A whole-tool audit against v2.139.0 — every filter, every list, every action
-across `cloud.html`, `cloud.js`, `cloud_manager.py` and the 46 `CLOUD_ACTIONS`.
-**Full detail, with the evidence for each item, is in
-`docs/audits/cloud-manager-2026-09-18.md`.** Findings there are marked
-`[measured]` (the real function was executed), `[traced]` (read through the
-call chain) or `[reported]` (not independently re-executed — confirm first).
+| Behaviour | At the audit | Now |
+| --- | --- | --- |
+| Transfer ownership | no coverage | `test_cloud_sharing_says_what_happened.py` executes it through five outcomes |
+| Folder merge (`merge_execute`) | no coverage | `test_cloud_merge_empty_means_empty.py` moves a real file on disk |
+| Duplicates tab delete | no coverage | `test_cloud_duplicates_delete_says_what_goes.py` drives the real dialog |
+| `merge_preview` | no coverage | **still none** |
+| `delete_cloud` / `delete_local` executing | no coverage | **still none** — `delete_cloud` appears in one test *docstring* and nowhere else |
 
-One defect was fixed on the spot and shipped in **v2.139.1**: `settlePair`
-sent its two arguments the wrong way round, so every action's "did it land"
-confirmation had failed since v2.120.0 — and the test covering it was pinning
-the swap by asserting a positional argument.
+Counted the same way across the whole tool: **20 of 49** `CLOUD_ACTIONS`, 149
+of 302 top-level functions in `cloud.js`, and 42 of 58 inline handlers are not
+named in any test file. The twenty actions are `add_group_member`,
+`create_local_folder`, `forget_all_recipients`, `get_duplicates`,
+`get_my_group`, `housekeeping_stop`, `list_manual_matches`, `list_not_matches`,
+`list_shares`, `mark_manual_match`, `mark_not_match`, `merge_preview`,
+`open_login`, `refresh_group_shares`, `remove_group_member`, `remove_share`,
+`reveal_in_explorer`, `toggle_group_share`, `unmark_manual_match` and
+`unmark_not_match`.
 
-**Every P1 item is now closed — six of them in v2.142.0, one commit and one
-failing-first test each.** They are kept listed here, and in full in the audit,
-because the reasoning is why each guard exists, and a guard whose reason is not
-written down is the one a later session removes as redundant.
+**Do not read those three numbers against the audit's** (25 of 46, 214 of 380,
+44 of 78). The audit's counting method was never committed as a script, so the
+two are not the same measurement and the difference is not a trend. The one
+reproducible number is `scripts/audit_source_string_tests.py`: 350 assertions
+in 61 files at the audit, **346 in 58** now.
 
-* ~~**The upload identifies the project it just made as "the first id that was
-  not in the listing a moment ago"**~~ (`cloud_manager.py:2611`) — it applied
-  `_await_new_project`'s evidence rule on the fallback path only, while the
-  primary path did the thing that docstring forbids in those words. Both paths
-  use it now, and an upload that cannot identify what it made renames nothing,
-  files nothing and writes nothing back over the local file.
-* ~~**The push overwrites the local `.esx` with no backup**~~ — **closed by
-  v2.141.0, which removed backups suite-wide.** It was a finding about
-  *inconsistency*: every other local overwrite in the file backed one up first
-  and this one did not. None of them do now, deliberately, and the writes rest
-  on atomic replace instead. Read `CLAUDE.md` § "Backups were removed, and that
-  is the design" before treating an unprotected write here as a defect. Its
-  live half was the item above, and that is what closed it.
-* ~~**`replace_cloud_project` never re-checks direction before deleting**~~ —
-  it re-reads both dates before anything is uploaded, and refuses with both of
-  them named. Same guard the pull direction has always had, and a missing date
-  still counts as "Ekahau did not say" rather than "newer".
-* ~~**Cancel on a running cloud write does nothing and then reports success as
-  "Cancelled"**~~ — Cancel is opt-in now and nothing opts in, so no running
-  write offers it; queued work still offers Remove, which always worked. Work
-  that returns is Done.
-* ~~**Merge's "delete the source folder afterwards" is ticked by default**~~ —
-  "empty" is measured over every file rather than the scan's skip list, and the
-  local delete dialog names what is tucked away in `archive/` and `output/`.
-* ~~**On the Projects tab the cloud and local checkboxes are the same
-  control**~~ — each side has its own key, as the Sites tab and nested rows
-  always did, and a mixed selection no longer claims local copies are safe.
+**Highest value first**, and the first two are the destructive ones:
+`delete_cloud` and `delete_local` actually executing, then `merge_preview`,
+then the sharing group's six actions.
 
-**The twelve P2 items are closed as well, in v2.143.0** — seven commits, each
-carrying a test that fails against the code before it. In short: Auto-assign
-files away only the projects it listed; the External chip can be reached on the
-Sites tab; the search reaches the projects inside a site and says what it is
-hiding; the head counts what the letter left and an empty list names what
-emptied it; sharing reports what Ekahau did, including when it will not say;
-the bulk planners refuse the push the row refuses; a stored comparison retires
-when the pair moves; a rename brings the name inside the file with it; and a
-typed destination is where the file goes. The audit has the detail per item,
-including the one deliberate non-change: the chips count the account rather
-than the search, and say so above the list.
-
-**And the twelve P3 items are closed, in v2.145.0** — two commits, the
-matching engine and the client. The matcher reads a three-digit building
-number as the number rather than as the letter "g", stops reading years as
-street numbers, will not pair two projects on a shared site code alone, gives
-the same answer whatever order Ekahau lists projects in, treats a name that
-differs only in capitals as exact, lets Ekahau's own project id outrank a
-stale not-a-match, and notices a file rewritten inside one second. On the
-client, a failed background poll no longer takes the list away, the Duplicates
-tab deletes through the real dialog instead of `window.confirm()`, and the
-row-busy clock starts when the work does.
-
-**Two of those were mis-filed as P3 and were not harmless** — the failed poll
-wiping the list, and every Duplicates-tab delete gated only by a truncatable
-native dialog. Severity was judged by how small the code was rather than by
-what it costs. Worth remembering when the next list is triaged.
-
-One systemic item from the audit is still open:
-
-* **The untested surface is the destructive one** — cloud and local delete
-  from the main list, transfer ownership and folder merge still have no test
-  that could fail if they broke. Sharing, the merge's emptiness check and the
-  Duplicates delete dialog have tests now; the rest of that list does not.
-
-*(CI installing Node — the other systemic item — was closed separately in
-`claude/ci-installs-node`.)*
+Related, and already ratcheted rather than listed as work: 114 assertions in 19
+test files that execute nothing at all
+(`scripts/audit_tests_that_never_run_anything.py`). That debt is held per file
+in `tests/source_string_assertion_baseline.json` and can only go down — see
+CLAUDE.md § "A test that would pass with the feature deleted is not a test".
 
 ---
 
@@ -180,7 +182,8 @@ locate it against. Construction crews locate everything off the column grid —
 lettered one axis, numbered the other, bubbled on the drawing — so a grid
 reference is the coordinate system they already use. This is the third of the
 three AEC conventions; the Key Plan (v2.60.0) and match lines (v2.62.0)
-shipped.
+shipped. Nothing has been built: `gridRef`, `grid_ref`, `columnGrid` and
+`column_grid` appear nowhere in the repo.
 
 **Automatic extraction from the raster is not tractable here.** It needs circle
 detection, OCR of the bubble letters and numbers, and line tracing. There is no
@@ -209,13 +212,21 @@ should be optional.
 data never goes in the install tree, and it must not go into the `.esx` either,
 since Ekahau has no member for it and a round trip would drop it.
 
-**Reuse.** The grid-config canvas already has picking, pan and zoom on a real
-floor plan. Build the two-point picker on that rather than a fourth canvas.
+**Reuse.** The grid-config canvas (`openGridConfig()`, `report.js:1757`) already
+has picking, pan and zoom on a real floor plan. Build the two-point picker on
+that rather than a fourth canvas.
+
+**Anything drawn or printed gets an absolute size floor, in points, not a
+fraction of the drawing** — CLAUDE.md § "The rule that keeps coming back". This
+feature's entire output is small text on a drawing, so it is the rule's next
+likely victim: a grid reference an installer cannot read on paper is the same
+defect as no grid reference.
 
 #### 6. P3 — Change / Audit report
 
-The gallery card exists but is intentionally marked **Coming soon**. Completing
-it requires:
+The gallery card exists and is intentionally marked **Coming soon** — verified
+as the only report still in that state (`report.js:6298`). Completing it
+requires:
 
 - A second `.esx` file picker for before-and-after projects.
 - AP matching and change classification for added, removed, moved, re-aimed,
@@ -226,16 +237,23 @@ it requires:
 This is the largest remaining Report feature and should be developed separately
 from routine maintenance.
 
+**The matching half may largely exist already.** `tools/esx_compare.py` answers
+"how do these two `.esx` files differ", per member, without touching disk; and
+v2.145.0 fixed seven faults in Cloud Manager's name matcher, several of which
+(three-digit building numbers, years read as street numbers, listing-order
+dependence) any second comparison engine would reproduce from scratch. Read
+both before writing a third one.
+
 ---
 
 ### PlanTrim
 
 #### 7. P3 — Only PNG, JPEG and SVG floor plans can be cropped
 
-`image_kind()` in `tools/esx_trimmer.py` returns `PNG`, `JPEG`, `SVG` or
-`UNKNOWN`, and `UNKNOWN` is refused. Ekahau accepts more than that — BMP, WBMP
-and GIF among them — so a project can carry a floor plan the trimmer will not
-touch.
+`image_kind()` (`tools/esx_trimmer.py:288`) sniffs three magic-byte signatures
+and returns `UNKNOWN` for everything else, which is refused. Verified
+unchanged. Ekahau accepts more than that — BMP, WBMP and GIF among them — so a
+project can carry a floor plan the trimmer will not touch.
 
 Pillow already reads all three, and the crop path is format-agnostic once the
 image is open; the gate is the magic-byte sniffer and the writer's format
@@ -246,92 +264,184 @@ higher.
 
 ### Suite-wide
 
-#### 8. P3 — BLOCKED: the DWG-to-`.esx` finding is not written down
+#### 8. P3 — BLOCKED: the DWG-to-`.esx` finding may now be written down
 
 A finding about going from DWG to `.esx` was established in an earlier session
-and never recorded, so the next session will redo the work.
+and never recorded. The item has stood on the grounds that nothing in the repo
+said what it was.
 
-**This cannot be written up from the repo.** `DWG` appears only as a file
-extension in the organizer, settings and Cloud Manager, and nothing in the git
-history, `CLAUDE.md`, the docs or the release notes records a conversion
-finding. Someone has to supply what the finding actually was before it can be
-written down; inventing a plausible one would be worse than the gap.
+**That is no longer quite true, and the item is narrower than it was.** Two
+places now record a DWG finding, neither of which existed when the item was
+written:
+
+- `tools/esx_trimmer.py`, module docstring, lines 27-32: a DWG import lands as
+  a vector plan; Ekahau writes a companion raster of the same drawing beside
+  it; and the two axes have to be scaled independently, because the rasteriser
+  rounds — 792x612 renders to 5000x3863 where one shared ratio would give
+  3863.6, so a single ratio would refuse every real file over the artefact.
+- `docs/USER_MANUAL.md` § "Vector plans — DWG and PDF imports", added in
+  v2.144.0, which states the same thing for a reader.
+
+**Whether that is *the* finding, only he can say.** It is a good candidate and
+it is specific, so the question to put to him is now "is this it?" rather than
+"what was it?" — which is a question he can answer in one word. Do not close
+the item on the strength of the candidate, and do not invent the remainder: a
+plausible invented finding is worse than the gap, which is why this item exists
+at all.
 
 ---
 
 ## Awaiting a decision, not work
 
-These are all small, and all blocked on a call rather than on effort. Grouped
-so they can be answered together.
+Blocked on a call rather than on effort, so they can be answered together.
 
-**All four were answered on 2026-09-19 and are closed.** Shipped in v2.144.0 —
-see "Decisions already made" below for the one that was answered by leaving it
-alone. They are kept here, struck through, only until the next full pass of this
-file.
+**The four menu-label questions that filled this section were all answered on
+2026-09-19** and are recorded under "Decisions already made" below. One
+question replaces them, and it came out of this pass:
 
-- ~~**Rename the AP Label Reference page.**~~ **AP Labels**, so the printed page
-  reads like its sibling **AP Notes** rather than like a different product.
-
-- ~~**"Report a Bug" has the same gap "View Issues" had.**~~ **Report a Bug on
-  GitHub**, on every page, matching the *View Issues* correction from v2.119.1.
-  `LABELS_HE_HAS_NOT_RULED_ON` in `tests/test_every_tool_is_in_every_menu.py` is
-  now **empty**, so the outbound-link rule covers everything with nothing
-  excused from it.
-
-- ~~**"User Guide" and "User Manual" sit next to each other and do not say which
-  is which.**~~ Answered by removing one of them rather than by renaming either:
-  *"There should be one universal User guide for the entire suite with chapters
-  for each of the tools."* The five per-tool pages are merged into their chapters
-  and deleted, the document is the **User Guide**, and every menu carries one
-  item. The old `/guide…` addresses redirect to their chapter.
-
-  **Three factual corrections came out of the merge**, and they are the reason
-  this was worth doing rather than a tidy-up: the guide promised a
-  `.previous-<timestamp>.esx` backup that nothing had written since v2.141.0,
-  claimed a wall template never restyles a type Ekahau ships when
-  `mergeTemplateTypes` has deliberately done exactly that since v2.100.19, and
-  the Report page claimed the cover image lives in `localStorage` when it has
-  been in `~/.wd_wireless_tools/report/` throughout. Two documents answering one
-  question is how all three survived.
-
-- ~~**"Suite Settings" goes to five different places.**~~ **Left as it is,
-  deliberately.** The deep link lands where you would want and the jump has never
-  surprised anyone. Closed rather than carried.
-
-  *All four found by a sweep of every `menu-item` / `help-menu-item` in
-  `web/**.html` on 2026-09-18, done alongside the View Issues rename. Nothing
-  else in any menu is ambiguous about where it goes: everything else is either
-  a tool page, an in-app dialog, or an action with no destination.*
-
+- **Is the DWG note in `esx_trimmer` the finding item 8 is missing?** It says a
+  DWG import lands as a vector plan with a companion raster beside it, and that
+  the two axes have to scale independently because the rasteriser rounds. If
+  that is what was established in the earlier session, item 8 closes and the
+  note is already written. If there was more to it, item 8 stays open and needs
+  the rest. **A yes or no is enough** — nothing else about item 8 can move
+  until this is answered, which is why it is here rather than only there.
 
 ---
 
 ## Decisions already made — kept so they are not re-litigated
 
-### The manual is organised around the job, not the tool list — done in v2.116.0
+**Read the date on an entry here.** One of them was reversed two releases after
+it was written and sat here wrong for forty-five minor versions, so this
+section is not exempt from the next pass.
 
-Item 9 in Open work, now closed. He opened the manual, said it was horrible,
-agreed it needed a revamp and asked for it on the back burner while he was
-blocked at work. It was done overnight on 2026-09-18.
+### A wall template updates every type it carries, including Ekahau's — and the opposite was recorded here until 2026-09-19
 
-**The organising decision, so it is not quietly undone:** the manual opens with
-"A site from start to finish", which walks one job through every tool in the
-order he uses them — Squirrel, Ekahau import, Scale, Prep, Quick Walls and hand-
-drawn walls over a background image, APs, upload, pull the cloud copy back down,
+**The entry this replaces said the opposite, and it was wrong from v2.100.19
+onward.** It read: *"A template adds; it never changes a wall type Ekahau
+ships"*, quoting him — *"I just want to add in the walls that we added, not
+change anything from the defaults."* That reading produced v2.100.5, which
+stripped three of his colours out of the shipped template and added a guard to
+`mergeTemplateTypes` skipping stock types.
+
+Both halves were wrong, and he said so: *"get them back to where they were for
+my template."* The three colours — `Door, Steel Fire/Exit` orange, `Elevator
+Shaft` green, `Window, Thick` `#0093EA` — are **his**, chosen so similar types
+can be told apart on a plan, and the Quick Walls guide had documented them as a
+feature for as long as they had existed. v2.100.19 put them back and removed
+the guard with them, because every Ekahau project already contains those three
+types: a skip-stock-types rule means his colours never land on anything, which
+is a restoration that changes a file and nothing anyone can see.
+
+Verified in this pass, both ends: `templates/WD Template_walltemplate.json`
+carries `#E85D04`, `#5FAB4F` and `#0093EA` on those three, and
+`mergeTemplateTypes` (`web/assets/js/walls.js:258`) has no stock branch —
+`kept` is never pushed to, so `keptPhrase` is dead code, left in place
+deliberately so that re-adding the skip is one line and the message that
+explains it is already written.
+
+**What is still true from the old entry**, and is the part worth keeping: a
+type the template says nothing about is left exactly as it is, and nothing is
+ever removed here. **Ekahau Defaults** is the button that deliberately starts
+over, and it asks first.
+
+The full reasoning, including how the colours were recovered from a real
+project, is in CLAUDE.md § "Known gotchas". That section has been right
+throughout; this file was the one that drifted.
+
+### Upload direction is built, and in-place replacement is ruled out — closed 2026-09-19
+
+Carried as open work from v2.69.0 to v2.145.0 on wording that stopped being
+true at v2.104.6. `replace_cloud_project` (`tools/cloud_manager.py:2322`) puts a
+local `.esx` up over an existing cloud project, and the Sync confirm sentence
+the item quoted — "that direction is not built yet" — is in no file in the
+repository.
+
+**It is a composition, and it always will be.** That settles the question the
+item left open, which was whether `batch/update` accepts documents other than
+`project`. It does write in place — it is how renaming works — but it is JSON,
+and a project's floor plans are binary images fetched from S3 by id during
+download. **A JSON document write cannot carry a re-cropped plan**, which is
+exactly what his edits change. So in-place replacement is ruled out by what the
+data is, not by an untested endpoint, and the capture script the old item
+pointed at would not have changed that.
+
+Four properties of the built version, each worth not undoing:
+
+* **The order is inverted from the way he asked for it, on purpose.** Upload,
+  verify, *then* delete. Deleting first means a failed upload leaves nothing in
+  the cloud — his local copy survives, but the shared copy other people work
+  from is gone and he may not find out until somebody asks. Uploading first
+  means a failure leaves a duplicate: visible, annoying, removable in one click.
+* **Direction is re-read on the server before anything is uploaded**
+  (v2.142.0), because the ledger's `staleness` is a snapshot from when the list
+  was drawn and it is the push that deletes. A missing cloud date is Ekahau not
+  saying, which is not Ekahau saying newer.
+* **The site is carried over** — the dataset listing is read for the old
+  project's `siteId` and the upload goes into it.
+* **Shares are lost, and it says so by name.** A share is keyed to the project
+  id and this deliberately creates a new project. Nothing re-applies them:
+  sharing other people's projects on their behalf is not a side effect an
+  upload should have. The result names everyone who loses access, at the moment
+  it happens rather than when somebody asks why they cannot open it.
+
+CLAUDE.md § "Uploading to Ekahau Cloud" was corrected in the same pass; its
+opening sentence still said the direction did not exist.
+
+### The four menu-label decisions — answered 2026-09-19, shipped in v2.144.0
+
+Verified against the files in this pass rather than taken from the commit
+message.
+
+- **AP Label Reference → AP Labels**, so the printed page reads like its
+  sibling **AP Notes**. No occurrence of the old name remains in `web/` or
+  `docs/`.
+- **Report a Bug → Report a Bug on GitHub**, on every page carrying it,
+  matching the *View Issues* correction from v2.119.1.
+  `LABELS_HE_HAS_NOT_RULED_ON` in `tests/test_every_tool_is_in_every_menu.py`
+  is now an empty set, so the outbound-link rule covers everything with nothing
+  excused from it by name.
+- **User Guide / User Manual** — answered by removing one rather than renaming
+  either: *"There should be one universal User guide for the entire suite with
+  chapters for each of the tools."* No `guide-*.html` page remains, and
+  `server.py:273-278` redirects all six old addresses to their chapter anchor.
+
+  **Three factual corrections came out of the merge**, and they are why it was
+  worth doing rather than a tidy-up: the guide promised a
+  `.previous-<timestamp>.esx` backup that nothing had written since v2.141.0;
+  it claimed a wall template never restyles a type Ekahau ships, when
+  `mergeTemplateTypes` has deliberately done exactly that since v2.100.19 (the
+  same error this file was carrying — see the first entry in this section); and
+  the Report page claimed the cover image lives in `localStorage` when it has
+  been in `~/.wd_wireless_tools/report/` throughout. **Two documents answering
+  one question is how all three survived**, which is the argument against
+  splitting them again.
+- **"Suite Settings" deep-linking to five different anchors — left alone,
+  deliberately.** The jump lands where you would want and has never surprised
+  anyone. Closed rather than carried.
+
+### The user documentation is organised around the job, not the tool list — v2.116.0, merged in v2.144.0
+
+He opened it, said it was horrible, and asked for the revamp on the back burner
+while he was blocked at work.
+
+**The organising decision, so it is not quietly undone:** it opens with "A site
+from start to finish", which walks one job through every tool in the order he
+uses them — Squirrel, Ekahau import, Scale, Prep, Quick Walls and hand-drawn
+walls over a background image, APs, upload, pull the cloud copy back down,
 Report. The per-tool sections are reference *underneath* that. Anyone tempted to
 restore an alphabetical tool list at the top should read this first: the tool
 list is what it was, and it was the thing he objected to.
 
-PlanTrim (50 words) and Scale (67) were written properly. Every tool section
-says what the tool is for before how to use it. Stale content was corrected —
-notably the claim that every tool leaves its backup beside the file it replaced,
-which stopped being true for Cloud Manager in v2.104.5.
+Since v2.144.0 this is the suite's **only** user document — the five per-tool
+guides are chapters in it. It is reached as **User Guide**, served at
+`/manual`, and lives at `docs/USER_MANUAL.md`; the file name is the last place
+the old word survives.
 
 Six screenshots live in `web/assets/manual/`, all taken from a synthetic project
 generated for the purpose ("Example Project", "Level 1"/"Level 2", APs from
 "AP-101"). The generator is not committed; regenerate rather than photographing
 anything real.
-
 
 ### The roll-up door colour is Ekahau's, and nothing was lost
 
@@ -369,10 +479,6 @@ and there is nothing to recover. `tests/test_template_store.py` pins it with
 this reasoning attached, so the question does not get reopened from the same
 wrong end.
 
-
-Not work. Recorded because each was settled once and would otherwise be
-rediscovered as an open question.
-
 ### Every native file picker says when it could not open — v2.100.12
 
 A picker that failed to open was reported as a cancel, everywhere, and a cancel
@@ -388,7 +494,7 @@ cannot (it needs a path, not bytes) and says what went wrong instead.
 The distinction is load-bearing and is tested: the cancel wording must stay
 exactly as it is, because every page keys its silence on that string.
 
-### A notes-terminated document prints correctly — item 7, closed by evidence
+### A notes-terminated document prints correctly — closed by evidence
 
 The trailing-blank-sheet fix (v2.96.2) had only ever been confirmed on a
 document whose last section was the compass page. A project with a note on all
@@ -401,7 +507,7 @@ is the one report he asked for notes on.
 
 ### The scrollbar styling is verified, and it was not what the item said
 
-Item 8 described "one `scrollbar-width` / `scrollbar-color` rule". There were
+The item described "one `scrollbar-width` / `scrollbar-color` rule". There were
 two different mechanisms, and the one on the Cloud Manager list was
 `::-webkit-scrollbar`, which **Firefox does not implement at all**. Measured
 with the list scrolling: Chrome and Edge reserved a 6px gutter, Firefox reserved
@@ -414,24 +520,7 @@ WebKit rule and took Chrome and Edge from 6px to 10px. Firefox still overlays
 rather than reserving — that is the platform, not a bug — so its bar is now
 thin and muted where it was default, and nothing about the layout moved.
 
-### A template adds; it never changes a wall type Ekahau ships
-
-His words, after applying WD Template was found to recolour three standard wall
-types: "I just want to add in the walls that we added, not change anything from
-the defaults. So if stuff has changed from the defaults, that's probably wrong."
-
-So the merge leaves a stock type exactly as it is and says in the toast which
-ones it left alone. The **Ekahau Defaults** template is the deliberate
-exception — putting the stock values back is the whole point of that one — and
-the three drifted colours were corrected in the shipped template as well, since
-a template carrying a wrong value is wrong whether or not anything applies it.
-
-The trade is recorded because it is a real one: a template can no longer carry
-a house value for a standard type. If that is ever wanted it has to be a
-deliberate, visible thing, not a side effect of having saved a template out of
-a project where somebody had recoloured a door once.
-
-### The wall audit is reachable — item 9 of the 2026-09-14 review, now done
+### The wall audit is reachable
 
 `tools/wall_audit.py` had 15 passing tests and no way into it from the app. It
 is now reached over `/api/walls/audit` and reported in the `#wallAudit` panel

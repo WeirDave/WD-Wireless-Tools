@@ -698,13 +698,40 @@ server reads `d["patch"]` and therefore saved nothing while reporting success.
 
 ## Uploading to Ekahau Cloud — what is known, and what is not
 
-Cloud Manager can download and it cannot upload over an existing cloud
-project. The wording in the Sync confirm says "that direction is not built
-yet" **deliberately**: the API is not known to be the obstacle, the code is
-simply not written, and the previous wording ("cannot") told the user
-something false about his own tool.
+**Cloud Manager uploads over an existing cloud project, and has since
+v2.104.6.** `replace_cloud_project` in `tools/cloud_manager.py` does it, the
+row offers it as *"Local newer · replace cloud"*, and the whole-account planner
+includes it. **This section opened by saying the opposite until 2026-09-19** —
+it still described the Sync confirm as reading "that direction is not built
+yet", a sentence that is in no file in the repository, and the backlog carried
+a matching item from v2.104.6 to v2.145.0. Anybody picking it up would have begun
+by building something that already worked.
 
-**What is established:**
+**It is a composition, not an in-place write, and that is now settled rather
+than pending.** The open question below — whether `batch/update` accepts
+documents other than `project` — stopped mattering: `batch/update` is JSON, and
+a project's floor plans are binary images fetched from S3 by id during
+download. **A JSON document write cannot carry a re-cropped plan**, which is
+exactly what his edits change. So in-place replacement is ruled out by what the
+data is, not by an untested endpoint, and the capture route at the end of this
+section would not change that. Don't re-open it on the strength of
+`projectHistorys` being present.
+
+**What the composition does, in order, and why the order is inverted from the
+way he asked for it** (*"why can't we just automatically delete that first and
+then upload the new one?"*): upload, verify the new project is really there and
+really his file, **then** delete the old. Deleting first means a failed upload
+leaves nothing in the cloud — his local copy survives but the shared copy other
+people work from is gone, and he may not hear about it until somebody asks.
+Uploading first means a failure leaves a duplicate: visible, annoying, and
+removable in one click. Same result, safer way round. It also re-reads which
+side is newer server-side before uploading (v2.142.0), carries the original
+`siteId` over, and **names everyone who loses access** — a share is keyed to
+the project id, so a new project does not carry it, and re-sharing other
+people's projects on their behalf is not a side effect an upload should have.
+
+**What is established about the API, kept because it is still the only written
+record of it:**
 
 - `GET /projectapi/v1/projects/{id}/batch` returns every document keyed
   exactly as the `.esx` members. `download_project` writes each key as
@@ -727,7 +754,8 @@ something false about his own tool.
 
 **What is NOT established:** whether `batch/update` accepts documents other
 than `project`. Nothing has been tested against it, and no speculative PUT
-should be made against a real account to find out.
+should be made against a real account to find out. *Moot for replacement, per
+the note above — it could not carry the floor plans either way.*
 
 **Dead ends — do not spend another session on these:**
 
@@ -759,14 +787,14 @@ other open question. Note that if it only offers "upload new", capturing it
 will reveal nothing about replacing — our `upload_project` already is that
 flow.
 
-**The fallback, if in-place proves unavailable:** delete the cloud project,
-upload the local file, re-assign it to its original site. The loss is
-narrower than earlier notes claimed — `tags` live inside `project.json` and
-travel with the file, and `projectHistorys.json` travels with it too. Shares
-are keyed to the project id and would be lost, but `share_projects` exists,
-so they can be captured beforehand and re-applied. That is a product
-decision, not an engineering one: take it to the user rather than choosing
-for him.
+**The fallback was taken, and it is the design.** Upload, verify, delete,
+re-assign to the original site. The loss is narrower than earlier notes
+claimed — `tags` live inside `project.json` and travel with the file, and
+`projectHistorys.json` travels with it too. Shares are the one real loss, and
+the decision there was made deliberately: `share_projects` exists and could
+re-apply them, but re-sharing on his behalf is not a side effect an upload
+should have, so the result **names the people who lost access** at the moment
+it happens rather than when one of them asks why they cannot open it.
 
 ## The Ekahau AP colour palette
 
@@ -1331,6 +1359,18 @@ not describe.
   well as the new content, so putting it back fails the suite rather than
   quietly returning. The Duplicates tab was still deleting through a bare
   `window.confirm()` and was brought onto the same dialog in v2.145.0.
+
+  **Noting how this one got here, because the rule it broke is one this file
+  enforces on the app.** `TheAppOnlyPointsAtControlsThatExist` fails the suite
+  when the product bolds the name of a control nothing renders. These notes are
+  held to no such check, so they went on naming a deleted modal while the app
+  could not have. A session reads this file as authority, so an instruction
+  here pointing at a control that is gone is the same defect as the Sync dialog
+  spending a release recommending a button greyed out for every row he had. No
+  check is proposed - a test parsing prose for control names would fire on
+  every historical passage in the file, of which there are many by design - but
+  that leaves a documentation pass as the only mechanism, which is an argument
+  for running one more often than every forty-five minor versions.
 
 ## The dev toolbar — WaxFrame Professional's method, ported
 

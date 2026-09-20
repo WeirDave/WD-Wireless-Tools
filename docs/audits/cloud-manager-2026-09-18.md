@@ -571,6 +571,13 @@ and a test now asserts its *absence*, so CLAUDE.md is describing a control that
 does not exist — the `TheAppOnlyPointsAtControlsThatExist` rule pointed at the
 repo's own notes.
 
+**A second instance of the same shape was found in the 2026-09-19 backlog pass
+and fixed with it:** CLAUDE.md § "Uploading to Ekahau Cloud" opened by saying
+Cloud Manager cannot upload over an existing cloud project, which stopped being
+true at v2.104.6 — and `BACKLOG.md` carried a matching open item all that time.
+So this finding was not a one-off slip in one paragraph; it is what happens to
+notes that no check can read.
+
 ### A33. Where the tests cannot fail — **partly closed**
 
 > **What has since been covered**, as a by-product of fixing the findings
@@ -584,10 +591,15 @@ repo's own notes.
 >
 > **Still uncovered, and this is the last open item in the document:** cloud
 > and local delete from the main list — `delete_cloud` and `delete_local`
-> appear in no test at all — transfer ownership as a whole flow, and folder
-> merge's `merge_preview` / `merge_execute`, which move and delete files on
-> disk. `startDelete` → `confirmDelete` → `bulkDelete` is still never
-> executed: the dialog is proven and the handler behind it is not.
+> appear in no test at all — and folder merge's `merge_preview`.
+> `startDelete` → `confirmDelete` → `bulkDelete` is still never executed: the
+> dialog is proven and the handler behind it is not.
+>
+> *An earlier draft of this paragraph also listed transfer ownership and
+> `merge_execute`. Both were measured on 2026-09-19 and both are covered —
+> see the re-measurement at the end of this finding. Two sessions closed
+> different halves of A32 and A33 within an hour of each other, which is how
+> the same section came to say both things.*
 
 `scripts/audit_source_string_tests.py` reports 350 source-text assertions
 across 61 files. Three cloud files execute nothing at all:
@@ -612,6 +624,24 @@ most actionable part of this audit:
 
 Counted: **214 of 380** top-level functions in `cloud.js`, **44 of 78** inline
 handlers, and **25 of 46** `CLOUD_ACTIONS` are not named in any test file.
+
+**Re-measured at v2.145.0, 2026-09-19.** Three of the five named behaviours
+have gained coverage that executes: transfer ownership through five outcomes
+(`test_cloud_sharing_says_what_happened.py`), folder merge moving a real file
+on disk (`test_cloud_merge_empty_means_empty.py`), and the Duplicates delete
+dialog (`test_cloud_duplicates_delete_says_what_goes.py`). **Items 1 and
+`merge_preview` are untouched** — `delete_cloud` is still named only in a test
+*docstring*, and `delete_local` only incidentally. Those are the two to do
+first, being the destructive ones.
+
+Whole-tool counts on that date: **20 of 49** `CLOUD_ACTIONS`, 149 of 302
+top-level functions, 42 of 58 inline handlers. **Do not read those against the
+three above.** The method used for this audit was not committed as a script, so
+the two are different measurements and the difference is not a trend — the
+2026-09-19 numbers come from a regex over `function <name>(`, `on*="name("` and
+`"name": lambda`, which is stated so the next pass can repeat it. The one
+reproducible figure is `scripts/audit_source_string_tests.py`: 350 assertions
+in 61 files here, **346 in 58** at v2.145.0.
 
 ### A34. Tests that pin wording rather than property
 
