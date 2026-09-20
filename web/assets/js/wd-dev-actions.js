@@ -41,6 +41,7 @@
   var Dev = WD.Dev;
 
   function esc(s) { return WD.esc(s); }
+  function escAttr(s) { return WD.escAttr(s); }
 
   function plural(n, one, many) {
     return n + ' ' + (n === 1 ? one : many);
@@ -117,14 +118,14 @@
 
   function safeBtn(id, fn, label, title) {
     return '<button type="button" class="dev-btn dev-btn-safe" id="' + id + '" ' +
-           'data-action="call" data-fn="' + fn + '" title="' + esc(title) + '">' +
+           'data-action="call" data-fn="' + fn + '" title="' + escAttr(title) + '">' +
            esc(label) + '</button>';
   }
 
   function writeBtn(id, fn, label, title) {
     return '<button type="button" class="dev-btn dev-btn-write" id="' + id + '" ' +
            'disabled data-action="call" data-fn="' + fn + '" ' +
-           'title="' + esc(title) + '">' + esc(label) + '</button>';
+           'title="' + escAttr(title) + '">' + esc(label) + '</button>';
   }
 
   function busy(id, on, label) {

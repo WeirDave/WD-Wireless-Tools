@@ -22,6 +22,7 @@
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return WD.esc(s); }
+  function escAttr(s) { return WD.escAttr(s); }
   function toast(m, k) { WD.toast(m, k); }
 
   /* ── Ekahau color palette (10 selectable colors + CLEAR) ───────────
@@ -1056,7 +1057,7 @@
     var html = '';
     S.floors.forEach(function (f) {
       var n = floorAPCount(f.id);
-      html += '<button class="ar-floor-tab" data-fp="' + esc(f.id) + '">' +
+      html += '<button class="ar-floor-tab" data-fp="' + escAttr(f.id) + '">' +
               esc(f.name) + ' <span style="opacity:.5;font-size:11px">(' + n + ')</span></button>';
     });
     var unplaced = S.aps.filter(function (a) { return !a.floorPlanId; }).length;
@@ -1390,7 +1391,7 @@
       return '<div class="ar-cseq-row" data-i="' + i + '"' +
         ' tabindex="0" role="listitem" style="--cseq-color:' + esc(hex) + '"' +
         ' title="Drag to reorder"' +
-        ' aria-label="' + esc(colorLabel(k)) + ', position ' + (i + 1) +
+        ' aria-label="' + escAttr(colorLabel(k)) + ', position ' + (i + 1) +
         ' of ' + (last + 1) + '. Drag to reorder, or use the arrow keys.">' +
         '<span class="ar-cseq-edge"></span>' +
         '<span class="ar-cseq-dot" style="background:' + esc(hex) +
@@ -2249,10 +2250,10 @@
         var border = WD.needsDarkText(rc) ? '1px solid rgba(0,0,0,.2)' : 'none';
         // Named, not just coloured: a dot on its own says nothing, and the
         // name is the word he sees in Ekahau's own menu.
-        swatch = '<span title="' + esc(colorLabel(colorKey(it.ap.color))) +
+        swatch = '<span title="' + escAttr(colorLabel(colorKey(it.ap.color))) +
           '" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + rc + ';border:' + border + ';vertical-align:middle;margin-right:4px"></span>';
       } else {
-        swatch = '<span title="' + esc(colorLabel(WD.CLEAR_KEY)) +
+        swatch = '<span title="' + escAttr(colorLabel(WD.CLEAR_KEY)) +
           '" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #222;vertical-align:middle;margin-right:4px;box-sizing:border-box"></span>';
       }
       var curTxt = it.oldName || '—';
@@ -2271,9 +2272,9 @@
       html += '<tr class="' + (isDiff ? 'changed' : '') +
         (it.unnumbered ? ' unnumbered' : '') + '">' +
         '<td class="ar-num">' + seq + '</td>' +
-        '<td class="ar-cur" title="' + esc(curTxt) + '">' + swatch + esc(curShown) + '</td>' +
+        '<td class="ar-cur" title="' + escAttr(curTxt) + '">' + swatch + esc(curShown) + '</td>' +
         '<td class="ar-arrow">→</td>' +
-        '<td class="ar-new" title="' + esc(newTxt) + '">' + esc(newShown) + '</td>' +
+        '<td class="ar-new" title="' + escAttr(newTxt) + '">' + esc(newShown) + '</td>' +
         '</tr>';
     });
 

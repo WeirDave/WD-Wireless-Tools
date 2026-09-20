@@ -57,6 +57,7 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
+  function escAttr(s) { return WD.escAttr(s); }
 
   function toast(msg, kind) {
     if (window.WD && WD.toast) WD.toast(msg, kind);
@@ -364,7 +365,7 @@
     const sel = $('swapFloorSelect');
     const opts = state.floors.map(f => {
       const n = (state.segmentsByFloor.get(f.id) || []).length;
-      return `<option value="${esc(f.id)}">${esc(f.name)} — ${n} wall${n === 1 ? '' : 's'}</option>`;
+      return `<option value="${escAttr(f.id)}">${esc(f.name)} — ${n} wall${n === 1 ? '' : 's'}</option>`;
     });
     sel.innerHTML = opts.join('');
   }
@@ -374,7 +375,7 @@
       (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
     const opts = ['<option value="">Pick a wall type…</option>']
       .concat(wts.map(w =>
-        `<option value="${esc(w.id)}">${esc(w.name)}</option>`)).join('');
+        `<option value="${escAttr(w.id)}">${esc(w.name)}</option>`)).join('');
     $('swapTargetType').innerHTML = opts;
     $('swapFromType').innerHTML = opts;
     $('swapToType').innerHTML = opts;
@@ -519,10 +520,10 @@
       const rows = gr.segs.map((g, i) => {
         const len = segLengthLabel(g);
         const jid = escJsStr(g.id);
-        return '<div class="swap-seg-row" data-seg-id="' + esc(g.id) + '" '
+        return '<div class="swap-seg-row" data-seg-id="' + escAttr(g.id) + '" '
           + 'onmouseenter="swapHoverSeg(\'' + jid + '\',1)" '
           + 'onmouseleave="swapHoverSeg(\'' + jid + '\',0)">'
-          + '<input type="checkbox" data-seg-id="' + esc(g.id) + '"'
+          + '<input type="checkbox" data-seg-id="' + escAttr(g.id) + '"'
           + (state.excluded.has(g.id) ? '' : ' checked')
           + ' onchange="toggleSwapSeg(this)" '
           + 'title="Include this segment in the swap">'
@@ -537,7 +538,7 @@
       const parentAttrs = gr.checked === gr.segs.length ? ' checked'
         : (gr.checked === 0 ? '' : ' data-indeterminate="1"');
       return '<div class="swap-sel-group' + (collapsed ? ' is-collapsed' : '') + '" '
-        + 'data-group-key="' + esc(gr.key) + '">'
+        + 'data-group-key="' + escAttr(gr.key) + '">'
         + '<div class="swap-sel-group-head" '
         +   'onmouseenter="swapHoverGroup(\'' + escJsStr(gr.key) + '\',1)" '
         +   'onmouseleave="swapHoverGroup(\'' + escJsStr(gr.key) + '\',0)">'
@@ -546,7 +547,7 @@
         +     'aria-expanded="' + (collapsed ? 'false' : 'true') + '" '
         +     'title="' + (collapsed ? 'Show' : 'Hide') + ' the individual segments">▾</button>'
         +   '<input type="checkbox" class="swap-sel-group-check" '
-        +     'data-group-key="' + esc(gr.key) + '"' + parentAttrs
+        +     'data-group-key="' + escAttr(gr.key) + '"' + parentAttrs
         +     ' onchange="toggleSwapGroup(this)" '
         +     'title="Check or uncheck every ' + esc(gr.name) + ' in the selection">'
         +   '<span class="swap-legend-swatch" style="--swap-swatch:' + gr.color + '"></span>'

@@ -1823,7 +1823,7 @@ function _renderJumpNav() {
     const title = isActive
       ? 'Showing only ' + L + ' — click to clear'
       : (enabled ? 'Show only ' + L : 'No sites here');
-    return `<button class="${cls}" data-letter="${e(L)}"
+    return `<button class="${cls}" data-letter="${a(L)}"
                     ${enabled ? `onclick="_jumpToLetter('${e(L)}')"` : 'disabled tabindex="-1"'}
                     title="${title}">${e(L)}</button>`;
   }).join('');
@@ -2390,7 +2390,7 @@ function renderLedger(hit) {
     flatByLetter.get(g).push(r);
   });
   const _emitFlatHeader = (g) =>
-      `<div class="ledger-group-head" role="separator" data-jump-letter="${e(g)}" aria-label="Section ${e(g)}">`
+      `<div class="ledger-group-head" role="separator" data-jump-letter="${a(g)}" aria-label="Section ${a(g)}">`
     +   `<span class="glh-letter cloud">${e(g)}</span>`
     +   `<span class="glh-gap"></span>`
     +   `<span class="glh-letter local">${e(g)}</span>`
@@ -2578,7 +2578,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
   if (!shown.length && !orphans.length) { h += emptyLedgerMessage() + `</div>`; return h; }
 
   const _emitHeader = (g) =>
-      `<div class="ledger-group-head" role="separator" data-jump-letter="${e(g)}" aria-label="Section ${e(g)}">`
+      `<div class="ledger-group-head" role="separator" data-jump-letter="${a(g)}" aria-label="Section ${a(g)}">`
     +   `<span class="glh-letter cloud">${e(g)}</span>`
     +   `<span class="glh-gap"></span>`
     +   `<span class="glh-letter local">${e(g)}</span>`
@@ -4319,7 +4319,7 @@ function cloudCell(r, localCodes) {
   const kindAttr = r.kind || currentTab;
 
   const chkKey = (r.cloudCheckKey && r.cloud) ? r.cloudCheckKey : r.key;
-  const chk = r.noCheckbox ? '' : `<input type="checkbox" class="rowchk" data-k="${e(chkKey)}" ${selected.has(chkKey) ? 'checked' : ''}>`;
+  const chk = r.noCheckbox ? '' : `<input type="checkbox" class="rowchk" data-k="${a(chkKey)}" ${selected.has(chkKey) ? 'checked' : ''}>`;
   const indentCls = r.indent ? ' child-row' : '';
   const chevron = r.toggle
     ? `<button class="tree-chevron${r.toggle.open ? ' open' : ''}" onclick="event.stopPropagation();toggleFolder('${j(r.toggle.key)}')" title="${r.toggle.open ? 'Collapse this site' : 'Expand this site'}" aria-expanded="${r.toggle.open}">${ic('chevron')}</button>`
@@ -4418,7 +4418,7 @@ function localCell(r, cloudCodes) {
   const kindAttr = r.kind || currentTab;
 
   const chkKey = (r.localCheckKey && r.local) ? r.localCheckKey : r.key;
-  const chk = r.noCheckbox ? '' : `<input type="checkbox" class="rowchk" data-k="${e(chkKey)}" ${selected.has(chkKey) ? 'checked' : ''}>`;
+  const chk = r.noCheckbox ? '' : `<input type="checkbox" class="rowchk" data-k="${a(chkKey)}" ${selected.has(chkKey) ? 'checked' : ''}>`;
   const indentCls = r.indent ? ' child-row' : '';
   if (!r.local) {
     return isSites
@@ -4738,7 +4738,7 @@ function _roleOption(value, currentValue) {
   const label = SHARE_ROLE_LABEL[value] || value;
   const desc = SHARE_ROLE_DESC[value] || '';
   const sel = value === currentValue ? ' selected' : '';
-  return `<option value="${value}"${sel} title="${e(desc)}">${e(label)}</option>`;
+  return `<option value="${value}"${sel} title="${a(desc)}">${e(label)}</option>`;
 }
 let _shareCtx = null;
 
@@ -4876,9 +4876,9 @@ function _shareRender() {
     const roleLabel = SHARE_ROLE_LABEL[u.role] || u.role;
 
     const roleControl = isOwner
-      ? `<span class="share-role-pill owner" title="${e(SHARE_ROLE_DESC.OWNER)}">${e(roleLabel)}</span>`
+      ? `<span class="share-role-pill owner" title="${a(SHARE_ROLE_DESC.OWNER)}">${e(roleLabel)}</span>`
       : `<select class="share-role-sel" data-email="${a(u.username)}"
-                 title="${e(SHARE_ROLE_DESC[u.role] || '')}"
+                 title="${a(SHARE_ROLE_DESC[u.role] || '')}"
                  onchange="_shareChangeRoleFromSelect(this)">
            ${_roleOption('READ_USER', u.role)}
            ${_roleOption('WRITE_USER', u.role)}
@@ -4911,7 +4911,7 @@ function _shareRender() {
 
   const filterHtml = others.length > 6
     ? `<input type="text" class="share-list-filter" id="shareListFilter"
-              placeholder="Filter by name or email…" value="${e(ctx.shareFilter || '')}"
+              placeholder="Filter by name or email…" value="${a(ctx.shareFilter || '')}"
               oninput="_shareFilterChange(this.value)">`
     : '';
   const listBody = visible.length
@@ -4958,7 +4958,7 @@ function _shareRender() {
        <div class="share-group-row">
          <div class="share-group-name">${e(cachedGroup.name || 'My Sharing Group')}</div>
          <select class="share-role-sel" id="shareGroupRole" ${enabled ? '' : 'disabled'}
-                 title="${e(SHARE_ROLE_DESC[currentRole] || '')}"
+                 title="${a(SHARE_ROLE_DESC[currentRole] || '')}"
                  onchange="_shareGroupRoleChange(this)">
            ${_roleOption('READ_USER', currentRole)}
            ${_roleOption('WRITE_USER', currentRole)}

@@ -987,7 +987,7 @@
       var st = floorState(rep, f.id);
       var here = f.id === box.current;
       return '<button type="button" class="ptb-row ' + st.cls +
-               (here ? ' is-current' : '') + '" data-floor="' + WD.esc(f.id) + '">' +
+               (here ? ' is-current' : '') + '" data-floor="' + WD.escAttr(f.id) + '">' +
                '<span class="ptb-row-name">' + WD.esc(floorLabel(f.name)) + '</span>' +
                '<span class="ptb-row-state">' + WD.esc(st.word) + '</span>' +
                '<span class="ptb-row-detail">' + WD.esc(st.detail) + '</span>' +

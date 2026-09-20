@@ -64,7 +64,7 @@
     list.innerHTML = effectiveNames.map(function (name, i) {
       return '<li class="sf-item" data-idx="' + i + '">' +
         '<span class="sf-handle">&#9776;</span>' +
-        '<input type="text" value="' + esc(name) + '" onchange="SP._updateSf(' + i + ', this.value)">' +
+        '<input type="text" value="' + escAttr(name) + '" onchange="SP._updateSf(' + i + ', this.value)">' +
         (effectiveNames.length > 1 ? '<button class="sf-remove" onclick="SP._removeSf(' + i + ')">&times;</button>' : '') +
         '</li>';
     }).join('');
@@ -103,10 +103,10 @@
     row.className = 's-cd-row';
     row.innerHTML =
       '<div class="s-cd-grid">' +
-        '<label>Folder name<input type="text" class="cd-name" value="' + esc(c.name || '') + '"></label>' +
-        '<label>Extensions<input type="text" class="cd-exts" value="' + esc((c.exts || []).join(', ')) + '"></label>' +
-        '<label>PDF keywords<input type="text" class="cd-pdfkw" value="' + esc((c.pdf_keywords || []).join(', ')) + '"></label>' +
-        '<label>JSON keywords<input type="text" class="cd-jsonkw" value="' + esc((c.json_keywords || []).join(', ')) + '"></label>' +
+        '<label>Folder name<input type="text" class="cd-name" value="' + escAttr(c.name || '') + '"></label>' +
+        '<label>Extensions<input type="text" class="cd-exts" value="' + escAttr((c.exts || []).join(', ')) + '"></label>' +
+        '<label>PDF keywords<input type="text" class="cd-pdfkw" value="' + escAttr((c.pdf_keywords || []).join(', ')) + '"></label>' +
+        '<label>JSON keywords<input type="text" class="cd-jsonkw" value="' + escAttr((c.json_keywords || []).join(', ')) + '"></label>' +
       '</div>' +
       '<button class="s-cd-remove" title="Remove">&times;</button>';
     row.querySelector('.s-cd-remove').addEventListener('click', function () { row.remove(); });
@@ -140,6 +140,7 @@
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
+  function escAttr(s) { return WD.escAttr(s); }
 
   SP.pickFolder = function () {
     API('cloud/pick_folder', {}).then(function (r) {

@@ -253,7 +253,7 @@ class HandleDragTests(unittest.TestCase):
     globalThis.window = { devicePixelRatio: DPR, addEventListener(){} };
     globalThis.WD = { PanZoom: { isPanGesture: e => e.button === 1 || e.button === 2,
                                  isHeld: () => false, onChange(){} },
-                      toast(){}, esc: s => String(s) };
+                      toast(){}, esc: s => String(s), escAttr: s => String(s) };
     globalThis.$ = id => document.getElementById(id);
     globalThis.box = { boxes:{}, current:'f1', img:{ width:5000, height:3750 },
                        view:{ scale:1, x:0, y:0 }, drag:null,
@@ -477,7 +477,7 @@ class WheelTests(unittest.TestCase):
                             addEventListener(){} };
     globalThis.window = { devicePixelRatio: DPR, addEventListener(){} };
     globalThis.WD = { PanZoom:{ isPanGesture:()=>false, isHeld:()=>false,
-                                onChange(){} }, toast(){}, esc:s=>String(s) };
+                                onChange(){} }, toast(){}, esc:s=>String(s), escAttr:s=>String(s) };
     globalThis.$ = id => document.getElementById(id);
     globalThis.box = { boxes:{}, current:'f1', img:{width:5000,height:3750},
       view:{scale:1,x:0,y:0}, drag:null,
@@ -636,7 +636,7 @@ class FloorStripTests(unittest.TestCase):
     }
     globalThis.document = { getElementById: el, addEventListener(){} };
     globalThis.window = { devicePixelRatio:1, addEventListener(){} };
-    globalThis.WD = { esc: s => String(s), toast(){},
+    globalThis.WD = { esc: s => String(s), escAttr: s => String(s), toast(){},
       PanZoom:{ isPanGesture:()=>false, isHeld:()=>false, onChange(){} } };
     globalThis.$ = el;
     globalThis.box = { floors: [], current: null, boxes: {} };
@@ -811,7 +811,7 @@ class CropStepTests(unittest.TestCase):
       getBoundingClientRect: () => ({ left:0, top:0, width:1200, height:600 }) });
     globalThis.document = { getElementById: el, addEventListener(){} };
     globalThis.window = { devicePixelRatio:1, addEventListener(){} };
-    globalThis.WD = { esc: s=>String(s), toast(){},
+    globalThis.WD = { esc: s=>String(s), escAttr: s=>String(s), toast(){},
       PanZoom: { isPanGesture: e => e && (e.button===1||e.button===2),
                  isHeld: ()=>false, onChange(){} },
       api: () => Promise.resolve({ ok:true, boxes:{} }) };
@@ -1373,7 +1373,7 @@ class RemainingWorkTests(unittest.TestCase):
     }
     globalThis.document = { getElementById: el, addEventListener(){} };
     globalThis.window = { devicePixelRatio:1, addEventListener(){} };
-    globalThis.WD = { esc: s => String(s), toast(){} };
+    globalThis.WD = { esc: s => String(s), escAttr: s => String(s), toast(){} };
     globalThis.$ = el;
     globalThis.state = { busy: false };
     eval(slice('  function syncCutButton(res)', '  window.ptCut = function'));
@@ -1466,7 +1466,7 @@ class ApplyToAllTests(unittest.TestCase):
       return src.slice(i, j);
     }
     const toasts = [];
-    globalThis.WD = { esc: s => String(s), toast: (m, k) => toasts.push([k, m]) };
+    globalThis.WD = { esc: s => String(s), escAttr: s => String(s), toast: (m, k) => toasts.push([k, m]) };
     globalThis.persist = () => {};
     globalThis.reanalyze = () => {};
     globalThis.updateReadout = () => {};

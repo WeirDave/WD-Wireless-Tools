@@ -141,7 +141,7 @@ function _renderManualFields() {
   wrap.innerHTML = '<div class="hint mb-8">No CSV loaded — fill in token values manually:</div>' +
     tokens.map(t =>
       '<div class="org-token-row"><label class="org-token-label">{' + esc(t) + '}</label>' +
-      '<input type="text" class="org-folder-input rn-manual-input" data-token="' + esc(t) + '" oninput="updateRenamePreview()" placeholder="' + esc(t) + '"></div>'
+      '<input type="text" class="org-folder-input rn-manual-input" data-token="' + escAttr(t) + '" oninput="updateRenamePreview()" placeholder="' + escAttr(t) + '"></div>'
     ).join('');
 }
 
@@ -499,7 +499,7 @@ function _renderRenameCsvPreview() {
   ['rnMapPrimary', 'rnMapAddress', 'rnMapDeprecated'].forEach(id => {
     const sel = document.getElementById(id);
     sel.innerHTML = id === 'rnMapPrimary' ? '' : '<option value="">(none)</option>';
-    headers.forEach(h => { sel.innerHTML += '<option value="' + esc(h) + '">' + esc(h) + '</option>'; });
+    headers.forEach(h => { sel.innerHTML += '<option value="' + escAttr(h) + '">' + esc(h) + '</option>'; });
   });
   const lower = headers.map(h => h.toLowerCase());
   const addrIdx = lower.findIndex(h => h.includes('address'));

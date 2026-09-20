@@ -477,7 +477,7 @@ function renderWallAudit() {
           + ` &middot; name says ${ft ? ft + ' ft' : 'a height'} &middot; none set</span>`
           + `<span class="wall-audit-spacer"></span>`
           + (ft ? `<button class="btn btn-sm btn-primary" onclick="applyAuditHeight('${f.wallTypeId}')"`
-                  + ` title="${esc(f.why)}">Set to ${ft} ft</button>` : '')
+                  + ` title="${escAttr(f.why)}">Set to ${ft} ft</button>` : '')
           + (i >= 0 ? `<button class="btn btn-sm" onclick="openEditModal(${i})">Edit&hellip;</button>` : '')
           + `<button class="btn btn-sm" onclick="dismissAuditFinding('${f.wallTypeId}')"`
           + ` title="Leave it on Auto and stop mentioning it">Leave as is</button>`

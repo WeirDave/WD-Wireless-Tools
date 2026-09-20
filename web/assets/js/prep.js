@@ -34,6 +34,7 @@
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return WD.esc(String(s == null ? '' : s)); }
+  function escAttr(s) { return WD.escAttr(s); }
 
   function plural(n, one, many) { return n === 1 ? one : (many || one + 's'); }
 
@@ -97,14 +98,14 @@
 
       $('prepWallTpl').innerHTML = wallTemplates.length
         ? wallTemplates.map(function (t) {
-            return '<option value="' + esc(t.file) + '">' + esc(t.name)
+            return '<option value="' + escAttr(t.file) + '">' + esc(t.name)
               + ' — ' + t.count + ' ' + plural(t.count, 'type') + '</option>';
           }).join('')
         : '<option value="">No wall templates saved yet</option>';
 
       $('prepCapTpl').innerHTML = capTemplates.length
         ? capTemplates.map(function (t) {
-            return '<option value="' + esc(t._file) + '">' + esc(t.name) + '</option>';
+            return '<option value="' + escAttr(t._file) + '">' + esc(t.name) + '</option>';
           }).join('')
         : '<option value="">No capacity templates saved yet</option>';
 
