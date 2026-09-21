@@ -207,6 +207,102 @@ class TheCheckCanFailTests(unittest.TestCase):
                                       "Cloud \u2192 Local"))
 
 
+class TheGatesThatLetTheFourthOneThroughTests(unittest.TestCase):
+    """Quick Walls' tips panel said "Click **#** on any wall type" for seven
+    minor versions after that button became the word **Set key**.
+
+    This guard was already in the suite and green the whole time, because every
+    gate in it was shut against that sentence at once:
+
+    * it emphasised with ``<strong>`` and the pattern read only ``<b>``;
+    * the verb was "Click" and the pattern read only "use";
+    * and with neither an arrow nor "use", the name was never collected, so
+      there was nothing to check against the corpus.
+
+    Any one of the three would have been enough to miss it, which is why all
+    three are asserted separately - a later narrowing of any single gate puts
+    the same class of defect back, and the other two tests would still pass.
+
+    Widening it turned up a fifth instance immediately: Cloud Manager's help
+    told him to click "Link anyway" on a held-back row, and nothing in the app
+    has ever rendered that. The real controls are "This is the one", "Not this
+    one" and "None of these".
+    """
+
+    #: The sentence as it actually shipped, in `web/walls.html`, v2.115.0
+    #: through v2.162.0.
+    QUICK_WALLS = ('<p>Click <strong>#</strong> on any wall type to pick a '
+                   'slot from a menu.</p>')
+
+    def names_in(self, markup):
+        from scripts.audit_named_controls import BOLD, USE_NAMED, ARROWS, EXTERNAL
+        names = {m for m in BOLD.findall(markup)
+                 if any(a in m for a in ARROWS)}
+        names |= set(USE_NAMED.findall(markup))
+        names -= set(EXTERNAL.findall(markup))
+        return {normalise(n) for n in names}
+
+    def test_the_sentence_that_got_through_is_collected_now(self):
+        self.assertIn("#", self.names_in(self.QUICK_WALLS),
+                      "the instruction that shipped for seven versions is "
+                      "still invisible to this guard")
+
+    def test_and_it_would_be_reported_missing(self):
+        """Collected is not enough - it has to fail against a corpus where the
+        button is the word it became."""
+        corpus = normalise("<button>Set key</button><button>Key 3</button>")
+        self.assertFalse(satisfied_by(corpus, "#"))
+        self.assertTrue(satisfied_by(corpus, "Set key"))
+
+    def test_strong_counts_as_naming_a_control(self):
+        """Gate one. The pages emphasise with `<strong>`; `cloud.js` uses
+        `<b>`, and the pattern was written against the file that had already
+        been caught."""
+        self.assertIn("Set key",
+                      self.names_in("<p>Click <strong>Set key</strong>.</p>"))
+
+    def test_more_than_one_verb_introduces_an_instruction(self):
+        """Gate two. Reaching only "use" made the guard's scope an accident of
+        how a sentence happened to be phrased."""
+        for verb in ("Click", "Press", "Choose", "Select", "Pick", "Open",
+                     "Tick", "Hit", "Tap", "Use"):
+            with self.subTest(verb=verb):
+                self.assertIn("Set key",
+                              self.names_in(f"<p>{verb} <b>Set key</b>.</p>"))
+
+    def test_an_intervening_word_does_not_hide_it(self):
+        for phrase in ("Click the <b>Set key</b>", "Click on <b>Set key</b>"):
+            with self.subTest(phrase=phrase):
+                self.assertIn("Set key", self.names_in(f"<p>{phrase}.</p>"))
+
+    def test_emphasis_that_is_not_an_instruction_is_left_alone(self):
+        """The widening must not turn every bolded word into a control, or the
+        guard becomes noise and gets switched off."""
+        quiet = ("<p><b>Held back but you know better?</b> The row lists "
+                 "candidates.</p>")
+        self.assertEqual(set(), self.names_in(quiet))
+
+    def test_a_control_in_another_program_can_be_opted_out(self):
+        """The landing page tells people to tick **Add Python to PATH**, which
+        is real, is in the Python installer, and is never going to be rendered
+        here. The opt-out is on the sentence rather than in a list somewhere
+        else, so it cannot drift away from the thing it excuses."""
+        theirs = ('<p>tick <b data-external="Python installer">Add Python to '
+                  'PATH</b> in the installer.</p>')
+        self.assertEqual(set(), self.names_in(theirs))
+        ours = "<p>tick <b>Add Python to PATH</b> in the installer.</p>"
+        self.assertIn("Add Python to PATH", self.names_in(ours),
+                      "the opt-out is being applied to everything")
+
+    def test_the_help_panels_are_in_scope_now(self):
+        """The end-to-end claim. `walls.html` carries instructional prose in a
+        tips panel, and the guard has to be reading it."""
+        rows = named_controls()
+        files = {f for f, _ in rows}
+        self.assertIn("web/walls.html", files,
+                      "Quick Walls' tips panel is not being read")
+
+
 class TheNarrowGuardStillAppliesTests(unittest.TestCase):
     """This widens the rule; it does not replace the original.
 

@@ -37,12 +37,39 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
-#: A control named in prose is bolded. Two shapes count as naming one: the
-#: sentence says "use" immediately before it, or it carries an arrow glyph -
-#: the badge style this suite uses for its sync directions. Both come from
+#: A control named in prose is emphasised. Two shapes count as naming one:
+#: an instructional verb immediately before it, or an arrow glyph in it - the
+#: badge style this suite uses for its sync directions. Both come from
 #: `TheAppOnlyPointsAtControlsThatExistTests`, which this generalises.
-BOLD = re.compile(r"<b>((?:&#\d+;|&\w+;|[^<])*?)</b>")
-USE_NAMED = re.compile(r"[Uu]se\s+<b>((?:&#\d+;|&\w+;|[^<])*?)</b>")
+#:
+#: **Three things had to widen after this missed a fourth instance.** Quick
+#: Walls' tips panel said "Click <strong>#</strong> on any wall type" for seven
+#: minor versions after that button became the word "Set key", and every gate
+#: here was shut against it: the panel emphasises with `<strong>` and this read
+#: only `<b>`; the verb was "Click" and this read only "use"; and with neither
+#: an arrow nor "use" it was never collected at all. Widening found a fifth as
+#: well - Cloud Manager's help telling him to click "Link anyway", which
+#: nothing has ever rendered.
+_EMPH = r"(?:b|strong)"
+BOLD = re.compile(r"<" + _EMPH + r">((?:&#\d+;|&\w+;|[^<])*?)</" + _EMPH + r">")
+
+#: The verbs that turn an emphasised phrase into an instruction. "Use" was the
+#: only one, which made the guard's reach an accident of how a sentence had
+#: been phrased rather than of what it was telling someone to do.
+_VERBS = (r"(?:use|click|press|choose|select|pick|open|tick|untick|hit|tap"
+          r"|go\s+to|head\s+to)")
+USE_NAMED = re.compile(r"\b" + _VERBS + r"\s+(?:on\s+|the\s+)?<" + _EMPH
+                       + r"[^>]*>((?:&#\d+;|&\w+;|[^<])*?)</" + _EMPH + r">",
+                       re.I)
+
+#: A control in somebody else's program, opted out at the sentence rather than
+#: in a list that would rot: `<b data-external="Python installer">`. The
+#: landing page tells people to tick "Add Python to PATH", which is real and is
+#: never going to be rendered by this app. The attribute says whose it is,
+#: which an allowlist somewhere else could not.
+EXTERNAL = re.compile(r"<" + _EMPH + r"\s[^>]*\bdata-external\b[^>]*>"
+                      r"((?:&#\d+;|&\w+;|[^<])*?)</" + _EMPH + r">")
+
 ARROWS = ("&#11014;", "&#11015;", "⬆", "⬇", "→", "←")
 
 #: Words that are emphasis rather than the name of a control. A bolded "not",
@@ -254,6 +281,8 @@ def named_controls():
         names = {m for m in BOLD.findall(src)
                  if any(a in m for a in ARROWS)}
         names |= set(USE_NAMED.findall(src))
+        names -= {normalise(m) for m in EXTERNAL.findall(src)}
+        names -= set(EXTERNAL.findall(src))
         for raw in names:
             if "${" in raw or "' +" in raw or '" +' in raw:
                 continue          # a template, pinned where the label is built
@@ -283,6 +312,15 @@ def satisfied_by(corpus: str, name: str) -> bool:
 
 
 def main() -> int:
+    # The names printed here contain arrows, and Windows decodes this stream as
+    # cp1252, so printing one raised UnicodeEncodeError and the inventory died
+    # part-way through its own list. The same trap as passing `encoding="utf-8"`
+    # to a Node probe: the machine that reports the fault is the one nobody
+    # trusts, because CI is UTF-8 and never sees it.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+
     corpus = build_corpus()
     rows = named_controls()
     missing = [(f, n) for f, n in rows if not satisfied_by(corpus, n)]
