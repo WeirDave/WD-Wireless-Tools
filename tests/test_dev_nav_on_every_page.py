@@ -59,6 +59,18 @@ BROWSERS = [
 #: a nav menu is.
 MENU_SELECTOR = ".main-menu, .help-menu, .wd-menu"
 
+#: Where the Dev Tools entry belongs: the page's navigation. Every menu a
+#: page navigates with is one of these two - counted across the shipped
+#: pages, they are all `div.main-menu` or `div.help-menu`.
+NAV_MENU_SELECTOR = ".main-menu, .help-menu"
+
+#: And where it must never appear. `.wd-menu` names no navigation menu on
+#: any page; the only two are Cloud Manager's in-page dropdowns, Select and
+#: the move/share/mark/overwrite menu. The entry was being injected into
+#: both - "I hit the Select button, and it's all wonky, with some sort of
+#: dev tools coming in there".
+IN_PAGE_MENU_SELECTOR = ".wd-menu"
+
 
 def pages_that_load_the_toolbar():
     """Every page that pulls in wd-dev.js, read off disk rather than listed.
@@ -191,17 +203,56 @@ class EveryPage(unittest.TestCase):
                          "no Dev Tools entry in the hamburger menu of these "
                          "pages, so there is no way into dev mode from them")
 
-    def test_the_entry_is_in_every_menu_a_page_carries(self):
+    def test_the_entry_is_in_every_navigation_menu_a_page_carries(self):
         """Quick Walls and friends carry two - one for the drop-zone screen
-        and one for the workspace - and a session can be on either."""
+        and one for the workspace - and a session can be on either.
+
+        Counted over navigation menus only. This used to count every
+        `.wd-menu` too and require an entry in each, which made the defect
+        below a requirement: the test went green precisely because the Dev
+        Tools entry had been injected into his Select dropdown.
+        """
         short = []
         for page in pages_with_a_menu():
             self.locked(page)
-            menus = len(self.driver.find_elements(By.CSS_SELECTOR, MENU_SELECTOR))
-            entries = len(self.driver.find_elements(By.CSS_SELECTOR, ".nav-item-dev"))
+            menus = len(self.driver.find_elements(By.CSS_SELECTOR,
+                                                  NAV_MENU_SELECTOR))
+            entries = len(self.driver.find_elements(By.CSS_SELECTOR,
+                                                    ".nav-item-dev"))
             if entries != menus:
-                short.append("%s (%d menus, %d entries)" % (page, menus, entries))
+                short.append("%s (%d nav menus, %d entries)"
+                             % (page, menus, entries))
         self.assertEqual(short, [])
+
+    def test_no_in_page_dropdown_gets_a_dev_entry(self):
+        """"I click not shared, then hit the Select button, and it's all
+        wonky - with some sort of dev tools coming in there or something."
+
+        The Select control and the move/share/mark/overwrite menu are
+        `<details class="wd-menu">`, and the injector took `.wd-menu` to mean
+        "a menu on this page". It is not one he navigates with, and an
+        Advanced section with a Dev Tools button inside a five-item dropdown
+        is most of what is in it.
+
+        Not gated on dev mode either - the entry is deliberately visible with
+        dev mode off, because it is the way in - so this was in the dropdown
+        whether or not he was in dev mode.
+        """
+        intruded = []
+        for page in pages_with_a_menu():
+            self.locked(page)
+            for menu in self.driver.find_elements(By.CSS_SELECTOR,
+                                                  IN_PAGE_MENU_SELECTOR):
+                found = menu.find_elements(By.CSS_SELECTOR,
+                                           ".nav-item-dev, .nav-dev-section")
+                if found:
+                    intruded.append("%s #%s (%d)"
+                                    % (page, menu.get_attribute("id")
+                                       or "(no id)", len(found)))
+        self.assertEqual(
+            intruded, [],
+            "the Dev Tools entry was injected into these in-page dropdowns, "
+            "which are controls rather than navigation: %s" % intruded)
 
     def open_the_menu(self):
         """Put the page in the state he is in when he clicks the hamburger.

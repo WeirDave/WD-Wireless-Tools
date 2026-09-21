@@ -430,7 +430,42 @@
      opinion about what a menu is. */
   var MENU_SELECTOR = '.main-menu, .help-menu, .wd-menu';
 
+  /* Where the Dev Tools entry is allowed to go: the page's navigation, and
+     nothing else.
+
+     "I click not shared, then hit the Select button, and it's all wonky -
+     with some sort of dev tools coming in there or something."
+
+     `.wd-menu` was in this set because `WD.toggleMenu` uses it, and there it
+     is harmless - closing a menu that is already closed costs nothing. Used
+     to decide *where to inject*, it is wrong: no page navigates with a
+     `.wd-menu`. Counted across the shipped pages, every navigation menu is a
+     `div.main-menu` or a `div.help-menu`, and the only two elements carrying
+     `wd-menu` are Cloud Manager's in-page dropdowns - Select, and the
+     move/share/mark/overwrite menu. So the entry went into the two controls
+     he uses and into no navigation menu that needed it.
+
+     It is not gated on dev mode either, because the entry is deliberately
+     visible with dev mode off - that is the way in. So this was in his
+     Select dropdown whether or not he was in dev mode.
+
+     Narrowing it cannot bring back "I see no link in nav hamburger menu":
+     that was `#mainMenu` matching three pages of nineteen, and the fix was
+     to match by class rather than by id. This keeps both nav classes and
+     drops only the one that never named a nav menu.
+     `tests/test_dev_nav_on_every_page.py` checks the entry is still on every
+     page, which is the guard that makes this safe to narrow. */
+  var NAV_MENU_SELECTOR = '.main-menu, .help-menu';
+
   function navMenus() {
+    return Array.prototype.slice.call(
+      document.querySelectorAll(NAV_MENU_SELECTOR));
+  }
+
+  /* Closing, on the other hand, can be generous: shutting a dropdown that is
+     already shut does nothing, and leaving one open behind a modal looks
+     like a fault. */
+  function allMenus() {
     return Array.prototype.slice.call(document.querySelectorAll(MENU_SELECTOR));
   }
 
@@ -438,7 +473,13 @@
     /* Generic, because the closer is page-specific: Cloud Manager has
        `closeMainMenu`, Quick Walls has `toggleDzMenu` and `toggleHelpMenu`,
        and most pages have neither. `open` is the class all of them use. */
-    navMenus().forEach(function (m) { m.classList.remove('open'); });
+    allMenus().forEach(function (m) {
+      m.classList.remove('open');
+      //: A `<details>` dropdown holds its state in the attribute rather than
+      //: a class, so the class removal above never reached the two in-page
+      //: menus. Left open, one of them sits under the dev modal.
+      if (m.tagName === 'DETAILS') m.removeAttribute('open');
+    });
   }
 
   function injectNavItems() {
