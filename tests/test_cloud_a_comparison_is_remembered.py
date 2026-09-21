@@ -113,9 +113,11 @@ class TheStoreKeepsAComparisonTests(unittest.TestCase):
         """It runs to hundreds of entries on a project that has genuinely
         moved on, and the row shows the summary."""
         self.rec(DIFFERS)
-        blob = json.loads(self.f.read_text(encoding="utf-8"))
-        self.assertNotIn("differences",
-                         blob["pairs"]["c-1"]["comparison"]["verdict"])
+        #: Through the module's own loader rather than by reading the file as
+        #: text, so the assertion is about what was stored rather than about
+        #: the characters it was stored in.
+        kept = ss.load(_path=self.f)["c-1"]["comparison"]["verdict"]
+        self.assertNotIn("differences", kept)
 
     # -- it is a measurement, not a sync point --------------------------
 

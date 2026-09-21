@@ -163,7 +163,12 @@ class NameColoursAreWhatTheyLookLikeTests(unittest.TestCase):
         if r.returncode != 0:
             raise AssertionError("render failed:\n" + (r.stderr or "")[-2500:])
 
+        #: Registered here rather than in `tearDownClass`, because a browser
+        #: that will not start raises out of this method and `tearDownClass`
+        #: then never runs - which is one of the ways a temp directory is left
+        #: behind for good.
         cls._tmp = tempfile.mkdtemp()
+        cls.addClassCleanup(shutil.rmtree, cls._tmp, True)
         page = Path(cls._tmp) / "ledger.html"
         page.write_text(
             "<!doctype html><html><head><meta charset='utf-8'><style>"
@@ -181,10 +186,6 @@ class NameColoursAreWhatTheyLookLikeTests(unittest.TestCase):
             cls.colours = json.loads(drv.execute_script(READ_COLOURS))
         finally:
             drv.quit()
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(getattr(cls, "_tmp", ""), ignore_errors=True)
 
     # -- the hierarchy he asked for, read off the page ----------------------
 

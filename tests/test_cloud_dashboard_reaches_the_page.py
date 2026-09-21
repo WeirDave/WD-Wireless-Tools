@@ -138,6 +138,10 @@ function ownerFilter() { return 'all'; }
 function renderOwnerFilterNotice() {}
 // setFilter redraws the list; the shim has no list, only the header.
 function renderRows() {}
+// Changing filter releases the rows held in place while a comparison result
+// was being read. This shim slices `setFilter` out of the file, so anything
+// it calls from elsewhere has to be declared here.
+function forgetAnsweredHere() {}
 
 function cloudOf(id, name, extra) {
   return Object.assign({ id, name, mtime: 200, owner: OWNER, siteName: '' }, extra || {});
