@@ -1345,6 +1345,17 @@ CLOUD_ACTIONS = {
     "realign_renamed": lambda d: cloud_realign.realign(
         cm, dry_run=d.get("dryRun", True) is not False,
         progress_cb=_progress_setter(d.get("opId")), limit=d.get("limit")),
+    # The same operation, scoped to the rows he picked. The dev toolbar's
+    # version sweeps the account as a one-off repair; this is the everyday
+    # case, and sharing the function is deliberate - a second implementation
+    # of "write to his project files" is not something to have two of.
+    #
+    # `dryRun` defaults to True here as it does there, so an absent field
+    # means "decide and report" rather than "write to his projects".
+    "reconcile_pairs": lambda d: cloud_realign.realign(
+        cm, dry_run=d.get("dryRun", True) is not False,
+        progress_cb=_progress_setter(d.get("opId")),
+        only=d.get("cloudIds") or []),
     "replace_cloud_project": lambda d: cm.replace_cloud_project(
         d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
     "upload_project": lambda d: cm.upload_project(d["path"], d.get("siteId"),

@@ -124,11 +124,23 @@ def _entry(pair):
             "path": local.get("path") or "", "cloudId": cloud.get("id") or ""}
 
 
-def realign(cm, dry_run=True, progress_cb=None, limit=None):
+def realign(cm, dry_run=True, progress_cb=None, limit=None, only=None):
     """Align every pair that is provably identical. Returns a report.
 
     `cm` is a `CloudManager`. `dry_run=True` (the default) decides everything
     and writes nothing.
+
+    `only` is a set of cloud project ids. Without it this sweeps the whole
+    account, which is the one-off repair the dev toolbar runs; with it, it is
+    the everyday action on the rows he has in front of him. The work is the
+    same either way, which is the point - "why are we not **fixing** the
+    difference, if it's something we can identify, like a date or the
+    internal project number or name?" This is that fix, and it already
+    existed as a repair script.
+
+    A pair named in `only` that is not a candidate is reported in `skipped`
+    with the reason. Dropping it silently would mean a selection of twelve
+    coming back as eight with nothing to say where the others went.
 
     The report is three lists plus counts:
 
@@ -138,6 +150,14 @@ def realign(cm, dry_run=True, progress_cb=None, limit=None):
 
     Every candidate lands in exactly one of them, so the three add up to
     `examined` and nothing goes missing between the preview and the run.
+
+    **It only ever writes the local file.** The cloud copy is left untouched,
+    and that is a decision rather than an omission: renaming the cloud
+    project would stamp its own `modifiedAt`, so the pair would come back
+    reading "cloud newer" the moment it was fixed - the discrepancy moved
+    rather than removed. Writing the local side sets the internal name, the
+    internal date *and* the date on disk to what the cloud already says, so
+    both sides agree and neither has moved.
     """
     if not cm._ensure():
         return {"error": "Not connected"}
@@ -156,12 +176,49 @@ def realign(cm, dry_run=True, progress_cb=None, limit=None):
         return {"error": "Could not list projects: %s" % e}
 
     candidates = find_candidates(data)
+
+    aligned, skipped, failed = [], [], []
+
+    if only is not None:
+        wanted = {str(i) for i in only if i}
+        by_id = {}
+        for m in (data.get("matched") or []):
+            cid = str((m.get("cloud") or {}).get("id") or "")
+            if cid:
+                by_id[cid] = m
+        eligible = {str((m.get("cloud") or {}).get("id") or "")
+                    for m in candidates}
+        candidates = [m for m in candidates
+                      if str((m.get("cloud") or {}).get("id") or "") in wanted]
+        #: Anything he picked that this cannot act on says so, by name. The
+        #: two reasons are different and he can act on the difference: a pair
+        #: whose dates already agree needs nothing, and one where the local
+        #: side is the newer one is his own edit - taking the cloud's name
+        #: and date over it would throw that away.
+        for cid in sorted(wanted - eligible):
+            pair = by_id.get(cid)
+            if pair is None:
+                skipped.append({"name": "", "folder": "", "path": "",
+                                "cloudId": cid,
+                                "reason": "Not a matched pair in this list."})
+                continue
+            stale = pair.get("staleness")
+            skipped.append({**_entry(pair), "reason":
+                            "Your local copy is the newer one - fixing this "
+                            "would overwrite your own change."
+                            if stale == "local_newer" else
+                            "Nothing to align - the two sides already agree."})
+
     if limit:
         candidates = candidates[:int(limit)]
 
-    cloud_iso = _cloud_modified_strings(cm.api)
+    #: Anything the selection filter already set aside counts as examined,
+    #: or the three lists stop adding up to it - and that invariant is what
+    #: makes "nothing went missing between the preview and the run" checkable
+    #: rather than a claim.
+    pre_skipped = len(skipped)
 
-    aligned, skipped, failed = [], [], []
+    cloud_iso = _cloud_modified_strings(cm.api)
     total = len(candidates) or 1
 
     for i, pair in enumerate(candidates):
@@ -274,7 +331,7 @@ def realign(cm, dry_run=True, progress_cb=None, limit=None):
 
     _say(stage="done", current=100, total=100, message="Done.")
     return {"ok": True, "dryRun": bool(dry_run),
-            "examined": len(candidates),
+            "examined": len(candidates) + pre_skipped,
             "aligned": aligned, "skipped": skipped, "failed": failed,
             "counts": {"aligned": len(aligned), "skipped": len(skipped),
                        "failed": len(failed)}}

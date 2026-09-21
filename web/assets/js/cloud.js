@@ -59,6 +59,11 @@ const API_MAP = {
   clear_external_override: ['clear_external_override', ['items']],
   list_manual_matches: ['list_manual_matches', []],
   verify_replace_local: ['verify_replace_local', ['cloudId', 'localPath']],
+  //: `dryRun` is second because it is the one argument that decides whether
+  //: anything is written, and a positional map is easiest to get wrong in
+  //: the middle. The server treats anything but an explicit `false` as a
+  //: dry run, so a caller that forgets it previews rather than writes.
+  reconcile_pairs: ['reconcile_pairs', ['cloudIds', 'dryRun', 'opId']],
   replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId']],
   compare_with_cloud: ['compare_with_cloud', ['path', 'cloudId', 'opId', 'cloudMtime']],
   set_internal_project_name: ['set_internal_project_name', ['path', 'name', 'opId']],
@@ -3704,6 +3709,156 @@ async function settlePair(cloudId, localPath, opts) {
   }
 }
 
+/* Stop the pair differing, rather than remembering that the difference does
+   not matter.
+
+   "Why are we not fixing the difference, if it's something we can identify -
+   like a date, or the internal project number or name?"
+
+   The comparison already says what differs. When nothing in the design has
+   moved, what is left is the project name written inside the .esx and the
+   modified date, and both of those are ours to write. Writing them ends the
+   question instead of annotating it.
+
+   **It writes the local file and never the cloud**, which is the part worth
+   being explicit about. Renaming the cloud project would stamp its own
+   `modifiedAt`, so the pair would read "cloud newer" again the moment it was
+   fixed - the discrepancy moved rather than removed. Taking the cloud's name
+   and date into the local file leaves both sides saying the same thing and
+   neither of them newer.
+
+   **This is the dev toolbar's realign, scoped to a selection**, not a second
+   implementation of it. `tools/cloud_realign.py` was written as a function
+   taking a `CloudManager` for exactly this, and there is no second copy of
+   "write to his project files" anywhere.
+
+   Two passes, and the first one is the real work: the preview downloads and
+   compares every pair and then writes nothing, so what he agrees to is the
+   decision itself rather than a guess about it. The live run re-derives
+   everything - a file can change between the two, and the proof has to be
+   current at the moment of writing. */
+async function reconcilePairs(pairs) {
+  const list = (pairs || []).filter(p => p && p.cloudId);
+  if (!list.length) { toast('Nothing to reconcile', 'info'); return; }
+  const ids = list.map(p => p.cloudId);
+  const n = ids.length;
+
+  let preview;
+  try {
+    preview = await opEnqueue({
+      title: `Checking ${n} pair${n === 1 ? '' : 's'}`,
+      sub: 'Comparing contents. Nothing is changed by this pass.',
+      type: 'compare', undoable: false, pollBackend: false,
+      run: async (opId) => {
+        const r = await pyApi('reconcile_pairs', ids, true, opId);
+        if (r && r.error) throw new Error(r.error);
+        return r;
+      },
+    }).promise;
+  } catch (err) {
+    toast('Could not check: ' + err.message, 'error');
+    return;
+  }
+  if (!preview) return;
+
+  const willFix = preview.aligned || [];
+  const wontFix = preview.skipped || [];
+  const broke = preview.failed || [];
+
+  if (!willFix.length) {
+    /* Nothing to do is an answer, and it has a reason per row. Saying only
+       "nothing to reconcile" over a row he just pressed a button on is the
+       silence this tool keeps being caught by. */
+    const why = (wontFix[0] && wontFix[0].reason)
+      || (broke[0] && broke[0].error)
+      || 'Nothing needed changing.';
+    toast(n === 1 ? why : `None of the ${n} could be made to match — ${why}`,
+          'info');
+    return;
+  }
+
+  //: Every file named, with the specific edits to it. Never "and 12 more":
+  //: this writes to his projects, and the list is the thing he is agreeing
+  //: to.
+  const rows = willFix.map(a =>
+    `<li><b>${e(a.name || a.cloudId)}</b>`
+    + (a.folder ? ` <span class="dim">— ${e(a.folder)}</span>` : '')
+    + '<ul>' + (a.actions || []).map(x => `<li>${e(x)}</li>`).join('') + '</ul>'
+    + '</li>').join('');
+  const held = wontFix.length
+    ? `<p class="sub"><b>${wontFix.length} left alone.</b></p><ul class="sub">`
+      + wontFix.map(s => `<li>${e(s.name || s.cloudId)} — ${e(s.reason)}</li>`)
+        .join('') + '</ul>'
+    : '';
+
+  const ok = await showConfirmModal(
+    willFix.length === 1 ? 'Make these two match?'
+                         : `Make ${willFix.length} pairs match?`,
+    '<p>The contents were compared and are identical. Only these details '
+    + 'differ, and they will be written into your local file:</p>'
+    + `<ul class="confirm-list">${rows}</ul>`
+    + '<p class="sub"><b>Nothing on Ekahau Cloud changes</b>, and no design '
+    + 'content is touched — a pair whose design really differs is never '
+    + 'offered here.</p>'
+    + '<p class="sub">No copy is kept — the cloud copy is the other copy.</p>'
+    + held,
+    willFix.length === 1 ? 'Make them match'
+                         : `Make ${willFix.length} pairs match`);
+  if (!ok) return;
+
+  let done;
+  try {
+    done = await opEnqueue({
+      title: `Making ${willFix.length} pair${willFix.length === 1 ? '' : 's'} match`,
+      sub: 'Writing the cloud’s name and date into your local files.',
+      type: 'reconcile', undoable: false, pollBackend: false,
+      run: async (opId) => {
+        //: The ids the preview actually approved, not the original
+        //: selection - anything it set aside must not be swept in by the
+        //: live pass.
+        const approved = willFix.map(a => a.cloudId);
+        const r = await pyApi('reconcile_pairs', approved, false, opId);
+        if (r && r.error) throw new Error(r.error);
+        return r;
+      },
+    }).promise;
+  } catch (err) {
+    toast('Could not finish: ' + err.message, 'error');
+    return;
+  }
+  if (!done) return;
+
+  const fixed = (done.aligned || []).length;
+  if (fixed) {
+    toast(fixed === 1
+      ? `“${(done.aligned[0].name) || 'That pair'}” now matches the cloud — the row will stop asking`
+      : `${fixed} pairs now match the cloud — those rows will stop asking`,
+      'success');
+  }
+  (done.failed || []).forEach(f =>
+    toast(`${f.name || f.cloudId}: ${f.error}`, 'error'));
+  (done.aligned || []).filter(a => a.warning).forEach(a =>
+    toast(`${a.name}: ${a.warning}`, 'info'));
+  const late = (done.skipped || []).length;
+  if (late && !fixed) {
+    toast(`${late} needed no change`, 'info');
+  }
+  _scheduleOpRefresh();
+}
+
+/* Every selected pair a comparison has already proved identical. */
+function bulkReconcile() {
+  const picked = selectedSyncItems().filter(d => d && d.kind === 'pair'
+                                                 && d.cloudId);
+  if (!picked.length) {
+    toast('Select some matched rows first', 'info');
+    return;
+  }
+  clearSelection();
+  reconcilePairs(picked.map(d => ({ cloudId: d.cloudId,
+                                    name: d.cloudName || d.localName || '' })));
+}
+
 function checkRealDifference(cloudId, localPath, label) {
   const key = _compareKey(cloudId, localPath);
   opEnqueue({
@@ -4119,11 +4274,34 @@ function rowDetailHtml(r, stripe) {
       : 'Your local copy has a later date. A real change, or only the name?');
   }
 
-  if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only' && c && c.name && l) {
+  /* Proven identical in content, and still reported as different.
+
+     "Once a pair is checked and determined that there's not really a
+     difference between the two, why would it come up unless something is
+     different? How come we're not fixing the difference, if it's something
+     we can identify - like a date, or the internal project number or name?"
+
+     He is right, and remembering the answer is the lesser fix. The things
+     that still differ here are the name written inside the .esx and the
+     modified date, and both are ours to write. So the pair stops differing
+     instead of being annotated as a difference that does not matter.
+
+     Offered only when a comparison has proved the designs identical - the
+     check is `cmp`, not the date, because writing to his project files on a
+     guess is the thing this must never do. */
+  if (cmp && !cmp.designDiffers && stale === 'cloud_newer' && c && l) {
+    acts.push(rdAction('check', 'Make them match',
+      `reconcilePairs([{cloudId:'${j(c.id)}',name:'${j(c.name || l.name || '')}'}])`,
+      { primary: true, writes: 'local',
+        title: 'The contents are identical - only the name recorded inside your local file and its modified date still differ. This writes the cloud’s name and date into your local .esx so the two genuinely agree and this row stops asking. Nothing on Ekahau Cloud changes.' }));
+  } else if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only' && c && c.name && l) {
+    /* Same content, same date, and only the name inside the file is wrong.
+       There is no date to carry over, so the narrower action is the whole
+       job. */
     acts.push(rdAction('rename', 'Set the name inside the file to match',
       `fixInternalName('${pj(l.path)}','${j(c.name)}','${j(l.name || '')}','${j(c.id)}')`,
       { primary: true, writes: 'local',
-        title: 'Renaming a file on disk does not change the project name stored inside it. This writes the cloud project’s name into your local .esx, and backs the file up first. Nothing on Ekahau Cloud changes.' }));
+        title: 'Renaming a file on disk does not change the project name stored inside it. This writes the cloud project’s name into your local .esx. Nothing on Ekahau Cloud changes.' }));
   }
 
   /* The staleness control keeps its own wording and its own reasoning - it is
@@ -7245,6 +7423,10 @@ function updateBulkBar() {
   let deletableCount = 0, movableCount = 0, localFolderCount = 0;
   let verifyableCount = 0;
   const verifyablePairIds = new Set();
+  //: Matched rows in the selection - what `bulkReconcile` can offer
+  //: to examine. Whether a pair is actually reconcilable is decided
+  //: by comparing contents, which the preview does.
+  let pairCount = 0;
 
   const ownedCloudIds = new Set();
   const ownedCloudNames = new Map();
@@ -7307,6 +7489,7 @@ function updateBulkBar() {
             owner: d.cloudOwner || '' });
       }
     }
+    if (d.kind === 'pair' && d.cloudId) pairCount++;
     if (d.kind === 'cloud' || d.kind === 'local') deletableCount++;
     if (d.kind === 'local') localFolderCount++;
     /* A project, on whichever tab it was selected from. This used to require
@@ -7363,6 +7546,16 @@ function updateBulkBar() {
       ? 'Sync ← needs matched sites, or local-only sites to create in the cloud'
       : 'Sync ← needs matched rows, local-only .esx files, or a local-only site',
     syncFromTip);
+  /* Any matched pair can be offered - whether it is reconcilable is settled
+     by comparing the contents, which is the preview's job and cannot be
+     known from the row. Gating this on the *rows* would mean gating it on
+     what has already been compared in this page session, and the whole
+     point is that the answer no longer has to live in the page. */
+  setBtn('bulkReconcileBtn', true, pairCount > 0,
+    'Select one or more matched rows first',
+    pairCount > 0
+      ? `Check ${pairCount} selected pair${pairCount === 1 ? '' : 's'} and, where the contents are identical, write the cloud's name and date into your local file so they agree`
+      : undefined);
   setBtn('bulkVerifyBtn', true, verifyableCount > 0, 'Select one or more Name-matches pairs to verify (download cloud → overwrite local)');
   setBtn('bulkShareBtn', true, ownedCloudIds.size > 0,
     'Select one or more cloud projects you own — Ekahau only lets the owner add shares',
