@@ -1713,12 +1713,45 @@
       return typeof obj === 'function' ? obj.bind(ctx) : obj;
     }
 
+    /* The arguments a handler is called with, built in one fixed order:
+
+           data-arg / data-arg-json,  data-arg2,  event,  element,  value
+
+       **One declared order rather than a convention per call site.** Several
+       handlers take two - `gridRefLabelChanged('a', this)` and
+       `_taKey(event, this)` - and inventing a rule for each is how an argument
+       order becomes something nobody can remember. This covers both by saying
+       which slots are filled:
+
+           data-arg="a" data-arg-this="1"        -> fn('a', el)
+           data-arg-event="1" data-arg-this="1"  -> fn(event, el)
+
+       `data-arg` is always a string, because an attribute is. A handler that
+       wants a real boolean or number - `toggleAll(true)`, `adjustGridCols(-1)`
+       - takes `data-arg-json`, which is parsed. Passing the string "false"
+       where a boolean is expected works right up until somebody writes
+       `if (arg)`. */
     function argsFor(el, e) {
-      if (el.dataset.argValue === '1') return [el.value];
-      if (el.dataset.argThis === '1') return [el];
-      if (el.dataset.argEvent === '1') return [e];
-      if ('arg' in el.dataset) return [el.dataset.arg];
-      return [];
+      var args = [];
+      if ('argJson' in el.dataset) {
+        try {
+          args.push(JSON.parse(el.dataset.argJson));
+        } catch (err) {
+          args.push(el.dataset.argJson);
+        }
+      } else if ('arg' in el.dataset) {
+        args.push(el.dataset.arg);
+      }
+      /* A second positional string, for the handful of handlers that take
+         two - `_renameInsertFormatToken(inputId, key)`. Named rather than
+         packed into `data-arg` with a separator, because a separator is a
+         format, and a format inside an attribute is the thing that needs
+         escaping rules of its own. */
+      if ('arg2' in el.dataset) args.push(el.dataset.arg2);
+      if (el.dataset.argEvent === '1') args.push(e);
+      if (el.dataset.argThis === '1') args.push(el);
+      if (el.dataset.argValue === '1') args.push(el.value);
+      return args;
     }
 
     function call(el, e) {
@@ -1758,6 +1791,22 @@
          remember. */
       'menu': function (el, e) {
         if (WD.toggleMenu) WD.toggleMenu(e, el.dataset.menu);
+      },
+      /* `document.getElementById('x').click()` - how every hidden file input
+         in this suite is opened from a visible button. The element is named
+         rather than the call written out, so the markup says what it points
+         at and a missing target is a warning rather than a thrown error on
+         `null`. */
+      'click-target': function (el) {
+        var target = document.getElementById(el.dataset.target);
+        if (target) target.click();
+        else if (window.console) {
+          console.warn('WD.actions: no element id', el.dataset.target, el);
+        }
+      },
+      'focus-target': function (el) {
+        var target = document.getElementById(el.dataset.target);
+        if (target) target.focus();
       },
       'noop': function (_el, e) { if (e) e.stopPropagation(); }
     };

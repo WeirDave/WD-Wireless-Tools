@@ -188,6 +188,36 @@ def _escapers() -> str:
     return "\n".join(parts)
 
 
+def _dispatcher() -> str:
+    """The real `WD.actions`, lifted rather than re-implemented.
+
+    Backlog item 10 moved these renderers off inline `onclick` and onto
+    delegated `data-action` attributes, so clicking a rendered button now goes
+    through the dispatcher. A probe that stubbed it would be asserting about a
+    dispatcher this repository does not ship - and the argument handling is
+    exactly the part a hostile value has to survive.
+    """
+    shared = (JS / "wd-shared.js").read_text(encoding="utf-8")
+    marker = "WD.actions = (function () {"
+    start = shared.find(marker)
+    if start < 0:
+        raise AssertionError("WD.actions moved - this probe cannot dispatch")
+    end, depth, seen = start, 0, False
+    while end < len(shared) and not (seen and depth == 0):
+        if shared[end] == "{":
+            depth += 1
+            seen = True
+        elif shared[end] == "}":
+            depth -= 1
+        end += 1
+    end = shared.find(";", end) + 1       # past the IIFE's `)();`
+    # `WD` is a local inside `wd-shared.js`'s own IIFE, so the slice refers to
+    # a name this page does not have. Aliasing it is the whole difference
+    # between lifting the real dispatcher and rewriting it.
+    return ("var WD = window.WD;\n" + shared[start:end]
+            + "\nWD.actions.mount();")
+
+
 #: The four renderers, lifted from the shipped files rather than retyped.
 def _renderers() -> str:
     rename = (JS / "rename.js").read_text(encoding="utf-8")
@@ -203,10 +233,14 @@ def _renderers() -> str:
     # produced a renderer whose body was English prose - which threw, was
     # caught by the driver's own try/except, and reported a page where
     # nothing executed. A probe that finds the wrong line passes.
+    # `data-fn` rather than `onclick` since backlog item 10 moved these onto
+    # delegated attributes. One source line per button, deliberately: this
+    # probe lifts a line and evaluates it, so a button split across lines
+    # arrives as a fragment that either throws or - worse - concatenates
+    # wrongly and renders something nobody ships.
     profile_lines = [line for _n, line in _code_lines(rename)
-                     if "onclick" in line
-                     and ("applyRenameProfile(" in line
-                          or "deleteRenameProfile(" in line)]
+                     if 'data-fn="applyRenameProfile"' in line
+                     or 'data-fn="deleteRenameProfile"' in line]
     if len(profile_lines) != 2:
         raise AssertionError(
             "the rename profile buttons moved (found %d) - this probe is "
@@ -217,7 +251,7 @@ def _renderers() -> str:
                               for line in profile_lines)
 
     token_line = _first_code_line(
-        rename, lambda l: "_renameInsertFormatToken(" in l and "onclick" in l,
+        rename, lambda l: 'data-fn="_renameInsertFormatToken"' in l,
         "the rename token button")
     token_expr = token_line.strip().rstrip(";")
 
@@ -273,6 +307,7 @@ PAGE = """<!doctype html>
 <div id="host"></div>
 <script>
 %(escapers)s
+%(dispatcher)s
 
 /* Local aliases, exactly as cloud.js defines them at the top of the file. */
 function e(s) { return WD.esc(s); }
@@ -305,10 +340,20 @@ window.__drive = function (html) {
   var host = document.getElementById('host');
   host.innerHTML = html;
   var handlers = [];
-  var buttons = host.querySelectorAll('[onclick]');
+  /* Both shapes. `[onclick]` is what these renderers used to produce and
+     what the unconverted ones still do; `[data-action]` is what a converted
+     one produces, and clicking it goes through the real dispatcher mounted
+     above rather than through anything this file invented. */
+  var buttons = host.querySelectorAll(
+    '[onclick], [data-action], [data-action-input]');
   for (var i = 0; i < buttons.length; i++) {
-    handlers.push(buttons[i].getAttribute('onclick'));
+    handlers.push(buttons[i].getAttribute('onclick')
+                  || buttons[i].getAttribute('data-fn'));
     try { buttons[i].click(); } catch (err) { /* a broken handler is data */ }
+    if (buttons[i].hasAttribute('data-action-input')) {
+      try { buttons[i].dispatchEvent(new Event('input', { bubbles: true })); }
+      catch (err) { /* not dispatchable is fine */ }
+    }
   }
   /* Anything that fires on hover or on load rather than on click. */
   var hovers = host.querySelectorAll('[onmouseover],[onmouseenter],[onerror],[onload]');
@@ -355,7 +400,8 @@ class HostileValues(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, str(cls.tmp), ignore_errors=True)
 
         (cls.tmp / "index.html").write_text(
-            PAGE % {"escapers": _escapers(), "renderers": _renderers()},
+            PAGE % {"escapers": _escapers(), "dispatcher": _dispatcher(),
+                "renderers": _renderers()},
             encoding="utf-8")
 
         cls.port = _free_port(PORT_HINT)

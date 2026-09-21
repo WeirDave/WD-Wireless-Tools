@@ -53,6 +53,13 @@ JS_INLINE_ATTR = re.compile(r'\son(' + "|".join(EVENTS) + r')\s*=\s*[\\"\'`]', r
 SCRIPT_SRC = re.compile(r'<script[^>]*\bsrc="([^"]+)"', re.I)
 DATA_FN = re.compile(r'data-fn="([^"]+)"')
 
+#: Names the browser provides, which no script in this repository defines.
+#: Deliberately tiny and explicit: the point of the check is that a control
+#: names something real, and "it is probably a global" would let every typo
+#: through. A name goes here only when the page is genuinely calling a
+#: browser builtin.
+BROWSER_BUILTINS = {"location.reload", "history.back", "window.print"}
+
 
 def strict_pages():
     import server
@@ -151,7 +158,12 @@ class EveryDelegatedNameResolvesTests(unittest.TestCase):
             names |= set(re.findall(r'\bfunction\s+([A-Za-z_$][\w$]*)', text))
             names |= set(re.findall(r'\b(?:var|let|const)\s+([A-Za-z_$][\w$]*)'
                                     r'\s*=\s*(?:function|\()', text))
-            names |= set(re.findall(r'\bWD\.([A-Za-z_$][\w$]*)\s*=', text))
+            # Any `Thing.method = function` - `SP.addCustomDest`,
+            # `WD.toggleMenu`. Matching only `WD.` and `window.` missed a
+            # whole page's worth of handlers on an object built as
+            # `window.SP = {}` and filled in afterwards.
+            names |= set(re.findall(
+                r'\b[A-Za-z_$][\w$]*\.([A-Za-z_$][\w$]*)\s*=\s*function', text))
             names |= set(re.findall(r'\bwindow\.([A-Za-z_$][\w$]*)\s*=', text))
             # `WD.x = { y: function ... }` and object-literal members.
             names |= set(re.findall(r'^\s*([A-Za-z_$][\w$]*)\s*:\s*function',
@@ -163,6 +175,8 @@ class EveryDelegatedNameResolvesTests(unittest.TestCase):
         for name in sorted(strict_pages()):
             defined = self.defined_names(name)
             for fn in sorted(set(DATA_FN.findall(page_text(name)))):
+                if fn in BROWSER_BUILTINS:
+                    continue
                 leaf = fn.split(".")[-1]
                 if leaf not in defined:
                     missing.setdefault(name, []).append(fn)
@@ -209,7 +223,9 @@ class TheHeaderReallyArrivesTests(unittest.TestCase):
         """Which URL serves each page on the strict list."""
         return {"home.html": "/", "scale.html": "/scale",
                 "manual.html": "/manual", "plantrim.html": "/plantrim",
-                "ap-rename.html": "/aprename"}
+                "ap-rename.html": "/aprename", "capacity.html": "/capacity",
+                "prep.html": "/prep", "rename.html": "/squirrel/rename",
+                "settings.html": "/settings", "setup.html": "/setup"}
 
     def test_every_strict_page_has_a_route_in_this_test(self):
         """Adding a page to the list without adding it here would leave it

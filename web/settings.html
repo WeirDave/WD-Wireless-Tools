@@ -18,7 +18,7 @@
   <div class="topbar-left">
     <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
     <div class="menu-wrap">
-      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'settingsMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <button class="hamburger-btn" data-action="menu" data-menu="settingsMenu" title="Menu"><span></span><span></span><span></span></button>
       <div id="settingsMenu" class="main-menu">
         <div class="menu-section">&#9656; Navigation</div>
         <a class="menu-item" href="/">⌂ Home</a>
@@ -37,14 +37,14 @@
         <div class="menu-sep"></div>
         <div class="menu-section">&#9656; Help</div>
         <a class="menu-item" href="/manual#suite-settings">· User Guide</a>
-        <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-        <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <button class="menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+        <button class="menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
         <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
       </div>
     </div>
   </div>
   <div class="topbar-right">
-    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+    <button class="theme-toggle" id="themeToggle" data-action="call" data-fn="toggleTheme">
       <span class="ico" id="themeIco"></span><span class="txt" id="themeTxt"></span>
     </button>
   </div>
@@ -64,8 +64,8 @@
         <label>Local project folder</label>
         <div class="s-row">
           <input type="text" id="sOutputDir" placeholder="Not set" readonly>
-          <button class="btn btn-blue" onclick="SP.pickFolder()">Browse&hellip;</button>
-          <button class="btn" onclick="SP.clearFolder()" title="Clear">Clear</button>
+          <button class="btn btn-blue" data-action="call" data-fn="SP.pickFolder">Browse&hellip;</button>
+          <button class="btn" data-action="call" data-fn="SP.clearFolder" title="Clear">Clear</button>
         </div>
         <div class="hint">Root folder where your Ekahau site folders live.</div>
       </div>
@@ -82,13 +82,13 @@
       <div class="s-field">
         <label>Default subfolders</label>
         <ul class="sf-list" id="sSfList"></ul>
-        <button class="btn mt-8" onclick="SP.addSubfolder()">+ Add subfolder</button>
+        <button class="btn mt-8" data-action="call" data-fn="SP.addSubfolder">+ Add subfolder</button>
         <div class="hint">Created automatically in new site folders.</div>
       </div>
       <div class="s-field">
         <label>Custom destinations (for Squirrel sorting)</label>
         <div id="sCdList"></div>
-        <button class="btn mt-8" onclick="SP.addCustomDest()">+ Add destination</button>
+        <button class="btn mt-8" data-action="call" data-fn="SP.addCustomDest">+ Add destination</button>
         <div class="hint">Additional sorting bins with their own file-type rules.</div>
       </div>
     </div>
@@ -131,7 +131,7 @@
           anything else is kept as typed. Leave blank for free-form names.</div>
       </div>
       <div class="s-field text-right">
-        <button class="btn btn-red" onclick="SP.resetOrganizer()">Reset Organizer Defaults</button>
+        <button class="btn btn-red" data-action="call" data-fn="SP.resetOrganizer">Reset Organizer Defaults</button>
       </div>
           <div class="s-overview" data-section="squirrel"></div>
 </div>
@@ -179,7 +179,7 @@
           <span class="dot"></span>
           <span id="sCloudStatusText">Checking&hellip;</span>
         </div>
-        <button class="btn mt-8" onclick="SP.forgetLogin()">Forget Login</button>
+        <button class="btn mt-8" data-action="call" data-fn="SP.forgetLogin">Forget Login</button>
       </div>
           <div class="s-overview" data-section="cloud"></div>
 </div>
@@ -316,12 +316,12 @@
       <div class="s-field">
         <label>Your whole setup, in one file</label>
         <div class="s-row">
-          <button class="btn btn-blue" onclick="SP.exportSettings()"
+          <button class="btn btn-blue" data-action="call" data-fn="SP.exportSettings"
                   title="Save everything you have configured to one file">&#11015; Export to a file&hellip;</button>
-          <button class="btn" onclick="document.getElementById('sImportFile').click()"
+          <button class="btn" data-action="click-target" data-target="sImportFile"
                   title="Restore from a settings file, after showing you what would change">&#11014; Import from a file&hellip;</button>
           <input type="file" id="sImportFile" accept=".json,application/json" hidden
-                 onchange="SP.chooseImport(this)">
+                 data-action-change="call" data-fn="SP.chooseImport" data-arg-this="1">
         </div>
         <div class="hint" id="sLastExport">&nbsp;</div>
         <div class="hint">Every setting on this page, your wall templates
@@ -361,9 +361,9 @@
   </details>
 
   <div class="settings-footer">
-    <button class="rerun-link" onclick="SP.rerunSetup()">Re-run Setup Wizard</button>
-    <button class="btn" onclick="location.reload()">Cancel</button>
-    <button class="btn btn-blue" onclick="SP.save()">Save</button>
+    <button class="rerun-link" data-action="call" data-fn="SP.rerunSetup">Re-run Setup Wizard</button>
+    <button class="btn" data-action="call" data-fn="location.reload">Cancel</button>
+    <button class="btn btn-blue" data-action="call" data-fn="SP.save">Save</button>
   </div>
 </div>
 
@@ -377,9 +377,9 @@
     <div id="sImportSummary"></div>
     <div class="s-import-detail" id="sImportDetail"></div>
     <div class="s-import-actions">
-      <button class="btn" onclick="SP.cancelImport()">Cancel</button>
+      <button class="btn" data-action="call" data-fn="SP.cancelImport">Cancel</button>
       <button class="btn btn-blue" id="sImportApplyBtn"
-              onclick="SP.applyImport()">Import these changes</button>
+              data-action="call" data-fn="SP.applyImport">Import these changes</button>
     </div>
   </div>
 </div>

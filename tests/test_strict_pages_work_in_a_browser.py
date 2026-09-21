@@ -329,6 +329,43 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
                     "the probe could not run an inline script even on a page "
                     "with no policy, so it proves nothing about %s" % kind)
 
+    def routes(self):
+        """Which URL serves each page on the strict list.
+
+        Written out rather than derived, so adding a page to
+        `CSP_STRICT_PAGES` fails here until somebody says how to reach it -
+        which is what stops a page joining the list without ever being opened
+        in a browser.
+        """
+        return {"home.html": "/", "scale.html": "/scale",
+                "manual.html": "/manual", "plantrim.html": "/plantrim",
+                "ap-rename.html": "/aprename", "capacity.html": "/capacity",
+                "prep.html": "/prep", "rename.html": "/squirrel/rename",
+                "settings.html": "/settings", "setup.html": "/setup"}
+
+    def test_every_strict_page_loads_and_is_wired(self):
+        """Each converted page, not only the two the other tests drive.
+
+        A page can pass the markup guard and still fail to load: a script that
+        throws on the way up leaves every delegated control inert, with
+        nothing on screen to say so. This is the cheapest assertion that would
+        notice - and it is the one that has to name every page on the list, so
+        a page cannot join it without being opened in three browsers first.
+        """
+        import server
+        self.assertEqual(
+            set(server.CSP_STRICT_PAGES), set(self.routes()),
+            "a page joined CSP_STRICT_PAGES without being driven here")
+        for kind, drv in self.drivers.items():
+            for page, url in sorted(self.routes().items()):
+                with self.subTest(browser=kind, page=page):
+                    self.load(drv, url)
+                    self.assertTrue(
+                        drv.execute_script(
+                            "return !!(window.WD && window.WD.actions"
+                            " && window.WD.toggleMenu);"),
+                        "%s did not finish wiring" % page)
+
     def test_the_header_is_the_strict_one_on_a_converted_page(self):
         """Read through the browser rather than from Flask, so what is
         asserted is what a user's browser was actually sent."""

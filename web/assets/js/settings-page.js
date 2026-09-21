@@ -95,8 +95,10 @@
     list.innerHTML = effectiveNames.map(function (name, i) {
       return '<li class="sf-item" data-idx="' + i + '">' +
         '<span class="sf-handle">&#9776;</span>' +
-        '<input type="text" value="' + escAttr(name) + '" onchange="SP._updateSf(' + i + ', this.value)">' +
-        (effectiveNames.length > 1 ? '<button class="sf-remove" onclick="SP._removeSf(' + i + ')">&times;</button>' : '') +
+        '<input type="text" value="' + escAttr(name) + '" data-action-change="call"' +
+          ' data-fn="SP._updateSf" data-arg-json="' + i + '" data-arg-value="1">' +
+        (effectiveNames.length > 1 ? '<button class="sf-remove" data-action="call"' +
+          ' data-fn="SP._removeSf" data-arg-json="' + i + '">&times;</button>' : '') +
         '</li>';
     }).join('');
   }

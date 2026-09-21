@@ -23,7 +23,7 @@
     <div class="setup-title">Welcome to WD Wireless Tools</div>
     <div class="setup-sub">Let's set up a few things before you start. This only takes a minute — you can always change these later in Settings.</div>
     <div class="setup-actions centered">
-      <button class="btn btn-blue" onclick="goStep('folder')">Get Started</button>
+      <button class="btn btn-blue" data-action="call" data-fn="goStep" data-arg="folder">Get Started</button>
     </div>
   </div>
 
@@ -36,13 +36,13 @@
       <label>Local root folder</label>
       <div class="setup-input-row">
         <input type="text" id="setupFolder" placeholder="Not set" readonly>
-        <button class="btn btn-blue" onclick="pickFolder()">Browse&hellip;</button>
+        <button class="btn btn-blue" data-action="call" data-fn="pickFolder">Browse&hellip;</button>
       </div>
       <div class="hint">You can set this later from any tool's menu.</div>
     </div>
     <div class="setup-actions">
-      <button class="btn setup-skip" onclick="goStep('subfolders')">Skip for now</button>
-      <button class="btn btn-blue" onclick="goStep('subfolders')">Next</button>
+      <button class="btn setup-skip" data-action="call" data-fn="goStep" data-arg="subfolders">Skip for now</button>
+      <button class="btn btn-blue" data-action="call" data-fn="goStep" data-arg="subfolders">Next</button>
     </div>
   </div>
 
@@ -53,11 +53,11 @@
     <div class="setup-sub">When a new site folder is created, these subfolders are added automatically. Rename, reorder, add, or remove as needed.</div>
     <div class="setup-field">
       <ul class="sf-list" id="sfList"></ul>
-      <button class="btn sf-add-btn" onclick="addSubfolder()">+ Add subfolder</button>
+      <button class="btn sf-add-btn" data-action="call" data-fn="addSubfolder">+ Add subfolder</button>
     </div>
     <div class="setup-actions">
-      <button class="btn setup-skip" onclick="goStep('folder')">Back</button>
-      <button class="btn btn-blue" onclick="goStep('cloud')">Next</button>
+      <button class="btn setup-skip" data-action="call" data-fn="goStep" data-arg="folder">Back</button>
+      <button class="btn btn-blue" data-action="call" data-fn="goStep" data-arg="cloud">Next</button>
     </div>
   </div>
 
@@ -67,15 +67,15 @@
     <div class="setup-title">Ekahau Cloud</div>
     <div class="setup-sub">Optionally connect to Ekahau Cloud to sync your projects. You can always do this later from Cloud Manager.</div>
     <div class="setup-field">
-      <button class="btn btn-blue" id="cloudLoginBtn" onclick="openCloudLogin()">Open Ekahau Login</button>
+      <button class="btn btn-blue" id="cloudLoginBtn" data-action="call" data-fn="openCloudLogin">Open Ekahau Login</button>
       <div class="cloud-status" id="cloudStatus">
         <span class="dot"></span>
         <span id="cloudStatusText">Not connected</span>
       </div>
     </div>
     <div class="setup-actions">
-      <button class="btn setup-skip" onclick="goStep('subfolders')">Back</button>
-      <button class="btn btn-blue" onclick="finishSetup()">Finish Setup</button>
+      <button class="btn setup-skip" data-action="call" data-fn="goStep" data-arg="subfolders">Back</button>
+      <button class="btn btn-blue" data-action="call" data-fn="finishSetup">Finish Setup</button>
     </div>
   </div>
 

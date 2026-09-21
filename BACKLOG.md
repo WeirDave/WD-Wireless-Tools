@@ -700,7 +700,7 @@ Two things came out of the work that the item did not ask for:
 
 ### Suite-wide
 
-#### 10. P2 — the tool pages have no Content-Security-Policy, and every control is an inline `onclick` — **five of nineteen done**
+#### 10. P2 — the tool pages have no Content-Security-Policy, and every control is an inline `onclick` — **ten of fourteen done**
 
 **The single biggest remaining security improvement, and it is a project
 rather than a fix.** The 2026-09-21 sweep closed fourteen findings; nine of
@@ -730,10 +730,36 @@ clobber a route's policy - which is the seam a page-by-page rollout would use.
 
 ---
 
-**Started 2026-09-21. Five pages are converted and carry a real policy**:
-`home`, `scale`, `manual`, `plantrim`, `ap-rename`. `server.CSP_STRICT_PAGES`
-is the list and it only grows; `STRICT_CSP` is what they get, with
-`script-src 'self'` and no `'unsafe-inline'` or `'unsafe-eval'`.
+**Started 2026-09-21. Ten of the fourteen served pages are converted and carry
+a real policy**: `home`, `scale`, `manual`, `plantrim`, `ap-rename` in
+v2.158.0, then `capacity`, `prep`, `rename`, `settings`, `setup` in v2.159.0.
+`server.CSP_STRICT_PAGES` is the list and it only grows; `STRICT_CSP` is what
+they get, with `script-src 'self'` and no `'unsafe-inline'` or
+`'unsafe-eval'`.
+
+**Twelve of the fourteen pages have converted markup**; `capacity`, `prep`,
+`rename`, `settings`, `setup`, `organizer` and `report` joined the first five,
+and the last two are `cloud` and `walls`.
+
+What holds the last four pages off the *strict list* is their JavaScript, which
+writes handlers into `innerHTML`: `cloud.js` has 71, `report.js` 17,
+`walls.js` and `walls-swap.js` 17 between them, `organizer.js` 11. A page
+cannot join the list while its scripts do that, and the guard fails it if they
+do.
+
+**`cloud.html` and `walls.html` were converted and then deliberately reverted**,
+which is worth knowing before somebody converts them again in isolation. Eight
+tests drive those two pages the way this repository requires - render with the
+real function, pull the handler back out of the markup, run it - and the
+conversion changes what they pull out. Rewriting those eight belongs with the
+`cloud.js` and `walls.js` work rather than ahead of it, because converting the
+markup alone buys nothing: neither page can carry the policy until its scripts
+are converted too.
+
+`test_cloud_external_override`, `test_cloud_merge_many_page`,
+`test_cloud_paired_rename`, `test_cloud_sync_everything`,
+`test_cloud_unshared_filter`, `test_swap_folding_and_menu_order`,
+`test_wall_height_ui` and `test_wall_template_merge` are the eight.
 
 **Three pieces of groundwork, and they are what the remaining fourteen pages
 need rather than anything page-specific:**

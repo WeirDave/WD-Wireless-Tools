@@ -1493,6 +1493,22 @@ async function doSaveAcorn() {
 
 // Rename is now on its own page at /squirrel/rename
 function showRename() { window.location.href = '/squirrel/rename'; }
+
+/* Two links used to be `onclick="closeModal('x');showRename()"`. The
+   dispatcher's `call-chain` passes the same arguments to every step, so a
+   chain whose first step takes one cannot be expressed as data attributes -
+   and inventing per-step arguments in markup would be building a language.
+   A named function is the smaller thing, and it reads better at the call
+   site than the chain did. Backlog item 10. */
+function settingsToRename() {
+  closeModal('settingsModal');
+  showRename();
+}
+
+function createFolderToSettings() {
+  closeModal('createFolderModal');
+  showSettings();
+}
 function showBulkRename() { window.location.href = '/squirrel/rename'; }
 
 function fmtSize(bytes) {

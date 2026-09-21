@@ -15,11 +15,11 @@
 </head>
 <body class="tool-prep">
 
-<div id="dzTopbar" class="dz-topbar" onclick="event.stopPropagation()">
+<div id="dzTopbar" class="dz-topbar" data-action="noop">
   <div class="header-left">
     <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
     <div class="help-menu-wrap">
-      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'dzMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <button class="hamburger-btn" data-action="menu" data-menu="dzMenu" title="Menu"><span></span><span></span><span></span></button>
       <div id="dzMenu" class="help-menu">
         <div class="menu-section">&#9656; Navigation</div>
         <a class="help-menu-item" href="/">⌂ Home</a>
@@ -38,8 +38,8 @@
         <div class="help-menu-sep"></div>
         <div class="menu-section">&#9656; Help &amp; Support</div>
         <a class="help-menu-item" href="/manual#prep">· User Guide</a>
-        <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-        <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <button class="help-menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+        <button class="help-menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
         <a class="help-menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
       </div>
     </div>
@@ -48,7 +48,7 @@
     <h1><span>WD</span> Prep <span class="ver" data-ver="prep">v&hellip;</span></h1>
   </div>
   <div class="header-actions">
-    <button class="theme-toggle" onclick="WD.toggleTheme()">
+    <button class="theme-toggle" data-action="call" data-fn="WD.toggleTheme">
       <span class="ico">🌙</span><span class="txt">Dark</span>
     </button>
   </div>
@@ -61,7 +61,7 @@
   <p class="dropzone-desc">Gets a freshly imported project ready to draw in &mdash; crops the empty canvas off the CAD sheets, puts a requirement area on every floor and loads your wall types &mdash; in one pass over the file instead of three.</p>
   <div class="dropzone-divider"></div>
   <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
-  <button type="button" class="dropzone-open-disk" onclick="event.stopPropagation(); prepOpenFromDisk()"
+  <button type="button" class="dropzone-open-disk" data-action="call" data-fn="prepOpenFromDisk" data-stop="1"
           title="Open through a file dialog so Prep can read the project where it sits, write the prepared copy beside it, and show you the folder">Open from disk&hellip;</button>
   <ul class="dropzone-steps">
     <li data-step="1."><strong>Choose</strong> which of the three things to do, and which templates to use</li>
@@ -76,7 +76,7 @@
     <div class="header-left">
       <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
       <div class="help-menu-wrap">
-        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'helpMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <button class="hamburger-btn" data-action="menu" data-menu="helpMenu" title="Menu"><span></span><span></span><span></span></button>
         <div id="helpMenu" class="help-menu">
           <div class="menu-section">&#9656; Navigation</div>
           <a class="help-menu-item" href="/">⌂ Home</a>
@@ -95,18 +95,18 @@
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Help &amp; Support</div>
           <a class="help-menu-item" href="/manual#prep">· User Guide</a>
-          <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-          <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+          <button class="help-menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+          <button class="help-menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
         </div>
       </div>
-      <span id="fileBadge" class="file-badge" onclick="prepLoadNewFile()"
+      <span id="fileBadge" class="file-badge" data-action="call" data-fn="prepLoadNewFile"
             title="Click to open another .esx"></span>
     </div>
     <div class="header-center">
       <h1><span>WD</span> Prep <span class="ver" data-ver="prep">v&hellip;</span></h1>
     </div>
     <div class="header-actions">
-      <button class="btn btn-sec" onclick="prepLoadNewFile()">Open another</button>
+      <button class="btn btn-sec" data-action="call" data-fn="prepLoadNewFile">Open another</button>
     </div>
   </div>
 
@@ -116,7 +116,7 @@
       <div class="prep-step">1 &mdash; What to do</div>
 
       <label class="prep-toggle">
-        <input type="checkbox" id="prepStep-trim" checked onchange="prepSyncStepUi()">
+        <input type="checkbox" id="prepStep-trim" checked data-action-change="call" data-fn="prepSyncStepUi">
         <span class="prep-toggle-body">
           <span class="prep-toggle-name">Trim the canvas</span>
           <span class="prep-toggle-why">Crops the empty paper off each CAD sheet and moves every AP, wall
@@ -126,7 +126,7 @@
       <div class="prep-opts" id="prepTrimOpts">
         <div class="prep-row">
           <label for="prepMargin">Leave a margin of</label>
-          <select id="prepMargin" class="prep-input prep-input--sel" onchange="prepSetMargin(this.value)">
+          <select id="prepMargin" class="prep-input prep-input--sel" data-action-change="call" data-fn="prepSetMargin" data-arg-value="1">
             <option value="tight">Tight &mdash; 3 ft (0.9 m)</option>
             <option value="normal" selected>Normal &mdash; 10 ft (3 m)</option>
             <option value="wide">Wide &mdash; 20 ft (6.1 m)</option>
@@ -136,11 +136,11 @@
           </select>
           <span id="prepMarginCustomWrap" hidden><input type="number" id="prepMarginFt"
                  class="prep-input prep-input--num" min="1" max="2000" step="1" value="200"
-                 onchange="prepSetCustomMargin(this.value)"> ft</span>
+                 data-action-change="call" data-fn="prepSetCustomMargin" data-arg-value="1"> ft</span>
           <span>around the drawing</span>
         </div>
         <label class="prep-row" id="prepUseBoxesRow" style="margin-bottom:0" hidden>
-          <input type="checkbox" id="prepUseBoxes" onchange="prepSyncStepUi()">
+          <input type="checkbox" id="prepUseBoxes" data-action-change="call" data-fn="prepSyncStepUi">
           <span id="prepUseBoxesLabel">Use the rectangles I drew in PlanTrim</span>
         </label>
         <p class="prep-hint">
@@ -163,7 +163,7 @@
       </div>
 
       <label class="prep-toggle">
-        <input type="checkbox" id="prepStep-areas" checked onchange="prepSyncStepUi()">
+        <input type="checkbox" id="prepStep-areas" checked data-action-change="call" data-fn="prepSyncStepUi">
         <span class="prep-toggle-body">
           <span class="prep-toggle-name">Put a requirement area on every floor</span>
           <span class="prep-toggle-why">From a capacity template and a headcount. A floor that already
@@ -173,14 +173,14 @@
       <div class="prep-opts" id="prepAreaOpts">
         <div class="prep-row">
           <label for="prepCapTpl">Template</label>
-          <select id="prepCapTpl" class="prep-input prep-input--sel" onchange="prepSyncStepUi()"></select>
+          <select id="prepCapTpl" class="prep-input prep-input--sel" data-action-change="call" data-fn="prepSyncStepUi"></select>
           <label for="prepOccupants">for</label>
           <input type="number" id="prepOccupants" class="prep-input prep-input--num" min="1" step="1"
-                 value="200" onchange="prepSyncStepUi()">
+                 value="200" data-action-change="call" data-fn="prepSyncStepUi">
           <label for="prepOccupants">people</label>
         </div>
         <label class="prep-row" style="margin-bottom:0">
-          <input type="checkbox" id="prepRetighten" checked onchange="prepSyncStepUi()">
+          <input type="checkbox" id="prepRetighten" checked data-action-change="call" data-fn="prepSyncStepUi">
           <span>Re-measure areas that still cover the whole plan</span>
         </label>
         <p class="prep-hint">
@@ -192,7 +192,7 @@
       </div>
 
       <label class="prep-toggle">
-        <input type="checkbox" id="prepStep-walls" checked onchange="prepSyncStepUi()">
+        <input type="checkbox" id="prepStep-walls" checked data-action-change="call" data-fn="prepSyncStepUi">
         <span class="prep-toggle-body">
           <span class="prep-toggle-name">Load the wall types</span>
           <span class="prep-toggle-why">Adds the types from a Quick Walls template so they are there to
@@ -202,7 +202,7 @@
       <div class="prep-opts" id="prepWallOpts">
         <div class="prep-row" style="margin-bottom:0">
           <label for="prepWallTpl">Template</label>
-          <select id="prepWallTpl" class="prep-input prep-input--sel" onchange="prepSyncStepUi()"></select>
+          <select id="prepWallTpl" class="prep-input prep-input--sel" data-action-change="call" data-fn="prepSyncStepUi"></select>
         </div>
       </div>
 
@@ -219,7 +219,7 @@
       <div id="prepPreview"><div class="prep-empty">Reading the project…</div></div>
 
       <div class="prep-row prep-go">
-        <button class="btn btn-primary" id="prepGoBtn" onclick="prepRun()" disabled>
+        <button class="btn btn-primary" id="prepGoBtn" data-action="call" data-fn="prepRun" disabled>
           Prepare and download
         </button>
         <span class="prep-hint" id="prepGoNote"></span>

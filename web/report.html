@@ -16,11 +16,11 @@
 </head>
 <body class="tool-report">
 
-<div id="dzTopbar" class="dz-topbar" onclick="event.stopPropagation()">
+<div id="dzTopbar" class="dz-topbar" data-action="noop">
   <div class="header-left">
     <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
     <div class="help-menu-wrap">
-      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'dzMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <button class="hamburger-btn" data-action="menu" data-menu="dzMenu" title="Menu"><span></span><span></span><span></span></button>
       <div id="dzMenu" class="help-menu">
         <div class="menu-section">&#9656; Navigation</div>
         <a class="help-menu-item" href="/">⌂ Home</a>
@@ -39,8 +39,8 @@
         <div class="help-menu-sep"></div>
         <div class="menu-section">&#9656; Help</div>
         <a class="help-menu-item" href="/manual#report">· User Guide</a>
-        <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-        <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <button class="help-menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+        <button class="help-menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
         <a class="help-menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
       </div>
     </div>
@@ -49,7 +49,7 @@
     <h1><span>WD</span> Report <span class="ver" data-ver="report">v&hellip;</span></h1>
   </div>
   <div class="header-actions">
-    <button class="theme-toggle" onclick="toggleTheme()">
+    <button class="theme-toggle" data-action="call" data-fn="toggleTheme">
       <span class="ico">🌙</span><span class="txt">Dark</span>
     </button>
   </div>
@@ -80,7 +80,7 @@
     <div class="header-left">
       <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
       <div class="help-menu-wrap">
-        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'wsMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <button class="hamburger-btn" data-action="menu" data-menu="wsMenu" title="Menu"><span></span><span></span><span></span></button>
         <div id="wsMenu" class="help-menu">
           <div class="menu-section">&#9656; Navigation</div>
           <a class="help-menu-item" href="/">⌂ Home</a>
@@ -95,37 +95,37 @@
           <a class="help-menu-item" href="/squirrel">· Squirrel</a>
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Tools</div>
-          <button class="help-menu-item" onclick="loadNewFile()">· Open Another File</button>
-          <button class="help-menu-item" onclick="openReportSettings()">· Report Settings</button>
+          <button class="help-menu-item" data-action="call" data-fn="loadNewFile">· Open Another File</button>
+          <button class="help-menu-item" data-action="call" data-fn="openReportSettings">· Report Settings</button>
           <a class="help-menu-item" href="/settings#report">· Suite Settings</a>
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Help</div>
           <a class="help-menu-item" href="/manual#report">· User Guide</a>
-          <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
+          <button class="help-menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
         </div>
       </div>
-      <span id="fileBadge" class="file-badge" onclick="loadNewFile()" title="Click to open another .esx"></span>
+      <span id="fileBadge" class="file-badge" data-action="call" data-fn="loadNewFile" title="Click to open another .esx"></span>
     </div>
     <div class="report-toolbar-center">
       <h1><span>WD</span> Report <span class="ver" data-ver="report">v&hellip;</span></h1>
     </div>
     <div class="header-actions">
-      <button class="theme-toggle" onclick="toggleTheme()">
+      <button class="theme-toggle" data-action="call" data-fn="toggleTheme">
         <span class="ico">🌙</span><span class="txt">Dark</span>
       </button>
     </div>
   </div>
 
   <nav class="rep-stepper noprint" id="stepper" aria-label="Report stages">
-    <button type="button" class="rep-step" data-stage="template" onclick="goStage('template')">
+    <button type="button" class="rep-step" data-stage="template" data-action="call" data-fn="goStage" data-arg="template">
       <span class="rep-step-num">1</span><span class="rep-step-label">Template</span>
     </button>
     <span class="rep-step-line"></span>
-    <button type="button" class="rep-step" data-stage="configure" onclick="goStage('configure')">
+    <button type="button" class="rep-step" data-stage="configure" data-action="call" data-fn="goStage" data-arg="configure">
       <span class="rep-step-num">2</span><span class="rep-step-label">Configure</span>
     </button>
     <span class="rep-step-line"></span>
-    <button type="button" class="rep-step" data-stage="review" onclick="goStage('review')">
+    <button type="button" class="rep-step" data-stage="review" data-action="call" data-fn="goStage" data-arg="review">
       <span class="rep-step-num">3</span><span class="rep-step-label">Review &amp; Print</span>
     </button>
   </nav>
@@ -138,7 +138,7 @@
     <div class="rep-settings-banner" id="settingsBanner"></div>
     <div class="rep-template-gallery" id="templateGallery"></div>
     <div class="rep-stage-nav">
-      <button class="btn btn-secondary" onclick="loadNewFile()">&#128193; Change file</button>
+      <button class="btn btn-secondary" data-action="call" data-fn="loadNewFile">&#128193; Change file</button>
       <span class="rep-stage-nav-spacer"></span>
     </div>
   </section>
@@ -168,38 +168,38 @@
         <span>APs to include</span>
         <span class="rep-ap-count" id="apCount"></span>
         <span class="rep-config-head-actions">
-          <button class="btn btn-secondary btn-sm" onclick="toggleAllAps(true)">Select all</button>
-          <button class="btn btn-secondary btn-sm" onclick="toggleAllAps(false)">None</button>
+          <button class="btn btn-secondary btn-sm" data-action="call" data-fn="toggleAllAps" data-arg-json="true">Select all</button>
+          <button class="btn btn-secondary btn-sm" data-action="call" data-fn="toggleAllAps" data-arg-json="false">None</button>
         </span>
       </div>
       <div class="rep-ap-controls">
         <div class="rep-groupby-pills" role="tablist" aria-label="Group APs by">
           <span class="rep-groupby-label">Group by</span>
-          <button class="rep-groupby-pill active" data-group="none"   onclick="setGroupBy('none')">None</button>
-          <button class="rep-groupby-pill"        data-group="color"  onclick="setGroupBy('color')">Color</button>
-          <button class="rep-groupby-pill"        data-group="floor"  onclick="setGroupBy('floor')">Floor</button>
-          <button class="rep-groupby-pill"        data-group="building" onclick="setGroupBy('building')">Building</button>
-          <button class="rep-groupby-pill"        data-group="model"  onclick="setGroupBy('model')">Model</button>
+          <button class="rep-groupby-pill active" data-group="none"   data-action="call" data-fn="setGroupBy" data-arg="none">None</button>
+          <button class="rep-groupby-pill"        data-group="color"  data-action="call" data-fn="setGroupBy" data-arg="color">Color</button>
+          <button class="rep-groupby-pill"        data-group="floor"  data-action="call" data-fn="setGroupBy" data-arg="floor">Floor</button>
+          <button class="rep-groupby-pill"        data-group="building" data-action="call" data-fn="setGroupBy" data-arg="building">Building</button>
+          <button class="rep-groupby-pill"        data-group="model"  data-action="call" data-fn="setGroupBy" data-arg="model">Model</button>
         </div>
         <input type="text" class="rep-ap-search" id="apSearch"
-               placeholder="🔍 Filter by name…" oninput="setApSearch(this.value)">
+               placeholder="🔍 Filter by name…" data-action-input="call" data-fn="setApSearch" data-arg-value="1">
       </div>
       <div id="apFilterList"></div>
     </div>
 
     <div class="rep-stage-nav">
-      <button class="btn btn-secondary" onclick="goStage('template')">&larr; Change template</button>
+      <button class="btn btn-secondary" data-action="call" data-fn="goStage" data-arg="template">&larr; Change template</button>
       <span class="rep-stage-nav-spacer"></span>
-      <button class="btn btn-blue" onclick="goStage('review')">Generate report &rarr;</button>
+      <button class="btn btn-blue" data-action="call" data-fn="goStage" data-arg="review">Generate report &rarr;</button>
     </div>
   </section>
 
   <section class="rep-stage rep-stage-review" id="stageReview" hidden>
     <div class="rep-review-bar noprint">
-      <button class="btn btn-secondary" onclick="goStage('configure')">&larr; Back to configure</button>
+      <button class="btn btn-secondary" data-action="call" data-fn="goStage" data-arg="configure">&larr; Back to configure</button>
       <span class="rep-stage-nav-spacer"></span>
-      <button class="btn btn-secondary" onclick="loadNewFile()">&#128193; Open another…</button>
-      <button class="btn btn-blue" onclick="printReport()">&#128424; Print / Save PDF</button>
+      <button class="btn btn-secondary" data-action="call" data-fn="loadNewFile">&#128193; Open another…</button>
+      <button class="btn btn-blue" data-action="call" data-fn="printReport">&#128424; Print / Save PDF</button>
     </div>
     <main class="report-canvas" id="reportCanvas">
       <div class="rep-empty">Report will render here.</div>
@@ -211,7 +211,7 @@
   <div class="grid-modal rep-settings-modal">
     <div class="grid-modal-header">
       <h3>Cover image and file name</h3>
-      <button class="btn-icon" onclick="closeReportSettings()" title="Close">&times;</button>
+      <button class="btn-icon" data-action="call" data-fn="closeReportSettings" title="Close">&times;</button>
     </div>
     <div class="grid-modal-body rep-settings-body">
       <p class="rep-set-intro">
@@ -230,8 +230,8 @@
           <div class="rep-set-cover-side">
             <div class="rep-set-cover-meta" id="setCoverMeta"></div>
             <div class="rep-set-cover-actions">
-              <button class="btn btn-secondary btn-sm" onclick="pickCoverImage()">Choose image&hellip;</button>
-              <button class="btn btn-secondary btn-sm" id="setCoverRemove" onclick="removeCoverImage()" hidden>Remove</button>
+              <button class="btn btn-secondary btn-sm" data-action="call" data-fn="pickCoverImage">Choose image&hellip;</button>
+              <button class="btn btn-secondary btn-sm" id="setCoverRemove" data-action="call" data-fn="removeCoverImage" hidden>Remove</button>
             </div>
             <div class="rep-set-status" id="setCoverStatus" hidden></div>
           </div>
@@ -256,7 +256,7 @@
     </div>
     <div class="grid-modal-footer">
       <span class="rep-set-footnote">Stored on this machine, alongside your wall templates.</span>
-      <button class="btn btn-secondary" onclick="closeReportSettings()">Close</button>
+      <button class="btn btn-secondary" data-action="call" data-fn="closeReportSettings">Close</button>
       <a class="btn btn-blue" href="/settings#report">Report settings&hellip;</a>
     </div>
   </div>
@@ -266,26 +266,26 @@
   <div class="grid-modal">
     <div class="grid-modal-header">
       <h3>Configure Grid</h3>
-      <button class="btn-icon" onclick="closeGridConfig()" title="Close">&times;</button>
+      <button class="btn-icon" data-action="call" data-fn="closeGridConfig" title="Close">&times;</button>
     </div>
     <div class="grid-modal-body">
       <div class="grid-modal-main">
         <div class="grid-controls">
           <label>Floor plan:
-            <select id="gridFloorSelect" onchange="gridFloorChanged(this)"></select>
+            <select id="gridFloorSelect" data-action-change="call" data-fn="gridFloorChanged" data-arg-this="1"></select>
           </label>
           <div class="grid-spinners">
             <div class="grid-spinner">
               <span>Columns:</span>
-              <button class="btn btn-secondary btn-sm" onclick="adjustGridCols(-1)">&minus;</button>
+              <button class="btn btn-secondary btn-sm" data-action="call" data-fn="adjustGridCols" data-arg-json="-1">&minus;</button>
               <span id="gridColsVal" class="grid-spin-val">3</span>
-              <button class="btn btn-secondary btn-sm" onclick="adjustGridCols(1)">+</button>
+              <button class="btn btn-secondary btn-sm" data-action="call" data-fn="adjustGridCols" data-arg-json="1">+</button>
             </div>
             <div class="grid-spinner">
               <span>Rows:</span>
-              <button class="btn btn-secondary btn-sm" onclick="adjustGridRows(-1)">&minus;</button>
+              <button class="btn btn-secondary btn-sm" data-action="call" data-fn="adjustGridRows" data-arg-json="-1">&minus;</button>
               <span id="gridRowsVal" class="grid-spin-val">3</span>
-              <button class="btn btn-secondary btn-sm" onclick="adjustGridRows(1)">+</button>
+              <button class="btn btn-secondary btn-sm" data-action="call" data-fn="adjustGridRows" data-arg-json="1">+</button>
             </div>
           </div>
           <div id="gridCellCount" class="grid-cell-count"></div>
@@ -311,14 +311,14 @@
       </div>
     </div>
     <div class="grid-modal-footer">
-      <button class="btn btn-secondary btn-sm" onclick="resetGridToAuto()">Reset to Auto</button>
-      <button class="btn btn-secondary btn-sm" onclick="resetCropBox()">Reset Grid</button>
-      <button class="btn btn-secondary btn-sm" onclick="resetGridZoom()">Reset Zoom</button>
+      <button class="btn btn-secondary btn-sm" data-action="call" data-fn="resetGridToAuto">Reset to Auto</button>
+      <button class="btn btn-secondary btn-sm" data-action="call" data-fn="resetCropBox">Reset Grid</button>
+      <button class="btn btn-secondary btn-sm" data-action="call" data-fn="resetGridZoom">Reset Zoom</button>
       <div class="grid-modal-actions">
-        <button class="btn btn-secondary btn-sm" onclick="closeGridConfig()">Cancel</button>
-        <button class="btn btn-secondary btn-sm" onclick="applyGridFloor(true)" title="Copies this crop position to every floor plan. If floors use different image positions, check each floor afterward and adjust.">Apply to All Floors</button>
-        <button class="btn btn-secondary btn-sm" onclick="applyGridFloor(false)">Apply</button>
-        <button class="btn btn-primary btn-sm" onclick="doneGridConfig()">Done</button>
+        <button class="btn btn-secondary btn-sm" data-action="call" data-fn="closeGridConfig">Cancel</button>
+        <button class="btn btn-secondary btn-sm" data-action="call" data-fn="applyGridFloor" data-arg-json="true" title="Copies this crop position to every floor plan. If floors use different image positions, check each floor afterward and adjust.">Apply to All Floors</button>
+        <button class="btn btn-secondary btn-sm" data-action="call" data-fn="applyGridFloor" data-arg-json="false">Apply</button>
+        <button class="btn btn-primary btn-sm" data-action="call" data-fn="doneGridConfig">Done</button>
       </div>
     </div>
   </div>
@@ -328,16 +328,16 @@
   <div class="grid-modal">
     <div class="grid-modal-header">
       <h3>Column grid &mdash; set up</h3>
-      <button class="btn-icon" onclick="closeGridRef()" title="Close">&times;</button>
+      <button class="btn-icon" data-action="call" data-fn="closeGridRef" title="Close">&times;</button>
     </div>
     <div class="grid-modal-body">
       <div class="grid-modal-main">
         <div class="grid-controls">
           <label>Floor plan:
-            <select id="gridRefFloorSelect" onchange="gridRefFloorChanged(this)"></select>
+            <select id="gridRefFloorSelect" data-action-change="call" data-fn="gridRefFloorChanged" data-arg-this="1"></select>
           </label>
           <label>Letters run:
-            <select id="gridRefAxis" onchange="gridRefAxisChanged(this)">
+            <select id="gridRefAxis" data-action-change="call" data-fn="gridRefAxisChanged" data-arg-this="1">
               <option value="x">Across the plan</option>
               <option value="y">Down the plan</option>
             </select>
@@ -345,15 +345,15 @@
           <div class="grid-ref-points">
             <div class="grid-ref-point">
               <button type="button" id="gridRefPickA" class="btn btn-secondary btn-sm"
-                      onclick="gridRefPick('a')">1. Click an intersection</button>
+                      data-action="call" data-fn="gridRefPick" data-arg="a">1. Click an intersection</button>
               <input type="text" id="gridRefLabelA" placeholder="A-1" maxlength="8"
-                     oninput="gridRefLabelChanged('a', this)" aria-label="Label for the first intersection">
+                     data-action-input="call" data-fn="gridRefLabelChanged" data-arg="a" data-arg-this="1" aria-label="Label for the first intersection">
             </div>
             <div class="grid-ref-point">
               <button type="button" id="gridRefPickB" class="btn btn-secondary btn-sm"
-                      onclick="gridRefPick('b')">2. Click another</button>
+                      data-action="call" data-fn="gridRefPick" data-arg="b">2. Click another</button>
               <input type="text" id="gridRefLabelB" placeholder="G-7" maxlength="8"
-                     oninput="gridRefLabelChanged('b', this)" aria-label="Label for the second intersection">
+                     data-action-input="call" data-fn="gridRefLabelChanged" data-arg="b" data-arg-this="1" aria-label="Label for the second intersection">
             </div>
           </div>
           <div id="gridRefStatus" class="grid-cell-count"></div>
@@ -379,11 +379,11 @@
       </div>
     </div>
     <div class="grid-modal-footer">
-      <button class="btn btn-secondary btn-sm" onclick="resetGridRefZoom()">Reset Zoom</button>
-      <button class="btn btn-secondary btn-sm" onclick="clearGridRefFloor()">Turn off for this floor</button>
+      <button class="btn btn-secondary btn-sm" data-action="call" data-fn="resetGridRefZoom">Reset Zoom</button>
+      <button class="btn btn-secondary btn-sm" data-action="call" data-fn="clearGridRefFloor">Turn off for this floor</button>
       <div class="grid-modal-actions">
-        <button class="btn btn-secondary btn-sm" onclick="closeGridRef()">Cancel</button>
-        <button class="btn btn-primary btn-sm" id="gridRefSaveBtn" onclick="saveGridRefFloor()" disabled>Save this floor</button>
+        <button class="btn btn-secondary btn-sm" data-action="call" data-fn="closeGridRef">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="gridRefSaveBtn" data-action="call" data-fn="saveGridRefFloor" disabled>Save this floor</button>
       </div>
     </div>
   </div>

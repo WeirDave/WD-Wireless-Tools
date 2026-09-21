@@ -19,7 +19,7 @@
     <div class="topbar-left">
       <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
       <div class="menu-wrap">
-        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'mainMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <button class="hamburger-btn" data-action="menu" data-menu="mainMenu" title="Menu"><span></span><span></span><span></span></button>
         <div class="main-menu" id="mainMenu">
           <div class="menu-section">&#9656; Navigation</div>
           <a class="menu-item" href="/">⌂ Home</a>
@@ -39,8 +39,8 @@
           <div class="menu-sep"></div>
           <div class="menu-section">&#9656; Help &amp; Support</div>
           <a class="menu-item" href="/manual#rename">· User Guide</a>
-          <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-          <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+          <button class="menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+          <button class="menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
           <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
         </div>
       </div>
@@ -49,7 +49,7 @@
       <h1><span>WD</span> Squirrel — Rename <span class="ver" data-ver="squirrel">v&hellip;</span></h1>
     </div>
     <div class="topbar-right">
-      <button class="theme-toggle" onclick="toggleTheme()">
+      <button class="theme-toggle" data-action="call" data-fn="toggleTheme">
         <span class="ico">🌙</span><span class="txt">Dark</span>
       </button>
     </div>
@@ -68,23 +68,23 @@
     <div class="sr-section-head">Project Folder</div>
     <div class="sr-toolbar">
       <div class="sr-toolbar-left">
-        <button class="btn btn-sec btn-sm" onclick="pickRenameRoot()">Browse…</button>
+        <button class="btn btn-sec btn-sm" data-action="call" data-fn="pickRenameRoot">Browse…</button>
         <span id="renameRootLabel" class="sr-folder-label"><span class="sr-hint">Click Browse… to pick a folder</span></span>
       </div>
       <div class="sr-toolbar-right">
-        <button class="btn btn-sec btn-sm" onclick="showRenameCsvModal()" title="Load a CSV file that maps site codes to names, cities, states, etc.">&#128196; Load CSV</button>
-        <button class="btn btn-sec btn-sm" onclick="showRenameGapReport()" title="Show which folders don't match any site in the loaded CSV">&#128202; Gap Report</button>
-        <button class="btn btn-sec btn-sm" onclick="showRenameProfiles()" title="Save or load a named set of format strings and rules">&#128221; Profiles</button>
-        <button class="btn btn-sec btn-sm" onclick="showRenameCsvHelper()" title="Generate a blank CSV template from your format string, or pre-fill one from existing folder names">&#128295; CSV Helper</button>
+        <button class="btn btn-sec btn-sm" data-action="call" data-fn="showRenameCsvModal" title="Load a CSV file that maps site codes to names, cities, states, etc.">&#128196; Load CSV</button>
+        <button class="btn btn-sec btn-sm" data-action="call" data-fn="showRenameGapReport" title="Show which folders don't match any site in the loaded CSV">&#128202; Gap Report</button>
+        <button class="btn btn-sec btn-sm" data-action="call" data-fn="showRenameProfiles" title="Save or load a named set of format strings and rules">&#128221; Profiles</button>
+        <button class="btn btn-sec btn-sm" data-action="call" data-fn="showRenameCsvHelper" title="Generate a blank CSV template from your format string, or pre-fill one from existing folder names">&#128295; CSV Helper</button>
         <span id="renameCsvStatus" class="sr-hint" hidden></span>
       </div>
     </div>
 
     <!-- Tabs -->
     <div class="sr-tabs" id="renameTabs">
-      <button class="sr-tab active" data-tab="folders" onclick="switchRenameTab('folders')">Folder Convention</button>
-      <button class="sr-tab" data-tab="files" onclick="switchRenameTab('files')">File Convention</button>
-      <button class="sr-tab" data-tab="rules" onclick="switchRenameTab('rules')">File Cleanup Rules</button>
+      <button class="sr-tab active" data-tab="folders" data-action="call" data-fn="switchRenameTab" data-arg="folders">Folder Convention</button>
+      <button class="sr-tab" data-tab="files" data-action="call" data-fn="switchRenameTab" data-arg="files">File Convention</button>
+      <button class="sr-tab" data-tab="rules" data-action="call" data-fn="switchRenameTab" data-arg="rules">File Cleanup Rules</button>
     </div>
 
     <!-- Folder Convention tab -->
@@ -92,7 +92,7 @@
       <div class="sr-format-section">
         <div class="sr-format-row">
           <label>Format:</label>
-          <input type="text" id="rnFolderFormat" class="sr-format-input" placeholder="e.g. {site_code} - {site_name} - {city} {state}" oninput="updateRenamePreview()">
+          <input type="text" id="rnFolderFormat" class="sr-format-input" placeholder="e.g. {site_code} - {site_name} - {city} {state}" data-action-input="call" data-fn="updateRenamePreview">
         </div>
         <div class="sr-token-hint">Click a token to insert it at the cursor. Type any literal text (spaces, dashes, parentheses) between tokens.</div>
         <div class="sr-tokens" id="rnFolderTokenBar"></div>
@@ -105,7 +105,7 @@
       <div class="sr-format-section">
         <div class="sr-format-row">
           <label>Format:</label>
-          <input type="text" id="rnFileFormat" class="sr-format-input" placeholder="e.g. {site_code} - {original}" oninput="updateRenamePreview()">
+          <input type="text" id="rnFileFormat" class="sr-format-input" placeholder="e.g. {site_code} - {original}" data-action-input="call" data-fn="updateRenamePreview">
         </div>
         <div class="sr-token-hint">Click a token to insert it. <code>{original}</code> keeps the existing filename; <code>{index}</code> adds a number per file.</div>
         <div class="sr-tokens" id="rnFileTokenBar"></div>
@@ -119,11 +119,11 @@
         <div class="org-rename-fields">
           <div>
             <label>From the start (regex)</label>
-            <input type="text" id="brStripPrefix" placeholder="e.g. IMG_|DSC_" oninput="updateRenamePreview()">
+            <input type="text" id="brStripPrefix" placeholder="e.g. IMG_|DSC_" data-action-input="call" data-fn="updateRenamePreview">
           </div>
           <div>
             <label>From the end (regex)</label>
-            <input type="text" id="brStripSuffix" placeholder="e.g.  \(copy\)| - edited" oninput="updateRenamePreview()">
+            <input type="text" id="brStripSuffix" placeholder="e.g.  \(copy\)| - edited" data-action-input="call" data-fn="updateRenamePreview">
           </div>
         </div>
       </div>
@@ -131,8 +131,8 @@
         <div class="org-settings-section-head">Replace</div>
         <label>Find (regex) / Replace with</label>
         <div class="org-regex-row">
-          <input type="text" id="brRegexFrom" placeholder="find (regex)" oninput="updateRenamePreview()">
-          <input type="text" id="brRegexTo" placeholder="replace" oninput="updateRenamePreview()">
+          <input type="text" id="brRegexFrom" placeholder="find (regex)" data-action-input="call" data-fn="updateRenamePreview">
+          <input type="text" id="brRegexTo" placeholder="replace" data-action-input="call" data-fn="updateRenamePreview">
         </div>
       </div>
       <div class="org-settings-section">
@@ -140,7 +140,7 @@
         <div class="org-rename-fields">
           <div>
             <label>Filename case</label>
-            <select id="brCase" onchange="updateRenamePreview()">
+            <select id="brCase" data-action-change="call" data-fn="updateRenamePreview">
               <option value="">Leave as-is</option>
               <option value="lower">lowercase</option>
               <option value="upper">UPPERCASE</option>
@@ -150,7 +150,7 @@
           </div>
           <div>
             <label>Word separator</label>
-            <select id="brSeparator" onchange="updateRenamePreview()">
+            <select id="brSeparator" data-action-change="call" data-fn="updateRenamePreview">
               <option value="">Leave as-is</option>
               <option value="underscore">Underscores (my_file_name.jpg)</option>
               <option value="hyphen">Hyphens (my-file-name.jpg)</option>
@@ -166,15 +166,15 @@
           <div>
             <label>Prefix</label>
             <div class="org-token-row">
-              <input type="text" id="brPrefix" placeholder="e.g. {folder} - PD v1.0_" oninput="updateRenamePreview()">
-              <button type="button" class="btn btn-sec btn-token" onclick="_renameInsertToken('brPrefix')">+{folder}</button>
+              <input type="text" id="brPrefix" placeholder="e.g. {folder} - PD v1.0_" data-action-input="call" data-fn="updateRenamePreview">
+              <button type="button" class="btn btn-sec btn-token" data-action="call" data-fn="_renameInsertToken" data-arg="brPrefix">+{folder}</button>
             </div>
           </div>
           <div>
             <label>Suffix</label>
             <div class="org-token-row">
-              <input type="text" id="brSuffix" placeholder="e.g.  - Baseline Survey" oninput="updateRenamePreview()">
-              <button type="button" class="btn btn-sec btn-token" onclick="_renameInsertToken('brSuffix')">+{folder}</button>
+              <input type="text" id="brSuffix" placeholder="e.g.  - Baseline Survey" data-action-input="call" data-fn="updateRenamePreview">
+              <button type="button" class="btn btn-sec btn-token" data-action="call" data-fn="_renameInsertToken" data-arg="brSuffix">+{folder}</button>
             </div>
           </div>
         </div>
@@ -197,9 +197,9 @@
     <!-- Action bar -->
     <div class="sr-preview-actions">
       <a class="btn btn-sec" href="/squirrel">&#8592; Squirrel</a>
-      <button class="btn btn-sec" onclick="renameUndo()" id="renameUndoBtn" hidden>&#8630; Undo</button>
+      <button class="btn btn-sec" data-action="call" data-fn="renameUndo" id="renameUndoBtn" hidden>&#8630; Undo</button>
       <span class="spacer"></span>
-      <button class="btn btn-primary sr-execute-btn" id="renameApplyBtn" onclick="doRename()" disabled>Apply Rename</button>
+      <button class="btn btn-primary sr-execute-btn" id="renameApplyBtn" data-action="call" data-fn="doRename" disabled>Apply Rename</button>
     </div>
 
   </div>
@@ -232,8 +232,8 @@
       </div>
     </div>
     <div class="modal-actions modal-actions-spaced">
-      <button class="btn btn-sec" onclick="closeModal('renameCsvModal')">Cancel</button>
-      <button class="btn btn-primary" id="renameCsvLoadBtn" onclick="doLoadRenameCsv()" disabled>Load Directory</button>
+      <button class="btn btn-sec" data-action="call" data-fn="closeModal" data-arg="renameCsvModal">Cancel</button>
+      <button class="btn btn-primary" id="renameCsvLoadBtn" data-action="call" data-fn="doLoadRenameCsv" disabled>Load Directory</button>
     </div>
   </div>
 </div>
@@ -244,7 +244,7 @@
     <h2>&#128202; Gap Report</h2>
     <div id="renameGapBody"><div class="org-extract-empty">Loading…</div></div>
     <div class="modal-actions">
-      <button class="btn btn-sec" onclick="closeModal('renameGapModal')">Close</button>
+      <button class="btn btn-sec" data-action="call" data-fn="closeModal" data-arg="renameGapModal">Close</button>
     </div>
   </div>
 </div>
@@ -258,11 +258,11 @@
       <h3>Save Current Settings as Profile</h3>
       <div class="org-root-row">
         <input type="text" id="renameProfileNameInput" class="org-folder-input flex-1" placeholder="Profile name">
-        <button class="btn btn-primary" onclick="doSaveRenameProfile()">Save</button>
+        <button class="btn btn-primary" data-action="call" data-fn="doSaveRenameProfile">Save</button>
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-sec" onclick="closeModal('renameProfilesModal')">Close</button>
+      <button class="btn btn-sec" data-action="call" data-fn="closeModal" data-arg="renameProfilesModal">Close</button>
     </div>
   </div>
 </div>
@@ -273,18 +273,18 @@
     <h2>&#128295; CSV Helper</h2>
     <p class="org-modal-desc">Generate a CSV template matching your format string, or pre-fill one from existing folders.</p>
     <div class="sr-csv-helper-row">
-      <button class="btn btn-blue" onclick="doCsvHelperTemplate()">&#128196; Generate Template</button>
-      <button class="btn btn-amber" onclick="doCsvHelperPrefill()">&#128194; Build from Existing Folders</button>
+      <button class="btn btn-blue" data-action="call" data-fn="doCsvHelperTemplate">&#128196; Generate Template</button>
+      <button class="btn btn-amber" data-action="call" data-fn="doCsvHelperPrefill">&#128194; Build from Existing Folders</button>
     </div>
     <div id="csvHelperResult" hidden>
       <label class="org-later-label">Generated CSV</label>
       <textarea id="csvHelperOutput" class="org-folder-input org-folder-input--mono" rows="10" readonly></textarea>
       <div class="mt-8">
-        <button class="btn btn-sec btn-sm" onclick="copyCsvHelper()">Copy to Clipboard</button>
+        <button class="btn btn-sec btn-sm" data-action="call" data-fn="copyCsvHelper">Copy to Clipboard</button>
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-sec" onclick="closeModal('renameCsvHelperModal')">Close</button>
+      <button class="btn btn-sec" data-action="call" data-fn="closeModal" data-arg="renameCsvHelperModal">Close</button>
     </div>
   </div>
 </div>

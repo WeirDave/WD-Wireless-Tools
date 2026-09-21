@@ -64,8 +64,11 @@
     list.innerHTML = names.map(function (name, i) {
       return '<li class="sf-item" data-idx="' + i + '">' +
         '<span class="sf-handle" title="Drag to reorder">&#9776;</span>' +
-        '<input type="text" value="' + escAttr(name) + '" onchange="updateSubfolder(' + i + ', this.value)">' +
-        (names.length > 1 ? '<button class="sf-remove" onclick="removeSubfolder(' + i + ')" title="Remove">&times;</button>' : '') +
+        '<input type="text" value="' + escAttr(name) + '" data-action-change="call"' +
+          ' data-fn="updateSubfolder" data-arg-json="' + i + '" data-arg-value="1">' +
+        (names.length > 1 ? '<button class="sf-remove" data-action="call"' +
+          ' data-fn="removeSubfolder" data-arg-json="' + i + '"' +
+          ' title="Remove">&times;</button>' : '') +
         '</li>';
     }).join('');
   }

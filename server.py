@@ -264,6 +264,14 @@ CSP_STRICT_PAGES = {
     "manual.html",
     "plantrim.html",
     "ap-rename.html",
+    # Joined in v2.159.0, once their scripts stopped writing handlers into
+    # markup as well - a page cannot be strict while its JavaScript builds an
+    # `onclick`, and the guard fails it if one does.
+    "capacity.html",
+    "prep.html",
+    "rename.html",
+    "settings.html",
+    "setup.html",
 }
 
 #: What a converted page gets.

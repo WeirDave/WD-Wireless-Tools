@@ -35,18 +35,18 @@
           <div class="menu-sep"></div>
           <div class="menu-section">&#9656; Tools</div>
           <a class="menu-item" href="/settings#organizer">· Suite Settings</a>
-          <button class="menu-item" onclick="pickFolder()">· Change Folder…</button>
-          <button class="menu-item" onclick="showCreateFolder()">· Create Project Folder</button>
-          <button class="menu-item" onclick="showExtractFloorplans()">· Extract Floorplans…</button>
-          <button class="menu-item" onclick="showAcornNotes()">· Acorn Notes…</button>
+          <button class="menu-item" data-action="call" data-fn="pickFolder">· Change Folder…</button>
+          <button class="menu-item" data-action="call" data-fn="showCreateFolder">· Create Project Folder</button>
+          <button class="menu-item" data-action="call" data-fn="showExtractFloorplans">· Extract Floorplans…</button>
+          <button class="menu-item" data-action="call" data-fn="showAcornNotes">· Acorn Notes…</button>
           <a class="menu-item" href="/squirrel/rename">· Rename…</a>
-          <button class="menu-item" onclick="doScan()" id="menuRescan">· Rescan</button>
-          <button class="menu-item" onclick="doUndo()" id="menuUndo" hidden>· ↶ Undo last organize</button>
+          <button class="menu-item" data-action="call" data-fn="doScan" id="menuRescan">· Rescan</button>
+          <button class="menu-item" data-action="call" data-fn="doUndo" id="menuUndo" hidden>· ↶ Undo last organize</button>
           <div class="menu-sep"></div>
           <div class="menu-section">&#9656; Help &amp; Support</div>
           <a class="menu-item" href="/manual#squirrel">· User Guide</a>
-          <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-          <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+          <button class="menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+          <button class="menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
           <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
         </div>
       </div>
@@ -55,7 +55,7 @@
       <h1><span>WD</span> Squirrel <span class="ver" data-ver="squirrel">v&hellip;</span></h1>
     </div>
     <div class="topbar-right">
-      <button class="theme-toggle" onclick="toggleTheme()">
+      <button class="theme-toggle" data-action="call" data-fn="toggleTheme">
         <span class="ico">🌙</span><span class="txt">Dark</span>
       </button>
     </div>
@@ -72,62 +72,62 @@
       <div class="pick-title">Stash your Ekahau files</div>
       <div class="pick-sub">Organize existing project files or create new project folders with the right structure.</div>
       <div class="pick-cards">
-        <div class="pick-card organize" onclick="pickFolder()">
+        <div class="pick-card organize" data-action="call" data-fn="pickFolder">
           <div class="pick-card-icon">&#128194;</div>
           <div class="pick-card-title">Organize Files</div>
           <div class="pick-card-desc">Select a folder with Ekahau site folders. Squirrel sorts loose files into <b>images/</b>, <b>floorplans/</b>, and <b>reports/</b> subfolders. <code>.esx</code> files stay in the root.</div>
-          <button class="btn btn-primary" onclick="event.stopPropagation(); pickFolder()">Select Folder…</button>
+          <button class="btn btn-primary" data-action="call" data-fn="pickFolder" data-stop="1">Select Folder…</button>
           <div id="lastFolderHint" class="pick-card-last-folder" hidden>
             <span>Last: <code id="lastFolderPath"></code></span>
-            <button type="button" class="pick-settings-link" onclick="event.stopPropagation(); continueLastFolder()">or continue with this folder &rarr;</button>
+            <button type="button" class="pick-settings-link" data-action="call" data-fn="continueLastFolder" data-stop="1">or continue with this folder &rarr;</button>
           </div>
         </div>
-        <div class="pick-card create" onclick="showCreateFolder()">
+        <div class="pick-card create" data-action="call" data-fn="showCreateFolder">
           <div class="pick-card-icon">&#128193;</div>
           <div class="pick-card-title">Create Project Folder</div>
           <div class="pick-card-desc">Create a new project folder and pick which subfolders it should contain — the defaults are <b>images</b>, <b>floorplans</b>, and <b>reports</b>, plus any custom destinations you've defined.</div>
-          <button class="btn btn-blue" onclick="event.stopPropagation(); showCreateFolder()">Create Folder…</button>
+          <button class="btn btn-blue" data-action="call" data-fn="showCreateFolder" data-stop="1">Create Folder…</button>
         </div>
-        <div class="pick-card extract" onclick="showExtractFloorplans()">
+        <div class="pick-card extract" data-action="call" data-fn="showExtractFloorplans">
           <div class="pick-card-icon">&#128441;</div>
           <div class="pick-card-title">Extract Floorplans</div>
           <div class="pick-card-desc">Pick an <code>.esx</code> and pull the floorplan images out as standalone files. Defaults to a <b>floorplans/</b> folder next to the <code>.esx</code>.</div>
-          <button class="btn btn-amber" onclick="event.stopPropagation(); showExtractFloorplans()">Select .esx…</button>
+          <button class="btn btn-amber" data-action="call" data-fn="showExtractFloorplans" data-stop="1">Select .esx…</button>
         </div>
-        <div class="pick-card rename" onclick="showRename()">
+        <div class="pick-card rename" data-action="call" data-fn="showRename">
           <div class="pick-card-icon">&#9999;&#65039;</div>
           <div class="pick-card-title">Rename</div>
           <div class="pick-card-desc">Rename folders and files to a consistent naming scheme. Use built-in tokens (site code, facility code, survey type…) or load a CSV for bulk operations. Also cleans up filenames with regex rules.</div>
-          <button class="btn btn-rose" onclick="event.stopPropagation(); showRename()">Open Rename…</button>
+          <button class="btn btn-rose" data-action="call" data-fn="showRename" data-stop="1">Open Rename…</button>
         </div>
-        <div class="pick-card acorn" onclick="showAcornNotes()">
+        <div class="pick-card acorn" data-action="call" data-fn="showAcornNotes">
           <div class="pick-card-icon">&#127792;</div>
           <div class="pick-card-title">Acorn Notes</div>
           <div class="pick-card-desc">Pick an <code>.esx</code> and stash a quick info note next to it — floor plan names, for now. Extract Floorplans keeps this note in sync automatically too.</div>
-          <button class="btn btn-teal" onclick="event.stopPropagation(); showAcornNotes()">Select .esx…</button>
+          <button class="btn btn-teal" data-action="call" data-fn="showAcornNotes" data-stop="1">Select .esx…</button>
         </div>
       </div>
       <div class="pick-settings-hint">
         <span>Want to rename destinations or add custom ones (route <code>.csv</code> to <code>raw-data/</code>)?</span>
-        <button type="button" class="pick-settings-link" onclick="showSettings()">&#9881; Open Settings&hellip;</button>
+        <button type="button" class="pick-settings-link" data-action="call" data-fn="showSettings">&#9881; Open Settings&hellip;</button>
       </div>
     </div>
 
     <div id="previewScreen" hidden>
       <div class="sticky-header">
         <div class="toolbar">
-          <button class="btn btn-sec" onclick="pickFolder()">Change Folder</button>
+          <button class="btn btn-sec" data-action="call" data-fn="pickFolder">Change Folder</button>
           <div class="root-path" id="rootPath"></div>
-          <button class="btn btn-blue" onclick="showCreateFolder()">&#128193; New Folder</button>
-          <button class="btn btn-sec" onclick="doScan()">↻ Rescan</button>
-          <button class="btn btn-sec" onclick="showSettings()" title="Rename destinations, add custom destinations, set rename patterns">&#9881; Settings</button>
+          <button class="btn btn-blue" data-action="call" data-fn="showCreateFolder">&#128193; New Folder</button>
+          <button class="btn btn-sec" data-action="call" data-fn="doScan">↻ Rescan</button>
+          <button class="btn btn-sec" data-action="call" data-fn="showSettings" title="Rename destinations, add custom destinations, set rename patterns">&#9881; Settings</button>
         </div>
 
         <div id="orgConfirmCard" class="org-confirm-card">
           <div id="orgConfirmText" class="org-confirm-text"></div>
           <div class="org-confirm-actions">
-            <button class="btn btn-sec" id="detailsToggleBtn" onclick="toggleDetails()">Show File Details</button>
-            <button class="btn btn-primary" onclick="doExecute()">Organize All Files</button>
+            <button class="btn btn-sec" id="detailsToggleBtn" data-action="call" data-fn="toggleDetails">Show File Details</button>
+            <button class="btn btn-primary" data-action="call" data-fn="doExecute">Organize All Files</button>
           </div>
         </div>
 
@@ -141,14 +141,14 @@
             <span id="bulkDestLabel" class="org-bulk-label" hidden>Move checked to:</span>
             <span id="bulkDestRow" class="org-bulk-dest-row" hidden></span>
             <span class="org-spacer"></span>
-            <button class="btn btn-sec" onclick="toggleAll(true)">Check All</button>
-            <button class="btn btn-sec" onclick="toggleAll(false)">Uncheck All</button>
-            <button class="btn btn-sec" id="advancedToggleBtn" onclick="toggleAdvanced()" title="Show duplicate/unreferenced detection, per-file destination overrides, and rename-rule details">Advanced</button>
-            <button class="btn btn-primary" onclick="doExecute()">Apply Moves</button>
+            <button class="btn btn-sec" data-action="call" data-fn="toggleAll" data-arg-json="true">Check All</button>
+            <button class="btn btn-sec" data-action="call" data-fn="toggleAll" data-arg-json="false">Uncheck All</button>
+            <button class="btn btn-sec" id="advancedToggleBtn" data-action="call" data-fn="toggleAdvanced" title="Show duplicate/unreferenced detection, per-file destination overrides, and rename-rule details">Advanced</button>
+            <button class="btn btn-primary" data-action="call" data-fn="doExecute">Apply Moves</button>
           </div>
           <div id="orgDestHint" class="org-dest-hint" hidden>
             <span>Files route to the destinations above based on their extension.</span>
-            <button type="button" class="org-dest-hint-link" onclick="showSettings()">Rename destinations or add a new one&hellip;</button>
+            <button type="button" class="org-dest-hint-link" data-action="call" data-fn="showSettings">Rename destinations or add a new one&hellip;</button>
           </div>
         </div>
       </div>
@@ -223,7 +223,7 @@
             <input type="text" id="cfgSubReports" class="org-subname-input" placeholder="reports">
           </div>
           <div class="org-migrate-row">
-            <button class="btn btn-sec btn-sm" onclick="migrateSubfolders()">Migrate existing folders&hellip;</button>
+            <button class="btn btn-sec btn-sm" data-action="call" data-fn="migrateSubfolders">Migrate existing folders&hellip;</button>
             <span class="hint-inline">Renames every matching subfolder across every site under the current root. Skips if the target already exists.</span>
           </div>
         </div>
@@ -261,18 +261,18 @@
             default <code>reports</code> mapping.
           </div>
           <div id="cfgCustomDestList" class="org-custom-dest-list"></div>
-          <button type="button" class="btn btn-sec btn-sm" onclick="addCustomDestination()">+ Add destination</button>
+          <button type="button" class="btn btn-sec btn-sm" data-action="call" data-fn="addCustomDestination">+ Add destination</button>
         </div>
         <div class="org-settings-col-filler"><img src="/assets/squirrel-v8.0-560x560.png" alt=""></div>
       </div>
     </div>
 
-    <div class="hint org-settings-section-hint">Rename patterns moved to their own tool — <button type="button" class="pick-settings-link" onclick="closeModal('settingsModal');showRename()">open Rename&hellip;</button></div>
+    <div class="hint org-settings-section-hint">Rename patterns moved to their own tool — <button type="button" class="pick-settings-link" data-action="call" data-fn="settingsToRename">open Rename&hellip;</button></div>
 
     <div class="modal-actions">
-      <button class="btn btn-sec" onclick="resetConfig()">Reset Defaults</button>
-      <button class="btn btn-sec" onclick="closeModal('settingsModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveConfig()">Save</button>
+      <button class="btn btn-sec" data-action="call" data-fn="resetConfig">Reset Defaults</button>
+      <button class="btn btn-sec" data-action="call" data-fn="closeModal" data-arg="settingsModal">Cancel</button>
+      <button class="btn btn-primary" data-action="call" data-fn="saveConfig">Save</button>
     </div>
   </div>
 </div>
@@ -284,19 +284,19 @@
     <label class="org-first-label">Root folder</label>
     <div class="org-root-row">
       <div id="createFolderRoot" class="org-root-path"></div>
-      <button class="btn btn-sec org-browse-btn" onclick="pickRootForCreate()">Browse…</button>
+      <button class="btn btn-sec org-browse-btn" data-action="call" data-fn="pickRootForCreate">Browse…</button>
     </div>
     <div class="org-bulk-toggle-row">
       <label class="org-bulk-toggle">
-        <input type="checkbox" id="bulkCreateToggle" onchange="toggleBulkCreate()">
+        <input type="checkbox" id="bulkCreateToggle" data-action-change="call" data-fn="toggleBulkCreate">
         Create multiple folders at once
       </label>
       <span class="hint org-bulk-toggle-hint">For several folders at the same site — e.g. one per building.</span>
     </div>
     <label class="org-later-label" id="newFolderLabel">Folder name</label>
     <div class="org-folder-mode-toggle" id="newFolderModeToggle">
-      <button type="button" class="org-folder-mode-btn active" id="folderModeNewBtn" onclick="setFolderMode('new')">+ New folder</button>
-      <button type="button" class="org-folder-mode-btn" id="folderModeExistingBtn" onclick="setFolderMode('existing')">Existing folder</button>
+      <button type="button" class="org-folder-mode-btn active" id="folderModeNewBtn" data-action="call" data-fn="setFolderMode" data-arg="new">+ New folder</button>
+      <button type="button" class="org-folder-mode-btn" id="folderModeExistingBtn" data-action="call" data-fn="setFolderMode" data-arg="existing">Existing folder</button>
     </div>
     <input type="text" id="newFolderName" class="org-folder-input" autocomplete="off" placeholder="e.g. SITE1 - 100 Example Ave, Anytown, CA 90210">
     <select id="existingFolderSelect" class="org-folder-input" hidden>
@@ -309,8 +309,8 @@
       <select id="bulkVaryToken" class="org-folder-input"></select>
     </div>
     <div id="bulkImportRow" class="org-bulk-import-row" hidden>
-      <button type="button" class="btn btn-sec btn-sm" onclick="document.getElementById('bulkImportFile').click()">&#128194; Import from file&hellip;</button>
-      <input type="file" id="bulkImportFile" accept=".txt,.docx,.pdf" hidden onchange="handleBulkImportFile(this)">
+      <button type="button" class="btn btn-sec btn-sm" data-action="click-target" data-target="bulkImportFile">&#128194; Import from file&hellip;</button>
+      <input type="file" id="bulkImportFile" accept=".txt,.docx,.pdf" hidden data-action-change="call" data-fn="handleBulkImportFile" data-arg-this="1">
       <span class="hint org-bulk-import-hint">.txt, .docx, or .pdf — each line becomes one folder</span>
     </div>
     <textarea id="bulkNamesInput" class="org-folder-input org-bulk-textarea" rows="5" hidden placeholder="One per line"></textarea>
@@ -319,15 +319,15 @@
 
     <label class="org-later-label">Subfolders to create</label>
     <div id="newFolderSubs" class="org-sub-picker"></div>
-    <button type="button" class="btn btn-sec btn-sm org-sub-add-btn" onclick="addAdHocSubfolder()">+ Add subfolder</button>
+    <button type="button" class="btn btn-sec btn-sm org-sub-add-btn" data-action="call" data-fn="addAdHocSubfolder">+ Add subfolder</button>
     <div class="hint org-sub-picker-hint">
       Uncheck any you don't need, or rename a field — edits here apply to this project only. To change the defaults for every new project, use
-      <button type="button" class="pick-settings-link" onclick="closeModal('createFolderModal');showSettings()">Settings</button>.
+      <button type="button" class="pick-settings-link" data-action="call" data-fn="createFolderToSettings">Settings</button>.
     </div>
 
     <div class="modal-actions modal-actions-spaced">
-      <button class="btn btn-sec" onclick="closeModal('createFolderModal')">Cancel</button>
-      <button class="btn btn-primary" id="createFolderBtn" onclick="doCreateFolder()">Create</button>
+      <button class="btn btn-sec" data-action="call" data-fn="closeModal" data-arg="createFolderModal">Cancel</button>
+      <button class="btn btn-primary" id="createFolderBtn" data-action="call" data-fn="doCreateFolder">Create</button>
     </div>
   </div>
 </div>
@@ -339,12 +339,12 @@
     <label class="org-first-label">Source <code>.esx</code></label>
     <div class="org-root-row">
       <div id="extractSourceLabel" class="org-root-path"></div>
-      <button class="btn btn-sec org-browse-btn" onclick="pickExtractSource()">Browse…</button>
+      <button class="btn btn-sec org-browse-btn" data-action="call" data-fn="pickExtractSource">Browse…</button>
     </div>
     <label class="org-later-label">Output folder</label>
     <div class="org-root-row">
       <div id="extractOutLabel" class="org-root-path"></div>
-      <button class="btn btn-sec org-browse-btn" onclick="pickExtractOutput()">Browse…</button>
+      <button class="btn btn-sec org-browse-btn" data-action="call" data-fn="pickExtractOutput">Browse…</button>
     </div>
     <div class="hint org-extract-out-hint">Defaults to a <code>floorplans/</code> folder next to the <code>.esx</code>. Created if it doesn't exist.</div>
 
@@ -353,13 +353,13 @@
       <div class="org-extract-empty">Pick an <code>.esx</code> to list its floors.</div>
     </div>
     <div class="org-extract-actions-row">
-      <button type="button" class="btn btn-sec btn-sm" onclick="toggleExtractAll(true)">Check All</button>
-      <button type="button" class="btn btn-sec btn-sm" onclick="toggleExtractAll(false)">Uncheck All</button>
+      <button type="button" class="btn btn-sec btn-sm" data-action="call" data-fn="toggleExtractAll" data-arg-json="true">Check All</button>
+      <button type="button" class="btn btn-sec btn-sm" data-action="call" data-fn="toggleExtractAll" data-arg-json="false">Uncheck All</button>
     </div>
 
     <div class="modal-actions modal-actions-spaced">
-      <button class="btn btn-sec" onclick="closeModal('extractModal')">Cancel</button>
-      <button class="btn btn-primary" id="extractBtn" onclick="doExtract()" disabled>Extract</button>
+      <button class="btn btn-sec" data-action="call" data-fn="closeModal" data-arg="extractModal">Cancel</button>
+      <button class="btn btn-primary" id="extractBtn" data-action="call" data-fn="doExtract" disabled>Extract</button>
     </div>
   </div>
 </div>
@@ -371,7 +371,7 @@
     <label class="org-first-label">Source <code>.esx</code></label>
     <div class="org-root-row">
       <div id="acornSourceLabel" class="org-root-path"></div>
-      <button class="btn btn-sec org-browse-btn" onclick="pickAcornSource()">Browse…</button>
+      <button class="btn btn-sec org-browse-btn" data-action="call" data-fn="pickAcornSource">Browse…</button>
     </div>
 
     <label class="org-later-label">Floor plans found</label>
@@ -380,8 +380,8 @@
     </div>
 
     <div class="modal-actions modal-actions-spaced">
-      <button class="btn btn-sec" onclick="closeModal('acornModal')">Cancel</button>
-      <button class="btn btn-primary" id="acornBtn" onclick="doSaveAcorn()" disabled>Save Acorn.txt</button>
+      <button class="btn btn-sec" data-action="call" data-fn="closeModal" data-arg="acornModal">Cancel</button>
+      <button class="btn btn-primary" id="acornBtn" data-action="call" data-fn="doSaveAcorn" disabled>Save Acorn.txt</button>
     </div>
   </div>
 </div>

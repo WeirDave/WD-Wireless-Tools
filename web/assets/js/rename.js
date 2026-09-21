@@ -78,12 +78,18 @@ function _renderTokenBars() {
     const inputId = barId === 'rnFolderTokenBar' ? 'rnFolderFormat' : 'rnFileFormat';
     bar.innerHTML = '<span class="sr-hint">Insert:</span> ' +
       // A token key is a **CSV column header** - it comes out of a file he
-      // imported, not out of this code - and it lands inside a JavaScript
-      // string. `esc` is the text escaper: it converts `&`, `<` and `>` and
-      // leaves the apostrophe alone, so a header named `a'` closed the
-      // string and everything after it ran. `WD.escJsStr` is the escaper for
-      // this sink; the label after it is element text and keeps `esc`.
-      tokens.map(t => '<button class="sr-token-btn" onclick="_renameInsertFormatToken(\'' + inputId + '\',\'' + WD.escJsStr(t.key) + '\')">{' + esc(t.key) + '}</button>').join(' ');
+      // imported, not out of this code. It used to land inside a JavaScript
+      // string in an `onclick`, where `esc` was not enough: it leaves the
+      // apostrophe alone, so a header named `a'` closed the string and
+      // everything after it ran, and `WD.escJsStr` was the escaper for that
+      // sink.
+      //
+      // **There is no JavaScript string here any more.** The key is attribute
+      // data now, so `escAttr` is the whole answer and the class of bug the
+      // note above describes cannot occur - a quote in the value ends the
+      // attribute and nothing more. Backlog item 10. The label after it is
+      // element text and keeps `esc`.
+      tokens.map(t => '<button class="sr-token-btn" data-action="call" data-fn="_renameInsertFormatToken" data-arg="' + escAttr(inputId) + '" data-arg2="' + escAttr(t.key) + '">{' + esc(t.key) + '}</button>').join(' ');
   });
 }
 
@@ -147,7 +153,7 @@ function _renderManualFields() {
   wrap.innerHTML = '<div class="hint mb-8">No CSV loaded — fill in token values manually:</div>' +
     tokens.map(t =>
       '<div class="org-token-row"><label class="org-token-label">{' + esc(t) + '}</label>' +
-      '<input type="text" class="org-folder-input rn-manual-input" data-token="' + escAttr(t) + '" oninput="updateRenamePreview()" placeholder="' + escAttr(t) + '"></div>'
+      '<input type="text" class="org-folder-input rn-manual-input" data-token="' + escAttr(t) + '" data-action-input="call" data-fn="updateRenamePreview" placeholder="' + escAttr(t) + '"></div>'
     ).join('');
 }
 
@@ -616,10 +622,18 @@ async function showRenameProfiles() {
          `WD.escJsStr` is the answer and it already existed; it escapes the
          backslash, the apostrophe, `<`, the ampersand and the quote, which
          is what a single-quoted JS string inside a double-quoted attribute
-         needs. Same shape `cloud.js` uses. */
+         needs. Same shape `cloud.js` uses.
+
+         **The sink is gone as of backlog item 10.** The profile name is
+         attribute data now rather than source inside an attribute, so
+         `escAttr` is the whole answer: a quote in the name ends the attribute
+         and there is no string left for it to close. The account above is
+         kept because the exploit was real and confirmed in all three
+         browsers, and because the lesson - that the escaper has to match the
+         sink - outlives this particular sink. */
       '<div class="sr-profile-actions">' +
-        '<button class="btn btn-sm" onclick="applyRenameProfile(\'' + WD.escJsStr(name) + '\')">Apply</button>' +
-        '<button class="btn btn-sm btn-danger" onclick="deleteRenameProfile(\'' + WD.escJsStr(name) + '\')">Delete</button>' +
+        '<button class="btn btn-sm" data-action="call" data-fn="applyRenameProfile" data-arg="' + escAttr(name) + '">Apply</button>' +
+        '<button class="btn btn-sm btn-danger" data-action="call" data-fn="deleteRenameProfile" data-arg="' + escAttr(name) + '">Delete</button>' +
       '</div></div>';
   }).join('');
 }

@@ -590,7 +590,7 @@
       + '<br><span class="prep-sub">It is in <b>' + esc(r.dir || '') + '</b>, beside the '
       + 'original, which is unchanged. Open it in Ekahau and start drawing.</span>'
       + '<div class="prep-row" style="margin:10px 0 0">'
-      + '<button class="btn btn-sec" onclick="prepReveal()">Show me the file</button>'
+      + '<button class="btn btn-sec" data-action="call" data-fn="prepReveal">Show me the file</button>'
       + '</div></div>';
   }
 
@@ -600,8 +600,8 @@
   function confirmReplace(j) {
     $('prepResult').innerHTML = '<div class="prep-warn">' + esc(j.error)
       + '<div class="prep-row" style="margin:10px 0 0">'
-      + '<button class="btn btn-primary" onclick="prepReplace()">Replace it</button>'
-      + '<button class="btn btn-sec" onclick="prepReveal()">Show me the folder</button>'
+      + '<button class="btn btn-primary" data-action="call" data-fn="prepReplace">Replace it</button>'
+      + '<button class="btn btn-sec" data-action="call" data-fn="prepReveal">Show me the folder</button>'
       + '</div></div>';
   }
 

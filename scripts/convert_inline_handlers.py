@@ -14,7 +14,15 @@ rest for a person to do by hand:
     fn()                        -> data-action="call" data-fn="fn"
     fn('literal')               -> ... data-arg="literal"
     fn(this.value)              -> ... data-arg-value="1"
+    fn(true) / fn(-1)           -> ... data-arg-json="true"
+    fn('a', this)               -> ... data-arg="a" data-arg-this="1"
+    fn(event, this)             -> ... data-arg-event="1" data-arg-this="1"
     event.stopPropagation()     -> data-action="noop"
+    event.stopPropagation();f() -> data-action="call" data-fn="f" data-stop="1"
+    if(event.target===this)f()  -> data-action="backdrop-call" data-fn="f"
+    a(); b()                    -> data-action="call-chain" data-fn="a,b"
+    getElementById('x').click() -> data-action="click-target" data-target="x"
+    getElementById('x').focus() -> data-action="focus-target" data-target="x"
     WD.toggleMenu(event,'x')    -> data-action="menu" data-menu="x"
 
 Anything with two arguments, arithmetic, a ternary or a call inside a call is
@@ -44,6 +52,22 @@ ATTR = re.compile(
     r'\son(' + "|".join(EVENTS) + r')="([^"]*)"', re.I)
 
 CALL_NONE = re.compile(r"^([\w.$]+)\(\)$")
+CALL_JSON = re.compile(r"^([\w.$]+)\(\s*(true|false|-?\d+(?:\.\d+)?)\s*\)$")
+CALL_LITERAL_THIS = re.compile(r"^([\w.$]+)\(\s*'([^']*)'\s*,\s*this\s*\)$")
+CALL_EVENT_THIS = re.compile(r"^([\w.$]+)\(\s*event\s*,\s*this\s*\)$")
+BACKDROP = re.compile(
+    r"^if\s*\(\s*event\.target\s*===\s*this\s*\)\s*([\w.$]+)\(\)$")
+CLICK_TARGET = re.compile(
+    r"^document\.getElementById\(\s*'([^']*)'\s*\)\.click\(\)$")
+FOCUS_TARGET = re.compile(
+    r"^document\.getElementById\(\s*'([^']*)'\s*\)\.focus\(\)$")
+STOP_THEN_CALL = re.compile(
+    r"^event\.stopPropagation\(\)\s*;\s*([\w.$]+)\(\)$")
+#: `a(); b()` with no arguments on either - the dispatcher's `call-chain`.
+#: A chain where any step takes an argument is left alone: `call-chain` passes
+#: the same arguments to every step, so converting one would change what the
+#: page does.
+CHAIN = re.compile(r"^([\w.$]+)\(\)\s*;\s*([\w.$]+)\(\)$")
 CALL_LITERAL = re.compile(r"^([\w.$]+)\(\s*'([^']*)'\s*\)$")
 CALL_VALUE = re.compile(r"^([\w.$]+)\(\s*this\.value\s*\)$")
 CALL_THIS = re.compile(r"^([\w.$]+)\(\s*this\s*\)$")
@@ -65,6 +89,43 @@ def convert_one(event: str, body: str):
 
     if STOP_ONLY.match(code):
         return _attrs([(prefix, "noop")])
+
+    m = STOP_THEN_CALL.match(code)
+    if m:
+        return _attrs([(prefix, "call"), ("data-fn", m.group(1)),
+                       ("data-stop", "1")])
+
+    m = BACKDROP.match(code)
+    if m:
+        return _attrs([(prefix, "backdrop-call"), ("data-fn", m.group(1))])
+
+    m = CLICK_TARGET.match(code)
+    if m:
+        return _attrs([(prefix, "click-target"), ("data-target", m.group(1))])
+
+    m = FOCUS_TARGET.match(code)
+    if m:
+        return _attrs([(prefix, "focus-target"), ("data-target", m.group(1))])
+
+    m = CHAIN.match(code)
+    if m:
+        return _attrs([(prefix, "call-chain"),
+                       ("data-fn", "%s,%s" % (m.group(1), m.group(2)))])
+
+    m = CALL_JSON.match(code)
+    if m:
+        return _attrs([(prefix, "call"), ("data-fn", m.group(1)),
+                       ("data-arg-json", m.group(2))])
+
+    m = CALL_LITERAL_THIS.match(code)
+    if m:
+        return _attrs([(prefix, "call"), ("data-fn", m.group(1)),
+                       ("data-arg", m.group(2)), ("data-arg-this", "1")])
+
+    m = CALL_EVENT_THIS.match(code)
+    if m:
+        return _attrs([(prefix, "call"), ("data-fn", m.group(1)),
+                       ("data-arg-event", "1"), ("data-arg-this", "1")])
 
     m = MENU.match(code)
     if m:

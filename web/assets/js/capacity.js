@@ -166,7 +166,8 @@
       }
       host.innerHTML = templates.map(function (t) {
         return '<div class="cap-tpl' + (t._file === chosen ? ' is-on' : '') + '" '
-          + 'onclick="capChoose(\'' + WD.escJsStr(t._file) + '\')">'
+          + 'data-action="call" data-fn="capChoose" data-arg="'
+          + WD.escAttr(t._file) + '">'
           + '<span class="cap-tpl-name">' + esc(t.name) + '</span>'
           + '<span class="cap-tpl-meta">' + Number(t.devicesPerOccupant || 0).toFixed(2)
           + ' per person · ' + (t.items || []).length + ' rows'
