@@ -81,7 +81,13 @@ class PrintResetsTheFullHeightShells(unittest.TestCase):
             selector, body = m.group(1), m.group(2)
             if "100vh" not in body:
                 continue
-            if "min-height" not in body and "height" not in body:
+            # `height` and `min-height` only. A `max-height` in viewport units
+            # is an upper bound - it can shrink a box, never force one to a
+            # full sheet - so it cannot cause the extra page this guards, and
+            # matching it caught the menu height cap, which is a scroll fix.
+            # Substring matching is what let `max-height` in: it contains
+            # "height".
+            if not re.search(r"(^|[;{\s])(min-)?height\s*:[^;]*100vh", body):
                 continue
             for part in selector.split(","):
                 part = part.strip().split("\n")[-1].strip()
