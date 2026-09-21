@@ -318,5 +318,112 @@ console.log(JSON.stringify({ body: sandbox.body }));
         self.assertNotIn("both", body.lower())
 
 
+class TheOperationsActuallyWriteTheSyncPointTests(unittest.TestCase):
+    """The third number only exists if something records it.
+
+    Everything above tests the store and the four states it produces. None
+    of it tests that a real operation *writes* a sync point - and found by
+    mutation: disabling both `sync_state.record(` calls in `cloud_manager`
+    left this file green.
+
+    That failure is silent and total. With nothing recorded, `classify`
+    answers `unknown` for every pair for ever, the tool falls back to
+    comparing two timestamps, and "they changed it" and "we both changed it"
+    go back to looking identical - which is the whole thing this was built
+    to separate. The store would be perfect and the feature absent.
+
+    Same shape as the comparison memory: the thing that remembers was tested
+    and the thing that does the remembering was not.
+
+    A pull is driven here because it is the cheaper of the two to stand up
+    honestly; the push shares the same `record()` and is covered by the
+    argument test below rather than by a second stubbed upload.
+    """
+
+    ISO_OLD = "2026-08-01T08:00:00.000Z"
+    ISO_NEW = "2026-09-04T08:00:00.000Z"
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="wd-syncpoint-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.state = self.tmp / "sync_state.json"
+        real = ss.STATE_FILE
+        ss.STATE_FILE = self.state
+        self.addCleanup(lambda: setattr(ss, "STATE_FILE", real))
+
+        from tools import cloud_manager as cm
+        self.cm = cm
+        cm._ESX_META_CACHE.clear()
+        self.addCleanup(cm._ESX_META_CACHE.clear)
+
+        self.folder = self.tmp / "SITE1 Riverside"
+        self.folder.mkdir()
+        self.local = self.folder / "SITE1 Riverside Baseline.esx"
+        self._esx(self.local, "SITE1 Riverside Baseline", self.ISO_OLD)
+        buf = self.tmp / "_cloud.esx"
+        self._esx(buf, "SITE1 Riverside Baseline", self.ISO_NEW)
+        self.cloud_bytes = buf.read_bytes()
+        buf.unlink()
+
+    @staticmethod
+    def _esx(path, name, iso):
+        import zipfile
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr("project.json", json.dumps({"project": {
+                "id": "cloud-1", "name": name, "title": name,
+                "history": {"modifiedAt": iso}}}))
+            z.writestr("accessPoints.json", json.dumps({"accessPoints": []}))
+
+    def _pull(self):
+        class _Resp:
+            status_code = 200
+            def json(self_inner):
+                return {"name": "SITE1 Riverside Baseline",
+                        "modifiedAt": TheOperationsActuallyWriteTheSyncPointTests.ISO_NEW}
+        class _Api:
+            def __init__(self, blob):
+                self._blob = blob
+            def get(self, url):
+                return _Resp()
+            def download_project(self, pid, progress_cb=None):
+                return {"esx": self._blob}
+        mgr = self.cm.CloudManager.__new__(self.cm.CloudManager)
+        mgr.config = {"output_dir": str(self.tmp)}
+        mgr._ensure = lambda: True
+        mgr.api = _Api(self.cloud_bytes)
+        return mgr.verify_replace_local("cloud-1", str(self.local))
+
+    def test_a_pull_records_that_the_two_are_now_the_same(self):
+        out = self._pull()
+        self.assertFalse(out.get("error"), out)
+        pairs = ss.load(_path=self.state)
+        self.assertIn("cloud-1", pairs,
+                      "the pull wrote no sync point, so the pair is unknown "
+                      "for ever and the fourth state can never arise")
+
+    def test_and_the_pair_then_reads_as_in_sync(self):
+        """The record is only worth writing if it answers the question."""
+        out = self._pull()
+        self.assertFalse(out.get("error"), out)
+        pairs = ss.load(_path=self.state)
+        rec = pairs["cloud-1"]
+        self.assertEqual(
+            ss.IN_SYNC,
+            ss.classify(rec, rec["cloudMtime"], rec["localMtime"],
+                        rec["localPath"]))
+
+    def test_it_records_the_dates_the_list_compares(self):
+        """Recorded against any other number and the record never matches
+        again - the memory is written and silently never found."""
+        self._pull()
+        rec = ss.load(_path=self.state)["cloud-1"]
+        listed = self.cm.get_local_esx_files(str(self.tmp))
+        mine = [f for f in listed
+                if Path(f["path"]).name == self.local.name]
+        self.assertTrue(mine, listed)
+        self.assertAlmostEqual(int(mine[0]["mtime"]),
+                               int(rec["localMtime"]), delta=2)
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
