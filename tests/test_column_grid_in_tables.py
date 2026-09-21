@@ -311,7 +311,7 @@ class TheRenderedTables(unittest.TestCase):
         7%. The count still matches and the total still sums to 100, so this is
         the only assertion that catches it - found by mutation, not by reading.
         """
-        self.check("""
+        self.check(r"""
           const html = renderTable('aim', true);
           const header = headerOf(html);
           const at = header.indexOf('Grid');

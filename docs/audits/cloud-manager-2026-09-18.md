@@ -25,20 +25,24 @@ future.
 
 ## Status
 
-**A0 to A33 are closed**, across v2.139.1 (A0), v2.142.0 (the six P1s),
-v2.143.0 (the twelve P2s) and v2.145.0 (the twelve P3s), plus A31 on its own
-branch, A32 in `CLAUDE.md`, and **A33 in v2.148.0** — the destructive surface
-that section was about now has tests that execute it, and the last of the
-untested actions were covered in v2.155.0. Each fix carries a test that fails
-against the code before it.
+**Every numbered finding is closed, A0 through A34**, across v2.139.1 (A0),
+v2.142.0 (the six P1s), v2.143.0 (the twelve P2s) and v2.145.0 (the twelve
+P3s), plus A31 on its own branch, A32 in `CLAUDE.md`, **A33 in v2.148.0** —
+the destructive surface that section was about now has tests that execute it,
+and the last of the untested actions were covered in v2.155.0 — and **A34 in
+v2.156.0**. Each fix carries a test that fails against the code before it.
 
-**One thing is not finished: A34**, tests that pin wording rather than
-property. Two of the five files it names have been converted since and a third
-was rewritten in v2.141.0; what is left is
-`test_cloud_modals_are_self_sufficient` and the two `__doc__` assertions in
-`test_cloud_replace_project`. It is tracked as backlog item 10 (2026-09-21).
+**A34 closed by conversion rather than deletion**, which is the part worth
+keeping. Its two remaining files now execute what they used to read:
+`test_cloud_replace_project` records the order the API calls arrive in, and
+`test_cloud_rename_dialog_driven` runs `startRename` against a readable DOM and
+asserts what lands on screen. The conversion found two defects the source
+checks could not — a delete-ordering assertion that a delete-first
+implementation would have passed, and an unchecked call that fills the rename
+preview when the dialog opens. Suite-wide the source-string count went from 342
+to 317.
 
-> **This section was wrong in both halves until 2026-09-21**, and the shape is
+> **This section was wrong in both halves until 2026-09-20**, and the shape is
 > worth more than the correction. It said "Every numbered finding is closed"
 > *and*, two paragraphs later, "One thing is not finished: A33" — contradicting
 > itself, with A33 closed three releases earlier and A34 unmentioned. Each half

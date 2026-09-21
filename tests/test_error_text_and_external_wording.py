@@ -1,4 +1,4 @@
-"""Two things the tool was saying that were not true.
+r"""Two things the tool was saying that were not true.
 
 **"a lot of extra backslashes."** The long-path fix shipped in v2.136.1 retries a
 failed copy with the `\\?\` form, and when *that* failed too the exception it
@@ -46,7 +46,7 @@ from tools import longpath as L
 
 
 class NoPathIsEscapedIntoAMessage(unittest.TestCase):
-    """What a person reads has no `repr` in it, and no `\\?\` either."""
+    r"""What a person reads has no `repr` in it, and no `\\?\` either."""
 
     def _failure_message(self, dest, prefixed=False):
         exc = OSError(errno.ENOENT, "The system cannot find the path specified",

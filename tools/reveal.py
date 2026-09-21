@@ -29,9 +29,31 @@ place rather than being written per tool:
 
   So on Windows the command line is built as a **string**, with the quotes
   around the path only, and Popen hands it to CreateProcess untouched.
-* Nothing here takes a path from the browser. Callers pass a path the server
-  already knows, and pass it as a list rather than through a shell, so a client
-  cannot smuggle arguments into a command line.
+* **One caller does take a path from the browser**, and this note used to say
+  otherwise. Three of the four - the log folder, Quick Walls, Prep - pass a
+  path the server already knows. `CloudManager.reveal_in_explorer` passes the
+  one the page sent, so the claim "nothing here takes a path from the browser"
+  was false, and it was the stated reason this was safe.
+
+  It is safe, for reasons worth writing down properly, because a future reader
+  who believes the old sentence might relax the checks that are actually doing
+  the work:
+
+  - `Popen` is called **without `shell=True`**, so on Windows the string goes
+    to `CreateProcess` verbatim. `&`, `|` and `;` in a path are not operators
+    and there is no shell injection here at all.
+  - What a string *could* allow is argument injection: a `"` in the path would
+    close the quoted argument and let a second one through, and `explorer`
+    opens what it is given - including an executable. That needs a `"` in a
+    filename, and **Windows does not permit one**. This branch is Windows-only,
+    so the character that would be needed cannot exist in a path that reaches
+    it.
+  - The path must also survive `_assert_inside` against the configured folder
+    and must already exist on disk.
+
+  The first two are the load-bearing ones. `_assert_inside` says of itself that
+  it is "a sanity check on a path this app's own page supplied, not a boundary
+  against an attacker", so it should not be read as the guard here.
 """
 from __future__ import annotations
 

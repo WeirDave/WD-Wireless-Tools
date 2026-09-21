@@ -52,7 +52,7 @@ class AimTableColumns(unittest.TestCase):
 
     def widths(self, **flags):
         """The colgroup and the header of a real Antenna Aim Sheet, paired."""
-        result = run_node("""
+        result = run_node(r"""
           const html = renderTable('aim', %s, { signOff: %s });
           const header = headerOf(html);
           const widths = (html.match(/width:([\d.]+)%%/g) || [])

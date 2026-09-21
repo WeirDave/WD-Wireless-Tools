@@ -25,7 +25,18 @@ EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 # is worth having under version control and is not worth 168 files of internal
 # changelog in a user's install folder. It was lost once by living only in a
 # backup, so it is tracked now and excluded here rather than simply absent.
-EXCLUDED_DIRECTORY_PARTS = {"releases"}
+#
+# `audits` and `reverse-engineering` joined it in v2.156.0, for the same reason
+# and eighteen months late: the whole-tool audit is 718 lines of internal
+# engineering notes, and the reverse-engineering folder is three browser
+# capture scripts and a README about Ekahau's undocumented API. Neither is
+# secret - the repository is public and the audit was checked and carries no
+# reported speech - and neither is for somebody who downloaded a wireless tool.
+# They were simply not considered when `releases` was excluded.
+#
+# What is left in docs/ is what a reader wants: USER_MANUAL.md and
+# wall-types.md. `tests/test_release_payload.py` holds that.
+EXCLUDED_DIRECTORY_PARTS = {"releases", "audits", "reverse-engineering"}
 
 
 def iter_release_files():

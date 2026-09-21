@@ -50,19 +50,26 @@ class _StubApi:
         self.datasets = [{"id": "old-1", "siteId": "site-9"}]
         self.deleted = []
         self.uploaded = []
+        #: Every call in the order it arrived. `deleted` and `uploaded` record
+        #: *that* something happened; the order is the safety property, and
+        #: nothing recorded it until the A34 conversion.
+        self.calls = []
         self._upload_ok = upload_ok
         self._appears = appears
         self._delete_raises = delete_raises
 
     # -- reads ---------------------------------------------------------
     def get_projects(self):
+        self.calls.append("verify")
         return list(self.projects)
 
     def get_dataset_listing(self):
+        self.calls.append("list")
         return list(self.datasets)
 
     # -- writes --------------------------------------------------------
     def upload_project(self, esx_path, progress_cb=None):
+        self.calls.append("upload")
         if not self._upload_ok:
             return {"error": "network went away"}
         self.uploaded.append(str(esx_path))
@@ -71,6 +78,7 @@ class _StubApi:
         return {"ok": True}
 
     def delete_project(self, pid):
+        self.calls.append("delete")
         if self._delete_raises:
             raise RuntimeError("403 refused")
         self.deleted.append(pid)
@@ -209,27 +217,59 @@ class ReplacingAnExistingCloudProjectTests(unittest.TestCase):
         self.assertEqual("Alpha Survey", names[0])
 
 
+    def test_the_upload_really_does_happen_before_the_delete(self):
+        """The order, asserted as an order rather than as an end state.
+
+        Two tests here were assertions about the *docstring* - that it contains
+        the words "inverted", "duplicate", "batch/update" and "S3". They were
+        the A34 case in `docs/audits/cloud-manager-2026-09-18.md`, and the
+        audit's charge was fair: rewording the prose failed the suite while the
+        safety property itself went unchecked by them. Renaming `inverted` to
+        `reversed` turned CI red with no behaviour change at all.
+
+        The reasoning still belongs in the docstring, and it is still there.
+        What it does not need is a test policing its vocabulary, so this holds
+        the property those two gestured at instead.
+
+        **And the property was genuinely unheld.** The test named
+        `test_the_old_project_is_deleted_only_after_the_upload` asserts that a
+        delete happened and that an upload happened - both true of a
+        delete-then-upload implementation that succeeds. Only the failure-path
+        tests would have caught the order, and by then the name of the test
+        that should have caught it is pointing at the wrong thing.
+        """
+        mgr, api = self._mgr()
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertTrue(out.get("ok"), out)
+        self.assertIn("upload", api.calls)
+        self.assertIn("delete", api.calls)
+        self.assertLess(api.calls.index("upload"), api.calls.index("delete"),
+                        "the old project was deleted before the new one was "
+                        "uploaded: %s" % api.calls)
+
+    def test_nothing_is_deleted_until_the_upload_has_been_verified(self):
+        """The project list is re-read between the two, and that is the check.
+
+        Uploading and then deleting straight away would still be "upload
+        first", and would still destroy the only remaining copy on the strength
+        of a call that returned - which is exactly what
+        `test_an_unverifiable_upload_deletes_nothing` refuses.
+        """
+        mgr, api = self._mgr()
+        mgr.replace_cloud_project(str(self.esx), "old-1")
+        after_upload = api.calls[api.calls.index("upload"):]
+        self.assertIn("verify", after_upload,
+                      "the project list was never re-read after the upload, so "
+                      "nothing confirmed the new project exists: %s" % api.calls)
+        self.assertLess(after_upload.index("verify"), after_upload.index("delete"),
+                        "the delete came before the verification: %s" % api.calls)
+
+
 class ItIsReachableAndHonestTests(unittest.TestCase):
 
     def test_the_page_can_call_it(self):
         import server
         self.assertIn("replace_cloud_project", server.CLOUD_ACTIONS)
-
-    def test_the_docstring_says_why_the_order_is_inverted(self):
-        doc = cm.CloudManager.replace_cloud_project.__doc__ or ""
-        self.assertIn("inverted", doc)
-        self.assertIn("duplicate", doc)
-
-    def test_it_records_why_there_is_no_atomic_replace(self):
-        """So nobody re-derives it.
-
-        `upload/initiate` takes no project id; `batch/update` writes JSON, and
-        floor plans are binary images fetched from S3 - so a document write
-        cannot carry a re-cropped plan, which is what his edits change.
-        """
-        doc = cm.CloudManager.replace_cloud_project.__doc__ or ""
-        self.assertIn("batch/update", doc)
-        self.assertIn("S3", doc)
 
 
 if __name__ == "__main__":

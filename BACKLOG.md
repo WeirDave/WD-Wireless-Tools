@@ -5,10 +5,10 @@ history and GitHub Releases.
 
 Priorities: **P1** = blocking · **P2** = wanted · **P3** = future enhancement.
 
-Last reviewed against **v2.145.0**, 2026-09-19, and item 8 closed against
-v2.146.0 the same day. Every item below was opened in the code and checked;
-what each check found is recorded on the item, including where the check
-found the item itself was wrong.
+Last reviewed against **v2.156.0**, 2026-09-20. Every item below was opened in
+the code and checked; what each check found is recorded on the item, including
+where the check found the item itself was wrong. The pass before this one was
+against v2.145.0 on 2026-09-19.
 
 **Items 2, 3, 5, 6, 7 and 9 were closed on 2026-09-20 in v2.153.0**, and item 4
 dropped from P1 to P3, because the destructive and sharing surfaces it was
@@ -29,7 +29,55 @@ one.
 is named by a test, and the count is held at zero by
 `tests/test_every_cloud_action_is_tested.py`.
 
-> **What the 2026-09-21 pass found.** The previous paragraph here said
+**Items 10 and 11 closed in v2.156.0**, which emptied this list - and then the
+same session opened **item 12** and it is not empty any more. The audit
+document's last open finding is closed and the release ZIP no longer carries
+`docs/audits/` or `docs/reverse-engineering/`; what replaced them is a coverage
+gap found by tripping over it.
+
+**What that does and does not mean.** Eleven entries are closed; the previous
+two passes both wrote "nothing is open" at exactly this point and were wrong
+within hours, both times about something that had never been written down. So
+this pass went looking outside the list on purpose, and found four things -
+one of which is item 12 and is open:
+
+* **A security review of the whole server surface**, not of a diff. Two
+  low-severity findings, both fixed in v2.156.0 - the release extractor checked
+  containment with a string prefix where the rest of the codebase asks
+  `relative_to`, and `tools/reveal.py` stated a reason for its own safety that
+  was false. Everything else held: the loopback bind, the Host and Origin
+  checks, the custom-header requirement on every state-changing route, the
+  encrypted cookie store, and the escaping on every interpolation into markup.
+* **The User Guide promised backups in three places.** Backups were removed
+  from the whole suite in v2.141.0 and `cloud.js` was corrected then;
+  `docs/USER_MANUAL.md` was not, and went on telling a reader a copy is kept
+  while a later section of the same document said there is none. The guard for
+  that promise read one file, which is backlog item 9's shape exactly, one
+  document further out. `tests/test_the_manual_promises_no_backup.py` widens
+  it.
+
+* **The first attempt at the first of those two fixes was worse than the bug**,
+  and the reason it survived is item 12. `zip_update` - the one function that
+  replaces a user's install - had no test at all, so a variable shadowing that
+  pointed the whole install at the temp directory passed a green suite, and the
+  test written beside it asserted the source string and therefore pinned the
+  defect rather than catching it. `TheRealUpdateRunsTests` runs the function
+  now, and `scripts/audit_functions_never_named_by_a_test.py` asks the same
+  question of everything else.
+
+* **The suite had been printing four `SyntaxWarning`s above the dots**, and
+  `<unknown>:49` names neither a file nor a line, so nobody could have acted on
+  it without going looking. Two were JavaScript regexes in non-raw Python
+  strings - which work today and become a `SyntaxError` in a future Python, at
+  which point those two files stop importing and take the suite with them.
+  `tests/test_no_syntax_warnings.py` compiles every tracked file and names what
+  it finds.
+
+**None of the four was on this list, and none could have been found by
+reading it.** That is the standing instruction for the next pass: open the
+code, then go and read whatever this file summarises rather than contains.
+
+> **What the 2026-09-20 pass found.** The previous paragraph here said
 > "Nothing is open", and said so while explaining why *this* time it could be
 > trusted. It was wrong within hours, and it was wrong in the way this file
 > keeps being wrong: not about the entries it contains, but about the ones it
@@ -112,6 +160,56 @@ will point at something else.
 ---
 
 ## Open work
+
+**One entry is open: item 12.** Everything else under this heading is struck
+through with the version that closed it, and those are kept rather than deleted
+because the reasoning on them is what stops the same item being re-opened from
+scratch - several were re-derived once already, and two were re-derived
+*wrongly*, which is what the record on each one prevents.
+
+New work goes here as an entry of the same shape: what the tool does now, what
+it should do, and what "done" is.
+
+### Test coverage
+
+#### 12. P2 - Thirty-two public functions in `tools/` are named by no test
+
+**Found the hard way on 2026-09-20**, in the same session that closed items 10
+and 11. `zip_update` - the one function that replaces a user's install - had no
+test of any kind. A variable shadowing that pointed the entire install at the
+temp directory therefore passed a suite of 2853 tests, and the test written
+beside the fix asserted the *source string* and so pinned the defect rather
+than catching it.
+
+`TheRealUpdateRunsTests` in `tests/test_release_archive_paths_are_contained.py`
+covers that one function now. The question it raised is the item:
+
+    python scripts/audit_functions_never_named_by_a_test.py
+
+**32 of the public functions in `tools/` are mentioned by no test at all.**
+Three of those are reachable from `server.py`, which means a browser can call
+them:
+
+* `esx_trimmer.api_trim_to` - PlanTrim's server entry point
+* `housekeeping.stop_process` - stops a process by pid, from the dev toolbar
+* `settings.migrate_legacy` - runs at startup, and a migration that goes wrong
+  loses settings silently, which is the shape that is hardest to notice
+
+The rest are worth reading rather than acting on in bulk. Several are certainly
+executed indirectly - the script is a **name search, not coverage**, which is
+the trade that lets it run in under a second - so the list is a prompt, and the
+question to ask of each line is "if this were wrong, what would fail?". The
+answer "nothing" is the one to act on.
+
+**Done** is: the three server-reachable ones driven by a test that runs them,
+the remaining 29 read once and each either covered or knowingly left, and a
+ratchet in the shape of `tests/test_a_test_must_be_able_to_fail.py` - a
+baseline that can come down and not go up - so the next function that ships
+without one fails the suite instead of waiting for somebody to notice.
+
+**Do not answer this with a test that names the function.** That is what the
+script measures and it is the weakness it inherits: a name in a comment counts.
+The point is a test that executes it.
 
 ### Cloud Manager
 
@@ -222,7 +320,7 @@ selection away from what the bulk action already does.
 
 > **This item called A33 "the last finding" and it was not.** The audit has an
 > **A34**, which no revision of this entry ever mentioned - see item 10, opened
-> on 2026-09-21. The heading said "last" because the previous revision did, and
+> on 2026-09-20. The heading said "last" because the previous revision did, and
 > each pass then checked the findings the *item* listed rather than the ones
 > the audit has.
 
@@ -368,14 +466,14 @@ whole thing was verified by putting the real v2.150.0 defect back into
 The Cloud Manager guard stays. Two checks of one property, with different
 corpora, is a state worth noticing rather than an argument for deleting one.
 
-#### 10. P3 — A34, the last audit finding, was never on this list
+#### 10. ~~P3 — A34, the last audit finding, was never on this list~~ — closed in v2.156.0
 
 `docs/audits/cloud-manager-2026-09-18.md` has an **A34: tests that pin wording
 rather than property**. Item 4 tracked A0 to A33 and closed on A33; A34 has
 never appeared in this file.
 
 **It is smaller than the audit says, and half of what it says is no longer
-true.** Measured on 2026-09-21 with `scripts/audit_source_string_tests.py`:
+true.** Measured on 2026-09-20 with `scripts/audit_source_string_tests.py`:
 
 | file the audit names | then | now |
 | --- | --- | --- |
@@ -395,14 +493,25 @@ _the_upload`, `test_a_failed_upload_deletes_nothing` and
 the ordering properly. So what is left is a documentation edit that can turn CI
 red, not a safety property with nothing behind it.
 
-**Done** is: those two `__doc__` assertions replaced by something that fails
-when the *ordering* changes rather than when the prose does, and
-`modals_are_self_sufficient` converted the way `test_cloud_sync_direction.py`
-was - render, pull the handler out of the markup, run it. The
-per-file numbers in `tests/source_string_assertion_baseline.json` come down as
-that happens; they are the measurement.
+**Both halves are done.** The two `__doc__` assertions are replaced by
+assertions about the *order of the calls*, and the rename dialog is driven
+rather than read - `tests/test_cloud_rename_dialog_driven.py` runs
+`startRename` against a readable DOM and asserts what it puts on screen.
+`modals_are_self_sufficient` went from 15 source-string assertions to 5, and
+the suite total from 342 to 317.
 
-#### 11. P3 — The release ZIP carries the internal engineering documents
+**The conversion found two things the source checks could not**, which is the
+argument for doing it rather than deleting the tests:
+
+* `test_the_old_project_is_deleted_only_after_the_upload` asserted that a
+  delete happened and that an upload happened - both true of a delete-first
+  implementation that succeeds. Only the failure-path tests would have caught
+  the order, and the test *named* for it would not have. It records the call
+  sequence now, and a mutation that skips the verification fails it.
+* Nothing checked that opening the rename dialog fills the preview. Removing
+  that call passed the entire file.
+
+#### 11. ~~P3 — The release ZIP carries the internal engineering documents~~ — closed in v2.156.0
 
 `scripts/build_release.py` ships all of `docs/` except `docs/releases`, so
 every install folder gets `docs/audits/cloud-manager-2026-09-18.md` (718 lines
@@ -422,8 +531,12 @@ reads every tracked file, so there is nothing about his sites or colleagues in
 either. The repository is public, so none of it is secret either. It is simply
 not for the person who downloaded a wireless tool.
 
-Adding `"audits"` and `"reverse-engineering"` to `EXCLUDED_DIRECTORY_PARTS`
-does it, alongside the test that pins the payload.
+Done by adding `"audits"` and `"reverse-engineering"` to
+`EXCLUDED_DIRECTORY_PARTS`. `tests/test_release_payload.py` holds it, and holds
+it as a *shape* rather than a filename list: **anything filed in a subdirectory
+of `docs/` is internal until somebody says otherwise**. A list of allowed names
+fails every time the manual gains a companion; this fails when a directory
+appears, which is the thing that has now twice turned out to be internal.
 
 ---
 

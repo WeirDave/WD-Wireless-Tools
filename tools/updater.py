@@ -1053,9 +1053,32 @@ def zip_update(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
         extract = staging / "extracted"
         try:
             with zipfile.ZipFile(zip_path) as zf:
+                # NOT `root`: that name is this function's *install* root,
+                # the folder the payload is copied into further down. Binding
+                # it here pointed the install at the staging folder, which
+                # `finally` then deleted - an update that reported success and
+                # changed nothing.
+                extract_root = extract.resolve()
                 for member in zf.namelist():
                     target = (extract / member).resolve()
-                    if not str(target).startswith(str(extract.resolve())):
+                    # `relative_to` rather than a string prefix. The prefix form
+                    # this had accepts a *sibling* whose name merely starts with
+                    # the root's: a member of `../extracted-elsewhere/x`
+                    # resolves outside `extracted` and still satisfies
+                    # `startswith(".../extracted")`. Every other containment
+                    # check in this codebase already asks it this way -
+                    # `_is_inside` in folder_organizer, `_assert_inside` in
+                    # cloud_manager - and this was the one that did not.
+                    #
+                    # Not independently exploitable: the archive is checksummed
+                    # against the .sha256 published beside it, so getting a
+                    # hostile member this far means already controlling the
+                    # release, and at that point the payload can be hostile
+                    # without any path trick. It is still the wrong question to
+                    # be asking, and the right one costs nothing.
+                    try:
+                        target.relative_to(extract_root)
+                    except ValueError:
                         raise UpdateError("Release archive contains an unsafe path.")
                 zf.extractall(extract)
         except zipfile.BadZipFile:

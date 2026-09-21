@@ -89,8 +89,10 @@ answer.
 | Produce installer-ready documents | [Report](#report) | Last, once the design is done |
 
 > **Before a bulk operation on real work:** every tool that changes files shows
-> you a preview first, and most keep a backup. Read the preview. That is what
-> it is for.
+> you a preview first. **Nothing keeps a copy of a file before overwriting it**
+> — see [What happens to a file that gets replaced](#what-happens-to-a-file-that-gets-replaced)
+> for why, and for what stands in its place. Read the preview. That is what it
+> is for.
 
 ---
 
@@ -205,9 +207,10 @@ cloud project rather than updating the first, and you end up reconciling two.
 So: [Cloud Manager](#cloud-manager) → find the project → **Cloud → Local**, and
 work from what comes down.
 
-Cloud Manager keeps a backup of the local file it replaces, in a `backups`
-folder rather than beside your live projects, so the copy you just overwrote is
-recoverable. See [What happens to a file that gets replaced](#what-happens-to-a-file-that-gets-replaced).
+Your local file is replaced by the copy Ekahau is holding, and **no second
+copy is kept — the cloud one is it**. It is still up there afterwards, so
+pulling again puts you back where you were. See
+[What happens to a file that gets replaced](#what-happens-to-a-file-that-gets-replaced).
 
 ### 10. Run the report — Report
 
@@ -427,7 +430,9 @@ cloud name. Renaming the file on disk changes only the first of those.
   pair together.
 - **Fix names inside files** sets the project name stored inside each selected
   `.esx` to match its cloud project. This is what clears a "name difference" on a
-  pair that is genuinely the same project. Every file is backed up first.
+  pair that is genuinely the same project. Each file is rewritten in place — built
+  in a temporary file and renamed over the top, so it is either entirely the old
+  one or entirely the new one and never half of either. No second copy is kept.
 - **Cloud → Local** and **Local → Cloud** copy names between matched rows in the
   direction you choose.
 
@@ -526,6 +531,35 @@ directions available; you can undo that from the badge in the middle column.
 A pair carrying Ekahau's own id, or one you confirmed yourself, needs no
 confirmation and moves without a dialog.
 
+### When both sides have changed
+
+Two dates cannot tell you whether *both* copies were edited since they last
+agreed. They only say which is newer, and the newer one being newer is exactly
+what you would see either way.
+
+So the tool keeps a record, on this machine, of what a pair looked like the
+last time it made the two sides identical — written whenever you pull a copy
+down or replace a cloud project. With that, four answers fall out instead of
+two:
+
+| cloud moved? | local moved? | what it says |
+| --- | --- | --- |
+| no | no | in sync |
+| yes | no | cloud changed — safe to pull |
+| no | yes | local changed — safe to push |
+| yes | yes | **diverged** |
+
+A **diverged** pair is left out of **⇅ Sync everything** entirely, and the
+confirmation names it and says that copying either way would discard somebody's
+work. **Nothing resolves a divergence for you**, deliberately: merging two
+`.esx` files is not something this tool can do, and picking a side silently is
+the one outcome worth refusing. Use **Check what differs** on the row to see
+what actually changed, then decide.
+
+The record is per installation and is keyed on Ekahau's project id, so it
+survives a rename on either side. A pair the tool has never synced reads as
+*unknown* rather than as agreeing.
+
 ### Sync everything
 
 **⇅ Sync everything** needs no selection, which is the point. It works out for
@@ -552,6 +586,44 @@ confirms a destination per row, auto-filled where the site is recognisable, and
 each move is queued as its own card with its own retry. A project whose local
 and cloud copies are matched moves **both** sides, so the pair survives the
 move.
+
+### Merge several folders into one
+
+Tick the local folders and use **Merge folders into one…** under **Move,
+share, mark, overwrite** in the selection bar. Pick the folder everything
+should end up in, read the file list, then confirm — nothing moves until you
+do. The **Merge** action on a single row is unchanged and still there.
+
+The file list is grouped by the folder each file came from, and every file has
+a tick you can clear to leave it where it is. Where a file already exists in
+the destination, the rule at the top of the dialog decides: keep the newer,
+keep both (the older gets a date stamp), or skip.
+
+**Where two of the folders you picked carry the same file, the list says so
+before anything moves** — marked *also in "…", which moves first*. Merging
+the folders one at a time cannot show you this, because at that moment neither
+copy is in the destination yet and both look clean. Under *keep newer* such a
+pair keeps **both** copies, because there is no file to compare against.
+
+A folder that cannot be merged — missing, or the destination itself — is named
+and left out rather than stopping the run, and a folder that fails part way
+through is named in the result.
+
+### Mark a project External, or mark it as yours
+
+The **External** count and filter work from the owner recorded on the project.
+That answers whose account it sits in, which is not always the same question as
+whose work it is — a project can arrive with no owner at all, and when the
+account comes back without a signed-in user nothing looks external.
+
+Tick the projects and use **Mark as External…** or **Mark as mine…** under
+**Move, share, mark, overwrite**. A marked row carries a **Marked External** or
+**Marked mine** badge in the middle column; click the badge to take the mark
+off. The counts, the filters and the row striping all follow it.
+
+**Nothing is written to Ekahau Cloud or to any file on disk.** The mark is a
+note this installation keeps about how you read the list, which is why it works
+on a project somebody else owns.
 
 ### Share a project with people
 

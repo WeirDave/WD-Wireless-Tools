@@ -52,140 +52,27 @@ CSS = (ROOT / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
 
 
 class TheRenameDialogStandsOnItsOwnTests(unittest.TestCase):
+    """Moved to `tests/test_cloud_rename_dialog_driven.py` in v2.156.0.
 
-    def setUp(self):
-        start = CLOUD_JS.index("function startRename(")
-        self.start_rename = CLOUD_JS[start:CLOUD_JS.index(
-            "\n/* The site or folder this thing sits in", start)]
+    This class held fifteen assertions against the *text* of `cloud.js`,
+    `cloud.html` and `wd-tools.css` - `assertIn('id="renameWhat"', CLOUD_HTML)`,
+    `assertIn("Folder / site name", start_rename)`, and so on. It is the file
+    the 2026-09-18 audit named first under **A34, tests that pin wording rather
+    than property**.
 
-    @staticmethod
-    def body(name):
-        """The source of one function, by name."""
-        fn = CLOUD_JS[CLOUD_JS.index("function %s(" % name):]
-        return fn[:fn.index("\n}")]
+    The audit was right, and the reason is worth keeping where the old tests
+    were: every one of those passes on an element nothing writes to and on a
+    label built into a string that is never assigned. They describe a dialog
+    that may or may not exist.
 
-    def test_it_says_what_is_being_changed(self):
-        """His phrase, and the right spec."""
-        self.assertIn('id="renameWhat"', CLOUD_HTML)
-        self.assertIn("You are renaming", self.start_rename)
+    `startRename` is run against a readable DOM now, and the assertions are
+    about what it puts on screen. The conversion found something the source
+    checks could not: nothing had ever checked that opening the dialog fills
+    the preview, so deleting that call passed the whole file.
 
-    def test_it_shows_where_the_thing_lives(self):
-        """The specific fact he was trying to read off the greyed-out list."""
-        self.assertIn("_renameContainerName", self.start_rename)
-
-    def test_the_folder_and_the_current_name_are_both_labelled_facts(self):
-        """"folder / site name" - his own answer to which name he meant.
-
-        Both are on screen at rest, each under a label of its own. The folder
-        used to be a lowercase aside on the end of the name line, which is
-        where a fact goes when it has been thought of as context rather than
-        as the string he is trying to type.
-        """
-        self.assertIn("Folder / site name", self.start_rename)
-        self.assertIn("Cloud site", self.start_rename)
-        for key in ("Current file name", "Current folder name",
-                    "Current project name", "Current site name"):
-            self.assertIn(key, self.start_rename)
-        self.assertIn("rename-what-key", self.start_rename)
-        self.assertIn("rename-what-folder", self.start_rename)
-        self.assertIn("rename-what-name", self.start_rename)
-
-    def test_the_current_name_carries_its_extension(self):
-        """What is on disk is `<name>.esx`, so that is what is shown."""
-        self.assertIn("name + suffix", self.start_rename)
-        self.assertIn(".esx", self.body("_renameSuffix"))
-
-    def test_a_local_item_shows_its_full_path(self):
-        """Two sites can own a folder of the same name; the path settles it."""
-        self.assertIn("Full path", self.start_rename)
-        self.assertIn("rename-what-path", self.start_rename)
-
-    def test_nothing_in_the_dialog_is_truncated(self):
-        """"it would be better if it was easily readable and lengthy than if
-        it's brief." The dialog is widened rather than the strings shortened.
-        """
-        self.assertIn(".modal.modal-rename", CSS)
-        self.assertIn('class="modal modal-rename"', CLOUD_HTML)
-        block = CSS[CSS.index(".rename-what {"):CSS.index(".rename-insert {")]
-        self.assertNotIn("text-overflow", block)
-        self.assertNotIn("white-space: nowrap", block)
-        self.assertIn("overflow-wrap: anywhere", block)
-
-    def test_the_dialog_does_not_judge_the_name_he_types(self):
-        """The apparatus he cut. "No just skip that idea for now, I just need
-        you to add the site name to the rename modal."
-
-        Two passes read more into "folder / site name" than was there - first
-        that the file name should equal the folder name, then a whole
-        prefix-and-descriptor scheme - and both are gone. The dialog shows him
-        what he asked to see and gets out of the way.
-        """
-        for gone in ("_renameMatch", "_renameMatchState", "_renameSplit",
-                     "_renameUsePrefix", "_renameDescriptor", "_renameSeparator"):
-            with self.subTest(gone=gone):
-                self.assertNotIn(gone, CLOUD_JS)
-        self.assertNotIn("renameMatch", CLOUD_HTML)
-        self.assertNotIn("rename-match", CSS)
-
-    def test_only_one_thing_is_offered_to_click(self):
-        """One button, doing the one thing he asked for. The second one went
-        with the scheme it belonged to."""
-        self.assertEqual(1, self.start_rename.count("rename-insert-btn"))
-        self.assertIn("Insert &ldquo;", self.start_rename)
-
-    def test_the_field_is_prefilled_and_the_caret_waits_at_the_end(self):
-        """Not select-all. He is adding to a name, not replacing one.
-
-        "I had a whole bunch that were named with just the prefix and didn't
-        add additional information on facilities, and now I need to do that."
-        With the whole value selected, the first character typed deletes the
-        prefix that was already correct.
-        """
-        self.assertIn("input.value = name;", self.start_rename)
-        self.assertNotIn("input.select();", self.start_rename)
-        self.assertIn("input.setSelectionRange(input.value.length, input.value.length);",
-                      self.start_rename)
-
-    def test_the_container_name_can_be_inserted_not_just_read(self):
-        """Showing it saves him nothing if he still has to type it."""
-        self.assertIn('id="renameInsert"', CLOUD_HTML)
-        self.assertIn("_renameInsert(", CLOUD_JS)
-        insert = self.body("_renameInsert")
-        self.assertIn("selectionStart", insert)
-        self.assertIn("setSelectionRange", insert)
-
-    def test_inserting_adds_to_the_name_rather_than_replacing_it(self):
-        """Caught by driving it: the first version wiped the name.
-
-        The field opens with everything selected so he can retype. That made
-        the insert button replace the selection - turning "Survey 30" into
-        "North Campus" - which is the opposite of "I want to use the folder
-        name as part of the name".
-        """
-        insert = self.body("_renameInsert")
-        self.assertIn("wholeThing", insert)
-        self.assertIn("start = end = value.length", insert)
-
-    def test_there_is_a_live_preview_of_the_result(self):
-        self.assertIn('id="renamePreview"', CLOUD_HTML)
-        self.assertIn('oninput="_renamePreview()"', CLOUD_HTML)
-        preview = self.body("_renamePreview")
-        self.assertIn("rename-preview-from", preview)
-        self.assertIn("rename-preview-to", preview)
-
-    def test_the_preview_shows_the_extension_for_a_local_file(self):
-        """He renames the file on disk; the suffix is part of the outcome."""
-        self.assertIn(".esx", self.body("_renameSuffix"))
-        self.assertIn("renameTarget.suffix", self.body("_renamePreview"))
-
-    def test_an_unchanged_or_empty_name_says_so(self):
-        preview = self.body("_renamePreview")
-        self.assertIn("Unchanged", preview)
-        self.assertIn("Enter a name", preview)
-
-    def test_a_site_is_not_described_as_being_inside_something(self):
-        fn = self.body("_renameContainerName")
-        self.assertIn("if (kind === 'sites') return '';", fn)
+    The rest of this file - the delete dialog, the filter legends, the focus
+    rings - is unchanged and still here.
+    """
 
 
 class IconButtonsSayWhatTheyDoTests(unittest.TestCase):
