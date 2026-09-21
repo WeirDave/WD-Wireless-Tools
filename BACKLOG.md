@@ -15,15 +15,18 @@ dropped from P1 to P3, because the destructive and sharing surfaces it was
 about now have tests that execute them and what is left of its list is reads
 and bookkeeping.
 
-**Item 8 is the open work that is left, and how it got here is the point.** It
-came from a branch that was finished and never pushed - two commits sitting in
-a worktree whose session had gone. That is the same fault as an unreleased
+**Item 8 closed in v2.154.0, and how it got here is worth keeping.** It came
+from a branch that was finished and never pushed - two commits sitting in a
+worktree whose session had gone. That is the same fault as an unreleased
 version wearing different clothes: finished work that is invisible to everyone,
 including to the pass a few hours later that recorded this file as having no
 open items at all. The branch was landed rather than discarded. **A worktree
 that looks abandoned is not evidence that what is in it is finished with** -
 `git log origin/main..<branch>` is, and it is worth running before removing
 one.
+
+**That leaves item 4, at P3, and nothing else.** It is coverage breadth across
+thirteen read-and-bookkeeping actions, none of which can lose anything.
 
 **Item 9 was filed under "Decisions already made", which is the wrong section
 for open work**, and it was moved up here in the same pass. That section exists
@@ -421,55 +424,70 @@ Two things came out of the work that the item did not ask for:
 
 ### Suite-wide
 
-#### 8. P2 — 831 lines of CSS still live in eight pages rather than the stylesheet
+#### 8. ~~P2 — 831 lines of CSS still live in eight pages rather than the stylesheet~~ — shipped in v2.154.0
 
-`style="..."` attributes were the small half of this and are dealt with: ten of
-the fifteen moved to utility classes in v2.146.1. The real remainder is eight
-embedded `<style>` blocks — 463 selectors, 831 lines — in `ap-rename.html`,
-`capacity.html`, `plantrim.html`, `prep.html`, `settings.html`, `setup.html`,
-`walls.html` and `pages/landing.html`.
+All eight `<style>` blocks are in `wd-tools.css` now — 841 lines out of
+`ap-rename`, `capacity`, `plantrim`, `prep`, `settings`, `setup`, `walls` and
+the landing page. Nothing about any page changed on screen: **every element on
+all fifteen pages computes to exactly what it did before, at 1920 and 1366, in
+Chrome, Edge and Firefox** — 90 captures, zero differences.
 
-Measured rather than assumed, because the obvious fear turned out not to be the
-real one. Only **four** selectors collide with `wd-tools.css` (`html`,
-`body.wd-resizing`, `body.wd-resizing *`, `body.tool-plantrim`), so the move is
-more tractable than its size suggests.
+**Moved verbatim, and appending is the safety property.** No rule was
+reformatted, reordered or merged. An embedded block sits after the `<link>` in
+document order, so a page rule already beat a stylesheet rule of equal
+specificity; appended to the end of `wd-tools.css` it still does. Anything
+tidier — sorting, deduplicating, scoping by body class — changes specificity or
+order and puts a tie in play, and a flipped tie is the two-pixel break that
+started this.
 
-**The trap is elsewhere, and it is the reason this entry exists.** Eleven
-selectors are defined in *both* `settings.html` and `setup.html`, and six of
-them have **drifted — deliberately**. Setup is the first-run wizard and is
-scaled up throughout: larger type, more padding, bigger hit areas. Merging the
-two into one stylesheet rule, which is exactly what "move the CSS out of the
-pages" invites, silently shrinks Setup or inflates Settings.
+**The six drifted selectors are scoped to `.setup-wrap`.** Both pages carry
+`body.tool-home`, so the body class could not separate them; the wrapper Setup
+already had could. Three of the six match elements that JavaScript builds into
+`.sf-list` and are never in the initial DOM, which is why the verification has a
+rule-level half at all.
 
-| selector | Settings | Setup |
-|---|---|---|
-| `.cloud-status` | gap 10px, padding 10px 12px, radius 6px | gap 12px, padding 14px 18px, radius 8px |
-| `.cloud-status .dot` | 8px | 10px |
-| `.sf-item` | gap 8px, padding 8px 10px, radius 6px | gap 10px, padding 10px 14px, radius 8px |
-| `.sf-item input[type="text"]` | padding 6px 8px, radius 4px, 13px | padding 10px 12px, radius 6px, 15px |
-| `.sf-handle` | 16px | 20px |
-| `.sf-remove` | 16px, padding 2px 4px | 20px, padding 4px 6px |
+`tests/test_settings_and_setup_stay_different.py` is the guard, and it is the
+part worth keeping: it renders the real list markup into each page's real
+container, measures both, and fails if Settings and Setup ever agree — in
+either direction. Removing the scope makes it fail in all three browsers,
+naming all nineteen properties that collapsed.
 
-The other five shared selectors are byte-identical and can merge freely. The six
-above need page-scoped selectors or distinct names — they are two components
-that happen to share a spelling, not one component defined twice.
+**The four selectors that collide with `wd-tools.css` were fewer than the entry
+thought, and the inline `style` attributes are untouched.** `body.wd-resizing`,
+`body.wd-resizing *` and `body.tool-plantrim` collide; appending keeps the page
+copy winning, as it did. The five inline attributes stay exactly where they
+were.
 
-**Two more things this pass has to respect.** An inline `style` attribute
-outranks every class selector, so one may be the only thing beating a
-higher-specificity page rule: `ap-rename.html`'s `flex:0 0 100px` sits under
-`.tool-aprename .ar-row > *` at (0,0,2,1) and broke when it was moved to a
-(0,0,1,0) utility. Three `margin-bottom:0` on `.prep-row` and one `margin-top`
-on `.lp-sub` are overridden by their own page's block for the same reason, and
-are the four of the original fifteen still in place. And an embedded block wins
-ties against the linked stylesheet on document order alone, so moving a rule
-into `wd-tools.css` can flip which one applies even with no selector change.
+**One thing the entry did not predict, and it would have made the check
+meaningless.** `pages/landing.html` links `assets/wd-tools.css` *relative to
+itself*, and the Pages build copies it to the site root with `assets/` beside
+it — so served from `web/pages/` that link 404s. Captured that way the page has
+no stylesheet at all, every element falls back to browser defaults, and two
+such captures agree perfectly whatever was done to the CSS. The harness stages
+the page the way it is really deployed.
 
-**The check that catches all of it** is not a screenshot comparison. Run a
-server on the baseline commit and one on the change, and compare
-`getComputedStyle` for every element on every page at 1920 and 1366, index
-aligned — the DOM shape is unchanged, so indices line up. The `ar-row` breakage
-above was two pixels in a full-page diff and unmissable in the computed styles.
+**Seventeen tests failed on the move and not one of them was testing
+behaviour.** They read a page's HTML looking for a CSS rule, because that is
+where the rule was when they were written. `tests/css_source.py` answers "what
+styles this page" instead, so the next move breaks nothing. Two of the
+seventeen were provenance rules — *"scoped to walls.html so the shared sheet
+stays out of this change"* — which recorded that some earlier change had not
+touched `wd-tools.css`. Reasonable of that change; not a rule about where CSS
+belongs, and this item is the decision that overrides them.
 
+Converting those tests took the source-string assertion count from **342 to
+327**.
+
+**The method, kept because it is the reusable part:**
+`scripts/capture_computed_styles.py` and `scripts/compare_computed_styles.py`
+run a server on each side and compare `getComputedStyle` for every element on
+every page, index aligned, plus every selector's declarations in cascade order.
+The second half is what covers elements that only exist once a file is loaded.
+Two mistakes in building it are worth not repeating: the page list must not be
+derived from the thing being changed — deriving it from "has a `<style>` block"
+emptied it the moment the move landed — and `<style>` is itself an element, so
+counting it makes every changed page differ by one and the comparison refuses
+before it looks at a property.
 ---
 
 ## Awaiting a decision, not work

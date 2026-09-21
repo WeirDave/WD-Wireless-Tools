@@ -231,11 +231,21 @@ class VerticalExtentMarkupTests(unittest.TestCase):
         self.assertIn("Height belongs to the wall type", js)
         self.assertIn("segmentsUsing", js)
 
-    def test_height_styles_are_not_in_the_shared_stylesheet(self):
-        """Scoped to walls.html so the shared sheet stays out of this change."""
-        shared = (ROOT / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
-        self.assertNotIn("wt-vert-mode", shared)
-        self.assertIn("wt-vert-mode", WALLS_HTML.read_text(encoding="utf-8"))
+    def test_height_styles_reach_the_page(self):
+        """This used to require the rules to be *absent* from the shared sheet.
+
+        That was never a property of the height UI. It recorded that the change
+        which added it had deliberately not touched `wd-tools.css` - a
+        reasonable thing to want of one change, and not a rule about where the
+        CSS belongs. Backlog item 8 moved every page's block into the shared
+        stylesheet in v2.154.0, so the old assertion asked for the opposite of
+        the design and failed on a change that moved no rule and altered no
+        computed value.
+
+        What is worth holding is that the rules exist and apply to Quick Walls.
+        """
+        from tests.css_source import css_for
+        self.assertIn("wt-vert-mode", css_for("walls.html"))
 
 
 if __name__ == "__main__":

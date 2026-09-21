@@ -20,6 +20,8 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from tests.css_source import css_for
+
 ROOT = Path(__file__).resolve().parent.parent
 AP_JS = ROOT / "web" / "assets" / "js" / "ap-rename.js"
 AP_HTML = ROOT / "web" / "ap-rename.html"
@@ -314,14 +316,14 @@ class TheSequenceIsArrangeable(unittest.TestCase):
         block = block[:block.index("WD.mountFolds")]
         self.assertIn("'dragover'", block)
         self.assertIn("'dragging'", block)
-        css = AP_HTML.read_text(encoding="utf-8")
+        css = css_for("ap-rename.html")
         self.assertIn(".ar-cseq-row.dragover", css)
         self.assertIn(".ar-cseq-row.dragging", css)
 
     def test_the_tag_looks_like_a_quick_walls_slot(self):
         """His words were "like the little tags" - matching them visually is
         half of not having to learn a second way to order things."""
-        css = AP_HTML.read_text(encoding="utf-8")
+        css = css_for("ap-rename.html")
         self.assertIn(".ar-cseq-edge", css)          # colour down the left edge
         self.assertIn("cursor:grab", css)
 

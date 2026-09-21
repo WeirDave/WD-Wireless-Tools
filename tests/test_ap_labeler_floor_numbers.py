@@ -28,6 +28,8 @@ import subprocess
 import unittest
 from pathlib import Path
 
+from tests.css_source import css_for
+
 ROOT = Path(__file__).resolve().parent.parent
 JS = ROOT / "web" / "assets" / "js" / "ap-rename.js"
 PAGE = ROOT / "web" / "ap-rename.html"
@@ -222,7 +224,7 @@ class TheWarningIsOnScreenAndSaysWhatToDo(unittest.TestCase):
 
     def test_the_element_exists_on_the_page(self):
         self.assertIn('id="arDupeWarn"', self.page)
-        self.assertIn(".ar-dupe-warn", self.page)
+        self.assertIn(".ar-dupe-warn", css_for("ap-rename.html"))
 
     def test_the_check_runs_on_every_update(self):
         self.assertIn("duplicateNames(S.preview)", self.body)

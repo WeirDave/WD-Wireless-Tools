@@ -1,7 +1,7 @@
 {
   "files": {
-    "test_ap_color_order.py": 21,
-    "test_ap_labeler_floor_numbers.py": 4,
+    "test_ap_color_order.py": 17,
+    "test_ap_labeler_floor_numbers.py": 3,
     "test_ap_notes_page.py": 5,
     "test_applog.py": 11,
     "test_bulk_bar_says_why.py": 2,
@@ -38,7 +38,7 @@
     "test_page_orientation.py": 17,
     "test_picker_dead_end.py": 4,
     "test_plan_detect.py": 6,
-    "test_plantrim_boxes.py": 29,
+    "test_plantrim_boxes.py": 20,
     "test_prep_says_it_even_when_idle.py": 4,
     "test_prep_trim_options.py": 7,
     "test_print_trailing_page.py": 3,
@@ -55,10 +55,10 @@
     "test_updater.py": 11,
     "test_user_dir_is_the_only_door.py": 2,
     "test_wall_audit_in_walls.py": 5,
-    "test_wall_height_ui.py": 7,
+    "test_wall_height_ui.py": 6,
     "test_wall_template_merge.py": 1,
     "test_walls_prefs_migration.py": 3
   },
   "note": "Per-file counts of assertions made against the text of a source file, as at the sweep that introduced this ratchet. Existing debt is tolerated; growth is not. Lower a number when you convert a test to one that executes - never raise one.",
-  "total": 342
+  "total": 327
 }

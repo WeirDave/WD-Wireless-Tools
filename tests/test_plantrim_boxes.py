@@ -19,6 +19,8 @@ import server
 from server import API_REQUEST_HEADER, app
 from tools import plantrim_store
 
+from tests.css_source import css_for
+
 ROOT = Path(__file__).resolve().parent.parent
 PLANTRIM_JS = ROOT / "web" / "assets" / "js" / "plantrim.js"
 PLANTRIM_HTML = ROOT / "web" / "plantrim.html"
@@ -188,9 +190,26 @@ class EditorMarkupTests(unittest.TestCase):
         self.assertIn("f.w !== here.w || f.h !== here.h", js)
 
     def test_styles_are_scoped_to_the_page(self):
-        shared = (ROOT / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
-        self.assertNotIn("ptb-stage", shared)
-        self.assertIn("ptb-stage", PLANTRIM_HTML.read_text(encoding="utf-8"))
+        """Scoped by selector now, rather than by which file they sit in.
+
+        This used to require `ptb-stage` to be absent from the shared sheet - a
+        record that the change adding it had left `wd-tools.css` alone, rather
+        than a rule about where the CSS belongs. Backlog item 8 moved every
+        page block into the shared stylesheet in v2.154.0.
+
+        Scoping is still real and still worth checking. It is the `ptb-` prefix
+        that does it, which is what keeps these rules off every other page now
+        that every page loads them.
+        """
+        css = css_for("plantrim.html")
+        self.assertIn("ptb-stage", css)
+        stray = [ln.strip() for ln in css.splitlines()
+                 if "ptb-" in ln and "{" in ln
+                 and not ln.lstrip().startswith(("/*", "*", "//"))
+                 and ".ptb-" not in ln and "body.tool-plantrim" not in ln]
+        self.assertEqual([], stray,
+                         "a PlanTrim rule that is not namespaced would now "
+                         "apply to every page: %s" % stray[:3])
 
     def test_boxes_are_not_written_into_the_esx(self):
         """The archive is Ekahau's format; our state lives beside the app.
@@ -587,8 +606,9 @@ class ActionVisibilityTests(unittest.TestCase):
         return out
 
     def test_the_action_row_is_pinned(self):
-        self.assertIn(".ptb-actions", self.html)
-        row = self.html[self.html.index(".ptb-actions {"):]
+        self.assertIn(".ptb-actions", css_for("plantrim.html"))
+        css = css_for("plantrim.html")
+        row = css[css.index(".ptb-actions {"):]
         self.assertIn("position: sticky", row[:300])
 
     def test_there_is_a_way_back_to_a_fitted_view(self):
@@ -597,15 +617,15 @@ class ActionVisibilityTests(unittest.TestCase):
 
     def test_the_stage_leaves_room_for_its_controls(self):
         """72vh put the action below the fold on his laptop."""
-        self.assertIn("min(58vh, 760px)", self.html)
-        self.assertNotIn("min(72vh, 900px)", self.html)
+        self.assertIn("min(58vh, 760px)", css_for("plantrim.html"))
+        self.assertNotIn("min(72vh, 900px)", css_for("plantrim.html"))
 
     def test_firefox_gets_a_findable_scrollbar(self):
-        self.assertIn("scrollbar-width: auto", self.html)
-        self.assertIn("scrollbar-color:", self.html)
+        self.assertIn("scrollbar-width: auto", css_for("plantrim.html"))
+        self.assertIn("scrollbar-color:", css_for("plantrim.html"))
 
     def test_the_wheel_does_not_chain_to_the_page(self):
-        self.assertIn("overscroll-behavior: contain", self.html)
+        self.assertIn("overscroll-behavior: contain", css_for("plantrim.html"))
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
@@ -1265,14 +1285,20 @@ class CursorTests(unittest.TestCase):
 
 class CursorMarkupTests(unittest.TestCase):
     def test_the_stage_starts_with_a_drawing_cursor(self):
-        html = PLANTRIM_HTML.read_text(encoding="utf-8")
-        self.assertIn(".ptb-stage canvas { cursor: crosshair; }", html)
+        self.assertIn(".ptb-stage canvas { cursor: crosshair; }",
+                      css_for("plantrim.html"))
 
     def test_the_pan_cursor_still_beats_the_inline_one(self):
         """Space-drag pans, and that reading has to win over the resize cursor
-        the pointer would otherwise be showing."""
-        html = PLANTRIM_HTML.read_text(encoding="utf-8")
-        self.assertIn(".ptb-stage.can-pan canvas { cursor: grab !important; }", html)
+        the pointer would otherwise be showing.
+
+        The `!important` is what wins it: the resize cursor is set inline on
+        the canvas, and an inline style beats any class selector without one.
+        Moving the rule into the shared stylesheet does not change that -
+        `!important` is settled before document order ever comes into it.
+        """
+        self.assertIn(".ptb-stage.can-pan canvas { cursor: grab !important; }",
+                      css_for("plantrim.html"))
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")

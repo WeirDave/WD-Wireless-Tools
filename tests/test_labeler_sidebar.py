@@ -20,6 +20,8 @@ import re
 import unittest
 from pathlib import Path
 
+from tests.css_source import rule_for
+
 ROOT = Path(__file__).resolve().parent.parent
 AP_HTML = ROOT / "web" / "ap-rename.html"
 AP_JS = ROOT / "web" / "assets" / "js" / "ap-rename.js"
@@ -32,23 +34,29 @@ class TheSettingsScrollAndTheControlsStay(unittest.TestCase):
     def setUp(self):
         self.html = AP_HTML.read_text(encoding="utf-8")
 
+    # These rules lived in ap-rename.html's own <style> block until v2.154.0
+    # moved every page block into wd-tools.css. `rule_for` asks where the
+    # browser would look rather than where the rule used to sit, which is what
+    # these were always about - see tests/css_source.py.
     def test_the_sidebar_itself_no_longer_scrolls(self):
         """A single scrolling column is what stopped the preview being
         bounded, so the column holds two regions instead."""
-        rule = re.search(r"\.tool-aprename \.ar-sidebar \{[^}]*\}", self.html).group(0)
+        rule = rule_for("ap-rename.html", ".tool-aprename .ar-sidebar")
+        self.assertTrue(rule, "no rule for .tool-aprename .ar-sidebar anywhere")
         self.assertIn("overflow:hidden", rule)
         self.assertNotIn("overflow-y:auto", rule)
 
     def test_the_scroll_region_can_actually_shrink(self):
         """Without min-height:0 a flex child is sized by its content and the
         overflow never engages - which is the whole bug, one level down."""
-        rule = re.search(r"\.tool-aprename \.ar-side-scroll \{[^}]*\}", self.html).group(0)
+        rule = rule_for("ap-rename.html", ".tool-aprename .ar-side-scroll")
+        self.assertTrue(rule, "no rule for .tool-aprename .ar-side-scroll anywhere")
         self.assertIn("min-height:0", rule)
         self.assertIn("overflow-y:auto", rule)
 
     def test_the_preview_is_bounded_so_it_scrolls_instead_of_growing(self):
-        rule = re.search(r"\.tool-aprename \.ar-side-dock \.ar-preview \{[^}]*\}",
-                         self.html).group(0)
+        rule = rule_for("ap-rename.html", ".tool-aprename .ar-side-dock .ar-preview")
+        self.assertTrue(rule, "no rule bounding the docked preview anywhere")
         self.assertIn("max-height", rule)
 
     def test_the_numbering_controls_are_docked_not_scrolled(self):
@@ -62,7 +70,8 @@ class TheSettingsScrollAndTheControlsStay(unittest.TestCase):
         self.assertIn('id="arPreview"', dock)
 
     def test_the_preview_header_stays_put_while_the_rows_scroll(self):
-        rule = re.search(r"\.tool-aprename \.ar-preview th\s*\{[^}]*\}", self.html).group(0)
+        rule = rule_for("ap-rename.html", ".tool-aprename .ar-preview th")
+        self.assertTrue(rule, "no rule for the preview header anywhere")
         self.assertIn("position:sticky", rule)
 
 
