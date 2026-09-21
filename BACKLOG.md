@@ -25,21 +25,38 @@ that looks abandoned is not evidence that what is in it is finished with** -
 `git log origin/main..<branch>` is, and it is worth running before removing
 one.
 
-**Item 4 closed in v2.155.0, and with it the 2026-09-18 whole-tool audit.**
-Every one of Cloud Manager's 51 server actions is named by a test, and the
-count is held at zero by `tests/test_every_cloud_action_is_tested.py`.
+**Item 4 closed in v2.155.0.** Every one of Cloud Manager's 51 server actions
+is named by a test, and the count is held at zero by
+`tests/test_every_cloud_action_is_tested.py`.
 
-**Nothing is open.** That has been said in this file before and was wrong twice
-in two days - once because an item's work had shipped forty-five versions
-earlier and the entry never caught up, once because finished work was sitting
-unpushed in a worktree and was therefore invisible to the pass that looked. So
-it is worth writing down what makes this claim different: every closed entry
-below names the release it shipped in, and the two claims that can rot on their
-own - the action count and the source-string debt - are each held by a test
-rather than by this paragraph.
+> **What the 2026-09-21 pass found.** The previous paragraph here said
+> "Nothing is open", and said so while explaining why *this* time it could be
+> trusted. It was wrong within hours, and it was wrong in the way this file
+> keeps being wrong: not about the entries it contains, but about the ones it
+> does not.
+>
+> **Item 4 said the Cloud Manager audit was finished. The audit has an A34,
+> and it is open.** Every one of the nine entries below was verified against
+> the code and every claim in them holds - the code was opened, not the entry
+> re-read. What none of them could show is a finding that was never written
+> down here at all. Item 4 listed A0 through A33 and stopped, because that is
+> what the *item* listed the last time somebody copied it forward.
+>
+> **The audit document says so too, and contradicts itself doing it.** Its
+> Status section reads "Every numbered finding is closed" and then, two
+> paragraphs later, "One thing is not finished: A33" - A33 having closed in
+> v2.148.0. Both halves stale, in opposite directions, in the section whose
+> whole job is to be read instead of the document.
+>
+> **The lesson is not "check the entries".** That was done, and the entries
+> were right. It is that a backlog is a list of what somebody remembered to
+> write down, so a pass has to go looking somewhere else - the audit documents,
+> the release payload, the things marked unfinished in code - for the work that
+> never made it onto the list.
 
-**The next pass should still open the code.** An entry that has been right for
-a month is not evidence; it is an entry nobody has checked for a month.
+**The next pass should still open the code**, and should also read anything
+this file *summarises* rather than contains. An entry that has been right for a
+month is not evidence; it is an entry nobody has checked for a month.
 
 **Item 9 was filed under "Decisions already made", which is the wrong section
 for open work**, and it was moved up here in the same pass. That section exists
@@ -201,7 +218,13 @@ the owner comparison cannot, and there is a test for exactly that state.
 site is external" rule, and no way to mark by owner address. Both are a
 selection away from what the bulk action already does.
 
-#### 4. ~~P3 — The Cloud Manager audit's last finding is down to breadth~~ — closed in v2.155.0
+#### 4. ~~P3 — The Cloud Manager audit's coverage finding~~ — closed in v2.155.0
+
+> **This item called A33 "the last finding" and it was not.** The audit has an
+> **A34**, which no revision of this entry ever mentioned - see item 10, opened
+> on 2026-09-21. The heading said "last" because the previous revision did, and
+> each pass then checked the findings the *item* listed rather than the ones
+> the audit has.
 
 The whole-tool audit of 2026-09-18 is in
 `docs/audits/cloud-manager-2026-09-18.md`, with the evidence per item, each
@@ -344,6 +367,63 @@ whole thing was verified by putting the real v2.150.0 defect back into
 
 The Cloud Manager guard stays. Two checks of one property, with different
 corpora, is a state worth noticing rather than an argument for deleting one.
+
+#### 10. P3 — A34, the last audit finding, was never on this list
+
+`docs/audits/cloud-manager-2026-09-18.md` has an **A34: tests that pin wording
+rather than property**. Item 4 tracked A0 to A33 and closed on A33; A34 has
+never appeared in this file.
+
+**It is smaller than the audit says, and half of what it says is no longer
+true.** Measured on 2026-09-21 with `scripts/audit_source_string_tests.py`:
+
+| file the audit names | then | now |
+| --- | --- | --- |
+| `test_cloud_modals_are_self_sufficient` | the whole file | 15 source-string assertions - the real remainder |
+| `test_cloud_replace_project` | two assert on `__doc__` | still two |
+| `test_cloud_ops_queue` | named | 2, and the class the audit named was rewritten in v2.141.0 |
+| `test_cloud_sync_everything` | named | 0 |
+| `test_cloud_sync_plan` | named | 0 |
+
+The audit's sharp sentence is *"editing a docstring breaks the suite while
+deleting the safety ordering does not"*. **The first half is still true and was
+demonstrated**: changing one word of `replace_cloud_project`'s docstring -
+`inverted` to `reversed`, no behaviour change at all - fails the suite. **The
+second half is not true any more.** `test_the_old_project_is_deleted_only_after
+_the_upload`, `test_a_failed_upload_deletes_nothing` and
+`test_an_unverifiable_upload_deletes_nothing` sit in that same file and cover
+the ordering properly. So what is left is a documentation edit that can turn CI
+red, not a safety property with nothing behind it.
+
+**Done** is: those two `__doc__` assertions replaced by something that fails
+when the *ordering* changes rather than when the prose does, and
+`modals_are_self_sufficient` converted the way `test_cloud_sync_direction.py`
+was - render, pull the handler out of the markup, run it. The
+per-file numbers in `tests/source_string_assertion_baseline.json` come down as
+that happens; they are the measurement.
+
+#### 11. P3 — The release ZIP carries the internal engineering documents
+
+`scripts/build_release.py` ships all of `docs/` except `docs/releases`, so
+every install folder gets `docs/audits/cloud-manager-2026-09-18.md` (718 lines
+of internal audit) and `docs/reverse-engineering/` (three browser capture
+scripts and their README). `docs/USER_MANUAL.md` and `docs/wall-types.md` are
+the two that belong there.
+
+**The decision has already been made in principle** - `docs/releases` is
+excluded with the reasoning written beside it: *"not worth 168 files of
+internal changelog in a user's install folder"*. These two directories are the
+same category and were not considered when that exclusion was added.
+
+**This is tidiness, not exposure, and the difference is worth stating** so
+nobody escalates it. The audit is technical throughout - it was checked for
+reported speech and quotes none, and `tests/test_no_real_world_data.py` already
+reads every tracked file, so there is nothing about his sites or colleagues in
+either. The repository is public, so none of it is secret either. It is simply
+not for the person who downloaded a wireless tool.
+
+Adding `"audits"` and `"reverse-engineering"` to `EXCLUDED_DIRECTORY_PARTS`
+does it, alongside the test that pins the payload.
 
 ---
 

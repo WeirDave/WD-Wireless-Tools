@@ -25,15 +25,29 @@ future.
 
 ## Status
 
-**Every numbered finding is closed**, across v2.139.1 (A0), v2.142.0 (the six
-P1s), v2.143.0 (the twelve P2s) and v2.145.0 (the twelve P3s), plus A31 on its
-own branch and A32 in `CLAUDE.md`. Each fix carries a test that fails against
-the code before it.
+**A0 to A33 are closed**, across v2.139.1 (A0), v2.142.0 (the six P1s),
+v2.143.0 (the twelve P2s) and v2.145.0 (the twelve P3s), plus A31 on its own
+branch, A32 in `CLAUDE.md`, and **A33 in v2.148.0** — the destructive surface
+that section was about now has tests that execute it, and the last of the
+untested actions were covered in v2.155.0. Each fix carries a test that fails
+against the code before it.
 
-**One thing is not finished: A33.** Cloud and local delete from the main list,
-transfer ownership, and folder merge still have no test that could fail if they
-broke — the most destructive surface in the tool is the least covered. See the
-note there.
+**One thing is not finished: A34**, tests that pin wording rather than
+property. Two of the five files it names have been converted since and a third
+was rewritten in v2.141.0; what is left is
+`test_cloud_modals_are_self_sufficient` and the two `__doc__` assertions in
+`test_cloud_replace_project`. It is tracked as backlog item 10 (2026-09-21).
+
+> **This section was wrong in both halves until 2026-09-21**, and the shape is
+> worth more than the correction. It said "Every numbered finding is closed"
+> *and*, two paragraphs later, "One thing is not finished: A33" — contradicting
+> itself, with A33 closed three releases earlier and A34 unmentioned. Each half
+> was written by somebody updating the half in front of them.
+>
+> A Status section exists so the document does not have to be read, which is
+> exactly what stops anyone noticing it has stopped being true. If a finding
+> closes and this paragraph is not the same edit, it has already started
+> drifting.
 
 Nothing here is deleted as it is closed. The reasoning is why each guard
 exists, and a guard whose reason is not written down is the one a later session
