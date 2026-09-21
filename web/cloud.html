@@ -434,6 +434,7 @@
   <div class="modal share-modal">
     <h3 id="shareModalTitle">Manage Sharing</h3>
     <p class="sub" id="shareSub">Loading&hellip;</p>
+    <div id="shareTargets"></div>
     <div id="shareList" class="share-list"></div>
     <div id="shareGroupSlot" class="share-group-slot" hidden></div>
     <div class="share-add">
@@ -456,7 +457,8 @@
           <option value="WRITE_USER" title="Collaborative access without sharing privileges">Edit rights</option>
           <option value="WRITE_SHARE_USER" title="Complete control over project and settings">Full access</option>
         </select>
-        <button class="btn btn-blue" onclick="_shareAdd()">Add</button>
+        <button class="btn btn-secondary" onclick="_shareStage()"
+                title="Put this address on the list below. Nothing is shared until you press the button at the bottom.">Add to list</button>
       </div>
       <div class="share-add-note">
         Add several at once — separate them with a comma, a semicolon or a
@@ -468,7 +470,8 @@
     </div>
     <div id="shareDangerSlot" class="share-danger-slot" hidden></div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModal('shareModal')">Close</button>
+      <button class="btn btn-secondary" onclick="closeModal('shareModal')">Cancel</button>
+      <button class="btn btn-blue" id="shareApplyBtn" onclick="_shareAdd()" disabled>Share</button>
     </div>
   </div>
 </div>

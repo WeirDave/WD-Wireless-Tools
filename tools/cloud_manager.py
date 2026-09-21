@@ -3557,7 +3557,11 @@ class CloudManager:
             except Exception as e:
                 skipped.append({"projectId": pid, "reason": str(e)})
 
-        results = {"skipped": skipped, "ownedCount": len(owned_ids)}
+        #: `ownedIds` so the page can name the projects in the result. It
+        #: holds the names; sending them here only to send them back would be
+        #: a second copy to keep in step.
+        results = {"skipped": skipped, "ownedCount": len(owned_ids),
+                   "ownedIds": list(owned_ids)}
         if not owned_ids:
             return {"error": "None of the selected projects are yours to share",
                     **results}
@@ -3565,10 +3569,44 @@ class CloudManager:
 
         if emails:
             try:
-                self.api.bulk_add_shares(owned_ids, emails, role)
-                results["emailsAdded"] = emails
+                raw = self.api.bulk_add_shares(owned_ids, emails, role)
+                #: Ekahau answers per address, in `responsePerEmailAddress`,
+                #: and this threw the answer away and reported the addresses
+                #: *he typed* as the addresses added. So one rejected
+                #: recipient in five was invisible, and the rejected address
+                #: was then written into Recent Recipients - which is the one
+                #: thing that store exists to avoid. The single-project path
+                #: has parsed this since the sharing audit; the bulk path
+                #: never did, which is the row-works-bulk-does-not shape
+                #: again.
+                per_email = {}
+                for row in (raw or []):
+                    if isinstance(row, dict):
+                        per_email.update(row.get("responsePerEmailAddress") or {})
+
+                per_recipient, succeeded = [], []
+                for email in emails:
+                    message = per_email.get(email, "")
+                    verdict = share_message_verdict(message)
+                    ok = verdict == "ok"
+                    per_recipient.append({"email": email, "ok": ok,
+                                          "verdict": verdict,
+                                          "message": message})
+                    if ok:
+                        succeeded.append(email)
+
+                results["recipients"] = per_recipient
+                #: Only the ones Ekahau accepted. Kept under the same key the
+                #: page has always read, so a partial run names the people who
+                #: actually got access rather than everybody on the list.
+                results["emailsAdded"] = succeeded
+                results["emailsRefused"] = [r["email"] for r in per_recipient
+                                            if not r["ok"]]
                 results["role"] = role
-                share_recipients.remember(emails)
+                #: Remembering an address Ekahau refused would offer it back
+                #: next time as though it had worked.
+                if succeeded:
+                    share_recipients.remember(succeeded)
             except Exception as e:
                 results["emailError"] = str(e)
 
@@ -3608,7 +3646,20 @@ class CloudManager:
         #: error alongside so the page can show it.
         wanted_email = bool(emails)
         wanted_group = bool(share_with_group and group_id)
-        email_failed = wanted_email and "emailError" in results
+        #: A request that raised is a failure, and so is one that came back
+        #: cleanly having refused every address - Ekahau reports that per
+        #: recipient rather than as a status, so nothing above would have
+        #: noticed. Without this the "nothing worked" test only ever saw
+        #: transport errors, and five refusals in five read as a success.
+        email_failed = wanted_email and (
+            "emailError" in results or not results.get("emailsAdded"))
+        if (wanted_email and "emailError" not in results
+                and not results.get("emailsAdded")):
+            refused = results.get("emailsRefused") or []
+            results["emailError"] = (
+                "Ekahau did not accept " + (
+                    refused[0] if len(refused) == 1
+                    else "%d of the addresses" % len(refused)))
         group_failed = wanted_group and "groupError" in results
         nothing_worked = ((email_failed or not wanted_email)
                           and (group_failed or not wanted_group))

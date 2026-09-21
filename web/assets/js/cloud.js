@@ -4990,12 +4990,17 @@ async function _fetchGroupIntoCtx() {
   }
 }
 
-async function openManageShares(projectId, projectName, bulkProjectIds) {
+async function openManageShares(projectId, projectName, bulkProjectIds,
+                                bulkProjects, notMine) {
   const isBulk = Array.isArray(bulkProjectIds) && bulkProjectIds.length > 0;
   _shareCtx = {
     projectId: isBulk ? null : projectId,
     projectName: isBulk ? null : projectName,
     bulkProjectIds: isBulk ? bulkProjectIds.slice() : null,
+    //: Names, so the dialog can say what it will act on, and the ones left
+    //: out of the selection because they are not his to share.
+    bulkProjects: isBulk ? (bulkProjects || []).slice() : null,
+    notMine: isBulk ? (notMine || []).slice() : null,
     users: [],
     group: null,
     groupPanelOpen: false,
@@ -5060,6 +5065,9 @@ function _shareRender() {
   if (!ctx) return;
   const listEl = document.getElementById('shareList');
   const isBulk = !!(ctx.bulkProjectIds && ctx.bulkProjectIds.length);
+  const targetsEl = document.getElementById('shareTargets');
+  if (targetsEl) targetsEl.innerHTML = isBulk ? _shareSelectionHtml() : '';
+  _shareApplyRender();
   if (isBulk) {
 
     listEl.innerHTML = '';
@@ -5501,7 +5509,9 @@ async function openBulkShare() {
     toast('Select cloud projects you own first', 'info');
     return;
   }
-  await openManageShares(null, null, ids);
+  await openManageShares(null, null, ids,
+                         (window._bulkShareOwned || []).slice(),
+                         (window._bulkShareNotMine || []).slice());
 }
 
 function _transferOwnershipStart() {
@@ -5593,6 +5603,12 @@ function _shareChipsAdd(text) {
     _shareChips.push({ email: one, valid: _shareLooksLikeEmail(one) });
     added = true;
   });
+  //: Naming somebody new means he is composing the next share, so the last
+  //: result stops standing where the list of targets goes.
+  if (added && _shareCtx && _shareCtx.lastResult) {
+    _shareCtx.lastResult = null;
+    _shareRender();
+  }
   if (added) _shareChipsRender();
   return added;
 }
@@ -5613,7 +5629,196 @@ function _shareChipsReset() {
   _shareSuggestHide();
 }
 
+/* The control that actually does it, named for what it will do.
+
+   The dialog shipped with two buttons - "Add" and "Close" - and "Add" was
+   the commit: in bulk it called `bulk_share`. But everything in here is
+   about assembling a list of recipients, and clicking a remembered name
+   already adds one without sharing, so "Add" reads as "add this to the
+   list". "I add both the recent names and the only option is Add or Close."
+   He read it correctly: no control was named after the operation.
+
+   Every other dialog in the same menu already does this - Move, Merge,
+   Create, Sync selected. This one is the exception being removed.
+
+   The label carries the real counts because it is a write to live cloud
+   projects, and it is disabled until there is somebody to share with, so
+   the reason it cannot run is the thing the button is missing. */
+/* Who got access to what, one line per recipient.
+
+   A bulk share is one request covering N projects and M people, and it used
+   to report one aggregate "Shared with A and B on 8 projects" built from the
+   list he typed rather than from Ekahau's answer. One refused address in
+   five was invisible.
+
+   Ekahau answers per address, so the recipients are reported individually
+   and the projects are named as a set - which is the granularity the API
+   actually gives. Claiming per-project certainty it never reported would be
+   the same invention in a new place. */
+function _shareReportBulk(r, ctx) {
+  const names = (r._projectNames || []).slice();
+  const n = r.ownedCount || (ctx.bulkProjectIds || []).length || 0;
+  const where = `${n} project${n === 1 ? '' : 's'}`;
+  const recipients = r.recipients || [];
+
+  const ok = recipients.filter(x => x.ok).map(x => x.email);
+  const bad = recipients.filter(x => !x.ok);
+
+  if (ok.length) {
+    toast(`${_shareNameList(ok)} now ${ok.length === 1 ? 'has' : 'have'} `
+          + `access to ${where}`, 'success');
+  }
+  //: Each refusal separately, with Ekahau's own words. Rolling them into
+  //: "2 failed" is how he ends up asking a colleague why they cannot open
+  //: something a week later.
+  bad.forEach(x => toast(
+    `${x.email} was not added: ${x.message || 'Ekahau did not say why'}`,
+    'error'));
+
+  if (r.emailError && !bad.length) toast('Not shared: ' + r.emailError, 'error');
+  if (r.groupShared) toast(`Group added to ${where}`, 'success');
+  if (r.groupError) toast('Group share failed: ' + r.groupError, 'error');
+
+  const skipped = (r.skipped || []).length;
+  if (skipped) {
+    toast(`${skipped} project${skipped === 1 ? '' : 's'} skipped — `
+          + 'only the owner can add shares', 'info');
+  }
+  //: And in the dialog, which stays open. A toast times out; the question
+  //: "who did that actually reach" does not, and "8 projects" a minute later
+  //: is not something he can check.
+  if (recipients.length) {
+    ctx.lastResult = { recipients: recipients, projects: names,
+                       skipped: r.skipped || [] };
+    _shareRender();
+  }
+}
+
+/* "Add to list" - what the button beside the box now does, and only that.
+
+   It used to be the commit, which is the whole defect. Splitting them means
+   the two things the dialog does have one control each: put a name on the
+   list, and share with the list. */
+function _shareStage() {
+  const el = document.getElementById('shareEmail');
+  if (!el) return;
+  const text = el.value.trim();
+  if (!text) { el.focus(); return; }
+  _shareChipsAdd(text);
+  el.value = '';
+  _shareSuggestHide();
+  _shareApplyRender();
+  el.focus();
+}
+
+function _shareApplyLabel() {
+  const ctx = _shareCtx;
+  if (!ctx) return { text: 'Share', enabled: false, why: '' };
+  const box = document.getElementById('shareEmail');
+  const typed = _shareSplit((box && box.value) || '');
+  const people = new Set(_shareChips.map(c => c.email).concat(typed));
+  const n = people.size;
+  const groupOn = !!(ctx.groupPanelOpen && ctx.group);
+
+  if (!n) {
+    return { text: ctx.bulkProjectIds
+               ? `Share ${ctx.bulkProjectIds.length} project${ctx.bulkProjectIds.length === 1 ? '' : 's'}`
+               : 'Share',
+             enabled: false,
+             why: 'Add at least one person first' };
+  }
+  const who = `${n} ${n === 1 ? 'person' : 'people'}`;
+  if (ctx.bulkProjectIds) {
+    const p = ctx.bulkProjectIds.length;
+    return { text: `Share ${p} project${p === 1 ? '' : 's'} with ${who}`,
+             enabled: true, why: '' };
+  }
+  return { text: `Share with ${who}`, enabled: true, why: '' };
+}
+
+function _shareApplyRender() {
+  const btn = document.getElementById('shareApplyBtn');
+  if (!btn) return;
+  const state = _shareApplyLabel();
+  btn.textContent = state.text;
+  btn.disabled = !state.enabled;
+  btn.setAttribute('aria-disabled', state.enabled ? 'false' : 'true');
+  btn.classList.toggle('is-disabled', !state.enabled);
+  btn.title = state.enabled
+    ? 'Adds these people to every project listed above.'
+    : state.why;
+}
+
+/* What the share is about to be applied to.
+
+   He reaches this from a selection made several steps back, behind a filter,
+   so the dialog states it rather than assuming he remembers. Full names, and
+   never "and 12 more" - the count is the thing he is checking. */
+function _shareSelectionHtml() {
+  const ctx = _shareCtx;
+  if (!ctx || !ctx.bulkProjectIds) return '';
+  if (ctx.lastResult) return _shareResultHtml(ctx.lastResult);
+  const names = (ctx.bulkProjects || []).map(p => p.name);
+  const n = ctx.bulkProjectIds.length;
+  const notMine = ctx.notMine || [];
+
+  let h = `<div class="share-targets"><div class="share-targets-head">`
+    + `These ${n} project${n === 1 ? '' : 's'} will be shared</div>`;
+  if (names.length) {
+    h += '<ul class="share-targets-list">'
+      + names.map(nm => `<li>${e(nm)}</li>`).join('')
+      + '</ul>';
+  }
+  if (notMine.length) {
+    /* Named, because "3 skipped" invites him to wonder which three - and
+       because being unable to share someone else's project is Ekahau's rule
+       rather than a fault here, so it is explained rather than reported. */
+    h += `<div class="share-targets-skipped"><b>${notMine.length} `
+      + `other${notMine.length === 1 ? ' project was' : ' projects were'} left out`
+      + `</b> — Ekahau only lets a project's owner add shares.<ul>`
+      + notMine.map(p => `<li>${e(p.name)}`
+          + (p.owner ? ` <span class="dim">— ${e(p.owner)}</span>` : '')
+          + '</li>').join('')
+      + '</ul></div>';
+  }
+  return h + '</div>';
+}
+
+/* What happened, per recipient and over which projects, left on screen.
+
+   Ekahau answers per address for one request covering every project, so the
+   recipients are individual and the projects are the named set they were
+   applied to. A recipient it refused says so in Ekahau's own words. */
+function _shareResultHtml(res) {
+  const ok = res.recipients.filter(x => x.ok);
+  const bad = res.recipients.filter(x => !x.ok);
+  const p = res.projects.length;
+  let h = '<div class="share-targets"><div class="share-targets-head">'
+    + 'Result</div><ul class="share-targets-list">';
+  ok.forEach(x => {
+    h += `<li><b>${e(x.email)}</b> — added to `
+       + `${p} project${p === 1 ? '' : 's'}</li>`;
+  });
+  bad.forEach(x => {
+    h += `<li class="is-bad"><b>${e(x.email)}</b> — not added`
+       + (x.message ? `: ${e(x.message)}` : '') + '</li>';
+  });
+  h += '</ul>';
+  if (ok.length && p) {
+    h += '<div class="share-targets-head">Projects</div>'
+      + '<ul class="share-targets-list">'
+      + res.projects.map(nm => `<li>${e(nm)}</li>`).join('')
+      + '</ul>';
+  }
+  if ((res.skipped || []).length) {
+    h += `<div class="share-targets-skipped"><b>${res.skipped.length} `
+      + `skipped</b> — only a project's owner can add shares.</div>`;
+  }
+  return h + '</div>';
+}
+
 function _shareChipsRender() {
+  _shareApplyRender();
   const host = document.getElementById('shareChips');
   if (!host) return;
   host.innerHTML = _shareChips.map(function (c) {
@@ -5642,6 +5847,10 @@ function _shareEmailInput(e) {
     el.value = keep;
   }
   _shareSuggestShow(el.value);
+  //: An address still being typed counts towards the button, because
+  //: `_shareAdd` takes it too - the button must not read "add someone
+  //: first" over a box with an address in it.
+  _shareApplyRender();
 }
 
 function _shareEmailPaste(e) {
@@ -5868,29 +6077,35 @@ async function _shareAdd() {
   try {
     let r;
     if (isBulk) {
-      r = await pyApi('bulk_share', ctx.bulkProjectIds, emails, role, false, null, '', 'READ_USER');
+      /* Through the queue, like every other write. A bulk share is N
+         projects on a work network and it belongs where he can see it
+         running, next to everything else that is running. */
+      const projectNames = (ctx.bulkProjects || []).map(p => p.name);
+      const ids = ctx.bulkProjectIds.slice();
+      const nP = ids.length;
+      r = await opEnqueue({
+        title: `Sharing ${nP} project${nP === 1 ? '' : 's'} with `
+               + `${emails.length} ${emails.length === 1 ? 'person' : 'people'}`,
+        sub: 'Adding people in Ekahau Cloud. Nothing on disk changes.',
+        type: 'share', undoable: false, pollBackend: false,
+        run: async () => {
+          const res = await pyApi('bulk_share', ids, emails, role,
+                                  false, null, '', 'READ_USER');
+          if (res && res.error) throw new Error(res.error);
+          return res;
+        },
+      }).promise;
+      if (!r) return;
+      r._projectNames = projectNames;
     } else {
       r = await pyApi('add_shares', ctx.projectId, emails, role);
     }
     if (r && r.error) { toast(r.error, 'error'); return; }
 
     if (isBulk) {
-      const n = r.ownedCount || 0;
-      const skipped = (r.skipped || []).length;
-      /* Only the addresses the server says went out. This fell back to the
-         list he typed, so a partial run - the group share landing and the
-         email share refused - named everybody as shared. */
-      const who = _shareNameList(r.emailsAdded || []);
-      if (who) {
-        toast(`Shared with ${who} on ${n} project${n === 1 ? '' : 's'}`
-              + (skipped ? ` (${skipped} skipped — not owner)` : ''), 'success');
-      }
-      if (r.emailError) toast('Not shared by email: ' + r.emailError, 'error');
-      if (r.groupShared && !who) {
-        toast(`Group added to ${n} project${n === 1 ? '' : 's'}`, 'success');
-      }
-      if (r.groupError) toast('Group share failed: ' + r.groupError, 'error');
+      _shareReportBulk(r, ctx);
       _shareChipsReset();
+      _shareApplyRender();
     } else {
       // Per recipient, because the request is one call but the outcome is not
       // one answer. Saying "shared" over a list where one address bounced is
@@ -7032,6 +7247,8 @@ function updateBulkBar() {
   const verifyablePairIds = new Set();
 
   const ownedCloudIds = new Set();
+  const ownedCloudNames = new Map();
+  const notMineToShare = new Map();
   const myEmail = ((data && data.currentUser) || '').toLowerCase();
   selected.forEach(k => {
     const d = rowData[k]; if (!d) return;
@@ -7074,7 +7291,21 @@ function updateBulkBar() {
     const cloudIdOfRow = d.cloudId || (d.kind === 'cloud' ? d.id : null);
     if ((d.kind === 'pair' || d.kind === 'cloud') && cloudIdOfRow) {
       const ownerOf = (d.cloudOwner || '').toLowerCase();
-      if (myEmail && ownerOf === myEmail) ownedCloudIds.add(cloudIdOfRow);
+      if (myEmail && ownerOf === myEmail) {
+        ownedCloudIds.add(cloudIdOfRow);
+        //: The name as well as the id, so the share dialog can list what it
+        //: is about to act on. He reaches it from a filtered selection made
+        //: several steps earlier and should not have to remember.
+        ownedCloudNames.set(cloudIdOfRow, d.cloudName || d.localName || cloudIdOfRow);
+      } else {
+        /* Someone else's, and it is dropped from the selection here rather
+           than refused by Ekahau later. Dropping it silently is the half
+           that was wrong: fifteen selected became "Sharing 12 projects" with
+           nothing to account for the other three. */
+        notMineToShare.set(cloudIdOfRow,
+          { name: d.cloudName || d.localName || cloudIdOfRow,
+            owner: d.cloudOwner || '' });
+      }
     }
     if (d.kind === 'cloud' || d.kind === 'local') deletableCount++;
     if (d.kind === 'local') localFolderCount++;
@@ -7140,6 +7371,10 @@ function updateBulkBar() {
       : undefined);
 
   window._bulkShareOwnedIds = Array.from(ownedCloudIds);
+  window._bulkShareOwned = Array.from(ownedCloudIds).map(
+    id => ({ id: id, name: ownedCloudNames.get(id) || id }));
+  window._bulkShareNotMine = Array.from(notMineToShare.entries()).map(
+    ([id, v]) => ({ id: id, name: v.name, owner: v.owner }));
   setBtn('bulkDeleteBtn', true, deletableCount > 0, 'Bulk delete only works on cloud-only or local-only rows');
   setBtn('compareBtn', currentTab === 'sites', localFolderCount >= 2, 'Select 2+ local folders to compare');
   setBtn('bulkMoveBtn', true, movableCount > 0, 'Select cloud projects or local .esx files first');
