@@ -600,20 +600,78 @@ class ToolbarInABrowser(unittest.TestCase):
                 len(words), 2,
                 "a dev toolbar button is not a readable phrase: %r" % label)
 
+    #: The one control in the strip that is not an action. It changes the
+    #: mode rather than doing anything, so it has no panel to open - and
+    #: clicking it unmounts the strip, which ends the loop below early.
+    NOT_AN_ACTION = {"devExitBtn"}
+
     def test_nothing_in_the_strip_writes_to_anything(self):
-        """Every strip button opens a panel. The controls that write live
-        inside it, under the explanation, so he cannot reach one without
-        having scrolled past what it does."""
+        """Every strip button that does something opens a panel. The controls
+        that write live inside it, under the explanation, so he cannot reach
+        one without having scrolled past what it does.
+
+        **This test was red from v2.163.0 until it was corrected**, and no
+        release noticed. v2.163.0 added "✕ Exit dev mode" to the strip -
+        correctly, a mode with no visible way out is its own defect - and
+        this loop required *every* button to open a panel. The exit button
+        opens nothing and unmounts the strip as it goes, so the loop failed
+        on it and never reached the assertion underneath.
+
+        It stayed invisible because the runners have no browser: CI skips
+        every test in this file, so a local-only failure is not something the
+        release gate can see. It is the sort of red that gets written off as
+        "pre-existing" on a machine that has browsers, which is what happened
+        for a day.
+        """
         self.unlocked()
         self.stub()
+        seen = []
         for btn in self.driver.find_elements(By.CSS_SELECTOR, "#devToolbar button"):
+            ident = btn.get_attribute("id") or "?"
+            seen.append(ident)
+            if ident in self.NOT_AN_ACTION:
+                continue
             self.driver.execute_script("arguments[0].click();", btn)
             self.wait_for(lambda: self.visible("#devResultModal"),
-                          "a panel for " + (btn.get_attribute("id") or "?"))
+                          "a panel for " + ident)
             self.click("#devResultModal .btn")
             self.wait_for(lambda: not self.visible("#devResultModal"), "it to close")
         self.assertEqual(self.calls(), [],
                          "a strip button reached the server on its own")
+        #: The exemption is one button, named, and it has to still be there -
+        #: otherwise this quietly becomes an exemption for whatever id gets
+        #: reused next.
+        self.assertIn("devExitBtn", seen,
+                      "the exit control is gone from the strip, so the "
+                      "exemption above is now excusing nothing")
+
+    def test_leaving_dev_mode_takes_the_strip_away(self):
+        """The exempted button, checked rather than trusted. It is excused
+        from opening a panel, not from being exercised."""
+        self.unlocked()
+        self.stub()
+        self.click("#devExitBtn")
+        self.wait_for(lambda: not self.visible("#devToolbar"),
+                      "the strip to go")
+
+    def test_leaving_dev_mode_locks_the_server_and_does_nothing_else(self):
+        """It does reach the server, and that is deliberate: leaving closes
+        the server's half rather than leaving a window open behind a strip
+        that is no longer on screen. What matters is that it is the only
+        call, and that it is the lock rather than anything that writes.
+        """
+        self.unlocked()
+        self.stub()
+        self.click("#devExitBtn")
+        self.wait_for(lambda: not self.visible("#devToolbar"),
+                      "the strip to go")
+        calls = [str(c) for c in self.calls()]
+        self.assertTrue(any("dev/lock" in c for c in calls),
+                        "leaving dev mode left the server's half open: %s"
+                        % calls)
+        self.assertEqual(
+            1, len(calls),
+            "leaving dev mode made a call other than the lock: %s" % calls)
 
     # ══ the panels explain themselves ═════════════════════════════
     def open_realign(self):
