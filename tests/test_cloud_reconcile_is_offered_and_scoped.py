@@ -299,6 +299,53 @@ class TwoPairs(unittest.TestCase):
         self.assertEqual(after_first, self.internal("c-1"))
 
 
+class TheRouteHandsOverTheRightArgumentsTests(unittest.TestCase):
+    """`CLOUD_ACTIONS` is a dictionary of lambdas nobody executes.
+
+    A perfect function reached through a lambda that reads the wrong key is
+    handed the wrong argument, and here one of those keys decides whether
+    anything is written at all.
+    """
+
+    def setUp(self):
+        import server
+        self.server = server
+        self.calls = []
+        real = server.cloud_realign.realign
+        def spy(cm, **kw):
+            self.calls.append(kw)
+            return {"ok": True, "aligned": [], "skipped": [], "failed": []}
+        server.cloud_realign.realign = spy
+        self.addCleanup(lambda: setattr(server.cloud_realign, "realign", real))
+
+    def call(self, payload):
+        self.server.CLOUD_ACTIONS["reconcile_pairs"](payload)
+        return self.calls[-1]
+
+    def test_the_route_exists(self):
+        self.assertIn("reconcile_pairs", self.server.CLOUD_ACTIONS)
+
+    def test_the_selected_ids_reach_the_scope(self):
+        got = self.call({"cloudIds": ["c-1", "c-2"], "dryRun": True})
+        self.assertEqual(["c-1", "c-2"], list(got["only"]))
+
+    def test_an_explicit_false_is_the_only_thing_that_writes(self):
+        self.assertFalse(self.call({"cloudIds": ["c-1"], "dryRun": False})["dry_run"])
+
+    def test_an_absent_flag_previews_rather_than_writes(self):
+        """The default has to be the safe one. `bool(d.get("dryRun"))` would
+        make a missing field mean "write to his projects", which is the exact
+        shape the dev toolbar's own route was careful to avoid."""
+        self.assertTrue(self.call({"cloudIds": ["c-1"]})["dry_run"])
+
+    def test_a_missing_selection_scopes_to_nothing_not_everything(self):
+        """`only=None` sweeps the whole account. A payload with no ids must
+        never become that."""
+        got = self.call({})
+        self.assertIsNotNone(got["only"])
+        self.assertEqual([], list(got["only"]))
+
+
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")
 class TheRowOffersItWhenItCanWorkTests(unittest.TestCase):
     """Rendered by the real row code, with the handler pulled back out."""

@@ -175,10 +175,25 @@ class AnActionSitsUnderTheSideItChanges(unittest.TestCase):
 
     def test_the_reported_button_is_on_the_local_side(self):
         """It writes the cloud project's name into the local .esx. Nothing
-        reaches Ekahau, so nothing about it belongs under the cloud column."""
+        reaches Ekahau, so nothing about it belongs under the cloud column.
+
+        Which control does that depends on whether the date moved too - the
+        narrow one where it did not, "Make them match" where it did, because
+        writing the name alone would leave the date behind. The side is the
+        property under test, so the assertion is on the side rather than on
+        whichever of the two is offered: naming one pins a control rather
+        than the rule it is here to demonstrate.
+        """
         band = self.out["nameInsideFile"]
-        self.assertIn("Set the name inside the file to match", band["local"])
-        self.assertNotIn("Set the name inside the file to match", band["cloud"])
+        fixes = ("Set the name inside the file to match", "Make them match")
+        self.assertTrue(
+            any(f in item for f in fixes for item in band["local"]),
+            "no control that writes the local file is on the local side: %s"
+            % (band,))
+        self.assertFalse(
+            any(f in item for f in fixes for item in band["cloud"]),
+            "a control that writes the local file is under the cloud column: "
+            "%s" % (band,))
 
     def test_a_download_is_on_the_local_side(self):
         """Downloading replaces the file on disk."""

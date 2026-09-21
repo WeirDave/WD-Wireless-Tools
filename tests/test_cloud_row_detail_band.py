@@ -107,8 +107,19 @@ api._compareResults.set(key, {
 out.internalOnlyBand = api.rowDetailHtml(row(), false);
 out.internalOnlyBadge = api.stalenessBadgeHtml(row());
 
+/* The same finding on a pair whose dates already agree.
+
+   `fixInternalName` writes the name and nothing else, which is the whole
+   job when there is no date difference to carry over. Where the cloud side
+   also reads newer, writing the name alone leaves the date behind and the
+   row goes on reporting a difference - so that case offers "Make them
+   match", which writes both. Two states, two controls, and this is the one
+   the narrower control belongs to. */
+out.internalOnlyNotStale = api.rowDetailHtml(
+  Object.assign(inSyncRow(), { differenceKind: 'renamed' }), false);
+
 // drive the fix out of the rendered band
-const m = /onclick="event\.stopPropagation\(\);(fixInternalName\([^"]*\))"/.exec(out.internalOnlyBand);
+const m = /onclick="event\.stopPropagation\(\);(fixInternalName\([^"]*\))"/.exec(out.internalOnlyNotStale);
 out.foundHandler = !!m;
 if (m) {
   const invoke = new Function('fixInternalName', 'return ' + m[1] + ';');
@@ -199,8 +210,22 @@ class TheFindingsGetTheFullWidthTests(unittest.TestCase):
         self.assertNotIn("different name on each side", band)
 
     def test_the_fix_is_offered_where_it_applies(self):
+        """On a pair whose dates agree, the name is the whole difference and
+        the narrow control is the whole fix."""
         self.assertIn("Set the name inside the file to match",
-                      self.out["internalOnlyBand"])
+                      self.out["internalOnlyNotStale"])
+
+    def test_where_the_date_has_moved_too_the_wider_fix_is_offered(self):
+        """"How come we're not fixing the difference, if it's something we
+        can identify - like a date, or the internal project number or name?"
+
+        Writing the name alone here would leave the date behind, so the row
+        would go on saying the cloud copy is newer and he would be back where
+        he started. The control that writes both is the one offered.
+        """
+        band = self.out["internalOnlyBand"]
+        self.assertIn("Make them match", band)
+        self.assertNotIn("Set the name inside the file to match", band)
 
     def test_clicking_the_fix_reaches_the_server_correctly(self):
         """Executed out of the rendered band, not matched as a string."""
