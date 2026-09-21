@@ -10,10 +10,20 @@ v2.146.0 the same day. Every item below was opened in the code and checked;
 what each check found is recorded on the item, including where the check
 found the item itself was wrong.
 
-**Every open item was closed on 2026-09-20 in v2.153.0.** Items 2, 3, 5, 6, 7
-and 9 shipped; item 4 dropped from P1 to P3, because the destructive and
-sharing surfaces it was about now have tests that execute them and what is left
-of its list is reads and bookkeeping.
+**Items 2, 3, 5, 6, 7 and 9 were closed on 2026-09-20 in v2.153.0**, and item 4
+dropped from P1 to P3, because the destructive and sharing surfaces it was
+about now have tests that execute them and what is left of its list is reads
+and bookkeeping.
+
+**Item 8 is the open work that is left, and how it got here is the point.** It
+came from a branch that was finished and never pushed - two commits sitting in
+a worktree whose session had gone. That is the same fault as an unreleased
+version wearing different clothes: finished work that is invisible to everyone,
+including to the pass a few hours later that recorded this file as having no
+open items at all. The branch was landed rather than discarded. **A worktree
+that looks abandoned is not evidence that what is in it is finished with** -
+`git log origin/main..<branch>` is, and it is worth running before removing
+one.
 
 **Item 9 was filed under "Decisions already made", which is the wrong section
 for open work**, and it was moved up here in the same pass. That section exists
