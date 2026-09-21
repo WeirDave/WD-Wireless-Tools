@@ -10,18 +10,16 @@
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<script>
-  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
-</script>
+<script src="/assets/js/wd-theme-boot.js"></script>
 <link rel="stylesheet" href="/assets/wd-tools.css">
 </head>
 <body class="tool-plantrim">
 
-<div id="dzTopbar" class="dz-topbar" onclick="event.stopPropagation()">
+<div id="dzTopbar" class="dz-topbar" data-action="noop">
   <div class="header-left">
     <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
     <div class="help-menu-wrap">
-      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'dzMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <button class="hamburger-btn" data-action="menu" data-menu="dzMenu" title="Menu"><span></span><span></span><span></span></button>
       <div id="dzMenu" class="help-menu">
         <div class="menu-section">&#9656; Navigation</div>
         <a class="help-menu-item" href="/">⌂ Home</a>
@@ -40,8 +38,8 @@
         <div class="help-menu-sep"></div>
         <div class="menu-section">&#9656; Help &amp; Support</div>
         <a class="help-menu-item" href="/manual#plantrim">· User Guide</a>
-        <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-        <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <button class="help-menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+        <button class="help-menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
         <a class="help-menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
       </div>
     </div>
@@ -50,7 +48,7 @@
     <h1><span>WD</span> PlanTrim <span class="ver" data-ver="plantrim">v&hellip;</span></h1>
   </div>
   <div class="header-actions">
-    <button class="theme-toggle" onclick="WD.toggleTheme()">
+    <button class="theme-toggle" data-action="call" data-fn="WD.toggleTheme">
       <span class="ico">🌙</span><span class="txt">Dark</span>
     </button>
   </div>
@@ -76,7 +74,7 @@
     <div class="header-left">
       <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
       <div class="help-menu-wrap">
-        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'helpMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <button class="hamburger-btn" data-action="menu" data-menu="helpMenu" title="Menu"><span></span><span></span><span></span></button>
         <div id="helpMenu" class="help-menu">
           <div class="menu-section">&#9656; Navigation</div>
           <a class="help-menu-item" href="/">⌂ Home</a>
@@ -95,19 +93,19 @@
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Help &amp; Support</div>
           <a class="help-menu-item" href="/manual#plantrim">· User Guide</a>
-        <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-          <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <button class="help-menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+          <button class="help-menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
         </div>
       </div>
-      <span id="fileBadge" class="file-badge" onclick="ptLoadNewFile()"
+      <span id="fileBadge" class="file-badge" data-action="call" data-fn="ptLoadNewFile"
             title="Click to open another .esx"></span>
     </div>
     <div class="header-center">
       <h1><span>WD</span> PlanTrim <span class="ver" data-ver="plantrim">v&hellip;</span></h1>
     </div>
     <div class="header-actions">
-      <button class="btn btn-sec" onclick="ptLoadNewFile()">Open another</button>
-      <button class="btn btn-sec" id="ptSaveBtn" onclick="ptTrim()" disabled
+      <button class="btn btn-sec" data-action="call" data-fn="ptLoadNewFile">Open another</button>
+      <button class="btn btn-sec" id="ptSaveBtn" data-action="call" data-fn="ptTrim" disabled
               title="Same as Cut and save, next to the plan">Save trimmed .esx</button>
     </div>
   </div>
@@ -123,11 +121,11 @@
       <div class="ptb-strip" id="ptbStrip"></div>
       <div class="ptb-bar">
         <span class="ptb-where" id="ptbFloorCount"></span>
-        <button class="btn btn-sm" id="ptbNext" onclick="ptbNextFloor()" hidden>Next floor &rarr;</button>
+        <button class="btn btn-sm" id="ptbNext" data-action="call" data-fn="ptbNextFloor" hidden>Next floor &rarr;</button>
         <span class="ptb-readout" id="ptbReadout">Automatic</span>
         <span class="ptb-margin-group">
           <label for="ptbMargin">Margin:</label>
-          <select id="ptbMargin" onchange="ptbSetMargin(this.value)"
+          <select id="ptbMargin" data-action-change="call" data-fn="ptbSetMargin" data-arg-value="1"
                   title="How much whitespace to leave around the building when trimming automatically">
             <option value="tight">Tight &mdash; 3 ft (0.9 m)</option>
             <option value="normal" selected>Normal &mdash; 10 ft (3 m)</option>
@@ -139,23 +137,23 @@
           <span id="ptbMarginCustomWrap" hidden><input type="number" id="ptbMarginFt"
                  min="1" max="2000" step="1" value="200" class="w-num-sm"
                  title="How far out to keep, in feet"
-                 onchange="ptbSetCustomMargin(this.value)"> ft</span>
+                 data-action-change="call" data-fn="ptbSetCustomMargin" data-arg-value="1"> ft</span>
         </span>
         <span class="ptb-spacer"></span>
-        <button class="btn btn-sm ptb-reset" id="ptbFit" onclick="ptbFitView()"
+        <button class="btn btn-sm ptb-reset" id="ptbFit" data-action="call" data-fn="ptbFitView"
                 title="Put the zoom and the position back to how this plan opened. It does not discard a rectangle you drew - that is Back to automatic - and it does not change the margin, which is a saved preference.">&#8634; Reset view</button>
-        <button class="btn btn-sm" id="ptbSuggest" onclick="ptbSuggest()"
+        <button class="btn btn-sm" id="ptbSuggest" data-action="call" data-fn="ptbSuggest"
                 title="Compare the sheets of this set to each other and propose a rectangle">Suggest from the set</button>
-        <button class="btn btn-sm" id="ptbApplyAll" onclick="ptbApplyToAll()" disabled
+        <button class="btn btn-sm" id="ptbApplyAll" data-action="call" data-fn="ptbApplyToAll" disabled
                 title="Use this floor's rectangle on every other floor">Apply to all floors</button>
-        <button class="btn btn-sm" id="ptbClear" onclick="ptbClearBox()" disabled
+        <button class="btn btn-sm" id="ptbClear" data-action="call" data-fn="ptbClearBox" disabled
                 title="Discard the rectangle and let detection decide this floor">Back to automatic</button>
       </div>
       <div class="ptb-cropbar">
-        <button class="btn btn-primary ptb-cropbtn" id="ptbCrop" onclick="ptbCropBox()" hidden>
+        <button class="btn btn-primary ptb-cropbtn" id="ptbCrop" data-action="call" data-fn="ptbCropBox" hidden>
           &#9986; Crop to this box
         </button>
-        <button class="btn btn-sm" id="ptbEdit" onclick="ptbEditBox()" hidden
+        <button class="btn btn-sm" id="ptbEdit" data-action="call" data-fn="ptbEditBox" hidden
                 title="Put the handles back on this box">Edit box</button>
       </div>
       <div class="ptb-stage" id="ptbStage">
@@ -163,7 +161,7 @@
         <div class="ptb-empty" id="ptbEmpty">Select a floor to draw on.</div>
       </div>
       <div class="ptb-actions">
-        <button class="btn btn-primary ptb-cut" id="ptbCut" onclick="ptCut()" disabled>
+        <button class="btn btn-primary ptb-cut" id="ptbCut" data-action="call" data-fn="ptCut" disabled>
           Cut and save
         </button>
         <span class="ptb-cut-note" id="ptbCutNote"></span>

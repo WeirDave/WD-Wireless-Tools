@@ -244,26 +244,90 @@ def _no_cache(resp):
     return resp
 
 
+#: Pages whose every control is a delegated `data-action` rather than an
+#: inline handler, and which therefore carry a policy that forbids inline
+#: script. Backlog item 10.
+#:
+#: **This list only grows.** A page joins it when its last inline handler
+#: goes, and `tests/test_pages_with_a_strict_policy.py` fails if a page on it
+#: gains one back - which is the failure that would otherwise be invisible,
+#: because the control keeps working in the developer's browser right up
+#: until the header is applied and then silently stops for the user.
+#:
+#: The header is per response, so this is a page-by-page rollout rather than
+#: one switch. The remaining pages keep the permissive default until their
+#: controls are converted; a partial policy on a page that still needs inline
+#: script would break it.
+CSP_STRICT_PAGES = {
+    "home.html",
+    "scale.html",
+    "manual.html",
+    "plantrim.html",
+    "ap-rename.html",
+}
+
+#: What a converted page gets.
+#:
+#: `script-src 'self'` with no `'unsafe-inline'` is the whole point: an
+#: injected `<script>` does not run even when an escaper is missed, which is
+#: the second line of defence behind this suite's 264 `innerHTML`
+#: assignments. It also forbids `eval`, which is why the dispatcher resolves a
+#: dotted name by walking `window` rather than evaluating it.
+#:
+#: **`style-src` keeps `'unsafe-inline'` and that is deliberate.** A style
+#: attribute is not a script: the worst it does is move something on the page,
+#: and several tools position elements by writing `style.left` at runtime.
+#: Forbidding it would break them to close a hole nothing in the sweep found.
+#:
+#: `img-src` allows `data:` and `blob:` because every tool here renders floor
+#: plans the browser built itself from an `.esx` in memory. `connect-src
+#: 'self'` keeps a page from talking to anything but this server, which is
+#: what the "no telemetry" promise means in practice.
+STRICT_CSP = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data: blob:; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'none'; "
+    "form-action 'none'; "
+    "frame-ancestors 'none'"
+)
+
+
+def _page(filename: str):
+    """Serve a tool page, with the strict policy if it has earned one."""
+    resp = send_from_directory(WEB, filename)
+    if filename in CSP_STRICT_PAGES:
+        # Set rather than `setdefault`: `_no_cache` runs afterwards and uses
+        # `setdefault`, so this wins and the permissive default never lands
+        # on a converted page.
+        resp.headers["Content-Security-Policy"] = STRICT_CSP
+    return resp
+
+
 @app.route("/")
 def home():
-    return send_from_directory(WEB, "home.html")
+    return _page("home.html")
 
 
 @app.route("/cloud")
 def cloud():
     if (WEB / "cloud.html").exists():
-        return send_from_directory(WEB, "cloud.html")
+        return _page("cloud.html")
     return "Cloud Manager UI is being set up…", 200
 
 
 @app.route("/walls")
 def walls():
-    return send_from_directory(WEB, "walls.html")
+    return _page("walls.html")
 
 
 @app.route("/squirrel")
 def organizer():
-    return send_from_directory(WEB, "organizer.html")
+    return _page("organizer.html")
 
 
 @app.route("/organizer")
@@ -273,49 +337,49 @@ def organizer_legacy_redirect():
 
 @app.route("/scale")
 def scale():
-    return send_from_directory(WEB, "scale.html")
+    return _page("scale.html")
 
 
 @app.route("/report")
 def report():
-    return send_from_directory(WEB, "report.html")
+    return _page("report.html")
 
 
 @app.route("/capacity")
 def capacity():
-    return send_from_directory(WEB, "capacity.html")
+    return _page("capacity.html")
 
 
 @app.route("/plantrim")
 def plantrim():
-    return send_from_directory(WEB, "plantrim.html")
+    return _page("plantrim.html")
 
 
 @app.route("/prep")
 def prep():
-    return send_from_directory(WEB, "prep.html")
+    return _page("prep.html")
 
 
 @app.route("/aprename")
 def aprename():
-    return send_from_directory(WEB, "ap-rename.html")
+    return _page("ap-rename.html")
 
 
 
 @app.route("/rename")
 @app.route("/squirrel/rename")
 def squirrel_rename():
-    return send_from_directory(WEB, "rename.html")
+    return _page("rename.html")
 
 
 @app.route("/setup")
 def setup():
-    return send_from_directory(WEB, "setup.html")
+    return _page("setup.html")
 
 
 @app.route("/settings")
 def settings_page():
-    return send_from_directory(WEB, "settings.html")
+    return _page("settings.html")
 
 
 @app.route("/manual")
@@ -328,7 +392,14 @@ def manual():
     drift out of date while nothing served it at all.
     """
     from tools import manual as manual_render
-    return Response(manual_render.render_page(), mimetype="text/html")
+    resp = Response(manual_render.render_page(), mimetype="text/html")
+    # Built from `web/manual.html`, which is on the converted list - but this
+    # route never goes through `_page`, so the policy has to be applied here
+    # too. A page that is strict as a file and permissive as a response is the
+    # worst of both: it looks converted and is not.
+    if "manual.html" in CSP_STRICT_PAGES:
+        resp.headers["Content-Security-Policy"] = STRICT_CSP
+    return resp
 
 
 # There is one guide for the whole suite, with a chapter per tool, and it is the

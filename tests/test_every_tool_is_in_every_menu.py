@@ -205,6 +205,25 @@ class EveryMenuButtonIsWiredToSomething(unittest.TestCase):
                 with self.subTest(page=f.name, button=btn[:60]):
                     if "onclick=" in btn:
                         continue
+                    # A delegated control is the third legal way to be wired,
+                    # and it is the one a page under a strict
+                    # Content-Security-Policy has to use - inline handlers are
+                    # exactly what that policy forbids. Backlog item 10.
+                    #
+                    # Checked rather than waved through: the action has to be
+                    # `menu` and it has to name an element that is on the page,
+                    # or this would accept a typo as wiring, which is the
+                    # failure the whole class is named for.
+                    if 'data-action="menu"' in btn:
+                        menu = re.search(r'data-menu="([^"]+)"', btn)
+                        self.assertIsNotNone(
+                            menu,
+                            f"{f.name}: data-action=menu with no data-menu")
+                        self.assertIn(
+                            f'id="{menu.group(1)}"', text,
+                            f"{f.name}: data-menu={menu.group(1)} names no "
+                            f"element on the page")
+                        continue
                     bid = re.search(r'id="([^"]+)"', btn)
                     self.assertIsNotNone(
                         bid, f"{f.name}: hamburger with neither onclick nor id")

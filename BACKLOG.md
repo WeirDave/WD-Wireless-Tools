@@ -700,7 +700,7 @@ Two things came out of the work that the item did not ask for:
 
 ### Suite-wide
 
-#### 10. P2 — the tool pages have no Content-Security-Policy, and every control is an inline `onclick`
+#### 10. P2 — the tool pages have no Content-Security-Policy, and every control is an inline `onclick` — **five of nineteen done**
 
 **The single biggest remaining security improvement, and it is a project
 rather than a fix.** The 2026-09-21 sweep closed fourteen findings; nine of
@@ -727,6 +727,57 @@ Only `frame-ancestors 'none'` is set today. The report cover response carries
 a full `default-src 'none'; sandbox` policy of its own, and
 `tests/test_the_server_answers_safely.py` holds that an `after_request` cannot
 clobber a route's policy - which is the seam a page-by-page rollout would use.
+
+---
+
+**Started 2026-09-21. Five pages are converted and carry a real policy**:
+`home`, `scale`, `manual`, `plantrim`, `ap-rename`. `server.CSP_STRICT_PAGES`
+is the list and it only grows; `STRICT_CSP` is what they get, with
+`script-src 'self'` and no `'unsafe-inline'` or `'unsafe-eval'`.
+
+**Three pieces of groundwork, and they are what the remaining fourteen pages
+need rather than anything page-specific:**
+
+* **The theme setter moved out of every page.** All fourteen carried an
+  identical inline `<script>` that has to run before the first paint, and no
+  page could go strict while it was there. It is `web/assets/js/wd-theme-boot.js`
+  now, still in `<head>` and still render-blocking, so the behaviour is
+  unchanged. The two copies had drifted: `home.html` did nothing in its
+  `catch`, so a browser with localStorage blocked got no theme attribute at
+  all. The defensive version won.
+* **`WD.actions` in `wd-shared.js`** - the dev toolbar's dispatcher
+  generalised, with a `menu` action for `WD.toggleMenu(event, id)`, which is
+  the only two-argument handler the markup needs. It resolves a dotted name by
+  walking `window`, never `eval`, because the policy forbids that too. The dev
+  toolbar keeps its own `#wdDevRoot`-scoped dispatcher and the new one skips
+  that subtree, or every dev-toolbar handler would fire twice.
+* **`scripts/convert_inline_handlers.py`** - handles five mechanical shapes and
+  **refuses everything else rather than guessing**, because a conversion that
+  guessed would produce a control that renders and does nothing. 52 handlers,
+  nothing left over.
+
+**What is left: fourteen pages and 525 handlers.** 378 are in markup and
+mechanical. The hard 147 are written into `innerHTML` by JavaScript -
+`cloud.js` has 79, `report.js` 25, `walls.js` 14 - where the handler and the
+markup are built in the same expression and the argument is often a value from
+the row. Those need the row renderer changed, not an attribute rewritten, and
+`tests/test_pages_with_a_strict_policy.py` already fails a page whose scripts
+write one, so a page cannot join the list until its JavaScript is converted
+too.
+
+**Two things found while doing it, both worth knowing before the next page:**
+
+* **A converted page under a strict policy cannot be checked by reading it.**
+  An inline handler added back works perfectly in the browser of whoever wrote
+  it and silently stops working for the user once the header is applied. The
+  browser tests inject an inline script into a converted page *and* an
+  unconverted one and require the two to differ - without that differential a
+  CSP test passes on a policy that was never applied.
+* **The test's own `WD_USER_DIR` made every page redirect to `/setup`.** The
+  scratch directory is empty, so `needs_setup` answers yes and the assertions
+  were being made against the setup wizard. The symptom was "the control is
+  missing", which reads exactly like the conversion having dropped it. It cost
+  a round of chasing a defect that was not there.
 
 #### 9. P3 — `/api/report/open_esx` reads any `.esx` the browser names
 

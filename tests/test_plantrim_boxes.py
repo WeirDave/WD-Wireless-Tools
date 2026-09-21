@@ -612,8 +612,19 @@ class ActionVisibilityTests(unittest.TestCase):
         self.assertIn("position: sticky", row[:300])
 
     def test_there_is_a_way_back_to_a_fitted_view(self):
+        """The control exists and is wired to the handler that fits the view.
+
+        It used to look for the literal `ptbFitView()`, which stopped being in
+        the markup when PlanTrim moved to delegated handlers for its
+        Content-Security-Policy (backlog item 10). The property is the same
+        one: a control, and a route from it to that function.
+        """
         self.assertIn('id="ptbFit"', self.html)
-        self.assertIn("ptbFitView()", self.html)
+        fit = self.html[self.html.index('id="ptbFit"'):]
+        fit = fit[:fit.index(">") + 1]
+        self.assertIn('data-fn="ptbFitView"', fit,
+                      "the reset-view button is not wired to ptbFitView")
+        self.assertIn('data-action="call"', fit)
 
     def test_the_stage_leaves_room_for_its_controls(self):
         """72vh put the action below the fold on his laptop."""

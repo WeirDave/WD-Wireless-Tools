@@ -8,9 +8,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="assets/wd-wireless-tools-v8.0-32x32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/wd-wireless-tools-v8.0-180x180.png">
 <link rel="stylesheet" href="assets/wd-tools.css">
-<script>
-  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
-</script>
+<script src="/assets/js/wd-theme-boot.js"></script>
 </head>
 <body class="tool-guide">
 
@@ -22,7 +20,7 @@
 
 <div class="topbar guide-topbar">
   <div class="menu-wrap">
-    <button class="hamburger-btn" onclick="WD.toggleMenu(event,'manualMenu')" title="Menu"><span></span><span></span><span></span></button>
+    <button class="hamburger-btn" data-action="menu" data-menu="manualMenu" title="Menu"><span></span><span></span><span></span></button>
     <div id="manualMenu" class="main-menu">
       <div class="menu-section">&#9656; Navigation</div>
       <a class="menu-item" href="/">⌂ Home</a>
@@ -40,8 +38,8 @@
       <a class="menu-item" href="/settings">· Suite Settings</a>
       <div class="menu-sep"></div>
       <div class="menu-section">&#9656; Help</div>
-      <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-      <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+      <button class="menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+      <button class="menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
       <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
     </div>
   </div>

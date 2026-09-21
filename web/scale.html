@@ -10,9 +10,7 @@
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<script>
-  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
-</script>
+<script src="/assets/js/wd-theme-boot.js"></script>
 <link rel="stylesheet" href="/assets/wd-tools.css">
 </head>
 <body class="tool-scale">
@@ -21,7 +19,7 @@
   <div class="topbar-left">
     <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
     <div class="menu-wrap">
-      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'scaleMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <button class="hamburger-btn" data-action="menu" data-menu="scaleMenu" title="Menu"><span></span><span></span><span></span></button>
       <div id="scaleMenu" class="main-menu">
         <div class="menu-section">&#9656; Navigation</div>
         <a class="menu-item" href="/">⌂ Home</a>
@@ -40,8 +38,8 @@
         <div class="menu-sep"></div>
         <div class="menu-section">&#9656; Help</div>
         <a class="menu-item" href="/manual#scale">· User Guide</a>
-        <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-        <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <button class="menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+        <button class="menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
         <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
       </div>
     </div>
@@ -50,7 +48,7 @@
     <h1><span>WD</span> Scale <span class="ver" data-ver="scale">v&hellip;</span></h1>
   </div>
   <div class="topbar-right">
-    <button class="theme-toggle" onclick="toggleTheme()">
+    <button class="theme-toggle" data-action="call" data-fn="toggleTheme">
       <span class="ico">🌙</span><span class="txt">Dark</span>
     </button>
   </div>

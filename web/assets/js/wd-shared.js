@@ -1668,6 +1668,142 @@
     };
   })();
 
+  /* ── delegated actions, so a page can forbid inline script ──────────
+     Backlog item 10. Every control in this suite was wired with an inline
+     `onclick`, and that is exactly what a Content-Security-Policy worth
+     having forbids: without `'unsafe-inline'` in `script-src`, injected
+     script does not run even when an escaper is missed - and nine of the
+     fourteen findings in the 2026-09-21 sweep were a value reaching markup
+     without the right escaper. There are 264 `innerHTML` assignments in this
+     suite and, until now, nothing behind them.
+
+     This is the dev toolbar's dispatcher generalised. `wd-dev.js` keeps its
+     own: it is scoped to `#wdDevRoot` on purpose, because a document-wide
+     walk would eventually pick up a click meant for a tool. This one *is* the
+     document-wide walk, so the two must not both handle the same element -
+     hence the `#wdDevRoot` skip below.
+
+     A control is written as:
+
+         <button data-action="call" data-fn="WD.doTheThing">
+
+     The name is resolved by walking a dotted path over `window` and binding
+     the result. **A lookup, not `eval`** - which is the point, since a policy
+     without 'unsafe-inline' also forbids `eval`, and a dispatcher built on it
+     would be no better than the attribute it replaced.
+
+     `data-arg` passes a string, `data-arg-this` the element, `data-arg-event`
+     the event, `data-arg-value` the element's value. `data-prevent` and
+     `data-stop` call the matching method. An event other than click is asked
+     for by name: `data-action-change="call"`.
+
+     A handler that cannot be found warns and does nothing, rather than
+     throwing: a dead control that says so in the console is easier to find
+     than a page that stopped at the first bad name. */
+  WD.actions = (function () {
+    function resolveDotted(name) {
+      var parts = String(name || '').split('.').filter(Boolean);
+      if (!parts.length) return null;
+      var ctx = window, obj = window;
+      for (var i = 0; i < parts.length; i++) {
+        if (obj === null || obj === undefined) return null;
+        ctx = obj;
+        obj = obj[parts[i]];
+      }
+      return typeof obj === 'function' ? obj.bind(ctx) : obj;
+    }
+
+    function argsFor(el, e) {
+      if (el.dataset.argValue === '1') return [el.value];
+      if (el.dataset.argThis === '1') return [el];
+      if (el.dataset.argEvent === '1') return [e];
+      if ('arg' in el.dataset) return [el.dataset.arg];
+      return [];
+    }
+
+    function call(el, e) {
+      var fn = resolveDotted(el.dataset.fn);
+      if (typeof fn !== 'function') {
+        if (window.console) {
+          console.warn('WD.actions: no handler named', el.dataset.fn, el);
+        }
+        return;
+      }
+      if (e && el.dataset.prevent === '1') e.preventDefault();
+      fn.apply(null, argsFor(el, e));
+      if (e && el.dataset.stop === '1') e.stopPropagation();
+    }
+
+    var HANDLERS = {
+      'call': call,
+      'call-chain': function (el, e) {
+        var names = String(el.dataset.fn || '').split(',');
+        for (var i = 0; i < names.length; i++) {
+          var fn = resolveDotted(names[i].trim());
+          if (typeof fn === 'function') fn.apply(null, argsFor(el, e));
+        }
+      },
+      /* Only when the click landed on the backdrop itself, never on the
+         dialog sitting on top of it. */
+      'backdrop-call': function (el, e) {
+        if (e.target !== el) return;
+        var fn = resolveDotted(el.dataset.fn);
+        if (typeof fn === 'function') fn();
+      },
+      /* `WD.toggleMenu(event, 'helpMenu')` is on the hamburger of all
+         nineteen pages, and it is the only two-argument handler the markup
+         needs. A named action reads better at the call site than a generic
+         way of passing an event *and* a string would, and it keeps the
+         dispatcher from growing an argument-order convention nobody would
+         remember. */
+      'menu': function (el, e) {
+        if (WD.toggleMenu) WD.toggleMenu(e, el.dataset.menu);
+      },
+      'noop': function (_el, e) { if (e) e.stopPropagation(); }
+    };
+
+    function attrFor(type) {
+      return 'action' + type.charAt(0).toUpperCase() + type.slice(1);
+    }
+
+    function dispatch(type) {
+      var selector = type === 'click'
+        ? '[data-action], [data-action-click]'
+        : '[data-action-' + type + ']';
+      return function (e) {
+        var el = e.target && e.target.closest ? e.target.closest(selector) : null;
+        if (!el) return;
+        /* The dev toolbar has its own scoped dispatcher and would otherwise
+           run this one as well, firing every handler twice. */
+        if (el.closest('#wdDevRoot')) return;
+        var name = el.dataset[attrFor(type)]
+          || (type === 'click' ? el.dataset.action : null);
+        if (!name) return;
+        var fn = HANDLERS[name];
+        if (fn) fn(el, e);
+      };
+    }
+
+    var EVENTS = ['click', 'change', 'input', 'submit', 'keyup', 'keydown',
+                  'dblclick', 'blur', 'focus', 'contextmenu', 'wheel'];
+
+    function mount() {
+      for (var i = 0; i < EVENTS.length; i++) {
+        /* Capture for `blur` and `focus`, which do not bubble. */
+        var capture = EVENTS[i] === 'blur' || EVENTS[i] === 'focus';
+        document.addEventListener(EVENTS[i], dispatch(EVENTS[i]), capture);
+      }
+    }
+
+    return {
+      mount: mount,
+      _resolveDotted: resolveDotted,
+      _handlers: HANDLERS
+    };
+  })();
+
+  WD.actions.mount();
+
   window.WD = WD;
 
   window.toggleTheme = WD.toggleTheme;

@@ -495,22 +495,69 @@ class ToolbarInABrowser(unittest.TestCase):
             "return typeof window.WD.Dev._resolveDotted('no.such.thing');")
         self.assertEqual(result, "undefined")
 
-    def test_the_dispatcher_does_not_touch_the_rest_of_the_page(self):
-        """Scoped to the dev root. The suite wires its own controls with
-        inline onclick, and this must not intercept one of those."""
+    def test_a_delegated_control_outside_the_dev_root_fires_exactly_once(self):
+        """There are two dispatchers now, and double-firing is the hazard.
+
+        This used to assert that a `data-action` outside `#wdDevRoot` fired
+        **zero** times, on the stated reasoning that "the suite wires its own
+        controls with inline onclick, and this must not intercept one of
+        those". Backlog item 10 is the work that makes that premise false: the
+        suite is moving off inline handlers precisely because a
+        Content-Security-Policy worth having forbids them, and `WD.actions` in
+        `wd-shared.js` is now the document-wide dispatcher that handles them.
+
+        So the property worth holding changed shape rather than going away.
+        The dev toolbar's dispatcher is still scoped to `#wdDevRoot`; what
+        matters is that the two do not both claim the same element, because a
+        handler that runs twice is a delete that happens twice. `WD.actions`
+        skips the dev root for exactly this reason, and this is the assertion
+        that would notice if it stopped.
+        """
         self.unlocked()
         fired = self.driver.execute_script("""
           window.__outside = 0;
-          window.__outsideFn = function () { window.__outside = 1; };
+          window.__outsideFn = function () { window.__outside += 1; };
           var b = document.createElement('button');
           b.id = 'outsideBtn';
           b.setAttribute('data-action', 'call');
           b.setAttribute('data-fn', '__outsideFn');
           document.body.appendChild(b);
           b.click();
+          b.remove();
           return window.__outside;
         """)
-        self.assertEqual(fired, 0)
+        self.assertEqual(
+            1, fired,
+            "a delegated control outside the dev root fired %d times - 0 means "
+            "WD.actions is not mounted, 2 means both dispatchers claimed it"
+            % fired)
+
+    def test_a_control_inside_the_dev_root_is_not_handled_twice(self):
+        """The other half of the same seam.
+
+        `wd-dev.js` handles `#wdDevRoot` and `WD.actions` skips it. If that
+        skip went, every dev-toolbar button would run its handler twice - and
+        the toolbar's handlers include ones that delete files.
+        """
+        self.unlocked()
+        fired = self.driver.execute_script("""
+          window.__inside = 0;
+          window.__insideFn = function () { window.__inside += 1; };
+          var root = document.getElementById('wdDevRoot');
+          if (!root) return -1;
+          var b = document.createElement('button');
+          b.setAttribute('data-action', 'call');
+          b.setAttribute('data-fn', '__insideFn');
+          root.appendChild(b);
+          b.click();
+          b.remove();
+          return window.__inside;
+        """)
+        self.assertNotEqual(-1, fired, "no #wdDevRoot on the page")
+        self.assertEqual(
+            1, fired,
+            "a control inside the dev root fired %d times - 2 means "
+            "WD.actions stopped skipping #wdDevRoot" % fired)
 
     # ══ drag ══════════════════════════════════════════════════════
     def test_the_position_is_remembered(self):

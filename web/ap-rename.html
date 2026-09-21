@@ -11,18 +11,16 @@
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<script>
-  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); } })();
-</script>
+<script src="/assets/js/wd-theme-boot.js"></script>
 <link rel="stylesheet" href="/assets/wd-tools.css">
 </head>
 <body class="tool-aprename">
 
-<div id="dzTopbar" class="dz-topbar" onclick="event.stopPropagation()">
+<div id="dzTopbar" class="dz-topbar" data-action="noop">
   <div class="header-left">
     <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
     <div class="help-menu-wrap">
-      <button class="hamburger-btn" onclick="WD.toggleMenu(event,'dzMenu')" title="Menu"><span></span><span></span><span></span></button>
+      <button class="hamburger-btn" data-action="menu" data-menu="dzMenu" title="Menu"><span></span><span></span><span></span></button>
       <div id="dzMenu" class="help-menu">
         <div class="menu-section">&#9656; Navigation</div>
         <a class="help-menu-item" href="/">⌂ Home</a>
@@ -41,8 +39,8 @@
         <div class="help-menu-sep"></div>
         <div class="menu-section">&#9656; Help &amp; Support</div>
         <a class="help-menu-item" href="/manual#ap-labeler">· User Guide</a>
-        <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-        <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+        <button class="help-menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+        <button class="help-menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
         <a class="help-menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
       </div>
     </div>
@@ -51,7 +49,7 @@
     <h1><span>WD</span> AP Labeler <span class="ver" data-ver="aprename">v&hellip;</span></h1>
   </div>
   <div class="header-actions">
-    <button class="theme-toggle" onclick="WD.toggleTheme()">
+    <button class="theme-toggle" data-action="call" data-fn="WD.toggleTheme">
       <span class="ico">🌙</span><span class="txt">Dark</span>
     </button>
   </div>
@@ -77,7 +75,7 @@
     <div class="header-left">
       <a class="home-btn" href="/" title="Home" aria-label="Home">&#8962; <span>Home</span></a>
       <div class="help-menu-wrap">
-        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'helpMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <button class="hamburger-btn" data-action="menu" data-menu="helpMenu" title="Menu"><span></span><span></span><span></span></button>
         <div id="helpMenu" class="help-menu">
           <div class="menu-section">&#9656; Navigation</div>
           <a class="help-menu-item" href="/">⌂ Home</a>
@@ -96,19 +94,19 @@
           <div class="help-menu-sep"></div>
           <div class="menu-section">&#9656; Help &amp; Support</div>
           <a class="help-menu-item" href="/manual#ap-labeler">· User Guide</a>
-          <button class="help-menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-          <button class="help-menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+          <button class="help-menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+          <button class="help-menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
         </div>
       </div>
-      <span id="fileBadge" class="file-badge" onclick="arLoadNew()"
+      <span id="fileBadge" class="file-badge" data-action="call" data-fn="arLoadNew"
             title="Click to open another .esx"></span>
     </div>
     <div class="header-center">
       <h1><span>WD</span> AP Labeler <span class="ver" data-ver="aprename">v&hellip;</span></h1>
     </div>
     <div class="header-actions">
-      <button class="btn btn-sec" onclick="arLoadNew()">Open another</button>
-      <button class="btn btn-primary" id="arDownloadBtn" onclick="arDownload()" disabled>Download labeled .esx</button>
+      <button class="btn btn-sec" data-action="call" data-fn="arLoadNew">Open another</button>
+      <button class="btn btn-primary" id="arDownloadBtn" data-action="call" data-fn="arDownload" disabled>Download labeled .esx</button>
     </div>
   </div>
 
@@ -122,7 +120,7 @@
         </div>
         <div class="ar-zoom-bar">
           <span id="arZoomLbl">100%</span>
-          <button onclick="arResetZoom()" title="Reset zoom">Reset</button>
+          <button data-action="call" data-fn="arResetZoom" title="Reset zoom">Reset</button>
         </div>
       </div>
       <div class="ar-splitter" id="arSplitter" title="Drag to resize — double-click to reset"
@@ -138,9 +136,9 @@
           <div class="ar-section-head" data-fold-toggle tabindex="0" role="button" aria-expanded="true"
                title="Click to collapse or expand"><span class="ar-section-num">1</span> Name Pattern<span class="ar-fold-caret">&#9662;</span></div>
           <div class="ar-mode-tabs">
-            <button class="ar-mode-tab active" data-mode="structured" onclick="arSetMode('structured')">Structured</button>
-            <button class="ar-mode-tab" data-mode="simple" onclick="arSetMode('simple')">Simple</button>
-            <button class="ar-mode-tab" data-mode="mac" onclick="arSetMode('mac')">MAC</button>
+            <button class="ar-mode-tab active" data-mode="structured" data-action="call" data-fn="arSetMode" data-arg="structured">Structured</button>
+            <button class="ar-mode-tab" data-mode="simple" data-action="call" data-fn="arSetMode" data-arg="simple">Simple</button>
+            <button class="ar-mode-tab" data-mode="mac" data-action="call" data-fn="arSetMode" data-arg="mac">MAC</button>
           </div>
 
           <div id="arStructuredFields">
@@ -310,9 +308,9 @@
           </summary>
           <div class="ar-preset-bar mt-6">
             <select id="arTemplateSelect"><option value="">&#8212; Load template &#8212;</option></select>
-            <button onclick="arSaveTemplate()" title="Save current settings as a template">Save</button>
-            <button onclick="arDeleteTemplate()" title="Delete selected template">Del</button>
-            <button onclick="arSaveDefaults()" title="Remember these settings as the defaults for this install">Set default</button>
+            <button data-action="call" data-fn="arSaveTemplate" title="Save current settings as a template">Save</button>
+            <button data-action="call" data-fn="arDeleteTemplate" title="Delete selected template">Del</button>
+            <button data-action="call" data-fn="arSaveDefaults" title="Remember these settings as the defaults for this install">Set default</button>
           </div>
         </details>
 
@@ -330,9 +328,9 @@
             <p class="ar-manual-hint">Click access points on the plan in the order you want them
               numbered. Click a numbered one again to remove it &mdash; the rest shift down.</p>
             <div class="ar-manual-btns">
-              <button type="button" id="arManualUndo" onclick="arManualUndo()" disabled
+              <button type="button" id="arManualUndo" data-action="call" data-fn="arManualUndo" disabled
                       title="Undo the last assignment (Ctrl+Z)">Undo</button>
-              <button type="button" id="arManualClear" onclick="arManualClear()" disabled
+              <button type="button" id="arManualClear" data-action="call" data-fn="arManualClear" disabled
                       title="Clear every manual number on this project">Clear all</button>
             </div>
           </div>

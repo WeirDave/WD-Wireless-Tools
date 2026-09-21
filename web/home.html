@@ -10,16 +10,14 @@
 <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<script>
-  (function () { try { document.documentElement.setAttribute('data-theme', localStorage.getItem('wd-theme') || 'dark'); } catch (e) {} })();
-</script>
+<script src="/assets/js/wd-theme-boot.js"></script>
 <link rel="stylesheet" href="/assets/wd-tools.css">
 </head>
 <body class="tool-home">
   <div class="topbar">
     <div class="topbar-left">
       <div class="menu-wrap">
-        <button class="hamburger-btn" onclick="WD.toggleMenu(event,'homeMenu')" title="Menu"><span></span><span></span><span></span></button>
+        <button class="hamburger-btn" data-action="menu" data-menu="homeMenu" title="Menu"><span></span><span></span><span></span></button>
         <div id="homeMenu" class="main-menu">
           <div class="menu-section">&#9656; Navigation</div>
           <a class="menu-item active" href="/">⌂ Home</a>
@@ -37,14 +35,14 @@
           <a class="menu-item" href="/settings">· Suite Settings</a>
           <div class="menu-sep"></div>
           <div class="menu-section">&#9656; Help &amp; Support</div>
-          <button class="menu-item" type="button" onclick="WD.openAbout()">· About &amp; Updates</button>
-          <button class="menu-item" type="button" onclick="WD.copyDiagnostics()">· Copy Diagnostics</button>
+          <button class="menu-item" type="button" data-action="call" data-fn="WD.openAbout">· About &amp; Updates</button>
+          <button class="menu-item" type="button" data-action="call" data-fn="WD.copyDiagnostics">· Copy Diagnostics</button>
           <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues/new?template=bug_report.yml" target="_blank" rel="noopener">· Report a Bug on GitHub</a>
           <a class="menu-item" href="https://github.com/WeirDave/WD-Wireless-Tools/issues" target="_blank" rel="noopener">· View Issues on GitHub</a>
         </div>
       </div>
     </div>
-    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">
+    <button class="theme-toggle" id="themeToggle" data-action="call" data-fn="toggleTheme">
       <span class="ico" id="themeIco">🌙</span><span class="txt" id="themeTxt">Dark</span>
     </button>
   </div>
