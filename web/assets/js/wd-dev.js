@@ -339,11 +339,27 @@
     var inner = (typeof Dev.toolbarInnerHtml === 'function')
       ? Dev.toolbarInnerHtml()
       : '<span class="dev-toolbar-empty">No actions are registered.</span>';
+    /* **The way out, on the surface itself.** "there isn't an x on the dev
+       toolbar!" - and there was not: the only exits were a nav item and the
+       `?dev=0` URL, so anyone who arrived here without being told the URL was
+       in a mode with no visible way to leave it. The nav item stays, because
+       that is WaxFrame's method; this is here because a mode you cannot see
+       your way out of fails a more basic test than fidelity to the pattern.
+
+       It carries the ✕ *and* the words. The ✕ alone is what he went looking
+       for, but an unlabelled glyph is the thing he has already objected to
+       once - "there are items in here and I don't know what they do" - and on
+       a strip whose other controls open panels, a bare ✕ could as easily read
+       as "close this panel" as "leave dev mode". */
     return '' +
       '<div class="dev-toolbar is-hidden" id="devToolbar">' +
         '<span class="dev-toolbar-label" title="Drag to move this toolbar">' +
           '⚙ DEV</span>' +
         inner +
+        '<button type="button" class="dev-toolbar-exit" id="devExitBtn" ' +
+                'data-action="call" data-fn="WD.Dev.exitDevMode" ' +
+                'title="Leave dev mode and hide this toolbar">' +
+          '✕ Exit dev mode</button>' +
       '</div>';
   }
 
@@ -595,6 +611,22 @@
     if (!root) {
       root = document.createElement('div');
       root.id = 'wdDevRoot';
+      /* **`noprint`, because this is a screen surface and Report prints.**
+         It shipped without it and the pink strip landed on the sheet, above
+         the report content, in the print view of a document he hands to
+         installers. Every other preview surface in Report already carries
+         this class; the toolbar was added later and never got it.
+
+         **The strip was the only thing exposed.** Both modals are built on
+         `.modal-overlay`, which the print block already excludes, so they
+         were never on the paper. The class goes on the root anyway rather
+         than on the strip: everything the toolbar renders lives inside here,
+         so a surface added later is covered by default instead of being the
+         next thing to ship without it.
+
+         `.noprint` is the suite's own convention - see the `@media print`
+         block in wd-tools.css - rather than a second mechanism for this. */
+      root.className = 'noprint';
       document.body.appendChild(root);
     }
     if (!document.getElementById('devToolbar')) {

@@ -548,6 +548,25 @@ body.tool-report .report-wiz-topbar { background: linear-gradient(rgba(159,27,88
 
 .help-menu-item:hover { color: var(--text); background: var(--accent-dim); }
 
+/* A menu taller than the window scrolls instead of running off the bottom.
+   "I see no link in nav hamburger menu" - the Dev Tools entry and the Exit
+   Dev Mode item are appended last, and on a 768px screen they landed at
+   y=691 and y=722 inside a 682px viewport. The menu was 714px tall with
+   `overflow-y: visible` and no cap, so there was nothing to scroll and no way
+   to reach either one. On a 1080p screen both are on screen, which is why
+   this looked like it worked.
+   Measured in Firefox at 1366x768, 1280x720 and 1920x1080.
+
+   The menus fit before the dev section existed - about 652px - so this cap
+   engages on the pages that have grown past the window rather than changing
+   how any menu looks today. `overscroll-behavior` keeps a flick at the end of
+   the list from scrolling the page underneath it. */
+.main-menu, .help-menu, .wd-menu {
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -9890,6 +9909,17 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 }
 
 .dev-toolbar-empty { font-size: 11px; color: var(--text-3); }
+
+/* The exit sits apart from the actions: a rule and a margin, so the control
+   that leaves the mode does not read as a fourth thing to run. Same hover as
+   its neighbours - it is an ordinary button, not a destructive one. */
+.dev-toolbar .dev-toolbar-exit {
+  margin-left: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-strong);
+  border-radius: 0 4px 4px 0;
+  color: var(--text-2);
+}
 
 /* A preview writes nothing, and says so in lime. WaxFrame tints its
    Deep Dive toggle the same way, for the same reason: the button whose
