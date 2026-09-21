@@ -571,6 +571,23 @@ class TheSuiteCleansUpAfterItself(unittest.TestCase):
 
     So the rule is executable rather than written down. A new `mkdtemp` with
     no cleanup in its enclosing function fails here.
+
+    **What it checks is that a cleanup is registered, not that it worked**,
+    and the difference is a real leak it cannot see. `shutil.rmtree(...,
+    ignore_errors=True)` on a directory Windows will not delete - because
+    something still holds a handle on a file inside it - removes nothing and
+    says nothing, and this check passes because the call is there. That
+    happened on 2026-09-21: `send_file` keeps the file open until the
+    response is closed, Flask's test client does not close it, and
+    `test_the_server_answers_safely.py` left a `wd-cover-*` directory behind
+    on every run. Two rules follow, and neither is enforceable from here:
+
+    * **Register the release of the handle before the removal.** Cleanups
+      run in reverse, so `addCleanup(response.close)` after
+      `addCleanup(rmtree, d)` is what makes the removal succeed.
+    * **Count, once, after a change that adds a temp directory.** Listing
+      `%TEMP%` either side of a run is five seconds and it is the only thing
+      that distinguishes a cleanup that ran from one that worked.
     """
 
     CLEANUP_MARKERS = ("rmtree", "addCleanup", "atexit", "TemporaryDirectory",

@@ -27,7 +27,9 @@ from __future__ import annotations
 
 import io
 import json
+import shutil
 import sys
+import tempfile
 import unittest
 import zipfile
 from pathlib import Path
@@ -67,26 +69,44 @@ class ResponseHeaders(unittest.TestCase):
         """
         with mock.patch.object(server.report_store, "cover_path",
                                return_value=self._an_svg_on_disk()):
-            r = self.client.get("/api/report/cover")
+            r = self.get_cover()
         policy = r.headers.get("Content-Security-Policy", "")
         self.assertIn("default-src 'none'", policy)
         self.assertIn("frame-ancestors 'none'", policy)
 
     def _an_svg_on_disk(self):
-        import tempfile
         d = Path(tempfile.mkdtemp(prefix="wd-cover-"))
-        self.addCleanup(lambda: __import__("shutil").rmtree(d, ignore_errors=True))
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         p = d / "cover.svg"
         p.write_text(
             '<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>',
             encoding="utf-8")
         return p
 
+    def get_cover(self):
+        """Fetch the cover, and make sure the file handle is let go.
+
+        `send_file` keeps the file open until the response is closed, and
+        Flask's test client does not close it for you. So the `rmtree` in
+        `_an_svg_on_disk` ran against a file Windows would not delete, and
+        `ignore_errors=True` meant it said nothing about it - a directory
+        left in `%TEMP%` on every run of the suite, which is the exact
+        accounting `TheSuiteCleansUpAfterItself` exists to keep.
+
+        The ratchet could not see it: it checks that a cleanup is
+        *registered*, not that it *worked*, and one was. Registering the
+        close first is what makes the removal succeed - cleanups run in
+        reverse, so this happens before the directory goes.
+        """
+        response = self.client.get("/api/report/cover")
+        self.addCleanup(response.close)
+        return response
+
     def test_a_stored_svg_cover_cannot_run_script(self):
         """The finding. A logo from somebody else is an ordinary upload."""
         with mock.patch.object(server.report_store, "cover_path",
                                return_value=self._an_svg_on_disk()):
-            r = self.client.get("/api/report/cover")
+            r = self.get_cover()
         self.assertEqual(200, r.status_code)
         policy = r.headers.get("Content-Security-Policy", "")
         self.assertIn("default-src 'none'", policy,
@@ -99,7 +119,7 @@ class ResponseHeaders(unittest.TestCase):
         """The regression half: it has to remain a usable image."""
         with mock.patch.object(server.report_store, "cover_path",
                                return_value=self._an_svg_on_disk()):
-            r = self.client.get("/api/report/cover")
+            r = self.get_cover()
         self.assertEqual(200, r.status_code)
         self.assertIn(b"<svg", r.data)
 
