@@ -16,10 +16,11 @@ non-raw string. `\\d` is not a Python escape, and Python's behaviour today is to
 leave an unrecognised escape exactly as written - which is why those probes
 work and have always worked.
 
-That behaviour is deprecated. It is a `SyntaxWarning` in 3.12 and is scheduled
-to become a `SyntaxError`, at which point those two files stop importing and
-take the suite with them. The fix is one character each: an `r` in front of the
-opening quotes.
+That behaviour is deprecated: a `DeprecationWarning` up to 3.11, a
+`SyntaxWarning` from 3.12, and scheduled to become a `SyntaxError` - at which
+point those two files stop importing and take the suite with them. CI builds
+this on 3.10 and 3.14, so both halves of that are live here. The fix is one
+character each: an `r` in front of the opening quotes.
 
 The other two were `\\?\\` - the Windows long-path prefix - written out in prose
 in a non-raw docstring, where it rendered as `\\?\\` with one backslash missing,
@@ -96,16 +97,46 @@ class TheWarningWouldHaveBeenSeenTests(unittest.TestCase):
     Not a mutation of the repository: a string with the same defect, compiled
     the same way. If Python ever stops warning about this, the assertion below
     goes red and says so, rather than the check above quietly passing forever.
+
+    **The category is not the same on every Python this suite is built for, and
+    that is how the first version of this file went red on CI while passing
+    locally.** It asserted ``category is SyntaxWarning``, which is true from
+    3.12 onwards. Before that the same defect raises a `DeprecationWarning`,
+    so both 3.10 jobs failed and both 3.14 jobs passed - and the machine it was
+    written on runs 3.12, where it looked fine.
+
+    The lesson is the one already in `CLAUDE.md` about node probes and locale
+    encodings, in a new place: a check on *how* the interpreter reports
+    something is a check on the interpreter version. So this asks whether a
+    warning arrives and what it says, and leaves the class to Python.
     """
 
-    def test_an_invalid_escape_still_warns(self):
+    #: `compile()` on a string, so it does not depend on a file in the tree.
+    PROBE = 'x = "width:([\\d.]+)%"'
+
+    def _warnings_for_the_probe(self):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
-            compile('x = "width:([\\d.]+)%"', "<probe>", "exec")
+            compile(self.PROBE, "<probe>", "exec")
+        return caught
+
+    def test_an_invalid_escape_still_warns(self):
         self.assertTrue(
-            [c for c in caught if c.category is SyntaxWarning],
+            self._warnings_for_the_probe(),
             "Python no longer warns about an unrecognised escape, so the "
             "check above can never fail and is measuring nothing")
+
+    def test_the_warning_still_says_what_is_wrong(self):
+        """The message is what the failure above prints, so it has to be useful.
+
+        A bare "there was a warning" would not tell anybody which character to
+        change, and it is the message rather than the class that is stable
+        across the versions this suite is built for.
+        """
+        messages = [str(c.message) for c in self._warnings_for_the_probe()]
+        self.assertTrue(
+            [m for m in messages if "invalid escape sequence" in m],
+            "the warning no longer names the problem: %r" % (messages,))
 
 
 if __name__ == "__main__":  # pragma: no cover
