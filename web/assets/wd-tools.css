@@ -120,7 +120,32 @@
   --opacity-disabled: 0.5;
 
 
-  --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  /* Faces that ship with the operating system, in that order, because this
+     is printed as well as displayed.
+
+     The stack used to lead with 'SF Mono', 'Cascadia Code' and 'Fira Code'.
+     It ended in `monospace` and was never missing a fallback - the fallback
+     was simply never reached. `SF Mono` is not on Windows, so a Windows
+     machine resolved **Cascadia Code**, which is installed by Windows
+     Terminal and VS Code and is therefore on a developer's machine and not on
+     anybody else's. Printing then went through Adobe PDF, Firefox referenced
+     the face by its PostScript name `CascadiaCode-Regular`, Distiller could
+     not embed it, and the job was abandoned with a PostScript error log
+     written where the PDF should have been. No PDF at all, from a report that
+     rendered perfectly on screen.
+
+     A generic fallback would not have helped, because nothing fell back. What
+     matters for something that gets printed is that the *preferred* face is
+     one the machine really has and one a print pipeline can embed:
+
+       Consolas  - ships with Windows, and with Office on macOS
+       Menlo     - ships with macOS
+       DejaVu Sans Mono - the usual Linux one
+       monospace - the generic, still last
+
+     Screen and print use the same stack deliberately: a report that looks one
+     way on screen and another on paper is its own bug. */
+  --mono: Consolas, Menlo, 'DejaVu Sans Mono', monospace;
   --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 
   --z-sticky: 10;
@@ -9091,7 +9116,10 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 .rename-what-folder { font-weight: 700; color: var(--blue); }
 .rename-what-name { font-weight: 700; }
 .rename-what-path {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  /* `var(--mono)` like everything else. This rule had its own stack, which
+     is how a second one drifts out of step with the first - and the first is
+     the one that just cost a document. */
+  font-family: var(--mono);
   font-size: 12px; color: var(--text-2);
 }
 @media (max-width: 640px) {

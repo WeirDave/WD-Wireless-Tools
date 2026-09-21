@@ -658,7 +658,9 @@ Only addresses that a share actually succeeded for are remembered, so a typo
 is never offered back to you.
 
 **This list stays on your computer.** It lives with your other settings, in
-`%USERPROFILE%\.wd_wireless_tools\share_recipients.json`, and is never sent
+`~/.wd_wireless_tools/share_recipients.json` — on Windows
+`%USERPROFILE%\.wd_wireless_tools\share_recipients.json`, on macOS
+`/Users/<you>/.wd_wireless_tools/share_recipients.json` — and is never sent
 anywhere. It is included in **Settings → Export settings**, so rebuilding a
 machine does not mean rebuilding the list from memory.
 
@@ -1921,10 +1923,18 @@ key and Ekahau would draw whichever it found first.
 
 ### Where your settings and templates live
 
-`~/.wd_wireless_tools/` — on Windows, `%USERPROFILE%\.wd_wireless_tools\`.
+`~/.wd_wireless_tools/`, which is:
+
+| Platform | Folder |
+| --- | --- |
+| Windows | `%USERPROFILE%\.wd_wireless_tools\` — usually `C:\Users\<you>\.wd_wireless_tools\` |
+| macOS | `/Users/<you>/.wd_wireless_tools/` |
+| Linux | `/home/<you>/.wd_wireless_tools/` |
+
 Settings, wall templates, capacity templates, logs and backups are all under
 there, **outside the install folder**, so updating or reinstalling the suite
-cannot touch them.
+cannot touch them. The suite asks the operating system where your home folder
+is rather than assuming a drive letter, so it is the same place on each.
 
 ---
 
