@@ -16,7 +16,7 @@
     "test_cloud_paired_rename.py": 4,
     "test_cloud_prefs_migration.py": 3,
     "test_cloud_pull.py": 3,
-    "test_cloud_row_detail_band.py": 6,
+    "test_cloud_row_detail_band.py": 4,
     "test_cloud_sync_all_dialog.py": 2,
     "test_cloud_sync_everything.py": 0,
     "test_cloud_unshared_filter.py": 7,
@@ -60,5 +60,5 @@
     "test_walls_prefs_migration.py": 3
   },
   "note": "Per-file counts of assertions made against the text of a source file, as at the sweep that introduced this ratchet. Existing debt is tolerated; growth is not. Lower a number when you convert a test to one that executes - never raise one.",
-  "total": 317
+  "total": 315
 }

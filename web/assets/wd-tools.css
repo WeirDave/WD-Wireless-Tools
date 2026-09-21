@@ -168,6 +168,20 @@
   --attn:   #d29922;   /* wants a decision */
   --danger: #f85149;   /* removes something */
   --accent: #2f81f7;   /* interactive - and the site names, which he chose */
+
+  /* The green out of the logo, for a local folder's name.
+
+     "use the green that's in the logo so that we're following suit" - so it
+     is measured rather than picked. Sampled from the product's own artwork:
+     the Cloud Manager tile reads #04B44A over 41,623 green pixels with the
+     mode and the mean agreeing to one point, and the suite wordmark reads
+     #03B744 / #05B747 on a noisier sample. Same colour; this is the cleanest
+     reading of it.
+
+     It is its own token rather than a change to `--green`, which is used by
+     buttons and badges across seven tools and is not the thing being asked
+     about. */
+  --brand-green: #04b44a;
   --accent-soft:    #a5a5f0;
   --accent-fill:    #1f6feb;
   --accent-fill-hi: #388bfd;
@@ -218,6 +232,11 @@
   --attn:   #9a6700;
   --danger: #cf222e;
   --accent: #0969da;
+
+  /* The same green, same hue and saturation, darkened until it is readable
+     on white: 2.75:1 at the brand value, 4.94:1 here. A brand colour that
+     cannot be read is not following suit either. */
+  --brand-green: #038235;
   --accent-soft:    #6639ba;
   --accent-fill:    #0969da;
   --accent-fill-hi: #0550ae;
@@ -3570,7 +3589,16 @@ body.tool-cloud .toolbar input.search:focus {
 
 .ledger.tree .tree-parent .lr-cell.cloud .cell-name { color: var(--blue); }
 
-.ledger.tree .tree-parent .lr-cell.local .cell-name { color: var(--green); }
+/* A local folder's name, in the logo's green.
+
+   The rule and the row class both survived the redesign; what broke was the
+   value behind them. `--green` is #15803d, which is a *light-theme* green -
+   3.45:1 on this surface, against 6.24:1 for the blue on the cloud side. So
+   one side of the row kept its colour and the other went murky, which is
+   what "we don't have the local file names for the folders coloured the same
+   as cloud" describes. The brand green is 6.29:1, which puts the two sides
+   back within a twentieth of a stop of each other. */
+.ledger.tree .tree-parent .lr-cell.local .cell-name { color: var(--brand-green); }
 
 .tree-chevron {
   flex: 0 0 auto; background: transparent; border: none; cursor: pointer;
@@ -9563,13 +9591,23 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
    little because everything around it got quieter. */
 .ledger.tree .tree-parent .lr-cell.cloud, .ledger.tree .tree-parent .lr-cell.local { font-weight: 600; }
 .ledger.tree .tree-parent .lr-cell .cell-name { font-size: 13px; letter-spacing: -0.1px; }
-.ledger.tree .tree-parent .lr-cell.local .cell-name { color: var(--text); }
+/* The folder name keeps its green, and this is where it stopped.
+   The line above says the site name keeps its blue "he asked for both", and
+   the rule that used to sit here set the local side to plain `--text` -
+   so one half of the pair he asked for survived the pass and the other did
+   not. The colour is set once now, further up, from `--brand-green`. */
 
 /* The alphabet dividers were 18px, 900 weight, 3px letterspaced and filled
    with colour - louder than the site names they were dividing. */
 .ledger-group-head .glh-letter { font-size: 11px; font-weight: 700; letter-spacing: 1.5px; padding: 5px 14px; }
+/* Both dividers quiet, not one of each. The pass that toned these down -
+   "louder than the site names they were dividing" - quietened the cloud
+   letter and left the local one on `--green`, which is the same
+   3.45:1 value the folder name was stuck with. The intent was clearly both;
+   only one line got written. The letters are not the hierarchy, the names
+   are. */
 .ledger-group-head .glh-letter.cloud { color: var(--text-3); background: none; }
-.ledger-group-head .glh-letter.local { background: none; }
+.ledger-group-head .glh-letter.local { color: var(--text-3); background: none; }
 [data-theme="light"] .ledger-group-head .glh-letter.cloud { background: none; }
 
 /* Narrow: the actions wrap under their sentence rather than squeezing it. */

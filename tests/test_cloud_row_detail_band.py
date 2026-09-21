@@ -324,14 +324,21 @@ class ThreeLevelsGetThreeTreatmentsTests(unittest.TestCase):
         self.assertEqual(token("surface"), token("detail-row"))
         self.assertEqual(token("stripe"), token("detail-row-stripe"))
 
-    def test_the_site_and_file_palette_is_left_alone(self):
-        """"Currently the sites are labelled in blue and the files are labelled
-        using white text, and the sites have a nice border ... I hope they
-        don't go the other direction." So this is not touched."""
-        self.assertIn(".ledger.tree .tree-parent .lr-cell.cloud .cell-name { color: var(--blue); }",
-                      self.CSS_TEXT)
-        self.assertIn(".ledger.tree .tree-parent .lr-cell.local .cell-name { color: var(--green); }",
-                      self.CSS_TEXT)
+    # `test_the_site_and_file_palette_is_left_alone` was here, asserting that
+    # this stylesheet contains two particular `color:` rules - and it is the
+    # reason there is now a browser-driven test instead.
+    #
+    # It went on passing through the whole period the local folder name
+    # rendered white, because a later rule in the same file set it back to
+    # `--text` and a substring search cannot see a cascade. The string was
+    # there and the colour was not. It would also have passed with the token
+    # behind it flattened to a value measuring 3.45:1, which is the second
+    # half of the same regression.
+    #
+    # `tests/test_cloud_name_colours.py` renders the real markup with this
+    # stylesheet, reads `getComputedStyle` back and computes contrast from
+    # the pixels. It fails on both of those and on a file name gaining a
+    # colour - the "other direction" the old docstring was quoting.
 
 
 class TheBandIsStyledForAWideScreenTests(unittest.TestCase):
