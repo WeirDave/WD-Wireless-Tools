@@ -77,7 +77,13 @@ function _renderTokenBars() {
     }
     const inputId = barId === 'rnFolderTokenBar' ? 'rnFolderFormat' : 'rnFileFormat';
     bar.innerHTML = '<span class="sr-hint">Insert:</span> ' +
-      tokens.map(t => '<button class="sr-token-btn" onclick="_renameInsertFormatToken(\'' + inputId + '\',\'' + esc(t.key) + '\')">{' + esc(t.key) + '}</button>').join(' ');
+      // A token key is a **CSV column header** - it comes out of a file he
+      // imported, not out of this code - and it lands inside a JavaScript
+      // string. `esc` is the text escaper: it converts `&`, `<` and `>` and
+      // leaves the apostrophe alone, so a header named `a'` closed the
+      // string and everything after it ran. `WD.escJsStr` is the escaper for
+      // this sink; the label after it is element text and keeps `esc`.
+      tokens.map(t => '<button class="sr-token-btn" onclick="_renameInsertFormatToken(\'' + inputId + '\',\'' + WD.escJsStr(t.key) + '\')">{' + esc(t.key) + '}</button>').join(' ');
   });
 }
 
@@ -584,9 +590,36 @@ async function showRenameProfiles() {
     return '<div class="sr-profile-item">' +
       '<div class="sr-profile-name">' + esc(name) + '</div>' +
       '<div class="sr-profile-detail">Folder: <code>' + esc(p.folder_format || '') + '</code> · File: <code>' + esc(p.file_format || '') + '</code></div>' +
+      /* A profile name goes into a JavaScript string inside an HTML
+         attribute, and that needs the escaper built for it.
+
+         This was `JSON.stringify(name).replace(/"/g, '&quot;')`, which looks
+         thorough and is not: `stringify` escapes the quote and the
+         backslash, the replace turns the quotes into entities, and **the
+         ampersand is left alone**. So a name containing the six characters
+         `&quot;` survives all of it, the browser decodes the entity back to
+         a real quote when it reads the attribute, and the JS string closes
+         early. A profile named
+
+             x&quot;);window.PWNED=true;//
+
+         renders `onclick="applyRenameProfile("x");window.PWNED=true;//")`
+         and runs. Confirmed by clicking the rendered button in Firefox,
+         Chrome and Edge - all three.
+
+         Not the crafted-`.esx` route: he types a profile name himself. It
+         arrives from somewhere else all the same, because a settings bundle
+         carries `rename_profiles.json` and a bundle is a file he can be
+         handed - it is how a setting gets from the machine at home to the
+         one at work.
+
+         `WD.escJsStr` is the answer and it already existed; it escapes the
+         backslash, the apostrophe, `<`, the ampersand and the quote, which
+         is what a single-quoted JS string inside a double-quoted attribute
+         needs. Same shape `cloud.js` uses. */
       '<div class="sr-profile-actions">' +
-        '<button class="btn btn-sm" onclick="applyRenameProfile(' + JSON.stringify(name).replace(/"/g, '&quot;') + ')">Apply</button>' +
-        '<button class="btn btn-sm btn-danger" onclick="deleteRenameProfile(' + JSON.stringify(name).replace(/"/g, '&quot;') + ')">Delete</button>' +
+        '<button class="btn btn-sm" onclick="applyRenameProfile(\'' + WD.escJsStr(name) + '\')">Apply</button>' +
+        '<button class="btn btn-sm btn-danger" onclick="deleteRenameProfile(\'' + WD.escJsStr(name) + '\')">Delete</button>' +
       '</div></div>';
   }).join('');
 }

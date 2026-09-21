@@ -10,8 +10,11 @@ endpoints. Runs a tiny local Flask server and opens your default browser to it.
 
 No pywebview, no WebView2 — so none of the desktop-window headaches.
 """
+import hashlib
+import hmac
 import json
 import logging
+import re
 import shutil
 import tempfile
 import os
@@ -42,6 +45,7 @@ from tools import settings_backup
 from tools import share_recipients
 from tools import updater
 from tools import applog
+from tools import esx_guard
 from tools import esx_trimmer
 from tools import plantrim_store
 from tools import plan_detect
@@ -56,6 +60,22 @@ ts = TemplateStore()
 PORT = int(os.environ.get("PORT") or 8675)
 API_REQUEST_HEADER = "X-WD-Wireless-Tools"
 _LOCAL_API_HOSTS = {"localhost", "127.0.0.1"}
+
+#: A ceiling on a request body, because there was none.
+#:
+#: Four routes read the whole body into memory before looking at it - the
+#: PlanTrim, Capacity and Prep drop zones, and the report cover upload - so
+#: a single POST could ask this process for as much memory as the sender
+#: cared to send.
+#:
+#: **The number is chosen to be far above his real work, not near it.** His
+#: projects run to a couple of hundred megabytes and a limit that fires on a
+#: real project would be the guard-on-the-normal-case failure: he would hit
+#: it on a Monday with a job to finish, and a refusal he cannot explain is
+#: worse than the unbounded read this replaces. A gigabyte is about five
+#: times the largest project seen here and still a bound.
+MAX_REQUEST_BYTES = 1024 * 1024 * 1024
+app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
 
 
 def _load_startup_versions():
@@ -92,7 +112,23 @@ _progress_lock = threading.Lock()
 _progress = {}
 
 
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, RequestEntityTooLarge
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def _too_large(exc):
+    """The size ceiling, answered in words rather than as Werkzeug's HTML.
+
+    Every page here reads a JSON body and shows `error`; a 413 carrying an
+    HTML error page renders as nothing at all, which is the silent failure
+    this suite keeps writing rules against.
+    """
+    return jsonify({
+        "ok": False,
+        "error": "That file is larger than this tool will accept in one "
+                 f"request ({MAX_REQUEST_BYTES // (1024 * 1024)} MB). Open "
+                 "it from disk instead - nothing is uploaded that way.",
+    }), 413
 
 
 @app.errorhandler(Exception)
@@ -143,6 +179,34 @@ def _protect_local_api():
     return None
 
 
+def _attachment(filename: str) -> str:
+    """A `Content-Disposition` value that survives the filename it is given.
+
+    Three routes built this header by interpolating a name straight into
+    `attachment; filename="{stem} (trimmed).esx"`. The name comes from a
+    query parameter, so a double quote in it closes the field early and
+    everything after it parses as further header parameters - the same shape
+    as the attribute-escaping bug v2.146.1 fixed in the markup, one layer
+    down.
+
+    It also produced a header the browser could not read for an ordinary
+    reason: a project named in anything but Latin-1 - an accent is enough -
+    cannot travel in `filename=` at all, and what arrived was mojibake or a
+    dropped header.
+
+    So: the quote and the backslash are escaped, control characters go, and
+    the real name travels in RFC 5987 `filename*` where every browser since
+    IE9 reads it in preference. `filename=` keeps an ASCII fallback.
+    """
+    name = "".join(ch for ch in str(filename or "")
+                   if ch.isprintable() and ch not in "\r\n")
+    name = name.strip() or "download"
+    ascii_name = name.encode("ascii", "replace").decode("ascii")
+    quoted = ascii_name.replace("\\", "_").replace('"', "_")
+    return (f'attachment; filename="{quoted}"; '
+            f"filename*=UTF-8''{quote(name, safe='')}")
+
+
 def _progress_setter(op_id):
     """Return a progress_cb bound to op_id. Empty op_id → no-op (backward compat)."""
     if not op_id:
@@ -166,7 +230,17 @@ def _no_cache(resp):
 
 
     resp.headers["X-Frame-Options"] = "DENY"
-    resp.headers["Content-Security-Policy"] = "frame-ancestors 'none'"
+    # Set rather than overwritten, because one route needs a stricter policy
+    # of its own - see `api_report_cover_get`, where a stored SVG has to be
+    # served as a picture and never as a document. Clobbering it here would
+    # have quietly undone that.
+    resp.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+    # The browser uses the type we declare and never guesses a better one.
+    # Every response here has a type the server chose deliberately - sniffed
+    # magic bytes for the cover image, the extension for a static asset - so
+    # there is nothing for a guess to improve on, and a guess is how a file
+    # stored as one thing gets run as another.
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     return resp
 
 
@@ -406,6 +480,7 @@ def api_capacity(action):
         try:
             src = Path(tmpdir) / "in.esx"
             src.write_bytes(blob)
+            esx_guard.check(src)
             if action == "analyze":
                 out = capacity_profiles.extract(str(src))
                 out["source"] = name
@@ -442,14 +517,19 @@ def api_capacity(action):
             stem = Path(name).stem or "project"
             response = make_response(dest.read_bytes())
             response.headers["Content-Type"] = "application/octet-stream"
-            response.headers["Content-Disposition"] = (
-                f'attachment; filename="{stem} (capacity).esx"')
+            response.headers["Content-Disposition"] = _attachment(
+                f"{stem} (capacity).esx")
             report = {k: out[k] for k in
                       ("ok", "occupants", "totalDevices", "floorsWritten",
                        "floorsSkipped", "areasReplaced", "areasLeftInPlace",
                        "profilesCreated", "orphanAreasIgnored")}
             response.headers["X-WD-Capacity-Report"] = quote(json.dumps(report))
             return response
+        # A refusal, not a fault: the archive is answerable, it is just
+        # not something it is safe to read. 400 rather than 500 so the
+        # page shows the sentence instead of "something went wrong".
+        except esx_guard.HostileArchive as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
         except Exception as e:
             return jsonify({"ok": False, "error": str(e)}), 500
         finally:
@@ -556,6 +636,7 @@ def api_plantrim(action):
     try:
         src = Path(tmpdir) / "in.esx"
         src.write_bytes(blob)
+        esx_guard.check(src)
         if action == "suggest":
             return jsonify(_plantrim_suggest(src))
 
@@ -570,9 +651,8 @@ def api_plantrim(action):
         payload = dest.read_bytes()
         response = make_response(payload)
         response.headers["Content-Type"] = "application/octet-stream"
-        response.headers["Content-Disposition"] = (
-            f'attachment; filename="{stem} (trimmed).esx"'
-        )
+        response.headers["Content-Disposition"] = _attachment(
+            f"{stem} (trimmed).esx")
         # The report rides along in a header so the page can show the numbers
         # without a second round trip carrying the whole archive again.
         response.headers["X-PlanTrim-Report"] = quote(json.dumps({
@@ -583,6 +663,11 @@ def api_plantrim(action):
             "droppedCount": sum(f.get("droppedCount") or 0 for f in result.get("floors") or []),
         }))
         return response
+    # A refusal, not a fault: the archive is answerable, it is just not
+    # something it is safe to read. 400 rather than 500 so the page shows
+    # the sentence instead of "something went wrong".
+    except esx_guard.HostileArchive as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -881,6 +966,7 @@ def api_prep(action):
         else:
             src = Path(tmpdir) / "in.esx"
             src.write_bytes(blob)
+            esx_guard.check(src)
         # Rectangles he already cropped in PlanTrim, reused rather than redrawn.
         # Read by the project's own id, the same key PlanTrim stores them under,
         # and only when asked for - the default is to find the drawing
@@ -941,8 +1027,8 @@ def api_prep(action):
         stem = Path(name).stem or "project"
         response = make_response(dest.read_bytes())
         response.headers["Content-Type"] = "application/octet-stream"
-        response.headers["Content-Disposition"] = (
-            f'attachment; filename="{stem} (prepared).esx"')
+        response.headers["Content-Disposition"] = _attachment(
+            f"{stem} (prepared).esx")
         # A summary, not the whole report. A dozen floors of trim detail runs
         # past what a header is allowed to carry, and a truncated header is a
         # page that silently renders nothing.
@@ -978,6 +1064,11 @@ def api_prep(action):
                        for f in (out.get("failed") or [])[:3]],
         }))
         return response
+    # A refusal, not a fault: the archive is answerable, it is just not
+    # something it is safe to read. 400 rather than 500 so the page shows
+    # the sentence instead of "something went wrong".
+    except esx_guard.HostileArchive as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
     finally:
@@ -990,11 +1081,42 @@ def api_report_cover_get():
 
     The page asks for it with the ?v= token from cover_info so a replaced image
     is picked up immediately instead of being served from cache.
+
+    **SVG is one of the formats this accepts, and an SVG is a document.**
+    `report_store._sniff` deliberately allows it - a company logo is usually
+    an SVG and that is exactly what a report cover is - so the bytes on disk
+    here can contain `<script>`. Rendered through the `<img>` tag the report
+    uses, that script never runs. Opened directly at this address, it does,
+    and it runs **on this server's origin**, which is where every `/api/*`
+    endpoint lives: the Ekahau session, the project folder, the update.
+
+    A logo handed over by somebody else, uploaded as the cover, is an
+    ordinary thing to do, so this is reachable without anybody doing
+    anything odd. The headers below are what make it a picture and only a
+    picture:
+
+    * `default-src 'none'` - no script, no fetch, no subresource of any kind,
+      whatever the file contains. `<img>` rendering is unaffected, because a
+      page's CSP governs what the *image response* may load and an image
+      loads nothing.
+    * `sandbox` - and it is not redundant. Were a policy ever loosened, the
+      sandbox still puts the document in an opaque origin, so it could not
+      reach this one.
+    * `frame-ancestors 'none'` - carried over from the default policy, which
+      this replaces rather than adds to.
+
+    `X-Content-Type-Options: nosniff` comes from `_no_cache` and matters here
+    too: the type is decided from the file's magic bytes when it is saved,
+    and a browser re-deciding would put that work back in play.
     """
     path = report_store.cover_path()
     if not path:
         return jsonify({"error": "no cover image"}), 404
-    return send_file(str(path), max_age=0)
+    resp = send_file(str(path), max_age=0)
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'none'; style-src 'unsafe-inline'; sandbox; "
+        "frame-ancestors 'none'")
+    return resp
 
 
 @app.route("/api/report/cover", methods=["POST", "DELETE"])
@@ -1251,6 +1373,127 @@ def _project_folders():
         return []
 
 
+# ── the dev toolbar's own actions, and the half of the gate that is here ────
+#
+# **The client was the whole gate, and the client is not the guard.** Dev mode
+# is `localStorage['wd_dev'] === '1'`, set by a password modal in `wd-dev.js`,
+# and `wd-dev.js` says plainly what that is worth: "obfuscation, not security
+# ... anyone with a browser console can set the flag directly". The server
+# agreed with nothing. `/api/dev/<action>` ran whatever arrived, and the
+# password hash it is checked against sits in two public repositories.
+#
+# What that was worth in practice is narrower than it sounds, and the honest
+# version matters for deciding how much to build:
+#
+#  * A local process running as him can already do anything these actions do,
+#    directly. A gate here does not change that.
+#  * Cross-site is already closed - `_protect_local_api` rejects a foreign
+#    Host, a foreign Origin, and any state-changing request without the
+#    custom header, which a form cannot set and CORS will not grant.
+#  * What is left is **script running inside a page this server served** -
+#    the crafted-`.esx` XSS class the v2.146.1 fix was about. That script is
+#    same-origin and passes every check above.
+#
+# So the gate that is worth having is the one that makes the two *writing*
+# actions unavailable unless somebody has proved the password to the server
+# in this run. Dev mode is off almost always; with it off, a script that gets
+# into a page can no longer delete anything through here or stop a process.
+#
+# **It is deliberately not put in front of the survey.** That is a read, it
+# returns counts rather than values, and the toolbar's whole purpose is
+# answering "is there junk everywhere" in five seconds. Charging a password
+# for a read is the guard-on-the-normal-case failure this repository has paid
+# for before.
+#
+# **And it does not pretend to be more than it is.** `/api/cloud/*` can
+# delete cloud projects and `/api/update` installs code, and neither is
+# behind this. Locking the dev panel while those stay open would be theatre.
+# The boundary that actually holds for those is the one the audit already
+# established: every destructive action re-derives its target server-side at
+# the moment it writes. See `housekeeping.sweep` and `stop_processes`.
+
+#: How long one unlock lasts. Long enough for a housekeeping pass, short
+#: enough that an unlocked server left running overnight re-locks itself.
+DEV_UNLOCK_SECONDS = 30 * 60
+
+#: Actions that change something, and therefore need the password. The survey
+#: is absent on purpose - see the note above.
+DEV_ACTIONS_NEEDING_UNLOCK = {"housekeeping_sweep", "housekeeping_stop"}
+
+_dev_lock = threading.Lock()
+_dev_unlocked_until = 0.0
+_dev_failed_attempts = 0
+
+
+def _dev_password_hash():
+    """The expected SHA-256, read out of `web/assets/js/wd-dev.js`.
+
+    **One copy, and it stays in the portable file.** `wd-dev.js` is written to
+    be copied to his other products unchanged, and the hash is the one thing
+    in it that deliberately does not change - it is the same password
+    WaxFrame Professional uses, at his request. Keeping a second copy here
+    would be a value that can drift from the one the modal actually checks,
+    and `tests/test_dev_password_hash.py` would not see the drift because it
+    compares this repository's copy with WaxFrame's.
+
+    Unreadable means locked. A gate that fails open is not a gate.
+    """
+    try:
+        text = (WEB / "assets" / "js" / "wd-dev.js").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    found = re.search(r"DEV_PW_HASH\s*=\s*['\"]([0-9a-fA-F]{64})['\"]", text)
+    return found.group(1).lower() if found else None
+
+
+def dev_is_unlocked():
+    with _dev_lock:
+        return time.time() < _dev_unlocked_until
+
+
+def _dev_unlock(password):
+    """Verify the password and open the writing actions for this process.
+
+    Compared with `hmac.compare_digest` rather than `==`: the timing of a
+    string comparison leaks how much of a digest matched, and this costs
+    nothing to get right.
+
+    A wrong password earns a delay that grows with the number of wrong ones,
+    because the only attacker this can see is a local script that can try
+    thousands a second against a hash published in two public repositories.
+    It is a speed bump, and the ceiling keeps it from becoming a way to hang
+    the server's thread pool.
+    """
+    global _dev_unlocked_until, _dev_failed_attempts
+
+    expected = _dev_password_hash()
+    if not expected:
+        return False, ("Dev actions are locked: this install has no readable "
+                       "dev password. Reinstall to restore web/assets/js/wd-dev.js.")
+
+    got = hashlib.sha256((password or "").encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(got, expected):
+        with _dev_lock:
+            _dev_failed_attempts += 1
+            attempts = _dev_failed_attempts
+        time.sleep(min(2.0, 0.25 * attempts))
+        # The modal says nothing on a wrong password and neither does this -
+        # telling a guesser they were close is worse than silence. The page
+        # needs to know it failed, so it gets that and no more.
+        return False, "Wrong password."
+
+    with _dev_lock:
+        _dev_unlocked_until = time.time() + DEV_UNLOCK_SECONDS
+        _dev_failed_attempts = 0
+    return True, ""
+
+
+def _dev_relock():
+    global _dev_unlocked_until
+    with _dev_lock:
+        _dev_unlocked_until = 0.0
+
+
 #: Dev toolbar actions that are not about the cloud. Same shape as
 #: CLOUD_ACTIONS, and separate because a housekeeping sweep has nothing to do
 #: with Ekahau and should not be reachable at a URL that says it does.
@@ -1262,20 +1505,47 @@ DEV_ACTIONS = {
     "housekeeping_sweep": lambda d: housekeeping.sweep(
         d.get("paths") or [], own_paths=_session_paths(),
         project_folders=_project_folders()),
-    "housekeeping_stop": lambda d: {
-        "ok": True,
-        "stopped": [pid for pid in (d.get("pids") or [])
-                    if housekeeping.stop_process(pid)]},
+    # Same rule as `sweep`, and it was missing here until the 2026-09-20
+    # sweep: the ids are re-derived from a fresh process survey and anything
+    # not on it is refused. This used to hand every id in the request body
+    # straight to `taskkill /F`.
+    "housekeeping_stop": lambda d: housekeeping.stop_processes(
+        d.get("pids") or []),
 }
 
 
 @app.route("/api/dev/<action>", methods=["POST"])
 def api_dev(action):
+    data = request.get_json(silent=True) or {}
+
+    if action == "unlock":
+        ok, why = _dev_unlock(data.get("password"))
+        return jsonify({"ok": ok, "error": ("" if ok else why),
+                        "secondsValid": DEV_UNLOCK_SECONDS if ok else 0})
+    if action == "lock":
+        _dev_relock()
+        return jsonify({"ok": True})
+    if action == "state":
+        return jsonify({"ok": True, "unlocked": dev_is_unlocked()})
+
     fn = DEV_ACTIONS.get(action)
     if not fn:
         return jsonify({"error": f"unknown action: {action}"}), 404
+
+    if action in DEV_ACTIONS_NEEDING_UNLOCK and not dev_is_unlocked():
+        # `code` rather than only prose, so the panel can offer the password
+        # box instead of showing him a failure he has to interpret. A control
+        # that refuses without saying how to proceed is the thing this
+        # repository calls a wall across the main road.
+        return jsonify({
+            "ok": False,
+            "code": "dev_locked",
+            "error": "This action needs the dev password. It is asked for "
+                     "once per run of the server.",
+        }), 403
+
     try:
-        return jsonify(fn(request.get_json(silent=True) or {}))
+        return jsonify(fn(data))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1630,6 +1900,31 @@ def _quieten_queue_warnings():
     logging.getLogger("waitress.queue").addFilter(_QueueDepthFilter())
 
 
+def _warn_about_stale_dependencies():
+    """Say so if a dependency is older than this version needs.
+
+    The installers check this and fix it, and an install can still drift:
+    somebody downgrades a package for another project, a system Python gets
+    replaced, a `pip install` for something else resolves one of ours
+    backwards. Pillow is the one that matters - it decodes floor-plan images
+    out of archives that arrive by email - so an install running an old one
+    should say so rather than look identical to a current one.
+
+    One line, and it never stops the server: being unable to start is a
+    worse outcome than being out of date, and he is the only person who can
+    decide which of those he has time for this morning.
+    """
+    try:
+        from tools import deps
+        result = deps.check()
+        if not result["ok"]:
+            applog.console("Dependencies need attention: " + deps.summary(result))
+            applog.console("  Run the installer again, or: "
+                           "python -m pip install --upgrade -r requirements.txt")
+    except Exception as exc:
+        applog.note_failure("dependency check", exc)
+
+
 def main():
     # Before the banner, so that anything the startup itself hits is recorded.
     # An import-time failure is still only visible on the console - by then
@@ -1637,6 +1932,7 @@ def main():
     # test exists to prevent.
     applog.install(app_version=_STARTUP_VERSIONS.get("suite"))
     _print_banner()
+    _warn_about_stale_dependencies()
     threading.Thread(target=_open_browser, daemon=True).start()
 
 

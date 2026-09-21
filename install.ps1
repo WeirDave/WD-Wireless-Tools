@@ -473,22 +473,29 @@ try {
         Write-Step "Downloading $tag…"
         Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip -UseBasicParsing
 
+        # A missing manifest and a wrong one are the same answer: this
+        # download cannot be shown to be the one that was published, so it is
+        # not installed. This warned and carried on until 2026-09-20, which
+        # made the check decorative - whoever can serve the ZIP has no reason
+        # to serve a checksum beside it.
         $sum = $release.assets | Where-Object { $_.name -eq "$assetName.sha256" } | Select-Object -First 1
-        if ($sum) {
-          Write-Step 'Verifying SHA-256…'
-          $sumFile = Join-Path $staging 'release.sha256'
-          Invoke-WebRequest -Uri $sum.browser_download_url -OutFile $sumFile -UseBasicParsing
-          $text = (Get-Content -Raw -LiteralPath $sumFile).Trim()
-          if ($text -notmatch '^(?<hash>[A-Fa-f0-9]{64})\b') { throw 'Checksum file is malformed.' }
-          $expected = $Matches['hash'].ToLowerInvariant()
-          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) {
-            throw "SHA-256 mismatch — expected $expected, got $actual. The download was not used."
-          }
-          Write-Ok "  Verified $actual"
-        } else {
-          Write-Warn '  No checksum published for this release; skipping verification.'
+        if (-not $sum) {
+          throw ("Release $tag publishes no checksum, so this download cannot be " +
+                 "verified and was not installed. Download it by hand from " +
+                 "https://github.com/$Repo/releases if you are sure, or wait for " +
+                 "the release to finish publishing.")
         }
+        Write-Step 'Verifying SHA-256…'
+        $sumFile = Join-Path $staging 'release.sha256'
+        Invoke-WebRequest -Uri $sum.browser_download_url -OutFile $sumFile -UseBasicParsing
+        $text = (Get-Content -Raw -LiteralPath $sumFile).Trim()
+        if ($text -notmatch '^(?<hash>[A-Fa-f0-9]{64})\b') { throw 'Checksum file is malformed.' }
+        $expected = $Matches['hash'].ToLowerInvariant()
+        $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actual -ne $expected) {
+          throw "SHA-256 mismatch — expected $expected, got $actual. The download was not used."
+        }
+        Write-Ok "  Verified $actual"
 
         Write-Step 'Extracting…'
         $extract = Join-Path $staging 'extracted'
@@ -523,19 +530,57 @@ try {
   }
 
   # ---- Dependencies ------------------------------------------------------------
+  #
+  # **Present is not the same as current, and this asked the wrong question.**
+  # The probe was `import flask, waitress, ... PIL`, so an install where every
+  # package imported never ran pip at all - and the version floors in
+  # requirements.txt, which are the security boundary, were never consulted.
+  # A Pillow from two years ago satisfied `import PIL` through any number of
+  # updates. Pillow decodes floor-plan images out of `.esx` archives that
+  # arrive by email, so that is the package where being out of date is a way
+  # in rather than a missing feature.
+  #
+  # `pip install -r` is the thing that reads the floors, so the check is now
+  # "does pip consider this satisfied", and pip is left to answer it.
   Write-Step 'Checking Python dependencies…'
   $py = (Get-PythonInfo).Cmd
   if (-not $py) { $py = 'python' }
-  $probe = 'import flask, waitress, requests, browser_cookie3, cryptography, keyring, PIL'
-  & $py -c $probe *>$null
-  if ($LASTEXITCODE -ne 0) {
-    Write-Host '  Installing missing packages…'
-    & $py -m pip install --disable-pip-version-check -q -r (Join-Path $target 'requirements.txt')
+
+  # `tools/deps.py` compares what is installed against the floors in
+  # requirements.txt and exits non-zero if anything is missing or older.
+  # It ships in the payload, so a ZIP install has it too.
+  Push-Location $target
+  try {
+    $depReport = & $py -m tools.deps 2>&1
+    $depsOk = ($LASTEXITCODE -eq 0)
+  } finally {
+    Pop-Location
+  }
+
+  if (-not $depsOk) {
+    if ($depReport) { Write-Host ('  ' + ($depReport -join "`n  ")) }
+    Write-Host '  Installing or updating packages…'
+    # --upgrade, because "already installed at some version" was the whole
+    # bug: without it pip leaves an old package that merely satisfies the
+    # name alone.
+    & $py -m pip install --disable-pip-version-check -q --upgrade -r (Join-Path $target 'requirements.txt')
     if ($LASTEXITCODE -ne 0) {
       Write-Warn '  Some packages failed to install. Run the launcher to see details.'
+    } else {
+      Push-Location $target
+      try {
+        & $py -m tools.deps *>$null
+        if ($LASTEXITCODE -ne 0) {
+          Write-Warn '  Some dependencies are still older than this version needs.'
+        } else {
+          Write-Ok '  Dependencies updated.'
+        }
+      } finally {
+        Pop-Location
+      }
     }
   } else {
-    Write-Ok '  All dependencies present.'
+    Write-Ok '  All dependencies present and current.'
   }
 
   Write-Host ''

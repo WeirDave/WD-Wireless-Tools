@@ -10,6 +10,14 @@ the code and checked; what each check found is recorded on the item, including
 where the check found the item itself was wrong. The pass before this one was
 against v2.145.0 on 2026-09-19.
 
+**Two items were added on 2026-09-21 by the security sweep** - items 9 and 10
+under Suite-wide. Both are things that sweep deliberately did *not* do, written
+down here rather than left in the report, because a finding that lives only in
+an audit document is the shape the 2026-09-21 backlog pass was itself about.
+The sweep's own findings and what was done about them are in
+`docs/audits/security-sweep-2026-09-21.md`, and everything it fixed shipped in
+v2.157.0.
+
 **Items 2, 3, 5, 6, 7 and 9 were closed on 2026-09-20 in v2.153.0**, and item 4
 dropped from P1 to P3, because the destructive and sharing surfaces it was
 about now have tests that execute them and what is left of its list is reads
@@ -659,6 +667,47 @@ Two things came out of the work that the item did not ask for:
   worst shape a loss can take.
 
 ### Suite-wide
+
+#### 10. P2 — the tool pages have no Content-Security-Policy, and every control is an inline `onclick`
+
+**The single biggest remaining security improvement, and it is a project
+rather than a fix.** The 2026-09-21 sweep closed fourteen findings; nine of
+them were some value reaching markup or a handler without the right escaper,
+and that class keeps coming back because the suite has 264 `innerHTML`
+assignments and no second line of defence behind them. A real CSP is that
+second line: with `script-src 'self'` and no `'unsafe-inline'`, injected
+script does not run even when an escaper is missed.
+
+**What stands in the way is `onclick`.** Every control in this suite is wired
+with an inline handler, and those are exactly what `'unsafe-inline'` permits
+and a useful policy forbids. So a policy strict enough to help requires
+converting all nineteen pages to delegated listeners first. The dev toolbar
+already works that way and is the worked example - `data-action="call"
+data-fn="WD.Dev.housekeepLook"`, one delegated listener, a dotted-name lookup
+rather than `eval`, scoped to `#wdDevRoot`. Its own notes say converting the
+rest of the suite to it is "a separate job with its own risk", which is this
+item.
+
+Doing it page by page is possible: a page whose controls are all converted can
+carry a stricter policy than the others, because the header is per response.
+
+Only `frame-ancestors 'none'` is set today. The report cover response carries
+a full `default-src 'none'; sandbox` policy of its own, and
+`tests/test_the_server_answers_safely.py` holds that an `after_request` cannot
+clobber a route's policy - which is the seam a page-by-page rollout would use.
+
+#### 9. P3 — `/api/report/open_esx` reads any `.esx` the browser names
+
+Recorded rather than opened, because the reasoning for it is sound and written
+in the route: Report parses the archive in the browser, the native picker
+hands back a path, and going through the server is the only way the page learns
+which *folder* the project is in - which is what names the saved report.
+
+What it means is that script running inside a page can read any `.esx` on the
+disk, not only the one that was opened. That is a real consequence of the
+same-origin trust model rather than a bug in this route, and item 10 above is
+what actually narrows it. Closing this one on its own would break "open from
+disk" and buy little.
 
 #### 8. ~~P2 — 831 lines of CSS still live in eight pages rather than the stylesheet~~ — shipped in v2.154.0
 

@@ -110,5 +110,138 @@ class TheReleaseAlwaysCarriesItsAssetsTests(unittest.TestCase):
         self.assertIn("uses: ./.github/workflows/release-assets.yml", RELEASE)
 
 
+class TheAutomaticNoteDoesNotPublishTheCommitMessageTests(unittest.TestCase):
+    """A commit message here is a record. A release note is a public page.
+
+    The two documents have different jobs and CLAUDE.md sets them out side
+    by side: the commit message quotes the user - *"yes, that is the point"* -
+    and the release note never does. The workflow published the commit
+    message as the note anyway, and the documented mitigation was to replace
+    it by hand every time.
+
+    That does not work, and the file says so: **58 of the first 60 releases
+    went out as commit messages**, and an audit of the 60 published notes
+    found 34 of them quoting him directly. A default that has to be
+    remembered on every release is a default that publishes.
+
+    So the automatic note is a stub. These hold the property rather than the
+    wording - the phrasing is free to change, publishing his week is not.
+    """
+
+    def _note_step(self) -> str:
+        start = AUTO.index("- name: Create the release")
+        end = AUTO.index("\n  assets:", start)
+        return AUTO[start:end]
+
+    def _note_commands(self) -> str:
+        """The step with its shell comments removed.
+
+        The note explaining this change quotes the command it replaced -
+        that is the whole point of the note - and a check that fires on its
+        own explanation teaches the next session to delete the
+        explanation.
+        """
+        return "\n".join(
+            line for line in self._note_step().split("\n")
+            if not line.strip().startswith("#"))
+
+    def test_the_commit_message_is_not_written_into_the_note(self):
+        self.assertNotIn("git log", self._note_commands(),
+                         "the release note is being built from the commit "
+                         "message again - see this class's docstring")
+
+    def test_the_note_still_names_the_version(self):
+        """A stub that says nothing is its own failure.
+
+        He reads these to work out whether the number on his screen is newer
+        or older than the release he is looking at.
+        """
+        step = self._note_step()
+        self.assertIn("${VERSION}", step)
+
+    def test_the_note_points_at_the_commit_for_anybody_who_wants_the_reasoning(self):
+        """The reasoning is not deleted, it is left where it belongs."""
+        self.assertIn("github.sha", self._note_step())
+
+    def test_a_hand_written_note_still_replaces_it(self):
+        self.assertIn("gh release edit", self._note_step())
+
+
+def _job_permissions(text: str) -> dict:
+    """{job name: {scope: level}} out of a workflow, including the default.
+
+    Parsed rather than grepped. `assertIn("contents: read", source)` is true
+    of a workflow where *some other* job reads, and it is the assert-on-the-
+    text shape `tests/test_a_test_must_be_able_to_fail.py` exists to stop
+    spreading. A dict can be asked the question that is actually meant:
+    what can *this* job's token do.
+
+    A hand-written reader rather than PyYAML, because PyYAML is not in
+    requirements.txt and a test that skips in CI is a test that is not run
+    where it matters most.
+    """
+    out, job, scope, indent = {}, None, None, None
+    for raw in text.split("\n"):
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        stripped = raw.strip()
+        depth = len(raw) - len(raw.lstrip())
+
+        if depth == 2 and stripped.endswith(":") and job is not None or \
+           depth == 2 and stripped.endswith(":"):
+            job = stripped[:-1]
+            out.setdefault(job, {})
+            scope = None
+            continue
+        if depth == 0 and stripped == "permissions:":
+            job, scope, indent = "*", "permissions", 0
+            out.setdefault("*", {})
+            continue
+        if depth == 0:
+            job, scope = None, None
+            continue
+        if stripped == "permissions:":
+            scope, indent = "permissions", depth
+            continue
+        if scope == "permissions":
+            if depth <= indent:
+                scope = None
+            elif ":" in stripped:
+                key, _, value = stripped.partition(":")
+                target = "*" if job is None else job
+                out.setdefault(target, {})[key.strip()] = value.strip()
+    return out
+
+
+class NoJobTakesMorePermissionThanItUsesTests(unittest.TestCase):
+    """A job that inherits a write token it never uses is a job whose token
+    can do more than the job can."""
+
+    def setUp(self):
+        self.auto = _job_permissions(AUTO)
+        self.tests_flow = _job_permissions(
+            (FLOW / "tests.yml").read_text(encoding="utf-8"))
+
+    def test_the_reader_found_the_jobs(self):
+        """A parser that returned nothing would pass every test below."""
+        self.assertIn("decide", self.auto)
+        self.assertIn("publish", self.auto)
+
+    def test_the_decide_job_only_reads(self):
+        """It reads one file and asks whether a tag exists."""
+        self.assertEqual("read", self.auto["decide"].get("contents"))
+
+    def test_the_publish_job_can_still_write(self):
+        """It pushes a tag and creates a release, so it needs the token."""
+        self.assertEqual("write", self.auto["publish"].get("contents"))
+
+    def test_the_test_workflow_never_asks_for_write(self):
+        levels = {scope: level
+                  for perms in self.tests_flow.values()
+                  for scope, level in perms.items()}
+        self.assertEqual("read", levels.get("contents"))
+        self.assertNotIn("write", levels.values())
+
+
 if __name__ == "__main__":
     unittest.main()

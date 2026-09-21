@@ -136,10 +136,25 @@ An asset-less release is worse than no release: the updater and both install
 scripts refuse a download whose checksum does not match, so the user is stuck
 rather than merely out of date.
 
-**The workflow publishes the commit message as the note, and that is never the
-finished note.** Replace it with `gh release edit vX.Y.Z --notes-file …` as
-part of shipping, every time - not "when the release deserves it". That
-qualifier is why 58 of the first 60 releases went out as commit messages.
+**The workflow no longer publishes the commit message as the note**, and the
+paragraph that used to sit here is why. It said: replace it by hand every
+time, not "when the release deserves it", and noted that the qualifier was
+how 58 of the first 60 releases went out as commit messages. That is an
+instruction that had already been shown not to work, left in place as the
+only mitigation.
+
+So the default changed instead, on 2026-09-21. The automatic note is a short
+stub - the version, the install link, and the commit it was built from. **A
+hand-written note is still the finished note**, and still goes on the same
+way:
+
+    gh release edit vX.Y.Z --notes-file notes.md
+
+The difference is what happens when nobody gets to it: a stub rather than
+your commit message, which quotes you directly and describes what you were
+working on. `TheAutomaticNoteDoesNotPublishTheCommitMessageTests` in
+`tests/test_release_is_automatic.py` holds it, and reverting is one line in
+the workflow if the trade is ever judged the wrong way round.
 
 The two documents have different jobs and it is worth being explicit about it,
 because the commit message in this repo is deliberately the better *record*:
@@ -609,8 +624,22 @@ matter of opinion.
   ship in a release ZIP). Without it, clicking Update in your own working copy
   would check out a release tag over in-progress work and detach HEAD.
 - `release.yml` publishes `<asset>.sha256` alongside the ZIP. The ZIP updater
-  and both install scripts refuse to install a mismatched download, so don't
-  drop that step.
+  and both install scripts refuse to install a download they cannot verify,
+  so don't drop that step - **an asset-less release is now a hard stop
+  rather than a warning**, which is the one thing about this that changed on
+  2026-09-21.
+
+  This line used to say "refuse to install a **mismatched** download", and
+  that was true and was not the whole sentence. A *missing* `.sha256` printed
+  "skipping verification" and installed anyway, in all three
+  implementations - so the check only worked against corruption, and not
+  against anybody who could choose what to serve. Absent and wrong are the
+  same answer now, and `install.sh` no longer treats a dropped connection
+  while fetching the manifest as "none published".
+
+  `tests/test_zip_update_installs_only_what_it_verified.py` drives the whole
+  path against a real archive, including the case that matters most for a
+  morning: **a release with a valid checksum still installs cleanly.**
 - `install.ps1` / `install.sh` are dual-role: piped through `iex`/`bash` they
   bootstrap a fresh install; run from inside an install folder they update it.
   Both are in `build_release.py`'s payload, so ZIP users get them too. A fresh
@@ -1226,6 +1255,55 @@ on screen where a list should have been, with his Windows profile SID in it.
 Anything that walks a tree he owns needs to survive a directory the system will
 not describe.
 
+## Escaping: four sinks, four escapers, and the guard has missed three of them
+
+**This class of bug has now been found three times, and each time the guard
+written for the previous one could not see the new one.** That pattern is the
+thing to know, more than any individual fix.
+
+`web/assets/js/wd-shared.js` has three escapers and they are not
+interchangeable. Which one is right depends on **where the value lands**, not
+on what the value is:
+
+| Where it lands | Escaper | Why the others are wrong |
+|---|---|---|
+| Element text - `<span>HERE</span>` | `WD.esc` | Goes through `textContent`. Leaves the quote and the apostrophe, which is correct here and only here. |
+| An attribute - `title="HERE"` | `WD.escAttr` | Escapes `&`, `'`, `"`, `<`, `>`. `WD.esc` leaves the quote, so it closes the attribute. |
+| A JS string in an attribute - `onclick="fn('HERE')"` | `WD.escJsStr` | Escapes the backslash, the apostrophe and `<` for the script, *then* `&` and `"` for the attribute. Two layers of decoding sit between the source and the code that runs. |
+| A URL | nothing yet | `encodeURIComponent` per component. No `javascript:` sink has been found; there is no shared helper because there has been nothing to share. |
+
+**The three rounds, and what each guard could not see:**
+
+* **v2.146.1** found 25 attribute sites using `esc` where `escAttr` was
+  needed, by driving a hostile `.esx` through AP Labeler in Firefox. Its
+  guard matches `attr="` *immediately* followed by the text escaper.
+* **2026-09-21** found four more. Two were
+  `JSON.stringify(x).replace(/"/g, '&quot;')`, which reads as thorough and
+  **never touches the ampersand** - so a value containing the six characters
+  `&quot;` survives it, the browser decodes that entity back to a real quote
+  when it reads the attribute, and the string closes early. One was `esc`
+  inside a *JavaScript* string rather than an attribute, on a CSV column
+  header. One was a wall type id out of an `.esx` with no escaper at all.
+  None matched the v2.146.1 pattern; the guard covers all four shapes now.
+* A fifth was found by that widened guard while it was being written, which
+  is the argument for widening it rather than fixing the four by hand.
+
+**The rule that generalises.** An escaper is a function that exists for the
+job. A pipeline of string operations assembled at the call site is a private
+opinion about escaping, and this codebase has now had five of them -
+`walls-swap.js` and `setup.js` each had one that was *correct* and disagreed
+with `WD.esc` about the quote, which is worse than being wrong, because it
+makes every line around it read as a counter-example to the rule. They all
+delegate now.
+
+**And a guard must not fire on its own explanation.** Three checks written in
+this pass matched the comment describing the bug they were checking for,
+because the fix quotes the old code. A check that does that teaches the next
+session to delete the explanation. Strip comments and docstrings first -
+`_comment_lines` in `tests/test_an_attribute_is_escaped_as_an_attribute.py`
+and `_code_only` in `tests/test_user_dir_is_the_only_door.py` both do, and
+both were written after the check fired on its own note.
+
 ## Known gotchas
 
 - **Write the character, not an escape for it - and never let a patch script
@@ -1685,9 +1763,34 @@ down - naming the file and line, never the value.
 
 Both repositories are public, so the hash now appears in two public places.
 That is no more exposed than it already was, but one recovered password opens
-both products rather than one. The gate is obfuscation, not security: it keeps
-a curious user out of a maintenance surface on a localhost-bound server, and
-anyone with a console can set the flag directly.
+both products rather than one. **The flag in `localStorage` is obfuscation,
+not security**: it keeps a curious user out of a maintenance surface on a
+localhost-bound server, and anyone with a console can set it directly.
+
+**Since 2026-09-21 the two actions that *write* are not gated by the flag.**
+They are gated by the server, which starts every run locked and needs the
+password proved to it - `/api/dev/unlock`, compared with
+`hmac.compare_digest` against the hash read out of `wd-dev.js`, so there is
+still exactly one copy of it. The password modal unlocks the server at the
+same time as it sets the flag, so the ordinary route in is unchanged; via
+`?dev=1` the first writing action asks once, which is friction at the moment
+of an irreversible action rather than in front of a read.
+
+**The survey is deliberately not behind it**, and that is the interesting
+half. It is a read, it returns counts rather than values, and the toolbar
+exists to answer "is there junk everywhere" in five seconds - charging a
+password for that is the guard-on-the-normal-case failure this file keeps
+writing rules against.
+
+**It is not a claim that the API is authenticated.** `/api/cloud/*` can
+delete cloud projects and `/api/update` installs code, and neither is behind
+this; locking the dev panel while leaving those open would be theatre. What
+holds for those is the rule the Cloud Manager audit established - every
+destructive action re-derives its target server-side before it writes - and
+`housekeeping.stop_processes` was brought onto it in the same pass, having
+been the one action that passed request data straight to `taskkill /F`.
+`tests/test_the_dev_actions_that_write_need_the_server.py` has the whole
+reasoning, including what the gate is and is not worth.
 
 **Testing the gate without the secret.** `WD.Dev._hash` and
 `WD.Dev._expectedHash` are exposed so a test can hash a string it invented,
@@ -2205,6 +2308,22 @@ between a useful list and 2,226 false alarms.
 
 It only ever deletes inside roots we own, never from the Desktop, and it
 re-derives the list at delete time instead of trusting what the page sends.
+
+**"Re-derives instead of trusting what the page sends" was true of `sweep`
+and not of `stop_processes`**, which took every process id in the request
+body and passed it to `taskkill /F`. Windows reuses process ids, so a page
+holding ids from an earlier survey could stop his browser, Ekahau with
+unsaved work, or a service. Fixed on 2026-09-21 by asking a fresh
+`list_processes()` and refusing anything not on it - the shape the sentence
+above already described. Nothing in the UI had ever called it, which is why
+it went unnoticed: **an endpoint with no caller still has every capability
+it was written with.** `stop_process` is the single-process killer and takes
+no decisions; `stop_processes` is the only thing that may call it.
+
+The other half of that sentence - "inside roots we own" - depends on
+`refused_roots()` knowing where the user directory *is*. It read the
+hard-coded default rather than `user_dir()`, so with `WD_USER_DIR` set it
+guarded a folder nobody was using. See the note on `refused_roots` itself.
 
 
 ## Memory across sessions, generally

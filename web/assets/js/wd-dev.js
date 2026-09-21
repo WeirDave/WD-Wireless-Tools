@@ -133,6 +133,40 @@
     if (input) input.value = '';
   };
 
+  /* Cancel and the backdrop both come through here, so an action waiting on
+     the password is told rather than left hanging on a promise. */
+  Dev.dismissDevModal = function () {
+    Dev.hideDevModal();
+    settlePending(false);
+  };
+
+  /* Tell the server the password too, so the actions that *write* are
+     available for this run.
+
+     The flag in `localStorage` decides whether the strip is on screen, and
+     that is all it can honestly decide - anyone with a console can set it.
+     The server keeps its own answer for the two housekeeping actions that
+     delete files or stop processes, and it starts every run locked. See the
+     long note above `DEV_ACTIONS` in `server.py` for what that is and is not
+     worth.
+
+     The **password** goes over, not the hash: the hash is in this file, in a
+     public repository, so a server that accepted the hash would be accepting
+     something anybody can read. It travels to 127.0.0.1 over a connection
+     that never leaves the machine.
+
+     A failure here is deliberately not fatal to the modal. A page opened
+     without a server behind it still gets the toolbar; the writing actions
+     are the only things that will say no, and they say so at the moment
+     they are pressed. */
+  function unlockServer(password) {
+    if (!WD.api) return Promise.resolve(false);
+    return WD.api('dev/unlock', { password: password })
+      .then(function (r) { return !!(r && r.ok); })
+      .catch(function () { return false; });
+  }
+  Dev._unlockServer = unlockServer;
+
   Dev.submitDevPassword = function () {
     var input = document.getElementById('devPwInput');
     var val = (input && input.value) || '';
@@ -141,15 +175,58 @@
         // WaxFrame says nothing on a wrong password - it just closes.
         // Telling a guesser they were close is worse than saying nothing.
         Dev.hideDevModal();
+        settlePending(false);
         return false;
       }
-      write(LS_DEV, '1');
-      Dev.hideDevModal();
-      Dev.mount();
-      if (WD.toast) WD.toast('Dev mode enabled', 'ok');
-      return true;
+      return unlockServer(val).then(function (unlocked) {
+        Dev.hideDevModal();
+        // Asked for by a writing action rather than to enter dev mode: the
+        // flag and the strip are already as he left them and must not move.
+        if (settlePending(unlocked)) return unlocked;
+        write(LS_DEV, '1');
+        Dev.mount();
+        if (WD.toast) WD.toast('Dev mode enabled', 'ok');
+        return true;
+      });
     });
   };
+
+  /* Ask for the password for the server's benefit alone, without touching
+     the flag or the toolbar.
+
+     This is the `?dev=1` route's other half. That query parameter is his own
+     way in and is deliberately not password-protected - it puts the strip on
+     screen and tells the server nothing. So the first time a writing action
+     is pressed, the server says it is locked and this runs: one prompt, at
+     the moment of an irreversible action, which is where this repository
+     already puts its friction rather than in front of a read.
+
+     The same modal, with one line of explanation added, because a second
+     password box that looks different would read as a different password.
+     Resolves true when the server accepted it. */
+  var _pending = null;
+
+  Dev.unlockForWrites = function () {
+    var note = document.getElementById('devPwNote');
+    if (note) {
+      note.textContent = 'This action deletes files or stops processes, so '
+        + 'the server asks for the password once per run.';
+      note.classList.remove('is-hidden');
+    }
+    return new Promise(function (resolve) {
+      _pending = resolve;
+      Dev.showDevModal();
+    });
+  };
+
+  function settlePending(value) {
+    var resolve = _pending;
+    _pending = null;
+    var note = document.getElementById('devPwNote');
+    if (note) { note.textContent = ''; note.classList.add('is-hidden'); }
+    if (resolve) resolve(value);
+    return !!resolve;
+  }
 
   Dev.exitDevMode = function () {
     drop(LS_DEV);
@@ -158,6 +235,9 @@
     if (tb) tb.classList.add('is-hidden');
     setNavActive(false);
     document.documentElement.removeAttribute('data-wd-dev');
+    // Leaving dev mode closes the server's half too, rather than leaving a
+    // window open behind a strip that is no longer on screen.
+    if (WD.api) WD.api('dev/lock', {}).catch(function () {});
     if (WD.toast) WD.toast('Dev mode disabled');
   };
 
@@ -270,9 +350,12 @@
   function modalHtml() {
     return '' +
       '<div class="modal-overlay dev-pw-overlay" id="devModal" ' +
-           'data-action="backdrop-call" data-fn="WD.Dev.hideDevModal">' +
+           'data-action="backdrop-call" data-fn="WD.Dev.dismissDevModal">' +
         '<div class="modal dev-pw-modal">' +
           '<h3 class="modal-title">Dev Tools</h3>' +
+          /* Empty and hidden until a writing action asks for the password,
+             which is the only time this box needs explaining. */
+          '<p class="dev-pw-note is-hidden" id="devPwNote"></p>' +
           '<input class="dev-pw-input" id="devPwInput" type="password" ' +
                  'placeholder="Password" autocomplete="off" ' +
                  'data-key-action="enter-call" ' +
@@ -280,7 +363,7 @@
           '<div class="modal-actions">' +
             '<button type="button" class="btn" ' +
                     'title="Close without entering dev mode" ' +
-                    'data-action="call" data-fn="WD.Dev.hideDevModal">' +
+                    'data-action="call" data-fn="WD.Dev.dismissDevModal">' +
               '✕ Cancel</button>' +
             '<button type="button" class="btn btn-primary" ' +
                     'title="Submit dev password to enter Dev Mode" ' +

@@ -27,11 +27,13 @@ import base64
 import copy
 import datetime as _dt
 import json
+import os
 import re
 import shutil
 from pathlib import Path
 
 from tools import settings as _settings
+from tools.safe_path import is_within
 
 SCHEMA_VERSION = 1
 APP_NAME = "WD Wireless Tools"
@@ -524,14 +526,21 @@ def apply_import(bundle: dict, sections=("settings", "files"),
     if "files" in want:
         for rel, payload in sorted((bundle.get("files") or {}).items()):
             # Refuse anything that would climb out of the user-data directory.
-            target = (root / rel).resolve()
-            if not str(target).startswith(str(root.resolve())):
+            #
+            # This asked `str(target).startswith(str(root))` until the
+            # 2026-09-20 sweep, which says yes to a *sibling* whose name
+            # begins the same way: `../.wd_wireless_tools_elsewhere/x`
+            # resolves outside the user directory and passed. See
+            # tools/safe_path.py - the same spelling was in the release
+            # archive guard, and both are component comparisons now.
+            target = root / rel
+            if not is_within(target, root):
                 applied.setdefault("refused", []).append(rel)
                 continue
             if any(part in NEVER_EXPORT for part in Path(rel).parts):
                 applied.setdefault("refused", []).append(rel)
                 continue
-            _write_payload(target, payload)
+            _write_payload(Path(os.path.normpath(target)), payload)
             applied["files"].append(rel)
 
     browser_back = {}

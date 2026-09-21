@@ -50,6 +50,12 @@ jobs:
   decide:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # This job only reads a file and asks whether a tag exists. The
+    # workflow-level `contents: write` is there for the publish job below,
+    # and a job that inherits a permission it does not use is a job whose
+    # token can do more than the job can.
+    permissions:
+      contents: read
     outputs:
       version: ${{ steps.read.outputs.version }}
       tag: ${{ steps.read.outputs.tag }}
@@ -96,6 +102,8 @@ jobs:
     if: needs.decide.outputs.needed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     env:
       TAG: ${{ needs.decide.outputs.tag }}
       VERSION: ${{ needs.decide.outputs.version }}
@@ -141,17 +149,39 @@ jobs:
             exit 0
           fi
 
-          # The commit message is the release note. These are written at
-          # length in this repo and say what changed and why, which is more
-          # use than generated notes - and a hand-written note can replace it
-          # afterwards with `gh release edit`.
-          git log -1 --pretty=%B "$TAG" > notes.md
+          # **The commit message is no longer the published note**, and that
+          # is a privacy change rather than a style one.
+          #
+          # Commit messages in this repository are deliberately the better
+          # *record*: they quote the user directly, describe what he was
+          # working on when something broke, and name what was tried. All of
+          # that is correct in git and none of it belongs on a public release
+          # page under his name. An audit on 2026-09-18 found no site codes
+          # or credentials in the 60 published notes - and **34 of them
+          # quoted him directly**.
+          #
+          # The documented mitigation was to replace the note by hand with
+          # `gh release edit` on every release. It does not work: 58 of the
+          # first 60 went out as commit messages, and CLAUDE.md says so
+          # itself. A default that has to be remembered every time is a
+          # default that publishes.
+          #
+          # So the automatic note is a short factual stub. It links to the
+          # commit for anyone who wants the reasoning, which is a click for
+          # a maintainer and not a paragraph about his week on the front
+          # page. The hand-written note still replaces it:
+          #
+          #     gh release edit vX.Y.Z --notes-file notes.md
+          #
+          # Reverting this is one `git log -1 --pretty=%B "$TAG" > notes.md`
+          # if that trade is ever judged the wrong way round.
           {
+            echo "WD Wireless Tools ${VERSION}."
             echo
-            echo "---"
+            echo "Install or update: https://github.com/${{ github.repository }}#installing"
             echo
-            echo "_Published automatically because \`web/assets/versions.json\` moved to ${VERSION} on main, with the full suite green._"
-          } >> notes.md
+            echo "_Published automatically because \`web/assets/versions.json\` moved to ${VERSION} on main, with the full suite green. Release notes are written by hand and follow shortly; the commit this was built from is ${{ github.sha }}._"
+          } > notes.md
 
           gh release create "$TAG" \
             --title "WD Wireless Tools $TAG" \

@@ -77,8 +77,21 @@ def windows_select_command(path) -> str:
 
     Separate from `reveal` so the shape can be asserted on any platform. The
     fault it fixes was invisible to a test that only ran the call.
+
+    **Raises on a quote rather than quoting it.** The module docstring works
+    through why argument injection here is not reachable - no `shell=True`,
+    and Windows does not permit `"` in a filename - and that reasoning is
+    correct and rests on a filesystem rule rather than on anything this code
+    does. One caller passes a path the browser sent, this function is
+    reachable on any platform through the tests, and the check is one line.
+    A guard that costs nothing should not be left out because the argument
+    for omitting it currently holds.
     """
-    return 'explorer /select,"%s"' % str(path)
+    text = str(path)
+    if '"' in text or any(ch in text for ch in "\r\n\0"):
+        raise ValueError("path contains a character that cannot be quoted "
+                         "onto a command line")
+    return 'explorer /select,"%s"' % text
 
 
 def reveal(path) -> dict:

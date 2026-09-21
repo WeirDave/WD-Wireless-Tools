@@ -476,10 +476,10 @@ function renderWallAudit() {
           + `<span class="wall-audit-detail">${f.segments} segment${f.segments === 1 ? '' : 's'}`
           + ` &middot; name says ${ft ? ft + ' ft' : 'a height'} &middot; none set</span>`
           + `<span class="wall-audit-spacer"></span>`
-          + (ft ? `<button class="btn btn-sm btn-primary" onclick="applyAuditHeight('${f.wallTypeId}')"`
+          + (ft ? `<button class="btn btn-sm btn-primary" onclick="applyAuditHeight('${WD.escJsStr(f.wallTypeId)}')"`
                   + ` title="${escAttr(f.why)}">Set to ${ft} ft</button>` : '')
           + (i >= 0 ? `<button class="btn btn-sm" onclick="openEditModal(${i})">Edit&hellip;</button>` : '')
-          + `<button class="btn btn-sm" onclick="dismissAuditFinding('${f.wallTypeId}')"`
+          + `<button class="btn btn-sm" onclick="dismissAuditFinding('${WD.escJsStr(f.wallTypeId)}')"`
           + ` title="Leave it on Auto and stop mentioning it">Leave as is</button>`
           + `</div>`;
       }).join('');

@@ -145,6 +145,36 @@
       esc((e && e.message) || e) + '</p>');
   }
 
+  /* An action that writes, run through the server's dev lock.
+
+     The server starts every run locked and only the two housekeeping actions
+     that delete files or stop processes need it - the survey does not, and
+     charging a password for a read is the guard-on-the-normal-case failure
+     this repository has already paid for. See the note above `DEV_ACTIONS`
+     in `server.py`.
+
+     Entering dev mode through the password modal unlocks the server at the
+     same time, so the ordinary route never sees this. `?dev=1` does not, so
+     the first write is where the password gets asked for. **One retry, and
+     only on `dev_locked`** - looping on a wrong password would turn a typo
+     into a modal he cannot dismiss. A refusal comes back as the ordinary
+     result object, so the caller's own error handling shows it. */
+  function callWriting(action, body) {
+    return WD.api(action, body).then(function (r) {
+      if (!r || r.code !== 'dev_locked') return r;
+      if (!Dev.unlockForWrites) return r;
+      return Dev.unlockForWrites().then(function (unlocked) {
+        if (!unlocked) {
+          return { ok: false,
+                   error: 'Cancelled - the password is needed for anything '
+                          + 'that deletes files or stops a process.' };
+        }
+        return WD.api(action, body);
+      });
+    });
+  }
+  Dev._callWriting = callWriting;
+
   /* ── Realign renamed cloud projects ──────────────────────────
      Roughly ninety pairs read "cloud newer" because the cloud projects were
      renamed and the local copies were not. Server side is
@@ -647,7 +677,7 @@
         'Nothing of yours, nothing in use, and nothing from your Desktop. ' +
         'Continue?')) return;
     busy('wdHousekeepSweepBtn', true, 'Deleting…');
-    return WD.api('dev/housekeeping_sweep', { paths: sweepable })
+    return callWriting('dev/housekeeping_sweep', { paths: sweepable })
       .then(function (r) {
         busy('wdHousekeepSweepBtn', false);
         Dev.setEnabled('wdHousekeepSweepBtn', false);

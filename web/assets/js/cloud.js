@@ -1866,8 +1866,8 @@ function _renderJumpNav() {
       ? 'Showing only ' + L + ' — click to clear'
       : (enabled ? 'Show only ' + L : 'No sites here');
     return `<button class="${cls}" data-letter="${a(L)}"
-                    ${enabled ? `onclick="_jumpToLetter('${e(L)}')"` : 'disabled tabindex="-1"'}
-                    title="${title}">${e(L)}</button>`;
+                    ${enabled ? `onclick="_jumpToLetter('${j(L)}')"` : 'disabled tabindex="-1"'}
+                    title="${a(title)}">${e(L)}</button>`;
   }).join('');
   nav.innerHTML = allChip + letterChips;
 }
@@ -5478,8 +5478,8 @@ function _shareChipsRender() {
       + (c.valid ? '' : ' title="That does not look like an email address"')
       + '>' + WD.esc(c.email)
       + '<button type="button" class="share-chip-x" aria-label="Remove '
-      + WD.esc(c.email) + '" onclick="event.stopPropagation();_shareChipRemove('
-      + JSON.stringify(c.email).replace(/"/g, '&quot;') + ')">&times;</button>'
+      + WD.escAttr(c.email) + '" onclick="event.stopPropagation();_shareChipRemove(\''
+      + WD.escJsStr(c.email) + '\')">&times;</button>'
       + '</span>';
   }).join('');
 }
@@ -5575,9 +5575,15 @@ function _shareSuggestShow(query) {
   if (!matches.length) { _shareSuggestHide(); return; }
   _shareSuggestIndex = -1;
   box.innerHTML = matches.map(function (r, i) {
+    // `JSON.stringify(x).replace(/"/g,'&quot;')` leaves the ampersand
+    // alone, so a value containing the six characters `&quot;` decodes
+    // back to a real quote when the browser reads the attribute and closes
+    // the JS string early. Same shape as the rename-profile buttons, found
+    // in the same sweep - see the note in rename.js. `WD.escJsStr` is the
+    // escaper for a JS string inside an attribute.
     return '<button type="button" class="share-suggest-item" data-i="' + i + '"'
       + ' onmousedown="event.preventDefault()"'
-      + ' onclick="_sharePick(' + JSON.stringify(r.email).replace(/"/g, '&quot;') + ')">'
+      + ' onclick="_sharePick(\'' + WD.escJsStr(r.email) + '\')">'
       + WD.esc(r.email) + '</button>';
   }).join('');
   box.hidden = false;
@@ -5638,13 +5644,21 @@ function _shareRecentRender() {
   host.innerHTML =
     '<div class="share-recent-label">Recent</div>'
     + offer.map(function (r) {
-      const safe = JSON.stringify(r.email).replace(/"/g, '&quot;');
+      // `JSON.stringify(x).replace(/"/g,'&quot;')` was the escaper here and
+      // is not one - it never touches the ampersand, so `&quot;` inside the
+      // value decodes back to a quote and closes the string. See rename.js.
+      const safe = WD.escJsStr(r.email);
+      // And the two labels are attributes, so they take the attribute
+      // escaper rather than the text one - the v2.146.1 finding, in a shape
+      // its guard could not see because the quote and the call have literal
+      // words between them.
+      const label = WD.escAttr(r.email);
       return '<span class="share-recent-item">'
-        + '<button type="button" class="share-recent-pick" onclick="_sharePick(' + safe + ')">'
+        + '<button type="button" class="share-recent-pick" onclick="_sharePick(\'' + safe + '\')">'
         + WD.esc(r.email) + '</button>'
         + '<button type="button" class="share-recent-x" title="Forget '
-        + WD.esc(r.email) + '" aria-label="Forget ' + WD.esc(r.email)
-        + '" onclick="_shareForget(' + safe + ')">&times;</button>'
+        + label + '" aria-label="Forget ' + label
+        + '" onclick="_shareForget(\'' + safe + '\')">&times;</button>'
         + '</span>';
     }).join('');
 }

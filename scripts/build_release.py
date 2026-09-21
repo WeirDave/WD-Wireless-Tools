@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import stat
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -39,11 +40,46 @@ EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 EXCLUDED_DIRECTORY_PARTS = {"releases", "audits", "reverse-engineering"}
 
 
+def tracked_files() -> set:
+    r"""Every path git has, as posix strings.
+
+    **The payload is what git tracks, not what is on disk.** This walked the
+    working tree with `rglob`, so anything sitting untracked under `tools/`,
+    `web/`, `templates/` or `docs/` went into the ZIP - a session's scratch
+    output, a screenshot, a draft, a `.esx` somebody dropped in to reproduce
+    something. In CI that is harmless, because a release is built from a
+    fresh checkout of a tag and there is nothing untracked in it. Built by
+    hand, on the machine where the work happens, it is a route for rule-zero
+    material into a public download, and a ZIP asset is the one thing about
+    a release that cannot be edited afterwards.
+
+    Refusing rather than falling back is deliberate. A build that quietly
+    reverted to walking the tree when git could not answer would be
+    unprotected in exactly the case that is not CI.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "-z"],
+            capture_output=True, check=True, timeout=120)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(
+            "Could not ask git what is tracked, so this build cannot tell a "
+            "shipped file from something left in the tree. Build from a "
+            "checkout."
+        ) from exc
+    return {name for name in out.stdout.decode("utf-8").split("\0") if name}
+
+
 def iter_release_files():
+    tracked = tracked_files()
+
     for relative in ROOT_FILES:
         path = ROOT / relative
         if not path.is_file():
             raise FileNotFoundError(f"Required release file is missing: {relative}")
+        if relative.replace("\\", "/") not in tracked:
+            raise FileNotFoundError(
+                f"Release file is not tracked by git: {relative}")
         yield path, Path(relative)
 
     for directory in ROOT_DIRECTORIES:
@@ -57,6 +93,8 @@ def iter_release_files():
             if ("__pycache__" in relative.parts
                     or EXCLUDED_DIRECTORY_PARTS & set(relative.parts)
                     or path.suffix in EXCLUDED_SUFFIXES):
+                continue
+            if relative.as_posix() not in tracked:
                 continue
             yield path, relative
 

@@ -328,17 +328,26 @@ else
     curl -fsSL -o "$STAGING/release.zip" "$BASE/$ASSET" \
       || { err "Release download failed."; exit 1; }
 
-    if curl -fsSL -o "$STAGING/release.sha256" "$BASE/$ASSET.sha256" 2>/dev/null; then
-      step "Verifying SHA-256…"
-      EXPECTED="$(awk 'NR==1 && $1 ~ /^[0-9A-Fa-f]{64}$/ { print tolower($1) }' "$STAGING/release.sha256")"
-      [ -n "$EXPECTED" ] || { err "Checksum file is malformed."; exit 1; }
-      ACTUAL="$(sha256_of "$STAGING/release.zip")" || { err "No SHA-256 tool available."; exit 1; }
-      [ "$ACTUAL" = "$EXPECTED" ] \
-        || { err "SHA-256 mismatch — expected $EXPECTED, got $ACTUAL. The download was not used."; exit 1; }
-      ok "  Verified $ACTUAL"
-    else
-      warn "  No checksum published for this release; skipping verification."
+    # A missing manifest and a wrong one are the same answer: this download
+    # cannot be shown to be the one that was published, so it is not
+    # installed. This warned and carried on until 2026-09-20, which made the
+    # check decorative - whoever can serve the ZIP has no reason to serve a
+    # checksum beside it. Note that a *transient* fetch failure landed in the
+    # same branch, so a dropped connection also skipped verification.
+    if ! curl -fsSL -o "$STAGING/release.sha256" "$BASE/$ASSET.sha256" 2>/dev/null; then
+      err "Could not fetch $ASSET.sha256, so this download cannot be verified"
+      err "and was not installed. Download it by hand from"
+      err "https://github.com/$REPO/releases if you are sure, or wait for the"
+      err "release to finish publishing."
+      exit 1
     fi
+    step "Verifying SHA-256…"
+    EXPECTED="$(awk 'NR==1 && $1 ~ /^[0-9A-Fa-f]{64}$/ { print tolower($1) }' "$STAGING/release.sha256")"
+    [ -n "$EXPECTED" ] || { err "Checksum file is malformed."; exit 1; }
+    ACTUAL="$(sha256_of "$STAGING/release.zip")" || { err "No SHA-256 tool available."; exit 1; }
+    [ "$ACTUAL" = "$EXPECTED" ] \
+      || { err "SHA-256 mismatch — expected $EXPECTED, got $ACTUAL. The download was not used."; exit 1; }
+    ok "  Verified $ACTUAL"
 
     step "Extracting…"
     mkdir -p "$STAGING/extracted"
@@ -373,14 +382,38 @@ else
 fi
 
 # ---- Dependencies -------------------------------------------------------------
+# **Present is not the same as current, and this asked the wrong question.**
+# The probe was `import flask, waitress, ... PIL`, so an install where every
+# package imported never ran pip at all - and the version floors in
+# requirements.txt, which are the security boundary, were never consulted. A
+# Pillow from two years ago satisfied `import PIL` through any number of
+# updates, and Pillow decodes floor-plan images out of `.esx` archives that
+# arrive by email.
+#
+# `pip install -r` is what reads the floors, so pip is asked whether it is
+# satisfied rather than the interpreter being asked whether the name exists.
 step "Checking Python dependencies…"
 PY="${PY_FOUND:-python3}"
-if ! "$PY" -c 'import flask, waitress, requests, browser_cookie3, cryptography, keyring, PIL' 2>/dev/null; then
-  echo "  Installing missing packages…"
-  "$PY" -m pip install --disable-pip-version-check -q -r "$TARGET/requirements.txt" \
-    || warn "  Some packages failed to install. Run the launcher to see details."
+REQS="$TARGET/requirements.txt"
+
+# `tools/deps.py` compares what is installed against the floors in
+# requirements.txt and exits non-zero if anything is missing or older. It
+# ships in the payload, so a ZIP install has it too.
+if ( cd "$TARGET" && "$PY" -m tools.deps ); then
+  ok "  All dependencies present and current."
 else
-  ok "  All dependencies present."
+  echo "  Installing or updating packages…"
+  # --upgrade, because "already installed at some version" was the whole
+  # bug: without it pip leaves an old package that satisfies the name alone.
+  if "$PY" -m pip install --disable-pip-version-check -q --upgrade -r "$REQS"; then
+    if ( cd "$TARGET" && "$PY" -m tools.deps >/dev/null 2>&1 ); then
+      ok "  Dependencies updated."
+    else
+      warn "  Some dependencies are still older than this version needs."
+    fi
+  else
+    warn "  Some packages failed to install. Run the launcher to see details."
+  fi
 fi
 
 echo

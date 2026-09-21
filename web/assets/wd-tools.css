@@ -9894,6 +9894,16 @@ body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-acc
 }
 .dev-pw-input:focus { border-color: var(--pink); outline: none; }
 
+/* Shown only when a writing action asked for the password, rather than when
+   the modal is being used to enter dev mode - so the box needs no
+   explanation in the case where the explanation would be noise. */
+.dev-pw-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
 /* ── Result modal ─────────────────────────────────────────────
    WaxFrame shows an action's detail in a modal too - the
    Troubleshooting Card - rather than growing the strip into a panel.

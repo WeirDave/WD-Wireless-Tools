@@ -52,11 +52,20 @@
   const canvas = () => $('swapCanvas');
   const ctx = () => canvas().getContext('2d');
 
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  }
+  /* Both delegate, so `esc` means the same thing in this file as in every
+     other one.
+
+     It did not. This was a private copy that escaped the double quote,
+     which `WD.esc` deliberately does not - `WD.esc` goes through
+     `textContent`, correct for element text and wrong inside an attribute,
+     and `WD.escAttr` is the one for attributes. The private copy was safe
+     on its own terms and it made every attribute in this file read as a
+     counter-example to the rule the rest of the suite follows: a reader
+     who knows what `WD.esc` does would call the two `title=` uses below
+     bugs, and somebody copying one of those lines into another file would
+     be writing one. The audit that split the two escapers moved this file's
+     call sites to the shared helper and left this definition behind. */
+  function esc(s) { return WD.esc(s); }
   function escAttr(s) { return WD.escAttr(s); }
 
   function toast(msg, kind) {
@@ -405,7 +414,7 @@
       return;
     }
     el.innerHTML = rows.map(r => `
-      <button class="swap-legend-row" onclick="selectAllOfType('${escJsStr(r.typeId)}')" title="Select all ${esc(r.name)} walls on this floor">
+      <button class="swap-legend-row" onclick="selectAllOfType('${escJsStr(r.typeId)}')" title="Select all ${escAttr(r.name)} walls on this floor">
         <span class="swap-legend-swatch" style="--swap-swatch:${r.color}"></span>
         <span class="swap-legend-name">${esc(r.name)}</span>
         <span class="swap-legend-count">${r.count}</span>
@@ -549,7 +558,7 @@
         +   '<input type="checkbox" class="swap-sel-group-check" '
         +     'data-group-key="' + escAttr(gr.key) + '"' + parentAttrs
         +     ' onchange="toggleSwapGroup(this)" '
-        +     'title="Check or uncheck every ' + esc(gr.name) + ' in the selection">'
+        +     'title="Check or uncheck every ' + escAttr(gr.name) + ' in the selection">'
         +   '<span class="swap-legend-swatch" style="--swap-swatch:' + gr.color + '"></span>'
         +   '<span class="swap-legend-name">' + esc(gr.name) + '</span>'
         +   '<span class="swap-sel-group-count">' + gr.checked + ' of ' + gr.segs.length + '</span>'

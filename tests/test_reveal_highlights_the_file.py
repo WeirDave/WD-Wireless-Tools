@@ -104,5 +104,48 @@ class EveryCallerGetsTheFixTests(unittest.TestCase):
         self.assertEqual(offenders, [], "these build their own: %s" % offenders)
 
 
+class NothingUnquotableReachesTheCommandLine(unittest.TestCase):
+    r"""The Windows branch builds a command line as a **string**.
+
+    That is deliberate and the module docstring says why - handing Popen a
+    list makes `list2cmdline` quote the whole `/select,<path>` token and
+    Explorer then ignores the switch. The cost is that the quoting is this
+    module's job, and a `"` in the path would close the quoted argument and
+    leave the rest to be parsed as further arguments to `explorer`, which
+    launches what it is handed.
+
+    **Not reachable today**, and worth a guard anyway. The module docstring
+    claimed no caller takes a path from the browser; one does -
+    `cloud_manager.reveal_in_explorer` is `/api/cloud/reveal_in_explorer`
+    with a path in the body, bounded by a check its own docstring describes
+    as a sanity check rather than a boundary. What actually stops this is
+    NTFS refusing `"` in a file name, which is a filesystem rule rather than
+    anything this code does.
+    """
+
+    def test_a_quote_in_the_path_is_refused(self):
+        from tools.reveal import windows_select_command
+        with self.assertRaises(ValueError):
+            windows_select_command(r'C:\Projects\a" "C:\Windows\System32\calc.exe')
+
+    def test_a_newline_in_the_path_is_refused(self):
+        from tools.reveal import windows_select_command
+        for bad in ("a\rb", "a\nb", "a\0b"):
+            with self.subTest(path=repr(bad)):
+                with self.assertRaises(ValueError):
+                    windows_select_command("C:\\Projects\\" + bad)
+
+    def test_an_ordinary_path_is_untouched(self):
+        """The guard must not fire on the case it exists beside.
+
+        A path with spaces is the normal one here - "Ekahau AI Pro Projects"
+        is in most of them - and it is what the quoting exists for.
+        """
+        from tools.reveal import windows_select_command
+        ordinary = r"C:\Users\me\Ekahau AI Pro Projects\O'Brien & Sons.esx"
+        self.assertEqual('explorer /select,"%s"' % ordinary,
+                         windows_select_command(ordinary))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1029,25 +1029,44 @@ def zip_update(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
         say(f"Downloading {release['tag']}…")
         _download(asset_url, zip_path)
 
+        # A missing manifest and a wrong one are the same answer: this
+        # download cannot be shown to be the one that was published, so it is
+        # not installed. This warned and carried on until the 2026-09-20
+        # sweep, which made the check decorative - whoever can serve the ZIP
+        # has no reason to serve a checksum beside it, and the case that
+        # matters is the one where there is nothing to compare against.
+        #
+        # It also mattered to the guard below this. That one is safe on the
+        # grounds that the archive was checksummed first; before this, an
+        # archive with no checksum reached it having been checked by nothing.
+        #
+        # In practice it fires on a release whose asset build failed part-way,
+        # which is a state this repository has genuinely been in, so the
+        # message says what to do rather than only what went wrong.
         checksum_url = release["assets"].get(f"{asset_name}.sha256")
-        if checksum_url:
-            say("Verifying checksum…")
-            checksum_path = staging / "release.sha256"
-            _download(checksum_url, checksum_path)
-            text = checksum_path.read_text(encoding="utf-8").strip()
-            match = re.match(r"^([A-Fa-f0-9]{64})\b", text)
-            if not match:
-                raise UpdateError("The release checksum file is malformed.")
-            expected = match.group(1).lower()
-            actual = _sha256(zip_path)
-            if actual != expected:
-                raise UpdateError(
-                    f"Checksum mismatch — expected {expected}, got {actual}. "
-                    "The download was not used."
-                )
-            say("Checksum verified.")
-        else:
-            say("No checksum published for this release; skipping verification.")
+        if not checksum_url:
+            raise UpdateError(
+                f"Release {release['tag']} publishes no checksum, so this "
+                "download cannot be verified and was not installed. "
+                f"Download it by hand from {cfg.releases_url} if you are "
+                "sure, or wait for the release to finish publishing."
+            )
+
+        say("Verifying checksum…")
+        checksum_path = staging / "release.sha256"
+        _download(checksum_url, checksum_path)
+        text = checksum_path.read_text(encoding="utf-8").strip()
+        match = re.match(r"^([A-Fa-f0-9]{64})\b", text)
+        if not match:
+            raise UpdateError("The release checksum file is malformed.")
+        expected = match.group(1).lower()
+        actual = _sha256(zip_path)
+        if actual != expected:
+            raise UpdateError(
+                f"Checksum mismatch — expected {expected}, got {actual}. "
+                "The download was not used."
+            )
+        say("Checksum verified.")
 
         say("Extracting…")
         extract = staging / "extracted"

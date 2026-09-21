@@ -25,9 +25,10 @@ files left where a worktree should be.
 
 What it will not touch
 ----------------------
-**His files.** `REFUSED_ROOTS` is checked before anything else and covers the
-Dropbox tree, `~/.wd_wireless_tools`, and the project folder Cloud Manager is
-configured against. Nothing is emptied from the recycle bin. Deletion is
+**His files.** `refused_roots()` is checked before anything else and covers
+the Dropbox tree, **the user directory `user_dir()` reports** - which is not
+always the default one, and reading the default instead was a real finding on
+2026-09-20 - and the project folder Cloud Manager is configured against. Nothing is emptied from the recycle bin. Deletion is
 additionally confined to `SAFE_ROOTS` - being outside a refused root is not
 enough on its own, a path has to be positively inside somewhere we own.
 
@@ -66,6 +67,9 @@ import re
 import subprocess
 import time
 from pathlib import Path
+
+from tools.safe_path import is_within_unresolved
+from tools.user_dir import user_dir
 
 #: An entry touched more recently than this is assumed to belong to a session
 #: that is still working. Deliberately generous: a wrongly-kept directory
@@ -146,9 +150,14 @@ def _norm(p):
 
 def _within(path, root):
     """Is `path` at or inside `root`? Compared on normalised absolute paths so
-    a different spelling of the same folder cannot slip past."""
-    p, r = _norm(path), _norm(root)
-    return p == r or p.startswith(r.rstrip("\\/") + os.sep)
+    a different spelling of the same folder cannot slip past.
+
+    Textual rather than resolved, deliberately: a survey walks thousands of
+    entries and `Path.resolve()` opens each one. It compares *components*
+    either way - see tools/safe_path.py, which is where the rule lives now,
+    and which explains why the prefix spelling this looks like is wrong.
+    """
+    return is_within_unresolved(path, root)
 
 
 def default_roots():
@@ -175,9 +184,22 @@ def refused_roots(roots=None, extra=None):
     not knowable from here - the caller passes it in. If that lookup ever
     fails, the caller passes nothing and the Dropbox and user-data guards
     still stand; `SAFE_ROOTS` is what actually bounds deletion.
+
+    **The user directory is asked for, not spelled out.** Until the
+    2026-09-20 sweep this built the path off the home directory itself, which
+    is the shipped *default* and not the answer: `WD_USER_DIR` moves that
+    directory, and exists precisely so an automated run cannot reach his real
+    settings. Reading the default means the refusal list names a folder
+    nobody is using and leaves the one in use unlisted - and the override
+    normally points inside `%TEMP%`, which is one of the three roots this is
+    allowed to delete from. So the failure direction was toward deleting a
+    live user directory. `user_dir()` is the only door; see
+    tools/user_dir.py, and
+    tests/test_user_dir_is_the_only_door.py for why the guard that should
+    have caught this could not see it.
     """
     home = Path.home()
-    out = [home / ".wd_wireless_tools", home / "Dropbox"]
+    out = [user_dir(), home / "Dropbox"]
     out.extend(Path(p) for p in (extra or []) if p)
     return [p for p in out if str(p).strip()]
 
@@ -492,12 +514,65 @@ def _powershell_processes():
 
 
 def stop_process(pid, killer=None):
-    """Stop one process by id. Injectable, for the same reason as above."""
+    """Stop one process by id. Injectable, for the same reason as above.
+
+    **Nothing outside this module may call this with a number it was handed.**
+    It is `taskkill /F` on whatever it is given and it asks no questions -
+    `stop_processes` below is the entry point, and it is the one that decides
+    which ids are ours.
+    """
     if killer is not None:
         return killer(pid)
     out = subprocess.run(["taskkill", "/PID", str(int(pid)), "/F"],
                          capture_output=True, text=True, timeout=30)
     return out.returncode == 0
+
+
+def stop_processes(pids, processes=None, killer=None):
+    """Stop the ones on this list that are still ours, and say what happened.
+
+    **The list is re-derived, not trusted** - the same rule `sweep` follows,
+    and it was missing here. The endpoint behind this took whatever process
+    ids arrived in the request body and passed each one straight to
+    `taskkill /F`, so a request could name any process on the machine: his
+    browser with a day of tabs in it, Ekahau, the editor holding unsaved
+    work, or a system service. Nothing about the request had to be hostile
+    for that to go wrong; a stale page holding ids from a previous survey is
+    enough.
+
+    So every id is looked up in a **fresh** `list_processes()` survey and must
+    still be there. Anything else is skipped and reported with the reason,
+    because a stop that silently did nothing reads as a stop that worked.
+
+    `processes` and `killer` are injectable so a test never depends on - and
+    can never touch - what is running on the machine.
+    """
+    current = list_processes() if processes is None else list(processes)
+    ours = {int(p["pid"]): p for p in current if p.get("pid") is not None}
+
+    stopped, skipped, failed = [], [], []
+    for raw in pids or []:
+        try:
+            pid = int(raw)
+        except (TypeError, ValueError):
+            skipped.append({"pid": raw,
+                            "reason": "Not a process id."})
+            continue
+        entry = ours.get(pid)
+        if entry is None:
+            skipped.append({"pid": pid,
+                            "reason": "Not something this found, so not "
+                                      "something it will stop."})
+            continue
+        if stop_process(pid, killer):
+            stopped.append(entry)
+        else:
+            failed.append({**entry, "error": "The process would not stop."})
+
+    return {"ok": True, "stopped": stopped, "skipped": skipped,
+            "failed": failed,
+            "counts": {"stopped": len(stopped), "skipped": len(skipped),
+                       "failed": len(failed)}}
 
 
 # ── the survey ───────────────────────────────────────────────────

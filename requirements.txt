@@ -1,7 +1,26 @@
-flask>=3.0
-waitress>=3.0
-requests>=2.28
-browser_cookie3>=0.19
-cryptography>=46.0
-keyring>=25.7
-pillow>=11.0
+# Floors, not pins - and the floors are the security boundary, so they are
+# not decorative.
+#
+# **They were set once and left**, and by 2026-09-20 the declared minimums
+# admitted 70 known vulnerabilities across six packages. `pillow>=11.0` is
+# the one that mattered: Pillow decodes floor-plan images out of `.esx`
+# archives, which arrive by email and out of shared folders, and its
+# advisories are decoder bugs - the class where the input is the attack. A
+# machine that happened to have Pillow 11 installed satisfied the floor, so
+# nothing ever upgraded it.
+#
+# Each floor below is the oldest release with no advisory against it, checked
+# with pip-audit rather than chosen by eye. Raise one when an advisory lands;
+# never lower one to make an install work.
+#
+# The installers check the *version*, not just that the import succeeds -
+# see the dependency step in install.ps1 / install.sh. They checked
+# importability alone until this pass, which is why a stale Pillow could sit
+# there through any number of updates without ever being looked at.
+flask>=3.1.3
+waitress>=3.0.2
+requests>=2.34.2
+browser_cookie3>=0.20.1
+cryptography>=50.0.1
+keyring>=25.7.0
+pillow>=12.3.0

@@ -64,7 +64,7 @@
     list.innerHTML = names.map(function (name, i) {
       return '<li class="sf-item" data-idx="' + i + '">' +
         '<span class="sf-handle" title="Drag to reorder">&#9776;</span>' +
-        '<input type="text" value="' + escHtml(name) + '" onchange="updateSubfolder(' + i + ', this.value)">' +
+        '<input type="text" value="' + escAttr(name) + '" onchange="updateSubfolder(' + i + ', this.value)">' +
         (names.length > 1 ? '<button class="sf-remove" onclick="removeSubfolder(' + i + ')" title="Remove">&times;</button>' : '') +
         '</li>';
     }).join('');
@@ -76,9 +76,14 @@
     });
   }
 
-  function escHtml(s) {
-    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
+  /* Delegating rather than a private copy, for the reason the audit that
+     split `esc` and `escAttr` gives: a file with its own opinion about
+     escaping is a file where the shared rule does not apply, and nobody
+     reading it can tell which one is in force. This copy also took
+     `s.replace` on whatever it was handed, so a subfolder name that came
+     back null threw instead of rendering. */
+  function escAttr(s) { return WD.escAttr(s); }
+  function escHtml(s) { return WD.esc(s); }
 
   window.updateSubfolder = function (idx, val) {
     var key = state.subfolders[idx];
@@ -151,7 +156,10 @@
       } else {
         summary += '<strong>Project folder:</strong> Not set (pick one from any tool)<br>';
       }
-      summary += '<strong>Subfolders:</strong> ' + effectiveNames().join(', ') + '<br>';
+      // Escaped: these are names he typed on the previous step, and they
+      // went into the summary raw.
+      summary += '<strong>Subfolders:</strong> '
+        + effectiveNames().map(escHtml).join(', ') + '<br>';
       summary += '<strong>Cloud:</strong> ' + (state.cloudConnected ? 'Connected' : 'Not connected') + '<br>';
       document.getElementById('setupSummary').innerHTML = summary;
       goStep('done');

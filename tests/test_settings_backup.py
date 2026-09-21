@@ -249,6 +249,55 @@ class NothingSecretLeavesTheMachine(Harness):
                          ["../../escaped.json", "cookies.enc"])
         self.assertFalse((self.root.parent.parent / "escaped.json").exists())
 
+    def test_an_import_cannot_write_into_a_sibling_with_a_shared_prefix(self):
+        r"""The case the test above could not see, and the guard let through.
+
+        The check was ``str(target).startswith(str(root))``, and the entry
+        above - ``../../escaped.json`` - lands two levels up where no prefix
+        is shared, so it was correctly refused and the guard looked right.
+
+        A **sibling of the user directory whose name begins with it** is the
+        one that gets through: with a root of ``...\.wd_wireless_tools``, an
+        entry of ``../.wd_wireless_tools_elsewhere/x.json`` resolves to
+        ``...\.wd_wireless_tools_elsewhere\x.json``, which starts with the
+        root's text and is not inside the root. A settings bundle is a file
+        he can be handed - it is how a setting gets from the machine at home
+        to the one at work - so this is a write outside the user directory
+        that arrives through an ordinary feature.
+
+        Found by the 2026-09-20 sweep while fixing the same spelling in the
+        release-archive guard; see
+        ``tests/test_one_answer_about_containment.py``.
+        """
+        self.write_settings()
+        sibling_name = self.root.name + "_elsewhere"
+        entry = f"../{sibling_name}/x.json"
+
+        # The premise: this pair really does share the text prefix, so a
+        # string comparison says yes to it.
+        landing = self.root.parent / sibling_name / "x.json"
+        self.assertTrue(str(landing).startswith(str(self.root)),
+                        "the fixture is wrong - it must share the prefix")
+
+        result = settings_backup.apply_import(
+            {"schema": 1, "settings": {}, "files": {entry: {"json": {"x": 1}}}},
+            root=self.root)
+
+        self.assertEqual([entry], result["applied"].get("refused", []))
+        self.assertEqual([], result["applied"]["files"])
+        self.assertFalse(landing.exists(),
+                         f"a bundle wrote outside the user directory: {landing}")
+
+    def test_an_absolute_entry_is_refused(self):
+        """`root / "C:/Windows/x"` is `C:/Windows/x` - pathlib hands it over."""
+        self.write_settings()
+        entry = (Path(self.root.anchor) / "wd-import-escape.json").as_posix()
+        result = settings_backup.apply_import(
+            {"schema": 1, "settings": {}, "files": {entry: {"json": {"x": 1}}}},
+            root=self.root)
+        self.assertEqual([entry], result["applied"].get("refused", []))
+        self.assertFalse(Path(entry).exists())
+
 
 class ThePreviewSaysWhatWillChange(Harness):
     """He has had settings change underneath him twice in one night and should
