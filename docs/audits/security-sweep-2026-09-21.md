@@ -5,7 +5,9 @@ A night's pass over the whole suite, starting from the four findings the
 fixed and shipped in **v2.157.0**, or listed at the end under what was left
 alone and why.
 
-**Run v2.157.0.** Update from About → Update, or run the installer again.
+**Run v2.157.1.** Update from About → Update, or run the installer again.
+Everything below shipped in v2.157.0; v2.157.1 is a test-only follow-up that
+stops the suite leaving two folders in `%TEMP%` per run.
 
 Ranked by what could actually have happened, worst first. Nothing here was
 found being exploited; several of them needed somebody to hand him a file,
