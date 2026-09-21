@@ -4244,11 +4244,29 @@ body.tool-walls .toolbar {
   font-size: 11px; padding: 3px 9px; white-space: nowrap;
 }
 
+/* A key that is assigned looks assigned. `Key 3` and `Set key` already read
+   differently, but the whole point of putting the value on the control is
+   being able to scan a column of twenty-six of them and see which are bound. */
+.wall-act.is-bound {
+  font-family: var(--mono); font-weight: 700;
+  color: var(--amber); border-color: rgba(217,119,6,0.45);
+}
+
+[data-theme="light"] .wall-act.is-bound { color: var(--amber-dark); }
+
 .keybind-menu {
   display: none; position: absolute; right: 0; top: 100%; margin-top: 4px;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,0.4);
   z-index: var(--z-menu); min-width: 140px; padding: 4px;
+}
+
+/* The menu opens on nine bare numbers, so it says what they are first. */
+.keybind-menu-head {
+  padding: 6px 10px 8px; margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px; line-height: 1.4; color: var(--text-2);
+  max-width: 260px; white-space: normal;
 }
 
 .keybind-menu.open { display: block; }

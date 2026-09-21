@@ -581,6 +581,26 @@ function renderWallCard(wt, i) {
   const kb = wt.keybindNumber;
   const kbBadge = kb ? `<span class="wall-keybind-badge">[${kb}]</span>` : '';
 
+  /* The button carries the answer, not just the verb.
+
+     It said "Shortcut", and he asked what it was - "wth is shortcut button in
+     quick walls?" - which is fair, because the word covers a desktop shortcut,
+     a saved filter and a keyboard binding equally well, and none of them was
+     ruled out by the label. A label is not automatically self-explanatory; the
+     test is whether somebody who has not used it knows what it does, and he
+     built this tool.
+
+     So it reads `Key 3` where a key is assigned and `Set key` where none is,
+     which answers "what does this do" and "what is it set to" in the same
+     glance - and makes the row readable without clicking anything. */
+  const kbLabel = kb ? `Key ${kb}` : 'Set key';
+  const kbTitle = kb
+    ? `Ekahau keyboard shortcut ${kb}. While drawing walls in Ekahau AI Pro, `
+      + `press ${kb} to pick this wall type. Click to change it or clear it.`
+    : 'No keyboard shortcut yet. Assign 1-9 and that key picks this wall type '
+      + 'while you draw in Ekahau AI Pro. Saved in the .esx, so it travels '
+      + 'with the project.';
+
   return `
     <div class="wall-card" draggable="true"
          style="--wall-color:${safeColor(wt.color)}"
@@ -601,12 +621,13 @@ function renderWallCard(wt, i) {
         </div>
       </div>
       <div class="wall-actions">
-        <button class="btn btn-sm wall-act" onclick="showKeybindMenu(event, ${i})"
-                title="Give this wall type a number key, so you can pick it in Ekahau without the menu">Shortcut</button>
+        <button class="btn btn-sm wall-act${kb ? ' is-bound' : ''}"
+                onclick="showKeybindMenu(event, ${i})"
+                title="${escAttr(kbTitle)}">${kbLabel}</button>
         <button class="btn btn-sm wall-act" onclick="openEditModal(${i})"
-                title="Change this wall type's name, colour, thickness or attenuation">Edit</button>
+                title="Change this wall type's name, colour, thickness, height or attenuation">Edit</button>
         <button class="btn btn-sm wall-act" onclick="cloneWall(${i})"
-                title="Duplicate this wall type as a new one to tweak">Clone</button>
+                title="${escAttr(`Start a new wall type copied from this one. It opens the editor with the name set to “${wt.name} (Copy)” and no keyboard shortcut; nothing is added until you press Add.`)}">Clone</button>
         <button class="btn btn-sm wall-act btn-danger" onclick="deleteWall(${i})"
                 title="Remove this wall type from the list">Delete</button>
       </div>
@@ -719,6 +740,15 @@ function showKeybindMenu(e, wallIndex) {
   menu.style.top = (rect.bottom + 4) + 'px';
   menu.style.right = (window.innerWidth - rect.right) + 'px';
 
+  /* Nine bare numbers do not say what they are for. The menu opens from a
+     button that now reads `Key 3` or `Set key`, and this finishes the
+     sentence: which key, in which program, doing what. */
+  const head = document.createElement('div');
+  head.className = 'keybind-menu-head';
+  head.textContent = 'Ekahau keyboard shortcut for "' + wallTypes[wallIndex].name
+    + '" — press this number while drawing walls to pick it';
+  menu.appendChild(head);
+
   for (let n = 1; n <= 9; n++) {
     const taken = map[n];
     const isCurrent = currentKb === n;
@@ -729,6 +759,10 @@ function showKeybindMenu(e, wallIndex) {
       label += ' Current';
     } else if (taken) {
       label += ` <span class="taken">(${esc(taken.name)})</span>`;
+      // One type per key, so choosing this one takes it off the other. Say
+      // which, rather than leaving him to notice afterwards.
+      btn.title = `${taken.name} has ${n} at the moment. Choosing it here moves `
+        + `${n} to this wall type and leaves ${taken.name} with no shortcut.`;
     } else {
       label += ' Available';
     }
@@ -748,7 +782,7 @@ function showKeybindMenu(e, wallIndex) {
     menu.appendChild(sep);
     const clr = document.createElement('button');
     clr.className = 'keybind-option clear-opt';
-    clr.textContent = 'Remove shortcut';
+    clr.textContent = `Remove shortcut [${currentKb}]`;
     clr.onclick = () => {
       assignKeybind(wallIndex, null);
       closeKeybindMenus();

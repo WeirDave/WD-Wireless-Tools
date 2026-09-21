@@ -741,7 +741,9 @@ The left column is slots `1` through `9`, matching Ekahau's own wall-type
 keyboard shortcuts.
 
 - **Drag** a wall type card from the list onto a slot to assign it.
-- Click **#** on any wall type to pick a slot from a menu instead.
+- Or use the key button on any wall type card to pick a slot from a menu. It
+  reads **Set key** when the type has no shortcut and **Key 3** when it has
+  slot 3, so you can see which types are bound without opening anything.
 - Click **×** on a slot to clear it.
 - One wall type per slot — assigning to an occupied slot replaces what was
   there.
@@ -758,10 +760,10 @@ a colour swatch, the RF attenuation for 2.4 / 5 / 6 GHz, and the thickness.
 
 | Button | What it does |
 | --- | --- |
-| `#` | Assign or change this type's keyboard shortcut |
-| `✎` | Edit the type — name, colour, thickness, height, propagation |
-| Clone | Opens the editor pre-filled from this type, with `(Copy)` on the name and the shortcut cleared |
-| `×` | Delete the type from the project |
+| **Set key** / **Key 3** | Assign, change or clear this type's Ekahau keyboard shortcut. The label is the current slot, or **Set key** when there is none |
+| **Edit** | Edit the type — name, colour, thickness, height, propagation |
+| **Clone** | Opens the editor pre-filled from this type, with `(Copy)` on the name and no keyboard shortcut. Nothing is added until you press **Add** |
+| **Delete** | Delete the type from the project |
 | **+ Add Wall Type** | A blank form, for when you have exact values from a datasheet |
 
 **Cloning is usually the fastest route:** start from a type whose numbers you
