@@ -336,6 +336,67 @@ class PreviewingAMergeTests(unittest.TestCase):
 
 # ------------------------------------------------- the routes above them
 
+class MergingAFolderIntoItselfTests(unittest.TestCase):
+    """The refusal that had nothing behind it.
+
+    Found by mutation rather than by reading: deleting the same-folder check
+    from `merge_preview` *and* `merge_execute` left the whole suite green.
+
+    It is not a cosmetic guard. With source and destination the same folder,
+    every file's target is the file itself, so the preview reports each one
+    as colliding with itself and hands him a list of conflicts to resolve.
+    Whichever answer he gives, the operation moves a file onto its own path -
+    and there is no copy kept anywhere since v2.141.0, which is exactly why
+    these three operations are the ones that needed executing tests.
+
+    Both halves are covered, because the preview and the write carry their
+    own copy of the check and either could lose it alone.
+    """
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.folder = self.root / "SITE5 Riverside"
+        self.folder.mkdir()
+        self.file = self.folder / "SITE5 Riverside Baseline.esx"
+        self.file.write_bytes(b"the only copy there is")
+        self.mgr = _Manager(out_dir=self.root)
+
+    def test_the_preview_refuses_it(self):
+        out = self.mgr.merge_preview(str(self.folder), str(self.folder))
+        self.assertIn("error", out)
+        self.assertIn("same folder", out["error"])
+        self.assertNotIn("files", out, "it offered a file list to act on")
+
+    def test_the_preview_refuses_it_by_a_different_spelling_of_the_path(self):
+        """A trailing separator is the same folder, and a refusal that can be
+        walked around by typing the path differently is not one."""
+        out = self.mgr.merge_preview(str(self.folder) + os.sep,
+                                     str(self.folder))
+        self.assertIn("error", out)
+        self.assertIn("same folder", out["error"])
+
+    def test_the_write_refuses_it_too(self):
+        """The preview and the write each hold their own check. Relying on
+        the dialog to have previewed first is trusting the caller."""
+        out = self.mgr.merge_execute(
+            str(self.folder), str(self.folder),
+            [{"rel": self.file.name, "action": "overwrite"}])
+        self.assertIn("error", out)
+        self.assertIn("same folder", out["error"])
+
+    def test_and_the_file_is_still_there(self):
+        """The property that matters. Moving a file onto its own path is how
+        the only copy of it stops existing."""
+        self.mgr.merge_preview(str(self.folder), str(self.folder))
+        self.mgr.merge_execute(
+            str(self.folder), str(self.folder),
+            [{"rel": self.file.name, "action": "overwrite"},
+             {"rel": self.file.name, "action": "move"}])
+        self.assertTrue(self.file.exists(), "the file was moved onto itself")
+        self.assertEqual(b"the only copy there is", self.file.read_bytes())
+
+
 class TheRouteReachesTheFunctionTests(unittest.TestCase):
     """The page does not call these functions; it posts an action name.
 
