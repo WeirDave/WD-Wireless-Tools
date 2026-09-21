@@ -1,0 +1,14 @@
+{
+  "_comment": [
+    "Public functions in tools/ that no test mentions, each with the reason",
+    "it is allowed to stay that way. This is a ratchet: an entry may be",
+    "removed, never added, and a stale entry fails the suite as loudly as a",
+    "new gap. It is empty because backlog item 12 emptied it, and the empty",
+    "state is the point - the next function that ships without a test fails",
+    "the suite instead of waiting for somebody to run an audit.",
+    "",
+    "Before adding an entry, read tests/test_every_public_function_is_exercised.py.",
+    "The answer to a gap is almost always a test that runs the function."
+  ],
+  "allowed": {}
+}

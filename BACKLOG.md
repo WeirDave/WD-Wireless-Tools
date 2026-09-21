@@ -169,18 +169,23 @@ will point at something else.
 
 ## Open work
 
-**One entry is open: item 12.** Everything else under this heading is struck
-through with the version that closed it, and those are kept rather than deleted
-because the reasoning on them is what stops the same item being re-opened from
-scratch - several were re-derived once already, and two were re-derived
-*wrongly*, which is what the record on each one prevents.
+**Nothing under this heading is open.** Every entry is struck through with the
+version that closed it, and they are kept rather than deleted because the
+reasoning on them is what stops the same item being re-opened from scratch -
+several were re-derived once already, and two were re-derived *wrongly*, which
+is what the record on each one prevents.
+
+**That sentence has been wrong three times in a week**, always in the same way:
+not about the entries, about something nobody had written down. It is left
+standing here as a statement about the list rather than about the code, which
+is all it has ever been able to mean.
 
 New work goes here as an entry of the same shape: what the tool does now, what
 it should do, and what "done" is.
 
 ### Test coverage
 
-#### 12. P2 - Thirty-two public functions in `tools/` are named by no test
+#### 12. ~~P2 - Thirty-two public functions in `tools/` are named by no test~~ - closed 2026-09-21
 
 **Found the hard way on 2026-09-20**, in the same session that closed items 10
 and 11. `zip_update` - the one function that replaces a user's install - had no
@@ -209,15 +214,42 @@ the trade that lets it run in under a second - so the list is a prompt, and the
 question to ask of each line is "if this were wrong, what would fail?". The
 answer "nothing" is the one to act on.
 
-**Done** is: the three server-reachable ones driven by a test that runs them,
-the remaining 29 read once and each either covered or knowingly left, and a
-ratchet in the shape of `tests/test_a_test_must_be_able_to_fail.py` - a
-baseline that can come down and not go up - so the next function that ships
-without one fails the suite instead of waiting for somebody to notice.
+**Closed at zero rather than at a reduced number, and with no release.** All
+thirty
+are covered - the count was 32 when the item was written and two were taken by
+another session in the meantime - and
+`tests/functions_never_named_baseline.json` is **empty**, which is the
+strongest state the ratchet can be in: anything new fails.
 
-**Do not answer this with a test that names the function.** That is what the
-script measures and it is the weakness it inherits: a name in a comment counts.
-The point is a test that executes it.
+No version bump goes with it, because nothing here reaches a user: `tests/`,
+`scripts/`, `BACKLOG.md` and `CLAUDE.md` are all outside the release payload,
+which was checked against `iter_release_files()` rather than assumed. The
+suite version stays where the security sweep left it.
+
+175 tests in six files, every one of them running the function rather than
+naming it:
+
+* `test_settings_migrate_legacy.py` - the startup migration. Idempotence is
+  the property the whole design rests on, because it runs on *every* start and
+  a version that re-migrates would reset a configured install to defaults.
+* `test_plantrim_geometry.py` - ten functions, the whole crop arithmetic.
+* `test_cloud_config_and_entry_points.py` - the two config stores and their
+  precedence, the External override store, the listing, both cookie paths and
+  the folder picker, plus `api_trim_to`.
+* `test_the_helpers_nobody_ran.py` - eight small ones, including rule zero's
+  own detector. `scan_text` carries the docstring *"separate and public so the
+  tests can exercise the detector directly"*: it was extracted for testing and
+  then never tested.
+* `test_the_decisions_nobody_ran.py` - the four that decide something.
+* `test_every_public_function_is_exercised.py` - the ratchet.
+
+**The weakness is inherited and is written on the ratchet itself**: it asks
+whether a test *names* the function, so a name in a comment satisfies it. That
+is the price of a check that runs in three seconds instead of doubling the
+suite. `test_a_test_must_be_able_to_fail.py` is the guard for test quality;
+this one is only the guard for test existence, and answering a failure by
+writing the name into a docstring would satisfy the letter of it and leave the
+function exactly as untested as before.
 
 ### Cloud Manager
 

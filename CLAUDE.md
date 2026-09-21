@@ -1038,6 +1038,30 @@ become acceptable because the sentence was updated.
 Swapping the first two arguments of `pushLocalOverCloud` fails the new test and
 passed every one of the assertions it replaced.
 
+**And the mutation check itself can be the thing that cannot fail.** Both of
+these turned up in one session on 2026-09-21, and both make the harness report
+a confident answer that is not about the code under test:
+
+* **A stale `__pycache__` survives the restore.** The loop is mutate, run,
+  `cp` the backup back, run again - and `cp` can leave a `.pyc` Python still
+  considers current, so the *next* run executes the mutated bytecode. It shows
+  up as a test that "fails" after the file is provably identical to the
+  backup, which reads as flakiness. Clear the caches either side of every
+  mutation: `find . -name __pycache__ -type d -exec rm -rf {} +`.
+* **`str.replace(anchor, new, 1)` mutates the first occurrence, which may be a
+  different function.** `if u.get("role") != "OWNER" and u.get("username")`
+  appears twice in `cloud_manager.py`, 200 lines apart. The mutation landed on
+  the wrong one, the tests passed, and the honest-looking conclusion was "my
+  test is too weak" - two real assertions were nearly rewritten to chase a
+  defect that had never been introduced. **Grep the anchor first and count
+  it**; if it is not unique, mutate by line number and assert the line says
+  what you expect before writing.
+
+The direction of both errors is the expensive one: they make a working test
+look inadequate, so the response is to weaken or complicate a test that was
+right. Confirm the mutation is actually in the function you think it is before
+believing what the run tells you.
+
 **And the harness can be the thing that cannot fail, not the assertions.** A
 Node probe whose checks are `await`ed has to `await` its exit with them: `node
 -e` reaches the end of the script while the async IIFE is still pending, exits
