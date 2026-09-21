@@ -66,6 +66,12 @@ function _compareKey(c, l) {
   return String(c || '') + '\u0000' + String(l || '').replace(/\\/g, '/').toLowerCase();
 }
 function _setRowBusy() {}
+/* The dates the row carries. `settlePair` stamps its request with the cloud
+   one, so the server records the comparison against the same number this page
+   retires it on. A stub returning a known pair lets that argument be pinned
+   like the other two. */
+function _pairMtimes() { return { c: 1234, l: 999 }; }
+const _answeredHere = new Set();
 
 /* The real request builder and the real mapping table, so the keys under test
    are the keys the server will be handed. */
@@ -117,6 +123,15 @@ class SettlePairSendsThePairItWasGiven(unittest.TestCase):
 
     def test_the_cloud_project_is_sent_as_the_cloud_id(self):
         self.assertEqual(CLOUD_ID, self.sent[0]["body"].get("cloudId"))
+
+    def test_the_cloud_date_the_row_carries_is_sent_too(self):
+        """The server records the comparison against this number, and this
+        page retires the stored answer when it moves. Sent as anything else -
+        omitted, or the local date - the record is written against a
+        fingerprint that never matches again, so the answer is stored and can
+        never be found. That failure is silent: comparing still works and the
+        memory simply never does."""
+        self.assertEqual(1234, self.sent[0]["body"].get("cloudMtime"))
 
 
 if __name__ == "__main__":

@@ -1336,7 +1336,8 @@ CLOUD_ACTIONS = {
     "set_internal_project_name": lambda d: cm.set_internal_project_name(
         d["path"], d.get("name"), _progress_setter(d.get("opId"))),
     "compare_with_cloud": lambda d: cm.compare_with_cloud(
-        d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
+        d["path"], d.get("cloudId"), _progress_setter(d.get("opId")),
+        cloud_mtime=d.get("cloudMtime")),
     # Dev toolbar. Aligns local files whose cloud twin was renamed and is
     # therefore reported newer. The default here is the safe one on purpose:
     # `bool(d.get("dryRun"))` would have made an absent field mean "write to

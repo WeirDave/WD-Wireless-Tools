@@ -60,6 +60,18 @@ EXPORT_FILES = (
     # rather than by anybody noticing they were gone.
     "site_directory.json",
     "rename_profiles.json",
+    # What a content comparison last found about each cloud/local pair, and
+    # what the two sides looked like when it was taken. It sits on the "how he
+    # works" side of the line despite describing this machine, because the
+    # answers in it are ones he paid for: each entry is a whole cloud project
+    # downloaded and compared member by member, and losing them means being
+    # asked the same questions again after a reinstall.
+    #
+    # Safe to carry to another machine because it cannot assert anything
+    # there. Every entry is retired unless the local path and both dates still
+    # match, so on a machine with a different folder it reads as "not
+    # compared" - the answer it would have given anyway.
+    "sync_state.json",
 )
 EXPORT_DIRS = ("templates", "capacity", "report")
 

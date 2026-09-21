@@ -1381,11 +1381,19 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
         divergence = sync_state.verdict_for(
             _sync_points, c.get("id"), l.get("path"),
             c.get("mtime"), l.get("mtime"))
+        #: What a content comparison last found about these two, if it still
+        #: describes them. This is what stops him being asked the same
+        #: question after every reload: the answer is on the row when the
+        #: list is built, rather than only in the page that asked for it.
+        comparison = sync_state.comparison_for(
+            _sync_points, c.get("id"), l.get("path"),
+            c.get("mtime"), l.get("mtime"))
         matched.append({"cloud": c, "local": l, "matchType": mtype,
                         "score": round(min(disp, 1.0), 2),
                         "namesDiffer": c["name"].strip() != l["name"].strip(),
                         "staleness": stale,
                         "divergence": divergence,
+                        "comparison": comparison,
                         "differenceKind": _difference(c, l, stale)})
 
     def _resolve_pass(cands, conflicts, mtype, base):
@@ -3303,7 +3311,8 @@ class CloudManager:
             return {"error": "Local file not found: %s" % local_path}
         return src
 
-    def compare_with_cloud(self, local_path, cloud_project_id, progress_cb=None):
+    def compare_with_cloud(self, local_path, cloud_project_id,
+                           progress_cb=None, cloud_mtime=None):
         """Is the cloud copy actually different, or only differently dated?
 
         "I don't know why we can't just compare a local file with the cloud
@@ -3369,6 +3378,39 @@ class CloudManager:
             progress_cb(stage="done", current=100, total=100, message="Done.")
         result["cloudProjectId"] = cloud_project_id
         result["path"] = str(src)
+
+        # Keep the answer. Without this the verdict lived in the page and
+        # nowhere else, so a reload asked him the same question again and
+        # discarded a comparison that had downloaded the whole cloud project
+        # to reach it.
+        #
+        # The local date is the one the list is built from -
+        # `history.modifiedAt` inside the .esx, falling back to the
+        # filesystem - because a fingerprint written against a different
+        # number than the list reads would never match and the memory would
+        # silently never work.
+        #
+        # The cloud date comes from the caller: it is the value the row was
+        # built with, and the question this record answers is "has either
+        # side moved since then". Without one there is nothing to invalidate
+        # against, so nothing is stored rather than something that cannot be
+        # retired.
+        try:
+            fs_mtime = int(src.stat().st_mtime)
+        except OSError:
+            fs_mtime = 0
+        local_mtime = _esx_meta(src, fs_mtime).get("internalMtime") or fs_mtime
+        result["localMtime"] = local_mtime
+        if cloud_mtime:
+            try:
+                sync_state.record_comparison(
+                    cloud_project_id, str(src), cloud_mtime, local_mtime,
+                    result)
+                result["checkedAt"] = int(time.time())
+            except Exception as exc:
+                # A comparison he can read now matters more than a record of
+                # it, so a store that will not write is logged and skipped.
+                applog.note_failure("recording a comparison", exc)
         return result
 
     def list_shares(self, project_id):

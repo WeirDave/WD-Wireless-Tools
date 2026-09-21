@@ -125,6 +125,12 @@ def record(cloud_id, local_path, cloud_mtime, local_mtime,
     Called after an operation that has made them identical - a download over
     the local file, or a replace of the cloud copy. Anything that leaves them
     different must not call this.
+
+    It replaces the whole entry, which drops any stored comparison with it.
+    That is deliberate rather than incidental: the operation has just moved
+    one side's date, so a comparison taken before it describes two files that
+    no longer exist in that state. The sync point it writes is the stronger
+    fact anyway - `classify` reads it and reports `in_sync`.
     """
     if not cloud_id or not local_path:
         return
@@ -137,6 +143,88 @@ def record(cloud_id, local_path, cloud_mtime, local_mtime,
         "direction": direction or "",
     }
     save(pairs, _path)
+
+
+#: The fields of a comparison worth keeping. `differences` is deliberately
+#: not one of them - it can run to hundreds of entries on a project that has
+#: genuinely moved on, and the row shows `summary`.
+_VERDICT_FIELDS = ("identical", "designDiffers", "renamedOnly", "summary",
+                   "nameState")
+
+
+def record_comparison(cloud_id, local_path, cloud_mtime, local_mtime,
+                      verdict, _path=None) -> None:
+    """Note what a content comparison found, and what the pair looked like.
+
+    "there are three files that say they needed to be checked, and when I
+    check them they just go away - until it refreshes again and then they come
+    back."
+
+    The answer lived in a JavaScript `Map` and nowhere else, so every reload
+    asked him the same question and threw away the answer he had already
+    given. A comparison downloads the whole cloud project to reach its
+    verdict; discarding that is expensive as well as rude.
+
+    This is **not** `record()`. That one says "these two are now the same" and
+    is written by an operation that made them so. A comparison is a
+    measurement, and it can just as well find that they differ - which is
+    worth remembering too, so the row can say when it was last looked at
+    rather than only whether it is settled. It is kept under its own key with
+    its own fingerprints, so a stored comparison can never be mistaken for a
+    sync point by `classify`.
+
+    A comparison that proves the two sides identical *is* also a sync point,
+    but that call is the caller's to make and is made explicitly.
+    """
+    if not cloud_id or not local_path or not isinstance(verdict, dict):
+        return
+    pairs = load(_path)
+    entry = pairs.get(str(cloud_id))
+    if not isinstance(entry, dict):
+        entry = {}
+    entry["comparison"] = {
+        "localPath": str(local_path),
+        "cloudMtime": int(cloud_mtime or 0),
+        "localMtime": int(local_mtime or 0),
+        "checkedAt": int(time.time()),
+        "verdict": {k: verdict.get(k) for k in _VERDICT_FIELDS},
+    }
+    pairs[str(cloud_id)] = entry
+    save(pairs, _path)
+
+
+def comparison_for(pairs, cloud_id, local_path, cloud_mtime, local_mtime):
+    """The stored comparison, if it still describes these two files.
+
+    Returns None rather than a stale answer. The retirement rule is the one
+    `classify` uses and for the same reason: a comparison taken at 09:00 does
+    not describe a project somebody edited at 10:00, and a confidently wrong
+    "settled" hides the change instead of showing it.
+    """
+    entry = (pairs or {}).get(str(cloud_id))
+    if not isinstance(entry, dict):
+        return None
+    cmp_rec = entry.get("comparison")
+    if not isinstance(cmp_rec, dict):
+        return None
+    if _norm(cmp_rec.get("localPath")) != _norm(local_path):
+        return None
+
+    was_c = int(cmp_rec.get("cloudMtime") or 0)
+    was_l = int(cmp_rec.get("localMtime") or 0)
+    now_c = int(cloud_mtime or 0)
+    now_l = int(local_mtime or 0)
+    if not was_c or not was_l or not now_c or not now_l:
+        return None
+    if abs(now_c - was_c) > TOLERANCE_S or abs(now_l - was_l) > TOLERANCE_S:
+        return None
+
+    verdict = cmp_rec.get("verdict")
+    if not isinstance(verdict, dict):
+        return None
+    out = dict(verdict)
+    out["checkedAt"] = int(cmp_rec.get("checkedAt") or 0)
+    return out
 
 
 def forget(cloud_id, _path=None) -> None:

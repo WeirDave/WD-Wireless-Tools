@@ -60,7 +60,7 @@ const API_MAP = {
   list_manual_matches: ['list_manual_matches', []],
   verify_replace_local: ['verify_replace_local', ['cloudId', 'localPath']],
   replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId']],
-  compare_with_cloud: ['compare_with_cloud', ['path', 'cloudId', 'opId']],
+  compare_with_cloud: ['compare_with_cloud', ['path', 'cloudId', 'opId', 'cloudMtime']],
   set_internal_project_name: ['set_internal_project_name', ['path', 'name', 'opId']],
   list_shares: ['list_shares', ['projectId']],
   add_share: ['add_share', ['projectId', 'email', 'role']],
@@ -846,6 +846,12 @@ function refreshData(silent, opts) {
   const background = opts ? !!opts.background : !!silent;
   if (!silent) {
     clearSelection();
+    /* He asked for the list again, so rows he answered last time go back to
+       being ordinary rows. Deliberately not done on a silent refresh: the
+       live poll and the refresh that follows his own comparison both come
+       through here, and clearing on those would take the row away 400ms
+       after the answer appeared - which is the complaint. */
+    forgetAnsweredHere();
     document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">Loading…</div>';
   }
   const tab = currentTab;
@@ -1294,6 +1300,7 @@ function _siteHoldsVisible(cloudObj, localObj, pred) {
            status: p.namesDiffer ? 'mismatch' : 'synced', cloud: p.cloud,
            local: p.local, matchType: p.matchType,
            staleness: p.staleness || null, namesDiffer: !!p.namesDiffer,
+           comparison: p.comparison || null,
            differenceKind: p.differenceKind || null }))
       || (kids.cloudOnly || []).some(c => ok({
            status: 'orphan', cloud: c, local: null }))
@@ -1756,6 +1763,9 @@ function setFilter(f) {
 
   if (f === 'synced') f = 'all';
   activeFilter = activeFilter === f ? 'all' : f;
+  //: Moving away. A row held in place so he could read its answer has no
+  //: claim on the next filter's list.
+  forgetAnsweredHere();
   /* The third copy of this rule, and the one that runs when he clicks.
 
      It read `.dash-card`, which the v2.113.0 header redesign removed. v2.118.0
@@ -2321,7 +2331,12 @@ function renderLedger(hit) {
     !!(row && row.cloud && row.local && row.matchType === 'exact');
   //: The same predicate the chip counts with - see `isOutOfSync`. Two
   //: spellings of this is what made the header say three over a list of six.
-  const directIsStale = isOutOfSync;
+  //:
+  //: Plus the pairs he answered while standing here, which stay listed with
+  //: their result rather than vanishing as he reads it - see `_answeredHere`.
+  //: The chip goes on counting what is genuinely out of sync, because the
+  //: number he is being told to act on must not include rows that are done.
+  const directIsStale = (row) => isOutOfSync(row) || answeredHere(row);
 
   /* `anyChildMatches` and the three `rowIs…` wrappers that used it are gone.
      Each one existed to let a site answer a project's question, and
@@ -2385,6 +2400,12 @@ function renderLedger(hit) {
   (data.matched || []).forEach(p => rows.push({
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'projects',
     matchType: p.matchType, staleness: p.staleness || null,
+    /* What a comparison last found about this pair, carried from the server.
+       Every tab builds its own row object out of named fields, so a field
+       the server adds reaches the screen only where it is copied - and a
+       missed one is silent: the row renders perfectly and simply never knows
+       it has been answered. */
+    comparison: p.comparison || null,
     differenceKind: p.differenceKind || null,
     cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || ''),
     /* One key per side, the same as the Sites tab and nested project rows.
@@ -2478,6 +2499,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
   (data.matched || []).forEach(p => rows.push({
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'sites',
     matchType: p.matchType, staleness: p.staleness || null,
+    comparison: p.comparison || null,
     differenceKind: p.differenceKind || null,
     cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || ''),
     cloudCheckKey: 's-c:' + p.cloud.id, localCheckKey: 's-l:' + p.local.path,
@@ -2573,6 +2595,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
       const row = { status: p.namesDiffer ? 'mismatch' : 'synced',
                     cloud: p.cloud, local: p.local, matchType: p.matchType,
                     staleness: p.staleness || null,
+                    comparison: p.comparison || null,
                     differenceKind: p.differenceKind || null };
       if (passOwner && !passOwner(row)) return;
       if (activeFilter !== 'all' && !(projPass || pass)(row.status, row)) return;
@@ -3063,7 +3086,7 @@ function _siteMatchesFilterAlone(r) {
 function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteName, passFilter) {
   const rows = [];
   (children.matched || []).forEach(p => rows.push({
-    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, staleness: p.staleness || null, differenceKind: p.differenceKind || null, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
+    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, staleness: p.staleness || null, comparison: p.comparison || null, differenceKind: p.differenceKind || null, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
   }));
   (children.cloudOnly || []).forEach(c => rows.push({ status: 'orphan', cloud: c, local: null, sort: c.name || '' }));
   (children.localOnly || []).forEach(l => rows.push({ status: 'orphan', cloud: null, local: l, sort: l.name || '' }));
@@ -3280,6 +3303,7 @@ function siteDigest(children, opts) {
   (children.matched || []).forEach(p => rows.push({
     status: p.namesDiffer ? 'mismatch' : 'synced', cloud: p.cloud, local: p.local,
     matchType: p.matchType, staleness: p.staleness || null,
+    comparison: p.comparison || null,
     namesDiffer: !!p.namesDiffer, paired: true,
   }));
   (children.cloudOnly || []).forEach(c => rows.push({
@@ -3448,6 +3472,13 @@ function _compareKey(cloudId, localPath) {
 /* The dates the pair carried when a comparison was taken, so the answer can
    be retired when it stops being about the same two files. */
 function _pairMtimes(cloudId, localPath) {
+  /* Before any list has been rendered there is nothing to read the dates
+     from, and that is an ordinary state rather than a fault - it is what a
+     comparison started from a deep link or a restored session sees. It used
+     to be called only after the request had gone out, so a throw here cost
+     nothing; called before it, to stamp the request, a throw would mean the
+     comparison never ran at all. */
+  if (typeof rowData === 'undefined' || !rowData) return null;
   const lp = String(localPath || '').replace(/\\/g, '/').toLowerCase();
   const cid = String(cloudId || '');
   for (const k of Object.keys(rowData)) {
@@ -3479,10 +3510,72 @@ function _compareStillApplies(res, r) {
   return res._seen.c === c && res._seen.l === l;
 }
 
+/* Pairs he answered in this sitting, so the row does not leave while he is
+   reading the answer.
+
+   "there are three files that say they needed to be checked, and when I check
+   them they just go away."
+
+   He is under the filter for rows that need a decision, and the filter is
+   right: a pair whose contents have been proven identical is no longer out of
+   sync, so it stops matching. The trouble is that answering the question was
+   what removed the row - the result arrived and left in the same instant, and
+   the thing he pressed the button to find out was never on screen.
+
+   So a row answered here keeps its place under the filter and shows its
+   result. It is not the filter being switched off: the row is listed because
+   its answer is known and displayed, and the moment he changes filter, tab or
+   reloads the list it is gone like any other settled pair. `clear()` is
+   called from exactly those three places. */
+const _answeredHere = new Set();
+
+/* When the comparison on this row was taken.
+
+   A row that is calm about a date difference has to say why it is calm. The
+   dates still disagree - that is what put the row in front of him - and
+   "Exact match" without a date reads as the tool having an opinion. "Exact
+   match - the contents and the name are the same on both sides. Nothing to
+   do. · checked 21 Sep" is the evidence for the opinion, and it is the thing
+   that tells him whether the answer predates the change he is thinking of.
+
+   Empty when there is no stamp, which is a comparison taken before this was
+   recorded. Silence is right there: inventing today's date for an answer of
+   unknown age would be worse than not saying. */
+function checkedWhen(cmp) {
+  const t = Number(cmp && cmp.checkedAt) || 0;
+  if (!t) return '';
+  const d = new Date(t * 1000);
+  if (isNaN(d.getTime())) return '';
+  return ' · checked ' + d.toLocaleDateString(undefined,
+                                              { day: 'numeric', month: 'short' });
+}
+
+function answeredHere(r) {
+  return !!(r && r.cloud && r.local
+            && _answeredHere.has(_compareKey(r.cloud.id, r.local.path)));
+}
+
+function forgetAnsweredHere() {
+  _answeredHere.clear();
+}
+
 function compareResultFor(r) {
   if (!r || !r.cloud || !r.local) return null;
   const res = _compareResults.get(_compareKey(r.cloud.id, r.local.path)) || null;
-  return _compareStillApplies(res, r) ? res : null;
+  if (_compareStillApplies(res, r)) {
+    if (res) return res;
+    /* Nothing from this page session. The server keeps the last comparison
+       against the dates both sides carried when it was taken, and hands it
+       back on the row only while it still describes them - so an answer he
+       gave yesterday is still an answer today, and one that has been
+       overtaken by an edit is not offered at all. Before this, the verdict
+       lived in the Map above and nowhere else: every reload asked him the
+       same question and threw away what he had already paid a full project
+       download to learn. */
+    return (r.comparison && typeof r.comparison === 'object')
+      ? r.comparison : null;
+  }
+  return null;
 }
 
 /* Download the cloud copy and diff it against the local file.
@@ -3581,12 +3674,19 @@ async function settlePair(cloudId, localPath, opts) {
        takes. Sent the other way round, the cloud id arrived as the local path,
        `_assert_inside` refused it, and every confirmation this function exists
        to make failed with "Local path is outside the configured folder". */
-    const r = await pyApi('compare_with_cloud', localPath, cloudId);
+    /* The dates the pair carries now. They stamp the answer here and go to
+       the server with the request, which records the comparison against the
+       same two numbers - so the stored answer retires on exactly the movement
+       this page retires it on, rather than on a second idea of "changed". */
+    const seen = _pairMtimes(cloudId, localPath);
+    const r = await pyApi('compare_with_cloud', localPath, cloudId, '',
+                          (seen && seen.c) || 0);
     if (r && !r.error) {
       //: Stamped with the dates the pair carried, so the answer retires when
       //: either side moves - see `_compareStillApplies`.
-      r._seen = _pairMtimes(cloudId, localPath);
+      r._seen = seen;
       _compareResults.set(_compareKey(cloudId, localPath), r);
+      _answeredHere.add(_compareKey(cloudId, localPath));
       /* A comparison is measured where a date is inferred, so a proven
          identical pair stops being reported as out of sync. Nothing is
          rewritten on disk - this is the tool declining to keep asking a
@@ -3611,12 +3711,17 @@ function checkRealDifference(cloudId, localPath, label) {
     sub: 'Downloading the cloud copy to compare. Nothing is changed.',
     type: 'compare', pollBackend: true, undoable: false,
     run: async (opId) => {
-      const r = await pyApi('compare_with_cloud', localPath, cloudId, opId);
+      const seen = _pairMtimes(cloudId, localPath);
+      const r = await pyApi('compare_with_cloud', localPath, cloudId, opId,
+                            (seen && seen.c) || 0);
       if (r && r.error) throw new Error(r.error);
       //: Same stamp as the settle path - the measurement is about these two
       //: files as they are now.
-      r._seen = _pairMtimes(cloudId, localPath);
+      r._seen = seen;
       _compareResults.set(key, r);
+      //: He asked this question; the row keeps its place while he reads the
+      //: answer. See `_answeredHere`.
+      _answeredHere.add(key);
       _scheduleOpRefresh();
       return r;
     },
@@ -3980,9 +4085,10 @@ function rowDetailHtml(r, stripe) {
     //: same. Deriving it from two other fields called "renamed only"
     //: settled, and that is a pair whose rename still has to be applied.
     if (cmp.identical) {
-      sentences.push('Exact match — the contents and the name are the same on both sides. Nothing to do.');
+      sentences.push('Exact match — the contents and the name are the same on both sides. Nothing to do.'
+                     + checkedWhen(cmp));
     } else if (cmp.summary) {
-      sentences.push(cmp.summary);
+      sentences.push(cmp.summary + checkedWhen(cmp));
     }
   } else if (stale === 'cloud_newer') {
     /* "what is the decision? Is that the last line where it says the cloud
