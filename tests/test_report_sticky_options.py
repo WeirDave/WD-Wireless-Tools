@@ -189,7 +189,8 @@ class StickyWiring(unittest.TestCase):
 
     def test_both_actions_are_reachable(self):
         self.assertIn("window.clearReportOptionDefaults", self.js)
-        self.assertIn('onclick="clearReportOptionDefaults()"', self.js)
+        # Delegated since backlog item 10.
+        self.assertIn('data-fn="clearReportOptionDefaults"', self.js)
         self.assertIn("function scheduleAutoSave()", self.js)
         self.assertIn("scheduleAutoSave()", self.js)
 

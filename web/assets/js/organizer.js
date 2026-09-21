@@ -209,7 +209,7 @@ function renderPreview() {
   if (bulkHost) {
     bulkHost.innerHTML = advanced ? dests.map(dst => {
       const cls = destinationCssClass(dst.key);
-      return `<button class="btn btn-sec btn-sm ${cls}" onclick="bulkSetDest('${escJsStr(dst.key)}')">${esc(dst.name)}</button>`;
+      return `<button class="btn btn-sec btn-sm ${cls}" data-action="call" data-fn="bulkSetDest" data-arg="${escAttr(dst.key)}">${esc(dst.name)}</button>`;
     }).join('') : '';
   }
 
@@ -225,7 +225,7 @@ function renderPreview() {
       : '';
     const dupCount = (d.duplicates || []).length;
     const dupChip = dupCount
-      ? `<div class="summary-chip chip-dupes" title="${dupCount} filename${dupCount !== 1 ? 's' : ''} appear in more than one site folder — click to review" onclick="document.getElementById('dupSection')?.scrollIntoView({behavior:'smooth'})"><span class="num">${dupCount}</span> duplicate${dupCount !== 1 ? 's' : ''}</div>`
+      ? `<div class="summary-chip chip-dupes" title="${dupCount} filename${dupCount !== 1 ? 's' : ''} appear in more than one site folder — click to review" data-action="scroll-target" data-target="dupSection"><span class="num">${dupCount}</span> duplicate${dupCount !== 1 ? 's' : ''}</div>`
       : '';
     const unrefCount = d.unreferenced_count || 0;
     const unrefChip = unrefCount
@@ -252,7 +252,7 @@ function renderPreview() {
     const moveCount = site.moves.length;
     const stayCount = site.staying.length;
     html += `<div class="site-group" data-site="${escAttr(site.folder)}">`;
-    html += `<div class="site-header" onclick="this.parentElement.classList.toggle('collapsed')">`;
+    html += `<div class="site-header" data-action="toggle-class" data-class="collapsed">`;
     html += `<div><span class="site-name">${esc(site.folder)}</span>`;
     if (moveCount) html += `<span class="site-badge">${moveCount} move${moveCount !== 1 ? 's' : ''}</span>`;
     if (stayCount) html += `<span class="site-badge">${stayCount} staying</span>`;
@@ -275,7 +275,7 @@ function renderPreview() {
     html += '<div class="site-body">';
     if (moveCount > 0) {
       html += '<table class="file-table"><thead><tr>';
-      html += '<th class="chk"><input type="checkbox" checked onchange="toggleSite(this, \'' + escJsStr(site.folder) + '\')"></th>';
+      html += '<th class="chk"><input type="checkbox" checked data-action-change="call" data-fn="toggleSite" data-arg="' + escAttr(site.folder) + '" data-arg-this="1"></th>';
       html += '<th>File</th><th class="col-dest">Destination</th><th class="col-size org-size-th">Size</th>';
       html += '</tr></thead><tbody>';
       for (const m of site.moves) {
@@ -283,7 +283,7 @@ function renderPreview() {
         const renamedBit = m.renamed_to ? ` <span class="renamed">(→ ${esc(m.renamed_to)})</span>` : '';
         let destCell;
         if (advanced) {
-          destCell = `<select class="dest-select ${destinationCssClass(m.target)}" data-site="${escAttr(site.folder)}" data-file="${escAttr(m.name)}" data-original="${m.target}" onchange="onDestChange(this)">`
+          destCell = `<select class="dest-select ${destinationCssClass(m.target)}" data-site="${escAttr(site.folder)}" data-file="${escAttr(m.name)}" data-original="${m.target}" data-action-change="call" data-fn="onDestChange" data-arg-this="1">`
             + dests.map(dst => `<option value="${escAttr(dst.key)}"${dst.key === m.target ? ' selected' : ''}>${esc(dst.name)}</option>`).join('')
             + `</select>`;
         } else {
@@ -365,8 +365,8 @@ function renderSuggestBanner() {
   html += `Squirrel found ${nGrouped} file${nGrouped !== 1 ? 's' : ''} sharing common name prefixes — group them into subfolders first? `;
   html += `<span class="org-suggest-sub">${s.unmatched} file${s.unmatched !== 1 ? 's' : ''} with no obvious prefix will stay put.</span></div>`;
   html += `<div class="org-suggest-actions">`;
-  html += `<button class="btn btn-sec btn-sm" onclick="dismissGroupSuggestion()">Dismiss</button>`;
-  html += `<button class="btn btn-primary btn-sm" onclick="applyGroupSuggestion()">Group into subfolders</button>`;
+  html += `<button class="btn btn-sec btn-sm" data-action="call" data-fn="dismissGroupSuggestion">Dismiss</button>`;
+  html += `<button class="btn btn-primary btn-sm" data-action="call" data-fn="applyGroupSuggestion">Group into subfolders</button>`;
   html += `</div></div>`;
   html += `<div class="org-suggest-list">`;
   for (const c of s.candidates) {
@@ -430,7 +430,11 @@ async function doUndo() {
 function toggleAll(checked) {
   document.querySelectorAll('#siteList input[type="checkbox"]').forEach(cb => cb.checked = checked);
 }
-function toggleSite(headerCb, siteName) {
+/* Arguments the other way round since backlog item 10: the delegated
+   dispatcher builds them in one declared order - `data-arg` first, then the
+   element - and having one order is the point of declaring it. One caller,
+   which is the markup a few hundred lines above. */
+function toggleSite(siteName, headerCb) {
   document.querySelectorAll(`#siteList input[data-site="${CSS.escape(siteName)}"]`).forEach(cb => cb.checked = headerCb.checked);
 }
 function onDestChange(sel) {
@@ -500,11 +504,11 @@ function renderResults(r) {
   const t = r.totals;
   const dests = destinationList(cachedConfig);
   const totalMoved = dests.reduce((sum, d) => sum + (t[d.key] || 0), 0);
-  let html = '<div class="toolbar"><button class="btn btn-sec" onclick="doScan()">← Back to Preview</button>';
+  let html = '<div class="toolbar"><button class="btn btn-sec" data-action="call" data-fn="doScan">← Back to Preview</button>';
   if (undoAvailable) {
-    html += `<button class="btn btn-amber" id="resultUndoBtn" onclick="doUndo()" title="Reverse the last organize — moves each file back to its original location">↶ Undo Last Organize (${undoCount})</button>`;
+    html += `<button class="btn btn-amber" id="resultUndoBtn" data-action="call" data-fn="doUndo" title="Reverse the last organize — moves each file back to its original location">↶ Undo Last Organize (${undoCount})</button>`;
   }
-  html += '<button class="btn btn-primary" onclick="pickFolder()">Organize Another Folder</button></div>';
+  html += '<button class="btn btn-primary" data-action="call" data-fn="pickFolder">Organize Another Folder</button></div>';
   const destChips = dests.map(dst => {
     const cls = destinationCssClass(dst.key).replace('dest-', 'chip-');
     return `<div class="summary-chip ${cls}"><span class="num">${t[dst.key] || 0}</span> → ${esc(dst.name)}</div>`;
@@ -519,7 +523,7 @@ function renderResults(r) {
   }
 
   for (const site of r.sites) {
-    html += `<div class="site-group"><div class="site-header" onclick="this.parentElement.classList.toggle('collapsed')">`;
+    html += `<div class="site-group"><div class="site-header" data-action="toggle-class" data-class="collapsed">`;
     html += `<span class="site-name">${esc(site.folder)}</span><span class="site-chevron">▾</span></div>`;
     html += '<div class="site-body"><table class="file-table"><thead><tr><th>File</th><th>Destination</th><th>Status</th></tr></thead><tbody>';
     for (const m of site.moves) {

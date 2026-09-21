@@ -186,11 +186,28 @@ class EveryDelegatedNameResolvesTests(unittest.TestCase):
             "would render and do nothing:\n  %r" % (missing,))
 
     def test_every_data_action_is_one_the_dispatcher_knows(self):
+        """The action table, read by matching its braces.
+
+        This took the first 2000 characters after `var HANDLERS = {`, which
+        worked until the table grew past it - and then reported the newest
+        actions as unknown. A window that silently stops covering is worse
+        than no window: it fails on correct markup and points at the markup.
+        """
         shared = (WEB / "assets" / "js" / "wd-shared.js").read_text(
             encoding="utf-8")
-        block = shared[shared.index("var HANDLERS = {"):]
-        known = set(re.findall(r"^\s*'([a-z-]+)':", block[:2000], re.M))
+        start = shared.index("var HANDLERS = {")
+        end, depth, seen = start, 0, False
+        while end < len(shared) and not (seen and depth == 0):
+            if shared[end] == "{":
+                depth += 1
+                seen = True
+            elif shared[end] == "}":
+                depth -= 1
+            end += 1
+        block = shared[start:end]
+        known = set(re.findall(r"^\s*'([a-z-]+)':", block, re.M))
         self.assertTrue(known, "could not read the dispatcher's action names")
+        self.assertIn("call", known, "the action table did not parse")
 
         used = set()
         for name in sorted(strict_pages()):
@@ -225,7 +242,9 @@ class TheHeaderReallyArrivesTests(unittest.TestCase):
                 "manual.html": "/manual", "plantrim.html": "/plantrim",
                 "ap-rename.html": "/aprename", "capacity.html": "/capacity",
                 "prep.html": "/prep", "rename.html": "/squirrel/rename",
-                "settings.html": "/settings", "setup.html": "/setup"}
+                "settings.html": "/settings", "setup.html": "/setup",
+                "organizer.html": "/squirrel",
+                "report.html": "/report"}
 
     def test_every_strict_page_has_a_route_in_this_test(self):
         """Adding a page to the list without adding it here would leave it

@@ -700,7 +700,7 @@ Two things came out of the work that the item did not ask for:
 
 ### Suite-wide
 
-#### 10. P2 — the tool pages have no Content-Security-Policy, and every control is an inline `onclick` — **ten of fourteen done**
+#### 10. P2 — the tool pages have no Content-Security-Policy, and every control is an inline `onclick` — **twelve of fourteen done**
 
 **The single biggest remaining security improvement, and it is a project
 rather than a fix.** The 2026-09-21 sweep closed fourteen findings; nine of
@@ -737,15 +737,13 @@ v2.158.0, then `capacity`, `prep`, `rename`, `settings`, `setup` in v2.159.0.
 they get, with `script-src 'self'` and no `'unsafe-inline'` or
 `'unsafe-eval'`.
 
-**Twelve of the fourteen pages have converted markup**; `capacity`, `prep`,
-`rename`, `settings`, `setup`, `organizer` and `report` joined the first five,
-and the last two are `cloud` and `walls`.
+**Twelve of the fourteen pages are done, markup and scripts both**, and carry
+the policy. `organizer` and `report` joined in v2.160.0 once `organizer.js`
+(11 handlers) and `report.js` (17) stopped writing them into `innerHTML`.
 
-What holds the last four pages off the *strict list* is their JavaScript, which
-writes handlers into `innerHTML`: `cloud.js` has 71, `report.js` 17,
-`walls.js` and `walls-swap.js` 17 between them, `organizer.js` 11. A page
-cannot join the list while its scripts do that, and the guard fails it if they
-do.
+**`cloud` and `walls` are what is left**, and they are the two that were always
+going to be hardest: `cloud.js` alone writes 71 handlers, and `walls.js` plus
+`walls-swap.js` another 17, on top of 104 and 61 in their markup.
 
 **`cloud.html` and `walls.html` were converted and then deliberately reverted**,
 which is worth knowing before somebody converts them again in isolation. Eight

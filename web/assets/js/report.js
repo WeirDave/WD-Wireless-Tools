@@ -608,7 +608,7 @@
       + '<div class="rep-sb-actions">'
       + '<a class="btn btn-secondary btn-sm" href="/settings#report">'
       + '⚙ Report settings…</a>'
-      + '<button type="button" class="btn btn-secondary btn-sm" onclick="openReportSettings()">'
+      + '<button type="button" class="btn btn-secondary btn-sm" data-action="call" data-fn="openReportSettings">'
       + 'Cover image…</button></div>';
   }
 
@@ -840,7 +840,7 @@
     return '<span class="rep-set-state" data-state="' + state + '" data-for="' + WD.escAttr(id) + '">'
       + '<span class="rep-set-badge">' + label + '</span>'
       + (state === 'overridden'
-          ? '<button type="button" class="rep-set-revert" onclick="revertOptToDefault(\'' + WD.escJsStr(id) + '\')">Use default</button>'
+          ? '<button type="button" class="rep-set-revert" data-action="call" data-fn="revertOptToDefault" data-arg="' + WD.escAttr(id) + '">Use default</button>'
           : '')
       + '</span>';
   }
@@ -1992,13 +1992,13 @@
           : '<span class="rep-ap-group-swatch rep-ap-group-swatch--empty"></span>';
       }
       html += '<div class="rep-ap-group' + (collapsed ? ' is-collapsed' : '') + '" data-group-key="' + WD.escAttr(k) + '">'
-        +   '<div class="rep-ap-group-head" onclick="toggleGroupCollapse(\'' + WD.escJsStr(k) + '\')">'
+        +   '<div class="rep-ap-group-head" data-action="call" data-fn="toggleGroupCollapse" data-arg="' + WD.escAttr(k) + '">'
         +     '<span class="rep-ap-group-chevron">▾</span>'
         +     swatch
         +     '<span class="rep-ap-group-label">' + WD.esc(label) + '</span>'
         +     '<span class="rep-ap-group-count">' + checkedInGroup + ' of ' + aps.length + '</span>'
         +     '<button type="button" class="rep-ap-group-toggle" '
-        +       'onclick="event.stopPropagation();toggleGroupAll(\'' + WD.escJsStr(k) + '\')">Toggle all</button>'
+        +       'data-action="call" data-fn="toggleGroupAll" data-stop="1" data-arg="' + WD.escAttr(k) + '">Toggle all</button>'
         +   '</div>'
         +   '<div class="rep-ap-group-body">' + aps.map(apRowHtml).join('') + '</div>'
         + '</div>';
@@ -2011,7 +2011,7 @@
     return '<label class="rep-ap-row">'
       + '<input type="checkbox" data-ap-id="' + WD.escAttr(ap.id) + '" '
       + (apDisabled.has(ap.id) ? '' : 'checked')
-      + ' onchange="toggleAp(this)">'
+      + ' data-action-change="call" data-fn="toggleAp" data-arg-this="1">'
       + '<span class="rep-ap-row-body">'
       +   '<span class="rep-ap-row-name">' + WD.esc(ap.name) + '</span>'
       +   '<span class="rep-ap-row-model">' + WD.esc(apModelDesignator(ap)) + '</span>'
@@ -2131,18 +2131,18 @@
         var cta = isSoon
           ? '<div class="rep-template-soon-note">In progress — check back soon</div>'
           : '<div class="rep-template-cta"><button type="button" class="btn btn-blue" '
-            + 'onclick="event.stopPropagation();selectReport(\'' + WD.escJsStr(id) + '\')">'
+            + 'data-action="call" data-fn="selectReport" data-stop="1" data-arg="' + WD.escAttr(id) + '">'
             + (isSelected ? 'Continue with this template' : 'Use this template')
             + '</button></div>';
 
-        var detailToggle = '<button type="button" class="rep-template-expand" onclick="event.stopPropagation();toggleTemplateDetail(\'' + WD.escJsStr(id) + '\')">'
+        var detailToggle = '<button type="button" class="rep-template-expand" data-action="call" data-fn="toggleTemplateDetail" data-stop="1" data-arg="' + WD.escAttr(id) + '">'
           + (isExpanded ? '▾ Less' : '▸ Details') + '</button>';
 
         html += '<div class="rep-template-card tpl-' + WD.escAttr(id)
           + (isSoon ? ' is-coming-soon' : '')
           + (isSelected ? ' is-selected' : '')
           + (isExpanded ? ' is-expanded' : '')
-          + '"' + (isSoon ? '' : ' onclick="selectReport(\'' + WD.escJsStr(id) + '\')"')
+          + '"' + (isSoon ? '' : ' data-action="call" data-fn="selectReport" data-arg="' + WD.escAttr(id) + '"')
           + '>'
           +   '<div class="rep-template-card-top">'
           +     '<div class="rep-template-preview">' + (r.preview || '') + '</div>'
@@ -2183,7 +2183,7 @@
       html += '<div class="rep-cat-group"><h3 class="rep-cat-heading">Other</h3><div class="rep-cat-list">';
       uncategorized.forEach(function (id) {
         var r = REPORTS[id];
-        html += '<div class="rep-template-card tpl-' + WD.escAttr(id) + '" onclick="selectReport(\'' + WD.escJsStr(id) + '\')">'
+        html += '<div class="rep-template-card tpl-' + WD.escAttr(id) + '" data-action="call" data-fn="selectReport" data-arg="' + WD.escAttr(id) + '">'
           + '<div class="rep-template-card-top"><div class="rep-template-preview">' + (r.preview || '') + '</div>'
           + '<div class="rep-template-titles"><span class="rep-template-pill available">Available</span>'
           + '<h3 class="rep-template-title">' + WD.esc(r.label) + '</h3>'
@@ -2267,7 +2267,7 @@
         +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
         + '</span>'
         + '<button type="button" class="btn btn-secondary btn-sm rep-btn-right" '
-        + 'onclick="openGridConfig()">' + gridLabel + '</button>'
+        + 'data-action="call" data-fn="openGridConfig">' + gridLabel + '</button>'
         + '</div>';
     }
     /* Says how many floors are set up, because that is the only question
@@ -2285,7 +2285,7 @@
         +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
         + '</span>'
         + '<button type="button" class="btn btn-secondary btn-sm rep-btn-right" '
-        + 'onclick="openGridRef()">' + WD.esc(gridRefLabel) + '</button>'
+        + 'data-action="call" data-fn="openGridRef">' + WD.esc(gridRefLabel) + '</button>'
         + '</div>';
     }
     /* The before-file. The button carries the chosen file's name rather than
@@ -2312,10 +2312,10 @@
         + '</span>'
         + '<span class="rep-btn-right">'
         + '<button type="button" class="btn btn-secondary btn-sm" '
-        + 'onclick="chooseBaseline()">' + WD.esc(btnLabel) + '</button>'
+        + 'data-action="call" data-fn="chooseBaseline">' + WD.esc(btnLabel) + '</button>'
         + (chosen
             ? ' <button type="button" class="btn btn-secondary btn-sm" '
-              + 'onclick="clearBaseline()">Clear</button>'
+              + 'data-action="call" data-fn="clearBaseline">Clear</button>'
             : '')
         + '</span>'
         + '</div>';
@@ -2332,7 +2332,7 @@
         + '<input type="text" id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" data-opt-type="text" '
         + 'value="' + WD.escAttr(textVal) + '" placeholder="' + WD.escAttr(opt.placeholder || '') + '" '
         + 'class="rep-input-text" '
-        + 'onchange="setOpt(this)" oninput="setOpt(this)">'
+        + 'data-action-change="call" data-action-input="call" data-fn="setOpt" data-arg-this="1">'
         + '</div>';
     }
     if (opt.type === 'select') {
@@ -2343,7 +2343,7 @@
         +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
         + '</span>'
         + '<select id="opt-' + WD.escAttr(opt.id) + '" data-opt-id="' + WD.escAttr(opt.id) + '" '
-        + 'data-opt-type="select" class="rep-input-text" onchange="setOpt(this)">'
+        + 'data-opt-type="select" class="rep-input-text" data-action-change="call" data-fn="setOpt" data-arg-this="1">'
         + (opt.options || []).map(function (o) {
             return '<option value="' + WD.escAttr(o.value) + '"'
               + (String(o.value) === String(selVal) ? ' selected' : '') + '>'
@@ -2363,7 +2363,7 @@
         + 'value="' + WD.escAttr(String(numVal)) + '" min="' + (opt.min || 1) + '" max="' + (opt.max || 20) + '" '
         + 'class="rep-input-sm" '
         + (disabled ? 'disabled' : '')
-        + ' onchange="setOpt(this)" oninput="setOpt(this)">'
+        + ' data-action-change="call" data-action-input="call" data-fn="setOpt" data-arg-this="1">'
         + '</div>';
     }
     var checked = (opt.id in currentOpts) ? currentOpts[opt.id] : !!opt.default;
@@ -2371,7 +2371,7 @@
       + (disabled ? ' title="' + WD.escAttr(reason || 'Not available for this project') + '"' : '') + '>'
       + '<input type="checkbox" data-opt-id="' + WD.escAttr(opt.id) + '" '
       + (checked ? 'checked' : '') + (disabled ? ' disabled' : '')
-      + ' onchange="setOpt(this)">'
+      + ' data-action-change="call" data-fn="setOpt" data-arg-this="1">'
       + '<span class="rep-check-body">'
       +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
       +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
@@ -2409,7 +2409,7 @@
         settingItems.forEach(function (opt) { dHtml += renderOptHtml(opt); });
         dHtml += '<div class="rep-opts-subhead-note">'
           + 'From your report settings. Changing one here affects this report only. '
-          + '<button type="button" class="rep-remembered-clear" onclick="openReportSettings()">Edit defaults…</button>'
+          + '<button type="button" class="rep-remembered-clear" data-action="call" data-fn="openReportSettings">Edit defaults…</button>'
           + '</div>'
           + '<div class="rep-opts-divider"></div>';
       }
@@ -2418,11 +2418,11 @@
         + '<span class="rep-config-icon">🖼️</span>'
         + '<span>Cover page</span></div>'
         + '<label class="rep-check">'
-        + '<input type="checkbox" id="optCover" checked onchange="markConfigDirty()">'
+        + '<input type="checkbox" id="optCover" checked data-action-change="call" data-fn="markConfigDirty">'
         + '<span>Include cover page</span></label>'
         + '<div class="rep-cover-summary" id="coverSummary"></div>'
         + '<div class="rep-logo-row">'
-        + '<button class="btn btn-secondary rep-logo-btn" onclick="openReportSettings()">Cover image &amp; defaults…</button>'
+        + '<button class="btn btn-secondary rep-logo-btn" data-action="call" data-fn="openReportSettings">Cover image &amp; defaults…</button>'
         + '</div>';
       detailsHost.innerHTML = dHtml;
     }
@@ -2453,7 +2453,7 @@
         + '</span>'
         + '<span id="autoSaveIndicator" class="rep-autosave-dot"></span>'
         + (savedCount ? '<button type="button" class="rep-remembered-clear" '
-            + 'onclick="clearReportOptionDefaults()">Reset to shipped defaults</button>' : '')
+            + 'data-action="call" data-fn="clearReportOptionDefaults">Reset to shipped defaults</button>' : '')
         + '</div>';
     }
 
@@ -4674,7 +4674,7 @@
     var mode = pageOrientMode(fpId, opts);
     var btn = function (val, label) {
       return '<button type="button" class="rep-orient-btn' + (mode === val ? ' is-on' : '') + '"'
-        + ' onclick="setPageOrient(\'' + WD.escJsStr(fpId) + '\',\'' + val + '\')">' + label + '</button>';
+        + ' data-action="call" data-fn="setPageOrient" data-arg="' + WD.escAttr(fpId) + '" data-arg2="' + WD.escAttr(val) + '">' + label + '</button>';
     };
     /* "Match all pages to this" is here because it is the correct thing to do
         in a browser that cannot mix, and because doing it by hand across a
@@ -4694,7 +4694,7 @@
       + btn('auto', 'Auto') + btn('portrait', 'Portrait') + btn('landscape', 'Landscape')
       + '<span class="rep-orient-now"></span>'
       + '<button type="button" class="rep-orient-all"'
-      +   ' onclick="matchAllPageOrient(\'' + WD.escJsStr(fpId) + '\')"'
+      +   ' data-action="call" data-fn="matchAllPageOrient" data-arg="' + WD.escAttr(fpId) + '"'
       +   ' title="Give every page in this report the orientation this one is using.'
       +   ' Mixing portrait and landscape in one document is verified in Chrome'
       +   ' and Edge. If pages come out clipped in another browser, use this to'

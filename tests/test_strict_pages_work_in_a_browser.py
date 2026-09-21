@@ -341,7 +341,9 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
                 "manual.html": "/manual", "plantrim.html": "/plantrim",
                 "ap-rename.html": "/aprename", "capacity.html": "/capacity",
                 "prep.html": "/prep", "rename.html": "/squirrel/rename",
-                "settings.html": "/settings", "setup.html": "/setup"}
+                "settings.html": "/settings", "setup.html": "/setup",
+                "organizer.html": "/squirrel",
+                "report.html": "/report"}
 
     def test_every_strict_page_loads_and_is_wired(self):
         """Each converted page, not only the two the other tests drive.

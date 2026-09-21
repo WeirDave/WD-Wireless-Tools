@@ -272,6 +272,11 @@ CSP_STRICT_PAGES = {
     "rename.html",
     "settings.html",
     "setup.html",
+    # Joined in v2.160.0. These two needed their *scripts* converted as well:
+    # `organizer.js` wrote eleven handlers into `innerHTML` and `report.js`
+    # seventeen, and a page carrying this policy cannot have any.
+    "organizer.html",
+    "report.html",
 }
 
 #: What a converted page gets.

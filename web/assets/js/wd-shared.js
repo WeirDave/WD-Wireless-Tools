@@ -1808,6 +1808,24 @@
         var target = document.getElementById(el.dataset.target);
         if (target) target.focus();
       },
+      'scroll-target': function (el) {
+        var target = document.getElementById(el.dataset.target);
+        if (target) target.scrollIntoView({ behavior: 'smooth' });
+      },
+      /* Collapsing a section by toggling a class on an ancestor. The markup
+         used to say `this.parentElement.classList.toggle('collapsed')`, which
+         is a DOM expression in an attribute - the exact thing a policy
+         without 'unsafe-inline' forbids.
+
+         `data-closest` names an ancestor selector; without it the parent is
+         used, which is what every existing caller wants. */
+      'toggle-class': function (el) {
+        var target = el.dataset.closest
+          ? el.closest(el.dataset.closest) : el.parentElement;
+        if (target && el.dataset.class) {
+          target.classList.toggle(el.dataset.class);
+        }
+      },
       'noop': function (_el, e) { if (e) e.stopPropagation(); }
     };
 

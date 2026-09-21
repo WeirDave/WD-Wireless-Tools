@@ -128,7 +128,21 @@ class PageOrientationTests(unittest.TestCase):
         This is the same thing in one press.
         """
         self.assertIn("window.matchAllPageOrient = function (fpId)", self.js)
-        self.assertIn('onclick="matchAllPageOrient(', self.js)
+        # Delegated since backlog item 10: a `data-fn` rather than an
+        # `onclick`, carrying the floor plan id as data instead of as part of
+        # a JavaScript call.
+        #
+        # One assertion rather than two, and not for tidiness - the
+        # source-string ratchet in `test_a_test_must_be_able_to_fail.py`
+        # counts these and only ever lets the count fall. Splitting a check
+        # in two is the easy way to raise it while feeling thorough.
+        wired = [line for line in self.js.split("\n")
+                 if 'data-fn="matchAllPageOrient"' in line
+                 and "data-arg=" in line]
+        self.assertTrue(
+            wired,
+            "the match-all control is not wired to matchAllPageOrient with "
+            "a floor plan id")
 
     def test_matching_resolves_auto_rather_than_copying_it(self):
         """Copying "auto" onto every page would leave each free to decide
