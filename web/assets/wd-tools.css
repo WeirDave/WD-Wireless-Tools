@@ -7001,7 +7001,10 @@ body.wd-has-stale-banner { padding-top: 52px; }
   html, body { padding-top: 0 !important; }
 
   .noprint, #dzTopbar, .report-wiz-topbar, .rep-stepper,
-  .rep-stage:not(.rep-stage-review), .rep-review-bar, .toasts { display: none !important; }
+  .rep-stage:not(.rep-stage-review), .rep-review-bar, .toasts,
+  /* A `position: fixed` element prints on the first sheet, so a settings
+     panel left open while printing would land on top of page one. */
+  .wd-settings-overlay { display: none !important; }
 
   .report-workspace { display: block !important; }
   .rep-stage-review { padding: 0 !important; }
@@ -11207,3 +11210,50 @@ body.tool-prep .dropzone-logo { background-image: url(/assets/wd-wireless-tools-
   font-size: 20px; padding: 16px 48px; border-radius: 10px;
   min-width: 240px;
 }
+
+/* ── The settings panel, over whatever tool is open ────────────────────────
+   It is an iframe of /settings rather than a copy of the controls, so the
+   page behind it is never unloaded - which is the whole point, because a
+   project dropped into Report lives in that page's memory. */
+.wd-settings-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.wd-settings-panel {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+  width: min(860px, 100%); height: min(88vh, 100%);
+  display: flex; flex-direction: column; overflow: hidden;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+.wd-settings-head {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex: 0 0 auto;
+}
+.wd-settings-title { font-size: 14px; font-weight: 600; color: var(--text); }
+/* Said rather than implied: the reason this is a panel is that the tool is
+   still there, and that is not obvious from a dimmed background alone. */
+.wd-settings-note { font-size: 11.5px; color: var(--text-3); flex: 1 1 auto; }
+.wd-settings-close {
+  flex: 0 0 auto; cursor: pointer;
+  background: var(--surface-hover); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 14px; font-size: 12.5px; font-family: inherit;
+}
+.wd-settings-close:hover { background: var(--border); }
+.wd-settings-frame { flex: 1 1 auto; width: 100%; border: 0; background: var(--bg); }
+body.wd-settings-open { overflow: hidden; }
+
+@media (max-width: 720px) {
+  .wd-settings-overlay { padding: 0; }
+  .wd-settings-panel { width: 100%; height: 100%; border-radius: 0; border: 0; }
+  .wd-settings-note { display: none; }
+}
+
+/* Inside the panel the page has no need of its own top bar: the tool's chrome
+   is behind it and a second Home button would leave the panel open over a page
+   that is no longer the one it was opened from. */
+body.wd-embedded .topbar { display: none; }
+body.wd-embedded .settings-wrap { padding-top: 16px; }

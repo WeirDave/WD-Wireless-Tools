@@ -935,6 +935,79 @@ print them, and measure the PDF.** The question is not "did it render" but
   at a page break, table headers repeated on every page they continue onto, and
   no text under about 6pt.
 
+### One engine is not the print path, and there are six
+
+**Three failures in one week came from verifying on one output and shipping for
+another**, and the third one produced no document at all:
+
+* the match line text was verified on screen and printed at 24pt;
+* the cover image was verified in preview;
+* the file name was verified against Firefox's own Save to PDF, and does not
+  populate through the Windows print driver, which is what he actually uses;
+* and `CascadiaCode-Regular` was verified in every browser here and killed the
+  job in Adobe Distiller, which is the only path that goes through PostScript.
+
+Firefox's built-in Save to PDF renders the page directly and substitutes fonts
+silently. Distiller does not: it resolves a font by its **PostScript** name, and
+refuses the job when it cannot. Microsoft Print to PDF renders through the
+Windows driver, which takes its suggested file name from the **print job name**
+and not from `document.title`. These are four different programs and they fail
+differently.
+
+**So a Report change is verified against the matrix, not against one browser:**
+
+| Output path | Produces a document | Renders correctly | File name populated |
+|---|---|---|---|
+| Firefox → Save to PDF | | | |
+| Firefox → Microsoft Print to PDF | | | |
+| Firefox → Adobe PDF (Distiller) | | | |
+| Chrome → Save as PDF | | | |
+| Edge → Save as PDF | | | |
+| macOS → Print to PDF | | | |
+
+Fill it in **by printing**. A row reasoned about from what a driver probably
+does is worth nothing - that is the habit being corrected.
+
+**Adobe stays in the matrix precisely because it is the one that failed.**
+Confirming it produces a document after a font change is how the fix is known
+to have worked rather than assumed.
+
+**What can be automated, and what cannot.** `driver.print_page(PrintOptions())`
+drives Firefox, Chrome and Edge headlessly and hands back the PDF, and PyMuPDF
+reads the page count and the embedded fonts straight out of it -
+`scripts/` has no helper for this yet; `printmatrix.py` in a session scratchpad
+is the pattern, and the useful assertion is the set of embedded font names.
+The Windows driver rows cannot be driven headlessly: the job name is only
+observable by printing to a real printer, which puts a Save dialog on his
+desktop. **Do not do that on his machine**; say the row is unverified instead.
+
+**Where a path genuinely cannot carry something, name the path that can.** If
+the Windows driver will not take the file name from the page, the answer is a
+line in the Print step saying which output preserves it, not silence and not
+pretending the six are equivalent.
+
+### A font has to exist on the machine that prints, not the one that built it
+
+`--mono` led with `'SF Mono', 'Cascadia Code', 'Fira Code'` and ended in
+`monospace`. The generic fallback was never missing and was **never reached**:
+`SF Mono` is not on Windows, so Windows resolved Cascadia Code, which arrives
+with Windows Terminal and VS Code and is therefore on a developer's machine and
+almost nobody else's.
+
+**A stack that resolves is a stack that never falls back.** What matters is not
+the last entry, it is the first one that exists - so the preferred face has to
+be one that ships with the operating system, on both of them:
+
+    --mono: Consolas, Menlo, 'DejaVu Sans Mono', monospace;
+
+`tests/test_fonts_survive_printing.py` holds it, in two halves, and the second
+is the one that matters: every stack ends in a generic family (cheap, and
+**passes on the broken stylesheet**), and every named face is on an allowlist of
+OS-shipped ones (catches it). It reads custom properties as well as
+`font-family`, because the first version did not and therefore passed on the
+exact declaration that caused the outage - almost every rule in the suite says
+`font-family: var(--mono)`.
+
 ### What to measure, and how
 
 `tests/test_ap_notes_page.py` is still the pattern for anything checkable in

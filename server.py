@@ -229,7 +229,13 @@ def _no_cache(resp):
     resp.headers["Expires"] = "0"
 
 
-    resp.headers["X-Frame-Options"] = "DENY"
+    # `setdefault`, for the same reason the policy below is: this runs after
+    # the route, so a plain assignment silently overwrites what a route
+    # decided. `/settings` sets SAMEORIGIN because the settings panel frames
+    # it, and this line replaced that with DENY - the panel rendered an empty
+    # box and the header said the opposite of the policy beside it. Everything
+    # that does not ask for something else still gets DENY.
+    resp.headers.setdefault("X-Frame-Options", "DENY")
     # Set rather than overwritten, because one route needs a stricter policy
     # of its own - see `api_report_cover_get`, where a stored SVG has to be
     # served as a picture and never as a document. Clobbering it here would
@@ -308,6 +314,14 @@ STRICT_CSP = (
     "form-action 'none'; "
     "frame-ancestors 'none'"
 )
+
+
+#: The strict policy with framing narrowed to this origin instead of forbidden.
+#: `/settings` is the only page a tool may frame, because the settings panel is
+#: an iframe of it - see `settings_page`. Built from STRICT_CSP so a directive
+#: added there is carried here without anybody remembering.
+SETTINGS_CSP = STRICT_CSP.replace("frame-ancestors 'none'",
+                                  "frame-ancestors 'self'")
 
 
 def _page(filename: str):
@@ -392,7 +406,31 @@ def setup():
 
 @app.route("/settings")
 def settings_page():
-    return _page("settings.html")
+    """The one document in the suite that may be framed, and only by us.
+
+    Every tool opens settings in a panel over itself rather than navigating to
+    it, because navigating away unloads the page - and a project dropped into
+    Report lives in that page's memory, so changing one default cost the
+    project and the configure step with it. The panel is an iframe of this
+    page, which keeps one settings page rather than a copy of its controls per
+    tool.
+
+    `_no_cache` sends `X-Frame-Options: DENY` and `frame-ancestors 'none'` to
+    everything, which is the right default and stays the default; this is the
+    single exception and it is narrowed twice over. `SAMEORIGIN` and
+    `frame-ancestors 'self'` allow only this origin, and the server binds to
+    127.0.0.1, so "this origin" is this machine. Nothing else gains it: the
+    cover image route sets its own stricter policy and is untouched.
+    """
+    resp = _page("settings.html")
+    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
+    # Derived from the strict policy rather than written out, and only the one
+    # directive changes. Replacing the header wholesale was the first version
+    # of this line, and it silently dropped `default-src`, `script-src` and
+    # every other protection `settings.html` earned when it joined
+    # CSP_STRICT_PAGES - a framing change quietly undoing a hardening pass.
+    resp.headers["Content-Security-Policy"] = SETTINGS_CSP
+    return resp
 
 
 @app.route("/manual")
@@ -411,7 +449,13 @@ def manual():
     # too. A page that is strict as a file and permissive as a response is the
     # worst of both: it looks converted and is not.
     if "manual.html" in CSP_STRICT_PAGES:
-        resp.headers["Content-Security-Policy"] = STRICT_CSP
+        # SETTINGS_CSP rather than STRICT_CSP: identical but for framing, which
+        # this origin is allowed. The guide is the other page a tool is
+        # consulted from and returned to, so it opens in the same panel as
+        # `/settings` - looking something up used to unload the project in
+        # front of him exactly as changing a setting did.
+        resp.headers["Content-Security-Policy"] = SETTINGS_CSP
+        resp.headers["X-Frame-Options"] = "SAMEORIGIN"
     return resp
 
 

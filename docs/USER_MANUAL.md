@@ -2338,6 +2338,30 @@ better than keeping a copy in case it does.
 *The install backup taken when you update is a separate thing and still
 happens — see [Update or Uninstall](#update-or-uninstall).*
 
+### Opening settings without losing your place
+
+**Settings open in a panel over whatever tool you are in.** Choose **Suite
+Settings** from the menu — or the gear in Cloud Manager, or **⚙ Report
+settings…** above the report list — and the panel opens on that tool's own
+section. Close it with **Close**, the Escape key, or by clicking outside it,
+and you are exactly where you were: the project still open, the report still
+configured, nothing to set up again.
+
+Before version 2.164.0 these were ordinary links. Going to Settings from Report
+with a project open and the **Configure** step filled in unloaded the page, and
+pressing Back returned to the drop zone — the project had to be opened again
+and the report configured again, because a file you drag in lives in the page
+rather than on disk.
+
+A setting changed in the panel takes effect in the tool behind it as soon as
+you save; there is nothing to reload.
+
+**The User Guide opens the same way**, at the chapter for the tool you are in,
+for the same reason — looking something up mid-job should not cost you the job.
+
+Going to a *different tool* from the menu still navigates, because that is
+leaving rather than stepping aside.
+
 ### Where your settings live
 
 Everything you configure is kept in one folder, outside the program:

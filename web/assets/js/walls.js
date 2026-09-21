@@ -303,6 +303,19 @@ let openMenuIndex = -1;
 // this resolves costs nothing; syncUnitToggleUI() runs again when it lands.
 loadWallsPrefs();
 
+/* The default template and the units are set in a panel over this page. Re-read
+   them when it reports a save, so the Template bar's note and the unit toggle
+   are right without reloading - and without disturbing the project in the
+   editor, which is the reason the panel exists. */
+if (window.WD && WD.onSettingsChanged) {
+  WD.onSettingsChanged(function () {
+    return loadWallsPrefs()
+      .then(() => { try { syncUnitToggleUI(); } catch (e) {} })
+      .then(() => refreshTemplateBar())
+      .catch(() => {});
+  });
+}
+
 const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('fileInput');
 

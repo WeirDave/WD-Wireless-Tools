@@ -1481,6 +1481,169 @@
     }).catch(function () {});
   };
 
+
+  /* ── Settings, without leaving the tool ───────────────────────────────────
+     "When you go to Report and you go to run the report and then you realise
+     you want to change some defaults, it takes you to the Settings screen but
+     it doesn't allow you to go back."
+
+     Measured before this existed, on the Antenna Aim Sheet with a project open
+     and the Configure step filled in: clicking through to Settings and pressing
+     Back returned to the drop zone. **The project was gone** - not only the
+     options, the `.esx` itself, because a dropped file lives in the page's
+     memory and navigating away unloads it. So the cost of changing one default
+     was opening the file again and redoing the configure step.
+
+     That was survivable while almost every setting had a control on the tool.
+     It stopped being survivable in v2.149.0 - v2.152.0, which moved sixteen of
+     them onto the Settings page: consolidating the settings made every one of
+     them a reason to leave the tool, so the return path had to stop being the
+     Back button.
+
+     The settings page opens *over* the tool in an iframe instead. Nothing is
+     unloaded, so there is nothing to restore - his project, his stage and his
+     options are all still there when it closes, because they never went
+     anywhere.
+
+     An iframe rather than a copy of the controls: one settings page, one set of
+     save logic, and a tool page that cannot accidentally disagree with it. The
+     page is same-origin, so `postMessage` back to the host is checked against
+     `location.origin` and nothing else can talk to it.
+
+     `/settings` is the only document the server allows to be framed, and only
+     by this origin - see `_allow_same_origin_framing` in `server.py`. */
+  var SETTINGS_OVERLAY_ID = 'wdSettingsOverlay';
+  var _settingsOnClose = null;
+
+  /* What a tool does when settings change underneath it. Without this the
+     overlay is worse than the navigation it replaces: he changes the units,
+     closes it, and the report still renders in feet because the page read that
+     value once at load. Each tool registers the one call that re-reads its
+     settings and repaints. */
+  WD.onSettingsChanged = function (fn) { _settingsOnClose = fn; };
+
+  /* The two pages a tool is consulted from and returned to. Going to another
+     *tool* is a departure and still navigates - this is for the ones that are
+     a detour from the job in hand. The User Guide is the second of them and
+     had exactly the same cost: open a project, check how something works,
+     come back to the drop zone. */
+  var PANELLED = {
+    '/settings': 'Suite Settings',
+    '/manual':   'User Guide'
+  };
+
+  WD.openSettings = function (section) { WD.openPanel('/settings', section); };
+  WD.openManual = function (section) { WD.openPanel('/manual', section); };
+
+  WD.openPanel = function (path, section) {
+    if (document.getElementById(SETTINGS_OVERLAY_ID)) return;
+    if (!Object.prototype.hasOwnProperty.call(PANELLED, path)) return;
+    var hash = section ? ('#' + String(section).replace(/^#/, '')) : '';
+    var wrap = document.createElement('div');
+    wrap.id = SETTINGS_OVERLAY_ID;
+    wrap.className = 'wd-settings-overlay';
+    wrap.setAttribute('role', 'dialog');
+    wrap.setAttribute('aria-modal', 'true');
+    wrap.setAttribute('aria-label', PANELLED[path]);
+    wrap.innerHTML =
+      '<div class="wd-settings-panel">'
+      + '<div class="wd-settings-head">'
+      +   '<span class="wd-settings-title">' + WD.esc(PANELLED[path]) + '</span>'
+      +   '<span class="wd-settings-note">This tool is still open behind this '
+      +     'panel. Closing comes straight back to it.</span>'
+      +   '<button type="button" class="wd-settings-close" '
+      +     'aria-label="Close">Close</button>'
+      + '</div>'
+      + '<iframe class="wd-settings-frame" title="' + WD.escAttr(PANELLED[path]) + '" '
+      +   'src="' + WD.escAttr(path + hash) + '"></iframe>'
+      + '</div>';
+    document.body.appendChild(wrap);
+    document.body.classList.add('wd-settings-open');
+
+    wrap.querySelector('.wd-settings-close')
+        .addEventListener('click', function () { WD.closeSettings(); });
+    // Clicking the dimmed area behind the panel, which is what a modal in this
+    // suite already does everywhere else.
+    wrap.addEventListener('mousedown', function (e) {
+      if (e.target === wrap) WD.closeSettings();
+    });
+    /* The framed page's own top bar would be a second set of chrome inside
+       the panel, and its Home link would navigate the panel rather than the
+       app. `settings.html` hides it for itself the moment it loads, which
+       avoids a flash; this covers any other page the panel is pointed at. */
+    var frame = wrap.querySelector('.wd-settings-frame');
+    frame.addEventListener('load', function () {
+      try { frame.contentDocument.body.classList.add('wd-embedded'); }
+      catch (e) { /* not same-origin, which PANELLED does not allow anyway */ }
+    });
+    document.addEventListener('keydown', _settingsEsc, true);
+    // Focus the panel rather than the page behind it, so Tab and Esc land here.
+    var btn = wrap.querySelector('.wd-settings-close');
+    if (btn && btn.focus) { try { btn.focus(); } catch (e) {} }
+  };
+
+  function _settingsEsc(e) {
+    if (e.key === 'Escape' || e.keyCode === 27) {
+      e.stopPropagation();
+      WD.closeSettings();
+    }
+  }
+
+  WD.closeSettings = function () {
+    var wrap = document.getElementById(SETTINGS_OVERLAY_ID);
+    if (!wrap) return;
+    document.removeEventListener('keydown', _settingsEsc, true);
+    wrap.parentNode.removeChild(wrap);
+    document.body.classList.remove('wd-settings-open');
+    /* Always, not only when a save was seen. A save the page made through some
+       path this does not know about would otherwise leave the tool reading a
+       stale value, and re-reading settings is cheap next to being wrong. */
+    if (typeof _settingsOnClose === 'function') {
+      try { _settingsOnClose(); } catch (e) { /* a tool that cannot refresh
+        still gets its page back, which is the point of the panel */ }
+    }
+  };
+
+  WD.settingsOverlayOpen = function () {
+    return !!document.getElementById(SETTINGS_OVERLAY_ID);
+  };
+
+  /* The settings page tells us when it has saved, so a tool can pick the value
+     up without waiting for the panel to close - Report's preview is the case
+     that wants it. Same-origin only; anything else is ignored. */
+  window.addEventListener('message', function (e) {
+    if (e.origin !== window.location.origin) return;
+    var d = e.data;
+    if (!d || d.wd !== 'settings-saved') return;
+    if (typeof _settingsOnClose === 'function') {
+      try { _settingsOnClose(); } catch (err) {}
+    }
+  });
+
+  /* Every "Suite Settings" link in every menu, and the in-tool ones Report,
+     Cloud Manager and Quick Walls added when their controls moved. The href is
+     left exactly as it was and still works: with no JavaScript, or on the
+     Settings page itself, it is an ordinary link. This only intercepts the
+     click. */
+  WD.wireSettingsLinks = function (root) {
+    if (window.top !== window.self) return;      // already inside the panel
+    if (PANELLED[window.location.pathname]) return;   // this IS one of them
+    var scope = root || document;
+    scope.addEventListener('click', function (e) {
+      var a = e.target && e.target.closest
+            ? e.target.closest('a[href^="/settings"], a[href^="/manual"]') : null;
+      if (!a) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+      if (a.target && a.target !== '' && a.target !== '_self') return;
+      var href = a.getAttribute('href') || '';
+      var i = href.indexOf('#');
+      var path = i > -1 ? href.slice(0, i) : href;
+      if (!PANELLED[path]) return;               // an ordinary link, left alone
+      e.preventDefault();
+      WD.openPanel(path, i > -1 ? href.slice(i + 1) : '');
+    }, true);
+  };
+
   document.addEventListener('DOMContentLoaded', function () {
     try { WD.sortNavMenus(); } catch (e) { /* an unsorted menu still works */ }
     WD.syncThemeUI();
@@ -1489,6 +1652,7 @@
     WD.checkServerVersion();
     WD.checkForUpdates({ force: false });
     WD.checkSetup();
+    WD.wireSettingsLinks();
   });
 
   WD.copyDiagnostics = function () {

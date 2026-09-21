@@ -322,14 +322,33 @@ class TheGearLandsOnTheControls(unittest.TestCase):
     """
 
     def _gear_url(self) -> str:
+        """The section the gear asks for, however it asks.
+
+        It used to navigate, and this read `window.location.href`. Since
+        v2.164.2 it opens the settings panel over Cloud Manager instead - the
+        navigation was unloading the page, which on Report meant losing the
+        open project. The question this test asks is unchanged and is the one
+        that matters: *which section does the gear ask for, and does that
+        section exist*. So both routes are recorded, and the fallback to
+        `location.href` is kept because it is still the no-JavaScript path.
+        """
         program = r"""
         const fs = require('fs');
         const src = fs.readFileSync(process.argv[1], 'utf8');
         const a = src.indexOf('function openSettings() {');
         if (a < 0) throw new Error('openSettings moved');
-        const b = src.indexOf('}', a) + 1;
+        let b = a, depth = 0, seen = false;
+        while (b < src.length && !(seen && depth === 0)) {
+          if (src[b] === '{') { depth++; seen = true; }
+          else if (src[b] === '}') depth--;
+          b++;
+        }
         let href = null;
-        global.window = { location: { set href(v) { href = v; }, get href() { return href; } } };
+        global.window = {
+          location: { set href(v) { href = v; }, get href() { return href; } },
+          WD: { openSettings: (section) => { href = '/settings#' + section; } },
+        };
+        global.WD = global.window.WD;
         eval(src.slice(a, b));
         openSettings();
         console.log(JSON.stringify(href));

@@ -264,14 +264,63 @@ class TheHeaderReallyArrivesTests(unittest.TestCase):
         self.addCleanup(resp.close)
         return resp
 
+    #: The two pages a tool opens in a panel over itself rather than
+    #: navigating to, so they are framed by this origin - see `settings_page`.
+    #: Everything else in their policy is the strict one.
+    PANELLED_PAGES = {"settings.html", "manual.html"}
+
     def test_a_strict_page_gets_the_strict_policy(self):
         for page, url in sorted(self.routes().items()):
             with self.subTest(page=page):
                 resp = self.get(url)
                 self.assertEqual(200, resp.status_code)
                 policy = resp.headers.get("Content-Security-Policy", "")
-                self.assertEqual(self.server.STRICT_CSP, policy,
+                want = (self.server.SETTINGS_CSP if page in self.PANELLED_PAGES
+                        else self.server.STRICT_CSP)
+                self.assertEqual(want, policy,
                                  "%s did not get the strict policy" % page)
+
+    def test_the_framing_exception_changes_only_the_framing(self):
+        """`SETTINGS_CSP` is the strict policy with one directive relaxed.
+
+        The first version of that change replaced the whole header and dropped
+        `default-src`, `script-src` and the rest - a framing change quietly
+        undoing the hardening these pages earned. Comparing directive by
+        directive is what catches it; comparing the strings would only say
+        they differ.
+        """
+        def directives(policy):
+            return {d.split(None, 1)[0]: d
+                    for d in (p.strip() for p in policy.split(";")) if d}
+
+        strict = directives(self.server.STRICT_CSP)
+        relaxed = directives(self.server.SETTINGS_CSP)
+        self.assertEqual(set(strict), set(relaxed),
+                         "the framing exception added or removed a directive")
+        differing = sorted(k for k in strict if strict[k] != relaxed[k])
+        self.assertEqual(
+            ["frame-ancestors"], differing,
+            "the framing exception changed something other than framing: "
+            + ", ".join(differing))
+        self.assertEqual(relaxed["frame-ancestors"], "frame-ancestors 'self'")
+
+    def test_only_the_panelled_pages_may_be_framed(self):
+        """Framing a tool page would let one page drive another, and none of
+        them needs it."""
+        for page, url in sorted(self.routes().items()):
+            with self.subTest(page=page):
+                xfo = self.get(url).headers.get("X-Frame-Options")
+                want = "SAMEORIGIN" if page in self.PANELLED_PAGES else "DENY"
+                self.assertEqual(want, xfo, "%s: X-Frame-Options" % page)
+
+    def test_the_panelled_list_here_matches_the_server(self):
+        """A page gaining the framing exception without this test noticing is
+        how the exception spreads."""
+        framed = set()
+        for page, url in self.routes().items():
+            if self.get(url).headers.get("X-Frame-Options") == "SAMEORIGIN":
+                framed.add(page)
+        self.assertEqual(self.PANELLED_PAGES, framed)
 
     def test_the_policy_actually_forbids_inline_script(self):
         """The one property the whole item is for.

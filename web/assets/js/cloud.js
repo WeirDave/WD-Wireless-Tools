@@ -6802,6 +6802,17 @@ function _readLegacy(key) {
   try { return localStorage.getItem(key); } catch (e) { return null; }
 }
 
+/* The merge rule and the refresh interval are set in a panel over this page,
+   so re-read them when it reports a save. The default view is deliberately not
+   re-applied here: it decides what the list *opens* on, and changing what is on
+   screen underneath him because he edited a preference would be the toolbar
+   toggle behaving like a setting, which is the confusion v2.148.1 fixed. */
+if (window.WD && WD.onSettingsChanged) {
+  WD.onSettingsChanged(function () {
+    return loadCloudPrefs().catch(() => {});
+  });
+}
+
 /* Read both prefs before the first refresh runs, migrating anything still in
    this browser. Runs at login, alongside loadDefaultOwnerFilter. */
 async function loadCloudPrefs() {
@@ -7127,6 +7138,9 @@ function closeMainMenu() {
 
    `#cloud` opens the Cloud Manager section of that page directly. */
 function openSettings() {
+  /* Over this page, not instead of it. Navigating away threw the session and
+     the listing away for the sake of changing one preference. */
+  if (window.WD && WD.openSettings) { WD.openSettings('cloud'); return; }
   window.location.href = '/settings#cloud';
 }
 

@@ -6,6 +6,29 @@
 
   window.SP = {};
 
+  /* Opened in the panel a tool puts over itself, rather than as a page of its
+     own. The tool's chrome is behind the panel, so this page hides its own -
+     and a Home link inside it would navigate the panel, leaving it open over a
+     tool it no longer belongs to. */
+  var EMBEDDED = window.top !== window.self;
+  if (EMBEDDED) {
+    document.documentElement.classList.add('wd-embedded');
+    document.addEventListener('DOMContentLoaded', function () {
+      document.body.classList.add('wd-embedded');
+    });
+  }
+
+  /* The tool behind the panel read its settings once, when it loaded. Telling
+     it a save happened is what stops it going on using the old value - he
+     changes the units, closes the panel, and the report has to render in the
+     unit he just chose. */
+  function announceSave() {
+    if (!EMBEDDED) return;
+    try {
+      window.parent.postMessage({ wd: 'settings-saved' }, window.location.origin);
+    } catch (e) { /* the panel still closes, and closing re-reads anyway */ }
+  }
+
   function init() {
     API('settings/get', {}).then(function (r) {
       if (!r.ok) return;
@@ -313,6 +336,7 @@
     API('settings/update', { patch: patch }).then(function (r) {
       if (r.ok) {
         settings = r.settings;
+        announceSave();
         loadOverviews();          // the values below the controls move too
         loadWallTemplates();      // and the template list, in case one changed
         WD.toast('Settings saved', 'ok');

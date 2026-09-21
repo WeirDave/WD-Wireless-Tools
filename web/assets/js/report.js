@@ -331,6 +331,26 @@
     }).catch(function () { /* a failed migration must not block the tool */ });
   }
 
+  /* Settings are changed in a panel over this page now, so this page is still
+     here when they change - and has to notice. Without this he changes the
+     units, closes the panel, and the report he is configuring still renders in
+     the unit he just stopped using, which is worse than the navigation the
+     panel replaced: at least a reload picked the new value up.
+
+     Everything here is a re-read and a repaint. The project, the stage and any
+     option he set for this report are untouched. */
+  if (window.WD && WD.onSettingsChanged) {
+    WD.onSettingsChanged(function () {
+      return fetchSettings().then(function () {
+        seedSettingDefaults();     // options inheriting a default, not overridden
+        configureDirty = true;     // the preview is rebuilt from the new values
+        renderReportOpts();
+        renderSettingsBanner();
+        renderFilenamePreview();
+      }).catch(function () { /* the tool keeps the values it already had */ });
+    });
+  }
+
   function initReportSettings() {
     return fetchSettings()
       .then(refreshCoverInfo)
