@@ -1258,6 +1258,41 @@ not describe.
   the fault is the one nobody trusts. Pass `encoding="utf-8"` to every
   `subprocess.run` that reads node's output.
 
+- **CI builds this on Python 3.10 and 3.14. His machine runs 3.12, which is
+  between them, so a version-dependent assertion can pass here and fail on
+  both ends.** Not hypothetical: a guard added in v2.156.0 asserted that an
+  invalid escape sequence raises `SyntaxWarning`, which is true from 3.12
+  onwards and is a `DeprecationWarning` up to 3.11. Both 3.14 jobs passed, both
+  3.10 jobs failed, and the local run was green throughout.
+
+  Same shape as the encoding trap above, and worth stating as the general rule:
+  **a check on *how* the interpreter reports something is a check on the
+  interpreter version.** Assert that the thing happened and what it said, and
+  leave the class, the wording and the exception type alone wherever the
+  property actually being tested does not depend on them.
+
+  The matrix is in `.github/workflows/tests.yml`: `[windows-latest,
+  macos-latest]` x `['3.10', '3.14']`. `py -3.14` exists on his machine, so the
+  top end is checkable locally; 3.10 is not installed and is the one that will
+  catch you.
+
+- **`zip_update` had no test at all until v2.156.0, and it is the function that
+  replaces a user's install.** A fix that opened with `root = extract.resolve()`
+  - shadowing that function's own *install* root parameter - pointed the payload
+  copy, the backup and the install at the temp staging directory, which
+  `finally` then deleted. A suite of 2869 tests was green on it.
+
+  `TheRealUpdateRunsTests` in `tests/test_release_archive_paths_are_contained.py`
+  drives it end to end now, stubbing only `fetch_latest_release` and
+  `_download` and asking the install folder where the files went.
+
+  The general question it raised is backlog item 12.
+  `scripts/audit_functions_never_named_by_a_test.py` reports **32 public
+  functions in `tools/` that no test so much as mentions**, three of them
+  reachable from `server.py`. It is a name search rather than coverage, so it
+  is a list to read rather than a verdict - but the one it would have caught is
+  the one that cost a red release.
+
 
 - **A wall template updates every type it carries, including the ones Ekahau
   ships - and three of those are recoloured on purpose.** `Elevator Shaft`
