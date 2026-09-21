@@ -1343,8 +1343,12 @@ CLOUD_ACTIONS = {
         d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
     "upload_project": lambda d: cm.upload_project(d["path"], d.get("siteId"),
                                                      progress_cb=_progress_setter(d.get("opId"))),
-    "download_project": lambda d: cm.download_project(d["projectId"], d["folder"],
-                                                        progress_cb=_progress_setter(d.get("opId"))),
+    "download_project": lambda d: cm.download_project(
+        d["projectId"], d["folder"],
+        progress_cb=_progress_setter(d.get("opId")),
+        #: `.get`, so an older page that does not send it still refuses
+        #: rather than inheriting a choice it never made.
+        on_exists=d.get("onExists") or "refuse"),
     "assign_to_site": lambda d: cm.assign_to_site(d["siteId"], d["datasetId"]),
     "rename_local": lambda d: cm.rename_local(d["path"], d["name"]),
     "delete_local": lambda d: cm.delete_local(d["path"]),

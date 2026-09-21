@@ -1561,6 +1561,58 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
         unmatched_cloud.append(c)
 
 
+    #: Say when "nothing on disk" is really "you said these are not the
+    #: same project".
+    #:
+    #: A rejected pairing is honoured by every pass, so the cloud project
+    #: falls through to `cloudOnly` and the row states, as a fact about the
+    #: disk, something that is actually a record of his own decision. When
+    #: the two names agree the download then refuses with "already exists",
+    #: and the list and the downloader are flatly contradicting each other
+    #: on the one question he is acting on.
+    #:
+    #: The matcher already knows; it was not saying. `_blocked` is re-asked
+    #: rather than a note being carried out of the passes, because a pair can
+    #: be vetoed in any of them and a flag threaded through four loops is a
+    #: flag one of them will forget to set.
+    if excluded:
+        for c in unmatched_cloud:
+            for l in unmatched_local:
+                if _blocked(c, l):
+                    c["rejectedPairing"] = True
+                    c["rejectedLocalPath"] = l.get("path") or ""
+                    c["rejectedLocalName"] = l.get("name") or ""
+                    break
+
+    #: And the more general case, which needs no decision from him at all.
+    #:
+    #: A rejected pairing is one way a cloud project ends up unpaired next to
+    #: a file of its own name. The other is that **the file is already
+    #: somebody else's**: two cloud projects sharing a name, the first taking
+    #: the local file by id, the second correctly landing here. Downloading
+    #: the second then refuses, and the row has just said nothing is on disk.
+    #:
+    #: Measured rather than assumed - it reproduces with no entry in
+    #: `not_matches.json`, which makes it the likelier of the two after a
+    #: bulk cloud rename.
+    #:
+    #: This is the downloader's question - "is there a file of this name" -
+    #: answered by the half of the tool that has already scanned the disk, so
+    #: the two stop disagreeing. It does not claim the download *will*
+    #: collide: that also depends on the folder, and saying "a file of this
+    #: name is on disk, here" is both true and the thing he needs to see.
+    _by_stem = {}
+    for l in local_items:
+        _by_stem.setdefault(_norm_name(l.get("name") or ""), l)
+    for c in unmatched_cloud:
+        if c.get("rejectedPairing"):
+            continue
+        hit = _by_stem.get(_norm_name(c.get("name") or ""))
+        if hit:
+            c["nameCollision"] = True
+            c["collidingLocalPath"] = hit.get("path") or ""
+            c["collidingLocalName"] = hit.get("name") or ""
+
     matched.sort(key=lambda e: e["cloud"]["name"].lower())
     unmatched_cloud.sort(key=lambda c: c["name"].lower())
     unmatched_local.sort(key=lambda l: l["name"].lower())
@@ -2952,7 +3004,8 @@ class CloudManager:
         except Exception as e:
             return {"error": str(e)}
 
-    def download_project(self, project_id, dest_folder_name, progress_cb=None):
+    def download_project(self, project_id, dest_folder_name, progress_cb=None,
+                         on_exists="refuse"):
         """Download a cloud project as an .esx file into a site folder.
 
         Uses the reverse-engineered batch + imageFiles flow from EkahauAPI
@@ -2994,8 +3047,35 @@ class CloudManager:
             if not safe_name.lower().endswith(".esx"):
                 safe_name += ".esx"
             target = dest_dir / safe_name
+            #: A refusal he can act on.
+            #:
+            #: This said `'<name>' already exists in <folder>` and stopped -
+            #: no path, no options, and nothing downstream able to tell it
+            #: apart from a network failure. It is worse than a dead end when
+            #: the list has just called the project cloud-only, which happens
+            #: when he has marked the pair as not-a-match: the two halves of
+            #: the tool then contradict each other and neither offers a way
+            #: through.
+            #:
+            #: `on_exists` is explicit and defaults to refusing. An
+            #: unrecognised value refuses too - a typo in a caller must never
+            #: become an overwrite.
+            replaced = bool(target.exists() and on_exists == "overwrite")
             if target.exists():
-                return {"error": f"'{safe_name}' already exists in {safe_folder}"}
+                if on_exists == "keepboth":
+                    target = _timestamped_path(target, int(time.time()))
+                elif on_exists == "overwrite":
+                    pass
+                elif on_exists == "refuse":
+                    return {"error": f"'{safe_name}' already exists in "
+                                     f"{safe_folder}",
+                            "code": "exists",
+                            "existingPath": str(target),
+                            "existingName": safe_name,
+                            "folder": safe_folder}
+                else:
+                    return {"error": f"Unknown choice for an existing file: "
+                                     f"{on_exists!r}. Nothing was written."}
             _assert_inside(target, dest_dir)
             if progress_cb:
                 progress_cb(stage="save", current=97, total=100,
@@ -3005,7 +3085,11 @@ class CloudManager:
             if progress_cb:
                 progress_cb(stage="done", current=100, total=100,
                             message="Done.")
-            return {"ok": True, "path": str(target), "name": proj_name}
+            #: `replaced` so the caller can say which of the two things
+            #: it did - writing a new file and overwriting one are not
+            #: the same event to report.
+            return {"ok": True, "path": str(target), "name": proj_name,
+                    "replaced": replaced}
         except Exception as e:
             return {"error": str(e)}
 

@@ -46,7 +46,7 @@ const API_MAP = {
   pick_folder: ['pick_folder', []],
   set_folder: ['set_folder', ['path']],
   upload_project: ['upload_project', ['path', 'siteId', 'opId']],
-  download_project: ['download_project', ['projectId', 'folder', 'opId']],
+  download_project: ['download_project', ['projectId', 'folder', 'opId', 'onExists']],
   assign_to_site: ['assign_to_site', ['siteId', 'datasetId']],
   reveal_in_explorer: ['reveal_in_explorer', ['path']],
   get_duplicates: ['get_duplicates', []],
@@ -3923,12 +3923,36 @@ function rowDetailHtml(r, stripe) {
       { quiet: true, title: 'Never pair these two again.' }));
   } else if (r.status === 'orphan' && c && !l) {
     icon = 'down';
-    sentences.push(kind === 'sites'
-      ? 'This cloud site has no matching folder on disk.'
-      : 'This cloud project has nothing matching it on disk.');
+    /* Why it is unpaired, when the reason is a decision he made.
+       "a cloud-only filtered item said only in cloud - said no match existed
+       - but trying to download we encountered 'already existed'."
+       Both were true and the row was the one lying: a rejected pairing is
+       honoured by every matching pass, so the project lands here and the
+       sentence reported his own decision as a fact about the disk. The file
+       is still there, which is why the download then refused. */
+    if (c.rejectedPairing) {
+      sentences.push('Unpaired because you marked this and '
+        + e(c.rejectedLocalName || 'a local file')
+        + ' as not a match. That file is still on disk.');
+      acts.push(rdAction('link', 'Undo not-a-match',
+        `undoNotMatch('${j(c.id)}','${pj(c.rejectedLocalPath || '')}')`,
+        { primary: true, title: 'Pair these two again. ' + a(c.rejectedLocalPath || '') }));
+    } else if (c.nameCollision) {
+      /* Nothing he did - two cloud projects share a name and the other one
+         took the local file. Nothing *pairs* with this project, which is
+         what unpaired means, but a file of its own name is sitting there
+         and the download is about to say so. */
+      sentences.push('Nothing is paired with this project, but a file of the '
+        + 'same name is already on disk: ' + e(c.collidingLocalName || '')
+        + '. Downloading will ask what to do about it.');
+    } else {
+      sentences.push(kind === 'sites'
+        ? 'This cloud site has no matching folder on disk.'
+        : 'This cloud project has nothing matching it on disk.');
+    }
     acts.push(rdAction('down', 'Download',
       `downloadThenMove('${j(c.id)}','${j(c.name)}')`,
-      { primary: true, writes: 'local', title: 'Download the .esx from Ekahau Cloud, then move it into a site folder.' }));
+      { primary: !c.rejectedPairing, writes: 'local', title: 'Download the .esx from Ekahau Cloud, then move it into a site folder.' }));
     acts.push(rdAction('link', 'Link to a local file…',
       `openLinkPicker('cloud','${j(c.id)}','${j(c.name)}')`,
       { quiet: true, title: 'Pair this cloud project with a local .esx yourself.' }));
@@ -4759,14 +4783,29 @@ async function openNotMatchManager() {
   showModal('notMatchModal');
 }
 
+/* Reachable from the row as well as from the manager now.
+
+   A stored decision that shapes what he sees has to be reversible from where
+   he meets it. This was only offered inside Manage Not-a-Match, which he has
+   to know exists - and the confirm that mentioned it was days earlier, on a
+   different project. */
 async function undoNotMatch(cloudId, localPath) {
+  _setRowBusy(cloudId, localPath, 'Pairing these two again…');
   try {
     const r = await pyApi('unmark_not_match', cloudId, localPath);
     if (r && r.error) { toast(r.error, 'error'); return; }
     toast('Un-marked', 'success');
-    openNotMatchManager();
+    /* Only when he is standing in it. Re-opening the manager over a row he
+       clicked in the list would be the page taking him somewhere he did not
+       ask to go. */
+    const mgr = document.getElementById('notMatchModal');
+    if (mgr && mgr.classList.contains('active')) openNotMatchManager();
     refreshData();
-  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+  } catch (e) {
+    toast('Failed: ' + e.message, 'error');
+  } finally {
+    _setRowBusy(cloudId, localPath, null);
+  }
 }
 
 async function markManualMatch(cloudId, localPath, cloudName, localName) {
@@ -8627,6 +8666,35 @@ function _setDeleteWhat(id, whatHtml) {
 // (Sync) that need the user to actually read a breakdown before committing
 // use this instead: showConfirmModal(title, bodyHtml, confirmLabel) -> Promise<boolean>.
 let _pendingConfirmAction = null;
+/* Which file is in the way, and the three things he can do about it.
+
+   Built on the ordinary confirm rather than a fourth modal, so it looks like
+   every other question the tool asks. **Keep both is the default button**,
+   because it is the only one of the three that cannot lose anything -
+   overwrite is a deliberate second click, which is the same friction every
+   other unrecoverable action here carries.
+
+   Resolves to 'keepboth', 'overwrite', or a falsy value for cancel. */
+function _askAboutExistingFile(r) {
+  const body =
+      '<p>A file of that name is already in <b>' + e(r.folder || '') + '</b>:</p>'
+    + '<p class="sub mono-path">' + e(r.existingPath || r.existingName || '') + '</p>'
+    + '<p class="sub"><b>Keep both</b> saves the download beside it with a '
+    + 'timestamp, and changes nothing that is already there.</p>'
+    + '<p class="sub warn"><b>Replace it</b> overwrites that file with the '
+    + 'cloud copy. No copy is kept, so whatever is in it now is gone.</p>'
+    + '<p class="sub"><button class="btn btn-secondary" '
+    + 'onclick="_resolveConfirmAction(&quot;overwrite&quot;)">Replace it</button></p>';
+  return new Promise(resolve => {
+    _pendingConfirmAction = (v) => resolve(v === true ? 'keepboth' : v);
+    document.getElementById('confirmActionTitle').textContent =
+      'That file is already there';
+    document.getElementById('confirmActionBody').innerHTML = body;
+    document.getElementById('confirmActionOkBtn').textContent = 'Keep both';
+    showModal('confirmActionModal');
+  });
+}
+
 function showConfirmModal(title, bodyHtml, confirmLabel) {
   return new Promise(resolve => {
     _pendingConfirmAction = resolve;
@@ -8779,8 +8847,33 @@ async function downloadThenMove(projectId, projectName) {
         subtitle: skipPicker
           ? `Landing in ${siteName} — the project's site folder.`
           : 'Fetching from Ekahau Cloud — floor plan images can take a moment.' },
-      (opId) => pyApi('download_project', projectId, destFolder, opId)
+      (opId) => pyApi('download_project', projectId, destFolder, opId, 'refuse')
     );
+    /* A file already at the destination is a question, not a failure.
+
+       This used to toast `'<name>' already exists in <folder>` and stop -
+       no path, no options - and it is the error he hit on a row the list
+       had just called cloud-only. Whatever put the file there, the way
+       forward is the same three choices, and the path is what tells him
+       which file he is deciding about. */
+    if (r && r.code === 'exists') {
+      const choice = await _askAboutExistingFile(r);
+      if (!choice) return;
+      const again = await runWithProgress(
+        { title: `Downloading "${projectName}"`,
+          subtitle: choice === 'overwrite'
+            ? 'Replacing the file already there.'
+            : 'Saving alongside the file already there.' },
+        (opId) => pyApi('download_project', projectId, destFolder, opId, choice)
+      );
+      if (again && again.error) { toast(again.error, 'error'); return; }
+      toast(again.replaced
+              ? `Replaced "${again.name || projectName}" in ${destFolder}`
+              : `Saved "${again.name || projectName}" alongside the existing file`,
+            'success');
+      _scheduleOpRefresh();
+      return;
+    }
     if (r && r.error) { toast(r.error, 'error'); return; }
     if (skipPicker) {
       toast(`Downloaded "${r.name || projectName}" into ${siteName}`, 'success');

@@ -1313,6 +1313,15 @@ body.tool-walls .btn-sm { padding: 6px 12px; font-size: 12px; }
    modal it is muddy. --amber-soft reads there, and is far too pale on the
    light theme, so the light theme takes the dark tone instead. */
 .modal .confirm-body p.sub.warn { color: var(--amber-soft); }
+/* A path he has to read to decide, so it is monospaced and allowed to break
+   anywhere - a project named after its site is long, and the folder it is in
+   is the part that tells him which file this is. */
+.modal .confirm-body p.sub.mono-path {
+  font-family: var(--mono); font-size: 11.5px;
+  color: var(--text); overflow-wrap: anywhere;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 6px 8px; margin: 6px 0 10px;
+}
 [data-theme="light"] .modal .confirm-body p.sub.warn { color: var(--amber-dark); }
 
 .modal label {
