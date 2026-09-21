@@ -1153,6 +1153,46 @@ sed -n '/function setOpt/,/^  };/p' report.js | grep -oE "\b[a-zA-Z_][a-zA-Z0-9_
 execute and files that do not, and `scripts/audit_handlers_exist.py` is the
 handler check.
 
+### A store with no writer is invisible
+
+**Three times in one day the thing that remembers was tested and the thing
+that does the remembering was not.** Every one of them was green, and every
+one of them would have meant a feature that never happened.
+
+* **`sync_state`** - the four states, the tolerance, the retirement rule and
+  the file format all had tests. Nothing checked that a push or a pull calls
+  `record()`. Disabling both call sites left the suite green. With nothing
+  written, `classify` answers `unknown` for every pair for ever and the tool
+  silently falls back to comparing two timestamps, which is the exact thing
+  the record was built to stop.
+* **The comparison memory** - same shape, found the same morning.
+  `record_comparison` was covered; `compare_with_cloud` calling it was not.
+* **The merge same-folder refusal** - a guard held in *two* places,
+  `merge_preview` and `merge_execute`, and exercised by neither. Deleting
+  both left the suite green.
+
+The pattern: a store is easy to test because it is pure, so it gets tested
+first and thoroughly, and the call site that fills it is one line inside a
+long method that is awkward to stand up. The awkward half is the half that
+makes the feature exist.
+
+**So for anything that persists: test that the operation writes it, not only
+that the store can hold it.** Drive the real operation against a stub and
+assert the record afterwards. And assert the *value* - a record written
+against a different number than the reader compares is stored and then never
+found again, which fails exactly as silently as not writing it at all.
+
+**The general rule this is a case of:** a guard, a store or a rule that
+exists in two places needs exercising in both. Mutating one at a time is how
+you find out; mutating both together can hide a gap behind the other copy's
+test.
+
+**And it is only ever found by mutation.** All three of these were written
+by someone who believed the feature was covered, and the coverage looked
+convincing. `scripts/audit_source_string_tests.py` finds tests that assert
+source text; nothing finds a test suite with a hole in the middle of it
+except breaking the code and watching whether anything notices.
+
 ## Backups were removed, and that is the design
 
 **Nothing in this suite copies a file aside before overwriting it any more.**
