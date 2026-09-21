@@ -25,8 +25,21 @@ that looks abandoned is not evidence that what is in it is finished with** -
 `git log origin/main..<branch>` is, and it is worth running before removing
 one.
 
-**That leaves item 4, at P3, and nothing else.** It is coverage breadth across
-thirteen read-and-bookkeeping actions, none of which can lose anything.
+**Item 4 closed in v2.155.0, and with it the 2026-09-18 whole-tool audit.**
+Every one of Cloud Manager's 51 server actions is named by a test, and the
+count is held at zero by `tests/test_every_cloud_action_is_tested.py`.
+
+**Nothing is open.** That has been said in this file before and was wrong twice
+in two days - once because an item's work had shipped forty-five versions
+earlier and the entry never caught up, once because finished work was sitting
+unpushed in a worktree and was therefore invisible to the pass that looked. So
+it is worth writing down what makes this claim different: every closed entry
+below names the release it shipped in, and the two claims that can rot on their
+own - the action count and the source-string debt - are each held by a test
+rather than by this paragraph.
+
+**The next pass should still open the code.** An entry that has been right for
+a month is not evidence; it is an entry nobody has checked for a month.
 
 **Item 9 was filed under "Decisions already made", which is the wrong section
 for open work**, and it was moved up here in the same pass. That section exists
@@ -188,7 +201,7 @@ the owner comparison cannot, and there is a test for exactly that state.
 site is external" rule, and no way to mark by owner address. Both are a
 selection away from what the bulk action already does.
 
-#### 4. P3 — The Cloud Manager audit's last finding is down to breadth
+#### 4. ~~P3 — The Cloud Manager audit's last finding is down to breadth~~ — closed in v2.155.0
 
 The whole-tool audit of 2026-09-18 is in
 `docs/audits/cloud-manager-2026-09-18.md`, with the evidence per item, each
@@ -247,12 +260,42 @@ because `CLOUD_ACTIONS` is a dictionary literal nobody executed: a method can
 be perfect and unreachable, and a lambda reading the wrong key is invisible to
 a test of the function it calls.
 
-**What is left of the list is reads and bookkeeping** — `create_local_folder`,
-`forget_all_recipients`, `get_duplicates`, `housekeeping_stop`,
-`list_manual_matches`, `list_not_matches`, `mark_manual_match`,
-`mark_not_match`, `open_login`, `refresh_group_shares`, `reveal_in_explorer`,
-`unmark_manual_match`, `unmark_not_match`. None of them can lose anything, so
-this is breadth rather than risk and no longer P1.
+**The last eleven closed in v2.155.0, and every one of the 51 actions is now
+named by a test.** The pairing decisions - `mark_manual_match`,
+`unmark_manual_match`, `list_manual_matches`, `mark_not_match`,
+`unmark_not_match`, `list_not_matches` - are in
+`tests/test_cloud_pairing_decisions_persist.py`; the other five in
+`tests/test_cloud_small_actions.py`.
+
+They could not lose a project, which is why this sat at P3. What they *can* do
+is make the ledger pair the wrong two things, quietly and permanently, and the
+failure then looks like the matcher being wrong rather than like a stored
+decision being wrong. So the key gets the attention: a pair is filed under
+cloud id and normalised local path, and the same file named with the other
+slash has to be the same decision.
+
+Two of the five are more than bookkeeping and are tested as such.
+`create_local_folder` writes to disk from a name typed by hand - it sanitises,
+refuses a traversal, and refuses to land on a folder that is already there.
+`reveal_in_explorer` hands a path from the page to the shell, so the
+containment check is tested from outside the folder as well as inside it.
+
+**The number is reproducible now, which it was not.** This item carried a
+figure for five releases that nobody could re-derive, because the audit's
+counting was never committed - the entry had to say so itself.
+`scripts/audit_cloud_action_coverage.py` is that script, and
+`tests/test_every_cloud_action_is_tested.py` holds the result at zero. It is an
+absolute rather than a baseline because the number *is* zero: a new action now
+arrives with a test or the suite says so.
+
+**What the guard counts is deliberately generous** - the action's name
+appearing anywhere under `tests/`. That over-reports, and `delete_cloud`
+spending the whole audit period in one docstring and nowhere else is exactly
+how the gap stayed invisible. Over-reporting is the right direction for a guard
+against forgetting and the wrong direction for judging whether a test is any
+good, which is what the ratchet in
+`tests/test_a_test_must_be_able_to_fail.py` is for. The two work together; one
+does not stand in for the other.
 
 Related, and already ratcheted rather than listed as work: 114 assertions in 19
 test files that execute nothing at all

@@ -49,7 +49,7 @@ SKIP_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".bmp",
 #: Placeholder site/building codes. Every one is invented. **Do not add a real
 #: one to make a test pass** - that is the failure this file exists to catch.
 ALLOWED_CODE_TOKENS = {
-    "SITE1", "SITE2", "SITE3", "SITE4", "SITE5", "SITE9", "SITE42",
+    "SITE1", "SITE2", "SITE3", "SITE4", "SITE5", "SITE7", "SITE9", "SITE42",
     "TEST1", "TEST2", "TEST3", "TEST4", "TEST5",
     "ACME1", "ACME2",
     "FLR1", "FLR2", "FLR3",
