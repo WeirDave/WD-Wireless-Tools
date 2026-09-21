@@ -31,6 +31,17 @@ floor and explains why:
     scaled independently on purpose: Ekahau renders a 792x612 plan to 5000x3863
     and 612 x (5000/792) is 3863.6, so the rasteriser rounded and one shared
     ratio would refuse every real file over the artefact.
+  * A raster in a format a crop cannot re-encode as itself.  PNG, JPEG, BMP,
+    GIF, TIFF and WebP all round-trip through Pillow and are cropped; the crop
+    never changes what the file is, because an .esx carries a GIF only because
+    Ekahau accepted a GIF.  **WBMP is the one Ekahau supports and this cannot
+    touch**, from both ends at once: it has no magic number, so only
+    ``images.json``'s ``imageFormat`` can name it, and Pillow ships no WBMP
+    codec in either direction.  It is named from its declaration and refused by
+    name rather than as "unrecognised".
+  * An image holding more than one frame — an animated GIF, a multipage TIFF.
+    A crop would keep the first and drop the rest without erroring, which is
+    the worst shape a loss can take.
   * Populated ``gpsReferencePoints`` — geo-anchored plans, shape never observed
     (0 of 173 floors), so the correct offset behaviour is unknown.
   * Content that already fills most of the canvas — nothing worth reclaiming.
@@ -57,6 +68,8 @@ import struct
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from tools import image_format
 
 # Files whose entries carry `location.coord` and a `location.floorPlanId`.
 POINT_FILES = {
@@ -286,15 +299,24 @@ def _require_pillow():
 
 
 def image_kind(blob: bytes) -> str:
-    """Identify an image from its magic bytes rather than trusting metadata."""
-    if blob[:8] == b"\x89PNG\r\n\x1a\n":
-        return "PNG"
-    if blob[:2] == b"\xff\xd8":
-        return "JPEG"
-    head = blob[:512].lstrip()
-    if head[:5] == b"<?xml" or head[:4] == b"<svg":
-        return "SVG"
-    return "UNKNOWN"
+    """Identify an image from its magic bytes rather than trusting metadata.
+
+    The magic numbers live in ``tools.image_format`` because two copies of them
+    is how one file comes to be two different things depending on which module
+    is asking. The name is upper-cased here because it is what gets handed to
+    Pillow as ``format=``.
+
+    A format this tool cannot crop is still *named*: "unrecognised image format"
+    and "a WBMP floor plan cannot be cropped" send somebody to different places,
+    and only one of them is true.
+    """
+    kind = image_format.sniff(blob[:512])
+    return kind.upper() if kind else "UNKNOWN"
+
+
+def croppable(kind: str) -> bool:
+    """Whether a crop can re-encode this format without changing what it is."""
+    return kind.lower() in image_format.CROPPABLE_RASTERS
 
 
 def png_size(blob: bytes) -> tuple | None:
@@ -700,12 +722,29 @@ def crop_svg(blob: bytes, box) -> bytes:
 
 def _crop_image(blob: bytes, box, kind: str) -> bytes:
     """Crop and re-encode, keeping a JPEG as close to its original as possible."""
+    if not croppable(kind):  # pragma: no cover - guarded by the caller
+        raise TrimError(f"cannot crop image kind {kind}")
     Image = _require_pillow()
     im = Image.open(io.BytesIO(blob))
     im.load()
     out = io.BytesIO()
     cropped = im.crop(box)
-    if kind == "PNG":
+    if kind not in ("PNG", "JPEG"):
+        # BMP, GIF, TIFF and WebP: re-encode as what it already was. The format
+        # is never changed by a crop - an .esx carrying a GIF carries it because
+        # Ekahau accepted a GIF, and handing back a PNG under the same image id
+        # is a decision this tool has no business making.
+        #
+        # A mode fix only ever fires on a source that was already unusual for
+        # its format, and it is the one place a crop can lose something: a
+        # palette is rebuilt when an RGB image is written as a GIF. Cropping
+        # does not change a mode, so a file that was valid going in is written
+        # back untouched.
+        want = image_format.save_mode(kind, cropped.mode)
+        if want:
+            cropped = cropped.convert(want)
+        cropped.save(out, format=kind)
+    elif kind == "PNG":
         cropped.save(out, format="PNG", optimize=True)
     elif kind == "JPEG":
         # A crop forces one re-encode. Reusing the source's own quantization
@@ -734,8 +773,6 @@ def _crop_image(blob: bytes, box, kind: str) -> bytes:
         except (TypeError, ValueError, OSError):
             out = io.BytesIO()
             cropped.save(out, format="JPEG", quality=92, optimize=True)
-    else:  # pragma: no cover - guarded by the caller
-        raise TrimError(f"cannot crop image kind {kind}")
     return out.getvalue()
 
 
@@ -790,7 +827,15 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin,
 
     kind = image_kind(blob)
     if kind == "UNKNOWN":
+        # The bytes said nothing we recognise. images.json's own ``imageFormat``
+        # is the only thing that can name a WBMP - it has no magic number - so
+        # the refusal can still say what the plan is rather than shrugging.
+        declared = _declared_format(members, image_id)
+        if declared:
+            return refuse(f"a {declared} floor plan cannot be cropped")
         return refuse("unrecognised image format")
+    if kind != "SVG" and not croppable(kind):
+        return refuse(f"a {kind} floor plan cannot be cropped")
 
     # A vector plan has no pixel grid, so its size comes from the root element
     # and its crop is a viewBox edit rather than a cut. Coordinates live in this
@@ -807,14 +852,28 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin,
         Image = _require_pillow()
         im = Image.open(io.BytesIO(blob))
         w, h = im.size
+        # An animated GIF or a multipage TIFF crops to its first frame and the
+        # rest go. Nothing errors and the result opens, which is the worst
+        # shape a loss can take, so it is refused instead. No real floor plan
+        # has ever been observed with more than one frame; a file that has is
+        # not the thing this tool was asked to crop.
+        if getattr(im, "n_frames", 1) > 1:
+            return refuse(
+                f"the {kind} floor plan holds {im.n_frames} frames and only the "
+                "first would survive a crop"
+            )
 
     declared_w, declared_h = plan.get("width"), plan.get("height")
     if declared_w and abs(float(declared_w) - w) > 0.5:
         return refuse(
             f"floorPlans.json says {declared_w:.0f}x{declared_h:.0f} but the image is {w}x{h}"
         )
-    if companion and image_kind(companion[1]) not in ("PNG", "JPEG"):
-        return refuse("the second image on this floor is in a format that cannot be cropped")
+    if companion and not croppable(image_kind(companion[1])):
+        ckind = image_kind(companion[1])
+        return refuse(
+            "the second image on this floor is a "
+            f"{ckind if ckind != 'UNKNOWN' else 'format'} that cannot be cropped"
+        )
 
     if manual_box is not None:
         return _plan_manual(members, plan, fid, name, manual_box, w, h, refuse, skip)
@@ -1107,6 +1166,23 @@ def companion_box(box, from_size, to_size):
     if x1 - x0 < 1 or y1 - y0 < 1:
         raise TrimError("the crop maps to nothing in the companion image")
     return x0, y0, x1, y1
+
+
+def _declared_format(members: dict, image_id: str) -> str:
+    """What images.json says this image is, upper-cased, or ``""``.
+
+    Believed only where the bytes say nothing. A declaration that disagrees
+    with a recognised magic number loses, every time - the bytes are what the
+    file is, and trusting the label over them is what named an SVG ``.png``.
+    """
+    doc = members.get("images.json")
+    if not isinstance(doc, dict) or not isinstance(doc.get("images"), list):
+        return ""
+    for img in doc["images"]:
+        if img.get("id") == image_id:
+            fmt = img.get("imageFormat")
+            return str(fmt).upper() if fmt else ""
+    return ""
 
 
 def _set_resolution(members: dict, image_id: str, w, h, dirty: set) -> None:

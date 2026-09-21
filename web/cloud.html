@@ -212,10 +212,13 @@
     <button class="btn btn-secondary bulk-btn" id="compareBtn" onclick="openCompare()" title="Compare the contents of the selected folders side by side">Compare</button>
 
     <details class="wd-menu">
-      <summary class="wd-menu-btn">Move, share, overwrite</summary>
+      <summary class="wd-menu-btn">Move, share, mark, overwrite</summary>
       <div class="wd-menu-items">
         <button class="wd-menu-item bulk-btn" id="bulkMoveBtn" onclick="bulkMoveToSite()" title="Move all selected to a site">Move to site&hellip;</button>
+        <button class="wd-menu-item" id="bulkMergeBtn" onclick="bulkMergeFolders()" title="Move the contents of every selected local folder into one folder you pick next. You see the whole file list first, including where two of the folders you picked carry the same file - which previewing them one at a time cannot show you. Nothing moves until you confirm.">Merge folders into one&hellip;</button>
         <button class="wd-menu-item bulk-btn" id="bulkShareBtn" onclick="openBulkShare()" title="Share all selected cloud projects with people or your Sharing Group in one action">Share&hellip;</button>
+        <button class="wd-menu-item" id="bulkMarkExternalBtn" onclick="bulkMarkExternal('external')" title="Say these are somebody else's work, whatever the owner recorded on the file says. They are counted, filtered and striped as External from then on. Nothing is written to Ekahau Cloud or to any file, and you can take the mark off from the badge on the row.">Mark as External&hellip;</button>
+        <button class="wd-menu-item" id="bulkMarkMineBtn" onclick="bulkMarkExternal('mine')" title="Say these are yours, whatever the owner recorded on the file says. Use it when a project has no owner, or when the account came back without a signed-in user and everything looks internal. Nothing is written to Ekahau Cloud or to any file.">Mark as mine&hellip;</button>
         <button class="wd-menu-item bulk-btn" id="bulkVerifyBtn" onclick="bulkVerifyNameMatches()" title="Escape hatch, not the everyday route - use Sync everything for that. For selected 'Name matches' pairs this forces the cloud copy down so the pair becomes 'Same file'. A pair where local is newer is still refused, and the copy it replaces is kept as a .previous- file.">Overwrite from cloud&hellip;</button>
       </div>
     </details>

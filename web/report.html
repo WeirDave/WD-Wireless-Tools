@@ -71,6 +71,10 @@
   </ul>
 </div>
 <input type="file" id="fileInput" accept=".esx" hidden>
+<!-- The Change / Audit report's "before" file. Separate from the one above on
+     purpose: that one replaces the project being reported on, so a wrong pick
+     there throws away the report you were setting up. -->
+<input type="file" id="baselineInput" accept=".esx" hidden>
 
 <div id="workspace" class="report-workspace">
 

@@ -395,9 +395,19 @@ class NotesReachPaper(unittest.TestCase):
         self.assertIn("Text only", block)
 
     def test_notes_are_read_from_the_project(self):
-        """No pictureNotes.json: it does not exist in a real file."""
-        self.assertIn("readJson('notes.json')", self.js)
-        self.assertNotIn("readJson('pictureNotes.json')", self.js)
+        """No pictureNotes.json: it does not exist in a real file.
+
+        The member name is matched without pinning the whole call. ``readJson``
+        gained a second parameter in v2.153.0, when the Change / Audit report
+        needed the same parser pointed at a second archive, and requiring the
+        call's exact text made this fail on a change that did not go near
+        notes.
+        """
+        self.assertRegex(self.js, r"readJson\('notes\.json'[,)]")
+        # The member is never *read*. The file is still named in a comment,
+        # deliberately: it explains that no such member exists in a real .esx,
+        # which is the finding that took a round of design work to establish.
+        self.assertNotRegex(self.js, r"readJson\('pictureNotes\.json'")
 
 
 if __name__ == "__main__":

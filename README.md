@@ -27,12 +27,12 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 
 <table>
 <tr>
-<td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.63.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.64.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"><br><b>Quick Walls</b><br><sub>v7.66.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.27.2 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"><br><b>Scale</b><br><sub>v1.5.2 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.64.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.18.1 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.65.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.19.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.13.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.4.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v1.9.1 · Desktop</sub></td>
@@ -105,7 +105,7 @@ Convert architectural measurements between feet-and-inches, decimal feet, inches
 
 ### Report
 
-Transform an `.esx` project into print-ready, installer-facing documents. Seven report formats are available today:
+Transform an `.esx` project into print-ready, installer-facing documents. Eight report formats are available today:
 
 - **AP Installation**
 - **Predictive Design / AP Placement**
@@ -114,8 +114,9 @@ Transform an `.esx` project into print-ready, installer-facing documents. Seven 
 - **Bill of Materials**
 - **Antenna Aim Sheet**
 - **Coverage Cell Boundary**
+- **Change / Audit Report** — two `.esx` files compared
 
-The **Change / Audit Report (coming soon)** is visible in the gallery but is not selectable yet. Every available report supports its own options and print-optimized renderer through the shared report registry.
+Every report supports its own options and print-optimized renderer through the shared report registry.
 
 ### PlanTrim
 
@@ -124,6 +125,7 @@ Crop the empty canvas off a CAD-imported floor plan and rebase every object's co
 - Detects the bounding box of all placed objects (APs, walls, areas, notes)
 - Trims the floor-plan image to the used region
 - Rebases coordinates so objects stay in the right place on the smaller canvas
+- Crops PNG, JPEG, BMP, GIF, TIFF, WebP and SVG plans, each written back as the format it already was
 - Downloads a cleaned `.esx` ready for design work
 
 ### AP Labeler
@@ -232,7 +234,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.152.1
+WIRELESS TOOLS  v2.153.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.

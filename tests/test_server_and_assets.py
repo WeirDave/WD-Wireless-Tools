@@ -603,8 +603,14 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
                      "aprename", "capacity", "prep"):
             with self.subTest(tool=tool):
                 self.assertIn(f"v{versions[tool]}", readme)
-        self.assertIn("Seven report formats are available today", readme)
-        self.assertIn("Change / Audit Report (coming soon)", readme)
+        # Eight since v2.153.0, when the Change / Audit report stopped being
+        # the one card the gallery would not open. The count and the card are
+        # pinned together deliberately: a ninth report added without that
+        # sentence being updated leaves the README quietly wrong about what
+        # ships, and the README is the first thing anyone reads.
+        self.assertIn("Eight report formats are available today", readme)
+        self.assertIn("**Change / Audit Report**", readme)
+        self.assertNotIn("coming soon", readme.lower())
         self.assertIn("[User Guide](docs/USER_MANUAL.md)", readme)
         self.assertIn("reverse-engineered upload/download flows", readme)
         self.assertIn("development-tool configuration", readme)

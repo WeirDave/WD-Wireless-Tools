@@ -10,6 +10,25 @@ v2.146.0 the same day. Every item below was opened in the code and checked;
 what each check found is recorded on the item, including where the check
 found the item itself was wrong.
 
+**Every open item was closed on 2026-09-20 in v2.153.0.** Items 2, 3, 5, 6, 7
+and 9 shipped; item 4 dropped from P1 to P3, because the destructive and
+sharing surfaces it was about now have tests that execute them and what is left
+of its list is reads and bookkeeping.
+
+**Item 9 was filed under "Decisions already made", which is the wrong section
+for open work**, and it was moved up here in the same pass. That section exists
+to be acted on without re-checking; an unfinished task sitting in it is the
+mirror of the entry that sat there for forty-five minor versions stating the
+opposite of the code.
+
+Two things are recorded rather than finished, and both are on their items.
+**Item 7 could only be delivered for two of the three formats it named**:
+Pillow ships no WBMP codec, so a format Ekahau accepts stays out of reach until
+it does — asserted against the installed Pillow rather than assumed, so the day
+that changes, the test says so. And **item 6 compares access points only** —
+wall, area and note changes are not in the Change / Audit report, which is what
+the item asked for and worth knowing before somebody expects otherwise.
+
 **Item numbers are reassigned at each pass.** A reference to one from outside
 this file has to name the pass date as well as the number, or in a month it
 will point at something else.
@@ -88,47 +107,75 @@ that gets settled. Narrowing it with a content comparison is a possible
 follow-up and would need the comparison's cost thought about first - it
 downloads the cloud copy per pair.
 
-#### 2. P2 — Bulk merge many folders into one
+#### 2. ~~P2 — Bulk merge many folders into one~~ — shipped in v2.153.0
 
-`merge_preview(src_path, dst_path)` and `merge_execute(src_path, dst_path,
-ops)` (`tools/cloud_manager.py:3743`, `:3785`) each take exactly one source and
-one destination, and `CLOUD_ACTIONS` exposes them that way
-(`server.py:1122-1123`). Verified unchanged.
+**How it is used.** Tick the local folders, then **Merge folders into one…**
+under **Move, share, mark, overwrite** in the selection bar. Pick the
+destination, check the file list, confirm. Nothing moves until you confirm, and
+the existing single-folder **Merge** on a row is unchanged.
 
-Add a bulk action that accepts multiple selected local source folders, previews
-the combined file operations, preserves per-file exclusions, and executes each
-source safely against one destination.
+**The reason it is not a loop over the old call**, which is the whole substance
+of the item: two of the folders can each carry a `Report.pdf`. Previewed one at
+a time they both read "no conflict", because at that moment neither is in the
+destination — and that is true, right up until the first one moves. Run one
+after the other, the second lands on the first and nothing ever said so.
+`merge_preview_many` walks the sources in the order they will run and carries
+what each will place forward into the next, so a collision between two selected
+folders is on the file list before anything moves, named — *"also in **SITE9
+East**, which moves first"*.
 
-Cloud-to-cloud merging should remain unsupported unless Ekahau provides a safe
-server-side operation. This needs dry-run coverage and file-count verification
-because source-folder cleanup can be destructive — and note that
-`merge_preview` is one of the twenty server actions no test names at all (item
-4), so there is no coverage to build on.
+**Under "Keep newer" a cross-source clash keeps both**, deliberately. There is
+no file to compare against yet, so "newer" cannot be answered; dropping a copy
+on a comparison that could not be made is the one outcome a merge must never
+produce.
 
-#### 3. P2 — Manual External override
+**A folder that cannot be merged is named and left out** rather than failing the
+run — refusing eight because one is wrong is the guard firing on his normal
+case. And one source failing mid-run does not stop the rest: the ones that have
+already gone moved real files, so the result names the folders that failed
+instead of reporting a bare error count.
 
-`_isExternal(cloudObj, localObj)` (`cloud.js:1339`) compares the owner email on
-either side against `data.currentUser` and does nothing else. There is no
-override anywhere in the repo: `external_override`, `externalOverride`,
-`markExternal` and `mark_external` appear in no file.
+Cloud-to-cloud merging is still unsupported, as the item asked.
 
-Add a persistent per-project override so a project can be marked External or
-Mine when ownership metadata is missing or does not reflect operational
-responsibility. The dashboard counts, filters and row styling must all honor
-the same override.
+**`merge_preview` is no longer uncovered** — it gained real tests in v2.148.0,
+and `tests/test_cloud_merge_many.py` moves real files on a real disk for the
+bulk path, including the case that proves the single preview cannot see a
+cross-source clash.
 
-**One case worth designing for, found while checking this.** `_isExternal`
-returns `false` for everything when `currentUser` is empty, so an account that
-comes back without one shows no External projects rather than an unknown
-number. That is the right default, and it is the case an override most
-obviously serves. Note the shape the owner filter settled on for the same
-problem (CLAUDE.md § "Known gotchas"): when a filter cannot answer, say so on
-screen rather than render a confident empty list.
+#### 3. ~~P2 — Manual External override~~ — shipped in v2.153.0
 
-The final UI — row action, inline control, or settings list — still needs a
-design decision.
+**How it is used.** Tick the projects, then **Mark as External…** or **Mark as
+mine…** under **Move, share, mark, overwrite** in the selection bar — the bar
+that appears once something is ticked. A marked row carries a **Marked
+External** or **Marked mine** badge in the middle column, and clicking that
+badge takes the mark off. There is no default to change; a project with no mark
+behaves exactly as it always did.
 
-#### 4. P1 — One systemic finding from the Cloud Manager audit is still open
+**Nothing is written to Ekahau Cloud or to any file.** It is an annotation on
+this installation's view, filed beside the manual matches in
+`~/.wd_wireless_tools/external_overrides.json`, and the confirm says so. That
+is also why it needs no ownership check: refusing to let him annotate his own
+view of somebody else's project would be a guard firing on the case the feature
+exists for.
+
+Keyed on Ekahau's cloud id where there is one, because that survives a rename on
+either side, and on the normalised local path otherwise — the same key on both
+sides of the wire, since a mark filed under a key the page never builds applies
+to nothing and says nothing about having failed. The counts, the filters and the
+row striping all read `_isExternal`, so honouring the override there covers all
+three at once.
+
+**The case the item singled out is the one it turned out to answer best.**
+`_isExternal` returned `false` for everything when `currentUser` was empty, so
+an account that comes back without one showed no External projects rather than
+an unknown number. That is still the fall-back — but a mark now answers where
+the owner comparison cannot, and there is a test for exactly that state.
+
+**What it does not do**, and was not asked for: there is no "everything in this
+site is external" rule, and no way to mark by owner address. Both are a
+selection away from what the bulk action already does.
+
+#### 4. P3 — The Cloud Manager audit's last finding is down to breadth
 
 The whole-tool audit of 2026-09-18 is in
 `docs/audits/cloud-manager-2026-09-18.md`, with the evidence per item, each
@@ -171,18 +218,76 @@ two are not the same measurement and the difference is not a trend. The one
 reproducible number is `scripts/audit_source_string_tests.py`: 350 assertions
 in 61 files at the audit, **346 in 58** now.
 
-**Highest value first**: the sharing group's six actions. The three
-destructive ones that used to head this list are done - see
-`tests/test_cloud_the_destructive_actions_are_executed.py`, which also pins
-the route table, since `CLOUD_ACTIONS` is a dictionary literal nobody
-executed and a lambda reading the wrong key is invisible to a test of the
-function it calls.
+**The sharing group's six actions were the last of it, and they closed in
+v2.153.0.** `tests/test_cloud_sharing_group_actions.py` executes
+`get_my_group`, `add_group_member`, `remove_group_member`,
+`toggle_group_share`, `list_shares` and `remove_share` against a fake shaped
+the way `cloud_manager` really reads Ekahau, and pins the two that can take
+somebody's access away: the whole current member list has to be echoed back on
+a removal, and `enable: false` has to arrive as false rather than as something
+truthy. `merge_preview` and `merge_execute` are covered by
+`tests/test_cloud_merge_many.py` with real files on disk, and
+`set_external_override` arrived with its own tests.
+
+Each of those files also pins the **route table**, separately from the method,
+because `CLOUD_ACTIONS` is a dictionary literal nobody executed: a method can
+be perfect and unreachable, and a lambda reading the wrong key is invisible to
+a test of the function it calls.
+
+**What is left of the list is reads and bookkeeping** — `create_local_folder`,
+`forget_all_recipients`, `get_duplicates`, `housekeeping_stop`,
+`list_manual_matches`, `list_not_matches`, `mark_manual_match`,
+`mark_not_match`, `open_login`, `refresh_group_shares`, `reveal_in_explorer`,
+`unmark_manual_match`, `unmark_not_match`. None of them can lose anything, so
+this is breadth rather than risk and no longer P1.
 
 Related, and already ratcheted rather than listed as work: 114 assertions in 19
 test files that execute nothing at all
 (`scripts/audit_tests_that_never_run_anything.py`). That debt is held per file
 in `tests/source_string_assertion_baseline.json` and can only go down — see
 CLAUDE.md § "A test that would pass with the feature deleted is not a test".
+
+#### 9. ~~P2 — The "only name controls that exist" guard reads one file~~ — shipped in v2.153.0
+
+`tests/test_named_controls_exist.py` now asks the question of every page and
+every script in `web/`, not just `cloud.js`. Nothing to turn on: it runs in the
+suite, and `scripts/audit_named_controls.py` prints the inventory — five
+instructional control names across four files today, all of them real.
+
+**The two failed attempts recorded on this item were both right about the idea
+and wrong about one detail, and the detail was in the same place twice.**
+
+* *Searching the source matched a comment in `report.js`* explaining why the
+  button had been renamed. The fix is to strip comments — but the reason the
+  comment survived is the part worth keeping: `report.js` contains a character
+  class of the characters a file name may not hold, and a double quote is one
+  of them. A scanner that knows only about quotes sees that quote inside the
+  regular expression, decides a string has started, and never finds its end.
+  Every comment after it in the file then survives as though it were code. So
+  the stripper recognises regular expressions, and a test builds that exact
+  shape and fails without it. **The guard was not too naive; its stripper was
+  broken, and the two look identical from outside.**
+* *Searching for `>Name<` across `web/` matched the instruction itself* — a page
+  saying "use <b>Cover image</b>" contains that string, so every instruction
+  satisfied itself. Bolded markup is removed from the haystack before the
+  needles are looked for.
+
+The third problem the item named is handled as it asked: a label built by
+concatenation — `'Cover image' + '…'` — never appears whole anywhere, so
+adjacent string literals joined by `+` are folded together before the corpus is
+built. **A rendering harness turned out not to be needed**, which is worth
+saying because the item proposed one: most labels in this suite are built at
+run time from data the page does not have until a file is loaded, so rendering
+each page would have missed them too.
+
+`TheCheckCanFailTests` is the load-bearing class. A guard for a defect that has
+already been fixed proves nothing unless it is shown to fail on that defect, so
+it reconstructs all three failures and requires each to be caught — and the
+whole thing was verified by putting the real v2.150.0 defect back into
+`settings.html` and watching the suite go red.
+
+The Cloud Manager guard stays. Two checks of one property, with different
+corpora, is a state worth noticing rather than an argument for deleting one.
 
 ---
 
@@ -202,10 +307,19 @@ skewed grid, a building carrying two grids — are handled the way this item ask
 for: the derived grid is drawn over the plan so a bad fit is visible, and
 **Turn off for this floor** is the answer. Nothing is guessed at.
 
-**What is still open**, and was always the second half of this item: the
-reference **under the marker label on the plan**. The tables were the cheap and
-useful half and are done; drawing it on the map is a separate change to the
-placement renderer and has not been started.
+**The second half shipped in v2.153.0.** The reference now prints **under the
+marker label on the plan**, on the AP Placement Map: **Add the column grid
+reference to each label** in the options panel of the Configure step, off by
+default, with **Set up column grid…** beside it. It reads the same calibration
+the tables do, so the plan and the table cannot disagree about where C-4 is —
+a test compares the two and fails if they ever do.
+
+It is the first of the extras on a marker's second line, ahead of model,
+channel and height: the others describe the access point, and this one says
+where to stand to find it. An AP with no coordinates, on an uncalibrated floor,
+or outside the lettered area contributes nothing rather than a dash, because a
+dash printed on a drawing reads as a reference somebody failed to fill in.
+Measured off the printed sheet at 6.7pt, above the report's 6pt floor.
 
 **One decision worth revisiting if it reads wrong on site.** The reference is
 the **nearest intersection** — `C-4` — because that is how a grid reference is
@@ -214,43 +328,86 @@ the worst case is half a bay of walking. The alternative is naming the bay
 (`C-D / 4-5`), which is precise and twice as wide in a table column. Changing it
 is a one-line change in `gridRefForPoint`.
 
-#### 6. P3 — Change / Audit report
+#### 6. ~~P3 — Change / Audit report~~ — shipped in v2.153.0
 
-The gallery card exists and is intentionally marked **Coming soon** — verified
-as the only report still in that state (`report.js:6298`). Completing it
-requires:
+It was the last card marked **Coming soon**, and the gallery refuses to open a
+card in that state, so the card had been visible and unusable throughout.
 
-- A second `.esx` file picker for before-and-after projects.
-- AP matching and change classification for added, removed, moved, re-aimed,
-  and re-mounted APs.
-- Before/after summaries, change tables, and per-floor overlay rendering.
-- Tests for dual-file state, matching thresholds, and generated output.
+**How it is used.** Open the newer project the way you always do; that one is
+the *after*. Pick **Change / Audit Report** in the template gallery, then in
+the options panel of the Configure step use **Choose the earlier .esx…**, under
+**Earlier project to compare against**. Neither file is written to and the
+earlier one is only read. The document is built at the Review step.
 
-This is the largest remaining Report feature and should be developed separately
-from routine maintenance.
+The options beneath it: **Count as moved when it moved** (default *0.5 m
+(1.6 ft) or more*), **Per-floor overlay drawings** (on), **Measurement units**
+(feet), **Cover page** (on) and **AP notes pages** — which defaults to *Never*
+here rather than *Auto*, because this is usually the document that gets handed
+over and site notes are often private working annotations.
 
-**The matching half may largely exist already.** `tools/esx_compare.py` answers
-"how do these two `.esx` files differ", per member, without touching disk; and
-v2.145.0 fixed seven faults in Cloud Manager's name matcher, several of which
-(three-digit building numbers, years read as street numbers, listing-order
-dependence) any second comparison engine would reproduce from scratch. Read
-both before writing a third one.
+**Matching is by Ekahau's id first and by name second, and never by position.**
+An id survives every edit, so where the after-file is a descendant of the
+before-file everything pairs exactly and a rename is free. Name is the fallback
+for an AP deleted and re-added, it has to be unambiguous on both sides, and the
+report says how many pairs were found that way because that is a judgement
+rather than a fact. Position is deliberately not a key: two APs that swapped
+places are two moves, and matching on position would report that as nothing
+having happened.
+
+**The trap worth knowing about is a re-cropped floor plan**, and it is the part
+that took the thinking. Coordinates in an `.esx` are measured from the corner of
+the floor plan image, so running PlanTrim between the two saves shifts every
+coordinate on that floor by the crop offset — seventy access points all
+"moved", burying the two that really did. Where a floor's image has *changed
+size* the two coordinate spaces are known not to be comparable: the shift is
+measured as the median displacement, taken out, and reported in its own section
+on the page. Where the image is the same size nothing is compensated, because
+there a displacement is real and explaining it away would hide every move on
+the floor — the more dangerous of the two failures, and it has its own test.
+
+**`tools/esx_compare.py` was not reused, and the reason is worth recording** so
+it is not proposed again. That module answers "do these two archives differ",
+per zip member, in Python on disk. This question is "what did somebody do to
+this design", per access point, in the browser against two already-parsed
+projects. They share no inputs and no output; one is a file comparison and the
+other is a design comparison.
+
+**What it does not do.** Wall, area and note changes are not compared — the
+item asked for access points and that is what it does. Nothing is written to
+either file.
 
 ---
 
 ### PlanTrim
 
-#### 7. P3 — Only PNG, JPEG and SVG floor plans can be cropped
+#### 7. ~~P3 — Only PNG, JPEG and SVG floor plans can be cropped~~ — shipped in v2.153.0
 
-`image_kind()` (`tools/esx_trimmer.py:288`) sniffs three magic-byte signatures
-and returns `UNKNOWN` for everything else, which is refused. Verified
-unchanged. Ekahau accepts more than that — BMP, WBMP and GIF among them — so a
-project can carry a floor plan the trimmer will not touch.
+PlanTrim now crops **PNG, JPEG, BMP, GIF, TIFF and WebP**, plus SVG as before,
+and each one is written back as the format it already was — an `.esx` carries a
+GIF only because Ekahau accepted a GIF, and handing back a PNG under the same
+image id is not a decision this tool should make. Nothing has to be turned on.
 
-Pillow already reads all three, and the crop path is format-agnostic once the
-image is open; the gate is the magic-byte sniffer and the writer's format
-branch. The refusal is at least honest today, which is why this is P3 and not
-higher.
+**The item said "Pillow already reads all three" of BMP, WBMP and GIF. Two of
+the three.** Pillow ships no WBMP codec in either direction, and that is now
+asserted against the installed Pillow rather than assumed, so a future version
+that gains one fails the test and reopens this deliberately. WBMP is out of
+reach from the other end too: it has no magic number — its first bytes are
+`00 00` — so only `images.json`'s `imageFormat` can name one. It is named from
+that declaration and refused **by name** now, rather than as "unrecognised
+image format", which is the difference between a reader knowing what to do next
+and not.
+
+Two things came out of the work that the item did not ask for:
+
+* **The magic numbers had two homes** and they disagreed about four formats.
+  `folder_organizer` sniffed a plan to name an extract, `esx_trimmer` sniffed
+  the same bytes with a shorter list to decide whether it could be cropped.
+  Both call `tools/image_format.py` now. Two answers to "what is this file" is
+  the shape of the fault that once named an SVG `.png`.
+* **An image holding more than one frame is refused** — an animated GIF, a
+  multipage TIFF. A crop would keep the first and drop the rest without
+  erroring, and a loss that leaves a file which opens and looks right is the
+  worst shape a loss can take.
 
 ---
 
@@ -277,40 +434,6 @@ grounds that it was momentarily empty, and the test caught it.
 **Read the date on an entry here.** One of them was reversed two releases after
 it was written and sat here wrong for forty-five minor versions, so this
 section is not exempt from the next pass.
-
-#### 9. P2 — The "only name controls that exist" guard reads one file
-
-`TheAppOnlyPointsAtControlsThatExistTests`
-(`tests/test_cloud_push_is_reachable.py:229`) is the rule that stops the app
-telling someone to use a button nothing renders. It was written when the Sync
-dialog spent a release recommending a control greyed out for every row, and it
-reads **`cloud.js` and nothing else** — the one page that had the bug.
-
-It is a suite-wide rule enforced on one file, and v2.150.0 walked straight into
-the gap. The Settings page gained a line reading "Open Report and use **Edit
-report settings**", and the same change had just renamed that button to
-**Cover image…**. Instruction on one page, control on another, guard blind to
-both. It was caught by looking at a screenshot of the finished page, which is
-not a mechanism.
-
-**Two attempts at a wider version failed, and the way they failed is the
-useful part.** Both passed with the defect in place:
-
-* checking whether the named string appears anywhere in the source matched a
-  **comment** in `report.js` explaining why the button had been renamed — the
-  old name was in quotes in prose, which read as a label;
-* checking for `>Name<` across all of `web/` matched the page under test,
-  because the page itself contains `<b>Name</b>` and the corpus included it.
-
-So a real version has to exclude the instructional markup from the haystack and
-recognise a label that is **built by concatenation** — `'Cover image' + '…'
-+ '</button>'` never appears as `>Cover image…<` anywhere in the source, which
-is how most labels in this suite are written. Rendering each page and reading
-the accessible labels out of it is the honest approach, and the browser harness
-in `tests/test_dev_nav_on_every_page.py` already walks every page that way.
-
-Until then the rule is enforced on Cloud Manager and nowhere else, and any
-cross-page instruction added elsewhere is unguarded.
 
 ### A wall template updates every type it carries, including Ekahau's — and the opposite was recorded here until 2026-09-19
 

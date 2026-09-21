@@ -18,6 +18,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+from tools import image_format
 from tools.rename_manager import (
     apply_file_rules as _apply_file_rules,
     migrate_rename_cfg as _migrate_rename_cfg_impl,
@@ -419,29 +420,14 @@ _DECLARED_EXTS = {
 
 
 def _sniff_image_format(head: bytes) -> str:
-    """Best-effort format sniff from a file's first bytes. Ekahau stores
-    floorplan images as `image-<uuid>` with no extension, so we detect the
-    real format to name extracts correctly."""
-    if head.startswith(b"\x89PNG\r\n\x1a\n"):
-        return "png"
-    if head.startswith(b"\xff\xd8\xff"):
-        return "jpeg"
-    if head[:6] in (b"GIF87a", b"GIF89a"):
-        return "gif"
-    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
-        return "webp"
-    if head[:2] == b"BM":
-        return "bmp"
-    if head[:4] in (b"II*\x00", b"MM\x00*"):
-        return "tiff"
-    # SVG is text, so it has no magic number in the usual sense. Ekahau stores
-    # CAD imports this way, and they are why extraction shipped broken: bytes
-    # nothing recognised used to fall back to .png, producing an XML document
-    # named .png that no image viewer will open.
-    lead = head.lstrip(b"\xef\xbb\xbf").lstrip()
-    if lead[:5] == b"<?xml" or lead[:4] == b"<svg":
-        return "svg"
-    return ""
+    """Best-effort format sniff from a file's first bytes.
+
+    The magic numbers moved to ``tools.image_format`` when PlanTrim needed the
+    same answer from the same bytes: one file was being identified by two lists
+    that disagreed about four formats. This wrapper stays because the name is
+    used throughout this module and in its tests.
+    """
+    return image_format.sniff(head)
 
 
 def _image_ext_from_bytes(data: bytes, declared: str | None = None) -> str:

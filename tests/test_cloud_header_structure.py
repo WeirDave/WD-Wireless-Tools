@@ -188,7 +188,10 @@ class TheDropdownsAreUsableTests(unittest.TestCase):
         # View went the way of More filters: once Expand and Collapse
         # became buttons it held one item, and a dropdown with one thing
         # in it is a click in front of a button.
-        for name in ("Select", "Move, share, overwrite"):
+        # "mark" joined the list in v2.153.0, with the External override. The
+        # label names what is inside rather than saying "More", which is the
+        # whole point of this check - so a new item means a new word here.
+        for name in ("Select", "Move, share, mark, overwrite"):
             with self.subTest(menu=name):
                 self.assertIn(">%s</summary>" % name, HTML)
 

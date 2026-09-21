@@ -7,6 +7,16 @@
 
   var esxZip = null;
   var fileName = '';
+  /* The "before" project for the Change / Audit report, and the name it came
+     from. Null until one is chosen, which is the report's ordinary starting
+     state rather than an error - the page says what it needs and offers the
+     picker rather than rendering an empty document. Cleared whenever a new
+     main project is opened, because a baseline belongs to the comparison it
+     was chosen for and silently carrying it across two projects would be a
+     comparison nobody asked for. */
+  var baseline = null;
+  var baselineName = '';
+  var baselineError = '';
   // The name of the folder the .esx was opened from, when that is knowable.
   // Empty on a drag-and-drop or on the hosted build - a browser hands over a
   // bare file name and nothing else - so everything downstream treats it as
@@ -922,6 +932,12 @@
   fileInput.addEventListener('change', function (e) {
     if (e.target.files.length) loadFile(e.target.files[0]);
   });
+  var baselineInput = document.getElementById('baselineInput');
+  if (baselineInput) {
+    baselineInput.addEventListener('change', function (e) {
+      if (e.target.files.length) loadBaselineFile(e.target.files[0]);
+    });
+  }
   /* Opening from disk, in the one way that knows which folder the file is in.
 
      A browser file input cannot answer that - File carries a name and no path
@@ -1030,6 +1046,10 @@
       templateConfirmed = false;
       configureDirty = true;
       currentStage = 'template';
+      // A baseline belongs to the comparison it was chosen for. Carrying it
+      // across to a different project would silently compare two files nobody
+      // put together.
+      baseline = null; baselineName = ''; baselineError = '';
 
       dropzone.hidden = true;
       document.getElementById('dzTopbar').hidden = true;
@@ -1057,8 +1077,13 @@
     }
   }
 
-  async function readJson(name) {
-    var f = esxZip.file(name);
+  /* *zip* defaults to the open project. The Change / Audit report reads a
+     second .esx through the same parser, and one parser reading two files is
+     the point: an extraction that drifts between two copies is how the same
+     project comes to have two different AP counts depending on which code
+     path asked. */
+  async function readJson(name, zip) {
+    var f = (zip || esxZip).file(name);
     if (!f) return null;
     return JSON.parse(await f.async('string'));
   }
@@ -1080,19 +1105,95 @@
     return url;
   }
 
+  /* Read one .esx into *proj*, the open project, loading its floor plan
+     images ready to draw. */
   async function parseEsx() {
-    var ap = await readJson('accessPoints.json');
-    var rad = await readJson('simulatedRadios.json');
-    var ant = await readJson('antennaTypes.json');
-    var fp = await readJson('floorPlans.json');
-    var img = await readJson('images.json');
-    var bld = await readJson('buildings.json');
-    var bf = await readJson('buildingFloors.json');
-    var nts = await readJson('notes.json');
-    var apm = await readJson('accessPointMeasurements.json');
-    var mr = await readJson('measuredRadios.json');
-    var sv = await readJson('surveys.json');
-    var perSurveyFiles = esxZip.file(/^survey-[a-f0-9\-]+\.json$/);
+    await parseInto(proj, esxZip, { images: true });
+  }
+
+  /* Choose the "before" .esx for the Change / Audit report.
+
+     Its own input, not the drop zone: the drop zone replaces the project being
+     reported on, and a wrong drop there would throw away the work of setting
+     the report up. A file that is not an .esx, or that carries no access
+     points, is refused *here* with the reason on the control, rather than
+     accepted and then rendered as a comparison against nothing. */
+  window.chooseBaseline = async function () {
+    var input = document.getElementById('baselineInput');
+    if (!input) return;
+    input.value = '';
+    input.click();
+  };
+
+  async function loadBaselineFile(file) {
+    baselineError = '';
+    if (!file) return;
+    if (!/\.esx$/i.test(file.name)) {
+      baselineError = 'That is not an .esx file.';
+      baseline = null; baselineName = '';
+      renderReportOpts(); window.renderReport(); return;
+    }
+    try {
+      var zip = await JSZip.loadAsync(await file.arrayBuffer());
+      var parsed = await parseInto({}, zip, { images: false });
+      if (!parsed.accessPoints.length) {
+        baselineError = 'That .esx has no access points in it, so there is '
+          + 'nothing to compare against.';
+        baseline = null; baselineName = '';
+      } else {
+        baseline = parsed;
+        baselineName = file.name;
+      }
+    } catch (err) {
+      baseline = null; baselineName = '';
+      baselineError = 'Could not read that file: ' + err.message;
+    }
+    baselineChanged();
+  }
+
+  window.clearBaseline = function () {
+    baseline = null; baselineName = ''; baselineError = '';
+    baselineChanged();
+  };
+
+  /* Redraw the control, and the document if it is the thing on screen.
+
+     Choosing a file from the Configure step must still leave the Review step
+     correct when it is reached, which is what ``configureDirty`` is for -
+     ``showStage`` re-renders on it. Rendering unconditionally would build the
+     whole document into a hidden canvas on every pick, and on a project with
+     floor plans that is real work for something nobody is looking at. */
+  function baselineChanged() {
+    configureDirty = true;
+    renderReportOpts();
+    if (currentStage === 'review') {
+      window.renderReport();
+      configureDirty = false;
+    }
+  }
+
+  /* Read one .esx into *target*.
+
+     The Change / Audit report needs a second project parsed the same way, and
+     only the same way: a baseline whose AP list was built by slightly
+     different code would report differences that are the parser's rather than
+     the design's. Images are the one part it does not need - the overlay is
+     drawn on the *current* floor plan, with the old positions marked on it -
+     so ``opts.images`` is off for a baseline and a 40 MB before-file costs no
+     object URLs. */
+  async function parseInto(target, zip, popts) {
+    var ap = await readJson('accessPoints.json', zip);
+    var rad = await readJson('simulatedRadios.json', zip);
+    var ant = await readJson('antennaTypes.json', zip);
+    var fp = await readJson('floorPlans.json', zip);
+    var img = await readJson('images.json', zip);
+    var bld = await readJson('buildings.json', zip);
+    var bf = await readJson('buildingFloors.json', zip);
+    var nts = await readJson('notes.json', zip);
+    var apm = await readJson('accessPointMeasurements.json', zip);
+    var mr = await readJson('measuredRadios.json', zip);
+    var sv = await readJson('surveys.json', zip);
+    var perSurveyFiles = zip.file(/^survey-[a-f0-9\-]+\.json$/);
     var perSurveyArrays = [];
     for (var psi = 0; psi < perSurveyFiles.length; psi++) {
       try {
@@ -1104,48 +1205,51 @@
     // Only used when the .esx has been renamed to something that says nothing
     // about the job, so a report never ends up named after "final.esx".
     var pj = null;
-    try { pj = await readJson('project.json'); } catch (e) {}
-    proj.projectName = (pj && pj.project && (pj.project.name || pj.project.title)) || '';
+    try { pj = await readJson('project.json', zip); } catch (e) {}
+    target.projectName = (pj && pj.project && (pj.project.name || pj.project.title)) || '';
     /* Ekahau's own id for this project. It survives every rename, upload and
        download, which is why the column grid calibration is filed under it -
        renaming the file, or the project inside it, must not cost the two
        clicks that set the grid up. */
-    proj.projectId = (pj && pj.project && pj.project.id) || '';
+    target.projectId = (pj && pj.project && pj.project.id) || '';
 
-    proj.accessPoints = (ap && ap.accessPoints) || [];
-    proj.radios = (rad && rad.simulatedRadios) || [];
-    proj.antennas = {};
-    ((ant && ant.antennaTypes) || []).forEach(function (a) { proj.antennas[a.id] = a; });
-    proj.floorPlans = (fp && fp.floorPlans) || [];
-    proj.images = {};
-    ((img && img.images) || []).forEach(function (i) { proj.images[i.id] = i; });
-    proj.buildings = {};
-    ((bld && bld.buildings) || []).forEach(function (b) { proj.buildings[b.id] = b; });
-    proj.buildingFloors = {};
-    ((bf && bf.buildingFloors) || []).forEach(function (x) { proj.buildingFloors[x.floorPlanId] = x; });
+    target.accessPoints = (ap && ap.accessPoints) || [];
+    target.radios = (rad && rad.simulatedRadios) || [];
+    target.antennas = {};
+    ((ant && ant.antennaTypes) || []).forEach(function (a) { target.antennas[a.id] = a; });
+    target.floorPlans = (fp && fp.floorPlans) || [];
+    target.images = {};
+    ((img && img.images) || []).forEach(function (i) { target.images[i.id] = i; });
+    target.buildings = {};
+    ((bld && bld.buildings) || []).forEach(function (b) { target.buildings[b.id] = b; });
+    target.buildingFloors = {};
+    ((bf && bf.buildingFloors) || []).forEach(function (x) { target.buildingFloors[x.floorPlanId] = x; });
     // Notes hang off an AP by id. There is no separate pictureNotes.json in a
     // real project - verified against one carrying both a text note and a
     // photo note: a note is a picture note when its imageIds is non-empty, and
     // such a note can carry no text at all.
-    proj.notes = {};
+    target.notes = {};
     ((nts && nts.notes) || []).forEach(function (n) {
-      if (n && n.id) proj.notes[n.id] = n;
+      if (n && n.id) target.notes[n.id] = n;
     });
-    proj.measurements = (apm && apm.accessPointMeasurements) || [];
-    proj.measuredRadios = (mr && mr.measuredRadios) || [];
-    proj.surveys = (sv && sv.surveys) ? sv.surveys.slice() : [];
+    target.measurements = (apm && apm.accessPointMeasurements) || [];
+    target.measuredRadios = (mr && mr.measuredRadios) || [];
+    target.surveys = (sv && sv.surveys) ? sv.surveys.slice() : [];
     for (var psj = 0; psj < perSurveyArrays.length; psj++) {
       for (var psk = 0; psk < perSurveyArrays[psj].length; psk++) {
-        proj.surveys.push(perSurveyArrays[psj][psk]);
+        target.surveys.push(perSurveyArrays[psj][psk]);
       }
     }
-    proj.imageUrls = {};
-    apDisabled = new Set();
+    target.imageUrls = {};
 
-    for (var i = 0; i < proj.floorPlans.length; i++) {
-      var f = proj.floorPlans[i];
-      await readImageAsUrl(f.bitmapImageId || f.imageId);
+    if (popts && popts.images) {
+      apDisabled = new Set();
+      for (var i = 0; i < target.floorPlans.length; i++) {
+        var f = target.floorPlans[i];
+        await readImageAsUrl(f.bitmapImageId || f.imageId);
+      }
     }
+    return target;
   }
 
   /* The "#" column is 0.58in wide because it holds a number. When a name
@@ -1256,7 +1360,20 @@
     if (opts.imperial === false) return 'meters';
     return 'feet';
   }
-  function fmt(n, dp) { return Number(n).toFixed(dp).replace(/\.?0+$/, ''); }
+  /* Drop a trailing zero that says nothing - 12.50 is 12.5 - but only after a
+     decimal point.
+
+     The old form was `toFixed(dp).replace(/\.?0+$/, '')`, which with no
+     decimals to work on ate the number's own digits: `fmt(20, 0)` returned
+     "2" and `fmt(180, 0)` returned "18". One caller did that in shipped
+     output - the transmit power on an AP Placement Map label - so a design
+     carrying 20 dBm printed "2 dBm" on the drawing an installer works from,
+     and 10 dBm printed "1 dBm". Every other call asks for a decimal, where
+     the point stops the match early, which is why this survived. */
+  function fmt(n, dp) {
+    var s = Number(n).toFixed(dp);
+    return s.indexOf('.') === -1 ? s : s.replace(/0+$/, '').replace(/\.$/, '');
+  }
   // Same, but keeps the decimal it was asked for. A column of heights reads as
   // a column when they all have one.
   function fmtFixed(n, dp) { return Number(n).toFixed(dp); }
@@ -1294,6 +1411,366 @@
     if (byFloor['_none']) order.push({ id: '_none', name: '(No floor plan)' });
     return order;
   }
+
+  /* ══ Comparing two projects ═══════════════════════════════════════════════
+
+     What the Change / Audit report rests on. Kept as plain functions over two
+     parsed projects, with no DOM and no module state, because the awkward
+     parts here are arithmetic and they are worth being able to test directly.
+
+     **Matching is by id first and name second, and never by position.**
+     Ekahau's AP id survives every edit, so where the after-file is a
+     descendant of the before-file - somebody opened the design, moved things
+     and saved, which is the ordinary case - every AP matches exactly and the
+     name is free to have changed. Name matching is the fallback for an AP that
+     was deleted and re-added, and for two files with no shared lineage.
+     Position is deliberately not a key: a moved AP is the thing being looked
+     for, so matching on where it is would hide exactly what the report is for.
+
+     **The trap this has to survive is a re-cropped floor plan.** Coordinates
+     live in full image pixel space, so trimming a plan between the two saves
+     - which is what PlanTrim is for, and he uses it - shifts every coordinate
+     on that floor by the crop offset. Reported naively that is seventy APs
+     that all moved, which is worse than useless: it buries the two that really
+     did. So where a floor's image has changed size the two coordinate spaces
+     are known not to be comparable, the shift is measured as the median
+     displacement of the matched APs, and it is taken out and *said on the
+     page*. Where the image is the same size the spaces are the same and a
+     displacement is a real move. */
+
+  // Below this, a difference is a nudge in the design rather than a decision
+  // to put the AP somewhere else. In metres, because that is what an .esx
+  // stores; the option that sets it names both units.
+  var DEFAULT_MOVE_THRESHOLD_M = 0.5;
+
+  function apCoord(ap) {
+    var loc = ap && ap.location;
+    return (loc && loc.coord) || null;
+  }
+
+  function normName(ap) {
+    return String((ap && ap.name) || '').trim().toLowerCase();
+  }
+
+  /* Pair the APs of two projects. Returns matched pairs plus what is left over
+     on each side. *byName* carries the fallback so a caller can report how a
+     pair was found - an id match and a name match do not deserve equal trust,
+     and the report says which it was. */
+  function matchAccessPoints(beforeAps, afterAps) {
+    var matched = [];
+    var afterById = {};
+    afterAps.forEach(function (a) { if (a && a.id) afterById[a.id] = a; });
+
+    var usedAfter = {};
+    var leftoverBefore = [];
+    beforeAps.forEach(function (b) {
+      var a = b && b.id ? afterById[b.id] : null;
+      if (a && !usedAfter[a.id]) {
+        usedAfter[a.id] = true;
+        matched.push({ before: b, after: a, by: 'id' });
+      } else {
+        leftoverBefore.push(b);
+      }
+    });
+
+    /* Name is a weaker key and is only allowed to match one-to-one. Two APs
+       called "AP" on either side must not pair off arbitrarily: an ambiguous
+       name is treated as no match, so they surface as one removed and one
+       added, which is true, rather than as a pair that silently invented a
+       relationship. */
+    var freeAfter = afterAps.filter(function (a) { return !usedAfter[a.id]; });
+    var afterByName = {};
+    freeAfter.forEach(function (a) {
+      var k = normName(a);
+      if (!k) return;
+      afterByName[k] = afterByName[k] === undefined ? a : null;   // null = ambiguous
+    });
+    var beforeNameCount = {};
+    leftoverBefore.forEach(function (b) {
+      var k = normName(b);
+      if (k) beforeNameCount[k] = (beforeNameCount[k] || 0) + 1;
+    });
+
+    var removed = [];
+    leftoverBefore.forEach(function (b) {
+      var k = normName(b);
+      var a = k && beforeNameCount[k] === 1 ? afterByName[k] : null;
+      if (a && !usedAfter[a.id]) {
+        usedAfter[a.id] = true;
+        matched.push({ before: b, after: a, by: 'name' });
+      } else {
+        removed.push(b);
+      }
+    });
+
+    var added = afterAps.filter(function (a) { return !usedAfter[a.id]; });
+    return { matched: matched, added: added, removed: removed };
+  }
+
+  /* Pair the floors of two projects: by id, then by name. A floor whose id
+     changed but whose name did not is the same floor to everyone except the
+     file. */
+  function matchFloors(beforeFloors, afterFloors) {
+    var pairs = [];
+    var usedAfter = {};
+    var byId = {};
+    afterFloors.forEach(function (f) { if (f && f.id) byId[f.id] = f; });
+    beforeFloors.forEach(function (b) {
+      var a = b && b.id ? byId[b.id] : null;
+      if (a && !usedAfter[a.id]) { usedAfter[a.id] = true; pairs.push({ before: b, after: a }); }
+    });
+    var freeAfter = afterFloors.filter(function (f) { return !usedAfter[f.id]; });
+    beforeFloors.forEach(function (b) {
+      if (pairs.some(function (p) { return p.before === b; })) return;
+      var a = freeAfter.find(function (f) {
+        return !usedAfter[f.id]
+          && String(f.name || '').trim().toLowerCase() === String(b.name || '').trim().toLowerCase()
+          && String(f.name || '').trim() !== '';
+      });
+      if (a) { usedAfter[a.id] = true; pairs.push({ before: b, after: a }); }
+    });
+    return pairs;
+  }
+
+  function median(values) {
+    if (!values.length) return 0;
+    var s = values.slice().sort(function (a, b) { return a - b; });
+    var m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  }
+
+  /* The offset to take out of one floor's before-coordinates, or null.
+
+     Only ever non-null when the floor plan image has *changed size*, which is
+     the observable fact that says the two coordinate spaces are different.
+     Where it has not, a displacement is a real move and must not be explained
+     away - a compensation that fired on an ordinary floor would hide every
+     move on it, which is the more dangerous of the two failures. */
+  function cropShiftFor(pair, pairsOnFloor) {
+    var b = pair.before, a = pair.after;
+    if (!b || !a) return null;
+    var sameSize = Number(b.width) === Number(a.width)
+                && Number(b.height) === Number(a.height);
+    if (sameSize) return null;
+    var dxs = [], dys = [];
+    pairsOnFloor.forEach(function (p) {
+      var cb = apCoord(p.before), ca = apCoord(p.after);
+      if (cb && ca) { dxs.push(ca.x - cb.x); dys.push(ca.y - cb.y); }
+    });
+    // Two points cannot tell a shift from a pair of moves.
+    if (dxs.length < 3) return null;
+    return { dx: median(dxs), dy: median(dys), count: dxs.length };
+  }
+
+  function deg(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
+
+  /* How far apart two angles are, the short way round. 359 and 1 are two
+     degrees apart, not three hundred and fifty eight - and an antenna nudged
+     across north is the case that gets this wrong. */
+  function angleDelta(a, b) {
+    if (a === null || b === null) return null;
+    var d = ((a - b) % 360 + 360) % 360;
+    return d > 180 ? 360 - d : d;
+  }
+
+  /* The radio a comparison reads, for either project. ``primaryRadio`` above
+     answers the same question for the open project only, off module state; a
+     baseline has its own radio list and cannot use it. */
+  function radioIndexFor(project) {
+    var byAp = {};
+    ((project && project.radios) || []).forEach(function (r) {
+      if (!r || !r.accessPointId) return;
+      var cur = byAp[r.accessPointId];
+      if (!cur || (r.radioTechnology === 'IEEE802_11' && cur.radioTechnology !== 'IEEE802_11')) {
+        byAp[r.accessPointId] = r;
+      }
+    });
+    return byAp;
+  }
+
+  /* What is different about one matched pair. An empty list means the AP is
+     unchanged, which is most of them on a real comparison and is why the
+     report leads with the changes rather than the inventory. */
+  function changesFor(pair, ctxInfo) {
+    var b = pair.before, a = pair.after;
+    var rb = ctxInfo.beforeRadios[b.id] || null;
+    var ra = ctxInfo.afterRadios[a.id] || null;
+    var out = [];
+
+    if (String(b.name || '') !== String(a.name || '')) {
+      out.push({ kind: 'renamed', from: b.name || '(unnamed)', to: a.name || '(unnamed)' });
+    }
+    if (String(b.model || '') !== String(a.model || '')) {
+      out.push({ kind: 'model', from: b.model || '—', to: a.model || '—' });
+    }
+    if (String(b.vendor || '') !== String(a.vendor || '')) {
+      out.push({ kind: 'vendor', from: b.vendor || '—', to: a.vendor || '—' });
+    }
+
+    var lb = b.location || {}, la = a.location || {};
+    var floorChanged = ctxInfo.floorKeyOf(lb.floorPlanId, 'before')
+                    !== ctxInfo.floorKeyOf(la.floorPlanId, 'after');
+    if (floorChanged) {
+      out.push({ kind: 'floor',
+                 from: ctxInfo.floorNameOf(lb.floorPlanId, 'before'),
+                 to: ctxInfo.floorNameOf(la.floorPlanId, 'after') });
+    }
+
+    var cb = apCoord(b), ca = apCoord(a);
+    if (cb && ca && !floorChanged) {
+      var shift = ctxInfo.shiftFor(la.floorPlanId) || { dx: 0, dy: 0 };
+      var dx = ca.x - (cb.x + shift.dx);
+      var dy = ca.y - (cb.y + shift.dy);
+      var px = Math.sqrt(dx * dx + dy * dy);
+      var mpu = ctxInfo.metersPerUnitOf(la.floorPlanId);
+      var metres = mpu ? px * mpu : null;
+      if (metres !== null && metres >= ctxInfo.threshold) {
+        out.push({ kind: 'moved', metres: metres, dx: dx, dy: dy });
+      }
+    } else if ((cb && !ca) || (!cb && ca)) {
+      out.push({ kind: cb ? 'unplaced' : 'placed' });
+    }
+
+    var azB = deg(rb && rb.antennaDirection), azA = deg(ra && ra.antennaDirection);
+    var dAz = angleDelta(azA, azB);
+    if (dAz !== null && dAz >= 1) {
+      out.push({ kind: 'azimuth', from: azB, to: azA, delta: dAz });
+    }
+    var tB = deg(rb && rb.antennaTilt), tA = deg(ra && ra.antennaTilt);
+    if (tB !== null && tA !== null && Math.abs(tA - tB) >= 1) {
+      out.push({ kind: 'tilt', from: tB, to: tA });
+    }
+    var hB = deg(rb && rb.antennaHeight), hA = deg(ra && ra.antennaHeight);
+    if (hB !== null && hA !== null && Math.abs(hA - hB) >= 0.05) {
+      out.push({ kind: 'height', from: hB, to: hA });
+    }
+    var mB = (rb && rb.antennaMounting) || '', mA = (ra && ra.antennaMounting) || '';
+    if (String(mB) !== String(mA)) {
+      out.push({ kind: 'mount', from: mB || '—', to: mA || '—' });
+    }
+    var atB = (rb && rb.antennaTypeId) || '', atA = (ra && ra.antennaTypeId) || '';
+    if (String(atB) !== String(atA)) {
+      out.push({ kind: 'antenna',
+                 from: ctxInfo.antennaNameOf(atB, 'before'),
+                 to: ctxInfo.antennaNameOf(atA, 'after') });
+    }
+    return out;
+  }
+
+  /* Compare two parsed projects.
+
+     Pure: it reads the two objects it is handed and nothing else, which is what
+     makes it testable without a browser. *opts.threshold* is in metres. */
+  function compareProjects(before, after, opts) {
+    opts = opts || {};
+    var threshold = typeof opts.threshold === 'number'
+      ? opts.threshold : DEFAULT_MOVE_THRESHOLD_M;
+
+    var beforeFloors = (before.floorPlans || []);
+    var afterFloors = (after.floorPlans || []);
+    var floorPairs = matchFloors(beforeFloors, afterFloors);
+
+    // One key per floor, shared by both sides, so "did it change floor" is
+    // asked of the building rather than of two unrelated id spaces.
+    var keyByBefore = {}, keyByAfter = {};
+    floorPairs.forEach(function (p, i) {
+      keyByBefore[p.before.id] = 'pair-' + i;
+      keyByAfter[p.after.id] = 'pair-' + i;
+    });
+    function floorKeyOf(id, side) {
+      if (!id) return '_none';
+      var m = side === 'before' ? keyByBefore[id] : keyByAfter[id];
+      return m || (side + ':' + id);
+    }
+    function floorObj(id, side) {
+      var list = side === 'before' ? beforeFloors : afterFloors;
+      return list.find(function (f) { return f.id === id; }) || null;
+    }
+    function floorNameOf(id, side) {
+      var f = floorObj(id, side);
+      return (f && f.name) || '(no floor plan)';
+    }
+    function antennaNameOf(id, side) {
+      if (!id) return '—';
+      var map = (side === 'before' ? before.antennas : after.antennas) || {};
+      return (map[id] && map[id].name) || id;
+    }
+    function metersPerUnitOf(id) {
+      var f = floorObj(id, 'after');
+      var v = f && Number(f.metersPerUnit);
+      return v && isFinite(v) && v > 0 ? v : null;
+    }
+
+    var paired = matchAccessPoints(before.accessPoints || [], after.accessPoints || []);
+
+    /* Crop shifts are worked out per floor, and they need the pairs on that
+       floor, so this runs before the per-AP comparison rather than inside it. */
+    var shifts = {};
+    var floorNotes = [];
+    floorPairs.forEach(function (fp) {
+      var on = paired.matched.filter(function (m) {
+        var la = (m.after.location || {}).floorPlanId;
+        var lb = (m.before.location || {}).floorPlanId;
+        return la === fp.after.id && lb === fp.before.id;
+      });
+      var shift = cropShiftFor(fp, on);
+      if (shift && (Math.abs(shift.dx) > 0.5 || Math.abs(shift.dy) > 0.5)) {
+        shifts[fp.after.id] = shift;
+        floorNotes.push({
+          floorId: fp.after.id,
+          name: fp.after.name || '(unnamed)',
+          beforeSize: [Number(fp.before.width) || 0, Number(fp.before.height) || 0],
+          afterSize: [Number(fp.after.width) || 0, Number(fp.after.height) || 0],
+          dx: shift.dx, dy: shift.dy, count: shift.count,
+        });
+      }
+    });
+
+    var info = {
+      beforeRadios: radioIndexFor(before),
+      afterRadios: radioIndexFor(after),
+      floorKeyOf: floorKeyOf,
+      floorNameOf: floorNameOf,
+      antennaNameOf: antennaNameOf,
+      metersPerUnitOf: metersPerUnitOf,
+      shiftFor: function (id) { return shifts[id] || null; },
+      threshold: threshold,
+    };
+
+    var changed = [];
+    var unchanged = [];
+    paired.matched.forEach(function (m) {
+      var ch = changesFor(m, info);
+      var rec = { before: m.before, after: m.after, by: m.by, changes: ch,
+                  floorId: (m.after.location || {}).floorPlanId || '_none' };
+      if (ch.length) changed.push(rec); else unchanged.push(rec);
+    });
+
+    return {
+      threshold: threshold,
+      matched: paired.matched.length,
+      matchedByName: paired.matched.filter(function (m) { return m.by === 'name'; }).length,
+      added: paired.added,
+      removed: paired.removed,
+      changed: changed,
+      unchanged: unchanged,
+      floorPairs: floorPairs,
+      floorNotes: floorNotes,
+      addedFloors: afterFloors.filter(function (f) {
+        return !floorPairs.some(function (p) { return p.after.id === f.id; });
+      }),
+      removedFloors: beforeFloors.filter(function (f) {
+        return !floorPairs.some(function (p) { return p.before.id === f.id; });
+      }),
+    };
+  }
+
+  window.WDCompare = {
+    match: matchAccessPoints,
+    matchFloors: matchFloors,
+    compare: compareProjects,
+    angleDelta: angleDelta,
+  };
 
   // Ekahau records the storey number on buildingFloors, not on the floor plan
   // itself, and plenty of projects never set it. Returns null when there is no
@@ -1809,6 +2286,38 @@
         + '</span>'
         + '<button type="button" class="btn btn-secondary btn-sm rep-btn-right" '
         + 'onclick="openGridRef()">' + WD.esc(gridRefLabel) + '</button>'
+        + '</div>';
+    }
+    /* The before-file. The button carries the chosen file's name rather than
+       a fixed word, because "which file am I comparing against" is the only
+       question at this control and reading it off the button beats opening a
+       dialog to find out. A refusal is shown here too, in the sentence the
+       loader wrote - a file rejected silently reads as a picker that does
+       nothing. */
+    if (opt.type === 'baseline-button') {
+      var chosen = !!baseline;
+      var btnLabel = chosen ? baselineName : 'Choose the earlier .esx…';
+      return '<div class="rep-check with-desc">'
+        + '<span class="rep-check-body">'
+        +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
+        +   (desc ? '<span class="rep-check-desc">' + WD.esc(desc) + '</span>' : '')
+        +   (baselineError
+              ? '<span class="rep-check-desc rep-warn">' + WD.esc(baselineError) + '</span>'
+              : '')
+        +   (chosen
+              ? '<span class="rep-check-desc">Comparing <b>' + WD.esc(fileName)
+                + '</b> against <b>' + WD.esc(baselineName) + '</b>, in that order: '
+                + 'the file open in this tool is the "after".</span>'
+              : '')
+        + '</span>'
+        + '<span class="rep-btn-right">'
+        + '<button type="button" class="btn btn-secondary btn-sm" '
+        + 'onclick="chooseBaseline()">' + WD.esc(btnLabel) + '</button>'
+        + (chosen
+            ? ' <button type="button" class="btn btn-secondary btn-sm" '
+              + 'onclick="clearBaseline()">Clear</button>'
+            : '')
+        + '</span>'
         + '</div>';
     }
     if (opt.type === 'text') {
@@ -3291,6 +3800,16 @@
   function apMarkerLabel(ap, opts, ctx) {
     var main = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
     var extra = [];
+    /* First of the extras on purpose. The others describe the AP; this one
+       says where to stand to find it, which is the question somebody holding
+       the drawing is actually asking. An AP with no coordinates, on a floor
+       with no calibration, or outside the lettered area contributes nothing
+       rather than a placeholder - a bare dash printed on a plan reads as a
+       grid reference somebody failed to fill in. */
+    if (opts.labelGrid) {
+      var gref = gridRefForAp(ap);
+      if (gref) extra.push(gref);
+    }
     if (opts.labelModel && ap.model) extra.push(ap.model);
     if (opts.labelRadio && ctx) {
       var r = ctx.primaryRadio(ap.id);
@@ -5361,6 +5880,340 @@
 
 
 
+  /* ══ Change / Audit report ════════════════════════════════════════════════
+
+     Two .esx files, and what is different between them. The comparison itself
+     is ``compareProjects`` further up, which is deliberately free of the DOM;
+     everything here is presentation. */
+
+  var CHANGE_WORDS = {
+    renamed: 'Renamed', model: 'Model', vendor: 'Vendor', floor: 'Floor',
+    moved: 'Moved', azimuth: 'Azimuth', tilt: 'Tilt', height: 'Height',
+    mount: 'Mount', antenna: 'Antenna', unplaced: 'Taken off the plan',
+    placed: 'Placed on the plan',
+  };
+
+  function describeChange(c, opts, ctx) {
+    // No digit count: fmtLength's own default is one decimal in feet and two
+    // in metres, which is what every other table in this suite prints, and a
+    // report that rounds differently from its siblings reads as a different
+    // measurement rather than the same one.
+    if (c.kind === 'moved') return fmtLength(c.metres, opts);
+    if (c.kind === 'height') {
+      return fmtLength(c.from, opts) + ' → ' + fmtLength(c.to, opts);
+    }
+    if (c.kind === 'azimuth') {
+      return fmt(c.from, 0) + '° → ' + fmt(c.to, 0) + '° ('
+        + fmt(c.delta, 0) + '°)';
+    }
+    if (c.kind === 'tilt') {
+      return fmt(c.from, 0) + '° → ' + fmt(c.to, 0) + '°';
+    }
+    if (c.kind === 'unplaced' || c.kind === 'placed') return '';
+    return String(c.from) + ' → ' + String(c.to);
+  }
+
+  /* One line naming every difference on one AP, so the table holds a row per
+     AP rather than a row per difference. An AP that was renamed *and* moved is
+     one decision somebody made, and splitting it across two rows makes the
+     reader reassemble it. */
+  function changeSummaryCell(rec, opts, ctx) {
+    return rec.changes.map(function (c) {
+      var word = CHANGE_WORDS[c.kind] || c.kind;
+      var detail = describeChange(c, opts, ctx);
+      return '<span class="rep-chg rep-chg--' + WD.escAttr(c.kind) + '">'
+        + WD.esc(word) + (detail ? ' ' + WD.esc(detail) : '') + '</span>';
+    }).join(' ');
+  }
+
+  function deltaCell(before, after) {
+    var d = after - before;
+    var sign = d > 0 ? '+' : d < 0 ? '−' : '';
+    var cls = d > 0 ? 'rep-delta-up' : d < 0 ? 'rep-delta-down' : 'rep-delta-same';
+    return '<span class="' + cls + '">' + sign + (d === 0 ? '0' : Math.abs(d)) + '</span>';
+  }
+
+  /* The overlay: the current floor plan, with where things used to be marked
+     on it. Drawn on the *after* plan on purpose - that is the drawing somebody
+     is holding, and rendering the old one would put the changes on a plan that
+     no longer matches the building. */
+  function renderAuditOverlay(fp, result, opts, ctx) {
+    var url = floorPlanImageUrl(fp);
+    if (!url) return '';
+    var W = fp.width || 1, H = fp.height || 1;
+    var minDim = Math.min(W, H);
+    var dotR = minDim * 0.012;
+    var sw = minDim * 0.003;
+    var shift = null;
+    result.floorNotes.forEach(function (n) { if (n.floorId === fp.id) shift = n; });
+
+    function onThisFloor(loc) { return loc && loc.floorPlanId === fp.id; }
+    var g = '';
+    var drew = 0;
+
+    result.changed.forEach(function (rec) {
+      if (!onThisFloor(rec.after.location)) return;
+      var ca = apCoord(rec.after);
+      if (!ca) return;
+      var moved = rec.changes.find(function (c) { return c.kind === 'moved'; });
+      if (moved) {
+        var cb = apCoord(rec.before);
+        if (cb) {
+          var fx = cb.x + (shift ? shift.dx : 0);
+          var fy = cb.y + (shift ? shift.dy : 0);
+          g += '<circle class="rep-aud-was" cx="' + fx + '" cy="' + fy + '" r="' + dotR
+            + '" stroke-width="' + sw + '"/>'
+            + '<line class="rep-aud-move" x1="' + fx + '" y1="' + fy + '" x2="' + ca.x
+            + '" y2="' + ca.y + '" stroke-width="' + sw + '"/>';
+        }
+      }
+      g += '<circle class="rep-aud-changed" cx="' + ca.x + '" cy="' + ca.y + '" r="' + dotR
+        + '" stroke-width="' + sw + '"/>';
+      drew++;
+    });
+    result.added.forEach(function (ap) {
+      if (!onThisFloor(ap.location)) return;
+      var c = apCoord(ap); if (!c) return;
+      g += '<circle class="rep-aud-added" cx="' + c.x + '" cy="' + c.y + '" r="' + dotR
+        + '" stroke-width="' + sw + '"/>';
+      drew++;
+    });
+    /* A removed AP is drawn where it used to be, corrected for a re-crop if
+       this floor had one - otherwise it lands wherever the old coordinate
+       space happened to put it, which on a trimmed plan is off the sheet. */
+    result.removed.forEach(function (ap) {
+      var loc = ap.location || {};
+      var pairedBefore = result.floorPairs.find(function (p) { return p.after.id === fp.id; });
+      if (!pairedBefore || loc.floorPlanId !== pairedBefore.before.id) return;
+      var c = apCoord(ap); if (!c) return;
+      var x = c.x + (shift ? shift.dx : 0), y = c.y + (shift ? shift.dy : 0);
+      g += '<g class="rep-aud-removed" transform="translate(' + x + ',' + y + ')">'
+        + '<line x1="' + (-dotR) + '" y1="' + (-dotR) + '" x2="' + dotR + '" y2="' + dotR
+        + '" stroke-width="' + sw + '"/>'
+        + '<line x1="' + (-dotR) + '" y1="' + dotR + '" x2="' + dotR + '" y2="' + (-dotR)
+        + '" stroke-width="' + sw + '"/></g>';
+      drew++;
+    });
+    result.unchanged.forEach(function (rec) {
+      if (!onThisFloor(rec.after.location)) return;
+      var c = apCoord(rec.after); if (!c) return;
+      g += '<circle class="rep-aud-same" cx="' + c.x + '" cy="' + c.y + '" r="' + (dotR * 0.6)
+        + '" stroke-width="' + (sw * 0.6) + '"/>';
+    });
+
+    if (!drew) return '';
+    return '<section class="rep-floor-section">'
+      + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + ' — what changed</h2>'
+      + '<div class="rep-overview">'
+      +   '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
+      +     '<img src="' + url + '" alt="Floor plan">'
+      +     '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + g + '</svg>'
+      +   '</div>'
+      +   '<div class="rep-overview-key rep-aud-key">'
+      +     '<span class="rep-aud-k rep-aud-k--added">Added</span>'
+      +     '<span class="rep-aud-k rep-aud-k--changed">Changed</span>'
+      +     '<span class="rep-aud-k rep-aud-k--was">Was here</span>'
+      +     '<span class="rep-aud-k rep-aud-k--removed">Removed</span>'
+      +     '<span class="rep-aud-k rep-aud-k--same">Unchanged</span>'
+      +   '</div>'
+      + '</div>'
+      + '</section>';
+  }
+
+  function renderAuditReport(aps, opts, ctx) {
+    /* No baseline is the report's ordinary starting state, not a fault. It
+       says which control chooses one and where that control is, because a
+       page reading "nothing to show" sends somebody looking for a file they
+       have already got. */
+    if (!baseline) {
+      return '<div class="rep-empty rep-empty--wide">'
+        + '<h2>Choose the earlier .esx to compare against</h2>'
+        + '<p>This report needs two files: the project open in this tool is the '
+        + '<b>after</b>, and the one you choose is the <b>before</b>.</p>'
+        + '<p>Use <b>Choose the earlier .esx…</b> in the options panel on the '
+        + 'left, under <b>Earlier project to compare against</b>. Nothing is '
+        + 'written to either file, and the earlier one is only read.</p>'
+        + (baselineError ? '<p class="rep-warn">' + WD.esc(baselineError) + '</p>' : '')
+        + '</div>';
+    }
+
+    var threshold = Number(opts.moveThreshold);
+    if (!isFinite(threshold) || threshold < 0) threshold = DEFAULT_MOVE_THRESHOLD_M;
+    var result = compareProjects(baseline, proj, { threshold: threshold });
+
+    var head = opts.cover
+      ? ctx.cover(proj.accessPoints.length, ctx.dateStr, 'Access points')
+      : ctx.inlineHeader(proj.accessPoints.length, ctx.dateStr, 'Access points');
+
+    /* ── which two files, in which order ─────────────────────────────────── */
+    var nBefore = baseline.accessPoints.length;
+    var nAfter = proj.accessPoints.length;
+    var whichFiles = '<section class="rep-floor-section">'
+      + '<h2 class="rep-floor-title">What is being compared</h2>'
+      + '<table class="rep-ap-table">'
+      + '<colgroup><col style="width:18%"><col style="width:46%"><col style="width:36%"></colgroup>'
+      + '<thead><tr><th></th><th>File</th><th>Project name</th></tr></thead><tbody>'
+      + '<tr><td class="rep-name">Before</td><td class="rep-name">' + WD.esc(baselineName)
+      +   '</td><td class="rep-name">' + WD.esc(baseline.projectName || '—') + '</td></tr>'
+      + '<tr><td class="rep-name">After</td><td class="rep-name">' + WD.esc(fileName)
+      +   '</td><td class="rep-name">' + WD.esc(proj.projectName || '—') + '</td></tr>'
+      + '</tbody></table>'
+      + '<p class="rep-aud-note">A movement counts as a move at '
+      +   WD.esc(fmtLength(threshold, opts)) + ' or more. Smaller differences are '
+      +   'left out, because a design nudged by a few centimetres is not an access '
+      +   'point somebody put somewhere else.</p>'
+      + (result.matchedByName
+          ? '<p class="rep-aud-note">' + result.matchedByName + ' access point'
+            + (result.matchedByName === 1 ? ' was' : 's were')
+            + ' paired by name rather than by the id Ekahau gives them, which '
+            + 'happens when one is deleted and re-added. Those pairings are a '
+            + 'judgement rather than a fact.</p>'
+          : '')
+      + '</section>';
+
+    /* ── the counts ──────────────────────────────────────────────────────── */
+    var bRadios = radioIndexFor(baseline), aRadios = radioIndexFor(proj);
+    function countDirectional(project, idx) {
+      return (project.accessPoints || []).filter(function (a) {
+        return radioIsDirectional(idx[a.id]);
+      }).length;
+    }
+    var statRows = [
+      ['Access points', nBefore, nAfter],
+      ['Floor plans', (baseline.floorPlans || []).length, (proj.floorPlans || []).length],
+      ['Directional APs', countDirectional(baseline, bRadios), countDirectional(proj, aRadios)],
+      ['Radios', (baseline.radios || []).length, (proj.radios || []).length],
+    ];
+    var stats = '<section class="rep-floor-section">'
+      + '<h2 class="rep-floor-title">Before and after</h2>'
+      + '<table class="rep-ap-table">'
+      + '<colgroup><col style="width:46%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup>'
+      + '<thead><tr><th>Count</th><th class="rep-num">Before</th>'
+      +   '<th class="rep-num">After</th><th class="rep-num">Change</th></tr></thead><tbody>'
+      + statRows.map(function (r) {
+          return '<tr><td class="rep-name">' + WD.esc(r[0]) + '</td>'
+            + '<td class="rep-az">' + r[1] + '</td>'
+            + '<td class="rep-az">' + r[2] + '</td>'
+            + '<td class="rep-az">' + deltaCell(r[1], r[2]) + '</td></tr>';
+        }).join('')
+      + '<tr><td class="rep-name">Added</td><td class="rep-az">—</td>'
+      +   '<td class="rep-az">' + result.added.length + '</td><td class="rep-az"></td></tr>'
+      + '<tr><td class="rep-name">Removed</td><td class="rep-az">' + result.removed.length
+      +   '</td><td class="rep-az">—</td><td class="rep-az"></td></tr>'
+      + '<tr><td class="rep-name">Changed</td><td class="rep-az">—</td>'
+      +   '<td class="rep-az">' + result.changed.length + '</td><td class="rep-az"></td></tr>'
+      + '<tr><td class="rep-name">Unchanged</td><td class="rep-az">—</td>'
+      +   '<td class="rep-az">' + result.unchanged.length + '</td><td class="rep-az"></td></tr>'
+      + '</tbody></table>'
+      + '</section>';
+
+    /* ── a re-cropped plan, said out loud ────────────────────────────────── */
+    var cropNote = '';
+    if (result.floorNotes.length) {
+      cropNote = '<section class="rep-floor-section">'
+        + '<h2 class="rep-floor-title">Floor plans that were re-cropped</h2>'
+        + '<p class="rep-aud-note">Positions inside an .esx are measured from the '
+        + 'corner of the floor plan image, so trimming a plan moves every '
+        + 'coordinate on it by the same amount. These floors changed size between '
+        + 'the two files. The shift has been measured and taken out, so what is '
+        + 'listed below is movement relative to the building rather than to the '
+        + 'image — without that, every access point on these floors would be '
+        + 'reported as having moved.</p>'
+        + '<table class="rep-ap-table">'
+        + '<colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup>'
+        + '<thead><tr><th>Floor</th><th class="rep-num">Before</th>'
+        +   '<th class="rep-num">After</th><th class="rep-num">Shift taken out</th></tr></thead><tbody>'
+        + result.floorNotes.map(function (n) {
+            return '<tr><td class="rep-name">' + WD.esc(n.name) + '</td>'
+              + '<td class="rep-az">' + n.beforeSize[0] + '×' + n.beforeSize[1] + '</td>'
+              + '<td class="rep-az">' + n.afterSize[0] + '×' + n.afterSize[1] + '</td>'
+              + '<td class="rep-az">' + fmt(n.dx, 0) + ', ' + fmt(n.dy, 0) + ' px</td></tr>';
+          }).join('')
+        + '</tbody></table></section>';
+    }
+
+    /* ── the changes, per floor ──────────────────────────────────────────── */
+    function apRowsTable(title, rows, withChanges) {
+      if (!rows.length) return '';
+      return '<section class="rep-floor-section">'
+        + '<h2 class="rep-floor-title">' + WD.esc(title) + ' (' + rows.length + ')</h2>'
+        + '<table class="rep-ap-table">'
+        + (withChanges
+            ? '<colgroup><col style="width:30%"><col style="width:20%"><col style="width:50%"></colgroup>'
+              + '<thead><tr><th>Access point</th><th>Floor</th><th>What changed</th></tr></thead>'
+            : '<colgroup><col style="width:34%"><col style="width:24%"><col style="width:42%"></colgroup>'
+              + '<thead><tr><th>Access point</th><th>Floor</th><th>Model</th></tr></thead>')
+        + '<tbody>' + rows.join('') + '</tbody></table></section>';
+    }
+
+    function floorNameForAp(ap, project) {
+      var id = (ap.location || {}).floorPlanId;
+      var f = (project.floorPlans || []).find(function (x) { return x.id === id; });
+      return (f && f.name) || '—';
+    }
+
+    var changedRows = result.changed.slice().sort(function (a, b) {
+      return String(a.after.name || '').localeCompare(String(b.after.name || ''),
+                                                      undefined, { numeric: true });
+    }).map(function (rec) {
+      return '<tr>'
+        + '<td class="rep-name">' + WD.esc(rec.after.name || '(unnamed)') + '</td>'
+        + '<td class="rep-name">' + WD.esc(floorNameForAp(rec.after, proj)) + '</td>'
+        + '<td>' + changeSummaryCell(rec, opts, ctx) + '</td>'
+        + '</tr>';
+    });
+    var addedRows = result.added.slice().sort(function (a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true });
+    }).map(function (ap) {
+      return '<tr><td class="rep-name">' + WD.esc(ap.name || '(unnamed)') + '</td>'
+        + '<td class="rep-name">' + WD.esc(floorNameForAp(ap, proj)) + '</td>'
+        + '<td class="rep-name">' + WD.esc(ap.model || '—') + '</td></tr>';
+    });
+    var removedRows = result.removed.slice().sort(function (a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true });
+    }).map(function (ap) {
+      return '<tr><td class="rep-name">' + WD.esc(ap.name || '(unnamed)') + '</td>'
+        + '<td class="rep-name">' + WD.esc(floorNameForAp(ap, baseline)) + '</td>'
+        + '<td class="rep-name">' + WD.esc(ap.model || '—') + '</td></tr>';
+    });
+
+    var nothingChanged = '';
+    if (!result.changed.length && !result.added.length && !result.removed.length) {
+      nothingChanged = '<section class="rep-floor-section">'
+        + '<h2 class="rep-floor-title">Nothing changed</h2>'
+        + '<p class="rep-aud-note">All ' + result.unchanged.length + ' access point'
+        + (result.unchanged.length === 1 ? ' is' : 's are')
+        + ' the same in both files: same place, same aim, same mount, same hardware. '
+        + 'That is a result, not an empty report.</p></section>';
+    }
+
+    var floorSections = '';
+    if (opts.overlay !== false) {
+      sortedFloorOrder({}).forEach(function (fp) {
+        if (fp.id === '_none') return;
+        floorSections += renderAuditOverlay(fp, result, opts, ctx);
+      });
+    }
+
+    /* The notes pages are unbounded, so they go last and they go in the return
+       expression - see tests/test_ap_notes_last.py, and the AP Placement Map
+       that appended them twenty lines early and put the compass page after
+       the lot. */
+    return head + whichFiles + stats + cropNote
+      + nothingChanged
+      + apRowsTable('Changed', changedRows, true)
+      + apRowsTable('Added', addedRows, false)
+      + apRowsTable('Removed', removedRows, false)
+      + floorSections
+      + REPORT_FOOTER
+      /* Every access point, not the filtered list. This report hides the AP
+         filter panel (``noApFilter``), and with it hidden ``renderReport``
+         defaults "include omni" to off - so passing the filtered list here
+         would quietly drop the notes on every omni AP in the project, on a
+         page nobody had a control to correct. */
+      + apNotesPages(proj.accessPoints, opts, ctx);
+  }
+
   function renderAimReport(aps, opts, ctx) {
     var head = opts.cover
       ? ctx.cover(aps.length, ctx.dateStr, 'Access points to aim')
@@ -6765,6 +7618,10 @@
           description: 'A second line under the name, e.g. "ch 36 \u00b7 15 dBm".' },
         { id: 'labelHeight', label: 'Add mount height to each label', default: false,
           description: 'A second line under the name, e.g. "3.0 m".' },
+        { id: 'labelGrid', label: 'Add the column grid reference to each label', default: false,
+          description: 'A second line under the name, e.g. "C-4" — the nearest column-grid intersection, which is the coordinate system the crew on site already uses. Set the grid up first with the button below; until at least one floor is calibrated this adds nothing.' },
+        { id: '_gridRefSetup', type: 'gridref-button', label: 'Set up column grid…',
+          description: 'Click two intersections you can name on each floor plan. Nothing is read off the drawing. This is the building’s own column grid — not the section grid above, which only decides how a large floor is split across pages.' },
         { id: 'showCones', label: 'Show aiming arrows on directional APs', default: false,
           description: 'Off by default \u2014 this map is about where the APs go. The Antenna Aim Sheet covers aiming.' },
         { id: 'inclDirectional', label: 'Include directional APs', default: true,
@@ -7028,18 +7885,52 @@
       output: 'A diff, with the changes listed per floor',
       docName: 'Change Report',
       coverBrand: 'Report · Change / Audit',
-      status: 'coming-soon',
+      status: 'ready',
       preview: PREVIEW_AUDIT,
       bestFor: 'Post-remediation write-ups, redesign hand-offs, and "prove we did what we said" audits.',
+      noApFilter: true,
       sections: [
         { icon: '🔍', title: 'Compare stats',
-          description: 'Before-and-after side-by-side: AP counts, radio counts, floor counts, band mix. Deltas rendered with signed arrows.' },
-        { icon: '➕', title: 'Added / removed / moved',
-          description: 'One row per change with the AP name, floor, and what changed (position, azimuth, height, model, or presence).' },
+          description: 'Before-and-after side-by-side: access point, radio and floor counts, with the change on each.' },
+        { icon: '➕', title: 'Added / removed / changed',
+          description: 'One row per access point with the name, floor, and everything that changed on it — position, azimuth, tilt, height, mount, antenna, model or name.' },
         { icon: '🗺️', title: 'Overlay diff',
-          description: 'Per-floor overlay showing removed APs faded, unchanged APs green, moved APs with a dotted line to their new position, added APs bright orange.' },
+          description: 'Per-floor overlay on the current plan: added, changed with a line back to where it was, removed, and unchanged.' },
       ],
-      sidebar: [],
+      sidebar: [
+        { id: '_baseline', type: 'baseline-button',
+          label: 'Earlier project to compare against',
+          description: 'The "before" file. The project open in this tool is the "after". Neither file is written to.' },
+        { id: 'moveThreshold', type: 'select', label: 'Count as moved when it moved', default: '0.5',
+          options: [
+            { value: '0',   label: 'Any distance at all' },
+            { value: '0.5', label: '0.5 m (1.6 ft) or more' },
+            { value: '1',   label: '1 m (3.3 ft) or more' },
+            { value: '3',   label: '3 m (9.8 ft) or more' },
+          ],
+          description: 'Below this, a difference in position is treated as a nudge in the design rather than a decision to put the access point somewhere else. Stated on the report itself, so whoever reads it knows what was left out.' },
+        { id: 'overlay', label: 'Per-floor overlay drawings', default: true,
+          description: 'The current floor plan with the changes marked on it: added, changed, where a moved AP used to be, and removed. Off makes this a tables-only document.' },
+        { id: 'units', type: 'select', label: 'Measurement units', default: 'feet',
+          options: [
+            { value: 'feet',   label: 'Feet' },
+            { value: 'meters', label: 'Metres' },
+          ],
+          description: 'Distances and heights are written in this unit. An .esx stores everything in metres, so this is a display choice; it does not change either project.' },
+        { id: 'cover', label: 'Cover page', default: true,
+          description: 'A title page naming both files. Off puts the same information in a header strip instead.' },
+        { id: 'confidential', label: 'Confidentiality notice in footer', default: false,
+          description: 'Adds "CONFIDENTIAL" to the report footer.' },
+        { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'never',
+          options: [
+            { value: 'auto',   label: 'Auto — when the project has notes' },
+            { value: 'always', label: 'Always include' },
+            { value: 'never',  label: 'Never include' },
+          ],
+          description: 'A page per floor listing the notes recorded against each AP on site. Defaults to Never here, because a change report is usually the document that gets handed over and site notes are often your own working annotations. Text only; a note with a photo is listed and marked, but the image is not printed.' },
+      ],
+      render: renderAuditReport,
+      postRender: function (host, opts) { applyPageOrientation(host, opts); },
     },
     coverage: {
       id: 'coverage',

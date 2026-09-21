@@ -2814,6 +2814,15 @@ body.tool-cloud .toolbar input.search:focus {
 .match-badge.mb-manual::before { background: var(--accent-soft); }
 .match-badge.mb-orphan::before { background: var(--danger); }
 
+/* The External override sits beside the match badge rather than replacing it:
+   the two say different things - what kind of pairing this is, and whose work
+   it is - and a mark that hid the pairing would cost him the more important of
+   the two. Only drawn where a mark exists, so a row that reads External
+   because the owner genuinely is somebody else carries nothing extra. */
+.match-badge.mb-ovr { margin-left: 6px; }
+.match-badge.mb-ovr.ovr-external::before { background: var(--attn); }
+.match-badge.mb-ovr.ovr-mine::before     { background: var(--ok); }
+
 /* Proven identical is the one state worth reading without looking for it - it
    is the answer to "is this done". */
 .match-badge.mb-id { color: var(--ok); }
@@ -3840,6 +3849,26 @@ body.tool-cloud .toolbar input.search:focus {
 [data-theme="light"] .jump-letter.jump-all:hover { color: var(--blue-dark); }
 
 .modal.peek.merge-modal { width: 780px; height: 660px; max-width: 94vw; max-height: 90vh; }
+
+/* Which folder the files below came from. A flat list of two hundred files
+   from eight folders is a list nobody can check, and checking it is the whole
+   reason the preview is on screen before anything moves. */
+.merge-src-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; padding: 7px 10px 5px;
+  font-size: 12px; font-weight: 700; color: var(--text);
+  background: var(--bg-2); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0;
+}
+.merge-src-n { font-weight: 400; font-size: 11px; color: var(--text-2); }
+
+/* The folders that were picked and cannot be merged. Left out silently, this
+   is how one gets abandoned without anybody noticing. */
+.merge-refused {
+  font-size: 12px; color: var(--danger);
+  border-left: 3px solid var(--danger); padding: 4px 0 4px 8px; margin: 0 0 8px;
+}
+.merge-refused ul { margin: 4px 0 0; padding-left: 18px; font-weight: 400; }
 
 .mfile { display: flex; align-items: center; gap: 8px; padding: 4px 10px; border-bottom: 1px solid var(--border); font-size: 12px; cursor: pointer; }
 
@@ -5459,6 +5488,11 @@ body.tool-report {
 
 .rep-check-desc { font-size: 12px; color: var(--text-2); line-height: 1.35; }
 
+/* Why a control refused what it was given, said next to the control. A file
+   the picker would not take has to explain itself where the picker is; a
+   toast has gone by the time anyone looks back to see what happened. */
+.rep-check-desc.rep-warn { color: var(--danger); font-weight: 600; }
+
 .rep-check.is-disabled {
   cursor: not-allowed; opacity: 0.55;
 }
@@ -6665,6 +6699,53 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-loc-warn { color: var(--amber, #d97706); font-size: 12px; }
 .rep-loc-warn-row { background: rgba(217, 119, 6, 0.06); }
 [data-theme="dark"] .rep-loc-warn-row { background: rgba(217, 119, 6, 0.1); }
+
+/* ── Change / Audit report ────────────────────────────────────────────────
+   Print is what these are for, so every colour here has to survive a mono
+   laser as well: the four marker states differ in shape and fill as well as
+   in hue, and the key names each one in words rather than relying on the
+   reader matching a colour. */
+.rep-aud-note {
+  font-size: 12px; color: var(--text-2); line-height: 1.45;
+  margin: 6px 0 10px; max-width: 46em;
+}
+.rep-chg {
+  display: inline-block; font-size: 11px; line-height: 1.5;
+  padding: 0 6px; margin: 1px 3px 1px 0; border-radius: 9px;
+  border: 1px solid var(--text-3); white-space: nowrap;
+}
+.rep-chg--moved   { border-color: var(--amber, #d97706); }
+.rep-chg--renamed { border-color: var(--text-3); }
+.rep-chg--floor   { border-color: var(--danger, #cf222e); }
+.rep-delta-up    { color: var(--ok, #2da44e); font-weight: 700; }
+.rep-delta-down  { color: var(--danger, #cf222e); font-weight: 700; }
+.rep-delta-same  { color: var(--text-3); }
+
+.rep-aud-added   { fill: none; stroke: #d97706; }
+.rep-aud-changed { fill: none; stroke: #0969da; }
+.rep-aud-was     { fill: none; stroke: #0969da; stroke-dasharray: 3 3; opacity: 0.8; }
+.rep-aud-move    { stroke: #0969da; stroke-dasharray: 4 3; }
+.rep-aud-removed line { stroke: #cf222e; stroke-linecap: round; }
+.rep-aud-same    { fill: none; stroke: #6e7781; opacity: 0.55; }
+
+.rep-aud-key { display: flex; flex-wrap: wrap; gap: 10px; }
+.rep-aud-k { display: inline-flex; align-items: center; gap: 4px; }
+.rep-aud-k::before {
+  content: ''; width: 9px; height: 9px; border-radius: 50%;
+  border: 2px solid currentColor;
+}
+.rep-aud-k--added   { color: #d97706; }
+.rep-aud-k--changed { color: #0969da; }
+.rep-aud-k--was     { color: #0969da; opacity: 0.8; }
+.rep-aud-k--was::before { border-style: dashed; }
+.rep-aud-k--removed { color: #cf222e; }
+.rep-aud-k--removed::before { border-radius: 0; transform: rotate(45deg); border-width: 0 2px 0 2px; }
+.rep-aud-k--same    { color: #6e7781; }
+
+.rep-empty--wide { max-width: 44em; margin: 0 auto; text-align: left; }
+.rep-empty--wide h2 { font-size: 16px; margin: 0 0 8px; }
+.rep-empty--wide p { font-size: 13px; line-height: 1.5; margin: 0 0 8px; }
+.rep-empty--wide .rep-warn { color: var(--danger); font-weight: 600; }
 
 .rep-aim-mark .rep-aim-tick { stroke: var(--rose); stroke-width: 2; stroke-linecap: round; }
 .rep-aim-mark .rep-aim-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }

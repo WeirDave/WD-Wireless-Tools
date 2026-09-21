@@ -2,7 +2,7 @@
   "files": {
     "test_ap_color_order.py": 21,
     "test_ap_labeler_floor_numbers.py": 4,
-    "test_ap_notes_page.py": 7,
+    "test_ap_notes_page.py": 5,
     "test_applog.py": 11,
     "test_bulk_bar_says_why.py": 2,
     "test_cloud_delete_identity.py": 12,
@@ -60,5 +60,5 @@
     "test_walls_prefs_migration.py": 3
   },
   "note": "Per-file counts of assertions made against the text of a source file, as at the sweep that introduced this ratchet. Existing debt is tolerated; growth is not. Lower a number when you convert a test to one that executes - never raise one.",
-  "total": 346
+  "total": 342
 }

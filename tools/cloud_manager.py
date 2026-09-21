@@ -54,6 +54,7 @@ KEYRING_SERVICE = "WD Wireless Tools Cloud Manager"
 KEYRING_USERNAME = "session-encryption-key"
 NOT_MATCH_FILE = CONFIG_DIR / "not_matches.json"
 MANUAL_MATCH_FILE = CONFIG_DIR / "manual_matches.json"
+EXTERNAL_OVERRIDE_FILE = CONFIG_DIR / "external_overrides.json"
 
 
 def _assert_inside(path, root):
@@ -335,6 +336,51 @@ def save_manual_matches(pairs):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     with open(MANUAL_MATCH_FILE, "w") as f:
         json.dump({"pairs": pairs}, f, indent=2)
+
+
+def _ov_key(cloud_id, local_path):
+    """One key for a project however it is reachable.
+
+    Ekahau's cloud id where there is one, because it survives a rename on
+    either side; the normalised local path otherwise, which is all a
+    local-only file has. The same shape ``_nm_pair_key`` uses, and for the
+    same reason.
+    """
+    if cloud_id:
+        return "c:" + str(cloud_id)
+    return "l:" + str(local_path or "").replace(chr(92), "/").lower()
+
+
+def load_external_overrides():
+    """Projects he has said are External, or are his, whatever the file says.
+
+    Ownership metadata answers "whose account is this in", and that is not
+    always the same question as "is this somebody else's work". A project can
+    come back with no owner at all - and when the account reports no current
+    user, *nothing* looks external, which is a confident empty answer rather
+    than an unknown one. This is the override for both.
+    """
+    if EXTERNAL_OVERRIDE_FILE.exists():
+        try:
+            with open(EXTERNAL_OVERRIDE_FILE) as f:
+                data = json.load(f) or {}
+            entries = data.get("entries", []) or []
+            return [e for e in entries
+                    if e.get("key") and e.get("value") in ("external", "mine")]
+        except Exception:
+            pass
+    return []
+
+
+def save_external_overrides(entries):
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(EXTERNAL_OVERRIDE_FILE, "w") as f:
+        json.dump({"entries": entries}, f, indent=2)
+
+
+def external_overrides_map():
+    """key -> "external" | "mine"."""
+    return {e["key"]: e["value"] for e in load_external_overrides()}
 
 
 def manual_matches_map():
@@ -2254,6 +2300,12 @@ class CloudManager:
 
 
             data["currentUser"] = (self.api.user_email or "").strip().lower()
+            # The overrides travel with the listing rather than being fetched
+            # separately: the row styling, the dashboard counts and the owner
+            # filter all read them, and a second round trip means a window
+            # where the page has the projects and not the answer to "is this
+            # one mine", which is when it would draw the list wrong once.
+            data["externalOverrides"] = external_overrides_map()
             return data
         except Exception as e:
             return {"error": self._handle_api_error(e)}
@@ -3841,6 +3893,124 @@ class CloudManager:
         except Exception as e:
             return {"error": str(e)}
 
+    def merge_preview_many(self, src_paths, dst_path):
+        """Dry run for several source folders landing in one destination.
+
+        **Not a loop over ``merge_preview``, and that is the whole point.** Two
+        sources can each carry a ``Report.pdf``. Previewed one at a time they
+        both read "no conflict", because neither file is in the destination
+        *yet*; run one after the other, the first moves cleanly and the second
+        lands on top of it - or is date-stamped - with nothing having warned
+        him. So the preview walks the sources in the order they will run and
+        carries what each one will place forward into the next. A file that
+        collides with an earlier source in the same run is marked
+        ``fromSource``, carrying that folder's name.
+
+        A source that cannot be merged at all - missing, the destination
+        itself, a parent of the destination - is reported by name and left out
+        rather than failing the whole run. Refusing eight folders because one
+        of them is wrong is the guard firing on his normal case.
+        """
+        try:
+            od = self.config.get("output_dir", "")
+            if not od:
+                return {"error": "No local folder is set — pick one first"}
+            paths = [p for p in (src_paths or []) if p]
+            if not paths:
+                return {"error": "No source folders were given"}
+            _assert_inside(dst_path, od)
+            dst = Path(dst_path)
+            if not dst.is_dir():
+                return {"error": "Destination folder not found"}
+
+            # What the destination will hold as the run proceeds: what is there
+            # now, plus whatever each earlier source will have put there.
+            placed = {}          # rel -> the source folder that will place it
+            sources, refused = [], []
+            total_clean = total_conflicts = total_cross = 0
+
+            for sp in paths:
+                one = self.merge_preview(sp, dst_path)
+                if one.get("error"):
+                    refused.append({"path": sp, "name": Path(sp).name,
+                                    "reason": one["error"]})
+                    continue
+                files = one.get("files") or []
+                n_conf = n_cross = 0
+                for rec in files:
+                    rel = rec["rel"]
+                    if not rec.get("conflict") and rel in placed:
+                        # Clean against the destination as it is now, and not
+                        # clean against the destination as it will be.
+                        rec["conflict"] = True
+                        rec["fromSource"] = placed[rel]
+                        rec["newer"] = "unknown"
+                        n_cross += 1
+                    if rec.get("conflict"):
+                        n_conf += 1
+                    placed.setdefault(rel, one["srcName"])
+                sources.append({
+                    "srcPath": sp, "srcName": one["srcName"],
+                    "nClean": len(files) - n_conf, "nConflicts": n_conf,
+                    "nCrossSource": n_cross, "files": files,
+                })
+                total_clean += len(files) - n_conf
+                total_conflicts += n_conf
+                total_cross += n_cross
+
+            if not sources:
+                return {"error": "None of the selected folders can be merged: "
+                                 + "; ".join(r["reason"] for r in refused)}
+            return {"dstName": dst.name, "dstPath": dst_path,
+                    "sources": sources, "refused": refused,
+                    "nSources": len(sources),
+                    "nClean": total_clean, "nConflicts": total_conflicts,
+                    "nCrossSource": total_cross}
+        except Exception as e:
+            return {"error": str(e)}
+
+    def merge_execute_many(self, merges, dst_path):
+        """Run several merges into one destination, in the order given.
+
+        *merges* is ``[{srcPath, ops}]``. Each goes through ``merge_execute``,
+        so every guard on the single-folder path applies here too rather than
+        being written a second time - the containment checks, the date-stamping
+        and the refusal to remove a source folder.
+
+        **One source failing does not stop the rest.** The ones that already
+        ran have moved real files and unwinding them is not something this can
+        do, so the result carries a row per source saying what happened to that
+        one, and the page reports the failures by name.
+        """
+        try:
+            od = self.config.get("output_dir", "")
+            if not od:
+                return {"error": "No local folder is set — pick one first"}
+            items = [m for m in (merges or []) if m.get("srcPath")]
+            if not items:
+                return {"error": "No source folders were given"}
+            results = []
+            moved = overwritten = keptboth = skipped = 0
+            for m in items:
+                one = self.merge_execute(m["srcPath"], dst_path, m.get("ops") or [])
+                row = {"srcPath": m["srcPath"], "srcName": Path(m["srcPath"]).name}
+                if one.get("error"):
+                    row["error"] = one["error"]
+                else:
+                    row.update(one)
+                    moved += one.get("moved", 0)
+                    overwritten += one.get("overwritten", 0)
+                    keptboth += one.get("keptboth", 0)
+                    skipped += one.get("skipped", 0)
+                results.append(row)
+            failed = [r for r in results if r.get("error")]
+            return {"ok": True, "results": results,
+                    "nSources": len(results), "nFailed": len(failed),
+                    "moved": moved, "overwritten": overwritten,
+                    "keptboth": keptboth, "skipped": skipped}
+        except Exception as e:
+            return {"error": str(e)}
+
     def merge_execute(self, src_path, dst_path, ops):
         """Apply per-file operations. ops: [{rel, action}] where action is
         move | overwrite | keepboth | skip. Never deletes the source folder."""
@@ -4004,3 +4174,46 @@ class CloudManager:
     def list_manual_matches(self):
         return {"ok": True, "pairs": load_manual_matches(),
                 "file": str(MANUAL_MATCH_FILE)}
+
+    def set_external_override(self, items, value):
+        """Mark projects External, or mark them as his, by hand.
+
+        *items* is a list of ``{cloudId, localPath, label}``. Nothing here
+        touches either copy of the project: an override is an annotation on
+        this installation's view, in the same class as a manual match, and the
+        cloud does not learn about it.
+        """
+        if value not in ("external", "mine"):
+            return {"error": "value must be 'external' or 'mine'"}
+        items = [i for i in (items or []) if i.get("cloudId") or i.get("localPath")]
+        if not items:
+            return {"error": "nothing to mark"}
+        entries = load_external_overrides()
+        by_key = {e["key"]: e for e in entries}
+        for item in items:
+            key = _ov_key(item.get("cloudId"), item.get("localPath"))
+            by_key[key] = {
+                "key": key,
+                "value": value,
+                "cloudId": item.get("cloudId") or "",
+                "localPath": item.get("localPath") or "",
+                "label": item.get("label") or "",
+                "addedAt": int(time.time()),
+            }
+        ordered = list(by_key.values())
+        save_external_overrides(ordered)
+        return {"ok": True, "count": len(ordered), "marked": len(items)}
+
+    def clear_external_override(self, items):
+        items = items or []
+        keys = {_ov_key(i.get("cloudId"), i.get("localPath")) for i in items}
+        if not keys:
+            return {"error": "nothing to clear"}
+        entries = load_external_overrides()
+        kept = [e for e in entries if e["key"] not in keys]
+        save_external_overrides(kept)
+        return {"ok": True, "count": len(kept), "removed": len(entries) - len(kept)}
+
+    def list_external_overrides(self):
+        return {"ok": True, "entries": load_external_overrides(),
+                "file": str(EXTERNAL_OVERRIDE_FILE)}

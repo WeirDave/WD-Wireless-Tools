@@ -41,6 +41,8 @@ const API_MAP = {
   delete_local: ['delete_local', ['path']],
   merge_preview: ['merge_preview', ['src', 'dst']],
   merge_execute: ['merge_execute', ['src', 'dst', 'ops']],
+  merge_preview_many: ['merge_preview_many', ['srcs', 'dst']],
+  merge_execute_many: ['merge_execute_many', ['merges', 'dst']],
   pick_folder: ['pick_folder', []],
   set_folder: ['set_folder', ['path']],
   upload_project: ['upload_project', ['path', 'siteId', 'opId']],
@@ -53,6 +55,8 @@ const API_MAP = {
   list_not_matches: ['list_not_matches', []],
   mark_manual_match: ['mark_manual_match', ['cloudId', 'localPath', 'cloudName', 'localName']],
   unmark_manual_match: ['unmark_manual_match', ['cloudId', 'localPath']],
+  set_external_override: ['set_external_override', ['items', 'value']],
+  clear_external_override: ['clear_external_override', ['items']],
   list_manual_matches: ['list_manual_matches', []],
   verify_replace_local: ['verify_replace_local', ['cloudId', 'localPath']],
   replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId']],
@@ -1336,7 +1340,45 @@ function iOwn(cloudObj) {
   return !ownershipBlock(cloudObj);
 }
 
+/* One key per project, however it is reachable: Ekahau's cloud id where there
+   is one - it survives a rename on either side - and the normalised local path
+   otherwise, which is all a local-only file has. The same shape the server
+   files overrides under; both ends have to agree, or a mark he set silently
+   applies to nothing. */
+function _ovKey(cloudObj, localObj) {
+  const cid = cloudObj && cloudObj.id;
+  if (cid) return 'c:' + cid;
+  const p = (localObj && localObj.path) || '';
+  return p ? 'l:' + String(p).replace(/\\/g, '/').toLowerCase() : '';
+}
+
+function _externalOverride(cloudObj, localObj) {
+  const d = (typeof data !== 'undefined' && data) || null;
+  const map = (d && d.externalOverrides) || null;
+  if (!map) return '';
+  const key = _ovKey(cloudObj, localObj);
+  return (key && map[key]) || '';
+}
+
+/* Whether this is somebody else's work.
+
+   **Ownership metadata answers a different question from the one being asked.**
+   It says whose account a project sits in; "is this external" is about who is
+   responsible for it, and the two part company often enough to need an answer
+   he can give himself.
+
+   The case that most obviously needs it: when the account comes back with no
+   `currentUser` there is nothing to compare an owner against, so every project
+   used to read as internal and the External count was a confident zero rather
+   than an unknown. A project can also arrive carrying no owner at all.
+
+   So a mark he has set wins, in both directions - External on a project the
+   file says is his, Mine on one it says is not. It is an annotation on this
+   installation's view and changes neither copy of the project, which is the
+   same class of thing as a manual match. */
 function _isExternal(cloudObj, localObj) {
+  const ov = _externalOverride(cloudObj, localObj);
+  if (ov) return ov === 'external';
   const me = ((data && data.currentUser) || '').toLowerCase();
   if (!me) return false;
   const co = (cloudObj && cloudObj.owner || '').toLowerCase();
@@ -4245,7 +4287,7 @@ function gutCell(r) {
      every state. */
   const kind = r.kind || currentTab;
   if (r.status === 'mismatch' || r.status === 'synced') {
-    return `<div class="lr-gut">${matchBadgeHtml(r, kind)}</div>`;
+    return `<div class="lr-gut">${matchBadgeHtml(r, kind)}${externalBadgeHtml(r)}</div>`;
   }
   const side = r.cloud ? 'cloud' : 'local';
   const label = (kind === 'sites')
@@ -4255,7 +4297,30 @@ function gutCell(r) {
       r.cloud
         ? 'This exists in Ekahau Cloud with nothing matching it on disk.'
         : 'This exists on disk with nothing matching it in Ekahau Cloud.'
-    )}"><span class="mb-dot"></span>${label}</span></div>`;
+    )}"><span class="mb-dot"></span>${label}</span>${externalBadgeHtml(r)}</div>`;
+}
+
+/* A mark he set by hand, shown where it is in force and cleared from there.
+
+   A persistent decision that leaves no trace on the row is the worst of both:
+   the count changes, the stripe changes, and nothing says why or how to undo
+   it. So the badge is only drawn where an override exists - a row reading
+   External because the owner really is somebody else has nothing to say here
+   - and clicking it takes the mark off, the same way the "You linked it"
+   badge unlinks a manual match. */
+function externalBadgeHtml(r) {
+  const ov = _externalOverride(r && r.cloud, r && r.local);
+  if (!ov) return '';
+  const c = (r && r.cloud) || null, l = (r && r.local) || null;
+  const label = ov === 'external' ? 'Marked External' : 'Marked mine';
+  const why = ov === 'external'
+    ? 'You marked this as somebody else’s work, whatever the owner on the '
+      + 'file says. It is counted and filtered as External. Click to take the mark off.'
+    : 'You marked this as yours, whatever the owner on the file says. It is '
+      + 'counted and filtered as internal. Click to take the mark off.';
+  return `<span class="match-badge mb-ovr ovr-${ov} clickable" title="${a(why)}" `
+       + `onclick="event.stopPropagation();clearExternalMark('${j(c && c.id || '')}','${pj(l && l.path || '')}')">`
+       + `<span class="mb-dot"></span>${label}</span>`;
 }
 
 /* Where this project lives, on this side.
@@ -5939,6 +6004,82 @@ async function unmarkManualMatch(cloudId, localPath, cloudName, localName) {
   } catch (e) { toast('Unlink failed: ' + e.message, 'error'); }
 }
 
+/* ── Marking a project External, or marking it as his ─────────────────────
+
+   The override for when the owner on the file is not the answer to "is this
+   somebody else's work" - a project with no owner, an account that comes back
+   without a current user, or a project in his own account that a contractor is
+   actually responsible for.
+
+   Nothing here touches either copy. It is an annotation on this installation's
+   view, filed beside the manual matches, which is why it needs no ownership
+   check: refusing to let him annotate his own view of somebody else's project
+   would be a guard firing on the case the feature exists for. */
+
+/* The selected rows as {cloudId, localPath, label}, one per project.
+
+   A pair contributes one entry keyed on its cloud id, because that is what the
+   override is keyed on and what survives a rename. A local-only row has no
+   cloud id and is keyed on its path. */
+function _selectedOverrideItems() {
+  const out = [];
+  const seen = new Set();
+  [...selected].forEach(k => {
+    const d = rowData[k];
+    if (!d) return;
+    const c = d.cloud || (d.kind === 'cloud' ? d : null);
+    const l = d.local || (d.kind === 'local' ? d : null);
+    const cloudId = (c && c.id) || '';
+    const localPath = (l && l.path) || '';
+    if (!cloudId && !localPath) return;
+    const key = cloudId ? 'c:' + cloudId : 'l:' + localPath.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({
+      cloudId: cloudId, localPath: localPath,
+      label: (c && c.name) || (l && l.name) || '',
+    });
+  });
+  return out;
+}
+
+async function bulkMarkExternal(value) {
+  const items = _selectedOverrideItems();
+  if (!items.length) {
+    toast('Tick the projects to mark first', 'info');
+    return;
+  }
+  const word = value === 'external' ? 'External' : 'yours';
+  const names = items.slice(0, 8).map(i => '  • ' + (i.label || i.localPath)).join('\n');
+  // Named, never abbreviated to "and N more" for a short list - the whole
+  // point of a confirm is that he can check what it is about to act on.
+  const more = items.length > 8 ? `\n  … and ${items.length - 8} more` : '';
+  const ok = confirm(
+    `Mark ${items.length} project${items.length === 1 ? '' : 's'} as ${word}?\n\n`
+    + names + more
+    + '\n\nThis changes how they are counted, filtered and striped here. '
+    + 'Nothing is written to Ekahau Cloud or to any file on disk, and you can '
+    + 'take the mark off from the badge on the row.');
+  if (!ok) return;
+  try {
+    const r = await pyApi('set_external_override', items, value);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast(`Marked ${items.length} as ${word}`, 'success');
+    clearSelection();
+    refreshData();
+  } catch (e) { toast('Could not save the mark: ' + e.message, 'error'); }
+}
+
+async function clearExternalMark(cloudId, localPath) {
+  try {
+    const r = await pyApi('clear_external_override',
+                          [{ cloudId: cloudId || '', localPath: localPath || '' }]);
+    if (r && r.error) { toast(r.error, 'error'); return; }
+    toast('Mark removed', 'success');
+    refreshData();
+  } catch (e) { toast('Could not remove the mark: ' + e.message, 'error'); }
+}
+
 let _linkPickerCtx = null;
 function _collectOrphansOfKind(kind, side) {
 
@@ -6153,13 +6294,56 @@ function localFolders() {
   (data.localOnly || []).forEach(f => out.push(f));
   return out;
 }
+/* One folder or several, through one code path.
+
+   The single-folder merge is the many-folder merge with one source in it.
+   Keeping two implementations of the preview, the conflict rules and the
+   cleanup would mean fixing everything twice - and the half he uses less
+   would be the half that drifted. */
 function startMerge(path, name) {
-  const src = localByPath(path);
-  mergeState = { srcPath: path, srcName: name, srcCode: src && src.code };
-  document.getElementById('mergeDestTitle').innerHTML = `Merge "${e(name)}" into…`;
+  startMergeMany([{ path: path, name: name }]);
+}
+
+function startMergeMany(srcs) {
+  const list = (srcs || []).filter(s => s && s.path);
+  if (!list.length) { toast('Nothing to merge', 'info'); return; }
+  const first = localByPath(list[0].path);
+  mergeState = {
+    srcs: list.map(s => ({ path: s.path, name: s.name || s.path })),
+    // The single-source fields the destination matcher reads. With several
+    // sources there is no one name to score against, so the first is used -
+    // the list is ordered and the first is the one he picked first.
+    srcPath: list[0].path,
+    srcName: list[0].name || list[0].path,
+    srcCode: first && first.code,
+  };
+  document.getElementById('mergeDestTitle').innerHTML = list.length === 1
+    ? `Merge "${e(mergeState.srcName)}" into…`
+    : `Merge ${list.length} folders into…`;
   document.getElementById('mergeDestSearch').value = '';
   renderMergeDests();
   showModal('mergeDestModal');
+}
+
+/* Merge every selected local folder into one. Reached from the selection bar,
+   which is the only place a set of folders exists to act on. */
+function bulkMergeFolders() {
+  const seen = new Set();
+  const srcs = [];
+  [...selected].forEach(k => {
+    const d = rowData[k];
+    if (!d) return;
+    const l = d.local || (d.kind === 'local' ? d : null);
+    if (!l || !l.path || !l.isDir) return;
+    if (seen.has(l.path)) return;
+    seen.add(l.path);
+    srcs.push({ path: l.path, name: l.name || l.path });
+  });
+  if (!srcs.length) {
+    toast('Tick the local folders to merge first', 'info');
+    return;
+  }
+  startMergeMany(srcs);
 }
 
 function _mergeMatchScore(dst) {
@@ -6173,7 +6357,11 @@ function _mergeMatchScore(dst) {
 function renderMergeDests() {
   const q = (document.getElementById('mergeDestSearch').value || '').toLowerCase();
   const list = localFolders()
-    .filter(f => f.path !== mergeState.srcPath && (!q || f.name.toLowerCase().includes(q)))
+    // Every source is excluded, not just the first. Offering one of them as
+    // the destination produces a merge that is refused server-side, which is
+    // a control that cannot work being offered anyway.
+    .filter(f => !(mergeState.srcs || []).some(s => s.path === f.path)
+                 && (!q || f.name.toLowerCase().includes(q)))
     .map(f => ({ f, score: _mergeMatchScore(f) }))
     .sort((a, b) => (b.score - a.score) || a.f.name.localeCompare(b.f.name));
   let h = list.length ? '' : `<div class="peek-more">No other folders to merge into.</div>`;
@@ -6194,7 +6382,8 @@ function chooseMergeDest(dstPath) {
 }
 async function runMergePreview() {
   let prev;
-  try { prev = await pyApi('merge_preview', mergeState.srcPath, mergeState.dstPath); }
+  const paths = (mergeState.srcs || []).map(s => s.path);
+  try { prev = await pyApi('merge_preview_many', paths, mergeState.dstPath); }
   catch (e) { toast('Preview failed: ' + e.message, 'error'); return; }
   if (prev.error) { toast(prev.error, 'error'); return; }
   mergeState.preview = prev;
@@ -6208,19 +6397,51 @@ function mtimeCmp(f) {
   return `incoming ${s} (${e(f.srcSizeH)}) · existing ${d} (${e(f.dstSizeH)}) — ${badge}`;
 }
 function showMergeModal(prev) {
-  document.getElementById('mergeTitle').innerHTML = `Merge "${e(mergeState.srcName)}" → "${e(mergeState.dstName)}"`;
+  const sources = prev.sources || [];
+  const many = sources.length > 1;
+  const nFiles = sources.reduce((n, s) => n + s.files.length, 0);
+  document.getElementById('mergeTitle').innerHTML = many
+    ? `Merge ${sources.length} folders → "${e(mergeState.dstName)}"`
+    : `Merge "${e(sources[0] ? sources[0].srcName : mergeState.srcName)}" → "${e(mergeState.dstName)}"`;
   const wrap = document.getElementById('mergeConflictWrap');
   const btn = document.getElementById('mergeBtn');
   const listEl = document.getElementById('mergeFileList');
-  if (!prev.files.length) {
-    document.getElementById('mergeSummary').textContent = 'Nothing to move — the source folder has no files.';
-    wrap.hidden = true; listEl.innerHTML = ''; btn.disabled = true; showModal('mergeModal'); return;
+
+  /* A folder that cannot be merged is named here rather than dropped.
+     Selecting eight and merging seven, silently, is how a folder gets left
+     behind and nobody notices until somebody goes looking for it. */
+  const refusedHtml = (prev.refused || []).length
+    ? `<div class="merge-refused"><b>${prev.refused.length}</b> of the folders you `
+      + `picked cannot be merged and ${prev.refused.length === 1 ? 'is' : 'are'} `
+      + `left out:<ul>`
+      + prev.refused.map(r => `<li>${e(r.name)} — ${e(r.reason)}</li>`).join('')
+      + `</ul></div>`
+    : '';
+
+  if (!nFiles) {
+    document.getElementById('mergeSummary').innerHTML = refusedHtml
+      + (many ? 'Nothing to move — none of those folders has any files in it.'
+              : 'Nothing to move — the source folder has no files.');
+    wrap.hidden = true; listEl.innerHTML = ''; btn.disabled = true;
+    showModal('mergeModal'); return;
   }
   btn.disabled = false;
-  document.getElementById('mergeSummary').innerHTML =
-    `Moving into <b>${e(mergeState.dstName)}</b>: <b>${prev.nClean}</b> new` +
-    (prev.nConflicts ? `, <b>${prev.nConflicts}</b> already exist. ` : `. `) +
-    `Untick any file you don't want to move — it stays put in the source folder.`;
+  /* Cross-source collisions are called out separately from ordinary ones.
+     They are the case he cannot see coming: neither file is in the
+     destination yet, so previewing the folders one at a time would report
+     both as clean and the second would land on the first. */
+  const crossHtml = prev.nCrossSource
+    ? ` <b>${prev.nCrossSource}</b> of those are two of the folders you picked `
+      + `carrying the same file — nothing is in the destination yet, so the `
+      + `rule below decides which copy survives.`
+    : '';
+  document.getElementById('mergeSummary').innerHTML = refusedHtml
+    + `Moving into <b>${e(mergeState.dstName)}</b>`
+    + (many ? ` from <b>${sources.length}</b> folders` : '')
+    + `: <b>${prev.nClean}</b> new`
+    + (prev.nConflicts ? `, <b>${prev.nConflicts}</b> already exist.` : `.`)
+    + crossHtml
+    + ` Untick any file you don't want to move — it stays put in its source folder.`;
   if (prev.nConflicts) {
     wrap.style.display = '';
     const saved = mergeRule();
@@ -6231,12 +6452,25 @@ function showMergeModal(prev) {
     wrap.style.display = 'none';
   }
   let h = '';
-  prev.files.forEach((f, i) => {
-    const status = f.conflict
-      ? `<span class="mfile-badge conflict">conflict</span><span class="mfile-cmp">${mtimeCmp(f)}</span>`
-      : `<span class="mfile-badge new">new</span><span class="mfile-cmp">${e(f.srcSizeH || '')}</span>`;
-    h += `<label class="mfile"><input type="checkbox" class="mfile-chk" data-i="${i}" checked>
-      <span class="mfile-name">${e(f.rel)}</span>${status}</label>`;
+  sources.forEach((s, si) => {
+    if (many) {
+      h += `<div class="merge-src-head">${e(s.srcName)}`
+        + `<span class="merge-src-n">${s.files.length} file`
+        + `${s.files.length === 1 ? '' : 's'}`
+        + (s.nConflicts ? ` · ${s.nConflicts} conflict${s.nConflicts === 1 ? '' : 's'}` : '')
+        + `</span></div>`;
+    }
+    s.files.forEach((f, i) => {
+      const status = f.conflict
+        ? `<span class="mfile-badge conflict">conflict</span>`
+          + `<span class="mfile-cmp">${f.fromSource
+              ? 'also in <b>' + e(f.fromSource) + '</b>, which moves first'
+              : mtimeCmp(f)}</span>`
+        : `<span class="mfile-badge new">new</span><span class="mfile-cmp">${e(f.srcSizeH || '')}</span>`;
+      h += `<label class="mfile"><input type="checkbox" class="mfile-chk" `
+        + `data-s="${si}" data-i="${i}" checked>`
+        + `<span class="mfile-name">${e(f.rel)}</span>${status}</label>`;
+    });
   });
   listEl.innerHTML = h;
   showModal('mergeModal');
@@ -6249,20 +6483,32 @@ async function confirmMerge() {
     rule = (document.querySelector('input[name="mrule"]:checked') || {}).value || 'newer';
     if (document.getElementById('mergeRemember').checked) setMergeRule(rule);
   }
+  // Ticked state is per source and per file, so the key is both. One flat
+  // index across several sources would untick the wrong file the moment a
+  // second folder was in the list.
   const included = new Set();
   document.querySelectorAll('#mergeFileList .mfile-chk').forEach(chk => {
-    if (chk.checked) included.add(parseInt(chk.dataset.i, 10));
+    if (chk.checked) included.add(chk.dataset.s + ':' + chk.dataset.i);
   });
-  const ops = prev.files.map((f, i) => {
-    if (!included.has(i)) return { rel: f.rel, action: 'skip' };
-    if (!f.conflict) return { rel: f.rel, action: 'move' };
-    if (rule === 'both') return { rel: f.rel, action: 'keepboth' };
-    if (rule === 'skip') return { rel: f.rel, action: 'skip' };
-    return { rel: f.rel, action: f.newer === 'src' ? 'overwrite' : 'skip' };
-  });
+  const sources = prev.sources || [];
+  const merges = sources.map((s, si) => ({
+    srcPath: s.srcPath,
+    ops: s.files.map((f, i) => {
+      if (!included.has(si + ':' + i)) return { rel: f.rel, action: 'skip' };
+      if (!f.conflict) return { rel: f.rel, action: 'move' };
+      if (rule === 'both') return { rel: f.rel, action: 'keepboth' };
+      if (rule === 'skip') return { rel: f.rel, action: 'skip' };
+      /* "Keep newer" against a file that has not moved yet cannot compare
+         anything, so a cross-source clash under that rule keeps both rather
+         than guessing. Losing a copy is the one outcome this must not
+         produce on a comparison it could not make. */
+      if (f.fromSource) return { rel: f.rel, action: 'keepboth' };
+      return { rel: f.rel, action: f.newer === 'src' ? 'overwrite' : 'skip' };
+    }),
+  }));
   const btn = document.getElementById('mergeBtn'); btn.disabled = true;
   let res;
-  try { res = await pyApi('merge_execute', mergeState.srcPath, mergeState.dstPath, ops); }
+  try { res = await pyApi('merge_execute_many', merges, mergeState.dstPath); }
   catch (e) { toast('Merge failed: ' + e.message, 'error'); btn.disabled = false; return; }
   if (res.error) { toast(res.error, 'error'); btn.disabled = false; return; }
   closeModal('mergeModal');
@@ -6271,26 +6517,40 @@ async function confirmMerge() {
   if (res.overwritten) parts.push(res.overwritten + ' overwritten');
   if (res.keptboth) parts.push(res.keptboth + ' kept both');
   if (res.skipped) parts.push(res.skipped + ' skipped');
-  const nerr = (res.errors || []).length;
-  toast('Merged: ' + (parts.join(', ') || 'nothing') + (nerr ? ` · ${nerr} error(s)` : ''), nerr ? 'error' : 'success');
+  const rows = res.results || [];
+  const failed = rows.filter(r => r.error);
+  const nerr = failed.length
+    + rows.reduce((n, r) => n + ((r.errors || []).length), 0);
+  /* A folder that failed is named. "3 error(s)" on a run over eight folders
+     leaves him to work out which three, and the answer is not on screen
+     anywhere else. */
+  const who = failed.length
+    ? ' · failed: ' + failed.map(r => r.srcName).join(', ')
+    : '';
+  toast('Merged: ' + (parts.join(', ') || 'nothing')
+        + (nerr ? ` · ${nerr} error${nerr === 1 ? '' : 's'}${who}` : ''),
+        nerr ? 'error' : 'success');
   refreshData();
 
   const autoDelete = (document.getElementById('mergeDeleteSrc') || {}).checked;
-  if (res.srcEmpty && autoDelete) {
-    opEnqueue({
-      title: `Cleaning up empty "${res.srcName || mergeState.srcName}"`,
-      type: 'delete', pollBackend: false, undoable: false,
-      run: async () => {
-        const r = await pyApi('delete_local', res.srcPath || mergeState.srcPath);
-        if (r && r.error) throw new Error(r.error);
-        _scheduleOpRefresh();
-        return r;
-      },
-    });
-  } else if (res.srcEmpty) {
-
-    setTimeout(() => startDelete('local', res.srcPath, res.srcName, true), 450);
-  }
+  const emptied = rows.filter(r => r.srcEmpty && !r.error);
+  emptied.forEach(r => {
+    const path = r.srcPath, name = r.srcName;
+    if (autoDelete) {
+      opEnqueue({
+        title: `Cleaning up empty "${name}"`,
+        type: 'delete', pollBackend: false, undoable: false,
+        run: async () => {
+          const rr = await pyApi('delete_local', path);
+          if (rr && rr.error) throw new Error(rr.error);
+          _scheduleOpRefresh();
+          return rr;
+        },
+      });
+    } else {
+      setTimeout(() => startDelete('local', path, name, true), 450);
+    }
+  });
 }
 
 function toggleMainMenu(ev) {
