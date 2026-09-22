@@ -67,35 +67,32 @@ class TheRunnerCanActuallyDriveABrowser(unittest.TestCase):
                       "browser tests skipped and this run reported a pass "
                       "over them - install requirements-dev.txt")
 
-    @unittest.skipUnless(IN_CI and sys.platform.startswith("win"),
-                         "browsers are required on the Windows runner")
+    @unittest.skipUnless(IN_CI, "only CI is required to have a browser")
     def test_ci_can_drive_a_browser(self):
         """The one that would have caught it.
 
         If this fails, the tests that drive real controls did not run and
         said nothing about it.
 
-        **Required on the Windows runner specifically**, and that is a
-        choice rather than an oversight. The Windows image ships Firefox,
-        Chrome and Edge; the macOS images do not reliably ship any of them,
-        and installing browsers there would mean adding third-party actions
-        to a pipeline that currently uses none - a supply-chain decision,
-        not a testing one, and not one to take quietly inside a test file.
+        **Required on every runner**, because every runner has them. That
+        was not assumed: this was first written to demand a browser only on
+        Windows, on the expectation that the macOS images ship none and
+        that covering them would mean adding third-party actions to a
+        pipeline that uses none. The inventory step said otherwise on the
+        first run - Firefox, Chrome and Edge are all present on both images,
+        at entirely different paths - so the narrower rule was protecting
+        against something that does not exist, and a guard that excuses a
+        platform it did not need to excuse is one that stops noticing when
+        that platform breaks.
 
-        Windows is also where this matters: it is what he runs, what the
-        release targets, and - per the print rules - Firefox there is the
-        engine whose behaviour decides the report. One runner that really
-        drives the controls closes the gap this file exists for. If macOS
-        coverage is wanted too, that is a deliberate conversation about
-        which actions to trust.
-
-        The inventory step prints what every runner found either way, so a
-        macOS image that gains a browser will be visible rather than
-        assumed.
+        Asking the machine is what made the difference. The hardcoded
+        Windows paths this replaced would have found nothing on macOS and
+        skipped there in silence, which is the failure this whole file
+        exists for.
         """
         self.assertTrue(
             browsers.available(),
-            "no browser on the Windows runner, so every test that drives a "
+            "no browser on this runner, so every test that drives a "
             "real control skipped: " + browsers.why_missing())
 
 
