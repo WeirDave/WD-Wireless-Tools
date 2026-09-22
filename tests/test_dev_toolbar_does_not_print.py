@@ -131,9 +131,7 @@ class TheToolbarIsNotOnThePaper(unittest.TestCase):
     def tearDownClass(cls):
         # Always, on the failure path too.
         _browsers.shut_down(cls.driver)
-        with contextlib.suppress(Exception):
-            cls.server.shutdown()
-            cls.server.server_close()
+        _browsers.stop_server(cls.server)
 
     def open(self, page, query=""):
         self.driver.get("http://127.0.0.1:%d/%s%s" % (self.port, page, query))

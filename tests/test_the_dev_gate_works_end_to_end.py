@@ -177,7 +177,7 @@ class DevGateEndToEnd(unittest.TestCase):
         cls.driver = _driver(cls.kind, cls.binary)
         if cls.driver is None:
             raise unittest.SkipTest("%s would not start" % cls.kind)
-        cls.addClassCleanup(cls.driver.quit)
+        cls.addClassCleanup(_browsers.shut_down, cls.driver)
 
     @staticmethod
     def _post(action, body, port):

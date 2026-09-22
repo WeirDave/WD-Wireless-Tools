@@ -416,7 +416,7 @@ class HostileValues(unittest.TestCase):
         cls.driver = _driver(cls.kind, cls.binary)
         if cls.driver is None:
             raise unittest.SkipTest("%s would not start" % cls.kind)
-        cls.addClassCleanup(cls.driver.quit)
+        cls.addClassCleanup(_browsers.shut_down, cls.driver)
         cls.driver.get("http://127.0.0.1:%d/index.html" % cls.port)
 
     def drive(self, js_expression, value):

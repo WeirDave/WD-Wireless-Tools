@@ -125,17 +125,27 @@ class EveryBrowserSuiteUsesIt(unittest.TestCase):
     machine just fills up."""
 
     def test_no_suite_quits_a_driver_by_hand(self):
+        """Read as code, not as lines.
+
+        The first version matched any line ending `.quit()`, which caught a
+        `.quit()` written inside a triple-quoted fixture in another test - a
+        guard failing on a deliberate example of the thing it guards against.
+        Parsing means a string is a string and a comment is a comment, and
+        only a real call counts.
+        """
+        import ast
         from pathlib import Path
         root = Path(__file__).resolve().parent
         offenders = []
         for path in sorted(root.glob("*.py")):
             if path.name in ("browsers.py", Path(__file__).name):
                 continue
-            text = path.read_text(encoding="utf-8")
-            for i, line in enumerate(text.splitlines(), 1):
-                stripped = line.strip()
-                if stripped.endswith(".quit()") and "shut_down" not in stripped:
-                    offenders.append(f"{path.name}:{i}")
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call)
+                        and isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "quit"):
+                    offenders.append(f"{path.name}:{node.lineno}")
         self.assertEqual([], offenders,
                          "these stop a browser without making sure it stopped: "
                          + ", ".join(offenders))

@@ -185,9 +185,7 @@ class ShareDialogInABrowser(unittest.TestCase):
 
     @classmethod
     def _stop_server(cls):
-        with contextlib.suppress(Exception):
-            cls.server.shutdown()
-            cls.server.server_close()
+        _browsers.stop_server(cls.server)
         cls.server = None
 
     def setUp(self):

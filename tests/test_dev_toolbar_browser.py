@@ -210,9 +210,7 @@ class ToolbarInABrowser(unittest.TestCase):
             _browsers.shut_down(cls.driver)
             cls.driver = None
         if cls.server is not None:
-            with contextlib.suppress(Exception):
-                cls.server.shutdown()
-                cls.server.server_close()
+            _browsers.stop_server(cls.server)
             cls.server = None
 
     # ── page helpers ─────────────────────────────────────────────

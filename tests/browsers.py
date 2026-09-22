@@ -29,6 +29,8 @@ import os
 import signal
 import subprocess
 import shutil
+import socket
+import threading
 import sys
 from pathlib import Path
 
@@ -194,3 +196,85 @@ def shut_down(driver) -> list:
             _kill(pid)
             killed.append(pid)
     return killed
+
+
+#: How long to wait for a `serve_forever` loop to acknowledge a shutdown
+#: before giving up on it and closing the socket anyway.
+SHUTDOWN_WAIT_S = 5.0
+
+
+def _swallow(fn):
+    try:
+        fn()
+    except Exception:                                         # noqa: BLE001
+        pass
+
+
+def stop_server(server) -> bool:
+    """`shutdown()` then `server_close()`, each on its own, and report.
+
+    Seven suites did this instead:
+
+        with contextlib.suppress(Exception):
+            server.shutdown()
+            server.server_close()
+
+    Both calls are inside one `suppress`, so a `shutdown()` that raises takes
+    `server_close()` with it - and `server_close()` is the one that releases
+    the listening socket. The failure is swallowed, the suite exits reporting
+    nothing, and the port stays held for whoever runs next. It is the same
+    shape as the browser teardown that left three Firefoxes behind: cleanup
+    written so that failing and succeeding look identical.
+
+    They are separate here, `server_close()` runs whatever `shutdown()` did,
+    and the caller is told whether the port actually came free.
+    """
+    ok = True
+
+    # `shutdown()` blocks until the `serve_forever` loop acknowledges it, and
+    # a server that was built but never served has no loop to acknowledge
+    # anything - so it waits for ever. A teardown that can hang is worse than
+    # one that can fail: a failure is visible and a hang looks like a busy
+    # suite. Bounded, in a thread, and then the socket is closed regardless.
+    shutdown = getattr(server, "shutdown", None)
+    if shutdown is not None:
+        worker = threading.Thread(target=_swallow, args=(shutdown,), daemon=True)
+        worker.start()
+        worker.join(SHUTDOWN_WAIT_S)
+        # A shutdown nobody acknowledged is not a failure. A server built but
+        # never served has no loop to answer, and the only thing that decides
+        # whether this worked is whether the port came free - which is asked
+        # below, of the address, rather than inferred from which methods were
+        # called. Inferring it from the calls is what the suppressed version
+        # did.
+
+    close = getattr(server, "server_close", None)
+    if close is not None:
+        try:
+            close()
+        except Exception:                                     # noqa: BLE001
+            ok = False
+
+    return ok and not port_held(server)
+
+
+def port_held(server) -> bool:
+    """Is the socket this server was listening on still bound?
+
+    Asked of the address rather than of the object, because "we called the
+    right methods" is what the suppressed version also believed.
+    """
+    address = getattr(server, "server_address", None)
+    if not address:
+        return False
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        # Deliberately no SO_REUSEADDR. On Windows it lets a second socket
+        # bind an address that is still in use, so the probe would report
+        # every port free - including the ones this is looking for.
+        probe.bind(address)
+    except OSError:
+        return True
+    finally:
+        probe.close()
+    return False
