@@ -62,8 +62,13 @@ class TheAuditCanFail(unittest.TestCase):
     """Both shapes, reconstructed. If these stop failing, the audit is inert."""
 
     def _scan(self, source):
-        path = Path(self.enterContext(
-            __import__("tempfile").TemporaryDirectory())) / "test_probe.py"
+        # `TemporaryDirectory` with `addCleanup`, not `enterContext` - that
+        # arrived in Python 3.11 and the suite still runs on 3.10, where every
+        # test in this class errored while 3.14 passed.
+        import tempfile
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "test_probe.py"
         path.write_text(textwrap.dedent(source), encoding="utf-8")
         return scan(path)
 
