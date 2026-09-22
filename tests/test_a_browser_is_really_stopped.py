@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import time
 import unittest
 
 from tests import browsers
@@ -53,13 +52,21 @@ class FakeDriver:
             raise RuntimeError("the driver stopped answering")
 
 
-def _gone(pid, timeout=5.0):
-    end = time.time() + timeout
-    while time.time() < end:
-        if not browsers._pid_alive(pid):
-            return True
-        time.sleep(0.15)
-    return False
+def _ended(proc, timeout=10.0):
+    """Did our own child actually die?
+
+    Asked of the Popen rather than of the pid, because on POSIX a killed child
+    stays a zombie until its parent reaps it, and `os.kill(pid, 0)` succeeds on
+    a zombie - so a pid check here passes on Windows and hangs on macOS. That
+    is a fact about being the parent, not about the kill: the browsers this
+    helper stops are nobody's children here, and `_pid_alive` is right for
+    them. Reaping is what this test has to do for its own stand-in.
+    """
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False
+    return proc.poll() is not None
 
 
 class AFailingQuitStillLeavesNothingBehind(unittest.TestCase):
@@ -75,7 +82,7 @@ class AFailingQuitStillLeavesNothingBehind(unittest.TestCase):
 
         self.assertTrue(driver.quit_called, "quit() was not even attempted")
         self.assertIn(proc.pid, killed, "it did not report killing anything")
-        self.assertTrue(_gone(proc.pid),
+        self.assertTrue(_ended(proc),
                         "the browser outlived a teardown that reported success")
 
     def test_a_raising_quit_does_not_raise_out(self):
@@ -91,7 +98,7 @@ class AFailingQuitStillLeavesNothingBehind(unittest.TestCase):
         driver = FakeDriver(service_pid=proc.pid, quit_raises=True)
         killed = browsers.shut_down(driver)
         self.assertIn(proc.pid, killed)
-        self.assertTrue(_gone(proc.pid))
+        self.assertTrue(_ended(proc))
 
     def test_a_clean_quit_kills_nothing(self):
         """When quit() works, the process is already gone and there is nothing
