@@ -489,10 +489,10 @@ function renderWallAudit() {
           + `<span class="wall-audit-detail">${f.segments} segment${f.segments === 1 ? '' : 's'}`
           + ` &middot; name says ${ft ? ft + ' ft' : 'a height'} &middot; none set</span>`
           + `<span class="wall-audit-spacer"></span>`
-          + (ft ? `<button class="btn btn-sm btn-primary" onclick="applyAuditHeight('${WD.escJsStr(f.wallTypeId)}')"`
+          + (ft ? `<button class="btn btn-sm btn-primary" data-action="call" data-fn="applyAuditHeight" data-arg="${WD.escAttr(f.wallTypeId)}"`
                   + ` title="${escAttr(f.why)}">Set to ${ft} ft</button>` : '')
-          + (i >= 0 ? `<button class="btn btn-sm" onclick="openEditModal(${i})">Edit&hellip;</button>` : '')
-          + `<button class="btn btn-sm" onclick="dismissAuditFinding('${WD.escJsStr(f.wallTypeId)}')"`
+          + (i >= 0 ? `<button class="btn btn-sm" data-action="call" data-fn="openEditModal" data-arg-json="${i}">Edit&hellip;</button>` : '')
+          + `<button class="btn btn-sm" data-action="call" data-fn="dismissAuditFinding" data-arg="${WD.escAttr(f.wallTypeId)}"`
           + ` title="Leave it on Auto and stop mentioning it">Leave as is</button>`
           + `</div>`;
       }).join('');
@@ -543,22 +543,26 @@ function renderHotkeyPanel() {
              style="--slot-color:${safeColor(wt.color)}"
              draggable="true"
              title="Drag to move this shortcut to another slot"
-             ondragstart="onSlotDragStart(event, ${n})"
-             ondragend="onSlotDragEnd(event)"
-             ondragover="onSlotDragOver(event, ${n})"
-             ondragleave="onSlotDragLeave(event)"
-             ondrop="onSlotDrop(event, ${n})">
+             data-slot="${n}"
+             data-action-dragstart="call" data-fn="onSlotDragStart"
+             data-action-dragend="call"
+             data-action-dragover="call"
+             data-action-dragleave="call"
+             data-action-drop="call"
+             data-arg-event="1" data-arg-this="1">
           <span class="hotkey-swatch"></span>
           <div class="hotkey-num">${n}</div>
           <div class="hotkey-name">${esc(wt.name)}</div>
-          <button class="hotkey-clear" onclick="clearKeybind(${n})" title="Remove shortcut">&times;</button>
+          <button class="hotkey-clear" data-action="call" data-fn="clearKeybind" data-arg-json="${n}" title="Remove shortcut">&times;</button>
         </div>`;
     } else {
       html += `
         <div class="hotkey-slot"
-             ondragover="onSlotDragOver(event, ${n})"
-             ondragleave="onSlotDragLeave(event)"
-             ondrop="onSlotDrop(event, ${n})">
+             data-slot="${n}"
+             data-action-dragover="call" data-fn="onSlotDragOver"
+             data-action-dragleave="call"
+             data-action-drop="call"
+             data-arg-event="1" data-arg-this="1">
           <div class="hotkey-num">${n}</div>
           <div class="hotkey-empty">drag here</div>
           <div></div>
@@ -617,8 +621,10 @@ function renderWallCard(wt, i) {
   return `
     <div class="wall-card" draggable="true"
          style="--wall-color:${safeColor(wt.color)}"
-         ondragstart="onCardDragStart(event, ${i})"
-         ondragend="onCardDragEnd(event)">
+         data-card-index="${i}"
+         data-action-dragstart="call" data-fn="onCardDragStart"
+         data-action-dragend="call"
+         data-arg-event="1" data-arg-this="1">
       <div class="wall-swatch"></div>
       <div class="wall-info">
         <div class="wall-name-row">
@@ -635,13 +641,14 @@ function renderWallCard(wt, i) {
       </div>
       <div class="wall-actions">
         <button class="btn btn-sm wall-act${kb ? ' is-bound' : ''}"
-                onclick="showKeybindMenu(event, ${i})"
+                data-wall-index="${i}" data-action="call" data-fn="showKeybindMenu"
+                data-arg-event="1" data-arg-this="1"
                 title="${escAttr(kbTitle)}">${kbLabel}</button>
-        <button class="btn btn-sm wall-act" onclick="openEditModal(${i})"
+        <button class="btn btn-sm wall-act" data-action="call" data-fn="openEditModal" data-arg-json="${i}"
                 title="Change this wall type's name, colour, thickness, height or attenuation">Edit</button>
-        <button class="btn btn-sm wall-act" onclick="cloneWall(${i})"
+        <button class="btn btn-sm wall-act" data-action="call" data-fn="cloneWall" data-arg-json="${i}"
                 title="${escAttr(`Start a new wall type copied from this one. It opens the editor with the name set to “${wt.name} (Copy)” and no keyboard shortcut; nothing is added until you press Add.`)}">Clone</button>
-        <button class="btn btn-sm wall-act btn-danger" onclick="deleteWall(${i})"
+        <button class="btn btn-sm wall-act btn-danger" data-action="call" data-fn="deleteWall" data-arg-json="${i}"
                 title="Remove this wall type from the list">Delete</button>
       </div>
     </div>`;
@@ -679,44 +686,47 @@ function renderList() {
 let dragCardIndex = -1;
 let dragSlotNum = -1;
 
-function onCardDragStart(e, i) {
+function onCardDragStart(e, el) {
+  const i = Number(el.dataset.cardIndex);
   dragCardIndex = i;
-  e.currentTarget.classList.add('dragging');
+  el.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', i.toString());
 }
 
-function onCardDragEnd(e) {
+function onCardDragEnd(e, el) {
   dragCardIndex = -1;
   document.querySelectorAll('.wall-card').forEach(c => c.classList.remove('dragging'));
   document.querySelectorAll('.hotkey-slot').forEach(s => s.classList.remove('dragover'));
 }
 
-function onSlotDragStart(e, num) {
+function onSlotDragStart(e, el) {
+  const num = Number(el.dataset.slot);
   dragSlotNum = num;
-  e.currentTarget.classList.add('dragging');
+  el.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', 'slot:' + num);
 }
 
-function onSlotDragEnd(e) {
+function onSlotDragEnd(e, el) {
   dragSlotNum = -1;
   document.querySelectorAll('.hotkey-slot').forEach(s => s.classList.remove('dragging', 'dragover'));
 }
 
-function onSlotDragOver(e, num) {
+function onSlotDragOver(e, el) {
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  e.currentTarget.classList.add('dragover');
+  el.classList.add('dragover');
 }
 
-function onSlotDragLeave(e) {
-  e.currentTarget.classList.remove('dragover');
+function onSlotDragLeave(e, el) {
+  el.classList.remove('dragover');
 }
 
-function onSlotDrop(e, num) {
+function onSlotDrop(e, el) {
+  const num = Number(el.dataset.slot);
   e.preventDefault();
-  e.currentTarget.classList.remove('dragover');
+  el.classList.remove('dragover');
   if (dragSlotNum >= 0) {
     if (dragSlotNum !== num) swapKeybinds(dragSlotNum, num);
     return;
@@ -738,7 +748,8 @@ function swapKeybinds(numA, numB) {
   else if (wtA) showToast(`Moved ${wtA.name} to [${numB}]`, 'success');
 }
 
-function showKeybindMenu(e, wallIndex) {
+function showKeybindMenu(e, el) {
+  const wallIndex = Number(el.dataset.wallIndex);
   e.stopPropagation();
   closeKeybindMenus();
   const map = getKeybindMap();
@@ -1368,14 +1379,6 @@ document.getElementById('tplImportInput').addEventListener('change', async (e) =
   }
   e.target.value = '';
 });
-
-function toggleDzMenu(e) {
-  WD.toggleMenu(e, 'dzMenu');
-}
-
-function toggleHelpMenu(e) {
-  WD.toggleMenu(e, 'helpMenu');
-}
 
 /* Backed by settings.json; loaded once by loadWallsPrefs(), and set on the
    Settings page under Quick Walls. Read here, never written here.

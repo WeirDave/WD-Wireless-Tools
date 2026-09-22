@@ -414,7 +414,7 @@
       return;
     }
     el.innerHTML = rows.map(r => `
-      <button class="swap-legend-row" onclick="selectAllOfType('${escJsStr(r.typeId)}')" title="Select all ${escAttr(r.name)} walls on this floor">
+      <button class="swap-legend-row" data-action="call" data-fn="selectAllOfType" data-arg="${escAttr(r.typeId)}" title="Select all ${escAttr(r.name)} walls on this floor">
         <span class="swap-legend-swatch" style="--swap-swatch:${r.color}"></span>
         <span class="swap-legend-name">${esc(r.name)}</span>
         <span class="swap-legend-count">${r.count}</span>
@@ -530,14 +530,15 @@
         const len = segLengthLabel(g);
         const jid = escJsStr(g.id);
         return '<div class="swap-seg-row" data-seg-id="' + escAttr(g.id) + '" '
-          + 'onmouseenter="swapHoverSeg(\'' + jid + '\',1)" '
-          + 'onmouseleave="swapHoverSeg(\'' + jid + '\',0)">'
+          + 'data-action-mouseenter="call" data-action-mouseleave="call" '
+          + 'data-fn="swapHoverSeg" data-arg-event="1" '
+          + 'data-arg="' + escAttr(g.id) + '">'
           + '<input type="checkbox" data-seg-id="' + escAttr(g.id) + '"'
           + (state.excluded.has(g.id) ? '' : ' checked')
-          + ' onchange="toggleSwapSeg(this)" '
+          + ' data-action-change="call" data-fn="toggleSwapSeg" data-arg-this="1" '
           + 'title="Include this segment in the swap">'
           + '<button type="button" class="swap-seg-locate" '
-          +   'onclick="locateSwapSeg(\'' + jid + '\')" '
+          +   'data-action="call" data-fn="locateSwapSeg" data-arg="' + escAttr(g.id) + '" '
           +   'title="Find this one on the plan">'
           +   '<span class="swap-seg-name">Segment ' + (i + 1) + '</span>'
           +   (len ? '<span class="swap-seg-len">' + esc(len) + '</span>' : '')
@@ -549,15 +550,16 @@
       return '<div class="swap-sel-group' + (collapsed ? ' is-collapsed' : '') + '" '
         + 'data-group-key="' + escAttr(gr.key) + '">'
         + '<div class="swap-sel-group-head" '
-        +   'onmouseenter="swapHoverGroup(\'' + escJsStr(gr.key) + '\',1)" '
-        +   'onmouseleave="swapHoverGroup(\'' + escJsStr(gr.key) + '\',0)">'
+        +   'data-action-mouseenter="call" data-action-mouseleave="call" '
+        +   'data-fn="swapHoverGroup" data-arg-event="1" '
+        +   'data-arg="' + escAttr(gr.key) + '">'
         +   '<button type="button" class="swap-sel-group-chevron" '
-        +     'onclick="toggleSwapGroupCollapse(\'' + escJsStr(gr.key) + '\')" '
+        +     'data-action="call" data-fn="toggleSwapGroupCollapse" data-arg="' + escAttr(gr.key) + '" '
         +     'aria-expanded="' + (collapsed ? 'false' : 'true') + '" '
         +     'title="' + (collapsed ? 'Show' : 'Hide') + ' the individual segments">▾</button>'
         +   '<input type="checkbox" class="swap-sel-group-check" '
         +     'data-group-key="' + escAttr(gr.key) + '"' + parentAttrs
-        +     ' onchange="toggleSwapGroup(this)" '
+        +     ' data-action-change="call" data-fn="toggleSwapGroup" data-arg-this="1" '
         +     'title="Check or uncheck every ' + escAttr(gr.name) + ' in the selection">'
         +   '<span class="swap-legend-swatch" style="--swap-swatch:' + gr.color + '"></span>'
         +   '<span class="swap-legend-name">' + esc(gr.name) + '</span>'
@@ -720,12 +722,13 @@
     updateCollapseAllButton();
   };
 
-  window.swapHoverSeg = function (id, on) {
-    setHoverSeg(on ? id : null, false);
+  window.swapHoverSeg = function (id, e) {
+    const leaving = e && e.type === 'mouseleave';
+    setHoverSeg(leaving ? null : id, false);
   };
 
-  window.swapHoverGroup = function (key, on) {
-    const next = on ? key : null;
+  window.swapHoverGroup = function (key, e) {
+    const next = (e && e.type === 'mouseleave') ? null : key;
     if (state.hoverGroupKey === next) return;
     state.hoverGroupKey = next;
     requestRender();

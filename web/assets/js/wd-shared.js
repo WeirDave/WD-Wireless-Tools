@@ -2016,12 +2016,15 @@
     }
 
     var EVENTS = ['click', 'change', 'input', 'submit', 'keyup', 'keydown',
-                  'dblclick', 'blur', 'focus', 'contextmenu', 'wheel'];
+                  'dblclick', 'blur', 'focus', 'contextmenu', 'wheel',
+                  'dragstart', 'dragend', 'dragover', 'dragleave', 'drop', 'paste',
+                  'mouseenter', 'mouseleave', 'mousedown'];
 
     function mount() {
       for (var i = 0; i < EVENTS.length; i++) {
         /* Capture for `blur` and `focus`, which do not bubble. */
-        var capture = EVENTS[i] === 'blur' || EVENTS[i] === 'focus';
+        var capture = EVENTS[i] === 'blur' || EVENTS[i] === 'focus'
+          || EVENTS[i] === 'mouseenter' || EVENTS[i] === 'mouseleave';
         document.addEventListener(EVENTS[i], dispatch(EVENTS[i]), capture);
       }
     }

@@ -223,7 +223,7 @@ class VerticalExtentMarkupTests(unittest.TestCase):
         html = WALLS_HTML.read_text(encoding="utf-8")
         self.assertIn('data-vmode="auto"', html)
         self.assertIn('data-vmode="fixed"', html)
-        self.assertIn("setHeightMode('auto')", html)
+        self.assertIn('data-fn="setHeightMode" data-arg="auto"', html)
 
     def test_the_per_type_consequence_is_stated(self):
         """Changing a height changes every segment drawn with that type."""

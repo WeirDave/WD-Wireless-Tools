@@ -81,13 +81,13 @@ class BothFoldAllControlsExist(unittest.TestCase):
         """
         block = self.row.group(1)
         for btn_id, label, handler in (
-                ("swapExpandAllBtn", "Expand all", "expandAllSwapGroups()"),
-                ("swapCollapseAllBtn", "Collapse all", "collapseAllSwapGroups()")):
+                ("swapExpandAllBtn", "Expand all", "expandAllSwapGroups"),
+                ("swapCollapseAllBtn", "Collapse all", "collapseAllSwapGroups")):
             with self.subTest(button=label):
                 self.assertIn(f'id="{btn_id}"', block)
                 self.assertIn(f">{label}</button>", block)
-                self.assertIn(f'onclick="{handler}"', block)
-                self.assertIn(f"window.{handler[:-2]} =", SWAP_JS,
+                self.assertIn(f'data-fn="{handler}"', block)
+                self.assertIn(f"window.{handler} =", SWAP_JS,
                               f"{handler} has no handler behind it")
 
     def test_each_starts_disabled_because_nothing_is_selected_yet(self):

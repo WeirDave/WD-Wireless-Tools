@@ -636,7 +636,6 @@
       rm.addEventListener('click', function () { _segments.splice(i, 1); renderSegments(); updateAll(); });
       row.appendChild(rm);
 
-      // Drag reorder
       row.addEventListener('dragstart', function (e) {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', String(i));
@@ -659,7 +658,6 @@
     });
   }
 
-  // Add-segment menu
   (function () {
     var btn = $('arAddBtn');
     var menu = $('arAddMenu');
@@ -683,7 +681,6 @@
     });
   })();
 
-  // Scope tab clicks
   (function () {
     var tabs = $('arScopeTabs');
     if (!tabs) return;

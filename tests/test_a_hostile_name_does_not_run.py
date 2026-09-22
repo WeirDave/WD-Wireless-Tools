@@ -264,9 +264,9 @@ def _renderers() -> str:
     walls_source = list(_code_lines(walls))
     walls_lines = []
     for position, (_number, line) in enumerate(walls_source):
-        if "onclick" not in line:
+        if "data-fn=" not in line:
             continue
-        if "applyAuditHeight(" in line or "dismissAuditFinding(" in line:
+        if ("applyAuditHeight" in line or "dismissAuditFinding" in line):
             walls_lines.append(line)
             # The `title=` half sits on the next line.
             following = walls_source[position + 1][1].strip()

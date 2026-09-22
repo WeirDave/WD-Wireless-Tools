@@ -274,7 +274,7 @@ class ShippedTemplateTests(unittest.TestCase):
 class ResetIsTheOnlyDestructiveActionTests(unittest.TestCase):
     def test_the_reset_button_still_exists_and_is_separate(self):
         html = WALLS_HTML.read_text(encoding="utf-8")
-        self.assertIn("resetToEkahauDefaults()", html)
+        self.assertIn('data-fn="resetToEkahauDefaults"', html)
 
     def test_the_reset_says_what_it_will_remove(self):
         """It is the one action that deletes wall types, so it names them

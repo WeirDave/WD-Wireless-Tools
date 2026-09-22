@@ -244,7 +244,8 @@ class TheHeaderReallyArrivesTests(unittest.TestCase):
                 "prep.html": "/prep", "rename.html": "/squirrel/rename",
                 "settings.html": "/settings", "setup.html": "/setup",
                 "organizer.html": "/squirrel",
-                "report.html": "/report"}
+                "report.html": "/report",
+                "walls.html": "/walls"}
 
     def test_every_strict_page_has_a_route_in_this_test(self):
         """Adding a page to the list without adding it here would leave it
@@ -338,14 +339,18 @@ class TheHeaderReallyArrivesTests(unittest.TestCase):
 
     def test_an_unconverted_page_keeps_the_permissive_default(self):
         """A page that still needs inline script must not get a policy that
-        breaks it. Half a rollout is worse than none."""
-        resp = self.get("/walls")
+        breaks it. Half a rollout is worse than none.
+
+        Cloud Manager is the last unconverted page. It was Quick Walls until
+        v2.165.0; when Cloud Manager joins the list this test needs a new
+        subject or it is asserting nothing."""
+        resp = self.get("/cloud")
         self.assertEqual(200, resp.status_code)
         self.assertEqual("frame-ancestors 'none'",
                          resp.headers.get("Content-Security-Policy"))
 
     def test_the_default_policy_is_still_set_everywhere(self):
-        for url in ("/walls", "/report", "/squirrel"):
+        for url in ("/cloud", "/report", "/squirrel"):
             with self.subTest(url=url):
                 self.assertIn(
                     "frame-ancestors 'none'",

@@ -320,10 +320,16 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
         Without this, the test above could be passing because the injection
         never worked in the first place, and the policy could be doing
         nothing at all.
+
+        Cloud Manager is the control because it is the last page still
+        carrying inline handlers. It was Quick Walls until v2.165.0. When
+        Cloud Manager is converted there is no unconverted page left, and
+        this differential has to be rebuilt on a fixture rather than quietly
+        deleted - without it the test above proves nothing.
         """
         for kind, drv in self.drivers.items():
             with self.subTest(browser=kind):
-                self.load(drv, "/walls")
+                self.load(drv, "/cloud")
                 result = drv.execute_script(PROBE)
                 self.assertTrue(
                     result["ran"],
@@ -344,7 +350,8 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
                 "prep.html": "/prep", "rename.html": "/squirrel/rename",
                 "settings.html": "/settings", "setup.html": "/setup",
                 "organizer.html": "/squirrel",
-                "report.html": "/report"}
+                "report.html": "/report",
+                "walls.html": "/walls"}
 
     def test_every_strict_page_loads_and_is_wired(self):
         """Each converted page, not only the two the other tests drive.

@@ -178,7 +178,7 @@ class PanelTests(unittest.TestCase):
         js = WALLS_JS.read_text(encoding="utf-8")
         panel = js[js.index("function renderWallAudit"):]
         panel = panel[:panel.index("\nfunction renderAll")]
-        called = set(re.findall(r'onclick="([A-Za-z_$][\w$]*)\(', panel))
+        called = set(re.findall(r'data-fn="([A-Za-z_$][\w$]*)"', panel))
         self.assertTrue(called, "the panel should offer at least one action")
         for name in called:
             self.assertRegex(

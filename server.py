@@ -283,6 +283,11 @@ CSP_STRICT_PAGES = {
     # seventeen, and a page carrying this policy cannot have any.
     "organizer.html",
     "report.html",
+    # Joined in v2.165.0. Quick Walls needed its drag-and-drop keybind
+    # slots and the visual-swap panel converted as well, and the shared
+    # dispatcher needed the drag, hover and paste events before either
+    # could be expressed without an inline handler.
+    "walls.html",
 }
 
 #: What a converted page gets.

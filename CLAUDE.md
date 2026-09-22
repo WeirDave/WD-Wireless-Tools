@@ -1471,6 +1471,73 @@ session to delete the explanation. Strip comments and docstrings first -
 and `_code_only` in `tests/test_user_dir_is_the_only_door.py` both do, and
 both were written after the check fired on its own note.
 
+## Comments: don't restate the code, and don't lose a finding either
+
+He asked for the comments to come out: *"you're my coder and I'm just the
+design guy, so I don't need to know what the hell it is you're coding, and no
+one else is going to look at the code and figure it out either."* Then, shown
+what was actually in them, he narrowed it himself, and **the narrowed version
+is the rule**: *"that's fine, leave the code comments in that make the
+difference."*
+
+So:
+
+* **Don't write a comment that restates the line below it.** `// Drag reorder`
+  above the drag-reorder handler is noise. He does not read it and nobody else
+  is going to.
+* **Do record a finding** — why something is the way it is, what breaks if it
+  is "corrected", what was tried and failed.
+* **Prefer putting that finding where it does work rather than in a comment.**
+  A test docstring that guards the behaviour, a named constant, or a rule
+  enforced in code all fail loudly when someone breaks them. A comment does
+  not. Both patterns are already here and are the ones to copy:
+
+  * `#646D7E` is Ekahau's own roll-up colour and must not be "corrected" — that
+    lives in `tests/test_template_store.py`'s docstring, with the survey behind
+    it, next to the test that asserts it.
+  * Trim must precede areas — that is not a comment at all. It is `ORDER_RULES`
+    in `tools/prep_pipeline.py`, carrying its own `why` string, enforced at
+    runtime by `PrepOrderError`. Reordering the steps fails loudly instead of
+    quietly producing uncropped plans.
+  * `tight: 0` fell through to a ten-pixel default, which is a different
+    real-world size on every drawing — relocated in v2.165.0 out of
+    `esx_trimmer.py` and `prep.js` into
+    `tests/test_margin_is_a_real_distance.py`, where
+    `test_tight_is_a_distance_rather_than_a_pixel_count` holds it.
+
+* **A comment is the fallback**, for when the knowledge genuinely cannot be
+  expressed as a test or a constraint.
+
+**The cleanup is far smaller than it sounds, and saying so up front matters.**
+Measured on 2026-09-20: ~5,088 comment lines across the shipped `.js` and
+`.py`, of which **86 blocks — 88 lines, about 2%** — are genuine restatement,
+plus 56 section dividers. Roughly **77% encode findings** and stay. A
+restatement pass removes about one comment line in fifty, so whoever asks for
+it should be told that before it runs, or the result reads as though nothing
+happened. **The rule for new code is the part that does the work, not the
+sweep.**
+
+Two traps if you ever do measure this again:
+
+* **Count by comment *block*, never by line.** A per-line classifier files the
+  continuation lines of a multi-line finding as noise and badly overstates what
+  is removable. That error was made and retracted on 2026-09-20; the first
+  number reported was wrong by more than an order of magnitude.
+* **A comment can be load-bearing, and nothing about reading it says so.** Four
+  comments cleared the block-level review on 2026-09-22 as unambiguous
+  restatement — labels sitting directly above the line they described. Removing
+  `// AP dots` from `report.js` broke seven tests: `test_grid_config_view.py`
+  slices the function body it inspects with `js.index("// AP dots")`. It was a
+  delimiter with a consumer. **Grep the tests for a comment's text before
+  deleting it**, and run the whole suite rather than the file's own tests —
+  that one surfaced only in the full 3,480-test run.
+
+* **A comment purge is not mechanically safe.** `# noqa:` and `# pragma:` are
+  functional directives, and there are ~66 of them here. A blanket strip breaks
+  linting and coverage.
+
+---
+
 ## Known gotchas
 
 - **Write the character, not an escape for it - and never let a patch script
