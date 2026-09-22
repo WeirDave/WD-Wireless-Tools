@@ -604,8 +604,24 @@ body.tool-report .report-wiz-topbar { background: linear-gradient(rgba(159,27,88
    The menus fit before the dev section existed - about 652px - so this cap
    engages on the pages that have grown past the window rather than changing
    how any menu looks today. `overscroll-behavior` keeps a flick at the end of
-   the list from scrolling the page underneath it. */
-.main-menu, .help-menu, .wd-menu {
+   the list from scrolling the page underneath it.
+
+   **Not `.wd-menu`.** It was in this selector, and it is not a navigation
+   menu - it is Cloud Manager's `<details>` wrapper, whose panel is an
+   absolutely positioned child. `overflow-y: auto` on the wrapper makes it a
+   scroll container, and a scroll container clips its absolutely positioned
+   descendants to its own padding box - which here is the 28px "Select"
+   button. So the panel was laid out, painted nowhere, and every item in it
+   was unclickable: `elementFromPoint` at each item returned whatever was
+   behind, and a real mouse click was refused. Measured on the shipped
+   v2.168.1 in Firefox, Chrome and Edge. The two menus it killed were Select
+   and the move/share/mark/overwrite menu - the whole bulk path.
+
+   Setting one axis also forces the other, so `overflow-x` became `auto` too
+   and the panel was clipped sideways as well. Both dropdowns are short and
+   neither needs a cap; if one ever does, it belongs on `.wd-menu-items`,
+   which is the panel, not on the wrapper. */
+.main-menu, .help-menu {
   max-height: calc(100vh - 96px);
   overflow-y: auto;
   overscroll-behavior: contain;
