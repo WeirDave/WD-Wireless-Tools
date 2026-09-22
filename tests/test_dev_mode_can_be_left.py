@@ -104,8 +104,7 @@ class DevModeLifecycle(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        with contextlib.suppress(Exception):
-            cls.driver.quit()
+        _browsers.shut_down(cls.driver)
         with contextlib.suppress(Exception):
             cls.server.shutdown()
             cls.server.server_close()

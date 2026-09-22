@@ -24,7 +24,10 @@ instead, so those guards keep working untouched.
 """
 from __future__ import annotations
 
+import contextlib
 import os
+import signal
+import subprocess
 import shutil
 import sys
 from pathlib import Path
@@ -120,3 +123,74 @@ def why_missing() -> str:
             % (", ".join(sorted(
                 n for w in _WHERE.values() for n in w["which"])),
                sys.platform))
+
+
+# ── stopping one, and meaning it ───────────────────────────────────────────
+
+def _pid_alive(pid: int) -> bool:
+    if not pid:
+        return False
+    if os.name == "nt":
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+            capture_output=True, text=True, errors="replace").stdout
+        return str(pid) in out
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _kill(pid: int) -> None:
+    if not pid:
+        return
+    if os.name == "nt":
+        # /T so the browser's own content processes go with it - Firefox keeps
+        # about ten per window, which is what turns a leak into gigabytes.
+        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                       capture_output=True, text=True, errors="replace")
+        return
+    with contextlib.suppress(OSError):
+        os.kill(pid, signal.SIGKILL)
+
+
+def shut_down(driver) -> list:
+    """`driver.quit()`, and then make sure the browser is actually gone.
+
+    **`quit()` inside a suppress-everything block looks unconditional and is
+    not.** When the driver has stopped answering - which is what happens under
+    memory pressure, precisely when a leak costs the most - `quit()` raises,
+    the exception is swallowed by the `contextlib.suppress(Exception)` that
+    was put there to make teardown unconditional, and the browser it started
+    outlives the run.
+
+    Measured on 2026-09-21: three headless Firefox processes left behind by a
+    suite whose teardown looks correct, with 2 GB of 32 GB free, and the next
+    browser run died with `ConnectionResetError` before its first assertion.
+    That is the same shape as the 307 processes and 22.5 GB recorded in
+    CLAUDE.md, arriving through a door that had already been closed once.
+
+    So the browser's own pid is read *before* quitting and killed afterwards
+    if it is still there. Firefox reports it as `moz:processID`; Chromium does
+    not report one, and there the driver process is the parent that takes the
+    browser with it, so the driver's pid is the one to check.
+
+    Returns the pids it had to kill, so a caller can say so rather than
+    cleaning up silently.
+    """
+    killed = []
+    caps = getattr(driver, "capabilities", None) or {}
+    browser_pid = caps.get("moz:processID") or 0
+    service = getattr(driver, "service", None)
+    service_proc = getattr(service, "process", None)
+    service_pid = getattr(service_proc, "pid", 0) or 0
+
+    with contextlib.suppress(Exception):
+        driver.quit()
+
+    for pid in (browser_pid, service_pid):
+        if pid and _pid_alive(pid):
+            _kill(pid)
+            killed.append(pid)
+    return killed

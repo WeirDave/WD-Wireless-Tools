@@ -111,10 +111,10 @@ class TheButtonsHaveRoom(unittest.TestCase):
             d.get(page.as_uri())
             cls.out = d.execute_script(PROBE)
         finally:
-            try:
-                d.quit()
-            except Exception:
-                pass
+            # Not a bare quit() in a try/except: a driver that has stopped
+            # answering raises there, the exception is swallowed, and the
+            # browser it started outlives the run.
+            _browsers.shut_down(d)
             shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def test_the_text_is_not_jammed_against_the_buttons(self):

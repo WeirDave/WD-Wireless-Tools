@@ -170,8 +170,7 @@ class EveryPage(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         if cls.driver is not None:
-            with contextlib.suppress(Exception):
-                cls.driver.quit()
+            _browsers.shut_down(cls.driver)
             cls.driver = None
         if cls.server is not None:
             with contextlib.suppress(Exception):

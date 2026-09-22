@@ -202,8 +202,7 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
             with contextlib.suppress(Exception):
                 patcher.stop()
         for drv in getattr(cls, "drivers", {}).values():
-            with contextlib.suppress(Exception):
-                drv.quit()
+            _browsers.shut_down(drv)
         httpd = getattr(cls, "httpd", None)
         if httpd is not None:
             httpd.shutdown()

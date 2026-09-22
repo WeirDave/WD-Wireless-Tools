@@ -207,8 +207,7 @@ class ToolbarInABrowser(unittest.TestCase):
         # Always, on the failure path too: an abandoned driver holds a browser
         # process and an abandoned server holds the port.
         if cls.driver is not None:
-            with contextlib.suppress(Exception):
-                cls.driver.quit()
+            _browsers.shut_down(cls.driver)
             cls.driver = None
         if cls.server is not None:
             with contextlib.suppress(Exception):

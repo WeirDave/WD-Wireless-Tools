@@ -130,8 +130,7 @@ class TheToolbarIsNotOnThePaper(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         # Always, on the failure path too.
-        with contextlib.suppress(Exception):
-            cls.driver.quit()
+        _browsers.shut_down(cls.driver)
         with contextlib.suppress(Exception):
             cls.server.shutdown()
             cls.server.server_close()

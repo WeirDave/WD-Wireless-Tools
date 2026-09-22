@@ -274,8 +274,7 @@ class TheReportCanBeReachedAndUsedTests(unittest.TestCase):
             try:
                 yield kind, driver
             finally:
-                with contextlib.suppress(Exception):
-                    driver.quit()
+                _browsers.shut_down(driver)
         if not started:
             self.skipTest("none of Chrome, Edge or Firefox could be started")
 

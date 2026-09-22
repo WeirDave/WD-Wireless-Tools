@@ -187,7 +187,7 @@ class NameColoursAreWhatTheyLookLikeTests(unittest.TestCase):
             drv.get(page.as_uri())
             cls.colours = json.loads(drv.execute_script(READ_COLOURS))
         finally:
-            drv.quit()
+            _browsers.shut_down(drv)
 
     # -- the hierarchy he asked for, read off the page ----------------------
 

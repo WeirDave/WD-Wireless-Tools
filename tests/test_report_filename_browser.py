@@ -211,7 +211,7 @@ class DroppedFileNamesTheReport(unittest.TestCase):
             try:
                 yield kind, driver
             finally:
-                driver.quit()
+                _browsers.shut_down(driver)
         if not started:
             self.skipTest("none of Firefox, Chrome or Edge would start")
 

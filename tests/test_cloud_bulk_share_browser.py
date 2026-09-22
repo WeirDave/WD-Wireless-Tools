@@ -180,8 +180,7 @@ class ShareDialogInABrowser(unittest.TestCase):
 
     @classmethod
     def _stop_driver(cls):
-        with contextlib.suppress(Exception):
-            cls.driver.quit()
+        _browsers.shut_down(cls.driver)
         cls.driver = None
 
     @classmethod
