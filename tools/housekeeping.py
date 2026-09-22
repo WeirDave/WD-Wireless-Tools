@@ -368,6 +368,35 @@ def scan_text(text):
 
 # ── what counts as ours ──────────────────────────────────────────
 
+#: A temp directory this repo made, matched by shape rather than by name.
+#:
+#: Every `tempfile.mkdtemp()` here passes a `wd-<something>-` prefix, and
+#: mkdtemp appends exactly eight characters from `[a-z0-9_]`. Matching that
+#: shape is deliberate, and it replaced a list of five literal prefixes.
+#:
+#: The list was the bug. It named `wd-tests-userdir-` while the suite had
+#: moved on to `wd-tests-home-`; two of its five entries - `wd-walls-` and
+#: `wd-report-` - matched nothing this repo had ever created; and the code
+#: went from 44 prefixes to 54 in the two days either side of 2026-09-21
+#: while the list stayed at five. Measured that morning: of 54 prefixes,
+#: 12 matched and 32 did not, and because `_survey_temp` skips an unmatched
+#: entry outright, the other 32 families were not merely undeletable - they
+#: never appeared in the inventory at all. 5,429 directories were cleared
+#: by hand that the button had reported nothing about.
+#:
+#: This is still a rule about names we chose, not a guess at what junk looks
+#: like. It does not match `wd-worktrees` or `wd-wireless-tools`, because
+#: neither ends in an eight-character mkdtemp suffix.
+_OUR_MKDTEMP = re.compile(r"wd-(?:[a-z0-9]+-)+[a-z0-9_]{8}")
+
+#: Names accepted with any suffix, not just an mkdtemp one.
+#:
+#: These predate the shape rule above and are kept because a directory left
+#: by an older build still deserves collecting. New prefixes do not belong
+#: here - the shape rule already has them, and that is the point of it.
+_LEGACY_PREFIXES = ("wd-tests-userdir-", "wd-cloud-pull-",
+                    "wd-prep-", "wd-walls-", "wd-report-")
+
 #: Each family: (group key, title, matcher, what it is).
 #:
 #: Adding one is a line here. The matcher takes a directory entry's name and
@@ -375,9 +404,11 @@ def scan_text(text):
 #: because a rule that loose would eventually match one of his folders.
 FAMILIES = [
     ("tests", "Test suite leftovers",
-     lambda n: n.startswith(("wd-tests-userdir-", "wd-cloud-pull-",
-                             "wd-prep-", "wd-walls-", "wd-report-")),
+     lambda n: bool(_OUR_MKDTEMP.fullmatch(n)) or n.startswith(_LEGACY_PREFIXES),
      "A temp directory the suite made and did not remove."),
+    ("updates", "Interrupted app updates",
+     lambda n: n.startswith("app-update-"),
+     "A staging directory from an app update that did not finish."),
     ("tests", "Test suite leftovers",
      lambda n: bool(re.fullmatch(r"wd\d+\.log", n)),
      "A log from a test server that ran on that port."),

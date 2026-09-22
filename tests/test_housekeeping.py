@@ -633,5 +633,88 @@ class TheSuiteCleansUpAfterItself(unittest.TestCase):
                          "which is how 12.73 GB accumulated on his machine")
 
 
+class TheButtonKnowsEveryNameWeMake(unittest.TestCase):
+    """The other half of the ratchet above.
+
+    `TheSuiteCleansUpAfterItself` checks that a temp directory gets removed
+    by the code that made it. This checks that the button can find it when
+    that fails anyway - and for two days it could not.
+
+    `FAMILIES` used to carry five literal prefixes. It named
+    `wd-tests-userdir-` while the suite had moved to `wd-tests-home-`, two
+    of the five matched nothing this repo had ever created, and the count
+    of real prefixes went 44 -> 54 in two days while the list stayed at
+    five. On 2026-09-21 that was 12 matched and 32 missed, and since
+    `_survey_temp` skips an unmatched entry outright, those 32 families
+    were invisible to the inventory rather than merely undeletable: 5,429
+    directories cleared by hand that the button had reported nothing about.
+
+    A list that has to be updated by hand every time somebody adds a
+    `mkdtemp` is a list that will be wrong again. The matcher now works on
+    the shape of a name instead, and this is what holds it to that.
+    """
+
+    @staticmethod
+    def _prefixes(tree):
+        """Literal `prefix=` values passed to `mkdtemp`, from the tree.
+
+        Read from the AST rather than the text for the reason the sibling
+        check gives: this file mentions the names it is checking, and a
+        checker that had to exempt itself would have a hole in it.
+        """
+        found = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = node.func
+            name = (fn.attr if isinstance(fn, ast.Attribute)
+                    else fn.id if isinstance(fn, ast.Name) else "")
+            if name != "mkdtemp":
+                continue
+            for kw in node.keywords:
+                if kw.arg == "prefix" and isinstance(kw.value, ast.Constant):
+                    if isinstance(kw.value.value, str):
+                        found.add(kw.value.value)
+        return found
+
+    def test_every_prefix_the_code_uses_is_one_the_button_matches(self):
+        root = Path(__file__).resolve().parent.parent
+        prefixes = set()
+        for path in sorted(root.rglob("*.py")):
+            if ".git" in path.parts:
+                continue
+            src = path.read_text(encoding="utf-8", errors="replace")
+            if "mkdtemp" not in src:
+                continue
+            try:
+                prefixes |= self._prefixes(ast.parse(src))
+            except SyntaxError:
+                continue
+        self.assertTrue(prefixes, "found no mkdtemp prefixes to check")
+        # mkdtemp appends exactly eight characters from [a-z0-9_].
+        unmatched = sorted(p for p in prefixes
+                           if not hk._family_for(p + "a1b2c3d4"))
+        self.assertEqual(unmatched, [],
+                         "the code makes these temp directories and the "
+                         "cleanup button cannot see them, so they would "
+                         "pile up in %TEMP% unreported")
+
+    def test_it_still_refuses_the_names_that_are_his(self):
+        """The prefixes that are not ours, and must never become ours.
+
+        `.plantrim-`, `.cover-`, `settings_` and `sync_state_` are
+        `mkstemp` prefixes for atomic writes *inside* `~/.wd_wireless_tools`
+        - his templates, his PlanTrim boxes, his settings. They look like
+        temp files because they are, and they are his. Widening the matcher
+        until it catches them would point the button at the one directory
+        it must never touch.
+        """
+        for name in (".plantrim-a1b2c3d4", ".cover-a1b2c3d4",
+                     "settings_a1b2.tmp", "sync_state_a1b2",
+                     "wd-worktrees", "wd-wireless-tools"):
+            with self.subTest(name=name):
+                self.assertIsNone(hk._family_for(name))
+
+
 if __name__ == "__main__":
     unittest.main()
