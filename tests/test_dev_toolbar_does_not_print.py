@@ -38,6 +38,8 @@ drives a real browser, which is not something to ask of CI - the same split
 """
 from __future__ import annotations
 
+from tests import browsers as _browsers
+
 import contextlib
 import socket
 import threading
@@ -74,7 +76,7 @@ try:  # pragma: no cover
 except ImportError:  # pragma: no cover
     HAVE_PYMUPDF = False
 
-FIREFOX = r"C:\Program Files\Mozilla Firefox\firefox.exe"
+FIREFOX = _browsers.find("firefox")
 
 
 def _free_port(start):

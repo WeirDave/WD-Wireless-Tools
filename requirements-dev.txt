@@ -1,0 +1,26 @@
+# What the test suite needs and the product does not.
+#
+# **Kept apart from `requirements.txt` deliberately.** That file is the
+# shipped dependency list: `build_release.py` puts it in the payload and
+# both installers run `pip install -r` against it on his machine. Anything
+# added there is installed on every machine that runs the tool, so a test
+# dependency belongs here instead.
+#
+# `selenium` is the whole of it, and its absence was not a small thing.
+# Fourteen test files drive real browsers - the pattern this repository
+# treats as its standard of proof after five defects shipped green behind
+# tests that only read source text - and every one of them is gated on
+# `from selenium import webdriver` succeeding. Nothing installed it in CI,
+# so all of them skipped there: around 300 test methods, reported as a pass.
+# That gap hid a test which had been red since v2.163.0 through four
+# releases.
+#
+# `tests/test_ci_runs_the_browser_tests.py` fails if this stops being
+# installed on a runner, the same way `test_ci_runs_the_node_tests.py`
+# guards node.
+#
+# A floor rather than a pin, matching the style of `requirements.txt`.
+# Selenium Manager - which fetches the right driver for whichever browser is
+# present, so nothing here has to install geckodriver or chromedriver - is
+# in every 4.x release well below this floor.
+selenium>=4.36.0

@@ -23,6 +23,8 @@ rule overriding it, or with the element removed from the modal entirely.
 """
 from __future__ import annotations
 
+from tests import browsers as _browsers
+
 import json
 import shutil
 import subprocess
@@ -35,7 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CSS = ROOT / "web" / "assets" / "wd-tools.css"
 CLOUD_HTML = ROOT / "web" / "cloud.html"
 
-FIREFOX = Path(r"C:\Program Files\Mozilla Firefox\firefox.exe")
+FIREFOX = Path(_browsers.find("firefox"))
 
 #: The body `checkAllUncompared()` really passes, for three pairs.
 BODY = (

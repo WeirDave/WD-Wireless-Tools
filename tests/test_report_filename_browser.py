@@ -23,6 +23,8 @@ Chrome, Edge and Firefox, per the standing rule.
 """
 from __future__ import annotations
 
+from tests import browsers as _browsers
+
 import base64
 import contextlib
 import json
@@ -44,9 +46,9 @@ WEB = ROOT / "web"
 PORT_HINT = 8834
 
 BROWSERS = [
-    ("firefox", r"C:\Program Files\Mozilla Firefox\firefox.exe"),
-    ("chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-    ("edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+    ("firefox", _browsers.find("firefox")),
+    ("chrome", _browsers.find("chrome")),
+    ("edge", _browsers.find("edge")),
 ]
 
 SITE = "Northwind Traders - Building 4 - 1200 Fake Rd"

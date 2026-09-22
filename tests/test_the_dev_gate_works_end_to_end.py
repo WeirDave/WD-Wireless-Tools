@@ -34,6 +34,8 @@ the one WaxFrame uses is checked separately by comparing the two files.
 """
 from __future__ import annotations
 
+from tests import browsers as _browsers
+
 import contextlib
 import hashlib
 import json
@@ -60,9 +62,9 @@ except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
 
 BROWSERS = [
-    ("firefox", r"C:\Program Files\Mozilla Firefox\firefox.exe"),
-    ("chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-    ("edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+    ("firefox", _browsers.find("firefox")),
+    ("chrome", _browsers.find("chrome")),
+    ("edge", _browsers.find("edge")),
 ]
 
 #: Invented here, and the copied tree's gate is pointed at its digest.

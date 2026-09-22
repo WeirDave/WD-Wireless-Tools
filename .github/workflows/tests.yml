@@ -19,7 +19,7 @@ jobs:
   test:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -56,10 +56,30 @@ jobs:
         with:
           node-version: '22'
 
+      # Fourteen test files drive Firefox, Chrome and Edge, which is the
+      # standard this repository holds itself to - a control is verified by
+      # running it, not by finding its name. Every one of them is gated on
+      # `from selenium import webdriver`, and nothing here installed it, so
+      # all ~300 of them skipped on the runner and reported as a pass. That
+      # is how a test stayed red from v2.163.0 through four releases: CI
+      # could not see it, and locally three identical red lines every run
+      # read as noise.
+      #
+      # Kept out of `requirements.txt` on purpose - that file ships in the
+      # release payload and both installers run it against his machine.
+      # `tests/test_ci_runs_the_browser_tests.py` fails if this step goes.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      # Which browsers the runner actually has, in the transcript, before
+      # anything depends on the answer. A skip that nobody can see is the
+      # thing being fixed here, so the inventory is printed rather than
+      # inferred from a test count.
+      - name: Report which browsers are available
+        run: python -m tests.browsers_report
 
       - name: Run safety suite
         run: python -m unittest discover -s tests -v

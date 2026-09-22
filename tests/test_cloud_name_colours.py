@@ -33,6 +33,8 @@ Every project and site name here is invented.
 """
 from __future__ import annotations
 
+from tests import browsers as _browsers
+
 import json
 import re
 import shutil
@@ -44,7 +46,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CLOUD_JS = ROOT / "web" / "assets" / "js" / "cloud.js"
 CSS = ROOT / "web" / "assets" / "wd-tools.css"
-FIREFOX = r"C:\Program Files\Mozilla Firefox\firefox.exe"
+FIREFOX = _browsers.find("firefox")
 NODE_TIMEOUT_S = 180
 
 #: One site, one file under it - the smallest tree that has all three levels.

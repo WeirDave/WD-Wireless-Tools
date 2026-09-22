@@ -26,6 +26,8 @@ the desktop.
 """
 from __future__ import annotations
 
+from tests import browsers as _browsers
+
 import contextlib
 import json
 import os
@@ -45,9 +47,9 @@ except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
 
 BROWSERS = [
-    ("firefox", r"C:\Program Files\Mozilla Firefox\firefox.exe"),
-    ("chrome", r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
-    ("edge", r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
+    ("firefox", _browsers.find("firefox")),
+    ("chrome", _browsers.find("chrome")),
+    ("edge", _browsers.find("edge")),
 ]
 
 #: Deliberately not 8675, which is the port a real install uses, and
