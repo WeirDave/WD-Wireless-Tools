@@ -84,6 +84,10 @@
     document.querySelectorAll('input[name="setowner"]').forEach(function (r) {
       r.checked = (r.value === own);
     });
+    var treeOpen = c.tree_default_open || 'attention';
+    document.querySelectorAll('input[name="setTreeOpen"]').forEach(function (r) {
+      r.checked = (r.value === treeOpen);
+    });
 
     // Read by walls.js after a save. It had no control anywhere until now,
     // so the only way to turn it off was editing settings.json by hand.
@@ -284,6 +288,14 @@
     for (var j = 0; j < owners.length; j++) {
       if (owners[j].checked) { ownerFilter = owners[j].value; break; }
     }
+    /* Falls back to what is saved rather than to the shipped default, so a
+       page that failed to render its radios cannot quietly reset his
+       choice on the next save. */
+    var treeOpen = (settings.cloud || {}).tree_default_open || 'attention';
+    var trees = document.querySelectorAll('input[name="setTreeOpen"]');
+    for (var t = 0; t < trees.length; t++) {
+      if (trees[t].checked) { treeOpen = trees[t].value; break; }
+    }
 
     var patch = {
       global: {
@@ -304,6 +316,7 @@
       cloud: {
         merge_rule: mergeRule,
         default_owner_filter: ownerFilter,
+        tree_default_open: treeOpen,
         live_interval_ms: parseInt(document.getElementById('sLiveMs').value, 10) || 30000,
       },
       walls: {

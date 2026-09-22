@@ -95,6 +95,22 @@ DEFAULTS = {
         # got three 403s. Opening on his own work is both what he wants and
         # the state in which every offered action can succeed.
         "default_owner_filter": "mine",
+        # How the Sites tree opens. "I want them expanded - all of them - and
+        # I want it to stick."
+        #
+        # `attention` is what the site-first redesign shipped: a site with
+        # something needing a decision opens and the rest stay shut, because
+        # opening ninety-odd sites at once was the wall that change was for.
+        # It is kept as the default so nobody else's install changes, and it
+        # is no longer the only answer - the reasoning behind it was about
+        # the first thing on screen, which is a judgement about his list
+        # rather than a fact about it.
+        #
+        # Deliberately three values rather than a checkbox. "Expanded" and
+        # "only what needs me" are the two he has asked for at different
+        # times, and Collapse all already exists as a button, so the third
+        # costs nothing and makes the set complete.
+        "tree_default_open": "attention",
     },
     "rename": {
         "folder_format": "",

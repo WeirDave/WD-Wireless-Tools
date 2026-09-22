@@ -165,6 +165,18 @@
       </div>
 
       <div class="s-field">
+        <label>Sites open as</label>
+        <div class="s-radios">
+          <label><input type="radio" name="setTreeOpen" value="all"> All sites expanded</label>
+          <label><input type="radio" name="setTreeOpen" value="attention"> Only sites that need a decision &mdash; the rest stay closed</label>
+          <label><input type="radio" name="setTreeOpen" value="none"> All sites collapsed</label>
+        </div>
+        <div class="hint">How the Sites tree opens in Cloud Manager. Expand all and Collapse all
+          in its toolbar still change what you are looking at, but only until you reload
+          &mdash; this is the one that sticks.</div>
+      </div>
+
+      <div class="s-field">
         <label>Live auto-refresh interval</label>
         <select id="sLiveMs">
           <option value="15000">15 seconds</option>

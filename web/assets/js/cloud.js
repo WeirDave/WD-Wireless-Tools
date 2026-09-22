@@ -670,6 +670,7 @@ async function goToDashboard(email) {
   // Before the first listing is drawn, not after, or the page shows
   // everything and then hides half of it a moment later.
   await loadDefaultOwnerFilter();
+  await loadTreeOpenMode();
   // Same reason: the merge rule and refresh interval have to be the saved ones
   // before anything can act on them.
   await loadCloudPrefs();
@@ -822,8 +823,10 @@ function closeSitesOnFirstSight() {
     const d = siteDigest(children);
     return !!d && (d.attention > 0 || d.unpaired > 0);
   };
+  //: His choice, and `attention` is only one of the three.
+  if (_treeOpenMode === 'all') return;
   const shut = (key, children) => {
-    if (!wantsHim(children)) collapsed.add(key);
+    if (_treeOpenMode === 'none' || !wantsHim(children)) collapsed.add(key);
   };
   (data.matched || []).forEach(p => shut('site:' + p.cloud.id,
     (p.cloud && p.cloud.children) || (p.local && p.local.children)));
@@ -7191,6 +7194,33 @@ function defaultOwnerFilter() {
    No server, or a settings file we cannot read, means All — showing
    everything is the safe way to be wrong, and it is what this page did
    before the setting existed. */
+/* How the Sites tree opens, from his settings.
+
+   "I want them expanded - all of them - and I want it to stick."
+
+   `attention` is what the site-first redesign shipped and stays the default
+   so nobody else's install changes: a site with something needing a decision
+   opens, the rest stay shut, because opening ninety sites at once was the
+   wall that change was for. That reasoning was about what the first screen
+   should be, which is a judgement about his list rather than a fact about
+   it - so it is a setting now and he can say.
+
+   `all` is his. Expand all and Collapse all still override whichever is
+   chosen, for this visit. */
+const TREE_OPEN_MODES = ['attention', 'all', 'none'];
+let _treeOpenMode = 'attention';
+
+function loadTreeOpenMode() {
+  const apply = (v) => {
+    _treeOpenMode = TREE_OPEN_MODES.indexOf(v) >= 0 ? v : 'attention';
+  };
+  if (!window.WD || !WD.api) { apply('attention'); return Promise.resolve(); }
+  return WD.api('settings/get').then(r => {
+    apply(r && r.ok && r.settings && r.settings.cloud
+      && r.settings.cloud.tree_default_open);
+  }).catch(() => { apply('attention'); });
+}
+
 function loadDefaultOwnerFilter() {
   const apply = (v) => {
     _ownerFilterDefault = _validOwnerFilter(v) || 'all';
