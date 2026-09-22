@@ -1540,6 +1540,35 @@ Two traps if you ever do measure this again:
 
 ## Known gotchas
 
+- **Every tracked text file is stored with LF, and `core.autocrlf` is not
+  what keeps it that way.** A 32-line change to `cloud.js` was committed as a
+  **20,434-line diff** - the whole file deleted and re-added - because the
+  blob went in with CRLF while `main` holds LF. Nothing failed: the suite was
+  green and the file was correct. What it costs is a change nobody can read
+  in the history, and, on a tree several sessions share, a conflict on every
+  hunk of a file two of them touched.
+
+  `core.autocrlf=true` is a filter on `git add`. The content-staging recipe
+  above -
+
+      git hash-object -w --stdin --path <path>
+
+  - applies no filter at all **without that `--path`**, so the safeguard is
+  off in exactly the situation it is reached for. That is how this happened.
+
+  `.gitattributes` is not a counter-example, though it reads like one.
+  `*.bat text eol=crlf` is a *checkout* instruction: the working tree gets
+  CRLF and the blob stays LF. So the invariant is total, and
+  `tests/test_every_tracked_file_is_stored_with_lf.py` needs no allowlist.
+  It reads the **index** rather than `HEAD`, so a staged file is caught
+  before it is committed.
+
+  Two things about repairing one. **Converting the working tree does not fix
+  a committed blob** - rewrite the blob and re-stage it. And **one pass is
+  not always enough**: an edit written into a CRLF file next to LF
+  neighbours leaves `\r\r\n`, which survives a single CRLF-to-LF replacement
+  and reads afterwards as a single stubborn CRLF. The substitution is `\r+\n`.
+
 - **Write the character, not an escape for it - and never let a patch script
   decide how many backslashes that takes.** This file is UTF-8 and the source
   is full of arrows, ticks, stars and em dashes written literally; a tooltip
