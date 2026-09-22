@@ -549,6 +549,38 @@
 
   // Shows both spellings at once so the effect of the switch is settled by
   // looking rather than by describing it.
+  /* Which destination keeps the file name, said in the Print step.
+
+     The name comes from `document.title`, and only the destinations that read
+     the page use it: Firefox's own "Save to PDF", and "Save as PDF" in Chrome
+     and Edge. **A Windows printer driver does not** - "Microsoft Print to PDF"
+     and "Adobe PDF" are printers, and the Save dialog a printer puts up names
+     the file from the Windows print job rather than from the page. He printed
+     through Microsoft Print to PDF and reported exactly that: the document was
+     right and the name was not filled in.
+
+     It is stated rather than worked around because it cannot be worked around
+     from inside a page - the page does not get to name a printer's output
+     file. Telling him which destination keeps the name is the whole fix, and
+     it is worth more than silence about a difference he will otherwise meet
+     after saving.
+
+     Not measured here, and that is recorded rather than glossed: driving a
+     Windows printer needs a real print dialog on his desktop, and Firefox's
+     silent-print preferences hang the driver - which CLAUDE.md already warned
+     about and which this session confirmed again. The claim above rests on his
+     report of the behaviour, not on a measurement. */
+  function renderPrintHint() {
+    var host = document.getElementById('repPrintHint');
+    if (!host) return;
+    host.innerHTML =
+      'Choosing <b>Save to PDF</b> in Firefox, or <b>Save as PDF</b> in Chrome '
+      + 'or Edge, offers the file name above. Printing to <b>Microsoft Print to '
+      + 'PDF</b> or <b>Adobe PDF</b> produces the same document, but those are '
+      + 'printers and name the file themselves — you will have to type it.';
+  }
+  window.renderPrintHint = renderPrintHint;
+
   function renderFilenamePreview() {
     var host = document.getElementById('setNamePreview');
     if (!host) return;
@@ -593,6 +625,7 @@
                 + (why ? ' ' + WD.esc(why) : '') + '</div>' : '');
   }
   window.renderFilenamePreview = renderFilenamePreview;
+  renderPrintHint();
 
   function renderSettingsBanner() {
     var host = document.getElementById('settingsBanner');

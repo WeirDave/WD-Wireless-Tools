@@ -201,6 +201,11 @@
       <button class="btn btn-secondary" data-action="call" data-fn="loadNewFile">&#128193; Open another…</button>
       <button class="btn btn-blue" data-action="call" data-fn="printReport">&#128424; Print / Save PDF</button>
     </div>
+    <!-- Which printer to pick, said where the printing happens. The file name
+         below is only offered by the destinations that take it from the page;
+         a Windows printer driver names the file from the print job instead and
+         ignores it. Saying so beats letting him find out after the save. -->
+    <p class="rep-print-hint noprint" id="repPrintHint"></p>
     <main class="report-canvas" id="reportCanvas">
       <div class="rep-empty">Report will render here.</div>
     </main>

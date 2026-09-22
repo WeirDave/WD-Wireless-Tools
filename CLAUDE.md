@@ -958,15 +958,45 @@ differently.
 
 | Output path | Produces a document | Renders correctly | File name populated |
 |---|---|---|---|
-| Firefox → Save to PDF | | | |
-| Firefox → Microsoft Print to PDF | | | |
-| Firefox → Adobe PDF (Distiller) | | | |
-| Chrome → Save as PDF | | | |
-| Edge → Save as PDF | | | |
-| macOS → Print to PDF | | | |
+| Firefox → Save to PDF | yes | yes | **yes** |
+| Chrome → Save as PDF | yes | yes | **yes** |
+| Edge → Save as PDF | yes | yes | **yes** |
+| Firefox → Microsoft Print to PDF | yes | yes | **no** |
+| Firefox → Adobe PDF (Distiller) | yes, since v2.164.1 | not measured | not measured |
+| macOS → Print to PDF | not measured | not measured | not measured |
 
-Fill it in **by printing**. A row reasoned about from what a driver probably
-does is worth nothing - that is the habit being corrected.
+Filled in on 2026-09-21, and the state of each row is itself part of the
+record:
+
+* **The first three are measured.** All five report types printed through
+  `driver.print_page(PrintOptions())`, the PDFs read back with PyMuPDF for page
+  count and embedded fonts, and `document.title` read at the moment of
+  printing. Page counts agree across the three engines.
+* **Microsoft Print to PDF is his report, not a measurement.** The document is
+  right and the name is not offered. It follows from what the two kinds of
+  destination are: "Save to PDF" is a browser feature and reads the page's
+  title; "Microsoft Print to PDF" and "Adobe PDF" are *printers*, and the Save
+  dialog a printer raises names the file from the Windows print job. **A page
+  cannot name a printer's output file**, so this is stated in the Print step
+  rather than fixed - see `renderPrintHint` in `report.js`.
+* **Adobe produces a document again** because the font it choked on is no
+  longer in the file - proved by embedding, not by printing: every report type
+  carried `CascadiaCode-Regular` before v2.164.1 and carries only Consolas and
+  Segoe UI after. There is no Adobe printer on his machine to print through.
+* **macOS is empty because there is no Mac here.** Left empty rather than
+  guessed, which is the whole point of the table.
+
+Fill a row in **by printing**. A row reasoned about from what a driver probably
+does is worth nothing - that is the habit being corrected - and a row that
+cannot be measured says so rather than being left to look measured.
+
+**Do not try to drive a Windows printer from Selenium.** It was tried on
+2026-09-21: a temporary printer on a FILE: port avoids the Save dialog, but
+`window.print()` with `print.always_print_silent` **hangs the driver** until
+the 120s read timeout, leaving orphaned Firefox processes behind. That is the
+same dead end the browser section already records for
+`print.print_to_filename`; it is recorded here too because the Windows-driver
+row is exactly where somebody will reach for it next.
 
 **Adobe stays in the matrix precisely because it is the one that failed.**
 Confirming it produces a document after a font change is how the fix is known

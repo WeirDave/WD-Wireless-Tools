@@ -11257,3 +11257,12 @@ body.wd-settings-open { overflow: hidden; }
    that is no longer the one it was opened from. */
 body.wd-embedded .topbar { display: none; }
 body.wd-embedded .settings-wrap { padding-top: 16px; }
+
+/* Which print destination keeps the file name. Beside the Print button rather
+   than in a tooltip: it decides which entry he picks in the print dialog, and
+   a decision does not go behind a hover. */
+.rep-print-hint {
+  margin: 6px 0 0; padding: 0 14px;
+  font-size: 12px; color: var(--text-3); line-height: 1.5;
+}
+.rep-print-hint b { color: var(--text-2); font-weight: 600; }
