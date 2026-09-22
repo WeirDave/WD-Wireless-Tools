@@ -211,6 +211,35 @@ class MenuItemsCanBeClicked(unittest.TestCase):
         A clipped panel still reports sensible coordinates; this is what
         notices that nothing is painted at them.
         """
+        misses = self._misplaced()
+        self.assertEqual([], misses, "\n".join(misses))
+
+    def test_they_are_still_reachable_on_a_short_screen(self):
+        """The same question at 1366x768, which is the size that matters.
+
+        The rule that caused this was a `max-height` written for a window too
+        short to hold a long menu - and the browsers here are fixed at 960
+        tall, so the one shape of regression this file exists for is the one
+        its own viewport cannot show. A cap that engages only below some
+        height would pass every other case in this file.
+
+        Restoring the size is a cleanup rather than a line at the end,
+        because a failure part way through would otherwise leave every later
+        test in the class running at a size it never asked for.
+        """
+        was = self.driver.get_window_size()
+        self.addCleanup(self.driver.set_window_size,
+                        was["width"], was["height"])
+        self.driver.set_window_size(1366, 768)
+        self.setUp()
+        misses = self._misplaced()
+        self.assertEqual(
+            [], misses,
+            "at 1366x768 these items are drawn where nothing can reach them:"
+            + "\n" + "\n".join(misses))
+
+    def _misplaced(self):
+        """Every item whose own centre belongs to something else."""
         misses = []
         for menu in self._each_menu():
             label = self.driver.execute_script(
@@ -228,7 +257,7 @@ class MenuItemsCanBeClicked(unittest.TestCase):
                     misses.append("%s / %s: the point belongs to %s"
                                   % (label, text, found.get("found")))
             self.driver.execute_script("arguments[0].open = false;", menu)
-        self.assertEqual([], misses, "\n".join(misses))
+        return misses
 
     def test_every_item_accepts_a_real_click(self):
         """And the browser has to let a mouse press it.
