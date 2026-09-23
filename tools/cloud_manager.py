@@ -1636,6 +1636,60 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
     }
 
 
+#: **Ownership is three states, not two.** A project is mine, provably
+#: somebody else's, or unproven - and the third is not the second.
+#:
+#: Collapsing them is what made a bulk share offer three projects out of
+#: thirty-three. The gate asked the share endpoint who owned each one, and
+#: that endpoint has nothing to say about a project nobody has ever shared -
+#: which is the entire set somebody working through a "not shared" filter has
+#: selected. No owner came back, "no owner" was read as "not yours", and his
+#: own projects were withheld from him while every row still displayed as his.
+OWNED = "owned"
+NOT_MINE = "not-mine"
+UNPROVEN = "unproven"
+
+
+def owner_in(users):
+    """The OWNER address out of a list of user rows, or ''.
+
+    The dataset listing and the share list use the same shape - `role` and
+    `username` - so one reader serves both. An empty answer is ordinary
+    rather than exceptional: it is what an unshared project looks like.
+    """
+    for u in (users or []):
+        if (u.get("role") or "").upper() == "OWNER":
+            return (u.get("username") or "").strip().lower()
+    return ""
+
+
+def cloud_owner_map(api):
+    """{project id: (owner, created_by)} for the account, in two calls.
+
+    This is the derivation the project list on screen already uses, and that
+    is the point of it: a gate on an action and the row the action is offered
+    from have to agree about who owns a project. They did not.
+    """
+    owners, created = {}, {}
+    try:
+        for entry in api.get_dataset_listing() or []:
+            eid = entry.get("id")
+            if eid:
+                owners[eid] = owner_in(entry.get("datasetUsers"))
+    except Exception:
+        pass
+    try:
+        for pr in api.get_projects() or []:
+            pid = pr.get("id")
+            if pid:
+                created[pid] = ((pr.get("history") or {})
+                                .get("createdBy") or "").strip().lower()
+    except Exception:
+        pass
+    return {pid: (owners.get(pid, ""), created.get(pid, ""))
+            for pid in set(owners) | set(created)}
+
+
 def build_sites_data(api, output_dir):
     sites = api.get_sites()
 
@@ -3514,6 +3568,57 @@ class CloudManager:
             return {"error": str(e)}
 
 
+    def _ownership(self, project_ids):
+        """{project id: (state, owner email)} for a batch.
+
+        **Only a strong source may refuse.** The dataset listing and the
+        share list each carry an explicit OWNER row, and either of them
+        naming somebody else is proof. `history.createdBy` is not proof -
+        ownership can be transferred and the creator does not move with it -
+        so it may confirm that a project is mine and may never conclude that
+        it is not.
+
+        The listing is asked first and covers the whole account in two calls.
+        The share endpoint is the fallback for the few it cannot place,
+        rather than the first question asked about every project: it is one
+        request each, and for an unshared project it answers nothing, which
+        is what made the old gate refuse the entire "not shared" filter.
+        """
+        me = (self.api.user_email or "").strip().lower()
+        try:
+            listing = cloud_owner_map(self.api)
+        except Exception:
+            listing = {}
+
+        out = {}
+        for pid in project_ids:
+            owner, created_by = listing.get(pid, ("", ""))
+            if not me:
+                #: Not knowing who we are is not evidence about anyone else.
+                out[pid] = (UNPROVEN, owner)
+                continue
+            if not owner and created_by and created_by == me:
+                #: He made it and nothing contradicts that. Asking the share
+                #: endpoint could only confirm what is already decided, and
+                #: it is one request per project - thirty of them, for his
+                #: thirty unshared files, every one answering nothing.
+                out[pid] = (OWNED, created_by)
+                continue
+            if not owner:
+                #: Worth a request only here, where it is the one source
+                #: that could still prove the project is somebody else's.
+                try:
+                    raw = self.api.list_project_shares(pid) or {}
+                    rows = raw.get(pid, []) if isinstance(raw, dict) else []
+                    owner = owner_in(rows)
+                except Exception:
+                    owner = ""
+            if owner:
+                out[pid] = (OWNED if owner == me else NOT_MINE, owner)
+            else:
+                out[pid] = (UNPROVEN, "")
+        return out
+
     def bulk_share(self, project_ids, emails, role="READ_USER",
                    share_with_group=False, group_id=None,
                    group_name="", group_role="READ_USER"):
@@ -3541,29 +3646,35 @@ class CloudManager:
         my_email = (self.api.user_email or "").strip().lower()
 
 
-        owned_ids, skipped = [], []
-        for pid in project_ids:
-            try:
-                raw = self.api.list_project_shares(pid) or {}
-                shares = raw.get(pid, []) if isinstance(raw, dict) else []
-                owner = next((u for u in shares
-                              if (u.get("role") or "").upper() == "OWNER"), None)
-                owner_email = ((owner or {}).get("username") or "").strip().lower()
-                if my_email and owner_email and my_email == owner_email:
-                    owned_ids.append(pid)
-                else:
-                    skipped.append({"projectId": pid, "reason":
-                        f"Not owner (owned by {owner_email or 'unknown'})"})
-            except Exception as e:
-                skipped.append({"projectId": pid, "reason": str(e)})
+        #: **Only a proven owner may refuse.** Anything this cannot place is
+        #: attempted: Ekahau answers 403 for a project that is not ours, and
+        #: a refusal he can read and retry is better than a control that
+        #: quietly did nothing. The opposite reading is what withheld thirty
+        #: of his own projects from him.
+        owned_ids, skipped, unproven = [], [], []
+        for pid, (state, owner_email) in self._ownership(project_ids).items():
+            if state == NOT_MINE:
+                skipped.append({"projectId": pid, "owner": owner_email,
+                                "reason": f"Owned by {owner_email}"})
+                continue
+            owned_ids.append(pid)
+            if state == UNPROVEN:
+                unproven.append(pid)
+
+        #: `project_ids` order, not dictionary order - the page pairs these
+        #: back up with the rows it sent and a reshuffle reads as a bug.
+        owned_ids = [p for p in project_ids if p in set(owned_ids)]
 
         #: `ownedIds` so the page can name the projects in the result. It
         #: holds the names; sending them here only to send them back would be
-        #: a second copy to keep in step.
+        #: a second copy to keep in step. `unprovenIds` is the honest part of
+        #: the count: attempted, not confirmed.
         results = {"skipped": skipped, "ownedCount": len(owned_ids),
-                   "ownedIds": list(owned_ids)}
+                   "ownedIds": list(owned_ids),
+                   "unprovenIds": list(unproven),
+                   "unprovenCount": len(unproven)}
         if not owned_ids:
-            return {"error": "None of the selected projects are yours to share",
+            return {"error": "Every selected project belongs to someone else",
                     **results}
 
 
@@ -3816,19 +3927,15 @@ class CloudManager:
 
             confirmed_ids = []
             if project_ids is not None:
-                for pid in project_ids:
-                    if not pid:
-                        continue
-                    try:
-                        raw = self.api.list_project_shares(pid) or {}
-                        shares = raw.get(pid, []) if isinstance(raw, dict) else []
-                        owner = next((u for u in shares
-                                      if (u.get("role") or "").upper() == "OWNER"), None)
-                        if not owner or (owner.get("username") or "").strip().lower() != my_email:
-                            continue
-                        confirmed_ids.append(pid)
-                    except Exception:
-                        continue
+                #: The same three-state reading the bulk share uses, and for
+                #: the same reason: this path takes the projects he ticked in
+                #: the picker, so dropping one he cannot be proved to own
+                #: removes a choice he has already made, without saying so.
+                picked = [p for p in project_ids if p]
+                keep = {pid for pid, (state, _owner)
+                        in self._ownership(picked).items()
+                        if state != NOT_MINE}
+                confirmed_ids = [p for p in picked if p in keep]
             else:
                 try:
                     dsl = self.api.get_dataset_listing() or []

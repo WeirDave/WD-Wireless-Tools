@@ -1339,16 +1339,41 @@ function _siteHasUnassigned(cloudObj, localObj) {
    The unknown case is deliberately permissive. A project with no owner
    recorded is not evidence that it is someone else's, and refusing on
    missing data is the guard-that-fires-on-his-normal-case failure. */
+/* Ownership is three states, and the third is not the second.
+
+   A project is mine, provably somebody else's, or unproven. Reading
+   "unproven" as "somebody else's" is what let a bulk share offer three
+   projects out of thirty-three: every one of the other thirty was his, the
+   row displayed as his, and the selection dropped them before anything was
+   sent because their owner field was empty.
+
+   `mine` and `unknown` are both actionable. Ekahau answers 403 for a project
+   that is not ours, and a refusal he can read and retry is better than a
+   control that quietly did nothing - the same reasoning as "Unrecoverable
+   earns friction, not refusal", one step further down.
+
+   **The three answers are written as string literals rather than named
+   constants, and that is not an oversight.** Several probes slice these
+   functions out of this file and `eval` them one at a time; a module-level
+   `const` is not inside any of those slices, so a named constant turns every
+   one of them into a ReferenceError. `ownershipOf` therefore sits directly
+   below `ownershipBlock`, inside the same sliced range, and neither reaches
+   for anything above it. */
 function ownershipBlock(cloudObj) {
+  if (ownershipOf(cloudObj) !== 'theirs') return '';
+  return 'Owned by ' + (cloudObj.owner || 'someone else')
+       + '. Ekahau only lets the owner change a project.';
+}
+
+function ownershipOf(cloudObj) {
   //: `typeof` because this is sliced out of the file by several probes, and
   //: a bare reference to an undeclared `data` is a ReferenceError rather
   //: than undefined.
   const d = (typeof data !== 'undefined' && data) || null;
   const me = ((d && d.currentUser) || '').toLowerCase();
   const owner = (cloudObj && cloudObj.owner || '').toLowerCase();
-  if (!me || !owner || owner.indexOf('@') < 0 || owner === me) return '';
-  return 'Owned by ' + (cloudObj.owner || 'someone else')
-       + '. Ekahau only lets the owner change a project.';
+  if (!me || !owner || owner.indexOf('@') < 0) return 'unknown';
+  return owner === me ? 'mine' : 'theirs';
 }
 
 function iOwn(cloudObj) {
@@ -4722,9 +4747,22 @@ function cloudCell(r, localCodes) {
      second line. An owner tag is worth the space when the answer is somebody
      else; when the answer is "you", it is the most predictable string on the
      page. The Owner toggle above the list is how he asks the other question. */
-  const ownerHtml = (!isSites && owner && owner !== me)
+  /* Sites carry an owner too, so the edge applies there as well. Only
+     the written-out address stays off them, which is what the comment
+     below is about. */
+  const ownState = ownershipOf(c);
+  const ownerHtml = !isSites && ownState === 'theirs'
     ? ` <span class="owner-tag other" title="${a(ownerTitle)}">${e(owner)}</span>`
-    : '';
+    : (!isSites && ownState === 'unknown'
+        /* The state that had no mark at all, and is the one worth marking.
+           A project Ekahau lists no owner for looked exactly like one he
+           owns, so thirty of his own projects being read as somebody else's
+           was invisible on screen - and it is a short tag rather than an
+           address because there is no address to show. */
+        ? ` <span class="owner-tag unknown" title="Ekahau lists no owner for`
+          + ` this project. That is ordinary for one nobody has shared.`
+          + ` Actions are still offered; Ekahau decides.">owner unknown</span>`
+        : '');
 
   const typeHtml = (!isSites && c.projectType)
     ? ` <span class="ptype-tag pt-${e(c.projectType.toLowerCase().replace(/\s+/g, '-'))}" title="Project type (from Ekahau)">${e(c.projectType)}</span>`
@@ -4738,10 +4776,27 @@ function cloudCell(r, localCodes) {
     ? ` <span class="shared-tag" title="Also shared with: ${a(shared.join(', '))}">${shared.length} shared</span>`
     : '';
 
-  const iOwnCloud = owner && me && owner === me;
+  const iOwnCloud = ownState !== 'theirs';
   const unassignedHtml = (!isSites && c.unassigned && iOwnCloud)
     ? ` <span class="ptype-tag pt-unassigned" title="This cloud project has no site parent in Ekahau. Assign it so it lives inside the right site.">Not assigned</span>`
     : '';
+  /* Colour is never the only signal, and the words live here rather than in
+     a helper beside this function: several probes slice `cloudCell` out on
+     its own and evaluate it, so anything it calls from above is a
+     ReferenceError in exactly the tests that check this row renders. */
+  const ownWords = ownState === 'theirs'
+    ? 'Owned by ' + (owner || 'somebody else')
+      + '. Ekahau only lets the owner change a project.'
+    : ownState === 'unknown'
+      ? 'Ekahau lists no owner for this project, which is ordinary for one '
+        + 'nobody has shared. Actions are still offered; Ekahau decides.'
+      : 'Yours.';
+  /* Beside the name, not inside it. The dot is row state rather than part
+     of the project's name, and nesting it in `.cell-name` put an empty span
+     in front of every name - which reads to anything parsing the rendered
+     row as a row with no name at all. */
+  const ownDot = `<span class="own-dot" data-own="${ownState}" `
+    + `title="${a(ownWords)}"></span>`;
   const nameHtml = (isMis ? charDiff(c.name, r.local.name).a : e(c.name)) + (isSites ? '' : '.esx') + typeHtml + planHtml + unassignedHtml + ownerHtml + sharedHtml + dupHintFor(c.id);
   const dup = r.status === 'orphan' && c.code && localCodes.has(c.code);
 
@@ -4785,8 +4840,10 @@ function cloudCell(r, localCodes) {
       { danger: true, title: 'A cloud delete cannot be undone.', blocked: notMine }),
   ], `Actions for this ${thing}`);
 
-  return `<div class="lr-cell cloud${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A local ${isSites ? 'folder' : '.esx'} shares code ${a(c.code)} — likely the same place"` : ''}>`
-    + `${chevron}${chk}<span class="cell-name">${nameHtml}</span>${meta}${menu}</div>`;
+  /* Ownership as colour on the cell itself, so a list of ninety answers
+     "whose is this" without a hover and without a column of addresses. */
+  return `<div class="lr-cell cloud own-${ownState}${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A local ${isSites ? 'folder' : '.esx'} shares code ${a(c.code)} — likely the same place"` : ''}>`
+    + `${chevron}${chk}${ownDot}<span class="cell-name">${nameHtml}</span>${meta}${menu}</div>`;
 }
 
 function localCell(r, cloudCodes) {
@@ -5172,7 +5229,7 @@ async function _fetchGroupIntoCtx() {
 }
 
 async function openManageShares(projectId, projectName, bulkProjectIds,
-                                bulkProjects, notMine) {
+                                bulkProjects, notMine, unproven) {
   const isBulk = Array.isArray(bulkProjectIds) && bulkProjectIds.length > 0;
   _shareCtx = {
     projectId: isBulk ? null : projectId,
@@ -5182,6 +5239,8 @@ async function openManageShares(projectId, projectName, bulkProjectIds,
     //: out of the selection because they are not his to share.
     bulkProjects: isBulk ? (bulkProjects || []).slice() : null,
     notMine: isBulk ? (notMine || []).slice() : null,
+    //: Included in the action and named separately - offered, not confirmed.
+    unproven: isBulk ? (unproven || []).slice() : null,
     users: [],
     group: null,
     groupPanelOpen: false,
@@ -5692,7 +5751,8 @@ async function openBulkShare() {
   }
   await openManageShares(null, null, ids,
                          (window._bulkShareOwned || []).slice(),
-                         (window._bulkShareNotMine || []).slice());
+                         (window._bulkShareNotMine || []).slice(),
+                         (window._bulkShareUnproven || []).slice());
 }
 
 function _transferOwnershipStart() {
@@ -5942,13 +6002,32 @@ function _shareSelectionHtml() {
   const names = (ctx.bulkProjects || []).map(p => p.name);
   const n = ctx.bulkProjectIds.length;
   const notMine = ctx.notMine || [];
+  const unproven = ctx.unproven || [];
 
+  /* The whole arithmetic in the heading, because the question he arrives
+     with is "did it take all of them" and counting a list of thirty by eye
+     is not an answer. */
+  const total = n + notMine.length;
+  const head = notMine.length
+    ? `${n} of the ${total} selected will be shared`
+    : `These ${n} project${n === 1 ? '' : 's'} will be shared`;
   let h = `<div class="share-targets"><div class="share-targets-head">`
-    + `These ${n} project${n === 1 ? '' : 's'} will be shared</div>`;
+    + `${head}</div>`;
   if (names.length) {
     h += '<ul class="share-targets-list">'
       + names.map(nm => `<li>${e(nm)}</li>`).join('')
       + '</ul>';
+  }
+  if (unproven.length) {
+    /* Named before he runs anything, because the alternative is finding out
+       from the result. These are attempted: Ekahau decides, and says so. */
+    h += `<div class="share-targets-unproven"><b>${unproven.length} of `
+      + `these ${n}</b> could not be confirmed as yours — Ekahau lists no `
+      + `owner for them, which is ordinary for a project nobody has shared. `
+      + `They are included; if any turns out not to be yours, Ekahau refuses `
+      + `that one and it is reported here.<ul>`
+      + unproven.map(u => `<li>${e(u.name)}</li>`).join('')
+      + '</ul></div>';
   }
   if (notMine.length) {
     /* Named, because "3 skipped" invites him to wonder which three - and
@@ -7475,6 +7554,8 @@ function updateBulkBar() {
   const ownedCloudIds = new Set();
   const ownedCloudNames = new Map();
   const notMineToShare = new Map();
+  //: Offered, but not confirmed as his - see the split below.
+  const unprovenToShare = new Map();
   const myEmail = ((data && data.currentUser) || '').toLowerCase();
   selected.forEach(k => {
     const d = rowData[k]; if (!d) return;
@@ -7516,21 +7597,26 @@ function updateBulkBar() {
 
     const cloudIdOfRow = d.cloudId || (d.kind === 'cloud' ? d.id : null);
     if ((d.kind === 'pair' || d.kind === 'cloud') && cloudIdOfRow) {
-      const ownerOf = (d.cloudOwner || '').toLowerCase();
-      if (myEmail && ownerOf === myEmail) {
+      const state = ownershipOf({ owner: d.cloudOwner });
+      const rowName = d.cloudName || d.localName || cloudIdOfRow;
+      if (state !== 'theirs') {
         ownedCloudIds.add(cloudIdOfRow);
         //: The name as well as the id, so the share dialog can list what it
         //: is about to act on. He reaches it from a filtered selection made
         //: several steps earlier and should not have to remember.
-        ownedCloudNames.set(cloudIdOfRow, d.cloudName || d.localName || cloudIdOfRow);
+        ownedCloudNames.set(cloudIdOfRow, rowName);
+        /* Kept apart from the proven ones so the dialog can be honest about
+           which is which. It is still offered: an empty owner field is the
+           ordinary state of a project nobody has shared, and reading it as
+           somebody else's is what withheld thirty of his own projects. */
+        if (state === 'unknown') unprovenToShare.set(cloudIdOfRow, rowName);
       } else {
         /* Someone else's, and it is dropped from the selection here rather
            than refused by Ekahau later. Dropping it silently is the half
            that was wrong: fifteen selected became "Sharing 12 projects" with
            nothing to account for the other three. */
         notMineToShare.set(cloudIdOfRow,
-          { name: d.cloudName || d.localName || cloudIdOfRow,
-            owner: d.cloudOwner || '' });
+          { name: rowName, owner: d.cloudOwner || '' });
       }
     }
     if (d.kind === 'pair' && d.cloudId) pairCount++;
@@ -7612,6 +7698,8 @@ function updateBulkBar() {
     id => ({ id: id, name: ownedCloudNames.get(id) || id }));
   window._bulkShareNotMine = Array.from(notMineToShare.entries()).map(
     ([id, v]) => ({ id: id, name: v.name, owner: v.owner }));
+  window._bulkShareUnproven = Array.from(unprovenToShare.entries()).map(
+    ([id, name]) => ({ id: id, name: name }));
   setBtn('bulkDeleteBtn', true, deletableCount > 0, 'Bulk delete only works on cloud-only or local-only rows');
   setBtn('compareBtn', currentTab === 'sites', localFolderCount >= 2, 'Select 2+ local folders to compare');
   setBtn('bulkMoveBtn', true, movableCount > 0, 'Select cloud projects or local .esx files first');

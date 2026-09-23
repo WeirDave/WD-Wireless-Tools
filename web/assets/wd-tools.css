@@ -2778,6 +2778,65 @@ body.tool-cloud .toolbar input.search:focus {
   box-shadow: 0 1px 2px rgba(0,0,0,0.15);
 }
 
+/* **The toggle is colour-coded to the rows it selects.** "make the user side
+   one colour and other users another colour for the different owners."
+
+   The two sides are the two answers, so each carries the colour its rows
+   carry in the list below: yours in the cloud accent, other people's in the
+   same orange the owner address is written in. All keeps the neutral purple,
+   because it is not one answer - it is both, and colouring it as either
+   would say something untrue about what is on screen.
+
+   The unselected buttons carry a dot rather than a fill, so the pairing is
+   readable before it is chosen. Colour is never the only signal: the button
+   still says Mine or Others, and the active one is still filled. */
+.owner-btn[data-owner="mine"].active   { background: var(--accent); }
+.owner-btn[data-owner="others"].active { background: var(--orange); color: #1b1200; }
+
+.owner-btn[data-owner="mine"]:not(.active)::before,
+.owner-btn[data-owner="others"]:not(.active)::before {
+  content: ""; display: inline-block;
+  width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 5px; vertical-align: middle;
+}
+.owner-btn[data-owner="mine"]:not(.active)::before   { background: var(--accent); }
+.owner-btn[data-owner="others"]:not(.active)::before { background: var(--orange); }
+
+/* **And the same two colours on the row, at rest.** A hundred rows answer
+   "whose is this" without a hover, and without a column of addresses - the
+   owner address is still only written out when the answer is somebody else,
+   which is the rule this edge was added alongside rather than instead of.
+
+   `own-unknown` is the one that had no mark at all. A project Ekahau lists
+   no owner for rendered identically to one he owns, so a gate reading those
+   as somebody else's withheld thirty of his own projects with nothing on
+   screen to show for it. */
+/* **A dot, and not the cell's left edge.** That edge already carries the
+   sync status - green synced, amber mismatch, red cloud-only, purple
+   external - and it is the first thing the list is read by. Ownership put
+   there would have overwritten a signal he uses constantly, in a way that
+   looked right in the stylesheet and was only visible by rendering it.
+
+   So ownership gets a channel of its own: seven pixels in front of the
+   project name, in the same two colours as the Owner toggle. */
+.own-dot {
+  display: inline-block; width: 7px; height: 7px;
+  border-radius: 50%; margin-right: 6px;
+  vertical-align: middle; flex: none;
+}
+.own-dot[data-own="mine"]    { background: var(--accent); }
+.own-dot[data-own="theirs"]  { background: var(--orange); }
+.own-dot[data-own="unknown"] {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--text-3);
+}
+
+.owner-tag.unknown {
+  color: var(--text-3); font-style: italic;
+  border: 1px dashed var(--border); border-radius: 3px;
+  padding: 0 4px;
+}
+
 /* A filter that hides rows announces itself here. The old version of this
    filter hid rows with nothing but a highlighted toolbar button to say so,
    and a short list read as missing data. */
@@ -3365,6 +3424,20 @@ body.tool-cloud .toolbar input.search:focus {
   font-size: 12px; color: var(--text-2); line-height: 1.5;
 }
 .share-targets-skipped ul {
+  margin: 6px 0 0; padding-left: 18px;
+  max-height: 7em; overflow-y: auto;
+}
+
+/* Included in the action, but not confirmed as his. Deliberately not styled
+   as a warning: these are ordinary, and the usual case is that every one of
+   them is his. It reads as a note, above the block that lists what is being
+   left out. */
+.share-targets-unproven {
+  margin-top: 10px; padding-top: 10px;
+  border-top: 1px dashed var(--border);
+  font-size: 12px; color: var(--text-2); line-height: 1.5;
+}
+.share-targets-unproven ul {
   margin: 6px 0 0; padding-left: 18px;
   max-height: 7em; overflow-y: auto;
 }
