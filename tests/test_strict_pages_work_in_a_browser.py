@@ -314,27 +314,29 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
                     "an injected inline script RAN on a page whose policy "
                     "forbids it - the header is not in force in %s" % kind)
 
-    def test_the_same_injection_runs_on_an_unconverted_page(self):
+    def test_the_same_injection_runs_without_the_policy(self):
         """The differential.
 
         Without this, the test above could be passing because the injection
         never worked in the first place, and the policy could be doing
         nothing at all.
 
-        Cloud Manager is the control because it is the last page still
-        carrying inline handlers. It was Quick Walls until v2.165.0. When
-        Cloud Manager is converted there is no unconverted page left, and
-        this differential has to be rebuilt on a fixture rather than quietly
-        deleted - without it the test above proves nothing.
-        """
+        It used to load whichever page was still unconverted - Quick Walls,
+        then Cloud Manager. As of v2.170.0 there is no such page, and the note
+        left here said this had to be rebuilt on a fixture rather than quietly
+        deleted. So the page is served from a data URL with no policy on it at
+        all: the same probe, the same browsers, nothing but the header
+        different."""
+        page = ("data:text/html,<!doctype html><title>probe</title>"
+                "<div id='host'></div>")
         for kind, drv in self.drivers.items():
             with self.subTest(browser=kind):
-                self.load(drv, "/cloud")
+                drv.get(page)
                 result = drv.execute_script(PROBE)
                 self.assertTrue(
                     result["ran"],
-                    "the probe could not run an inline script even on a page "
-                    "with no policy, so it proves nothing about %s" % kind)
+                    "the probe could not run an inline script on a page with "
+                    "no policy at all, so it proves nothing about %s" % kind)
 
     def routes(self):
         """Which URL serves each page on the strict list.
@@ -351,7 +353,8 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
                 "settings.html": "/settings", "setup.html": "/setup",
                 "organizer.html": "/squirrel",
                 "report.html": "/report",
-                "walls.html": "/walls"}
+                "walls.html": "/walls",
+                "cloud.html": "/cloud"}
 
     def test_every_strict_page_loads_and_is_wired(self):
         """Each converted page, not only the two the other tests drive.

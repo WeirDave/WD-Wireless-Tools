@@ -314,6 +314,8 @@ PAGE = """<!doctype html>
 /* Local aliases, exactly as cloud.js defines them at the top of the file. */
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
+function np(s) { return String(s == null ? '' : s).replace(/\\\\/g, '/'); }
+function p(s) { return a(np(s)); }
 function j(s) { return WD.escJsStr(s); }
 function esc(s) { return WD.esc(s); }
 function escAttr(s) { return WD.escAttr(s); }

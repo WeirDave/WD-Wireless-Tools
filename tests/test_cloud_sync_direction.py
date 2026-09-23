@@ -15,7 +15,7 @@ that." `replace_cloud_project` had shipped in v2.104.6 with its server route
 and nothing calling it.
 
 **Why this file was rewritten.** Its assertions were of the form
-`assertIn("pushLocalOverCloud(", block)` - the markup contains the name of a
+`assertIn('data-fn="pushLocalOverCloud"', block)` - the markup contains the name of a
 handler. That is true whether or not the handler is reachable, whether or not
 the arguments are right, and whether or not clicking it does anything, and it
 was green for the whole period he could not use the control. A test that would
@@ -66,18 +66,20 @@ eval(slice(shared, '  WD.esc = function', '  WD.applyVersions'));
 globalThis.WD = WD;
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
-function j(s) { return WD.escJsStr(s); }
-function pj(s) { return j(String(s == null ? '' : s).replace(/\\/g, '/')); }
+function np(s) { return String(s == null ? '' : s).replace(/\\/g, '/'); }
+function p(s) { return a(np(s)); }
 
 // stand-ins for presentation only, so a glyph set cannot fail a wiring test
 function ic(name) { return '<i data-ic="' + name + '"></i>'; }
 let currentTab = 'projects';
 function compareResultFor() { return null; }
-function rdAction(icon, label, call, opts) {
+function rdAction(icon, label, fn, args, opts) {
   opts = opts || {};
   return '<button class="rd-btn' + (opts.primary ? ' primary' : '')
-       + '" title="' + a(opts.title || '') + '" onclick="event.stopPropagation();'
-       + call + '">' + ic(icon) + '<span>' + label + '</span></button>';
+       + '" title="' + a(opts.title || '') + '"'
+       + ' data-action="call" data-stop="1" data-fn="' + a(fn) + '"'
+       + ' data-args-json="' + a(JSON.stringify(args || [])) + '">'
+       + ic(icon) + '<span>' + label + '</span></button>';
 }
 
 // `stalenessBadgeHtml` asks this whether the row has anything left to do.
@@ -101,19 +103,42 @@ function record(name) {
  'checkRealDifference', 'fixInternalName'].forEach(record);
 globalThis.event = { stopPropagation() {} };
 
+/* The controls are delegated now: `data-fn` names the handler and the
+   arguments arrive in `data-args-json`, or in `data-arg`/`data-arg2` for the
+   short ones. Nothing is evaluated - the name is looked up and called, the
+   same as the real dispatcher does. */
+function unattr(v) {
+  return String(v || '').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+                        .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                        .replace(/&amp;/g, '&');
+}
+
 function buttons(html) {
   const out = [];
   const re = /<button\b([^>]*)>([\s\S]*?)<\/button>/g;
   let m;
   while ((m = re.exec(html))) {
     const attrs = m[1];
-    const onclick = (attrs.match(/onclick="([\s\S]*?)"/) || [])[1] || '';
+    const pick = (name) => {
+      const hit = attrs.match(new RegExp(name + '="([\\s\\S]*?)"'));
+      return hit ? unattr(hit[1]) : null;
+    };
+    let args = [];
+    const list = pick('data-args-json');
+    if (list !== null) {
+      args = JSON.parse(list);
+    } else {
+      const one = pick('data-arg-json');
+      if (one !== null) args.push(JSON.parse(one));
+      else if (pick('data-arg') !== null) args.push(pick('data-arg'));
+      if (pick('data-arg2') !== null) args.push(pick('data-arg2'));
+    }
     out.push({
       label: m[2].replace(/<[^>]*>/g, '').trim(),
-      onclick: onclick.replace(/&#39;/g, "'").replace(/&quot;/g, '"')
-                      .replace(/&amp;/g, '&').replace(/&lt;/g, '<'),
+      fn: pick('data-fn'),
+      args: args,
       disabled: /aria-disabled="true"/.test(attrs),
-      title: (attrs.match(/title="([\s\S]*?)"/) || [])[1] || '',
+      title: pick('title') || '',
     });
   }
   return out;
@@ -121,7 +146,8 @@ function buttons(html) {
 
 function click(button) {
   calls.length = 0;
-  eval(button.onclick);
+  const fn = button.fn && globalThis[button.fn];
+  if (typeof fn === 'function') fn.apply(null, button.args);
   return calls.slice();
 }
 """
@@ -233,7 +259,7 @@ class AGuessedPairRefusesAndSaysHow(unittest.TestCase):
           const bs = buttons(stalenessBadgeHtml(pair('code', 'local_newer')));
           console.log(JSON.stringify(bs.map(b => ({
             label: b.label, disabled: b.disabled,
-            calls: b.onclick ? click(b).map(c => c.name) : [],
+            calls: b.fn ? click(b).map(c => c.name) : [],
           }))));
         """)
         for b in got:
@@ -249,7 +275,7 @@ class AGuessedPairRefusesAndSaysHow(unittest.TestCase):
     def test_the_control_that_lifts_the_refusal_runs_and_promotes_this_pair(self):
         got = node(r"""
           const bs = buttons(stalenessBadgeHtml(pair('code', 'local_newer')));
-          const confirm = bs.filter(b => !b.disabled && b.onclick);
+          const confirm = bs.filter(b => !b.disabled && b.fn);
           console.log(JSON.stringify(confirm.map(b => ({
             label: b.label, got: click(b),
           }))));
@@ -268,9 +294,9 @@ class AGuessedPairRefusesAndSaysHow(unittest.TestCase):
         and running what comes back."""
         got = node(r"""
           const before = buttons(stalenessBadgeHtml(pair('code', 'local_newer')))
-            .filter(b => b.onclick).map(b => click(b).map(c => c.name));
+            .filter(b => b.fn).map(b => click(b).map(c => c.name));
           const after = buttons(stalenessBadgeHtml(pair('manual', 'local_newer')))
-            .filter(b => !b.disabled && b.onclick).map(b => click(b).map(c => c.name));
+            .filter(b => !b.disabled && b.fn).map(b => click(b).map(c => c.name));
           console.log(JSON.stringify({ before: before, after: after }));
         """)
         flat = lambda rows: [n for row in rows for n in row]

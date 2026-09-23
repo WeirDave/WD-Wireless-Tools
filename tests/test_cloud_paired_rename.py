@@ -89,6 +89,8 @@ global.document = { getElementById: (id) => els[id] || null };
 
 function e(s) { return String(s == null ? '' : s); }
 function a(s) { return String(s == null ? '' : s); }
+function np(s) { return String(s == null ? '' : s).replace(/\\/g, '/'); }
+function p(s) { return a(np(s)); }
 let currentTab = 'projects';
 let data = null;
 let renameTarget = null;
@@ -531,7 +533,7 @@ class TheOfferIsInTheDialogItself(unittest.TestCase):
     def test_toggling_it_redraws_the_preview(self):
         """Otherwise the two outcomes on screen stop describing what the
         button is about to do."""
-        m = re.search(r'id="renamePairBoth"[^>]*onchange="([^"]+)"', CLOUD_HTML)
+        m = re.search(r'id="renamePairBoth"[^>]*data-fn="([^"]+)"', CLOUD_HTML)
         self.assertIsNotNone(m)
         self.assertIn("_renamePreview", m.group(1))
 

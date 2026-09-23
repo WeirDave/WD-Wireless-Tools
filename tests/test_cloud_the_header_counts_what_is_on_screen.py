@@ -145,7 +145,7 @@ console.log(JSON.stringify({
   bar,
   barIsAboveTheLedger: html.indexOf('uncompared-bar') >= 0
     && html.indexOf('uncompared-bar') < html.indexOf('<div class="ledger'),
-  barRunsAComparison: /checkAllUncompared\(\)/.test(html),
+  barRunsAComparison: /data-fn="checkAllUncompared"/.test(html),
   uncomparedPairs: vm.runInContext('_uncomparedNow.length', sandbox),
 }));
 """

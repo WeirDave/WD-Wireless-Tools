@@ -42,12 +42,13 @@ const block = slice('function comparisonIsSettled(', '\nfunction isOutOfSync(')
             + slice('const MATCH_BADGE_SPEC = {', '\nfunction gutCell(r)');
 
 const WD = { esc: s => String(s == null ? '' : s),
-             escAttr: s => String(s == null ? '' : s),
+             escAttr: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
              escJsStr: s => String(s == null ? '' : s) };
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
 function j(s) { return WD.escJsStr(s); }
-function pj(s) { return j(String(s == null ? '' : s).replace(/\\/g, '/')); }
+function np(s) { return String(s == null ? '' : s).replace(/\\/g, '/'); }
+function p(s) { return a(np(s)); }
 let currentTab = 'projects';
 function opEnqueue() { return { id: 'op', promise: Promise.resolve() }; }
 function toast() {}
@@ -57,9 +58,9 @@ function _scheduleOpRefresh() {}
 function selectedSyncItems() { return []; }
 function clearSelection() {}
 
-const fn = new Function('WD','e','a','j','pj','currentTab','opEnqueue','toast','pyApi','_clearStaleness','_scheduleOpRefresh','selectedSyncItems','clearSelection',
+const fn = new Function('WD','e','a','p','np','currentTab','opEnqueue','toast','pyApi','_clearStaleness','_scheduleOpRefresh','selectedSyncItems','clearSelection',
   block + '\nreturn { stalenessBadgeHtml, rowDetailHtml, _compareResults, _compareKey };');
-const api = fn(WD,e,a,j,pj,currentTab,opEnqueue,toast,pyApi,_clearStaleness,_scheduleOpRefresh,selectedSyncItems,clearSelection);
+const api = fn(WD,e,a,p,np,currentTab,opEnqueue,toast,pyApi,_clearStaleness,_scheduleOpRefresh,selectedSyncItems,clearSelection);
 
 const row = (over) => Object.assign({
   kind: 'projects', matchType: 'id', staleness: 'cloud_newer',
@@ -116,7 +117,7 @@ class TheMeasuredAnswerShowsInTheRowTests(unittest.TestCase):
         The row is stale here, so the detail row exists to carry the question
         even though no comparison has run - "appear when a comparison has been
         run, or when the row needs an action"."""
-        self.assertIn("checkRealDifference(", self.out["beforeChecking"])
+        self.assertIn('data-fn="checkRealDifference"', self.out["beforeChecking"])
         self.assertIn("Check what differs", self.out["beforeChecking"])
 
     def test_an_unchecked_row_asks_the_question_and_names_the_answer(self):
@@ -176,7 +177,7 @@ class TheMeasuredAnswerShowsInTheRowTests(unittest.TestCase):
     def test_the_action_is_still_there_beside_it(self):
         """The measured answer outranks the guess; it does not remove the
         action, because he still has to decide what to do about it."""
-        self.assertIn("verifyReplaceLocal(", self.out["afterDiffers"])
+        self.assertIn('data-fn="verifyReplaceLocal"', self.out["afterDiffers"])
 
     def test_re_checking_is_offered_once_an_answer_exists(self):
         self.assertIn(">Re-check<", self.out["afterSame"])

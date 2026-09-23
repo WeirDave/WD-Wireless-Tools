@@ -95,7 +95,7 @@ WD.escJsStr = s => String(s == null ? '' : s).replace(/['\\]/g, '\\$&');
 function e(s){return WD.esc(s);} function a(s){return WD.escAttr(s);}
 function j(s){return WD.escJsStr(s);}
 function p(s){return a(String(s==null?'':s).replace(/\\/g,'/'));}
-function pj(s){return j(String(s==null?'':s).replace(/\\/g,'/'));}
+function np(s){return String(s==null?'':s).replace(/\\/g,'/');}
 
 let currentTab = 'sites';
 let activeFilter = 'all';
@@ -211,7 +211,7 @@ out.sampleLocalText = rows.length ? visibleText(rows[0].local) : '';
 /* The assignment story is untouched: the project genuinely filed under no site
    still says so, on its name and in its menu, where it can be acted on. */
 out.notAssignedTags = (tree.match(/pt-unassigned/g) || []).length;
-out.assignMenuItems = (tree.match(/assignOrphanToSite\(/g) || []).length;
+out.assignMenuItems = (tree.match(/data-fn="assignOrphanToSite"/g) || []).length;
 
 /* --- Flat, where the location tag is the point of the view. -------------- */
 currentTab = 'projects';

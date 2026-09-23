@@ -1538,6 +1538,77 @@ Two traps if you ever do measure this again:
 
 ---
 
+## Every control is declared, not written — `WD.actions`
+
+All fourteen pages carry `script-src 'self'` with no `'unsafe-inline'`, so a
+control cannot have an `onclick`. It names its handler instead and the shared
+dispatcher in `wd-shared.js` makes the call. The rollout finished in v2.170.0;
+`tests/test_pages_with_a_strict_policy.py` and
+`tests/test_strict_pages_work_in_a_browser.py` hold it.
+
+```html
+<button data-action="call" data-fn="setFilter" data-arg="all">All</button>
+```
+
+**The attributes.** `data-action` picks the action for a click;
+`data-action-<event>` does it for any other event in `EVENTS`. `data-fn` names
+the handler, resolved by walking a dotted path over `window` — a lookup, not
+`eval`, which is what lets it run under the policy. The actions are `call`,
+`call-chain`, `backdrop-call`, `menu`, `click-target`, `focus-target`,
+`scroll-target`, `toggle-class`, `noop`, `prevent` and `enter-call`.
+
+Arguments arrive in one fixed order — `data-arg`/`data-arg-json`, `data-arg2`,
+event, element, value, checked — and `data-prevent`/`data-stop` call the
+matching method.
+
+**Four of these exist because the last two pages needed them, and each one is
+a trap worth knowing:**
+
+* **`data-args-json` carries a whole argument list.** Cloud Manager identifies
+  a pair by `(cloudId, localPath, cloudName, localName)` and its replace
+  actions add two timestamps. More named slots would be slots nobody could
+  remember the order of, and packing them into `data-arg` with a separator is
+  what the dispatcher's own note rules out — a separator is a format needing
+  escaping rules of its own. JSON has those rules already, and it keeps
+  numbers as numbers, which two of those handlers compare rather than display.
+* **`data-fn-<event>` names a handler for one event.** The site type-ahead
+  shows on focus, filters on input, hides on blur and takes keys on keydown.
+  Four handlers on one element meant four `data-fn` attributes — **the parser
+  keeps the first and drops the rest**, so every event would have called the
+  focus handler and nothing would have said so.
+* **`data-arg-checked` passes a checkbox's state.** `data-arg-value` cannot
+  stand in: the `value` of a checkbox is the string `"on"` whether it is
+  ticked or not, so `toggleAll(this.checked)` becomes `toggleAll('on')` and
+  every unticking reads as a tick.
+* **`prevent` is not `noop`.** `noop` stops propagation; a mousedown on a
+  suggestion row must keep the field from losing focus *without* hiding the
+  list the row is in.
+
+**Two things that bite when converting a page.**
+
+**`e.currentTarget` is the document under delegation, not the element.** Every
+Quick Walls keybind-slot handler read its element off the event and would have
+pointed at `document` the moment the header applied. They take the matched
+element now, and any index comes off that element's own data attribute —
+because the fixed argument order puts `data-arg` *before* the event, and those
+handlers want the event first.
+
+**An escaper wrapper can be carrying behaviour as well as escaping.** cloud.js
+had `pj()`, which normalised backslashes to forward slashes *and* escaped for
+a JS string. Converting away from inline handlers removed the wrapper and took
+the normalisation with it, so handlers began receiving raw Windows paths where
+the routes expect forward slashes. `np()` is that normalisation on its own.
+`test_cloud_sync_direction` caught it; nothing about reading the call site
+would have.
+
+**Testing a delegated control.** `tests/delegated.py` reads a control's handler
+and arguments back out of rendered markup. A harness that used to pull an
+`onclick` string out and evaluate it uses that instead — and note that a
+harness stubbing `escAttr` as the identity function will now silently produce
+unparseable markup, because the attribute has to survive as an attribute.
+
+---
+
 ## Known gotchas
 
 - **Every tracked text file is stored with LF, and `core.autocrlf` is not

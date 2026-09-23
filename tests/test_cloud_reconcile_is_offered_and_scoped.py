@@ -393,11 +393,18 @@ sandbox.__row = JSON.parse(process.argv[2]);
 const html = vm.runInContext('rowDetailHtml(__row, "")', sandbox);
 
 // Pull the handler back out of the markup and run it against a recorder.
-const m = html.match(/reconcilePairs\(([^)]*)\)/);
+// The control is delegated: its handler is named and its argument is a
+// JSON list on the element, so nothing is evaluated out of the markup.
+const tag = (html.match(/<[^>]*data-fn="reconcilePairs"[^>]*>/) || [])[0];
 let called = null;
-if (m) {
+const m = tag ? true : null;
+if (tag) {
+  const raw = (tag.match(/data-args-json="([^"]*)"/) || [])[1] || '[]';
+  const args = JSON.parse(raw.replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+                             .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                             .replace(/&amp;/g, '&'));
   sandbox.reconcilePairs = (arg) => { called = arg; };
-  try { vm.runInContext('reconcilePairs(' + m[1] + ')', sandbox); }
+  try { sandbox.reconcilePairs.apply(null, args); }
   catch (e) { called = { error: e.message }; }
 }
 process.stdout.write(JSON.stringify({

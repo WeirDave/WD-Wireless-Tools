@@ -39,8 +39,12 @@ globalThis.window = globalThis;
 
 const e = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const pj = s => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-globalThis.e = e; globalThis.pj = pj;
+const a = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;')
+  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const np = s => String(s == null ? '' : s).replace(/\\/g, '/');
+const p = s => a(np(s));
+globalThis.e = e; globalThis.a = a; globalThis.np = np; globalThis.p = p;
 
 /* ── what the sliced handlers reach for ─────────────────────────────────── */
 globalThis.calls = [];
@@ -142,7 +146,9 @@ globalThis.setPreview = setPreview;
 globalThis.untick = untick;
 
 // The real handlers, exactly as shipped.
-eval(slice('function startMerge(path, name)', '\nfunction toggleMainMenu('));
+// Ends at closeMainMenu: `toggleMainMenu` was a two-line wrapper around
+// WD.toggleMenu and went with the hamburger in v2.170.0.
+eval(slice('function startMerge(path, name)', '\nfunction closeMainMenu('));
 
 const failures = [];
 function check(what, cond) { if (!cond) failures.push(what); }
@@ -416,7 +422,11 @@ class TheControlIsOfferedTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("node"), "node is not installed")
     def test_clicking_it_collects_the_selected_folders(self):
         """Run the button's own onclick, not a name taken from it."""
-        click = json.dumps(self.buttons["bulkMergeBtn"]["onclick"])
+        btn = self.buttons["bulkMergeBtn"]
+        # The control is delegated: call its named handler with its own
+        # arguments, rather than evaluating a string it no longer carries.
+        click = json.dumps("%s.apply(null, %s)"
+                           % (btn["fn"], json.dumps(btn["args"])))
         body = ("(async () => {\n"
                 "  rowData['a'] = { kind: 'local', path: 'A', name: 'A', isDir: true };\n"
                 "  selected.add('a');\n"

@@ -413,7 +413,7 @@ class ItIsHonestAboutTheHalfItDoesNotDoInBulk(unittest.TestCase):
         badge = badge[:badge.index("function gutCell")]
         local_newer = badge[badge.index("if (s === 'local_newer')"):]
         self.assertNotIn("not built", local_newer)
-        self.assertIn("pushLocalOverCloud(", local_newer)
+        self.assertIn('data-fn="pushLocalOverCloud"', local_newer)
 
         # Run the row's handler against a recording stub rather than reading
         # it. A proven pair goes straight through; a guessed one asks first.
@@ -445,7 +445,7 @@ class ItIsHonestAboutTheHalfItDoesNotDoInBulk(unittest.TestCase):
         # Nothing is at risk: unchanged. What to do about it: it used to be
         # "save it from Ekahau", because there was nothing else. There is now.
         self.assertIn("newer", local_newer)
-        self.assertIn("pushLocalOverCloud(", local_newer)
+        self.assertIn('data-fn="pushLocalOverCloud"', local_newer)
         self.assertNotIn("save it to the cloud from there", local_newer)
 
     def test_an_otherwise_clean_run_still_mentions_what_is_waiting(self):
@@ -482,7 +482,7 @@ class NoBluntDirectionalControl(unittest.TestCase):
     def test_the_everyday_button_is_not_directional(self):
         html = CLOUD_HTML.read_text(encoding="utf-8")
         line = next(l for l in html.splitlines() if 'id="syncAllBtn"' in l)
-        self.assertIn("syncEverything()", line)
+        self.assertIn('data-fn="syncEverything"', line)
         self.assertNotIn("bulk-btn", line)
 
     def test_it_promises_it_cannot_overwrite_work(self):

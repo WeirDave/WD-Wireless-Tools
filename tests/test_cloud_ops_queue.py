@@ -46,6 +46,13 @@ const block = slice('const _ops = new Map();', '\nasync function runWithProgress
 // the assertions read the op records themselves.
 const stubs = `
   function e(s) { return String(s == null ? '' : s); }
+  function a(s) { return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  // four backslashes: this is a template literal, which halves them before
+  // the regex is parsed
+  function np(s) { return String(s == null ? '' : s).replace(/\\\\/g, '/'); }
+  function p(s) { return a(np(s)); }
   function _deckRender() {}
   function _ensureDeckTick() {}
   function _ensureDeckPoll() {}

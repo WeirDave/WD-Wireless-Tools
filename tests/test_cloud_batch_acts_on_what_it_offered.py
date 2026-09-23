@@ -479,7 +479,7 @@ class TheSearchSaysWhatItIsHiding(unittest.TestCase):
                       self.out["viewSearch"]["notice"])
 
     def test_it_offers_the_way_out(self):
-        self.assertIn("clearSearch()", self.out["viewSearch"]["notice"])
+        self.assertIn('data-fn="clearSearch"', self.out["viewSearch"]["notice"])
 
 
 @unittest.skipIf(shutil.which("node") is None, "node is not installed")

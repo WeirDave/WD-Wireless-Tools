@@ -90,7 +90,7 @@ WD.escJsStr = s => String(s == null ? '' : s).replace(/['\\]/g, '\\$&');
 function e(s){return WD.esc(s);} function a(s){return WD.escAttr(s);}
 function j(s){return WD.escJsStr(s);}
 function p(s){return a(String(s==null?'':s).replace(/\\/g,'/'));}
-function pj(s){return j(String(s==null?'':s).replace(/\\/g,'/'));}
+function np(s){return String(s==null?'':s).replace(/\\/g,'/');}
 
 let currentTab = 'sites';
 let activeFilter = 'all';

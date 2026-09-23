@@ -26,9 +26,13 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from delegated import DELEGATED_JS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 CLOUD_JS = ROOT / "web" / "assets" / "js" / "cloud.js"
@@ -55,12 +59,13 @@ const block = slice('function comparisonIsSettled(', '\nfunction isOutOfSync(')
             + slice('const MATCH_BADGE_SPEC = {', '\nfunction gutCell(r)');
 
 const WD = { esc: s => String(s == null ? '' : s),
-             escAttr: s => String(s == null ? '' : s),
+             escAttr: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
              escJsStr: s => String(s == null ? '' : s) };
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
 function j(s) { return WD.escJsStr(s); }
-function pj(s) { return j(String(s == null ? '' : s).replace(/\\/g, '/')); }
+function np(s) { return String(s == null ? '' : s).replace(/\\/g, '/'); }
+function p(s) { return a(np(s)); }
 let currentTab = 'projects';
 
 const calls = [];
@@ -81,9 +86,9 @@ function clearSelection() {}
 // `renderRows` joined the list because an action redraws its own row now -
 // that is the fix rather than a side effect, so the probe supplies one and
 // counts the redraws.
-const fn = new Function('WD','e','a','j','pj','currentTab','opEnqueue','toast','pyApi','showConfirmModal','_clearStaleness','_scheduleOpRefresh','selectedSyncItems','clearSelection','renderRows',
+const fn = new Function('WD','e','a','p','np','currentTab','opEnqueue','toast','pyApi','showConfirmModal','_clearStaleness','_scheduleOpRefresh','selectedSyncItems','clearSelection','renderRows',
   block + '\nreturn { stalenessBadgeHtml, rowDetailHtml, fixInternalName, _setRowBusy, _compareResults, _compareKey };');
-const api = fn(WD,e,a,j,pj,currentTab,opEnqueue,toast,pyApi,showConfirmModal,_clearStaleness,_scheduleOpRefresh,selectedSyncItems,clearSelection,renderRows);
+const api = fn(WD,e,a,p,np,currentTab,opEnqueue,toast,pyApi,showConfirmModal,_clearStaleness,_scheduleOpRefresh,selectedSyncItems,clearSelection,renderRows);
 
 const row = () => ({
   kind: 'projects', matchType: 'id', staleness: 'cloud_newer',
@@ -119,11 +124,10 @@ out.internalOnlyNotStale = api.rowDetailHtml(
   Object.assign(inSyncRow(), { differenceKind: 'renamed' }), false);
 
 // drive the fix out of the rendered band
-const m = /onclick="event\.stopPropagation\(\);(fixInternalName\([^"]*\))"/.exec(out.internalOnlyNotStale);
+const m = delegated(out.internalOnlyNotStale, 'fixInternalName');
 out.foundHandler = !!m;
 if (m) {
-  const invoke = new Function('fixInternalName', 'return ' + m[1] + ';');
-  invoke(api.fixInternalName);
+  api.fixInternalName.apply(null, m.args);
   out.queuedTitle = queued.length ? queued[0].title : '';
   /* The click has landed, so the row says it is working. Captured here
      because the next render deliberately shows a different state. */
@@ -163,7 +167,7 @@ def probe():
     if not _PROBE:
         with tempfile.TemporaryDirectory() as td:
             script = Path(td) / "probe.js"
-            script.write_text(NODE_SCRIPT, encoding="utf-8")
+            script.write_text(DELEGATED_JS + NODE_SCRIPT, encoding="utf-8")
             proc = subprocess.run(["node", str(script), str(CLOUD_JS)],
                                   capture_output=True, timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
@@ -301,7 +305,7 @@ class ItStopsContradictingItsOwnFindingTests(unittest.TestCase):
 
     def test_the_download_is_demoted_and_not_removed(self):
         """He may still want it. Quieter, not gone."""
-        self.assertIn("verifyReplaceLocal(", self.out["internalOnlyBadge"])
+        self.assertIn('data-fn="verifyReplaceLocal"', self.out["internalOnlyBadge"])
 
     def test_an_unproven_or_differing_row_keeps_the_normal_wording(self):
         badge = self.out["differsBadge"]

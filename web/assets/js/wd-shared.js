@@ -1973,10 +1973,39 @@
        wants a real boolean or number - `toggleAll(true)`, `adjustGridCols(-1)`
        - takes `data-arg-json`, which is parsed. Passing the string "false"
        where a boolean is expected works right up until somebody writes
-       `if (arg)`. */
+       `if (arg)`.
+
+       **`data-args-json` carries a whole argument list**, for the handlers
+       that take four and five - Cloud Manager's pairing actions identify a
+       pair by `(cloudId, localPath, cloudName, localName)`, and its replace
+       actions add two timestamps. A sixth and seventh named slot would be
+       slots nobody could remember the order of, and packing them into
+       `data-arg` with a separator is what the note above rules out: a
+       separator is a format that needs escaping rules of its own.
+
+       JSON is a format too, but it is one with those rules already written,
+       and it survives an attribute unchanged once the attribute is escaped
+       normally. It also keeps numbers as numbers, which two of those
+       handlers compare rather than display. It fills the whole list, so it
+       does not combine with `data-arg` or `data-arg2`. */
     function argsFor(el, e) {
       var args = [];
-      if ('argJson' in el.dataset) {
+      if ('argsJson' in el.dataset) {
+        /* A bad list is a dead control either way; saying so names the
+           element, which is what turns it into a five-second fix. */
+        try {
+          var list = JSON.parse(el.dataset.argsJson);
+          if (Object.prototype.toString.call(list) === '[object Array]') {
+            args = args.concat(list);
+          } else if (window.console) {
+            console.warn('WD.actions: data-args-json is not an array', el);
+          }
+        } catch (err) {
+          if (window.console) {
+            console.warn('WD.actions: data-args-json did not parse', el, err);
+          }
+        }
+      } else if ('argJson' in el.dataset) {
         try {
           args.push(JSON.parse(el.dataset.argJson));
         } catch (err) {
@@ -1994,14 +2023,37 @@
       if (el.dataset.argEvent === '1') args.push(e);
       if (el.dataset.argThis === '1') args.push(el);
       if (el.dataset.argValue === '1') args.push(el.value);
+      /* A checkbox's state. `data-arg-value` cannot stand in for it: the
+         `value` of a checkbox is the string "on" whether it is ticked or
+         not, so `toggleAll(this.checked)` becomes `toggleAll('on')` and every
+         unticking reads as a tick. */
+      if (el.dataset.argChecked === '1') args.push(!!el.checked);
       return args;
     }
 
+    /* One element can answer several events, and they rarely want the same
+       handler: the site type-ahead shows on focus, filters on input, hides on
+       blur and takes keys on keydown. `data-fn` is a single attribute, so
+       four handlers on one element means four `data-fn`s, and the parser
+       keeps the first and drops the rest - every event would call the focus
+       handler and nothing would say so.
+
+       `data-fn-<event>` names the handler for one event and falls back to
+       `data-fn`, which is still what a single-event control uses. */
+    function fnNameFor(el, e) {
+      var type = e && e.type;
+      if (type) {
+        var key = 'fn' + type.charAt(0).toUpperCase() + type.slice(1);
+        if (key in el.dataset) return el.dataset[key];
+      }
+      return el.dataset.fn;
+    }
+
     function call(el, e) {
-      var fn = resolveDotted(el.dataset.fn);
+      var fn = resolveDotted(fnNameFor(el, e));
       if (typeof fn !== 'function') {
         if (window.console) {
-          console.warn('WD.actions: no handler named', el.dataset.fn, el);
+          console.warn('WD.actions: no handler named', fnNameFor(el, e), el);
         }
         return;
       }
@@ -2069,7 +2121,25 @@
           target.classList.toggle(el.dataset.class);
         }
       },
-      'noop': function (_el, e) { if (e) e.stopPropagation(); }
+      'noop': function (_el, e) { if (e) e.stopPropagation(); },
+      /* preventDefault and nothing else. `noop` stops propagation, which is
+         the opposite of what a mousedown on a suggestion row wants: it must
+         keep the field from losing focus without also hiding the list the
+         row is in. */
+      'prevent': function (_el, e) { if (e) e.preventDefault(); }
+    };
+
+    /* `data-action-keydown="enter-call"` - Enter in a text field submits,
+       every other key falls through. The markup used to spell this out as
+       `if(event.key==='Enter'){event.preventDefault();addMember()}`, which is
+       a statement in an attribute and exactly what a policy without
+       'unsafe-inline' forbids. wd-dev.js has carried the same action since
+       the dev toolbar was ported. */
+    HANDLERS['enter-call'] = function (el, e) {
+      if (!e || e.key !== 'Enter') return;
+      e.preventDefault();
+      var fn = resolveDotted(fnNameFor(el, e));
+      if (typeof fn === 'function') fn.apply(null, argsFor(el, e));
     };
 
     function attrFor(type) {

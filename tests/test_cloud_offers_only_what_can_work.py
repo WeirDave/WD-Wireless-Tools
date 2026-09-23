@@ -120,7 +120,7 @@ function pushOffered(owner) {
   sandbox.__row = Object.assign(mk(owner), { staleness: 'local_newer' });
   const html = vm.runInContext('stalenessBadgeHtml(__row)', sandbox);
   return {
-    live: /pushLocalOverCloud\(/.test(html),
+    live: /data-fn="pushLocalOverCloud"/.test(html),
     saysWhy: /Owned by/.test(html),
     offersConfirmPair: /markManualMatch\(/.test(html),
   };

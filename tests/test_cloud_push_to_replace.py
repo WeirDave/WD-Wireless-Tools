@@ -57,12 +57,13 @@ const block = slice('function ownershipBlock(', '\nfunction _isExternal(')
             + slice('const MATCH_BADGE_SPEC = {', '\nfunction gutCell(r)');
 
 const WD = { esc: s => String(s == null ? '' : s),
-             escAttr: s => String(s == null ? '' : s),
+             escAttr: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
              escJsStr: s => String(s == null ? '' : s) };
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
 function j(s) { return WD.escJsStr(s); }
-function pj(s) { return j(String(s == null ? '' : s).replace(/\\/g, '/')); }
+function np(s) { return String(s == null ? '' : s).replace(/\\/g, '/'); }
+function p(s) { return a(np(s)); }
 let currentTab = 'projects';
 
 // Captured instead of performed: the queue and the server are other tests.
@@ -75,9 +76,9 @@ async function pyApi() { return apiResult; }
 function _clearStaleness() {}
 function _scheduleOpRefresh() {}
 
-const fn = new Function('WD','e','a','j','pj','currentTab','opEnqueue','toast','pyApi','_clearStaleness','_scheduleOpRefresh',
+const fn = new Function('WD','e','a','p','np','currentTab','opEnqueue','toast','pyApi','_clearStaleness','_scheduleOpRefresh',
   block + '\nreturn { stalenessBadgeHtml, canPushToCloud, pushLocalOverCloud };');
-const api = fn(WD,e,a,j,pj,currentTab,opEnqueue,toast,pyApi,_clearStaleness,_scheduleOpRefresh);
+const api = fn(WD,e,a,p,np,currentTab,opEnqueue,toast,pyApi,_clearStaleness,_scheduleOpRefresh);
 
 const row = (over) => Object.assign({
   kind: 'projects',
@@ -179,11 +180,11 @@ class OnlyAProvenPairMayReplaceTheCloudCopyTests(unittest.TestCase):
     def test_an_ekahau_id_match_may_push(self):
         """The stamp inside both files. This is the normal case."""
         self.assertTrue(self.out["gate"]["id"])
-        self.assertIn("pushLocalOverCloud(", self.out["badge"]["id"])
+        self.assertIn('data-fn="pushLocalOverCloud"', self.out["badge"]["id"])
 
     def test_a_pairing_he_made_himself_may_push(self):
         self.assertTrue(self.out["gate"]["manual"])
-        self.assertIn("pushLocalOverCloud(", self.out["badge"]["manual"])
+        self.assertIn('data-fn="pushLocalOverCloud"', self.out["badge"]["manual"])
 
     def test_a_name_only_match_may_push_but_is_asked_first(self):
         """This asserted the opposite and that assertion was the bug.
@@ -196,12 +197,12 @@ class OnlyAProvenPairMayReplaceTheCloudCopyTests(unittest.TestCase):
         `test_cloud_push_is_reachable.py` drives that path.
         """
         self.assertTrue(self.out["gate"]["exact"])
-        self.assertIn("pushLocalOverCloud(", self.out["badge"]["exact"])
+        self.assertIn('data-fn="pushLocalOverCloud"', self.out["badge"]["exact"])
 
     def test_a_guessed_match_may_not(self):
         for mt in ("code", "fuzzy"):
             self.assertFalse(self.out["gate"][mt], mt)
-            self.assertNotIn("pushLocalOverCloud(", self.out["badge"][mt], mt)
+            self.assertNotIn('data-fn="pushLocalOverCloud"', self.out["badge"][mt], mt)
 
     def test_a_site_row_may_not(self):
         """A site's local side is a folder, not an .esx."""

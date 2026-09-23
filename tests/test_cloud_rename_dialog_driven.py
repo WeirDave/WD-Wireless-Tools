@@ -31,8 +31,12 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from delegated import DELEGATED_JS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 CLOUD_JS = ROOT / "web" / "assets" / "js" / "cloud.js"
@@ -144,7 +148,7 @@ function done() {
 
 
 def run_node(checks: str) -> subprocess.CompletedProcess:
-    program = PRELUDE + "eval(" + json.dumps(checks) + ");"
+    program = DELEGATED_JS + PRELUDE + "eval(" + json.dumps(checks) + ");"
     try:
         # encoding is explicit: the dialog's labels carry curly quotes, and
         # decoding the child with the locale codec reads them as mojibake on
@@ -273,10 +277,9 @@ class TheFieldIsReadyToTypeIntoTests(unittest.TestCase):
           // The button's own onclick, pulled back out of the markup it
           // rendered and run - a handler that takes the wrong argument
           // renders perfectly and does nothing.
-          const m = els.renameInsert.innerHTML.match(/onclick="([^"]*)"/);
+          const m = delegated(els.renameInsert.innerHTML, '_renameInsert');
           check('the insert button has a handler', !!m);
-          eval(m[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-                   .replace(/&amp;/g, '&'));
+          globalThis._renameInsert.apply(null, m.args);
           check('the name he already had survived: ' + input.value,
                 input.value.indexOf(before) !== -1);
           check('and the folder name is now in it',
@@ -292,9 +295,8 @@ class TheFieldIsReadyToTypeIntoTests(unittest.TestCase):
           const input = els.renameInput;
           input.value = 'SITE4 - Design';
           input.selectionStart = input.selectionEnd = input.value.length;
-          const m2 = els.renameInsert.innerHTML.match(/onclick="([^"]*)"/);
-          eval(m2[1].replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-                    .replace(/&amp;/g, '&'));
+          const m2 = delegated(els.renameInsert.innerHTML, '_renameInsert');
+          globalThis._renameInsert.apply(null, m2.args);
           check('the original is intact: ' + input.value,
                 input.value.indexOf('SITE4 - Design') === 0);
           done();

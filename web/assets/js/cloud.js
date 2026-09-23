@@ -3,11 +3,17 @@
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
 
-function j(s) { return WD.escJsStr(s); }
+/* A local path, normalised to forward slashes. `p` escapes it for a single
+   attribute; `np` leaves it raw, for the values that go into a JSON argument
+   list and are escaped once as that list.
 
+   The normalisation is behaviour, not formatting: the handlers and the server
+   routes compare these paths against forward-slash forms. Dropping it while
+   converting away from inline handlers sent raw Windows paths through, which
+   is what test_cloud_sync_direction caught. */
+function np(s) { return String(s == null ? '' : s).replace(/\\/g, '/'); }
 function p(s) { return a(String(s == null ? '' : s).replace(/\\/g, '/')); }
 
-function pj(s) { return j(String(s == null ? '' : s).replace(/\\/g, '/')); }
 
 let currentTab = lastFilesKind();
 let data = null;
@@ -136,7 +142,7 @@ function _opIcon(op) {
 function _opActionsHtml(op) {
   const btns = [];
   if (op.status === 'queued') {
-    btns.push(`<button class="op-btn" onclick="opCancelQueued('${op.id}')" title="Take this out of the queue before it runs">Remove</button>`);
+    btns.push(`<button class="op-btn" data-action="call" data-fn="opCancelQueued" data-arg="${a(op.id)}" title="Take this out of the queue before it runs">Remove</button>`);
   }
   /* **Opt-in, not opt-out.** Nothing forwards the cancel flag to the request
      and Ekahau has no cancel for an upload or a delete, so a running cloud
@@ -147,17 +153,17 @@ function _opActionsHtml(op) {
      Queued work is genuinely removable and still says so, above. An operation
      that can really be stopped says `cancelable: true` and stops. */
   if (op.status === 'running' && op.cancelable === true) {
-    btns.push(`<button class="op-btn" onclick="opCancel('${op.id}')">Cancel</button>`);
+    btns.push(`<button class="op-btn" data-action="call" data-fn="opCancel" data-arg="${a(op.id)}">Cancel</button>`);
   }
   if (op.status === 'failed' && op.retryFn) {
-    btns.push(`<button class="op-btn primary" onclick="opRetry('${op.id}')">Retry</button>`);
+    btns.push(`<button class="op-btn primary" data-action="call" data-fn="opRetry" data-arg="${a(op.id)}">Retry</button>`);
   }
   if (op.status === 'done' && op.undoable && op.undoFn && Date.now() < op.undoExpiresAt) {
     const secLeft = Math.max(0, Math.ceil((op.undoExpiresAt - Date.now()) / 1000));
-    btns.push(`<button class="op-btn primary" onclick="opUndo('${op.id}')">Undo</button><span class="op-undo-timer">${secLeft}s</span>`);
+    btns.push(`<button class="op-btn primary" data-action="call" data-fn="opUndo" data-arg="${a(op.id)}">Undo</button><span class="op-undo-timer">${secLeft}s</span>`);
   }
   if (op.status === 'done' || op.status === 'failed' || op.status === 'cancelled') {
-    btns.push(`<button class="op-btn" onclick="_opRemove('${op.id}')" title="Dismiss">&times;</button>`);
+    btns.push(`<button class="op-btn" data-action="call" data-fn="_opRemove" data-arg="${a(op.id)}" title="Dismiss">&times;</button>`);
   }
   return btns.join('');
 }
@@ -775,6 +781,12 @@ function _syncTabUI(kind) {
   _markActiveFilter();
 }
 function switchTab(kind) {
+  /* No argument means the Files group header, which re-opens whichever of
+     sites/projects was last used. The markup used to say
+     `switchTab(lastFilesKind())`, which is a function call in an attribute -
+     exactly what a policy without 'unsafe-inline' forbids. The default lives
+     here now, where it can be read. */
+  if (!kind) kind = lastFilesKind();
   if (kind === currentTab) return;
   currentTab = kind;
   if (kind === 'sites' || kind === 'projects') {
@@ -1897,7 +1909,7 @@ function _renderJumpNav() {
 
   const allActive = activeLetter === null;
   const allChip = `<button class="jump-letter jump-all${allActive ? ' active' : ''}"
-                           onclick="_clearJumpLetter()"
+                           data-action="call" data-fn="_clearJumpLetter"
                            title="${allActive ? 'Showing all letters' : 'Clear letter filter — show all'}">All</button>`;
   const letterChips = letters.map(L => {
     const enabled = present.has(L);
@@ -1909,7 +1921,7 @@ function _renderJumpNav() {
       ? 'Showing only ' + L + ' — click to clear'
       : (enabled ? 'Show only ' + L : 'No sites here');
     return `<button class="${cls}" data-letter="${a(L)}"
-                    ${enabled ? `onclick="_jumpToLetter('${j(L)}')"` : 'disabled tabindex="-1"'}
+                    ${enabled ? `data-action="call" data-fn="_jumpToLetter" data-arg="${a(L)}"` : 'disabled tabindex="-1"'}
                     title="${a(title)}">${e(L)}</button>`;
   }).join('');
   nav.innerHTML = allChip + letterChips;
@@ -1962,7 +1974,7 @@ function dupHintFor(idOrPath) {
   if (!idOrPath) return '';
   const key = dupIndex.get(idOrPath);
   if (!key) return '';
-  return ` <span class="dup-hint" title="Part of a duplicate cluster — click to inspect" onclick="event.stopPropagation();jumpToCluster('${j(key)}')">&#8776;</span>`;
+  return ` <span class="dup-hint" title="Part of a duplicate cluster — click to inspect" data-action="call" data-fn="jumpToCluster" data-arg="${a(key)}" data-stop="1">&#8776;</span>`;
 }
 
 function jumpToCluster(clusterKey) {
@@ -2037,10 +2049,10 @@ function renderDuplicates() {
     </div>
   </div>
   <div id="dupBulkBar" class="dup-bulk-bar">
-    <label class="dup-bulk-selall"><input type="checkbox" id="dupBulkSelAll" onchange="dupBulkSelectAll(this.checked)"> Select all across clusters</label>
+    <label class="dup-bulk-selall"><input type="checkbox" id="dupBulkSelAll" data-action-change="call" data-fn="dupBulkSelectAll" data-arg-checked="1"> Select all across clusters</label>
     <span class="spacer"></span>
     <span id="dupBulkCount" class="dup-bulk-count">0 selected</span>
-    <button class="btn btn-red btn-sm" onclick="dupBulkDelete()">Delete checked</button>
+    <button class="btn btn-red btn-sm" data-action="call" data-fn="dupBulkDelete">Delete checked</button>
   </div>
   <div class="dup-container">`;
   filtered.forEach(cl => h += renderCluster(cl));
@@ -2056,10 +2068,13 @@ function renderDuplicates() {
 }
 
 function renderCluster(cl) {
-  const kAttr = j(cl.key);
+  /* Attribute-escaped, not JS-escaped. It is read back by the dispatcher and
+     matched against the raw key by `cssEscape(key)` below, so `data-key` and
+     the handler's argument have to be the same value. */
+  const kAttr = a(cl.key);
   const shapeLabel = cl.shape === 'mixed' ? 'Mixed' : cl.shape === 'local-only' ? 'Local only' : 'Cloud only';
   let h = `<div class="dup-cluster expanded" data-key="${kAttr}">`;
-  h += `<div class="dup-head" onclick="toggleCluster('${kAttr}')">`;
+  h += `<div class="dup-head" data-action="call" data-fn="toggleCluster" data-arg="${kAttr}">`;
   h += `<span class="dup-chevron">&#9656;</span>`;
   h += `<span class="dup-title">${e(cl.displayName)}</span>`;
   h += `<span class="dup-shape ${cl.shape}">${shapeLabel}</span>`;
@@ -2080,13 +2095,13 @@ function renderCluster(cl) {
 
   if (cl.shape !== 'mixed' && allExtras) {
 
-    h += `<button class="btn btn-sec btn-sm" onclick="dupKeep('${kAttr}','newest')">Keep newest — delete rest</button>`;
-    h += `<button class="btn btn-sec btn-sm" onclick="dupKeep('${kAttr}','largest')">Keep largest — delete rest</button>`;
+    h += `<button class="btn btn-sec btn-sm" data-action="call" data-fn="dupKeep" data-arg="${kAttr}" data-arg2="newest">Keep newest — delete rest</button>`;
+    h += `<button class="btn btn-sec btn-sm" data-action="call" data-fn="dupKeep" data-arg="${kAttr}" data-arg2="largest">Keep largest — delete rest</button>`;
   } else if (hasPair) {
 
-    h += `<button class="btn btn-amber btn-sm" onclick="dupDeleteExtras('${kAttr}')" title="Deletes only the ${extraCount} unmatched extra${extraCount !== 1 ? 's' : ''} — the matched cloud↔local pair stays intact.">&#128465; Delete ${extraCount} extra${extraCount !== 1 ? 's' : ''} (keep the pair)</button>`;
+    h += `<button class="btn btn-amber btn-sm" data-action="call" data-fn="dupDeleteExtras" data-arg="${kAttr}" title="Deletes only the ${extraCount} unmatched extra${extraCount !== 1 ? 's' : ''} — the matched cloud↔local pair stays intact.">&#128465; Delete ${extraCount} extra${extraCount !== 1 ? 's' : ''} (keep the pair)</button>`;
   }
-  h += `<button class="btn btn-red btn-sm" onclick="dupDeleteChecked('${kAttr}')">Delete checked</button>`;
+  h += `<button class="btn btn-red btn-sm" data-action="call" data-fn="dupDeleteChecked" data-arg="${kAttr}">Delete checked</button>`;
   h += `</div>`;
 
   h += `<div class="dup-items">`;
@@ -2102,7 +2117,7 @@ function renderCluster(cl) {
     const sizeStr = fmtBytes(it.size);
 
     h += `<div class="${rowCls.join(' ')}" data-iid="${a(iid)}">`;
-    h += `<input type="checkbox" class="dup-item-check" onchange="dupChkChanged('${kAttr}')">`;
+    h += `<input type="checkbox" class="dup-item-check" data-action-change="call" data-fn="dupChkChanged" data-arg="${kAttr}">`;
     h += `<span class="dup-item-side ${sideCls}">${sideIcon}</span>`;
 
     const loc = it.location || (it.side === 'cloud' ? '(no site)' : '');
@@ -2116,13 +2131,13 @@ function renderCluster(cl) {
     h += `<div class="dup-item-date">${e(dateStr)}</div>`;
     h += `<div class="dup-item-actions">`;
     if (it.side === 'local') {
-      h += `<button class="icon-btn" title="Show in Explorer/Finder" onclick="revealInExplorer('${pj(it.path)}')">&#128193;<span class="ib-label">Show</span></button>`;
+      h += `<button class="icon-btn" title="Show in Explorer/Finder" data-action="call" data-fn="revealInExplorer" data-arg="${p(it.path)}">&#128193;<span class="ib-label">Show</span></button>`;
     } else {
-      h += `<button class="icon-btn" title="View site contents" onclick="openCloudPeek('${j(it.id)}','${j(it.location)}')">&#128065;<span class="ib-label">View</span></button>`;
+      h += `<button class="icon-btn" title="View site contents" data-action="call" data-fn="openCloudPeek" data-arg="${a(it.id)}" data-arg2="${a(it.location)}">&#128065;<span class="ib-label">View</span></button>`;
     }
 
-    const iidAttr = it.side === 'local' ? pj(iid) : j(iid);
-    h += `<button class="icon-btn del" title="Delete" onclick="dupDeleteOne('${kAttr}','${iidAttr}')">&#128465;<span class="ib-label">Delete</span></button>`;
+    const iidAttr = it.side === 'local' ? p(iid) : a(iid);
+    h += `<button class="icon-btn del" title="Delete" data-action="call" data-fn="dupDeleteOne" data-arg="${kAttr}" data-arg2="${iidAttr}">&#128465;<span class="ib-label">Delete</span></button>`;
     h += `</div>`;
     h += `</div>`;
   });
@@ -2664,8 +2679,8 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
     ).join('');
     h += `<div class="auto-assign-row" role="status">`
        +   `<div class="auto-assign-banner">`
-       +     `<button class="aab-chevron${autoOpen ? ' open' : ''}" onclick="toggleAutoAssignDetails()" title="${autoOpen ? 'Hide' : 'Show'} projects and destinations" aria-expanded="${autoOpen}"><span class="aab-chevron-icon">&#9656;</span>${autoOpen ? 'Hide' : 'Show'} list</button>`
-       +     `<button class="btn btn-blue aab-btn" onclick="autoAssignAllMatched()" title="Assign each of these to the site its local .esx already lives in"><span class="aab-btn-icon">&#128206;</span> Auto-assign ${n}</button>`
+       +     `<button class="aab-chevron${autoOpen ? ' open' : ''}" data-action="call" data-fn="toggleAutoAssignDetails" title="${autoOpen ? 'Hide' : 'Show'} projects and destinations" aria-expanded="${autoOpen}"><span class="aab-chevron-icon">&#9656;</span>${autoOpen ? 'Hide' : 'Show'} list</button>`
+       +     `<button class="btn btn-blue aab-btn" data-action="call" data-fn="autoAssignAllMatched" title="Assign each of these to the site its local .esx already lives in"><span class="aab-btn-icon">&#128206;</span> Auto-assign ${n}</button>`
        +     `<span class="aab-text"><b>${n}</b> unassigned cloud project${n === 1 ? '' : 's'} ${verb} not assigned to a site. Do you want to automatically assign ${n === 1 ? 'it' : 'them'} to a site?</span>`
        +   `</div>`
        +   `<div class="aab-details"${autoOpen ? '' : ' hidden'}>${detailRows}</div>`
@@ -2848,9 +2863,9 @@ function renderHeldBackSection(heldBack) {
         <span class="hbc-reason" title="Why WD did not pair these automatically">${e(h.reason)}</span>
         <span class="hbc-actions">
           <button class="btn btn-blue btn-sm" title="Say this cloud ${label} is the same one as ${a(name)}"
-                  onclick="markManualMatch('${j(c.id)}','${pj(l && l.path)}','${j(c.name)}','${j(l && l.name)}')">This is the one</button>
+                  data-action="call" data-fn="markManualMatch" data-args-json="${a(JSON.stringify([c.id, np(l && l.path), c.name, l && l.name]))}">This is the one</button>
           <button class="btn btn-secondary btn-sm" title="Never suggest this pair again"
-                  onclick="markNotMatch('${j(c.id)}','${pj(l && l.path)}','${j(c.name)}','${j(l && l.name)}')">Not this one</button>
+                  data-action="call" data-fn="markNotMatch" data-args-json="${a(JSON.stringify([c.id, np(l && l.path), c.name, l && l.name]))}">Not this one</button>
         </span>
       </li>`;
     }).join('');
@@ -2863,7 +2878,7 @@ function renderHeldBackSection(heldBack) {
     const none = (l && n)
       ? `<button class="btn btn-secondary btn-sm hb-none"
                  title="Dismiss all ${n} suggestion${n === 1 ? '' : 's'} for this file. It stays unpaired and WD stops offering ${n === 1 ? 'this one' : 'these'}."
-                 onclick="heldBackNoneOfThese('${pj(l.path)}')">None of these</button>`
+                 data-action="call" data-fn="heldBackNoneOfThese" data-arg="${p(l.path)}">None of these</button>`
       : '';
 
     return `<div class="hb-group${(gi % 2) ? ' stripe' : ''}">
@@ -2885,7 +2900,7 @@ function renderHeldBackSection(heldBack) {
      contents of the site above it. Nothing here belongs to a site - these are
      questions about what pairs with what. */
   return `<div class="hb-section${isOpen ? ' open' : ''}">
-      <button class="hb-head" onclick="toggleHeldBack()" aria-expanded="${isOpen}">
+      <button class="hb-head" data-action="call" data-fn="toggleHeldBack" aria-expanded="${isOpen}">
         <span class="hb-toggle${isOpen ? ' open' : ''}">&#9656;</span>
         <span class="hb-title">Not paired yet \u2014 ${nFiles} local file${nFiles === 1 ? '' : 's'} we could not match on ${nFiles === 1 ? 'its' : 'their'} own</span>
         <span class="hb-sub">These are not part of any site above. Each one is a question: which cloud project is it?</span>
@@ -2971,7 +2986,7 @@ function renderSearchNotice() {
     + (_searchTotalBeforeSearch === 1 ? '' : 's')
     + ' — <b>' + e(term) + '</b> is hiding ' + hiddenN
     + '. The counts above are for everything.'
-    + ' <button class="btn btn-secondary own-empty-btn" onclick="clearSearch()">Clear search</button>';
+    + ' <button class="btn btn-secondary own-empty-btn" data-action="call" data-fn="clearSearch">Clear search</button>';
 }
 
 /* Whatever is in the search box right now, or ''. */
@@ -3009,32 +3024,32 @@ function emptyLedgerMessage() {
   if (term) {
     return '<div class="empty-msg">Nothing here matches <b>' + e(term) + '</b>'
       + (alsoNarrowed ? ', with the other filters you have on' : '') + '.'
-      + '<br><button class="btn btn-secondary own-empty-btn" onclick="clearSearch()">Clear search</button></div>';
+      + '<br><button class="btn btn-secondary own-empty-btn" data-action="call" data-fn="clearSearch">Clear search</button></div>';
   }
   if (activeLetter) {
     return '<div class="empty-msg">Nothing here starts with <b>'
       + e(activeLetter) + '</b>.'
-      + '<br><button class="btn btn-secondary own-empty-btn" onclick="_clearJumpLetter()">Show every letter</button></div>';
+      + '<br><button class="btn btn-secondary own-empty-btn" data-action="call" data-fn="_clearJumpLetter">Show every letter</button></div>';
   }
   /* Only sayable when nothing else is narrowing the list - otherwise it is a
      claim about his whole account made from a filtered view, and the chip
      above it may be saying a different number. */
   if (activeFilter === 'unshared') {
     return '<div class="empty-msg">Everything you own has been shared with someone.'
-      + '<br><button class="btn btn-secondary own-empty-btn" onclick="setFilter(&quot;unshared&quot;)">Show all projects</button></div>';
+      + '<br><button class="btn btn-secondary own-empty-btn" data-action="call" data-fn="setFilter" data-arg="unshared">Show all projects</button></div>';
   }
   if (activeFilter !== 'all') {
     const lbl = _activeFilterLabel();
     return '<div class="empty-msg">Nothing here matches the <b>'
       + e(lbl || 'selected') + '</b> filter.'
-      + '<br><button class="btn btn-secondary own-empty-btn" onclick="setFilter(&quot;all&quot;)">Show everything</button></div>';
+      + '<br><button class="btn btn-secondary own-empty-btn" data-action="call" data-fn="setFilter" data-arg="all">Show everything</button></div>';
   }
   if (cur === 'all') return '<div class="empty-msg">Nothing here yet.</div>';
   return '<div class="empty-msg">Nothing here owned by '
     + (cur === 'mine' ? 'you' : 'anyone else')
     + ' — the owner filter is on <b>' + e(OWNER_FILTER_LABEL[cur]) + '</b>'
     + (_ownerFilterOverridden ? '' : ', your saved default')
-    + '.<br><button class="btn btn-secondary own-empty-btn" onclick="setOwnerFilterUI(\'all\')">Show all owners</button></div>';
+    + '.<br><button class="btn btn-secondary own-empty-btn" data-action="call" data-fn="setOwnerFilterUI" data-arg="all">Show all owners</button></div>';
 }
 
 function buildPassOwner(own, me) {
@@ -3248,13 +3263,25 @@ function rowMenu(items, label) {
    sense: a disabled button swallows the click, and the click is how he asks
    why. `_wireDisabledBulkReasons` turns the click into the explanation, the
    same as `rdUnavailable`. */
-function menuItem(icon, label, call, opts) {
+/* `fn` is a handler's name and `args` its arguments, rather than a string of
+   JavaScript to put in an attribute. The page carries a policy that forbids
+   inline script, so the call is declared - `data-fn` plus one JSON argument
+   list - and the shared dispatcher makes it.
+
+   The values go in raw. They used to be run through an escJsStr wrapper at every
+   call site to survive being pasted into a quoted JS expression; there is no
+   expression now, so there is nothing to escape them for. `a()` on the
+   encoded list is the attribute escaping, and it is in one place instead of
+   twenty-five. */
+function menuItem(icon, label, fn, args, opts) {
   const o = opts || {};
   if (o.blocked) {
     return `<button class="row-menu-item is-disabled" aria-disabled="true"`
          + ` title="${a(o.blocked)}">${ic(icon)}<span>${label}</span></button>`;
   }
-  return `<button class="row-menu-item${o.danger ? ' danger' : ''}" onclick="event.stopPropagation();${call}"`
+  return `<button class="row-menu-item${o.danger ? ' danger' : ''}"`
+       + ` data-action="call" data-stop="1" data-fn="${a(fn)}"`
+       + ` data-args-json="${a(JSON.stringify(args || []))}"`
        + `${o.title ? ` title="${a(o.title)}"` : ''}>${ic(icon)}<span>${label}</span></button>`;
 }
 
@@ -3274,12 +3301,16 @@ function menuItem(icon, label, call, opts) {
 
    Omitting it means the action changes neither file - a comparison, a pairing,
    a refusal to pair - and those stay with the sentence on the left. */
-function rdAction(icon, label, call, opts) {
+/* Same contract as `menuItem`: a handler name and its arguments, declared
+   rather than written out as script in an attribute. */
+function rdAction(icon, label, fn, args, opts) {
   const o = opts || {};
   const side = o.writes === 'cloud' || o.writes === 'local' ? o.writes : '';
   return `<button class="rd-btn${o.primary ? ' primary' : ''}${o.danger ? ' danger' : ''}${o.quiet ? ' quiet' : ''}"`
        + `${side ? ` data-writes="${side}"` : ''}`
-       + `${o.title ? ` title="${a(o.title)}"` : ''} onclick="event.stopPropagation();${call}">`
+       + ` data-action="call" data-stop="1" data-fn="${a(fn)}"`
+       + ` data-args-json="${a(JSON.stringify(args || []))}"`
+       + `${o.title ? ` title="${a(o.title)}"` : ''}>`
        + `${ic(icon)}<span>${label}</span></button>`;
 }
 
@@ -3407,7 +3438,7 @@ function matchBadgeHtml(r, kind) {
   const c = r.cloud, l = r.local;
   const isManual = r.matchType === 'manual';
   const onclick = isManual
-    ? `onclick="unmarkManualMatch('${j(c && c.id || '')}','${pj(l && l.path || '')}','${j(c && c.name || '')}','${j(l && l.name || '')}')"`
+    ? `data-action="call" data-fn="unmarkManualMatch" data-args-json="${a(JSON.stringify([c && c.id || '', np(l && l.path || ''), c && c.name || '', l && l.name || '']))}"`
     : '';
   const cursor = isManual ? ' clickable' : '';
   return `<span class="match-badge mb-${spec.cls}${cursor}" title="${a(spec.title)}"${onclick ? ' ' + onclick : ''}>${spec.label}</span>`;
@@ -3948,7 +3979,7 @@ function uncomparedBandHtml(pairs) {
     + `<span class="ub-icon">${ic('swap')}</span>`
     + `<span class="ub-text"><b>${n} of these have a date difference that has not been checked.</b> `
     + `Whether the design really changed, or something was only renamed, is still unknown on each of them.</span>`
-    + `<button class="rd-btn primary" onclick="checkAllUncompared()" `
+    + `<button class="rd-btn primary" data-action="call" data-fn="checkAllUncompared" `
     + `title="Compares each pair's contents and reports what actually differs. Read-only — nothing is changed on either side. Each one downloads the cloud copy to compare it.">`
     + `${ic('swap')}<span>Check all ${n}</span></button>`
     + `</div>`;
@@ -4201,13 +4232,13 @@ function rowDetailHtml(r, stripe) {
     tone = 'rd-differs'; icon = 'notEqual';
     sentences.push('The names disagree. Pick the one to keep, or say these are not the same project.');
     acts.push(rdAction('arrowR', 'Cloud → Local',
-      `syncRow('to-local','${j(c.id)}','${j(c.name)}','${pj(l.path)}','${kind}')`,
+      'syncRow', ['to-local', c.id, c.name, np(l.path), kind],
       { primary: true, writes: 'local', title: 'Rename the local file so it matches the cloud project.' }));
     acts.push(rdAction('arrowL', 'Local → Cloud',
-      `syncRow('to-cloud','${j(c.id)}','${j(l.name)}','${pj(l.path)}','${kind}')`,
+      'syncRow', ['to-cloud', c.id, l.name, np(l.path), kind],
       { writes: 'cloud', title: 'Rename the cloud project so it matches your local file.' }));
     acts.push(rdAction('notEqual', 'Not a match',
-      `markNotMatch('${j(c.id)}','${pj(l.path)}','${j(c.name)}','${j(l.name)}')`,
+      'markNotMatch', [c.id, np(l.path), c.name, l.name],
       { quiet: true, title: 'Never pair these two again.' }));
   } else if (r.status === 'orphan' && c && !l) {
     icon = 'down';
@@ -4223,7 +4254,7 @@ function rowDetailHtml(r, stripe) {
         + e(c.rejectedLocalName || 'a local file')
         + ' as not a match. That file is still on disk.');
       acts.push(rdAction('link', 'Undo not-a-match',
-        `undoNotMatch('${j(c.id)}','${pj(c.rejectedLocalPath || '')}')`,
+        'undoNotMatch', [c.id, np(c.rejectedLocalPath || '')],
         { primary: true, title: 'Pair these two again. ' + a(c.rejectedLocalPath || '') }));
     } else if (c.nameCollision) {
       /* Nothing he did - two cloud projects share a name and the other one
@@ -4239,19 +4270,19 @@ function rowDetailHtml(r, stripe) {
         : 'This cloud project has nothing matching it on disk.');
     }
     acts.push(rdAction('down', 'Download',
-      `downloadThenMove('${j(c.id)}','${j(c.name)}')`,
+      'downloadThenMove', [c.id, c.name],
       { primary: !c.rejectedPairing, writes: 'local', title: 'Download the .esx from Ekahau Cloud, then move it into a site folder.' }));
     acts.push(rdAction('link', 'Link to a local file…',
-      `openLinkPicker('cloud','${j(c.id)}','${j(c.name)}')`,
+      'openLinkPicker', ['cloud', c.id, c.name],
       { quiet: true, title: 'Pair this cloud project with a local .esx yourself.' }));
   } else if (r.status === 'orphan' && l && !c) {
     icon = 'up';
     sentences.push('This local file has nothing matching it in Ekahau Cloud.');
     acts.push(rdAction('up', 'Upload',
-      `uploadFromLocal('${pj(l.path)}','${j(l.name)}')`,
+      'uploadFromLocal', [np(l.path), l.name],
       { primary: true, writes: 'cloud', title: 'Upload this .esx to Ekahau Cloud as a new project.' }));
     acts.push(rdAction('link', 'Link to a cloud project…',
-      `openLinkPicker('local','${pj(l.path)}','${j(l.name)}')`,
+      'openLinkPicker', ['local', np(l.path), l.name],
       { quiet: true, title: 'Pair this local file with a cloud project yourself.' }));
   }
 
@@ -4319,7 +4350,7 @@ function rowDetailHtml(r, stripe) {
      guess is the thing this must never do. */
   if (cmp && !cmp.designDiffers && stale === 'cloud_newer' && c && l) {
     acts.push(rdAction('check', 'Make them match',
-      `reconcilePairs([{cloudId:'${j(c.id)}',name:'${j(c.name || l.name || '')}'}])`,
+      'reconcilePairs', [[{cloudId:c.id,name:c.name || l.name || ''}]],
       { primary: true, writes: 'local',
         title: 'The contents are identical - only the name recorded inside your local file and its modified date still differ. This writes the cloud’s name and date into your local .esx so the two genuinely agree and this row stops asking. Nothing on Ekahau Cloud changes.' }));
   } else if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only' && c && c.name && l) {
@@ -4327,7 +4358,7 @@ function rowDetailHtml(r, stripe) {
        There is no date to carry over, so the narrower action is the whole
        job. */
     acts.push(rdAction('rename', 'Set the name inside the file to match',
-      `fixInternalName('${pj(l.path)}','${j(c.name)}','${j(l.name || '')}','${j(c.id)}')`,
+      'fixInternalName', [np(l.path), c.name, l.name || '', c.id],
       { primary: true, writes: 'local',
         title: 'Renaming a file on disk does not change the project name stored inside it. This writes the cloud project’s name into your local .esx. Nothing on Ekahau Cloud changes.' }));
   }
@@ -4341,7 +4372,7 @@ function rowDetailHtml(r, stripe) {
   const _settled = !!(cmp && cmp.identical);
   if (!stale && !_settled && r.status === 'synced' && r.matchType === 'exact' && c && l) {
     acts.push(rdAction('down', 'Download over local',
-      `verifyReplaceLocal('${j(c.id)}','${pj(l.path)}','${j(c.name)}',${Number(c.mtime) || 0},${Number(l.mtime) || 0})`,
+      'verifyReplaceLocal', [c.id, np(l.path), c.name, Number(c.mtime) || 0, Number(l.mtime) || 0],
       { quiet: true, writes: 'local',
         title: 'These matched on name alone. Taking the cloud copy over your local file makes them byte-identical, so the pair upgrades to Same file. Your local file is replaced by the cloud copy, which Ekahau still holds.' }));
     if (!sentences.length) {
@@ -4390,7 +4421,7 @@ function rowDetailHtml(r, stripe) {
   const asksToCompare = !!(c && l && stale && !cmp && r.differenceKind !== 'renamed');
   if (c && l) {
     acts.push(rdAction('swap', cmp ? 'Re-check' : 'Check what differs',
-      `checkRealDifference('${j(c.id)}','${pj(l.path)}','${j(c.name || l.name || '')}')`,
+      'checkRealDifference', [c.id, np(l.path), c.name || l.name || ''],
       { primary: asksToCompare, quiet: !asksToCompare,
         title: 'Compare the two files’ contents and report what actually differs. Read-only — nothing is changed on either side.' }));
   }
@@ -4452,7 +4483,7 @@ function rdUnavailable(icon, label, why, writes) {
 //: And the one control that lifts it, so the key sits beside the lock.
 function rdConfirmPair(r, unlocks) {
   return `<button class="rd-btn" title="${a('Say these two really are the same project. That promotes the pair to a match you made yourself, and ' + unlocks + ' becomes available. You can undo it from the badge in the middle column.')}" `
-       + `onclick="event.stopPropagation();markManualMatch('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name || '')}','${j(r.local.name || '')}')">`
+       + `data-action="call" data-stop="1" data-fn="markManualMatch" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.cloud.name || '', r.local.name || '']))}">`
        + `${ic('link')}<span>Confirm this pair</span></button>`;
 }
 
@@ -4524,7 +4555,7 @@ function stalenessBadgeHtml(r) {
       const answered = renamedOnly || !!cmp;
       const weight = provenSame ? ' quiet is-demoted' : (answered ? ' primary' : ' quiet');
       return cmpHtml
-        + `<button class="rd-btn${weight}${renamedOnly ? ' is-renamed' : ''}" data-writes="local" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" onclick="event.stopPropagation();verifyReplaceLocal('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.cloud.name)}',${Number(r.cloud.mtime) || 0},${Number(r.local.mtime) || 0})">${ic('down')}<span>${label}</span></button>`
+        + `<button class="rd-btn${weight}${renamedOnly ? ' is-renamed' : ''}" data-writes="local" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" data-action="call" data-fn="verifyReplaceLocal" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.cloud.name, Number(r.cloud.mtime) || 0, Number(r.local.mtime) || 0]))}" data-stop="1">${ic('down')}<span>${label}</span></button>`
         + checkBtn;
     }
     /* Shown and unavailable, never absent - and the thing that lifts the
@@ -4569,7 +4600,7 @@ function stalenessBadgeHtml(r) {
          been compared, not on a date alone. */
       const weight = cmp ? ' primary' : ' quiet';
       return cmpHtml
-        + `<button class="rd-btn${weight}" data-writes="cloud" title="${a(plan)}" onclick="event.stopPropagation();pushLocalOverCloud('${j(r.cloud.id)}','${pj(r.local.path)}','${j(r.local.name || '')}','${j(r.cloud.name || '')}','${j(r.matchType || '')}')">${ic('up')}<span>Local newer · replace cloud</span></button>`
+        + `<button class="rd-btn${weight}" data-writes="cloud" title="${a(plan)}" data-action="call" data-fn="pushLocalOverCloud" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.local.name || '', r.cloud.name || '', r.matchType || '']))}" data-stop="1">${ic('up')}<span>Local newer · replace cloud</span></button>`
         + checkBtn;
     }
     /* Only a guessed pairing reaches here now - same site code, or similar
@@ -4655,7 +4686,7 @@ function externalBadgeHtml(r) {
     : 'You marked this as yours, whatever the owner on the file says. It is '
       + 'counted and filtered as internal. Click to take the mark off.';
   return `<span class="match-badge mb-ovr ovr-${ov} clickable" title="${a(why)}" `
-       + `onclick="event.stopPropagation();clearExternalMark('${j(c && c.id || '')}','${pj(l && l.path || '')}')">`
+       + `data-action="call" data-stop="1" data-fn="clearExternalMark" data-arg="${a(c && c.id || '')}" data-arg2="${p(l && l.path || '')}">`
        + `<span class="mb-dot"></span>${label}</span>`;
 }
 
@@ -4723,13 +4754,13 @@ function cloudCell(r, localCodes) {
   const chk = r.noCheckbox ? '' : `<input type="checkbox" class="rowchk" data-k="${a(chkKey)}" ${selected.has(chkKey) ? 'checked' : ''}>`;
   const indentCls = r.indent ? ' child-row' : '';
   const chevron = r.toggle
-    ? `<button class="tree-chevron${r.toggle.open ? ' open' : ''}" onclick="event.stopPropagation();toggleFolder('${j(r.toggle.key)}')" title="${r.toggle.open ? 'Collapse this site' : 'Expand this site'}" aria-expanded="${r.toggle.open}">${ic('chevron')}</button>`
+    ? `<button class="tree-chevron${r.toggle.open ? ' open' : ''}" data-action="call" data-fn="toggleFolder" data-arg="${a(r.toggle.key)}" data-stop="1" title="${r.toggle.open ? 'Collapse this site' : 'Expand this site'}" aria-expanded="${r.toggle.open}">${ic('chevron')}</button>`
     : '';
   if (!r.cloud) {
     if (isSites) {
-      return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Create a cloud site from this folder" onclick="createFromLocal('${j(r.local.name)}')">${ic('plus')}<span>Cloud site</span></button></div>`;
+      return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Create a cloud site from this folder" data-action="call" data-fn="createFromLocal" data-arg="${a(r.local.name)}">${ic('plus')}<span>Cloud site</span></button></div>`;
     }
-    return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Upload .esx to Ekahau Cloud" onclick="uploadFromLocal('${pj(r.local.path)}','${j(r.local.name)}')">${ic('up')}<span>Upload</span></button></div>`;
+    return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Upload .esx to Ekahau Cloud" data-action="call" data-fn="uploadFromLocal" data-arg="${p(r.local.path)}" data-arg2="${a(r.local.name)}">${ic('up')}<span>Upload</span></button></div>`;
   }
   const c = r.cloud, isMis = r.status === 'mismatch', thing = isSites ? 'cloud site' : 'cloud project';
   const me = ((data && data.currentUser) || '').toLowerCase();
@@ -4818,25 +4849,25 @@ function cloudCell(r, localCodes) {
   const notMine = isSites ? '' : ownershipBlock(c);
   const menu = rowMenu([
     isSites && (c.datasets && c.datasets.length)
-      ? menuItem('eye', 'View the projects in this site', `openCloudPeek('${j(c.id)}','${j(c.name)}')`,
+      ? menuItem('eye', 'View the projects in this site', 'openCloudPeek', [c.id, c.name],
           { title: `${c.datasets.length} project${c.datasets.length > 1 ? 's' : ''} in Ekahau Cloud` })
       : '',
     (!isSites && c.unassigned && r.parentSiteId)
       ? menuItem('plus', `Assign to “${e(r.parentSiteName || '')}”`,
-          `assignOrphanToSite('${j(c.id)}','${j(r.parentSiteId)}','${j(c.name)}','${j(r.parentSiteName || '')}')`,
+          'assignOrphanToSite', [c.id, r.parentSiteId, c.name, r.parentSiteName || ''],
           { blocked: notMine })
       : '',
     !isSites ? menuItem('share', `Sharing…${(c.sharedWith || []).length ? ` (${(c.sharedWith || []).length})` : ''}`,
-          `openManageShares('${j(c.id)}','${j(c.name)}')`,
+          'openManageShares', [c.id, c.name],
           { title: 'Manage who this cloud project is shared with', blocked: notMine }) : '',
-    !isSites ? menuItem('move', 'Move to a site…', `startMoveToSite('${j(c.id)}','${j(c.name)}')`,
+    !isSites ? menuItem('move', 'Move to a site…', 'startMoveToSite', [c.id, c.name],
           { blocked: notMine }) : '',
     (!isSites && r.local) ? menuItem('swap', 'Check what differs…',
-        `checkRealDifference('${j(c.id)}','${pj(r.local.path)}','${j(c.name || '')}')`,
+        'checkRealDifference', [c.id, np(r.local.path), c.name || ''],
         { title: 'Compare this against the local file and report what actually differs. Read-only.' }) : '',
-    menuItem('rename', `Rename this ${thing}…`, `startRename('cloud','${j(c.id)}','${j(c.name)}','${kindAttr}')`,
+    menuItem('rename', `Rename this ${thing}…`, 'startRename', ['cloud', c.id, c.name, kindAttr],
       { blocked: notMine }),
-    menuItem('trash', `Delete this ${thing}`, `startDelete('cloud','${j(c.id)}','${j(c.name)}',false,'${kindAttr}')`,
+    menuItem('trash', `Delete this ${thing}`, 'startDelete', ['cloud', c.id, c.name, false, kindAttr],
       { danger: true, title: 'A cloud delete cannot be undone.', blocked: notMine }),
   ], `Actions for this ${thing}`);
 
@@ -4855,7 +4886,7 @@ function localCell(r, cloudCodes) {
   const indentCls = r.indent ? ' child-row' : '';
   if (!r.local) {
     return isSites
-      ? `<div class="lr-cell local empty${indentCls}"><button class="ghost-add" title="Create a matching local folder" onclick="createLocalFolder('${j(r.cloud.name)}')">${ic('plus')}<span>Local folder</span></button></div>`
+      ? `<div class="lr-cell local empty${indentCls}"><button class="ghost-add" title="Create a matching local folder" data-action="call" data-fn="createLocalFolder" data-arg="${a(r.cloud.name)}">${ic('plus')}<span>Local folder</span></button></div>`
       : `<div class="lr-cell local empty${indentCls}"></div>`;
   }
   const l = r.local, isMis = r.status === 'mismatch', thing = isSites ? 'local folder' : '.esx file';
@@ -4880,16 +4911,16 @@ function localCell(r, cloudCodes) {
   const meta = `${where}<span class="cell-meta">${e(l.meta || '')}</span>`;
 
   const menu = rowMenu([
-    menuItem('folder', `Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}`, `revealInExplorer('${pj(l.path)}')`),
+    menuItem('folder', `Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}`, 'revealInExplorer', [np(l.path)]),
     isSites ? menuItem('flag', flagged ? 'Remove the review flag' : 'Flag this folder for review',
-        `flagReview('${pj(l.path)}','${j(l.name)}')`,
+        'flagReview', [np(l.path), l.name],
         { title: flagged ? 'Removes the ! prefix' : 'Adds a ! prefix so it sorts to the top here and in Explorer' }) : '',
     (!isSites && !l.isDir) ? menuItem('move', 'Move to another site folder…',
-        `startMoveLocalToSite('${pj(l.path)}','${j(l.name)}')`) : '',
-    isSites ? menuItem('merge', 'Merge into another folder…', `startMerge('${pj(l.path)}','${j(l.name)}')`) : '',
-    menuItem('rename', `Rename this ${thing}…`, `startRename('local','${pj(l.path)}','${j(l.name)}','${kindAttr}')`),
+        'startMoveLocalToSite', [np(l.path), l.name]) : '',
+    isSites ? menuItem('merge', 'Merge into another folder…', 'startMerge', [np(l.path), l.name]) : '',
+    menuItem('rename', `Rename this ${thing}…`, 'startRename', ['local', np(l.path), l.name, kindAttr]),
     menuItem('trash', `Delete this ${thing}${isSites ? ' and its contents' : ''}`,
-      `startDelete('local','${pj(l.path)}','${j(l.name)}',${l.isDir},'${kindAttr}')`,
+      'startDelete', ['local', np(l.path), l.name, l.isDir, kindAttr],
       { danger: true, title: 'A local delete can be undone by downloading the cloud copy again.' }),
   ], `Actions for this ${thing}`);
 
@@ -4919,7 +4950,7 @@ function previewBadge(l) {
   } else {
     tip = `${s.esx} Ekahau .esx file${s.esx > 1 ? 's' : ''} — click to view contents`;
   }
-  return `<button class="${cls}" title="${a(tip)}" onclick="event.stopPropagation();openPeek('${pj(l.path)}')">&#128065;<span class="ib-label">Peek</span></button>`;
+  return `<button class="${cls}" title="${a(tip)}" data-action="call" data-fn="openPeek" data-arg="${p(l.path)}" data-stop="1">&#128065;<span class="ib-label">Peek</span></button>`;
 }
 function peekFileRow(f, typeClass) {
   const when = f.mtime ? new Date(f.mtime * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
@@ -5118,7 +5149,7 @@ async function openNotMatchManager() {
         </div>
         <div class="nm-meta">${e(when)}</div>
         <button class="btn btn-secondary nm-undo" title="Un-mark — let matching consider this pair again"
-                onclick="undoNotMatch('${j(pr.cloudId)}','${pj(pr.localPath)}')">Un-mark</button>
+                data-action="call" data-fn="undoNotMatch" data-arg="${a(pr.cloudId)}" data-arg2="${p(pr.localPath)}">Un-mark</button>
       </div>`;
     }).join('');
     body.innerHTML = `<div class="nm-list">${rows}</div>
@@ -5337,14 +5368,14 @@ function _shareRender() {
       ? `<span class="share-role-pill owner" title="${a(SHARE_ROLE_DESC.OWNER)}">${e(roleLabel)}</span>`
       : `<select class="share-role-sel" data-email="${a(u.username)}"
                  title="${a(SHARE_ROLE_DESC[u.role] || '')}"
-                 onchange="_shareChangeRoleFromSelect(this)">
+                 data-action-change="call" data-fn="_shareChangeRoleFromSelect" data-arg-this="1">
            ${_roleOption('READ_USER', u.role)}
            ${_roleOption('WRITE_USER', u.role)}
            ${_roleOption('WRITE_SHARE_USER', u.role)}
          </select>`;
     const removeBtn = isOwner
       ? ''
-      : `<button class="share-remove" title="Remove access" onclick="_shareRemove('${j(u.username)}')">&times;</button>`;
+      : `<button class="share-remove" title="Remove access" data-action="call" data-fn="_shareRemove" data-arg="${a(u.username)}">&times;</button>`;
     return `<div class="share-row${isOwner ? ' is-owner' : ''}">
       <div class="share-who">
         <div class="share-name">${e(name || u.username)}</div>
@@ -5370,7 +5401,7 @@ function _shareRender() {
   const filterHtml = others.length > 6
     ? `<input type="text" class="share-list-filter" id="shareListFilter"
               placeholder="Filter by name or email…" value="${a(ctx.shareFilter || '')}"
-              oninput="_shareFilterChange(this.value)">`
+              data-action-input="call" data-fn="_shareFilterChange" data-arg-value="1">`
     : '';
   const listBody = visible.length
     ? visible.map(rowHtml).join('')
@@ -5400,12 +5431,12 @@ function _shareRender() {
     const memberCount = fetchedGroup ? (fetchedGroup.members || []).length : null;
 
     const manageChip = fetchedGroup
-      ? `<button class="btn btn-sm btn-secondary" onclick="_toggleGroupMembersPanel()"
+      ? `<button class="btn btn-sm btn-secondary" data-action="call" data-fn="_toggleGroupMembersPanel"
                  title="Add or remove people from this group">
            Manage members${memberCount !== null ? ` (${memberCount})` : ''}
            <span class="share-group-manage-caret">${ctx.groupPanelOpen ? '▾' : '▸'}</span>
          </button>
-         <button class="btn btn-sm btn-secondary" id="syncGroupSharesBtn" onclick="_refreshGroupShares()"
+         <button class="btn btn-sm btn-secondary" id="syncGroupSharesBtn" data-action="call" data-fn="_refreshGroupShares"
                  title="Ekahau doesn't push new members to projects you've already shared with the group. This finds every project you own that currently shares this group and re-syncs the membership on all of them in one action.">
            &#x21bb; Sync group shares
          </button>`
@@ -5417,13 +5448,13 @@ function _shareRender() {
          <div class="share-group-name">${e(cachedGroup.name || 'My Sharing Group')}</div>
          <select class="share-role-sel" id="shareGroupRole" ${enabled ? '' : 'disabled'}
                  title="${a(SHARE_ROLE_DESC[currentRole] || '')}"
-                 onchange="_shareGroupRoleChange(this)">
+                 data-action-change="call" data-fn="_shareGroupRoleChange" data-arg-this="1">
            ${_roleOption('READ_USER', currentRole)}
            ${_roleOption('WRITE_USER', currentRole)}
            ${_roleOption('WRITE_SHARE_USER', currentRole)}
          </select>
          <label class="share-group-switch" title="${enabled ? 'Group is currently shared — click to remove' : 'Click to share this project with the whole group'}">
-           <input type="checkbox" ${enabled ? 'checked' : ''} onchange="_shareGroupToggle(this)">
+           <input type="checkbox" ${enabled ? 'checked' : ''} data-action-change="call" data-fn="_shareGroupToggle" data-arg-this="1">
            <span class="share-group-slider"></span>
          </label>
        </div>
@@ -5462,10 +5493,10 @@ function _shareRender() {
              action cannot be undone unless the new owner transfers it back.
            </div>
            <div class="share-danger-confirm-row">
-             <button class="btn btn-red" onclick="_transferOwnershipCommit()">
+             <button class="btn btn-red" data-action="call" data-fn="_transferOwnershipCommit">
                Transfer to ${e(state.newOwner)}
              </button>
-             <button class="btn btn-secondary" onclick="_transferOwnershipCancel()">Cancel</button>
+             <button class="btn btn-secondary" data-action="call" data-fn="_transferOwnershipCancel">Cancel</button>
            </div>`;
       } else if (!candidates.length) {
 
@@ -5491,7 +5522,7 @@ function _shareRender() {
                <option value="">Choose recipient…</option>
                ${options}
              </select>
-             <button class="btn btn-danger" onclick="_transferOwnershipStart()">Transfer&hellip;</button>
+             <button class="btn btn-danger" data-action="call" data-fn="_transferOwnershipStart">Transfer&hellip;</button>
            </div>`;
       }
     } else {
@@ -5513,7 +5544,7 @@ function _renderGroupMembersPanel(group) {
             <div class="share-email">${e(m.email)}</div>
           </div>
           <button class="share-remove" title="Remove from group"
-                  onclick="_groupRemoveMember('${j(m.email)}')">&times;</button>
+                  data-action="call" data-fn="_groupRemoveMember" data-arg="${a(m.email)}">&times;</button>
         </div>`;
       }).join('')
     : `<div class="share-group-member-empty">No members yet.</div>`;
@@ -5525,9 +5556,9 @@ function _renderGroupMembersPanel(group) {
     <div class="share-group-members-list">${rows}</div>
     <div class="share-add-row share-group-add-row">
       <input type="email" id="groupMemberEmail" placeholder="add-someone@company.com"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();_groupAddMember()}">
+             data-action-keydown="enter-call" data-fn="_groupAddMember">
       <span></span>
-      <button class="btn btn-primary" onclick="_groupAddMember()">Add to group</button>
+      <button class="btn btn-primary" data-action="call" data-fn="_groupAddMember">Add to group</button>
     </div>
   </div>`;
 }
@@ -5617,7 +5648,7 @@ function _syncGroupRender() {
     const isChecked = ctx.selected.has(pid);
     return `<label class="sync-group-row">
       <input type="checkbox" ${isChecked ? 'checked' : ''}
-             onchange="_syncGroupTogglePid('${j(pid)}', this.checked)">
+             data-action-change="call" data-fn="_syncGroupTogglePid" data-arg="${a(pid)}" data-arg-checked="1">
       <span class="sync-group-name">${e(name)}</span>
     </label>`;
   }).join('');
@@ -6088,8 +6119,8 @@ function _shareChipsRender() {
       + (c.valid ? '' : ' title="That does not look like an email address"')
       + '>' + WD.esc(c.email)
       + '<button type="button" class="share-chip-x" aria-label="Remove '
-      + WD.escAttr(c.email) + '" onclick="event.stopPropagation();_shareChipRemove(\''
-      + WD.escJsStr(c.email) + '\')">&times;</button>'
+      + WD.escAttr(c.email) + '" data-action="call" data-stop="1"'
+      + ' data-fn="_shareChipRemove" data-arg="' + WD.escAttr(c.email) + '">&times;</button>'
       + '</span>';
   }).join('');
 }
@@ -6189,15 +6220,13 @@ function _shareSuggestShow(query) {
   if (!matches.length) { _shareSuggestHide(); return; }
   _shareSuggestIndex = -1;
   box.innerHTML = matches.map(function (r, i) {
-    // `JSON.stringify(x).replace(/"/g,'&quot;')` leaves the ampersand
-    // alone, so a value containing the six characters `&quot;` decodes
-    // back to a real quote when the browser reads the attribute and closes
-    // the JS string early. Same shape as the rename-profile buttons, found
-    // in the same sweep - see the note in rename.js. `WD.escJsStr` is the
-    // escaper for a JS string inside an attribute.
+    // An email address is an attribute value here, so it takes the attribute
+    // escaper. It was a JS string in an `onclick` until v2.170.0, which is why
+    // it had a JS-string escaper and a note about `JSON.stringify` not being
+    // one; CLAUDE.md's escaping section keeps that finding.
     return '<button type="button" class="share-suggest-item" data-i="' + i + '"'
-      + ' onmousedown="event.preventDefault()"'
-      + ' onclick="_sharePick(\'' + WD.escJsStr(r.email) + '\')">'
+      + ' data-action-mousedown="prevent"'
+      + ' data-action="call" data-fn="_sharePick" data-arg="' + WD.escAttr(r.email) + '">'
       + WD.esc(r.email) + '</button>';
   }).join('');
   box.hidden = false;
@@ -6258,21 +6287,17 @@ function _shareRecentRender() {
   host.innerHTML =
     '<div class="share-recent-label">Recent</div>'
     + offer.map(function (r) {
-      // `JSON.stringify(x).replace(/"/g,'&quot;')` was the escaper here and
-      // is not one - it never touches the ampersand, so `&quot;` inside the
-      // value decodes back to a quote and closes the string. See rename.js.
-      const safe = WD.escJsStr(r.email);
       // And the two labels are attributes, so they take the attribute
       // escaper rather than the text one - the v2.146.1 finding, in a shape
       // its guard could not see because the quote and the call have literal
       // words between them.
       const label = WD.escAttr(r.email);
       return '<span class="share-recent-item">'
-        + '<button type="button" class="share-recent-pick" onclick="_sharePick(\'' + safe + '\')">'
+        + '<button type="button" class="share-recent-pick" data-action="call" data-fn="_sharePick" data-arg="' + label + '">'
         + WD.esc(r.email) + '</button>'
         + '<button type="button" class="share-recent-x" title="Forget '
         + label + '" aria-label="Forget ' + label
-        + '" onclick="_shareForget(\'' + safe + '\')">&times;</button>'
+        + '" data-action="call" data-fn="_shareForget" data-arg="' + label + '">&times;</button>'
         + '</span>';
     }).join('');
 }
@@ -6806,7 +6831,7 @@ function _lpFilter(q) {
       ? (c.siteName || c._parentSite || '')
       : (c.folder || c._parentSite || '');
     return `<div class="lp-item${isSameCode ? ' same-site' : ''}"
-                 onclick="_lpPick('${j(idOrPath)}','${j(c.name || '')}')">
+                 data-action="call" data-fn="_lpPick" data-arg="${a(idOrPath)}" data-arg2="${a(c.name || '')}">
       <div class="lp-item-main">
         <span class="lp-item-name">${e(c.name || '')}</span>
         ${isSameCode ? '<span class="lp-item-tag">same site</span>' : ''}
@@ -7012,7 +7037,7 @@ function renderMergeDests() {
   let h = list.length ? '' : `<div class="peek-more">No other folders to merge into.</div>`;
   list.forEach(({ f, score }) => {
     const isMatch = score >= 0.5;
-    h += `<div class="peek-row pick" onclick="chooseMergeDest('${pj(f.path)}')">
+    h += `<div class="peek-row pick" data-action="call" data-fn="chooseMergeDest" data-arg="${p(f.path)}">
       <span class="pk-name">${isMatch ? '<b class="amber">★</b> ' : ''}${e(f.name)}</span>
       <span class="pk-size">${e(f.meta || '')}</span></div>`;
   });
@@ -7196,10 +7221,6 @@ async function confirmMerge() {
       setTimeout(() => startDelete('local', path, name, true), 450);
     }
   });
-}
-
-function toggleMainMenu(ev) {
-  WD.toggleMenu(ev, 'mainMenu');
 }
 
 function closeMainMenu() {
@@ -7430,7 +7451,7 @@ function renderOwnerFilterNotice() {
          be false, and `_ownerFilterForcedReason` has already explained. */
       + (_ownerFilterForcedReason ? '' : e(where))
       + '</span>'
-      + '<button class="btn btn-secondary own-note-btn" onclick="setOwnerFilterUI(\'mine\')">'
+      + '<button class="btn btn-secondary own-note-btn" data-action="call" data-fn="setOwnerFilterUI" data-arg="mine">'
       + 'Show only mine</button>';
     return;
   }
@@ -7450,7 +7471,7 @@ function renderOwnerFilterNotice() {
     + e(OWNER_FILTER_LABEL[cur]) + '</b> — sites and projects owned by '
     + (cur === 'mine' ? 'other people are hidden. ' : 'you are hidden. ')
     + e(where) + '</span>'
-    + '<button class="btn btn-secondary own-note-btn" onclick="setOwnerFilterUI(\'all\')">'
+    + '<button class="btn btn-secondary own-note-btn" data-action="call" data-fn="setOwnerFilterUI" data-arg="all">'
     + 'Show all owners</button>';
 }
 
@@ -8307,7 +8328,7 @@ function _syncVerdictCell(d) {
 function _syncPickRowsHtml(rows, kind, dir, withVerdict) {
   return rows.map((d, i) => '<tr>'
     + '<td class="sync-plan-pick"><input type="checkbox" class="sync-pick" checked'
-    + ' data-kind="' + kind + '" data-idx="' + i + '" onchange="_syncPickUpdate()"></td>'
+    + ' data-kind="' + kind + '" data-idx="' + i + '" data-action-change="call" data-fn="_syncPickUpdate"></td>'
     + '<td class="sync-plan-name">' + e(d.localName || d.cloudName || d.name) + '</td>'
     + '<td class="sync-plan-dir">' + dir + '</td>'
     + (withVerdict ? _syncVerdictCell(d) : '')
@@ -8327,7 +8348,7 @@ function _syncPushRowsHtml(rows) {
   return rows.map((d, i) => '<tr>'
     + '<td class="sync-plan-pick"><input type="checkbox" class="sync-pick"'
     + (PROVEN_MATCH_TYPES.has(d.matchType) ? ' checked' : '')
-    + ' data-kind="up" data-idx="' + i + '" onchange="_syncPickUpdate()"></td>'
+    + ' data-kind="up" data-idx="' + i + '" data-action-change="call" data-fn="_syncPickUpdate"></td>'
     + '<td class="sync-plan-name">' + e(d.localName || d.cloudName || '') + '</td>'
     + '<td class="sync-plan-dir">&#11014; up</td>'
     + '<td class="sync-plan-name">' + e(d.cloudName || '')
@@ -8417,7 +8438,7 @@ async function syncEverything() {
   if (plan.down.length) {
     body += '<p class="sync-plan-lead">'
       + '<label class="sync-plan-all"><input type="checkbox" id="syncAll-down" checked '
-      + 'onchange="_syncPickAll(\'down\', this.checked)"> '
+      + 'data-action-change="call" data-fn="_syncPickAll" data-arg="down" data-arg-checked="1"> '
       + 'Replace <b>' + plan.down.length + '</b> local file'
       + (plan.down.length === 1 ? '' : 's') + ' with the cloud copy</label></p>'
       + '<div class="sync-plan-wrap"><table class="sync-plan">'
@@ -8439,7 +8460,7 @@ async function syncEverything() {
         + 'compared.</b> A later cloud date can mean real work, or just a '
         + 'rename — the dates cannot tell them apart. '
         + '<button type="button" class="btn btn-secondary btn-inline" '
-        + 'onclick="_syncCheckFirst()">Compare them first</button> '
+        + 'data-action="call" data-fn="_syncCheckFirst">Compare them first</button> '
         + 'Nothing is changed by comparing.</p>';
     }
   }
@@ -8447,7 +8468,7 @@ async function syncEverything() {
   if (plan.fresh.length) {
     body += '<p class="sync-plan-lead">'
       + '<label class="sync-plan-all"><input type="checkbox" id="syncAll-fresh" checked '
-      + 'onchange="_syncPickAll(\'fresh\', this.checked)"> '
+      + 'data-action-change="call" data-fn="_syncPickAll" data-arg="fresh" data-arg-checked="1"> '
       + 'Download <b>' + plan.fresh.length + '</b> cloud project'
       + (plan.fresh.length === 1 ? '' : 's') + ' you have no local copy of</label></p>'
       + '<div class="sync-plan-wrap"><table class="sync-plan">'
@@ -8469,7 +8490,7 @@ async function syncEverything() {
     body += '<p class="sync-plan-lead">'
       + '<label class="sync-plan-all"><input type="checkbox" id="syncAll-up" '
       + (unproven.length === plan.up.length ? '' : 'checked ')
-      + 'onchange="_syncPickAll(\'up\', this.checked)"> '
+      + 'data-action-change="call" data-fn="_syncPickAll" data-arg="up" data-arg-checked="1"> '
       + 'Send <b>' + plan.up.length + '</b> newer local file'
       + (plan.up.length === 1 ? '' : 's') + ' up</label></p>'
       + '<div class="sync-plan-wrap"><table class="sync-plan">'
@@ -8832,13 +8853,12 @@ function startRename(side, idOrPath, name, kind) {
      he does not have to type. */
   const insert = document.getElementById('renameInsert');
   if (where) {
-    const arg = a(JSON.stringify(where));
     insert.hidden = false;
     insert.innerHTML =
       '<span class="rename-insert-label">' + e(whereKey) + '</span>'
       + '<button type="button" class="rename-insert-btn"'
       + ' title="Add it to the name at the cursor, keeping what is already there"'
-      + ' onclick="_renameInsert(' + arg + ')">Insert &ldquo;' + e(where) + '&rdquo;</button>';
+      + ' data-action="call" data-fn="_renameInsert" data-arg="' + a(where) + '">Insert &ldquo;' + e(where) + '&rdquo;</button>';
   } else {
     insert.hidden = true;
     insert.innerHTML = '';
@@ -9350,7 +9370,7 @@ function _askAboutExistingFile(r) {
     + '<p class="sub warn"><b>Replace it</b> overwrites that file with the '
     + 'cloud copy. No copy is kept, so whatever is in it now is gone.</p>'
     + '<p class="sub"><button class="btn btn-secondary" '
-    + 'onclick="_resolveConfirmAction(&quot;overwrite&quot;)">Replace it</button></p>';
+    + 'data-action="call" data-fn="_resolveConfirmAction" data-arg="overwrite">Replace it</button></p>';
   return new Promise(resolve => {
     _pendingConfirmAction = (v) => resolve(v === true ? 'keepboth' : v);
     document.getElementById('confirmActionTitle').textContent =
@@ -9771,9 +9791,8 @@ function _sourceItemHtml(t, i, includePicker) {
                value="${a(_taDisplayText(t))}"
                placeholder="Type to search sites…"
                autocomplete="off"
-               onfocus="_taShow(this)" oninput="_taFilter(this)"
-               onblur="_taBlur(this)" onkeydown="_taKey(event, this)">
-        <button type="button" class="mv-ta-clear" data-idx="${i}" onclick="_taClear(${i})" title="Clear" tabindex="-1">&times;</button>
+               data-action-focus="call" data-fn-focus="_taShow" data-action-input="call" data-fn-input="_taFilter" data-action-blur="call" data-fn-blur="_taBlur" data-action-keydown="call" data-fn-keydown="_taKey" data-arg-event="1" data-arg-this="1">
+        <button type="button" class="mv-ta-clear" data-idx="${i}" data-action="call" data-fn="_taClear" data-arg-json="${i}" title="Clear" tabindex="-1">&times;</button>
         <div class="mv-ta-list" hidden></div>
       </div>
       ${t.destAuto && t.destValue.startsWith('i:') ? '<span class="mv-item-auto" title="Auto-matched by site code or filename similarity">auto</span>' : ''}
@@ -9845,14 +9864,14 @@ function _taRenderList(idx, query) {
               : (!s.localFolder ? ' <span class="mv-ta-tag">cloud only</span>' : '');
     const active = val === currentValue ? ' active' : '';
     rows.push(`<div class="mv-ta-item${active}" data-val="${val}"
-                    onmousedown="event.preventDefault();_taPick('${idx}','${val}')">${e(s.name)}${tag}</div>`);
+                    data-action-mousedown="call" data-fn="_taPick" data-arg="${a(idx)}" data-arg2="${a(val)}" data-prevent="1">${e(s.name)}${tag}</div>`);
   });
 
   const exact = scored.some(m => (m.s.name || '').toLowerCase() === q);
   if (q && !exact) {
     const active = currentValue === '__new__' ? ' active' : '';
     rows.push(`<div class="mv-ta-item mv-ta-newop${active}" data-val="__new__" data-query="${a(query)}"
-                    onmousedown="event.preventDefault();_taPickNew(this, '${j(String(idx))}')">+ Create new site: "${e(query)}"</div>`);
+                    data-action-mousedown="call" data-fn="_taPickNew" data-arg="${a(String(idx))}" data-arg-this="1" data-prevent="1">+ Create new site: "${e(query)}"</div>`);
   }
   if (!rows.length) {
     return '<div class="mv-ta-empty">No matching sites. Keep typing to create a new one.</div>';
@@ -9860,7 +9879,7 @@ function _taRenderList(idx, query) {
   return rows.join('');
 }
 
-function _taShow(input) {
+function _taShow(ev, input) {
   const idx = input.dataset.idx;
   const list = _taGetList(idx);
   if (!list) return;
@@ -9893,7 +9912,7 @@ function _taCommitTyped(idx, text) {
   else _taPickNew(idx, typed);
 }
 
-function _taBlur(input) {
+function _taBlur(ev, input) {
 
   const idx = input.dataset.idx;
   setTimeout(() => {
@@ -9904,7 +9923,7 @@ function _taBlur(input) {
     if (target) input.value = _taDisplayText(target);
   }, 150);
 }
-function _taFilter(input) {
+function _taFilter(ev, input) {
   const idx = input.dataset.idx;
   const list = _taGetList(idx);
   if (!list) return;

@@ -147,7 +147,7 @@ class TheCardBehavesLikeTheOthersTests(unittest.TestCase):
     def test_it_is_a_dashboard_card_like_every_other_filter(self):
         """Not a one-off control in its own style."""
         self.assertIn('data-filter="unshared"', self.html)
-        self.assertIn("setFilter('unshared')", self.html)
+        self.assertIn('data-fn="setFilter" data-arg="unshared"', self.html)
         # It is found by what it filters now, not by the id of the box round
         # it - see the note on the hiding test below.
         self.assertIn('data-filter="unshared"', self.html)

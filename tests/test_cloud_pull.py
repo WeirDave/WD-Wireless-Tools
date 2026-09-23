@@ -191,14 +191,14 @@ class CloudPullWiringTests(unittest.TestCase):
         # It reported a state and offered nothing to do about it for a long time.
         start = self.js.index("function stalenessBadgeHtml(")
         body = self.js[start:self.js.index("\n}", start)]
-        self.assertIn("verifyReplaceLocal(", body)
+        self.assertIn('data-fn="verifyReplaceLocal"', body)
         # `is-action` was the class that distinguished a clickable pill from a
         # decorative one, back when both were pills. Everything in the band is
         # a button now, so the property is that this one is pressable and
         # wired - not that it carries a class telling the stylesheet so.
-        i = body.index("verifyReplaceLocal(")
+        i = body.index('data-fn="verifyReplaceLocal"')
         self.assertIn("<button", body[:i])
-        self.assertIn("onclick=", body[:i])
+        self.assertIn('data-action="call"', body[:i])
 
     def test_pushing_up_needs_a_stronger_pairing_than_pulling_down(self):
         """This used to assert that nothing could push a local file up, which
@@ -226,7 +226,7 @@ class CloudPullWiringTests(unittest.TestCase):
         body = self.js[start:self.js.index(chr(10) + "}", start)]
         local_part = body[body.index("local_newer"):]
         self.assertIn("canPushToCloud(r)", local_part)
-        self.assertIn("pushLocalOverCloud(", local_part)
+        self.assertIn('data-fn="pushLocalOverCloud"', local_part)
 
 if __name__ == "__main__":
     unittest.main()

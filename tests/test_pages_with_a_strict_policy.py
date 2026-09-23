@@ -174,7 +174,13 @@ class EveryDelegatedNameResolvesTests(unittest.TestCase):
         missing = {}
         for name in sorted(strict_pages()):
             defined = self.defined_names(name)
-            for fn in sorted(set(DATA_FN.findall(page_text(name)))):
+            # `call-chain` carries several names in one attribute, comma
+            # separated - `closeMainMenu,pickFolder`. Resolving the whole
+            # string as one name reports four real handlers as missing.
+            found = set()
+            for raw in DATA_FN.findall(page_text(name)):
+                found |= {part.strip() for part in raw.split(',') if part.strip()}
+            for fn in sorted(found):
                 if fn in BROWSER_BUILTINS:
                     continue
                 leaf = fn.split(".")[-1]
@@ -245,7 +251,8 @@ class TheHeaderReallyArrivesTests(unittest.TestCase):
                 "settings.html": "/settings", "setup.html": "/setup",
                 "organizer.html": "/squirrel",
                 "report.html": "/report",
-                "walls.html": "/walls"}
+                "walls.html": "/walls",
+                "cloud.html": "/cloud"}
 
     def test_every_strict_page_has_a_route_in_this_test(self):
         """Adding a page to the list without adding it here would leave it
@@ -337,17 +344,29 @@ class TheHeaderReallyArrivesTests(unittest.TestCase):
         self.assertNotIn("unsafe-eval", script_src)
         self.assertIn("'self'", script_src)
 
-    def test_an_unconverted_page_keeps_the_permissive_default(self):
-        """A page that still needs inline script must not get a policy that
-        breaks it. Half a rollout is worse than none.
+    def test_a_page_off_the_list_keeps_the_permissive_default(self):
+        """The strict header must follow the list, not arrive unconditionally.
 
-        Cloud Manager is the last unconverted page. It was Quick Walls until
-        v2.165.0; when Cloud Manager joins the list this test needs a new
-        subject or it is asserting nothing."""
+        This used to load whichever page was still unconverted - Quick Walls,
+        then Cloud Manager. As of v2.170.0 every page the server serves is on
+        the list, so there is no such page to load, and deleting the test
+        would leave `test_a_strict_page_gets_the_strict_policy` unable to fail
+        for the right reason: a server that stamped the strict header on every
+        response would pass it.
+
+        So the subject is made rather than found. One page is lifted off the
+        list for the length of the request and has to come back with the
+        permissive default. A page that still needed inline script would get
+        that same default, which is the property this was always about."""
+        original = set(self.server.CSP_STRICT_PAGES)
+        self.addCleanup(setattr, self.server, "CSP_STRICT_PAGES", original)
+        self.server.CSP_STRICT_PAGES = original - {"cloud.html"}
         resp = self.get("/cloud")
         self.assertEqual(200, resp.status_code)
         self.assertEqual("frame-ancestors 'none'",
-                         resp.headers.get("Content-Security-Policy"))
+                         resp.headers.get("Content-Security-Policy"),
+                         "a page off the list still got the strict policy, so "
+                         "the header does not depend on the list at all")
 
     def test_the_default_policy_is_still_set_everywhere(self):
         for url in ("/cloud", "/report", "/squirrel"):

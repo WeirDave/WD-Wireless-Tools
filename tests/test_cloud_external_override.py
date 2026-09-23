@@ -19,13 +19,18 @@ would pass with it consulted nowhere.
 """
 from __future__ import annotations
 
+import html
 import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from delegated import DELEGATED_JS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 CLOUD_JS = ROOT / "web" / "assets" / "js" / "cloud.js"
@@ -227,9 +232,9 @@ globalThis.window = globalThis;
 const e = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const a = e;
-const j = s => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-const pj = j;
-globalThis.e = e; globalThis.a = a; globalThis.j = j; globalThis.pj = pj;
+const np = s => String(s == null ? '' : s).replace(/\\/g, '/');
+const p = s => a(np(s));
+globalThis.e = e; globalThis.a = a; globalThis.np = np; globalThis.p = p;
 globalThis.currentTab = 'projects';
 function ic() { return ''; }
 
@@ -265,7 +270,7 @@ function done() {
 
 
 def run_node(checks: str) -> subprocess.CompletedProcess:
-    program = NODE_PRELUDE + "eval(" + json.dumps(checks) + ");"
+    program = DELEGATED_JS + NODE_PRELUDE + "eval(" + json.dumps(checks) + ");"
     try:
         return subprocess.run(["node", "-e", program, str(CLOUD_JS)],
                               capture_output=True, text=True,
@@ -387,18 +392,17 @@ class TheMarkIsVisibleAndUndoableTests(unittest.TestCase):
         self.run_checks(r"""
           setOverrides({ 'c:c-mine': 'external' });
           const h = externalBadgeHtml({ cloud: MINE, local: LOCAL });
-          const m = h.match(/onclick="([^"]*)"/);
+          const m = delegated(h, 'clearExternalMark');
           check('the badge has a handler', !!m);
-          const call = m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
           const got = [];
           globalThis.event = { stopPropagation() {} };
           globalThis.clearExternalMark = function (cloudId, localPath) {
             got.push([cloudId, localPath]);
           };
-          eval(call);
+          globalThis.clearExternalMark.apply(null, m.args);
           eq('called once with this project', got,
-             [['c-mine', 'C:\\Projects\\Site\\Plan.esx']]);
+             [['c-mine', 'C:/Projects/Site/Plan.esx']]);
           done();
         """)
 
@@ -409,24 +413,44 @@ class TheMarkIsVisibleAndUndoableTests(unittest.TestCase):
           const odd = { id: "it's-a-b\\c", name: "O'Brien" };
           setOverrides({ ["c:" + odd.id]: 'external' });
           const h = externalBadgeHtml({ cloud: odd });
-          const m = h.match(/onclick="([^"]*)"/);
+          const m = delegated(h, 'clearExternalMark');
           check('there is a handler', !!m);
           const got = [];
           globalThis.event = { stopPropagation() {} };
           globalThis.clearExternalMark = function (id) { got.push(id); };
-          eval(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+          globalThis.clearExternalMark.apply(null, m.args);
           eq('the id survived escaping', got, ["it's-a-b\\c"]);
           done();
         """)
 
 
+def _delegated_args(attrs) -> list:
+    """The arguments a delegated control carries, in the dispatcher's order."""
+    raw = attrs.get("data-args-json")
+    if raw is not None:
+        return json.loads(html.unescape(raw))
+    out = []
+    if "data-arg-json" in attrs:
+        out.append(json.loads(html.unescape(attrs["data-arg-json"])))
+    elif "data-arg" in attrs:
+        out.append(html.unescape(attrs["data-arg"]))
+    if "data-arg2" in attrs:
+        out.append(html.unescape(attrs["data-arg2"]))
+    return out
+
+
 def buttons_on(page) -> dict:
-    """Every ``<button>`` on a page, as ``{id, label, onclick, title}``.
+    """Every ``<button>`` on a page, as ``{id, label, fn, args, title}``.
 
     Parsed rather than matched as text. A substring check passes on a control
     that is commented out, that appears twice, or whose label and handler
     belong to two different buttons - and the last of those is exactly what an
     inert control looks like from outside.
+
+    ``fn`` and ``args`` are the delegated handler and its arguments. It used to
+    report ``onclick``, which every page carrying the strict policy leaves
+    empty - a caller that evaluated that string would have run nothing and
+    said nothing, which is the same inert control seen from a different angle.
     """
     out = {}
     text = page.read_text(encoding="utf-8")
@@ -439,7 +463,8 @@ def buttons_on(page) -> dict:
         key = attrs.get("id") or re.sub(r"\s+", " ", label).strip()
         out[key] = {"id": attrs.get("id", ""),
                     "label": re.sub(r"\s+", " ", label).strip(),
-                    "onclick": attrs.get("onclick", ""),
+                    "fn": attrs.get("data-fn", ""),
+                    "args": _delegated_args(attrs),
                     "title": attrs.get("title", "")}
     return out
 
@@ -480,12 +505,19 @@ class TheControlExistsWhereTheTextSaysItIsTests(unittest.TestCase):
         the opposite of what its label says, which nothing about the markup
         would reveal.
         """
-        clicks = json.dumps([self.buttons["bulkMarkExternalBtn"]["onclick"],
-                             self.buttons["bulkMarkMineBtn"]["onclick"]])
+        # Each control names its handler and carries its own argument; the
+        # pair differ by that argument and nothing else, which is the point.
+        clicks = json.dumps([
+            [self.buttons["bulkMarkExternalBtn"]["fn"],
+             self.buttons["bulkMarkExternalBtn"]["args"]],
+            [self.buttons["bulkMarkMineBtn"]["fn"],
+             self.buttons["bulkMarkMineBtn"]["args"]]])
         proc = run_node("""
           const got = [];
           globalThis.bulkMarkExternal = function (v) { got.push(v); };
-          %s.forEach(function (src) { eval(src); });
+          %s.forEach(function (c) {
+            globalThis[c[0]].apply(null, c[1]);
+          });
           eq('one call each, in the order the menu lists them', got,
              ['external', 'mine']);
           done();

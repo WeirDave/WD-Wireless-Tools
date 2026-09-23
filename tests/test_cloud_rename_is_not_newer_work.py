@@ -54,18 +54,19 @@ const block = slice('function comparisonIsSettled(', '\nfunction isOutOfSync(')
 
 const WD = {
   esc: s => String(s == null ? '' : s),
-  escAttr: s => String(s == null ? '' : s),
+  escAttr: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
   escJsStr: s => String(s == null ? '' : s),
 };
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
 function j(s) { return WD.escJsStr(s); }
-function pj(s) { return j(String(s == null ? '' : s).replace(/\\/g, '/')); }
+function np(s) { return String(s == null ? '' : s).replace(/\\/g, '/'); }
+function p(s) { return a(np(s)); }
 let currentTab = 'projects';
 
-const fn = new Function('WD', 'e', 'a', 'j', 'pj', 'currentTab',
+const fn = new Function('WD', 'e', 'a', 'p', 'np', 'currentTab',
   block + '\nreturn { stalenessBadgeHtml, canPullFromCloud };');
-const api = fn(WD, e, a, j, pj, currentTab);
+const api = fn(WD, e, a, p, np, currentTab);
 
 const row = (over) => Object.assign({
   kind: 'projects',

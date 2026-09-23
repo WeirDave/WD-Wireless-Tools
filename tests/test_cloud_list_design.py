@@ -49,7 +49,7 @@ WD.escJsStr = s => String(s == null ? '' : s).replace(/['\\]/g, '\\$&');
 function e(s){return WD.esc(s);} function a(s){return WD.escAttr(s);}
 function j(s){return WD.escJsStr(s);}
 function p(s){return a(String(s==null?'':s).replace(/\\/g,'/'));}
-function pj(s){return j(String(s==null?'':s).replace(/\\/g,'/'));}
+function np(s){return String(s==null?'':s).replace(/\\/g,'/');}
 let currentTab='projects', selected=new Set(), activeFilter='all';
 const data={currentUser:'me@example.com'};
 const _compareResults=new Map();
@@ -178,7 +178,7 @@ class OnlyARowThatWantsSomethingGetsASecondLineTests(unittest.TestCase):
     def test_comparing_is_still_always_reachable(self):
         """It left the band, so it has to be somewhere. It is in the row
         menu - otherwise this would be a feature removed by a layout change."""
-        self.assertIn("checkRealDifference(", self.out["cloudCell"])
+        self.assertIn('data-fn="checkRealDifference"', self.out["cloudCell"])
 
 
 @needs_node
@@ -513,7 +513,7 @@ class AGuessedPairIsRefusedAndToldWhyTests(unittest.TestCase):
     def test_the_control_that_lifts_the_refusal_is_in_the_same_band(self):
         html = self.out["guessedBand"]
         self.assertIn("Confirm this pair", strip(html))
-        self.assertIn("markManualMatch(", html)
+        self.assertIn('data-fn="markManualMatch"', html)
 
 
 if __name__ == "__main__":

@@ -241,8 +241,8 @@ const esc = (x) => String(x == null ? '' : x)
 const el = { textContent: '', innerHTML: '' };
 const sandbox = {
   console, JSON, Math, Set, Map, RegExp, Promise,
-  e: esc, a: esc, j: (x) => String(x == null ? '' : x),
-  pj: (x) => String(x == null ? '' : x).split('\\').join('/'),
+  e: esc, a: esc, np: (x) => String(x == null ? '' : x).split('\\').join('/'),
+  p: (x) => esc(String(x == null ? '' : x).split('\\').join('/')),
   currentTab: 'projects', rowData: {}, _compareResults: new Map(),
   _compareKey: (c, l) => String(c) + '\u0000' + String(l).toLowerCase(),
   compareResultFor: () => null, rowIsBusy: () => null,
@@ -310,13 +310,13 @@ console.log(JSON.stringify(out));
         self.assertIn("still on disk", self.out["rejected"])
 
     def test_the_row_offers_the_undo(self):
-        self.assertIn("undoNotMatch(", self.out["rejected"])
+        self.assertIn('data-fn="undoNotMatch"', self.out["rejected"])
 
     def test_an_ordinary_cloud_only_row_is_unchanged(self):
         html = self.out["plain"]
         self.assertIn("nothing matching it on disk", html)
         self.assertNotIn("not a match", html)
-        self.assertNotIn("undoNotMatch(", html)
+        self.assertNotIn('data-fn="undoNotMatch"', html)
 
     def test_the_dialog_names_the_file_in_the_way(self):
         self.assertIn("SITE1 Riverside/SITE1 Riverside Baseline.esx",

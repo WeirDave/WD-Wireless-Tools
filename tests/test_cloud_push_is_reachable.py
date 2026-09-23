@@ -31,9 +31,13 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from delegated import DELEGATED_JS  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 CLOUD_JS = ROOT / "web" / "assets" / "js" / "cloud.js"
@@ -61,12 +65,13 @@ const block = slice('function ownershipBlock(', '\nfunction _isExternal(')
             + slice('const MATCH_BADGE_SPEC = {', '\nfunction gutCell(r)');
 
 const WD = { esc: s => String(s == null ? '' : s),
-             escAttr: s => String(s == null ? '' : s),
+             escAttr: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
              escJsStr: s => String(s == null ? '' : s) };
 function e(s) { return WD.esc(s); }
 function a(s) { return WD.escAttr(s); }
 function j(s) { return WD.escJsStr(s); }
-function pj(s) { return j(String(s == null ? '' : s).replace(/\\/g, '/')); }
+function np(s) { return String(s == null ? '' : s).replace(/\\/g, '/'); }
+function p(s) { return a(np(s)); }
 let currentTab = 'projects';
 
 const calls = [];
@@ -87,9 +92,9 @@ function _clearStaleness() {}
 function _scheduleOpRefresh() {}
 // `_compareResults` and `_compareKey` are declared inside the slice itself
 // since v2.110.0, so passing them in again is a redeclaration.
-const fn = new Function('WD','e','a','j','pj','currentTab','opEnqueue','toast','pyApi','showConfirmModal','_clearStaleness','_scheduleOpRefresh',
+const fn = new Function('WD','e','a','p','np','currentTab','opEnqueue','toast','pyApi','showConfirmModal','_clearStaleness','_scheduleOpRefresh',
   block + '\nreturn { stalenessBadgeHtml, pushLocalOverCloud, canPushToCloud };');
-const api = fn(WD,e,a,j,pj,currentTab,opEnqueue,toast,pyApi,showConfirmModal,_clearStaleness,_scheduleOpRefresh);
+const api = fn(WD,e,a,p,np,currentTab,opEnqueue,toast,pyApi,showConfirmModal,_clearStaleness,_scheduleOpRefresh);
 
 const row = (matchType) => ({
   kind: 'projects', matchType,
@@ -101,10 +106,9 @@ const row = (matchType) => ({
 /* Pull the handler back out of the rendered row and run it. This is the step
    that would have caught a control that renders and does nothing. */
 function clickTheControl(html) {
-  const m = /onclick="event\.stopPropagation\(\);(pushLocalOverCloud\([^"]*\))"/.exec(html);
-  if (!m) throw new Error('no push handler in the rendered row: ' + html.slice(0, 200));
-  const invoke = new Function('pushLocalOverCloud', 'return ' + m[1] + ';');
-  return invoke(api.pushLocalOverCloud);
+  const hit = delegated(html, 'pushLocalOverCloud');
+  if (!hit) throw new Error('no push handler in the rendered row: ' + html.slice(0, 200));
+  return api.pushLocalOverCloud.apply(null, hit.args);
 }
 
 (async () => {
@@ -112,7 +116,7 @@ function clickTheControl(html) {
 
   // --- a name-only pair: the case he actually has --------------------------
   const exactHtml = api.stalenessBadgeHtml(row('exact'));
-  out.exactOffersTheControl = /pushLocalOverCloud\(/.test(exactHtml);
+  out.exactOffersTheControl = /data-fn="pushLocalOverCloud"/.test(exactHtml);
   out.exactIsNotDisabled = !/aria-disabled="true"/.test(exactHtml);
 
   calls.length = 0; confirms.length = 0; toasts.length = 0; queued.length = 0;
@@ -143,7 +147,7 @@ function clickTheControl(html) {
 
   // --- a guessed pair is still refused ------------------------------------
   const fuzzyHtml = api.stalenessBadgeHtml(row('fuzzy'));
-  out.fuzzyOffersTheControl = /pushLocalOverCloud\(/.test(fuzzyHtml);
+  out.fuzzyOffersTheControl = /data-fn="pushLocalOverCloud"/.test(fuzzyHtml);
   out.fuzzyIsDisabled = /aria-disabled="true"/.test(fuzzyHtml);
 
   process.stdout.write(JSON.stringify(out));
@@ -159,7 +163,7 @@ class TheControlIsReachableAndRunsTests(unittest.TestCase):
     def setUpClass(cls):
         with tempfile.TemporaryDirectory() as td:
             script = Path(td) / "probe.js"
-            script.write_text(NODE_SCRIPT, encoding="utf-8")
+            script.write_text(DELEGATED_JS + NODE_SCRIPT, encoding="utf-8")
             proc = subprocess.run(["node", str(script), str(CLOUD_JS)],
                                   capture_output=True, timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:

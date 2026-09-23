@@ -278,7 +278,7 @@ const toast = () => {};
 const loadOverviews = () => {};
 const loadWallTemplates = () => {};
 
-const WD = { escAttr: s => String(s == null ? '' : s),
+const WD = { escAttr: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
              esc: s => String(s == null ? '' : s), toast(){} };
 
 const NAMES = ['document','API','settings','_subfolders','_subfolderNames',

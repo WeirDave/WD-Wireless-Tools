@@ -700,7 +700,7 @@ Two things came out of the work that the item did not ask for:
 
 ### Suite-wide
 
-#### 10. P2 — the tool pages have no Content-Security-Policy, and every control is an inline `onclick` — **twelve of fourteen done**
+#### 10. ~~P2 — the tool pages have no Content-Security-Policy, and every control is an inline `onclick`~~ — closed in v2.170.0
 
 **The single biggest remaining security improvement, and it is a project
 rather than a fix.** The 2026-09-21 sweep closed fourteen findings; nine of
@@ -722,6 +722,49 @@ item.
 
 Doing it page by page is possible: a page whose controls are all converted can
 carry a stricter policy than the others, because the header is per response.
+
+**Closed.** All fourteen pages carry `script-src 'self'` with no
+`'unsafe-inline'`. Quick Walls went in v2.169.0 and Cloud Manager - 107
+handlers in the page and 74 written from `cloud.js` - in v2.170.0.
+
+**Four things the last two pages needed that the first twelve did not**, kept
+because each is a trap rather than a chore:
+
+* **The dispatcher had no drag, hover or paste events.** Quick Walls' keybind
+  slots are drag targets and the swap panel highlights on hover. Nine events
+  joined `EVENTS`; `mouseenter`/`mouseleave` are captured rather than bubbled,
+  for the same reason `blur` and `focus` already are.
+* **`e.currentTarget` is the document under delegation.** Every keybind-slot
+  handler read its element off the event, which would have pointed at
+  `document` the moment the header applied - and said nothing.
+* **Four and five-argument handlers.** Cloud Manager identifies a pair by
+  `(cloudId, localPath, cloudName, localName)` and its replace actions add two
+  timestamps. `data-arg`/`data-arg2` could not carry them, and more named slots
+  would be slots nobody could remember the order of, so `data-args-json` takes
+  the whole list. It keeps numbers as numbers, which two of those handlers
+  compare rather than display.
+* **One element, several events, different handlers.** The site type-ahead
+  shows on focus, filters on input, hides on blur and takes keys on keydown.
+  Four handlers on one element meant four `data-fn` attributes, and the parser
+  keeps the first and drops the rest - every event would have called the focus
+  handler. `data-fn-<event>` names one per event.
+
+**And one behaviour change the conversion nearly shipped.** `pj()` normalised
+backslashes to forward slashes *as well as* escaping for a JS string. Stripping
+the wrapper took the normalisation with it, so handlers began receiving raw
+Windows paths where the routes expect forward slashes.
+`test_cloud_sync_direction` caught it. `np()` is that normalisation without the
+escaping, for values going into an argument list.
+
+The test harnesses moved with it: `tests/delegated.py` reads a control's
+handler and arguments back out of rendered markup, which is what the ones that
+used to `eval` an `onclick` do now.
+
+**The differential that guards this had to be rebuilt.** With no unconverted
+page left, `test_a_page_off_the_list_keeps_the_permissive_default` lifts one
+page off `CSP_STRICT_PAGES` for the length of a request instead of loading a
+page that never had the header - otherwise a server stamping the strict policy
+on everything would pass every test in that file.
 
 Only `frame-ancestors 'none'` is set today. The report cover response carries
 a full `default-src 'none'; sandbox` policy of its own, and

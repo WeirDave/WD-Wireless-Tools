@@ -37,7 +37,7 @@ globalThis.window = globalThis;
 const WD = {
   esc: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
                      .replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
-  escAttr: s => String(s == null ? '' : s).replace(/"/g, '&quot;'),
+  escAttr: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
 };
 globalThis.WD = WD;
 

@@ -288,6 +288,11 @@ CSP_STRICT_PAGES = {
     # dispatcher needed the drag, hover and paste events before either
     # could be expressed without an inline handler.
     "walls.html",
+    # Joined in v2.170.0, and with it the rollout is complete - every page
+    # the server serves forbids inline script. Cloud Manager was last because
+    # it was largest: 107 handlers in the page and 74 more written from
+    # cloud.js, including the row menus, which built their call as a string.
+    "cloud.html",
 }
 
 #: What a converted page gets.
