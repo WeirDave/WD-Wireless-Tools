@@ -1425,46 +1425,29 @@ async function refreshTemplateBar() {
 
   const sel = document.getElementById('templateSelect');
   const tpls = _tplCache;
-  const def = getDefaultTemplate() || 'WD Template';
 
-  let html = '';
+  /* Ordering and selection both come from WD, which is the only copy of the
+     rule - his templates first, Ekahau's last, and the saved default chosen
+     when it still exists. Prep reads the same two functions. They used to
+     decide separately and disagreed: Prep opened on Ekahau Default.
 
-  const wd = tpls.find(t => t.name === 'WD Template');
-  if (wd) {
-    const selected = def === wd.name ? ' selected' : '';
-    html += `<option value="${escAttr(wd.name)}"${selected}>${esc(wd.name)} (${wd.wallTypes.length} types) ⭐</option>`;
-  }
+     The synthetic `Ekahau Defaults` option that used to be built here out of
+     `ekahau_defaults.json` is gone. It was a fallback for a time when Ekahau's
+     stock types were not a real template, and `Ekahau Default` has been a
+     seeded file since v2.104.7 - so all it could do now was put a second,
+     near-identically named Ekahau row in the same dropdown.
 
-  // The two he asked for sit together at the top: his curated set, and
-  // Ekahau's stock types as the baseline to come back to.
-  //
-  // `Ekahau Default` is now a real template file, seeded into his own
-  // templates folder like any other, so it is exportable, backed up and his.
-  // It replaces the synthetic `Ekahau Defaults` entry that used to be built
-  // here out of `ekahau_defaults.json` - listing both would put two almost
-  // identically named Ekahau rows in one dropdown.
-  //
-  // The **Ekahau Defaults button** is untouched and still does something this
-  // option deliberately does not: it starts the wall list over, and asks
-  // first. Choosing this option applies additively, like every other template.
-  const ekahau = tpls.find(t => t.name === 'Ekahau Default');
-  if (ekahau) {
-    const selected = (def === ekahau.name || def === 'Ekahau Defaults') ? ' selected' : '';
-    html += `<option value="${escAttr(ekahau.name)}"${selected}>${esc(ekahau.name)} (${ekahau.wallTypes.length} types)</option>`;
-  } else if (_ekahauDefaults) {
-    const selected = def === 'Ekahau Defaults' ? ' selected' : '';
-    html += `<option value="Ekahau Defaults"${selected}>Ekahau Defaults (${_ekahauDefaults.wallTypes.length} types)</option>`;
-  }
+     The **Ekahau Defaults button** is untouched and still does what no option
+     here does: it starts the wall list over, and asks first. */
+  const ordered = WD.wallTemplateOrder(tpls);
+  const chosen = WD.chooseWallTemplate(tpls, getDefaultTemplate());
 
-  const pinned = ['WD Template', 'Ekahau Default'];
-  const userTpls = tpls.filter(t => pinned.indexOf(t.name) === -1);
-  if (userTpls.length > 0) {
-    html += '<option disabled>───────────────</option>';
-    userTpls.forEach(t => {
-      const selected = t.name === def ? ' selected' : '';
-      html += `<option value="${escAttr(t.name)}"${selected}>${esc(t.name)} (${t.wallTypes.length} types)</option>`;
-    });
-  }
+  let html = ordered.map(t => {
+    const selected = (chosen && t.name === chosen.name) ? ' selected' : '';
+    const star = WD.isEkahauTemplate(t.name) ? '' : ' ⭐';
+    return `<option value="${escAttr(t.name)}"${selected}>`
+      + `${esc(WD.wallTemplateLabel(t))}${star}</option>`;
+  }).join('');
 
   sel.innerHTML = html;
 

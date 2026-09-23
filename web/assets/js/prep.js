@@ -88,18 +88,34 @@
     return (ft * WD.METRES_PER_FOOT).toFixed(4) + 'm';
   }
 
+  // Read before the list is built, because which option is selected depends
+  // on it. An empty string means no saved default, not "use Ekahau's".
+  var savedWallTemplateName = '';
+
   function loadTemplates() {
-    return fetch('/api/prep/templates', {
-      method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
+    return WD.savedWallTemplateName().then(function (name) {
+      savedWallTemplateName = name || '';
+      return fetch('/api/prep/templates', {
+        method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
+      });
     }).then(function (r) { return r.json(); }).then(function (r) {
       if (!r || !r.ok) return;
       wallTemplates = r.wall || [];
       capTemplates = r.capacity || [];
 
+      // His template first and selected; Ekahau's last, and chosen only when
+      // there is nothing of his. The rule lives in WD so that Prep and Quick
+      // Walls cannot drift apart again - this list used to render in the
+      // order the server returned it, which put "Ekahau Default" first and
+      // left the browser to select it, so preparing a project quietly applied
+      // Ekahau's stock types unless he noticed the dropdown and changed it.
+      wallTemplates = WD.wallTemplateOrder(wallTemplates);
+      var chosen = WD.chooseWallTemplate(wallTemplates, savedWallTemplateName);
       $('prepWallTpl').innerHTML = wallTemplates.length
         ? wallTemplates.map(function (t) {
-            return '<option value="' + escAttr(t.file) + '">' + esc(t.name)
-              + ' — ' + t.count + ' ' + plural(t.count, 'type') + '</option>';
+            var sel = (chosen && t.file === chosen.file) ? ' selected' : '';
+            return '<option value="' + escAttr(t.file) + '"' + sel + '>'
+              + esc(WD.wallTemplateLabel(t)) + '</option>';
           }).join('')
         : '<option value="">No wall templates saved yet</option>';
 

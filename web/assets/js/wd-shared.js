@@ -358,6 +358,85 @@
 
      The menu is display:none until it is opened, so this never shows as a
      reshuffle. */
+  /* Which wall template is his, which is the fallback, and which one a tool
+     opens on. One copy, because Prep and Quick Walls disagreed.
+
+     They listed the same two templates and picked different ones. Quick Walls
+     pinned his first and honoured the saved default; Prep rendered whatever
+     order the server returned - alphabetical, so "Ekahau Default" sorted
+     first - set no `selected` at all, and the browser therefore chose the
+     first option. Preparing a project applied Ekahau's stock types unless he
+     noticed and changed the dropdown.
+
+     His words: "the default should end up being whatever the customer
+     creates. Ekahau should always be the fallback, not the primary."
+
+     So the rule is here rather than in either tool: his own templates sort
+     first and one of them is selected; Ekahau's is last and is only chosen
+     when there is nothing of his to choose. */
+  WD.EKAHAU_TEMPLATE = 'Ekahau Default';
+
+  /* The synthetic entry Quick Walls used to build out of `ekahau_defaults.json`
+     before that file became a real template. A saved default may still name
+     it. */
+  WD.LEGACY_EKAHAU_TEMPLATE = 'Ekahau Defaults';
+
+  WD.isEkahauTemplate = function (name) {
+    return name === WD.EKAHAU_TEMPLATE || name === WD.LEGACY_EKAHAU_TEMPLATE;
+  };
+
+  /* His first, Ekahau last. Stable within each group, so a list that arrives
+     alphabetical stays alphabetical apart from the one move. */
+  WD.wallTemplateOrder = function (list) {
+    var mine = [], fallback = [];
+    (list || []).forEach(function (t) {
+      (WD.isEkahauTemplate(t && t.name) ? fallback : mine).push(t);
+    });
+    return mine.concat(fallback);
+  };
+
+  /* The template a tool should open on:
+       1. the saved default, if it is still on disk
+       2. otherwise the first of his
+       3. otherwise Ekahau's, which is what "fallback" means
+     Returns the template object, or null when the list is empty. */
+  WD.chooseWallTemplate = function (list, savedName) {
+    var ordered = WD.wallTemplateOrder(list);
+    if (!ordered.length) return null;
+    if (savedName) {
+      var exact = ordered.filter(function (t) { return t.name === savedName; })[0];
+      if (exact) return exact;
+      // A default saved under the old synthetic name still means Ekahau's.
+      if (savedName === WD.LEGACY_EKAHAU_TEMPLATE) {
+        var eka = ordered.filter(function (t) {
+          return WD.isEkahauTemplate(t.name);
+        })[0];
+        if (eka) return eka;
+      }
+    }
+    return ordered[0];
+  };
+
+  /* "WD Template — yours · 26 types". The suffix is the point: "Ekahau
+     Default" and a template of his own were two rows that did not say which
+     was which, and he could not tell them apart. */
+  WD.wallTemplateLabel = function (tpl) {
+    if (!tpl) return '';
+    var n = (tpl.wallTypes ? tpl.wallTypes.length : tpl.count) || 0;
+    var role = WD.isEkahauTemplate(tpl.name) ? 'fallback' : 'yours';
+    return tpl.name + ' — ' + role + ' · ' + n + ' type' + (n === 1 ? '' : 's');
+  };
+
+  /* The saved default's name, or '' - read through the server so both tools
+     get the same answer. Never throws; no server means no saved default. */
+  WD.savedWallTemplateName = function () {
+    if (!WD.api) return Promise.resolve('');
+    return WD.api('settings/get').then(function (r) {
+      var w = r && r.ok && r.settings && r.settings.walls;
+      return (w && typeof w.default_template === 'string') ? w.default_template : '';
+    }).catch(function () { return ''; });
+  };
+
   WD.sortNavMenus = function (root) {
     var scope = root || document;
     var heads = scope.querySelectorAll('.menu-section');

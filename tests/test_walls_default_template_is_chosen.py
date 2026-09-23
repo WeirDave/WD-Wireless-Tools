@@ -36,6 +36,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 WALLS_JS = WEB / "assets" / "js" / "walls.js"
+SHARED_JS = WEB / "assets" / "js" / "wd-shared.js"
 SETTINGS_JS = WEB / "assets" / "js" / "settings-page.js"
 SETTINGS_HTML = WEB / "settings.html"
 REGISTRY = WEB / "assets" / "settings-registry.json"
@@ -361,6 +362,19 @@ class TheTemplateBarSaysWhatAutoApplyWillDo(unittest.TestCase):
           b++;
         }
 
+        // The ordering and the default choice live in wd-shared.js now, and
+        // refreshTemplateBar calls them. The real block is loaded rather than
+        // stubbed, so this probe exercises the same rule the page does - a
+        // fake WD here would let the two drift apart silently, which is the
+        // exact failure that put Prep and Quick Walls on different defaults.
+        const shared = fs.readFileSync(process.argv[2], 'utf8');
+        const sa = shared.indexOf('  WD.EKAHAU_TEMPLATE =');
+        const sb = shared.indexOf('  WD.sortNavMenus = function', sa);
+        if (sa < 0 || sb < 0) throw new Error('the wall-template block moved in wd-shared.js');
+        const WD = {};
+        eval(shared.slice(sa, sb));
+        globalThis.WD = WD;
+
         let noteRendered = false;
         const els = {
           templateSelect: { innerHTML: '', value: 'WD Template' },
@@ -391,7 +405,7 @@ class TheTemplateBarSaysWhatAutoApplyWillDo(unittest.TestCase):
         nothing calls produces no note at all, and every assertion above would
         still pass."""
         r = subprocess.run(
-            ["node", "-e", self.REFRESH_PROBE, str(WALLS_JS)],
+            ["node", "-e", self.REFRESH_PROBE, str(WALLS_JS), str(SHARED_JS)],
             capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if r.returncode != 0:
             raise AssertionError((r.stdout + r.stderr).strip())
