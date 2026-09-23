@@ -846,6 +846,54 @@ too.
   missing", which reads exactly like the conversion having dropped it. It cost
   a round of chasing a defect that was not there.
 
+#### 13. ~~P3 — every `uses:` in CI followed a tag rather than a commit~~ — closed in v2.175.0
+
+**A tag is a pointer somebody else can move.** `uses: actions/checkout@v6` is
+not a version; whoever controls that tag runs code inside a job that has a
+checkout of this repository and a token, on every push and every release. Nine
+`uses:` across five workflows named tags. Four of those workflows are on the
+release path — `tests.yml` decides whether a release publishes at all,
+`auto-release.yml` tags and publishes it, `release-assets.yml` builds the ZIP
+both installers verify by checksum — so an action swapped underneath them
+reaches the file people download.
+
+**The 2026-09-21 sweep recorded this and did not do it**, and the reasoning it
+gave was honest and is worth reading before assuming the entry was an
+oversight: every action used here is GitHub's own, and "pinning by hash means
+updating them by hand forever" is a real cost for a one-person repository. It
+ended "say the word and it is a small change."
+
+**What changed is the second half rather than the judgement.** Pinning alone
+does trade one silent exposure for another: a tag quietly picks up the upstream
+security fix and a SHA does not, so an unattended pin drifts behind every
+advisory against that action and nothing says so. `.github/dependabot.yml` is
+what removes the by-hand cost — Dependabot understands the pinned form
+specifically and rewrites the SHA *and* the `# vX.Y.Z` comment beside it, which
+is why that comment is part of the convention and not decoration. One pull
+request at a time, because nine pins can produce a wave on a quiet week and a
+wave is how a security update gets closed unread with the rest.
+
+**`pip` is deliberately not in that file**, and the reason is in it at length:
+`requirements.txt` declares floors rather than pins, each floor is the oldest
+release with no advisory against it, and version-update pull requests would
+argue with that design on a schedule. Dependabot *alerts* are a separate
+mechanism, are on for the repository regardless, and are what should raise a
+floor.
+
+**A local reusable workflow is exempt and the exemption is asserted rather than
+assumed.** `uses: ./.github/workflows/tests.yml` resolves inside this
+repository at the commit being run; there is no third party to pin, and a rule
+that pinned everything would name this repo's own commit in its own workflow.
+
+`tests/test_every_action_is_pinned.py` is the guard — 11 tests. It parses
+rather than searches, because these workflows carry prose naming actions and
+versions and a substring assertion would pass on a comment while the step it
+guards was gone. The reader is tested before it is trusted, on a
+commented-out `uses:`, on a version comment, on a local workflow and on a bare
+tag. Four mutants were watched failing: one action put back on a tag, one
+version comment stripped, `dependabot.yml` deleted, and its ecosystem changed
+to one that does not watch actions.
+
 #### 9. P3 — `/api/report/open_esx` reads any `.esx` the browser names
 
 Recorded rather than opened, because the reasoning for it is sound and written

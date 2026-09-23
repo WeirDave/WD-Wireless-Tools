@@ -293,6 +293,46 @@ exports. I found nothing to fix. The log file carries no credentials either.
 
 ---
 
+### Where those four stand now — 2026-09-23
+
+The four paragraphs above are left exactly as they were written, because the
+reasoning in each is what stops it being re-derived from scratch. Two are
+closed and two stand.
+
+**The Content-Security-Policy is done.** All fourteen served pages carry
+`script-src 'self'` with no `'unsafe-inline'`, finished in v2.174.0 — the last
+two, Quick Walls and Cloud Manager, in v2.169.0 and v2.170.0. The paragraph
+above calls it "a project, not a night's work" and that was right: 525 inline
+handlers across nineteen pages, 147 of them written into `innerHTML` by
+JavaScript where the handler and the markup are built in the same expression.
+BACKLOG.md item 10 carries the whole record, including the four dispatcher
+traps the last two pages needed that the first twelve did not.
+
+**Every `uses:` is pinned to a commit SHA**, closed in v2.175.0. The paragraph
+above judged the trade not worth it because "pinning by hash means updating
+them by hand forever", and that objection was correct rather than lazy — what
+changed is that `.github/dependabot.yml` now removes the by-hand part, and
+`tests/test_every_action_is_pinned.py` fails a workflow that goes back to a
+tag or loses its updater. BACKLOG.md item 13.
+
+**`open_esx` still reads any `.esx` the browser names, and that is still the
+right call** — the route exists so the page learns which *folder* a project is
+in, which is what names the saved report, and closing it breaks "open from
+disk". What has changed is the sentence that mattered: "script inside a page
+could use it". A strict policy is now what stops script getting into a page in
+the first place, so the residual is narrower than it was when this was written.
+The route is POST, so it also requires the custom header a cross-site form
+cannot set.
+
+**The API still trusts same-origin, and there is nothing further to add.** The
+cross-site half was closed in v2.157.0 and holds: a foreign Host, a foreign
+Origin and any state-changing request without the custom header are all
+rejected, and every route that changes anything is POST. The half a guard
+cannot reach is script already inside one of its own pages — and a token in the
+page would not help, because script in the page can read whatever the page can.
+That is the CSP's job and the CSP is now in place. Recorded as closed by the
+work above rather than as outstanding.
+
 ## How this was checked
 
 Full suite green on a clean clone of `main` before starting (2,843 tests) and

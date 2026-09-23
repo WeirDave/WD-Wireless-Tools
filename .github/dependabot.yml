@@ -1,0 +1,40 @@
+# Dependabot — the half that makes a pinned SHA safe rather than merely fixed.
+#
+# Every `uses:` in this repository names a commit SHA rather than a tag. That
+# closes the supply-chain route a tag leaves open: `actions/checkout@v6` is a
+# moving pointer, and whoever can move it runs code in a job that has a token
+# and a checkout of this repository. A SHA cannot be moved.
+#
+# **The cost of pinning is that it freezes.** A tag quietly picks up the
+# upstream fix; a SHA does not, so an unattended pin drifts behind every
+# advisory against the action and nothing says so. Pinning without an updater
+# trades one silent exposure for another.
+#
+# So this file exists for one ecosystem. Dependabot understands the pinned form
+# specifically: it rewrites the SHA *and* the version comment beside it, which
+# is why the comment is part of the convention rather than decoration.
+#
+# **`pip` is deliberately absent, and this is the reasoning rather than an
+# omission.** `requirements.txt` declares FLOORS, not pins, and the comment at
+# the top of it explains that the floors are the security boundary — each one
+# is the oldest release with no advisory against it, checked with pip-audit.
+# Version-update pull requests against a floor list argue with that design:
+# they would propose raising a minimum that is already correct, on a schedule,
+# whether or not an advisory exists. Dependabot *alerts* are a separate
+# mechanism, are on for the repository regardless of this file, and are what
+# should raise a floor. Raising it is a judgement — see the instruction in
+# `requirements.txt` never to lower one to make an install work.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # One pull request at a time. Nine `uses:` across five workflows can
+    # produce a wave of them on a quiet week, and a wave is how a security
+    # update gets closed unread with the rest.
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "ci"
+    labels:
+      - "dependencies"
