@@ -226,6 +226,40 @@ class DevModeLifecycle(unittest.TestCase):
         self.assertIn("✕", label)
         self.assertIn("Exit dev mode", label)
 
+    def test_the_exit_is_not_labelled_with_a_generic_word(self):
+        """An exit that exists but is not recognised as one is still no exit.
+
+        The bulk share dialog had a working way out the whole time, labelled
+        **"Cancel"**. After an action that reads as "undo what I just did",
+        nobody presses Cancel, so the control was there and unusable. The same
+        trap is available here: "Close", "Done" and "Cancel" all describe
+        dismissing a panel rather than leaving a mode the tool is now in.
+
+        So the label has to name the mode it leaves. Checked on both exits -
+        the strip and the nav item - because they are worded separately and
+        only one of them has ever been looked at.
+        """
+        self.open("?dev=1")
+        vague = ("cancel", "close", "done", "ok", "dismiss", "back", "hide")
+        strip = self.driver.find_element(By.ID, "devExitBtn").text.strip()
+
+        self.assertTrue(self.open_the_hamburger(), "no menu button on the page")
+        nav = self.visible_nav_item(".nav-item-exit-dev")
+        self.assertIsNotNone(nav, "no Exit Dev Mode item in the open menu")
+
+        for what, label in (("the strip exit", strip),
+                            ("the nav exit", nav.text.strip())):
+            with self.subTest(control=what):
+                words = label.lower().replace("✕", " ").replace("·", " ").split()
+                self.assertNotIn(
+                    words[0] if words else "", vague,
+                    "%s leads with a word that describes dismissing a panel, "
+                    "not leaving a mode: %r" % (what, label))
+                self.assertIn(
+                    "dev", label.lower(),
+                    "%s does not name dev mode, so it will not be recognised "
+                    "as the way out of it: %r" % (what, label))
+
     def test_out_by_the_nav_item(self):
         self.open("?dev=1")
         self.assertTrue(self.open_the_hamburger(), "no menu button on the page")
