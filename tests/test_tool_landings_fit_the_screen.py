@@ -4,7 +4,7 @@ Quick Walls, Prep, Capacity, PlanTrim, Report and AP Labeler share one
 landing: logo, description, a dashed drop target, Open, and three steps. It
 opened with 96px of padding and a 180px logo, so on a 1280x720 or 1366x768
 screen the steps - and on Quick Walls the Open button - were below the fold.
-A short window now gets a smaller logo and tighter spacing.
+The logo and spacing now scale with the window height.
 
 The second test is the one that was nearly shipped broken: that top padding
 is also what keeps the logo clear of `.dz-topbar`, which is fixed, and the
@@ -72,6 +72,21 @@ class ToolLandingsFitTheScreenTests(harness.BrowserPagesHarness):
                         self.assertIsNotNone(m["logoTop"], m)
                         self.assertGreaterEqual(m["logoTop"], m["barBottom"], m)
 
+
+    def test_the_logo_scales_with_the_window_rather_than_stepping(self):
+        """Adaptive, not one breakpoint: a taller window gets a bigger logo
+        at every step, up to the full 180px on a tall screen."""
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                sizes = []
+                for h in (720, 900, 1300):
+                    self.measure(drv, "/walls", 1440, h)
+                    sizes.append(drv.execute_script(
+                        "return document.querySelector('.dropzone-logo')"
+                        ".getBoundingClientRect().height;"))
+                self.assertLess(sizes[0], sizes[1], sizes)
+                self.assertLess(sizes[1], sizes[2], sizes)
+                self.assertAlmostEqual(sizes[2], 180, delta=1)
 
 if __name__ == "__main__":
     unittest.main()

@@ -157,6 +157,21 @@ class SquirrelHomeFitsTheScreenTests(BrowserPagesHarness):
                                   % (kind, m["innerWidth"], m["innerHeight"]))
                 self.assertLessEqual(m["lastBottom"], m["innerHeight"], m)
 
+    def test_the_icon_scales_with_the_window_rather_than_stepping(self):
+        """Adaptive, not one breakpoint: a taller window gets a bigger icon at
+        every step, up to the full 180px on a tall screen."""
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                sizes = []
+                for h in (720, 900, 1300):
+                    self.measure(drv, 1440, h)
+                    sizes.append(drv.execute_script(
+                        "return document.querySelector('#pickScreen .pick-icon img')"
+                        ".getBoundingClientRect().height;"))
+                self.assertLess(sizes[0], sizes[1], sizes)
+                self.assertLess(sizes[1], sizes[2], sizes)
+                self.assertAlmostEqual(sizes[2], 180, delta=1)
+
     def test_a_narrow_window_wraps_rather_than_spilling_sideways(self):
         for kind, drv in self.each_browser():
             with self.subTest(browser=kind):
