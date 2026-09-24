@@ -1,0 +1,66 @@
+# A release note is published by committing it to docs/releases/vX.Y.Z.md.
+#
+# auto-release.yml publishes a stub, and the finished note used to need
+# `gh release edit` on a machine that had gh. This applies the committed note
+# instead, from either direction:
+#
+#  * a push to main that adds or changes a note - the release usually exists
+#  * a release build that finishes - the note may have been committed first
+#
+# scripts/apply_release_notes.py skips a note whose release does not exist
+# yet, so whichever of the two arrives first, the second one lands it.
+
+name: Release notes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/releases/v*.md
+  workflow_run:
+    workflows: ["Release on version bump"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to apply its committed note to, e.g. v2.175.3"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-notes
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Apply committed notes to their releases
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          case "$EVENT" in
+            push)
+              python scripts/apply_release_notes.py --changed "$BEFORE" "$AFTER" ;;
+            workflow_run)
+              version="$(python -c "import json;print(json.load(open('web/assets/versions.json'))['suite'])")"
+              python scripts/apply_release_notes.py --tag "v$version" ;;
+            workflow_dispatch)
+              python scripts/apply_release_notes.py --tag "$INPUT_TAG" ;;
+          esac

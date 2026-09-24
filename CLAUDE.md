@@ -145,10 +145,16 @@ only mitigation.
 
 So the default changed instead, on 2026-09-21. The automatic note is a short
 stub - the version, the install link, and the commit it was built from. **A
-hand-written note is still the finished note**, and still goes on the same
-way:
+hand-written note is still the finished note**, and since 2026-09-24 it goes
+on by being committed:
 
-    gh release edit vX.Y.Z --notes-file notes.md
+    docs/releases/vX.Y.Z.md    # push to main; release-notes.yml applies it
+
+`.github/workflows/release-notes.yml` runs `scripts/apply_release_notes.py` on
+a push that changes a note, and again when a release build finishes, so the
+note can be committed before or after its release exists. This replaced
+`gh release edit`, which only worked on a machine with `gh` - a cloud session
+has none, and a note that needs the right machine is a note that waits.
 
 The difference is what happens when nobody gets to it: a stub rather than
 your commit message, which quotes you directly and describes what you were
@@ -237,8 +243,8 @@ and for backfilling assets onto a tag whose build failed.
    local suite pass then and fail now, and both times the local suite was
    answering a different question from the one CI asks. Stage first, then run.
 5. **The release publishes itself** once the bump lands and CI is green - see
-   the section above. What is still worth doing by hand is the *note*: edit it
-   afterwards with `gh release edit vX.Y.Z --notes-file notes.md`, in the
+   the section above. What is still worth doing by hand is the *note*: commit
+   it as `docs/releases/vX.Y.Z.md` and the workflow applies it, in the
    WaxFrame Pro style (H1 = one-line summary, `## What changed` with bullets,
    `## Verified`, `## Files changed`).
 
