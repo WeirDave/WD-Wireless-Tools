@@ -58,8 +58,12 @@ return {
 """
 
 
-@unittest.skipUnless(HAVE_SELENIUM, "selenium is not installed")
-class SquirrelHomeFitsTheScreenTests(unittest.TestCase):
+class BrowserPagesHarness(unittest.TestCase):
+    """The real app on a free port and every browser this machine has.
+
+    No tests of its own, so unittest never sets it up; the landing-page
+    tests in this file and `test_tool_landings_fit_the_screen.py` inherit it.
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -115,17 +119,21 @@ class SquirrelHomeFitsTheScreenTests(unittest.TestCase):
         if thread is not None:
             thread.join(timeout=10)
 
+    def each_browser(self):
+        if not self.drivers:
+            self.skipTest("no browser could be started on this machine")
+        return self.drivers.items()
+
+
+@unittest.skipUnless(HAVE_SELENIUM, "selenium is not installed")
+class SquirrelHomeFitsTheScreenTests(BrowserPagesHarness):
+
     def measure(self, drv, width, height):
         drv.set_window_size(width, height)
         drv.get(self.base + "/squirrel")
         WebDriverWait(drv, 15).until(
             EC.visibility_of_element_located((By.ID, "pickScreen")))
         return drv.execute_script(MEASURE)
-
-    def each_browser(self):
-        if not self.drivers:
-            self.skipTest("no browser could be started on this machine")
-        return self.drivers.items()
 
     def test_all_five_cards_share_one_row_on_a_wide_window(self):
         for kind, drv in self.each_browser():

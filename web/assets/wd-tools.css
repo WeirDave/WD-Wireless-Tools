@@ -5184,6 +5184,20 @@ body.tool-report {
   display: block; margin: 0 auto 8px;
 }
 
+/* The drop-zone landing opened with 96px of padding and a 180px logo, which
+   on a laptop screen put the Open button and the steps below the fold. Same
+   short-window rule as Squirrel's home page; held by
+   tests/test_tool_landings_fit_the_screen.py. The top padding is also what
+   clears .dz-topbar, which is pinned to the top of the window, so it cannot go below the
+   bar's height or the logo slides underneath it. */
+@media (max-height: 860px) {
+  .dropzone { padding-top: 76px; padding-bottom: 28px; }
+  .dropzone-logo { width: 104px; height: 104px; margin-bottom: 16px; }
+  .dropzone-brand-logo { width: 104px; height: 104px; }
+  .dropzone-divider { margin: 16px auto; }
+  .dropzone-cta { padding: 36px 60px; }
+}
+
 .report-workspace { display: none; }
 
 .report-workspace.active { display: flex; flex-direction: column; min-height: 100vh; }
