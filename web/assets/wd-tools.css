@@ -4814,6 +4814,23 @@ body.tool-organizer .topbar-right { justify-content: flex-end; flex: 1; }
 
 .pick-card.acorn:hover { border-color: var(--teal); }
 
+/* Squirrel has five cards, and 774px holds three: the other two always
+   wrapped, so a laptop screen scrolled to reach Rename and Acorn Notes with
+   empty space either side. One row wherever five fit at a readable width,
+   and a smaller hero on a short screen. Held by
+   tests/test_squirrel_home_fits_the_screen.py. */
+@media (min-width: 1080px) {
+  body.tool-organizer .pick-cards { max-width: 1302px; flex-wrap: nowrap; }
+  body.tool-organizer .pick-card { flex: 1 1 0; min-width: 0; max-width: 246px; padding: 24px 18px; }
+}
+@media (max-height: 860px) {
+  body.tool-organizer .pick-screen { padding-top: 8px; }
+  body.tool-organizer .pick-icon { margin-bottom: 10px; }
+  body.tool-organizer .pick-icon img { max-height: 96px; }
+  body.tool-organizer .pick-title { font-size: 26px; margin-bottom: 6px; }
+  body.tool-organizer .pick-sub { margin-bottom: 20px; }
+}
+
 .modal-acorn { width: 560px; max-width: min(94vw, 560px); }
 .modal-acorn .org-root-path {
   direction: rtl; text-align: left; unicode-bidi: plaintext;
