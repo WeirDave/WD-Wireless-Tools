@@ -317,11 +317,13 @@ function _renderTokenPreview(tab) {
   const correctCount = items.filter(x => x.status === 'already_correct').length;
   const unmatchedCount = items.filter(x => x.status === 'unmatched').length;
   const collisionCount = items.filter(x => x.status === 'collision').length;
+  const incompleteCount = items.filter(x => x.status === 'incomplete').length;
   const parts = [];
   if (renameCount) parts.push(renameCount + ' to rename');
   if (correctCount) parts.push(correctCount + ' already correct');
   if (unmatchedCount) parts.push(unmatchedCount + ' unmatched');
   if (collisionCount) parts.push(collisionCount + ' collision' + (collisionCount !== 1 ? 's' : ''));
+  if (incompleteCount) parts.push(incompleteCount + ' need' + (incompleteCount === 1 ? 's' : '') + ' a value');
   countEl.textContent = parts.length ? '(' + parts.join(', ') + ')' : '';
   document.getElementById('renameApplyBtn').disabled = renameCount === 0;
 

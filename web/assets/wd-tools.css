@@ -4899,6 +4899,7 @@ body.tool-organizer .topbar-right { justify-content: flex-end; flex: 1; }
 .rn-st-already_correct .org-rename-new { color: var(--text-3); }
 .rn-st-collision .org-rename-new { color: var(--amber); }
 .rn-st-collision .org-rename-warn { color: var(--red); font-weight: 600; }
+.rn-st-incomplete .org-rename-new { color: var(--text-3); text-decoration: line-through; }
 
 .pick-card-icon { font-size: 36px; margin-bottom: 12px; }
 

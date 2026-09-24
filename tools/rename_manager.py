@@ -241,6 +241,15 @@ def _squirrel_layout(skip: set | None,
 _FILE_TOKENS_WITHOUT_CSV = {"original", "index", "folder", "date"}
 
 
+def _token_status(current: str, new_name: str, warnings: list) -> str:
+    """``incomplete`` when a token had no value, so the new name carries a
+    ``__token__`` placeholder. Offering that as a rename would put the
+    placeholder on disk; the page applies only ``rename`` rows."""
+    if new_name == current:
+        return "already_correct"
+    return "incomplete" if warnings else "rename"
+
+
 # ── Token-format rename ─────────────────────────────────────────────
 
 def apply_token_format(fmt: str, separator: str, values: dict) -> tuple[str, list]:
@@ -490,8 +499,7 @@ class RenameManager:
                 continue
             new_name, warnings = apply_token_format(
                 format_str, separator, m["site"])
-            status = ("already_correct" if new_name == m["folder"]
-                      else "rename")
+            status = _token_status(m["folder"], new_name, warnings)
             renames.append({
                 "current": m["folder"],
                 "new_name": new_name,
@@ -531,7 +539,7 @@ class RenameManager:
             renames.append({
                 "current": folder,
                 "new_name": new_name,
-                "status": "rename" if new_name != folder else "already_correct",
+                "status": _token_status(folder, new_name, warnings),
                 "warnings": warnings,
             })
         _check_collisions(renames)
@@ -638,8 +646,7 @@ class RenameManager:
                     new_stem, warnings = apply_token_format(
                         format_str, separator, values)
                     new_name = new_stem + ext
-                    status = ("already_correct" if fpath.name == new_name
-                              else "rename")
+                    status = _token_status(fpath.name, new_name, warnings)
                     renames.append({
                         "folder": rel,
                         "current": fpath.name,
