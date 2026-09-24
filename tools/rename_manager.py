@@ -214,6 +214,33 @@ def _check_collisions(renames: list) -> None:
                 f"Collision: multiple items would be renamed to '{r['new_name']}'")
 
 
+def _squirrel_layout(skip: set | None,
+                     subfolder_names: list | None) -> tuple[set, list]:
+    """Where Squirrel has filed a site's files: (dirs to skip, subfolders).
+
+    Squirrel moves everything but the ``.esx`` into ``images/``,
+    ``floorplans/``, ``reports/`` and any custom destination. A rename that
+    scanned only the site folder itself therefore found nothing to preview
+    on an organised tree, which is every tree Squirrel has touched. So when
+    the caller does not say, the layout comes from Squirrel's own saved
+    config - the same one Organize files by - rather than a second list.
+    """
+    if skip is not None and subfolder_names is not None:
+        return set(skip), list(subfolder_names)
+    from tools import folder_organizer as fo
+    cfg = fo._load_config()
+    if subfolder_names is None:
+        subfolder_names = [d["name"] for d in fo._get_destinations(cfg)
+                           if d.get("name")]
+    if skip is None:
+        skip = fo._effective_skip(cfg)
+    return set(skip), list(subfolder_names)
+
+
+# Tokens a file name can be built from without a CSV site directory.
+_FILE_TOKENS_WITHOUT_CSV = {"original", "index", "folder", "date"}
+
+
 # ── Token-format rename ─────────────────────────────────────────────
 
 def apply_token_format(fmt: str, separator: str, values: dict) -> tuple[str, list]:
@@ -443,7 +470,7 @@ class RenameManager:
         for token expansion.  If ``manual_values`` is provided (no CSV mode),
         applies that single set of values to each folder.
         """
-        if manual_values:
+        if manual_values is not None:
             return self._preview_folder_rename_manual(
                 root, format_str, separator, manual_values)
 
@@ -561,47 +588,65 @@ class RenameManager:
     # ── File rename (token-based) ──
 
     def preview_file_rename(self, root: str, format_str: str,
-                            separator: str = " - ") -> dict:
+                            separator: str = " - ",
+                            skip: set | None = None,
+                            subfolder_names: list | None = None) -> dict:
         root_path = Path(root)
         if not root_path.is_dir():
             return {"error": f"Not a directory: {root}"}
         sites, column_map, headers = self._load_sites()
         if not sites:
-            return {"error": "No site directory loaded"}
-
-        has_original = "{original}" in format_str
-        has_index = "{index}" in format_str
+            needs_csv = sorted(set(re.findall(r"\{(\w+)\}", format_str))
+                               - _FILE_TOKENS_WITHOUT_CSV)
+            if needs_csv:
+                return {"error": "Load a CSV site directory to fill "
+                        + ", ".join("{" + t + "}" for t in needs_csv)
+                        + ". Without one, only {original}, {index}, "
+                        "{folder} and {date} are available."}
+        skip, subfolder_names = _squirrel_layout(skip, subfolder_names)
+        today = datetime.now().strftime("%Y-%m-%d")
 
         renames = []
         for folder_dir in sorted(root_path.iterdir()):
-            if not folder_dir.is_dir():
+            if (not folder_dir.is_dir() or folder_dir.name.startswith(".")
+                    or folder_dir.name.lower() in skip):
                 continue
-            site, method, confidence = self._match_folder_to_site(
-                folder_dir.name, sites, column_map)
-            if not site:
-                continue
-            files = sorted(
-                [f for f in folder_dir.iterdir() if not f.is_dir()],
-                key=lambda p: p.name.lower(),
-            )
-            for idx, fpath in enumerate(files, 1):
-                ext = fpath.suffix
-                stem = _split_ext(fpath.name)[0]
-                values = dict(site)
-                values["original"] = stem
-                values["index"] = str(idx)
-                new_stem, warnings = apply_token_format(
-                    format_str, separator, values)
-                new_name = new_stem + ext
-                status = ("already_correct" if fpath.name == new_name
-                          else "rename")
-                renames.append({
-                    "folder": folder_dir.name,
-                    "current": fpath.name,
-                    "new_name": new_name,
-                    "status": status,
-                    "warnings": warnings,
-                })
+            if sites:
+                site, method, confidence = self._match_folder_to_site(
+                    folder_dir.name, sites, column_map)
+                if not site:
+                    continue
+            else:
+                site = {}
+            for d in [folder_dir] + [folder_dir / sf for sf in subfolder_names]:
+                if not d.is_dir():
+                    continue
+                files = sorted(
+                    [f for f in d.iterdir()
+                     if f.is_file() and not f.name.startswith(".")],
+                    key=lambda p: p.name.lower(),
+                )
+                rel = d.relative_to(root_path).as_posix()
+                for idx, fpath in enumerate(files, 1):
+                    ext = fpath.suffix
+                    stem = _split_ext(fpath.name)[0]
+                    values = dict(site)
+                    values.setdefault("folder", folder_dir.name)
+                    values.setdefault("date", today)
+                    values["original"] = stem
+                    values["index"] = str(idx)
+                    new_stem, warnings = apply_token_format(
+                        format_str, separator, values)
+                    new_name = new_stem + ext
+                    status = ("already_correct" if fpath.name == new_name
+                              else "rename")
+                    renames.append({
+                        "folder": rel,
+                        "current": fpath.name,
+                        "new_name": new_name,
+                        "status": status,
+                        "warnings": warnings,
+                    })
 
         _check_collisions(renames)
         return {
@@ -658,8 +703,7 @@ class RenameManager:
         if not root_path.is_dir():
             return {"ok": False, "error": "No valid root folder set"}
 
-        skip = skip or set()
-        subfolder_names = subfolder_names or []
+        skip, subfolder_names = _squirrel_layout(skip, subfolder_names)
         votes = {"spaced_hyphen": 0, "underscore": 0,
                  "hyphen": 0, "space": 0}
 
@@ -706,8 +750,7 @@ class RenameManager:
         if not root_path.is_dir():
             return {"ok": False, "error": "No valid root folder set"}
 
-        skip = skip or set()
-        subfolder_names = subfolder_names or []
+        skip, subfolder_names = _squirrel_layout(skip, subfolder_names)
         cfg = {"rename": rules} if rules else {"rename": DEFAULT_FILE_RULES}
 
         def scan_site(site_dir: Path) -> list:
