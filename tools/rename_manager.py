@@ -237,6 +237,27 @@ def _squirrel_layout(skip: set | None,
     return set(skip), list(subfolder_names)
 
 
+_SITE_FOLDER_PICKED = ("This is a site folder - its subfolders are Squirrel's "
+                       "and are not renamed. Pick the folder that contains "
+                       "your site folders to rename those.")
+
+
+def _site_folder_names(root_path: Path, skip: set) -> tuple[list, bool]:
+    """Folders under ``root_path`` that are sites, and whether any were left
+    out as Squirrel's own (``images/`` and the rest). Picking a site folder
+    as the root makes its subfolders the only candidates, and renaming
+    those would break the layout Organize built."""
+    names, skipped = [], False
+    for d in root_path.iterdir():
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        if d.name.lower() in skip:
+            skipped = True
+            continue
+        names.append(d.name)
+    return sorted(names, key=str.lower), skipped
+
+
 # Tokens a file name can be built from without a CSV site directory.
 _FILE_TOKENS_WITHOUT_CSV = {"original", "index", "folder", "date"}
 
@@ -429,10 +450,10 @@ class RenameManager:
         if not sites:
             return {"error": "No site directory loaded"}
 
-        folders = sorted(
-            [d.name for d in root_path.iterdir() if d.is_dir()],
-            key=str.lower,
-        )
+        folders, skipped = _site_folder_names(
+            root_path, _squirrel_layout(None, None)[0])
+        if not folders and skipped:
+            return {"error": _SITE_FOLDER_PICKED}
 
         matches = []
         used_sites = set()
@@ -525,10 +546,10 @@ class RenameManager:
         if not root_path.is_dir():
             return {"error": f"Not a directory: {root}"}
 
-        folders = sorted(
-            [d.name for d in root_path.iterdir() if d.is_dir()],
-            key=str.lower,
-        )
+        folders, skipped = _site_folder_names(
+            root_path, _squirrel_layout(None, None)[0])
+        if not folders and skipped:
+            return {"error": _SITE_FOLDER_PICKED}
         renames = []
         for folder in folders:
             auto_values = dict(values)
@@ -614,11 +635,13 @@ class RenameManager:
         skip, subfolder_names = _squirrel_layout(skip, subfolder_names)
         today = datetime.now().strftime("%Y-%m-%d")
 
+        site_names, _ = _site_folder_names(root_path, skip)
+        # No site folders under the root means the root is one: its own
+        # files and its Squirrel subfolders are what gets renamed.
+        site_dirs = ([root_path / n for n in site_names] or [root_path])
+
         renames = []
-        for folder_dir in sorted(root_path.iterdir()):
-            if (not folder_dir.is_dir() or folder_dir.name.startswith(".")
-                    or folder_dir.name.lower() in skip):
-                continue
+        for folder_dir in site_dirs:
             if sites:
                 site, method, confidence = self._match_folder_to_site(
                     folder_dir.name, sites, column_map)

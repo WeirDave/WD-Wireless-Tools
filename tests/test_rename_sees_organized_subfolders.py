@@ -129,5 +129,45 @@ class RenameSeesOrganizedSubfoldersTests(unittest.TestCase):
                          ["Alpha Site (old)"])
 
 
+    # Picking the site folder itself as the root, rather than its parent.
+
+    def test_file_convention_from_the_site_folder_renames_its_own_files(self):
+        site = self.root / "Alpha Site"
+        r = self.post("preview_file_rename", {
+            "root": str(site), "format": "{original} - {folder}",
+        })
+        self.assertTrue(r.get("ok"), r)
+        got = {(x["folder"], x["current"]): x["new_name"] for x in r["renames"]}
+        self.assertEqual(got, {
+            (".", "survey.esx"): "survey - Alpha Site.esx",
+            ("images", "IMG_0001.JPG"): "IMG_0001 - Alpha Site.JPG",
+            ("floorplans", "Level 1.pdf"): "Level 1 - Alpha Site.pdf",
+        })
+        done = self.post("execute_file_rename", {
+            "root": str(site),
+            "renames": [x for x in r["renames"] if x["status"] == "rename"],
+        })
+        self.assertEqual(done["renamed"], 3, done)
+        self.assertTrue((site / "survey - Alpha Site.esx").is_file())
+
+    def test_folder_convention_never_offers_squirrels_subfolders(self):
+        r = self.post("preview_folder_rename", {
+            "root": str(self.root / "Alpha Site"), "format": "{folder} X",
+            "manual_values": {},
+        })
+        self.assertNotIn("renames", r)
+        self.assertIn("site folder", r["error"])
+        for sub in ("images", "floorplans", "reports"):
+            self.assertTrue((self.root / "Alpha Site" / sub).is_dir())
+
+    def test_folder_convention_leaves_squirrel_subfolders_out_beside_sites(self):
+        (self.root / "images").mkdir()
+        r = self.post("preview_folder_rename", {
+            "root": str(self.root), "format": "{folder} X",
+            "manual_values": {},
+        })
+        self.assertEqual([x["current"] for x in r["renames"]], ["Alpha Site"])
+
+
 if __name__ == "__main__":
     unittest.main()

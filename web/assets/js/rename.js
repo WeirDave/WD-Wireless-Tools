@@ -333,7 +333,7 @@ function _renderTokenPreview(tab) {
   }
   list.innerHTML = items.map(it => {
     const statusClass = 'rn-st-' + (it.status || 'unmatched');
-    const current = tab === 'files' && it.folder
+    const current = tab === 'files' && it.folder && it.folder !== '.'
       ? esc(it.folder) + '/' + esc(it.current)
       : esc(it.current);
     return '<div class="org-rename-row ' + statusClass + '">' +
