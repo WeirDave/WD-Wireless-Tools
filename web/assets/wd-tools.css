@@ -4226,26 +4226,29 @@ body.tool-cloud .toolbar input.search:focus {
 
 .dropzone-cta {
   font-size: 15px; color: var(--text-2); margin-bottom: 4px;
-  padding: 52px 60px; border: 2px dashed var(--border);
+  padding: 52px 60px; border: 2px dashed var(--dz-accent);
   border-radius: 12px; width: 100%; transition: all 0.2s;
 }
 
+/* One variable per tool, set here and nowhere else. Per-tool border rules
+   drifted: Quick Walls and AP Labeler coloured the resting box, Report and
+   PlanTrim only the hover, Prep and Capacity nothing, so four of six drop
+   boxes were a grey outline that did not read as a target. */
+body { --dz-accent: var(--blue); }
+body.tool-walls    { --dz-accent: var(--green); }
+body.tool-report   { --dz-accent: var(--rose); }
+body.tool-aprename { --dz-accent: var(--indigo); }
+body.tool-plantrim { --dz-accent: var(--pt-accent); }
+body.tool-prep     { --dz-accent: var(--lime); }
+body.tool-capacity { --dz-accent: var(--azure); }
+body.tool-rename   { --dz-accent: var(--amber); }
+
 .dropzone:hover .dropzone-cta, .dropzone.dragover .dropzone-cta {
-  border-color: var(--blue); background: var(--accent-dim);
+  border-color: var(--dz-accent);
+  background: color-mix(in srgb, var(--dz-accent) 18%, transparent);
 }
 
-body.tool-walls .dropzone-cta { border-color: var(--green); }
-body.tool-walls .dropzone:hover .dropzone-cta, body.tool-walls .dropzone.dragover .dropzone-cta {
-  border-color: var(--green); background: rgba(21,128,61,0.18);
-}
-
-body.tool-report .dropzone:hover .dropzone-cta, body.tool-report .dropzone.dragover .dropzone-cta {
-  border-color: var(--rose); background: rgba(159,27,88,0.18);
-}
-
-.dropzone .ext { color: var(--blue); }
-body.tool-walls .dropzone .ext { color: var(--green); }
-body.tool-report .dropzone .ext { color: var(--rose); }
+.dropzone .ext { color: var(--dz-accent); }
 
 .dropzone-steps {
   margin-top: 20px; text-align: left; display: inline-block;
@@ -8389,10 +8392,12 @@ body.wd-has-update-banner .wd-update-badge { display: none; }
 .sr-csv-helper-row { display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap; }
 .sr-csv-modal { max-width: 700px; }
 .sr-csv-drop {
-  border: 2px dashed var(--border); border-radius: 8px; padding: 32px;
-  text-align: center; cursor: pointer; transition: border-color .15s;
+  border: 2px dashed var(--dz-accent); border-radius: 8px; padding: 32px;
+  text-align: center; cursor: pointer; transition: border-color .15s, background .15s;
 }
-.sr-csv-drop:hover, .sr-csv-drop.drag-over { border-color: var(--blue); }
+.sr-csv-drop:hover, .sr-csv-drop.drag-over {
+  background: color-mix(in srgb, var(--dz-accent) 18%, transparent);
+}
 .sr-column-map { margin-top: 16px; }
 .sr-map-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
 .sr-map-row label { font-size: 13px; color: var(--text-2); min-width: 180px; }
@@ -8664,14 +8669,7 @@ body.tool-aprename .dz-topbar { background: linear-gradient(rgba(99,102,241,0.18
 body.tool-aprename .header-actions .btn-primary { background: var(--indigo); border-color: var(--indigo); }
 body.tool-aprename .header-actions .btn-primary:hover { background: var(--indigo-dark); border-color: var(--indigo-dark); }
 
-body.tool-aprename .dropzone .ext { color: var(--indigo); }
-body.tool-aprename .dropzone-cta  { border-color: var(--indigo); }
-body.tool-aprename .dropzone:hover .dropzone-cta,
-body.tool-aprename .dropzone.dragover .dropzone-cta { border-color: var(--indigo); background: rgba(99,102,241,0.18); }
 body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x560.png); }
-
-body.tool-plantrim .dropzone:hover .dropzone-cta,
-body.tool-plantrim .dropzone.dragover .dropzone-cta { border-color: var(--pt-accent); }
 
 .pt-editor .pt-wrap { flex: 1; overflow: auto; max-width: 900px; margin: 0 auto; width: 100%; }
 

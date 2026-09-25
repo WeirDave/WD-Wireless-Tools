@@ -88,5 +88,32 @@ class ToolLandingsFitTheScreenTests(harness.BrowserPagesHarness):
                 self.assertLess(sizes[1], sizes[2], sizes)
                 self.assertAlmostEqual(sizes[2], 180, delta=1)
 
+    def test_every_drop_target_is_outlined_in_its_own_tool_colour(self):
+        """Quick Walls outlined its drop box in its own green; four of the
+        other five drew a grey outline that only coloured on hover, or never.
+        At rest, each box carries a colour, the `.esx` in it matches, and no
+        two tools share one."""
+        for kind, drv in self.each_browser():
+            seen = {}
+            for path in TOOLS:
+                with self.subTest(browser=kind, tool=path):
+                    self.measure(drv, path, 1440, 900)
+                    m = drv.execute_script("""
+                      var cta = document.querySelector('.dropzone-cta');
+                      var probe = document.createElement('div');
+                      probe.style.color = 'var(--border)';
+                      document.body.appendChild(probe);
+                      var r = {
+                        border: getComputedStyle(cta).borderTopColor,
+                        ext: getComputedStyle(cta.querySelector('.ext')).color,
+                        neutral: getComputedStyle(probe).color
+                      };
+                      probe.remove();
+                      return r;""")
+                    self.assertNotEqual(m["border"], m["neutral"], m)
+                    self.assertEqual(m["border"], m["ext"], m)
+                    self.assertNotIn(m["border"], seen, (path, seen))
+                    seen[m["border"]] = path
+
 if __name__ == "__main__":
     unittest.main()
