@@ -2161,7 +2161,7 @@ The suite chooses the mechanism for you based on how it was installed:
 | Install | What happens |
 | --- | --- |
 | Cloned with git | Fetches and checks out the newest release tag. Fast, and the previous version stays available in git. |
-| Installed from a ZIP | Downloads the release asset, verifies its SHA-256, copies the current folder to a dated `.previous-vX.X.X` backup, then installs. |
+| Installed from a ZIP | Downloads the release asset, verifies its SHA-256, copies the current folder aside, then installs. The copy is removed once the install succeeds; if the install fails partway, it is kept beside the install folder as `<folder>.previous-vX.X.X-<date>` and the error names it. |
 | A development checkout | A **Pull now** button that fast-forwards your branch, plus the exact `git` command to run by hand. |
 
 #### If you are running from a development checkout
@@ -2238,7 +2238,7 @@ The button shows exactly what will happen before you confirm:
 
 - The folder becomes a tracked checkout of the repository.
 - **You stay on the version you have now.** Converting and updating are separate steps, so switching never changes your code out from under you. Use **Update now** afterwards when you want the newer version.
-- A dated backup of the folder is made first.
+- The folder is copied aside while it switches. The copy is removed once the switch succeeds, and kept if it fails.
 - Settings and templates are untouched — they live outside the folder.
 
 Files you added yourself that aren't part of the app (a stray `.esx`, your own notes) are left alone.
@@ -2335,8 +2335,9 @@ renamed over the top, so a file is either entirely the old one or entirely the
 new one and never half of either. That stops a write going wrong, which is
 better than keeping a copy in case it does.
 
-*The install backup taken when you update is a separate thing and still
-happens — see [Update or Uninstall](#update-or-uninstall).*
+*Updating copies the install folder aside while it runs and removes the copy
+once it succeeds; a copy is only left behind when an update fails partway —
+see [Update or Uninstall](#update-or-uninstall).*
 
 ### Opening settings without losing your place
 

@@ -14,7 +14,8 @@ Three mechanisms, auto-detected, because installs genuinely differ:
 
   ZIP install   No .git.  Update downloads the release asset, verifies its
                 SHA-256, and replaces the shipped payload in place after
-                copying the tree to a dated sibling backup.
+                copying the tree to a dated sibling backup, which is removed
+                once the install succeeds and kept if it fails.
 
   convert       A ZIP install opting into git, in place, without reinstalling.
 
@@ -683,8 +684,8 @@ def convert_to_git(root: Path | None = None, log=None, install_git_if_missing: b
     new code as well.  After converting, the normal Update button handles the
     rest.
 
-    Safety: the tree is copied to a dated sibling backup first; user data lives
-    outside the tree; and untracked files (stray .esx, notes) are left alone —
+    Safety: the tree is copied to a dated sibling backup first, removed once the
+    conversion succeeds and kept if it fails; user data lives outside the tree; and untracked files (stray .esx, notes) are left alone —
     a checkout only overwrites paths the release actually ships.
     """
     root = root or cfg.install_root
@@ -725,9 +726,10 @@ def convert_to_git(root: Path | None = None, log=None, install_git_if_missing: b
 
     after = local_version(root, cfg)
     say("This install now updates through git.")
+    leftover = _discard_backup(backup)
     return {"ok": True, "mode": "convert", "changed": cmp_version(after, current) != 0,
             "previousVersion": current, "newVersion": after,
-            "target": tag, "backup": str(backup)}
+            "target": tag, "backup": leftover}
 
 
 # ================================================================== github ==
@@ -1001,6 +1003,23 @@ def _backup_install(root: Path, version: str, cfg: AppConfig = CONFIG) -> Path:
     return backup
 
 
+def _discard_backup(backup: Path) -> str | None:
+    """Remove the copy taken for this update once the update has succeeded.
+
+    The copy exists for one case: an install that dies partway through, where
+    it is the only complete version on disk. Once the new version is in place
+    it protects nothing - the release it came from is still on GitHub - and
+    keeping it meant a full copy of the app beside the install after every
+    update, never pruned. A failed update never reaches this, so its copy is
+    kept and named in the error.
+
+    Returns the path if it could not be removed (a Windows handle, say), so
+    the caller can say where it is rather than leave it unmentioned.
+    """
+    shutil.rmtree(backup, ignore_errors=True)
+    return str(backup) if backup.exists() else None
+
+
 def zip_update(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
     """Download, verify, and replace the shipped payload in place."""
     root = root or cfg.install_root
@@ -1130,9 +1149,10 @@ def zip_update(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
             )
 
         say(f"Updated to v{new_version}.")
+        leftover = _discard_backup(backup)
         return {"ok": True, "mode": "zip", "changed": True,
                 "previousVersion": before, "newVersion": new_version,
-                "target": release["tag"], "backup": str(backup)}
+                "target": release["tag"], "backup": leftover}
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 

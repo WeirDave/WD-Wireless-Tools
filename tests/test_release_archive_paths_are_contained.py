@@ -215,18 +215,41 @@ class TheRealUpdateRunsTests(unittest.TestCase):
             json.loads((self.install / self.cfg.version_path)
                        .read_text(encoding="utf-8"))[self.cfg.version_key])
 
+    def _copies_beside_the_install(self):
+        return [p for p in self.install.parent.iterdir()
+                if p.name.startswith(self.install.name + ".previous-v")]
+
     def test_the_backup_is_a_copy_of_the_install_rather_than_of_staging(self):
         """A backup that does not hold what it replaced is worse than none.
 
         It is the copy somebody reaches for, so its being wrong is discovered
-        only at the moment it is needed.
+        only at the moment it is needed - which is an install that failed
+        partway, the one case the copy is still kept for.
         """
-        result = self._run(self._release_zip())
-        backup = Path(result["backup"])
-        self.assertTrue(backup.is_dir())
-        self.assertEqual(self.install.parent, backup.parent)
-        self.assertTrue((backup / "web" / "old-marker.txt").is_file(),
+        real_move = shutil.move
+        calls = []
+
+        def move_then_fail(src, dst):
+            calls.append(dst)
+            if len(calls) == 2:
+                raise OSError("disk full")
+            return real_move(src, dst)
+
+        with mock.patch.object(updater.shutil, "move", move_then_fail):
+            with self.assertRaises(updater.UpdateError) as ctx:
+                self._run(self._release_zip())
+        copies = self._copies_beside_the_install()
+        self.assertEqual(1, len(copies), copies)
+        self.assertIn(str(copies[0]), str(ctx.exception),
+                      "the error does not say where the intact copy is")
+        self.assertTrue((copies[0] / "web" / "old-marker.txt").is_file(),
                         "the backup does not hold the copy being replaced")
+
+    def test_a_successful_update_leaves_no_copy_behind(self):
+        result = self._run(self._release_zip())
+        self.assertTrue(result["changed"])
+        self.assertIsNone(result["backup"])
+        self.assertEqual([], self._copies_beside_the_install())
 
     def test_an_update_that_is_already_current_changes_nothing(self):
         self._make_tree(self.install, "1.1.0")

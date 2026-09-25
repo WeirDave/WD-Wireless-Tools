@@ -1071,7 +1071,8 @@
             (needsGit ? '<li>Git will be installed first (about a minute).</li>' : '') +
             '<li>This folder becomes a tracked checkout of ' + esc(config.repo) + '.</li>' +
             '<li>You stay on the version you have now — this doesn’t update you.</li>' +
-            '<li>A dated backup of the folder is made first.</li>' +
+            '<li>The folder is copied aside while it switches. The copy is ' +
+              'removed once the switch succeeds, and kept if it fails.</li>' +
             '<li>Your settings and templates are untouched — they live outside ' +
               'this folder.</li>' +
           '</ul>' +
@@ -1200,8 +1201,8 @@
             'This install now updates through git.</div>' +
           '<div class="wd-update-note">You’re still on v' + esc(res.newVersion || '') +
             '. Updates from here are an incremental pull.</div>' +
-          (res.backup ? '<div class="wd-update-note">Backup: ' + esc(res.backup) +
-            '</div>' : '') +
+          (res.backup ? '<div class="wd-update-note">The copy taken before switching ' +
+            'could not be removed and can be deleted: ' + esc(res.backup) + '</div>' : '') +
           stepsHtml(res.steps) });
         return;
       }
@@ -1240,8 +1241,8 @@
           ? '<div class="wd-update-note">Your edits to ' +
             esc(res.rescuedTemplates.join(', ')) + ' were kept as personal copies.</div>'
           : '') +
-        (res.backup ? '<div class="wd-update-note">Previous copy saved to ' +
-          esc(res.backup) + '</div>' : '') +
+        (res.backup ? '<div class="wd-update-note">The copy taken before updating ' +
+          'could not be removed and can be deleted: ' + esc(res.backup) + '</div>' : '') +
         stepsHtml(res.steps) +
         '<div class="wd-update-primaryRow">' +
           '<button class="btn btn-primary wd-update-restartBtn" type="button">' +

@@ -508,6 +508,7 @@ try {
         $newVersion = Test-InstallTree $tree $version
         Write-Ok "  v$newVersion, all expected files present."
 
+        $backup = $null
         if ($existing) {
           $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
           $backup = Join-Path (Split-Path -Parent $target) `
@@ -523,6 +524,16 @@ try {
 
         if ($currentVersion) { Write-Ok "Updated v$currentVersion -> v$newVersion" }
         else { Write-Ok "Installed v$newVersion" }
+
+        # The copy is for an install that dies partway, where it is the only
+        # complete version on disk. Reaching here means it did not, so it
+        # goes; a failure above throws first and leaves it in place.
+        if ($backup) {
+          Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
+          if (Test-Path -LiteralPath $backup) {
+            Write-Host "  The copy taken before updating could not be removed: $backup"
+          }
+        }
       } finally {
         Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
       }

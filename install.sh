@@ -378,6 +378,16 @@ else
     chmod +x "$TARGET/Start WD Wireless Tools.command" 2>/dev/null || true
 
     if [ -n "$CURRENT" ]; then ok "Updated v$CURRENT -> v$NEW"; else ok "Installed v$NEW"; fi
+
+    # The copy is for an install that dies partway, where it is the only
+    # complete version on disk. Reaching here means it did not, so it goes;
+    # a failure above exits first and leaves it in place.
+    if [ -n "${BACKUP:-}" ]; then
+      rm -rf "$BACKUP" 2>/dev/null || true
+      if [ -e "$BACKUP" ]; then
+        echo "  The copy taken before updating could not be removed: $BACKUP"
+      fi
+    fi
   fi
 fi
 

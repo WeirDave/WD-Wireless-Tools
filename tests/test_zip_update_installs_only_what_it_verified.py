@@ -154,13 +154,15 @@ class AVerifiedReleaseStillInstalls(ZipUpdateHarness):
             "# new",
             (self.install / "tools" / "thing.py").read_text(encoding="utf-8").strip())
 
-    def test_the_previous_install_is_kept_beside_it(self):
+    def test_no_copy_of_the_previous_install_is_left_behind(self):
+        """The copy is for an install that dies partway. A successful update
+        used to leave a full `.previous-v*` copy of the app beside the install
+        every time, never pruned."""
         result, _ = self._run(self._release())
-        backup = Path(result["backup"])
-        self.assertTrue(backup.is_dir(), f"no backup at {backup}")
+        self.assertIsNone(result["backup"])
         self.assertEqual(
-            "# old",
-            (backup / "server.py").read_text(encoding="utf-8").strip())
+            [], [p.name for p in self.install.parent.iterdir()
+                 if ".previous-v" in p.name])
 
     def test_it_says_the_checksum_was_verified(self):
         _, said = self._run(self._release())
