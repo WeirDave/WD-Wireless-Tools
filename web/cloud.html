@@ -205,8 +205,8 @@
     <span class="selcount" id="selCount"></span>
     <button class="btn btn-secondary" data-action="call" data-fn="bulkCheckDifferences" title="Compare the selected files against their cloud copies and report what actually differs. Read-only - nothing is changed on either side.">Check differences</button>
     <button class="btn btn-secondary" data-action="call" data-fn="bulkFixInternalNames" title="Set the project name stored inside each selected .esx to match its cloud project. Renaming a file on disk does not change the name inside it, which is why matched files can still report a name difference. Each file is backed up first.">Fix names inside files</button>
-    <button class="btn btn-secondary bulk-btn" id="bulkSyncTo" data-action="call" data-fn="bulkSync" data-arg="to-local" title="Copy cloud names onto matched local (for selected matched rows)">Cloud &#8594; Local</button>
-    <button class="btn btn-secondary bulk-btn" id="bulkSyncFrom" data-action="call" data-fn="bulkSync" data-arg="to-cloud" title="Copy local names onto matched cloud (for selected matched rows)">Local &#8594; Cloud</button>
+    <button class="btn btn-teal bulk-btn" id="bulkSyncTo" data-action="call" data-fn="bulkSync" data-arg="to-local" title="Copy cloud names onto matched local (for selected matched rows)">Cloud &#8594; Local</button>
+    <button class="btn btn-blue bulk-btn" id="bulkSyncFrom" data-action="call" data-fn="bulkSync" data-arg="to-cloud" title="Copy local names onto matched cloud (for selected matched rows)">Local &#8594; Cloud</button>
     <button class="btn btn-secondary bulk-btn" id="compareBtn" data-action="call" data-fn="openCompare" title="Compare the contents of the selected folders side by side">Compare</button>
 
     <details class="wd-menu">

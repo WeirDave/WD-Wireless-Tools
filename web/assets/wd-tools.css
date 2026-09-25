@@ -2510,7 +2510,12 @@ body.tool-cloud .toolbar input.search:focus {
 
 .col-legend span:nth-child(3) { text-align: center; }
 
-.col-legend span:nth-child(4) { color: var(--slate); padding-left: 8px; }
+/* The two headers carry the colours of the two bulk Sync buttons, each of
+   which is coloured by the side it writes to: Cloud → Local is teal and lands
+   in the Local column, Local → Cloud is blue and lands in the Cloud column.
+   The labels read in screen order - Cloud is the left column - so the key is
+   where the colour is, not which way round the words are. */
+.col-legend span:nth-child(4) { color: var(--teal); padding-left: 8px; }
 
 .rows-container { padding: 0 12px 12px; flex: 1; overflow-y: auto; }
 
