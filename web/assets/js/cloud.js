@@ -3886,7 +3886,12 @@ async function reconcilePairs(pairs) {
     return;
   }
   if (!done) return;
+  _reportReconcile(done);
+}
 
+/* What a live reconcile did, in words. Shared by the row and the bulk path so
+   the two cannot drift apart about what "done" says. */
+function _reportReconcile(done) {
   const fixed = (done.aligned || []).length;
   if (fixed) {
     toast(fixed === 1
@@ -3903,6 +3908,51 @@ async function reconcilePairs(pairs) {
     toast(`${late} needed no change`, 'info');
   }
   _scheduleOpRefresh();
+}
+
+/* The row's own "Make them match": one pair, no preview, no confirm.
+
+   "Why does the make them match button prompt me again to make them match?"
+   Because it ran the bulk path, which previews - a second download and
+   compare - and then asks with a button carrying the same label. On a single
+   row that bought nothing. The row only offers this once a comparison has
+   already proved the designs identical, so he has seen the proof; what gets
+   written is the cloud's name and date into his local file, never design
+   content and never the cloud; and the live pass re-downloads and
+   re-compares before it writes, so a pair that changed since the comparison
+   is refused by the server rather than by a dialog. The server is the guard.
+
+   Bulk keeps its preview: those rows may never have been compared, and the
+   list of files is what he is agreeing to. */
+async function reconcileNow(pair) {
+  if (!pair || !pair.cloudId) { toast('Nothing to reconcile', 'info'); return; }
+  const label = pair.name || 'this pair';
+  let done;
+  try {
+    done = await opEnqueue({
+      title: `Making “${label}” match the cloud`,
+      sub: 'Re-checking the contents, then writing the cloud’s name and date into your local file.',
+      type: 'reconcile', undoable: false, pollBackend: false,
+      run: async (opId) => {
+        const r = await pyApi('reconcile_pairs', [pair.cloudId], false, opId);
+        if (r && r.error) throw new Error(r.error);
+        return r;
+      },
+    }).promise;
+  } catch (err) {
+    toast('Could not finish: ' + err.message, 'error');
+    return;
+  }
+  if (!done) return;
+  //: A refusal is an answer with a reason - the design moved since the
+  //: comparison, or the local copy became the newer one. Say which.
+  if (!(done.aligned || []).length && !(done.failed || []).length) {
+    const why = ((done.skipped || [])[0] || {}).reason || 'Nothing needed changing.';
+    toast(`${label}: ${why}`, 'info');
+    _scheduleOpRefresh();
+    return;
+  }
+  _reportReconcile(done);
 }
 
 /* Every selected pair a comparison has already proved identical. */
@@ -4357,7 +4407,7 @@ function rowDetailHtml(r, stripe) {
      guess is the thing this must never do. */
   if (cmp && !cmp.designDiffers && stale === 'cloud_newer' && c && l) {
     acts.push(rdAction('check', 'Make them match',
-      'reconcilePairs', [[{cloudId:c.id,name:c.name || l.name || ''}]],
+      'reconcileNow', [{cloudId:c.id,name:c.name || l.name || ''}],
       { primary: true, writes: 'local',
         title: 'The contents are identical - only the name recorded inside your local file and its modified date still differ. This writes the cloud’s name and date into your local .esx so the two genuinely agree and this row stops asking. Nothing on Ekahau Cloud changes.' }));
   } else if (cmp && !cmp.designDiffers && cmp.nameState === 'internal_only' && c && c.name && l) {
