@@ -466,6 +466,7 @@ process.stdout.write(JSON.stringify({
         self.assertFalse(got["offered"], got["html"][:400])
 
 
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
 class TheRowWritesOnceAndDoesNotAskAgainTests(unittest.TestCase):
     """"Why does the make them match button prompt me again to make them
     match?"

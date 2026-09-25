@@ -1065,6 +1065,12 @@ function onDuplicates(kind, jsonStr) {
 function indexRowData() {
   rowData = {};
   (data.matched || []).forEach(p => {
+    //: `data.matched` is sites on the Sites tab and projects on the Projects
+    //: tab, and this used to say 'sites' for both. The Local -> Cloud planner
+    //: skips the ownership check for a site, so on the Projects tab every
+    //: colleague's project went into the rename run and answered 403. The
+    //: server sets `isDir` on both sides, and a folder is what a site is.
+    const entityKind = p.local.isDir ? 'sites' : 'projects';
     rowData['p:' + p.cloud.id] = {
       kind: 'pair', cloudId: p.cloud.id, cloudName: p.cloud.name,
       localName: p.local.name, localPath: p.local.path,
@@ -1081,7 +1087,7 @@ function indexRowData() {
 
       cloudOwner: (p.cloud.owner || ''),
       siteName: p.cloud.siteName || '',
-      entityKind: 'sites',
+      entityKind,
     };
     // Independent per-side entries — same pattern as the ct-c:/ct-l: keys
     // nested project rows already use — so a matched site's cloud side and
@@ -1091,7 +1097,7 @@ function indexRowData() {
       kind: 'cloud', id: p.cloud.id, name: p.cloud.name,
       cloudOwner: (p.cloud.owner || ''),
       siteName: p.cloud.siteName || '',
-      entityKind: 'sites',
+      entityKind,
     };
     rowData['s-l:' + p.local.path] = {
       //: `data.matched` is sites on the Sites tab and projects on the
@@ -1101,7 +1107,7 @@ function indexRowData() {
       //: explicitly on both: true for a site folder, false for a project.
       kind: 'local', path: p.local.path, name: p.local.name,
       isDir: !!p.local.isDir,
-      entityKind: 'sites',
+      entityKind,
     };
   });
   (data.cloudOnly || []).forEach(s => {
@@ -4269,7 +4275,7 @@ function rowDetailHtml(r, stripe) {
      at all, which is what keeps a list of ninety-seven folders scannable - the
      ones that need him are the ones with a second line. */
   const kind = r.kind || currentTab;
-  if (kind === 'sites') return '';
+  if (kind === 'sites') return siteDetailHtml(r, stripe);
 
   const cmp = compareResultFor(r);
   const stale = r.staleness;
@@ -4523,6 +4529,53 @@ function rowDetailHtml(r, stripe) {
     + `</span>`
     + `</div>`;
 }
+/* A site whose folder and cloud names disagree, and the two ways to settle it.
+
+   A site row had no band at all, so a folder renamed on disk had no control
+   that renamed its cloud site. Sites carry no Ekahau id, so a renamed folder
+   can only pair with its site by shared site code or similar wording - which
+   is exactly what bulk Local -> Cloud refuses to rename since v2.176.0, with a
+   message sending him to "the row's own Local -> Cloud". On a site row that
+   control did not exist, so the only route up was one the tool refused.
+
+   The refusal is right for a bulk run nobody reads. Here the two names are on
+   screen side by side, which is the check the refusal asks for, so the rename
+   is offered and the sentence says how the pair was found. Only the names
+   band: content, comparison and staleness are about files, not folders. */
+function siteDetailHtml(r, stripe) {
+  const c = r.cloud, l = r.local;
+  if (r.status !== 'mismatch' || !c || !l) return '';
+  const guessed = !PUSHABLE_MATCH_TYPES.has(r.matchType);
+  const sentence = 'The folder and the cloud site are named differently. '
+    + (guessed
+      ? 'They were paired by a shared site code or similar wording, so check '
+        + 'both names first. Pick the one to keep, or say these are not the same site.'
+      : 'Pick the one to keep, or say these are not the same site.');
+  const acts = [
+    rdAction('arrowR', 'Cloud → Local',
+      'syncRow', ['to-local', c.id, c.name, np(l.path), 'sites'],
+      { writes: 'local', title: 'Rename the local folder so it matches the cloud site. The files inside it move with it.' }),
+    rdAction('arrowL', 'Local → Cloud',
+      'syncRow', ['to-cloud', c.id, l.name, np(l.path), 'sites'],
+      { primary: true, writes: 'cloud', title: 'Rename the cloud site so it matches your local folder. The projects in it stay where they are.' }),
+    rdAction('notEqual', 'Not a match',
+      'markNotMatch', [c.id, np(l.path), c.name, l.name],
+      { quiet: true, title: 'Never pair this folder and this site again.' }),
+  ].join('');
+  const split = _rdSplitBySide(acts);
+  return `<div class="row-detail rd-differs${stripe ? ' stripe' : ''} status-${r.status}">`
+    + `<span class="rd-lane cloud">`
+    +   `<span class="rd-icon">${ic('notEqual')}</span>`
+    +   `<span class="rd-text">${e(sentence)}</span>`
+    +   `<span class="rd-actions">${split.cloud + split.neutral}</span>`
+    + `</span>`
+    + `<span class="rd-gut"></span>`
+    + `<span class="rd-lane local">`
+    +   `<span class="rd-actions">${split.local}</span>`
+    + `</span>`
+    + `</div>`;
+}
+
 /* The action that is refused, drawn as itself: named, greyed, and carrying
    its own reason. It is not disabled in the HTML sense - a disabled button
    swallows the click, and the click is how he asks why. It is marked
