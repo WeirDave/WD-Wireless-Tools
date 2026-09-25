@@ -4234,9 +4234,16 @@ function rowDetailHtml(r, stripe) {
     acts.push(rdAction('arrowR', 'Cloud → Local',
       'syncRow', ['to-local', c.id, c.name, np(l.path), kind],
       { primary: true, writes: 'local', title: 'Rename the local file so it matches the cloud project.' }));
-    acts.push(rdAction('arrowL', 'Local → Cloud',
-      'syncRow', ['to-cloud', c.id, l.name, np(l.path), kind],
-      { writes: 'cloud', title: 'Rename the cloud project so it matches your local file.' }));
+    //: Renaming a cloud project is a change to it, and Ekahau lets only the
+    //: owner make one - so on somebody else's project this was offered and
+    //: then answered with a 403. The row still names the control, with why.
+    const notMine = ownershipBlock(c);
+    acts.push(notMine
+      ? rdUnavailable('arrowL', 'Local → Cloud',
+          notMine + ' Rename your local file instead, or ask the owner.', 'cloud')
+      : rdAction('arrowL', 'Local → Cloud',
+          'syncRow', ['to-cloud', c.id, l.name, np(l.path), kind],
+          { writes: 'cloud', title: 'Rename the cloud project so it matches your local file.' }));
     acts.push(rdAction('notEqual', 'Not a match',
       'markNotMatch', [c.id, np(l.path), c.name, l.name],
       { quiet: true, title: 'Never pair these two again.' }));
@@ -7861,8 +7868,33 @@ function syncPlan(items, dir) {
   const moving = new Set([...contentPulls, ...contentPushes,
                           ...blockedPulls, ...blockedPushes, ...wrongWay]);
 
-  // What is left of the matched rows is the old behaviour: names only.
-  const pairs = allPairs.filter(d => !moving.has(d));
+  /* What is left of the matched rows is the old behaviour: names only.
+
+     Going up, a name is a write to his cloud project, and it had none of the
+     guards the content push has. A pairing WD guessed - a shared site code,
+     similar wording - renamed the cloud project after whichever local file it
+     was guessed against, which is exactly the case where the two are most
+     likely not the same project, and in a bulk run nobody reads the row. A
+     colleague's project was queued and answered 403. And a pair whose names
+     already agree was sent anyway: a no-op to the name, but Ekahau stamps a
+     new modified date on every rename, so the row came back "cloud newer".
+
+     Coming down is untouched: a local rename is recoverable and takes nothing
+     from anyone else. */
+  const named = allPairs.filter(d => !moving.has(d));
+  const namesAgree = (d) =>
+    (d.localName || '').trim() === (d.cloudName || '').trim();
+  const renameRefusal = (d) => {
+    if (dir !== 'to-cloud') return '';
+    if (!PUSHABLE_MATCH_TYPES.has(d.matchType)) return 'guessed';
+    if (d.entityKind !== 'sites' && !iOwn({ owner: d.cloudOwner })) return 'not-mine';
+    return '';
+  };
+  const unchanged = dir === 'to-cloud' ? named.filter(namesAgree) : [];
+  const pairs = named.filter(d => !unchanged.includes(d) && !renameRefusal(d));
+  const blockedRenames = named
+    .filter(d => !unchanged.includes(d) && renameRefusal(d))
+    .map(d => Object.assign({}, d, { refusal: renameRefusal(d) }));
 
   const uploads = dir === 'to-cloud'
     ? items.filter(d => isProjectSyncItem(d) && d.kind === 'local' && !d.isDir)
@@ -7877,16 +7909,43 @@ function syncPlan(items, dir) {
   const wantKind = dir === 'to-cloud' ? 'local' : 'cloud';
   const siteCreates = items.filter(d => !handled.has(d) && d.kind === wantKind && d.children);
   const creating = new Set(siteCreates);
-  const skipped = items.filter(d => !handled.has(d) && !creating.has(d));
+  const skipped = items.filter(d => !handled.has(d) && !creating.has(d))
+    .concat(unchanged);
   return {
     pairs: pairs, uploads: uploads, downloads: downloads,
     contentPulls: contentPulls, contentPushes: contentPushes,
     blockedPushes: blockedPushes, blockedPulls: blockedPulls,
+    blockedRenames: blockedRenames,
     wrongWay: wrongWay,
     siteCreates: siteCreates, skipped: skipped,
     total: pairs.length + uploads.length + downloads.length
          + contentPulls.length + contentPushes.length + siteCreates.length,
   };
+}
+
+/* The cloud renames a Local → Cloud run leaves out, named, with the remedy
+   for each reason - they differ, so they are not one sentence. `plain` drops
+   the markup for a toast. */
+function _blockedRenamesSentence(list, plain) {
+  const b = (t) => plain ? t : '<b>' + t + '</b>';
+  const nameOf = (d) => plain ? (d.localName || d.cloudName || '')
+                              : e(d.localName || d.cloudName || '');
+  const guessed = list.filter(d => d.refusal === 'guessed');
+  const notMine = list.filter(d => d.refusal === 'not-mine');
+  const parts = [];
+  if (guessed.length) {
+    parts.push(b(guessed.length + ' cloud name' + (guessed.length === 1 ? ' is' : 's are')
+      + ' not changed') + ' because the pairing was guessed from a site code or'
+      + ' similar wording: ' + guessed.map(nameOf).join(', ') + '. Check the two names on the row and'
+      + ' use its own ' + b('Local → Cloud') + ' if they are the same project.');
+  }
+  if (notMine.length) {
+    parts.push(b(notMine.length + ' cloud project' + (notMine.length === 1 ? ' belongs' : 's belong')
+      + ' to somebody else') + ' and Ekahau lets only the owner rename '
+      + (notMine.length === 1 ? 'it' : 'them') + ': '
+      + notMine.map(nameOf).join(', ') + '.');
+  }
+  return parts.join(' ');
 }
 
 function selectedSyncItems() {
@@ -7929,9 +7988,14 @@ async function bulkSync(dir) {
   const contentPushes = plan.contentPushes || [];
   const blockedPushes = plan.blockedPushes || [];
   const blockedPulls = plan.blockedPulls || [];
+  const blockedRenames = plan.blockedRenames || [];
   const wrongWay = plan.wrongWay || [];
   const stillSkipped = plan.skipped;
 
+  if (!plan.total && blockedRenames.length) {
+    toast(_blockedRenamesSentence(blockedRenames, true), 'info');
+    return;
+  }
   if (!plan.total) {
     toast(dir === 'to-cloud'
       ? 'Select matched rows or local-only .esx files first'
@@ -8049,6 +8113,10 @@ async function bulkSync(dir) {
         ${names}. Same reason in the other direction — these were paired by
         guesswork, so downloading over your local file could overwrite a
         different project. Use <b>Confirm this pair</b> on the row.</p>`;
+  }
+
+  if (blockedRenames.length) {
+    body += `<p class="sub warn">${_blockedRenamesSentence(blockedRenames, false)}</p>`;
   }
 
   /* Newer on the other side. Not refused, and no longer a dead end: the other

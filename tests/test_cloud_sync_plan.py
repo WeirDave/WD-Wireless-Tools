@@ -179,6 +179,57 @@ class SyncMovesContent(unittest.TestCase):
           done();
         """)
 
+    def test_a_cloud_rename_on_a_guessed_pairing_is_refused(self):
+        """Local -> Cloud renames the cloud project after the local file. On a
+        pairing guessed from a site code or similar wording that is the case
+        most likely to be two different projects, and a bulk run is the one
+        place nobody reads the row. Coming down, a local rename is
+        recoverable, so that direction is unchanged."""
+        self.run_block("""
+          var d = pair('a', null, _code); d.localName = 'a renamed';
+          var up = syncPlan([d], 'to-cloud');
+          check('not renamed: ' + up.pairs.length, up.pairs.length === 0);
+          check('named as refused', up.blockedRenames.length === 1
+                && up.blockedRenames[0].refusal === 'guessed');
+          check('and not counted as work: ' + up.total, up.total === 0);
+          var down = syncPlan([d], 'to-local');
+          check('the local rename still runs', down.pairs.length === 1);
+          var proven = pair('b', null); proven.localName = 'b renamed';
+          check('a proven pair is still renamed',
+                syncPlan([proven], 'to-cloud').pairs.length === 1);
+          done();
+        """)
+
+    def test_a_cloud_rename_on_someone_elses_project_is_refused(self):
+        """Ekahau lets only the owner rename a project, so queuing a
+        colleague's ended in a 403 halfway through the run."""
+        self.run_block("""
+          globalThis.data = { currentUser: 'me@example.invalid' };
+          var theirs = pair('a', null); theirs.localName = 'a renamed';
+          theirs.cloudOwner = 'colleague@example.invalid';
+          var mine = pair('b', null); mine.localName = 'b renamed';
+          mine.cloudOwner = 'me@example.invalid';
+          var plan = syncPlan([theirs, mine], 'to-cloud');
+          check('only his own is renamed: ' + names(plan.pairs),
+                names(plan.pairs) === 'b');
+          check('the other is named with its reason',
+                plan.blockedRenames.length === 1
+                && plan.blockedRenames[0].refusal === 'not-mine');
+          done();
+        """)
+
+    def test_a_cloud_name_that_already_agrees_is_not_rewritten(self):
+        """Renaming a cloud project to the name it already has changes
+        nothing but its date - Ekahau stamps a new modified date on every
+        rename - so the pair came back reading "cloud newer" for no reason."""
+        self.run_block("""
+          var plan = syncPlan([pair('a', null)], 'to-cloud');
+          check('no rename queued: ' + plan.pairs.length, plan.pairs.length === 0);
+          check('reported as skipped', plan.skipped.length === 1);
+          check('not called refused', plan.blockedRenames.length === 0);
+          done();
+        """)
+
     def test_a_mixed_selection_reports_both_halves(self):
         """Selecting some of each has to be honest about which is which."""
         self.run_block("""

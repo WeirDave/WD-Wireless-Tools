@@ -126,6 +126,23 @@ function pushOffered(owner) {
   };
 }
 
+// Renaming the cloud project from a row whose names disagree - the row's own
+// Local -> Cloud, in the band under it.
+function cloudRenameOffered(owner) {
+  sandbox.__row = Object.assign(mk(owner), { status: 'mismatch' });
+  sandbox.__row.local = Object.assign({}, sandbox.__row.local,
+    { name: 'Alpha Survey Renamed' });
+  const html = vm.runInContext('rowDetailHtml(__row, 0)', sandbox);
+  const btns = html.match(/<button class="rd-btn[\s\S]*?<\/button>/g) || [];
+  const push = btns.filter(b => /Local → Cloud/.test(b));
+  return {
+    drawn: push.length === 1,
+    live: push.some(b => /data-fn="syncRow"/.test(b) && /to-cloud/.test(b)),
+    saysWhy: push.some(b => /is-disabled/.test(b) && /Owned by/.test(b)),
+    pullLive: btns.some(b => /data-fn="syncRow"/.test(b) && /to-local/.test(b)),
+  };
+}
+
 // The banner's candidate set.
 function autoAssignable(owner) {
   sandbox.__site = [{
@@ -143,6 +160,8 @@ console.log(JSON.stringify({
   theirs: controls(THEM),
   pushMine: pushOffered(ME),
   pushTheirs: pushOffered(THEM),
+  renameMine: cloudRenameOffered(ME),
+  renameTheirs: cloudRenameOffered(THEM),
   autoAssignMine: autoAssignable(ME),
   autoAssignTheirs: autoAssignable(THEM),
   defaultOwner: vm.runInContext('defaultOwnerFilter()', sandbox),
@@ -207,6 +226,19 @@ class OnlyOfferWhatCanSucceedTests(unittest.TestCase):
         self.assertTrue(theirs["saysWhy"], "refused without giving the reason")
         self.assertFalse(theirs["offersConfirmPair"],
                          "offered a remedy that does not apply")
+
+    def test_renaming_the_cloud_copy_needs_ownership_too(self):
+        """The row whose names disagree offered Local -> Cloud on every pair,
+        and on a colleague's project Ekahau answered it with a 403. It stays
+        drawn and named - he goes looking for a control he has used - and
+        carries the reason. Renaming his own local file is still offered,
+        because that takes nothing from anyone."""
+        mine, theirs = self.out["renameMine"], self.out["renameTheirs"]
+        self.assertTrue(mine["live"], "refused on his own project")
+        self.assertTrue(theirs["drawn"], "the control vanished instead of saying why")
+        self.assertFalse(theirs["live"], "offered on a project he does not own")
+        self.assertTrue(theirs["saysWhy"], "refused without giving the reason")
+        self.assertTrue(theirs["pullLive"], "the local rename was refused as well")
 
     def test_auto_assign_proposes_only_projects_he_owns(self):
         """The reported failure: three proposed, three 403s. The candidate set
