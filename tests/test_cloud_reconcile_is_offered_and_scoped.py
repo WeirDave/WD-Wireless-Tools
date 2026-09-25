@@ -395,7 +395,7 @@ const html = vm.runInContext('rowDetailHtml(__row, "")', sandbox);
 // Pull the handler back out of the markup and run it against a recorder.
 // The control is delegated: its handler is named and its argument is a
 // JSON list on the element, so nothing is evaluated out of the markup.
-const tag = (html.match(/<[^>]*data-fn="reconcilePairs"[^>]*>/) || [])[0];
+const tag = (html.match(/<[^>]*data-fn="reconcileNow"[^>]*>/) || [])[0];
 let called = null;
 const m = tag ? true : null;
 if (tag) {
@@ -403,8 +403,8 @@ if (tag) {
   const args = JSON.parse(raw.replace(/&quot;/g, '"').replace(/&#39;/g, "'")
                              .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
                              .replace(/&amp;/g, '&'));
-  sandbox.reconcilePairs = (arg) => { called = arg; };
-  try { sandbox.reconcilePairs.apply(null, args); }
+  sandbox.reconcileNow = (arg) => { called = arg; };
+  try { sandbox.reconcileNow.apply(null, args); }
   catch (e) { called = { error: e.message }; }
 }
 process.stdout.write(JSON.stringify({
@@ -446,8 +446,8 @@ process.stdout.write(JSON.stringify({
     def test_the_handler_receives_the_pair(self):
         """The control is verified by running it, not by finding its name."""
         got = self.run_js(self._row(self.IDENTICAL))
-        self.assertEqual([{"cloudId": "c-1",
-                           "name": "SITE1 Riverside Final"}], got["called"])
+        self.assertEqual({"cloudId": "c-1",
+                          "name": "SITE1 Riverside Final"}, got["called"])
 
     def test_it_is_not_offered_when_the_design_really_differs(self):
         """Writing to his file on a pair that genuinely changed is the one
@@ -464,6 +464,123 @@ process.stdout.write(JSON.stringify({
     def test_it_is_not_offered_when_his_copy_is_the_newer_one(self):
         got = self.run_js(self._row(self.IDENTICAL, staleness="local_newer"))
         self.assertFalse(got["offered"], got["html"][:400])
+
+
+@unittest.skipIf(shutil.which("node") is None, "node is not installed")
+class TheRowWritesOnceAndDoesNotAskAgainTests(unittest.TestCase):
+    """"Why does the make them match button prompt me again to make them
+    match?"
+
+    The row ran the bulk path: a preview - a second download and compare -
+    then a confirm whose button carried the same label, then the live pass.
+    The row only offers the action once a comparison has proved the designs
+    identical, and the live pass re-checks before writing, so the second
+    question protected nothing. The row goes straight to the live pass now;
+    bulk, whose rows may never have been compared, keeps its preview.
+
+    Both are run for real against recorders: the server calls that arrive,
+    their `dry_run` flag in order, and whether a modal was opened.
+    """
+
+    PROGRAM = r"""
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync(process.argv[1], 'utf8');
+function fakeEl() {
+  return { innerHTML: '', textContent: '', value: '', checked: false,
+    hidden: false, disabled: false, dataset: {}, style: {}, children: [],
+    classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
+    addEventListener(){}, setAttribute(){}, getAttribute(){ return null; },
+    querySelector(){ return null; }, querySelectorAll(){ return []; },
+    appendChild(){}, remove(){}, focus(){}, click(){} };
+}
+const sandbox = {
+  console, JSON, Math, Date, Map, Set, Promise, RegExp, Intl,
+  setTimeout, clearTimeout, setInterval, clearInterval,
+  document: { getElementById(){ return fakeEl(); },
+    querySelector(){ return fakeEl(); }, querySelectorAll(){ return []; },
+    createElement(){ return fakeEl(); }, addEventListener(){},
+    body: fakeEl(), documentElement: fakeEl() },
+  navigator: { platform: 'Win32', clipboard: { writeText: async () => {} } },
+  location: { href: 'file:///cloud.html', search: '', hash: '' },
+  localStorage: { getItem: () => null, setItem(){}, removeItem(){} },
+  fetch: async () => ({ ok: true, json: async () => ({}) }),
+  alert(){}, confirm(){ return true; },
+  requestAnimationFrame: (f) => setTimeout(f, 0),
+  WD: { esc: s => String(s == null ? '' : s), applyVersions(){}, toast(){} },
+};
+sandbox.WD.escAttr = sandbox.WD.esc;
+sandbox.WD.escJsStr = s => String(s == null ? '' : s);
+sandbox.window = sandbox;
+vm.createContext(sandbox);
+try { vm.runInContext(source, sandbox, { filename: 'cloud.js' }); }
+catch (err) { if (!/addEventListener|null|undefined/.test(err.message)) throw err; }
+
+const reply = JSON.parse(process.argv[3]);
+const calls = [], modals = [], toasts = [];
+sandbox.pyApi = async (method, ids, dryRun) => {
+  calls.push({ method, ids, dryRun });
+  return dryRun ? reply.preview : reply.live;
+};
+sandbox.opEnqueue = (spec) => ({ promise: spec.run('op-1') });
+sandbox.showConfirmModal = async (title, body, label) => {
+  modals.push({ title, label }); return true;
+};
+sandbox.toast = (msg, kind) => { toasts.push({ msg, kind }); };
+sandbox._scheduleOpRefresh = () => {};
+
+(async () => {
+  const which = process.argv[2];
+  const pair = { cloudId: 'c-1', name: 'SITE1 Riverside Final' };
+  if (which === 'row') await sandbox.reconcileNow(pair);
+  else await sandbox.reconcilePairs([pair]);
+  process.stdout.write(JSON.stringify({ calls, modals, toasts }));
+})().catch(e => { console.error(e.stack || e.message); process.exit(1); });
+"""
+
+    ALIGNED = {"ok": True, "aligned": [{"cloudId": "c-1",
+                                        "name": "SITE1 Riverside",
+                                        "actions": ["Set the modified date "
+                                                    "to the cloud's"]}],
+               "skipped": [], "failed": []}
+    REFUSED = {"ok": True, "aligned": [], "failed": [],
+               "skipped": [{"cloudId": "c-1", "name": "SITE1 Riverside",
+                            "reason": "The designs genuinely differ - "
+                                      "2 access points moved."}]}
+
+    def run_js(self, which, preview=None, live=None):
+        reply = {"preview": preview or self.ALIGNED, "live": live or self.ALIGNED}
+        r = subprocess.run(
+            ["node", "-e", self.PROGRAM, str(CLOUD_JS), which, json.dumps(reply)],
+            capture_output=True, text=True, encoding="utf-8",
+            timeout=NODE_TIMEOUT_S)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).strip()[-2500:])
+        return json.loads(r.stdout.strip().splitlines()[-1])
+
+    def test_the_row_makes_one_live_call_and_opens_no_modal(self):
+        got = self.run_js("row")
+        self.assertEqual([{"method": "reconcile_pairs", "ids": ["c-1"],
+                           "dryRun": False}], got["calls"])
+        self.assertEqual([], got["modals"])
+
+    def test_the_row_says_it_is_done(self):
+        got = self.run_js("row")
+        self.assertTrue(any(t["kind"] == "success" and "now matches" in t["msg"]
+                            for t in got["toasts"]), got["toasts"])
+
+    def test_a_refusal_at_write_time_is_shown_with_its_reason(self):
+        """The server is the guard now, so what it refuses has to reach him
+        in its own words rather than as a count."""
+        got = self.run_js("row", live=self.REFUSED)
+        self.assertTrue(any("genuinely differ" in t["msg"] for t in got["toasts"]),
+                        got["toasts"])
+        self.assertFalse(any(t["kind"] == "success" for t in got["toasts"]))
+
+    def test_bulk_still_previews_then_asks_then_writes(self):
+        got = self.run_js("bulk")
+        self.assertEqual([True, False], [c["dryRun"] for c in got["calls"]])
+        self.assertEqual(1, len(got["modals"]))
 
 
 if __name__ == "__main__":
