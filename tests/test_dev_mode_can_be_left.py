@@ -48,8 +48,9 @@ TEST_PW = "not-the-real-password"
 
 try:  # pragma: no cover
     from selenium import webdriver
-    from selenium.common.exceptions import WebDriverException
+    from selenium.common.exceptions import TimeoutException, WebDriverException
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
     HAVE_SELENIUM = True
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
@@ -131,6 +132,21 @@ class DevModeLifecycle(unittest.TestCase):
         survives a reload, and the strip that is actually on the screen."""
         return self.strip_visible(), self.stored_flag()
 
+    def wait_until(self, condition, message, timeout=10):
+        """Poll for the state an action is expected to reach, bounded.
+
+        The password submit hashes through `crypto.subtle` and then waits on
+        the server's unlock - two Promises - so a fixed sleep measures the
+        runner, not the page. 0.6s passed on three matrix jobs and failed on
+        windows-latest / 3.10 with the flag simply not written yet. A poll
+        returns as soon as the state arrives and fails with the same message
+        when it never does."""
+        try:
+            WebDriverWait(self.driver, timeout, poll_frequency=0.05).until(
+                lambda d: condition())
+        except TimeoutException:
+            self.fail(message)
+
     def open_the_hamburger(self):
         """Open the menu the way a person does, rather than forcing `.open`.
 
@@ -191,20 +207,18 @@ class DevModeLifecycle(unittest.TestCase):
         entry = self.visible_nav_item(".nav-item-dev")
         self.assertIsNotNone(entry, "no Dev Tools item in the open menu")
         entry.click()
-        time.sleep(0.25)
-        self.assertIn("active",
-                      self.driver.find_element(By.ID, "devModal")
-                      .get_attribute("class"),
-                      "the nav item did not open the password modal")
+        self.wait_until(
+            lambda: "active" in (self.driver.find_element(By.ID, "devModal")
+                                 .get_attribute("class") or ""),
+            "the nav item did not open the password modal")
 
         box = self.driver.find_element(By.ID, "devPwInput")
         box.send_keys(TEST_PW)
         unlock = self.driver.find_element(
             By.CSS_SELECTOR, '#devModal [data-fn="WD.Dev.submitDevPassword"].btn-primary')
         unlock.click()
-        time.sleep(0.6)
-        self.assertEqual(self.in_dev_mode(), (True, "1"),
-                         "the password was accepted but dev mode did not start")
+        self.wait_until(lambda: self.in_dev_mode() == (True, "1"),
+                        "the password was accepted but dev mode did not start")
 
     # ── the ways out ─────────────────────────────────────────────
     def test_out_by_the_toolbar_exit(self):
@@ -214,8 +228,8 @@ class DevModeLifecycle(unittest.TestCase):
         btn = self.driver.find_element(By.ID, "devExitBtn")
         self.assertTrue(btn.is_displayed(), "the exit control is not on screen")
         btn.click()
-        time.sleep(0.3)
-        self.assertEqual(self.in_dev_mode(), (False, None))
+        self.wait_until(lambda: self.in_dev_mode() == (False, None),
+                        "the toolbar exit did not leave dev mode")
 
     def test_the_toolbar_exit_says_what_it_does(self):
         """An unlabelled glyph is the thing he has already objected to. The ✕
@@ -267,8 +281,8 @@ class DevModeLifecycle(unittest.TestCase):
         self.assertIsNotNone(
             exit_item, "no Exit Dev Mode item in the open menu while dev is on")
         exit_item.click()
-        time.sleep(0.3)
-        self.assertEqual(self.in_dev_mode(), (False, None))
+        self.wait_until(lambda: self.in_dev_mode() == (False, None),
+                        "the nav exit did not leave dev mode")
 
     def test_out_by_url(self):
         self.open("?dev=1")
@@ -281,7 +295,8 @@ class DevModeLifecycle(unittest.TestCase):
         back on the next page he opens - and back onto his printout."""
         self.open("?dev=1")
         self.driver.find_element(By.ID, "devExitBtn").click()
-        time.sleep(0.3)
+        self.wait_until(lambda: self.stored_flag() is None,
+                        "the toolbar exit did not clear the flag")
         self.open()
         self.assertEqual(self.in_dev_mode(), (False, None))
 
