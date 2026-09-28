@@ -47,6 +47,7 @@ from tools import updater
 from tools import applog
 from tools import esx_guard
 from tools import esx_trimmer
+from tools import image_format
 from tools import plantrim_store
 from tools import plan_detect
 from tools import prep_pipeline
@@ -987,6 +988,47 @@ def _prep_saved_boxes(src):
         return {}
 
 
+_PREP_IMAGE_TYPES = {"png": "image/png", "jpeg": "image/jpeg", "gif": "image/gif",
+                     "webp": "image/webp", "bmp": "image/bmp",
+                     "svg": "image/svg+xml"}
+
+
+def _prep_floor_image(floor_id):
+    """One floor's plan image from the project opened from disk, for the map.
+
+    A dropped project is already in the browser and is read there; one opened
+    from disk never is, which is the point of that route. So this hands over
+    one floor at a time, chosen by floor id out of the project's own
+    floorPlans.json - never a member name from the request, so nothing but a
+    listed plan image can come back.
+
+    Served with a sandbox policy because a CAD import is SVG, and an SVG
+    opened as a document can run script.
+    """
+    import zipfile
+    path = _PREP_PROJECT.get("path")
+    if not path or not Path(path).is_file():
+        return jsonify({"ok": False, "error": "No project is open from disk."}), 404
+    try:
+        with zipfile.ZipFile(path) as z:
+            plans = json.loads(z.read("floorPlans.json")).get("floorPlans") or []
+            plan = next((p for p in plans if p.get("id") == floor_id), None)
+            image_id = plan and plan.get("imageId")
+            if not image_id:
+                return jsonify({"ok": False, "error": "That floor has no plan image."}), 404
+            blob = z.read("image-" + str(image_id))
+    except KeyError:
+        return jsonify({"ok": False, "error": "That floor's image is missing from the archive."}), 404
+    except (zipfile.BadZipFile, ValueError, OSError) as e:
+        return jsonify({"ok": False, "error": f"Could not read the project: {e}"}), 400
+    kind = image_format.sniff(blob[:512])
+    resp = Response(blob, mimetype=_PREP_IMAGE_TYPES.get(kind, "application/octet-stream"))
+    resp.headers["Content-Security-Policy"] = "sandbox"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @app.route("/api/prep/<action>", methods=["POST"])
 def api_prep(action):
     """Trim, area and wall-type a new project in one pass.
@@ -1052,6 +1094,9 @@ def api_prep(action):
                      for t in ts.scan().get("templates", [])],
             "capacity": capacity_profiles.list_templates().get("templates", []),
         })
+
+    if action == "image":
+        return _prep_floor_image(request.args.get("floor") or "")
 
     if action not in ("plan", "run"):
         return jsonify({"error": f"unknown action: {action}"}), 404

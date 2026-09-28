@@ -216,6 +216,18 @@
 
     <div class="prep-card">
       <div class="prep-step">2 &mdash; What that would do</div>
+      <div class="prep-map" id="prepMap" hidden>
+        <p class="ptb-intro">
+          The same view as PlanTrim: the shaded paper is cut away, the dashed line is what is
+          kept. Pick a floor to see its crop. It redraws when you change the margin.
+        </p>
+        <div class="ptb-strip" id="prepMapStrip"></div>
+        <div class="ptb-stage" id="prepMapStage">
+          <canvas id="prepMapCanvas"></canvas>
+          <div class="ptb-empty" id="prepMapEmpty">Loading the floor plan&hellip;</div>
+        </div>
+        <div class="ptb-hint" id="prepMapCaption"></div>
+      </div>
       <div id="prepPreview"><div class="prep-empty">Reading the project…</div></div>
 
       <div class="prep-row prep-go">
@@ -238,6 +250,7 @@
 
 <div id="toast" class="toast"></div>
 
+<script src="/assets/lib/jszip.min.js"></script>
 <script src="/assets/js/wd-shared.js"></script>
 <script src="/assets/js/wd-dev.js"></script>
 <script src="/assets/js/wd-dev-actions.js"></script>

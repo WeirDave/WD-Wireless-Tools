@@ -961,6 +961,20 @@ step reports nothing to change. In that second case the preview still lists each
 floor and why it was skipped, so a project that needs no work reads as finished
 rather than as broken.
 
+### Seeing what the trim cuts
+
+With **Trim the canvas** ticked, the top of step **2 — What that would do**
+shows the floor plan the way PlanTrim does: the whole sheet, the paper that
+will be cut away shaded, and a dashed blue line around what is kept. A row per
+floor sits above it — click one to see that floor. It opens on the first floor
+that is actually being cropped; a floor that is left as it is shows unshaded,
+with the reason underneath.
+
+The picture is drawn from the same numbers as the step card below it, and it
+redraws whenever the preview does — change the margin and the dashed line
+moves. It is a view only: to draw your own rectangle, use PlanTrim, then tick
+**Use the rectangles I drew in PlanTrim** here.
+
 ### Two ways to open a project, and they are not the same
 
 **Drop it, or click to browse,** and the file is uploaded to the local server for the preview and again for the run. The prepared copy comes back as a download.

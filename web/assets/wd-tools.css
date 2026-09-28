@@ -11416,3 +11416,9 @@ body.wd-embedded .settings-wrap { padding-top: 16px; }
   font-size: 12px; color: var(--text-3); line-height: 1.5;
 }
 .rep-print-hint b { color: var(--text-2); font-weight: 600; }
+
+/* Prep's map borrows PlanTrim's strip and stage, read-only: nothing to drag,
+   so no crosshair, and a little less height so the step cards stay close. */
+.prep-map { margin-bottom: 12px; }
+.prep-map .ptb-stage { height: min(46vh, 560px); min-height: 280px; }
+.prep-map .ptb-stage canvas { cursor: default; }
