@@ -2533,7 +2533,7 @@ PORT=8676 bash "Start WD Wireless Tools.command"
 
 ### Cloud Manager cannot find a session
 
-- Confirm you are signed into [Ekahau Cloud](https://cloud.ekahau.com/) in Chrome, Edge, or Firefox.
+- Confirm you are signed into [Ekahau Cloud](https://www.ekahau.cloud/) in Chrome, Edge, or Firefox.
 - Use a normal browser window, not Private or Incognito mode.
 - Close and reopen the browser if its cookie database is locked.
 - Return to Cloud Manager and retry the login check.

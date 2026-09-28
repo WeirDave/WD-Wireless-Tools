@@ -27,7 +27,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 
 <table>
 <tr>
-<td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.72.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.72.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"><br><b>Quick Walls</b><br><sub>v7.69.2 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.27.9 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"><br><b>Scale</b><br><sub>v1.5.2 · Desktop</sub></td>
@@ -234,7 +234,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.177.0
+WIRELESS TOOLS  v2.177.1
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
@@ -286,7 +286,7 @@ Right-click `Start WD Wireless Tools.command`, choose **Open**, then confirm **O
 
 ### Cloud Manager cannot find a session
 
-Confirm that you are signed into `https://cloud.ekahau.com` in a normal Chrome, Edge, or Firefox window. Close and reopen the browser if its cookie database is locked.
+Confirm that you are signed into `https://www.ekahau.cloud` in a normal Chrome, Edge, or Firefox window. Close and reopen the browser if its cookie database is locked.
 
 ### Port 8675 is already in use
 
