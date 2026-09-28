@@ -1020,7 +1020,10 @@ def _prep_floor_image(floor_id):
     except KeyError:
         return jsonify({"ok": False, "error": "That floor's image is missing from the archive."}), 404
     except (zipfile.BadZipFile, ValueError, OSError) as e:
-        return jsonify({"ok": False, "error": f"Could not read the project: {e}"}), 400
+        # The detail goes to the log: an OSError carries his full path.
+        applog.note_failure("prep floor image", e)
+        return jsonify({"ok": False, "error": "Could not read the floor plan "
+                                              "image from the project."}), 400
     kind = image_format.sniff(blob[:512])
     resp = Response(blob, mimetype=_PREP_IMAGE_TYPES.get(kind, "application/octet-stream"))
     resp.headers["Content-Security-Policy"] = "sandbox"

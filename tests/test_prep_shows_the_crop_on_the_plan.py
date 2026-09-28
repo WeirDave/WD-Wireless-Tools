@@ -86,6 +86,16 @@ class TheFloorImageComesFromTheProjectOnDisk(unittest.TestCase):
         for probe in ("floorPlans.json", "image-img1", "../project.json"):
             self.assertEqual(self.image(probe).status_code, 404, probe)
 
+    def test_an_unreadable_project_does_not_echo_the_exception(self):
+        """An OSError carries the full path; it goes to the log, not the page."""
+        broken = Path(self.tmp.name) / "Broken.esx"
+        broken.write_bytes(b"not a zip")
+        server._PREP_PROJECT["path"] = str(broken)
+        res = self.image("f1")
+        self.assertEqual(res.status_code, 400)
+        self.assertNotIn(str(broken), res.get_data(as_text=True))
+        self.assertNotIn("zip file", res.get_data(as_text=True).lower())
+
     def test_nothing_is_served_without_a_project_opened_from_disk(self):
         server._PREP_PROJECT["path"] = None
         self.assertEqual(self.image("f1").status_code, 404)
