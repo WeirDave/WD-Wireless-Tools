@@ -634,7 +634,10 @@ def api_capacity(action):
 
             if action == "plan":
                 out = capacity_profiles.plan_application(
-                    str(src), tpl, request.args.get("occupants"), replace_existing=replace)
+                    str(src), tpl, request.args.get("occupants"), replace_existing=replace,
+                    floor_occupants=request.args.get("floorOccupants"),
+                    existing=request.args.get("existing"),
+                    floor_existing=request.args.get("floorExisting"))
                 out["source"] = name
                 return jsonify(out)
 
@@ -645,7 +648,10 @@ def api_capacity(action):
             dest = Path(tmpdir) / "out.esx"
             out = capacity_profiles.apply_to(
                 str(src), str(dest), tpl, request.args.get("occupants"),
-                replace_existing=replace)
+                replace_existing=replace,
+                floor_occupants=request.args.get("floorOccupants"),
+                existing=request.args.get("existing"),
+                floor_existing=request.args.get("floorExisting"))
             out["source"] = name
             if not out.get("ok"):
                 return jsonify(out), 400
@@ -660,6 +666,8 @@ def api_capacity(action):
                 f"{stem} (capacity).esx")
             report = {k: out[k] for k in
                       ("ok", "occupants", "totalDevices", "floorsWritten",
+                       "perFloor", "occupantsWritten", "devicesWritten",
+                       "areasReshaped", "areasCleared",
                        "floorsSkipped", "areasReplaced", "areasLeftInPlace",
                        "profilesCreated", "orphanAreasIgnored")}
             response.headers["X-WD-Capacity-Report"] = quote(json.dumps(report))

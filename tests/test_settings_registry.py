@@ -43,7 +43,7 @@ def _flatten(node, prefix=""):
         # These paths are containers. Any other dict is a value in its own
         # right (page_orient, subfolder_names) and must not be walked into.
         if isinstance(value, dict) and path in (
-            "global", "organizer", "cloud", "rename", "report", "walls",
+            "global", "organizer", "cloud", "rename", "report", "walls", "capacity",
             "aprename", "plantrim", "organizer.rename", "rename.file_rules",
         ):
             out.extend(_flatten(value, path + "."))

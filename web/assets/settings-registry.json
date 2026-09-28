@@ -209,6 +209,20 @@
       }
     },
     {
+      "key": "capacity.existing_devices",
+      "label": "Floors that already have devices",
+      "category": "preference",
+      "owner": "Capacity",
+      "section": "capacity",
+      "home": "settings",
+      "control": "sCapExisting",
+      "values": {
+        "keep": "Keep them as they are",
+        "devices": "Replace device counts, keep the area outline",
+        "reshape": "Replace device counts and redraw the area"
+      }
+    },
+    {
       "key": "cloud.tree_default_open",
       "label": "Sites open as",
       "category": "preference",

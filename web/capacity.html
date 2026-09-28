@@ -140,20 +140,32 @@
       <div class="cap-step">3 &mdash; Apply a template to this project</div>
       <div class="cap-tpl-list" id="capTemplates"></div>
       <div class="cap-row mt-12">
-        <label for="capHeadcount">This building is for</label>
+        <label for="capHeadcount">Each floor is for</label>
         <input type="number" id="capHeadcount" class="cap-input cap-input--num" min="1" step="1" value="200"
                data-action-input="call" data-fn="capPlan">
         <label for="capHeadcount">people</label>
-        <label class="check-inline">
-          <input type="checkbox" id="capReplace" data-action-change="call" data-fn="capPlan">
-          <span>Replace requirement areas that already exist</span>
-        </label>
+      </div>
+      <div class="cap-row">
+        <label for="capExisting">Floors that already have devices</label>
+        <select id="capExisting" class="cap-input" data-action-change="call" data-fn="capExistingAll" data-arg-value="1">
+          <option value="keep">Keep them as they are</option>
+          <option value="devices">Replace device counts, keep the area outline</option>
+          <option value="reshape">Replace device counts and redraw the area</option>
+        </select>
       </div>
       <p class="cap-hint">
+        Floors hold different numbers of people, so every floor below has its own
+        <b>People on this floor</b> box. Leave it blank to use the number above,
+        type a number to override it, or type 0 to leave that floor alone.
+      </p>
+      <p class="cap-hint">
         An area you drew yourself is filled in, not replaced &mdash; your outline is kept
-        exactly as it is and only the devices are written into it. A floor is left alone
-        only when its area <em>already carries capacity items</em>, since overwriting
-        those would discard numbers you set; tick the box to replace them.
+        exactly as it is and only the devices are written into it. A floor whose area
+        <em>already carries devices</em> is kept as it is unless you choose otherwise
+        above, or per floor below. That dropdown starts on the default saved in
+        <a href="/settings#sec-capacity">Settings &rarr; Capacity</a>. Replacing sets the floor to the new number &mdash; it
+        never adds to what was there, and any second capacity area on that floor has its
+        devices cleared so it stops counting twice.
       </p>
       <div id="capPlan"></div>
 

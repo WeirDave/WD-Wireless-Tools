@@ -295,7 +295,11 @@ class PlanTests(unittest.TestCase):
         got = cap.plan_application(self.esx, self.tpl, 200, replace_existing=True)
         self.assertEqual(got["willWrite"], 1)
         self.assertEqual(got["floors"][0]["mode"], "replace")
-        self.assertIn("replace the 6 capacity items", got["floors"][0]["action"])
+        floor = got["floors"][0]
+        # It says what is there now and what it becomes, as device counts.
+        self.assertEqual(floor["existingItemCount"], 6)
+        self.assertIn("replace %d devices with %d" % (
+            floor["existingDevices"], floor["totalDevices"]), floor["action"])
 
     def test_a_floor_with_no_requirement_is_created(self):
         path = build_esx(Path(self.tmp.name) / "bare.esx", areas=[])
