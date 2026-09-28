@@ -647,13 +647,25 @@ async function forgetCloudLogin() {
     toast(result.error, 'error');
     return;
   }
+  backToSignIn();
+}
+
+/* The sign-in screen, from wherever he was. Used by Forget login and by a
+   listing that comes back `sessionExpired`: an expired cookie used to leave
+   him on an empty list under a raw "401 Client Error" toast, with Live
+   polling the same dead session every 30 seconds and nothing on screen that
+   would fix it. */
+function backToSignIn(msg) {
   stopLive();
   data = null;
   dupData = null;
+  _drawnData = null;
+  _drawnFingerprint = '';
   document.getElementById('appScreen').style.display = 'none';
   document.getElementById('setupScreen').hidden = true;
   document.getElementById('loginScreen').style.display = '';
   setAuthState('login');
+  if (msg) toast(msg, 'error');
 }
 
 async function showApp(email) {
@@ -956,6 +968,7 @@ function onData(kind, jsonStr, opts) {
 
   const background = !!(opts && opts.background) && !(opts && opts.force);
 
+  if (next && next.sessionExpired) { backToSignIn(next.error); return; }
   if (next && next.error) {
     /* And a poll he did not ask for does not get to take the list away. The
        whole point of the deferred apply below is that an unrequested refresh
@@ -1051,6 +1064,7 @@ function onDuplicates(kind, jsonStr) {
   let d;
   try { d = JSON.parse(jsonStr); }
   catch (err) { toast('Bad data payload', 'error'); return; }
+  if (d.sessionExpired) { backToSignIn(d.error); return; }
   if (d.error) {
     document.getElementById('rowsContainer').innerHTML = '<div class="empty-msg">' + e(d.error) + '</div>';
     toast(d.error, 'error'); return;

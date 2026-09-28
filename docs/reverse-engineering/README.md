@@ -2,7 +2,7 @@
 
 `tools/cloud_manager.py` talks to an API Ekahau does not document. These three
 browser-console scripts are how that API was worked out: you paste one into the
-devtools console on `cloud.ekahau.com`, drive the Ekahau web UI by hand, and it
+devtools console on `www.ekahau.cloud`, drive the Ekahau web UI by hand, and it
 prints the requests the page actually made.
 
 They are kept for the same reason `docs/wall-types.md` is kept. The endpoints

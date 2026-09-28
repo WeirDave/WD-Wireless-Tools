@@ -152,6 +152,7 @@
     $('fileBadge').style.display = 'inline-block';
     $('prepResult').innerHTML = '';
     lastWritten = null;
+    resetMap();
   }
 
   /* Opening from disk, and what happens when that cannot be done.
@@ -273,6 +274,7 @@
     if (!steps.length) {
       $('prepPreview').innerHTML =
         '<div class="prep-empty">Pick at least one thing to do.</div>';
+      $('prepMap').hidden = true;
       setGo(false, '');
       return;
     }
@@ -333,6 +335,7 @@
   function renderPreview(r) {
     var host = $('prepPreview');
     if (!r || !r.ok) {
+      $('prepMap').hidden = true;
       host.innerHTML = '<div class="prep-empty">'
         + esc((r && r.error) || 'Could not read that project.') + '</div>';
       setGo(false, '');
@@ -348,6 +351,8 @@
     // run where *nothing* can happen.
     var refused = [];
     var order = r.steps || [];
+
+    renderMap(order.indexOf('trim') >= 0 ? (r.step && r.step.trim) : null);
 
     if (order.indexOf('trim') >= 0) {
       var t = (r.step && r.step.trim) || {};
@@ -455,6 +460,205 @@
     $('prepGoBtn').disabled = !on;
     $('prepGoNote').textContent = note || '';
   }
+
+  // ── the map: what the trim keeps, drawn on the plan ─────────────────────────
+  //
+  // PlanTrim's proposed-crop view, read-only. The box comes straight out of the
+  // plan report the cards below are quoting, so the picture and the numbers
+  // cannot disagree. A dropped project is already in the browser and is read
+  // with JSZip; one opened from disk never is, so its images come one floor at
+  // a time from /api/prep/image.
+
+  var map = { floors: [], current: null, images: {}, zip: null };
+
+  function resetMap() {
+    map.floors = [];
+    map.current = null;
+    map.images = {};
+    map.zip = null;
+    $('prepMap').hidden = true;
+  }
+
+  /* The kept rectangle in the displayed image's own pixels, or null.
+
+     The report is in the plan's coordinate space (`oldSize`), which for a
+     raster is the image and for an SVG is its viewBox - and a browser renders
+     an SVG at whatever size its root element asks for. Scaling by the ratio is
+     what keeps the box on the drawing either way. */
+  function mapKeptBox(f, iw, ih) {
+    if (!f || f.action !== 'trimmed' || !f.offset || !f.newSize || !f.oldSize) return null;
+    if (!f.oldSize[0] || !f.oldSize[1] || !iw || !ih) return null;
+    var sx = iw / f.oldSize[0], sy = ih / f.oldSize[1];
+    return [f.offset[0] * sx, f.offset[1] * sy,
+            (f.offset[0] + f.newSize[0]) * sx, (f.offset[1] + f.newSize[1]) * sy];
+  }
+  window.__prepMapKeptBox = mapKeptBox;
+
+  function mapFloorState(f) {
+    if (f.action === 'trimmed') {
+      return { cls: 'is-auto', word: 'Trim',
+               detail: f.oldSize[0] + '×' + f.oldSize[1] + ' → '
+                 + f.newSize[0] + '×' + f.newSize[1] };
+    }
+    if (f.action === 'skipped') return { cls: 'is-skip', word: 'Leave as is', detail: f.reason || '' };
+    return { cls: 'is-refused', word: 'Refused', detail: f.reason || '' };
+  }
+
+  function renderMap(t) {
+    var host = $('prepMap');
+    var floors = (t && !t.error && t.floors) || [];
+    if (!floors.length) { host.hidden = true; map.floors = []; return; }
+    map.floors = floors;
+    var ids = floors.map(function (f) { return f.id; });
+    if (ids.indexOf(map.current) < 0) {
+      // Open on the first floor that is actually being cropped.
+      var first = floors.filter(function (f) { return f.action === 'trimmed'; })[0] || floors[0];
+      map.current = first.id;
+    }
+    host.hidden = false;
+    $('prepMapStrip').innerHTML = floors.map(function (f) {
+      var st = mapFloorState(f);
+      return '<button type="button" class="ptb-row ' + st.cls
+        + (f.id === map.current ? ' is-current' : '') + '"'
+        + ' data-action="call" data-fn="prepMapSelect" data-arg="' + escAttr(f.id) + '">'
+        + '<span class="ptb-row-name">' + esc(f.name) + '</span>'
+        + '<span class="ptb-row-state">' + esc(st.word) + '</span>'
+        + '<span class="ptb-row-detail">' + esc(st.detail) + '</span>'
+        + '</button>';
+    }).join('');
+    showMapFloor();
+  }
+
+  window.prepMapSelect = function (id) {
+    map.current = id;
+    Array.prototype.forEach.call($('prepMapStrip').children, function (b) {
+      b.classList.toggle('is-current', b.getAttribute('data-arg') === id);
+    });
+    showMapFloor();
+  };
+
+  function currentMapFloor() {
+    return map.floors.filter(function (f) { return f.id === map.current; })[0] || null;
+  }
+
+  function sniffImageType(bytes) {
+    var i = 0;
+    if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) i = 3;
+    while (i < bytes.length && (bytes[i] === 0x20 || bytes[i] === 0x0A
+                                || bytes[i] === 0x0D || bytes[i] === 0x09)) i++;
+    return bytes[i] === 0x3C ? 'image/svg+xml' : '';
+  }
+
+  function floorImageBlob(id) {
+    if (fromDisk) {
+      return fetch('/api/prep/image?floor=' + encodeURIComponent(id), {
+        method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
+      }).then(function (r) {
+        if (!r.ok) {
+          return r.json().then(function (j) { throw new Error(j.error || 'no image'); },
+                               function () { throw new Error('no image'); });
+        }
+        return r.blob();
+      });
+    }
+    if (!fileBytes || typeof JSZip === 'undefined') return Promise.reject(new Error('no image'));
+    if (!map.zip) map.zip = JSZip.loadAsync(fileBytes);
+    return map.zip.then(function (zip) {
+      var fp = zip.file('floorPlans.json');
+      if (!fp) throw new Error('This project has no floor plans.');
+      return fp.async('string').then(function (txt) {
+        var plan = (JSON.parse(txt).floorPlans || []).filter(function (p) { return p.id === id; })[0];
+        var entry = plan && plan.imageId && zip.file('image-' + plan.imageId);
+        if (!entry) throw new Error('This floor has no image in the archive.');
+        return entry.async('uint8array');
+      });
+    }).then(function (bytes) {
+      var type = sniffImageType(bytes);
+      return new Blob([bytes], type ? { type: type } : undefined);
+    });
+  }
+
+  function floorImage(id) {
+    if (map.images[id]) return map.images[id];
+    map.images[id] = floorImageBlob(id).then(function (blob) {
+      return new Promise(function (resolve, reject) {
+        var url = URL.createObjectURL(blob);
+        var im = new Image();
+        im.onload = function () { URL.revokeObjectURL(url); resolve(im); };
+        im.onerror = function () {
+          URL.revokeObjectURL(url);
+          reject(new Error('This floor plan image could not be displayed.'));
+        };
+        im.src = url;
+      });
+    });
+    return map.images[id];
+  }
+
+  function showMapFloor() {
+    var f = currentMapFloor();
+    if (!f) return;
+    var id = f.id;
+    var empty = $('prepMapEmpty');
+    var st = mapFloorState(f);
+    $('prepMapCaption').textContent = f.action === 'trimmed'
+      ? f.name + ': ' + st.detail + ' — ' + f.areaSavedPct + '% of the sheet is cut away.'
+      : f.name + ': not cropped' + (f.reason ? ' — ' + f.reason : '') + '.';
+    floorImage(id).then(function (im) {
+      if (map.current !== id) return;
+      empty.hidden = true;
+      drawMap(im, f);
+    }, function (e) {
+      if (map.current !== id) return;
+      clearMapCanvas();
+      empty.hidden = false;
+      empty.textContent = e.message || 'This floor plan could not be displayed.';
+    });
+  }
+
+  function clearMapCanvas() {
+    var cv = $('prepMapCanvas');
+    cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+  }
+
+  function drawMap(im, f) {
+    var cv = $('prepMapCanvas');
+    var r = cv.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.max(1, Math.round(r.width * dpr));
+    cv.height = Math.max(1, Math.round(r.height * dpr));
+    var g = cv.getContext('2d');
+    g.clearRect(0, 0, cv.width, cv.height);
+    var iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
+    if (!iw || !ih) return;
+    // The whole sheet, because what is being cut away is the point.
+    var s = Math.min(cv.width / iw, cv.height / ih) * 0.97;
+    var ox = (cv.width - iw * s) / 2, oy = (cv.height - ih * s) / 2;
+    g.imageSmoothingEnabled = true;
+    g.drawImage(im, ox, oy, iw * s, ih * s);
+
+    var b = mapKeptBox(f, iw, ih);
+    if (!b) return;
+    var x = ox + b[0] * s, y = oy + b[1] * s;
+    var w = (b[2] - b[0]) * s, h = (b[3] - b[1]) * s;
+    g.save();
+    g.fillStyle = 'rgba(0,0,0,0.55)';
+    g.beginPath();
+    g.rect(ox, oy, iw * s, ih * s);
+    g.rect(x, y, w, h);
+    g.fill('evenodd');
+    g.restore();
+    g.save();
+    g.strokeStyle = 'rgba(74,158,255,0.95)';
+    g.lineWidth = 2 * dpr;
+    g.setLineDash([7 * dpr, 5 * dpr]);
+    g.strokeRect(x, y, w, h);
+    g.restore();
+  }
+
+  window.addEventListener('resize', function () {
+    if (!$('prepMap').hidden && map.current) showMapFloor();
+  });
 
   // ── the run ────────────────────────────────────────────────────────────────
 

@@ -25,7 +25,7 @@ Only the **latest released version** is supported for security fixes. The curren
 WD Wireless Tools is a **local-first desktop application** — a Python server running on `localhost` that serves browser-based tool pages:
 
 - There is no WD Wireless Tools account or telemetry backend. Your Ekahau project files, cloud session credentials, and settings all stay on your machine.
-- Cloud Manager communicates directly with `cloud.ekahau.com` using the session cookie from your existing browser login. The session is encrypted at rest using the operating system credential vault.
+- Cloud Manager communicates directly with `www.ekahau.cloud` using the session cookie from your existing browser login. The session is encrypted at rest using the operating system credential vault.
 - Quick Walls, Report, and Scale parse Ekahau `.esx` files entirely in the browser — no project data leaves the machine.
 - The server binds to `localhost` only and rejects requests from non-loopback origins. Cross-origin POST requests are blocked before any action runs.
 - Because the server runs locally, the most serious class of vulnerability is **anything that could allow a remote site to trigger server-side actions** (CSRF, DNS rebinding) or **inject script into tool pages** (XSS via crafted project data). Reports of these vectors are especially valued.

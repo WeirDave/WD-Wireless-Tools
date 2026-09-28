@@ -2351,18 +2351,49 @@ class CloudManager:
         self.api = try_saved_cookies() or try_browser_cookies()
         return self.api is not None
 
+    #: What a dead session reads as. It says what to do rather than what
+    #: happened, because the page acts on it: a listing that fails this way
+    #: takes him back to the sign-in screen instead of drawing an empty list.
+    SESSION_EXPIRED = ("Your Ekahau Cloud sign-in has expired. Use "
+                       "\"Log in to Ekahau Cloud\" to reconnect.")
+
+    def _session_is_dead(self, e):
+        """A saved session goes stale between calls - signed out elsewhere,
+        or the AccessToken cookie simply expired overnight. Ekahau answers
+        that one of two ways, and both mean the same thing:
+
+        * a login redirect, which requests follows in a loop until
+          TooManyRedirects;
+        * a plain **401** on the API itself. This one was not handled, so
+          `raise_for_status()`'s own text - "401 Client Error: Unauthorized
+          for url: https://www.ekahau.cloud/site-management-api/v1/sites" -
+          reached the screen and read as a wrong address. The address is
+          right: a 401 is the server answering and refusing the cookie. And
+          `self.api` was kept, so every retry replayed the same dead cookie
+          until the app was restarted."""
+        if isinstance(e, (requests.exceptions.TooManyRedirects,
+                          requests.exceptions.ConnectionError)):
+            return True
+        resp = getattr(e, "response", None)
+        return (isinstance(e, requests.exceptions.HTTPError)
+                and resp is not None and resp.status_code == 401)
+
     def _handle_api_error(self, e):
-        """A saved session can go stale between calls (signed out of Ekahau
-        Cloud elsewhere, cookie expiry). requests then follows the app's
-        login redirect in a loop until it hits its 30-redirect cap, raising
-        TooManyRedirects with a raw "Exceeded 30 redirects" message instead
-        of anything a user can act on. Treat that as a dead session: drop
-        it so the next call re-validates via try_saved_cookies()/
-        try_browser_cookies() instead of trusting a stale self.api forever."""
-        if isinstance(e, (requests.exceptions.TooManyRedirects, requests.exceptions.ConnectionError)):
+        if self._session_is_dead(e):
+            # Dropped so the next call re-validates via try_saved_cookies() /
+            # try_browser_cookies() instead of trusting it forever.
             self.api = None
-            return "Your Ekahau Cloud session has expired. Reconnect (Settings → Forget login, then sign back in)."
+            return self.SESSION_EXPIRED
         return str(e)
+
+    def _api_error(self, e):
+        """The error payload for a listing. `sessionExpired` is what the page
+        acts on; the message alone would leave it guessing from wording."""
+        msg = self._handle_api_error(e)
+        out = {"error": msg}
+        if self.api is None:
+            out["sessionExpired"] = True
+        return out
 
     def status(self):
         connected = self._ensure()
@@ -2407,7 +2438,7 @@ class CloudManager:
 
     def get_data(self, kind):
         if not self._ensure():
-            return {"error": "Not connected"}
+            return {"error": self.SESSION_EXPIRED, "sessionExpired": True}
         try:
             od = self.config.get("output_dir", "")
             data = build_projects_data(self.api, od) if kind == "projects" else build_sites_data(self.api, od)
@@ -2422,16 +2453,16 @@ class CloudManager:
             data["externalOverrides"] = external_overrides_map()
             return data
         except Exception as e:
-            return {"error": self._handle_api_error(e)}
+            return self._api_error(e)
 
     def get_duplicates(self):
         if not self._ensure():
-            return {"error": "Not connected"}
+            return {"error": self.SESSION_EXPIRED, "sessionExpired": True}
         try:
             od = self.config.get("output_dir", "")
             return build_duplicates_data(self.api, od)
         except Exception as e:
-            return {"error": self._handle_api_error(e)}
+            return self._api_error(e)
 
     def rename_cloud(self, kind, cloud_id, name):
         if not self._ensure():

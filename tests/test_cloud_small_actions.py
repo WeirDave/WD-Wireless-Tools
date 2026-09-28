@@ -234,7 +234,11 @@ class ListingDuplicatesTests(unittest.TestCase):
         self.assertEqual("/some/where", build.call_args[0][1])
 
     def test_being_signed_out_says_so(self):
-        self.assertEqual({"error": "Not connected"}, _Disconnected().get_duplicates())
+        r = _Disconnected().get_duplicates()
+        # Flagged, so the page goes back to sign-in rather than drawing an
+        # empty list under the message.
+        self.assertTrue(r.get("sessionExpired"), r)
+        self.assertTrue(r.get("error"), r)
 
     def test_a_failure_comes_back_as_an_error_not_an_empty_list(self):
         """An empty duplicates list and a listing nobody could fetch are
