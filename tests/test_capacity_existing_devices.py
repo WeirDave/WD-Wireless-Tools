@@ -198,6 +198,7 @@ global.WD = {
   escAttr: s => String(s).replace(/&/g, '&amp;').replace(/'/g, '&#39;')
                          .replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
   toast() {},
+  api: (action) => fetch('/api/' + action).then(r => r.json()),
 };
 const calls = [];
 const PLAN = { ok: true, occupants: 200, totalDevices: 600, rows: [], perFloor: false,
@@ -207,9 +208,12 @@ const PLAN = { ok: true, occupants: 200, totalDevices: 600, rows: [], perFloor: 
       existingChoice: 'keep', existingDevices: 150, existingAreaCount: 2,
       action: 'keep', totalDevices: 600, basis: 'walls' },
   ] };
+const SAVED = process.argv[2] || '';
 global.fetch = (url) => {
   calls.push(url);
-  const body = url.indexOf('/templates') >= 0 ? { templates: [] }
+  const body = url.indexOf('/settings/get') >= 0
+      ? { ok: true, settings: SAVED ? { capacity: { existing_devices: SAVED } } : {} }
+    : url.indexOf('/templates') >= 0 ? { templates: [] }
     : url.indexOf('/analyze') >= 0 ? { ok: false, error: 'not under test' }
     : url.indexOf('/plan') >= 0 ? PLAN : { ok: true };
   return Promise.resolve({ json: () => Promise.resolve(body),
@@ -226,6 +230,22 @@ function last(kind) { return calls.filter(u => u.indexOf('/' + kind) >= 0).pop()
 
 (async () => {
   eval(src);
+  if (SAVED) {
+    for (let i = 0; i < 5; i++) await flush();
+    const want = ['keep', 'devices', 'reshape'].indexOf(SAVED) >= 0 ? SAVED : 'keep';
+    check('the page opens on the saved default (' + want + '), not "' + el('capExisting').value + '"',
+          el('capExisting').value === want);
+    el('capExisting').value = 'keep';
+    el('fileInput').files = [{ name: 'Second.esx', arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)) }];
+    el('fileInput').listeners.change();
+    for (let i = 0; i < 5; i++) await flush();
+    check('opening another project starts from the saved default again',
+          el('capExisting').value === want);
+    const hitSettings = calls.filter(u => u.indexOf('/settings/update') >= 0);
+    check('the page never writes the setting', hitSettings.length === 0);
+    if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
+    process.exit(0);
+  }
   el('fileInput').files = [{ name: 'Invented.esx', arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)) }];
   el('fileInput').listeners.change();
   for (let i = 0; i < 5; i++) await flush();
@@ -270,12 +290,56 @@ function last(kind) { return calls.filter(u => u.indexOf('/' + kind) >= 0).pop()
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
 class ExistingDevicesControlTests(unittest.TestCase):
-    def test_the_choice_reaches_the_server(self):
-        r = subprocess.run(["node", "-e", PAGE_HARNESS, str(CAPACITY_JS)],
+    def run_page(self, saved=""):
+        r = subprocess.run(["node", "-e", PAGE_HARNESS, str(CAPACITY_JS), saved],
                            capture_output=True, text=True, encoding="utf-8",
                            timeout=120)
         if r.returncode != 0:
             raise AssertionError((r.stdout + r.stderr).strip())
+
+    def test_the_choice_reaches_the_server(self):
+        self.run_page()
+
+    def test_the_page_opens_on_the_saved_default(self):
+        """Settings → Capacity → Floors that already have devices."""
+        self.run_page("devices")
+        self.run_page("reshape")
+
+    def test_a_saved_value_it_does_not_know_falls_back_to_keep(self):
+        self.run_page("everything")
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class TheSettingsPageSavesIt(unittest.TestCase):
+    """Settings → Capacity. Runs the real SP.save and reads the patch it sends."""
+
+    def _patch(self, values):
+        from test_one_control_per_setting_across_pages import SavingKeepsWhatItCannotSee
+        return SavingKeepsWhatItCannotSee._save_patch(
+            SavingKeepsWhatItCannotSee(), "ask", None, values, [])
+
+    def test_the_chosen_default_is_written(self):
+        for choice in ("keep", "devices", "reshape"):
+            with self.subTest(choice=choice):
+                patch = self._patch({"sCapExisting": choice})
+                self.assertEqual(patch["capacity"]["existing_devices"], choice)
+
+    def test_an_unrendered_select_keeps_what_is_saved(self):
+        patch = self._patch({"sCapExisting": ""})
+        self.assertEqual(patch["capacity"]["existing_devices"], "keep")
+
+
+class TheSettingIsDeclaredAndDefaultsToKeep(unittest.TestCase):
+    def test_it_ships_as_keep(self):
+        from tools import settings as st
+        self.assertEqual(st.DEFAULTS["capacity"]["existing_devices"], "keep")
+
+    def test_the_registry_names_exactly_the_choices_the_writer_takes(self):
+        reg = json.loads((ROOT / "web" / "assets" / "settings-registry.json")
+                         .read_text(encoding="utf-8"))
+        entry = [e for e in reg["settings"] if e.get("key") == "capacity.existing_devices"][0]
+        self.assertEqual(set(entry["values"]), set(cap.EXISTING_CHOICES))
+        self.assertEqual(entry["home"], "settings")
 
 
 if __name__ == "__main__":

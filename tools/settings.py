@@ -185,6 +185,14 @@ DEFAULTS = {
         # 200 ft is the magic number, I just threw it out."
         "margin_custom_ft": 200,
     },
+    "capacity": {
+        # What Capacity starts on for a floor that already carries devices:
+        # "keep", "devices" (new counts, outline kept) or "reshape" (new
+        # counts, outline redrawn). Only the starting point - the dropdown on
+        # the Capacity page changes one run and writes nothing here. Ships as
+        # "keep" because the other two change numbers he set.
+        "existing_devices": "keep",
+    },
     "walls": {
         # Opening a project from disk lets Quick Walls show you the folder it
         # came from after a save, which is otherwise hard to find again. Not

@@ -89,6 +89,10 @@
       r.checked = (r.value === treeOpen);
     });
 
+    var cp = settings.capacity || {};
+    var capSel = document.getElementById('sCapExisting');
+    if (capSel) capSel.value = cp.existing_devices || 'keep';
+
     // Read by walls.js after a save. It had no control anywhere until now,
     // so the only way to turn it off was editing settings.json by hand.
     var w = settings.walls || {};
@@ -318,6 +322,16 @@
         default_owner_filter: ownerFilter,
         tree_default_open: treeOpen,
         live_interval_ms: parseInt(document.getElementById('sLiveMs').value, 10) || 30000,
+      },
+      capacity: {
+        // Falls back to what is saved, never to the shipped default, so a
+        // page whose select failed to render cannot reset his choice.
+        existing_devices: (function () {
+          var el = document.getElementById('sCapExisting');
+          var ok = { keep: 1, devices: 1, reshape: 1 };
+          if (el && ok[el.value]) return el.value;
+          return (settings.capacity || {}).existing_devices || 'keep';
+        }())
       },
       walls: {
         reveal_source_after_save: document.getElementById('sWallsReveal').checked,

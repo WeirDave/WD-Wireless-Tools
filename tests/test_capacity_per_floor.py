@@ -163,6 +163,7 @@ global.WD = {
   escAttr: s => String(s).replace(/&/g, '&amp;').replace(/'/g, '&#39;')
                          .replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
   toast() {},
+  api: (action) => fetch('/api/' + action).then(r => r.json()),
 };
 const calls = [];
 const PLAN = { ok: true, occupants: 200, totalDevices: 600, rows: [], perFloor: false,

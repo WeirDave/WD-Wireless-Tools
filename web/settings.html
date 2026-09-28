@@ -306,6 +306,26 @@
 </div>
   </details>
 
+  <!-- Capacity -->
+  <details class="s-section" id="sec-capacity">
+    <summary>Capacity</summary>
+    <div class="s-body">
+      <div class="s-field">
+        <label for="sCapExisting">Floors that already have devices</label>
+        <select id="sCapExisting">
+          <option value="keep">Keep them as they are</option>
+          <option value="devices">Replace device counts, keep the area outline</option>
+          <option value="reshape">Replace device counts and redraw the area</option>
+        </select>
+        <div class="hint mt-4">What the <b>Floors that already have devices</b> dropdown in
+          Capacity starts on each time a project is opened. Replacing sets a floor to the new
+          number and never adds to what was there. Changing the dropdown in Capacity affects
+          that run only; this is the only place the default is saved.</div>
+      </div>
+      <div class="s-overview" data-section="capacity"></div>
+    </div>
+  </details>
+
   <!-- Every other tool: nothing here to change, but the overview says what
        each one saves and which of its own controls owns it. -->
   <details class="s-section" id="sec-elsewhere">

@@ -47,6 +47,8 @@
     fileName = file.name;
     floorOcc = {};
     floorExist = {};
+    // A new project starts from the saved default again.
+    $('capExisting').value = savedExisting;
     file.arrayBuffer().then(function (buf) {
       fileBytes = buf;
       $('dropzone').style.display = 'none';
@@ -457,6 +459,21 @@
     return 'the whole page';
   }
 
+  // The saved default from Settings → Capacity. Read only: the dropdown on
+  // this page changes one run and never writes back. Any failure leaves the
+  // shipped "keep", which changes nothing he set.
+  var EXISTING_CHOICES = ['keep', 'devices', 'reshape'];
+  var savedExisting = 'keep';
+
+  function loadExistingDefault() {
+    return WD.api('settings/get').then(function (r) {
+      var v = r && r.settings && r.settings.capacity && r.settings.capacity.existing_devices;
+      if (EXISTING_CHOICES.indexOf(v) >= 0) savedExisting = v;
+    }).catch(function () { /* keep the shipped default */ }).then(function () {
+      $('capExisting').value = savedExisting;
+    });
+  }
+
   // ── wiring ─────────────────────────────────────────────────────────────────
   function init() {
     var dz = $('dropzone'), input = $('fileInput');
@@ -472,7 +489,7 @@
     });
     $('capName').addEventListener('input', function () { /* name is read at save */ });
     loadTemplates();
-    capPlan();
+    loadExistingDefault().then(capPlan);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

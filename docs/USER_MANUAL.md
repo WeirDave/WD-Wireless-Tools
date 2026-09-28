@@ -1709,8 +1709,9 @@ The preview says what will happen to each floor before you press anything:
 | **skip — no people on this floor** | **People on this floor** is set to 0 |
 
 **Floors that already have devices** decides what happens to a floor whose
-area already carries capacity items. It is set to **Keep them as they are** by
-default. The other two choices are **Replace device counts, keep the area
+area already carries capacity items. It starts on the default saved in
+**Settings → Capacity**, which ships as **Keep them as they are**; changing it
+on the Capacity page affects that run only. The other two choices are **Replace device counts, keep the area
 outline** and **Replace device counts and redraw the area**. Each floor with
 devices also has its own **This floor** dropdown to choose differently for that
 floor; changing the choice at the top resets every floor to it.
