@@ -419,26 +419,42 @@
         cards.push(stepCard('Wall types', 'cannot', 'skip', [esc(w.error)]));
         refused.push('the wall types');
       } else {
-        var add = w.add || [], skip = w.skip || [];
-        willDo += add.length;
+        var add = w.add || [], upd = w.update || [], skip = w.skip || [];
+        var todo = add.length + upd.length;
+        willDo += todo;
+        var chips = function (xs) {
+          return xs.map(function (x) {
+            return '<span class="prep-chip">' + esc(x.name) + '</span>';
+          }).join('');
+        };
         var wl = [];
         // Chips, not a comma-joined list. Half the shipped names have a comma
         // in them - "Door, Hollow Wood", "Wall, Cinder Block" - so joining on
         // commas produces a run of words with no way to tell where one type
         // ends and the next begins.
-        wl.push(add.length
-          ? 'Adding ' + add.map(function (x) {
-              return '<span class="prep-chip">' + esc(x.name) + '</span>';
-            }).join('')
-          : '<span class="prep-sub">Every type in this template is already here.</span>');
+        if (add.length) wl.push('Adding ' + chips(add));
+        if (upd.length) {
+          wl.push('Setting to the template’s version ' + chips(upd)
+            + '<br><span class="prep-sub">Same types the project already has, with the '
+            + 'template’s colour, number key and attenuation. Walls already drawn '
+            + 'with them stay on them.</span>');
+        }
+        if (!todo) {
+          wl.push('<span class="prep-sub">Every type in this template is already here, '
+            + 'exactly as the template has it.</span>');
+        } else if (w.unchanged) {
+          wl.push('<span class="prep-sub">' + w.unchanged + ' already match the template.</span>');
+        }
         if (skip.length) {
-          wl.push('<span class="prep-sub">' + skip.length + ' already in the project, left '
-            + 'alone — replacing one would change the attenuation of walls already drawn '
-            + 'with it.</span>');
+          wl.push('<span class="prep-sub">Not applied: ' + skip.map(function (x) {
+            return esc(x.name + ' (' + x.why + ')');
+          }).join('; ') + '</span>');
         }
         cards.push(stepCard('Wall types',
-          add.length ? add.length + ' to add' : 'nothing to do',
-          add.length ? 'do' : 'skip', wl));
+          todo ? [add.length ? add.length + ' to add' : '',
+                  upd.length ? upd.length + ' to update' : '']
+                   .filter(Boolean).join(', ') : 'nothing to do',
+          todo ? 'do' : 'skip', wl));
       }
     }
 
@@ -726,10 +742,12 @@
     }
 
     if (ran.indexOf('walls') >= 0) {
-      if (failed.walls) bits.push('<b>did not add wall types</b>');
-      else if (r.wallTypesAdded && r.wallTypesAdded.length) {
-        bits.push('added <b>' + r.wallTypesAdded.length + '</b> wall '
-          + plural(r.wallTypesAdded.length, 'type'));
+      var nAdd = (r.wallTypesAdded || []).length, nUpd = (r.wallTypesUpdated || []).length;
+      if (failed.walls) bits.push('<b>did not apply the wall types</b>');
+      else if (nAdd || nUpd) {
+        if (nAdd) bits.push('added <b>' + nAdd + '</b> wall ' + plural(nAdd, 'type'));
+        if (nUpd) bits.push('set <b>' + nUpd + '</b> wall ' + plural(nUpd, 'type')
+          + ' to the template’s version');
       } else if (r.wallTypesPresent) {
         bits.push('<b>all ' + r.wallTypesPresent + '</b> wall '
           + plural(r.wallTypesPresent, 'type') + ' from that template '
@@ -760,7 +778,8 @@
       areasWritten: (step.areas || {}).floorsWritten,
       areasRetightened: (step.retighten || []).map(function (x) { return x.floorName; }),
       wallTypesAdded: ((step.walls || {}).add || []).map(function (x) { return x.name; }),
-      wallTypesPresent: ((step.walls || {}).skip || []).length,
+      wallTypesUpdated: ((step.walls || {}).update || []).map(function (x) { return x.name; }),
+      wallTypesPresent: (step.walls || {}).unchanged || 0,
     });
   }
 

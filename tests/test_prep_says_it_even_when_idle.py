@@ -86,7 +86,9 @@ class ANoChangeRunStillNamesEveryStep(unittest.TestCase):
             "failed": [],
             "step": {"trim": {"trimmedCount": 0, "floorCount": 2},
                      "areas": {"floorsWritten": []},
-                     "walls": {"add": [], "skip": [{"name": f"W{i}"} for i in range(26)]}},
+                     # The shape wall_inject reports since v2.178.1: types
+                     # already matching the template are counted, not skipped.
+                     "walls": {"add": [], "update": [], "unchanged": 26, "skip": []}},
         })
         self.assertIn("wall type", text.lower(),
                       "the wall step ran and is not mentioned at all")

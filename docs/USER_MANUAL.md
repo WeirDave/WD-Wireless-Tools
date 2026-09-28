@@ -949,7 +949,7 @@ Prep does the setup work on a freshly imported project in one pass over the file
 
 - **Trim the canvas** — crops the empty paper off each CAD sheet and moves every AP, wall and area with it. The same work PlanTrim does.
 - **Put a requirement area on every floor** — from a capacity template and a headcount, using the templates saved in WD Capacity.
-- **Load the wall types** — adds the types from a Quick Walls template so they are there to draw with.
+- **Load the wall types** — applies a Quick Walls template exactly as Quick Walls does: types the project lacks are added, and the ones it already has — every Ekahau project carries Ekahau's stock types — are set to the template's colour, number key and attenuation.
 
 Each step is optional, each is previewed per floor before anything is written, and your project file is never written to.
 
@@ -1005,7 +1005,7 @@ This is not a preference. A requirement area counts as something that has to sta
 
 Prep is meant to be run more than once. Run it on the fresh import, draw your walls in Ekahau, and run it again.
 
-- Wall types already in the project are left alone. Replacing one would change the attenuation of every wall already drawn with it.
+- Wall types that already match the template are left alone, so a second run has nothing to do. A type you changed in Ekahau since — a colour, a key, an attenuation — is set back to the template's version, the same as applying the template in Quick Walls. Walls already drawn stay on their types either way.
 - A floor that has already been trimmed is skipped.
 - A floor that already has a requirement area is left alone.
 

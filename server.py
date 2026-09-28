@@ -1240,7 +1240,8 @@ def api_prep(action):
             # that added nothing has to be able to say so here too - otherwise
             # the dropped-file route stays silent about it while the
             # open-from-disk route explains itself.
-            "wallTypesPresent": len(walls.get("skip") or []),
+            "wallTypesPresent": walls.get("unchanged") or 0,
+            "wallTypesUpdated": [u.get("name") for u in (walls.get("update") or [])],
             "ran": out.get("ran"),
             # A step that refused has to travel with the file. Without this the
             # page said what it had done and nothing about what it had not, and

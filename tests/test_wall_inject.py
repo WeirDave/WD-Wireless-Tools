@@ -11,10 +11,12 @@ Two decisions this file holds.
 remaps drawn segments from one type to another; preparation just makes the types
 available to draw with. Nothing already drawn changes.
 
-**A type already in the project wins.** Replacing a "Concrete" that the project
-already has would silently change the attenuation of every wall already drawn
-with it - a design change wearing the clothes of a setup step. It is skipped,
-and the skip is reported.
+**The template wins, as it does in Quick Walls.** This file said the opposite
+until v2.178.1 - "a type already in the project wins" - and that rule is why
+Prep never applied his template: every Ekahau project already carries the
+stock types, and his template is those same types with his colours and number
+keys, plus five of his own. Prep added the five and skipped the rest. The
+project's id is kept, so walls already drawn stay on their type.
 """
 from __future__ import annotations
 
@@ -88,15 +90,24 @@ class WallInjection(unittest.TestCase):
         names = [w["name"] for w in read_member(self.esx, "wallTypes.json")["wallTypes"]]
         self.assertEqual(names, ["Concrete", "Drywall", "Framery Pod", "Glass"])
 
-    def test_a_type_the_project_already_has_is_left_alone(self):
-        """Its attenuation belongs to walls already drawn with it."""
-        report = wall_inject.inject(self.esx, [wall_type("Concrete", 3.0)])
+    def test_a_type_the_project_already_has_takes_the_templates_version(self):
+        """Keeping the project's id, so the drawn segment stays on it."""
+        report = wall_inject.inject(self.esx, [wall_type("Concrete", 3.0, "tpl-id")])
+        self.assertTrue(report.get("written"), report)
         self.assertEqual(report["add"], [])
-        self.assertEqual([s["name"] for s in report["skip"]], ["Concrete"])
-        kept = [w for w in read_member(self.esx, "wallTypes.json")["wallTypes"]
-                if w["name"] == "Concrete"][0]
-        self.assertEqual(kept["propagationProperties"][0]["attenuationFactor"], 30.0,
-                         "the project's own value was overwritten")
+        self.assertEqual(report["update"], [{"name": "Concrete", "was": "Concrete"}])
+        types = read_member(self.esx, "wallTypes.json")["wallTypes"]
+        concrete = [w for w in types if w["name"] == "Concrete"]
+        self.assertEqual(len(concrete), 1)
+        self.assertEqual(concrete[0]["propagationProperties"][0]["attenuationFactor"], 3.0)
+        self.assertEqual(concrete[0]["id"], "id-concrete")
+        seg = read_member(self.esx, "wallSegments.json")["wallSegments"][0]
+        self.assertIn(seg["wallTypeId"], {w["id"] for w in types})
+
+    def test_a_type_already_exactly_as_the_template_has_it_is_not_work(self):
+        report = wall_inject.inject(self.esx, [wall_type("Concrete", 30.0)])
+        self.assertFalse(report.get("written"), report)
+        self.assertEqual(report["unchanged"], 1)
 
     def test_matching_is_by_name_not_by_id(self):
         """A template captured from another project carries that project's ids,
