@@ -1703,12 +1703,24 @@ The preview says what will happen to each floor before you press anything:
 | --- | --- |
 | **your area — adding N capacity items** | An area you drew is filled in. Your outline is not changed; only the devices are written into it |
 | **create an area from the walls you drew** | No area on that floor, so one is created from the extent of the walls (or the APs, or the page, in that order) |
-| **skip — this area already has N capacity items** | Left alone. Those are numbers you set, and overwriting them is the one destructive case |
+| **keep — already has N devices** | The floor already carries devices and is left as it is (the default) |
+| **replace N devices with M, keep the outline** | The floor is set to the new count; your outline is not touched |
+| **replace N devices with M and redraw the outline** | The floor is set to the new count and the area is redrawn from the walls (or the APs) |
 | **skip — no people on this floor** | **People on this floor** is set to 0 |
 
-Tick **Replace requirement areas that already exist** to overwrite that last
-case. Even then your outline is kept — no area is ever deleted, in any of the
-three situations.
+**Floors that already have devices** decides what happens to a floor whose
+area already carries capacity items. It is set to **Keep them as they are** by
+default. The other two choices are **Replace device counts, keep the area
+outline** and **Replace device counts and redraw the area**. Each floor with
+devices also has its own **This floor** dropdown to choose differently for that
+floor; changing the choice at the top resets every floor to it.
+
+Replacing **sets** the floor to the new number — it never adds to what was
+there, so running Capacity again on the same project gives the same count
+rather than a doubled one. If a floor carries more than one capacity area, the
+largest takes the new devices and the others have their devices cleared (their
+outlines stay), because Ekahau adds every capacity area on a floor together.
+No area is ever deleted.
 
 ### Profiles
 

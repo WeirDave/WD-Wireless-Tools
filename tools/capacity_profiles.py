@@ -574,8 +574,43 @@ def _floor_headcounts(floor_occupants) -> dict:
     return out
 
 
+# What to do with a floor that already carries capacity items.
+#
+#   keep      leave it exactly as it is
+#   devices   new device counts, outline kept
+#   reshape   new device counts, outline redrawn from the walls or APs
+#
+# "Replace" used to rewrite only the first capacity area on a floor. Ekahau
+# totals every capacity area on a floor, so any second one kept counting and
+# each run added to the last. Both replacing choices now clear the device
+# counts on every other capacity area on the floor - their outlines stay - so
+# the floor ends up carrying exactly the number asked for.
+EXISTING_CHOICES = ("keep", "devices", "reshape")
+
+
+def _existing_choices(floor_existing) -> dict:
+    if isinstance(floor_existing, str):
+        try:
+            floor_existing = json.loads(floor_existing) if floor_existing.strip() else {}
+        except ValueError:
+            floor_existing = {}
+    if not isinstance(floor_existing, dict):
+        return {}
+    return {str(k): v for k, v in floor_existing.items() if v in EXISTING_CHOICES}
+
+
+def _device_total(area) -> int:
+    total = 0
+    for item in area.get("capacityItems") or []:
+        try:
+            total += int(item.get("deviceCount") or 0)
+        except (TypeError, ValueError, AttributeError):
+            pass
+    return total
+
+
 def plan_application(esx_path, template, occupants, replace_existing=False,
-                     floor_occupants=None):
+                     floor_occupants=None, existing=None, floor_existing=None):
     """Work out what applying this template would do, without writing anything.
 
     One requirement area per floor plan. A floor that already has a requirement
@@ -591,6 +626,9 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
     with zipfile.ZipFile(esx_path) as zf:
         members = _read_members(zf)
 
+    default_existing = existing if existing in EXISTING_CHOICES else (
+        "devices" if replace_existing else "keep")
+    per_floor_existing = _existing_choices(floor_existing)
     per_floor = _floor_headcounts(floor_occupants)
     counts = apply_headcount(template, occupants)
 
@@ -649,15 +687,35 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
             info["skipped"] = True
             info["action"] = "skip - no people on this floor"
         elif with_capacity:
+            choice = per_floor_existing.get(floor["id"], default_existing)
+            primary = max(with_capacity, key=_polygon_area)
             info["mode"] = "replace"
-            info["targetAreaId"] = with_capacity[0].get("id")
-            info["existingItemCount"] = len(with_capacity[0].get("capacityItems") or [])
-            info["skipped"] = not replace_existing
-            info["action"] = (
-                "skip - this area already has %d capacity items"
-                % info["existingItemCount"] if info["skipped"]
-                else "replace the %d capacity items already on your area"
-                % info["existingItemCount"])
+            info["existingChoice"] = choice
+            info["targetAreaId"] = primary.get("id")
+            info["targetAreaName"] = primary.get("name") or ""
+            info["existingItemCount"] = sum(
+                len(a.get("capacityItems") or []) for a in with_capacity)
+            info["existingDevices"] = sum(_device_total(a) for a in with_capacity)
+            info["existingAreaCount"] = len(with_capacity)
+            info["clearAreaIds"] = [a.get("id") for a in with_capacity
+                                    if a is not primary]
+            info["reshape"] = choice == "reshape"
+            info["skipped"] = choice == "keep"
+            if choice == "keep":
+                info["action"] = ("keep - already has %d devices"
+                                  % info["existingDevices"])
+            elif choice == "devices":
+                info["action"] = ("replace %d devices with %d, keep the outline"
+                                  % (info["existingDevices"], floor_counts["totalDevices"]))
+            else:
+                info["action"] = ("replace %d devices with %d and redraw the "
+                                  "outline from %s"
+                                  % (info["existingDevices"], floor_counts["totalDevices"],
+                                     _basis_words(info.get("basis"))))
+            if choice != "keep" and len(with_capacity) > 1:
+                info["action"] += (" - the other %d capacity areas are cleared "
+                                   "so they stop adding to the total"
+                                   % (len(with_capacity) - 1))
         elif target is not None:
             info["mode"] = "populate"
             info["targetAreaId"] = target.get("id")
@@ -711,6 +769,8 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
         "totalDevices": counts["totalDevices"] if counts.get("ok") else 0,
         "rows": names["rows"] if counts.get("ok") else [],
         "perFloor": bool(per_floor),
+        "existing": default_existing,
+        "floorsWithDevices": sum(1 for p in plans if p.get("mode") == "replace"),
         "occupantsWritten": sum(p["occupants"] for p in writing),
         "devicesWritten": sum(p["totalDevices"] for p in writing),
         "floors": plans,
@@ -895,7 +955,8 @@ def _missing_message(missing) -> str:
 
 
 def apply_to(src_path, dest_path, template, occupants,
-             replace_existing=False, floor_occupants=None):
+             replace_existing=False, floor_occupants=None,
+             existing=None, floor_existing=None):
     """Write the template into a project. The only function here that writes.
 
     `src_path` is read and never modified - the written project is a separate
@@ -912,7 +973,8 @@ def apply_to(src_path, dest_path, template, occupants,
     dest_path = Path(dest_path)
 
     plan = plan_application(src_path, template, occupants, replace_existing,
-                            floor_occupants=floor_occupants)
+                            floor_occupants=floor_occupants,
+                            existing=existing, floor_existing=floor_existing)
     if not plan.get("ok"):
         return plan
 
@@ -936,6 +998,7 @@ def apply_to(src_path, dest_path, template, occupants,
             "rows": counts["rows"], "floorsWritten": [],
             "floorsSkipped": [f["floorName"] or f["floorPlanId"] for f in plan["floors"]],
             "areasReplaced": 0, "areasLeftInPlace": 0, "profilesCreated": [],
+            "areasReshaped": 0, "areasCleared": 0,
             "orphanAreasIgnored": plan["orphanAreasIgnored"],
             "occupantsWritten": 0, "devicesWritten": 0,
             "note": "Every floor already has a requirement area or has nobody "
@@ -1015,7 +1078,8 @@ def apply_to(src_path, dest_path, template, occupants,
     # notes are left exactly as he drew them - replacing a capacity template is
     # not permission to redraw his outline, and on a hand-drawn requirement
     # area that outline is the work.
-    replaced, populated = 0, 0
+    replaced, populated, reshaped = 0, 0, 0
+    cleared_ids = set()
     written = []
     for floor in write_floors:
         mode = floor.get("mode") or "create"
@@ -1029,6 +1093,14 @@ def apply_to(src_path, dest_path, template, occupants,
             target["capacityItems"] = items_for(floor)
             if req_id:
                 target["requirementId"] = req_id
+            if mode == "replace" and floor.get("reshape") and floor.get("polygon"):
+                target["area"] = [{"x": p["x"], "y": p["y"]} for p in floor["polygon"]]
+                reshaped += 1
+            for other_id in floor.get("clearAreaIds") or []:
+                other = by_id.get(other_id)
+                if other is not None and other.get("capacityItems"):
+                    other["capacityItems"] = []
+                    cleared_ids.add(other_id)
         else:
             area = {
                 "floorPlanId": floor["floorPlanId"],
@@ -1052,8 +1124,8 @@ def apply_to(src_path, dest_path, template, occupants,
     left_in_place = sum(
         1 for a in areas
         if isinstance(a, dict) and a.get("floorPlanId") in target_ids
-        and a.get("id") not in touched and a.get("requirementId")
-        and not a.get("capacityItems"))
+        and a.get("id") not in touched and a.get("id") not in cleared_ids
+        and a.get("requirementId") and not a.get("capacityItems"))
 
     # Build the new archive beside the destination first, so a failure part-way
     # through never lands on top of a real project.
@@ -1091,6 +1163,8 @@ def apply_to(src_path, dest_path, template, occupants,
                           for f in plan["floors"] if f["skipped"]],
         "areasReplaced": replaced,
         "areasPopulated": populated,
+        "areasReshaped": reshaped,
+        "areasCleared": len(cleared_ids),
         "areasLeftInPlace": left_in_place,
         "profilesCreated": created,
         "orphanAreasIgnored": plan["orphanAreasIgnored"],

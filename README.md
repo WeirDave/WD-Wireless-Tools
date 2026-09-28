@@ -150,7 +150,7 @@ Read the device mix out of a project you have already set up in Ekahau, and appl
 - Previews per floor before anything is written, including where the requirement area would go and how big it is
 - Writes the requirement areas into a new copy of the project and downloads it; your file is never written to
 - Carries the device and usage profiles themselves, so a template applies to a project that has never seen them
-- Leaves a floor alone when it already has a requirement area, unless replacement is asked for, and even then replaces only areas that carry capacity
+- For a floor that already has devices, asks per floor whether to keep them, replace the device count and keep the outline, or replace the count and redraw the outline; replacing sets the count and never adds to it, so running it twice does not double anything
 
 
 ### Prep

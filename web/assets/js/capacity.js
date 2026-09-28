@@ -15,6 +15,7 @@
   var templates = [];
   var chosen = null;         // filename of the template selected for apply
   var floorOcc = {};         // floorPlanId -> headcount typed for that floor
+  var floorExist = {};       // floorPlanId -> keep / devices / reshape for that floor
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return WD.esc(String(s == null ? '' : s)); }
@@ -45,6 +46,7 @@
   function loadFile(file) {
     fileName = file.name;
     floorOcc = {};
+    floorExist = {};
     file.arrayBuffer().then(function (buf) {
       fileBytes = buf;
       $('dropzone').style.display = 'none';
@@ -188,7 +190,9 @@
     return '?name=' + encodeURIComponent(fileName)
       + '&template=' + encodeURIComponent(chosen)
       + '&occupants=' + encodeURIComponent($('capHeadcount').value)
-      + '&replace=' + ($('capReplace').checked ? '1' : '0')
+      + '&existing=' + encodeURIComponent($('capExisting').value || 'keep')
+      + (Object.keys(floorExist).length
+          ? '&floorExisting=' + encodeURIComponent(JSON.stringify(floorExist)) : '')
       + (Object.keys(floorOcc).length
           ? '&floorOccupants=' + encodeURIComponent(JSON.stringify(floorOcc)) : '');
   }
@@ -199,6 +203,19 @@
     var v = String(value == null ? '' : value).trim();
     if (v === '' || isNaN(Number(v)) || Number(v) < 0) delete floorOcc[floorId];
     else floorOcc[floorId] = Number(v);
+    capPlan();
+  };
+
+  // The choice at the top applies to every floor that has devices; picking it
+  // again resets any floor that was set on its own.
+  window.capExistingAll = function () {
+    floorExist = {};
+    capPlan();
+  };
+
+  window.capFloorExisting = function (floorId, value) {
+    if (value === $('capExisting').value) delete floorExist[floorId];
+    else floorExist[floorId] = value;
     capPlan();
   };
 
@@ -224,8 +241,8 @@
         $('capApplyBtn').textContent = 'Apply to ' + r.willWrite + ' floor'
           + (r.willWrite === 1 ? '' : 's') + ' and download';
       } else {
-        setApply(false, 'No floor would be written: each one already has capacity '
-          + 'items or is set to 0 people. Tick the box above to replace existing items.');
+        setApply(false, 'No floor would be written: each one is kept as it is or set '
+          + 'to 0 people. Choose Replace for floors that already have devices.');
         $('capApplyBtn').textContent = 'Apply and download';
       }
       var counts = r.rows.map(function (x) {
@@ -250,9 +267,22 @@
             + (f.targetVertexCount ? ', ' + f.targetVertexCount + ' points' : '')
             + ' — the outline is not changed, only the devices are written into it.';
         } else if (f.mode === 'replace') {
-          facts = 'This area already carries <b>' + (f.existingItemCount || 0)
-            + '</b> capacity item' + (f.existingItemCount === 1 ? '' : 's')
-            + '. Tick the box above to overwrite them; your outline is kept either way.';
+          var many = (f.existingAreaCount || 1) > 1;
+          facts = 'Already carries <b>' + (f.existingDevices || 0) + '</b> device'
+            + (f.existingDevices === 1 ? '' : 's')
+            + (many ? ' across <b>' + f.existingAreaCount + '</b> capacity areas' : '') + '. '
+            + (f.existingChoice === 'keep'
+                ? 'Kept as it is.'
+                : 'Set to <b>' + (f.totalDevices || 0) + '</b> &mdash; replaced, not added to'
+                  + (f.existingChoice === 'reshape'
+                      ? '; the outline is redrawn from <b>' + esc(basisWords(f.basis)) + '</b>'
+                      : '; the outline is kept')
+                  + (many ? ', and the other ' + (f.existingAreaCount - 1)
+                      + ' area' + (f.existingAreaCount === 2 ? ' is' : 's are')
+                      + ' cleared of devices so ' + (f.existingAreaCount === 2 ? 'it stops' : 'they stop')
+                      + ' counting twice' : '')
+                  + '.')
+            + existingPickHtml(f, i);
         } else {
           facts = 'Area from <b>' + esc(basisWords(f.basis)) + '</b>'
             + (f.padMeters ? ' plus ' + f.padMeters + ' m padding' : '')
@@ -274,7 +304,14 @@
           + '<tr><td colspan="2" class="cap-total">Per floor, for ' + r.occupants + ' people</td>'
           + '<td class="cap-n cap-total">' + r.totalDevices + '</td></tr></tbody></table>'
         : '';
-      host.innerHTML = perFloorTable
+      var existingNote = r.floorsWithDevices
+        ? '<div class="cap-warn">' + r.floorsWithDevices + ' floor'
+          + (r.floorsWithDevices === 1 ? ' already has' : 's already have')
+          + ' devices on it. Choose what happens to '
+          + (r.floorsWithDevices === 1 ? 'it' : 'them')
+          + ' in <b>Floors that already have devices</b> above, or floor by floor below.</div>'
+        : '';
+      host.innerHTML = perFloorTable + existingNote
         + '<div style="margin-top:14px">' + floors + '</div>'
         + '<p class="cap-hint">' + r.willWrite + ' floor'
         + (r.willWrite === 1 ? '' : 's') + ' would be written, '
@@ -286,6 +323,23 @@
             + ' orphaned area ignored.' : '') + '</p>';
     });
   };
+
+  function existingPickHtml(f, i) {
+    var id = 'capFloorExist' + i;
+    var cur = f.existingChoice || 'keep';
+    var opts = [['keep', 'Keep them'], ['devices', 'Replace devices, keep outline'],
+                ['reshape', 'Replace devices, redraw outline']];
+    return '<div class="cap-row cap-floor-people">'
+      + '<label for="' + id + '">This floor</label>'
+      + '<select id="' + id + '" class="cap-input" data-action-change="call"'
+      + ' data-fn="capFloorExisting" data-arg="' + WD.escAttr(f.floorPlanId) + '"'
+      + ' data-arg-value="1">'
+      + opts.map(function (o) {
+          return '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>'
+            + o[1] + '</option>';
+        }).join('')
+      + '</select></div>';
+  }
 
   function fmtPeople(n) {
     n = Number(n) || 0;
@@ -369,8 +423,14 @@
         + esc(r.floorsSkipped.join(', ')) + '.');
     }
     if (r.areasReplaced) {
-      bits.push('Replaced ' + r.areasReplaced + ' capacity area'
-        + (r.areasReplaced === 1 ? '' : 's') + '.');
+      bits.push('Replaced the devices on ' + r.areasReplaced + ' area'
+        + (r.areasReplaced === 1 ? '' : 's')
+        + (r.areasReshaped ? ', ' + r.areasReshaped + ' of them with a redrawn outline' : '')
+        + '.');
+    }
+    if (r.areasCleared) {
+      bits.push('Cleared the devices from ' + r.areasCleared + ' other capacity area'
+        + (r.areasCleared === 1 ? '' : 's') + ' so the floor total is not counted twice.');
     }
     if (r.areasLeftInPlace) {
       // Worth saying out loud: "replace" did not mean "delete every area".

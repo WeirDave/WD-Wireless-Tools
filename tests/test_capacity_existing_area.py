@@ -166,7 +166,8 @@ class ThreeCases(unittest.TestCase):
         plan = cap.plan_application(esx, self.template, 200)
         floor = [f for f in plan["floors"] if f["floorPlanId"] == FLOOR][0]
         self.assertEqual(floor["mode"], "replace")
-        self.assertIn("already has 1 capacity items", floor["action"])
+        # What would be lost, stated as the number he set: 42 devices.
+        self.assertIn("already has 42 devices", floor["action"])
 
     def test_replacing_keeps_his_outline_rather_than_redrawing_it(self):
         """Replace used to delete the area and create a fresh rectangle."""
