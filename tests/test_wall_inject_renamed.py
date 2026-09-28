@@ -15,8 +15,11 @@ The rule: **same words, in any order, punctuation ignored, is the same type.**
 Different words stay different, so `Wall, Dry` and `Wall, Dry, Hollow` remain
 two types — and none of his own five collides with anything Ekahau ships.
 
-Deliberately conservative. It only ever causes Prep to skip *more*; it never
-deletes, never modifies, and never touches a wall already drawn.
+The old-named type is the one the template's version lands on: it takes the
+template's name and properties and keeps its own id, so walls drawn with it
+stay on it and there is still one type, not two. Until v2.178.1 it was skipped
+instead, along with every other type the project already had - which is why
+his template never reached a project through Prep (see test_wall_inject.py).
 """
 from __future__ import annotations
 
@@ -69,16 +72,18 @@ class EkahausRenaming(unittest.TestCase):
     def test_a_renamed_type_is_not_added_again(self):
         for old, new in RENAMED:
             with self.subTest(old=old):
-                plan = wall_inject.plan_into_members(members([old]), template([new]))
-                self.assertEqual(plan["add"], [])
-                self.assertIn("older name", plan["skip"][0]["why"])
-                self.assertIn(old, plan["skip"][0]["why"])
+                m = members([old])
+                report = wall_inject.inject_into_members(m, template([new]))
+                self.assertEqual(report["add"], [])
+                types = json.loads(m[wall_inject.MEMBER])["wallTypes"]
+                self.assertEqual([t["name"] for t in types], [new])
+                self.assertEqual(types[0]["id"], "id-0", "drawn walls would lose their type")
 
-    def test_the_skip_names_the_type_it_matched(self):
-        """He has to be able to see why his type was not added."""
+    def test_the_update_names_the_type_it_matched(self):
+        """He has to be able to see which of his types it landed on."""
         plan = wall_inject.plan_into_members(members(["Dry Wall"]),
                                              template(["Wall, Dry"]))
-        self.assertIn("Dry Wall", plan["skip"][0]["why"])
+        self.assertEqual(plan["update"], [{"name": "Wall, Dry", "was": "Dry Wall"}])
 
 
 class DistinctTypesStayDistinct(unittest.TestCase):
@@ -113,11 +118,11 @@ class TheRealProjectShape(unittest.TestCase):
         "SteelFire/ExitDoor (13dB)", "SteelRollupDoor (11dB)",
     ]
 
-    def test_the_renamed_ten_are_all_skipped(self):
+    def test_the_renamed_ten_are_all_matched(self):
         tpl = template([new for _, new in RENAMED] + HIS_OWN)
         plan = wall_inject.plan_into_members(members(self.OLD_PROJECT), tpl)
-        renamed_skips = [s for s in plan["skip"] if "older name" in s["why"]]
-        self.assertEqual(len(renamed_skips), 10)
+        self.assertEqual(sorted((u["was"], u["name"]) for u in plan["update"]),
+                         sorted(RENAMED))
         self.assertEqual(sorted(a["name"] for a in plan["add"]), sorted(HIS_OWN))
 
     def test_a_template_naming_the_same_type_twice_only_adds_it_once(self):

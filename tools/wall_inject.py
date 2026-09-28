@@ -12,11 +12,20 @@ another. This does not touch ``wallSegments.json`` at all - it makes the types
 available so he can draw with them, which is what preparation means. Nothing
 that is already drawn changes.
 
-**A type already in the project wins.** If the project has a "Concrete" and the
-template has a "Concrete", the project's is kept and the template's is skipped.
-Replacing it would silently change the attenuation of walls already drawn with
-it, which is a design change wearing the clothes of a setup step. The skip is
-reported rather than done quietly.
+**The template wins, the way it does in Quick Walls.** A type the project
+already has is replaced by the template's version, keeping the project's own id
+so every wall already drawn with it still points at it. This used to be the
+other way round - "a type already in the project wins" - and it meant his
+template never reached a project at all: every Ekahau project already carries
+Ekahau's twenty-one stock types, his template is those same twenty-one with his
+colours and his number-key layout plus five of his own, so Prep added the five
+and skipped everything that made it *his*. Quick Walls got the same rule wrong
+once and was put back (see CLAUDE.md, "A wall template updates every type it
+carries"); a template that means one thing in Quick Walls and another in Prep
+is not a template.
+
+A type the template carries unchanged is left alone and not reported as work,
+so a second run over a prepared project still has nothing to do.
 
 Same posture as everything else here that writes to an .esx: ``metersPerUnit``
 and every other member are passed through byte-identical, the rebuild goes to
@@ -69,8 +78,51 @@ def _read_members(path: Path) -> dict:
         return {n: z.read(n) for n in z.namelist()}
 
 
+def _stock_key(wt) -> str:
+    """Ekahau's own ``key`` ("Concrete", "ThickWindow"), which survives the
+    renames the display name went through. Quick Walls matches on it first."""
+    return str((wt or {}).get("key") or "").strip()
+
+
+def _same(a: dict, b: dict) -> bool:
+    """Whether two wall types are identical apart from their id."""
+    strip = lambda w: {k: v for k, v in w.items() if k != "id"}
+    return strip(a) == strip(b)
+
+
+def _match(existing: list):
+    """A finder for the project's own copy of a template type: by Ekahau key,
+    then by name, then by the same words in another order (Ekahau's renaming).
+    """
+    by_stock = {}
+    by_name = {}
+    by_words = {}
+    for i, w in enumerate(existing):
+        sk = _stock_key(w)
+        if sk:
+            by_stock.setdefault(sk, i)
+        by_name.setdefault(_key(w.get("name")), i)
+        by_words.setdefault(_words(w.get("name")), i)
+
+    def find(wt):
+        sk = _stock_key(wt)
+        if sk and sk in by_stock:
+            return by_stock[sk]
+        k = _key(wt.get("name"))
+        if k in by_name:
+            return by_name[k]
+        return by_words.get(_words(wt.get("name")))
+    return find
+
+
 def plan_into_members(members: dict, wall_types: list) -> dict:
-    """What injecting these types would do, without doing it."""
+    """What applying these types would do, without doing it.
+
+    ``add`` are new to the project, ``update`` replace the project's own copy
+    (``was`` names it, which differs when Ekahau renamed it), ``unchanged``
+    counts the ones already exactly as the template has them, and ``skip`` is
+    only for entries that cannot be applied at all.
+    """
     if MEMBER not in members:
         return {"error": "This project has no wallTypes.json, so there is "
                          "nothing to add types to."}
@@ -80,11 +132,10 @@ def plan_into_members(members: dict, wall_types: list) -> dict:
     except (ValueError, KeyError, TypeError) as exc:
         return {"error": f"wallTypes.json could not be read: {exc}"}
 
-    have = {_key(w.get("name")) for w in existing}
-    # Same words in a different order is Ekahau's own renaming, not a new type.
-    renamed = {_words(w.get("name")): w.get("name") for w in existing}
-    add, skip = [], []
-    seen, seen_words = set(), set()
+    find = _match(existing)
+    add, update, skip = [], [], []
+    unchanged = 0
+    seen, seen_words, seen_targets = set(), set(), set()
     for wt in wall_types or []:
         name = wt.get("name")
         k = _key(name)
@@ -92,29 +143,30 @@ def plan_into_members(members: dict, wall_types: list) -> dict:
             skip.append({"name": name or "(unnamed)",
                          "why": "the template entry has no name"})
             continue
-        if k in have or k in seen:
-            skip.append({"name": name,
-                         "why": "the project already has a wall type with this name"})
-            continue
         w = _words(name)
-        if w in renamed:
-            skip.append({"name": name,
-                         "why": "the project already has this type under Ekahau's "
-                                "older name, “%s”" % renamed[w]})
-            continue
-        if w in seen_words:
+        at = find(wt)
+        if k in seen or w in seen_words or (at is not None and at in seen_targets):
             skip.append({"name": name,
                          "why": "the template names this type twice"})
             continue
         seen.add(k)
         seen_words.add(w)
-        add.append({"name": name})
-    return {"ok": True, "add": add, "skip": skip,
-            "existing": len(existing), "total": len(existing) + len(add)}
+        if at is None:
+            add.append({"name": name})
+            continue
+        seen_targets.add(at)
+        have = existing[at]
+        if _same(have, wt):
+            unchanged += 1
+            continue
+        update.append({"name": name, "was": have.get("name")})
+    return {"ok": True, "add": add, "update": update, "unchanged": unchanged,
+            "skip": skip, "existing": len(existing),
+            "total": len(existing) + len(add)}
 
 
 def inject_into_members(members: dict, wall_types: list) -> dict:
-    """Add the missing types to ``members`` in place.
+    """Apply the template to ``members`` in place.
 
     Returns the same report ``plan_into_members`` gives, so a preview and a run
     describe themselves identically - the preview is not a second description
@@ -126,12 +178,24 @@ def inject_into_members(members: dict, wall_types: list) -> dict:
 
     doc = json.loads(members[MEMBER])
     existing = doc["wallTypes"]
+    find = _match(existing)
     used_ids = {w.get("id") for w in existing if w.get("id")}
     by_key = {_key(w.get("name")): w for w in (wall_types or [])}
+    incoming = []
+
+    for entry in plan["update"]:
+        source = by_key[_key(entry["name"])]
+        at = find(source)
+        wt = json.loads(json.dumps(source))       # never share structure
+        # The project's id, not the template's: wall segments reference the
+        # type by id, and this is what keeps every drawn wall on it.
+        wt["id"] = existing[at].get("id") or wt.get("id") or str(uuid.uuid4())
+        existing[at] = wt
+        incoming.append(wt)
 
     for entry in plan["add"]:
         source = by_key[_key(entry["name"])]
-        wt = json.loads(json.dumps(source))       # never share structure
+        wt = json.loads(json.dumps(source))
         # Keep the template's id when it is free. A template captured out of
         # another project carries that project's ids, and two projects can
         # legitimately collide, so a taken id gets a fresh one rather than
@@ -140,8 +204,9 @@ def inject_into_members(members: dict, wall_types: list) -> dict:
             wt["id"] = str(uuid.uuid4())
         used_ids.add(wt["id"])
         existing.append(wt)
+        incoming.append(wt)
 
-    _resolve_keybind_collisions(existing, plan["add"])
+    _resolve_keybind_collisions(existing, incoming)
 
     members[MEMBER] = (json.dumps(doc, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     return plan
@@ -149,6 +214,8 @@ def inject_into_members(members: dict, wall_types: list) -> dict:
 
 def _resolve_keybind_collisions(existing: list, added: list) -> None:
     """One number key, one wall type. The incoming type wins.
+
+    ``added`` is the type objects this pass wrote, new or replaced.
 
     Adding types without touching this leaves two wall types claiming the same
     slot, and in Ekahau a number key can only draw one of them - so a shortcut
@@ -169,7 +236,7 @@ def _resolve_keybind_collisions(existing: list, added: list) -> None:
     sitting in the project is his and is left alone - this adds types, it does
     not tidy up after Ekahau.
     """
-    incoming = {id(w) for w in existing[len(existing) - len(added):]} if added else set()
+    incoming = {id(w) for w in added}
     claimed = {}
     for wt in existing:
         if id(wt) in incoming:
@@ -216,9 +283,10 @@ def inject(esx_path, wall_types: list, dest=None) -> dict:
     report = inject_into_members(members, wall_types)
     if report.get("error"):
         return report
-    if not report["add"]:
+    if not report["add"] and not report["update"]:
         return {**report, "ok": True, "written": False,
-                "note": "Every type in the template is already in this project."}
+                "note": "Every type in the template is already in this project, "
+                        "exactly as the template has it."}
 
     target = Path(dest) if dest else path
 
