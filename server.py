@@ -1172,6 +1172,7 @@ def api_prep(action):
 
         common = dict(steps=steps or None, wall_types=wall_types,
                       template=capacity_tpl, occupants=request.args.get("occupants"),
+                      floor_occupants=request.args.get("floorOccupants"),
                       margin=margin, retighten=retighten, boxes=boxes)
 
         if action == "plan":

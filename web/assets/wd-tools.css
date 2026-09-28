@@ -10989,6 +10989,8 @@ body.tool-prep .dropzone-logo { background-image: url(/assets/wd-wireless-tools-
 .prep-facts { font-size: 12px; color: var(--text-2); line-height: 1.7; }
 .prep-facts b { color: var(--text); }
 .prep-sub { color: var(--text-3); }
+.prep-floor-people { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 4px 0 2px; }
+.prep-floor-people .prep-input--num { width: 80px; }
 .prep-chip {
   display: inline-block; margin: 2px 4px 2px 0; padding: 1px 7px;
   border: 1px solid var(--border); border-radius: 5px;

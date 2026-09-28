@@ -174,11 +174,16 @@
         <div class="prep-row">
           <label for="prepCapTpl">Template</label>
           <select id="prepCapTpl" class="prep-input prep-input--sel" data-action-change="call" data-fn="prepSyncStepUi"></select>
-          <label for="prepOccupants">for</label>
+          <label for="prepOccupants">each floor for</label>
           <input type="number" id="prepOccupants" class="prep-input prep-input--num" min="1" step="1"
                  value="200" data-action-change="call" data-fn="prepSyncStepUi">
           <label for="prepOccupants">people</label>
         </div>
+        <p class="prep-hint">
+          Floors rarely hold the same number of people. Each floor in the preview has its own
+          <b>People on this floor</b> box: leave it blank to use the number above, type a number
+          to override it, or type 0 to leave that floor alone.
+        </p>
         <label class="prep-row" style="margin-bottom:0">
           <input type="checkbox" id="prepRetighten" checked data-action-change="call" data-fn="prepSyncStepUi">
           <span>Re-measure areas that still cover the whole plan</span>

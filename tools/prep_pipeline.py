@@ -166,6 +166,19 @@ def stale_placeholder_areas(members: dict) -> list:
     return out
 
 
+def _stale_to_retighten(members: dict, floor_occupants=None) -> list:
+    """The placeholders to re-measure, minus any floor set to 0 people.
+
+    0 means "leave this floor alone". Re-measuring drops the placeholder and
+    relies on the writer to put a replacement in, and the writer writes nothing
+    on a floor with nobody on it - so without this the floor would lose its
+    area and its devices.
+    """
+    zero = {fid for fid, n in capacity_profiles._floor_headcounts(floor_occupants).items()
+            if n == 0}
+    return [s for s in stale_placeholder_areas(members) if s["floorPlanId"] not in zero]
+
+
 def _drop_areas(src: Path, dest: Path, area_ids: set) -> None:
     """Copy the project across without the named areas.
 
@@ -188,7 +201,7 @@ def _drop_areas(src: Path, dest: Path, area_ids: set) -> None:
 
 def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
          margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET, boxes=None,
-         retighten: bool = True) -> dict:
+         retighten: bool = True, floor_occupants=None) -> dict:
     """What a run would do, without writing anything.
 
     Each step is previewed by the module that owns it, so the preview cannot
@@ -219,9 +232,10 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
             out["step"]["areas"] = {"ok": False,
                                     "error": "No capacity template was chosen."}
         else:
-            area_plan = capacity_profiles.plan_application(path, template, occupants)
+            area_plan = capacity_profiles.plan_application(
+                path, template, occupants, floor_occupants=floor_occupants)
             if retighten and area_plan.get("ok"):
-                stale = stale_placeholder_areas(_members(path))
+                stale = _stale_to_retighten(_members(path), floor_occupants)
                 area_plan["retighten"] = stale
                 by_floor = {s["floorPlanId"]: s for s in stale}
                 for floor in area_plan.get("floors", []):
@@ -252,7 +266,7 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
 
 def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
         occupants=None, margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET,
-        boxes=None, retighten: bool = True) -> dict:
+        boxes=None, retighten: bool = True, floor_occupants=None) -> dict:
     """Do the whole pass and write once.
 
     Each step reads the file the previous step produced, which is what makes
@@ -328,7 +342,7 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                 dropped = []
                 staged = cur
                 if retighten:
-                    dropped = stale_placeholder_areas(_members(cur))
+                    dropped = _stale_to_retighten(_members(cur), floor_occupants)
                     result["step"]["retighten"] = dropped
                     if dropped:
                         out = nxt()
@@ -336,7 +350,8 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                         staged = out
                 out = nxt()
                 report = capacity_profiles.apply_to(
-                    staged, out, template, occupants, replace_existing=False)
+                    staged, out, template, occupants, replace_existing=False,
+                    floor_occupants=floor_occupants)
                 if not report.get("ok"):
                     # `cur` is left where it was, so the staged removal above is
                     # abandoned with everything else this step touched.
