@@ -4170,7 +4170,7 @@
       + keySwatch('omni', omniAps) + ' Omni / ceiling &nbsp;·&nbsp; ' + WD.esc(antennaLabelHint(opts));
   }
 
-  function renderAntennaOverview(fp, aps, opts, ctx, keyHtml) {
+  function renderAntennaOverview(fp, aps, opts, ctx, keyHtml, pageHeaded) {
     var url = floorPlanImageUrl(fp);
     if (!url) return '<div class="rep-empty-small">Floor plan image not available.</div>';
     var W = fp.width || 1, H = fp.height || 1;
@@ -4182,7 +4182,7 @@
         opts.cropBox = (opts.cropBoxes && opts.cropBoxes[fp.id]) || null;
         opts.floorName = fp.name || 'Floor plan';
         opts.floorNumber = floorNumberFor(fp);
-        return renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml);
+        return renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml, pageHeaded);
       }
     }
 
@@ -4275,7 +4275,7 @@
     return letter + (row + 1);
   }
 
-  function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml) {
+  function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml, pageHeaded) {
     var cols = grid.cols, rows = grid.rows;
     var cb = opts.cropBox || { x: 0, y: 0, w: 1, h: 1 };
     var ox = cb.x * W, oy = cb.y * H;
@@ -4304,7 +4304,9 @@
       + ' (' + cols + '&times;' + rows + ' grid) so AP markers stay legible.'
       + (emptyLabels.length ? ' No APs in section' + (emptyLabels.length === 1 ? '' : 's') + ' ' + emptyLabels.join(', ') + ' — skipped.' : '')
       + '</div>';
-    out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb, segFloorHeading(opts));
+    // The AP Placement Map already heads the page with this floor directly
+    // above the index; a second heading here printed "Floor N" twice in a row.
+    out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb, pageHeaded ? '' : segFloorHeading(opts));
     nonEmpty.forEach(function (cell) {
       out += renderAntennaSegmentCell(url, W, H, cell, opts, ctx, keyHtml, cells);
     });
@@ -4633,7 +4635,7 @@
       out += '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
     }
     out += (fp.id !== '_none')
-      ? renderAntennaOverview(fp, sorted, opts, ctx, placementKeyHtml(opts, sorted))
+      ? renderAntennaOverview(fp, sorted, opts, ctx, placementKeyHtml(opts, sorted), !!heading)
       : '<div class="rep-empty-small">No floor plan assigned to these APs.</div>';
     out += renderReportFooter(opts, ctx);
     return out + '</div></section>';
