@@ -14,6 +14,7 @@
   var derived = null;        // that, turned into per-person ratios
   var templates = [];
   var chosen = null;         // filename of the template selected for apply
+  var floorOcc = {};         // floorPlanId -> headcount typed for that floor
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return WD.esc(String(s == null ? '' : s)); }
@@ -43,6 +44,7 @@
 
   function loadFile(file) {
     fileName = file.name;
+    floorOcc = {};
     file.arrayBuffer().then(function (buf) {
       fileBytes = buf;
       $('dropzone').style.display = 'none';
@@ -182,6 +184,24 @@
     capPlan();
   };
 
+  function applyQuery() {
+    return '?name=' + encodeURIComponent(fileName)
+      + '&template=' + encodeURIComponent(chosen)
+      + '&occupants=' + encodeURIComponent($('capHeadcount').value)
+      + '&replace=' + ($('capReplace').checked ? '1' : '0')
+      + (Object.keys(floorOcc).length
+          ? '&floorOccupants=' + encodeURIComponent(JSON.stringify(floorOcc)) : '');
+  }
+
+  // A blank field hands the floor back to the building headcount; 0 means
+  // nobody works there and the floor is left alone.
+  window.capFloorOccupants = function (floorId, value) {
+    var v = String(value == null ? '' : value).trim();
+    if (v === '' || isNaN(Number(v)) || Number(v) < 0) delete floorOcc[floorId];
+    else floorOcc[floorId] = Number(v);
+    capPlan();
+  };
+
   // ── apply preview ──────────────────────────────────────────────────────────
   window.capPlan = function () {
     var host = $('capPlan');
@@ -191,11 +211,7 @@
       setApply(false, chosen ? 'Load a project first.' : 'Pick a template first.');
       return;
     }
-    var q = '?name=' + encodeURIComponent(fileName)
-      + '&template=' + encodeURIComponent(chosen)
-      + '&occupants=' + encodeURIComponent($('capHeadcount').value)
-      + '&replace=' + ($('capReplace').checked ? '1' : '0');
-    api('plan', fileBytes, q).then(function (r) {
+    api('plan', fileBytes, applyQuery()).then(function (r) {
       if (!r || !r.ok) {
         host.innerHTML = '<div class="cap-empty">' + esc((r && r.error) || 'Could not plan that.') + '</div>';
         setApply(false, 'Nothing to apply.');
@@ -208,15 +224,15 @@
         $('capApplyBtn').textContent = 'Apply to ' + r.willWrite + ' floor'
           + (r.willWrite === 1 ? '' : 's') + ' and download';
       } else {
-        setApply(false, 'Every floor already has a requirement area. Tick the box above '
-          + 'to replace them.');
+        setApply(false, 'No floor would be written: each one already has capacity '
+          + 'items or is set to 0 people. Tick the box above to replace existing items.');
         $('capApplyBtn').textContent = 'Apply and download';
       }
       var counts = r.rows.map(function (x) {
         return '<tr><td>' + esc(shortDevice(x.device)) + '</td><td class="cap-sub">' + esc(x.usage)
           + '</td><td class="cap-n">' + x.deviceCount + '</td></tr>';
       }).join('');
-      var floors = r.floors.map(function (f) {
+      var floors = r.floors.map(function (f, i) {
         var cls = f.skipped ? 'skip' : (f.mode === 'populate' ? 'yours'
                  : f.mode === 'replace' ? 'replace' : 'create');
         var size = f.widthFt
@@ -226,7 +242,9 @@
         // his own outline is being used, and whether anything of his is at
         // risk. The computed extent is only relevant when we are making one.
         var facts;
-        if (f.mode === 'populate') {
+        if (f.mode === 'none') {
+          facts = 'Set to 0 people, so nothing is written to this floor.';
+        } else if (f.mode === 'populate') {
           facts = 'Using the area you drew'
             + (f.targetAreaName ? ' (<b>' + esc(f.targetAreaName) + '</b>)' : '')
             + (f.targetVertexCount ? ', ' + f.targetVertexCount + ' points' : '')
@@ -247,21 +265,50 @@
           + '<div class="cap-floor-head"><span class="cap-floor-name">'
           + esc(f.floorName || 'Floor plan') + '</span>'
           + '<span class="cap-badge cap-badge--' + cls + '">' + esc(f.action) + '</span></div>'
-          + '<div class="cap-facts">' + facts + '</div></div>';
+          + '<div class="cap-facts">' + facts + '</div>'
+          + floorPeopleHtml(f, i) + '</div>';
       }).join('');
-      host.innerHTML =
-        '<table class="cap-table"><thead><tr><th>Device profile</th><th>Usage profile</th>'
-        + '<th style="text-align:right">Devices</th></tr></thead><tbody>' + counts
-        + '<tr><td colspan="2" class="cap-total">Total for ' + r.occupants + ' people</td>'
-        + '<td class="cap-n cap-total">' + r.totalDevices + '</td></tr></tbody></table>'
+      var perFloorTable = r.rows.length
+        ? '<table class="cap-table"><thead><tr><th>Device profile</th><th>Usage profile</th>'
+          + '<th style="text-align:right">Devices</th></tr></thead><tbody>' + counts
+          + '<tr><td colspan="2" class="cap-total">Per floor, for ' + r.occupants + ' people</td>'
+          + '<td class="cap-n cap-total">' + r.totalDevices + '</td></tr></tbody></table>'
+        : '';
+      host.innerHTML = perFloorTable
         + '<div style="margin-top:14px">' + floors + '</div>'
         + '<p class="cap-hint">' + r.willWrite + ' floor'
         + (r.willWrite === 1 ? '' : 's') + ' would be written, '
-        + r.willSkip + ' left alone.'
+        + r.willSkip + ' left alone'
+        + (r.willWrite ? ' &mdash; <b>' + fmtPeople(r.occupantsWritten) + ' people, '
+            + r.devicesWritten + ' devices</b> across the floors written' : '')
+        + '.'
         + (r.orphanAreasIgnored ? ' ' + r.orphanAreasIgnored
             + ' orphaned area ignored.' : '') + '</p>';
     });
   };
+
+  function fmtPeople(n) {
+    n = Number(n) || 0;
+    return n === Math.round(n) ? String(n) : n.toFixed(1);
+  }
+
+  // Each floor takes its own headcount. Left blank, it uses the building
+  // number above - shown as the placeholder so the fallback is visible.
+  function floorPeopleHtml(f, i) {
+    var id = 'capFloorOcc' + i;
+    var own = Object.prototype.hasOwnProperty.call(floorOcc, f.floorPlanId);
+    return '<div class="cap-row cap-floor-people">'
+      + '<label for="' + id + '">People on this floor</label>'
+      + '<input type="number" id="' + id + '" class="cap-input cap-input--num" min="0" step="1"'
+      + ' value="' + (own ? WD.escAttr(String(floorOcc[f.floorPlanId])) : '') + '"'
+      + ' placeholder="' + WD.escAttr($('capHeadcount').value || '') + '"'
+      + ' data-action-change="call" data-fn="capFloorOccupants"'
+      + ' data-arg="' + WD.escAttr(f.floorPlanId) + '" data-arg-value="1">'
+      + '<span class="cap-sub">' + (f.mode === 'none' ? 'nobody here'
+          : (own ? '' : 'building number &middot; ')
+            + (f.totalDevices || 0) + ' device' + (f.totalDevices === 1 ? '' : 's'))
+      + '</span></div>';
+  }
 
   function setApply(on, note) {
     $('capApplyBtn').disabled = !on;
@@ -274,11 +321,7 @@
     var btn = $('capApplyBtn'), label = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Applying…';
-    var q = '?name=' + encodeURIComponent(fileName)
-      + '&template=' + encodeURIComponent(chosen)
-      + '&occupants=' + encodeURIComponent($('capHeadcount').value)
-      + '&replace=' + ($('capReplace').checked ? '1' : '0');
-    fetch('/api/capacity/apply' + q, {
+    fetch('/api/capacity/apply' + applyQuery(), {
       method: 'POST',
       headers: { 'X-WD-Wireless-Tools': '1' },
       body: fileBytes,
@@ -319,7 +362,7 @@
     var bits = ['Wrote <b>' + esc(name) + '</b> — '
       + r.floorsWritten.length + ' floor'
       + (r.floorsWritten.length === 1 ? '' : 's') + ', '
-      + r.totalDevices + ' devices for ' + r.occupants + ' people.'];
+      + r.devicesWritten + ' devices for ' + fmtPeople(r.occupantsWritten) + ' people.'];
     if (r.floorsSkipped.length) {
       bits.push(r.floorsSkipped.length + ' floor'
         + (r.floorsSkipped.length === 1 ? '' : 's') + ' left alone: '

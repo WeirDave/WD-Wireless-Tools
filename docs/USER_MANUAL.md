@@ -1684,6 +1684,19 @@ Open the project you want to set up, pick a template, type the headcount, and
 press **Apply and download**. Nothing is written to the file you opened — a new
 copy is built and downloaded, so replacing the original stays your decision.
 
+**Each floor is for** is the headcount every floor gets by default. Floors
+rarely hold the same number of people, so every floor in the preview also has
+its own **People on this floor** box:
+
+- leave it blank and the floor uses the **Each floor is for** number, shown
+  greyed in the box;
+- type a number and that floor is sized for that many people instead;
+- type **0** and the floor is left alone — nothing is written to it.
+
+The preview shows the device count for each floor as you change it, and the
+line under the floors totals the people and devices across every floor that
+will be written.
+
 The preview says what will happen to each floor before you press anything:
 
 | What it says | What it will do |
@@ -1691,6 +1704,7 @@ The preview says what will happen to each floor before you press anything:
 | **your area — adding N capacity items** | An area you drew is filled in. Your outline is not changed; only the devices are written into it |
 | **create an area from the walls you drew** | No area on that floor, so one is created from the extent of the walls (or the APs, or the page, in that order) |
 | **skip — this area already has N capacity items** | Left alone. Those are numbers you set, and overwriting them is the one destructive case |
+| **skip — no people on this floor** | **People on this floor** is set to 0 |
 
 Tick **Replace requirement areas that already exist** to overwrite that last
 case. Even then your outline is kept — no area is ever deleted, in any of the

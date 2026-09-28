@@ -140,7 +140,7 @@
       <div class="cap-step">3 &mdash; Apply a template to this project</div>
       <div class="cap-tpl-list" id="capTemplates"></div>
       <div class="cap-row mt-12">
-        <label for="capHeadcount">This building is for</label>
+        <label for="capHeadcount">Each floor is for</label>
         <input type="number" id="capHeadcount" class="cap-input cap-input--num" min="1" step="1" value="200"
                data-action-input="call" data-fn="capPlan">
         <label for="capHeadcount">people</label>
@@ -149,6 +149,11 @@
           <span>Replace requirement areas that already exist</span>
         </label>
       </div>
+      <p class="cap-hint">
+        Floors hold different numbers of people, so every floor below has its own
+        <b>People on this floor</b> box. Leave it blank to use the number above,
+        type a number to override it, or type 0 to leave that floor alone.
+      </p>
       <p class="cap-hint">
         An area you drew yourself is filled in, not replaced &mdash; your outline is kept
         exactly as it is and only the devices are written into it. A floor is left alone

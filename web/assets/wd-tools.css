@@ -10792,6 +10792,8 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .cap-badge--yours { background: var(--blue-bg, #e6f0ff); color: var(--blue, #0068FF); }
 .cap-facts { font-size: 12px; color: var(--text-2); line-height: 1.7; }
 .cap-facts b { color: var(--text); }
+.cap-floor-people { margin: 8px 0 0; }
+.cap-floor-people .cap-sub { font-size: 12px; }
 .cap-warn {
   margin-top: 12px; padding: 10px 12px; border-radius: 6px;
   background: var(--amber-bg); color: var(--amber-dark); font-size: 12px; line-height: 1.6;

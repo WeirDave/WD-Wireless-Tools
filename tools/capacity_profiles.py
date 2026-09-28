@@ -549,24 +549,58 @@ def _basis_words(basis) -> str:
     }.get(basis, "the whole page")
 
 
-def plan_application(esx_path, template, occupants, replace_existing=False):
+def _floor_headcounts(floor_occupants) -> dict:
+    """{floorPlanId: headcount} from whatever the caller sent.
+
+    Blank, missing or unreadable means "use the project headcount" for that
+    floor. Zero is a real answer - nobody works there - and leaves the floor
+    alone rather than writing an area full of zeroes.
+    """
+    if isinstance(floor_occupants, str):
+        try:
+            floor_occupants = json.loads(floor_occupants) if floor_occupants.strip() else {}
+        except ValueError:
+            floor_occupants = {}
+    out = {}
+    for fid, value in (floor_occupants or {}).items() if isinstance(floor_occupants, dict) else ():
+        if value is None or (isinstance(value, str) and not value.strip()):
+            continue
+        try:
+            n = float(value)
+        except (TypeError, ValueError):
+            continue
+        if n >= 0:
+            out[str(fid)] = n
+    return out
+
+
+def plan_application(esx_path, template, occupants, replace_existing=False,
+                     floor_occupants=None):
     """Work out what applying this template would do, without writing anything.
 
     One requirement area per floor plan. A floor that already has a requirement
     area is skipped unless asked otherwise - a hand-drawn area is real work and
     is never silently replaced.
+
+    `occupants` is the headcount every floor gets by default. `floor_occupants`
+    ({floorPlanId: headcount}) overrides it floor by floor: a building is
+    rarely the same number of people on every storey, and one number applied
+    to every floor puts the whole building on each of them.
     """
     esx_path = Path(esx_path)
     with zipfile.ZipFile(esx_path) as zf:
         members = _read_members(zf)
 
+    per_floor = _floor_headcounts(floor_occupants)
     counts = apply_headcount(template, occupants)
-    if not counts.get("ok"):
-        return counts
 
     floors = [f for f in (members.get("floorPlans.json") or {}).get("floorPlans", [])
               if isinstance(f, dict) and f.get("id")]
     live = {f["id"] for f in floors}
+
+    # The project headcount is only required where a floor falls back on it.
+    if not counts.get("ok") and any(f["id"] not in per_floor for f in floors):
+        return counts
 
     # Areas per live floor. Matched on floorPlanId only: `key` and the display
     # name both drift between Ekahau versions, and `isDefault` means "shipped
@@ -601,7 +635,20 @@ def plan_application(esx_path, template, occupants, replace_existing=False):
         with_capacity = [a for a in here if a.get("capacityItems")]
         target = _area_to_populate(here)
 
-        if with_capacity:
+        own = per_floor.get(floor["id"])
+        floor_counts = counts if own is None else (
+            apply_headcount(template, own) if own > 0 else
+            {"ok": True, "occupants": 0.0, "totalDevices": 0,
+             "rows": [dict(r, deviceCount=0, exact=0.0)
+                      for r in apply_headcount(template, 1)["rows"]]})
+        info["occupants"] = floor_counts["occupants"]
+        info["occupantsOverridden"] = own is not None
+
+        if own == 0:
+            info["mode"] = "none"
+            info["skipped"] = True
+            info["action"] = "skip - no people on this floor"
+        elif with_capacity:
             info["mode"] = "replace"
             info["targetAreaId"] = with_capacity[0].get("id")
             info["existingItemCount"] = len(with_capacity[0].get("capacityItems") or [])
@@ -618,7 +665,7 @@ def plan_application(esx_path, template, occupants, replace_existing=False):
             info["targetVertexCount"] = len(target.get("area") or [])
             info["skipped"] = False
             info["action"] = ("your area - adding %d capacity items, "
-                              "your outline is not changed" % len(counts["rows"]))
+                              "your outline is not changed" % len(floor_counts["rows"]))
         else:
             info["mode"] = "create"
             info["skipped"] = False
@@ -626,8 +673,8 @@ def plan_application(esx_path, template, occupants, replace_existing=False):
 
         # Kept for callers written against the old shape.
         info["hasExistingRequirement"] = bool(with_capacity)
-        info["rows"] = counts["rows"]
-        info["totalDevices"] = counts["totalDevices"]
+        info["rows"] = floor_counts["rows"]
+        info["totalDevices"] = floor_counts["totalDevices"]
         plans.append(info)
 
     # The profiles, resolved here rather than only in the writer.
@@ -645,19 +692,27 @@ def plan_application(esx_path, template, occupants, replace_existing=False):
     # definition for. So the probe runs against a throwaway copy and the real
     # members are left untouched. `_read_members` parses only the JSON members,
     # so the copy is a few documents, not the floor plan images.
+    names = counts if counts.get("ok") else apply_headcount(template, 1)
     if any(not p["skipped"] for p in plans):
-        missing = _missing_for(copy.deepcopy(members), template, counts)
+        missing = _missing_for(copy.deepcopy(members), template, names)
         if missing:
             return {"ok": False, "missing": missing,
                     "error": _missing_message(missing),
                     "source": esx_path.name}
 
+    writing = [p for p in plans if not p["skipped"]]
     return {
         "ok": True,
         "source": esx_path.name,
-        "occupants": counts["occupants"],
-        "totalDevices": counts["totalDevices"],
-        "rows": counts["rows"],
+        # The project headcount and what it comes to on one floor. Where every
+        # floor has its own number there is no project headcount, and these
+        # describe nothing - hence the totals below.
+        "occupants": counts.get("occupants", 0.0) if counts.get("ok") else 0.0,
+        "totalDevices": counts["totalDevices"] if counts.get("ok") else 0,
+        "rows": names["rows"] if counts.get("ok") else [],
+        "perFloor": bool(per_floor),
+        "occupantsWritten": sum(p["occupants"] for p in writing),
+        "devicesWritten": sum(p["totalDevices"] for p in writing),
         "floors": plans,
         "orphanAreasIgnored": orphans,
         "willWrite": sum(1 for p in plans if not p["skipped"]),
@@ -840,7 +895,7 @@ def _missing_message(missing) -> str:
 
 
 def apply_to(src_path, dest_path, template, occupants,
-             replace_existing=False):
+             replace_existing=False, floor_occupants=None):
     """Write the template into a project. The only function here that writes.
 
     `src_path` is read and never modified - the written project is a separate
@@ -856,7 +911,8 @@ def apply_to(src_path, dest_path, template, occupants,
     src_path = Path(src_path)
     dest_path = Path(dest_path)
 
-    plan = plan_application(src_path, template, occupants, replace_existing)
+    plan = plan_application(src_path, template, occupants, replace_existing,
+                            floor_occupants=floor_occupants)
     if not plan.get("ok"):
         return plan
 
@@ -864,7 +920,10 @@ def apply_to(src_path, dest_path, template, occupants,
         members = _read_members(zf)
         raw_names = [i.filename for i in zf.infolist()]
 
+    # Profile names only; every floor's counts come from its own plan entry.
     counts = apply_headcount(template, occupants)
+    if not counts.get("ok"):
+        counts = dict(apply_headcount(template, 1), occupants=0.0, totalDevices=0)
 
     write_floors = [f for f in plan["floors"] if not f["skipped"]]
     if not write_floors:
@@ -878,8 +937,10 @@ def apply_to(src_path, dest_path, template, occupants,
             "floorsSkipped": [f["floorName"] or f["floorPlanId"] for f in plan["floors"]],
             "areasReplaced": 0, "areasLeftInPlace": 0, "profilesCreated": [],
             "orphanAreasIgnored": plan["orphanAreasIgnored"],
-            "note": "Every floor already has a requirement area, so nothing was "
-                    "written and the project was not changed.",
+            "occupantsWritten": 0, "devicesWritten": 0,
+            "note": "Every floor already has a requirement area or has nobody "
+                    "on it, so nothing was written and the project was not "
+                    "changed.",
         }
 
     defs = template.get("profileDefs") or {}
@@ -938,7 +999,7 @@ def apply_to(src_path, dest_path, template, occupants,
     # counted and reported rather than passed over in silence.
     by_id = {a.get("id"): a for a in areas if isinstance(a, dict)}
 
-    def items_for():
+    def items_for(floor):
         return [
             {
                 "identifier": _new_id(),
@@ -946,7 +1007,7 @@ def apply_to(src_path, dest_path, template, occupants,
                 "usageProfileId": usage_ids[row["usage"]],
                 "deviceProfileId": device_ids[row["device"]],
             }
-            for row in counts["rows"] if row["deviceCount"] > 0
+            for row in floor["rows"] if row["deviceCount"] > 0
         ]
 
     # No area is ever deleted, in any of the three cases. Where one already
@@ -965,7 +1026,7 @@ def apply_to(src_path, dest_path, template, occupants,
                 replaced += 1
             else:
                 populated += 1
-            target["capacityItems"] = items_for()
+            target["capacityItems"] = items_for(floor)
             if req_id:
                 target["requirementId"] = req_id
         else:
@@ -973,7 +1034,7 @@ def apply_to(src_path, dest_path, template, occupants,
                 "floorPlanId": floor["floorPlanId"],
                 "name": template.get("name") or "Capacity",
                 "noteIds": [],
-                "capacityItems": items_for(),
+                "capacityItems": items_for(floor),
                 "color": "#2c3e50",
                 "area": [{"x": p["x"], "y": p["y"]} for p in floor["polygon"]],
                 "id": _new_id(),
@@ -1023,6 +1084,9 @@ def apply_to(src_path, dest_path, template, occupants,
         "totalDevices": counts["totalDevices"],
         "rows": counts["rows"],
         "floorsWritten": written,
+        "perFloor": plan["perFloor"],
+        "occupantsWritten": plan["occupantsWritten"],
+        "devicesWritten": plan["devicesWritten"],
         "floorsSkipped": [f["floorName"] or f["floorPlanId"]
                           for f in plan["floors"] if f["skipped"]],
         "areasReplaced": replaced,
