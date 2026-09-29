@@ -8921,7 +8921,7 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
   float: left; width: 250px; margin: 0 22px 12px 0; text-align: center;
 }
 .rep-compass-right { min-width: 0; }
-.rep-comp-rose { width: 250px; height: 250px; }
+.rep-comp-rose { width: 250px; height: 250px; overflow: visible; }
 .rep-comp-ring { fill: none; stroke: #333; stroke-width: 1.5; }
 .rep-comp-center { fill: #333; }
 .rep-comp-major { stroke: #333; stroke-width: 2; }
@@ -9006,6 +9006,15 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
     float: none; margin: 0 auto 8px; break-inside: avoid;
   }
   .rep-compass-page.is-landscape .rep-comp-rose { width: 155px; height: 155px; }
+  /* The rose's text is in viewBox units, so it shrinks with the rose: at
+     155px a unit prints at 0.36pt, and the degree ring came out at 4.7pt and
+     NE/SE/SW/NW at 5.4pt - under the 6pt floor, on the one drawing someone
+     reads with a compass in the other hand. Larger in units here so they land
+     at about 6.2pt on paper. 17 units still clears the tick marks inside the
+     ring (the labels sit 108 units out, the ticks start at 128) and keeps NE
+     inside the drawing. */
+  .rep-compass-page.is-landscape .rep-comp-deg { font-size: 17px; }
+  .rep-compass-page.is-landscape .rep-comp-intercard { font-size: 17px; }
   .rep-compass-page.is-landscape .rep-compass-caption { font-size: 7.5pt; }
   /* Two columns of half a landscape sheet is 1080pt of column against roughly
      1000pt of content, so a section that refuses to split cannot be placed and

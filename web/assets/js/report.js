@@ -7314,7 +7314,11 @@
 
     cardinals.forEach(function (c) {
       var rad = c.deg * Math.PI / 180;
-      var lr = R + 18;
+      // R + 18 put the letters' centres 158 units out on a drawing whose
+      // edge is 160 out, so the outer half of N, E, S and W was cut off on
+      // every printed compass page. At R + 10 a 19-unit capital clears both
+      // the ring and the edge.
+      var lr = R + 10;
       var x = cx + lr * Math.sin(rad), y = cy - lr * Math.cos(rad);
       labels += '<text x="' + x + '" y="' + y + '" class="rep-comp-cardinal ' + c.cls
         + '" text-anchor="middle" dominant-baseline="central">' + c.lbl + '</text>';

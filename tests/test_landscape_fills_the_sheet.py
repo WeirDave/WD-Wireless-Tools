@@ -383,5 +383,39 @@ class TheNameListUsesALandscapeSheet(_NodeProbe):
         """.replace("LONG", json.dumps(long)))
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class TheCompassRoseIsDrawnWhole(_NodeProbe):
+    """N, E, S and W were centred 158 units out on a 320-unit drawing whose
+    edge is 160 out, so the outer half of each letter was cut off on every
+    printed compass page, portrait and landscape alike. Runs the real
+    renderer and checks every label's extent against the drawing it is in.
+
+    The degree ring's print size (under 6pt on a landscape sheet until it was
+    enlarged there) is a property of the printed PDF, not of this markup, and
+    was measured there: 6.2pt and up in landscape, 6.4pt and up in portrait."""
+
+    def test_every_direction_letter_fits_inside_the_drawing(self):
+        self.check("""
+          eval(fn('function renderCompassReferencePage('));
+          globalThis.orientPickerHtml = () => '';
+          const html = renderCompassReferencePage({}, {});
+          const vb = (html.match(/viewBox="([^"]+)"/) || [])[1].split(' ').map(Number);
+          // Font sizes in viewBox units, as the stylesheet sets them; half a
+          // capital's advance and half its height are both under 0.5em.
+          const em = { 'rep-comp-cardinal': 19, 'rep-comp-intercard': 17 };
+          const re = /<text x="([^"]+)" y="([^"]+)" class="(rep-comp-(?:cardinal|intercard))[^"]*"[^>]*>([A-Z]+)</g;
+          let m, n = 0;
+          while ((m = re.exec(html))) {
+            n++;
+            const x = +m[1], y = +m[2], half = em[m[3]] * 0.5 * Math.max(1, m[4].length * 0.75);
+            check(m[4] + ' runs off the drawing: centre ' + x.toFixed(1) + ',' + y.toFixed(1),
+                  x - half >= vb[0] && x + half <= vb[0] + vb[2]
+                  && y - em[m[3]] * 0.5 >= vb[1] && y + em[m[3]] * 0.5 <= vb[1] + vb[3]);
+          }
+          check('expected 8 direction labels, found ' + n, n === 8);
+          done();
+        """)
+
+
 if __name__ == "__main__":
     unittest.main()
