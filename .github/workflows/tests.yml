@@ -19,7 +19,11 @@ jobs:
   test:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # The Windows / Python 3.10 job runs 26-31 minutes as the suite stands,
+    # so a 30-minute cap cancelled healthy runs part-way through - main's own
+    # push run for 2.182.0 among them. The cap is there to stop a hung job, not
+    # to bound a slow one; 45 keeps that with room for the suite to grow.
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
