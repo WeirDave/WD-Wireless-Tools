@@ -201,6 +201,19 @@ notes - but 34 of them quoted him directly. That is the exposure to keep out.
 `release.yml` remains for a release published by hand through the GitHub UI,
 and for backfilling assets onto a tag whose build failed.
 
+## A finished PR is merged and released without asking
+
+**"next time just merge and release without asking."** Said on 2026-09-29,
+after a session opened a PR, watched it go green and then reported it as
+waiting for him to merge. A green PR waiting on him is unreleased work he
+cannot install.
+
+So when a cloud session's PR has green CI and no merge conflict: mark it ready,
+merge it with a **merge commit** (not squash or rebase - `scripts/tested_head.py`
+recognises a merge that added nothing to a tested head and skips the second
+suite run), then confirm the release published with its ZIP and `.sha256`
+attached. Red CI still means no merge.
+
 ## Release process — the parts that are still yours
 
 1. Bump `web/assets/versions.json` — this is the single source of truth for
