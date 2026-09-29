@@ -4276,6 +4276,12 @@ async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matc
    lifts it slightly, so it reads as attached to the row above rather than as
    another project. */
 
+function uploadAsNewCopyArgs(r) {
+  const c = r.cloud || {}, l = r.local || {};
+  return [np(l.path), l.name || '', c.name || '',
+          c.siteId || r.parentSiteId || '', c.siteName || r.parentSiteName || ''];
+}
+
 function rowDetailHtml(r, stripe) {
   /* The row that needs him, and what he can do about it.
 
@@ -4465,6 +4471,16 @@ function rowDetailHtml(r, stripe) {
     if (!sentences.length) {
       sentences.push('Matched by name only — nothing has proved these are the same file.');
     }
+  }
+
+  /* Keeping both is an answer to "the two sides differ", alongside taking one
+     over the other - see `uploadAsNewCopy`. Only on a row whose band exists for
+     that reason; on an in-step pair it stays in the local file's menu. */
+  if (stale && !_settled && c && l && !l.isDir) {
+    acts.push(rdAction('up', 'Upload as a new project…',
+      'uploadAsNewCopy', uploadAsNewCopyArgs(r),
+      { quiet: true, writes: 'cloud',
+        title: `Keep both: upload your local file as a separate cloud project under a new name. "${c.name}" is left as it is.` }));
   }
 
   /* A row with nothing to say gets no band at all, and that is the rule the
@@ -5214,6 +5230,9 @@ function localCell(r, cloudCodes) {
         { title: flagged ? 'Removes the ! prefix' : 'Adds a ! prefix so it sorts to the top here and in Explorer' }) : '',
     (!isSites && !l.isDir) ? menuItem('move', 'Move to another site folder…',
         'startMoveLocalToSite', [np(l.path), l.name]) : '',
+    (!isSites && !l.isDir && r.cloud) ? menuItem('up', 'Upload as a new cloud project…',
+        'uploadAsNewCopy', uploadAsNewCopyArgs(r),
+        { title: `Keep both: upload this file as a separate cloud project under a new name. "${r.cloud.name}" is left as it is.` }) : '',
     (isSites && !r.cloud && !r.indent)
       ? menuItem('link', 'Link to a cloud site…', 'openLinkPicker', ['local', np(l.path), l.name, 'sites'],
           { title: 'Pair this folder with a cloud site yourself - for a folder that was renamed.' })
@@ -9991,6 +10010,68 @@ async function uploadFromLocal(path, name, siteId) {
 
     refreshData();
   } catch (err) { toast(err.message, 'error'); }
+}
+
+/* A paired local file going up as a project of its own, beside the one it is
+   paired with rather than over it.
+
+   He kept an older copy, carried on in a new one, and wanted the older one in
+   the cloud as a second project for the site. Upload was drawn only on a local
+   file with nothing opposite it, so a paired file offered download and replace
+   and nothing else - the ordinary "keep both" had no control.
+
+   The name is asked for because it has to differ. `upload_project` names the
+   new cloud project after the local file, so an unchanged name puts two
+   identically named projects in one site, and pairing cannot tell them apart.
+   The local file is renamed first so both sides of the new pair carry the name
+   he chose, and the existing cloud project is not touched at all. */
+async function uploadAsNewCopy(path, localName, cloudName, siteId, siteName) {
+  const taken = String(cloudName || '').trim().toLowerCase();
+  const suggested = String(localName || '').trim().toLowerCase() === taken
+    ? `${localName} (copy)` : localName;
+  const where = siteName ? ` in site "${siteName}"` : '';
+  const raw = prompt(
+    `Upload "${localName}.esx" as a NEW cloud project${where}.\n\n`
+    + `"${cloudName}" stays in Ekahau Cloud as it is. Your local file is `
+    + `renamed to the name below and uploaded under it, so the two stay separate.\n\n`
+    + 'Name for the new project:', suggested);
+  if (raw == null) return;
+  const name = String(raw).trim().replace(/\.esx$/i, '').trim();
+  if (!name) return;
+  if (name.toLowerCase() === taken) {
+    toast(`"${name}" is the name of the project already in the cloud. `
+      + 'Pick a different name so the two can be told apart.', 'error');
+    return;
+  }
+  let target = path;
+  if (name !== localName) {
+    const rn = await pyApi('rename_local', path, name);
+    if (!rn || rn.error) {
+      toast(`Could not rename the local file to "${name}.esx": `
+        + ((rn && rn.error) || 'no response') + '. Nothing was uploaded.', 'error');
+      return;
+    }
+    target = np(rn.newPath || path);
+  }
+  try {
+    const r = await runWithProgress(
+      { title: `Uploading "${name}.esx" as a new project`,
+        subtitle: 'Sending to Ekahau Cloud — larger projects take longer.' },
+      (opId) => pyApi('upload_project', target, siteId || undefined, opId)
+    );
+    if (r && r.error) {
+      toast(`Upload failed: ${r.error}. The local file is now "${name}.esx"; `
+        + `"${cloudName}" in the cloud was not touched.`, 'error');
+    } else if (r && r.warning) {
+      toast(r.warning, 'warn');
+    } else {
+      toast(`Uploaded "${name}" as a new cloud project${where}. `
+        + `"${cloudName}" is unchanged.`, 'success');
+    }
+  } catch (err) {
+    toast(`Upload failed: ${err.message}. The local file is now "${name}.esx".`, 'error');
+  }
+  refreshData();
 }
 
 async function downloadThenMove(projectId, projectName) {
