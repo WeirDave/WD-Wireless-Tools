@@ -9349,18 +9349,25 @@ function startRename(side, idOrPath, name, kind) {
      name - "I want to use the folder name as part of the name". One click
      puts it where the cursor is, so the part he cannot remember is the part
      he does not have to type. */
+  /* "rename a site on the cloud and then use the name that the local is and
+     vice versa". The other side's name was on screen as a fact and still had
+     to be retyped, so it is one click too - and it replaces the name rather
+     than inserting, because taking the other side's name whole is the ask. */
   const insert = document.getElementById('renameInsert');
-  if (where) {
-    insert.hidden = false;
-    insert.innerHTML =
-      '<span class="rename-insert-label">' + e(whereKey) + '</span>'
+  const useOther = partner && partner.name && partner.name !== name
+    ? '<span class="rename-insert-label">' + e(_renamePartnerKey(partner, kind)) + '</span>'
+      + '<button type="button" class="rename-insert-btn rename-use-btn"'
+      + ' title="Replace the new name with this one, so both sides carry the same name"'
+      + ' data-action="call" data-fn="_renameUseName" data-arg="' + a(partner.name) + '">Use &ldquo;' + e(partner.name) + '&rdquo;</button>'
+    : '';
+  const insertWhere = where
+    ? '<span class="rename-insert-label">' + e(whereKey) + '</span>'
       + '<button type="button" class="rename-insert-btn"'
       + ' title="Add it to the name at the cursor, keeping what is already there"'
-      + ' data-action="call" data-fn="_renameInsert" data-arg="' + a(where) + '">Insert &ldquo;' + e(where) + '&rdquo;</button>';
-  } else {
-    insert.hidden = true;
-    insert.innerHTML = '';
-  }
+      + ' data-action="call" data-fn="_renameInsert" data-arg="' + a(where) + '">Insert &ldquo;' + e(where) + '&rdquo;</button>'
+    : '';
+  insert.hidden = !(useOther || insertWhere);
+  insert.innerHTML = useOther + insertWhere;
 
   /* Default on. Keeping the pair aligned is the entire point of his naming
      convention, so the common case should not need a decision - he can still
@@ -9462,6 +9469,15 @@ function _renamePartnerAlreadyNamed(next) {
 function _renameBothWanted() {
   const both = document.getElementById('renamePairBoth');
   return !!(renameTarget && renameTarget.partner && both && both.checked);
+}
+
+function _renameUseName(text) {
+  const input = document.getElementById('renameInput');
+  if (!input) return;
+  input.value = String(text == null ? '' : text);
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  _renamePreview();
 }
 
 function _renameInsert(text) {

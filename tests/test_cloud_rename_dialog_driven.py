@@ -442,3 +442,83 @@ class TheApparatusHeCutIsNotOnScreenTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class TheOtherSidesNameIsOneClickTests(unittest.TestCase):
+    """"rename a site on the cloud and then use the name that the local is and
+    vice versa."
+
+    The partner's name was already in the dialog as a fact, and he still had to
+    type it. The button is found in what the dialog rendered and run through
+    the real `_renameUseName`, in both directions and on the Sites tab.
+    """
+
+    PAIRS = r"""
+      // The preview calls this only when there is a pair, so the rest of the
+      // file never needed it.
+      eval(slice('function _renameSentenceCase(s)', '\n/* One side, one call.'));
+      data.matched = [
+        { cloud: { id: 'proj-1', name: 'Northgate Survey' },
+          local: { path: 'C:\\Projects\\SITE4 Northgate\\SITE4 - Design.esx',
+                   name: 'SITE4 - Design' } },
+        { cloud: { id: 'site-9', name: 'SITE4 Northgate Campus' },
+          local: { path: 'C:\\Projects\\SITE4 Northgate', name: 'SITE4 Northgate' } },
+      ];
+      function useButton() {
+        const hit = delegated(els.renameInsert.innerHTML, '_renameUseName');
+        if (!hit) throw new Error('no use-name control in: ' + els.renameInsert.innerHTML);
+        return hit;
+      }
+    """
+
+    def run_checks(self, checks: str):
+        proc = run_node(self.PAIRS + checks)
+        if proc.returncode != 0:
+            self.fail((proc.stderr or proc.stdout or "node failed").strip())
+
+    def test_renaming_the_cloud_project_can_take_the_local_name(self):
+        self.run_checks(r"""
+          startRename('cloud', 'proj-1', 'Northgate Survey', 'projects');
+          check('the control is shown', els.renameInsert.hidden === false);
+          const hit = useButton();
+          _renameUseName.apply(null, hit.args);
+          eq('the field holds the local name', els.renameInput.value, 'SITE4 - Design');
+          check('the preview shows the new name',
+                textOf(els.renamePreview.innerHTML).indexOf('SITE4 - Design') !== -1);
+          done();
+        """)
+
+    def test_renaming_the_local_file_can_take_the_cloud_name(self):
+        self.run_checks(r"""
+          startRename('local', 'C:\\Projects\\SITE4 Northgate\\SITE4 - Design.esx',
+                      'SITE4 - Design', 'projects');
+          const hit = useButton();
+          _renameUseName.apply(null, hit.args);
+          eq('the field holds the cloud name', els.renameInput.value, 'Northgate Survey');
+          eq('caret at the end', els.renameInput.selectionStart, 'Northgate Survey'.length);
+          done();
+        """)
+
+    def test_a_cloud_site_can_take_the_folder_name(self):
+        """The Sites tab has no folder to insert, so the control area used to
+        stay hidden there - the new button must still show."""
+        self.run_checks(r"""
+          startRename('cloud', 'site-9', 'SITE4 Northgate Campus', 'sites');
+          check('the control is shown on a site', els.renameInsert.hidden === false);
+          _renameUseName.apply(null, useButton().args);
+          eq('the field holds the folder name', els.renameInput.value, 'SITE4 Northgate');
+          done();
+        """)
+
+    def test_no_control_when_the_names_already_agree_or_there_is_no_partner(self):
+        self.run_checks(r"""
+          data.matched[0].local.name = 'Northgate Survey';
+          startRename('cloud', 'proj-1', 'Northgate Survey', 'projects');
+          check('no use-name control when they agree',
+                !/_renameUseName/.test(els.renameInsert.innerHTML));
+          startRename('cloud', 'unpaired-7', 'Somewhere Else', 'sites');
+          check('nothing to use without a partner',
+                !/_renameUseName/.test(els.renameInsert.innerHTML));
+          done();
+        """)
