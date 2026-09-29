@@ -127,6 +127,17 @@ Four properties, each one a failure that has already happened here, and
 * it re-reads `versions.json` **at the tag** before publishing, because that is
   what `build_release.py` reads
 
+**It does not re-run a suite that already passed on the same tree.** Since
+2026-09-29 the `decide` job asks `scripts/tested_head.py` whether the commit
+being released is a merge that added nothing to a PR head, meaning the branch
+already contained main and the trees are identical. If it is, and a successful
+pull-request run of `tests.yml` exists for that head, the suite is skipped and
+the release publishes in about a minute instead of about 27. Any doubt,
+including an API error, means the suite runs.
+`tests/test_release_skips_a_suite_it_already_ran.py` evaluates the `publish`
+condition for every test outcome. **So merge main into a PR before merging it**:
+a PR that is behind main still releases, just with the full wait.
+
 **The one thing that is not obvious and would silently break it:** a release
 created with `GITHUB_TOKEN` does **not** fire `release: published`. GitHub
 suppresses that to stop workflows looping. So the automatic path cannot rely on
