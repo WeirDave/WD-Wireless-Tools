@@ -163,8 +163,6 @@
       </div>
     </details>
 
-    <button class="btn" id="expandAllBtn" data-action="call" data-fn="expandAllSites" title="Open every site in the list">Expand all</button>
-    <button class="btn" id="collapseAllBtn" data-action="call" data-fn="collapseAllSites" title="Close every site in the list">Collapse all</button>
     <button class="btn-icon-only" id="matchHelpChip" data-action="call" data-fn="openMatchHelp" title="How does WD decide that two files are the same project?" aria-label="How matching works">&#9432;</button>
 
     <button class="btn btn-amber dup-toolbar-btn" id="dupDeleteAllToolbarBtn"
@@ -227,7 +225,17 @@
     <button class="btn btn-secondary" data-action="call" data-fn="clearSelection" title="Untick everything">Clear selection</button>
   </div>
 
-  <div class="jump-nav" id="jumpNav" aria-label="Jump to letter"></div>
+  <!-- Expand and Collapse share the A-Z line, at its left: "the expand all
+       and collapse all should be on the same line as the alphabet just left
+       justified." Both act on the list the letters index, so they sit with
+       them rather than among the toolbar's actions. -->
+  <div class="jump-row" id="jumpRow">
+    <span class="jump-tools">
+      <button class="btn" id="expandAllBtn" data-action="call" data-fn="expandAllSites" title="Open every site in the list">Expand all</button>
+      <button class="btn" id="collapseAllBtn" data-action="call" data-fn="collapseAllSites" title="Close every site in the list">Collapse all</button>
+    </span>
+    <div class="jump-nav" id="jumpNav" aria-label="Jump to letter"></div>
+  </div>
 
   <div class="col-legend">
     <span></span>

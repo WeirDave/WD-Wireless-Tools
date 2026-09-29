@@ -785,7 +785,9 @@ function _syncTabUI(kind) {
      draws through `renderRows` on the way in - each goes straight to its own
      renderer - so the rail the ledger put up stayed up, twenty-six letters
      over a list that none of them selects. */
-  const jump = document.getElementById('jumpNav');
+  //: The row, not the rail: Expand and Collapse live on the same line, and
+  //: hiding only the letters would leave an empty bordered strip behind.
+  const jump = document.getElementById('jumpRow');
   if (jump && isLocalOnlyTab(kind)) jump.style.display = 'none';
 
   const dupTbBtn = document.getElementById('dupDeleteAllToolbarBtn');
@@ -1908,8 +1910,9 @@ let _jumpNavPresentCache = new Set();
 function _renderJumpNav() {
   const nav = document.getElementById('jumpNav');
   if (!nav) return;
-  if (isLocalOnlyTab(currentTab)) { nav.style.display = 'none'; return; }
-  nav.style.display = '';
+  const row = document.getElementById('jumpRow') || nav;
+  if (isLocalOnlyTab(currentTab)) { row.style.display = 'none'; return; }
+  row.style.display = '';
   const container = document.getElementById('rowsContainer');
 
   if (!activeLetter) {
@@ -8533,7 +8536,7 @@ async function bulkSync(dir) {
    not is worse than the friction of being told you are not. */
 function syncEverythingPlan() {
   const down = [], up = [], upBlocked = [], inSync = [], fresh = [];
-  const downBlocked = [], diverged = [];
+  const downBlocked = [], diverged = [], siteRenames = [];
   const seenPair = new Set(), seenCloud = new Set();
 
   const isFile = (l) => /\.esx$/i.test(String((l && l.path) || ''));
@@ -8586,8 +8589,25 @@ function syncEverythingPlan() {
     (kids.cloudOnly || []).forEach(c => takeCloud(c, siteName));
   };
 
+  /* A folder renamed in Explorer or Finder. `takePair` skips folders, and
+     until this nothing else looked at them - so after a rename, Sync
+     everything said "Local and cloud already match" with the site still
+     wearing its old name. "it spots the differences but you can't upload to
+     the cloud." Local is where the work happens, so the folder's name is the
+     one that goes up; the dialog shows both names before anything is sent. */
+  const takeSiteName = (pr) => {
+    if (!pr || !pr.cloud || !pr.local || !pr.cloud.id) return;
+    if (isFile(pr.local) || !pr.namesDiffer) return;
+    const localName = String(pr.local.name || '').trim();
+    if (!localName || localName === String(pr.cloud.name || '').trim()) return;
+    siteRenames.push({ cloudId: pr.cloud.id, cloudName: pr.cloud.name || '',
+                       localName, localPath: pr.local.path,
+                       matchType: pr.matchType });
+  };
+
   (data.matched || []).forEach(pr => {
     takePair(pr);
+    takeSiteName(pr);
     const site = (pr.cloud && pr.cloud.name) || (pr.local && pr.local.name) || '';
     walkKids((pr.cloud && pr.cloud.children) || (pr.local && pr.local.children), site);
   });
@@ -8595,7 +8615,18 @@ function syncEverythingPlan() {
   (data.localOnly || []).forEach(l => walkKids(l.children, l.name));
   if (data.orphans) (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
 
-  return { down, up, upBlocked, downBlocked, fresh, inSync, diverged };
+  return { down, up, upBlocked, downBlocked, fresh, inSync, diverged, siteRenames };
+}
+
+function _syncSiteRowsHtml(rows) {
+  return rows.map((d, i) => '<tr>'
+    + '<td class="sync-plan-pick"><input type="checkbox" class="sync-pick"'
+    + (d.matchType === 'fuzzy' ? '' : ' checked')
+    + ' data-kind="site" data-idx="' + i + '" data-action-change="call" data-fn="_syncPickUpdate"></td>'
+    + '<td class="sync-plan-name">' + e(d.cloudName) + '</td>'
+    + '<td class="sync-plan-dir">&#11014; rename</td>'
+    + '<td class="sync-plan-name">' + e(d.localName) + '</td>'
+    + '</tr>').join('');
 }
 
 function _syncRowsHtml(rows, dir) {
@@ -8676,7 +8707,7 @@ function _syncPickUpdate() {
     btn.textContent = n ? ('Sync ' + n) : 'Nothing selected';
     btn.disabled = !n;
   }
-  ['down', 'fresh', 'up'].forEach(kind => {
+  ['down', 'fresh', 'up', 'site'].forEach(kind => {
     const boxes = _syncPickBoxes(kind);
     const head = document.getElementById('syncAll-' + kind);
     if (head && boxes.length) {
@@ -8713,7 +8744,8 @@ function _syncCheckFirst() {
 async function syncEverything() {
   if (!data || !data.summary) { toast('Nothing loaded yet', 'info'); return; }
   const plan = syncEverythingPlan();
-  const willDo = plan.down.length + plan.fresh.length + plan.up.length;
+  const willDo = plan.down.length + plan.fresh.length + plan.up.length
+    + plan.siteRenames.length;
 
   if (!willDo) {
     // Still say what is waiting to go up - that is the half of the loop this
@@ -8735,6 +8767,30 @@ async function syncEverything() {
      screen was frightening. */
   let body = '<p class="sub">Tick what you want. Nothing happens to anything '
     + 'you untick, and nothing happens at all until you press the button.</p>';
+
+  if (plan.siteRenames.length) {
+    const n = plan.siteRenames.length;
+    const guessed = plan.siteRenames.filter(d => d.matchType === 'fuzzy').length;
+    body += '<p class="sync-plan-lead">'
+      + '<label class="sync-plan-all"><input type="checkbox" id="syncAll-site" '
+      + (guessed === n ? '' : 'checked ')
+      + 'data-action-change="call" data-fn="_syncPickAll" data-arg="site" data-arg-checked="1"> '
+      + 'Rename <b>' + n + '</b> cloud site' + (n === 1 ? '' : 's')
+      + ' to match your folder' + (n === 1 ? '' : 's') + '</label></p>'
+      + '<div class="sync-plan-wrap"><table class="sync-plan">'
+      + '<thead><tr><th></th><th>Cloud site now</th><th>Direction</th>'
+      + '<th>Renamed to your folder</th></tr></thead>'
+      + '<tbody>' + _syncSiteRowsHtml(plan.siteRenames) + '</tbody>'
+      + '</table></div>'
+      + '<p class="sub">The projects in each site stay where they are. '
+      + 'A rename can be put back the same way.</p>';
+    if (guessed) {
+      body += '<p class="sub warn"><b>' + guessed + ' of these '
+        + (guessed === 1 ? 'was' : 'were') + ' paired on similar wording '
+        + 'only</b>, so ' + (guessed === 1 ? 'it arrives' : 'they arrive')
+        + ' unticked. Check both names are the same site, then tick.</p>';
+    }
+  }
 
   if (plan.down.length) {
     body += '<p class="sync-plan-lead">'
@@ -8848,8 +8904,9 @@ async function syncEverything() {
 
   /* `showConfirmModal` empties the body when it closes, so the selection has
      to be read on the way out rather than after the await. */
-  let _pickedDown = [], _pickedFresh = [], _pickedUp = [];
+  let _pickedDown = [], _pickedFresh = [], _pickedUp = [], _pickedSite = [];
   const _grab = () => {
+    _pickedSite = _syncPicked('site');
     _pickedDown = _syncPicked('down');
     _pickedFresh = _syncPicked('fresh');
     _pickedUp = _syncPicked('up');
@@ -8872,7 +8929,9 @@ async function syncEverything() {
   const downRows = pickedDown.map(i => plan.down[i]).filter(Boolean);
   const freshRows = pickedFresh.map(i => plan.fresh[i]).filter(Boolean);
   const upRows = pickedUp.map(i => plan.up[i]).filter(Boolean);
-  if (!downRows.length && !freshRows.length && !upRows.length) return;
+  const siteRows = _pickedSite.map(i => plan.siteRenames[i]).filter(Boolean);
+  if (!downRows.length && !freshRows.length && !upRows.length
+      && !siteRows.length) return;
   clearSelection();
 
   /* verify_replace_local is the same call the per-row arrow makes: it
@@ -8881,6 +8940,20 @@ async function syncEverything() {
      the cloud project it is being replaced by is the copy. */
   const results = { done: 0, failed: 0, skipped: 0 };
   const waits = [];
+  for (const d of siteRows) {
+    const { promise } = opEnqueue({
+      title: 'Renaming cloud site "' + d.cloudName + '" to "' + d.localName + '"',
+      type: 'rename', pollBackend: false, undoable: false,
+      run: async () => {
+        const r = await pyApi('rename_cloud', 'sites', d.cloudId, d.localName);
+        if (r && r.error) throw new Error(r.error);
+        _scheduleOpRefresh();
+        return r;
+      },
+    });
+    waits.push(promise.then(() => { results.done++; })
+                      .catch(() => { results.failed++; }));
+  }
   for (const d of downRows) {
     const { promise } = opEnqueue({
       title: 'Updating "' + (d.localName || d.cloudName) + '" from the cloud',
