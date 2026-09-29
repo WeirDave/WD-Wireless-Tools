@@ -227,6 +227,23 @@ and for backfilling assets onto a tag whose build failed.
    use a clean venv: `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install
    -q -r requirements.txt && /tmp/venv/bin/python -m unittest discover -s
    tests -v`.
+
+   **`python scripts/run_tests.py` is the same suite, about 3x faster**, and
+   it is what CI runs since 2026-09-29. Each module runs in its own process,
+   one per core, and gets its own `WD_USER_DIR` from the runner. Under
+   `discover` that isolation comes from `test_0_user_dir_isolation.py`
+   sorting first, and a module run alone has no such ordering. Browser
+   modules never run two at a time. A test that passes under `discover` and
+   fails here usually depends on an earlier module's side effects:
+   `test_capacity_profiles` did, because another test had reloaded the module
+   under the default user directory. Fix the test, not the order.
+
+   **The browser tests run in one CI job, not four.**
+   `WD_BROWSER_TESTS=off` makes `tests.browsers.find` report no browser, so
+   every browser test skips. `tests.yml` sets it off everywhere except
+   Windows / Python 3.14. `tests/test_ci_splits_and_parallelises_the_suite.py`
+   fails unless exactly one job keeps them on. Leave the variable unset
+   locally.
 4. Commit and push to `main` directly (no PR needed for routine work).
    **Then wait for the push's CI run to go green before pushing the tag**
    (`gh run watch`). A local suite and CI do not ask the same question: CI

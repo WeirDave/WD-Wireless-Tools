@@ -84,6 +84,8 @@ def find(kind: str) -> str:
     programming error rather than a missing browser, so it raises.
     """
     where = _WHERE[kind]
+    if not wanted():
+        return NOT_INSTALLED
     for candidate in where["paths"]:
         if candidate and Path(candidate).is_file():
             return candidate
@@ -92,6 +94,29 @@ def find(kind: str) -> str:
         if found:
             return found
     return NOT_INSTALLED
+
+
+#: Set to "off" to skip every browser test in this process.
+SWITCH = "WD_BROWSER_TESTS"
+
+
+def wanted() -> bool:
+    """False only when `WD_BROWSER_TESTS=off`.
+
+    CI runs four jobs - Windows and macOS, Python 3.10 and 3.14 - and the
+    browser tests drove Firefox, Chrome and Edge in all four. They check
+    what a page does in a browser, which does not change with the Python
+    running the harness, so three of those four runs repeated the fourth
+    and made every job minutes longer. `tests.yml` turns them off everywhere
+    but one job, and `test_ci_runs_the_browser_tests` holds that exactly one
+    job still runs them.
+
+    Answering through `find` means every existing skip guard - they all ask
+    whether the binary exists - skips with no change of its own. On a laptop
+    nothing sets the variable, so they run wherever a browser is installed,
+    as before.
+    """
+    return os.environ.get(SWITCH, "").strip().lower() != "off"
 
 
 def installed(kind: str) -> bool:
@@ -120,6 +145,9 @@ def on_ci() -> bool:
 
 def why_missing() -> str:
     """A sentence for a skip message, naming what was looked for."""
+    if not wanted():
+        return ("browser tests are switched off in this run (%s=off); "
+                "one CI job runs them" % SWITCH)
     return ("no browser found - looked for %s on PATH and in the usual "
             "install locations for %s"
             % (", ".join(sorted(

@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from tools import capacity_profiles as cap  # noqa: E402
+from tools import user_dir as ud  # noqa: E402
 
 
 LAPTOP = "dev-laptop"
@@ -333,8 +334,13 @@ class StorageTests(unittest.TestCase):
     def test_templates_are_saved_outside_the_install_tree(self):
         # The install folder is replaced wholesale by an update; anything the
         # user made has to sit somewhere else.
+        # The user directory is whichever one the module was imported under:
+        # `WD_USER_DIR` in a normal run, the default when another test has
+        # reloaded it with the variable cleared. Checking for the default's
+        # folder name made this pass only after such a test had run first.
         self.assertNotIn(str(ROOT), str(self._orig))
-        self.assertIn(".wd_wireless_tools", str(self._orig))
+        self.assertEqual(self._orig.name, "capacity")
+        self.assertIn(self._orig.parent, {ud.user_dir(), ud.DEFAULT})
 
     def test_save_and_list_round_trip(self):
         tpl = {"name": "My Office", "items": [{"device": "d", "usage": "u", "perOccupant": 1.0}]}
