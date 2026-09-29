@@ -1349,6 +1349,19 @@ A floor too big to read on one sheet can be split into lettered sections. Turn o
 - **Configure grid…** opens the plan so you can set rows and columns by hand and
   position the area to be covered. Sections containing no APs are drawn dashed —
   they never become sheets.
+- **Combine cells**, in the same dialog under the Columns and Rows controls,
+  joins neighbouring cells into one section that prints as one sheet — for an
+  open area the grid would otherwise cut into sheets of empty floor, such as a
+  warehouse in one leg of an L-shaped building. Click **Combine cells**, click
+  the cells on the plan, then **Combine selected**. The cells have to make a
+  rectangle. A whole column top to bottom takes its letter (A1 and A2 become
+  **A**); anything else is named by its corners (**A1–B2**). The index, the Key
+  Plan and the match lines all use the combined name, and a match line along an
+  edge that meets two sections names both. To undo, click a combined section
+  and **Split**. Combined sections are set per floor, are copied by **Apply to
+  All Floors**, and are cleared if the number of columns or rows changes. Like
+  the rest of the grid dialog they are not saved: reloading the page or picking
+  another report starts the grid again.
 
 ### Column grid references
 
@@ -1477,6 +1490,17 @@ sit behind it.
 Each page can be set to **Auto**, **Portrait** or **Landscape** using the control
 above it, and the choice is remembered. Auto turns a page only when turning it
 prints the map meaningfully larger, so a plan that gains little stays upright.
+
+- **Floors split into sections** follow the same rule: on Auto the floor turns
+  landscape when its section maps print meaningfully larger that way round. Set
+  to Landscape, each section map is sized for the landscape sheet and uses its
+  full width.
+- **The cover page** has the same control. On Auto it takes the orientation most
+  of the report's sheets print in, so a landscape set of maps opens on a
+  landscape cover. **Match all pages** includes it.
+- **The AP Labels page** runs in two columns side by side on a landscape sheet,
+  as long as every name on the floor is 44 characters or shorter. A longer name
+  keeps the list in one column, because names are never wrapped.
 
 **Mixing portrait and landscape in one document works in Firefox, Chrome and
 Edge.** All three have been measured printing a document whose pages ask for

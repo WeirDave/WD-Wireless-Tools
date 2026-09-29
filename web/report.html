@@ -294,6 +294,12 @@
             </div>
           </div>
           <div id="gridCellCount" class="grid-cell-count"></div>
+          <div class="grid-merge-controls">
+            <button id="gridMergeModeBtn" class="btn btn-secondary btn-sm" aria-pressed="false" data-action="call" data-fn="toggleGridMergeMode">Combine cells</button>
+            <button id="gridCombineBtn" class="btn btn-secondary btn-sm" disabled data-action="call" data-fn="combineGridCells">Combine selected</button>
+            <button id="gridSplitBtn" class="btn btn-secondary btn-sm" disabled data-action="call" data-fn="splitGridCells">Split</button>
+            <span id="gridMergeHint" class="grid-merge-hint"></span>
+          </div>
         </div>
         <div id="gridPreviewContainer" class="grid-preview-container">
           <div id="gridPreviewImage" class="grid-preview-image"></div>
@@ -306,6 +312,8 @@
           <dd>Drag the blue box over the building area. Drag corners or edges to resize it.</dd>
           <dt>2. Fine-tune (optional)</dt>
           <dd>Scroll to zoom in for precise placement. Hold <kbd>Space</kbd> and drag to pan &mdash; anywhere, including over the blue box. Middle-drag and right-drag do the same, and plain dragging outside the box still pans. Adjust columns &amp; rows with +/&minus; if needed &mdash; auto-calculated by default.</dd>
+          <dt>Combine cells (optional)</dt>
+          <dd>For an open area the grid cuts through &mdash; a warehouse in one leg of an L-shaped building, say &mdash; click <strong>Combine cells</strong>, click the cells to join, then <strong>Combine selected</strong>. They print as one section on one sheet. A full column top to bottom is named by its letter, so A1 and A2 become <strong>A</strong>. Cells have to make a rectangle. Click a combined section and <strong>Split</strong> to undo it. Changing the number of columns or rows clears combined sections.</dd>
           <dt>3. Apply</dt>
           <dd>Click <strong>Apply</strong> to save this floor&rsquo;s grid.</dd>
           <dt>4. Additional floors</dt>
