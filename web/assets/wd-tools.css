@@ -10544,6 +10544,9 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 [data-theme="light"] .tool-aprename .ar-plan-wrap { background:#e8e8ee; }
 .tool-aprename .ar-plan-box { position:relative; line-height:0; }
 .tool-aprename .ar-plan-box img { display:block; max-width:100%; max-height:calc(100vh - 100px); }
+/* A plan is paper. Line work on a transparent background (most vector plans)
+   is black on the dark stage and reads as an empty floor. */
+.tool-aprename .ar-plan-box img { background:#fff; }
 .tool-aprename .ar-guide { position:absolute; z-index:1; pointer-events:none; }
 .tool-aprename .ar-guide-h { left:0; right:0; height:0; border-top:1.5px dashed rgba(255,180,50,.55); }
 .tool-aprename .ar-guide-v { top:0; bottom:0; width:0; border-left:1.5px dashed rgba(255,180,50,.55); }

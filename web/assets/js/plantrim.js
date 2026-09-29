@@ -1196,43 +1196,6 @@
     el.hidden = false;
   }
 
-  // A floor plan member carries no extension and no content type, so a blob
-  // made from it has neither. A browser will sniff a raster out of that, but an
-  // SVG is text and will not render without being told it is an image - which
-  // is why vector plans showed an empty canvas and no error. The format comes
-  // from images.json, cross-checked against the bytes in the same spirit as the
-  // extractor: what the file *is* wins over what it is labelled.
-  var MIME = { SVG: 'image/svg+xml', PNG: 'image/png', JPEG: 'image/jpeg',
-               JPG: 'image/jpeg', GIF: 'image/gif', BMP: 'image/bmp',
-               TIFF: 'image/tiff', WEBP: 'image/webp' };
-
-  function sniffMime(bytes) {
-    // Guards are the number of bytes each check actually reads, not the length
-    // of the signature: a four-byte read behind a "length > 8" guard silently
-    // declines to identify a file it could have.
-    if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 &&
-        bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
-    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg';
-    if (bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 &&
-        bytes[2] === 0x46) return 'image/gif';
-    // SVG is text: look past a byte-order mark and any leading whitespace.
-    var i = 0;
-    if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) i = 3;
-    while (i < bytes.length && bytes[i] <= 0x20) i++;
-    if (bytes[i] === 0x3c) {          // '<'
-      var head = '';
-      for (var j = i; j < Math.min(i + 8, bytes.length); j++) {
-        head += String.fromCharCode(bytes[j]);
-      }
-      if (head.indexOf('<?xml') === 0 || head.indexOf('<svg') === 0) return 'image/svg+xml';
-    }
-    return '';
-  }
-
-  function mimeFor(bytes, declared) {
-    return sniffMime(bytes) || MIME[String(declared || '').toUpperCase()] || '';
-  }
-
   function loadImage(f) {
     if (box.img && box.imgFor === f.imageId) return Promise.resolve();
     var entry = box.zip && box.zip.file('image-' + f.imageId);
@@ -1244,7 +1207,7 @@
     }
     return entry.async('uint8array').then(function (bytes) {
       return new Promise(function (resolve) {
-        var type = mimeFor(bytes, f.format);
+        var type = WD.imageMime(bytes, f.format);
         var url = URL.createObjectURL(new Blob([bytes], type ? { type: type } : undefined));
         var im = new Image();
         im.onload = function () {

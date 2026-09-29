@@ -91,6 +91,44 @@
     return /^#[0-9a-fA-F]{3,8}$|^rgba?\([^)]+\)$|^hsla?\([^)]+\)$/.test(c) ? c : '#888';
   };
 
+  /* ── A floor plan's image type ───────────────────────────────────
+     A floor plan member carries no extension and no content type, so a blob
+     made from it has neither. A browser will sniff a raster out of that, but an
+     SVG is text and will not render without being told it is an image. And
+     images.json's imageFormat is not to be believed over the bytes: a plan
+     labelled PNG that is really an SVG is refused outright when the blob is
+     typed image/png, and the floor shows nothing. What the file *is* wins over
+     what it is labelled. PlanTrim and AP Labeler both load plans through this. */
+  var IMAGE_MIME = { SVG: 'image/svg+xml', PNG: 'image/png', JPEG: 'image/jpeg',
+                     JPG: 'image/jpeg', GIF: 'image/gif', BMP: 'image/bmp',
+                     TIFF: 'image/tiff', WEBP: 'image/webp' };
+
+  WD.sniffImageMime = function (bytes) {
+    // Guards are the number of bytes each check actually reads, not the length
+    // of the signature: a four-byte read behind a "length > 8" guard silently
+    // declines to identify a file it could have.
+    if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 &&
+        bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8) return 'image/jpeg';
+    if (bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 &&
+        bytes[2] === 0x46) return 'image/gif';
+    var i = 0;
+    if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) i = 3;
+    while (i < bytes.length && bytes[i] <= 0x20) i++;
+    if (bytes[i] === 0x3c) {
+      var head = '';
+      for (var j = i; j < Math.min(i + 8, bytes.length); j++) {
+        head += String.fromCharCode(bytes[j]);
+      }
+      if (head.indexOf('<?xml') === 0 || head.indexOf('<svg') === 0) return 'image/svg+xml';
+    }
+    return '';
+  };
+
+  WD.imageMime = function (bytes, declared) {
+    return WD.sniffImageMime(bytes) || IMAGE_MIME[String(declared || '').toUpperCase()] || '';
+  };
+
   /* ── The Ekahau AP palette ───────────────────────────────────────
      The ten colours Ekahau offers in its Mark menu, plus CLEAR (no colour).
 

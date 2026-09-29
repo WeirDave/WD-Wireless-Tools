@@ -23,6 +23,7 @@ from tests.css_source import css_for
 
 ROOT = Path(__file__).resolve().parent.parent
 PLANTRIM_JS = ROOT / "web" / "assets" / "js" / "plantrim.js"
+SHARED_JS = ROOT / "web" / "assets" / "js" / "wd-shared.js"
 PLANTRIM_HTML = ROOT / "web" / "plantrim.html"
 
 NODE_TIMEOUT_S = 120
@@ -388,13 +389,19 @@ class CanvasImageTypeTests(unittest.TestCase):
       if (i < 0 || j < 0) throw new Error('could not find ' + a);
       return src.slice(i, j);
     }
-    eval(slice('  var MIME = {', '  function loadImage(f)'));
+    const shared = fs.readFileSync(process.argv[2], 'utf8');
+    const a = shared.indexOf('  var IMAGE_MIME = {');
+    const b = shared.indexOf('  /* ── The Ekahau AP palette');
+    if (a < 0 || b < 0) throw new Error('image type helpers moved');
+    const WD = {};
+    eval(shared.slice(a, b));
+    const mimeFor = WD.imageMime;
     const bytesOf = (arr) => new Uint8Array(arr);
     const textBytes = (s) => new Uint8Array([...s].map(c => c.charCodeAt(0)));
     """
 
     def run_js(self, script):
-        proc = subprocess.run(["node", "-e", self.PRELUDE + script, str(PLANTRIM_JS)],
+        proc = subprocess.run(["node", "-e", self.PRELUDE + script, str(PLANTRIM_JS), str(SHARED_JS)],
                               capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if proc.returncode != 0:
             raise AssertionError("node failed: " + proc.stderr)
@@ -462,7 +469,7 @@ class CanvasImageTypeTests(unittest.TestCase):
         js = PLANTRIM_JS.read_text(encoding="utf-8")
         self.assertIn("images.json", js)
         self.assertIn("format: formats[f.imageId]", js)
-        self.assertIn("mimeFor(bytes, f.format)", js)
+        self.assertIn("WD.imageMime(bytes, f.format)", js)
 
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")

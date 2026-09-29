@@ -1019,7 +1019,7 @@
 
       S.imageFormats = {};
       ((imgData && imgData.images) || []).forEach(function (img) {
-        S.imageFormats[img.id] = (img.imageFormat || 'PNG').toUpperCase();
+        S.imageFormats[img.id] = img.imageFormat || '';
       });
 
       ((bfData && bfData.buildingFloors) || []).forEach(function (bf) {
@@ -1122,9 +1122,8 @@
     var entry = S.zip.file('image-' + floor.imageId);
     if (!entry) return Promise.reject('missing image blob');
     return entry.async('uint8array').then(function (data) {
-      var fmt = S.imageFormats[floor.imageId] || 'PNG';
-      var mime = fmt === 'JPEG' ? 'image/jpeg' : fmt === 'SVG' ? 'image/svg+xml' : 'image/png';
-      var blob = new Blob([data], { type: mime });
+      var mime = WD.imageMime(data, S.imageFormats[floor.imageId]);
+      var blob = new Blob([data], mime ? { type: mime } : undefined);
       var url = URL.createObjectURL(blob);
       S.floorImageUrls[floor.id] = url;
       return url;
