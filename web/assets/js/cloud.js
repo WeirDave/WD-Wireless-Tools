@@ -4708,6 +4708,7 @@ async function settleLocation(side, cloudId, siteId, localPath, dest, label) {
    band: content, comparison and staleness are about files, not folders. */
 function siteDetailHtml(r, stripe) {
   const c = r.cloud, l = r.local;
+  if (r.status === 'orphan' && l && !c) return unpairedFolderHtml(r, stripe);
   if (r.status !== 'mismatch' || !c || !l) return '';
   const guessed = !PUSHABLE_MATCH_TYPES.has(r.matchType);
   const sentence = 'The folder and the cloud site are named differently. '
@@ -4737,6 +4738,41 @@ function siteDetailHtml(r, stripe) {
     + `<span class="rd-lane local">`
     +   `<span class="rd-actions">${split.local}</span>`
     + `</span>`
+    + `</div>`;
+}
+
+/* A folder with no cloud site, when there is a cloud site with no folder.
+
+   "add the link picker for unpaired sites too." A folder renamed far enough
+   in Explorer or Finder stops pairing with its site at all - no shared code,
+   not enough words in common - and the two sat on the list as "Local folder
+   only" and "Cloud site only", with "+ Cloud site" as the only offer. That
+   creates a second site; the one he wanted to rename was the one on the row
+   below.
+
+   Linking them by hand makes a pair he made himself, and a mismatched pair
+   already carries Local → Cloud and Cloud → Local in its own band.
+
+   Only on the folder, and only while some cloud site is unpaired: a folder
+   that could not be linked to anything has nothing to ask. The cloud side
+   carries the same action in its row menu rather than a band, because
+   colleagues' sites are cloud-only by the dozen and a band on each is
+   noise. */
+function unpairedFolderHtml(r, stripe) {
+  const l = r.local;
+  const d = (typeof data !== 'undefined' && data) || {};
+  if (!(d.cloudOnly || []).length) return '';
+  const acts = rdAction('link', 'Link to a cloud site…',
+    'openLinkPicker', ['local', np(l.path), l.name, 'sites'],
+    { primary: true, title: 'Pick the cloud site this folder is - for a folder that was renamed. Nothing is renamed until you choose to.' });
+  return `<div class="row-detail rd-plain${stripe ? ' stripe' : ''} status-orphan">`
+    + `<span class="rd-lane cloud">`
+    +   `<span class="rd-icon">${ic('link')}</span>`
+    +   `<span class="rd-text">${e('No cloud site matches this folder. If you renamed it, link it to its site; otherwise create one.')}</span>`
+    +   `<span class="rd-actions">${acts}</span>`
+    + `</span>`
+    + `<span class="rd-gut"></span>`
+    + `<span class="rd-lane local"></span>`
     + `</div>`;
 }
 
@@ -5095,6 +5131,10 @@ function cloudCell(r, localCodes) {
       ? menuItem('eye', 'View the projects in this site', 'openCloudPeek', [c.id, c.name],
           { title: `${c.datasets.length} project${c.datasets.length > 1 ? 's' : ''} in Ekahau Cloud` })
       : '',
+    (isSites && !r.local && !r.indent)
+      ? menuItem('link', 'Link to a local folder…', 'openLinkPicker', ['cloud', c.id, c.name, 'sites'],
+          { title: 'Pair this cloud site with a folder yourself - for a folder that was renamed.' })
+      : '',
     (!isSites && c.unassigned && r.parentSiteId)
       ? menuItem('plus', `Assign to “${e(r.parentSiteName || '')}”`,
           'assignOrphanToSite', [c.id, r.parentSiteId, c.name, r.parentSiteName || ''],
@@ -5160,6 +5200,10 @@ function localCell(r, cloudCodes) {
         { title: flagged ? 'Removes the ! prefix' : 'Adds a ! prefix so it sorts to the top here and in Explorer' }) : '',
     (!isSites && !l.isDir) ? menuItem('move', 'Move to another site folder…',
         'startMoveLocalToSite', [np(l.path), l.name]) : '',
+    (isSites && !r.cloud && !r.indent)
+      ? menuItem('link', 'Link to a cloud site…', 'openLinkPicker', ['local', np(l.path), l.name, 'sites'],
+          { title: 'Pair this folder with a cloud site yourself - for a folder that was renamed.' })
+      : '',
     isSites ? menuItem('merge', 'Merge into another folder…', 'startMerge', [np(l.path), l.name]) : '',
     menuItem('rename', `Rename this ${thing}…`, 'startRename', ['local', np(l.path), l.name, kindAttr]),
     menuItem('trash', `Delete this ${thing}${isSites ? ' and its contents' : ''}`,
@@ -6993,35 +7037,47 @@ function _collectOrphansOfKind(kind, side) {
     seen.add(k);
     out.push({ ...item, ...(extra || {}) });
   };
+  /* On the Tree tab the top-level lists hold *sites and folders*, and the
+     projects are one level down. Reading the top level as projects put whole
+     sites into a project's link picker, and picking one filed a manual match
+     between a project and a site that nothing could ever honour. */
+  const tree = currentTab === 'sites';
+  if (kind === 'sites') {
+    //: The top level is the sites and folders themselves - on the Tree tab only.
+    if (!tree) return out;
+    ((side === 'cloud' ? data.cloudOnly : data.localOnly) || []).forEach(x => push(x));
+    return out;
+  }
   if (kind === 'projects') {
     if (side === 'cloud') {
-      (data.cloudOnly || []).forEach(x => push(x));
+      if (!tree) (data.cloudOnly || []).forEach(x => push(x));
       (data.orphans && data.orphans.cloudOnly || []).forEach(x => push(x));
       (data.matched || []).forEach(p => {
         ((p.cloud && p.cloud.children && p.cloud.children.cloudOnly) || []).forEach(x => push(x, { _parentSite: p.cloud.name }));
       });
-      (data.localOnly || []).forEach(f => {
-        ((f.children && f.children.cloudOnly) || []).forEach(x => push(x));
+      if (tree) (data.cloudOnly || []).forEach(s => {
+        ((s.children && s.children.cloudOnly) || []).forEach(x => push(x, { _parentSite: s.name }));
       });
     } else {
-      (data.localOnly || []).forEach(x => push(x));
+      if (!tree) (data.localOnly || []).forEach(x => push(x));
       (data.matched || []).forEach(p => {
         ((p.cloud && p.cloud.children && p.cloud.children.localOnly) || []).forEach(x => push(x, { _parentSite: p.cloud.name }));
       });
-      (data.cloudOnly || []).forEach(s => {
-        ((s.children && s.children.localOnly) || []).forEach(x => push(x));
+      if (tree) (data.localOnly || []).forEach(f => {
+        ((f.children && f.children.localOnly) || []).forEach(x => push(x, { _parentSite: f.name }));
       });
     }
   }
   return out;
 }
 
-function openLinkPicker(sourceSide, sourceId, sourceName) {
+function openLinkPicker(sourceSide, sourceId, sourceName, kind) {
   const oppositeSide = sourceSide === 'cloud' ? 'local' : 'cloud';
   const code = (sourceName.match(/^([A-Z]{2,}[0-9]+)/) || [])[1] || '';
-  _linkPickerCtx = { sourceSide, sourceId, sourceName, code, oppositeSide };
+  const sites = kind === 'sites';
+  _linkPickerCtx = { sourceSide, sourceId, sourceName, code, oppositeSide, kind: sites ? 'sites' : 'projects' };
 
-  const candidates = _collectOrphansOfKind('projects', oppositeSide);
+  const candidates = _collectOrphansOfKind(sites ? 'sites' : 'projects', oppositeSide);
 
   candidates.sort((a, b) => {
     const ac = a.code === code ? 0 : 1;
@@ -7033,9 +7089,13 @@ function openLinkPicker(sourceSide, sourceId, sourceName) {
 
   const sourceLabel = sourceSide === 'cloud' ? 'CLOUD' : 'LOCAL';
   const oppositeLabel = oppositeSide === 'cloud' ? 'CLOUD' : 'LOCAL';
-  document.getElementById('linkPickerTitle').textContent = `Link to a ${oppositeSide} counterpart`;
-  document.getElementById('linkPickerSub').textContent =
-    `Pick the ${oppositeSide} file to link with this ${sourceSide} orphan. Overrides all auto-matching.`;
+  const thing = (side) => sites ? (side === 'cloud' ? 'cloud site' : 'local folder')
+                                : (side === 'cloud' ? 'cloud project' : 'local file');
+  document.getElementById('linkPickerTitle').textContent = `Link to a ${thing(oppositeSide)}`;
+  document.getElementById('linkPickerSub').textContent = sites
+    ? `Pick the ${thing(oppositeSide)} this ${thing(sourceSide)} is. Only unpaired ones are listed. `
+      + `Once linked, the row offers to rename either side to match.`
+    : `Pick the ${oppositeSide} file to link with this ${sourceSide} orphan. Overrides all auto-matching.`;
   document.getElementById('linkPickerSource').innerHTML =
     `<div class="lp-source-inner">
        <span class="hb-tag ${sourceSide}">${sourceLabel}</span>
@@ -7070,9 +7130,11 @@ function _lpFilter(q) {
   list.innerHTML = filtered.map(c => {
     const isSameCode = ctx.code && c.code === ctx.code;
     const idOrPath = ctx.oppositeSide === 'cloud' ? c.id : c.path;
-    const subtitle = ctx.oppositeSide === 'cloud'
-      ? (c.siteName || c._parentSite || '')
-      : (c.folder || c._parentSite || '');
+    const subtitle = ctx.kind === 'sites'
+      ? (c.meta || '')
+      : ctx.oppositeSide === 'cloud'
+        ? (c.siteName || c._parentSite || '')
+        : (c.folder || c._parentSite || '');
     return `<div class="lp-item${isSameCode ? ' same-site' : ''}"
                  data-action="call" data-fn="_lpPick" data-arg="${a(idOrPath)}" data-arg2="${a(c.name || '')}">
       <div class="lp-item-main">
