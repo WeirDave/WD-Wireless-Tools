@@ -35,6 +35,7 @@ Usage::
     python scripts/run_tests.py --jobs 1        # serially, same isolation
     python scripts/run_tests.py test_updater test_esx_trimmer
     python scripts/run_tests.py --record tests/durations.json
+    python scripts/run_tests.py --browsers-only  # what each browser job runs
 
 `tests/durations.json` only orders the queue. A module missing from it is
 treated as slow and started early, so a stale file costs balance, never a
@@ -256,6 +257,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("modules", nargs="*",
                     help="test modules to run (default: all)")
     ap.add_argument("--jobs", "-j", type=int, default=os.cpu_count() or 1)
+    ap.add_argument("--browsers-only", action="store_true",
+                    help="run only the modules that drive a browser - "
+                         "what each per-browser CI job runs")
     ap.add_argument("--browser-jobs", type=int, default=None,
                     help="browser modules at once after the first "
                          "(default: --jobs minus one)")
@@ -267,6 +271,8 @@ def main(argv: list[str] | None = None) -> int:
     a = ap.parse_args(argv)
 
     modules = discover(a.modules)
+    if a.browsers_only:
+        modules = [m for m in modules if uses_a_browser(m)]
     if not modules:
         print("no test modules found", file=sys.stderr)
         return 1

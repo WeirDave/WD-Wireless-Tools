@@ -6,10 +6,10 @@ the workflow's switch is evaluated for every matrix combination,
 `tests.browsers` is asked about a browser that really is on `PATH`, and
 `scripts/run_tests.py` is run against modules written here.
 
-* **The browser tests still run somewhere.** They are the suite's standard of
-  proof, and they have already been silently absent from CI once, for four
-  releases. Turning them off in three jobs is only safe while exactly one job
-  keeps them on.
+* **The browser tests still run, each browser exactly once.** They are the
+  suite's standard of proof, and they have already been silently absent from
+  CI once, for four releases. The suite jobs switch them off, which is only
+  safe while the browser jobs, taken together, drive each browser once.
 * **A parallel run still isolates the user directory.** Under `discover`,
   `test_0_user_dir_isolation.py` does that by sorting first. A module run on
   its own gets no such ordering, so the runner has to supply it, and a lapse
@@ -22,6 +22,7 @@ the workflow's switch is evaluated for every matrix combination,
 """
 from __future__ import annotations
 
+import contextlib
 import io
 import os
 import re
@@ -46,65 +47,111 @@ from tools import user_dir as ud  # noqa: E402
 WORKFLOW = ROOT / ".github" / "workflows" / "tests.yml"
 
 
-def _matrix(lines: list[str], key: str) -> list[str]:
-    for line in lines:
-        m = re.match(rf"^\s+{re.escape(key)}:\s*\[(.*)\]\s*$", line)
+def _jobs(text: str) -> dict[str, list[str]]:
+    """Each job in the workflow, as its lines with comments dropped."""
+    lines = [l for l in text.splitlines() if not l.lstrip().startswith("#")]
+    at = lines.index("jobs:")
+    jobs: dict[str, list[str]] = {}
+    name = None
+    for line in lines[at + 1:]:
+        m = re.match(r"^  ([\w-]+):\s*$", line)
         if m:
-            return [v.strip().strip("'\"") for v in m.group(1).split(",")]
-    raise AssertionError(f"matrix.{key} not found in tests.yml")
+            name = m.group(1)
+            jobs[name] = []
+        elif name and line.strip():
+            jobs[name].append(line)
+    return jobs
 
 
-def _switch_expression(lines: list[str]) -> str:
-    for line in lines:
-        m = re.match(r"^\s+WD_BROWSER_TESTS:\s*\$\{\{(.*)\}\}\s*$", line)
+def _value(block: list[str], key: str) -> str | None:
+    for line in block:
+        m = re.match(rf"^\s+{re.escape(key)}:\s*(.*?)\s*$", line)
         if m:
-            return m.group(1).strip()
-    raise AssertionError("WD_BROWSER_TESTS is not set in tests.yml")
+            return m.group(1).strip("'\"")
+    return None
 
 
-def _evaluate(expr: str, matrix: dict) -> str:
-    """Evaluate a GitHub expression of the `a && 'x' || 'y'` kind."""
-    py = re.sub(r"matrix\.([\w-]+)",
-                lambda m: repr(matrix[m.group(1)]), expr)
-    py = py.replace("&&", " and ").replace("||", " or ")
-    if re.search(r"matrix|\$|!(?!=)", py):
-        raise AssertionError(f"cannot evaluate {expr!r}")
-    return eval(py, {"__builtins__": {}}, {})
+def _matrix(block: list[str]) -> dict[str, list[str]]:
+    out, inside = {}, False
+    for line in block:
+        if re.match(r"^\s+matrix:\s*$", line):
+            inside = True
+            continue
+        if inside:
+            m = re.match(r"^\s{8}([\w-]+):\s*\[(.*)\]\s*$", line)
+            if not m:
+                break
+            out[m.group(1)] = [v.strip().strip("'\"")
+                               for v in m.group(2).split(",")]
+    return out
 
 
-class TheBrowserTestsRunInExactlyOneJob(unittest.TestCase):
+def _resolve(value: str | None, combo: dict) -> str | None:
+    """A literal, or `${{ matrix.x }}` - the only two shapes allowed here."""
+    if value is None:
+        return None
+    m = re.fullmatch(r"\$\{\{\s*matrix\.([\w-]+)\s*\}\}", value)
+    if m:
+        return combo[m.group(1)]
+    if "${{" in value:
+        raise AssertionError(f"cannot evaluate {value!r}")
+    return value
+
+
+def _runs(text: str) -> list[dict]:
+    """One entry per job the workflow will start: its name, the runner it
+    lands on, the browser switch, and which browsers it may drive."""
+    out = []
+    for name, block in _jobs(text).items():
+        matrix = _matrix(block)
+        combos = [{}]
+        for key, values in matrix.items():
+            combos = [dict(c, **{key: v}) for c in combos for v in values]
+        for combo in combos:
+            switch = _resolve(_value(block, "WD_BROWSER_TESTS"), combo)
+            only = _resolve(_value(block, "WD_BROWSERS"), combo)
+            browsers_ = ({b.strip() for b in only.split(",")} if only
+                         else {"firefox", "chrome", "edge"})
+            out.append({"job": name, "combo": combo,
+                        "runs_on": _resolve(_value(block, "runs-on"), combo),
+                        "switch": switch, "browsers": browsers_})
+    return out
+
+
+class EachBrowserIsTestedExactlyOnce(unittest.TestCase):
+    """The workflow, expanded job by job and combination by combination."""
 
     def setUp(self):
-        lines = [l for l in WORKFLOW.read_text(encoding="utf-8").splitlines()
-                 if not l.lstrip().startswith("#")]
-        self.oses = _matrix(lines, "os")
-        self.pythons = _matrix(lines, "python-version")
-        self.expr = _switch_expression(lines)
+        self.runs = _runs(WORKFLOW.read_text(encoding="utf-8"))
 
-    def _setting(self, os_name: str, python: str) -> str:
-        return _evaluate(self.expr, {"os": os_name, "python-version": python})
+    def test_the_jobs_were_read(self):
+        """Every assertion below is vacuous over an empty list."""
+        jobs = {r["job"] for r in self.runs}
+        self.assertEqual(jobs, {"test", "browsers"}, self.runs)
+        self.assertEqual(sum(r["job"] == "test" for r in self.runs), 4)
 
-    def test_the_matrix_was_read(self):
-        """Every assertion below is vacuous over an empty matrix."""
-        self.assertIn("windows-latest", self.oses)
-        self.assertGreaterEqual(len(self.oses) * len(self.pythons), 2)
+    def test_every_job_says_on_or_off(self):
+        """An empty value reads as "on" to `tests.browsers`, so a missing
+        switch would quietly put the browsers back in every suite job."""
+        for r in self.runs:
+            self.assertIn(r["switch"], ("on", "off"), r)
 
-    def test_exactly_one_job_runs_them(self):
-        on = [(o, p) for o in self.oses for p in self.pythons
-              if self._setting(o, p) == "on"]
-        self.assertEqual(len(on), 1, on)
+    def test_the_suite_jobs_drive_no_browser(self):
+        for r in self.runs:
+            if r["job"] == "test":
+                self.assertEqual(r["switch"], "off", r)
 
-    def test_that_job_is_on_windows(self):
+    def test_each_browser_is_driven_by_exactly_one_job(self):
+        driven = [b for r in self.runs if r["switch"] == "on"
+                  for b in r["browsers"]]
+        self.assertEqual(sorted(driven), ["chrome", "edge", "firefox"],
+                         self.runs)
+
+    def test_every_job_that_drives_a_browser_is_on_windows(self):
         """What he runs, and where a browser difference would matter to him."""
-        on = [o for o in self.oses for p in self.pythons
-              if self._setting(o, p) == "on"]
-        self.assertEqual(on, ["windows-latest"])
-
-    def test_every_other_job_says_off_rather_than_nothing(self):
-        """An empty value reads as "on" to `tests.browsers`, so a typo in
-        the expression would quietly run them in every job again."""
-        values = {self._setting(o, p) for o in self.oses for p in self.pythons}
-        self.assertEqual(values, {"on", "off"})
+        for r in self.runs:
+            if r["switch"] == "on":
+                self.assertEqual(r["runs_on"], "windows-latest", r)
 
 
 class TheSwitchReachesEveryBrowserTest(unittest.TestCase):
@@ -135,6 +182,19 @@ class TheSwitchReachesEveryBrowserTest(unittest.TestCase):
                 self.assertFalse(Path(binary).exists(), kind)
             self.assertIn(browsers.SWITCH, browsers.why_missing())
 
+    def test_a_browser_left_out_of_the_list_is_not_found(self):
+        with mock.patch.dict(os.environ, {"PATH": self.path,
+                                          browsers.SWITCH: "on",
+                                          browsers.ONLY: "chrome"}):
+            self.assertFalse(browsers.installed("firefox"))
+            self.assertIn(browsers.ONLY, browsers.why_missing())
+
+    def test_a_browser_in_the_list_is_found(self):
+        with mock.patch.dict(os.environ, {"PATH": self.path,
+                                          browsers.SWITCH: "on",
+                                          browsers.ONLY: "firefox"}):
+            self.assertTrue(browsers.installed("firefox"))
+
     def test_on_means_on(self):
         with mock.patch.dict(os.environ, {"PATH": self.path,
                                           browsers.SWITCH: "on"}):
@@ -148,6 +208,22 @@ class TheSuiteStepUsesTheRunner(unittest.TestCase):
         self.assertIn("Run safety suite", steps)
         self.assertEqual(steps["Run safety suite"].get("run"),
                          "python scripts/run_tests.py")
+
+    def test_the_browser_jobs_run_only_the_browser_modules(self):
+        steps = {s.get("name"): s for s in workflow_steps(WORKFLOW)}
+        self.assertEqual(steps["Run browser tests"].get("run"),
+                         "python scripts/run_tests.py --browsers-only")
+
+    def test_browsers_only_selects_exactly_the_browser_modules(self):
+        """Run through `main`, so the flag is proved to reach the queue."""
+        seen = []
+        with mock.patch.object(run_tests, "run_all",
+                               lambda mods, *a, **k: seen.extend(mods) or []), \
+                contextlib.redirect_stdout(io.StringIO()):
+            run_tests.main(["--browsers-only"])
+        self.assertTrue(seen)
+        self.assertEqual(sorted(seen), sorted(
+            m for m in run_tests.discover() if run_tests.uses_a_browser(m)))
 
     def test_the_runner_finds_every_test_file(self):
         """`discover` runs every `test_*.py`; a runner that found fewer
