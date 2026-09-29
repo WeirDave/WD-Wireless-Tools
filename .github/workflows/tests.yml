@@ -29,15 +29,10 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
         python-version: ['3.10', '3.14']
-    # The browser tests run in exactly one of the four jobs. They check what a
-    # page does in Firefox, Chrome and Edge, which does not depend on the
-    # Python version or the runner OS driving them, so the other three jobs
-    # repeated the first and took minutes each to do it. Windows, because that
-    # is what he runs; 3.14, because it is the faster of the two Windows jobs.
-    # `tests/browsers.py` reads this; `tests/test_ci_runs_the_browser_tests.py`
-    # fails unless exactly one combination has it on.
+    # No browser tests in these four jobs: they have jobs of their own below,
+    # one per browser. `tests/browsers.py` reads this switch.
     env:
-      WD_BROWSER_TESTS: ${{ (matrix.os == 'windows-latest' && matrix.python-version == '3.14') && 'on' || 'off' }}
+      WD_BROWSER_TESTS: 'off'
 
     steps:
       - name: Check out repository
@@ -106,3 +101,58 @@ jobs:
 
       - name: Check dependency consistency
         run: python -m pip check
+
+  # The browser tests, one job per browser, next to the four above rather
+  # than inside one of them.
+  #
+  # Inside a job they competed for its cores with the rest of the suite and
+  # slowed badly: one module took 549 s alongside the other tests against 171 s
+  # alone, so running browser modules side by side saved nothing and the job
+  # stayed at 19 minutes. Split three ways, each job drives one browser and runs
+  # only the modules that drive one. Windows, because that is what he runs.
+  #
+  # `WD_BROWSERS` narrows `tests.browsers.find` to this job's browser, so each
+  # browser's tests run exactly once across the three.
+  # `tests/test_ci_splits_and_parallelises_the_suite.py` holds that: the four
+  # jobs above are off, and together these cover each browser once.
+  browsers:
+    name: ${{ matrix.browser }} / Windows
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [firefox, chrome, edge]
+    env:
+      WD_BROWSER_TESTS: 'on'
+      WD_BROWSERS: ${{ matrix.browser }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      - name: Report which browsers are available
+        run: python -m tests.browsers_report
+
+      - name: Run browser tests
+        run: python scripts/run_tests.py --browsers-only

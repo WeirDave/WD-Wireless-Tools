@@ -243,12 +243,18 @@ and for backfilling assets onto a tag whose build failed.
    `test_capacity_profiles` did, because another test had reloaded the module
    under the default user directory. Fix the test, not the order.
 
-   **The browser tests run in one CI job, not four.**
-   `WD_BROWSER_TESTS=off` makes `tests.browsers.find` report no browser, so
-   every browser test skips. `tests.yml` sets it off everywhere except
-   Windows / Python 3.14. `tests/test_ci_splits_and_parallelises_the_suite.py`
-   fails unless exactly one job keeps them on. Leave the variable unset
-   locally.
+   **The browser tests have their own CI jobs, one per browser.** The four
+   suite jobs set `WD_BROWSER_TESTS=off`, which makes `tests.browsers.find`
+   report no browser, so every browser test skips there. The `browsers` job
+   runs on Windows with one matrix entry each for Firefox, Chrome and Edge.
+   It sets `WD_BROWSERS` to that one browser and runs
+   `scripts/run_tests.py --browsers-only`. The first attempt ran them all in
+   one of the suite jobs, and it stayed at 19 minutes: browser modules
+   competing with the rest of the suite for cores slowed down about as much
+   as running them side by side saved. One module took 549 s there, against
+   171 s alone. `tests/test_ci_splits_and_parallelises_the_suite.py` expands
+   every job and fails unless the suite jobs are off and each browser is
+   driven exactly once, on Windows. Leave both variables unset locally.
 4. Commit and push to `main` directly (no PR needed for routine work).
    **Then wait for the push's CI run to go green before pushing the tag**
    (`gh run watch`). A local suite and CI do not ask the same question: CI

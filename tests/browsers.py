@@ -84,7 +84,7 @@ def find(kind: str) -> str:
     programming error rather than a missing browser, so it raises.
     """
     where = _WHERE[kind]
-    if not wanted():
+    if not wanted() or kind not in chosen():
         return NOT_INSTALLED
     for candidate in where["paths"]:
         if candidate and Path(candidate).is_file():
@@ -119,6 +119,25 @@ def wanted() -> bool:
     return os.environ.get(SWITCH, "").strip().lower() != "off"
 
 
+#: Comma-separated browsers this process may drive, e.g. "firefox". Unset
+#: means all three.
+ONLY = "WD_BROWSERS"
+
+
+def chosen() -> set:
+    """The browsers `WD_BROWSERS` allows - all three when it is unset.
+
+    CI gives each browser a job of its own, so each one's tests run once and
+    none of them competes with the rest of the suite for cores. Answering
+    through `find`, like the on/off switch above, means every existing skip
+    guard honours it without a change of its own.
+    """
+    raw = os.environ.get(ONLY, "").strip().lower()
+    if not raw:
+        return set(_WHERE)
+    return {k.strip() for k in raw.split(",") if k.strip()}
+
+
 def installed(kind: str) -> bool:
     return find(kind) != NOT_INSTALLED
 
@@ -147,7 +166,12 @@ def why_missing() -> str:
     """A sentence for a skip message, naming what was looked for."""
     if not wanted():
         return ("browser tests are switched off in this run (%s=off); "
-                "one CI job runs them" % SWITCH)
+                "CI runs them in a job of their own" % SWITCH)
+    if set(_WHERE) - chosen():
+        return ("this run drives only %s (%s); the other browsers are "
+                "tested in their own jobs"
+                % (", ".join(sorted(chosen() & set(_WHERE))) or "no browser",
+                   ONLY))
     return ("no browser found - looked for %s on PATH and in the usual "
             "install locations for %s"
             % (", ".join(sorted(
