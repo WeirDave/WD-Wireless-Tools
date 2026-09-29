@@ -274,3 +274,72 @@ class ItIsReachableAndHonestTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KeepingAnOlderLocalCopyOnPurposeTests(unittest.TestCase):
+    """"now I want to take the local copy that was before my changes and
+    overwrite it on the cloud."
+
+    The newer-cloud refusal stays the default - it is what stops a save made
+    after the list was drawn from being thrown away. `overwrite_newer` is the
+    one way past it, sent only by the confirm that names both dates.
+    """
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.root, True)
+        self.esx = self.root / "Alpha Survey.esx"
+        doc = {"project": {"id": "local-uuid-1",
+                           "history": {"createdBy": "me@example.com",
+                                       "modifiedAt": "2026-01-01T09:00:00Z"}}}
+        with zipfile.ZipFile(self.esx, "w") as z:
+            z.writestr("project.json", json.dumps(doc))
+
+    def _mgr(self):
+        api = _StubApi()
+        api.projects[0]["history"] = {"modifiedAt": "2026-03-01T09:00:00Z"}
+        mgr = _Manager(api, self.root)
+
+        def fake_upload(path, site_id=None, progress_cb=None):
+            api.upload_project(path)
+            return {"ok": True, "uploaded": True, "datasetId": "new-1"}
+
+        mgr.upload_project = fake_upload
+        return mgr, api
+
+    def test_a_newer_cloud_copy_is_still_refused_by_default(self):
+        mgr, api = self._mgr()
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertEqual("cloud_newer", out.get("error"), out)
+        self.assertEqual([], api.uploaded)
+        self.assertEqual([], api.deleted)
+
+    def test_overwrite_newer_replaces_it(self):
+        mgr, api = self._mgr()
+        out = mgr.replace_cloud_project(str(self.esx), "old-1",
+                                        overwrite_newer=True)
+        self.assertTrue(out.get("ok"), out)
+        self.assertEqual(["upload", "delete"],
+                         [c for c in api.calls if c in ("upload", "delete")])
+        self.assertEqual(["old-1"], api.deleted)
+
+    def test_the_route_passes_the_flag_only_when_it_is_exactly_true(self):
+        import server
+        seen = []
+
+        class _Cm:
+            def replace_cloud_project(self, path, cloud_id, progress_cb=None,
+                                      overwrite_newer=False):
+                seen.append(overwrite_newer)
+                return {"ok": True}
+
+        route = server.CLOUD_ACTIONS["replace_cloud_project"]
+        real = server.cm
+        server.cm = _Cm()
+        try:
+            route({"path": "x.esx", "cloudId": "c1", "overwriteNewer": True})
+            route({"path": "x.esx", "cloudId": "c1", "overwriteNewer": "yes"})
+            route({"path": "x.esx", "cloudId": "c1"})
+        finally:
+            server.cm = real
+        self.assertEqual([True, False, False], seen)

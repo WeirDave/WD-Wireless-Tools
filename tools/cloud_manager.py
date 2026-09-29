@@ -2565,7 +2565,8 @@ class CloudManager:
         except Exception as e:
             return {"error": str(e)}
 
-    def replace_cloud_project(self, esx_path, cloud_project_id, progress_cb=None):
+    def replace_cloud_project(self, esx_path, cloud_project_id, progress_cb=None,
+                              overwrite_newer=False):
         """Put a local .esx up over an existing cloud project.
 
         "why can't we just automatically delete that first and then upload the
@@ -2590,6 +2591,10 @@ class CloudManager:
         but it is JSON, and a project's floor plans are binary images fetched
         from S3 by id during download. A JSON document write cannot carry a
         re-cropped plan, which is exactly what his edits change.
+
+        `overwrite_newer` is the one way past the newer-cloud refusal below,
+        and only a confirm naming both dates sends it: he kept an older local
+        copy on purpose and wants it to win over later cloud edits.
 
         Returns a dict that always says what actually happened, step by step.
         """
@@ -2633,7 +2638,7 @@ class CloudManager:
         _NEWER_TOLERANCE_S = 60
         #: A missing date is Ekahau not saying, which is not Ekahau saying
         #: newer - a guard that fired on that would refuse his ordinary case.
-        if (local_internal_mtime and cloud_mtime
+        if (not overwrite_newer and local_internal_mtime and cloud_mtime
                 and cloud_mtime > local_internal_mtime + _NEWER_TOLERANCE_S):
             return {
                 "error": "cloud_newer",

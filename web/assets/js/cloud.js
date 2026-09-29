@@ -70,7 +70,7 @@ const API_MAP = {
   //: the middle. The server treats anything but an explicit `false` as a
   //: dry run, so a caller that forgets it previews rather than writes.
   reconcile_pairs: ['reconcile_pairs', ['cloudIds', 'dryRun', 'opId']],
-  replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId']],
+  replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId', 'overwriteNewer']],
   compare_with_cloud: ['compare_with_cloud', ['path', 'cloudId', 'opId', 'cloudMtime']],
   set_internal_project_name: ['set_internal_project_name', ['path', 'name', 'opId']],
   list_shares: ['list_shares', ['projectId']],
@@ -4179,7 +4179,7 @@ function bulkFixInternalNames() {
    upload-verify-delete sequence for the bulk path is how this repo grows two
    implementations of one operation, and the row and the planner disagreeing is
    exactly what this commit is fixing. */
-function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName) {
+function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName, overwriteNewer) {
   _setRowBusy(cloudId, localPath, 'Uploading your local copy and replacing the cloud project…');
   const handle = opEnqueue({
     title: `Replacing cloud "${cloudName || localName}" with your local copy`,
@@ -4188,7 +4188,7 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName) {
     busyRow: { cloudId, localPath,
                label: 'Uploading your local copy and replacing the cloud project…' },
     run: async (opId) => {
-      const r = await pyApi('replace_cloud_project', localPath, cloudId, opId);
+      const r = await pyApi('replace_cloud_project', localPath, cloudId, opId, overwriteNewer === true);
 
       if (r && r.error) {
         /* The server re-reads both dates before it deletes anything, because
@@ -4228,6 +4228,33 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName) {
   handle.promise.then(() => settlePair(cloudId, localPath))
         .catch(() => _setRowBusy(cloudId, localPath, null));
   return handle;
+}
+
+/* The cloud copy is newer and he wants the older local file to win anyway.
+
+   "I started off working on one file ... made a copy of that file and started
+   working on that ... now I want to take the local copy that was before my
+   changes and overwrite it on the cloud." The later cloud edits live on in
+   the copy, so throwing them away here is the decision, not an accident.
+
+   The server refuses a newer cloud copy by default, which protects the
+   ordinary push from a save that lands after the list was drawn. This is the
+   one route past it, and it asks once, naming the project and both dates -
+   friction for something that cannot be undone, not a refusal. */
+async function replaceNewerCloudWithLocal(cloudId, localPath, localName, cloudName, cloudMtime, localMtime) {
+  const ok = await showConfirmModal(
+    'Replace the newer cloud copy?',
+    '<p>Upload your local <b>' + e(localName || '') + '.esx</b> and replace the cloud project '
+    + '<b>' + e(cloudName || '') + '</b>.</p>'
+    + '<p>The cloud copy was saved <b>' + e(fmtExactDate(cloudMtime) || 'more recently') + '</b>; '
+    + 'your local file was saved <b>' + e(fmtExactDate(localMtime) || 'earlier') + '</b>. '
+    + 'Every change made in the cloud since your local save is lost.</p>'
+    + '<p class="sub">Your local file is uploaded and checked first; the old cloud project '
+    + 'is deleted only after that succeeds. It keeps its site. A cloud delete cannot be undone, '
+    + 'and anyone it was shared with loses access.</p>',
+    'Replace the cloud copy');
+  if (!ok) return;
+  _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName, true);
 }
 
 async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matchType) {
@@ -4864,7 +4891,15 @@ function stalenessBadgeHtml(r) {
          pushing him at the irreversible option. */
       const answered = renamedOnly || !!cmp;
       const weight = provenSame ? ' quiet is-demoted' : (answered ? ' primary' : ' quiet');
-      return cmpHtml
+      /* The other answer to "the cloud is newer": keep the local one. Quiet,
+         because the date says the cloud has work in it, and gated on owning
+         the project because the replace deletes it. */
+      const notMine = ownershipBlock(r.cloud);
+      const keepLocal = notMine
+        ? rdUnavailable('up', 'Replace cloud with local…',
+            notMine + ' Replacing it would delete their project.', 'cloud')
+        : `<button class="rd-btn quiet" data-writes="cloud" title="${a('Keep your local file instead: upload it over the newer cloud copy. You are asked to confirm first, with both dates shown.')}" data-action="call" data-fn="replaceNewerCloudWithLocal" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.local.name || '', r.cloud.name || '', Number(r.cloud.mtime) || 0, Number(r.local.mtime) || 0]))}" data-stop="1">${ic('up')}<span>Replace cloud with local…</span></button>`;
+      return cmpHtml + keepLocal
         + `<button class="rd-btn${weight}${renamedOnly ? ' is-renamed' : ''}" data-writes="local" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" data-action="call" data-fn="verifyReplaceLocal" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.cloud.name, Number(r.cloud.mtime) || 0, Number(r.local.mtime) || 0]))}" data-stop="1">${ic('down')}<span>${label}</span></button>`
         + checkBtn;
     }

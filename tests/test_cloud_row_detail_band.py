@@ -54,7 +54,10 @@ function slice(from, to) {
 // rather than the helper being stubbed, because a stub would test the stub.
 // `stalenessBadgeHtml` asks `comparisonIsSettled` whether the row has anything
 // left to do at all, and that lives above this slice.
-const block = slice('function comparisonIsSettled(', '\nfunction isOutOfSync(')
+// The cloud-newer branch asks who owns the project before offering to replace
+// it, so the real ownership check is sliced in rather than stubbed.
+const block = slice('function ownershipBlock(', '\nfunction _isExternal(')
+            + slice('function comparisonIsSettled(', '\nfunction isOutOfSync(')
             + slice('const ICONS = {', '\nfunction siteDigest(')
             + slice('const MATCH_BADGE_SPEC = {', '\nfunction gutCell(r)');
 
