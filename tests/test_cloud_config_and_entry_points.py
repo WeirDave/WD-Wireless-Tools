@@ -396,6 +396,28 @@ class BuildProjectsDataTests(unittest.TestCase):
         self.assertEqual("owner@example.com", row["owner"])
         self.assertEqual(["editor@example.org"], row["sharedWith"])
 
+    def test_the_site_id_and_every_site_name_reach_the_page(self):
+        """A row whose folder and site disagree renames the site by id, and
+        has to know whether the folder's name is already a site - an empty
+        one included, which the dataset listing never mentions."""
+        api = self.api(projects=[self.PROJECT], listing=[
+            {"id": "p-1", "siteName": "Example Campus"}])
+        api.get_sites.return_value = [
+            {"siteId": "s-1", "name": "Example Campus"},
+            {"siteId": "s-2", "name": "Example Annex"}]
+        result = self.build(api)
+        self.assertEqual("s-1", self.cloud_rows(result)[0]["siteId"])
+        self.assertEqual({"Example Campus": "s-1", "Example Annex": "s-2"},
+                         result["siteIds"])
+
+    def test_a_failed_site_list_still_takes_the_ids_off_the_listing(self):
+        api = self.api(projects=[self.PROJECT], listing=[
+            {"id": "p-1", "siteName": "Example Campus", "siteId": "s-1"}])
+        api.get_sites.side_effect = RuntimeError("no sites")
+        result = self.build(api)
+        self.assertEqual("s-1", self.cloud_rows(result)[0]["siteId"])
+        self.assertEqual({"Example Campus": "s-1"}, result["siteIds"])
+
     def test_the_owner_is_not_listed_as_somebody_it_is_shared_with(self):
         listing = [{"id": "p-1", "siteName": "S", "datasetUsers": [
             {"role": "OWNER", "username": "owner@example.com"}]}]

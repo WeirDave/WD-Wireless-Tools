@@ -785,7 +785,9 @@ function _syncTabUI(kind) {
      draws through `renderRows` on the way in - each goes straight to its own
      renderer - so the rail the ledger put up stayed up, twenty-six letters
      over a list that none of them selects. */
-  const jump = document.getElementById('jumpNav');
+  //: The row, not the rail: Expand and Collapse live on the same line, and
+  //: hiding only the letters would leave an empty bordered strip behind.
+  const jump = document.getElementById('jumpRow');
   if (jump && isLocalOnlyTab(kind)) jump.style.display = 'none';
 
   const dupTbBtn = document.getElementById('dupDeleteAllToolbarBtn');
@@ -1908,8 +1910,9 @@ let _jumpNavPresentCache = new Set();
 function _renderJumpNav() {
   const nav = document.getElementById('jumpNav');
   if (!nav) return;
-  if (isLocalOnlyTab(currentTab)) { nav.style.display = 'none'; return; }
-  nav.style.display = '';
+  const row = document.getElementById('jumpRow') || nav;
+  if (isLocalOnlyTab(currentTab)) { row.style.display = 'none'; return; }
+  row.style.display = '';
   const container = document.getElementById('rowsContainer');
 
   if (!activeLetter) {
@@ -4363,6 +4366,13 @@ function rowDetailHtml(r, stripe) {
       { quiet: true, title: 'Pair this local file with a cloud project yourself.' }));
   }
 
+  const where = locationBand(r);
+  if (where) {
+    if (tone === 'rd-plain') tone = 'rd-differs';
+    sentences.push(where.sentence);
+    acts.push(where.acts);
+  }
+
   /* A measured comparison outranks anything inferred from a date, so it speaks
      first and the download it contradicts is demoted rather than removed. */
   if (cmp) {
@@ -4543,6 +4553,146 @@ function rowDetailHtml(r, stripe) {
     + `</span>`
     + `</div>`;
 }
+/* Do the two sides agree about where this project lives?
+
+   His projects are named after their site, so a tag repeating it is the same
+   crowding in a smaller font. What Flat can say that the tree cannot is when
+   the two *disagree* - a .esx in the wrong folder, a project assigned to the
+   wrong site - so that is when the location is worth the row.
+
+   **The tab decides this, not the row.** It used to read `r.kind`, and
+   `renderTreeChildren` sets `kind: 'projects'` on every child so that the row
+   menu offers project actions rather than site actions. So the Flat-only tag
+   rendered on every row of the Tree as well, and it had nothing true to say
+   there: `build_sites_data` gives a tree child a `folder` and no `siteName`,
+   because on the Tree the site *is* the row above it. Every child therefore
+   compared '' against its folder, disagreed, and drew both halves - the folder
+   name again on the local side, and on the cloud side the words **no site**,
+   underneath the very site it is filed in. "they weren't assigned to a site on
+   the cloud and yet they're listed underneath the site on the cloud side."
+
+   A project genuinely filed under no site still says so, and says it in the
+   place that can act on it: the `Not assigned` tag on its name, the
+   `Assign to "<site>"` item in its menu, and the auto-assign banner above the
+   list. Those are about assignment. This tag was about location, and on the
+   Tree the location is not in question. */
+function locationDiffers(r) {
+  if (currentTab !== 'projects') return false;
+  if (!r.cloud || !r.local) return false;
+  const site = String((r.cloud && r.cloud.siteName) || '').trim().toLowerCase();
+  const folder = String((r.local && r.local.folder) || '').trim().toLowerCase();
+  return site !== folder;
+}
+
+/* A project whose cloud site and local folder disagree, and the way to settle it.
+
+   "if you rename a folder on your drive it shows changed local against the
+   cloud version but there is no way to change the cloud to match the local."
+
+   On the Projects tab a renamed folder shows on every project inside it as a
+   site on one side and a different folder on the other - `locationHtml` draws
+   both - and nothing on the row could act on it. The Sites tab could rename
+   the site, but only if the renamed folder still paired with it; a bigger
+   rename leaves the two unpaired there, and this tab was where he saw it.
+
+   Which action is right depends on what happened, and the listing can tell:
+
+   * **The folder was renamed** - every project the cloud site holds sits in
+     this one folder, no folder carries the site's name any more, and no cloud
+     site already has the folder's name. Rename the site, or the folder back.
+     Either one settles every project in it at once.
+   * **The project was moved** - anything else. Assign the cloud project to
+     the site named like the folder, or move the file into the site's folder.
+     Where no site has that name the control is shown unavailable with the
+     reason, rather than creating a site he did not ask for. */
+function locationBand(r) {
+  if (!locationDiffers(r)) return null;
+  const c = r.cloud, l = r.local;
+  const site = String(c.siteName || '').trim();
+  const folder = String(l.folder || '').trim();
+  if (!folder) return null;
+  const low = (s) => String(s || '').trim().toLowerCase();
+  const d = (typeof data !== 'undefined' && data) || {};
+  const siteIds = d.siteIds || {};
+  const siteIdByName = (name) => {
+    const k = Object.keys(siteIds).find(n => low(n) === low(name));
+    return k ? siteIds[k] : '';
+  };
+  const folderSiteId = siteIdByName(folder);
+  const localPath = np(l.path);
+  const folderPath = localPath.slice(0, localPath.lastIndexOf('/'));
+
+  const localFolders = new Set();
+  (d.matched || []).forEach(p => p.local && localFolders.add(low(p.local.folder)));
+  (d.localOnly || []).forEach(x => localFolders.add(low(x.folder)));
+  const siteFolders = new Set((d.matched || [])
+    .filter(p => p.cloud && p.local && c.siteId && p.cloud.siteId === c.siteId)
+    .map(p => low(p.local.folder)));
+  const renamed = !!(site && c.siteId && folderPath && !folderSiteId
+    && siteFolders.size === 1 && siteFolders.has(low(folder))
+    && !localFolders.has(low(site)));
+
+  if (renamed) {
+    return {
+      sentence: 'The folder "' + folder + '" and the cloud site "' + site
+        + '" are named differently, and every project in that site is in this '
+        + 'folder, so the folder looks renamed. Pick the name to keep.',
+      acts: rdAction('arrowR', 'Rename folder to match',
+          'syncRow', ['to-local', c.siteId, site, folderPath, 'sites'],
+          { writes: 'local', title: 'Rename the local folder "' + folder + '" back to "' + site + '". The files inside it move with it.' })
+        + rdAction('arrowL', 'Rename cloud site to match',
+          'syncRow', ['to-cloud', c.siteId, folder, folderPath, 'sites'],
+          { primary: true, writes: 'cloud', title: 'Rename the cloud site "' + site + '" to "' + folder + '". Every project in it stays where it is.' }),
+    };
+  }
+
+  const label = c.name || l.name || '';
+  let toCloud;
+  const notMine = ownershipBlock(c);
+  if (!folderSiteId) {
+    toCloud = rdUnavailable('arrowL', 'Move cloud project to match',
+      'No cloud site is named "' + folder + '". Create it from the folder\'s '
+      + 'row on the Sites tab, or move the file instead.', 'cloud');
+  } else if (notMine) {
+    toCloud = rdUnavailable('arrowL', 'Move cloud project to match',
+      notMine + ' Move your local file instead, or ask the owner.', 'cloud');
+  } else {
+    toCloud = rdAction('arrowL', 'Move cloud project to match',
+      'settleLocation', ['cloud', c.id, folderSiteId, localPath, folder, label],
+      { writes: 'cloud', title: 'Assign the cloud project to the site "' + folder + '", where your local file is.' });
+  }
+  const toLocal = site
+    ? rdAction('arrowR', 'Move file to match',
+        'settleLocation', ['local', c.id, '', localPath, site, label],
+        { writes: 'local', title: 'Move your local .esx into the folder "' + site + '", matching its cloud site. The folder is created if it is not there.' })
+    : '';
+  return {
+    sentence: site
+      ? 'This project is in the cloud site "' + site + '" but the folder "'
+        + folder + '" on disk. Move one side to match the other.'
+      : 'This project is in no cloud site, and in the folder "' + folder
+        + '" on disk.',
+    acts: toLocal + toCloud,
+  };
+}
+
+async function settleLocation(side, cloudId, siteId, localPath, dest, label) {
+  opEnqueue({
+    title: side === 'cloud'
+      ? `Moving "${label}" to cloud site "${dest}"`
+      : `Moving "${label}.esx" into folder "${dest}"`,
+    type: 'op', pollBackend: false, undoable: false,
+    run: async () => {
+      const r = side === 'cloud'
+        ? await pyApi('assign_to_site', siteId, cloudId)
+        : await pyApi('move_local_to_site', localPath, dest);
+      if (r && r.error) throw new Error(r.error);
+      _scheduleOpRefresh();
+      return r;
+    },
+  });
+}
+
 /* A site whose folder and cloud names disagree, and the two ways to settle it.
 
    A site row had no band at all, so a folder renamed on disk had no control
@@ -4825,37 +4975,6 @@ function externalBadgeHtml(r) {
    Two icons rather than one word, because the two sides mean different things
    and he has to be able to see that they disagree: a cloud project belongs to
    a **site**, a local file sits in a **folder**. */
-/* Do the two sides agree about where this project lives?
-
-   His projects are named after their site, so a tag repeating it is the same
-   crowding in a smaller font. What Flat can say that the tree cannot is when
-   the two *disagree* - a .esx in the wrong folder, a project assigned to the
-   wrong site - so that is when the location is worth the row.
-
-   **The tab decides this, not the row.** It used to read `r.kind`, and
-   `renderTreeChildren` sets `kind: 'projects'` on every child so that the row
-   menu offers project actions rather than site actions. So the Flat-only tag
-   rendered on every row of the Tree as well, and it had nothing true to say
-   there: `build_sites_data` gives a tree child a `folder` and no `siteName`,
-   because on the Tree the site *is* the row above it. Every child therefore
-   compared '' against its folder, disagreed, and drew both halves - the folder
-   name again on the local side, and on the cloud side the words **no site**,
-   underneath the very site it is filed in. "they weren't assigned to a site on
-   the cloud and yet they're listed underneath the site on the cloud side."
-
-   A project genuinely filed under no site still says so, and says it in the
-   place that can act on it: the `Not assigned` tag on its name, the
-   `Assign to "<site>"` item in its menu, and the auto-assign banner above the
-   list. Those are about assignment. This tag was about location, and on the
-   Tree the location is not in question. */
-function locationDiffers(r) {
-  if (currentTab !== 'projects') return false;
-  if (!r.cloud || !r.local) return false;
-  const site = String((r.cloud && r.cloud.siteName) || '').trim().toLowerCase();
-  const folder = String((r.local && r.local.folder) || '').trim().toLowerCase();
-  return site !== folder;
-}
-
 function locationHtml(where, side) {
   const name = String(where || '').trim();
   if (!name) {
@@ -8417,7 +8536,7 @@ async function bulkSync(dir) {
    not is worse than the friction of being told you are not. */
 function syncEverythingPlan() {
   const down = [], up = [], upBlocked = [], inSync = [], fresh = [];
-  const downBlocked = [], diverged = [];
+  const downBlocked = [], diverged = [], siteRenames = [];
   const seenPair = new Set(), seenCloud = new Set();
 
   const isFile = (l) => /\.esx$/i.test(String((l && l.path) || ''));
@@ -8470,8 +8589,25 @@ function syncEverythingPlan() {
     (kids.cloudOnly || []).forEach(c => takeCloud(c, siteName));
   };
 
+  /* A folder renamed in Explorer or Finder. `takePair` skips folders, and
+     until this nothing else looked at them - so after a rename, Sync
+     everything said "Local and cloud already match" with the site still
+     wearing its old name. "it spots the differences but you can't upload to
+     the cloud." Local is where the work happens, so the folder's name is the
+     one that goes up; the dialog shows both names before anything is sent. */
+  const takeSiteName = (pr) => {
+    if (!pr || !pr.cloud || !pr.local || !pr.cloud.id) return;
+    if (isFile(pr.local) || !pr.namesDiffer) return;
+    const localName = String(pr.local.name || '').trim();
+    if (!localName || localName === String(pr.cloud.name || '').trim()) return;
+    siteRenames.push({ cloudId: pr.cloud.id, cloudName: pr.cloud.name || '',
+                       localName, localPath: pr.local.path,
+                       matchType: pr.matchType });
+  };
+
   (data.matched || []).forEach(pr => {
     takePair(pr);
+    takeSiteName(pr);
     const site = (pr.cloud && pr.cloud.name) || (pr.local && pr.local.name) || '';
     walkKids((pr.cloud && pr.cloud.children) || (pr.local && pr.local.children), site);
   });
@@ -8479,7 +8615,18 @@ function syncEverythingPlan() {
   (data.localOnly || []).forEach(l => walkKids(l.children, l.name));
   if (data.orphans) (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
 
-  return { down, up, upBlocked, downBlocked, fresh, inSync, diverged };
+  return { down, up, upBlocked, downBlocked, fresh, inSync, diverged, siteRenames };
+}
+
+function _syncSiteRowsHtml(rows) {
+  return rows.map((d, i) => '<tr>'
+    + '<td class="sync-plan-pick"><input type="checkbox" class="sync-pick"'
+    + (d.matchType === 'fuzzy' ? '' : ' checked')
+    + ' data-kind="site" data-idx="' + i + '" data-action-change="call" data-fn="_syncPickUpdate"></td>'
+    + '<td class="sync-plan-name">' + e(d.cloudName) + '</td>'
+    + '<td class="sync-plan-dir">&#11014; rename</td>'
+    + '<td class="sync-plan-name">' + e(d.localName) + '</td>'
+    + '</tr>').join('');
 }
 
 function _syncRowsHtml(rows, dir) {
@@ -8560,7 +8707,7 @@ function _syncPickUpdate() {
     btn.textContent = n ? ('Sync ' + n) : 'Nothing selected';
     btn.disabled = !n;
   }
-  ['down', 'fresh', 'up'].forEach(kind => {
+  ['down', 'fresh', 'up', 'site'].forEach(kind => {
     const boxes = _syncPickBoxes(kind);
     const head = document.getElementById('syncAll-' + kind);
     if (head && boxes.length) {
@@ -8597,7 +8744,8 @@ function _syncCheckFirst() {
 async function syncEverything() {
   if (!data || !data.summary) { toast('Nothing loaded yet', 'info'); return; }
   const plan = syncEverythingPlan();
-  const willDo = plan.down.length + plan.fresh.length + plan.up.length;
+  const willDo = plan.down.length + plan.fresh.length + plan.up.length
+    + plan.siteRenames.length;
 
   if (!willDo) {
     // Still say what is waiting to go up - that is the half of the loop this
@@ -8619,6 +8767,30 @@ async function syncEverything() {
      screen was frightening. */
   let body = '<p class="sub">Tick what you want. Nothing happens to anything '
     + 'you untick, and nothing happens at all until you press the button.</p>';
+
+  if (plan.siteRenames.length) {
+    const n = plan.siteRenames.length;
+    const guessed = plan.siteRenames.filter(d => d.matchType === 'fuzzy').length;
+    body += '<p class="sync-plan-lead">'
+      + '<label class="sync-plan-all"><input type="checkbox" id="syncAll-site" '
+      + (guessed === n ? '' : 'checked ')
+      + 'data-action-change="call" data-fn="_syncPickAll" data-arg="site" data-arg-checked="1"> '
+      + 'Rename <b>' + n + '</b> cloud site' + (n === 1 ? '' : 's')
+      + ' to match your folder' + (n === 1 ? '' : 's') + '</label></p>'
+      + '<div class="sync-plan-wrap"><table class="sync-plan">'
+      + '<thead><tr><th></th><th>Cloud site now</th><th>Direction</th>'
+      + '<th>Renamed to your folder</th></tr></thead>'
+      + '<tbody>' + _syncSiteRowsHtml(plan.siteRenames) + '</tbody>'
+      + '</table></div>'
+      + '<p class="sub">The projects in each site stay where they are. '
+      + 'A rename can be put back the same way.</p>';
+    if (guessed) {
+      body += '<p class="sub warn"><b>' + guessed + ' of these '
+        + (guessed === 1 ? 'was' : 'were') + ' paired on similar wording '
+        + 'only</b>, so ' + (guessed === 1 ? 'it arrives' : 'they arrive')
+        + ' unticked. Check both names are the same site, then tick.</p>';
+    }
+  }
 
   if (plan.down.length) {
     body += '<p class="sync-plan-lead">'
@@ -8732,8 +8904,9 @@ async function syncEverything() {
 
   /* `showConfirmModal` empties the body when it closes, so the selection has
      to be read on the way out rather than after the await. */
-  let _pickedDown = [], _pickedFresh = [], _pickedUp = [];
+  let _pickedDown = [], _pickedFresh = [], _pickedUp = [], _pickedSite = [];
   const _grab = () => {
+    _pickedSite = _syncPicked('site');
     _pickedDown = _syncPicked('down');
     _pickedFresh = _syncPicked('fresh');
     _pickedUp = _syncPicked('up');
@@ -8756,7 +8929,9 @@ async function syncEverything() {
   const downRows = pickedDown.map(i => plan.down[i]).filter(Boolean);
   const freshRows = pickedFresh.map(i => plan.fresh[i]).filter(Boolean);
   const upRows = pickedUp.map(i => plan.up[i]).filter(Boolean);
-  if (!downRows.length && !freshRows.length && !upRows.length) return;
+  const siteRows = _pickedSite.map(i => plan.siteRenames[i]).filter(Boolean);
+  if (!downRows.length && !freshRows.length && !upRows.length
+      && !siteRows.length) return;
   clearSelection();
 
   /* verify_replace_local is the same call the per-row arrow makes: it
@@ -8765,6 +8940,20 @@ async function syncEverything() {
      the cloud project it is being replaced by is the copy. */
   const results = { done: 0, failed: 0, skipped: 0 };
   const waits = [];
+  for (const d of siteRows) {
+    const { promise } = opEnqueue({
+      title: 'Renaming cloud site "' + d.cloudName + '" to "' + d.localName + '"',
+      type: 'rename', pollBackend: false, undoable: false,
+      run: async () => {
+        const r = await pyApi('rename_cloud', 'sites', d.cloudId, d.localName);
+        if (r && r.error) throw new Error(r.error);
+        _scheduleOpRefresh();
+        return r;
+      },
+    });
+    waits.push(promise.then(() => { results.done++; })
+                      .catch(() => { results.failed++; }));
+  }
   for (const d of downRows) {
     const { promise } = opEnqueue({
       title: 'Updating "' + (d.localName || d.cloudName) + '" from the cloud',
