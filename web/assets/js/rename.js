@@ -282,6 +282,7 @@ async function _runRenamePreview() {
 
   if (tab === 'rules') {
     _renameState.items = r.items || [];
+    _renameState.scanned = r.scanned || 0;
     _renderRulesPreview();
   } else {
     _renameState.items = r.renames || [];
@@ -296,7 +297,10 @@ function _renderRulesPreview() {
   countEl.textContent = items.length ? '(' + items.length + ')' : '';
   document.getElementById('renameApplyBtn').disabled = items.length === 0;
   if (!items.length) {
-    list.innerHTML = '<div class="org-extract-empty">No files change with the current rules.</div>';
+    const n = _renameState.scanned || 0;
+    list.innerHTML = '<div class="org-extract-empty">' + (n
+      ? n + ' file' + (n !== 1 ? 's' : '') + ' found, .esx included. None change with the current rules - set a rule above and the renames appear here.'
+      : 'No files found in this folder or its site folders.') + '</div>';
     return;
   }
   list.innerHTML = items.map(it =>
