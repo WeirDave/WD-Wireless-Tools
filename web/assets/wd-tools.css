@@ -8120,6 +8120,11 @@ body.wd-has-update-banner .wd-update-badge { display: none; }
 .grid-spinner { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 .grid-spin-val { min-width: 24px; text-align: center; font-weight: 700; font-size: 15px; color: var(--text); }
 .grid-cell-count { font-size: 12px; color: var(--text-3); }
+.grid-merge-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.grid-merge-controls .btn.is-on { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.grid-merge-hint { font-size: 12px; color: var(--text-2); }
+#gridSvg .grid-cell-picked { fill: rgba(236,72,153,0.28); stroke: #db2777; }
+#gridSvg .rep-grid-cell--combined { stroke-dasharray: none; }
 .grid-zoom-hint { font-size: 11px; color: var(--text-3); margin-top: 4px; }
 .grid-preview-container { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; padding: 12px; overflow: hidden; position: relative; cursor: grab; }
 /* Space held: the whole map is grabbable, crop handles included, so the resize

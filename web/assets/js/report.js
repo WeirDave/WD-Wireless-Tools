@@ -2314,6 +2314,7 @@
       var gr = (currentOpts.segRows || '') + '';
       var gridLabel = (gc && gr) ? gc + ' × ' + gr : 'Auto';
       if (currentOpts.cropBoxes && Object.keys(currentOpts.cropBoxes).length) gridLabel += ' (cropped)';
+      if (currentOpts.segMerges && Object.keys(currentOpts.segMerges).length) gridLabel += ' (combined)';
       return '<div class="rep-check with-desc">'
         + '<span class="rep-check-body">'
         +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
@@ -3225,6 +3226,13 @@
   var _gridZoom = 1, _gridPanX = 0, _gridPanY = 0;
   var _spaceUnsub = null;
   var _panState = null;
+  // Combined sections, per floor id, and the cells picked in Combine mode.
+  // While Combine mode is on the crop box is not draggable: a click on the
+  // plan picks a cell instead.
+  var _segMerges = {};
+  var _mergeMode = false;
+  var _mergeSel = {};
+  var _panMoved = false;
 
   window.openGridConfig = function () {
     var modal = document.getElementById('gridConfigModal');
@@ -3244,6 +3252,9 @@
     });
     var fc = _cropBoxes[fp.id];
     _cropBox = fc ? { x: fc.x, y: fc.y, w: fc.w, h: fc.h } : { x: 0, y: 0, w: 1, h: 1 };
+    _segMerges = JSON.parse(JSON.stringify(currentOpts.segMerges || {}));
+    _mergeMode = false;
+    _mergeSel = {};
 
     var sel = document.getElementById('gridFloorSelect');
     sel.innerHTML = '';
@@ -3269,6 +3280,7 @@
   window.gridFloorChanged = function (sel) {
     saveCurrentFloorCrop();
     _gridFloorIdx = parseInt(sel.value, 10) || 0;
+    _mergeSel = {};
     _gridZoom = 1; _gridPanX = 0; _gridPanY = 0;
     var newFp = proj.floorPlans[_gridFloorIdx];
     var fc = newFp && _cropBoxes[newFp.id];
@@ -3298,17 +3310,28 @@
     var W = fp.width, H = fp.height;
     var aps = filterApsForFloor(fp);
 
+    if (pruneStaleMerges()) {
+      showToast('Combined sections cleared \u2014 the grid now has a different '
+        + 'number of columns or rows, so they no longer cover the same ground.', 'info');
+    }
+    var groups = segMergeGroups(_segMerges[fp.id], _gridCols, _gridRows);
+    var sectionCount = _gridCols * _gridRows - groups.reduce(function (n, g) {
+      return n + (g.c1 - g.c0 + 1) * (g.r1 - g.r0 + 1) - 1;
+    }, 0);
+
     document.getElementById('gridColsVal').textContent = _gridCols;
     document.getElementById('gridRowsVal').textContent = _gridRows;
     document.getElementById('gridCellCount').textContent =
-      _gridCols * _gridRows + ' cells, ' + aps.length + ' APs on this floor';
+      _gridCols * _gridRows + ' cells'
+      + (groups.length ? ' in ' + sectionCount + ' sections' : '')
+      + ', ' + aps.length + ' APs on this floor';
+    updateMergeControls(groups);
 
     var vw = 1000, vh = 1000 * (H / W);
 
     var bx = _cropBox.x * vw, by = _cropBox.y * vh;
     var bw = _cropBox.w * vw, bh = _cropBox.h * vh;
 
-    var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + vw + ' ' + vh + '" '
       + 'class="grid-svg-fill" '
       + 'id="gridSvg" data-dw="' + vw + '" data-dh="' + vh + '">';
@@ -3349,25 +3372,46 @@
       hasApsAt[ci3 + ',' + ri3] = true;
     });
 
-    var cells = '', cellLabels = '';
+    // A combined section is drawn once, as the rectangle it prints as, from
+    // the same list of sections the printed index is built from.
+    var baseCells = [];
     for (var ri = 0; ri < _gridRows; ri++) {
       for (var ci = 0; ci < _gridCols; ci++) {
-        var cxr = bx + ci * cw, cyr = by + ri * ch;
-        var used = !!hasApsAt[ci + ',' + ri];
-        cells += '<rect x="' + cxr + '" y="' + cyr + '" width="' + cw + '" height="' + ch
-          + '" class="rep-grid-halo" stroke-width="' + (glw * 2.6) + '" pointer-events="none"/>';
-        cells += '<rect x="' + cxr + '" y="' + cyr + '" width="' + cw + '" height="' + ch
-          + '" class="rep-grid-cell' + (used ? '' : ' rep-grid-cell--empty')
-          + '" stroke-width="' + glw + '" pointer-events="none"/>';
-        var lbl = (ci < 26 ? letters[ci] : 'C' + (ci + 1)) + (ri + 1);
-        cellLabels += '<text x="' + (cxr + cw / 2) + '" y="' + (cyr + ch / 2) + '"'
-          + ' text-anchor="middle" dominant-baseline="central"'
-          + ' class="rep-grid-label' + (used ? '' : ' rep-grid-label--empty') + '"'
-          + ' font-size="' + Math.max(12, Math.min(30, cw * 0.32)) + '"'
-          + ' pointer-events="none">' + lbl + '</text>';
+        baseCells.push({ col: ci, row: ri, x0: bx + ci * cw, y0: by + ri * ch,
+          x1: bx + (ci + 1) * cw, y1: by + (ri + 1) * ch,
+          aps: hasApsAt[ci + ',' + ri] ? [1] : [] });
       }
     }
-    svg += cells + cellLabels;
+    var cells = '', cellLabels = '', picked = '', hits = '';
+    segSections(baseCells, _gridCols, _gridRows, _segMerges[fp.id]).forEach(function (sec) {
+      var cxr = sec.x0, cyr = sec.y0, sw2 = sec.x1 - sec.x0, sh2 = sec.y1 - sec.y0;
+      var used = sec.aps.length > 0;
+      cells += '<rect x="' + cxr + '" y="' + cyr + '" width="' + sw2 + '" height="' + sh2
+        + '" class="rep-grid-halo" stroke-width="' + (glw * 2.6) + '" pointer-events="none"/>';
+      cells += '<rect x="' + cxr + '" y="' + cyr + '" width="' + sw2 + '" height="' + sh2
+        + '" class="rep-grid-cell' + (used ? '' : ' rep-grid-cell--empty')
+        + (sec.members > 1 ? ' rep-grid-cell--combined' : '')
+        + '" stroke-width="' + glw + '" pointer-events="none"/>';
+      cellLabels += '<text x="' + (cxr + sw2 / 2) + '" y="' + (cyr + sh2 / 2) + '"'
+        + ' text-anchor="middle" dominant-baseline="central"'
+        + ' class="rep-grid-label' + (used ? '' : ' rep-grid-label--empty') + '"'
+        + ' font-size="' + Math.max(12, Math.min(30, cw * 0.32)) + '"'
+        + ' pointer-events="none">' + WD.esc(sec.label) + '</text>';
+    });
+    if (_mergeMode) {
+      baseCells.forEach(function (c) {
+        var key = c.col + ',' + c.row;
+        if (_mergeSel[key]) {
+          picked += '<rect x="' + c.x0 + '" y="' + c.y0 + '" width="' + (c.x1 - c.x0)
+            + '" height="' + (c.y1 - c.y0) + '" class="grid-cell-picked" stroke-width="'
+            + (glw * 1.4) + '" pointer-events="none"/>';
+        }
+        hits += '<rect data-cell="' + key + '" x="' + c.x0 + '" y="' + c.y0
+          + '" width="' + (c.x1 - c.x0) + '" height="' + (c.y1 - c.y0)
+          + '" fill="transparent" cursor="pointer"/>';
+      });
+    }
+    svg += cells + picked + cellLabels;
 
     // AP dots
     aps.forEach(function (ap) {
@@ -3382,6 +3426,15 @@
       + '" class="rep-grid-halo" stroke-width="' + (glw * 3) + '" pointer-events="none"/>';
     svg += '<rect x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh
       + '" class="grid-crop-border" stroke-width="' + (glw * 1.2) + '" pointer-events="none"/>';
+
+    // Combine mode: the cells take the clicks, and the box stays where it is.
+    if (_mergeMode) {
+      svg += hits + '</svg>';
+      document.getElementById('gridPreviewImage').innerHTML = svg;
+      applyGridZoom();
+      bindGridZoomPan();
+      return;
+    }
 
     // move area rendered FIRST so edges and corners sit on top in SVG z-order
     svg += '<rect data-edge="move" x="' + bx + '" y="' + by + '" width="' + bw + '" height="' + bh
@@ -3454,6 +3507,17 @@
     // Right-drag pans, so the context menu would only ever land mid-gesture.
     container.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
+    // In Combine mode a click picks a cell. A drag that happened to start on
+    // one was a pan, and must not also pick it.
+    if (!container._mergeClickBound) {
+      container._mergeClickBound = true;
+      container.addEventListener('click', function (e) {
+        if (!_mergeMode || _panMoved) return;
+        var hit = e.target.closest && e.target.closest('[data-cell]');
+        if (hit) gridMergePick(hit.getAttribute('data-cell'));
+      });
+    }
+
     // Held Space shows the open hand before the drag starts, and letting go
     // mid-drag drops the map where it is instead of leaving it stuck to the
     // pointer.
@@ -3466,6 +3530,7 @@
   }
 
   function startGridPan(e) {
+    _panMoved = false;
     var container = document.getElementById('gridPreviewContainer');
     if (container) container.classList.add('pan-active');
     _panState = {
@@ -3486,6 +3551,7 @@
     if (!_panState) return;
     var dx = e.clientX - _panState.startX;
     var dy = e.clientY - _panState.startY;
+    if (Math.abs(dx) + Math.abs(dy) > 4) _panMoved = true;
     _gridPanX = _panState.origPX + dx;
     _gridPanY = _panState.origPY + dy;
     applyGridZoom();
@@ -3654,8 +3720,17 @@
           _cropBoxes[f.id] = { x: crop.x, y: crop.y, w: crop.w, h: crop.h };
         });
       }
+      var here = (proj.floorPlans[_gridFloorIdx] || {}).id;
+      var merge = here && _segMerges[here];
+      _segMerges = {};
+      if (merge) {
+        (proj.floorPlans || []).forEach(function (f) {
+          _segMerges[f.id] = JSON.parse(JSON.stringify(merge));
+        });
+      }
       var fps = proj.floorPlans || [];
-      var msg = 'Crop applied to all ' + fps.length + ' floors.';
+      var msg = 'Crop' + (merge ? ' and combined sections' : '')
+        + ' applied to all ' + fps.length + ' floors.';
       if (fps.length > 1) msg += ' Check each floor — images may not be aligned.';
       showToast(msg);
     } else {
@@ -3670,6 +3745,10 @@
     currentOpts.segCols = _gridCols;
     currentOpts.segRows = _gridRows;
     currentOpts.cropBoxes = Object.keys(_cropBoxes).length ? _cropBoxes : null;
+    pruneStaleMerges();
+    currentOpts.segMerges = Object.keys(_segMerges).length ? _segMerges : null;
+    _mergeMode = false;
+    _mergeSel = {};
     configureDirty = true;
     releaseGridPanKeys();
     document.getElementById('gridConfigModal').hidden = true;
@@ -3684,11 +3763,118 @@
     _gridRows = auto.rows;
     _cropBox = { x: 0, y: 0, w: 1, h: 1 };
     if (fp) delete _cropBoxes[fp.id];
+    if (fp) delete _segMerges[fp.id];
+    _mergeSel = {};
+    updateGridPreview();
+  };
+
+  // Columns and rows are one setting for every floor, so a change of shape
+  // retires every floor's combined sections, not just this one's.
+  function pruneStaleMerges() {
+    var dropped = false;
+    Object.keys(_segMerges).forEach(function (id) {
+      var m = _segMerges[id];
+      if (!m || m.cols !== _gridCols || m.rows !== _gridRows
+          || !segMergeGroups(m, _gridCols, _gridRows).length) {
+        if (m && m.groups && m.groups.length) dropped = true;
+        delete _segMerges[id];
+      }
+    });
+    if (dropped) _mergeSel = {};
+    return dropped;
+  }
+
+  function selectedMergeKeys() {
+    return Object.keys(_mergeSel).filter(function (k) { return _mergeSel[k]; });
+  }
+
+  /* Picking a cell that belongs to a combined section picks the whole
+     section, so Split has something to act on and Combine cannot be asked to
+     cut one in half by accident. */
+  function gridMergePick(key) {
+    var fp = proj.floorPlans[_gridFloorIdx];
+    if (!fp || !key) return;
+    var p = key.split(',');
+    var c = parseInt(p[0], 10), r = parseInt(p[1], 10);
+    var keys = [key];
+    segMergeGroups(_segMerges[fp.id], _gridCols, _gridRows).forEach(function (g) {
+      if (c < g.c0 || c > g.c1 || r < g.r0 || r > g.r1) return;
+      keys = [];
+      for (var rr = g.r0; rr <= g.r1; rr++) for (var cc = g.c0; cc <= g.c1; cc++) keys.push(cc + ',' + rr);
+    });
+    var allOn = keys.every(function (k) { return _mergeSel[k]; });
+    keys.forEach(function (k) { if (allOn) delete _mergeSel[k]; else _mergeSel[k] = true; });
+    updateGridPreview();
+  }
+  window.gridMergePick = gridMergePick;
+
+  // Every control stays on screen and says why it cannot be used yet, rather
+  // than appearing only once it can.
+  function updateMergeControls(groups) {
+    var fp = proj.floorPlans[_gridFloorIdx];
+    var modeBtn = document.getElementById('gridMergeModeBtn');
+    var combineBtn = document.getElementById('gridCombineBtn');
+    var splitBtn = document.getElementById('gridSplitBtn');
+    var hint = document.getElementById('gridMergeHint');
+    if (!modeBtn || !combineBtn || !splitBtn || !hint || !fp) return;
+    modeBtn.textContent = _mergeMode ? 'Finish combining' : 'Combine cells';
+    modeBtn.setAttribute('aria-pressed', _mergeMode ? 'true' : 'false');
+    modeBtn.classList.toggle('is-on', _mergeMode);
+    var keys = selectedMergeKeys();
+    var why;
+    if (!_mergeMode) {
+      why = 'Turn on Combine cells, then click the cells to join into one section.';
+      combineBtn.disabled = true; splitBtn.disabled = true;
+      combineBtn.title = splitBtn.title = why;
+      hint.textContent = groups.length
+        ? groups.length + ' combined section' + (groups.length === 1 ? '' : 's') + ' on this floor.'
+        : '';
+      return;
+    }
+    var merge = _segMerges[fp.id];
+    var comb = segMergeCombine(merge, _gridCols, _gridRows, keys);
+    var split = segMergeSplit(merge, _gridCols, _gridRows, keys);
+    combineBtn.disabled = !!comb.error;
+    combineBtn.title = comb.error || ('Combine into section ' + comb.label);
+    splitBtn.disabled = !!split.error;
+    splitBtn.title = split.error || 'Split back into single cells';
+    hint.textContent = comb.error
+      ? (keys.length ? comb.error : 'Click cells on the plan to pick them. ' + comb.error)
+      : 'Ready: these cells become section ' + comb.label + '.';
+  }
+
+  window.toggleGridMergeMode = function () {
+    _mergeMode = !_mergeMode;
+    _mergeSel = {};
+    updateGridPreview();
+  };
+
+  window.combineGridCells = function () {
+    var fp = proj.floorPlans[_gridFloorIdx];
+    if (!fp) return;
+    var res = segMergeCombine(_segMerges[fp.id], _gridCols, _gridRows, selectedMergeKeys());
+    if (res.error) { showToast(res.error, 'info'); return; }
+    _segMerges[fp.id] = res.merge;
+    _mergeSel = {};
+    showToast('Combined into section ' + res.label + '.', 'success');
+    updateGridPreview();
+  };
+
+  window.splitGridCells = function () {
+    var fp = proj.floorPlans[_gridFloorIdx];
+    if (!fp) return;
+    var res = segMergeSplit(_segMerges[fp.id], _gridCols, _gridRows, selectedMergeKeys());
+    if (res.error) { showToast(res.error, 'info'); return; }
+    if (res.merge) _segMerges[fp.id] = res.merge; else delete _segMerges[fp.id];
+    _mergeSel = {};
+    showToast('Split back into single cells.', 'success');
     updateGridPreview();
   };
 
   window.closeGridConfig = function () {
     _dragState = null;
+    _mergeMode = false;
+    _mergeSel = {};
     document.removeEventListener('mousemove', onCropDrag);
     document.removeEventListener('mouseup', endCropDrag);
     releaseGridPanKeys();
@@ -3717,6 +3903,7 @@
     if (currentOpts.segCols > 0) opts.segCols = currentOpts.segCols;
     if (currentOpts.segRows > 0) opts.segRows = currentOpts.segRows;
     if (currentOpts.cropBoxes) opts.cropBoxes = currentOpts.cropBoxes;
+    if (currentOpts.segMerges) opts.segMerges = currentOpts.segMerges;
     // Whatever was saved, with anything changed this session on top.
     if (!currentOpts.pageOrient) {
       currentOpts.pageOrient = Object.assign({}, savedPageOrient);
@@ -4180,6 +4367,7 @@
       var grid = computeAntennaGrid(W, H, aps, opts, fp.metersPerUnit);
       if (grid.cols * grid.rows > 1) {
         opts.cropBox = (opts.cropBoxes && opts.cropBoxes[fp.id]) || null;
+        opts.segMerge = (opts.segMerges && opts.segMerges[fp.id]) || null;
         opts.floorName = fp.name || 'Floor plan';
         opts.floorNumber = floorNumberFor(fp);
         return renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml, pageHeaded);
@@ -4270,9 +4458,151 @@
   }
 
   function segCellLabel(col, row) {
+    return segColLetter(col) + (row + 1);
+  }
+
+  function segColLetter(col) {
     var letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    var letter = col < 26 ? letters[col] : ('C' + (col + 1));
-    return letter + (row + 1);
+    return col < 26 ? letters[col] : ('C' + (col + 1));
+  }
+
+  /* Combined sections.
+
+     A grid is regular and a building is not. On an L-shaped plan one leg can
+     be a single open warehouse, and cutting it into A1 and A2 gives the
+     installer two sheets of empty slab joined by a match line across the
+     middle of nothing - no wall, no column, nothing to place an AP by. So
+     cells can be combined into one section: one sheet, one box on the key
+     plan, one entry in the index, while the rest of the grid stays divided.
+
+     A combined section is always a rectangle of whole cells, because a
+     section prints as one crop of the plan and a crop is a rectangle.
+
+     It is stored against the grid it was drawn on - {cols, rows, groups} -
+     and ignored once the grid changes shape. "Columns A and B" on a 3x2 grid
+     is a different piece of the building on a 4x2 one, and applying it there
+     would be a guess. */
+  function segSectionLabel(c0, r0, c1, r1, rows) {
+    if (c0 === c1 && r0 === r1) return segCellLabel(c0, r0);
+    // A whole column (or run of columns) top to bottom is named by its
+    // letter, which is how he asked for it: A1 + A2 is just "A".
+    if (rows > 1 && r0 === 0 && r1 === rows - 1) {
+      return c0 === c1 ? segColLetter(c0)
+        : segColLetter(c0) + '\u2013' + segColLetter(c1);
+    }
+    return segCellLabel(c0, r0) + '\u2013' + segCellLabel(c1, r1);
+  }
+
+  // The groups of a stored merge that still apply to a cols x rows grid:
+  // whole-cell rectangles, inside the grid, larger than one cell, and not
+  // overlapping one another. Anything else is dropped rather than repaired.
+  function segMergeGroups(merge, cols, rows) {
+    if (!merge || merge.cols !== cols || merge.rows !== rows) return [];
+    var taken = {}, out = [];
+    (merge.groups || []).forEach(function (g) {
+      if (!g) return;
+      var c0 = Math.min(g.c0, g.c1), c1 = Math.max(g.c0, g.c1);
+      var r0 = Math.min(g.r0, g.r1), r1 = Math.max(g.r0, g.r1);
+      if ([c0, c1, r0, r1].some(function (v) { return v !== Math.floor(v) || !(v >= 0); })) return;
+      if (c1 >= cols || r1 >= rows) return;
+      if (c0 === c1 && r0 === r1) return;
+      var keys = [];
+      for (var r = r0; r <= r1; r++) for (var c = c0; c <= c1; c++) keys.push(c + ',' + r);
+      if (keys.some(function (k) { return taken[k]; })) return;
+      keys.forEach(function (k) { taken[k] = true; });
+      out.push({ c0: c0, r0: r0, c1: c1, r1: r1 });
+    });
+    return out;
+  }
+
+  /* The sections a floor actually prints: the grid's cells, with each
+     combined group standing in for the cells it covers. `cells` is the
+     row-major cell list with bounds and APs; what comes back is in reading
+     order of each section's top-left cell, which is also the order the
+     sheets are printed in. */
+  function segSections(cells, cols, rows, merge) {
+    var groups = segMergeGroups(merge, cols, rows);
+    var owner = {};
+    groups.forEach(function (g, i) {
+      for (var r = g.r0; r <= g.r1; r++) for (var c = g.c0; c <= g.c1; c++) owner[c + ',' + r] = i;
+    });
+    var made = {}, sections = [];
+    cells.forEach(function (cell) {
+      var gi = owner[cell.col + ',' + cell.row];
+      if (gi === undefined) {
+        sections.push({
+          col: cell.col, row: cell.row,
+          c0: cell.col, r0: cell.row, c1: cell.col, r1: cell.row,
+          x0: cell.x0, y0: cell.y0, x1: cell.x1, y1: cell.y1,
+          aps: cell.aps || [], members: 1,
+          label: segCellLabel(cell.col, cell.row),
+        });
+        return;
+      }
+      var s = made[gi];
+      if (!s) {
+        var g = groups[gi];
+        s = made[gi] = {
+          col: g.c0, row: g.r0, c0: g.c0, r0: g.r0, c1: g.c1, r1: g.r1,
+          x0: cell.x0, y0: cell.y0, x1: cell.x1, y1: cell.y1,
+          aps: [], members: (g.c1 - g.c0 + 1) * (g.r1 - g.r0 + 1),
+          label: segSectionLabel(g.c0, g.r0, g.c1, g.r1, rows),
+        };
+        sections.push(s);
+      }
+      s.x0 = Math.min(s.x0, cell.x0); s.y0 = Math.min(s.y0, cell.y0);
+      s.x1 = Math.max(s.x1, cell.x1); s.y1 = Math.max(s.y1, cell.y1);
+      s.aps = s.aps.concat(cell.aps || []);
+    });
+    return sections;
+  }
+
+  /* What pressing Combine or Split does to a stored merge, given the cells
+     selected in the grid dialog. Pure, so the rules can be tested without a
+     dialog: returns the new merge, or `error` saying why nothing changed -
+     which is also the reason shown beside the disabled button. */
+  function segMergeCombine(merge, cols, rows, selKeys) {
+    var groups = segMergeGroups(merge, cols, rows);
+    var sel = (selKeys || []).map(function (k) {
+      var p = String(k).split(',');
+      return { c: parseInt(p[0], 10), r: parseInt(p[1], 10) };
+    }).filter(function (p) { return p.c >= 0 && p.r >= 0 && p.c < cols && p.r < rows; });
+    if (sel.length < 2) return { error: 'Select two or more cells next to each other.' };
+    var c0 = Infinity, c1 = -1, r0 = Infinity, r1 = -1, seen = {};
+    sel.forEach(function (p) {
+      seen[p.c + ',' + p.r] = true;
+      c0 = Math.min(c0, p.c); c1 = Math.max(c1, p.c);
+      r0 = Math.min(r0, p.r); r1 = Math.max(r1, p.r);
+    });
+    if (Object.keys(seen).length !== (c1 - c0 + 1) * (r1 - r0 + 1)) {
+      return { error: 'The selected cells have to make a rectangle \u2014 a section prints as one rectangular sheet.' };
+    }
+    var inside = function (g) { return g.c0 >= c0 && g.c1 <= c1 && g.r0 >= r0 && g.r1 <= r1; };
+    var touches = function (g) { return g.c0 <= c1 && g.c1 >= c0 && g.r0 <= r1 && g.r1 >= r0; };
+    if (groups.some(function (g) { return touches(g) && !inside(g); })) {
+      return { error: 'That selection cuts through a combined section. Select all of it, or split it first.' };
+    }
+    if (groups.some(function (g) { return g.c0 === c0 && g.c1 === c1 && g.r0 === r0 && g.r1 === r1; })) {
+      return { error: 'Those cells are already one section.' };
+    }
+    var kept = groups.filter(function (g) { return !inside(g); });
+    kept.push({ c0: c0, r0: r0, c1: c1, r1: r1 });
+    return { merge: { cols: cols, rows: rows, groups: kept },
+             label: segSectionLabel(c0, r0, c1, r1, rows) };
+  }
+
+  function segMergeSplit(merge, cols, rows, selKeys) {
+    var groups = segMergeGroups(merge, cols, rows);
+    var sel = {};
+    (selKeys || []).forEach(function (k) { sel[k] = true; });
+    var hit = function (g) {
+      for (var r = g.r0; r <= g.r1; r++) for (var c = g.c0; c <= g.c1; c++) if (sel[c + ',' + r]) return true;
+      return false;
+    };
+    var kept = groups.filter(function (g) { return !hit(g); });
+    if (kept.length === groups.length) return { error: 'Select a combined section to split it back into cells.' };
+    return { merge: kept.length ? { cols: cols, rows: rows, groups: kept } : null,
+             count: groups.length - kept.length };
   }
 
   function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml, pageHeaded) {
@@ -4295,13 +4625,17 @@
       var ri = Math.min(rows - 1, Math.max(0, Math.floor((c.y - oy) / ch)));
       cells[ri * cols + ci].aps.push(ap);
     });
+    cells = segSections(cells, cols, rows, opts.segMerge);
+    var combined = cells.filter(function (cell) { return cell.members > 1; }).length;
 
     var nonEmpty = cells.filter(function (cell) { return cell.aps.length; });
     var emptyLabels = cells.filter(function (cell) { return !cell.aps.length; })
-      .map(function (cell) { return segCellLabel(cell.col, cell.row); });
+      .map(function (cell) { return cell.label; });
 
     var out = '<div class="rep-seg-note">Floor plan split into ' + nonEmpty.length + ' section' + (nonEmpty.length === 1 ? '' : 's')
-      + ' (' + cols + '&times;' + rows + ' grid) so AP markers stay legible.'
+      + ' (' + cols + '&times;' + rows + ' grid'
+      + (combined ? ', ' + combined + ' combined section' + (combined === 1 ? '' : 's') : '')
+      + ') so AP markers stay legible.'
       + (emptyLabels.length ? ' No APs in section' + (emptyLabels.length === 1 ? '' : 's') + ' ' + emptyLabels.join(', ') + ' — skipped.' : '')
       + '</div>';
     // The AP Placement Map already heads the page with this floor directly
@@ -4349,12 +4683,15 @@
       });
     });
     var labels = '';
-    var fontSize = Math.min(gw / (allCells.length > 0 ? Math.sqrt(allCells.length) : 1), gh / (allCells.length > 0 ? Math.sqrt(allCells.length) : 1)) * 0.4;
+    // Sized from the grid's own cell count, so a combined section does not
+    // shrink every other label on the page.
+    var nGrid = allCells.reduce(function (n, c) { return n + (c.members || 1); }, 0);
+    var fontSize = Math.min(gw / (nGrid > 0 ? Math.sqrt(nGrid) : 1), gh / (nGrid > 0 ? Math.sqrt(nGrid) : 1)) * 0.4;
     allCells.forEach(function (cell) {
       var cx = (cell.x0 + cell.x1) / 2, cy = (cell.y0 + cell.y1) / 2;
       var hasAps = nonEmptySet[cell.col + ',' + cell.row];
       labels += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" dominant-baseline="middle" class="rep-grid-label' + (hasAps ? '' : ' rep-grid-label--empty') + '" font-size="' + fontSize + '">'
-        + segCellLabel(cell.col, cell.row) + '</text>';
+        + WD.esc(cell.label || segCellLabel(cell.col, cell.row)) + '</text>';
     });
     return '<div class="rep-overview rep-seg-index">'
       + (floorHeading ? '<div class="rep-seg-floor">' + WD.esc(floorHeading) + '</div>' : '')
@@ -4403,7 +4740,7 @@
         others += '<text x="' + ((c.x0 + c.x1) / 2) + '" y="' + ((c.y0 + c.y1) / 2)
           + '" class="rep-seg-locator-label' + (isThis ? ' is-here' : '') + '"'
           + ' font-size="' + labelAt + '" text-anchor="middle"'
-          + ' dominant-baseline="central">' + WD.esc(segCellLabel(c.col, c.row)) + '</text>';
+          + ' dominant-baseline="central">' + WD.esc(c.label || segCellLabel(c.col, c.row)) + '</text>';
       }
     });
 
@@ -4452,30 +4789,59 @@
   function matchLinesFor(cell, cells, cW, cH) {
     var empty = { svg: '', labels: '' };
     if (!cells || cells.length < 2) return empty;
-    var byPos = {};
-    cells.forEach(function (c) { byPos[c.col + ',' + c.row] = c; });
-    var at = function (dc, dr) {
-      var c = byPos[(cell.col + dc) + ',' + (cell.row + dr)];
-      return (c && c.aps && c.aps.length) ? c : null;
+    // Extent in grid cells. A combined section spans several, so one side can
+    // meet more than one neighbour - and one neighbour can meet only part of
+    // a side. Plain cells carry col/row alone and span exactly one.
+    var ext = function (c) {
+      return { c0: c.c0 != null ? c.c0 : c.col, c1: c.c1 != null ? c.c1 : c.col,
+               r0: c.r0 != null ? c.r0 : c.row, r1: c.r1 != null ? c.r1 : c.row };
     };
+    var me = ext(cell);
     var dash = Math.min(cW, cH) * 0.035;
     var sw = Math.min(cW, cH) * 0.006;
     var svg = '', labels = '';
 
-    function edge(neighbour, side, x1, y1, x2, y2) {
-      if (!neighbour) return;
-      svg += '<line class="rep-matchline" x1="' + x1 + '" y1="' + y1
-        + '" x2="' + x2 + '" y2="' + y2 + '" stroke-width="' + sw
-        + '" stroke-dasharray="' + dash + ',' + (dash * 0.6) + '"/>';
-      labels += '<div class="rep-matchline-edge is-' + side + '">'
-        + 'MATCH LINE \u2014 SECTION '
-        + WD.esc(segCellLabel(neighbour.col, neighbour.row)) + '</div>';
+    function neighbours(side) {
+      return cells.filter(function (c) {
+        if (c === cell || !(c.aps && c.aps.length)) return false;
+        var o = ext(c);
+        if (o.c0 === me.c0 && o.r0 === me.r0) return false;
+        var rowsMeet = o.r0 <= me.r1 && o.r1 >= me.r0;
+        var colsMeet = o.c0 <= me.c1 && o.c1 >= me.c0;
+        if (side === 'right')  return rowsMeet && o.c0 === me.c1 + 1;
+        if (side === 'left')   return rowsMeet && o.c1 === me.c0 - 1;
+        if (side === 'bottom') return colsMeet && o.r0 === me.r1 + 1;
+        return colsMeet && o.r1 === me.r0 - 1;
+      });
     }
 
-    edge(at(1, 0),  'right',  cell.x1, cell.y0, cell.x1, cell.y1);
-    edge(at(-1, 0), 'left',   cell.x0, cell.y0, cell.x0, cell.y1);
-    edge(at(0, 1),  'bottom', cell.x0, cell.y1, cell.x1, cell.y1);
-    edge(at(0, -1), 'top',    cell.x0, cell.y0, cell.x1, cell.y0);
+    function edge(side) {
+      var ns = neighbours(side);
+      if (!ns.length) return;
+      ns.forEach(function (n) {
+        var x1, y1, x2, y2;
+        if (side === 'right' || side === 'left') {
+          x1 = x2 = (side === 'right') ? cell.x1 : cell.x0;
+          y1 = Math.max(cell.y0, n.y0); y2 = Math.min(cell.y1, n.y1);
+        } else {
+          y1 = y2 = (side === 'bottom') ? cell.y1 : cell.y0;
+          x1 = Math.max(cell.x0, n.x0); x2 = Math.min(cell.x1, n.x1);
+        }
+        svg += '<line class="rep-matchline" x1="' + x1 + '" y1="' + y1
+          + '" x2="' + x2 + '" y2="' + y2 + '" stroke-width="' + sw
+          + '" stroke-dasharray="' + dash + ',' + (dash * 0.6) + '"/>';
+      });
+      labels += '<div class="rep-matchline-edge is-' + side + '">'
+        + 'MATCH LINE \u2014 SECTION' + (ns.length > 1 ? 'S ' : ' ')
+        + ns.map(function (n) {
+            return WD.esc(n.label || segCellLabel(n.col, n.row));
+          }).join(', ') + '</div>';
+    }
+
+    edge('right');
+    edge('left');
+    edge('bottom');
+    edge('top');
     return { svg: svg, labels: labels };
   }
 
@@ -4485,7 +4851,7 @@
     var vx = Math.max(0, cell.x0 - bleed), vy = Math.max(0, cell.y0 - bleed);
     var vx2 = Math.min(W, cell.x1 + bleed), vy2 = Math.min(H, cell.y1 + bleed);
     var vW = vx2 - vx, vH = vy2 - vy;
-    var label = segCellLabel(cell.col, cell.row);
+    var label = cell.label || segCellLabel(cell.col, cell.row);
     var match = matchLinesFor(cell, cells, cW, cH);
     var markers = buildAntennaMarkers(cell.aps, cW, cH, opts, ctx, cell) + match.svg;
     return '<div class="rep-overview rep-seg-cell">'
