@@ -201,7 +201,7 @@ def _drop_areas(src: Path, dest: Path, area_ids: set) -> None:
 
 def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
          margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET, boxes=None,
-         retighten: bool = True, floor_occupants=None) -> dict:
+         retighten: bool = True, floor_occupants=None, existing=None) -> dict:
     """What a run would do, without writing anything.
 
     Each step is previewed by the module that owns it, so the preview cannot
@@ -233,7 +233,8 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
                                     "error": "No capacity template was chosen."}
         else:
             area_plan = capacity_profiles.plan_application(
-                path, template, occupants, floor_occupants=floor_occupants)
+                path, template, occupants, floor_occupants=floor_occupants,
+                existing=existing)
             if retighten and area_plan.get("ok"):
                 stale = _stale_to_retighten(_members(path), floor_occupants)
                 area_plan["retighten"] = stale
@@ -266,7 +267,8 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
 
 def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
         occupants=None, margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET,
-        boxes=None, retighten: bool = True, floor_occupants=None) -> dict:
+        boxes=None, retighten: bool = True, floor_occupants=None,
+        existing=None) -> dict:
     """Do the whole pass and write once.
 
     Each step reads the file the previous step produced, which is what makes
@@ -351,7 +353,7 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                 out = nxt()
                 report = capacity_profiles.apply_to(
                     staged, out, template, occupants, replace_existing=False,
-                    floor_occupants=floor_occupants)
+                    floor_occupants=floor_occupants, existing=existing)
                 if not report.get("ok"):
                     # `cur` is left where it was, so the staged removal above is
                     # abandoned with everything else this step touched.
