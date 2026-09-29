@@ -56,10 +56,14 @@ jobs:
     # token can do more than the job can.
     permissions:
       contents: read
+      # To ask whether the pull request's own CI run already passed on this
+      # tree - see the step at the end of this job.
+      actions: read
     outputs:
       version: ${{ steps.read.outputs.version }}
       tag: ${{ steps.read.outputs.tag }}
       needed: ${{ steps.read.outputs.needed }}
+      tested: ${{ steps.tested.outputs.tested }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -92,14 +96,61 @@ jobs:
             echo "::notice::$tag is not released yet."
           fi
 
+      # **The suite is not run twice on the same tree.** A merged pull request
+      # has already run all four jobs on exactly this code, and running them
+      # again was ~27 minutes of nothing but waiting between the merge and the
+      # release. It is skipped only when the tree being released is provably
+      # the one that was tested - `scripts/tested_head.py` says when that is -
+      # and a successful pull-request run of tests.yml is recorded against it.
+      #
+      # Every doubt falls toward testing: no candidate, no successful run, or
+      # the API failing all leave `tested=false` and the suite runs as it
+      # always has. A red pull-request run never releases, because a red run
+      # is not a successful one.
+      - name: Was this exact tree already tested on its pull request?
+        id: tested
+        if: steps.read.outputs.needed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          head="$(python scripts/tested_head.py "$SHA" || true)"
+          if [[ -z "$head" ]]; then
+            echo "tested=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$SHA is not a tree a pull request tested - running the suite."
+            exit 0
+          fi
+
+          runs="$(gh api -X GET "repos/$REPO/actions/workflows/tests.yml/runs" \
+                    -f head_sha="$head" -f event=pull_request -f status=success \
+                    --jq '.total_count' 2>/dev/null || echo 0)"
+          if [[ "$runs" =~ ^[0-9]+$ ]] && (( runs > 0 )); then
+            echo "tested=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::The tree at $SHA passed the full suite on its pull request ($head) - not running it again."
+          else
+            echo "tested=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No successful pull-request run for $head - running the suite."
+          fi
+
   tests:
     needs: decide
-    if: needs.decide.outputs.needed == 'true'
+    if: needs.decide.outputs.needed == 'true' && needs.decide.outputs.tested != 'true'
     uses: ./.github/workflows/tests.yml
 
   publish:
     needs: [decide, tests]
-    if: needs.decide.outputs.needed == 'true'
+    # Publishes after a green suite here, or - with the suite skipped - only
+    # when `decide` proved the pull request's green run was on this tree. A
+    # failed or cancelled suite matches neither, so a red suite still
+    # publishes nothing. `!cancelled()` is what lets a skipped `tests` through
+    # at all; without it a skipped need skips this job.
+    if: >-
+      ${{ !cancelled()
+      && needs.decide.outputs.needed == 'true'
+      && (needs.tests.result == 'success'
+          || (needs.tests.result == 'skipped' && needs.decide.outputs.tested == 'true')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -189,7 +240,9 @@ jobs:
 
   assets:
     needs: [decide, publish]
-    if: needs.decide.outputs.needed == 'true'
+    # A skipped `tests` two jobs up would skip this too, so it asks about
+    # `publish` directly.
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
     uses: ./.github/workflows/release-assets.yml
     with:
       tag: ${{ needs.decide.outputs.tag }}
