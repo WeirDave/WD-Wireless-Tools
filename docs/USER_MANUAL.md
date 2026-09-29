@@ -1498,6 +1498,9 @@ prints the map meaningfully larger, so a plan that gains little stays upright.
 - **The cover page** has the same control. On Auto it takes the orientation most
   of the report's sheets print in, so a landscape set of maps opens on a
   landscape cover. **Match all pages** includes it.
+- **The AP Labels page** runs in two columns side by side on a landscape sheet,
+  as long as every name on the floor is 44 characters or shorter. A longer name
+  keeps the list in one column, because names are never wrapped.
 
 **Mixing portrait and landscape in one document works in Firefox, Chrome and
 Edge.** All three have been measured printing a document whose pages ask for

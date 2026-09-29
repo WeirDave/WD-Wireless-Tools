@@ -5448,6 +5448,11 @@
           : '');
   }
 
+  /* Half a landscape sheet, less the number column and the gap, is about
+     4in; the names print in 9pt monospace at 0.075in a character. 44
+     characters leaves a margin for the padding and a heavier face. */
+  var KEY_PAIR_MAX_CHARS = 44;
+
   function renderApNameKeySection(fp, aps, opts, ctx, floorIdx) {
     var sorted = aps.slice().sort(function (a, b) {
       return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
@@ -5476,12 +5481,21 @@
         + '</div></div>';
     }
 
+    var longest = 0;
     var rows = sorted.map(function (ap) {
       var num = apLabel(ap, 'short');
       var full = apLabel(ap, 'full') || '(unnamed)';
+      longest = Math.max(longest, String(full).length);
       return '<tr><td class="rep-key-num">' + WD.esc(num) + '</td>'
         + '<td class="rep-key-name">' + WD.esc(full) + '</td></tr>';
     }).join('');
+    /* On a landscape sheet the list runs in two columns side by side - one
+       narrow list down the left of a 10in sheet ran the footer onto a sheet
+       of its own at 24 names. Only where every name fits half the sheet: a
+       name is never wrapped, so one that did not fit would print across the
+       column beside it. The class is harmless in portrait; the print
+       stylesheet only acts on it once the page is turned. */
+    var pairs = longest <= KEY_PAIR_MAX_CHARS;
 
     var out = '<section class="rep-floor-section rep-key-page rep-oriented"'
       + ' data-page-key="key:' + WD.escAttr(fp.id) + '" data-page-kind="table"'
@@ -5490,7 +5504,12 @@
       + referencePageHead('AP Labels', fp, count);
     out += '<p class="rep-key-intro">The plan shows the number. Write the full name on the label.</p>'
       + scheme
-      + '<table class="rep-key-table"><thead><tr>'
+      + (pairs
+          ? '<div class="rep-key-pairs-head" aria-hidden="true">'
+            + '<span class="rep-key-num">#</span><span>Full AP name</span>'
+            + '<span class="rep-key-num">#</span><span>Full AP name</span></div>'
+          : '')
+      + '<table class="rep-key-table' + (pairs ? ' rep-key-table--pairs' : '') + '"><thead><tr>'
       + '<th class="rep-key-num">#</th><th>Full AP name</th>'
       + '</tr></thead><tbody>' + rows + '</tbody></table>'
       + renderReportFooter(opts, ctx);

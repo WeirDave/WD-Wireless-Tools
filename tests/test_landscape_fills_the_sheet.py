@@ -336,5 +336,52 @@ class SectionMapsFillTheSheet(_NodeProbe):
         """)
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class TheNameListUsesALandscapeSheet(_NodeProbe):
+    """On a landscape sheet the AP name list was one narrow column down the
+    left of 10in of paper: 24 names ran the footer onto a sheet of its own,
+    and 70 took three sheets where portrait takes two. It now runs in two
+    columns side by side - measured: 24 names on one sheet, 70 on two.
+
+    A name is copied onto hardware by hand and is never wrapped, so the two
+    columns are only offered when every name fits half the sheet. These run
+    the real renderer; the print stylesheet only acts on the class once the
+    page has been turned landscape."""
+
+    def render(self, names):
+        return """
+          eval(constant('KEY_PAIR_MAX_CHARS') + fn('function renderApNameKeySection('));
+          globalThis.WD = { esc: String, escAttr: String };
+          globalThis.apLabel = (ap, kind) => kind === 'short' ? ap.short : ap.name;
+          globalThis.orientPickerHtml = () => '';
+          globalThis.referencePageHead = () => '<h2>AP Labels</h2>';
+          globalThis.renderReportFooter = () => '<footer></footer>';
+          globalThis.structuredSegments = () => null;
+          globalThis.labelerPattern = null;
+          const names = %s;
+          const html = renderApNameKeySection({ id: 'f1', name: 'Floor 1' },
+            names.map((n, i) => ({ id: 'a' + i, name: n, short: String(i + 1) })), {}, {}, 0);
+        """ % json.dumps(names)
+
+    def test_short_names_are_offered_two_columns_with_a_header_for_each(self):
+        self.check(self.render(["AP %d" % i for i in range(1, 25)]) + """
+          check('no two-column class on a list of short names', /rep-key-table--pairs/.test(html));
+          const head = (html.match(/<div class="rep-key-pairs-head"[^]*?<[/]div>/) || [''])[0];
+          check('the two-column header does not head both columns: ' + head,
+                (head.match(/Full AP name/g) || []).length === 2);
+          check('a name went missing', (html.match(/<tr>/g) || []).length === 25);
+          done();
+        """)
+
+    def test_a_name_too_long_for_half_the_sheet_keeps_one_column(self):
+        long = "BLDG-EXAMPLE-NORTH-WAREHOUSE-MEZZANINE-LEVEL-2-AP-017"
+        self.check(self.render(["AP 1", long]) + """
+          check('a long name was put in a half-width column',
+                !/rep-key-table--pairs/.test(html) && !/rep-key-pairs-head/.test(html));
+          check('the long name was altered', html.indexOf(LONG) > -1);
+          done();
+        """.replace("LONG", json.dumps(long)))
+
+
 if __name__ == "__main__":
     unittest.main()
