@@ -3826,9 +3826,11 @@
       why = 'Turn on Combine cells, then click the cells to join into one section.';
       combineBtn.disabled = true; splitBtn.disabled = true;
       combineBtn.title = splitBtn.title = why;
-      hint.textContent = groups.length
-        ? groups.length + ' combined section' + (groups.length === 1 ? '' : 's') + ' on this floor.'
-        : '';
+      // Said on screen, not only in the disabled buttons' tooltips: a
+      // greyed-out Combine selected with no visible reason reads as broken.
+      hint.textContent = (groups.length
+        ? groups.length + ' combined section' + (groups.length === 1 ? '' : 's') + ' on this floor. '
+        : '') + why;
       return;
     }
     var merge = _segMerges[fp.id];
