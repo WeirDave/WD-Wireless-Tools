@@ -5107,7 +5107,16 @@ function cloudCell(r, localCodes) {
      row as a row with no name at all. */
   const ownDot = `<span class="own-dot" data-own="${ownState}" `
     + `title="${a(ownWords)}"></span>`;
-  const nameHtml = (isMis ? charDiff(c.name, r.local.name).a : e(c.name)) + (isSites ? '' : '.esx') + typeHtml + planHtml + unassignedHtml + ownerHtml + sharedHtml + dupHintFor(c.id);
+  /* A site name is copied far more often than it is read: it goes into a
+     ticket, a chat, a filename, Ekahau's own search box. The whole row
+     already opens the site, so the name itself is the one place a click can
+     mean "copy" without taking that away - the row toggle ignores buttons.
+     Inline rather than a helper, for the reason given above `ownWords`. */
+  const cloudNameText = isMis ? charDiff(c.name, r.local.name).a : e(c.name);
+  const cloudNameCore = isSites
+    ? `<button type="button" class="name-copy" data-action="call" data-fn="copySiteName" data-arg="${a(c.name)}" data-stop="1" title="Copy the site name">${cloudNameText}</button>`
+    : cloudNameText + '.esx';
+  const nameHtml = cloudNameCore + typeHtml + planHtml + unassignedHtml + ownerHtml + sharedHtml + dupHintFor(c.id);
   const dup = r.status === 'orphan' && c.code && localCodes.has(c.code);
 
   /* On a site row the meta is the digest: what is inside, and how much of it
@@ -5185,7 +5194,12 @@ function localCell(r, cloudCodes) {
   const localTypeHtml = (!isSites && l.projectType)
     ? ` <span class="ptype-tag pt-${e(l.projectType.toLowerCase().replace(/\s+/g, '-'))}" title="Project type (detected from .esx contents)">${e(l.projectType)}</span>`
     : '';
-  const nameHtml = (isMis ? charDiff(r.cloud.name, l.name).b : e(l.name)) + (l.isDir ? '' : '.esx') + localTypeHtml + ownerHtml + dupHintFor(l.path);
+  //: Same as the cloud side: on a site row the name copies, the row opens.
+  const localNameText = isMis ? charDiff(r.cloud.name, l.name).b : e(l.name);
+  const localNameCore = isSites && l.isDir
+    ? `<button type="button" class="name-copy" data-action="call" data-fn="copySiteName" data-arg="${a(l.name)}" data-stop="1" title="Copy the folder name">${localNameText}</button>`
+    : localNameText + (l.isDir ? '' : '.esx');
+  const nameHtml = localNameCore + localTypeHtml + ownerHtml + dupHintFor(l.path);
   const dup = r.status === 'orphan' && l.code && cloudCodes.has(l.code);
   const hasContents = isSites && l.src && l.src.total > 0;
   const flagged = l.name.charAt(0) === '!';
@@ -5213,6 +5227,35 @@ function localCell(r, cloudCodes) {
 
   return `<div class="lr-cell local${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A cloud ${isSites ? 'site' : 'project'} shares code ${a(l.code)} — likely the same place"` : ''}>`
     + `${chk}<span class="cell-name">${nameHtml}</span>${srcUI}${meta}${menu}</div>`;
+}
+/* Copies a site or folder name exactly as stored - not the rendered markup,
+   which on a mismatched pair carries the character-diff highlighting.
+   The textarea route is for a page served somewhere the async clipboard is
+   refused; on localhost it is not reached. */
+function copySiteName(name) {
+  const text = String(name == null ? '' : name);
+  const done = () => toast(`Copied "${text}"`, 'success');
+  const fallback = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) done(); else toast('Could not copy - select the name and copy it by hand.', 'error');
+    } catch (err) {
+      toast('Could not copy - select the name and copy it by hand.', 'error');
+    }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).then(done, fallback);
+  }
+  fallback();
+  return Promise.resolve();
 }
 function localByPath(path) {
 
@@ -10718,9 +10761,18 @@ function _wireRowToggle() {
     return (row && row.dataset.toggle) ? row : null;
   };
 
+  /* Dragging across text to select it ends in a click, and that click used
+     to fold the site away under the selection. A row with text selected in
+     it is being read, not opened. */
+  const selecting = (row) => {
+    const sel = window.getSelection && window.getSelection();
+    if (!sel || sel.isCollapsed || !String(sel).trim()) return false;
+    return !!(sel.anchorNode && row.contains(sel.anchorNode));
+  };
+
   document.addEventListener('click', (ev) => {
     const row = owns(ev.target);
-    if (!row) return;
+    if (!row || selecting(row)) return;
     ev.preventDefault();
     toggleFolder(row.dataset.toggle);
   });

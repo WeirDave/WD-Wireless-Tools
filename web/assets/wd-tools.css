@@ -2650,6 +2650,13 @@ body.tool-cloud .toolbar input.search:focus {
 }
 
 .lr-cell .cell-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.lr-cell .cell-name .name-copy {
+  all: unset; display: inline; color: inherit; font: inherit;
+  overflow-wrap: anywhere; cursor: copy; border-radius: 3px;
+  text-decoration: underline dotted transparent; text-underline-offset: 3px;
+}
+.lr-cell .cell-name .name-copy:hover { text-decoration-color: currentColor; }
+.lr-cell .cell-name .name-copy:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .owner-tag {
   font-size: 11px; color: var(--text-3); font-weight: 400;
