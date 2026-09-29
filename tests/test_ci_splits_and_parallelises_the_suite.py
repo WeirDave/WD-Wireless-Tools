@@ -17,7 +17,8 @@ the workflow's switch is evaluated for every matrix combination,
 * **A failing, crashing or hung module fails the run.** A runner that
   reported green over a module it never finished would be worse than the
   slow one it replaced.
-* **Two browser modules never run at once**, and everything else does.
+* **Browser modules go first; the first runs alone**, then no more than the
+  limit run at once, and everything else runs alongside them.
 """
 from __future__ import annotations
 
@@ -172,14 +173,16 @@ class TheRunnerTests(unittest.TestCase):
             textwrap.dedent(body), encoding="utf-8")
         return name
 
-    def _run(self, modules, jobs=4, timeout=run_tests.MODULE_TIMEOUT):
+    def _run(self, modules, jobs=4, timeout=run_tests.MODULE_TIMEOUT,
+             browser_jobs=None):
         out = io.StringIO()
         results = run_tests.run_all(modules, jobs, False, {}, out=out,
-                                    root=self.root, timeout=timeout)
+                                    root=self.root, timeout=timeout,
+                                    browser_jobs=browser_jobs)
         return {r.module: r for r in results}, out.getvalue()
 
     def _recorder(self, name: str, sleep: float, browser: bool) -> str:
-        marker = "# selenium - this module stands in for a browser test" \
+        marker = "HAVE_SELENIUM = False  # stands in for a browser test" \
             if browser else ""
         return self._module(name, f"""
             {marker}
@@ -227,17 +230,61 @@ class TheRunnerTests(unittest.TestCase):
         self.assertLess(max(a0, b0), min(a1, b1),
                         "the two modules ran one after the other")
 
-    def test_two_browser_modules_never_overlap(self):
+    @staticmethod
+    def _overlap(a, b) -> bool:
+        return max(a[0], b[0]) < min(a[1], b[1])
+
+    def test_with_one_browser_job_no_two_browser_modules_overlap(self):
         mods = [self._recorder(f"test_b{i}", 0.7, True) for i in range(3)]
         mods.append(self._recorder("test_plain", 0.7, False))
-        results, _ = self._run(mods)
+        results, _ = self._run(mods, browser_jobs=1)
         self.assertTrue(all(r.ok for r in results.values()), results)
         spans = sorted(self._span(m) for m in mods[:3])
         for (_, end), (start, _) in zip(spans, spans[1:]):
             self.assertLessEqual(end, start, spans)
-        p0, p1 = self._span("test_plain")
-        self.assertTrue(any(max(p0, s) < min(p1, e) for s, e in spans),
+        plain = self._span("test_plain")
+        self.assertTrue(any(self._overlap(plain, s) for s in spans),
                         "a plain module waited for the browser modules")
+
+    def test_the_first_browser_module_runs_alone(self):
+        """Selenium Manager fetches drivers on first use; nothing else that
+        drives a browser may start until that first one is done."""
+        mods = [self._recorder(f"test_b{i}", 0.7, True) for i in range(3)]
+        results, _ = self._run(mods, browser_jobs=3)
+        self.assertTrue(all(r.ok for r in results.values()), results)
+        spans = sorted(self._span(m) for m in mods)
+        first_end = spans[0][1]
+        for start, _ in spans[1:]:
+            self.assertGreaterEqual(start, first_end, spans)
+
+    def test_after_the_first_they_share_the_runner(self):
+        mods = [self._recorder(f"test_b{i}", 1.0, True) for i in range(3)]
+        self._run(mods, jobs=4, browser_jobs=2)
+        spans = sorted(self._span(m) for m in mods)
+        self.assertTrue(self._overlap(spans[1], spans[2]),
+                        "browser modules still ran one at a time: %s" % spans)
+
+    def test_never_more_browser_modules_than_the_limit(self):
+        mods = [self._recorder(f"test_b{i}", 0.8, True) for i in range(5)]
+        self._run(mods, jobs=4, browser_jobs=2)
+        spans = [self._span(m) for m in mods]
+        for t in sorted({s for s, _ in spans}):
+            running = sum(1 for s, e in spans if s <= t < e)
+            self.assertLessEqual(running, 2, spans)
+
+    def test_browser_modules_are_queued_first(self):
+        got = run_tests.order(["test_a", "test_b_browser", "test_c"],
+                              {"test_a": 90.0, "test_b_browser": 1.0},
+                              lambda m: m.endswith("browser"))
+        self.assertEqual(got[0], "test_b_browser")
+
+    def test_saying_the_word_is_not_driving_a_browser(self):
+        """This file names selenium in prose; it must not be queued, and
+        serialised, as though it opened one."""
+        self.assertFalse(run_tests.uses_a_browser(Path(__file__).stem))
+        self.assertTrue(run_tests.uses_a_browser("test_dev_toolbar_browser"))
+        self.assertTrue(run_tests.uses_a_browser(
+            "test_combined_sections_browser"))
 
     def test_a_failing_module_fails_and_its_output_is_printed(self):
         mod = self._module("test_red", """

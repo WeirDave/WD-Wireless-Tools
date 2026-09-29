@@ -19,11 +19,15 @@ run on its own has no such ordering, so relying on it here would put a run
 one import away from his real `~/.wd_wireless_tools`. The directory is a
 fresh one per module, under a root this script removes when it finishes.
 
-**Browser modules run one at a time.** Several Firefox/Chrome/Edge sessions at
-once on a four-core runner is how timing-sensitive UI tests start failing for
-reasons that have nothing to do with the code, and Selenium Manager fetches a
-driver on first use - two of those racing is a failure nobody could reproduce.
-Everything else runs alongside them.
+**Browser modules go first, and the first one runs alone.** They are the long
+pole - about 1,000 seconds between them on a Windows runner against under two
+minutes for everything else - and with local timings, where they skip, they
+had sorted last and run one at a time: a 19-minute job. Selenium Manager
+fetches a driver on first use, and two fetches racing for one cache is a
+failure nobody could reproduce, so nothing else that drives a browser starts
+until the first browser module has finished. After that up to
+`--browser-jobs` run at once (default: one fewer than `--jobs`, leaving a core
+for the rest).
 
 Usage::
 
@@ -74,11 +78,21 @@ def discover(names: list[str] | None = None, root: Path = ROOT) -> list[str]:
     return wanted
 
 
+#: Imports selenium itself, or runs through a harness that did and says so
+#: with `HAVE_SELENIUM` - test_combined_sections_browser is the second kind.
+_IMPORTS_SELENIUM = re.compile(
+    r"^\s*(?:from|import)\s+selenium\b"
+    r"|^\s*HAVE_SELENIUM\s*="
+    r"|\.HAVE_SELENIUM\b", re.M)
+
+
 @functools.lru_cache(maxsize=None)
 def uses_a_browser(module: str, root: Path = ROOT) -> bool:
+    """True for a module that drives a browser - not one that merely says
+    the word, which a test about this runner has to."""
     text = (root / "tests" / f"{module}.py").read_text(encoding="utf-8",
-                                               errors="replace")
-    return "selenium" in text
+                                                       errors="replace")
+    return bool(_IMPORTS_SELENIUM.search(text))
 
 
 def load_durations(path: Path = DURATIONS) -> dict[str, float]:
@@ -90,9 +104,12 @@ def load_durations(path: Path = DURATIONS) -> dict[str, float]:
             if isinstance(v, (int, float))}
 
 
-def order(modules: list[str], durations: dict[str, float]) -> list[str]:
-    """Longest first; unmeasured before measured; name breaks ties."""
-    return sorted(modules, key=lambda m: (-durations.get(m, UNKNOWN), m))
+def order(modules: list[str], durations: dict[str, float],
+          browser=lambda m: False) -> list[str]:
+    """Browser modules first, then longest first; unmeasured before
+    measured; name breaks ties."""
+    return sorted(modules, key=lambda m: (not browser(m),
+                                          -durations.get(m, UNKNOWN), m))
 
 
 _RAN = re.compile(r"^Ran (\d+) tests? in", re.M)
@@ -155,22 +172,41 @@ def run_module(module: str, user_root: Path, verbose: bool,
 
 def run_all(modules: list[str], jobs: int, verbose: bool,
             durations: dict[str, float], out=sys.stdout,
-            root: Path = ROOT, timeout: float = MODULE_TIMEOUT) -> list[Result]:
-    queue = order(modules, durations)
-    lock = threading.Lock()
-    one_browser = threading.Semaphore(1)
+            root: Path = ROOT, timeout: float = MODULE_TIMEOUT,
+            browser_jobs: int | None = None) -> list[Result]:
+    is_browser = functools.partial(uses_a_browser, root=root)
+    queue = order(modules, durations, is_browser)
+    lock = threading.RLock()
+    limit = max(1, browser_jobs if browser_jobs is not None else jobs - 1)
+    browsers = {"running": 0, "done": 0}
+    active = {"n": 0}
     results: list[Result] = []
 
     def take() -> str | None:
-        """The next module this worker may start. A browser module is only
-        handed out when no other browser module is running."""
+        """The next module this worker may start. A browser module waits
+        while the first browser module is still running, and after that
+        while `limit` are."""
         with lock:
+            allowed = 1 if browsers["done"] == 0 else limit
             for i, m in enumerate(queue):
-                if not uses_a_browser(m, root):
+                if not is_browser(m):
                     return queue.pop(i)
-                if one_browser.acquire(blocking=False):
+                if browsers["running"] < allowed:
+                    browsers["running"] += 1
                     return queue.pop(i)
             return None
+
+    def stalled() -> bool:
+        """Modules are waiting, none is running, and none can be handed out.
+        Nothing will ever change that, so the workers stop and `main`
+        reports what never ran - a hang would say nothing at all."""
+        with lock:
+            return bool(queue) and active["n"] == 0 and take_is_blocked()
+
+    def take_is_blocked() -> bool:
+        allowed = 1 if browsers["done"] == 0 else limit
+        return all(is_browser(m) for m in queue) and \
+            browsers["running"] >= allowed
 
     def report(res: Result):
         with lock:
@@ -188,15 +224,23 @@ def run_all(modules: list[str], jobs: int, verbose: bool,
                 with lock:
                     if not queue:
                         return
-                m = take()
+                with lock:
+                    m = take()
+                    if m is not None:
+                        active["n"] += 1
                 if m is None:
+                    if stalled():
+                        return
                     time.sleep(0.2)
                     continue
                 try:
                     report(run_module(m, Path(users), verbose, timeout, root))
                 finally:
-                    if uses_a_browser(m, root):
-                        one_browser.release()
+                    with lock:
+                        active["n"] -= 1
+                        if is_browser(m):
+                            browsers["running"] -= 1
+                            browsers["done"] += 1
 
         threads = [threading.Thread(target=worker, daemon=True)
                    for _ in range(max(1, jobs))]
@@ -212,6 +256,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("modules", nargs="*",
                     help="test modules to run (default: all)")
     ap.add_argument("--jobs", "-j", type=int, default=os.cpu_count() or 1)
+    ap.add_argument("--browser-jobs", type=int, default=None,
+                    help="browser modules at once after the first "
+                         "(default: --jobs minus one)")
     ap.add_argument("--verbose", "-v", action="store_true",
                     help="print every module's full output, not only "
                          "the failing ones")
@@ -226,7 +273,8 @@ def main(argv: list[str] | None = None) -> int:
 
     started = time.monotonic()
     print(f"Running {len(modules)} modules on {a.jobs} worker(s)", flush=True)
-    results = run_all(modules, a.jobs, a.verbose, load_durations())
+    results = run_all(modules, a.jobs, a.verbose, load_durations(),
+                      browser_jobs=a.browser_jobs)
     elapsed = time.monotonic() - started
 
     if a.record:
