@@ -167,7 +167,7 @@
         <span class="prep-toggle-body">
           <span class="prep-toggle-name">Put a requirement area on every floor</span>
           <span class="prep-toggle-why">From a capacity template and a headcount. A floor that already
-            has one is left alone. <span id="prepNote-areas"></span></span>
+            has devices is kept as it is unless you choose otherwise below. <span id="prepNote-areas"></span></span>
         </span>
       </label>
       <div class="prep-opts" id="prepAreaOpts">
@@ -183,6 +183,19 @@
           Floors rarely hold the same number of people. Each floor in the preview has its own
           <b>People on this floor</b> box: leave it blank to use the number above, type a number
           to override it, or type 0 to leave that floor alone.
+        </p>
+        <div class="prep-row">
+          <label for="prepExisting">Floors that already have devices</label>
+          <select id="prepExisting" class="prep-input prep-input--sel" data-action-change="call" data-fn="prepSyncStepUi">
+            <option value="keep">Keep them as they are</option>
+            <option value="devices">Replace device counts, keep the area outline</option>
+            <option value="reshape">Replace device counts and redraw the area</option>
+          </select>
+        </div>
+        <p class="prep-hint">
+          Starts on the default saved in <a href="/settings#sec-capacity">Settings &rarr; Capacity</a>,
+          the same one Capacity uses. Replacing sets a floor to the new number and never adds to
+          what was there; any second capacity area on that floor has its devices cleared.
         </p>
         <label class="prep-row" style="margin-bottom:0">
           <input type="checkbox" id="prepRetighten" checked data-action-change="call" data-fn="prepSyncStepUi">

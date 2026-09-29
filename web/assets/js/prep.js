@@ -32,6 +32,22 @@
   var capTemplates = [];
   var previewSeq = 0;        // so a slow preview cannot land after a newer one
   var floorOcc = {};         // floorPlanId -> headcount typed for that floor
+  // Settings → Capacity → Floors that already have devices. Read only: the
+  // dropdown here changes one run and never writes back. A failed read or an
+  // unknown value leaves "keep", which changes nothing he set.
+  var EXISTING_CHOICES = ['keep', 'devices', 'reshape'];
+  var savedExisting = 'keep';
+
+  function loadExistingDefault() {
+    return WD.api('settings/get').then(function (r) {
+      var v = r && r.settings && r.settings.capacity && r.settings.capacity.existing_devices;
+      if (EXISTING_CHOICES.indexOf(v) >= 0) savedExisting = v;
+    }).catch(function () { /* keep the shipped default */ }).then(function () {
+      if ($('prepExisting')) $('prepExisting').value = savedExisting;
+      // A project opened before the setting arrived previewed on "keep".
+      if (loaded()) preview();
+    });
+  }
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return WD.esc(String(s == null ? '' : s)); }
@@ -148,6 +164,7 @@
   function openEditor(name) {
     fileName = name;
     floorOcc = {};             // floors belong to one project
+    if ($('prepExisting')) $('prepExisting').value = savedExisting;
     $('dropzone').style.display = 'none';
     $('editor').classList.add('active');
     $('fileBadge').textContent = name;
@@ -254,7 +271,10 @@
     }
     if ($('prepStep-areas').checked) {
       q += '&capacityTemplate=' + encodeURIComponent($('prepCapTpl').value)
-        + '&occupants=' + encodeURIComponent($('prepOccupants').value);
+        + '&occupants=' + encodeURIComponent($('prepOccupants').value)
+        + '&existing=' + encodeURIComponent(
+            EXISTING_CHOICES.indexOf($('prepExisting').value) >= 0
+              ? $('prepExisting').value : 'keep');
       if (Object.keys(floorOcc).length) {
         q += '&floorOccupants=' + encodeURIComponent(JSON.stringify(floorOcc));
       }
@@ -934,6 +954,7 @@
     WD.applyVersions();
     loadTemplates();
     loadMargin();
+    loadExistingDefault();
 
     $('fileInput').addEventListener('change', function (e) {
       if (e.target.files[0]) loadFile(e.target.files[0]);
