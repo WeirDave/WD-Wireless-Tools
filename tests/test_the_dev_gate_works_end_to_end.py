@@ -159,6 +159,16 @@ class DevGateEndToEnd(unittest.TestCase):
         env = dict(os.environ)
         env["WD_USER_DIR"] = str(cls.scratch / "userdir")
         env["PORT"] = str(cls.port)
+        # The housekeeping survey walks the temp folder, and sizing it has no
+        # time budget. Left at the real one it read whatever the suite had
+        # already left there - on a Windows runner 25 minutes in, enough to
+        # outlast Selenium's 30 s script timeout and fail the release build
+        # for 2.183.0 - and run locally it surveyed his own %TEMP%. Its own
+        # folder keeps the survey small, and inside the scratch tree.
+        temp = cls.scratch / "temp"
+        temp.mkdir()
+        for var in ("TEMP", "TMP", "TMPDIR"):
+            env[var] = str(temp)
         cls.proc = subprocess.Popen(
             [sys.executable, "server.py"], cwd=str(run), env=env,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
