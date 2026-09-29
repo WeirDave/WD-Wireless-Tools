@@ -6027,7 +6027,10 @@ body.tool-report {
 .rep-floor-section[data-floor-idx="4"] .rep-seg-locator-rect { fill: rgba(236,72,153,0.35); stroke: #ec4899; }
 
 .rep-seg-locator {
-  position: relative; width: 90px; flex-shrink: 0;
+  position: relative; flex-shrink: 0;
+  /* 90px wide, or narrower where that would be taller than 1.1in (105.6px);
+     KEY_PLAN_MAX_H_IN in report.js sizes the section map against this. */
+  width: min(90px, calc(105.6px * var(--w) / var(--h)));
   border: 1px solid #ddd; aspect-ratio: var(--w) / var(--h); overflow: hidden;
 }
 
@@ -8129,6 +8132,11 @@ body.wd-has-update-banner .wd-update-badge { display: none; }
 .grid-spinner { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 .grid-spin-val { min-width: 24px; text-align: center; font-weight: 700; font-size: 15px; color: var(--text); }
 .grid-cell-count { font-size: 12px; color: var(--text-3); }
+.grid-merge-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.grid-merge-controls .btn.is-on { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.grid-merge-hint { font-size: 12px; color: var(--text-2); }
+#gridSvg .grid-cell-picked { fill: rgba(236,72,153,0.28); stroke: #db2777; }
+#gridSvg .rep-grid-cell--combined { stroke-dasharray: none; }
 .grid-zoom-hint { font-size: 11px; color: var(--text-3); margin-top: 4px; }
 .grid-preview-container { border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; flex: 1; min-height: 0; padding: 12px; overflow: hidden; position: relative; cursor: grab; }
 /* Space held: the whole map is grabbable, crop handles included, so the resize
@@ -8833,6 +8841,7 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 }
 .rep-key-sep { font-family: var(--mono); font-size: 13px; color: var(--text-3); padding-top: 1px; }
 
+.rep-key-pairs-head { display: none; }
 .rep-key-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .rep-key-table th {
   text-align: left; padding: 4px 8px; font-size: 11px;
@@ -8863,6 +8872,28 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
   .rep-key-table td.rep-key-num, .rep-key-table th.rep-key-num {
     width: 0.7in !important; white-space: nowrap !important;
   }
+  /* Landscape: two columns of names side by side, when every name fits one
+     (KEY_PAIR_MAX_CHARS in report.js decides, and adds --pairs). A table
+     cannot flow into columns, so the rows become flex rows in a multi-column
+     block, and one header row is drawn across the top for both columns -
+     the table's own header could only ever head the first. */
+  .rep-key-page.is-landscape .rep-key-table--pairs {
+    display: block; columns: 2; column-gap: 0.4in;
+  }
+  .rep-key-page.is-landscape .rep-key-table--pairs thead { display: none; }
+  .rep-key-page.is-landscape .rep-key-table--pairs tbody { display: block; }
+  .rep-key-page.is-landscape .rep-key-table--pairs tr {
+    display: flex; break-inside: avoid; page-break-inside: avoid;
+  }
+  .rep-key-page.is-landscape .rep-key-table--pairs td.rep-key-num { flex: 0 0 0.7in; }
+  .rep-key-page.is-landscape .rep-key-table--pairs td.rep-key-name { flex: 1 1 auto; }
+  .rep-key-page.is-landscape .rep-key-pairs-head {
+    display: grid; grid-template-columns: 0.7in 1fr 0.4in 0.7in 1fr;
+    font-size: 9pt; text-transform: uppercase; letter-spacing: .4px;
+    color: #555 !important; border-bottom: 1px solid #e5e5e7;
+  }
+  .rep-key-page.is-landscape .rep-key-pairs-head span { padding: 3px 6px; }
+  .rep-key-page.is-landscape .rep-key-pairs-head span:nth-child(3) { grid-column: 4; }
   .rep-key-intro { color: #555 !important; }
   .rep-key-scheme {
     border-color: #d5d5d7 !important; background: #fafafa !important;
@@ -8890,7 +8921,7 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
   float: left; width: 250px; margin: 0 22px 12px 0; text-align: center;
 }
 .rep-compass-right { min-width: 0; }
-.rep-comp-rose { width: 250px; height: 250px; }
+.rep-comp-rose { width: 250px; height: 250px; overflow: visible; }
 .rep-comp-ring { fill: none; stroke: #333; stroke-width: 1.5; }
 .rep-comp-center { fill: #333; }
 .rep-comp-major { stroke: #333; stroke-width: 2; }
@@ -8975,6 +9006,15 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
     float: none; margin: 0 auto 8px; break-inside: avoid;
   }
   .rep-compass-page.is-landscape .rep-comp-rose { width: 155px; height: 155px; }
+  /* The rose's text is in viewBox units, so it shrinks with the rose: at
+     155px a unit prints at 0.36pt, and the degree ring came out at 4.7pt and
+     NE/SE/SW/NW at 5.4pt - under the 6pt floor, on the one drawing someone
+     reads with a compass in the other hand. Larger in units here so they land
+     at about 6.2pt on paper. 17 units still clears the tick marks inside the
+     ring (the labels sit 108 units out, the ticks start at 128) and keeps NE
+     inside the drawing. */
+  .rep-compass-page.is-landscape .rep-comp-deg { font-size: 17px; }
+  .rep-compass-page.is-landscape .rep-comp-intercard { font-size: 17px; }
   .rep-compass-page.is-landscape .rep-compass-caption { font-size: 7.5pt; }
   /* Two columns of half a landscape sheet is 1080pt of column against roughly
      1000pt of content, so a section that refuses to split cannot be placed and
@@ -8987,6 +9027,14 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
   .rep-compass-page.is-landscape .rep-compass-sect h3 {
     break-after: avoid; page-break-after: avoid;
   }
+  /* Measured on Letter landscape: the two columns still ran four lines onto
+     a second sheet. Only the space between lines and sections gives - text
+     stays at 9pt, and the rose stays at 155px, because its degree labels are
+     already small at that size and shrinking it makes them smaller. */
+  .rep-compass-page.is-landscape .rep-compass-sect { margin-bottom: 8px; }
+  .rep-compass-page.is-landscape .rep-compass-sect p,
+  .rep-compass-page.is-landscape .rep-compass-sect ul { line-height: 1.38; margin-bottom: 4px; }
+  .rep-compass-page.is-landscape .rep-compass-sect li { margin-bottom: 2px; }
   .rep-compass-sect h3 { font-size: 10pt; color: #111 !important; }
   .rep-compass-sect p,
   .rep-compass-sect ul { font-size: 9pt; color: #222 !important; }
