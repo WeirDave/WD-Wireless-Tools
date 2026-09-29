@@ -1472,7 +1472,8 @@ CLOUD_ACTIONS = {
         progress_cb=_progress_setter(d.get("opId")),
         only=d.get("cloudIds") or []),
     "replace_cloud_project": lambda d: cm.replace_cloud_project(
-        d["path"], d.get("cloudId"), _progress_setter(d.get("opId"))),
+        d["path"], d.get("cloudId"), _progress_setter(d.get("opId")),
+        overwrite_newer=d.get("overwriteNewer") is True),
     "upload_project": lambda d: cm.upload_project(d["path"], d.get("siteId"),
                                                      progress_cb=_progress_setter(d.get("opId"))),
     "download_project": lambda d: cm.download_project(
