@@ -637,11 +637,21 @@ class RenameManager:
 
         site_names, _ = _site_folder_names(root_path, skip)
         # No site folders under the root means the root is one: its own
-        # files and its Squirrel subfolders are what gets renamed.
-        site_dirs = ([root_path / n for n in site_names] or [root_path])
+        # files and its Squirrel subfolders are what gets renamed. With site
+        # folders, loose files at the top level are scanned as well - its
+        # subfolders are the sites, so only the root itself.
+        if site_names:
+            scans = [(root_path / n,
+                      [root_path / n] + [root_path / n / sf
+                                         for sf in subfolder_names])
+                     for n in site_names]
+            scans.append((root_path, [root_path]))
+        else:
+            scans = [(root_path, [root_path] + [root_path / sf
+                                                for sf in subfolder_names])]
 
         renames = []
-        for folder_dir in site_dirs:
+        for folder_dir, dirs in scans:
             if sites:
                 site, method, confidence = self._match_folder_to_site(
                     folder_dir.name, sites, column_map)
@@ -649,7 +659,7 @@ class RenameManager:
                     continue
             else:
                 site = {}
-            for d in [folder_dir] + [folder_dir / sf for sf in subfolder_names]:
+            for d in dirs:
                 if not d.is_dir():
                     continue
                 files = sorted(
@@ -741,8 +751,7 @@ class RenameManager:
             if not d.is_dir():
                 return
             for f in d.iterdir():
-                if (not f.is_file() or f.name.startswith(".")
-                        or f.suffix.lower() == ".esx"):
+                if not f.is_file() or f.name.startswith("."):
                     continue
                 stem = _split_ext(f.name)[0]
                 if " - " in stem:
@@ -783,27 +792,33 @@ class RenameManager:
         skip, subfolder_names = _squirrel_layout(skip, subfolder_names)
         cfg = {"rename": rules} if rules else {"rename": DEFAULT_FILE_RULES}
 
+        scanned = 0
+
+        def scan_dir(d: Path, site_dir: Path) -> list:
+            nonlocal scanned
+            found = []
+            if not d.is_dir():
+                return found
+            for f in sorted(d.iterdir()):
+                if not f.is_file() or f.name.startswith("."):
+                    continue
+                scanned += 1
+                new_name = apply_file_rules(f.name, site_dir.name, cfg)
+                if new_name == f.name:
+                    continue
+                found.append({
+                    "site": site_dir.name,
+                    "dir": str(d),
+                    "path": str(f),
+                    "old_name": f.name,
+                    "new_name": new_name,
+                })
+            return found
+
         def scan_site(site_dir: Path) -> list:
             found = []
-            candidate_dirs = ([site_dir]
-                              + [site_dir / sf for sf in subfolder_names])
-            for d in candidate_dirs:
-                if not d.is_dir():
-                    continue
-                for f in sorted(d.iterdir()):
-                    if (not f.is_file() or f.name.startswith(".")
-                            or f.suffix.lower() == ".esx"):
-                        continue
-                    new_name = apply_file_rules(f.name, site_dir.name, cfg)
-                    if new_name == f.name:
-                        continue
-                    found.append({
-                        "site": site_dir.name,
-                        "dir": str(d),
-                        "path": str(f),
-                        "old_name": f.name,
-                        "new_name": new_name,
-                    })
+            for d in [site_dir] + [site_dir / sf for sf in subfolder_names]:
+                found.extend(scan_dir(d, site_dir))
             return found
 
         site_dirs = [
@@ -814,9 +829,14 @@ class RenameManager:
         items = []
         for site_dir in site_dirs:
             items.extend(scan_site(site_dir))
-        if not site_dirs:
+        if site_dirs:
+            # Loose files next to the site folders - a batch of .esx dropped
+            # straight into the projects folder - were invisible here.
+            items.extend(scan_dir(root_path, root_path))
+        else:
             items.extend(scan_site(root_path))
-        return {"ok": True, "items": items, "count": len(items)}
+        return {"ok": True, "items": items, "count": len(items),
+                "scanned": scanned}
 
     def execute_bulk_rename(self, items: list | None = None) -> dict:
         if not items:
@@ -1091,7 +1111,8 @@ class RenameManager:
             "root.withdraw()\n"
             "root.wm_attributes('-topmost', True)\n"
             "p = filedialog.askdirectory("
-            "title='Select site projects root folder')\n"
+            "title='Select the folder holding the files to rename"
+            " (folders only - files appear in the preview)')\n"
             "print(p or '')\n"
         )
         try:
