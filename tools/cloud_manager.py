@@ -1909,14 +1909,32 @@ def build_sites_data(api, output_dir):
 def build_projects_data(api, output_dir):
 
     dataset_site = {}
+    dataset_site_id = {}
     dataset_meta = {}
     plan_by_name = {}
+    #: Every cloud site by name, empty ones included. A row whose folder and
+    #: site disagree has to know whether the folder's name is already a site
+    #: (move the project there) or is nobody's yet (rename the site to it).
+    #: The dataset listing only names sites that hold a project, and renaming
+    #: a site onto the name of an empty one would leave two sites wearing it.
+    site_ids = {}
+    try:
+        for s in api.get_sites():
+            sid = s.get("siteId") or s.get("id")
+            if sid and s.get("name"):
+                site_ids[s["name"]] = sid
+    except Exception:
+        pass
     try:
         for entry in api.get_dataset_listing():
             eid = entry.get("id")
             sname = entry.get("siteName")
             if eid and sname:
                 dataset_site[eid] = sname
+                sid = entry.get("siteId") or site_ids.get(sname)
+                if sid:
+                    dataset_site_id[eid] = sid
+                    site_ids.setdefault(sname, sid)
             if eid:
                 users = entry.get("datasetUsers") or []
                 shared_with = sorted({
@@ -1980,7 +1998,8 @@ def build_projects_data(api, output_dir):
                       "planType": plan_by_name.get(name.strip().lower()),
 
 
-                      "siteName": site_name})
+                      "siteName": site_name,
+                      "siteId": dataset_site_id.get(pid, "")})
     local = [{"path": f["path"], "name": f["name"], "code": extract_site_code(f["name"]),
               "isDir": False, "folder": f["folder"],
               "size": int(f.get("size") or 0), "mtime": int(f.get("mtime") or 0),
@@ -2005,7 +2024,9 @@ def build_projects_data(api, output_dir):
     except Exception as e:
         applog.note_failure("pruning sync points", e)
 
-    return build_matches(cloud, local, not_matches_set(), mm_map)
+    result = build_matches(cloud, local, not_matches_set(), mm_map)
+    result["siteIds"] = site_ids
+    return result
 
 
 def _dup_key(name):
