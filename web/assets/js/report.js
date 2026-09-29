@@ -3927,7 +3927,8 @@
       if (metaRows.length) meta = '<div class="rep-cover-meta">' + metaRows.join('') + '</div>';
     }
     var displayDate = (ctx && ctx.dateReadable) ? ctx.dateReadable : dateStr;
-    return '<section class="rep-cover">'
+    return '<section class="rep-cover rep-oriented" data-page-key="cover" data-page-kind="cover">'
+      + orientPickerHtml('cover', opts || {})
       + logo
       + '<div class="rep-cover-brand"><img class="rep-brand-icon" src="../assets/report-v8.0-560x560.png" alt=""> ' + WD.esc(r.coverBrand) + '</div>'
       + '<h1 class="rep-cover-title">' + WD.esc(siteName()) + '</h1>'
@@ -4923,14 +4924,21 @@
     }
   }
 
-  function sizeAntennaSegmentForPrint(overlayEl) {
+  function segOverlayRatio(overlayEl) {
     var x0 = parseFloat(overlayEl.getAttribute('data-seg-x0'));
     var y0 = parseFloat(overlayEl.getAttribute('data-seg-y0'));
     var x1 = parseFloat(overlayEl.getAttribute('data-seg-x1'));
     var y1 = parseFloat(overlayEl.getAttribute('data-seg-y1'));
     var ratio = (x1 - x0) / (y1 - y0);
-    if (!isFinite(ratio) || ratio <= 0) return;
+    return (isFinite(ratio) && ratio > 0) ? ratio : 0;
+  }
 
+  /* How big one section map prints, in inches, on a sheet either way round.
+     The one place the answer is worked out, so the Auto choice and the sizing
+     it leads to cannot disagree. */
+  function segPrintSizeIn(overlayEl, landscape) {
+    var ratio = segOverlayRatio(overlayEl);
+    if (!ratio) return null;
     /* Fit both US Letter and A4 portrait after the page chrome around the map,
        less the gutter the match line labels now sit in: .rep-seg-plan-wrap
        pads 0.26in at the sides and below and 0.16in above, and the plan has to
@@ -4939,10 +4947,78 @@
     // The index page now carries the large floor header above the map, so it
     // has about 0.6in less to work with than it used to.
     var maxHeightIn = overlayEl.closest('.rep-seg-index') ? 7.13 : 7.48;
+    /* A landscape sheet. These were fixed at the portrait figures, so
+       turning a section page gave it an 11in-wide sheet and a map 6.9in wide
+       in the middle of it.
+
+       The height is built from what sits above and below the map, measured
+       off a printed landscape sheet rather than carried over from portrait,
+       whose figure has an inch of slack in it that a 7.45in-tall sheet cannot
+       spare. The one part that varies is the Key Plan thumbnail. */
+    var cellPage = overlayEl.closest('.rep-seg-cell');
+    var above = cellPage
+      ? SEG_HEAD_IN + keyPlanHeightIn(cellPage)
+      : SEG_INDEX_HEAD_IN;
+    if (landscape) {
+      maxWidthIn = SHEET_H_IN - (SHEET_W_IN - maxWidthIn);
+      maxHeightIn = SHEET_W_IN - above - SEG_BELOW_IN;
+    } else {
+      // Portrait keeps its long-standing figure, except where the header is
+      // tall enough to push the map off the sheet - which on a tall building
+      // put the header on one sheet and the map on the next.
+      maxHeightIn = Math.min(maxHeightIn, SHEET_H_IN - above - SEG_BELOW_IN);
+    }
     var widthIn = Math.min(maxWidthIn, maxHeightIn * ratio);
-    var heightIn = widthIn / ratio;
-    overlayEl.style.setProperty('--print-w', widthIn.toFixed(3) + 'in');
-    overlayEl.style.setProperty('--print-h', heightIn.toFixed(3) + 'in');
+    return { w: widthIn, h: widthIn / ratio };
+  }
+
+  function sizeAntennaSegmentForPrint(overlayEl) {
+    var size = segPrintSizeIn(overlayEl, !!overlayEl.closest('.is-landscape'));
+    if (!size) return;
+    overlayEl.style.setProperty('--print-w', size.w.toFixed(3) + 'in');
+    overlayEl.style.setProperty('--print-h', size.h.toFixed(3) + 'in');
+  }
+
+  /* Auto, for a floor split into sections: the way round that prints the
+     section maps bigger, by the same test a whole-floor map uses - turning
+     the paper has to earn ROTATE_GAIN in scale. Every section of a floor
+     shares one page setting, so it is decided on their combined area, and the
+     index does not vote: it is one sheet of reference, the sections are what
+     gets worked from. */
+  function segmentedFloorWantsLandscape(page) {
+    var overlays = page.querySelectorAll('.rep-seg-cell .rep-overview-plan[data-seg="1"]');
+    var up = 0, turned = 0;
+    for (var i = 0; i < overlays.length; i++) {
+      var a = segPrintSizeIn(overlays[i], false), b = segPrintSizeIn(overlays[i], true);
+      if (!a || !b) continue;
+      up += a.w * a.h;
+      turned += b.w * b.h;
+    }
+    return up > 0 && turned > up * ROTATE_GAIN * ROTATE_GAIN;
+  }
+
+  /* Measured on a printed Letter landscape section sheet, in inches from the
+     top margin: the header row starts 0.24 down and the map 0.43 below the
+     thumbnail's bottom edge (the caption and the match line gutter), so 0.67
+     plus the thumbnail. The index page has a floor heading and a note
+     instead, and its map starts 1.13 down. Below the map: the key line ends
+     0.49 under it, and 0.3 is kept spare so a key that wraps to a second line
+     still lands on the same sheet. */
+  var SEG_HEAD_IN = 0.67;
+  var SEG_INDEX_HEAD_IN = 1.13;
+  var SEG_BELOW_IN = 0.8;
+  /* The thumbnail is 90px wide at the plan's aspect, and no taller than
+     1.1in - .rep-seg-locator in the stylesheet narrows it instead. Without
+     the cap a tall building's thumbnail was 2in tall. */
+  var KEY_PLAN_W_IN = 90 / 96;
+  var KEY_PLAN_MAX_H_IN = 1.1;
+
+  function keyPlanHeightIn(cellPage) {
+    var loc = cellPage.querySelector('.rep-seg-locator');
+    if (!loc) return 0;
+    var w = parseFloat(loc.style.getPropertyValue('--w'));
+    var h = parseFloat(loc.style.getPropertyValue('--h'));
+    return (w > 0 && h > 0) ? Math.min(KEY_PLAN_MAX_H_IN, KEY_PLAN_W_IN * h / w) : 0;
   }
 
   function applyAntennaSegmentCrop(host, opts) {
@@ -5074,6 +5150,7 @@
     var kind = page.getAttribute('data-page-kind') || '';
 
     if (kind === 'plan') return null;      // the plan pass below decides
+    if (kind === 'cover') return null;     // follows the rest - orientCover
 
     if (kind === 'table') {
       var table = page.querySelector('table');
@@ -5142,6 +5219,7 @@
     }
     sizePlacementPlansForPrint(host, currentOpts);
     applyPageOrientation(host, currentOpts);
+    resizeSegmentsForPrint(host);
     persistPageOrient();
     configureDirty = true;
     var n = keys.length;
@@ -5172,6 +5250,7 @@
     // rebuilding the report and losing the reader's scroll position.
     sizePlacementPlansForPrint(host, currentOpts);
     applyPageOrientation(host, currentOpts);
+    resizeSegmentsForPrint(host);
     persistPageOrient();
     configureDirty = true;
   };
@@ -5219,6 +5298,50 @@
       var now = page.querySelector('.rep-orient-now');
       if (now) now.textContent = (mode === 'auto' ? 'auto \u2192 ' : '') + want;
     }
+    orientCover(host, opts);
+  }
+
+  /* The cover follows the report.
+
+     It has nothing of its own that needs one shape or the other, so on Auto
+     it used to be decided by the fallthrough - portrait, always - and a set
+     of landscape maps opened on one upright sheet. It never carried a page
+     key either, so even "Match all pages" went straight past it.
+
+     On Auto it now takes the way round most of the report's sheets print.
+     Sheets, not pages: a floor split into eight sections is eight landscape
+     sheets and one element, and counting elements would let a single
+     portrait compass page outvote them. A tie goes to the page printed
+     straight after the cover, which is the one it is bound against. Set by
+     hand it is like any other page. */
+  function orientCover(host, opts) {
+    var cover = host.querySelector('[data-page-kind="cover"]');
+    if (!cover) return;
+    var mode = pageOrientMode('cover', opts || {});
+    var want = mode;
+    if (mode === 'auto') {
+      var pages = host.querySelectorAll('[data-page-key]');
+      var land = 0, port = 0, first = null;
+      for (var i = 0; i < pages.length; i++) {
+        var pg = pages[i];
+        if (pg === cover) continue;
+        var isLand = pg.classList.contains('is-landscape');
+        if (first === null) first = isLand;
+        var sheets = 1 + pg.querySelectorAll('.rep-seg-cell').length;
+        if (isLand) land += sheets; else port += sheets;
+      }
+      want = (land > port || (land === port && first)) ? 'landscape' : 'portrait';
+    }
+    cover.classList.toggle('is-landscape', want === 'landscape');
+    var now = cover.querySelector('.rep-orient-now');
+    if (now) now.textContent = (mode === 'auto' ? 'auto \u2192 ' : '') + want;
+  }
+
+  // Section sheets are sized for the sheet they land on, so turning the page
+  // has to size them again.
+  function resizeSegmentsForPrint(host) {
+    var overlays = host.querySelectorAll('.rep-overview-plan[data-seg="1"]');
+    for (var i = 0; i < overlays.length; i++) sizeAntennaSegmentForPrint(overlays[i]);
   }
 
   function placementKeyHtml(opts, aps) {
@@ -5581,7 +5704,25 @@
     for (var i = 0; i < pages.length; i++) {
       var page = pages[i];
       var el = page.querySelector('.rep-overview-plan:not([data-seg="1"])');
-      if (!el) continue;
+      if (!el) {
+        /* A floor split into sections. Each sheet is sized for whichever way
+           round the page is (sizeAntennaSegmentForPrint), so the page only
+           has to be told. Auto used to leave these upright whatever shape
+           the sections were. */
+        if (page.querySelector('.rep-overview-plan[data-seg="1"]')) {
+          var segMode = pageOrientMode(page.getAttribute('data-page-key'), opts || {});
+          var segLand = segMode === 'landscape' ? true
+            : segMode === 'portrait' ? false
+            : segmentedFloorWantsLandscape(page);
+          page.classList.toggle('is-landscape', segLand);
+          var segNow = page.querySelector('.rep-orient-now');
+          if (segNow) {
+            segNow.textContent = (segMode === 'auto' ? 'auto \u2192 ' : '')
+              + (segLand ? 'landscape' : 'portrait');
+          }
+        }
+        continue;
+      }
       var ratio = planAspect(el);
       if (!(ratio > 0)) continue;
 
@@ -5619,6 +5760,7 @@
         now.textContent = (mode === 'auto' ? 'auto \u2192 ' : '') + (rotate ? 'landscape' : 'portrait');
       }
     }
+    orientCover(host, opts);
   }
 
   function renderSummaryStrip(aps, ctx) {

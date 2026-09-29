@@ -1491,6 +1491,14 @@ Each page can be set to **Auto**, **Portrait** or **Landscape** using the contro
 above it, and the choice is remembered. Auto turns a page only when turning it
 prints the map meaningfully larger, so a plan that gains little stays upright.
 
+- **Floors split into sections** follow the same rule: on Auto the floor turns
+  landscape when its section maps print meaningfully larger that way round. Set
+  to Landscape, each section map is sized for the landscape sheet and uses its
+  full width.
+- **The cover page** has the same control. On Auto it takes the orientation most
+  of the report's sheets print in, so a landscape set of maps opens on a
+  landscape cover. **Match all pages** includes it.
+
 **Mixing portrait and landscape in one document works in Firefox, Chrome and
 Edge.** All three have been measured printing a document whose pages ask for
 different sheets, and all three give each page the sheet it asked for. You do

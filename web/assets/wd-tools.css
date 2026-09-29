@@ -6018,7 +6018,10 @@ body.tool-report {
 .rep-floor-section[data-floor-idx="4"] .rep-seg-locator-rect { fill: rgba(236,72,153,0.35); stroke: #ec4899; }
 
 .rep-seg-locator {
-  position: relative; width: 90px; flex-shrink: 0;
+  position: relative; flex-shrink: 0;
+  /* 90px wide, or narrower where that would be taller than 1.1in (105.6px);
+     KEY_PLAN_MAX_H_IN in report.js sizes the section map against this. */
+  width: min(90px, calc(105.6px * var(--w) / var(--h)));
   border: 1px solid #ddd; aspect-ratio: var(--w) / var(--h); overflow: hidden;
 }
 
