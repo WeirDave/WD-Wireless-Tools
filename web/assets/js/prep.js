@@ -31,6 +31,7 @@
   var wallTemplates = [];
   var capTemplates = [];
   var previewSeq = 0;        // so a slow preview cannot land after a newer one
+  var floorOcc = {};         // floorPlanId -> headcount typed for that floor
 
   function $(id) { return document.getElementById(id); }
   function esc(s) { return WD.esc(String(s == null ? '' : s)); }
@@ -146,6 +147,7 @@
 
   function openEditor(name) {
     fileName = name;
+    floorOcc = {};             // floors belong to one project
     $('dropzone').style.display = 'none';
     $('editor').classList.add('active');
     $('fileBadge').textContent = name;
@@ -253,8 +255,36 @@
     if ($('prepStep-areas').checked) {
       q += '&capacityTemplate=' + encodeURIComponent($('prepCapTpl').value)
         + '&occupants=' + encodeURIComponent($('prepOccupants').value);
+      if (Object.keys(floorOcc).length) {
+        q += '&floorOccupants=' + encodeURIComponent(JSON.stringify(floorOcc));
+      }
     }
     return q;
+  }
+
+  // Same rule as Capacity: blank hands the floor back to the number above,
+  // 0 means nobody works there and the floor is left alone.
+  window.prepFloorOccupants = function (floorId, value) {
+    var v = String(value == null ? '' : value).trim();
+    if (v === '' || isNaN(Number(v)) || Number(v) < 0) delete floorOcc[floorId];
+    else floorOcc[floorId] = Number(v);
+    preview();
+  };
+
+  function floorPeopleHtml(f, i) {
+    var id = 'prepFloorOcc' + i;
+    var own = Object.prototype.hasOwnProperty.call(floorOcc, f.floorPlanId);
+    return '<span class="prep-floor-people">'
+      + '<label for="' + id + '">People on this floor</label> '
+      + '<input type="number" id="' + id + '" class="prep-input prep-input--num" min="0" step="1"'
+      + ' value="' + (own ? escAttr(String(floorOcc[f.floorPlanId])) : '') + '"'
+      + ' placeholder="' + escAttr($('prepOccupants').value || '') + '"'
+      + ' data-action-change="call" data-fn="prepFloorOccupants"'
+      + ' data-arg="' + escAttr(f.floorPlanId) + '" data-arg-value="1"> '
+      + '<span class="prep-sub">' + (f.mode === 'none' ? 'nobody here'
+          : (own ? '' : 'the number above · ')
+            + (f.totalDevices || 0) + ' ' + plural(f.totalDevices || 0, 'device'))
+      + '</span></span>';
   }
 
   window.prepSyncStepUi = syncStepUi;
@@ -393,15 +423,19 @@
         refused.push('the requirement areas');
       } else {
         willDo += a.willWrite || 0;
-        var rows = (a.floors || []).map(function (f) {
+        var rows = (a.floors || []).map(function (f, i) {
           var size = f.widthFt
             ? ' <span class="prep-sub">(' + f.widthFt + ' × ' + f.heightFt + ' ft, from the '
               + esc(f.basis) + ')</span>'
             : '';
-          return '<b>' + esc(f.floorName || f.floorPlanId) + '</b> — ' + esc(f.action) + size;
+          return '<b>' + esc(f.floorName || f.floorPlanId) + '</b> — ' + esc(f.action) + size
+            + '<br>' + floorPeopleHtml(f, i);
         });
-        rows.push('<span class="prep-sub">' + a.totalDevices + ' devices for '
-          + a.occupants + ' people.</span>');
+        rows.push('<span class="prep-sub">' + (a.willWrite
+          ? (a.devicesWritten != null ? a.devicesWritten : a.totalDevices) + ' devices for '
+            + (a.occupantsWritten != null ? a.occupantsWritten : a.occupants)
+            + ' people across the floors being written.'
+          : 'No floor is being written.') + '</span>');
         cards.push(stepCard('Requirement areas',
           a.willWrite ? a.willWrite + ' ' + plural(a.willWrite, 'floor') : 'nothing to do',
           a.willWrite ? 'do' : 'skip', rows));
