@@ -29,6 +29,15 @@ jobs:
       matrix:
         os: [windows-latest, macos-latest]
         python-version: ['3.10', '3.14']
+    # The browser tests run in exactly one of the four jobs. They check what a
+    # page does in Firefox, Chrome and Edge, which does not depend on the
+    # Python version or the runner OS driving them, so the other three jobs
+    # repeated the first and took minutes each to do it. Windows, because that
+    # is what he runs; 3.14, because it is the faster of the two Windows jobs.
+    # `tests/browsers.py` reads this; `tests/test_ci_runs_the_browser_tests.py`
+    # fails unless exactly one combination has it on.
+    env:
+      WD_BROWSER_TESTS: ${{ (matrix.os == 'windows-latest' && matrix.python-version == '3.14') && 'on' || 'off' }}
 
     steps:
       - name: Check out repository
@@ -85,8 +94,12 @@ jobs:
       - name: Report which browsers are available
         run: python -m tests.browsers_report
 
+      # One module per process, as many at once as the runner has cores -
+      # the runner had three or four and used one. `scripts/run_tests.py`
+      # gives every module its own `WD_USER_DIR`, which under `discover` came
+      # from test_0_user_dir_isolation.py sorting first.
       - name: Run safety suite
-        run: python -m unittest discover -s tests -v
+        run: python scripts/run_tests.py
 
       - name: Compile Python sources
         run: python -m compileall -q server.py tools tests

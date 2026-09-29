@@ -90,6 +90,10 @@ class TheRunnerCanActuallyDriveABrowser(unittest.TestCase):
         skipped there in silence, which is the failure this whole file
         exists for.
         """
+        if not browsers.wanted():
+            self.skipTest("browser tests are off in this job; "
+                          "TheBrowserTestsRunInExactlyOneJob holds that "
+                          "one job still runs them")
         self.assertTrue(
             browsers.available(),
             "no browser on this runner, so every test that drives a "
