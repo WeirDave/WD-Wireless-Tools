@@ -97,10 +97,18 @@ class CellsCanBeCombinedInTheDialog(unittest.TestCase):
             driver = _picker.ThePickerSavesWhatWasClicked._driver(kind, binary)
             if driver is None:
                 continue
-            started += 1
             try:
-                driver.set_window_size(1600, 1200)
-                driver.set_script_timeout(60)
+                # Setting the browser itself up. A window the browser has
+                # already discarded at this point (seen once on a Windows
+                # runner, in Firefox) is the browser failing to start, which
+                # _driver already treats as "not available" - it says nothing
+                # about the page. Everything from the page load on counts.
+                try:
+                    driver.set_window_size(1600, 1200)
+                    driver.set_script_timeout(60)
+                except _picker.WebDriverException:
+                    continue
+                started += 1
                 driver.get(self.url)
                 time.sleep(1.2)
                 opened = driver.execute_async_script(SETUP_JS, self.b64)
