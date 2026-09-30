@@ -266,6 +266,13 @@ class ABoxIsTheDecisionOnTheCanvas(unittest.TestCase):
         f = self.floor(self.plan("&boxes=not-json"))
         self.assertNotEqual(f.get("source"), "manual")
 
+    def test_only_four_numbers_per_floor_survive_the_store(self):
+        self.assertEqual(
+            self.store.clean_boxes({FLOOR: [1, "2", 3.5, 4], "short": [1, 2, 3],
+                                    "words": ["a", 1, 2, 3], 7: [1, 2, 3, 4]}),
+            {FLOOR: [1.0, 2.0, 3.5, 4.0]})
+        self.assertEqual(self.store.clean_boxes("not a map"), {})
+
     def test_suggest_answers_for_a_dropped_project(self):
         r = self.client.post("/api/prep/suggest?name=x.esx", data=self.src.read_bytes(),
                              headers={API_REQUEST_HEADER: "1"})

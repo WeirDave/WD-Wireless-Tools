@@ -107,15 +107,19 @@ const el = {};
 function $(id) { return el[id] || (el[id] = { id, hidden: false, innerHTML: '', textContent: '', disabled: false }); }
 function esc(s) { return String(s); }
 function plural(n, one) { return n === 1 ? one : one + 's'; }
-function syncSavedBoxes() {}
 function renderMap() {}
-function clearanceLine() { return ''; }
-function stepCard(title, badge, cls, lines) { return JSON.stringify({ title, badge, cls, lines }); }
+function renderSwap() {}
+function syncTrimControls() {}
+function marginWords() { return ''; }
+function selectedText() { return 'His template'; }
+function setStatus(step, text) { $('prepStatus-' + step).textContent = text; }
+var trim = { boxes: {}, loaded: true }, lastPlan = null, fromDisk = false;
 let go = null;
 function setGo(on, note) { go = { on, note }; }
 eval(src.slice(a, b));
 renderPreview(JSON.parse(process.argv[2]));
-console.log(JSON.stringify({ go, html: $('prepPreview').innerHTML }));
+console.log(JSON.stringify({ go, html: $('prepStatus-walls').textContent + ' '
+                                       + $('prepWallList').innerHTML }));
 """
 
 
@@ -143,7 +147,7 @@ class ThePreviewOffersIt(unittest.TestCase):
     def test_nothing_to_add_or_update_is_nothing_to_do(self):
         out = self.render({"ok": True, "add": [], "update": [], "unchanged": 26, "skip": []})
         self.assertFalse(out["go"]["on"], out)
-        self.assertIn("nothing to do", out["html"])
+        self.assertIn("already in the project", out["html"])
 
 
 if __name__ == "__main__":
