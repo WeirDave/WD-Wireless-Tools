@@ -47,7 +47,7 @@ asked directly.
 **`sweep` re-surveys rather than trusting what it is handed.** The caller sends
 a list of paths, and every one is looked up in a freshly computed survey and
 must still be deletable. A path that went live between the preview and the
-sweep is skipped and reported. Same rule as the realign action: the proof has
+sweep is skipped and reported. Same rule as Cloud Manager's reconcile: the proof has
 to be current at the moment of writing, not at the moment of previewing.
 
 Real workplace data is reported first, and only ever as a count
@@ -803,7 +803,7 @@ def sweep(paths, roots=None, now=None, registered=None, own_paths=None,
     **The list is re-derived, not trusted.** Every path is looked up in a
     fresh survey and must still be marked deletable there. A path that went
     live in between, or that was never ours, is skipped and reported with the
-    reason. That is the same rule the realign action follows: the proof has
+    reason. That is the same rule Cloud Manager's reconcile follows: the proof has
     to be current at the moment of writing.
     """
     current = survey(roots=roots, now=now, registered=registered,

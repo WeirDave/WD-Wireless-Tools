@@ -37,7 +37,7 @@ EXCLUDED_SUFFIXES = {".pyc", ".pyo"}
 #
 # What is left in docs/ is what a reader wants: USER_MANUAL.md and
 # wall-types.md. `tests/test_release_payload.py` holds that.
-EXCLUDED_DIRECTORY_PARTS = {"releases", "audits", "reverse-engineering"}
+EXCLUDED_DIRECTORY_PARTS = {"releases", "audits", "reverse-engineering", "dev-notes"}
 
 
 def tracked_files() -> set:
