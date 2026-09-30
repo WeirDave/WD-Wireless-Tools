@@ -205,14 +205,48 @@ and for backfilling assets onto a tag whose build failed.
 
 **"next time just merge and release without asking."** Said on 2026-09-29,
 after a session opened a PR, watched it go green and then reported it as
-waiting for him to merge. A green PR waiting on him is unreleased work he
-cannot install.
+waiting for him to merge. Made a standing instruction on 2026-09-30: **a
+cloud session merges its own PR when every check is green. Do not wait for
+him to say so.** A green PR waiting on him is unreleased work he cannot
+install.
 
-So when a cloud session's PR has green CI and no merge conflict: mark it ready,
-merge it with a **merge commit** (not squash or rebase - `scripts/tested_head.py`
-recognises a merge that added nothing to a tested head and skips the second
-suite run), then confirm the release published with its ZIP and `.sha256`
-attached. Red CI still means no merge.
+A session on his computer pushes straight to `main` and the release follows. A
+cloud session (started from claude.ai or his phone) cannot push to `main`, so
+it works on a branch and opens a PR. Merging that PR used to wait for him to reply "merge
+it", often hours later from a phone, and that one step was the only
+difference between the two. It is gone now: from either kind of session he
+asks for a change and gets a release.
+
+The conditions, all of them, on the PR's **current head**:
+
+1. **Every check has passed**: the four suite jobs, the firefox, chrome and
+   edge jobs, and CodeQL. One that is red, cancelled or still running means
+   no merge. Fix it and push, then wait again.
+2. **The branch contains the latest `main`.** Merge `origin/main` into it
+   first and let CI run on the result. That is also what lets the release
+   skip its own test run (see `scripts/tested_head.py` above), so the release
+   lands about a minute after the merge.
+3. **The version number is still yours.** Check
+   `git show origin/main:web/assets/versions.json` right before merging. If
+   another session has taken the number, bump to the next one, push, and go
+   back to condition 1.
+
+Then mark the PR ready if it is a draft, and merge it with a **merge commit**
+(not squash or rebase - `scripts/tested_head.py` only recognises a merge that
+added nothing to a tested head) pinned to the head SHA the checks ran on
+(`expectedHeadSha`), so a push arriving in between cannot be merged untested.
+Stop watching the PR and cancel any check-in scheduled for it. Confirm the
+release published with its ZIP and `.sha256` attached, and tell him the
+version it released.
+
+**What this does not cover:** a PR somebody else opened, a PR he has said to
+hold, and anything he asked to review first. Those still wait for him.
+
+**GitHub's own auto-merge is ticked on in the repository settings and does
+nothing**, by design. It needs a branch protection rule requiring checks on
+`main`, and that rule was deliberately not set up: it is one more thing to
+maintain, and a rule that did not exempt him would reject the direct pushes
+that local sessions make. This instruction does the same job without it.
 
 ## Release process — the parts that are still yours
 
@@ -270,8 +304,8 @@ attached. Red CI still means no merge.
    driven exactly once, on Windows. Leave both variables unset locally.
 4. Commit and push to `main` directly (no PR needed for routine work). A
    cloud session cannot, so it opens a PR and **merges that PR itself once it
-   is green**. The conditions are under "A cloud session merges its own pull
-   request once it is green".
+   is green**. The conditions are under "A finished PR is merged and released
+   without asking".
    **Then wait for the push's CI run to go green before pushing the tag**
    (`gh run watch`). A local suite and CI do not ask the same question: CI
    runs against a clean checkout, so it is the only thing that sees a file you
@@ -2517,45 +2551,6 @@ rewrite, with the repository owner's explicit say-so for that one operation.
 
 Then wait for CI, and tag from the shared checkout as the release process
 describes - naming the SHA, as always.
-
-### A cloud session merges its own pull request once it is green
-
-**Standing instruction from David, 2026-09-30: a cloud session merges its own
-PR when every check is green. Do not wait for him to say so.** A session on his
-computer pushes straight to `main` and the release follows. A cloud session
-(started from claude.ai or his phone) cannot push to `main`, so it works on a
-branch and opens a PR. Merging that PR used to wait for him to reply "merge
-it", often hours later from a phone, and that one step was the only
-difference between the two. It is gone now: from either kind of session he
-asks for a change and gets a release.
-
-The conditions, all of them, on the PR's **current head**:
-
-1. **Every check has passed**: the four suite jobs, the firefox, chrome and
-   edge jobs, and CodeQL. One that is red, cancelled or still running means
-   no merge. Fix it and push, then wait again.
-2. **The branch contains the latest `main`.** Merge `origin/main` into it
-   first and let CI run on the result. That is also what lets the release
-   skip its own test run (see `scripts/tested_head.py` above), so the release
-   lands about a minute after the merge.
-3. **The version number is still yours.** Check
-   `git show origin/main:web/assets/versions.json` right before merging. If
-   another session has taken the number, bump to the next one, push, and go
-   back to condition 1.
-
-Then mark the PR ready if it is a draft, and merge it with a merge commit
-pinned to the head SHA the checks ran on (`expectedHeadSha`), so a push
-arriving in between cannot be merged untested. Stop watching the PR and cancel
-any check-in scheduled for it. Tell him the version it released.
-
-**What this does not cover:** a PR somebody else opened, a PR he has said to
-hold, and anything he asked to review first. Those still wait for him.
-
-**GitHub's own auto-merge is ticked on in the repository settings and does
-nothing**, by design. It needs a branch protection rule requiring checks on
-`main`, and that rule was deliberately not set up: it is one more thing to
-maintain, and a rule that did not exempt him would reject the direct pushes
-that local sessions make. This instruction does the same job without it.
 
 ### The one thing a worktree does not protect you from
 
