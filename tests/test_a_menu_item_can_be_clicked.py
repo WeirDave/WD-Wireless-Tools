@@ -52,6 +52,9 @@ PORT_HINT = 8847
 
 try:  # pragma: no cover - availability varies by machine
     from selenium import webdriver
+    from selenium.common.exceptions import TimeoutException
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
     HAVE_SELENIUM = True
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
@@ -95,6 +98,49 @@ class StubBackend(SimpleHTTPRequestHandler):
         with contextlib.suppress(Exception):
             self.rfile.read(int(self.headers.get("Content-Length") or 0))
         return self._send({"ok": True})
+
+
+class QuietServer(ThreadingHTTPServer):
+    """A browser that abandons a download is not a failure.
+
+    Chrome fetches the page's multi-size favicon after the load event, and the
+    click test reloads the page once per item - so the next reload regularly
+    cuts that download off. The default handler prints a full
+    `ConnectionAbortedError` traceback for it, which sat directly above the one
+    real failure this file has had in CI and read as its cause. It was not.
+    """
+
+    def handle_error(self, request, client_address):
+        import sys
+        if isinstance(sys.exc_info()[1], (ConnectionAbortedError,
+                                           ConnectionResetError,
+                                           BrokenPipeError)):
+            return
+        super().handle_error(request, client_address)
+
+
+#: How long a freshly revealed menu gets to become clickable. The bar is
+#: shown by script a moment before the click, and on a loaded CI runner Chrome
+#: once refused that click as not interactable - one run in many, never
+#: reproduced locally in over 300 attempts.
+SETTLE_S = 5
+
+#: What the page looked like when a menu would not open, so that a failure
+#: explains itself instead of only naming an exception.
+WHY_NOT = """
+const s = arguments[0], r = s.getBoundingClientRect();
+const app = document.getElementById('appScreen');
+const bar = document.getElementById('selectionBar');
+const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+return JSON.stringify({
+  ready: document.readyState, path: location.pathname,
+  app: app && getComputedStyle(app).display,
+  barHidden: bar ? bar.hidden : null,
+  rect: [r.left, r.top, r.width, r.height].map(Math.round),
+  viewport: [innerWidth, innerHeight],
+  at: at ? at.tagName.toLowerCase() + (at.id ? '#' + at.id : '') : null,
+});
+"""
 
 
 def _driver(kind, binary):
@@ -171,7 +217,7 @@ class MenuItemsCanBeClicked(unittest.TestCase):
             raise unittest.SkipTest("%s is not installed here" % cls.kind)
 
         cls.port = _free_port(PORT_HINT)
-        cls.server = ThreadingHTTPServer(
+        cls.server = QuietServer(
             ("127.0.0.1", cls.port), partial(StubBackend, directory=str(WEB)))
         cls.addClassCleanup(cls._stop_server)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
@@ -283,11 +329,19 @@ class MenuItemsCanBeClicked(unittest.TestCase):
                 self.setUp()
                 menu = self._each_menu()[index]
                 summary = menu.find_element("css selector", "summary")
+                # Waiting on the summary cannot hide the defect this file is
+                # about: in v2.168.1 the Select button itself worked and the
+                # items it opened were unreachable. A summary that never
+                # becomes clickable still fails, a few seconds later.
+                with contextlib.suppress(TimeoutException):
+                    WebDriverWait(self.driver, SETTLE_S).until(
+                        EC.element_to_be_clickable(summary))
                 try:
                     summary.click()
                 except Exception as exc:
-                    refused.append("%s: the menu itself would not open (%s)"
-                                   % (label, type(exc).__name__))
+                    refused.append("%s: the menu itself would not open (%s) %s"
+                                   % (label, type(exc).__name__,
+                                      self.driver.execute_script(WHY_NOT, summary)))
                     break
                 item = self._each_menu()[index].find_elements(
                     "css selector", ".wd-menu-item")[position]
