@@ -3991,6 +3991,7 @@
       floorPlanForAp: floorPlanForAp,
     };
     host.innerHTML = r.render(aps, opts, ctx);
+    dropPrintWhitespace(host);
     // Every report, not only the one whose postRender happened to ask.
     applyPageOrientation(host, opts);
     document.title = reportDocTitle();
@@ -4000,6 +4001,28 @@
       } catch (e) { console.error('postRender', e); }
     }
   };
+
+  /* Firefox gives a whitespace-only text node its own box in print when it
+     sits beside a display:none sibling - the review bar, the print hint, the
+     modals and scripts after the workspace. That box belongs to no named
+     page, so the sheet it lands on takes the default paper: one before the
+     cover made page one portrait whatever the cover asked for, and one after
+     the last section added a blank trailing sheet. Chromium draws neither.
+     Measured in Firefox 153 through geckodriver's Print Page: an all-landscape
+     report printed P L L L L L + blank before this, L L L L L L after.
+
+     Only the chain from the canvas up to the root matters, and every child on
+     it is a block or hidden, so the text removed here renders as nothing on
+     screen either. */
+  function dropPrintWhitespace(host) {
+    for (var el = host; el; el = el.parentElement) {
+      var nodes = el.childNodes;
+      for (var i = nodes.length - 1; i >= 0; i--) {
+        var n = nodes[i];
+        if (n.nodeType === 3 && !/\S/.test(n.nodeValue)) el.removeChild(n);
+      }
+    }
+  }
 
   // Label text is composable so one report can show just the name while another
   // carries the detail an installer needs without a second lookup.

@@ -1838,6 +1838,31 @@ unparseable markup, because the attribute has to survive as an attribute.
   guarded by `tests/test_marker_bounds.py`. Don't assume an orientation report
   and a clipping report are the same defect.
 
+  **A whitespace text node can decide page one's paper, in Firefox only.**
+  Found 2026-09-30 after "the cover is landscape and the first sheet is
+  still portrait". Every class was right. Firefox gives a whitespace-only text
+  node beside a `display:none` sibling its own box in print. `#stageReview`
+  has two such siblings in front of the canvas (the review bar and print
+  hint), and the modals and scripts come after it. Those boxes belong to no
+  named page. So the first sheet took the default paper, and a blank sheet was
+  laid out after the last page. `dropPrintWhitespace` in `report.js` strips
+  them on every render. Naming the root (`html:has(.rep-oriented)`) did not
+  help, and neither did `page: auto` on it. Bisecting by removing DOM nodes in
+  the live page found it. Bisecting the stylesheet did not.
+  `tests/test_report_first_sheet_orientation_browser.py` prints the real page
+  and needs one sheet per page, each on its page's paper.
+  `tests/pdf_sheets.py` reads sheet sizes without PyMuPDF, so the test runs in
+  CI and does not skip there.
+
+  **Firefox in a cloud container:** `apt` only has the snap stub, and
+  mozilla.org is blocked. conda-forge is reachable. Download
+  `firefox-*.conda`, `geckodriver-*.conda`, `nss-*.conda` and `nspr-*.conda`
+  from `conda.anaconda.org/conda-forge/linux-64/`. Each is a zip holding a
+  `pkg-*.tar.zst`. Run Firefox with `LD_LIBRARY_PATH` pointing at the
+  extracted `lib/`. **Unset that variable for Chromium**, because the conda NSS
+  crashes it at launch. The resulting `InvalidSessionIdException` reads like a
+  test fault.
+
 - **A requirement area silently stops the canvas being trimmed, so trimming
   always runs first.** `esx_trimmer._floor_coord_bbox` unions every coordinate
   belonging to a floor into the crop box, so that nothing ends up off the image
