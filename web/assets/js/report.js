@@ -1825,16 +1825,13 @@
     angleDelta: angleDelta,
   };
 
-  // Ekahau records the storey number on buildingFloors, not on the floor plan
-  // itself, and plenty of projects never set it. Returns null when there is no
-  // usable number so callers can fall back to the plain section label.
+  // Null when neither the plan's name nor Ekahau's building gives a number, so
+  // callers fall back to the plain section label. See WD.storeyNumber for why
+  // buildingFloors' value is not printed as it stands.
   function floorNumberFor(fp) {
     if (!fp || fp.id === '_none') return null;
     var bf = proj.buildingFloors && proj.buildingFloors[fp.id];
-    var raw = bf ? bf.floorNumber : null;
-    if (raw === null || raw === undefined || raw === '') return null;
-    var n = Number(raw);
-    return isFinite(n) ? n : null;
+    return WD.storeyNumber(fp.name, bf ? bf.floorNumber : null);
   }
 
   function floorPlanImageUrl(fp) {

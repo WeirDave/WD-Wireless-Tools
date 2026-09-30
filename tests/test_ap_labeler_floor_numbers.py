@@ -32,6 +32,7 @@ from tests.css_source import css_for
 
 ROOT = Path(__file__).resolve().parent.parent
 JS = ROOT / "web" / "assets" / "js" / "ap-rename.js"
+SHARED_JS = ROOT / "web" / "assets" / "js" / "wd-shared.js"
 PAGE = ROOT / "web" / "ap-rename.html"
 
 NODE_TIMEOUT_S = 120
@@ -39,12 +40,16 @@ NODE_TIMEOUT_S = 120
 PRELUDE = r"""
 const fs = require('fs');
 const source = fs.readFileSync(process.argv[1], 'utf8');
-function cut(from, to) {
-  const a = source.indexOf(from);
-  const b = source.indexOf(to, a);
+const shared = fs.readFileSync(process.argv[2], 'utf8');
+function cut(from, to, src) {
+  src = src || source;
+  const a = src.indexOf(from);
+  const b = src.indexOf(to, a);
   if (a < 0 || b < 0) throw new Error('could not find ' + from);
-  return source.slice(a, b);
+  return src.slice(a, b);
 }
+globalThis.WD = {};
+eval(cut('  WD.storeyNumber = function', '  /* ── Legibility', shared));
 eval(cut('function getFloorNumber(floor) {', 'function buildStructuredName'));
 eval(cut('function duplicateNames(items) {', 'function updateDownloadBtn'));
 
@@ -59,27 +64,13 @@ function done() {
   process.exit(0);
 }
 
-// The same derivation the load path runs, so the precedence can be tested
-// without standing up a zip reader.
-function numberFloors(floors, buildingFloors) {
-  const fromBuilding = {};
-  (buildingFloors || []).forEach(bf => {
-    if (bf.floorNumber != null) fromBuilding[bf.floorPlanId] = bf.floorNumber;
-  });
-  floors.forEach((f, i) => {
-    if (fromBuilding[f.id] != null) { f.num = fromBuilding[f.id]; return; }
-    const m = String(f.name || '').match(/\d+/);
-    f.num = m ? parseInt(m[0], 10) : (i + 1);
-  });
-  return floors;
-}
 """
 
 
 def run_node(checks: str) -> subprocess.CompletedProcess:
     program = PRELUDE + "eval(" + json.dumps(checks) + ");"
     try:
-        return subprocess.run(["node", "-e", program, str(JS)],
+        return subprocess.run(["node", "-e", program, str(JS), str(SHARED_JS)],
                               capture_output=True, text=True,
                               timeout=NODE_TIMEOUT_S)
     except subprocess.TimeoutExpired as exc:
@@ -111,18 +102,60 @@ class EveryFloorGetsItsOwnNumber(unittest.TestCase):
           done();
         """)
 
-    def test_ekahau_wins_when_it_has_said_something(self):
-        """buildingFloors.json is what Ekahau itself shows in the UI, so a
-        number in a floor's name never overrides it. A basement is the case
-        that makes this matter: named "01 - Parking", numbered 0."""
+    def test_ekahaus_stacking_position_is_not_the_storey(self):
+        """The reported case. buildingFloors.json numbers a building's floors
+        by stacking position from 0, so a plan named "Floor 1" carries 0 and
+        "Floor 3" carries 2. Printed as it stands, the first floor's APs were
+        named "00" and the third floor's "02"."""
         self.run_block("""
           const floors = numberFloors([
-            { id: 'f1', name: '01 - Parking' },
-            { id: 'f2', name: '02 - Ground' },
+            { id: 'f1', name: 'Floor 1' },
+            { id: 'f2', name: 'Floor 2' },
+            { id: 'f3', name: 'Floor 3' },
+          ], [{ floorPlanId: 'f1', floorNumber: 0 },
+              { floorPlanId: 'f2', floorNumber: 1 },
+              { floorPlanId: 'f3', floorNumber: 2 }]);
+          eq('first',  getFloorNumber(floors[0]), '01');
+          eq('second', getFloorNumber(floors[1]), '02');
+          eq('third',  getFloorNumber(floors[2]), '03');
+          done();
+        """)
+
+    def test_a_building_with_unnumbered_names_counts_from_one(self):
+        """With nothing in the name, the stacking position is all there is,
+        and it is shifted so the bottom floor is 1 rather than 0."""
+        self.run_block("""
+          const floors = numberFloors([
+            { id: 'f1', name: 'Ground' },
+            { id: 'f2', name: 'Mezzanine' },
           ], [{ floorPlanId: 'f1', floorNumber: 0 },
               { floorPlanId: 'f2', floorNumber: 1 }]);
-          eq('parking takes Ekahau\\'s 0', getFloorNumber(floors[0]), '00');
-          eq('ground takes Ekahau\\'s 1',  getFloorNumber(floors[1]), '01');
+          eq('ground',    getFloorNumber(floors[0]), '01');
+          eq('mezzanine', getFloorNumber(floors[1]), '02');
+          done();
+        """)
+
+    def test_the_name_wins_over_the_stacking_position(self):
+        """A building whose plans were stacked out of order, or that starts
+        above the ground: the name is what the designer typed."""
+        self.run_block("""
+          const floors = numberFloors([
+            { id: 'f1', name: 'Level 4' },
+            { id: 'f2', name: '3rd Floor' },
+            { id: 'f3', name: 'FL-7 East' },
+          ], [{ floorPlanId: 'f1', floorNumber: 0 },
+              { floorPlanId: 'f2', floorNumber: 5 },
+              { floorPlanId: 'f3', floorNumber: 1 }]);
+          eq('level', getFloorNumber(floors[0]), '04');
+          eq('ordinal', getFloorNumber(floors[1]), '03');
+          eq('fl-', getFloorNumber(floors[2]), '07');
+          done();
+        """)
+
+    def test_a_floor_word_beats_a_building_number_in_the_same_name(self):
+        self.run_block("""
+          const floors = numberFloors([{ id: 'f1', name: 'Bldg 5 Level 2' }], []);
+          eq('floor word', getFloorNumber(floors[0]), '02');
           done();
         """)
 
@@ -146,7 +179,7 @@ class EveryFloorGetsItsOwnNumber(unittest.TestCase):
           const floors = numberFloors([
             { id: 'f1', name: 'Ground' },
             { id: 'f2', name: 'Level 7' },
-          ], [{ floorPlanId: 'f1', floorNumber: 1 }]);
+          ], [{ floorPlanId: 'f1', floorNumber: 0 }]);
           eq('from building', getFloorNumber(floors[0]), '01');
           eq('from the name', getFloorNumber(floors[1]), '07');
           done();

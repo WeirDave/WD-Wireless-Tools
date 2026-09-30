@@ -261,6 +261,32 @@
     return k.charAt(0).toUpperCase() + k.slice(1);
   };
 
+  /* ── The storey a floor plan is on ───────────────────────────────
+     `buildingFloors[].floorNumber` is Ekahau's stacking position inside a
+     building, counted from 0 - not the storey number anyone says out loud.
+     The Report printed "Floor 0" over a plan named "Floor 1", and the Labeler
+     named that floor's APs "00"; the third floor up came out as 2. Both tools
+     read the stored value as if it were the label.
+
+     So the floor's own name wins, because it is what the designer typed and
+     what Ekahau shows: a number after a floor word ("Level 3", "FL-2"), an
+     ordinal ("3rd Floor"), or a leading number ("01 - Ground"). Only when the
+     name says nothing is the stacking position used, shifted to count from 1.
+     A negative position (below the bottom floor Ekahau counts from) is left
+     alone rather than shifted towards zero. Null when neither says anything,
+     so each tool can fall back in its own way. */
+  WD.storeyNumber = function (name, stackPosition) {
+    var s = String(name || '');
+    var m = s.match(/\b(?:floor|flr|fl|level|lvl|lev|storey|story)\s*[-#.:]?\s*(\d+)/i)
+         || s.match(/\b(\d+)\s*(?:st|nd|rd|th)\b/i)
+         || s.match(/^\s*(\d+)\b/);
+    if (m) return parseInt(m[1], 10);
+    if (stackPosition === null || stackPosition === undefined || stackPosition === '') return null;
+    var n = Number(stackPosition);
+    if (!isFinite(n)) return null;
+    return n >= 0 ? n + 1 : n;
+  };
+
   /* ── Legibility on a user-chosen colour ──────────────────────────
      Every tool that paints text or a glyph on a colour somebody picked in
      Ekahau has the same problem, so it is answered once, here.
