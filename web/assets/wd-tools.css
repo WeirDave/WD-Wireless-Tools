@@ -7383,9 +7383,14 @@ body.wd-has-stale-banner { padding-top: 52px; }
     box-shadow: none !important; border-radius: 0 !important;
     max-width: none !important; margin: 0 !important;
     padding: 40px 20px !important;
-    min-height: 90vh !important;
+    min-height: 9in !important;
     page-break-after: always;
   }
+  /* 90% of the printable area, stated per sheet. It was 90vh, and in
+     Firefox that put a landscape cover's overflow on a blank second sheet -
+     printed L P L L L L L for six pages. Chromium clamps it and never showed
+     the fault. */
+  .rep-cover.is-landscape { min-height: 6.75in !important; }
   .rep-cover-stat b { color: #111 !important; }
   .rep-cover-stat span { color: #666 !important; }
   .rep-cover-date { color: #666 !important; border-top-color: #eee !important; }
@@ -8996,6 +9001,13 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
   /* A heading stranded at the foot of a column with its list overleaf is the
      same fault as the page break this whole change is about, one scale down. */
   .rep-compass-sect { break-inside: avoid; page-break-inside: avoid; }
+  /* The last section's bottom margin is space below nothing. On a portrait
+     page that is nearly full it does not fit, and Firefox carries it - with
+     the section's white background - onto a sheet of its own: a blank last
+     page. Measured: seven sheets with it, six without. */
+  .rep-compass-sect:last-child,
+  .rep-compass-sect:last-child > :last-child,
+  .rep-compass-sect:last-child li:last-child { margin-bottom: 0 !important; }
 
   /* Turned onto the long edge the sheet is 10in wide, and one measure that
      wide is unreadable - about 150 characters a line. Two columns put the line

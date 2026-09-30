@@ -44,7 +44,17 @@ class CompassPageLayout(unittest.TestCase):
     def _print_block(self) -> str:
         """The @media print rules for this page."""
         start = self.css.index(".rep-compass-page { page-break-before: always;")
-        return self.css[start:start + 3000]
+        # To the brace closing the enclosing @media block. A fixed window of
+        # 3000 characters stopped short of the landscape rules as soon as a
+        # rule was added above them.
+        end, depth = start, 0
+        while end < len(self.css) and depth >= 0:
+            if self.css[end] == "{":
+                depth += 1
+            elif self.css[end] == "}":
+                depth -= 1
+            end += 1
+        return self.css[start:end]
 
     def test_the_rose_sits_in_the_text_not_in_a_column_of_its_own(self):
         """The fix, and the thing most likely to be undone by a later tidy-up.
