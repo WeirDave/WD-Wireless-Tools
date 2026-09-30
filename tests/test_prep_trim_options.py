@@ -273,6 +273,24 @@ class ABoxIsTheDecisionOnTheCanvas(unittest.TestCase):
             {FLOOR: [1.0, 2.0, 3.5, 4.0]})
         self.assertEqual(self.store.clean_boxes("not a map"), {})
 
+    def test_a_failed_comparison_does_not_echo_the_exception(self):
+        """What went wrong is logged; the page gets a sentence, not a path."""
+        from tools import plan_detect
+        real = plan_detect.suggest
+
+        def boom(floors):
+            raise OSError("C:/Users/someone/secret/project.esx is locked")
+        plan_detect.suggest = boom
+        try:
+            r = self.client.post("/api/prep/suggest?name=x.esx", data=self.src.read_bytes(),
+                                 headers={API_REQUEST_HEADER: "1"})
+        finally:
+            plan_detect.suggest = real
+        body = r.get_json()
+        self.assertFalse(body["ok"])
+        self.assertNotIn("secret", json.dumps(body))
+        self.assertNotIn("OSError", json.dumps(body))
+
     def test_suggest_answers_for_a_dropped_project(self):
         r = self.client.post("/api/prep/suggest?name=x.esx", data=self.src.read_bytes(),
                              headers={API_REQUEST_HEADER: "1"})

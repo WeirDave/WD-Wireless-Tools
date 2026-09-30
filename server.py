@@ -744,10 +744,13 @@ def _plantrim_suggest(src: Path) -> dict:
             return {"ok": True, "suggestions": []}
         return {"ok": True,
                 "suggestions": [s.as_dict() for s in plan_detect.suggest(floors)]}
-    except esx_trimmer.TrimError as exc:
-        return {"ok": False, "error": str(exc)}
-    except Exception as exc:  # pragma: no cover - surfaced to the UI
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    except Exception as exc:
+        # The detail goes to the log, never to the page: an exception's text
+        # can carry his full path, and a response is not a place for it. What
+        # he needs to know is that no box was proposed and that he can draw.
+        applog.note_failure("comparing floor plan sheets", exc)
+        return {"ok": False, "error": "Could not compare the sheets in this project. "
+                                      "Draw the box on the plan instead."}
 
 
 @app.route("/api/plantrim/<action>", methods=["POST"])
