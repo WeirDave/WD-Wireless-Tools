@@ -744,10 +744,13 @@ def _plantrim_suggest(src: Path) -> dict:
             return {"ok": True, "suggestions": []}
         return {"ok": True,
                 "suggestions": [s.as_dict() for s in plan_detect.suggest(floors)]}
-    except esx_trimmer.TrimError as exc:
-        return {"ok": False, "error": str(exc)}
-    except Exception as exc:  # pragma: no cover - surfaced to the UI
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    except Exception as exc:
+        # The detail goes to the log, never to the page: an exception's text
+        # can carry his full path, and a response is not a place for it. What
+        # he needs to know is that no box was proposed and that he can draw.
+        applog.note_failure("comparing floor plan sheets", exc)
+        return {"ok": False, "error": "Could not compare the sheets in this project. "
+                                      "Draw the box on the plan instead."}
 
 
 @app.route("/api/plantrim/<action>", methods=["POST"])
@@ -1007,23 +1010,61 @@ SETTINGS_ACTIONS = {
 _PREP_PROJECT = {"path": None, "written": None}
 
 
-def _prep_saved_boxes(src):
-    """The rectangles PlanTrim saved for this project, if any.
+def _prep_project_facts(src):
+    """What the workbench needs to know about the project besides the plan.
 
-    Keyed by the project's own id, the same way PlanTrim keys them, so a plan
-    cropped there and then prepared here reuses that work instead of asking for
-    it twice. Drawing a box is the one part of PlanTrim that cannot become a
-    batch control; a box already drawn is just data, and this is the seam.
+    * ``projectId`` - the key PlanTrim stores drawn boxes under. The page saves
+      the boxes it draws under the same key, so a box drawn in either tool is
+      the same box in both.
+    * ``boxes`` - the boxes already saved for it.
+    * ``floors`` - every floor's id, name and size in plan units, which is the
+      space a box is drawn in. A project opened from disk is never in the
+      browser, so this is the only place the page can learn them.
+    * ``wallCount`` - wall segments already drawn. Wall Swap only means
+      something once there are walls to swap.
 
     Any failure to read them is silent and means "none" - a convenience that
     cannot be loaded must never stop a prepare.
     """
     import zipfile
+    facts = {"projectId": "", "boxes": {}, "floors": [], "wallCount": 0}
     try:
         with zipfile.ZipFile(src) as z:
-            pid = json.loads(z.read("project.json"))["project"]["id"]
-        return plantrim_store.load(pid) or {}
+            names = set(z.namelist())
+            if "project.json" in names:
+                facts["projectId"] = str(
+                    (json.loads(z.read("project.json")).get("project") or {}).get("id") or "")
+            if "floorPlans.json" in names:
+                facts["floors"] = [
+                    {"id": f.get("id"), "name": f.get("name") or "(unnamed)",
+                     "w": round(float(f.get("width") or 0)),
+                     "h": round(float(f.get("height") or 0))}
+                    for f in json.loads(z.read("floorPlans.json")).get("floorPlans") or []
+                    if isinstance(f, dict) and f.get("id")]
+            if "wallSegments.json" in names:
+                facts["wallCount"] = len(
+                    json.loads(z.read("wallSegments.json")).get("wallSegments") or [])
     except Exception:
+        return facts
+    if facts["projectId"]:
+        try:
+            facts["boxes"] = plantrim_store.load(facts["projectId"]) or {}
+        except Exception:
+            facts["boxes"] = {}
+    return facts
+
+
+def _prep_boxes_from(arg):
+    """The boxes the page sent, as ``{floorId: [x0, y0, x1, y1]}``, or None.
+
+    None means the page did not say, which is not the same as an empty map:
+    empty is "every floor automatic", sent after he took his boxes away.
+    """
+    if arg is None:
+        return None
+    try:
+        return plantrim_store.clean_boxes(json.loads(arg))
+    except ValueError:
         return {}
 
 
@@ -1140,7 +1181,7 @@ def api_prep(action):
     if action == "image":
         return _prep_floor_image(request.args.get("floor") or "")
 
-    if action not in ("plan", "run"):
+    if action not in ("plan", "run", "suggest"):
         return jsonify({"error": f"unknown action: {action}"}), 404
 
     # Opened from disk, the archive is read where it lies and nothing is
@@ -1194,12 +1235,23 @@ def api_prep(action):
             src = Path(tmpdir) / "in.esx"
             src.write_bytes(blob)
             esx_guard.check(src)
-        # Rectangles he already cropped in PlanTrim, reused rather than redrawn.
-        # Read by the project's own id, the same key PlanTrim stores them under,
-        # and only when asked for - the default is to find the drawing
-        # automatically, exactly as before.
-        saved = _prep_saved_boxes(src)
-        boxes = saved if (saved and request.args.get("useBoxes") == "1") else None
+        if action == "suggest":
+            # PlanTrim's Suggest, on whichever copy Prep has: the one on disk
+            # or the one just sent. Proposals only - the page puts them on the
+            # plan to be checked, and nothing is written.
+            return jsonify(_plantrim_suggest(src))
+
+        # The boxes to crop to. The workbench sends the ones on its canvas as
+        # `boxes`, an empty map meaning "every floor automatic". Before it has
+        # any, `useBoxes=1` asks for the ones already saved for this project -
+        # drawn here or in PlanTrim, keyed by the project's own id - so a box
+        # drawn once is used by both tools. Neither means automatic.
+        facts = _prep_project_facts(src)
+        saved = facts["boxes"]
+        boxes = _prep_boxes_from(request.args.get("boxes"))
+        if boxes is None:
+            boxes = saved if (saved and request.args.get("useBoxes") == "1") else None
+        boxes = boxes or None
 
         common = dict(steps=steps or None, wall_types=wall_types,
                       template=capacity_tpl, occupants=request.args.get("occupants"),
@@ -1212,8 +1264,8 @@ def api_prep(action):
             out = prep_pipeline.plan(str(src), **common)
             out["source"] = name
             out["fromDisk"] = on_disk is not None
-            # So the page can offer them, and say how many there are.
             out["savedBoxes"] = len(saved or {})
+            out["project"] = facts
             return jsonify(out), (200 if out.get("ok") else 400)
 
         if on_disk is not None:

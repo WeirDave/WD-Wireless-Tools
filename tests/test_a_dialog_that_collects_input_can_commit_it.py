@@ -146,6 +146,8 @@ def _defined_names() -> set:
         names |= set(re.findall(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\()", src))
         names |= set(re.findall(r"([A-Za-z_$][\w$]*)\s*:\s*(?:async\s*)?function", src))
         names |= set(re.findall(r"(?:WD|Dev)\.([A-Za-z_$][\w$]*)\s*=", src))
+        # A page handler the dispatcher resolves off `window`.
+        names |= set(re.findall(r"window\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function", src))
     return names
 
 

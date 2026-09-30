@@ -1,8 +1,10 @@
 /* WD Prep — get a new project ready in one pass.
  *
- * Trim the canvas, put the requirement areas in, load the wall types. Three
- * errands today, three loads and three saves of a file that can run to a
- * couple of hundred megabytes, before a single wall gets drawn.
+ * One file, one plan canvas, the stages down the left, one save. Trim the
+ * canvas, put the requirement areas in, load the wall types: three errands,
+ * three loads and three saves of a file that can run to a couple of hundred
+ * megabytes, before a single wall gets drawn. docs/prep-workbench.md is the
+ * plan this page is built to.
  *
  * Two things this page deliberately does not do.
  *
@@ -12,9 +14,9 @@
  * open and the trim then reports a tidy skip for a crop it was prevented from
  * making. A page that could set that order is a page that could get it wrong.
  *
- * It does not write to the file you loaded. Preparing builds a new copy and
- * downloads it, so replacing the original stays a decision made in a file
- * manager rather than one made here.
+ * It does not write to the file you loaded. Preparing builds a new copy, so
+ * replacing the original stays a decision made in a file manager rather than
+ * one made here. Every control on the page is a decision held until Prepare.
  */
 (function () {
   'use strict';
@@ -28,16 +30,28 @@
   // prepared copy is written into the project folder rather than Downloads.
   var fromDisk = false;
   var lastWritten = null;
+  var lastPlan = null;       // the newest preview the server sent
   var wallTemplates = [];
   var capTemplates = [];
   var previewSeq = 0;        // so a slow preview cannot land after a newer one
   var floorOcc = {};         // floorPlanId -> headcount typed for that floor
   var floorExist = {};       // floorPlanId -> keep / devices / reshape for that floor
+  var stage = 'trim';        // the stage whose panel and overlay are showing
+  var STAGES = ['trim', 'areas', 'walls', 'swap'];
   // Settings → Capacity → Floors that already have devices. Read only: the
   // dropdown here changes one run and never writes back. A failed read or an
   // unknown value leaves "keep", which changes nothing he set.
   var EXISTING_CHOICES = ['keep', 'devices', 'reshape'];
   var savedExisting = 'keep';
+
+  /* The boxes drawn on the Trim stage, in plan units, per floor.
+
+     They are PlanTrim's boxes: saved under the project's own id in the same
+     store, so a box drawn in either tool is the box both use. Until the first
+     preview comes back the page does not know them, so it asks the server to
+     use whatever is saved (`useBoxes=1`); from then on it sends its own set,
+     an empty set meaning every floor is automatic. */
+  var trim = { boxes: {}, loaded: false, projectId: '', suggestions: {} };
 
   function loadExistingDefault() {
     return WD.api('settings/get').then(function (r) {
@@ -106,6 +120,18 @@
     return (ft * WD.METRES_PER_FOOT).toFixed(4) + 'm';
   }
 
+  // "Normal, 10 ft" for the rail, out of the option's own label so the two
+  // cannot say different things.
+  function marginWords() {
+    var sel = $('prepMargin');
+    if (!sel) return '';
+    if (sel.value === 'custom') return ($('prepMarginFt').value || '') + ' ft';
+    var opt = sel.options && sel.options[sel.selectedIndex];
+    var label = String((opt && opt.text) || sel.value || '');
+    var m = /^(.*?)\s+—\s+([0-9.]+ ft)/.exec(label);
+    return m ? m[1] + ', ' + m[2] : label;
+  }
+
   // Read before the list is built, because which option is selected depends
   // on it. An empty string means no saved default, not "use Ekahau's".
   var savedWallTemplateName = '';
@@ -118,6 +144,10 @@
       });
     }).then(function (r) { return r.json(); }).then(function (r) {
       if (!r || !r.ok) return;
+      // Coming back from Quick Walls or Capacity reloads the lists, and what
+      // he had picked stays picked while it still exists.
+      var keepWall = $('prepWallTpl').value;
+      var keepCap = $('prepCapTpl').value;
       wallTemplates = r.wall || [];
       capTemplates = r.capacity || [];
 
@@ -129,6 +159,8 @@
       // Ekahau's stock types unless he noticed the dropdown and changed it.
       wallTemplates = WD.wallTemplateOrder(wallTemplates);
       var chosen = WD.chooseWallTemplate(wallTemplates, savedWallTemplateName);
+      var stillThere = wallTemplates.filter(function (t) { return t.file === keepWall; })[0];
+      if (stillThere) chosen = stillThere;
       $('prepWallTpl').innerHTML = wallTemplates.length
         ? wallTemplates.map(function (t) {
             var sel = (chosen && t.file === chosen.file) ? ' selected' : '';
@@ -139,14 +171,17 @@
 
       $('prepCapTpl').innerHTML = capTemplates.length
         ? capTemplates.map(function (t) {
-            return '<option value="' + escAttr(t._file) + '">' + esc(t.name) + '</option>';
+            var sel = t._file === keepCap ? ' selected' : '';
+            return '<option value="' + escAttr(t._file) + '"' + sel + '>' + esc(t.name) + '</option>';
           }).join('')
         : '<option value="">No capacity templates saved yet</option>';
 
       // A step with nothing to work from is switched off and says so, rather
       // than being offered and then refused by the server.
       if (!wallTemplates.length) disableStep('walls', 'Save one in Quick Walls first.');
-      if (!capTemplates.length) disableStep('areas', 'Capture one in WD Capacity first.');
+      else enableStep('walls');
+      if (!capTemplates.length) disableStep('areas', 'Capture one from a project first.');
+      else enableStep('areas');
       syncStepUi();
     }).catch(function () { /* the pickers stay empty; the notes explain */ });
   }
@@ -158,6 +193,16 @@
     $('prepNote-' + step).textContent = why;
   }
 
+  // A template saved since - captured on the Areas stage, or in another tab -
+  // gives a switched-off step something to work from again.
+  function enableStep(step) {
+    var box = $('prepStep-' + step);
+    if (!box.disabled) return;
+    box.disabled = false;
+    box.checked = true;
+    $('prepNote-' + step).textContent = '';
+  }
+
   // ── file in ────────────────────────────────────────────────────────────────
 
   window.prepLoadNewFile = function () { $('fileInput').click(); };
@@ -166,6 +211,8 @@
     fileName = name;
     floorOcc = {};             // floors belong to one project
     floorExist = {};
+    trim = { boxes: {}, loaded: false, projectId: '', suggestions: {} };
+    lastPlan = null;
     if ($('prepExisting')) $('prepExisting').value = savedExisting;
     $('dropzone').style.display = 'none';
     $('editor').classList.add('active');
@@ -266,7 +313,9 @@
       + '&retighten=' + ($('prepRetighten').checked ? '1' : '0');
     if ($('prepStep-trim').checked) {
       q += '&margin=' + encodeURIComponent(marginParam());
-      if ($('prepUseBoxes').checked) q += '&useBoxes=1';
+      q += trim.loaded
+        ? '&boxes=' + encodeURIComponent(JSON.stringify(trim.boxes))
+        : '&useBoxes=1';
     }
     if ($('prepStep-walls').checked) {
       q += '&wallTemplate=' + encodeURIComponent($('prepWallTpl').value);
@@ -296,7 +345,7 @@
     preview();
   };
 
-  // The dropdown in step 1 covers every floor that has devices; choosing it
+  // The dropdown above covers every floor that has devices; choosing it
   // again resets any floor set on its own, the same as Capacity.
   window.prepExistingAll = function () {
     floorExist = {};
@@ -348,10 +397,13 @@
 
   window.prepSyncStepUi = syncStepUi;
 
+  // A stage left out stays on the rail, dimmed and still openable: its
+  // settings are where he goes to decide whether he wants it back.
   function syncStepUi() {
-    $('prepTrimOpts').hidden = !$('prepStep-trim').checked;
-    $('prepAreaOpts').hidden = !$('prepStep-areas').checked;
-    $('prepWallOpts').hidden = !$('prepStep-walls').checked;
+    ['trim', 'areas', 'walls'].forEach(function (s) {
+      var card = $('prepStageCard-' + s);
+      if (card && card.classList) card.classList.toggle('is-off', !$('prepStep-' + s).checked);
+    });
     preview();
   }
 
@@ -362,9 +414,8 @@
     var steps = chosenSteps();
     if (!steps.length) {
       $('prepPreview').innerHTML =
-        '<div class="prep-empty">Pick at least one thing to do.</div>';
-      $('prepMap').hidden = true;
-      setGo(false, '');
+        '<div class="prep-empty">Pick at least one stage to run.</div>';
+      setGo(false, 'Nothing is ticked, so there is nothing to write.');
       return;
     }
     var seq = ++previewSeq;
@@ -383,31 +434,6 @@
     });
   }
 
-  function stepCard(title, badge, badgeCls, lines) {
-    return '<div class="prep-item">'
-      + '<div class="prep-item-head"><span class="prep-item-name">' + esc(title) + '</span>'
-      + '<span class="prep-badge prep-badge--' + badgeCls + '">' + esc(badge) + '</span></div>'
-      + '<div class="prep-facts">' + lines.join('<br>') + '</div></div>';
-  }
-
-  // PlanTrim remembers the rectangles he cropped, per project. Prep can reuse
-  // them rather than asking him to draw again - the one part of PlanTrim that
-  // cannot be a batch control is drawing a box, but a box already drawn is just
-  // data. The row stays hidden unless this project has some.
-  function syncSavedBoxes(r) {
-    var row = $('prepUseBoxesRow');
-    if (!row) return;
-    var n = (r && r.savedBoxes) || 0;
-    row.hidden = !n;
-    if (!n) {
-      $('prepUseBoxes').checked = false;
-      return;
-    }
-    $('prepUseBoxesLabel').textContent =
-      'Use the ' + n + ' rectangle' + (n === 1 ? '' : 's') + ' I drew in PlanTrim'
-      + ' (instead of finding the drawing automatically)';
-  }
-
   // How much drawing this sheet actually carries beyond the building, each
   // way. It is the only thing that answers "is 200 ft a real choice here" -
   // on a sheet with 80 ft of site on it, every margin above 80 is the same
@@ -421,180 +447,276 @@
       + ft(c.top) + ' up, ' + ft(c.bottom) + ' down</span>';
   }
 
+  // One floor's line in the Trim panel's "All floors" list.
+  function trimFloorLine(f) {
+    var name = '<b>' + esc(f.name) + '</b>';
+    var mine = f.source === 'manual' ? ' <span class="prep-badge prep-badge--do">your box</span>' : '';
+    if (f.action !== 'trimmed' && f.repaired) {
+      return name + ' — <span class="prep-sub">trimmed by an earlier version and lost the '
+        + 'white page behind the drawing; it is put back</span>' + clearanceLine(f);
+    }
+    if (f.action === 'trimmed') {
+      return name + mine + ' — ' + f.oldSize[0] + '×' + f.oldSize[1]
+        + ' → ' + f.newSize[0] + '×' + f.newSize[1]
+        + ' <span class="prep-sub">(' + f.areaSavedPct + '% of the sheet was empty)</span>'
+        + clearanceLine(f);
+    }
+    return name + ' — <span class="prep-sub">'
+      + esc(f.action + (f.reason ? ': ' + f.reason : '')) + '</span>'
+      + clearanceLine(f);
+  }
+
+  /* Everything the preview decides, in one place: the rail's status lines,
+     each stage's panel, the plan's floor strip and overlay, and the footer.
+
+     A step that cannot run used to stop the whole prepare, so the button was
+     disabled whenever one refused. It does not any more: the steps that can
+     run do, and the refusal is reported. What the button must not offer is a
+     run where *nothing* can happen. */
   function renderPreview(r) {
     var host = $('prepPreview');
     if (!r || !r.ok) {
-      $('prepMap').hidden = true;
       host.innerHTML = '<div class="prep-empty">'
         + esc((r && r.error) || 'Could not read that project.') + '</div>';
       setGo(false, '');
       return;
     }
+    lastPlan = r;
+    host.innerHTML = '';
 
-    syncSavedBoxes(r);
-    var cards = [];
-    var willDo = 0;
-    // A step that cannot run used to stop the whole prepare, so the button was
-    // disabled whenever one refused. It does not any more: the steps that can
-    // run do, and the refusal is reported. What the button must not offer is a
-    // run where *nothing* can happen.
-    var refused = [];
+    // The boxes the server used, the first time: after that the page's own
+    // set is the one that counts, and it is the one it sends.
+    var proj = r.project || {};
+    if (!trim.loaded && proj.boxes) {
+      trim.boxes = {};
+      Object.keys(proj.boxes).forEach(function (id) { trim.boxes[id] = proj.boxes[id].slice(0, 4); });
+      trim.loaded = true;
+    }
+    if (proj.projectId) trim.projectId = proj.projectId;
+
     var order = r.steps || [];
+    var willDo = 0;
+    var writes = [];
+    var refused = [];
 
-    renderMap(order.indexOf('trim') >= 0 ? (r.step && r.step.trim) : null);
-
-    if (order.indexOf('trim') >= 0) {
-      var t = (r.step && r.step.trim) || {};
-      if (t.error) {
-        cards.push(stepCard('Trim the canvas', 'cannot', 'skip', [esc(t.error)]));
-        refused.push('the trim');
-      } else {
-        var n = t.trimmedCount || 0;
-        var fixed = t.repairedCount || 0;
-        willDo += n + fixed;
-        var lines = (t.floors || []).map(function (f) {
-          if (f.action !== 'trimmed' && f.repaired) {
-            return '<b>' + esc(f.name) + '</b> — <span class="prep-sub">trimmed by an earlier '
-              + 'version and lost the white page behind the drawing; it is put back</span>'
-              + clearanceLine(f);
-          }
-          if (f.action === 'trimmed') {
-            return '<b>' + esc(f.name) + '</b> — ' + f.oldSize[0] + '×' + f.oldSize[1]
-              + ' → ' + f.newSize[0] + '×' + f.newSize[1]
-              + ' <span class="prep-sub">(' + f.areaSavedPct + '% of the sheet was empty)</span>'
-              + clearanceLine(f);
-          }
-          return '<b>' + esc(f.name) + '</b> — <span class="prep-sub">'
-            + esc(f.action + (f.reason ? ': ' + f.reason : '')) + '</span>'
-            + clearanceLine(f);
-        });
-        cards.push(stepCard('Trim the canvas',
-          n ? n + ' of ' + t.floorCount + ' ' + plural(t.floorCount, 'floor')
-            : (fixed ? fixed + ' to repair' : 'nothing to do'),
-          (n || fixed) ? 'do' : 'skip', lines.length ? lines : ['No floor plans in this project.']));
-      }
+    // ── trim ──
+    var t = order.indexOf('trim') >= 0 ? ((r.step && r.step.trim) || {}) : null;
+    if (!t) {
+      setStatus('trim', 'Not included', 'is-off');
+      $('prepTrimFloors').innerHTML = '<div class="prep-empty">Tick the stage to crop the sheets.</div>';
+    } else if (t.error) {
+      setStatus('trim', 'Cannot run: ' + t.error, 'is-bad');
+      $('prepTrimFloors').innerHTML = '<div class="prep-warn">' + esc(t.error) + '</div>';
+      refused.push('the trim');
+    } else {
+      var n = t.trimmedCount || 0;
+      var fixed = t.repairedCount || 0;
+      var mine = (t.floors || []).filter(function (f) {
+        return f.action === 'trimmed' && f.source === 'manual';
+      }).length;
+      willDo += n + fixed;
+      var bits = [n + ' of ' + (t.floorCount || 0) + ' ' + plural(t.floorCount || 0, 'floor') + ' cropped',
+                  marginWords()];
+      if (mine) bits.push(mine + ' your ' + plural(mine, 'box', 'boxes'));
+      if (fixed) bits.push(fixed + ' to repair');
+      setStatus('trim', bits.join(' · '), (n || fixed) ? 'is-do' : '');
+      if (n) writes.push('trim ' + n + ' ' + plural(n, 'floor'));
+      if (fixed) writes.push('repair ' + fixed + ' ' + plural(fixed, 'plan'));
+      var lines = (t.floors || []).map(trimFloorLine);
+      $('prepTrimFloors').innerHTML = lines.length
+        ? lines.map(function (l) { return '<div class="pb-item">' + l + '</div>'; }).join('')
+        : '<div class="prep-empty">No floor plans in this project.</div>';
     }
 
-    if (order.indexOf('areas') >= 0) {
-      var a = (r.step && r.step.areas) || {};
-      if (!a.ok) {
-        // The other steps still run. Saying so matters: the reader is looking
-        // at a reason, and needs to know whether it costs them the whole pass
-        // or just this part of it.
-        cards.push(stepCard('Requirement areas', 'cannot', 'skip',
-          [esc(a.error || 'Could not work out the requirement areas.'),
-           '<span class="prep-sub">The other steps still run and the file is '
-           + 'still written — this part of it is what will be missing. Fix the '
-           + 'project in Ekahau and prepare it again to add the areas.</span>']));
-        refused.push('the requirement areas');
-      } else {
-        willDo += a.willWrite || 0;
-        var rows = (a.floors || []).map(function (f, i) {
-          var size = f.widthFt
-            ? ' <span class="prep-sub">(' + f.widthFt + ' × ' + f.heightFt + ' ft, from the '
-              + esc(f.basis) + ')</span>'
-            : '';
-          return '<b>' + esc(f.floorName || f.floorPlanId) + '</b> — ' + esc(f.action) + size
-            + '<br>' + floorPeopleHtml(f, i) + floorExistingHtml(f, i);
-        });
-        rows.push('<span class="prep-sub">' + (a.willWrite
-          ? (a.devicesWritten != null ? a.devicesWritten : a.totalDevices) + ' devices for '
-            + (a.occupantsWritten != null ? a.occupantsWritten : a.occupants)
-            + ' people across the floors being written.'
-          : 'No floor is being written.') + '</span>');
-        cards.push(stepCard('Requirement areas',
-          a.willWrite ? a.willWrite + ' ' + plural(a.willWrite, 'floor') : 'nothing to do',
-          a.willWrite ? 'do' : 'skip', rows));
-        if (a.measuredBeforeTrim) {
-          cards.push('<p class="prep-hint">Those sizes are measured on the plan as it is '
-            + 'now. Trimming runs first, so the areas are re-measured on the cropped '
-            + 'canvas when you actually prepare the file.</p>');
-        }
-      }
+    // ── areas ──
+    var a = order.indexOf('areas') >= 0 ? ((r.step && r.step.areas) || {}) : null;
+    if (!a) {
+      setStatus('areas', 'Not included', 'is-off');
+      $('prepAreaFloors').innerHTML = '<div class="prep-empty">Tick the stage to put a requirement area on each floor.</div>';
+    } else if (!a.ok) {
+      // The other steps still run. Saying so matters: the reader is looking
+      // at a reason, and needs to know whether it costs them the whole pass
+      // or just this part of it.
+      setStatus('areas', 'Cannot run: ' + (a.error || 'could not work out the areas'), 'is-bad');
+      $('prepAreaFloors').innerHTML = '<div class="prep-warn">'
+        + esc(a.error || 'Could not work out the requirement areas.')
+        + '<br><span class="prep-sub">The other stages still run and the file is still '
+        + 'written — this part of it is what will be missing. Fix the project in Ekahau '
+        + 'and prepare it again to add the areas.</span></div>';
+      refused.push('the requirement areas');
+    } else {
+      willDo += a.willWrite || 0;
+      var nFloors = (a.floors || []).length;
+      var people = a.occupantsWritten != null ? a.occupantsWritten : a.occupants;
+      setStatus('areas', [
+        (a.willWrite || 0) + ' of ' + nFloors + ' ' + plural(nFloors, 'floor'),
+        selectedText('prepCapTpl'),
+        (people || 0) + ' ' + plural(people || 0, 'person', 'people'),
+      ].join(' · '), a.willWrite ? 'is-do' : '');
+      if (a.willWrite) writes.push('requirement areas on ' + a.willWrite + ' ' + plural(a.willWrite, 'floor'));
+      var rows = (a.floors || []).map(function (f, i) {
+        var size = f.widthFt
+          ? ' <span class="prep-sub">(' + f.widthFt + ' × ' + f.heightFt + ' ft, from the '
+            + esc(f.basis) + ')</span>'
+          : '';
+        return '<div class="pb-item"><b>' + esc(f.floorName || f.floorPlanId) + '</b> — '
+          + esc(f.action) + size + '<br>' + floorPeopleHtml(f, i) + floorExistingHtml(f, i)
+          + '</div>';
+      });
+      rows.push('<p class="pb-hint">' + (a.willWrite
+        ? (a.devicesWritten != null ? a.devicesWritten : a.totalDevices) + ' devices for '
+          + people + ' people across the floors being written.'
+        : 'No floor is being written.')
+        + (a.measuredBeforeTrim ? ' Sizes are measured on the plan as it is now; the trim '
+          + 'runs first, so they are measured again on the cropped canvas when you prepare.' : '')
+        + '</p>');
+      $('prepAreaFloors').innerHTML = rows.join('');
     }
 
-    if (order.indexOf('walls') >= 0) {
-      var w = (r.step && r.step.walls) || {};
-      if (w.error) {
-        cards.push(stepCard('Wall types', 'cannot', 'skip', [esc(w.error)]));
-        refused.push('the wall types');
-      } else {
-        var add = w.add || [], upd = w.update || [], skip = w.skip || [];
-        var todo = add.length + upd.length;
-        willDo += todo;
-        var chips = function (xs) {
-          return xs.map(function (x) {
-            return '<span class="prep-chip">' + esc(x.name) + '</span>';
-          }).join('');
-        };
-        var wl = [];
-        // Chips, not a comma-joined list. Half the shipped names have a comma
-        // in them - "Door, Hollow Wood", "Wall, Cinder Block" - so joining on
-        // commas produces a run of words with no way to tell where one type
-        // ends and the next begins.
-        if (add.length) wl.push('Adding ' + chips(add));
-        if (upd.length) {
-          wl.push('Setting to the template’s version ' + chips(upd)
-            + '<br><span class="prep-sub">Same types the project already has, with the '
-            + 'template’s colour, number key and attenuation. Walls already drawn '
-            + 'with them stay on them.</span>');
-        }
-        if (!todo) {
-          wl.push('<span class="prep-sub">Every type in this template is already here, '
-            + 'exactly as the template has it.</span>');
-        } else if (w.unchanged) {
-          wl.push('<span class="prep-sub">' + w.unchanged + ' already match the template.</span>');
-        }
-        if (skip.length) {
-          wl.push('<span class="prep-sub">Not applied: ' + skip.map(function (x) {
-            return esc(x.name + ' (' + x.why + ')');
-          }).join('; ') + '</span>');
-        }
-        cards.push(stepCard('Wall types',
-          todo ? [add.length ? add.length + ' to add' : '',
-                  upd.length ? upd.length + ' to update' : '']
-                   .filter(Boolean).join(', ') : 'nothing to do',
-          todo ? 'do' : 'skip', wl));
+    // ── walls ──
+    var w = order.indexOf('walls') >= 0 ? ((r.step && r.step.walls) || {}) : null;
+    if (!w) {
+      setStatus('walls', 'Not included', 'is-off');
+      $('prepWallList').innerHTML = '<div class="prep-empty">Tick the stage to load a wall template.</div>';
+    } else if (w.error) {
+      setStatus('walls', 'Cannot run: ' + w.error, 'is-bad');
+      $('prepWallList').innerHTML = '<div class="prep-warn">' + esc(w.error) + '</div>';
+      refused.push('the wall types');
+    } else {
+      var add = w.add || [], upd = w.update || [], skip = w.skip || [];
+      var todo = add.length + upd.length;
+      willDo += todo;
+      var chips = function (xs) {
+        return xs.map(function (x) {
+          return '<span class="prep-chip">' + esc(x.name) + '</span>';
+        }).join('');
+      };
+      setStatus('walls', selectedText('prepWallTpl') + ' · ' + (todo
+        ? [add.length ? add.length + ' to add' : '', upd.length ? upd.length + ' to update' : '']
+            .filter(Boolean).join(', ')
+        : 'already in the project'), todo ? 'is-do' : '');
+      var wb = [];
+      if (add.length) wb.push(add.length + ' wall ' + plural(add.length, 'type') + ' added');
+      if (upd.length) wb.push(upd.length + ' updated');
+      if (wb.length) writes.push(wb.join(', '));
+      // Chips, not a comma-joined list. Half the shipped names have a comma
+      // in them - "Door, Hollow Wood", "Wall, Cinder Block" - so joining on
+      // commas produces a run of words with no way to tell where one type
+      // ends and the next begins.
+      var wl = [];
+      if (add.length) wl.push('<div class="pb-item"><b>Adding</b><br>' + chips(add) + '</div>');
+      if (upd.length) {
+        wl.push('<div class="pb-item"><b>Setting to the template’s version</b><br>' + chips(upd)
+          + '<br><span class="prep-sub">Types the project already has, given the template’s '
+          + 'colour, number key and attenuation. Walls drawn with them stay on them.</span></div>');
       }
+      if (!todo) {
+        wl.push('<div class="pb-item prep-sub">Every type in this template is already here, '
+          + 'exactly as the template has it.</div>');
+      } else if (w.unchanged) {
+        wl.push('<div class="pb-item prep-sub">' + w.unchanged + ' already match the template.</div>');
+      }
+      if (skip.length) {
+        wl.push('<div class="pb-item prep-sub">Not applied: ' + skip.map(function (x) {
+          return esc(x.name + ' (' + x.why + ')');
+        }).join('; ') + '</div>');
+      }
+      $('prepWallList').innerHTML = wl.join('');
     }
 
-    host.innerHTML = cards.join('');
+    renderSwap(proj);
+    renderMap(r);
+    syncTrimControls();
+
     if (willDo) {
-      setGo(true, refused.length
-        ? 'Builds a new .esx without ' + refused.join(' or ')
-          + ' — that part cannot run on this project. Your file is not touched.'
-        : 'Builds a new .esx and downloads it. Your file is not touched.');
+      setGo(true, '<b>Will write:</b> ' + esc(writes.join(' · ')) + '. '
+        + (refused.length
+          ? esc('Without ' + refused.join(' or ') + ' — that part cannot run on this project. ')
+          : '')
+        + esc(fromDisk ? 'A new copy is written beside the original.'
+                       : 'A new copy is downloaded; your file is not touched.'));
     } else if (refused.length) {
-      setGo(false, 'Nothing can run on this project: ' + refused.join(' and ')
-                 + ' cannot, and there is nothing else left to do.');
+      setGo(false, esc('Nothing can run on this project: ' + refused.join(' and ')
+                     + ' cannot, and there is nothing else left to do.'));
     } else {
       setGo(false, 'This project is already prepared — there is nothing left to do.');
     }
   }
 
-  function setGo(on, note) {
-    $('prepGoBtn').disabled = !on;
-    $('prepGoNote').textContent = note || '';
+  function selectedText(id) {
+    var sel = $(id);
+    var opt = sel && sel.options && sel.options[sel.selectedIndex];
+    return String((opt && opt.text) || (sel && sel.value) || '');
   }
 
-  // ── the map: what the trim keeps, drawn on the plan ─────────────────────────
-  //
-  // PlanTrim's proposed-crop view, read-only, on the suite's shared plan canvas
-  // (WD.PlanView) - so it zooms and pans the way PlanTrim does, and draws the
-  // plan on the same white page. The box comes straight out of the plan report
-  // the cards below are quoting, so the picture and the numbers cannot
-  // disagree. WD.ProjectFile fetches the floor images: from the dropped file
-  // with JSZip, or one floor at a time from /api/prep/image when the project
-  // was opened from disk and is deliberately not in the browser.
+  function setStatus(step, text, cls) {
+    var el = $('prepStatus-' + step);
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'pb-stage-status' + (cls ? ' ' + cls : '');
+  }
 
-  var map = { floors: [], current: null, file: null, view: null };
+  // The footer's note is markup the renderer built from escaped parts.
+  function setGo(on, note) {
+    $('prepGoBtn').disabled = !on;
+    $('prepGoNote').innerHTML = note || '';
+  }
+
+  // Wall Swap replaces walls already drawn, so it has nothing to do on a new
+  // project. It stays on the rail with the reason, because a control that
+  // vanishes is its own kind of puzzle.
+  function renderSwap(proj) {
+    var n = (proj && proj.wallCount) || 0;
+    setStatus('swap', n ? n + ' ' + plural(n, 'wall') + ' drawn · swap them in Quick Walls'
+                        : 'Only when the project already has walls', n ? '' : 'is-off');
+    $('prepSwapInfo').innerHTML = n
+      ? '<div class="pb-item">This project already has <b>' + n + '</b> '
+        + plural(n, 'wall segment') + '. Visual Wall Swap changes the type of walls already '
+        + 'drawn, by picking them on the plan. It runs in Quick Walls, on the prepared copy: '
+        + 'prepare first, then open that copy in '
+        + '<a href="/walls" target="_blank" rel="noopener">Quick Walls</a> and use its '
+        + 'Wall Swap.</div>'
+      : '<div class="pb-item prep-sub">Not available on this project: it has no walls yet, '
+        + 'so there is nothing to swap. Wall Swap is for a project you are preparing again '
+        + 'after drawing, when some walls went in on the wrong type.</div>';
+  }
+
+  // ── stages ─────────────────────────────────────────────────────────────────
+
+  window.prepStage = function (name) {
+    if (STAGES.indexOf(name) < 0) return;
+    stage = name;
+    STAGES.forEach(function (s) {
+      var panel = $('prepPanel-' + s);
+      if (panel) panel.hidden = s !== name;
+      var card = $('prepStageCard-' + s);
+      if (card && card.classList) card.classList.toggle('is-current', s === name);
+    });
+    if (lastPlan) renderMap(lastPlan);
+    syncTrimControls();
+  };
+
+  // ── the plan: one canvas for every stage ───────────────────────────────────
+  //
+  // The suite's shared plan canvas (WD.PlanView), so it zooms and pans the way
+  // PlanTrim does and draws the plan on the same white page. What is drawn over
+  // the plan follows the stage: the crop box and its handles on Trim, the
+  // requirement area on Areas, and the cropped sheet as it will come out on
+  // the others. Everything drawn comes out of the preview the panels are
+  // quoting, so the picture and the numbers cannot disagree. WD.ProjectFile
+  // fetches the floor images: from the dropped file with JSZip, or one floor at
+  // a time from /api/prep/image when the project was opened from disk and is
+  // deliberately not in the browser.
+
+  var map = { floors: [], current: null, file: null, view: null, editor: null };
 
   function resetMap() {
     map.floors = [];
     map.current = null;
     map.file = null;
     if (map.view) map.view.setImage(null);
-    $('prepMap').hidden = true;
+    var empty = $('prepMapEmpty');
+    if (empty) { empty.hidden = false; empty.textContent = 'Reading the project…'; }
   }
 
   function mapFile() {
@@ -623,39 +745,92 @@
   }
   window.__prepMapKeptBox = mapKeptBox;
 
+  // What the trim does to one floor, for its button in the strip.
   function mapFloorState(f) {
+    if (!f) return { cls: 'is-pending', word: '', detail: '' };
     if (f.action === 'trimmed') {
-      return { cls: 'is-auto', word: 'Trim',
-               detail: f.oldSize[0] + '×' + f.oldSize[1] + ' → '
-                 + f.newSize[0] + '×' + f.newSize[1] };
+      return { cls: f.source === 'manual' ? 'is-manual' : 'is-auto',
+               word: f.source === 'manual' ? 'Your box' : 'Trim',
+               detail: '−' + f.areaSavedPct + '%' };
     }
     if (f.repaired) {
-      return { cls: 'is-auto', word: 'Repair', detail: 'white page behind the drawing restored' };
+      return { cls: 'is-auto', word: 'Repair', detail: 'white page restored' };
     }
     if (f.action === 'skipped') return { cls: 'is-skip', word: 'Leave as is', detail: f.reason || '' };
     return { cls: 'is-refused', word: 'Refused', detail: f.reason || '' };
   }
 
-  function renderMap(t) {
-    var host = $('prepMap');
-    var floors = (t && !t.error && t.floors) || [];
-    if (!floors.length) { host.hidden = true; map.floors = []; return; }
+  // What the areas step does to one floor, for its button in the strip.
+  function areaFloorState(f) {
+    if (!f) return { cls: 'is-pending', word: '', detail: '' };
+    if (f.mode === 'none') return { cls: 'is-skip', word: 'nobody', detail: '' };
+    if (f.skipped) {
+      return { cls: 'is-skip', word: 'keeps ' + (f.existingDevices || 0) + ' '
+               + plural(f.existingDevices || 0, 'device'), detail: '' };
+    }
+    var n = f.occupants || 0;
+    return { cls: 'is-auto', word: n + ' ' + plural(n, 'person', 'people'),
+             detail: (f.totalDevices || 0) + ' ' + plural(f.totalDevices || 0, 'device') };
+  }
+
+  function byId(list, key, id) {
+    return (list || []).filter(function (x) { return x && x[key] === id; })[0] || null;
+  }
+
+  function trimFloor(id) {
+    var t = lastPlan && lastPlan.step && lastPlan.step.trim;
+    return byId(t && t.floors, 'id', id);
+  }
+
+  function areaFloor(id) {
+    var a = lastPlan && lastPlan.step && lastPlan.step.areas;
+    return byId(a && a.ok && a.floors, 'floorPlanId', id);
+  }
+
+  // The project's floors, from the facts the server sent and failing those
+  // from whichever step listed them.
+  function planFloors(r) {
+    var proj = (r && r.project) || {};
+    if (proj.floors && proj.floors.length) return proj.floors;
+    var t = r && r.step && r.step.trim;
+    if (t && t.floors && t.floors.length) {
+      return t.floors.map(function (f) {
+        return { id: f.id, name: f.name,
+                 w: f.oldSize ? f.oldSize[0] : 0, h: f.oldSize ? f.oldSize[1] : 0 };
+      });
+    }
+    var a = r && r.step && r.step.areas;
+    return ((a && a.floors) || []).map(function (f) {
+      return { id: f.floorPlanId, name: f.floorName || f.floorPlanId, w: 0, h: 0 };
+    });
+  }
+
+  function renderMap(r) {
+    var floors = planFloors(r);
     map.floors = floors;
+    if (!floors.length) {
+      $('prepMapStrip').innerHTML = '';
+      var empty = $('prepMapEmpty');
+      if (empty) { empty.hidden = false; empty.textContent = 'This project has no floor plans.'; }
+      return;
+    }
     var ids = floors.map(function (f) { return f.id; });
     if (ids.indexOf(map.current) < 0) {
       // Open on the first floor that is actually being cropped.
-      var first = floors.filter(function (f) { return f.action === 'trimmed'; })[0] || floors[0];
+      var first = floors.filter(function (f) {
+        var tf = trimFloor(f.id);
+        return tf && tf.action === 'trimmed';
+      })[0] || floors[0];
       map.current = first.id;
     }
-    host.hidden = false;
     $('prepMapStrip').innerHTML = floors.map(function (f) {
-      var st = mapFloorState(f);
-      return '<button type="button" class="ptb-row ' + st.cls
+      var st = stage === 'areas' ? areaFloorState(areaFloor(f.id)) : mapFloorState(trimFloor(f.id));
+      return '<button type="button" class="pb-floor ' + st.cls
         + (f.id === map.current ? ' is-current' : '') + '"'
-        + ' data-action="call" data-fn="prepMapSelect" data-arg="' + escAttr(f.id) + '">'
-        + '<span class="ptb-row-name">' + esc(f.name) + '</span>'
-        + '<span class="ptb-row-state">' + esc(st.word) + '</span>'
-        + '<span class="ptb-row-detail">' + esc(st.detail) + '</span>'
+        + ' data-action="call" data-fn="prepMapSelect" data-arg="' + escAttr(f.id) + '"'
+        + (st.detail ? ' title="' + escAttr(st.detail) + '"' : '') + '>'
+        + '<span class="pb-floor-name">' + esc(f.name) + '</span>'
+        + (st.word ? ' <span class="pb-floor-state">' + esc(st.word) + '</span>' : '')
         + '</button>';
     }).join('');
     showMapFloor();
@@ -663,10 +838,12 @@
 
   window.prepMapSelect = function (id) {
     map.current = id;
-    Array.prototype.forEach.call($('prepMapStrip').children, function (b) {
+    var strip = $('prepMapStrip');
+    Array.prototype.forEach.call((strip && strip.children) || [], function (b) {
       b.classList.toggle('is-current', b.getAttribute('data-arg') === id);
     });
     showMapFloor();
+    syncTrimControls();
   };
 
   function currentMapFloor() {
@@ -676,20 +853,20 @@
   function showMapFloor() {
     var f = currentMapFloor();
     if (!f) return;
+    captionFor(f);
+    if (!WD.PlanView || !WD.ProjectFile) return;
     var id = f.id;
     var empty = $('prepMapEmpty');
-    var st = mapFloorState(f);
-    $('prepMapCaption').textContent = f.action === 'trimmed'
-      ? f.name + ': ' + st.detail + ' — ' + f.areaSavedPct + '% of the sheet is cut away.'
-      : f.repaired
-        ? f.name + ': not cropped again. Trimmed by an earlier version, it lost the white page '
-          + 'behind the drawing; preparing puts it back.'
-        : f.name + ': not cropped' + (f.reason ? ' — ' + f.reason : '') + '.';
     var file = mapFile();
     file.image(id).then(function (im) {
       if (map.current !== id || map.file !== file) return;
       empty.hidden = true;
-      mapView().setImage(im);
+      var pv = mapView();
+      // The same floor again - a new preview, a changed margin - keeps the
+      // view where he put it. Only another floor is framed afresh.
+      if (pv.img === im) pv.draw();
+      else pv.setImage(im);
+      zoomReadout();
     }, function (e) {
       if (map.current !== id || map.file !== file) return;
       mapView().setImage(null);
@@ -698,26 +875,140 @@
     });
   }
 
+  function captionFor(f) {
+    var cap = $('prepMapCaption');
+    if (!cap) return;
+    if (stage === 'trim' && $('prepStep-trim').checked) {
+      cap.textContent = trim.boxes[f.id]
+        ? 'Drag a handle or an edge to adjust your box, or drag inside it to move it. '
+          + 'Space-drag, middle or right drag pans; the wheel zooms.'
+        : 'The dashed line is what automatic keeps. Drag a rectangle to choose your own. '
+          + 'Space-drag, middle or right drag pans; the wheel zooms.';
+    } else if (stage === 'areas') {
+      cap.textContent = 'The requirement area each floor gets, on the plan as it will be '
+        + 'cropped. Drag to move the plan; the wheel zooms.';
+    } else {
+      cap.textContent = 'The sheet as it will come out of the trim. Drag to move the plan; '
+        + 'the wheel zooms.';
+    }
+  }
+
   // Made on first use rather than at load, so the stage exists and has a size.
   function mapView() {
     if (!map.view) {
+      map.editor = WD.BoxEditor.create({
+        get: function () { return trim.boxes[map.current] || null; },
+        set: function (b) {
+          if (b) trim.boxes[map.current] = b;
+          else delete trim.boxes[map.current];
+        },
+        commit: function () {
+          delete trim.suggestions[map.current];
+          boxesChanged();
+        },
+        size: function () { return floorSize(map.current); },
+        proposed: function () { return autoBox(map.current); },
+        enabled: function () { return stage === 'trim' && $('prepStep-trim').checked; },
+      });
       map.view = WD.PlanView.create({
         canvas: $('prepMapCanvas'),
         stage: $('prepMapStage'),
-        dragPans: true,
-        overlay: drawKept,
+        overlay: drawOverlay,
+        dragPans: function () { return !(stage === 'trim' && $('prepStep-trim').checked); },
+        onDown: function (e, p, pv) { return map.editor.onDown(e, p, pv); },
+        onMove: function (e, p, pv, dragging) { map.editor.onMove(e, p, pv, dragging); },
+        onUp: function (e, p, pv) { map.editor.onUp(e, p, pv); },
       });
     }
     return map.view;
   }
 
-  // Shades the paper being cut away and dashes the edge of what is kept. The
-  // whole sheet is framed, because what goes is the point of the picture.
-  function drawKept(g, pv) {
-    var f = currentMapFloor();
+  // A floor's size in plan units: the space a box is drawn in and the report
+  // is written in.
+  function floorSize(id) {
+    var f = byId(map.floors, 'id', id);
+    if (f && f.w && f.h) return { w: f.w, h: f.h };
+    var tf = trimFloor(id);
+    if (tf && tf.oldSize) return { w: tf.oldSize[0], h: tf.oldSize[1] };
+    return null;
+  }
+
+  // What automatic keeps on this floor, in plan units, or null.
+  function autoBox(id) {
+    var f = trimFloor(id);
+    if (!f || f.action !== 'trimmed' || f.source === 'manual' || !f.offset || !f.newSize) return null;
+    return [f.offset[0], f.offset[1], f.offset[0] + f.newSize[0], f.offset[1] + f.newSize[1]];
+  }
+
+  function drawOverlay(g, pv) {
+    zoomReadout();
+    if (stage === 'trim' && $('prepStep-trim').checked) {
+      map.editor.overlay(g, pv);
+      return;
+    }
+    var im = pv.img;
+    var s = floorSize(map.current);
+    if (!im || !s) return;
+    var kx = im.width / s.w, ky = im.height / s.h;
+    var dpr = window.devicePixelRatio || 1;
+    var tf = $('prepStep-trim').checked ? trimFloor(map.current) : null;
+    var kept = drawKept(g, pv, tf);
+    var k0 = kept && pv.toScreen(kept[0], kept[1]);
+    var k1 = kept && pv.toScreen(kept[2], kept[3]);
+    if (stage !== 'areas' || !$('prepStep-areas').checked) return;
+    var af = areaFloor(map.current);
+    if (!af || af.mode === 'none') return;
+    var pts = af.outline || af.polygon || [];
+    // An area measured from the whole page is measured again on the cropped
+    // page, so on a floor being trimmed it is the kept rectangle.
+    var onScreen;
+    if (kept && af.outlineIsNew && af.basis === 'canvas') {
+      onScreen = [k0, { x: k1.x, y: k0.y }, k1, { x: k0.x, y: k1.y }];
+    } else {
+      onScreen = pts.map(function (p) { return pv.toScreen(p.x * kx, p.y * ky); });
+    }
+    if (onScreen.length < 3) return;
+    g.save();
+    if (kept) {
+      g.beginPath();
+      g.rect(k0.x, k0.y, k1.x - k0.x, k1.y - k0.y);
+      g.clip();
+    }
+    g.beginPath();
+    onScreen.forEach(function (p, i) { if (i) g.lineTo(p.x, p.y); else g.moveTo(p.x, p.y); });
+    g.closePath();
+    g.fillStyle = af.skipped ? 'rgba(148,163,184,0.18)' : 'rgba(236,72,153,0.18)';
+    g.fill();
+    g.strokeStyle = af.skipped ? '#94a3b8' : '#db2777';
+    g.lineWidth = 2 * dpr;
+    if (af.skipped) g.setLineDash([6 * dpr, 4 * dpr]);
+    g.stroke();
+    g.restore();
+    // Labelled in points, not as a fraction of the drawing, so it reads the
+    // same at any zoom.
+    var st = areaFloorState(af);
+    var label = 'Requirement area · ' + st.word + (st.detail ? ' · ' + st.detail : '');
+    var x = Math.min.apply(null, onScreen.map(function (p) { return p.x; }));
+    var y = Math.min.apply(null, onScreen.map(function (p) { return p.y; }));
+    if (kept) { x = Math.max(x, k0.x); y = Math.max(y, k0.y); }
+    g.save();
+    g.font = (12 * dpr) + 'px system-ui, sans-serif';
+    var tw = g.measureText(label).width;
+    g.fillStyle = af.skipped ? '#64748b' : '#db2777';
+    g.fillRect(x + 8 * dpr, y + 8 * dpr, tw + 14 * dpr, 20 * dpr);
+    g.fillStyle = '#ffffff';
+    g.textBaseline = 'middle';
+    g.fillText(label, x + 15 * dpr, y + 18 * dpr);
+    g.restore();
+  }
+
+  // The paper the trim takes away, shaded, and the edge of what is kept
+  // dashed: the sheet as it will come out, which is what every stage after
+  // the trim works on. Returns the kept box in image pixels, or null.
+  function drawKept(g, pv, f) {
     var im = pv.img;
     var b = mapKeptBox(f, im && im.width, im && im.height);
-    if (!b) return;
+    if (!b) return null;
     var dpr = window.devicePixelRatio || 1;
     var s0 = pv.toScreen(0, 0), s1 = pv.toScreen(im.width, im.height);
     var k0 = pv.toScreen(b[0], b[1]), k1 = pv.toScreen(b[2], b[3]);
@@ -734,10 +1025,276 @@
     g.setLineDash([7 * dpr, 5 * dpr]);
     g.strokeRect(k0.x, k0.y, k1.x - k0.x, k1.y - k0.y);
     g.restore();
+    return b;
+  }
+
+  function zoomReadout() {
+    var el = $('prepZoomLevel');
+    if (!el || !map.view || !map.view.img) { if (el) el.textContent = ''; return; }
+    el.textContent = Math.round(map.view.view.scale / (window.devicePixelRatio || 1) * 100) + '%';
   }
 
   window.prepMapFit = function () {
     if (map.view) map.view.reset();
+  };
+
+  window.prepMapZoom = function (dir) {
+    var pv = map.view;
+    if (!pv || !pv.img) return;
+    var k = dir === 'in' ? WD.PlanView.ZOOM_STEP : 1 / WD.PlanView.ZOOM_STEP;
+    pv.zoomAt(k, pv.canvas.width / 2, pv.canvas.height / 2);
+  };
+
+  // ── the Trim stage: PlanTrim's box editor ──────────────────────────────────
+
+  // Saved where PlanTrim keeps them and previewed again, so the strip, the
+  // panel and the footer describe the box he just let go of.
+  function boxesChanged() {
+    trim.loaded = true;
+    if (trim.projectId) {
+      WD.api('plantrim/boxes_save', { projectId: trim.projectId, boxes: trim.boxes })
+        .catch(function () { /* a lost box is a redraw, not a failure worth a toast */ });
+    }
+    if (map.view) map.view.draw();
+    syncTrimControls();
+    preview();
+  }
+
+  function syncTrimControls() {
+    var f = currentMapFloor();
+    var on = !!$('prepStep-trim').checked;
+    var b = f && trim.boxes[f.id];
+    var tf = f && trimFloor(f.id);
+    var title = $('prepTrimTitle');
+    if (title) title.textContent = 'Trim' + (f ? ' · ' + f.name : '');
+    var lead = $('prepTrimFloor');
+    if (lead) {
+      lead.textContent = !tf ? ''
+        : tf.action === 'trimmed'
+          ? tf.oldSize[0] + '×' + tf.oldSize[1] + ' → ' + tf.newSize[0] + '×' + tf.newSize[1]
+            + ' · ' + tf.areaSavedPct + '% of the sheet is empty paper.'
+          : (tf.repaired ? 'Not cropped again; the white page behind the drawing is put back.'
+                         : 'Not cropped' + (tf.reason ? ': ' + tf.reason : '') + '.');
+    }
+    var same = f ? map.floors.filter(function (x) {
+      return x.id !== f.id && x.w === f.w && x.h === f.h;
+    }).length : 0;
+    setDisabled('prepTrimSuggest', !on || map.floors.length < 1);
+    setDisabled('prepTrimDraw', !on || !f);
+    setDisabled('prepTrimAll', !on || !b || !same);
+    setDisabled('prepTrimAuto', !on || !b);
+    var hint = $('prepTrimHint');
+    if (hint) {
+      hint.textContent = !on ? 'The trim is not ticked, so every sheet is left as it is.'
+        : b ? 'Your box keeps ' + Math.round(b[2] - b[0]) + ' × ' + Math.round(b[3] - b[1])
+              + ' of this sheet.' + (same ? '' : ' No other floor is the same size, so it '
+              + 'cannot be applied to them.')
+          : 'Automatic: the drawing is found on its own. Drag a rectangle on the plan to '
+            + 'choose what to keep instead.';
+    }
+    showEvidence();
+    if (f) captionFor(f);
+  }
+
+  function setDisabled(id, off) {
+    var el = $(id);
+    if (el) el.disabled = !!off;
+  }
+
+  function showEvidence() {
+    var el = $('prepTrimEvidence');
+    if (!el) return;
+    var s = trim.suggestions[map.current];
+    if (!s) { el.hidden = true; el.innerHTML = ''; return; }
+    var label = s.basis === 'cross-sheet'
+      ? 'Proposed from ' + s.sheets + ' sheets of this size'
+      : (s.basis === 'single-sheet' ? 'Proposed from this sheet alone'
+                                    : 'Nothing could be proposed');
+    el.innerHTML = '<span class="ptb-ev-basis"><strong>' + esc(label) + '</strong></span>'
+      + esc(s.evidence || '') + ' <em>Check it and drag if it is wrong — nothing is written '
+      + 'until you press Prepare.</em>';
+    el.hidden = false;
+  }
+
+  /* Suggestions are put on the plan, never taken on trust. The rectangle
+     lands where it can be seen and dragged and the evidence for it is stated;
+     it is used only because he can see it there, and nothing is written until
+     Prepare. Detection that cannot be checked is what the box exists to
+     escape, so it does not get to act on its own. */
+  window.prepTrimSuggest = function () {
+    if (!loaded()) return;
+    var btn = $('prepTrimSuggest');
+    var label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Comparing sheets…';
+    fetch('/api/prep/suggest?name=' + encodeURIComponent(fileName)
+          + (fromDisk ? '&source=disk' : ''), {
+      method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
+      body: fromDisk ? null : fileBytes,
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (!res || !res.ok) {
+        WD.toast((res && res.error) || 'Could not compare the sheets', 'error');
+        return;
+      }
+      trim.suggestions = {};
+      var filled = 0;
+      (res.suggestions || []).forEach(function (s) {
+        trim.suggestions[s.floorId] = s;
+        if (s.box) { trim.boxes[s.floorId] = s.box.slice(0, 4); filled++; }
+      });
+      if (!filled) {
+        WD.toast('Nothing to suggest from this set', 'error');
+        showEvidence();
+        return;
+      }
+      WD.toast('Proposed a box on ' + filled + ' ' + plural(filled, 'floor')
+               + ' — check it before preparing', 'success');
+      boxesChanged();
+    }).catch(function () {
+      WD.toast('Could not compare the sheets', 'error');
+    }).then(function () {
+      btn.textContent = label;
+      syncTrimControls();
+    });
+  };
+
+  // Starts from what automatic keeps, with handles on it - adjusting a box
+  // that is nearly right is quicker than drawing one from nothing.
+  window.prepTrimDraw = function () {
+    var id = map.current;
+    if (!id) return;
+    if (trim.boxes[id]) {
+      WD.toast('Drag a handle or an edge to adjust the box', 'success');
+      return;
+    }
+    var auto = autoBox(id);
+    var s = floorSize(id);
+    if (auto) {
+      trim.boxes[id] = auto.slice();
+    } else if (s) {
+      // Nothing detected to start from: an inset of the whole sheet, so every
+      // handle is on the page and in reach.
+      trim.boxes[id] = [s.w * 0.1, s.h * 0.1, s.w * 0.9, s.h * 0.9];
+    } else {
+      return;
+    }
+    boxesChanged();
+  };
+
+  window.prepTrimAuto = function () {
+    if (!trim.boxes[map.current]) return;
+    delete trim.boxes[map.current];
+    delete trim.suggestions[map.current];
+    boxesChanged();
+  };
+
+  // The same CAD set puts the title block in the same place on every sheet, so
+  // the box carries over as-is - but only where the sheet is the same size. On
+  // another size the numbers mean another part of the sheet.
+  window.prepTrimApplyAll = function () {
+    var here = currentMapFloor();
+    var b = here && trim.boxes[here.id];
+    if (!b) return;
+    var applied = 0, skipped = 0;
+    map.floors.forEach(function (f) {
+      if (f.id === here.id) return;
+      if (f.w !== here.w || f.h !== here.h) { skipped++; return; }
+      trim.boxes[f.id] = b.slice();
+      applied++;
+    });
+    if (!applied) {
+      WD.toast('No other floor is the same size as this one', 'error');
+      return;
+    }
+    WD.toast('Applied to ' + applied + ' ' + plural(applied, 'floor')
+             + (skipped ? '; skipped ' + skipped + ' of a different size' : ''), 'success');
+    boxesChanged();
+  };
+
+  // ── the Areas stage: capture a template without leaving ────────────────────
+
+  var capture = { extracted: null, derived: null };
+
+  window.prepCaptureOpen = function () {
+    var input = $('prepCaptureInput');
+    input.value = '';
+    input.click();
+  };
+
+  window.prepCaptureClose = function () {
+    $('prepCaptureModal').classList.remove('active');
+    capture = { extracted: null, derived: null };
+  };
+
+  function captureFile(file) {
+    file.arrayBuffer().then(function (buf) {
+      return fetch('/api/capacity/analyze?name=' + encodeURIComponent(file.name), {
+        method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' }, body: buf,
+      });
+    }).then(function (r) { return r.json(); }).then(function (r) {
+      if (!r || !r.ok) {
+        WD.toast((r && r.error) || 'Could not read that project', 'error');
+        return;
+      }
+      if (!r.rows || !r.rows.length) {
+        WD.toast('No capacity items in that project. Set the areas up in Ekahau first, '
+                 + 'then capture from it.', 'error');
+        return;
+      }
+      capture.extracted = r;
+      $('prepCaptureName').value = file.name.replace(/\.esx(\.zip)?$/i, '');
+      $('prepCaptureBody').innerHTML = '<p class="pb-lead">' + esc(file.name) + ': '
+        + r.rows.length + ' ' + plural(r.rows.length, 'row') + ', ' + (r.totalDevices || 0)
+        + ' ' + plural(r.totalDevices || 0, 'device') + '.</p>';
+      $('prepCaptureModal').classList.add('active');
+      window.prepCaptureDerive();
+    }).catch(function (e) {
+      WD.toast('Could not read that project: ' + e.message, 'error');
+    });
+  }
+
+  window.prepCaptureDerive = function () {
+    if (!capture.extracted) return;
+    $('prepCaptureSave').disabled = true;
+    fetch('/api/capacity/derive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: JSON.stringify({ extracted: capture.extracted,
+                             occupants: $('prepCapturePeople').value,
+                             name: $('prepCaptureName').value }),
+    }).then(function (r) { return r.json(); }).then(function (r) {
+      if (!r || !r.ok) {
+        capture.derived = null;
+        $('prepCaptureDerived').innerHTML = '<div class="prep-warn">'
+          + esc((r && r.error) || 'Could not work that out.') + '</div>';
+        return;
+      }
+      capture.derived = r;
+      $('prepCaptureDerived').innerHTML = '<p class="pb-hint"><b>'
+        + Number(r.devicesPerOccupant || 0).toFixed(2) + '</b> devices per person, across '
+        + (r.items || []).length + ' ' + plural((r.items || []).length, 'profile') + '.</p>';
+      $('prepCaptureSave').disabled = false;
+    });
+  };
+
+  window.prepCaptureSave = function () {
+    if (!capture.derived) return;
+    var body = JSON.parse(JSON.stringify(capture.derived));
+    body.name = $('prepCaptureName').value || body.name;
+    fetch('/api/capacity/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: JSON.stringify({ template: body }),
+    }).then(function (r) { return r.json(); }).then(function (r) {
+      if (!r || !r.ok) { WD.toast((r && r.error) || 'Could not save', 'error'); return; }
+      WD.toast('Saved "' + body.name + '"', 'success');
+      window.prepCaptureClose();
+      // Selected by its file, which is how the list names it.
+      $('prepCapTpl').value = r.file;
+      $('prepCapTpl').innerHTML = '<option value="' + escAttr(r.file) + '" selected>'
+        + esc(body.name) + '</option>';
+      loadTemplates();
+    });
   };
 
   // ── the run ────────────────────────────────────────────────────────────────
@@ -828,9 +1385,6 @@
     return bits.length ? bits.join(', ') : 'no changes were needed';
   }
 
-  /* Opened from disk: the prepared copy is already sitting in the project
-     folder, so the useful thing to say is where, and to offer to show it -
-     the next thing he does is open it in Ekahau. */
   // One summary builder for every path, because there are two report shapes
   // and three renderers, and the shapes are not interchangeable: the download
   // path reads a flat header, the open-from-disk path and the nothing-to-do
@@ -876,6 +1430,9 @@
       + '<br><span class="prep-sub">' + esc(where) + '</span></div>';
   }
 
+  /* Opened from disk: the prepared copy is already sitting in the project
+     folder, so the useful thing to say is where, and to offer to show it -
+     the next thing he does is open it in Ekahau. */
   function renderWritten(r) {
     var host = $('prepResult');
     if (!r || !r.ok) {
@@ -974,6 +1531,18 @@
     $('fileInput').addEventListener('change', function (e) {
       if (e.target.files[0]) loadFile(e.target.files[0]);
       e.target.value = '';
+    });
+    var cap = $('prepCaptureInput');
+    if (cap) {
+      cap.addEventListener('change', function (e) {
+        if (e.target.files[0]) captureFile(e.target.files[0]);
+        e.target.value = '';
+      });
+    }
+    // Templates edited in Quick Walls or Capacity - both links open a tab -
+    // are picked up on the way back, without reopening the project.
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') loadTemplates();
     });
     var dz = $('dropzone');
     dz.addEventListener('click', function () { $('fileInput').click(); });

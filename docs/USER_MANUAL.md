@@ -154,10 +154,9 @@ cloud round trip comes later, and doing it now costs you a step.
 It writes a new file beside the original, named `<name> (prepared).esx`, and
 leaves the original alone.
 
-![Prep showing the three steps and what each would do](../web/assets/manual/prep-steps.png)
+![Prep's workbench: the stages on the left, the plan in the middle, the Trim stage's settings on the right](../web/assets/manual/prep-steps.png)
 
-*Prep says what each step would do before it does it — and says plainly when a step *cannot* run, and why.*
-
+*Prep is one workbench: the stages down the left, the plan in the middle with the current stage drawn on it, that stage's settings on the right, and a footer saying what **Prepare** will write.*
 
 **The steps run in a fixed order and the order is not arbitrary.** Trimming has
 to happen before areas are added, because an area drawn on the full sheet
@@ -165,8 +164,8 @@ becomes part of what the trimmer has to keep, and the crop it prevents is
 reported as a clean skip. Prep enforces the order and refuses to run one that
 would misbehave.
 
-If you only want the cropping, [PlanTrim](#plantrim) does that alone and gives
-you per-floor control over each crop box.
+If you only want the cropping, [PlanTrim](#plantrim) does that alone. The
+boxes are shared: a box drawn in either tool is used by both.
 
 ### 6. Draw the walls — Quick Walls, then Ekahau
 
@@ -945,35 +944,50 @@ never modified.
 
 ## Prep
 
-Prep does the setup work on a freshly imported project in one pass over the file, instead of three trips through three tools. Drop the `.esx` on it, choose which of the three things to do, check what it says it will do, and download the prepared copy.
+Prep does the setup work on a freshly imported project in one pass over the file, instead of three trips through three tools. Open the `.esx`, look over each stage on the plan, change only what needs it, and press **Prepare**. Nothing is written until then, and your project file is never written to.
 
-- **Trim the canvas** — crops the empty paper off each CAD sheet and moves every AP, wall and area with it. The same work PlanTrim does.
-- **Put a requirement area on every floor** — from a capacity template and a headcount, using the templates saved in WD Capacity. The number beside the template (**each floor for … people**) is what every floor gets by default; each floor in the preview also has its own **People on this floor** box, the same as in Capacity. Leave it blank to use the number above, type a number to override it, or type **0** to leave that floor alone — including a whole-plan placeholder area already on it, which Prep would otherwise re-measure. **Floors that already have devices**, under the headcount, works exactly as it does in Capacity — **Keep them as they are**, **Replace device counts, keep the area outline** or **Replace device counts and redraw the area** — and starts on the default saved in **Settings → Capacity**. Each floor that already has devices also gets its own **This floor** dropdown in the preview, so some floors can be replaced and others kept; changing the dropdown in step 1 resets every floor to it. A floor set to **Keep them** on its own is also left out of the re-measure, so a whole-plan placeholder on it stays exactly as it is.
-- **Load the wall types** — applies a Quick Walls template exactly as Quick Walls does: types the project lacks are added, and the ones it already has — every Ekahau project carries Ekahau's stock types — are set to the template's colour, number key and attenuation.
+### The workbench
 
-Each step is optional, each is previewed per floor before anything is written, and your project file is never written to.
+- **The stages**, down the left in the order they run: **1 · Trim the canvas**, **2 · Requirement areas**, **3 · Wall types** and **4 · Wall swap**. Each has a tick box to include it and a one-line status - *"2 of 3 floors cropped · Normal, 10 ft · 1 your box"*. Click a stage to open it. A stage left out stays on the rail, dimmed, and still opens.
+- **The plan**, in the middle, shared by every stage. The floors run along its top; click one to see it. **Fit**, **−** and **+** sit beside them, the wheel zooms, and Space-drag, a middle drag or a right drag pans. On every stage but Trim a plain drag pans too.
+- **The stage's settings**, on the right.
+- **The footer**, always in view: *"Will write: trim 2 floors · requirement areas on 3 floors · 6 wall types added"*, and the **Prepare** button.
 
-The button is **Prepare and download**, under the preview. It is unavailable
-until there is something to do, and the line beside it says which of the two
-reasons applies — *"Pick at least one thing to do."* with nothing ticked, or
-*"This project is already prepared — there is nothing left to do."* when every
-step reports nothing to change. In that second case the preview still lists each
-floor and why it was skipped, so a project that needs no work reads as finished
-rather than as broken.
+Every stage opens on your saved defaults, so a project that needs nothing looked at is one click.
 
-### Seeing what the trim cuts
+### 1 · Trim the canvas
 
-With **Trim the canvas** ticked, the top of step **2 — What that would do**
-shows the floor plan the way PlanTrim does: the whole sheet, the paper that
-will be cut away shaded, and a dashed blue line around what is kept. A row per
-floor sits above it — click one to see that floor. It opens on the first floor
-that is actually being cropped; a floor that is left as it is shows unshaded,
-with the reason underneath.
+Crops the empty paper off each CAD sheet and moves every AP, wall and area with it - the same work PlanTrim does, with PlanTrim's box editor on the plan.
 
-The picture is drawn from the same numbers as the step card below it, and it
-redraws whenever the preview does — change the margin and the dashed line
-moves. It is a view only: to draw your own rectangle, use PlanTrim, then tick
-**Use the rectangles I drew in PlanTrim** here.
+- **Automatic** is the default: the dashed blue line is what the trim keeps, and the shaded paper is what goes.
+- **Drag a rectangle** on the plan to choose what to keep instead. Drag a handle or an edge to adjust it, and drag inside it to move it. The floor's button then says **Your box**.
+- **Suggest a box** compares the sheets and proposes a box on each floor, with the evidence for it. It lands on the plan to be checked.
+- **Draw my own** starts a box from what automatic keeps, with handles on it.
+- **Apply to all floors** copies this floor's box to every other floor of the same sheet size.
+- **Back to automatic** takes this floor's box away.
+- **Margin around the drawing** is the same setting as PlanTrim's Margin, measured on each plan's own scale.
+
+Boxes are PlanTrim's own, saved for this project as soon as you let go, so a box drawn in either tool is the one both use - and a box drawn in PlanTrim shows here as **Your box** when the project opens.
+
+### 2 · Requirement areas
+
+Puts a requirement area on every floor from a capacity template and a headcount. The plan shows each floor's area in pink, where it will be on the cropped sheet, labelled with its people and devices.
+
+- **Capacity template** - pick one, or **Capture from a project…** to read the device counts out of a finished project and save them as a template without leaving Prep. **Manage templates** opens Capacity in a new tab; Prep picks up any change when you come back.
+- **People on each floor, unless set below** is what every floor gets by default. Each floor under **Per floor** has its own **People on this floor** box: leave it blank to use the number above, type a number to override it, or type **0** to leave that floor alone - including a whole-plan placeholder area already on it, which Prep would otherwise re-measure.
+- **Floors that already have devices** works exactly as it does in Capacity - **Keep them as they are**, **Replace device counts, keep the area outline** or **Replace device counts and redraw the area** - and starts on the default saved in **Settings → Capacity**. Each floor that already has devices also gets its own **This floor** dropdown, so some floors can be replaced and others kept; changing the dropdown above resets every floor to it. A floor set to **Keep them** on its own is also left out of the re-measure.
+
+### 3 · Wall types
+
+Applies a Quick Walls template exactly as Quick Walls does: types the project lacks are added, and the ones it already has - every Ekahau project carries Ekahau's stock types - are set to the template's colour, number key and attenuation. The panel lists each type being added or updated. To change the template itself, edit it in Quick Walls; Prep picks up the change when you come back.
+
+### 4 · Wall swap
+
+Wall swap changes the type of walls already drawn, so it only means something on a project that has walls - a project you are preparing again after drawing. On a new project it says why it is not available. Where there are walls, it says how many and points to Quick Walls' Wall Swap, run on the prepared copy.
+
+### Prepare
+
+**Prepare** is unavailable until there is something to write, and the footer says which reason applies - nothing ticked, or *"This project is already prepared — there is nothing left to do."* when every stage reports nothing to change. In that second case each stage still lists every floor and why it was skipped, so a project that needs no work reads as finished rather than as broken. What Prepare wrote, or why it wrote nothing, appears above the footer.
 
 ### Two ways to open a project, and they are not the same
 

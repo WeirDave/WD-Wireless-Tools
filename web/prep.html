@@ -64,8 +64,8 @@
   <button type="button" class="dropzone-open-disk" data-action="call" data-fn="prepOpenFromDisk" data-stop="1"
           title="Open through a file dialog so Prep can read the project where it sits, write the prepared copy beside it, and show you the folder">Open from disk&hellip;</button>
   <ul class="dropzone-steps">
-    <li data-step="1."><strong>Choose</strong> which of the three things to do, and which templates to use</li>
-    <li data-step="2."><strong>Check</strong> what it says it will do to each floor</li>
+    <li data-step="1."><strong>Check</strong> each stage on the plan &mdash; draw a box, see the areas</li>
+    <li data-step="2."><strong>Change</strong> only what needs it; every stage opens on your defaults</li>
     <li data-step="3."><strong>Prepare</strong> &mdash; a new copy is written, your original is untouched</li>
   </ul>
 </div>
@@ -110,23 +110,84 @@
     </div>
   </div>
 
-  <div class="prep-wrap">
+  <div class="pb-body">
 
-    <div class="prep-card">
-      <div class="prep-step">1 &mdash; What to do</div>
+    <nav class="pb-rail" aria-label="Stages">
+      <div class="pb-rail-head">Stages &middot; run in this order</div>
 
-      <label class="prep-toggle">
-        <input type="checkbox" id="prepStep-trim" checked data-action-change="call" data-fn="prepSyncStepUi">
-        <span class="prep-toggle-body">
-          <span class="prep-toggle-name">Trim the canvas</span>
-          <span class="prep-toggle-why">Crops the empty paper off each CAD sheet and moves every AP, wall
-            and area with it. <span id="prepNote-trim"></span></span>
-        </span>
-      </label>
-      <div class="prep-opts" id="prepTrimOpts">
-        <div class="prep-row">
-          <label for="prepMargin">Leave a margin of</label>
-          <select id="prepMargin" class="prep-input prep-input--sel" data-action-change="call" data-fn="prepSetMargin" data-arg-value="1">
+      <div class="pb-stage is-current" id="prepStageCard-trim">
+        <input type="checkbox" id="prepStep-trim" checked aria-label="Include the trim"
+               data-action-change="call" data-fn="prepSyncStepUi">
+        <button type="button" class="pb-stage-open" data-action="call" data-fn="prepStage" data-arg="trim">
+          <span class="pb-stage-name">1 &middot; Trim the canvas</span>
+          <span class="pb-stage-status" id="prepStatus-trim"></span>
+          <span class="pb-stage-note" id="prepNote-trim"></span>
+        </button>
+      </div>
+
+      <div class="pb-stage" id="prepStageCard-areas">
+        <input type="checkbox" id="prepStep-areas" checked aria-label="Include the requirement areas"
+               data-action-change="call" data-fn="prepSyncStepUi">
+        <button type="button" class="pb-stage-open" data-action="call" data-fn="prepStage" data-arg="areas">
+          <span class="pb-stage-name">2 &middot; Requirement areas</span>
+          <span class="pb-stage-status" id="prepStatus-areas"></span>
+          <span class="pb-stage-note" id="prepNote-areas"></span>
+        </button>
+      </div>
+
+      <div class="pb-stage" id="prepStageCard-walls">
+        <input type="checkbox" id="prepStep-walls" checked aria-label="Include the wall types"
+               data-action-change="call" data-fn="prepSyncStepUi">
+        <button type="button" class="pb-stage-open" data-action="call" data-fn="prepStage" data-arg="walls">
+          <span class="pb-stage-name">3 &middot; Wall types</span>
+          <span class="pb-stage-status" id="prepStatus-walls"></span>
+          <span class="pb-stage-note" id="prepNote-walls"></span>
+        </button>
+      </div>
+
+      <div class="pb-stage pb-stage--optional" id="prepStageCard-swap">
+        <button type="button" class="pb-stage-open" data-action="call" data-fn="prepStage" data-arg="swap">
+          <span class="pb-stage-name">4 &middot; Wall swap</span>
+          <span class="pb-stage-status" id="prepStatus-swap">Only when the project already has walls</span>
+        </button>
+      </div>
+
+      <div class="pb-rail-foot">
+        Every stage opens on your saved defaults. If nothing needs a look, press
+        <b>Prepare</b> straight away. The stages always run in this order: a
+        requirement area put in before the trim would hold the crop open.
+      </div>
+    </nav>
+
+    <main class="pb-main">
+      <div class="pb-floorbar">
+        <div class="pb-floors" id="prepMapStrip" role="group" aria-label="Floors"></div>
+        <div class="pb-view-tools">
+          <button type="button" class="btn btn-sec pb-fit" data-action="call" data-fn="prepMapFit"
+                  title="Show the whole sheet again">Fit</button>
+          <button type="button" class="btn btn-sec pb-zoom" data-action="call" data-fn="prepMapZoom" data-arg="out"
+                  aria-label="Zoom out" title="Zoom out">&minus;</button>
+          <span class="pb-zoom-level" id="prepZoomLevel"></span>
+          <button type="button" class="btn btn-sec pb-zoom" data-action="call" data-fn="prepMapZoom" data-arg="in"
+                  aria-label="Zoom in" title="Zoom in">+</button>
+        </div>
+      </div>
+      <div class="ptb-stage pb-canvas" id="prepMapStage">
+        <canvas id="prepMapCanvas"></canvas>
+        <div class="ptb-empty" id="prepMapEmpty">Reading the project&hellip;</div>
+      </div>
+      <div class="pb-canvas-hint" id="prepMapCaption"></div>
+      <div id="prepMap" hidden></div>
+    </main>
+
+    <aside class="pb-panel" aria-label="Stage settings">
+
+      <section class="pb-section" id="prepPanel-trim">
+        <h2 class="pb-title" id="prepTrimTitle">Trim</h2>
+        <p class="pb-lead" id="prepTrimFloor"></p>
+        <div class="pb-field" id="prepTrimOpts">
+          <label for="prepMargin">Margin around the drawing</label>
+          <select id="prepMargin" class="prep-input" data-action-change="call" data-fn="prepSetMargin" data-arg-value="1">
             <option value="tight">Tight &mdash; 3 ft (0.9 m)</option>
             <option value="normal" selected>Normal &mdash; 10 ft (3 m)</option>
             <option value="wide">Wide &mdash; 20 ft (6.1 m)</option>
@@ -134,141 +195,123 @@
             <option value="parking-lot">Parking lot &mdash; 200 ft (61 m)</option>
             <option value="custom">Custom&hellip;</option>
           </select>
-          <span id="prepMarginCustomWrap" hidden><input type="number" id="prepMarginFt"
+          <span id="prepMarginCustomWrap" class="pb-inline" hidden><input type="number" id="prepMarginFt"
                  class="prep-input prep-input--num" min="1" max="2000" step="1" value="200"
+                 aria-label="Custom margin in feet"
                  data-action-change="call" data-fn="prepSetCustomMargin" data-arg-value="1"> ft</span>
-          <span>around the drawing</span>
         </div>
-        <label class="prep-row" id="prepUseBoxesRow" style="margin-bottom:0" hidden>
-          <input type="checkbox" id="prepUseBoxes" data-action-change="call" data-fn="prepSyncStepUi">
-          <span id="prepUseBoxesLabel">Use the rectangles I drew in PlanTrim</span>
-        </label>
-        <p class="prep-hint">
-          The margin is measured on the plan&rsquo;s own scale, so the same setting means the
-          same real distance on every sheet whatever its resolution. A plan with no scale falls
-          back to 10 pixels. <b>Normal</b> is what the suite ships with; <b>Wide</b> and
-          <b>Extra wide</b> leave noticeably more paper around the building if a crop that
-          close to the walls is tighter than you like, and <b>Parking lot</b> keeps the
-          site around it for outdoor APs. Pick <b>Custom</b> to type any distance.
-          A margin never invents paper: if you ask for more than the sheet has, it keeps
-          everything there is and stops at the edge. Each floor below says how much
-          drawing it actually carries beyond the building, which is what tells you
-          whether a big margin is a real choice or just &ldquo;keep the whole sheet&rdquo;.
-        </p>
-        <p class="prep-hint">
-          This is the <b>same setting as PlanTrim&rsquo;s Margin</b>, not a separate one &mdash;
-          change it in either tool and both remember it, so a project you prepare here is
-          cropped the way you set it there.
-        </p>
-      </div>
+        <div class="pb-grid2">
+          <button type="button" class="btn btn-sec" id="prepTrimSuggest" data-action="call" data-fn="prepTrimSuggest"
+                  title="Compare the sheets and propose a box on each floor. It lands on the plan to check; nothing is written.">Suggest a box</button>
+          <button type="button" class="btn btn-sec" id="prepTrimDraw" data-action="call" data-fn="prepTrimDraw"
+                  title="Start a box from what automatic would keep, with handles to drag. Or drag out a new one on the plan.">Draw my own</button>
+          <button type="button" class="btn btn-sec" id="prepTrimAll" data-action="call" data-fn="prepTrimApplyAll"
+                  title="Copy this floor's box to every other floor of the same sheet size">Apply to all floors</button>
+          <button type="button" class="btn btn-sec" id="prepTrimAuto" data-action="call" data-fn="prepTrimAuto"
+                  title="Take this floor's box away and let the drawing be found automatically">Back to automatic</button>
+        </div>
+        <p class="pb-hint" id="prepTrimHint"></p>
+        <div class="ptb-evidence" id="prepTrimEvidence" hidden></div>
+        <p class="pb-note">Boxes you draw here are the same ones PlanTrim remembers for this
+          project. Draw in either tool and both use them.</p>
+        <div class="pb-subhead">All floors</div>
+        <div class="pb-list" id="prepTrimFloors"></div>
+        <p class="pb-hint">The margin is measured on the plan&rsquo;s own scale, so it is the same
+          real distance on every sheet, and it is the same setting as PlanTrim&rsquo;s Margin.
+          A margin never invents paper: asking for more than the sheet has keeps the whole
+          sheet. Each floor says how much drawing it carries beyond the building.</p>
+      </section>
 
-      <label class="prep-toggle">
-        <input type="checkbox" id="prepStep-areas" checked data-action-change="call" data-fn="prepSyncStepUi">
-        <span class="prep-toggle-body">
-          <span class="prep-toggle-name">Put a requirement area on every floor</span>
-          <span class="prep-toggle-why">From a capacity template and a headcount. A floor that already
-            has devices is kept as it is unless you choose otherwise below. <span id="prepNote-areas"></span></span>
-        </span>
-      </label>
-      <div class="prep-opts" id="prepAreaOpts">
-        <div class="prep-row">
-          <label for="prepCapTpl">Template</label>
-          <select id="prepCapTpl" class="prep-input prep-input--sel" data-action-change="call" data-fn="prepSyncStepUi"></select>
-          <label for="prepOccupants">each floor for</label>
-          <input type="number" id="prepOccupants" class="prep-input prep-input--num" min="1" step="1"
-                 value="200" data-action-change="call" data-fn="prepSyncStepUi">
-          <label for="prepOccupants">people</label>
+      <section class="pb-section" id="prepPanel-areas" hidden>
+        <h2 class="pb-title">Requirement areas</h2>
+        <div class="pb-field" id="prepAreaOpts">
+          <label for="prepCapTpl">Capacity template</label>
+          <select id="prepCapTpl" class="prep-input" data-action-change="call" data-fn="prepSyncStepUi"></select>
         </div>
-        <p class="prep-hint">
-          Floors rarely hold the same number of people. Each floor in the preview has its own
-          <b>People on this floor</b> box: leave it blank to use the number above, type a number
-          to override it, or type 0 to leave that floor alone.
-        </p>
-        <div class="prep-row">
+        <div class="pb-grid2">
+          <button type="button" class="btn btn-sec" data-action="call" data-fn="prepCaptureOpen"
+                  title="Read the device counts out of a finished project and save them as a template">Capture from a project&hellip;</button>
+          <a class="btn btn-sec" href="/capacity" target="_blank" rel="noopener"
+             title="Opens Capacity in a new tab. Prep picks up any change when you come back.">Manage templates</a>
+        </div>
+        <input type="file" id="prepCaptureInput" accept=".esx" hidden>
+        <div class="pb-field">
+          <label for="prepOccupants">People on each floor, unless set below</label>
+          <input type="number" id="prepOccupants" class="prep-input" min="1" step="1"
+                 value="200" data-action-change="call" data-fn="prepSyncStepUi">
+        </div>
+        <div class="pb-field">
           <label for="prepExisting">Floors that already have devices</label>
-          <select id="prepExisting" class="prep-input prep-input--sel" data-action-change="call" data-fn="prepExistingAll">
+          <select id="prepExisting" class="prep-input" data-action-change="call" data-fn="prepExistingAll">
             <option value="keep">Keep them as they are</option>
             <option value="devices">Replace device counts, keep the area outline</option>
             <option value="reshape">Replace device counts and redraw the area</option>
           </select>
         </div>
-        <p class="prep-hint">
-          Starts on the default saved in <a href="/settings#sec-capacity">Settings &rarr; Capacity</a>,
-          the same one Capacity uses. Replacing sets a floor to the new number and never adds to
-          what was there; any second capacity area on that floor has its devices cleared.
-        </p>
-        <label class="prep-row" style="margin-bottom:0">
+        <label class="pb-check">
           <input type="checkbox" id="prepRetighten" checked data-action-change="call" data-fn="prepSyncStepUi">
           <span>Re-measure areas that still cover the whole plan</span>
         </label>
-        <p class="prep-hint">
-          The first pass runs before there are any walls to measure, so the area covers the
-          whole sheet. Once you have drawn walls, running Prep again tightens it to them.
-          Only an area that is still exactly the whole plan is touched &mdash; a polygon you
-          moved, redrew or cut around an atrium is left alone.
-        </p>
-      </div>
+        <div class="pb-subhead">Per floor</div>
+        <div class="pb-list" id="prepAreaFloors"></div>
+        <p class="pb-hint">Leave a floor&rsquo;s box blank to use the number above, or type 0 to
+          leave that floor alone. The choice for floors with devices starts on the default in
+          <a href="/settings#sec-capacity">Settings &rarr; Capacity</a>. Replacing sets a floor to
+          the new number and never adds to what was there. Only an area that still covers the
+          whole plan is re-measured; one you drew or moved is left alone.</p>
+      </section>
 
-      <label class="prep-toggle">
-        <input type="checkbox" id="prepStep-walls" checked data-action-change="call" data-fn="prepSyncStepUi">
-        <span class="prep-toggle-body">
-          <span class="prep-toggle-name">Load the wall types</span>
-          <span class="prep-toggle-why">Applies a Quick Walls template the way Quick Walls does: adds the
-            types the project lacks and sets the ones it has to the template&rsquo;s colour, number key
-            and attenuation. Walls already drawn stay on their types. <span id="prepNote-walls"></span></span>
-        </span>
-      </label>
-      <div class="prep-opts" id="prepWallOpts">
-        <div class="prep-row" style="margin-bottom:0">
-          <label for="prepWallTpl">Template</label>
-          <select id="prepWallTpl" class="prep-input prep-input--sel" data-action-change="call" data-fn="prepSyncStepUi"></select>
+      <section class="pb-section" id="prepPanel-walls" hidden>
+        <h2 class="pb-title">Wall types</h2>
+        <div class="pb-field" id="prepWallOpts">
+          <label for="prepWallTpl">Wall template</label>
+          <select id="prepWallTpl" class="prep-input" data-action-change="call" data-fn="prepSyncStepUi"></select>
         </div>
-      </div>
+        <div class="pb-list" id="prepWallList"></div>
+        <p class="pb-hint">Applied the way Quick Walls applies it: types the project lacks are
+          added, types it has are set to the template&rsquo;s colour, number key and attenuation,
+          and walls already drawn stay on their types. To change the template itself, edit it in
+          <a href="/walls" target="_blank" rel="noopener">Quick Walls</a>; Prep picks up the change
+          when you come back.</p>
+      </section>
 
-      <p class="prep-order">
-        These always run in the order trim &rarr; areas &rarr; wall types, whichever you pick.
-        A requirement area counts as something that has to stay on the plan, so an area put in
-        before the trim holds the crop open &mdash; and the trim then reports that there was
-        nothing to crop, which looks exactly like success.
-      </p>
+      <section class="pb-section" id="prepPanel-swap" hidden>
+        <h2 class="pb-title">Wall swap</h2>
+        <div class="pb-list" id="prepSwapInfo"></div>
+      </section>
+
+      <div id="prepPreview" class="pb-status"></div>
+    </aside>
+  </div>
+
+  <div class="pb-result" id="prepResult"></div>
+
+  <footer class="pb-footer">
+    <div class="pb-willwrite" id="prepGoNote"></div>
+    <button class="btn btn-primary pb-prepare" id="prepGoBtn" data-action="call" data-fn="prepRun" disabled>
+      Prepare
+    </button>
+  </footer>
+</div>
+
+<div class="modal-overlay pb-modal" id="prepCaptureModal" data-action="backdrop-call" data-fn="prepCaptureClose">
+  <div class="modal pb-modal-box" role="dialog" aria-modal="true" aria-labelledby="prepCaptureTitle">
+    <h2 class="pb-title" id="prepCaptureTitle">Capture a capacity template</h2>
+    <div id="prepCaptureBody"></div>
+    <div class="pb-field">
+      <label for="prepCaptureName">Template name</label>
+      <input type="text" id="prepCaptureName" class="prep-input" maxlength="120">
     </div>
-
-    <div class="prep-card">
-      <div class="prep-step">2 &mdash; What that would do</div>
-      <div class="prep-map" id="prepMap" hidden>
-        <p class="ptb-intro">
-          The same view as PlanTrim: the shaded paper is cut away, the dashed line is what is
-          kept. Pick a floor to see its crop. It redraws when you change the margin.
-          Scroll to zoom and drag to move the plan; <b>Fit</b> shows the whole sheet again.
-        </p>
-        <div class="ptb-strip" id="prepMapStrip"></div>
-        <div class="prep-map-tools">
-          <button type="button" class="btn btn-sec" data-action="call" data-fn="prepMapFit"
-                  title="Show the whole sheet again">Fit</button>
-        </div>
-        <div class="ptb-stage" id="prepMapStage">
-          <canvas id="prepMapCanvas"></canvas>
-          <div class="ptb-empty" id="prepMapEmpty">Loading the floor plan&hellip;</div>
-        </div>
-        <div class="ptb-hint" id="prepMapCaption"></div>
-      </div>
-      <div id="prepPreview"><div class="prep-empty">Reading the project…</div></div>
-
-      <div class="prep-row prep-go">
-        <button class="btn btn-primary" id="prepGoBtn" data-action="call" data-fn="prepRun" disabled>
-          Prepare and download
-        </button>
-        <span class="prep-hint" id="prepGoNote"></span>
-      </div>
-      <div id="prepResult"></div>
+    <div class="pb-field">
+      <label for="prepCapturePeople">People that project was designed for</label>
+      <input type="number" id="prepCapturePeople" class="prep-input" min="1" step="1" value="200"
+             data-action-change="call" data-fn="prepCaptureDerive">
     </div>
-
-    <p class="prep-hint text-center">
-      Your project file is never written to. Preparing builds a new copy, so keeping it is
-      your decision. Opened from disk, that copy is written beside the original and nothing
-      is uploaded &mdash; which on a large project is the difference between a preview that
-      keeps up and one that does not.
-    </p>
+    <div id="prepCaptureDerived"></div>
+    <div class="pb-modal-actions">
+      <button type="button" class="btn btn-sec" data-action="call" data-fn="prepCaptureClose">Cancel</button>
+      <button type="button" class="btn btn-primary" id="prepCaptureSave" data-action="call" data-fn="prepCaptureSave" disabled>Save and use it</button>
+    </div>
   </div>
 </div>
 

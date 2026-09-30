@@ -130,6 +130,42 @@ class PrepExistingDevicesTests(unittest.TestCase):
         self.assertEqual(f["existingChoice"], "reshape")
 
 
+class TheOutlineIsWhatTheFloorEndsUpWith(unittest.TestCase):
+    """What Prep draws on the plan for each floor: the polygon already there
+    when it is kept, the computed rectangle when one is made or redrawn."""
+
+    setUp = PrepExistingDevicesTests.setUp
+    tearDown = PrepExistingDevicesTests.tearDown
+
+    def floors(self, **kw):
+        plan = cap.plan_application(self.two, self.tpl, 200, **kw)
+        self.assertTrue(plan["ok"], plan)
+        return {f["floorPlanId"]: f for f in plan["floors"]}
+
+    def test_a_kept_area_is_drawn_vertex_for_vertex(self):
+        f = self.floors(existing="keep")[FLOOR]
+        self.assertEqual(f["outline"], BIG)
+        self.assertFalse(f["outlineIsNew"])
+
+    def test_replacing_devices_keeps_the_outline(self):
+        f = self.floors(existing="devices")[FLOOR]
+        self.assertEqual(f["outline"], BIG)
+
+    def test_a_redraw_is_the_computed_rectangle(self):
+        f = self.floors(existing="reshape")[FLOOR]
+        self.assertEqual(f["outline"], f["polygon"])
+        self.assertTrue(f["outlineIsNew"])
+
+    def test_a_floor_with_no_area_gets_the_computed_one(self):
+        f = self.floors()[FLOOR_2]
+        self.assertEqual(f["outline"], f["polygon"])
+        self.assertTrue(f["outlineIsNew"])
+
+    def test_a_floor_left_alone_has_none(self):
+        f = self.floors(floor_occupants={FLOOR_2: 0})[FLOOR_2]
+        self.assertNotIn("outline", f)
+
+
 PAGE_HARNESS = DELEGATED_JS + r"""
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf8');
@@ -353,7 +389,7 @@ PER_FLOOR_HARNESS = PAGE_HARNESS.split("(async () => {")[0].replace(
   open('Invented.esx');
   for (let i = 0; i < 8; i++) await flush();
 
-  const html = el('prepPreview').innerHTML;
+  const html = el('prepAreaFloors').innerHTML;
   const tags = html.match(/<select[^>]*data-fn="prepFloorExisting"[^>]*>/g) || [];
   check('only the floor that already has devices gets a choice: ' + tags.length,
         tags.length === 1);

@@ -281,6 +281,87 @@ def _esx_bytes() -> bytes:
     return buf.getvalue()
 
 
+# The box editor on a real PlanView. The image renders at twice the plan's own
+# size (an SVG does that), so every box assertion also proves the scaling: a
+# drag of 100 canvas pixels is 50 plan units at a scale of 1.
+EDITOR = r"""
+let box = null, committed = [];
+const ed = WD.BoxEditor.create({
+  get: () => box, set: b => { box = b; }, commit: b => committed.push(b),
+  size: () => ({ w: 100, h: 50 }), proposed: () => null, enabled: () => true,
+});
+const pv = WD.PlanView.create({ canvas, overlay: ed.overlay,
+  onDown: ed.onDown, onMove: ed.onMove, onUp: ed.onUp });
+pv.setImage(img);
+pv.view.scale = 1; pv.view.x = 0; pv.view.y = 0;
+function drag(x0, y0, x1, y1) {
+  fire('canvas', 'mousedown', { clientX: x0, clientY: y0 });
+  fire('window', 'mousemove', { clientX: x1, clientY: y1 });
+  fire('window', 'mouseup', { clientX: x1, clientY: y1 });
+}
+"""
+
+
+@needs_node
+class TheBoxEditor(unittest.TestCase):
+
+    def test_a_drag_draws_a_box_in_plan_units(self):
+        out = node(EDITOR + "drag(20, 10, 120, 70); console.log(JSON.stringify([box, committed]));")
+        self.assertEqual(out, [[10, 5, 60, 35], [[10, 5, 60, 35]]])
+
+    def test_a_click_is_not_a_box(self):
+        out = node(EDITOR + "drag(20, 10, 22, 12); console.log(JSON.stringify([box, committed]));")
+        self.assertEqual(out, [None, [None]])
+
+    def test_a_corner_handle_resizes_and_nothing_else_moves(self):
+        out = node(EDITOR + "box = [10, 5, 60, 35]; drag(120, 70, 160, 90);"
+                            "console.log(JSON.stringify(box));")
+        self.assertEqual(out, [10, 5, 80, 45])
+
+    def test_a_drag_inside_moves_it_and_stops_at_the_edge_whole(self):
+        out = node(EDITOR + "box = [10, 5, 60, 35]; drag(80, 40, 380, 40);"
+                            "console.log(JSON.stringify(box));")
+        self.assertEqual(out, [50, 5, 100, 35], "moved to the edge, same size")
+
+    def test_a_drag_outside_starts_a_new_box(self):
+        out = node(EDITOR + "box = [10, 5, 20, 15]; drag(100, 60, 180, 90);"
+                            "console.log(JSON.stringify(box));")
+        self.assertEqual(out, [50, 30, 90, 45])
+
+    def test_a_view_can_pan_on_a_plain_drag_only_while_its_tool_is_off(self):
+        out = node(r"""
+let tool = true;
+const pv = WD.PlanView.create({ canvas, dragPans: () => !tool, onDown: () => true });
+pv.setImage(img);
+const x0 = pv.view.x;
+fire('canvas', 'mousedown', { clientX: 10, clientY: 10 });
+fire('window', 'mousemove', { clientX: 60, clientY: 10 });
+fire('window', 'mouseup', {});
+const withTool = pv.view.x - x0;
+tool = false;
+fire('canvas', 'mousedown', { clientX: 10, clientY: 10 });
+fire('window', 'mousemove', { clientX: 60, clientY: 10 });
+fire('window', 'mouseup', {});
+console.log(JSON.stringify([withTool, pv.view.x - x0]));
+""")
+        self.assertEqual(out, [0, 50])
+
+    def test_switched_off_it_takes_no_drag_and_the_view_pans(self):
+        out = node(r"""
+let box = null;
+const ed = WD.BoxEditor.create({ get: () => box, set: b => { box = b; }, commit() {},
+  size: () => ({ w: 100, h: 50 }), enabled: () => false });
+const pv = WD.PlanView.create({ canvas, overlay: ed.overlay, dragPans: false,
+  onDown: ed.onDown, onMove: ed.onMove, onUp: ed.onUp });
+pv.setImage(img);
+fire('canvas', 'mousedown', { clientX: 20, clientY: 10 });
+fire('window', 'mousemove', { clientX: 120, clientY: 70 });
+fire('window', 'mouseup', {});
+console.log(JSON.stringify(box));
+""")
+        self.assertIsNone(out)
+
+
 @needs_node
 class TheProjectFileListsItsFloors(unittest.TestCase):
 
@@ -344,14 +425,13 @@ const calls = [];
 const g = new Proxy({}, { get(t, k) { if (k in t) return t[k];
   return (...a) => calls.push([k, ...a]); }, set(t, k, v) { t[k] = v; return true; } });
 const window = { devicePixelRatio: 1 };
-var map = { floors: [{ id: 'f', action: 'trimmed', oldSize: [200, 100], newSize: [100, 50],
-                       offset: [50, 25] }], current: 'f' };
-eval(fn('function currentMapFloor() {'));
+const f = { id: 'f', action: 'trimmed', oldSize: [200, 100], newSize: [100, 50],
+            offset: [50, 25] };
 eval(fn('function mapKeptBox(f, iw, ih) {'));
-eval(fn('function drawKept(g, pv) {'));
+eval(fn('function drawKept(g, pv, f) {'));
 const pv = { img: { width: 400, height: 200 },
              toScreen: (x, y) => ({ x: x * 0.5 + 10, y: y * 0.5 + 20 }) };
-drawKept(g, pv);
+drawKept(g, pv, f);
 console.log(JSON.stringify(calls.filter(c => c[0] === 'strokeRect')));
 """)
         # The report box is in the plan's own 200x100 space; the image renders

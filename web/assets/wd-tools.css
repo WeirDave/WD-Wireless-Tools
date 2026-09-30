@@ -11080,6 +11080,119 @@ body.tool-prep .dropzone-logo { background-image: url(/assets/wd-wireless-tools-
 }
 
 
+/* Prep as one workbench: a rail of stages, the plan in the middle, the
+   current stage's settings on the right, and a footer that always shows what
+   Prepare will write. The editor is a 100vh column (.editor.active), so the
+   body takes what the header and footer leave and each column scrolls on its
+   own - the Prepare button never scrolls away. */
+body.tool-prep .editor.active { overflow: hidden; }
+.pb-body { flex: 1 1 auto; min-height: 0; display: flex; }
+.pb-rail {
+  width: 260px; flex-shrink: 0; overflow-y: auto; padding: 14px 12px;
+  border-right: 1px solid var(--border); background: var(--surface-raised);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.pb-rail-head {
+  font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px;
+  color: var(--text-3); padding: 0 6px 4px;
+}
+.pb-rail-foot { margin-top: auto; font-size: 11px; line-height: 1.55; color: var(--text-3); padding: 8px 6px 0; }
+.pb-stage {
+  display: flex; align-items: flex-start; gap: 8px; padding: 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+}
+.pb-stage.is-current { border-color: var(--lime); background: color-mix(in srgb, var(--lime) 12%, var(--bg)); }
+.pb-stage.is-off .pb-stage-name { color: var(--text-3); }
+.pb-stage--optional { border-style: dashed; background: transparent; }
+.pb-stage input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
+.pb-stage-open {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px;
+  background: none; border: none; padding: 0; margin: 0; text-align: left;
+  color: var(--text); font: inherit; cursor: pointer;
+}
+.pb-stage-name { font-size: 13px; font-weight: 600; }
+.pb-stage-status { font-size: 11.5px; line-height: 1.45; color: var(--text-2); }
+.pb-stage-status.is-off { color: var(--text-3); }
+.pb-stage-status.is-bad { color: var(--red, #e5534b); }
+.pb-stage-note:empty { display: none; }
+.pb-stage-note { font-size: 11px; color: var(--amber-dark, #b45309); }
+
+.pb-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; padding: 10px 12px; gap: 8px; }
+.pb-floorbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pb-floors { display: flex; gap: 6px; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+.pb-floor {
+  padding: 5px 11px; border-radius: 6px; border: 1px solid var(--border);
+  background: transparent; color: var(--text-2); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.pb-floor:hover { border-color: var(--lime); }
+.pb-floor.is-current { border-color: var(--lime); color: var(--text); background: color-mix(in srgb, var(--lime) 14%, transparent); }
+.pb-floor-state { font-size: 11px; opacity: 0.85; }
+.pb-floor.is-manual .pb-floor-state { color: var(--blue); opacity: 1; }
+.pb-floor.is-refused .pb-floor-state { color: var(--amber, #f0ad4e); opacity: 1; }
+.pb-view-tools { display: flex; align-items: center; gap: 6px; }
+.pb-zoom { min-width: 32px; padding-left: 8px; padding-right: 8px; }
+.pb-zoom-level { font-size: 12px; font-family: var(--mono); color: var(--text-3); min-width: 44px; text-align: center; }
+.ptb-stage.pb-canvas { flex: 1 1 auto; height: auto; min-height: 260px; background: #0b0c0e; }
+.pb-canvas-hint { font-size: 12px; color: var(--text-3); min-height: 1.3em; }
+
+.pb-panel {
+  width: 360px; flex-shrink: 0; overflow-y: auto; padding: 16px 18px 24px;
+  border-left: 1px solid var(--border); background: var(--surface-raised);
+}
+.pb-section { display: flex; flex-direction: column; gap: 12px; }
+.pb-section[hidden] { display: none; }
+.pb-title { font-size: 15px; font-weight: 700; margin: 0; color: var(--text); }
+.pb-lead { font-size: 12.5px; line-height: 1.5; color: var(--text-2); margin: 0; }
+.pb-field { display: flex; flex-direction: column; gap: 5px; }
+.pb-field label { font-size: 12.5px; color: var(--text-2); }
+.pb-field .prep-input { width: 100%; box-sizing: border-box; }
+.pb-inline { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.pb-inline .prep-input--num { width: 92px; }
+.pb-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pb-grid2 .btn {
+  width: 100%; justify-content: center; text-align: center; box-sizing: border-box;
+  padding-left: 8px; padding-right: 8px; font-size: 12.5px; text-decoration: none; white-space: normal;
+}
+.pb-check { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--text-2); }
+.pb-hint { font-size: 11.5px; line-height: 1.55; color: var(--text-3); margin: 0; }
+.pb-note {
+  font-size: 12px; line-height: 1.5; color: var(--text-2); margin: 0;
+  padding: 9px 11px; border: 1px solid var(--border); border-radius: 8px;
+}
+.pb-subhead { font-size: 12.5px; font-weight: 700; color: var(--text); margin-top: 2px; }
+.pb-list { display: flex; flex-direction: column; gap: 6px; }
+.pb-item {
+  font-size: 12px; line-height: 1.6; color: var(--text-2);
+  padding: 8px 10px; background: var(--bg); border-radius: 6px;
+}
+.pb-item b { color: var(--text); }
+.pb-item .prep-input--sel { min-width: 0; max-width: 100%; }
+.pb-status:empty { display: none; }
+.pb-status { margin-top: 12px; }
+
+.pb-result:empty { display: none; }
+.pb-result { padding: 0 16px; max-height: 30vh; overflow-y: auto; }
+.pb-result > div { margin: 8px 0; }
+.pb-footer {
+  flex-shrink: 0; display: flex; align-items: center; gap: 16px;
+  padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-raised);
+}
+.pb-willwrite { flex: 1 1 auto; font-size: 13px; line-height: 1.5; color: var(--text-2); }
+.pb-willwrite b { color: var(--text); }
+.pb-prepare { font-size: 15px; font-weight: 700; padding: 11px 30px; }
+.pb-modal-box { width: 460px; display: flex; flex-direction: column; gap: 12px; }
+.pb-modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* A narrow window stacks the three columns rather than squeezing the plan. */
+@media (max-width: 1100px) {
+  body.tool-prep .editor.active { overflow: auto; height: auto; min-height: 100vh; }
+  .pb-body { flex-direction: column; }
+  .pb-rail, .pb-panel { width: auto; border: none; border-bottom: 1px solid var(--border); }
+  .ptb-stage.pb-canvas { height: 60vh; flex: none; }
+  .pb-footer { position: sticky; bottom: 0; }
+}
+
+
 /* Quick Walls
    ---------------------------------------------------
    Moved out of walls.html. */

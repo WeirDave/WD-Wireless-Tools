@@ -55,7 +55,7 @@ def _write_all(data: dict) -> None:
         raise
 
 
-def _clean_boxes(boxes) -> dict:
+def clean_boxes(boxes) -> dict:
     """Keep only what looks like ``{floorId: [x0, y0, x1, y1]}``."""
     out = {}
     if not isinstance(boxes, dict):
@@ -75,7 +75,7 @@ def _clean_boxes(boxes) -> dict:
 def load(project_id: str) -> dict:
     if not project_id:
         return {}
-    return _clean_boxes(_load_all().get(project_id))
+    return clean_boxes(_load_all().get(project_id))
 
 
 def save(project_id: str, boxes) -> dict:
@@ -83,7 +83,7 @@ def save(project_id: str, boxes) -> dict:
     if not project_id:
         return {}
     data = _load_all()
-    cleaned = _clean_boxes(boxes)
+    cleaned = clean_boxes(boxes)
     if cleaned:
         data[project_id] = cleaned
     else:
@@ -103,3 +103,7 @@ def forget(project_id: str) -> None:
     data = _load_all()
     if data.pop(project_id, None) is not None:
         _write_all(data)
+
+
+# The name the tests and older callers know it by.
+_clean_boxes = clean_boxes

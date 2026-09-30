@@ -196,19 +196,32 @@ class UntouchedFormChangesNothing(unittest.TestCase):
             return {n: z.read(n) for n in sorted(z.namelist())}
 
 
-class SavedBoxesAreOfferedNotAssumed(unittest.TestCase):
-    """Drawing a rectangle cannot be a batch control; a rectangle already drawn
-    is just data, and reusing it saves him drawing it twice. It is opt-in, so
-    the default pass is unchanged."""
+class ABoxIsTheDecisionOnTheCanvas(unittest.TestCase):
+    """The Trim stage is PlanTrim's box editor, and a box on the plan is what
+    the trim crops to. The boxes are PlanTrim's own, saved under the project's
+    id, so one drawn in either tool is used by both - and it is on the plan and
+    in the floor strip as "Your box", so it is never used unseen. With no box
+    anywhere the pass is exactly the automatic one."""
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="wd-prep-boxes-"))
         self.addCleanup(shutil.rmtree, self.tmp, True)
         self.src = make_esx(self.tmp / "in.esx")
         self.client = app.test_client()
+        from tools import plantrim_store
+        self.store = plantrim_store
+        self.addCleanup(plantrim_store.forget, "prj-0001")
 
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
+    def plan(self, query):
+        r = self.client.post("/api/prep/plan?name=x.esx&steps=trim&margin=tight" + query,
+                             data=self.src.read_bytes(),
+                             headers={API_REQUEST_HEADER: "1"})
+        body = r.get_json()
+        self.assertTrue(body.get("ok"), body)
+        return body
+
+    def floor(self, body):
+        return body["step"]["trim"]["floors"][0]
 
     def test_a_saved_box_crops_to_itself_rather_than_to_the_ink(self):
         auto = self.tmp / "auto.esx"
@@ -222,47 +235,204 @@ class SavedBoxesAreOfferedNotAssumed(unittest.TestCase):
                          (800.0, 620.0))
         self.assertNotEqual(plan_of(auto)["width"], plan_of(boxed)["width"])
 
-    def test_the_page_only_offers_them_when_there_are_some(self):
-        js = PREP_JS.read_text(encoding="utf-8")
-        self.assertIn("savedBoxes", js)
-        body = js[js.index("function syncSavedBoxes"):]
-        body = body[:body.index("function renderPreview")]
-        self.assertIn("row.hidden = !n", body,
-                      "the offer must not appear when there is nothing to offer")
+    def test_the_box_the_page_sends_is_the_crop(self):
+        box = [100, 80, 900, 700]
+        f = self.floor(self.plan("&boxes=" + json.dumps({FLOOR: box})))
+        self.assertEqual(f["source"], "manual")
+        self.assertEqual(f["offset"], [100, 80])
+        self.assertEqual(f["newSize"], [800, 620])
 
-    def test_they_are_not_used_unless_asked_for(self):
-        js = PREP_JS.read_text(encoding="utf-8")
-        self.assertIn("useBoxes=1", js)
-        html = PREP_HTML.read_text(encoding="utf-8")
-        row = html[html.index('id="prepUseBoxesRow"'):]
-        self.assertIn("hidden", row[:200], "the row ships hidden")
-        checkbox = html[html.index('id="prepUseBoxes"'):]
-        self.assertNotIn("checked", checkbox[:120], "and unticked")
+    def test_the_saved_box_is_used_until_the_page_has_its_own(self):
+        self.store.save("prj-0001", {FLOOR: [100, 80, 900, 700]})
+        first = self.plan("&useBoxes=1")
+        self.assertEqual(self.floor(first)["source"], "manual")
+        # The facts that let the page show it and save changes to it.
+        self.assertEqual(first["project"]["projectId"], "prj-0001")
+        self.assertEqual(first["project"]["boxes"], {FLOOR: [100.0, 80.0, 900.0, 700.0]})
+        self.assertEqual(first["project"]["floors"],
+                         [{"id": FLOOR, "name": "Level 1", "w": W, "h": H}])
+
+    def test_back_to_automatic_is_an_empty_set_and_beats_the_saved_one(self):
+        self.store.save("prj-0001", {FLOOR: [100, 80, 900, 700]})
+        f = self.floor(self.plan("&useBoxes=1&boxes=%7B%7D"))
+        self.assertNotEqual(f.get("source"), "manual")
+
+    def test_nothing_asked_for_is_automatic_whatever_is_saved(self):
+        self.store.save("prj-0001", {FLOOR: [100, 80, 900, 700]})
+        f = self.floor(self.plan(""))
+        self.assertNotEqual(f.get("source"), "manual")
+
+    def test_nonsense_boxes_are_automatic_rather_than_an_error(self):
+        f = self.floor(self.plan("&boxes=not-json"))
+        self.assertNotEqual(f.get("source"), "manual")
+
+    def test_only_four_numbers_per_floor_survive_the_store(self):
+        self.assertEqual(
+            self.store.clean_boxes({FLOOR: [1, "2", 3.5, 4], "short": [1, 2, 3],
+                                    "words": ["a", 1, 2, 3], 7: [1, 2, 3, 4]}),
+            {FLOOR: [1.0, 2.0, 3.5, 4.0]})
+        self.assertEqual(self.store.clean_boxes("not a map"), {})
+
+    def test_a_failed_comparison_does_not_echo_the_exception(self):
+        """What went wrong is logged; the page gets a sentence, not a path."""
+        from tools import plan_detect
+        real = plan_detect.suggest
+
+        def boom(floors):
+            raise OSError("C:/Users/someone/secret/project.esx is locked")
+        plan_detect.suggest = boom
+        try:
+            r = self.client.post("/api/prep/suggest?name=x.esx", data=self.src.read_bytes(),
+                                 headers={API_REQUEST_HEADER: "1"})
+        finally:
+            plan_detect.suggest = real
+        body = r.get_json()
+        self.assertFalse(body["ok"])
+        self.assertNotIn("secret", json.dumps(body))
+        self.assertNotIn("OSError", json.dumps(body))
+
+    def test_suggest_answers_for_a_dropped_project(self):
+        r = self.client.post("/api/prep/suggest?name=x.esx", data=self.src.read_bytes(),
+                             headers={API_REQUEST_HEADER: "1"})
+        body = r.get_json()
+        self.assertTrue(body["ok"], body)
+        self.assertIsInstance(body["suggestions"], list)
+
+
+BOX_HARNESS = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const els = {};
+function el(id) {
+  if (!els[id]) els[id] = {
+    id, innerHTML: '', textContent: '', value: '', checked: false, hidden: false,
+    disabled: false, style: {}, files: [], title: '', options: [], children: [],
+    classList: { add() {}, remove() {}, toggle() {} },
+    listeners: {}, addEventListener(t, f) { this.listeners[t] = f; }, click() {},
+  };
+  return els[id];
+}
+el('prepStep-trim').checked = true;
+el('prepMargin').value = 'normal';
+const docListeners = {};
+global.document = { getElementById: el, addEventListener(t, f) { docListeners[t] = f; },
+                    querySelector: () => null, visibilityState: 'visible' };
+global.window = global;
+const saves = [];
+global.WD = {
+  esc: s => String(s), escAttr: s => String(s).replace(/"/g, '&quot;'),
+  toast() {}, applyVersions() {}, savedWallTemplateName: () => Promise.resolve(''),
+  wallTemplateOrder: l => l, chooseWallTemplate: () => null, wallTemplateLabel: t => t.name,
+  api: (action, body) => { if (action === 'plantrim/boxes_save') saves.push(body);
+                           return Promise.resolve({ ok: true, settings: {} }); },
+};
+const calls = [];
+const FLOORS = [{ id: 'f1', name: 'Ground', w: 800, h: 600 },
+                { id: 'f2', name: 'Level 2', w: 800, h: 600 },
+                { id: 'f3', name: 'Roof', w: 400, h: 300 }];
+global.fetch = (url) => {
+  calls.push(url);
+  const body = url.indexOf('/prep/plan') >= 0
+    ? { ok: true, steps: ['trim'], project: { projectId: 'prj-9', floors: FLOORS,
+          boxes: { f1: [10, 20, 700, 500] }, wallCount: 0 },
+        step: { trim: { trimmedCount: 1, floorCount: 3, floors: [
+          { id: 'f1', name: 'Ground', action: 'trimmed', source: 'manual', areaSavedPct: 30,
+            oldSize: [800, 600], newSize: [690, 480], offset: [10, 20] },
+          { id: 'f2', name: 'Level 2', action: 'trimmed', areaSavedPct: 20,
+            oldSize: [800, 600], newSize: [600, 500], offset: [100, 50] },
+          { id: 'f3', name: 'Roof', action: 'skipped', reason: 'tight' }] } } }
+    : url.indexOf('/prep/templates') >= 0 ? { ok: true, wall: [], capacity: [] }
+    : { ok: true };
+  return Promise.resolve({ json: () => Promise.resolve(body), ok: true,
+                           headers: { get: () => null } });
+};
+const flush = () => new Promise(r => setTimeout(r, 0));
+const failures = [];
+function check(what, cond) { if (!cond) failures.push(what); }
+function param(url, name) {
+  const m = new RegExp('[?&]' + name + '=([^&]*)').exec(url || '');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function last() { return calls.filter(u => u.indexOf('/prep/plan') >= 0).pop(); }
+(async () => {
+  eval(src);
+  docListeners.DOMContentLoaded();
+  for (let i = 0; i < 5; i++) await flush();
+  el('fileInput').listeners.change({ target: { files: [{ name: 'Invented.esx',
+    arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)) }], value: '' } });
+  for (let i = 0; i < 8; i++) await flush();
+
+  check('the first preview asks for the saved boxes', param(last(), 'useBoxes') === '1');
+  check('it opens on the floor being cropped', /Your box/.test(el('prepMapStrip').innerHTML));
+  check('the rail counts his box: ' + el('prepStatus-trim').textContent,
+        /1 your box/.test(el('prepStatus-trim').textContent));
+
+  window.prepSyncStepUi();
+  for (let i = 0; i < 5; i++) await flush();
+  check('after that the page sends its own set',
+        JSON.stringify(JSON.parse(param(last(), 'boxes'))) === JSON.stringify({ f1: [10, 20, 700, 500] }));
+
+  window.prepMapSelect('f1');
+  window.prepTrimApplyAll();
+  for (let i = 0; i < 5; i++) await flush();
+  const all = JSON.parse(param(last(), 'boxes'));
+  check('apply to all copies to the same-size floor only: ' + JSON.stringify(all),
+        all.f2 && all.f2.join() === '10,20,700,500' && !all.f3);
+  check('and saves them where PlanTrim reads them',
+        saves.length && saves[saves.length - 1].projectId === 'prj-9'
+        && saves[saves.length - 1].boxes.f2);
+
+  window.prepTrimAuto();
+  for (let i = 0; i < 5; i++) await flush();
+  const after = JSON.parse(param(last(), 'boxes'));
+  check('back to automatic takes this floor out: ' + JSON.stringify(after),
+        !after.f1 && after.f2);
+
+  window.prepMapSelect('f2');
+  window.prepTrimAuto();
+  window.prepTrimDraw();
+  for (let i = 0; i < 5; i++) await flush();
+  const drawn = JSON.parse(param(last(), 'boxes'));
+  check('draw my own starts from what automatic keeps: ' + JSON.stringify(drawn.f2),
+        drawn.f2 && drawn.f2.join() === '100,50,700,550');
+
+  window.prepRun();
+  for (let i = 0; i < 5; i++) await flush();
+  const run = calls.filter(u => u.indexOf('/prep/run') >= 0).pop();
+  check('prepare crops to the same boxes the preview showed',
+        param(run, 'boxes') === param(last(), 'boxes'));
+
+  if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
+  process.exit(0);
+})().catch(e => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class TheTrimStageDrivesTheBoxes(unittest.TestCase):
+    """The page's handlers, run against a stubbed server: what each one sends
+    is what the trim will crop to."""
+
+    def test_the_trim_controls_reach_the_server(self):
+        r = subprocess.run(["node", "-e", BOX_HARNESS, str(PREP_JS)],
+                           capture_output=True, text=True, encoding="utf-8", timeout=120)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).strip())
 
 
 class TheOptionsBelongToTheStep(unittest.TestCase):
-    """His ask was about the layout: "select options right below the what to
-    do". The block sits under the trim step and appears with it."""
+    """The margin lives in the Trim stage's panel, once."""
 
-    def test_the_block_sits_under_the_trim_step(self):
+    def test_the_margin_is_in_the_trim_panel(self):
         html = PREP_HTML.read_text(encoding="utf-8")
-        trim_step = html.index('id="prepStep-trim"')
-        opts = html.index('id="prepTrimOpts"')
-        areas_step = html.index('id="prepStep-areas"')
-        self.assertLess(trim_step, opts, "the options come after their step")
-        self.assertLess(opts, areas_step, "and before the next one")
-
-    def test_it_is_styled_as_the_other_steps_options_are(self):
-        html = PREP_HTML.read_text(encoding="utf-8")
-        block = html[html.index('id="prepTrimOpts"') - 40:]
-        self.assertIn('class="prep-opts"', block[:80])
-
-    def test_it_is_shown_and_hidden_with_its_step(self):
-        js = PREP_JS.read_text(encoding="utf-8")
-        self.assertIn("$('prepTrimOpts').hidden = !$('prepStep-trim').checked;", js)
+        panel = html.index('id="prepPanel-trim"')
+        margin = html.index('id="prepMargin"')
+        areas = html.index('id="prepPanel-areas"')
+        self.assertLess(panel, margin)
+        self.assertLess(margin, areas)
 
     def test_there_is_no_second_place_to_set_this(self):
-        """Not a tab, not a gear, not a modal - one place, under the step."""
+        """Not a tab, not a gear, not a modal - one place, in the stage."""
         html = PREP_HTML.read_text(encoding="utf-8")
         self.assertEqual(html.count('id="prepMargin"'), 1)
 
