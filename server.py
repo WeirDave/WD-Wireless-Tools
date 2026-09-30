@@ -1174,6 +1174,7 @@ def api_prep(action):
                       template=capacity_tpl, occupants=request.args.get("occupants"),
                       floor_occupants=request.args.get("floorOccupants"),
                       existing=request.args.get("existing"),
+                      floor_existing=request.args.get("floorExisting"),
                       margin=margin, retighten=retighten, boxes=boxes)
 
         if action == "plan":

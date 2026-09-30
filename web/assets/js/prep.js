@@ -32,6 +32,7 @@
   var capTemplates = [];
   var previewSeq = 0;        // so a slow preview cannot land after a newer one
   var floorOcc = {};         // floorPlanId -> headcount typed for that floor
+  var floorExist = {};       // floorPlanId -> keep / devices / reshape for that floor
   // Settings → Capacity → Floors that already have devices. Read only: the
   // dropdown here changes one run and never writes back. A failed read or an
   // unknown value leaves "keep", which changes nothing he set.
@@ -164,6 +165,7 @@
   function openEditor(name) {
     fileName = name;
     floorOcc = {};             // floors belong to one project
+    floorExist = {};
     if ($('prepExisting')) $('prepExisting').value = savedExisting;
     $('dropzone').style.display = 'none';
     $('editor').classList.add('active');
@@ -275,6 +277,9 @@
         + '&existing=' + encodeURIComponent(
             EXISTING_CHOICES.indexOf($('prepExisting').value) >= 0
               ? $('prepExisting').value : 'keep');
+      if (Object.keys(floorExist).length) {
+        q += '&floorExisting=' + encodeURIComponent(JSON.stringify(floorExist));
+      }
       if (Object.keys(floorOcc).length) {
         q += '&floorOccupants=' + encodeURIComponent(JSON.stringify(floorOcc));
       }
@@ -290,6 +295,40 @@
     else floorOcc[floorId] = Number(v);
     preview();
   };
+
+  // The dropdown in step 1 covers every floor that has devices; choosing it
+  // again resets any floor set on its own, the same as Capacity.
+  window.prepExistingAll = function () {
+    floorExist = {};
+    preview();
+  };
+
+  window.prepFloorExisting = function (floorId, value) {
+    if (EXISTING_CHOICES.indexOf(value) < 0) return;
+    if (value === $('prepExisting').value) delete floorExist[floorId];
+    else floorExist[floorId] = value;
+    preview();
+  };
+
+  // Only a floor that already carries devices has anything to choose.
+  function floorExistingHtml(f, i) {
+    if (f.mode !== 'replace') return '';
+    var id = 'prepFloorExist' + i;
+    var cur = f.existingChoice || 'keep';
+    var opts = [['keep', 'Keep them'], ['devices', 'Replace devices, keep outline'],
+                ['reshape', 'Replace devices, redraw outline']];
+    return '<br><span class="prep-floor-people">'
+      + '<label for="' + id + '">This floor</label> '
+      + '<select id="' + id + '" class="prep-input prep-input--sel" data-action-change="call"'
+      + ' data-fn="prepFloorExisting" data-arg="' + escAttr(f.floorPlanId) + '"'
+      + ' data-arg-value="1">'
+      + opts.map(function (o) {
+          return '<option value="' + o[0] + '"' + (o[0] === cur ? ' selected' : '') + '>'
+            + o[1] + '</option>';
+        }).join('')
+      + '</select> <span class="prep-sub">already has ' + (f.existingDevices || 0) + ' '
+      + plural(f.existingDevices || 0, 'device') + '</span></span>';
+  }
 
   function floorPeopleHtml(f, i) {
     var id = 'prepFloorOcc' + i;
@@ -449,7 +488,7 @@
               + esc(f.basis) + ')</span>'
             : '';
           return '<b>' + esc(f.floorName || f.floorPlanId) + '</b> — ' + esc(f.action) + size
-            + '<br>' + floorPeopleHtml(f, i);
+            + '<br>' + floorPeopleHtml(f, i) + floorExistingHtml(f, i);
         });
         rows.push('<span class="prep-sub">' + (a.willWrite
           ? (a.devicesWritten != null ? a.devicesWritten : a.totalDevices) + ' devices for '
