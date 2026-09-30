@@ -1515,7 +1515,9 @@ not happen.
 
 ### Print cleanly
 
-Press **Print / Save PDF** on the Review step. The print stylesheet already
+Press **Print / Save PDF** on the Review step. It sits above the first sheet;
+once that has scrolled away, a second **Print / Save PDF** and a **Back to top**
+button float in the bottom-right corner. The print stylesheet already
 forces the four things people usually have to fix by hand:
 
 - backgrounds and colours on, so your logo and the marker cones actually print;
