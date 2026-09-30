@@ -822,9 +822,10 @@ target server-side. `tests/test_the_dev_actions_that_write_need_the_server.py`.
   list is cleared.
 * **Preview is lime and says it changes nothing; the live control is pink,
   `disabled` until its own preview succeeds, and names the count.**
-* A long run shows progress by sending an `opId` and polling
-  `/api/cloud/progress` every 250 ms (`startPolling` in `wd-dev-actions.js`).
-  A finished run says "Finished" in words; a preview never does.
+* A future action that runs for minutes needs visible progress and a
+  finished state that says "Finished" in words. The removed realign action
+  did this by sending an `opId` and polling `/api/cloud/progress` every
+  250 ms; its code is in git history before v2.193.0.
 
 **Testing it**: `tests/test_dev_toolbar_browser.py` drives it in all three
 browsers over plain `http.server` on `web/`, with `WD.api` stubbed.

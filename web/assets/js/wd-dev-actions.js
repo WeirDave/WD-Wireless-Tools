@@ -184,54 +184,6 @@
     if (btn) { btn.textContent = labelFor(last.result); delete btn.dataset.wasLabel; }
   }
 
-  /* ── progress, while it runs ─────────────────────────────────
-     Kept for any action that runs for minutes. No current button uses it;
-     the one that did (the one-off realign, removed in v2.193.0) ran ninety
-     cloud downloads behind a button reading "Aligning..." until this was
-     added. A server operation reports through `progress_cb`, which
-     `server.py` exposes at `/api/cloud/progress` keyed by an `opId`.
-
-     Same shape Cloud Manager uses: make an id, send it, poll every 250 ms,
-     stop when the call returns. */
-  var poller = null;
-
-  function stopPolling() {
-    if (poller) { clearInterval(poller); poller = null; }
-  }
-
-  function progressHtml(pct, message) {
-    return '' +
-      '<div class="progress-wrap">' +
-        '<div class="progress-track">' +
-          '<div class="progress-fill' + (pct == null ? ' indeterminate' : '') +
-               '"' + (pct == null ? '' : ' style="width:' + pct + '%"') +
-          '></div>' +
-        '</div>' +
-        '<div class="progress-label">' +
-          '<span class="stage">' + esc(message || 'Working…') + '</span>' +
-          '<span class="pct">' + (pct == null ? '' : pct + '%') + '</span>' +
-        '</div>' +
-      '</div>';
-  }
-
-  function startPolling(opId, lead) {
-    stopPolling();
-    Dev.setPanelOutput('<p class="dev-result-lead">' + esc(lead) + '</p>' +
-                       progressHtml(null, 'Starting…'));
-    poller = setInterval(function () {
-      fetch('/api/cloud/progress?id=' + encodeURIComponent(opId))
-        .then(function (r) { return r.json(); })
-        .then(function (p) {
-          if (!poller || !p) return;
-          var pct = (typeof p.current === 'number' && p.total)
-            ? Math.round(100 * p.current / p.total) : null;
-          Dev.setPanelOutput('<p class="dev-result-lead">' + esc(lead) +
-                             '</p>' + progressHtml(pct, p.message));
-        })
-        .catch(function () { /* a dropped poll is not a failed operation */ });
-    }, 250);
-  }
-
   /* ── Clean up leftover files ─────────────────────────────────
      "how do I know, once we've done all the work, when to be able to clean
      stuff up?" Server side is `tools/housekeeping.py`. */

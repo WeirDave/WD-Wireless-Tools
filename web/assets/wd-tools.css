@@ -10355,13 +10355,6 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
   font-size: 11.5px;
   word-break: break-word;
 }
-.dev-result-acts {
-  list-style: disc;
-  margin: 2px 0 0;
-  padding-left: 18px;
-  color: var(--lime);
-  font-size: 11.5px;
-}
 .dev-result-body code {
   background: var(--surface-2);
   border-radius: 3px;
@@ -10443,21 +10436,6 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 }
 .dev-panel-footer:empty { display: none; }
 
-/* "How will I know when it is done?" - the finished state answers it in
-   words, in lime, at the top of the report, rather than leaving him to infer
-   it from a progress bar having been replaced by a list. */
-.dev-result-done {
-  margin: 0 0 10px;
-  padding: 9px 12px;
-  border-left: 3px solid var(--lime);
-  background: var(--surface-2);
-  border-radius: 0 4px 4px 0;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text);
-}
-.dev-result-done strong { color: var(--lime); }
-
 /* When a remembered result is shown rather than a fresh one, say so. */
 .dev-panel-stamp {
   margin: 0 0 10px;
@@ -10518,11 +10496,6 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
   margin: 10px 0 4px;
   font-size: 12.5px;
   color: var(--text);
-}
-.dev-result-count {
-  color: var(--text-3);
-  font-size: 11.5px;
-  white-space: nowrap;
 }
 
 /* ===================================================================
