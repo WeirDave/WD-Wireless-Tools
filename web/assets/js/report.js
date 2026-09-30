@@ -943,7 +943,21 @@
       configureDirty = false;
       window.scrollTo({ top: 0, behavior: 'auto' });
     }
+    syncToTopButton();
   }
+
+  /* The review bar (Print, Back to configure) sits above the first sheet. Once
+     it has scrolled off-screen, a floating button takes you back to it. */
+  var TO_TOP_AFTER_PX = 400;
+  function syncToTopButton() {
+    var btn = document.getElementById('repToTop');
+    if (!btn) return;
+    btn.hidden = !(currentStage === 'review' && window.scrollY > TO_TOP_AFTER_PX);
+  }
+  window.scrollReportToTop = function () {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  window.addEventListener('scroll', syncToTopButton, { passive: true });
 
   function updateStepper() {
     var stepper = document.getElementById('stepper');

@@ -209,6 +209,10 @@
     <main class="report-canvas" id="reportCanvas">
       <div class="rep-empty">Report will render here.</div>
     </main>
+    <!-- Print lives in the bar above the first sheet, and a report runs to
+         dozens of sheets. Shown once that bar has scrolled away. -->
+    <button type="button" class="btn btn-blue rep-to-top noprint" id="repToTop" hidden
+            data-action="call" data-fn="scrollReportToTop" title="Back to the top, where Print is">&uarr; Back to top</button>
   </section>
 </div>
 

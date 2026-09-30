@@ -1515,7 +1515,9 @@ not happen.
 
 ### Print cleanly
 
-Press **Print / Save PDF** on the Review step. The print stylesheet already
+Press **Print / Save PDF** on the Review step. It sits above the first sheet;
+from further down a long report, the **Back to top** button in the bottom-right
+corner returns to it. The print stylesheet already
 forces the four things people usually have to fix by hand:
 
 - backgrounds and colours on, so your logo and the marker cones actually print;

@@ -5814,6 +5814,11 @@ body.tool-report {
 
 [data-theme="light"] .rep-review-bar { background: var(--head-bg); }
 
+.rep-to-top {
+  position: fixed; right: 24px; bottom: 24px; z-index: 50;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
+
 .report-canvas {
   background: #f5f5f7; overflow-y: auto; padding: 24px;
 }
@@ -7175,7 +7180,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
   html, body { padding-top: 0 !important; }
 
   .noprint, #dzTopbar, .report-wiz-topbar, .rep-stepper,
-  .rep-stage:not(.rep-stage-review), .rep-review-bar, .toasts,
+  .rep-stage:not(.rep-stage-review), .rep-review-bar, .rep-to-top, .toasts,
   /* A `position: fixed` element prints on the first sheet, so a settings
      panel left open while printing would land on top of page one. */
   .wd-settings-overlay { display: none !important; }
