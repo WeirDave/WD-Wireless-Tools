@@ -1951,7 +1951,8 @@
     }
     if (dim === 'model') {
       if (key === 'Unknown|Unknown') return 'Unknown model';
-      return key.replace('|', ' · ');
+      var cut = key.indexOf('|');       // vendor|model; a model may itself hold a '|'
+      return key.slice(0, cut) + ' · ' + key.slice(cut + 1);
     }
     if (dim === 'floor') {
       if (key === '__nofloor') return 'No floor';

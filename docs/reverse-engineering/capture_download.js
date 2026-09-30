@@ -7,11 +7,18 @@
 
     const captured = [];
 
+    const isAmazonHost = (u) => {
+        try {
+            const host = new URL(u, location.href).hostname;
+            return host === 'amazonaws.com' || host.endsWith('.amazonaws.com');
+        } catch (e) { return false; }
+    };
+
     const isInteresting = (url) => {
         const u = String(url || '');
         return u.includes('/esxfileapi/')
             || u.includes('/projectapi/')
-            || u.includes('amazonaws.com')
+            || isAmazonHost(u)
             || u.includes('/download')
             || u.includes('.esx')
             || u.toLowerCase().includes('download');

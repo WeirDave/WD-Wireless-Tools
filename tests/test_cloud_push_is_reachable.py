@@ -253,8 +253,8 @@ class TheAppOnlyPointsAtControlsThatExistTests(unittest.TestCase):
     #: those instructions with "Use <b>Confirm this pair</b>", and keying only
     #: on arrows left the guard matching nothing at all - which it reported,
     #: because a guard with no subjects is not a passing guard.
-    NAMED = re.compile(r"<b>((?:&#\d+;|[^<])*?)</b>")
-    USE_NAMED = re.compile(r"[Uu]se <b>((?:&#\d+;|[^<])*?)</b>")
+    NAMED = re.compile(r"<b>([^<]*?)</b>")
+    USE_NAMED = re.compile(r"[Uu]se <b>([^<]*?)</b>")
     ARROWS = ("&#11014;", "&#11015;")
 
     def test_every_control_the_text_names_is_a_real_label(self):

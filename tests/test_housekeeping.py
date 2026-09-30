@@ -446,11 +446,11 @@ class WorkplaceDataIsCountedAndNeverQuoted(Machine):
     def test_the_report_never_carries_the_value_it_matched(self):
         """A report that quoted them would be one more copy of the thing being
         reported - the same trap as the scrub-without-quoting commit."""
-        secret = "ABCD7"
+        matched = "ABCD7"
         make_dir(self.temp / "wd-cloud-pull-q", 99, self.now,
-                 files=(("note.txt", "site %s survey" % secret),))
+                 files=(("note.txt", "site %s survey" % matched),))
         blob = json.dumps(self.survey())
-        self.assertNotIn(secret, blob)
+        self.assertNotIn(matched, blob)
 
     def test_the_totals_add_the_findings_up(self):
         make_dir(self.temp / "wd-cloud-pull-1", 99, self.now,

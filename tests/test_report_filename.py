@@ -452,6 +452,11 @@ class OpenEsxRoute(unittest.TestCase):
         self.esx = folder / "400 Example St, Fairview, CA 90003 - PD.esx"
         with zipfile.ZipFile(self.esx, "w") as z:
             z.writestr("project.json", "{}")
+        # The route serves only what the native picker handed out, so the
+        # fixture goes through the same record the picker writes to.
+        import server
+        self.addCleanup(server._PICKED_ESX.clear)
+        server._remember_picked_esx({"ok": True, "path": str(self.esx)})
 
     def tearDown(self):
         import shutil
@@ -487,6 +492,9 @@ class OpenEsxRoute(unittest.TestCase):
         traceback."""
         other = self.tmp / "notes.txt"
         other.write_text("hello", encoding="utf-8")
+        import server
+        for p in (other, self.tmp / "gone.esx"):
+            server._remember_picked_esx({"ok": True, "path": str(p)})
         for label, payload, code in (
             ("not an .esx", {"path": str(other)}, 400),
             ("missing", {"path": str(self.tmp / "gone.esx")}, 404),
@@ -500,6 +508,35 @@ class OpenEsxRoute(unittest.TestCase):
                     self.assertIn("error", r.get_json())
                 finally:
                     r.close()
+
+    def test_a_path_the_picker_did_not_hand_out_is_not_read(self):
+        """The page cannot name an arbitrary file and get its bytes back, even
+        one that exists and is an .esx - only what the picker chose."""
+        stranger = self.tmp / "elsewhere.esx"
+        shutil.copy(self.esx, stranger)
+        r = self.client.post("/api/report/open_esx",
+                             json={"path": str(stranger)}, headers=self.header)
+        try:
+            self.assertEqual(r.status_code, 403)
+            self.assertNotEqual(r.data[:2], b"PK")
+        finally:
+            r.close()
+
+    def test_the_picker_route_records_what_it_hands_out(self):
+        import server
+        from unittest import mock
+        picked = {"ok": True, "path": str(self.esx)}
+        server._PICKED_ESX.clear()
+        with mock.patch.object(server.fo, "pick_esx_file", return_value=picked):
+            r = self.client.post("/api/organizer/pick_esx_file", json={},
+                                 headers=self.header)
+        self.assertEqual(r.get_json()["path"], str(self.esx))
+        r = self.client.post("/api/report/open_esx",
+                             json={"path": str(self.esx)}, headers=self.header)
+        try:
+            self.assertEqual(r.status_code, 200)
+        finally:
+            r.close()
 
 
 if __name__ == "__main__":

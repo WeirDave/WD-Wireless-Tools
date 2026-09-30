@@ -153,6 +153,22 @@ def _unhandled(exc):
     }), 500
 
 
+def _route_failed(exc, status=500, *, ok_key=False, prefix=""):
+    """The one way a route that caught an exception answers the page.
+
+    The page shows the exception's message - the tool's rule is that a failure
+    explains itself - and never a traceback. A 500 is a fault, so its stack
+    goes to the log file first: a route that catches and returns is otherwise
+    the one failure that leaves no trace. A 400 is the request being wrong and
+    is not logged, which keeps the log to faults.
+    """
+    if status >= 500:
+        applog.note_failure(f"{request.method} {request.path}", exc)
+    body = {"ok": False} if ok_key else {}
+    body["error"] = f"{prefix}{exc}"
+    return jsonify(body), status
+
+
 @app.before_request
 def _protect_local_api():
     """Keep browser pages outside this local server from calling its API.
@@ -600,7 +616,7 @@ def api_walls(action):
 
         return jsonify({"error": "unknown action: " + action}), 404
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _route_failed(e)
 
 
 @app.route("/api/capacity/<action>", methods=["POST"])
@@ -676,9 +692,9 @@ def api_capacity(action):
         # not something it is safe to read. 400 rather than 500 so the
         # page shows the sentence instead of "something went wrong".
         except esx_guard.HostileArchive as e:
-            return jsonify({"ok": False, "error": str(e)}), 400
+            return _route_failed(e, 400, ok_key=True)
         except Exception as e:
-            return jsonify({"ok": False, "error": str(e)}), 500
+            return _route_failed(e, ok_key=True)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -694,7 +710,7 @@ def api_capacity(action):
         if action == "delete":
             return jsonify(capacity_profiles.delete_template(data.get("file") or ""))
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return _route_failed(e, ok_key=True)
     return jsonify({"error": f"unknown action: {action}"}), 404
 
 
@@ -815,9 +831,9 @@ def api_plantrim(action):
     # something it is safe to read. 400 rather than 500 so the page shows
     # the sentence instead of "something went wrong".
     except esx_guard.HostileArchive as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
+        return _route_failed(e, 400, ok_key=True)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _route_failed(e)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -840,12 +856,26 @@ ORGANIZER_ACTIONS = {
     "reset_config": lambda d: fo.reset_config(),
     "create_project_folder": lambda d: fo.create_project_folder(d["name"], d.get("root"), d.get("subfolders")),
     "list_root_folders": lambda d: fo.list_root_folders(d.get("root")),
-    "pick_esx_file": lambda d: fo.pick_esx_file(),
+    "pick_esx_file": lambda d: _remember_picked_esx(fo.pick_esx_file()),
     "pick_output_folder": lambda d: fo.pick_output_folder(d.get("default")),
     "list_floorplans": lambda d: fo.list_floorplans(d["path"]),
     "extract_floorplans": lambda d: fo.extract_floorplans(d["path"], d.get("selections"), d.get("out_dir"), d.get("floor_ids")),
     "save_esx_info": lambda d: fo.save_esx_info(d["path"]),
 }
+
+
+# Paths the native .esx picker has handed to a page, keyed by the exact string
+# the page was given. /api/report/open_esx serves only these: the page names a
+# file the user chose in a dialog on this machine, and the path that is read
+# is the one recorded here, never the one in the request.
+_PICKED_ESX: dict[str, Path] = {}
+
+
+def _remember_picked_esx(result: dict) -> dict:
+    picked = result.get("path") if isinstance(result, dict) else None
+    if result.get("ok") and picked:
+        _PICKED_ESX[str(picked)] = Path(picked)
+    return result
 
 
 @app.route("/api/organizer/<action>", methods=["POST"])
@@ -857,9 +887,9 @@ def api_organizer(action):
         data = request.get_json(silent=True) or {}
         return jsonify(fn(data))
     except KeyError as e:
-        return jsonify({"error": f"missing field: {e}"}), 400
+        return _route_failed(e, 400, prefix="missing field: ")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _route_failed(e)
 
 
 
@@ -908,9 +938,9 @@ def api_rename(action):
         data = request.get_json(silent=True) or {}
         return jsonify(fn(data))
     except KeyError as e:
-        return jsonify({"error": f"missing field: {e}"}), 400
+        return _route_failed(e, 400, prefix="missing field: ")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _route_failed(e)
 
 
 TEMPLATE_ACTIONS = {
@@ -932,9 +962,9 @@ def api_templates(action):
         data = request.get_json(silent=True) or {}
         return jsonify(fn(data))
     except KeyError as e:
-        return jsonify({"error": f"missing field: {e}"}), 400
+        return _route_failed(e, 400, prefix="missing field: ")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _route_failed(e)
 
 
 SETTINGS_ACTIONS = {
@@ -1269,9 +1299,9 @@ def api_prep(action):
     # something it is safe to read. 400 rather than 500 so the page shows
     # the sentence instead of "something went wrong".
     except esx_guard.HostileArchive as e:
-        return jsonify({"ok": False, "error": str(e)}), 400
+        return _route_failed(e, 400, ok_key=True)
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return _route_failed(e, ok_key=True)
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
 
@@ -1364,7 +1394,7 @@ def api_report_grid(action):
         return jsonify(fn(request.get_json(silent=True) or {}))
     except Exception as e:
         applog.note_failure("report grid " + action, e)
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return _route_failed(e, ok_key=True)
 
 
 @app.route("/api/report/find_folder", methods=["POST"])
@@ -1396,18 +1426,20 @@ def api_report_open_esx():
     name and nothing else, which is why the name was derived from the .esx stem
     before this existed.
 
-    The path arrives from the client, so it is checked here rather than
-    trusted. A localhost tool that already reveals folders and downloads
-    projects wherever the user points it is not made safer by refusing to read
-    a file, but a stale or mistyped path should come back as a sentence rather
-    than a traceback.
+    The page names the file, but only a file the native picker handed out in
+    this run can be read (see _PICKED_ESX), so a request cannot turn this into
+    a way to read any path on the machine. A stale path still comes back as a
+    sentence rather than a traceback.
     """
     data = request.get_json(silent=True) or {}
     raw = (data.get("path") or "").strip()
     if not raw:
         return jsonify({"error": "No file was chosen."}), 400
+    picked = _PICKED_ESX.get(raw)
+    if picked is None:
+        return jsonify({"error": "Choose the file again."}), 403
     try:
-        path = Path(raw).resolve(strict=True)
+        path = picked.resolve(strict=True)
     except (OSError, ValueError, RuntimeError):
         return jsonify({"error": "That file could not be found any more."}), 404
     if not path.is_file() or path.suffix.lower() != ".esx":
@@ -1432,9 +1464,9 @@ def api_settings(action):
         data = request.get_json(silent=True) or {}
         return jsonify(fn(data))
     except KeyError as e:
-        return jsonify({"error": f"missing field: {e}"}), 400
+        return _route_failed(e, 400, prefix="missing field: ")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _route_failed(e)
 
 
 CLOUD_ACTIONS = {
@@ -1562,9 +1594,9 @@ def api_cloud(action):
                 with _progress_lock:
                     _progress.pop(op_id, None)
     except KeyError as e:
-        return jsonify({"error": f"missing field: {e}"}), 400
+        return _route_failed(e, 400, prefix="missing field: ")
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _route_failed(e)
 
 
 def _session_paths():
@@ -1765,7 +1797,7 @@ def api_dev(action):
     try:
         return jsonify(fn(data))
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return _route_failed(e)
 
 
 @app.route("/api/logs/reveal", methods=["POST"])

@@ -66,7 +66,7 @@ def main() -> int:
     # inline <script> in pages defines handlers too
     for f in html_files:
         text = f.read_text(encoding="utf-8", errors="replace")
-        for block in re.findall(r"<script\b[^>]*>(.*?)</script>", text, re.S | re.I):
+        for block in re.findall(r"<script\b[^>]*>(.*?)</script\s*>", text, re.S | re.I):
             defined |= definitions(block)
 
     used: dict[str, list[str]] = {}

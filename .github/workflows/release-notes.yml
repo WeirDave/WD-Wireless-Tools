@@ -9,6 +9,12 @@
 #
 # scripts/apply_release_notes.py skips a note whose release does not exist
 # yet, so whichever of the two arrives first, the second one lands it.
+#
+# This job holds contents: write, so it only ever runs code from main. A
+# workflow_run event names the commit the release was built from, and that
+# commit is read for its version number with `git show` - as data - rather
+# than checked out, because checking out the triggering run's commit in a
+# privileged job is the untrusted-checkout pattern.
 
 name: Release notes
 
@@ -35,7 +41,11 @@ concurrency:
 
 jobs:
   apply:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
@@ -43,7 +53,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          ref: main
           fetch-depth: 0
           persist-credentials: false
 
@@ -53,13 +63,14 @@ jobs:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
+          RELEASED_SHA: ${{ github.event.workflow_run.head_sha }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           case "$EVENT" in
             push)
               python scripts/apply_release_notes.py --changed "$BEFORE" "$AFTER" ;;
             workflow_run)
-              version="$(python -c "import json;print(json.load(open('web/assets/versions.json'))['suite'])")"
+              version="$(git show "$RELEASED_SHA:web/assets/versions.json" | python -c "import json,sys;print(json.load(sys.stdin)['suite'])")"
               python scripts/apply_release_notes.py --tag "v$version" ;;
             workflow_dispatch)
               python scripts/apply_release_notes.py --tag "$INPUT_TAG" ;;

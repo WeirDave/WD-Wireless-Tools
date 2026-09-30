@@ -797,7 +797,7 @@ class ClientChecksThroughTheServerTests(unittest.TestCase):
         """The constant may survive as documentation; a call to it may not."""
         self.assertNotIn("fetch(WD_API_LATEST", self.src)
         for line in self.src.splitlines():
-            if "fetch(" in line and "api.github.com" in line:
+            if "fetch(" in line and re.search(r"api\.github\.com", line):
                 self.fail("the browser is calling GitHub directly: " + line.strip())
 
     def test_it_still_tells_a_rate_limit_apart_from_a_dead_network(self):

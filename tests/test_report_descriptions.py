@@ -26,7 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REPORT_JS = ROOT / "web" / "assets" / "js" / "report.js"
 
-FIELD = re.compile(r"(label|description|readBy|output|bestFor|docName|status):\s*'((?:\\.|[^'])*)'")
+FIELD = re.compile(r"(label|description|readBy|output|bestFor|docName|status):\s*'((?:\\.|[^'\\])*)'")
 
 
 def reports():
