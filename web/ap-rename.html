@@ -252,21 +252,34 @@
           </div>
         </div>
 
-        <!-- ═══ SECTION 2: SCOPE ═══ -->
-        <div class="ar-section ar-foldable" data-fold="scope">
+        <!-- ═══ SECTION 2: FLOORS TO RENAME ═══ -->
+        <div class="ar-section ar-foldable" data-fold="floors">
           <div class="ar-section-head" data-fold-toggle tabindex="0" role="button" aria-expanded="true"
-               title="Click to collapse or expand"><span class="ar-section-num">2</span> Scope<span class="ar-fold-caret">&#9662;</span></div>
-          <div class="ar-scope-tabs" id="arScopeTabs">
-            <button class="ar-scope-tab active" data-scope="all">All APs</button>
-            <button class="ar-scope-tab" data-scope="perFloor">Per Floor</button>
+               title="Click to collapse or expand"><span class="ar-section-num">2</span> Floors to rename<span class="ar-fold-caret">&#9662;</span></div>
+          <div class="ar-scope-tabs" id="arFloorPickTabs">
+            <button class="ar-scope-tab active" type="button" data-action="call" data-fn="arSetFloorPick" data-arg="all">Whole project</button>
+            <button class="ar-scope-tab" type="button" data-action="call" data-fn="arSetFloorPick" data-arg="current">This floor only</button>
+            <button class="ar-scope-tab" type="button" data-action="call" data-fn="arSetFloorPick" data-arg="chosen">Choose floors</button>
           </div>
-          <div class="ar-scope-desc" id="arScopeDesc">One continuous sequence across the entire project.</div>
+          <div class="ar-scope-desc" id="arFloorPickDesc">Every floor is renamed.</div>
+          <div class="ar-fp-list" id="arFloorPickList" hidden></div>
         </div>
 
-        <!-- ═══ SECTION 3: ORDERING ═══ -->
+        <!-- ═══ SECTION 3: NUMBERING ═══ -->
+        <div class="ar-section ar-foldable" data-fold="scope">
+          <div class="ar-section-head" data-fold-toggle tabindex="0" role="button" aria-expanded="true"
+               title="Click to collapse or expand"><span class="ar-section-num">3</span> Numbering<span class="ar-fold-caret">&#9662;</span></div>
+          <div class="ar-scope-tabs" id="arScopeTabs">
+            <button class="ar-scope-tab active" data-scope="all">Continuous</button>
+            <button class="ar-scope-tab" data-scope="perFloor">Restart each floor</button>
+          </div>
+          <div class="ar-scope-desc" id="arScopeDesc">One sequence across the floors, in floor order.</div>
+        </div>
+
+        <!-- ═══ SECTION 4: ORDERING ═══ -->
         <div class="ar-section ar-foldable" data-fold="ordering">
           <div class="ar-section-head" data-fold-toggle tabindex="0" role="button" aria-expanded="true"
-               title="Click to collapse or expand — collapse Name Pattern to give the colour list the column"><span class="ar-section-num">3</span> Ordering<span class="ar-fold-caret">&#9662;</span></div>
+               title="Click to collapse or expand — collapse Name Pattern to give the colour list the column"><span class="ar-section-num">4</span> Ordering<span class="ar-fold-caret">&#9662;</span></div>
           <select id="arOrder">
             <option value="proximity" selected>Nearest Neighbor</option>
             <option value="row-snake">Zigzag Rows</option>

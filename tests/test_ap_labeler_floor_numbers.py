@@ -248,7 +248,7 @@ class TheWarningIsOnScreenAndSaysWhatToDo(unittest.TestCase):
 
     def test_it_says_both_ways_out(self):
         self.assertIn("Add a Floor segment", self.body)
-        self.assertIn("All APs", self.body)
+        self.assertIn("Continuous", self.body)
 
     def test_it_clears_itself_when_the_collision_is_resolved(self):
         """A warning that stays up after the cause is gone is worse than none;
