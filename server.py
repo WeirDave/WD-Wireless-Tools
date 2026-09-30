@@ -1270,6 +1270,7 @@ def api_prep(action):
             "ok": True,
             "ran": out.get("ran"),
             "trimmed": trim.get("trimmedCount"),
+            "repaired": trim.get("repairedCount") or 0,
             "floorCount": trim.get("floorCount"),
             "bytesBefore": trim.get("bytesBefore"),
             "bytesAfter": trim.get("bytesAfter"),

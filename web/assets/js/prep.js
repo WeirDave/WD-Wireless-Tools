@@ -450,8 +450,14 @@
         refused.push('the trim');
       } else {
         var n = t.trimmedCount || 0;
-        willDo += n;
+        var fixed = t.repairedCount || 0;
+        willDo += n + fixed;
         var lines = (t.floors || []).map(function (f) {
+          if (f.action !== 'trimmed' && f.repaired) {
+            return '<b>' + esc(f.name) + '</b> — <span class="prep-sub">trimmed by an earlier '
+              + 'version and lost the white page behind the drawing; it is put back</span>'
+              + clearanceLine(f);
+          }
           if (f.action === 'trimmed') {
             return '<b>' + esc(f.name) + '</b> — ' + f.oldSize[0] + '×' + f.oldSize[1]
               + ' → ' + f.newSize[0] + '×' + f.newSize[1]
@@ -463,8 +469,9 @@
             + clearanceLine(f);
         });
         cards.push(stepCard('Trim the canvas',
-          n ? n + ' of ' + t.floorCount + ' ' + plural(t.floorCount, 'floor') : 'nothing to do',
-          n ? 'do' : 'skip', lines.length ? lines : ['No floor plans in this project.']));
+          n ? n + ' of ' + t.floorCount + ' ' + plural(t.floorCount, 'floor')
+            : (fixed ? fixed + ' to repair' : 'nothing to do'),
+          (n || fixed) ? 'do' : 'skip', lines.length ? lines : ['No floor plans in this project.']));
       }
     }
 
@@ -609,6 +616,9 @@
                detail: f.oldSize[0] + '×' + f.oldSize[1] + ' → '
                  + f.newSize[0] + '×' + f.newSize[1] };
     }
+    if (f.repaired) {
+      return { cls: 'is-auto', word: 'Repair', detail: 'white page behind the drawing restored' };
+    }
     if (f.action === 'skipped') return { cls: 'is-skip', word: 'Leave as is', detail: f.reason || '' };
     return { cls: 'is-refused', word: 'Refused', detail: f.reason || '' };
   }
@@ -712,7 +722,10 @@
     var st = mapFloorState(f);
     $('prepMapCaption').textContent = f.action === 'trimmed'
       ? f.name + ': ' + st.detail + ' — ' + f.areaSavedPct + '% of the sheet is cut away.'
-      : f.name + ': not cropped' + (f.reason ? ' — ' + f.reason : '') + '.';
+      : f.repaired
+        ? f.name + ': not cropped again. Trimmed by an earlier version, it lost the white page '
+          + 'behind the drawing; preparing puts it back.'
+        : f.name + ': not cropped' + (f.reason ? ' — ' + f.reason : '') + '.';
     floorImage(id).then(function (im) {
       if (map.current !== id) return;
       empty.hidden = true;
@@ -744,6 +757,11 @@
     var s = Math.min(cv.width / iw, cv.height / ih) * 0.97;
     var ox = (cv.width - iw * s) / 2, oy = (cv.height - ih * s) / 2;
     g.imageSmoothingEnabled = true;
+    // Paper under the plan, as in PlanTrim. A CAD plan is an SVG with a
+    // transparent background, and on the dark stage transparency reads as
+    // grey lines on black.
+    g.fillStyle = '#fff';
+    g.fillRect(ox, oy, iw * s, ih * s);
     g.drawImage(im, ox, oy, iw * s, ih * s);
 
     var b = mapKeptBox(f, iw, ih);
@@ -818,6 +836,10 @@
       } else {
         bits.push('<b>no floor plan needed trimming</b>');
       }
+      if (!failed.trim && r.repaired) {
+        bits.push('put the white page back behind <b>' + r.repaired + '</b> '
+          + plural(r.repaired, 'floor plan') + ' an earlier version had trimmed');
+      }
     }
 
     if (ran.indexOf('areas') >= 0) {
@@ -867,6 +889,7 @@
       ran: r.ran,
       failed: r.failed,
       trimmed: (step.trim || {}).trimmedCount,
+      repaired: (step.trim || {}).repairedCount || 0,
       floorCount: (step.trim || {}).floorCount,
       areasWritten: (step.areas || {}).floorsWritten,
       areasRetightened: (step.retighten || []).map(function (x) { return x.floorName; }),

@@ -342,7 +342,9 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                     refuse("trim", f"Trimming refused: {exc}")
                     continue
                 result["step"]["trim"] = esx_trimmer._report_json(report)
-                if report.trimmed_count:
+                # A floor an earlier crop left without its page is repaired in
+                # the same write, so a repair with nothing to cut is still work.
+                if report.trimmed_count or report.repaired_count:
                     cur = out
                     result["changed"] = True
 
