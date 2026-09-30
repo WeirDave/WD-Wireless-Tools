@@ -1420,6 +1420,7 @@ class RemainingWorkTests(unittest.TestCase):
     globalThis.WD = { esc: s => String(s), escAttr: s => String(s), toast(){} };
     globalThis.$ = el;
     globalThis.state = { busy: false };
+    eval(slice('  function hasWork(res)', '  function busy('));
     eval(slice('  function syncCutButton(res)', '  window.ptCut = function'));
     function floor(id, source) {
       return { id: id, action: 'trimmed', source: source,
@@ -1471,6 +1472,18 @@ class RemainingWorkTests(unittest.TestCase):
         """)
         self.assertEqual(out["label"], "Nothing to cut")
         self.assertTrue(out["off"])
+
+    def test_a_repair_with_nothing_to_cut_can_still_be_saved(self):
+        """A floor an earlier version trimmed is repaired by saving, so the
+        button has to be live even when nothing is left to cut."""
+        out = self.run_js("""
+          syncCutButton({ trimmedCount: 0, repairedCount: 1,
+                          floors: [{ action: 'skipped', repaired: true }] });
+          console.log(JSON.stringify({ label: btn().textContent,
+                                       off: btn().disabled }));
+        """)
+        self.assertEqual(out["label"], "Save repaired .esx")
+        self.assertFalse(out["off"])
 
     def test_a_floor_that_cannot_be_cropped_does_not_count_as_his(self):
         """A refused floor has no source, and must not be mistaken for one he

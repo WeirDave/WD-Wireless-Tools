@@ -804,6 +804,7 @@ def api_plantrim(action):
         # without a second round trip carrying the whole archive again.
         response.headers["X-PlanTrim-Report"] = quote(json.dumps({
             "trimmedCount": result["trimmedCount"],
+            "repairedCount": result.get("repairedCount", 0),
             "floorCount": result["floorCount"],
             "bytesBefore": result["bytesBefore"],
             "bytesAfter": result["bytesAfter"],

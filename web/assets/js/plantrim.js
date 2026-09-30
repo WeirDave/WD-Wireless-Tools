@@ -98,16 +98,22 @@
       .then(function (r) { return r.json(); });
   };
 
+  // Saving has something to write when a floor is cut, and also when a floor
+  // an earlier version trimmed needs its page put back behind the drawing.
+  function hasWork(res) {
+    return !!(res && (res.trimmedCount || res.repairedCount));
+  }
+
   function busy(on, label) {
     state.busy = on;
     var cut = $('ptbCut');
     if (cut) {
-      cut.disabled = on || !state.report || !state.report.trimmedCount;
+      cut.disabled = on || !hasWork(state.report);
       if (on && label) cut.textContent = label;
     }
     var save = $('ptSaveBtn');
     if (save) {
-      save.disabled = on || !state.report || !state.report.trimmedCount;
+      save.disabled = on || !hasWork(state.report);
       if (label) save.textContent = label;
     }
     document.body.classList.toggle('pt-busy', on);
@@ -210,7 +216,8 @@
     var note = $('ptbCutNote');
     if (!btn) return;
     var n = res && res.trimmedCount;
-    btn.disabled = !n || state.busy;
+    var fixed = (res && res.repairedCount) || 0;
+    btn.disabled = !hasWork(res) || state.busy;
     if (!res) {
       btn.textContent = 'Cut and save';
       if (note) note.textContent = '';
@@ -225,10 +232,13 @@
       if (f.source === 'manual') drawn++; else auto++;
     });
     var allMine = n && drawn === n && !auto;
-    btn.textContent = !n ? 'Nothing to cut'
+    btn.textContent = !n ? (fixed ? 'Save repaired .esx' : 'Nothing to cut')
                          : (allMine ? 'Save trimmed .esx' : 'Cut and save');
     if (!note) return;
-    if (!n) {
+    if (!n && fixed) {
+      note.textContent = repairedSentence(fixed) + ' Saving writes a new copy — ' +
+        'your original file is not changed.';
+    } else if (!n) {
       note.textContent = 'Every floor plan is already tight, or cannot be cropped.';
     } else if (allMine) {
       note.textContent = 'Every crop is a box you drew. Saving writes a new copy \u2014 ' +
@@ -238,6 +248,11 @@
         (drawn ? ' (' + drawn + ' to a box you drew)' : ' automatically') +
         '. Your original file is not changed \u2014 you get a new copy.';
     }
+  }
+
+  function repairedSentence(k) {
+    return k + ' floor plan' + (k === 1 ? '' : 's') + ' trimmed by an earlier version ' +
+      (k === 1 ? 'has' : 'have') + ' lost the page behind the drawing; saving puts it back.';
   }
 
   window.ptCut = function () { window.ptTrim(); };
@@ -259,11 +274,14 @@
         right = '<span class="pt-dims">' + f.oldSize[0] + '&times;' + f.oldSize[1] +
                 ' <span class="pt-arrow">&rarr;</span> ' + f.newSize[0] + '&times;' + f.newSize[1] +
                 '</span><span class="pt-saved">&minus;' + f.areaSavedPct + '% area</span>';
+      } else if (f.repaired) {
+        badge = 'Repair';
+        right = '<span class="pt-reason">White page behind the drawing restored</span>';
       } else {
         badge = f.action === 'skipped' ? 'Leave as is' : 'Refused';
         right = '<span class="pt-reason">' + esc(f.reason || f.action) + '</span>';
       }
-      return '<div class="pt-floor is-' + f.action + '">' +
+      return '<div class="pt-floor is-' + (f.action !== 'trimmed' && f.repaired ? 'repaired' : f.action) + '">' +
                '<span class="pt-badge">' + badge + '</span>' +
                '<span class="pt-floor-name">' + esc(f.name) + '</span>' +
                right +
@@ -272,7 +290,9 @@
 
     var n = res.trimmedCount;
     var note = $('ptSizeNote');
-    if (!n) {
+    if (!n && res.repairedCount) {
+      note.textContent = repairedSentence(res.repairedCount);
+    } else if (!n) {
       note.textContent = 'Nothing to trim here — every floor plan is already tight, or cannot be ' +
                          'cropped safely.';
     } else {
@@ -289,7 +309,7 @@
 
   // -------------------------------------------------------------------- trim
   window.ptTrim = function () {
-    if (state.busy || !state.bytes || !state.report || !state.report.trimmedCount) return;
+    if (state.busy || !state.bytes || !hasWork(state.report)) return;
     busy(true, 'Trimming…');
     $('ptResult').hidden = true;
 
@@ -317,11 +337,13 @@
         setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
 
         var count = meta ? meta.trimmedCount : state.report.trimmedCount;
+        var fixed = meta ? (meta.repairedCount || 0) : (state.report.repairedCount || 0);
         var box = $('ptResult');
         box.hidden = false;
         box.className = 'pt-result pt-good';
         box.innerHTML =
-          '<strong>Saved — ' + count + ' floor plan' + (count === 1 ? '' : 's') + ' trimmed.</strong>' +
+          '<strong>Saved — ' + count + ' floor plan' + (count === 1 ? '' : 's') + ' trimmed' +
+          (fixed ? ', ' + fixed + ' repaired' : '') + '.</strong>' +
           '<div class="pt-result-path">' + esc(name) + '</div>' +
           (meta ? '<div class="pt-result-size">' + mb(meta.bytesBefore) + ' &rarr; ' +
                   mb(meta.bytesAfter) + '</div>' : '') +
@@ -333,7 +355,8 @@
             : '') +
           '<div class="pt-result-next">Open it in Ekahau to confirm it looks right before using it ' +
           'on real work. Your original file is untouched.</div>';
-        toast('Trimmed ' + count + ' floor plan' + (count === 1 ? '' : 's'), 'success');
+        toast(count ? 'Trimmed ' + count + ' floor plan' + (count === 1 ? '' : 's')
+                    : 'Repaired ' + fixed + ' floor plan' + (fixed === 1 ? '' : 's'), 'success');
       })
       .catch(function (e) {
         busy(false, 'Save trimmed .esx');
@@ -491,6 +514,11 @@
 
     g.imageSmoothingEnabled = true;
     var tl = toScreen(0, 0);
+    // A plan is drawn on paper. Where a drawing is transparent, the dark stage
+    // showing through turns a line drawing into grey lines on black, which is
+    // not how it looks on any page it is printed on.
+    g.fillStyle = '#fff';
+    g.fillRect(tl.x, tl.y, box.img.width * box.view.scale, box.img.height * box.view.scale);
     g.drawImage(box.img, tl.x, tl.y,
                 box.img.width * box.view.scale, box.img.height * box.view.scale);
 
@@ -952,6 +980,12 @@
       return {
         word: 'Automatic', cls: 'is-auto',
         detail: dims + saved + (drawn ? '  \u00b7 your box was not used' : ''),
+      };
+    }
+    if (f.action !== 'trimmed' && f.repaired) {
+      return {
+        word: 'Repair', cls: 'is-auto',
+        detail: 'the page behind the drawing is restored when you save' + beyond,
       };
     }
     if (f.action === 'skipped') {
