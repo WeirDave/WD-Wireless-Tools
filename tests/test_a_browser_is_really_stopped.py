@@ -119,6 +119,62 @@ class AFailingQuitStillLeavesNothingBehind(unittest.TestCase):
         self.assertEqual([], browsers.shut_down(FakeDriver()))
 
 
+_PARENT = r"""
+import subprocess, sys, time
+if sys.argv[1] == "contained":
+    import tests.browsers
+child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+print(child.pid, flush=True)
+time.sleep(120)
+"""
+
+
+@unittest.skipUnless(sys.platform == "win32", "job objects are a Windows mechanism")
+class ADeadTestProcessTakesItsBrowsersWithIt(unittest.TestCase):
+    """`shut_down` only runs if the test process is alive to run it.
+
+    The runner stops a module that runs past its timeout by killing that one
+    process, and Windows does not kill what it started. geckodriver and its
+    Firefox then carry on with no parent, holding memory and the working
+    directory - on 2026-09-29, a worktree folder nothing could delete.
+
+    A stand-in plays the browser, as above. Its parent is killed the way the
+    runner kills a module, and the question is whether the stand-in outlives
+    it. The first test is the fault as it was; the second is the fix.
+    """
+
+    def _orphan(self, mode):
+        from pathlib import Path
+        parent = subprocess.Popen(
+            [sys.executable, "-c", _PARENT, mode],
+            cwd=str(Path(__file__).resolve().parents[1]),
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        pid = int(parent.stdout.readline())
+        self.addCleanup(browsers._kill, pid)
+        parent.kill()
+        parent.wait(timeout=10)
+        parent.stdout.close()
+        return pid
+
+    def _outlives(self, pid, wait=10.0):
+        import time
+        deadline = time.monotonic() + wait
+        while time.monotonic() < deadline:
+            if not browsers._pid_alive(pid):
+                return False
+            time.sleep(0.25)
+        return True
+
+    def test_without_the_job_the_browser_outlives_its_test(self):
+        self.assertTrue(self._outlives(self._orphan("bare"), wait=2.0))
+
+    def test_with_the_job_the_browser_ends_with_its_test(self):
+        self.assertFalse(self._outlives(self._orphan("contained")))
+
+    def test_importing_the_helpers_is_what_places_the_process(self):
+        self.assertIsNotNone(browsers._JOB)
+
+
 class EveryBrowserSuiteUsesIt(unittest.TestCase):
     """One suite left calling `quit()` directly is one suite still leaking,
     and it would be the quietest possible regression - nothing fails, the

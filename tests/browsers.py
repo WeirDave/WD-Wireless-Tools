@@ -209,6 +209,85 @@ def _kill(pid: int) -> None:
         os.kill(pid, signal.SIGKILL)
 
 
+def _contain_descendants():
+    """Windows: end everything this process starts when this process ends.
+
+    `shut_down` only helps if it runs. When the test process itself dies - the
+    runner stops a module that ran past its timeout, a crash, a closed console -
+    Windows kills that one process and nothing under it. geckodriver and the
+    Firefox it launched carry on with no parent, holding their memory and their
+    working directory: a worktree whose folder then cannot be deleted, because
+    an invisible Firefox is sitting in it. Found on 2026-09-29 as eleven
+    processes started with ``--marionette`` and a throwaway profile, whose
+    geckodriver was long gone.
+
+    A job object with ``KILL_ON_JOB_CLOSE`` closes that. This process joins it
+    at import, every process it starts from then on inherits it, and when this
+    process ends by any route the handle closes and the kernel ends the rest.
+    ``BREAKAWAY_OK`` leaves a process that explicitly asks to escape free to do
+    so; nothing in this repository does.
+
+    Returns the job handle, or None where this does not apply or the process
+    could not be placed in a job. Failing here is not worth failing a test run
+    over: the suite behaves exactly as it did before.
+    """
+    if os.name != "nt":
+        return None
+    import ctypes
+    from ctypes import wintypes
+
+    class _Basic(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64),
+                    ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD),
+                    ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t),
+                    ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t),
+                    ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class _Io(ctypes.Structure):
+        _fields_ = [(n, ctypes.c_uint64) for n in (
+            "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+            "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+    class _Extended(ctypes.Structure):
+        _fields_ = [("BasicLimitInformation", _Basic),
+                    ("IoInfo", _Io),
+                    ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t),
+                    ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.SetInformationJobObject.argtypes = (
+        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+    kernel32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+
+    job = kernel32.CreateJobObjectW(None, None)
+    if not job:
+        return None
+    info = _Extended()
+    info.BasicLimitInformation.LimitFlags = 0x2000 | 0x800  # KILL_ON_JOB_CLOSE | BREAKAWAY_OK
+    extended_limit_information = 9
+    if not kernel32.SetInformationJobObject(job, extended_limit_information,
+                                            ctypes.byref(info), ctypes.sizeof(info)):
+        kernel32.CloseHandle(job)
+        return None
+    if not kernel32.AssignProcessToJobObject(job, kernel32.GetCurrentProcess()):
+        kernel32.CloseHandle(job)
+        return None
+    return job
+
+
+#: Held for the life of the process and never closed by hand: closing it is
+#: what ends everything the process started, and that happens at exit.
+_JOB = _contain_descendants()
+
+
 def shut_down(driver) -> list:
     """`driver.quit()`, and then make sure the browser is actually gone.
 

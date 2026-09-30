@@ -482,6 +482,17 @@ why it costs real waiting time. Four sessions stalled on this in one day.
 - **Always tear it down**, on the failure path too. An abandoned process holds
   the port for the next session. Kill it by PID on the port, not by name — that
   would take down the user's own instance.
+- **A test process that dies does not take its browsers with it, unless it is
+  in a job.** Windows kills one process and nothing it started, so a module
+  the runner stopped at its timeout, or one that crashed, used to leave
+  geckodriver and a headless Firefox running with no parent - eleven processes
+  on 2026-09-29, and a worktree folder nothing could delete because that
+  Firefox's working directory was inside it. `tests/browsers.py` now places
+  the importing process in a kill-on-close job object, so everything it starts
+  ends when it does, by any route. `ADeadTestProcessTakesItsBrowsersWithIt`
+  holds it. A leftover of this kind is recognisable by `--marionette` and a
+  `rust_mozprofile` temp profile on its command line; his own Firefox has
+  neither.
 - **Starting the server opens a browser window on his desktop, and nobody
   closes it.** `main()` spawns `_open_browser()` unconditionally, so every test
   server a session starts puts a real Firefox window on the machine pointing at
