@@ -69,7 +69,8 @@ class TheDownloadCarriesOnlyWhatAReaderWantsTests(unittest.TestCase):
 
     def test_no_internal_engineering_notes_ship(self):
         strays = [f for f in self.docs
-                  if f.split("/")[1] in ("audits", "releases", "reverse-engineering")]
+                  if f.split("/")[1] in ("audits", "releases", "reverse-engineering",
+                                          "dev-notes")]
         self.assertEqual(
             [], strays,
             "these are notes for whoever maintains this, not for whoever "
@@ -109,7 +110,7 @@ class TheDownloadCarriesOnlyWhatAReaderWantsTests(unittest.TestCase):
 class TheExclusionIsDeclaredWhereItIsReadableTests(unittest.TestCase):
 
     def test_the_excluded_directories_are_named(self):
-        self.assertEqual({"releases", "audits", "reverse-engineering"},
+        self.assertEqual({"releases", "audits", "reverse-engineering", "dev-notes"},
                          build_release.EXCLUDED_DIRECTORY_PARTS)
 
     def test_excluding_a_directory_really_removes_it(self):

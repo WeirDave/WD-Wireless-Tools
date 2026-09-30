@@ -20,161 +20,82 @@ disclosure; "52 segments in one real project" is not.
 
 **Where it applies: everything that persists.** Source, comments, test
 fixtures, sample data, `docs/`, the user manual, `BACKLOG.md`, this file,
-commit messages, published GitHub release notes, the landing page, and
-screenshots.
+commit messages, release notes, the landing page, and screenshots.
 
-**When he shares a real project to settle a technical question** - and he does,
-sparingly, because he keeps work data out of development - read it for
+**When he shares a real project to settle a technical question**, read it for
 structure and metadata only. Do not copy its content, do not turn it into a
 fixture, and do not let a name or a figure out of it reach a commit. Build the
 fixture synthetically, with invented names.
 
 **Assume this repository is public, because it is.** Anything committed is
-published, and a public repository is not a place anything can be quietly
-un-published: release notes can be edited, but ZIP assets, forks, clones and
-commit history cannot be taken back the same way.
+published: ZIP assets, forks, clones and commit history cannot be taken back.
 
 **If you are unsure whether something is traceable to his employer or to a
 real person, leave it out and ask.** Unsure is a hit.
 
-**One file in the user data directory is worse than the rest and should be
-treated that way.** `~/.wd_wireless_tools/share_recipients.json` holds the
-email addresses of real colleagues - not a path or a filename, other people's
-contact details. `tools/share_recipients.py` manages it; it is gitignored,
-absent from the release payload, and has no network imports at all, and
-`tests/test_share_recipients.py` asserts each of those. Never open his copy to
-"see the real shape", never paste a line of it into an issue or a commit, and
-never build a fixture from it. Every address in this repo is invented at an
-RFC 2606 documentation domain.
+**`~/.wd_wireless_tools/share_recipients.json` holds real colleagues' email
+addresses.** `tools/share_recipients.py` manages it; it is gitignored, absent
+from the release payload, and has no network imports, and
+`tests/test_share_recipients.py` asserts all three. Never open his copy, never
+paste from it, never build a fixture from it. Every address in this repo is
+invented at an RFC 2606 documentation domain.
 
-**The guard covers the history now, not just the working tree.** For a long
-time `tests/test_no_real_world_data.py` read `git ls-files` - the files checked
-out right now - and nothing else. The repository is public, so every commit
-message and every blob ever committed is published too, and none of that was
-being checked. A survey on 2026-09-17 found site-code-shaped tokens still in
-both, on `main`, long after the tree had been cleaned - including in the
-message of the commit that did the cleaning, which is the scrub-without-quoting
-trap.
+**How it is enforced.** `tests/test_no_real_world_data.py`:
 
-`TheHistoryIsCheckedToo` closes it, and it is **a ratchet rather than a gate**.
-What is already published is listed by object id in
-`tests/no_real_world_data_baseline.json` and skipped; anything new fails. That
-split is deliberate: failing on the existing history would pin CI red until
-somebody rewrote published history, and that is a decision to take on purpose,
-not one a test should force. Cleaning the working tree afterwards does not
-unpublish a blob, so the check is on the commit.
+* every site-code-shaped token in tracked files must be on an allowlist of
+  invented ones, emails must use documentation domains, and no credential
+  shapes or infrastructure addresses are allowed. **A new placeholder fails
+  that test - that is the check working.** Confirm it is invented, then add it
+  to the allowlist. Never add a real one to make the suite green.
+* `TheHistoryIsCheckedToo` checks commit messages and every blob ever
+  committed, as a **ratchet**: what is already published is listed in
+  `tests/no_real_world_data_baseline.json` and skipped; anything new fails.
+  Regenerate it with `python scripts/refresh_history_baseline.py` only after a
+  deliberate history rewrite; it should only ever get shorter.
+* **Nothing prints the value.** A failure names the commit or blob id and the
+  path, because a CI transcript is as public as the thing it complains about.
 
-**Nothing prints the value.** A failure names the commit or blob id and the
-path and stops there - a CI transcript is as public as the thing it is
-complaining about. Regenerate the baseline with
-`python scripts/refresh_history_baseline.py` after a deliberate rewrite; it
-should only ever get shorter.
+It is rule zero because it had already gone wrong: a real site code was the
+worked example in Cloud Manager's own UI and in every release ZIP, and his
+employer's name reached a release note in a quoted CAD sheet title. Each one
+arrived as real data used to reproduce a real problem and then left behind.
+**Audit by enumerating every token of the shape, not by searching a list of
+known names** - the list missed every real identifier that was found.
 
-### Why this is rule zero rather than a guideline
+## Releases are automatic: a version bump on `main` publishes
 
-It was escalated as an emergency, in those words, because it had already gone
-wrong. A real site code was the worked example for Cloud Manager's site-code
-match - in `cloud.html` and `guide-cloud.html`, so it was **on screen in the
-shipped product**, and inside every release ZIP. A real building and city, a
-real Ekahau Cloud project name and a second site code were sitting in release
-notes. His employer's name reached a published release note in a quoted CAD
-sheet title. None of it was malicious; each one arrived the same way, as real
-data used to reproduce a real problem and then left behind.
+**Bump `web/assets/versions.json` and the release publishes itself.** Do not
+tag, do not run `gh release create`, and do not hold a release back.
+`.github/workflows/auto-release.yml` watches that file: when `suite` on `main`
+has no matching tag, it runs the full suite, tags **the commit that bumped
+it** (`github.sha`, never a moving HEAD), re-reads `versions.json` **at the
+tag**, publishes, and calls `release-assets.yml` to attach the ZIP and its
+`.sha256`. A red suite publishes nothing.
+`tests/test_release_is_automatic.py` holds all of that.
 
-`tests/test_no_real_world_data.py` enforces what can be enforced: every
-site-code-shaped token in tracked files must be on an allowlist of invented
-ones, emails must use documentation domains, and no credential shapes or
-infrastructure addresses are allowed. **A new placeholder will fail that test.
-That is the check working** - confirm the value is invented, then add it to the
-allowlist. Never add a real one to make the suite green.
+**Why:** he installs what is published. An unreleased commit is invisible to
+him - three versions of finished work once sat untagged while he fought bugs
+at work that were already fixed.
 
-The audit lesson is in the method: searching a *list of known names* missed
-every real identifier that was found. Enumerating every token of the shape and
-reading all of them is what worked.
+* **A release created with `GITHUB_TOKEN` does not fire `release: published`**,
+  so the automatic path calls `release-assets.yml` itself rather than relying
+  on `release.yml`. An asset-less release is worse than none: the updater and
+  both install scripts refuse a download without a matching checksum.
+* **It skips a suite that already passed on the same tree.**
+  `scripts/tested_head.py` recognises a merge that added nothing to a PR head
+  with a green `tests.yml` run; the release then takes about a minute instead
+  of about 27. So **merge main into a PR before merging it.**
+  `tests/test_release_skips_a_suite_it_already_ran.py` holds it.
+* `release.yml` remains for a release published by hand in the GitHub UI and
+  for backfilling assets onto a tag whose build failed.
 
-## A version bump on `main` is a release — that part is automatic now
+### Release notes
 
-**Bump `web/assets/versions.json` and the release publishes itself.** You do not
-tag, you do not run `gh release create`, and you must not hold a release back
-waiting for a better moment. `.github/workflows/auto-release.yml` watches that
-one file: when the `suite` value on `main` has no matching tag, it runs the full
-suite, tags **the commit that bumped it**, verifies `versions.json` *at the tag*,
-publishes, and calls `release-assets.yml` to attach the ZIP and its checksum.
-
-**Why this stopped being a manual step.** "Why were commits created with no
-releases?? That should never happen." He is right, and it was a process gap
-rather than a slip. Main went red on a test, three sessions correctly held their
-tags, two were cut afterwards and one was not; later sessions then bumped the
-version and deliberately did not tag, reasoning that pushing a tag is ceremony
-to perform only when asked. Every one of those decisions was defensible on its
-own. The result was three versions of finished work he could not install, while
-he sat at work fighting the old build and reporting bugs that were already
-fixed.
-
-**He installs what is published.** An unreleased commit is not "nearly
-shipped", it is invisible - the same problem as uncommitted work wearing a
-different hat. So the remembering is gone: green suite and a new version means
-a release exists, and a red suite means no release at all, which is the
-behaviour that saved three bad tags and is preserved deliberately.
-
-Four properties, each one a failure that has already happened here, and
-`tests/test_release_is_automatic.py` holds all of them:
-
-* it fires **only on a version change**, not on every commit
-* **a red suite publishes nothing**
-* it tags `github.sha` - **the commit the run was for** - never a moving HEAD,
-  which is how `v2.103.14` landed on another session's commit
-* it re-reads `versions.json` **at the tag** before publishing, because that is
-  what `build_release.py` reads
-
-**It does not re-run a suite that already passed on the same tree.** Since
-2026-09-29 the `decide` job asks `scripts/tested_head.py` whether the commit
-being released is a merge that added nothing to a PR head, meaning the branch
-already contained main and the trees are identical. If it is, and a successful
-pull-request run of `tests.yml` exists for that head, the suite is skipped and
-the release publishes in about a minute instead of about 27. Any doubt,
-including an API error, means the suite runs.
-`tests/test_release_skips_a_suite_it_already_ran.py` evaluates the `publish`
-condition for every test outcome. **So merge main into a PR before merging it**:
-a PR that is behind main still releases, just with the full wait.
-
-**The one thing that is not obvious and would silently break it:** a release
-created with `GITHUB_TOKEN` does **not** fire `release: published`. GitHub
-suppresses that to stop workflows looping. So the automatic path cannot rely on
-`release.yml` noticing - it calls `release-assets.yml` itself, and both paths
-share that one workflow rather than each having their own copy of the build.
-An asset-less release is worse than no release: the updater and both install
-scripts refuse a download whose checksum does not match, so the user is stuck
-rather than merely out of date.
-
-**The workflow no longer publishes the commit message as the note**, and the
-paragraph that used to sit here is why. It said: replace it by hand every
-time, not "when the release deserves it", and noted that the qualifier was
-how 58 of the first 60 releases went out as commit messages. That is an
-instruction that had already been shown not to work, left in place as the
-only mitigation.
-
-So the default changed instead, on 2026-09-21. The automatic note is a short
-stub - the version, the install link, and the commit it was built from. **A
-hand-written note is still the finished note**, and since 2026-09-24 it goes
-on by being committed:
-
-    docs/releases/vX.Y.Z.md    # push to main; release-notes.yml applies it
-
-`.github/workflows/release-notes.yml` runs `scripts/apply_release_notes.py` on
-a push that changes a note, and again when a release build finishes, so the
-note can be committed before or after its release exists. This replaced
-`gh release edit`, which only worked on a machine with `gh` - a cloud session
-has none, and a note that needs the right machine is a note that waits.
-
-The difference is what happens when nobody gets to it: a stub rather than
-your commit message, which quotes you directly and describes what you were
-working on. `TheAutomaticNoteDoesNotPublishTheCommitMessageTests` in
-`tests/test_release_is_automatic.py` holds it, and reverting is one line in
-the workflow if the trade is ever judged the wrong way round.
-
-The two documents have different jobs and it is worth being explicit about it,
-because the commit message in this repo is deliberately the better *record*:
+The automatic note is a stub (version, install link, commit). **The real note
+is committed as `docs/releases/vX.Y.Z.md`**; `release-notes.yml` applies it on
+push or when the release build finishes, so it can land before or after the
+release. Style: H1 = one-line summary, `## What changed` with bullets,
+`## Verified`, `## Files changed`.
 
 | | commit message | release note |
 |---|---|---|
@@ -183,884 +104,351 @@ because the commit message in this repo is deliberately the better *record*:
 | quotes the user | yes, that is the point | never |
 | first/second person | fine | never |
 
-See **Release notes** in the global instructions for the full standard. The
-short version: third person, no "I"/"we"/"you", describe the change and not
-the discovery, never mention screenshots or reports or conversations, group by
-tool, lead with the user-visible effect.
+Third person, no "I"/"we"/"you", describe the change not the discovery, never
+mention screenshots, reports or conversations, group by tool, lead with the
+user-visible effect. **It is a privacy boundary too**: a note narrating who
+reported something or what network they were on publishes that under his name,
+and the rule-zero scanners never read release bodies.
 
-**And it is a privacy boundary, not only a style one.** A note that narrates
-who reported something, what they were working on, how many projects they
-have or what network they were on publishes that under his name on a public
-repository - the same class as committing real data, arriving through a door
-the rule-zero scanners do not watch. `tests/test_no_real_world_data.py` reads
-tracked files and commit objects; it has never read a release body, because
-release bodies live on GitHub rather than in the tree. An audit on 2026-09-18
-found no site codes, addresses or credential shapes in any of the 60 published
-notes - but 34 of them quoted him directly. That is the exposure to keep out.
-
-`release.yml` remains for a release published by hand through the GitHub UI,
-and for backfilling assets onto a tag whose build failed.
+**A user-facing feature's note says how to use it**: the **tool**, the
+**panel**, the **exact label** in quotes, and its **default** and how to turn
+it on. Someone once read a note and still could not find a control sixth in a
+panel of eighteen. **Suite and tool versions are different numbers** - suite
+2.92.0 shipped Report 2.60.0, and the Report page shows the Report number - so
+name both.
 
 ## A finished PR is merged and released without asking
 
-**"next time just merge and release without asking."** Said on 2026-09-29,
-after a session opened a PR, watched it go green and then reported it as
-waiting for him to merge. Made a standing instruction on 2026-09-30: **a
-cloud session merges its own PR when every check is green. Do not wait for
-him to say so.** A green PR waiting on him is unreleased work he cannot
-install.
+*"next time just merge and release without asking."* **A cloud session merges
+its own PR when every check is green.** A green PR waiting on him is
+unreleased work he cannot install. A local session pushes straight to `main`.
 
-A session on his computer pushes straight to `main` and the release follows. A
-cloud session (started from claude.ai or his phone) cannot push to `main`, so
-it works on a branch and opens a PR. Merging that PR used to wait for him to reply "merge
-it", often hours later from a phone, and that one step was the only
-difference between the two. It is gone now: from either kind of session he
-asks for a change and gets a release.
-
-The conditions, all of them, on the PR's **current head**:
+All of these, on the PR's **current head**:
 
 1. **Every check has passed**: the four suite jobs, the firefox, chrome and
-   edge jobs, and CodeQL. One that is red, cancelled or still running means
-   no merge. Fix it and push, then wait again.
-2. **The branch contains the latest `main`.** Merge `origin/main` into it
-   first and let CI run on the result. That is also what lets the release
-   skip its own test run (see `scripts/tested_head.py` above), so the release
-   lands about a minute after the merge.
+   edge jobs, and CodeQL. Red, cancelled or running means no merge.
+2. **The branch contains the latest `main`.** Merge `origin/main` in first and
+   let CI run on the result - which is also what lets the release skip its
+   own test run.
 3. **The version number is still yours.** Check
    `git show origin/main:web/assets/versions.json` right before merging. If
-   another session has taken the number, bump to the next one, push, and go
-   back to condition 1.
+   another session took it, bump to the next, push, back to 1.
 
-Then mark the PR ready if it is a draft, and merge it with a **merge commit**
-(not squash or rebase - `scripts/tested_head.py` only recognises a merge that
-added nothing to a tested head) pinned to the head SHA the checks ran on
-(`expectedHeadSha`), so a push arriving in between cannot be merged untested.
-Stop watching the PR and cancel any check-in scheduled for it. Confirm the
-release published with its ZIP and `.sha256` attached, and tell him the
-version it released.
+Then mark it ready if it is a draft and merge with a **merge commit** (not
+squash or rebase - `tested_head.py` only recognises a merge) pinned to the
+tested head SHA (`expectedHeadSha`). Stop watching the PR, confirm the release
+published with its ZIP and `.sha256`, and tell him the version.
 
-**What this does not cover:** a PR somebody else opened, a PR he has said to
-hold, and anything he asked to review first. Those still wait for him.
+**Not covered:** a PR somebody else opened, one he said to hold, anything he
+asked to review first. GitHub's auto-merge is ticked on and does nothing, by
+design - it would need a branch protection rule that would also reject local
+sessions' direct pushes.
 
-**GitHub's own auto-merge is ticked on in the repository settings and does
-nothing**, by design. It needs a branch protection rule requiring checks on
-`main`, and that rule was deliberately not set up: it is one more thing to
-maintain, and a rule that did not exempt him would reject the direct pushes
-that local sessions make. This instruction does the same job without it.
+## Release checklist — the parts that are still yours
 
-## Release process — the parts that are still yours
+1. **Bump `web/assets/versions.json`** - the single source of truth for every
+   tool's version and the suite version. Pages read it via `data-ver` and
+   `WD.applyVersions()`. **Take the number from `origin/main`**, not from your
+   checkout: two sessions have independently written the same number, git saw
+   identical bytes, and nothing flagged it.
+2. **Update `README.md` by hand**: the `WIRELESS TOOLS  vX.X.X` banner, and the
+   version badge of **every tool you touched**.
+   `tests/test_server_and_assets.py::test_public_documentation_uses_current_versions_and_report_status`
+   enforces it. The landing page deliberately quotes no version.
+3. **`git add` new files, then run the suite.** Several tests ask
+   `git ls-files` what exists - including the rule-zero scan - so an unstaged
+   file is invisible locally and read by CI. v2.136.0 went out red that way;
+   v2.102.0 went out dead the opposite way, with a module left untracked.
+   `python scripts/run_tests.py` is the suite CI runs, about 3x faster than
+   `python -m unittest discover -s tests -v`. If system Python's flask or
+   cryptography is broken, use a venv from `requirements.txt`.
+4. **Push, and treat red CI as stop**, whatever it says. CI runs a clean
+   checkout; it is the only thing that sees a file you forgot.
+5. **Commit the release note** as `docs/releases/vX.Y.Z.md`.
 
-1. Bump `web/assets/versions.json` — this is the single source of truth for
-   every tool's version + the suite version. Every page's displayed version
-   (`data-ver` attributes, read by `WD.applyVersions()` in
-   `web/assets/js/wd-shared.js`) comes from this file automatically.
-2. **Also manually update `README.md`** — it quotes versions in prose and is
-   NOT auto-synced from versions.json:
-   - the `WIRELESS TOOLS  vX.X.X` example banner, and
-   - the version badge of **every tool you touched** in the table near the top
-     (not just Cloud Manager — the test checks all seven).
+**Never run a bare `git commit`** where the index might be shared - name the
+paths: `git commit -F msg.txt -- path/one path/two`. A pathless commit once
+published another session's staged work under a message saying the opposite.
+Staging a file another session is also editing needs content-based staging
+(`git hash-object -w --stdin --path <path>` on `HEAD:path` plus your edits,
+then `git update-index --cacheinfo`) - **and the `--path` is what applies the
+LF filter**; see Known gotchas.
 
-   There used to be a third place, `web/pages/hosted-cloud-stub.html`, which
-   quoted the Cloud Manager version. It went with hosted mode. The public
-   landing page (`web/pages/landing.html`) deliberately quotes no version at
-   all, so there is nothing there to fall out of date.
+**If you ever tag by hand, name the SHA, never HEAD**, and check
+`git show vX.Y.Z:web/assets/versions.json` before pushing. v2.103.14 landed on
+another session's commit that way. Tag pushes are blocked from cloud sessions.
 
-   A real test enforces this:
-   `tests/test_server_and_assets.py::test_public_documentation_uses_current_versions_and_report_status`.
-   Skipping step 2 breaks CI on every commit — this has happened before.
-3. Run the full test suite locally before pushing:
-   `python -m unittest discover -s tests -v`
-   If the sandbox's system Python has a broken flask/cryptography install,
-   use a clean venv: `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install
-   -q -r requirements.txt && /tmp/venv/bin/python -m unittest discover -s
-   tests -v`.
+**How the suite is run.** `scripts/run_tests.py` runs each module in its own
+process with its own `WD_USER_DIR`. A test that passes under `discover` and
+fails here usually depends on an earlier module's side effects - fix the test,
+not the order. **Browser tests have their own CI jobs**: the four suite jobs
+set `WD_BROWSER_TESTS=off`; the `browsers` job runs on Windows, one matrix
+entry each for Firefox, Chrome and Edge, via `run_tests.py --browsers-only`.
+`tests/test_ci_splits_and_parallelises_the_suite.py` holds that split. Leave
+both variables unset locally.
 
-   **`python scripts/run_tests.py` is the same suite, about 3x faster**, and
-   it is what CI runs since 2026-09-29. Each module runs in its own process,
-   one per core, and gets its own `WD_USER_DIR` from the runner. Under
-   `discover` that isolation comes from `test_0_user_dir_isolation.py`
-   sorting first, and a module run alone has no such ordering. Browser
-   modules are queued first, and the first one runs alone so Selenium
-   Manager can fetch its drivers before any other browser starts. After
-   that, up to `--browser-jobs` run at once (default: one fewer than
-   `--jobs`). They were the long pole in the one job that runs them: about
-   1,000 s of browser work, against under two minutes for everything else.
-   A test that passes under `discover` and
-   fails here usually depends on an earlier module's side effects:
-   `test_capacity_profiles` did, because another test had reloaded the module
-   under the default user directory. Fix the test, not the order.
-
-   **The browser tests have their own CI jobs, one per browser.** The four
-   suite jobs set `WD_BROWSER_TESTS=off`, which makes `tests.browsers.find`
-   report no browser, so every browser test skips there. The `browsers` job
-   runs on Windows with one matrix entry each for Firefox, Chrome and Edge.
-   It sets `WD_BROWSERS` to that one browser and runs
-   `scripts/run_tests.py --browsers-only`. The first attempt ran them all in
-   one of the suite jobs, and it stayed at 19 minutes: browser modules
-   competing with the rest of the suite for cores slowed down about as much
-   as running them side by side saved. One module took 549 s there, against
-   171 s alone. `tests/test_ci_splits_and_parallelises_the_suite.py` expands
-   every job and fails unless the suite jobs are off and each browser is
-   driven exactly once, on Windows. Leave both variables unset locally.
-4. Commit and push to `main` directly (no PR needed for routine work). A
-   cloud session cannot, so it opens a PR and **merges that PR itself once it
-   is green**. The conditions are under "A finished PR is merged and released
-   without asking".
-   **Then wait for the push's CI run to go green before pushing the tag**
-   (`gh run watch`). A local suite and CI do not ask the same question: CI
-   runs against a clean checkout, so it is the only thing that sees a file you
-   forgot to `git add`. v2.102.0 went out with `tools/user_dir.py` untracked -
-   the local suite passed because the file was sitting there untracked, CI
-   failed with 30 errors, and the tag and release were pushed over the top of
-   that failure. The result was a release whose server could not start and
-   which had no ZIP asset, because the release build correctly refused to
-   package a failing tree. `tests/test_shipped_modules_are_tracked.py` now
-   catches that particular shape locally, but red CI means stop, whatever it
-   says.
-
-   **The corollary, and it has now cost a release of its own: `git add` new
-   files *before* you run the suite locally.** Several tests ask `git ls-files`
-   what exists rather than walking the working tree - `test_no_real_world_data`
-   is the important one, because it is rule zero's enforcement. A brand new
-   test file that is not yet staged is **invisible to that scan**, so the local
-   run is green on a tree the scan never looked at, and CI - which checks out a
-   clean tree where the file is tracked - reads it and fails. That is how
-   v2.136.0 went out red: two new test files carrying an invented site code
-   that was not on `ALLOWED_CODE_TOKENS`.
-
-   Same lesson as v2.102.0 pointing the other way: an untracked file made the
-   local suite pass then and fail now, and both times the local suite was
-   answering a different question from the one CI asks. Stage first, then run.
-5. **The release publishes itself** once the bump lands and CI is green - see
-   the section above. What is still worth doing by hand is the *note*: commit
-   it as `docs/releases/vX.Y.Z.md` and the workflow applies it, in the
-   WaxFrame Pro style (H1 = one-line summary, `## What changed` with bullets,
-   `## Verified`, `## Files changed`).
-
-   The commands below are the manual ceremony. You should not need them, and
-   they are kept because the reasoning in them still applies to anything that
-   tags by hand:
-   ```powershell
-   git tag -a vX.Y.Z -m "vX.Y.Z" <the sha of your own version-bump commit>
-   git show vX.Y.Z:web/assets/versions.json   # must say X.Y.Z before pushing
-   git push origin vX.Y.Z
-   gh release create vX.Y.Z --title "WD Wireless Tools vX.Y.Z" --notes "..."
-   ```
-   **Name the SHA. Never tag HEAD.** Several sessions share this one working
-   tree, so `main` can move between your push and your tag — and a bare
-   `git tag` then puts your version number on somebody else's commit. That
-   happened to v2.103.14: another session committed v2.103.15 in the seconds
-   between, the tag landed on their commit, the release build correctly refused
-   it (`Requested release 2.103.14 does not match suite version '2.103.15'`),
-   and the release had notes and no ZIP. The tag and release were deleted and
-   the change shipped inside v2.103.15, whose ZIP already contained it. The
-   `git show` line above is the cheap check: it reads `versions.json` **at the
-   tag**, which is exactly what the workflow will read.
-
-   **And never run a bare `git commit`.** The index is shared too. A
-   documentation-only commit run with no paths swallowed another session's
-   fully staged margin work - fifteen files, a version bump and all - and
-   published it under a message that ended "Documentation only ... so no
-   version bump", which by then was false. Nothing was lost, but the history
-   now says something that is not true. Name the paths every time:
-   `git commit -F msg.txt -- path/one path/two`, which commits those paths
-   from the working tree and ignores whatever else is staged.
-
-   **Staging a file another session is also editing needs content-based
-   staging, not `git add`.** `git add` takes the whole file including their
-   half-finished work - and if their half references a module they have not
-   tracked yet, that is v2.102.0 again. The way that works: take `git show
-   HEAD:path`, apply your own edits to *that*, `git hash-object -w --stdin
-   --path <path>`, then `git update-index --cacheinfo 100644,<sha>,<path>`.
-   Their working tree is untouched and only your change is staged. Verify it
-   before committing by exporting the index somewhere else and running the
-   suite there: `git checkout-index -a -f --prefix=/some/dir/`. That is the
-   tree CI will see, which is the only tree whose test result means anything.
-
-   **A test that reads the live repository will go red for reasons that have
-   nothing to do with your change.** `tests/test_updater.py::BlockedApiTests`
-   patched three calls and left `remote_branch_state`, which asks how far
-   behind `origin/main` this checkout is - so it passed only while the commit
-   under test was the branch tip, and failed on a re-run after anything else
-   landed. Fixed in v2.103.17. If CI fails somewhere you did not touch, check
-   whether the test is asking the repository a question before assuming you
-   broke it.
-
-   The release workflow (`.github/workflows/release.yml`) triggers on
-   `release: [published]`, checks out the tag, runs tests, builds the ZIP via
-   `scripts/build_release.py`, and uploads it as a release asset.
-   `build_release.py` raises if the tag doesn't match `versions.json`'s
-   `"suite"` value — so the version bump commit MUST land before the
-   tag is pushed.
-   Note: tag pushes work from local sessions but are blocked from
-   Claude Code **cloud** sessions (claude.ai web).
-
-6. **A release note for a user-facing feature must say how to use it.**
-   This is the one rule that makes a note longer, and it survives the
-   plain-facts standard above because it *is* a fact about the product rather
-   than a story about the work.
-
-   "Added X" is not sufficient. Someone read a note, saw the feature listed,
-   and still could not find the control — it was sixth in a panel of
-   eighteen, and the note never said where it was. Every user-facing entry
-   states four things:
-
-   - **the tool** it is in (Report → AP Placement Map)
-   - **the panel** it lives in (the options panel in the Configure step)
-   - **the exact label** on the control, quoted, so it can be searched for
-   - **its default**, and what to do to turn it on
-
-   Where it sits in a long list is worth a sentence too, and if a later
-   release moves it, say so — someone on the older build is reading the
-   older note.
-
-   This is the same rule the product itself follows: state the consequence
-   and the action, not just the fact. A note is documentation for someone
-   who was not in the conversation where the feature was designed.
-
-   Version numbers are a live source of confusion and belong in the note.
-   **The suite version and each tool's version are different numbers** —
-   suite 2.92.0 ships Report 2.60.0, and the Report page shows the Report
-   one. A note that says "fixed in 2.92" leaves the reader unable to tell
-   whether the number on their screen is newer or older than that.
-
+**A test that reads the live repository goes red for reasons unrelated to your
+change.** If CI fails somewhere you did not touch, check whether the test asks
+git a question before assuming you broke it.
 
 ## Unrecoverable earns friction, not refusal
 
-**A guard that refuses the ordinary state of his work is a wall across the main
-road.** When an action cannot be undone, make it ask - do not make it
-impossible.
+**When an action cannot be undone, make it ask - do not make it impossible.** A
+guard that refuses the ordinary state of his work is a wall across the main
+road, and he stops believing the guards that matter.
 
-The case that named this: `Local → Cloud` shipped with
-`PUSHABLE_MATCH_TYPES = {id, manual}`, so replacing a cloud project was offered
-only on a pair sharing Ekahau's id or one he had linked by hand. The reasoning
-was sound - a cloud delete cannot be undone, so the pair should be proven - and
-the effect was that the feature never worked for him. A project built locally
-and uploaded carries Ekahau's id in the **cloud** copy only; the local file does
-not have it until the project is downloaded back. "Local is newer and there is
-no shared id" is therefore the normal state of work in progress, and it was the
-one thing the guard refused. He asked for that feature about six times and every
-ask produced code he could not reach.
+The case that named it: `Local → Cloud` was offered only on pairs sharing
+Ekahau's id. A project built locally and uploaded carries that id in the cloud
+copy only, so "local is newer and there is no shared id" is the normal state
+of work in progress - the one thing the guard refused. He asked for the
+feature about six times and could never reach it. It now asks once, naming the
+cloud project it will delete. A *guessed* pairing is still refused. **Confirm
+what he can check, refuse only what he cannot.**
 
-It is allowed now and asks once, naming the cloud project it will delete. A
-*guessed* pairing - a shared site code, similar wording - is still refused,
-because there the two names are not even the same and there is nothing for him
-to confirm against. That is the line: **confirm what he can check, refuse only
-what he cannot.**
+## Verifying a change — servers, ports, browsers
 
-The same mistake in other clothes, already paid for here: the Prep pass that
-threw away completed work because one step refused, and the delete that made him
-type `DELETE` for something a backup already covered. He has said it plainly
-more than once - a guard that fires on his normal case is worse than no guard,
-because he stops believing the ones that matter.
+**Sessions have hung here: a server start or browser call that never returns
+looks exactly like a session working.** Four stalled in one day.
 
-## Verifying a change — test servers, ports, and browsers
-
-**Sessions have hung here before. The symptom is a session that reports as
-running with a frozen turn count** — a dev-server start or a browser-pane call
-that never returns. From outside it is indistinguishable from idle, which is
-why it costs real waiting time. Four sessions stalled on this in one day.
-
-- **Prefer not starting a server at all.** Most things are verifiable by
-  generating the output and inspecting it, or by executing the renderer in Node
-  against real data. `tests/test_ap_notes_page.py` is the pattern: it slices the
-  render function out of `report.js`, runs it with stubs, and asserts on the
-  HTML. No port, nothing to leak, and it runs in CI.
-- **`WD_USER_DIR` is enforced, not just available.** Set it to a scratch
-  directory before starting any server you are going to drive, and his real
-  configuration cannot be reached.
-  `tests/test_user_dir_is_the_only_door.py` imports every module that owns
-  user data with the variable set and asserts that every path it will write to
-  moved - and that nothing rebuilds `Path.home() / ".wd_wireless_tools"` for
-  itself. It is read once at import, so exporting it after a process starts
-  does nothing.
-
-- **Never bind a default or shared port.** Several sessions work in this repo at
-  once, and 8675 is the user's own running instance. Pick an explicit, unusual
-  high port, and pick a different one per session rather than the number
-  everybody reaches for.
-- **Always tear it down**, on the failure path too. An abandoned process holds
-  the port for the next session. Kill it by PID on the port, not by name — that
-  would take down the user's own instance.
-- **A test process that dies does not take its browsers with it, unless it is
-  in a job.** Windows kills one process and nothing it started, so a module
-  the runner stopped at its timeout, or one that crashed, used to leave
-  geckodriver and a headless Firefox running with no parent - eleven processes
-  on 2026-09-29, and a worktree folder nothing could delete because that
-  Firefox's working directory was inside it. `tests/browsers.py` now places
-  the importing process in a kill-on-close job object, so everything it starts
-  ends when it does, by any route. `ADeadTestProcessTakesItsBrowsersWithIt`
-  holds it. A leftover of this kind is recognisable by `--marionette` and a
-  `rust_mozprofile` temp profile on its command line; his own Firefox has
-  neither.
-- **Starting the server opens a browser window on his desktop, and nobody
-  closes it.** `main()` spawns `_open_browser()` unconditionally, so every test
-  server a session starts puts a real Firefox window on the machine pointing at
-  its port. They are never cleaned up, and Firefox keeps about ten content
-  processes per window. Measured on 2026-09-16 after a day of sessions doing
-  this: **307 Firefox processes holding 22.5 GB, with 1 GB of 32 GB free** -
-  which is most of a day's unexplained slowness. Do not run `server.py`
-  directly for a check. Extract the tree you want to a scratch directory and
-  neutralise `_open_browser` there, or import the module and replace it before
-  calling `main()`. If you find leftovers, the safe way to identify them is the
-  command line: they read `-osint -url http://localhost:<port>/`, and one whose
-  port is no longer listening cannot be anything the user is looking at. Never
-  kill `firefox.exe` by name - his own browser is in that list.
-
-- **A dead port is not enough on its own, and following the rule above as
-  written would have closed his browser.** On 2026-09-20 exactly one process
-  matched `-osint -url http://localhost:8676/`, and 8676 was not listening - so
-  by the paragraph above it was safe to kill. It was the **root** Firefox
-  process, with fourteen children including one holding 940 MB. A session had
-  opened the first window months of tabs ago; every window he opened since
-  lived under it.
-
-  That is how Windows Firefox works: the `-osint -url` invocation is a request
-  to the *running* instance, and when there is no running instance the process
-  making the request becomes the one everything else attaches to. So the
-  command line records how a process was started and says nothing about what it
-  is holding now.
-
-  **Check for children before killing anything, not just the port:**
-
-  ```powershell
-  Get-CimInstance Win32_Process -Filter "Name='firefox.exe'" |
-    Select-Object ProcessId, ParentProcessId,
-                  @{n='MB';e={[int]($_.WorkingSetSize/1MB)}}
-  ```
-
-  A process other `firefox.exe` processes name as their parent is his browser,
-  whatever its own command line says. Leave it, and say so in the report rather
-  than cleaning quietly - an orphan that survives is a nuisance, and his
-  browser is not.
-
-- **Never block indefinitely on a bind or a browser call.** Bound the wait, and
-  fail loudly if it does not come up. A failed check is visible; a stalled
-  session is not, which makes the stall the worse outcome.
+- **Prefer not starting a server at all.** Generate the output and inspect it,
+  or run the renderer in Node against real data -
+  `tests/test_ap_notes_page.py` is the pattern.
+- **WD_USER_DIR is enforced, not just available.** Set it to a scratch
+  directory before starting any server, so his real configuration cannot be
+  reached. It is read once at import. `tests/test_user_dir_is_the_only_door.py`
+  holds that every module owning user data moves with it.
+- **Never bind a default or shared port.** 8675 is his own running instance;
+  pick an unusual high port, different per session.
+- **Always tear it down**, on the failure path too. Kill by PID on the port,
+  never by name.
+- **Never run `server.py` directly for a check.** `main()` opens a real browser
+  window nobody closes - once 307 Firefox processes holding 22.5 GB. Import the
+  module and neutralise `_open_browser` first.
+- **Never kill `firefox.exe` by name, and never by command line alone.** An
+  `-osint -url http://localhost:<port>/` process whose port is dead can be the
+  **root** of his own browser, because on Windows the first requester becomes
+  the instance everything else attaches to. **Check for children first**; a
+  process other `firefox.exe` processes name as parent is his browser. Leave
+  it and report it.
+- **A test process that dies takes its browsers with it** because
+  `tests/browsers.py` puts it in a kill-on-close job object
+  (`ADeadTestProcessTakesItsBrowsersWithIt`). A leftover has `--marionette`
+  and a `rust_mozprofile` profile on its command line.
+- **Bound every wait**, and fail loudly. A failed check is visible; a stall is
+  not.
 
 ### Nobody is at the keyboard
 
-The user works remotely from these sessions and often reads them hours later
-on a phone. **Never use AskUserQuestion or any other interactive prompt**, and
-never run a command that waits on stdin (`git rebase -i`, `git add -i`, a
-`read`, a pager). A session blocked on a prompt nobody can answer looks
-exactly like a session doing work, which is how the time gets lost.
-
-Make the reasonable call, do the whole task, and say in the report what you
-decided and why. A decision that turns out wrong is cheap to correct; a
-session that stopped to ask is not.
+He often reads sessions hours later on a phone. **Never use AskUserQuestion or
+any interactive prompt**, and never run a command that waits on stdin
+(`git rebase -i`, `git add -i`, `read`, a pager). Make the reasonable call, do
+the whole task, and say in the report what you decided and why.
 
 ### A control is verified by running its handler, not by finding its name
 
-**Asserting that the source contains `doTheThing(` proves the string exists. It
-does not prove anything happens when he clicks it.** Four defects have now
-shipped green this way, the last being a `Local → Cloud` button that rendered
-perfectly and was inert for every pair he owned.
+Render the row with the **real** render function, pull the handler back out of
+that HTML, and execute it against recording stubs. `tests/delegated.py` reads a
+control's handler and arguments out of rendered markup, and
+`tests/test_cloud_push_is_reachable.py` is the pattern. It catches a handler
+that is missing, misnamed, takes different arguments, or bails early, and it
+pins argument order - which matters when one argument names what gets deleted.
 
-So for any control, the test renders the row with the **real** render function,
-pulls the `onclick` back **out of that HTML**, and executes it against recording
-stubs. `tests/test_cloud_push_is_reachable.py` is the pattern. It catches a
-handler that is missing, misnamed, takes different arguments, or bails before
-reaching the server - none of which a substring assertion can see. It also
-pins the argument order, which matters when one of them names the thing that
-gets deleted.
-
-And if any text in the app tells him to use a control, that control has to
-exist: `TheAppOnlyPointsAtControlsThatExistTests` fails on a bolded control name
-that nothing renders. The Sync dialog spent a release telling him to use a
-button that was greyed out for every row he had, which reads as the tool lying
-to him. Either wire it or stop naming it.
+**Text that tells him to use a control requires that control to exist**:
+`TheAppOnlyPointsAtControlsThatExistTests` fails on a bolded control name that
+nothing renders.
 
 ### A control that exists is a control that works
 
-**"I don't want the user to be the bug catcher."** That is the standard, in
-his words, said while he was working through the tool before a Monday looking
-for exactly these.
+*"I don't want the user to be the bug catcher."* Wherever the tool **can know
+in advance** that an operation will fail, it must not offer it. The control
+stays visible and named, marked unavailable, carrying the reason - vanishing
+is its own problem.
 
-Wherever the tool **can know in advance** that an operation will fail, it must
-not offer it. Not offered and then refused; not queued and then reported as an
-error. The control stays visible and named, marked unavailable, carrying the
-reason - vanishing is its own problem, because he goes looking for a control
-he has used before.
+**A filter is a view, not a permission.** Auto-assign once proposed
+assignments Ekahau answered `403` to, because candidates were gated on the
+owner *filter* rather than on ownership. Gate an action on the fact.
+`ownershipBlock()` / `iOwn()` in `cloud.js` are the ownership half: assign,
+move, rename, delete, share and replace-cloud need ownership; **reads do not**.
+`tests/test_cloud_offers_only_what_can_work.py` holds both halves.
 
-Three of these turned up in one day, which is what made it a rule:
-
-* the Sync dialog naming a control that was greyed out for every row he had;
-* a download offered as the recommended action *after* a comparison had proved
-  the two files identical;
-* **Auto-assign proposing three assignments Ekahau answered `403 Forbidden`
-  to**, because the candidate set was gated on the **owner filter** rather
-  than on ownership, and he had it on All.
-
-That last one is the general trap and worth stating on its own: **a filter is
-a view, not a permission.** All is the correct thing to be on when you want to
-see everything, and it must never become consent to act on everything. Gate an
-action on the fact, not on what happens to be on screen.
-
-`ownershipBlock()` / `iOwn()` in `cloud.js` are the ownership half:
-non-empty means refused, and the string is the reason shown on the control.
-Ekahau only lets a project's owner change it, so assign, move, rename, delete,
-share and replace-cloud all need it. **Reads do not** - comparing, downloading
-and every local-side action work fine on a project shared with him, and
-refusing those would be the guard firing on a case that works, which is the
-failure described under "Unrecoverable earns friction" above.
-
-`tests/test_cloud_offers_only_what_can_work.py` holds both halves: nothing is
-refused on his own project, and nothing that needs ownership is offered on
-anyone else's.
-
-**Where the tool genuinely cannot know in advance**, the failure explains
-itself in plain language and shows the server's message in full. A raw status
-and an endpoint path reads as a fault in this tool, and a message clipped at
-`{"s…` - which is what he was shown - is no better than a silent failure. He
-had to work out the cause himself from what the tool would not display.
+**Where the tool cannot know in advance**, the failure explains itself in
+plain language and shows the server's message in full - never a raw status or
+a message clipped at `{"s…`.
 
 ### Browser verification — Chrome, Edge and Firefox, every time
 
-**Standing rule from the user: anything user-facing is checked in all three.**
-Not Firefox alone, and not Chromium alone. This was written down only after a
-sweep was run in Firefox by itself and he had to say so again, so it is the rule
-rather than a suggestion.
-
-All three are installed:
+**Anything user-facing is checked in all three.** On his machine:
 
     Chrome   C:\Program Files\Google\Chrome\Application\chrome.exe
     Edge     C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
     Firefox  C:\Program Files\Mozilla Firefox\firefox.exe
 
-That Firefox line carried a literal form-feed for a while, so it read
-`Mozilla Firefoxirefox.exe` - the `\f` had been interpreted rather than
-written. If a browser will not start, check the path exists before you
-believe the error: the same mistake against Edge surfaces as
-`NoSuchDriverException: Unable to obtain driver for MicrosoftEdge`, which
-reads like a missing driver while the driver sits in `~/.cache/selenium`
-the whole time.
+`selenium` drives all three; Selenium Manager fetches drivers. Set
+`options.binary_location`. If a browser will not start, check the path exists
+before believing the error - a bad path surfaces as
+`NoSuchDriverException`. **Firefox decides print questions**: he prints from
+it, and it has twice carried a print fault Chromium does not.
 
-`selenium` drives all three; Selenium Manager fetches each driver itself, so
-there is nothing to install by hand. Point `options.binary_location` at the
-executable above and use the matching `Options` class.
+**Printing to PDF.** `webdriver.Firefox(headless)` →
+`driver.print_page(PrintOptions())` returns the PDF through Firefox's real
+print pipeline. `PrintOptions` is in
+`selenium.webdriver.common.print_page_options`. **Leave
+`page_width`/`page_height` unset** when the question is what `@page` does, or
+every sheet comes back the size you pinned. WebDriver BiDi
+(`browsingContext.print`) is the other route. Firefox has no
+`--print-to-pdf`, and the silent-print preferences produce no file - do not
+rediscover those. Read the PDF with PyMuPDF; `tests/pdf_sheets.py` reads sheet
+sizes without it, for CI.
 
-**Firefox still decides a print question**, because it is what he prints from
-and it is the engine that has twice carried a fault Chromium does not have - the
-trailing blank sheet in v2.96.2 among them. So: check all three, and when they
-disagree about print, Firefox is the one that matters.
+**Do not install Playwright.** Its bundled Firefox left zombie processes that
+locked its own binary and made every later launch fail with `spawn UNKNOWN`.
 
-Firefox has **no `--print-to-pdf`**, and the silent-print preferences
-(`print.always_print_silent` + `print.print_to_filename`) produce no file.
-Headless also throws `RenderCompositorSWGL failed mapping default framebuffer`.
-Do not spend another session rediscovering those three.
-
-What works is **WebDriver BiDi**: launch with `--remote-debugging-port`, connect
-to `ws://127.0.0.1:<port>/session`, then `session.new` →
-`browsingContext.getTree` → `browsingContext.print`, which returns the PDF as
-base64. There is no websocket library installed; a minimal RFC 6455 client is
-about 60 lines. This drives the same path `window.print()` takes, which is what
-the Report Print button calls.
-
-Inspect the result rather than trusting it: decompressing the content streams
-and reading the `(...)` text operators is enough to tell which page each piece
-of content landed on, so "it starts a new sheet" and "the row did not split" are
-assertions about the printed output, not about the CSS source.
-
-**Do not install Playwright.** It was tried on 2026-09-15 and removed the same
-night. Its bundled Firefox spawned processes that never exited, those locked its
-own binary, and every launch after the first failed with `spawn UNKNOWN` against
-files its own zombies were holding - which reads exactly like a policy block and
-is not one. It left eight orphaned processes running and 683 MB in
-`%LOCALAPPDATA%\ms-playwright`. `selenium` + the installed Firefox does the same
-job, cleans up after itself, and drives the browser he actually prints from.
-
-**A second path that works, and needs no hand-rolled websocket: geckodriver.**
-`pip install selenium`, then `webdriver.Firefox(headless)` →
-`driver.print_page(PrintOptions())`, which returns the same base64 PDF through
-the same Firefox print pipeline. Selenium Manager fetches geckodriver itself, so
-there is nothing to install by hand. Two things to know. `PrintOptions` is in
-`selenium.webdriver.common.print_page_options`, not the firefox package. And
-setting `page_width`/`page_height` on it **overrides what the CSS asked for** -
-leave them unset when the question is what `@page` does, or every sheet comes
-back the size you pinned and you will conclude the engine ignored the rule.
-
-This is what found the trailing blank sheet in v2.96.2 - a fault Chromium does
-not have and that therefore survived every check made here until one was run in
-Firefox. Page count is the assertion: seven sheets before, six after. A page
-carrying nothing but the body's white background reads as `chars=0 imgs=0
-draws=1` through PyMuPDF, which is how "blank" was made checkable rather than a
-matter of opinion.
+**Firefox in a cloud container:** `apt` has only the snap stub and mozilla.org
+is blocked. Fetch `firefox-*.conda`, `geckodriver-*.conda`, `nss-*.conda` and
+`nspr-*.conda` from `conda.anaconda.org/conda-forge/linux-64/` (each is a zip
+holding a `pkg-*.tar.zst`) and run Firefox with `LD_LIBRARY_PATH` at the
+extracted `lib/`. **Unset that variable for Chromium**, or the conda NSS
+crashes it and it reads as `InvalidSessionIdException`.
 
 ## Updating (in-app) — how it fits together
 
-- `tools/updater.py` is the whole mechanism. `detect_install()` decides which
-  of git / ZIP / convert / manual / dev applies, and the About panel leads with
-  that single action instead of asking the user to choose. `/api/update/status`
-  (GET) and `/api/update` (POST) in `server.py` are the only entry points; the
-  UI lives in `_showUpdatePanel()` and friends in `web/assets/js/wd-shared.js`.
-- **User data must never live in the install tree**, or updates break. Wall
-  templates moved to `~/.wd_wireless_tools/templates/` for exactly this reason
-  — `templates/WD Template_walltemplate.json` is git-tracked *and* was
-  user-writable, so a customized copy made `git pull` abort with "local changes
-  would be overwritten" and the user could never update again. Shipped
-  templates stay in `templates/` as read-only built-ins; user files shadow them
-  by filename; deleting a built-in writes a tombstone in `hidden.json`. If you
-  add any new user-writable state, put it under `~/.wd_wireless_tools/`.
+- `tools/updater.py` is the whole mechanism. `detect_install()` picks git / ZIP
+  / convert / manual / dev, and About leads with that one action.
+  `/api/update/status` and `/api/update` in `server.py` are the only entry
+  points; the UI is `_showUpdatePanel()` in `wd-shared.js`.
+- **User data never lives in the install tree**, or updates break. Put new
+  user-writable state under `~/.wd_wireless_tools/`. Shipped wall templates
+  stay in `templates/` as read-only built-ins; user files in
+  `~/.wd_wireless_tools/templates/` shadow them by filename, and deleting a
+  built-in writes a tombstone in `hidden.json`.
 - **The update check must not depend on `api.github.com`, and the browser must
-  not call GitHub at all.** Both were true until v2.98.1 and it cost the feature
-  its only user: on his work machine `git pull` worked from a terminal while the
-  in-app check timed out, because a corporate network commonly carries git over
-  HTTPS to github.com and still blocks or throttles `api.github.com`. The page
-  made that call itself, with no timeout on it, so About hung and then reported
-  that GitHub was unreachable on an install perfectly able to update.
-
-  The order now is: the page asks `/api/update/status`; that asks
-  `remote_release_tag()` (`git ls-remote --tags origin`) for a git install; and
-  the API is left with release notes only, on an 8s budget, failing quietly. A
-  ZIP install has no remote and still uses the API. Don't put the API back in
-  front of that, and don't let the browser reach GitHub directly —
-  `tests/test_updater.py::ClientChecksThroughTheServerTests` and
-  `BlockedApiTests` hold both.
-
-  Related: every git call runs with `GIT_TERMINAL_PROMPT=0` and non-interactive
-  credential helpers. Nothing here has a terminal, so a prompt became a
-  two-minute timeout and on Windows could raise a credential dialog on a desktop
-  nobody is at. Local git commands have their own `LOCAL_GIT_TIMEOUT`, and the
-  timeout message names the command — "timed out talking to GitHub" was being
-  reported for `git status`.
-
+  not call GitHub at all.** A corporate network can allow git over HTTPS and
+  still block the API. A git install checks with `git ls-remote --tags origin`;
+  the API is only for release notes, on an 8s budget, failing quietly. A ZIP
+  install still uses the API. `ClientChecksThroughTheServerTests` and
+  `BlockedApiTests` in `tests/test_updater.py` hold it.
+- Every git call runs with `GIT_TERMINAL_PROMPT=0` and non-interactive
+  credential helpers; local commands have `LOCAL_GIT_TIMEOUT`, and a timeout
+  names the command.
 - `is_dev_checkout()` blocks auto-update on a maintainer's clone (detected by
-  `.github` / `tests` / `scripts` / `BACKLOG.md` / `CLAUDE.md`, none of which
-  ship in a release ZIP). Without it, clicking Update in your own working copy
-  would check out a release tag over in-progress work and detach HEAD.
-- `release.yml` publishes `<asset>.sha256` alongside the ZIP. The ZIP updater
-  and both install scripts refuse to install a download they cannot verify,
-  so don't drop that step - **an asset-less release is now a hard stop
-  rather than a warning**, which is the one thing about this that changed on
-  2026-09-21.
+  `.github` / `tests` / `scripts` / `BACKLOG.md` / `CLAUDE.md`).
+- **A missing `.sha256` is a hard stop, the same as a wrong one**, in the ZIP
+  updater and both install scripts.
+  `tests/test_zip_update_installs_only_what_it_verified.py` drives it,
+  including that a release with a valid checksum still installs.
+- `install.ps1` / `install.sh` bootstrap when piped, update when run inside an
+  install. Missing git on Windows installs via `winget` (`--scope user` first),
+  falling back to ZIP with the reason. macOS git is described, never
+  auto-installed.
+- `convert_to_git()` checks out the tag matching the installed version, not
+  the newest - converting and updating are separate decisions. It backs up
+  first and sits behind a confirm step.
 
-  This line used to say "refuse to install a **mismatched** download", and
-  that was true and was not the whole sentence. A *missing* `.sha256` printed
-  "skipping verification" and installed anyway, in all three
-  implementations - so the check only worked against corruption, and not
-  against anybody who could choose what to serve. Absent and wrong are the
-  same answer now, and `install.sh` no longer treats a dropped connection
-  while fetching the manifest as "none published".
+Porting this to his other apps: `docs/dev-notes/porting.md`.
 
-  `tests/test_zip_update_installs_only_what_it_verified.py` drives the whole
-  path against a real archive, including the case that matters most for a
-  morning: **a release with a valid checksum still installs cleanly.**
-- `install.ps1` / `install.sh` are dual-role: piped through `iex`/`bash` they
-  bootstrap a fresh install; run from inside an install folder they update it.
-  Both are in `build_release.py`'s payload, so ZIP users get them too. A fresh
-  interactive install asks git-vs-ZIP; an existing install keeps whatever it
-  already uses and is never asked again.
-- Missing git is **not** a dead end on Windows: `winget install Git.Git` runs as
-  part of the flow (`install_git()` / `Install-Git`), with `--scope user` tried
-  first to dodge the admin prompt. Every failure mode — no winget, no network,
-  blocked by policy — falls back to ZIP with the reason shown. macOS is
-  supported by this repo but git is only *described* there (`xcode-select`,
-  Homebrew), never auto-installed.
-- `convert_to_git()` deliberately checks out the tag matching the version
-  already installed, not the newest one. Converting and updating are separate
-  decisions; doing both at once would silently ship new code to someone who
-  only clicked "switch". It backs up first and is gated behind a confirm step
-  in the UI.
+## Logging — `tools/applog.py`, and there is only one of it
 
-## Logging — `tools/applog.py`, and why there is only one of it
+**Anything that goes wrong goes through `applog`, not `print`.**
 
-**Anything that goes wrong goes through `applog`, not `print`.** A fault
-appeared in his terminal on a machine three hours away, printed a wall of
-traceback, and was gone the moment the window was closed. One chance to see
-it, missed - that is what this exists for.
-
-- The file is `~/.wd_wireless_tools/logs/wd-wireless-tools.log` - on Windows,
-  `%USERPROFILE%\.wd_wireless_tools\logs\`. **Do not add a second log
-  location.** The user directory is where state lives; a second home for it is
-  the same bug as the two-store settings drift above.
-- **It appends and is never truncated on startup**, and the last **7 days** are
-  kept, yesterday's filed under its own date. That mode is not an incidental
-  default: a handler opening in `w` destroys the evidence at the exact moment
-  someone restarts to see whether the fault recurs, which is the sequence that
-  lost one. Ceiling is `MAX_TOTAL_BYTES + MAX_FILE_BYTES` = **10 MB**,
-  enforced by pruning oldest-first, not estimated.
-- **Measured growth on a healthy install: 90 bytes per launch, and nothing
-  else** - browsing every tool and calling every endpoint added zero. Root
-  logger sits at WARNING and `wd` at INFO deliberately, so library chatter
-  cannot rotate the useful part out. If you add per-request logging, put it
-  behind a level that can be dialled down.
-- `applog.install()` is called once from `main()`. It installs **both**
-  `sys.excepthook` and `threading.excepthook` - a raising background thread is
-  never seen by the first, prints to stderr, and the process carries on
-  serving, which is exactly the failure that leaves no trace.
-- `applog.note_failure("update check", exc)` for anything the app chooses to
-  carry on from. `applog.console(...)` for the one line the terminal gets.
-- **A traceback must never reach his terminal.** `server.py` has a catch-all
-  `@app.errorhandler(Exception)` that logs the stack to the file and returns
-  short JSON; Flask's default writes the whole stack to stderr, which is how
-  one failing request filled the console with seventeen lines.
-- The path is on screen in **About → Diagnostics** with a copy button, and in
-  the startup banner. Every run writes a `started - version ...` line, so the
-  file always exists (About must not point at nothing) and the first question
-  - which version was running - is already answered.
-- **It holds real paths and hostnames, so it is rule zero material**:
-  gitignored, absent from the release payload, never a fixture, never
-  uploaded. `tests/test_applog.py` holds all three.
-
-## Porting the updater to the other apps
-
-`tools/updater.py` and the `WD.Updater` block in `wd-shared.js` are written to
-move to LensLedger / Subscription Wizard by copying two files and editing one
-config block each — nothing below `CONFIG` names this app.
-
-- Python: edit the `CONFIG = AppConfig(...)` literal (repo, version file path
-  and key, asset name template, payload files/dirs, user-data dir,
-  `rescuable_globs`). A test asserts `CONFIG.payload_*` stays in step with
-  `build_release.py`; write the equivalent for the target repo.
-- JS: edit `WD.Updater.config` (repo, bootstrap command, endpoint paths), then
-  call `WD.Updater.mount(el, state)` from wherever that app shows version info.
-- Server: copy the `/api/update` and `/api/update/status` routes.
-- `rescue_dirty_templates()` still imports `tools.template_store` directly —
-  that is the one WD-specific seam left. Generalize it if the target app has
-  its own user-editable-but-tracked files; delete the call if it has none.
-- **WaxFrame is the exception**: it is a `file://` app with no server, so it
-  cannot have the in-app button at all. Its path stays the standalone
-  `Update-WaxFrame.ps1`, which is where this design came from.
+- One file: `~/.wd_wireless_tools/logs/wd-wireless-tools.log`. **Do not add a
+  second log location.**
+- It appends, is never truncated on startup, keeps 7 days, and is capped at
+  10 MB. Opening in `w` would destroy the evidence at the moment someone
+  restarts to see if the fault recurs.
+- A healthy install grows 90 bytes per launch. Root logger at WARNING, `wd` at
+  INFO. Put any per-request logging behind a level.
+- `applog.install()` hooks both `sys.excepthook` and `threading.excepthook`.
+  `applog.note_failure(...)` for anything the app carries on from;
+  `applog.console(...)` for the one terminal line.
+- **A traceback never reaches his terminal**: `server.py`'s catch-all
+  `@app.errorhandler(Exception)` logs the stack and returns short JSON.
+- The path is shown in **About → Diagnostics** and the startup banner.
+- **It holds real paths and hostnames, so it is rule-zero material**:
+  gitignored, not in the release, never a fixture. `tests/test_applog.py`.
 
 ## Where a setting is allowed to live
 
-**Adding a setting means adding it to `web/assets/settings-registry.json` first.**
-That file is the rule, not a description of one, and
-`tests/test_settings_registry.py` enforces it. The categories and why each
-exists are defined *in the registry itself* — read them there, they are the
-whole point.
+**Add a setting to `web/assets/settings-registry.json` first.** That file is
+the rule; `tests/test_settings_registry.py` enforces it. Two categories only:
+**preference** (server-side in `settings.json`, exactly one control anywhere)
+and **ui-state** (`localStorage`, deliberately - syncing a collapsed panel
+between machines is a regression). Hosted mode is retired, so there is no
+third store; adding one back recreates the bug where Suite Settings wrote one
+store while the runtime read another.
 
-**Two categories, and only two.** **preference** (follows the person,
-server-side in `settings.json`, exactly one control anywhere) and **ui-state**
-(panel widths, collapsed sections, tips seen — stays in `localStorage`
-deliberately, because syncing a collapsed panel between machines is a
-regression).
-
-There used to be a third, `hosted-mirror`, for the GitHub Pages build where
-Quick Walls / Scale / Report ran with no server to save to. **Hosted mode is
-retired** (v2.61.0 replaced it with a static landing page; v2.71.0 moved the
-last three settings server-side). There is no server-when-present store any
-more, and adding one back would recreate the two-store bug below.
-
-How this drifted in the first place, so it is not repeated: settings went
-wherever the tool that needed them already had a habit, and the habit was set
-by whether that tool happened to have a server call handy. Cloud Manager
-straddled both eras and ended up with `merge_rule` and `live_interval_ms` in
-**both** stores — Suite Settings read and wrote `settings.json` while the
-runtime only read `localStorage`, so the page displayed a value that was not
-in force and saving there did nothing at all. Fixed in v2.57.0; the migration
-takes the browser's value as the one in effect and only deletes the local key
-once the server write has succeeded.
-
-Two of the registry tests each correspond to a bug that shipped: "no setting
-lives in two stores" is that one, and "every `settings/update` sends a `patch`
-envelope" is report page orientation, which posted `{report: {...}}` where the
-server reads `d["patch"]` and therefore saved nothing while reporting success.
+Two registry tests each match a bug that shipped: "no setting lives in two
+stores", and "every `settings/update` sends a `patch` envelope" (a page posted
+`{report: {...}}`, saved nothing, and reported success).
 
 ## Uploading to Ekahau Cloud — what is known, and what is not
 
-**Cloud Manager uploads over an existing cloud project, and has since
-v2.104.6.** `replace_cloud_project` in `tools/cloud_manager.py` does it, the
-row offers it as *"Local newer · replace cloud"*, and the whole-account planner
-includes it. **This section opened by saying the opposite until 2026-09-19** —
-it still described the Sync confirm as reading "that direction is not built
-yet", a sentence that is in no file in the repository, and the backlog carried
-a matching item from v2.104.6 to v2.145.0. Anybody picking it up would have begun
-by building something that already worked.
+**Cloud Manager replaces a cloud project by composition:**
+`replace_cloud_project` in `tools/cloud_manager.py`, offered on the row as
+*"Local newer · replace cloud"*. **Upload, verify, then delete the old one** -
+never delete first, because a failed upload would leave nothing in the cloud.
+It re-checks which side is newer server-side, carries `siteId` over, and
+**names everyone who loses access**, since shares are keyed to the project id.
+Re-sharing on his behalf was deliberately rejected.
 
-**It is a composition, not an in-place write, and that is now settled rather
-than pending.** The open question below — whether `batch/update` accepts
-documents other than `project` — stopped mattering: `batch/update` is JSON, and
-a project's floor plans are binary images fetched from S3 by id during
-download. **A JSON document write cannot carry a re-cropped plan**, which is
-exactly what his edits change. So in-place replacement is ruled out by what the
-data is, not by an untested endpoint, and the capture route at the end of this
-section would not change that. Don't re-open it on the strength of
-`projectHistorys` being present.
+**In-place replacement is ruled out and should not be reopened**: floor plans
+are binary images, and `batch/update` is JSON.
 
-**What the composition does, in order, and why the order is inverted from the
-way he asked for it** (*"why can't we just automatically delete that first and
-then upload the new one?"*): upload, verify the new project is really there and
-really his file, **then** delete the old. Deleting first means a failed upload
-leaves nothing in the cloud — his local copy survives but the shared copy other
-people work from is gone, and he may not hear about it until somebody asks.
-Uploading first means a failure leaves a duplicate: visible, annoying, and
-removable in one click. Same result, safer way round. It also re-reads which
-side is newer server-side before uploading (v2.142.0), carries the original
-`siteId` over, and **names everyone who loses access** — a share is keyed to
-the project id, so a new project does not carry it, and re-sharing other
-people's projects on their behalf is not a side effect an upload should have.
+**Dead ends:** no public Ekahau Cloud API documentation exists; the browser
+capture scripts cannot see Ekahau AI Pro's desktop traffic; proxying it would
+need a trusted root certificate on a **work machine** - not to be suggested.
 
-**What is established about the API, kept because it is still the only written
-record of it:**
-
-- `GET /projectapi/v1/projects/{id}/batch` returns every document keyed
-  exactly as the `.esx` members. `download_project` writes each key as
-  `{key}.json` and the result is byte-identical to Ekahau's own download
-  (`docs/releases/v1.8.41.md`).
-- That batch response therefore **includes `projectHistorys`** — a real `.esx`
-  contains `projectHistorys.json`, and it can only have come from there. So
-  **the cloud stores the revision chain**, which is the data a server would
-  need to detect a conflict. That is what makes in-place update with a
-  sync-or-overwrite prompt plausible rather than wishful.
-- `rename_project` already writes back in place:
-  `PUT /projectapi/v1/projects/{id}/batch/update` with `{"project": {...}}`.
-  Read-all and write-one, same shape.
-- `upload_project` uses `esxfileapi/v1/projects/upload/initiate` → S3 PUT →
-  `commit`. `initiate` takes only `fileName`/`fileExtension`, no project id,
-  so that flow creates a **new** project. This is the web UI's upload path.
-- `assign_to_site(site_id, dataset_id, type)` exists and works, so
-  re-attaching a re-uploaded project to its original site is a call we
-  already have.
-
-**What is NOT established:** whether `batch/update` accepts documents other
-than `project`. Nothing has been tested against it, and no speculative PUT
-should be made against a real account to find out. *Moot for replacement, per
-the note above — it could not carry the floor plans either way.*
-
-**Dead ends — do not spend another session on these:**
-
-- `docs/reverse-engineering/capture_upload.js` **cannot see the sync/overwrite
-  prompt.** That dialog is in Ekahau AI Pro, the desktop client; the script
-  wraps `fetch`/`XHR` in a browser page and desktop traffic never goes near
-  it.
-- **There is no public Ekahau Cloud API documentation.** That is why these
-  capture scripts exist at all.
-- Proxying the desktop client would settle it, but it means installing a
-  trusted root certificate on a **work machine**. Not to be suggested.
-
-**The cheap route that is still open.**
-`docs/reverse-engineering/capture_project_fields.js` hits the project
-*listing*, which is a browser operation and is unaffected by the desktop
-problem. Field names alone answer whether a project record carries a
-revision, version or etag. The safe one-liner, which prints no values and
-copies nothing:
-
-```js
-fetch('/projectapi/v1/projects').then(r => r.json()).then(d => {
-  const p = (Array.isArray(d) ? d : d.projects || d.items || [])[0] || {};
-  console.log(Object.keys(p).sort().join(', '));
-});
-```
-
-Whether the Ekahau Cloud **web** UI can replace an existing project is the
-other open question. Note that if it only offers "upload new", capturing it
-will reveal nothing about replacing — our `upload_project` already is that
-flow.
-
-**The fallback was taken, and it is the design.** Upload, verify, delete,
-re-assign to the original site. The loss is narrower than earlier notes
-claimed — `tags` live inside `project.json` and travel with the file, and
-`projectHistorys.json` travels with it too. Shares are the one real loss, and
-the decision there was made deliberately: `share_projects` exists and could
-re-apply them, but re-sharing on his behalf is not a side effect an upload
-should have, so the result **names the people who lost access** at the moment
-it happens rather than when one of them asks why they cannot open it.
+The full API notes - endpoints, what is established, the one cheap route still
+open - are in `docs/dev-notes/ekahau-cloud-api.md`.
 
 ## The Ekahau AP colour palette
 
 `WD.EKAHAU_COLORS` in `web/assets/js/wd-shared.js` is the only copy. Anything
 that draws or names an AP colour goes through `WD.ekahauColorKey()` (value →
-key) and `WD.ekahauColorName()` (key → the word Ekahau uses).
+key) and `WD.ekahauColorName()` (key → Ekahau's word).
 
 | Ekahau's name | key in code | hex |
 |---|---|---|
-| Clear | `__none` | *(no colour written at all)* |
+| Clear | `__none` | *(no colour written)* |
 | Yellow | `yellow` | `#FFE600` |
 | Orange | `orange` | `#FF8500` |
 | Red | `red` | `#FF0000` |
 | Pink | `magenta` | `#FF00FF` |
 | Violet | `purple` | `#C297FF` |
 | Blue | `blue` | `#0068FF` |
-| Gray | `gray` | `#6D6D6D` (also accepts `#6B6B6B`) |
+| Gray | `gray` | `#6D6D6D` (also `#6B6B6B`) |
 | Green | `green` | `#00FF00` |
 | Brown | `brown` | `#C97700` |
 | Mint | `cyan` | `#00FFCE` |
 
-**The names and the keys disagree on purpose.** Ekahau says Pink, Violet and
-Mint; this codebase called them magenta, purple and cyan long before anyone
-checked. The keys are internal and a saved colour sequence is stored by key,
-so renaming them would silently reorder somebody's sequence — the display name
-is what changed. `WD.EKAHAU_COLOR_ALIASES` accepts either vocabulary coming in.
-
-**Gray is the cautionary tale.** The table started with `#6D6D6D`, which is
-what a real project actually contains. A later pass "corrected" it to
-`#6B6B6B` by reading the swatch off the picker on screen, and from then on
-every grey AP fell through to `Custom #6D6D6D` in the colour list. Reading a
-rendered colour is not the same as knowing what gets written to the file.
-`WD.EKAHAU_HEX_ALIASES` exists for this: **add an observed hex, never replace
-one**, or the bug just moves to whoever had the other value.
-
-**What is verified and what is not.** Red, Green, Orange and Pink are
-confirmed against a real project — they resolved to names in it. Gray is
-confirmed the other way round, as above. Yellow, Violet, Blue, Brown and Mint
-are still only as good as the picker. The hex values were checked against the
-real Ekahau colour picker (2026-09-04). The *stored representation* is not
-verified: across 111 local `.esx` files and 913 APs there is not a single
-`color` field on an access point, because none of those projects has a marked
-AP. Everywhere else the format stores colour as hex (`"color": "#FF0000"` on
-wall types, areas, attenuation areas) and no palette name appears anywhere in
-any file, so hex is what is trusted. If a value arrives that is neither a known
-hex nor a known name it is kept as-is, drawn, and labelled `Custom #XXXXXX` —
-never dropped and never guessed at.
-
-To settle it: mark one AP of each colour in a throwaway project, save, and read
-`accessPoints.json`. Until then, do not assume the table is complete — Ekahau
-may permit a custom colour.
-
-**Two implementations is the failure mode here.** The Report printed `#6B6B6B`
-as a section heading while the Labeler said `Gray`, because grouping-by-colour
-labelled sections with the raw stored value. The user reported seeing a hex,
-the Labeler got fixed, and the Report kept doing it. Every surface that shows
-an AP colour to a reader — labeler sequence list, labeler preview swatch,
-report grouping headings — goes through the shared pair now, and
-`tests/test_ap_color_order.py` holds that.
+- **Keys and names disagree on purpose.** Saved colour sequences are stored by
+  key, so renaming keys would silently reorder them. `WD.EKAHAU_COLOR_ALIASES`
+  accepts either vocabulary.
+- **Add an observed hex to `WD.EKAHAU_HEX_ALIASES`, never replace one.** Gray
+  was "corrected" from a real file's `#6D6D6D` to a picker reading of
+  `#6B6B6B`, and every grey AP became `Custom #6D6D6D`.
+- Red, Green, Orange, Pink and Gray are confirmed against real files; the rest
+  only against the picker. An unknown value is kept, drawn and labelled
+  `Custom #XXXXXX` - never dropped or guessed.
+- **Every surface goes through the shared pair.** The Report once printed a hex
+  heading while the Labeler said `Gray`. `tests/test_ap_color_order.py`.
 
 ## Changing a report means printing it and reading it
 
-**A report that renders is not a report that works, and only one of those had
-ever been checked.** Three defects were reported from a live job in one
-evening - match line text painted across the AP markers at 24pt, AP names
-printed on top of the floor column, a compass page set at 3.9pt - and every one
-of them was green in the suite the whole time. The tests asserted properties:
-that the match line label was rotated, that the table had `table-layout: fixed`.
-Both were true throughout the period the sheets were unusable.
+**A report that renders is not a report that works.** Three defects from one
+live job were green throughout because tests asserted properties (the label
+was rotated) rather than results (it printed at 24pt over the markers).
 
-So, for any change to report generation: **generate the affected reports,
-print them, and measure the PDF.** The question is not "did it render" but
-"can the person this sheet is for finish their task from it".
+For any report change: **generate, print, and measure the PDF.** Can the
+person the sheet is for finish their task from it?
 
-- **AP installation and placement sheets** - an installer standing in the
-  building. Every AP identifier legible at printed size, every marker findable,
-  model, mount, height and orientation present, sections joining up through the
-  match lines and key plan.
-- **Bill of Materials and the summary** - someone raising a purchase order.
-  Every distinct part and its quantity, without counting anything by hand.
-- **Everything** - nothing overlapping, nothing off the sheet, nothing clipped
-  at a page break, table headers repeated on every page they continue onto, and
-  no text under about 6pt.
+- **Installation and placement sheets** - every AP identifier legible, every
+  marker findable, model/mount/height/orientation present, sections joined by
+  match lines and the key plan.
+- **BOM and summary** - every distinct part and quantity, no hand counting.
+- **Everything** - nothing overlapping, off the sheet, or clipped at a break;
+  headers repeated; no text under about 6pt.
 
-### One engine is not the print path, and there are six
-
-**Three failures in one week came from verifying on one output and shipping for
-another**, and the third one produced no document at all:
-
-* the match line text was verified on screen and printed at 24pt;
-* the cover image was verified in preview;
-* the file name was verified against Firefox's own Save to PDF, and does not
-  populate through the Windows print driver, which is what he actually uses;
-* and `CascadiaCode-Regular` was verified in every browser here and killed the
-  job in Adobe Distiller, which is the only path that goes through PostScript.
-
-Firefox's built-in Save to PDF renders the page directly and substitutes fonts
-silently. Distiller does not: it resolves a font by its **PostScript** name, and
-refuses the job when it cannot. Microsoft Print to PDF renders through the
-Windows driver, which takes its suggested file name from the **print job name**
-and not from `document.title`. These are four different programs and they fail
-differently.
-
-**So a Report change is verified against the matrix, not against one browser:**
+### Six output paths, not one
 
 | Output path | Produces a document | Renders correctly | File name populated |
 |---|---|---|---|
@@ -1071,247 +459,83 @@ differently.
 | Firefox → Adobe PDF (Distiller) | yes, since v2.164.1 | not measured | not measured |
 | macOS → Print to PDF | not measured | not measured | not measured |
 
-Filled in on 2026-09-21, and the state of each row is itself part of the
-record:
+The first three are measured. **A printer names its output file from the
+Windows print job, not the page title, and a page cannot change that** - the
+Print step says so (`renderPrintHint` in `report.js`). Adobe failed outright
+until v2.164.1 because Distiller resolves fonts by PostScript name. **Fill a
+row in by printing**; a row that cannot be measured says so. **Do not drive a
+Windows printer from Selenium**: silent printing hangs the driver and orphans
+Firefox. Never print to a real printer on his machine.
 
-* **The first three are measured.** All five report types printed through
-  `driver.print_page(PrintOptions())`, the PDFs read back with PyMuPDF for page
-  count and embedded fonts, and `document.title` read at the moment of
-  printing. Page counts agree across the three engines.
-* **Microsoft Print to PDF is his report, not a measurement.** The document is
-  right and the name is not offered. It follows from what the two kinds of
-  destination are: "Save to PDF" is a browser feature and reads the page's
-  title; "Microsoft Print to PDF" and "Adobe PDF" are *printers*, and the Save
-  dialog a printer raises names the file from the Windows print job. **A page
-  cannot name a printer's output file**, so this is stated in the Print step
-  rather than fixed - see `renderPrintHint` in `report.js`.
-* **Adobe produces a document again** because the font it choked on is no
-  longer in the file - proved by embedding, not by printing: every report type
-  carried `CascadiaCode-Regular` before v2.164.1 and carries only Consolas and
-  Segoe UI after. There is no Adobe printer on his machine to print through.
-* **macOS is empty because there is no Mac here.** Left empty rather than
-  guessed, which is the whole point of the table.
+### Fonts
 
-Fill a row in **by printing**. A row reasoned about from what a driver probably
-does is worth nothing - that is the habit being corrected - and a row that
-cannot be measured says so rather than being left to look measured.
-
-**Do not try to drive a Windows printer from Selenium.** It was tried on
-2026-09-21: a temporary printer on a FILE: port avoids the Save dialog, but
-`window.print()` with `print.always_print_silent` **hangs the driver** until
-the 120s read timeout, leaving orphaned Firefox processes behind. That is the
-same dead end the browser section already records for
-`print.print_to_filename`; it is recorded here too because the Windows-driver
-row is exactly where somebody will reach for it next.
-
-**Adobe stays in the matrix precisely because it is the one that failed.**
-Confirming it produces a document after a font change is how the fix is known
-to have worked rather than assumed.
-
-**What can be automated, and what cannot.** `driver.print_page(PrintOptions())`
-drives Firefox, Chrome and Edge headlessly and hands back the PDF, and PyMuPDF
-reads the page count and the embedded fonts straight out of it -
-`scripts/` has no helper for this yet; `printmatrix.py` in a session scratchpad
-is the pattern, and the useful assertion is the set of embedded font names.
-The Windows driver rows cannot be driven headlessly: the job name is only
-observable by printing to a real printer, which puts a Save dialog on his
-desktop. **Do not do that on his machine**; say the row is unverified instead.
-
-**Where a path genuinely cannot carry something, name the path that can.** If
-the Windows driver will not take the file name from the page, the answer is a
-line in the Print step saying which output preserves it, not silence and not
-pretending the six are equivalent.
-
-### A font has to exist on the machine that prints, not the one that built it
-
-`--mono` led with `'SF Mono', 'Cascadia Code', 'Fira Code'` and ended in
-`monospace`. The generic fallback was never missing and was **never reached**:
-`SF Mono` is not on Windows, so Windows resolved Cascadia Code, which arrives
-with Windows Terminal and VS Code and is therefore on a developer's machine and
-almost nobody else's.
-
-**A stack that resolves is a stack that never falls back.** What matters is not
-the last entry, it is the first one that exists - so the preferred face has to
-be one that ships with the operating system, on both of them:
+**A font stack uses its first face that exists, not its last.** `'Cascadia
+Code'` came with developer tools, so it resolved on dev machines and killed
+the job in Distiller. The preferred face has to ship with the OS:
 
     --mono: Consolas, Menlo, 'DejaVu Sans Mono', monospace;
 
-`tests/test_fonts_survive_printing.py` holds it, in two halves, and the second
-is the one that matters: every stack ends in a generic family (cheap, and
-**passes on the broken stylesheet**), and every named face is on an allowlist of
-OS-shipped ones (catches it). It reads custom properties as well as
-`font-family`, because the first version did not and therefore passed on the
-exact declaration that caused the outage - almost every rule in the suite says
-`font-family: var(--mono)`.
+`tests/test_fonts_survive_printing.py` checks every named face against an
+allowlist of OS-shipped ones, custom properties included.
 
-### What to measure, and how
+### How to measure
 
-`tests/test_ap_notes_page.py` is still the pattern for anything checkable in
-Node. What that cannot do is measure ink on paper, and that is where these
-faults live. Print through the real pipeline (`driver.print_page(PrintOptions())`
-- see the browser section above) and read the PDF with PyMuPDF:
+- **Text on text**: pairs of span bboxes overlapping by more than half the
+  shorter height and a couple of points of width.
+- **Off the sheet**: anything within about 18pt of the edge (Chromium's own
+  footer sits there and is not ours).
+- **Point sizes**: anything under 6pt is a defect.
+- **Cross-references**: every match-line label names a sheet that exists.
 
-- **Text on top of text.** Take every span's bbox and look for pairs that
-  overlap by more than half the shorter one's height and a couple of points of
-  width. That single check finds the whole class: 24 hits on the aim sheet, 4
-  on the BOM, none after. Glyph boxes run slightly above and below their ink,
-  so a large numeral over its own caption is a false positive - hence the
-  thresholds.
-- **Anything outside the printable area.** Any span or image whose box passes
-  within about 18pt of the sheet edge. Chromium's own page footer sits there
-  and is not ours.
-- **Point sizes.** Collect every span's size. Anything under 6pt is a defect,
-  not a style choice.
-- **Cross-sheet references.** Collect the section headings and the match line
-  labels and confirm every reference names a sheet that exists.
+**The fixture is synthetic and deliberately imperfect**: two floors, one dense
+enough to split into sections, around seventy APs, two omni and two
+directional models, long antenna part numbers (real ones reach fifty
+characters) - and an AP with a generic name, one with no model, one with no
+mount or height, one on no floor plan. A clean project passes everything and
+proves nothing.
 
-### The fixture, and why it is deliberately imperfect
+**A size that is a fraction of the drawing is not a size on paper.** Anything
+read off a sheet gets an absolute floor or a size in points - the placement
+map's idiom floors at about 1.35% of the long edge, near 7pt - and labels go in
+the margin, not on the drawing.
 
-Build it synthetically, invented throughout, and structurally realistic: two
-floors, one dense enough to trigger section splitting, on the order of seventy
-APs, **two omni models and two directional models** so per-model counts are
-exercised, external antennas with azimuth, tilt, mount and height, and
-deliberately long antenna part numbers - a real one is fifty characters and
-that is what overflows a table.
-
-And leave faults in it: an AP with a generic name, one with no model, one with
-no mount or height, one on no floor plan. Every one of those found something.
-A clean project passes everything and proves nothing.
-
-### The rule that keeps coming back
-
-**A size that is a fraction of the drawing is not a size on paper.** The match
-line label was `min(cellW, cellH) * 0.045` and printed at 24pt. The aim
-mini-map and coverage markers were `min(W, H) * 0.022` and printed at 5.4pt.
-The placement map has had the right idiom since v2.52 with the reasoning
-written beside it - floor the value at about 1.35% of the long edge, which
-lands near 7pt at the width these print - and the fix each time was to use it.
-Anything a person reads off a sheet gets an absolute floor, or a size in
-points, and the label goes in the margin rather than on the drawing.
-
-### And the one that caused two of them
-
-`.rep-ap-table td.rep-name` is used by three tables. Its print rule said "the
-AP name is transcribed onto a physical label, so it is never cut" and
-implemented that as `white-space: nowrap; overflow: visible` - which is not
-"never cut", it is "never wrapped, and allowed to leave the cell". Only one of
-the three tables holds a short AP name. **Before writing a rule for a shared
-class, check who else uses it**, and prefer wrapping to nowrap: wrapping loses
-no characters, which is what "never cut" actually asks for. `overflow: hidden`
-on a table cell is not a reliable backstop on its own - the BOM had it and
-overflowed anyway. Column widths are the mechanism.
+**Before writing a rule for a shared class, check who else uses it**, and
+prefer wrapping to `nowrap`. `.rep-ap-table td.rep-name` serves three tables,
+and a `nowrap` meant for one broke the other two. Column widths are the
+mechanism; `overflow: hidden` on a cell is not a backstop.
 
 ## A test that would pass with the feature deleted is not a test
 
-**Five shipped defects were green the entire time they were broken**, and all
-five were the same shape: the test asserted that the *source contained*
-something rather than that the *code did* something.
+Five shipped defects were green the whole time, all the same shape: the test
+asserted the *source contained* something rather than that the *code did*
+something. A 2026-09-17 survey found 358 source-text assertions across 61 of
+107 test files.
 
-- **Apply-to-all** reported "Applied to 1 floor" while discarding the work.
-- **The match line label** test asserted the label was *rotated*. It passed for
-  the whole period the installer sheets were unusable.
-- **`↑ Local newer · replace cloud`** - the tests asserted the markup contained
-  `pushLocalOverCloud(`, and it did. He could not use it for days.
-- **Prep's wall step** was verified 1 → 26 on fixtures while doing nothing
-  visible on his machine.
-- **The backups wording** was pinned by a test requiring a particular sentence,
-  so five dialogs told him the wrong place to find a file he had just
-  overwritten. A test that pins the phrasing pins the bug with it.
+**Instead:** render the real thing, pull the handler out of the rendered
+markup, run it, and assert the call that arrives - name, arguments, order, and
+the path that should refuse. `tests/test_cloud_sync_direction.py` is the worked
+example, using the **real** `WD.escJsStr`. For anything visual, measure the
+rendered result. Where a property matters, assert the property, not the
+phrasing - a test pinning a sentence pins the bug with it.
 
-A survey on 2026-09-17 found **358 assertions against the text of a source
-file, across 61 of 107 test files** - 120 of them in 22 files that never
-execute anything at all.
+**Check your test can fail**: mutate the code and watch it go red. And make
+sure the mutation check itself can fail:
 
-### What to write instead
+* **Clear `__pycache__` either side of every mutation**
+  (`find . -name __pycache__ -type d -exec rm -rf {} +`) - a stale `.pyc` can
+  keep running the mutated code after restore.
+* **Grep the anchor and count it before `str.replace(anchor, new, 1)`** - it
+  may hit a different function. If it is not unique, mutate by line number.
+* **An async Node probe must `await` its exit**, or `node -e` exits 0 before
+  the failures are read. `run_drop` in `tests/test_report_filename.py` has the
+  fix.
+* **A stub server standing in for `server.py` must answer
+  `/api/settings/get`**, or the page decides it has no server and skips every
+  server-backed path.
 
-**Render the real thing, pull the handler back out of the rendered markup, run
-it, and assert the call that arrives** - its name, its arguments, their order,
-and what happens on the path that is supposed to refuse.
-`tests/test_cloud_sync_direction.py` is the worked example: it evaluates the
-`onclick` it finds in the output, with `pushLocalOverCloud` and friends
-stubbed, and checks the five arguments. It uses the **real** `WD.escJsStr`,
-because a project named with an apostrophe or a path with a backslash is
-exactly what turns a present button into a dead one.
-
-For anything visual, **measure the rendered result** rather than asserting the
-rule exists - see the report section above, which prints the PDF and reads back
-point sizes and bounding boxes.
-
-**Where a property genuinely matters, assert the property rather than the
-phrasing.** The backups case is the rule: require that the dialog names the
-location `_backup_target` actually uses, not that it contains a given
-sentence. Wording changes; being wrong about where his file went does not
-become acceptable because the sentence was updated.
-
-**Check your test can fail.** Mutate the thing it covers and watch it go red.
-Swapping the first two arguments of `pushLocalOverCloud` fails the new test and
-passed every one of the assertions it replaced.
-
-**And the mutation check itself can be the thing that cannot fail.** Both of
-these turned up in one session on 2026-09-21, and both make the harness report
-a confident answer that is not about the code under test:
-
-* **A stale `__pycache__` survives the restore.** The loop is mutate, run,
-  `cp` the backup back, run again - and `cp` can leave a `.pyc` Python still
-  considers current, so the *next* run executes the mutated bytecode. It shows
-  up as a test that "fails" after the file is provably identical to the
-  backup, which reads as flakiness. Clear the caches either side of every
-  mutation: `find . -name __pycache__ -type d -exec rm -rf {} +`.
-* **`str.replace(anchor, new, 1)` mutates the first occurrence, which may be a
-  different function.** `if u.get("role") != "OWNER" and u.get("username")`
-  appears twice in `cloud_manager.py`, 200 lines apart. The mutation landed on
-  the wrong one, the tests passed, and the honest-looking conclusion was "my
-  test is too weak" - two real assertions were nearly rewritten to chase a
-  defect that had never been introduced. **Grep the anchor first and count
-  it**; if it is not unique, mutate by line number and assert the line says
-  what you expect before writing.
-
-The direction of both errors is the expensive one: they make a working test
-look inadequate, so the response is to weaken or complicate a test that was
-right. Confirm the mutation is actually in the function you think it is before
-believing what the run tells you.
-
-**And the harness can be the thing that cannot fail, not the assertions.** A
-Node probe whose checks are `await`ed has to `await` its exit with them: `node
--e` reaches the end of the script while the async IIFE is still pending, exits
-0, and the failures list is never read. Six tests written that way in
-`test_report_filename.py` passed with four deliberate breakages of the code
-under test in place - every assertion was correct and none of them was ever
-looked at. Nothing about it reads as wrong; mutation is what found it.
-`run_drop` in that file carries the two lines that fix it, and the same trap
-waits for any probe that grows an `async` wrapper.
-
-The second half is the same lesson wearing a browser. A Selenium harness that
-serves `web/` over `http.server` without answering `/api/settings/get` leaves
-`settingsAvailable` **false**, so the page concludes it is the hosted build and
-skips every server-backed path in it. The first run of
-`test_report_filename_browser.py` did exactly that and reported a passing page
-in all three browsers while the feature under test was never reached. **If a
-stub server is standing in for `server.py`, it has to answer the call the page
-uses to decide a server exists at all.**
-
-**And the slice itself can be wrong, which is the same failure one layer down.**
-These probes work by cutting one function out of a source file and `eval`ing
-it, so the two indices that define the cut are load-bearing and neither is
-checked by anything. Both ends went wrong on 2026-09-20, in the same afternoon,
-and each produced a run that was green against code that did not parse:
-
-* **Slicing to "wherever the next function starts" swallows anything inserted
-  between them.** `test_one_control_per_setting_across_pages.py` took
-  `openHashSection` from `  function openHashSection() {` to
-  `  function populate() {`. A new block added between the two came along with
-  it, the eval threw on a reference that block needed, and three tests failed
-  in a way that looked like the change under test rather than the harness.
-
-* **Searching for a two-space `}` finds it inside a four-space one.** The
-  obvious fix - end the slice at the function's own closing brace, `'  }'` -
-  works only for a function with no nested blocks. `populate()` has several, so
-  the slice ended at the first inner `}` and the eval failed on an unbalanced
-  brace.
-
-**Count the braces.** No line ending appears in it, so CRLF and LF both work -
-which matters, because the working tree here is CRLF and a search for
-`'\n  }\n'` silently matches nothing:
+**Slicing a function out of a source file: count the braces.** Slicing to the
+next function's start swallows anything inserted between, and searching for a
+two-space `}` finds a nested one. This works on CRLF and LF alike:
 
 ```js
 const a = src.indexOf('  function openHashSection() {');
@@ -1325,1491 +549,360 @@ while (b < src.length && !(seen && depth === 0)) {
 eval(src.slice(a, b));
 ```
 
-`seen` is what makes it start counting at the first brace rather than exiting
-immediately, and the `if (a < 0) throw` is not optional: without it a renamed
-function silently slices from index -1 and the probe tests something else
-entirely.
-
-**A probe's own failure has to be loud.** Every one of these should raise on
-the slice markers before it evaluates anything, and the Python side should
-raise `AssertionError((r.stdout + r.stderr).strip())` on a non-zero exit rather
-than parsing whatever came back. A probe that returns `{}` on a broken slice
-passes every assertion that checks for absence.
-
-**Where a probe needs the code to run to the end, stub everything it calls.**
-`setOpt` in `report.js` calls four helpers after the line under test; stubbing
-three of them left it throwing partway, which would have hidden a write that
-came after. The cheap way to get the list is to read it off the function
-instead of guessing:
-
-```bash
-sed -n '/function setOpt/,/^  };/p' report.js | grep -oE "\b[a-zA-Z_][a-zA-Z0-9_.]*\(" | sort -u
-```
+**A probe's own failure has to be loud**: throw on a missing slice marker, and
+raise `AssertionError((r.stdout + r.stderr).strip())` on a non-zero exit. A
+probe that returns `{}` passes every assertion of absence. **Stub everything
+the code under test calls**, or it throws partway and hides a later write;
+read the list off the function with
+`sed -n '/function setOpt/,/^  };/p' report.js | grep -oE "\b[a-zA-Z_][a-zA-Z0-9_.]*\(" | sort -u`.
 
 ### The ratchet
 
-`tests/test_a_test_must_be_able_to_fail.py` holds two properties:
-
-- **every handler named in an event attribute is defined somewhere** - 299
-  checked, and a name in an `onclick` is a string until something calls it;
-- **no test file gains assertions against its own source.** Existing debt is
-  recorded per file in `tests/source_string_assertion_baseline.json` and
-  tolerated; growth fails, and so does leaving a stale number in place after
-  converting a file. Lower a number, never raise one.
-
-`scripts/audit_source_string_tests.py` prints the inventory,
-`scripts/audit_tests_that_never_run_anything.py` splits it into files that
-execute and files that do not, and `scripts/audit_handlers_exist.py` is the
-handler check.
+`tests/test_a_test_must_be_able_to_fail.py`: every handler named in an event
+attribute is defined somewhere, and **no test file gains assertions against
+its own source** - existing debt is in
+`tests/source_string_assertion_baseline.json`. Lower a number, never raise one,
+and lower it when you convert a file. Scripts:
+`scripts/audit_source_string_tests.py`,
+`scripts/audit_tests_that_never_run_anything.py`,
+`scripts/audit_handlers_exist.py`,
+`scripts/audit_functions_never_named_by_a_test.py`.
 
 ### A store with no writer is invisible
 
-**Three times in one day the thing that remembers was tested and the thing
-that does the remembering was not.** Every one of them was green, and every
-one of them would have meant a feature that never happened.
-
-* **`sync_state`** - the four states, the tolerance, the retirement rule and
-  the file format all had tests. Nothing checked that a push or a pull calls
-  `record()`. Disabling both call sites left the suite green. With nothing
-  written, `classify` answers `unknown` for every pair for ever and the tool
-  silently falls back to comparing two timestamps, which is the exact thing
-  the record was built to stop.
-* **The comparison memory** - same shape, found the same morning.
-  `record_comparison` was covered; `compare_with_cloud` calling it was not.
-* **The merge same-folder refusal** - a guard held in *two* places,
-  `merge_preview` and `merge_execute`, and exercised by neither. Deleting
-  both left the suite green.
-
-The pattern: a store is easy to test because it is pure, so it gets tested
-first and thoroughly, and the call site that fills it is one line inside a
-long method that is awkward to stand up. The awkward half is the half that
-makes the feature exist.
-
-**So for anything that persists: test that the operation writes it, not only
-that the store can hold it.** Drive the real operation against a stub and
-assert the record afterwards. And assert the *value* - a record written
-against a different number than the reader compares is stored and then never
-found again, which fails exactly as silently as not writing it at all.
-
-**The general rule this is a case of:** a guard, a store or a rule that
-exists in two places needs exercising in both. Mutating one at a time is how
-you find out; mutating both together can hide a gap behind the other copy's
-test.
-
-**And it is only ever found by mutation.** All three of these were written
-by someone who believed the feature was covered, and the coverage looked
-convincing. `scripts/audit_source_string_tests.py` finds tests that assert
-source text; nothing finds a test suite with a hole in the middle of it
-except breaking the code and watching whether anything notices.
+**For anything that persists, test that the operation writes it, not only that
+the store can hold it**, and assert the value. `sync_state`, the comparison
+memory and the merge same-folder guard were each thoroughly tested as stores or
+rules while nothing checked the call site that fills or enforces them;
+disabling it left the suite green. **A guard or store that exists in two places
+needs exercising in both** - mutate one at a time. Only mutation finds these.
 
 ## Backups were removed, and that is the design
 
-**Nothing in this suite copies a file aside before overwriting it any more.**
-v2.141.0 deleted `tools/backups.py`, the Backup Folder tab, the four
-`/api/backups/*` endpoints, the two Settings controls and roughly 1,900 lines
-with them. `tools/settings_backup.py` is the one exception and the section
-below says why.
+v2.141.0 deleted `tools/backups.py`, the Backup Folder tab and its endpoints.
+**Do not put it back.** His argument: a backup taken out of *doubt* is doubt
+made permanent - fix the code or refuse the operation instead. The *undo* case
+was already covered: every tool that derives a project writes under a new name,
+and Cloud Manager's local copy is a copy of what Ekahau still holds.
 
-**Do not put it back without reading this.** It was built, shipped in
-v2.137.0, fixed in v2.137.1, reviewed on his work machine and then removed
-whole - so the next session to notice that a write is unprotected is retracing
-a route that has already been walked to the end.
+**Writes rest on atomicity instead**: build in a temp file and rename over the
+top. `_rewrite_project_json` writes nothing when nothing changes, so callers can
+re-run safely.
 
-### Why
+**No text may promise a copy that is not kept.** Every place in `cloud.js` now
+names the cloud as the other copy. `NothingPromisesACopyThatIsNoLongerKeptTests`
+in `tests/test_cloud_ops_queue.py` fails on the old phrasings and requires the
+true one.
 
-His argument, and it is the right one: *"if we do need backups because we are
-forcing a user into a situation where they're not sure if the data is accurate
-or not or if we're unsure of our results and we need to make a backup because
-of that - that doesn't put a lot of faith in the programming."*
+**What survived:**
 
-That separates the two reasons a backup gets written, and only one of them is
-real:
+* **`tools/longpath.py`** - `MAX_PATH` handling (`tests/test_long_paths.py`).
+* **`tools/settings_backup.py`** - the one exception: a settings import must
+  land on `settings.json` itself, so it keeps three dated copies.
+* **`backups` stays in `_SKIP_DIRS`** - old installs have that folder full of
+  real projects, and a scan that descended into it would flag them all.
 
-* **Doubt** - "this might go wrong". Not a reason for a backup. It is a reason
-  to fix the code, or to refuse the operation. A copy aside is doubt made
-  permanent, and it is doubt the user pays for in disk and in clutter.
-* **Undo** - "this was the wrong thing to do, put it back". Legitimate, and
-  already covered everywhere it arises.
+**Lessons that outlive the feature:**
 
-And the undo case was already answered without a backup, in two different
-ways. **Every tool that derives a project writes it under a new name** -
-Prep, Quick Walls, PlanTrim, Capacity all take a destination, so the original
-is still sitting there under its own name and needs no restoring. *"When I do
-something like Quick Walls I bring the file in, I trust our work and I just
-save right over the original copy."* If he wants to overwrite, he picks the
-old file himself, which is a decision he can see. **And Cloud Manager's local
-copy is a copy already** - a pull replaces it with a project Ekahau is still
-holding afterwards, so a third copy on disk is a backup of a backup. *"If
-someone's primary is the Ekahau cloud then there isn't any reason to be
-concerned with keeping a backup of a backup."*
+* **When a feature moves where it writes, every reader of that location is
+  part of the change** - a pruner looking in the old folder found nothing and
+  reported success.
+* **A root that is "the parent of X" is the whole drive when X is near the
+  top.** One scan walked all of `C:\`.
+* **`Path.is_dir()` does not swallow WinError 1920** (`ERROR_CANT_ACCESS_FILE`),
+  raised by unavailable cloud-storage placeholders and inside `$Recycle.Bin`.
+  Anything that walks his tree must survive it.
 
-The call-site research is what settled it, and it is worth repeating because
-reading the signatures gets it wrong. Five tools had a `backup=` parameter and
-it looked like five tools took backups. Every one of their real callers passed
-a `dest` and `backup=False`, or was a browser download. **Only Cloud
-Manager's two callers ever wrote one** - and those are the two where the cloud
-is holding the other copy.
+## Escaping: four sinks, four escapers
 
-### What the writes rest on instead
+Which escaper is right depends on **where the value lands**:
 
-Atomicity, which was always the better half: build in a temp file, rename over
-the top, so the file is either entirely the old one or entirely the new one and
-never half of either. **A copy aside protects a write that has already gone
-wrong; this stops it going wrong.** `_rewrite_project_json` also writes nothing
-at all when the mutation changes nothing - no temp file, no replace - which is
-what makes every caller free to re-run after an interruption.
+| Where it lands | Escaper |
+|---|---|
+| Element text - `<span>HERE</span>` | `WD.esc` |
+| An attribute - `title="HERE"` | `WD.escAttr` |
+| A JS string in an attribute | `WD.escJsStr` |
+| A URL | `encodeURIComponent` per component |
 
-### The half that was dangerous to remove
+This class has been found three times, each time in a shape the previous guard
+could not see - including `JSON.stringify(x).replace(/"/g, '&quot;')`, which
+never escapes `&`. **Use the function that exists for the job; never assemble
+an escaping pipeline at the call site.** The guard is
+`tests/test_an_attribute_is_escaped_as_an_attribute.py`.
 
-**The code was the easy part. The sentences were not.** Eight places in
-`cloud.js` told him a copy was kept, and a promise of a copy that nobody writes
-is worse than no promise at all: it is how somebody overwrites a file believing
-they can get it back. Every one of them now names the cloud as the other copy -
-"Your local file is replaced by the copy Ekahau is holding. No second copy is
-kept - the cloud one is it." Saying nothing would have been the other failure,
-because a replace with no stated safety net reads as data loss.
+**A guard must not fire on its own explanation**: strip comments and
+docstrings before matching (`_comment_lines` there, `_code_only` in
+`tests/test_user_dir_is_the_only_door.py`).
 
-That sentence has now been wrong twice in the same place, which is why three
-tests hold it rather than one. It said the copy sat next to the original after
-it had moved into a folder; then it promised a copy after there was none.
-`NothingPromisesACopyThatIsNoLongerKeptTests` in `tests/test_cloud_ops_queue.py`
-fails on any of the old phrasings, and the paired test requires the true one -
-a guard against removing the promise and leaving a bare overwrite behind.
+## Comments
 
-### What survived, and where it went
+His rule: *"leave the code comments in that make the difference."*
 
-* **`tools/longpath.py`** - `MAX_PATH`, `long_path`, `write_path`,
-  `describe_failure`. None of it was ever about backups: the limit is hit by
-  `<project>.esx.wd-rename.tmp`, which is the .esx path plus 14 characters, on
-  a project named after its site. `tests/test_long_paths.py` holds it.
-* **`tools/settings_backup.py`** - kept, and it is the one genuine exception.
-  Settings cannot use the new-filename pattern: an import has to land on
-  `settings.json` itself, and there is no second copy of it anywhere. So it
-  keeps three dated copies and prunes its own, with `KEEP_COPIES` and
-  `_prune_copies` self-contained in that module now.
-* **`backups` stays in `_SKIP_DIRS`.** Nothing writes that folder any more,
-  but it exists on every install that ran a sync before v2.141.0, full of real
-  projects. A scan that suddenly descended into it would report every one of
-  them as a local-only project needing attention. It is his folder to delete
-  when he is ready, not ours to start reading.
-
-### Two defects the feature carried, recorded because the shapes recur
-
-Both were silent, both shipped green, and neither is about backups
-specifically.
-
-**A retention policy that looked in the wrong folder did nothing at all, for
-as long as the folder existed.** Cloud Manager filed its copy under
-`<project folder>/backups/<site>/`; `prune_for` went on looking in
-`target.parent`, where there was nothing. "Keep 3" kept every generation ever
-taken and the number in Settings was inert. The general shape: **when a
-feature moves where it writes, every reader of that location is part of the
-change** - and a reader that finds nothing reports success.
-
-**And a scan walked his whole C: drive.** The roots were the project folder
-*and the install's parent*, because the updater's backup folder is a sibling of
-the install - and the parent of `C:\WD-Wireless-Tools` is `C:\`. The fix was a
-depth per root, but the lesson is the one that outlives the feature: **a root
-that is "the parent of X" is the whole drive when X is near the top.** Those
-same roots fed Settings' Check usage and Clean up, so the whole disk had been
-in range of a purge since that screen shipped. Nothing was ever deleted that
-was not backup-shaped, and that is luck rather than design.
-
-**One more, because it will bite something else.** `Path.is_dir()` ignores a
-fixed list of Windows errors - not ready, invalid name, cannot resolve filename
-- and **1920, `ERROR_CANT_ACCESS_FILE`, is not on it. 1921 is**, which is
-exactly why this reads like it should already be handled. A cloud-storage
-placeholder whose provider is not running raises 1920, and so does a reparse
-point inside `$Recycle.Bin`. One of them put
-
-    [WinError 1920] The file cannot be accessed by the system: '...'
-
-on screen where a list should have been, with his Windows profile SID in it.
-Anything that walks a tree he owns needs to survive a directory the system will
-not describe.
-
-## Escaping: four sinks, four escapers, and the guard has missed three of them
-
-**This class of bug has now been found three times, and each time the guard
-written for the previous one could not see the new one.** That pattern is the
-thing to know, more than any individual fix.
-
-`web/assets/js/wd-shared.js` has three escapers and they are not
-interchangeable. Which one is right depends on **where the value lands**, not
-on what the value is:
-
-| Where it lands | Escaper | Why the others are wrong |
-|---|---|---|
-| Element text - `<span>HERE</span>` | `WD.esc` | Goes through `textContent`. Leaves the quote and the apostrophe, which is correct here and only here. |
-| An attribute - `title="HERE"` | `WD.escAttr` | Escapes `&`, `'`, `"`, `<`, `>`. `WD.esc` leaves the quote, so it closes the attribute. |
-| A JS string in an attribute - `onclick="fn('HERE')"` | `WD.escJsStr` | Escapes the backslash, the apostrophe and `<` for the script, *then* `&` and `"` for the attribute. Two layers of decoding sit between the source and the code that runs. |
-| A URL | nothing yet | `encodeURIComponent` per component. No `javascript:` sink has been found; there is no shared helper because there has been nothing to share. |
-
-**The three rounds, and what each guard could not see:**
-
-* **v2.146.1** found 25 attribute sites using `esc` where `escAttr` was
-  needed, by driving a hostile `.esx` through AP Labeler in Firefox. Its
-  guard matches `attr="` *immediately* followed by the text escaper.
-* **2026-09-21** found four more. Two were
-  `JSON.stringify(x).replace(/"/g, '&quot;')`, which reads as thorough and
-  **never touches the ampersand** - so a value containing the six characters
-  `&quot;` survives it, the browser decodes that entity back to a real quote
-  when it reads the attribute, and the string closes early. One was `esc`
-  inside a *JavaScript* string rather than an attribute, on a CSV column
-  header. One was a wall type id out of an `.esx` with no escaper at all.
-  None matched the v2.146.1 pattern; the guard covers all four shapes now.
-* A fifth was found by that widened guard while it was being written, which
-  is the argument for widening it rather than fixing the four by hand.
-
-**The rule that generalises.** An escaper is a function that exists for the
-job. A pipeline of string operations assembled at the call site is a private
-opinion about escaping, and this codebase has now had five of them -
-`walls-swap.js` and `setup.js` each had one that was *correct* and disagreed
-with `WD.esc` about the quote, which is worse than being wrong, because it
-makes every line around it read as a counter-example to the rule. They all
-delegate now.
-
-**And a guard must not fire on its own explanation.** Three checks written in
-this pass matched the comment describing the bug they were checking for,
-because the fix quotes the old code. A check that does that teaches the next
-session to delete the explanation. Strip comments and docstrings first -
-`_comment_lines` in `tests/test_an_attribute_is_escaped_as_an_attribute.py`
-and `_code_only` in `tests/test_user_dir_is_the_only_door.py` both do, and
-both were written after the check fired on its own note.
-
-## Comments: don't restate the code, and don't lose a finding either
-
-He asked for the comments to come out: *"you're my coder and I'm just the
-design guy, so I don't need to know what the hell it is you're coding, and no
-one else is going to look at the code and figure it out either."* Then, shown
-what was actually in them, he narrowed it himself, and **the narrowed version
-is the rule**: *"that's fine, leave the code comments in that make the
-difference."*
-
-So:
-
-* **Don't write a comment that restates the line below it.** `// Drag reorder`
-  above the drag-reorder handler is noise. He does not read it and nobody else
-  is going to.
-* **Do record a finding** — why something is the way it is, what breaks if it
-  is "corrected", what was tried and failed.
-* **Prefer putting that finding where it does work rather than in a comment.**
-  A test docstring that guards the behaviour, a named constant, or a rule
-  enforced in code all fail loudly when someone breaks them. A comment does
-  not. Both patterns are already here and are the ones to copy:
-
-  * `#646D7E` is Ekahau's own roll-up colour and must not be "corrected" — that
-    lives in `tests/test_template_store.py`'s docstring, with the survey behind
-    it, next to the test that asserts it.
-  * Trim must precede areas — that is not a comment at all. It is `ORDER_RULES`
-    in `tools/prep_pipeline.py`, carrying its own `why` string, enforced at
-    runtime by `PrepOrderError`. Reordering the steps fails loudly instead of
-    quietly producing uncropped plans.
-  * `tight: 0` fell through to a ten-pixel default, which is a different
-    real-world size on every drawing — relocated in v2.165.0 out of
-    `esx_trimmer.py` and `prep.js` into
-    `tests/test_margin_is_a_real_distance.py`, where
-    `test_tight_is_a_distance_rather_than_a_pixel_count` holds it.
-
-* **A comment is the fallback**, for when the knowledge genuinely cannot be
-  expressed as a test or a constraint.
-
-**The cleanup is far smaller than it sounds, and saying so up front matters.**
-Measured on 2026-09-20: ~5,088 comment lines across the shipped `.js` and
-`.py`, of which **86 blocks — 88 lines, about 2%** — are genuine restatement,
-plus 56 section dividers. Roughly **77% encode findings** and stay. A
-restatement pass removes about one comment line in fifty, so whoever asks for
-it should be told that before it runs, or the result reads as though nothing
-happened. **The rule for new code is the part that does the work, not the
-sweep.**
-
-Two traps if you ever do measure this again:
-
-* **Count by comment *block*, never by line.** A per-line classifier files the
-  continuation lines of a multi-line finding as noise and badly overstates what
-  is removable. That error was made and retracted on 2026-09-20; the first
-  number reported was wrong by more than an order of magnitude.
-* **A comment can be load-bearing, and nothing about reading it says so.** Four
-  comments cleared the block-level review on 2026-09-22 as unambiguous
-  restatement — labels sitting directly above the line they described. Removing
-  `// AP dots` from `report.js` broke seven tests: `test_grid_config_view.py`
-  slices the function body it inspects with `js.index("// AP dots")`. It was a
-  delimiter with a consumer. **Grep the tests for a comment's text before
-  deleting it**, and run the whole suite rather than the file's own tests —
-  that one surfaced only in the full 3,480-test run.
-
-* **A comment purge is not mechanically safe.** `# noqa:` and `# pragma:` are
-  functional directives, and there are ~66 of them here. A blanket strip breaks
-  linting and coverage.
-
----
+* **Don't restate the line below.**
+* **Do record a finding** - why it is this way, what breaks if "corrected",
+  what failed.
+* **Prefer a finding that enforces itself**: a test docstring beside the test,
+  a named constant, a runtime rule (`ORDER_RULES` in `tools/prep_pipeline.py`
+  is the model).
+* **Grep the tests for a comment's text before deleting it** - `// AP dots` in
+  `report.js` was a slice delimiter and removing it broke seven tests. Run the
+  whole suite.
+* `# noqa:` and `# pragma:` are directives; never strip them.
 
 ## Every control is declared, not written — `WD.actions`
 
-All fourteen pages carry `script-src 'self'` with no `'unsafe-inline'`, so a
-control cannot have an `onclick`. It names its handler instead and the shared
-dispatcher in `wd-shared.js` makes the call. The rollout finished in v2.170.0;
-`tests/test_pages_with_a_strict_policy.py` and
-`tests/test_strict_pages_work_in_a_browser.py` hold it.
+All pages carry `script-src 'self'` with no `'unsafe-inline'`, so **no inline
+`onclick`**. A control names its handler and the dispatcher in `wd-shared.js`
+calls it:
 
 ```html
 <button data-action="call" data-fn="setFilter" data-arg="all">All</button>
 ```
 
-**The attributes.** `data-action` picks the action for a click;
-`data-action-<event>` does it for any other event in `EVENTS`. `data-fn` names
-the handler, resolved by walking a dotted path over `window` — a lookup, not
-`eval`, which is what lets it run under the policy. The actions are `call`,
-`call-chain`, `backdrop-call`, `menu`, `click-target`, `focus-target`,
-`scroll-target`, `toggle-class`, `noop`, `prevent` and `enter-call`.
+`data-action` is for a click, `data-action-<event>` for another event in
+`EVENTS`. `data-fn` is resolved by walking a dotted path over `window` - a
+lookup, not `eval`. Actions: `call`, `call-chain`, `backdrop-call`, `menu`,
+`click-target`, `focus-target`, `scroll-target`, `toggle-class`, `noop`,
+`prevent`, `enter-call`. Argument order is fixed: `data-arg`/`data-arg-json`,
+`data-arg2`, event, element, value, checked. `data-prevent`/`data-stop` call
+the matching method. `tests/test_pages_with_a_strict_policy.py` and
+`tests/test_strict_pages_work_in_a_browser.py` hold it.
 
-Arguments arrive in one fixed order — `data-arg`/`data-arg-json`, `data-arg2`,
-event, element, value, checked — and `data-prevent`/`data-stop` call the
-matching method.
+Traps:
 
-**Four of these exist because the last two pages needed them, and each one is
-a trap worth knowing:**
-
-* **`data-args-json` carries a whole argument list.** Cloud Manager identifies
-  a pair by `(cloudId, localPath, cloudName, localName)` and its replace
-  actions add two timestamps. More named slots would be slots nobody could
-  remember the order of, and packing them into `data-arg` with a separator is
-  what the dispatcher's own note rules out — a separator is a format needing
-  escaping rules of its own. JSON has those rules already, and it keeps
-  numbers as numbers, which two of those handlers compare rather than display.
-* **`data-fn-<event>` names a handler for one event.** The site type-ahead
-  shows on focus, filters on input, hides on blur and takes keys on keydown.
-  Four handlers on one element meant four `data-fn` attributes — **the parser
-  keeps the first and drops the rest**, so every event would have called the
-  focus handler and nothing would have said so.
-* **`data-arg-checked` passes a checkbox's state.** `data-arg-value` cannot
-  stand in: the `value` of a checkbox is the string `"on"` whether it is
-  ticked or not, so `toggleAll(this.checked)` becomes `toggleAll('on')` and
-  every unticking reads as a tick.
-* **`prevent` is not `noop`.** `noop` stops propagation; a mousedown on a
-  suggestion row must keep the field from losing focus *without* hiding the
-  list the row is in.
-
-**Two things that bite when converting a page.**
-
-**`e.currentTarget` is the document under delegation, not the element.** Every
-Quick Walls keybind-slot handler read its element off the event and would have
-pointed at `document` the moment the header applied. They take the matched
-element now, and any index comes off that element's own data attribute —
-because the fixed argument order puts `data-arg` *before* the event, and those
-handlers want the event first.
-
-**An escaper wrapper can be carrying behaviour as well as escaping.** cloud.js
-had `pj()`, which normalised backslashes to forward slashes *and* escaped for
-a JS string. Converting away from inline handlers removed the wrapper and took
-the normalisation with it, so handlers began receiving raw Windows paths where
-the routes expect forward slashes. `np()` is that normalisation on its own.
-`test_cloud_sync_direction` caught it; nothing about reading the call site
-would have.
-
-**Testing a delegated control.** `tests/delegated.py` reads a control's handler
-and arguments back out of rendered markup. A harness that used to pull an
-`onclick` string out and evaluate it uses that instead — and note that a
-harness stubbing `escAttr` as the identity function will now silently produce
-unparseable markup, because the attribute has to survive as an attribute.
-
----
+* **`data-args-json` carries a whole argument list** - use it rather than
+  inventing a separator format.
+* **`data-fn-<event>` names a handler per event.** Multiple `data-fn`
+  attributes silently keep the first.
+* **`data-arg-checked` passes a checkbox's state**; `data-arg-value` gives the
+  string `"on"` either way.
+* **`prevent` is not `noop`**: `noop` stops propagation.
+* **`e.currentTarget` is the document under delegation.** Take the element
+  argument.
+* **An escaper wrapper can carry behaviour.** `cloud.js`'s old `pj()` also
+  normalised backslashes; `np()` does that now.
+* A harness that stubs `escAttr` as identity produces unparseable markup.
 
 ## Known gotchas
 
-- **Every tracked text file is stored with LF, and `core.autocrlf` is not
-  what keeps it that way.** A 32-line change to `cloud.js` was committed as a
-  **20,434-line diff** - the whole file deleted and re-added - because the
-  blob went in with CRLF while `main` holds LF. Nothing failed: the suite was
-  green and the file was correct. What it costs is a change nobody can read
-  in the history, and, on a tree several sessions share, a conflict on every
-  hunk of a file two of them touched.
-
-  `core.autocrlf=true` is a filter on `git add`. The content-staging recipe
-  above -
-
-      git hash-object -w --stdin --path <path>
-
-  - applies no filter at all **without that `--path`**, so the safeguard is
-  off in exactly the situation it is reached for. That is how this happened.
-
-  `.gitattributes` is not a counter-example, though it reads like one.
-  `*.bat text eol=crlf` is a *checkout* instruction: the working tree gets
-  CRLF and the blob stays LF. So the invariant is total, and
-  `tests/test_every_tracked_file_is_stored_with_lf.py` needs no allowlist.
-  It reads the **index** rather than `HEAD`, so a staged file is caught
-  before it is committed.
-
-  Two things about repairing one. **Converting the working tree does not fix
-  a committed blob** - rewrite the blob and re-stage it. And **one pass is
-  not always enough**: an edit written into a CRLF file next to LF
-  neighbours leaves `\r\r\n`, which survives a single CRLF-to-LF replacement
-  and reads afterwards as a single stubborn CRLF. The substitution is `\r+\n`.
-
-- **Write the character, not an escape for it - and never let a patch script
-  decide how many backslashes that takes.** This file is UTF-8 and the source
-  is full of arrows, ticks, stars and em dashes written literally; a tooltip
-  already says "Cloud → Local: apply the cloud name". An escape buys
-  nothing, hides what the string says from anyone reading it, and has now gone
-  wrong three ways in one session:
-
-  - a patch written in a Python raw string put `\\u2019` into `cloud.js`, so a
-    tooltip would have read "the two files\u2019 contents" - valid JavaScript,
-    green tests, visible only to him
-  - a bash heredoc read `\25BE` as an octal escape and a chevron rendered as
-    "BE"
-  - a test looking for the arrow could not find it, because the test wrote the
-    character and the source wrote the escape
-
-  None of those breaks a build. `tests/test_cloud_list_design.py::
-  EscapeSequencesDoNotReachTheScreenTests` fails on a double-escaped sequence
-  in any file that renders text. And **if a patch script keeps mangling
-  backslashes, stop using the shell heredoc** and write the file with the
-  editing tools instead - that is what finally worked both times.
-
-- **A Node probe must be told its encoding, or it passes in CI and fails on his
-  machine.** `subprocess.run(..., text=True)` decodes the child's stdout with
-  the *locale* encoding, which is cp1252 on Windows and UTF-8 in GitHub
-  Actions. A probe that renders a label containing an arrow therefore comes
-  back mangled locally and intact in CI - the exact inversion of the usual
-  failure, and the one that wastes the most time, because the machine reporting
-  the fault is the one nobody trusts. Pass `encoding="utf-8"` to every
-  `subprocess.run` that reads node's output.
-
-- **CI builds this on Python 3.10 and 3.14. His machine runs 3.12, which is
-  between them, so a version-dependent assertion can pass here and fail on
-  both ends.** Not hypothetical: a guard added in v2.156.0 asserted that an
-  invalid escape sequence raises `SyntaxWarning`, which is true from 3.12
-  onwards and is a `DeprecationWarning` up to 3.11. Both 3.14 jobs passed, both
-  3.10 jobs failed, and the local run was green throughout.
-
-  Same shape as the encoding trap above, and worth stating as the general rule:
-  **a check on *how* the interpreter reports something is a check on the
-  interpreter version.** Assert that the thing happened and what it said, and
-  leave the class, the wording and the exception type alone wherever the
-  property actually being tested does not depend on them.
-
-  The matrix is in `.github/workflows/tests.yml`: `[windows-latest,
-  macos-latest]` x `['3.10', '3.14']`. `py -3.14` exists on his machine, so the
-  top end is checkable locally; 3.10 is not installed and is the one that will
-  catch you.
-
-- **`zip_update` had no test at all until v2.156.0, and it is the function that
-  replaces a user's install.** A fix that opened with `root = extract.resolve()`
-  - shadowing that function's own *install* root parameter - pointed the payload
-  copy, the backup and the install at the temp staging directory, which
-  `finally` then deleted. A suite of 2869 tests was green on it.
-
-  `TheRealUpdateRunsTests` in `tests/test_release_archive_paths_are_contained.py`
-  drives it end to end now, stubbing only `fetch_latest_release` and
-  `_download` and asking the install folder where the files went.
-
-  The general question it raised is backlog item 12.
-  `scripts/audit_functions_never_named_by_a_test.py` reports **32 public
-  functions in `tools/` that no test so much as mentions**, three of them
-  reachable from `server.py`. It is a name search rather than coverage, so it
-  is a list to read rather than a verdict - but the one it would have caught is
-  the one that cost a red release.
-
-
-- **A wall template updates every type it carries, including the ones Ekahau
-  ships - and three of those are recoloured on purpose.** `Elevator Shaft`
-  green, `Door, Steel Fire/Exit` orange, `Window, Thick` `#0093EA`, because
-  Ekahau's greys for those three are hard to tell apart on a plan.
-
-  **This was got wrong once, expensively, so do not re-derive it.** v2.100.5
-  read "I just want to add in the walls that we added, not change anything from
-  the defaults" as meaning the template must never deviate from Ekahau, removed
-  those three colours and added a guard to `mergeTemplateTypes` that skipped
-  stock types. Both were wrong: the Quick Walls guide had documented the
-  recolour as a feature for as long as it existed, and he asked for them back -
-  "get them back to where they were for my template."
-
-  The colours were recovered from `wallTypes.json` inside his own most recent
-  project, which is the backup for this: Quick Walls writes his types into
-  every project he applies them to. Only the newest of three September projects
-  carried them; the two older ones had Ekahau's greys, so **take the most
-  recent rather than assuming agreement**.
-
-  The guard had to go with them. Every Ekahau project already contains those
-  three types, so a skip-stock-types rule means his colours never land on
-  anything - a restoration that changes a file and nothing anyone can see. The
-  `kept` / `keptPhrase` reporting is still in `walls.js` if the guard is ever
-  wanted back.
-
-- **The AP notes pages print last, and it is a decision.** The section is
-  unbounded - a survey that photographs every AP would be a page per access
-  point - so nothing anyone looks up by position may sit behind it. Every
-  renderer in `report.js` concatenates `apNotesPages(...)` **in its return
-  expression**, never into an earlier block. That form is enforced by
-  `tests/test_ap_notes_last.py`, and the reason it is enforced rather than
-  written down: the AP Placement Map did `sections += apNotesPages(...)` two
-  dozen lines before its return and then appended the compass page after the
-  lot, so the return expression did not mention the notes at all and there was
-  nothing for a reader to notice. Found by printing it, not by reading it.
-
-- **Per-page paper orientation works in Firefox too. It is measured now, and
-  the invariant still matters more than the feature.** Mixed orientation in one
-  document is done with named `@page` rules (`@page placementLandscape { size:
-  Letter landscape }`) in `web/assets/wd-tools.css`.
-
-  **Settled 2026-09-12: Firefox 155 honours named `@page` sizes at print time.**
-  A two-page probe - one div on a named portrait page, one on a named landscape
-  page - came out 612x792 then 792x612 from a single document, printed through
-  geckodriver's WebDriver Print Page command. Chromium and Edge were already
-  measured and are correct. So mixed orientation is supported in all three, and
-  "make everything portrait" is a workaround nobody needs any more.
-
-  **The history, because this claim has been wrong in both directions.** It was
-  first asserted that Firefox does not implement named pages at all; that was
-  never measured and was withdrawn in 49e30fb. The detection shipped alongside
-  it was wrong on its own terms too - `CSS.supports('page','auto')` returns true
-  in Firefox as well as Chromium, so the warning could never have fired in the
-  browser it existed for. The lesson held through both rounds: print behaviour
-  is a measurement, not a recollection, and the engine has to be named.
-
-  Verified by printing the same document with the `page:` declarations intact
-  and stripped: with them, each page gets the sheet it asked for; without them,
-  a page sized 7.667in wide for a landscape sheet lands on a portrait one.
-
-  **The invariant: layout and sheet must never disagree.** A document that is
-  uniformly landscape is fine. A page laid out for a sheet it will not get is
-  not - content sized for one orientation on a sheet of the other overflows and
-  is clipped at the margin, which is how APs went missing from an installer's
-  drawing. So where named pages are unavailable, pick **one** orientation for
-  the whole document - from the majority of pages, or from the widest content -
-  and lay every page out for that one. Degrading to a uniform document is
-  correct; delivering mixed orientation that the engine will not honour is not.
-
-  Related but separate: the clipping reported alongside this turned out to be
-  the label placer walking labels off the plan edge, fixed in v2.52.1 and
-  guarded by `tests/test_marker_bounds.py`. Don't assume an orientation report
-  and a clipping report are the same defect.
-
-  **A whitespace text node can decide page one's paper, in Firefox only.**
-  Found 2026-09-30 after "the cover is landscape and the first sheet is
-  still portrait". Every class was right. Firefox gives a whitespace-only text
-  node beside a `display:none` sibling its own box in print. `#stageReview`
-  has two such siblings in front of the canvas (the review bar and print
-  hint), and the modals and scripts come after it. Those boxes belong to no
-  named page. So the first sheet took the default paper, and a blank sheet was
-  laid out after the last page. `dropPrintWhitespace` in `report.js` strips
-  them on every render. Naming the root (`html:has(.rep-oriented)`) did not
-  help, and neither did `page: auto` on it. Bisecting by removing DOM nodes in
-  the live page found it. Bisecting the stylesheet did not.
-  `tests/test_report_first_sheet_orientation_browser.py` prints the real page
-  and needs one sheet per page, each on its page's paper.
-  `tests/pdf_sheets.py` reads sheet sizes without PyMuPDF, so the test runs in
-  CI and does not skip there.
-
-  **Firefox in a cloud container:** `apt` only has the snap stub, and
-  mozilla.org is blocked. conda-forge is reachable. Download
-  `firefox-*.conda`, `geckodriver-*.conda`, `nss-*.conda` and `nspr-*.conda`
-  from `conda.anaconda.org/conda-forge/linux-64/`. Each is a zip holding a
-  `pkg-*.tar.zst`. Run Firefox with `LD_LIBRARY_PATH` pointing at the
-  extracted `lib/`. **Unset that variable for Chromium**, because the conda NSS
-  crashes it at launch. The resulting `InvalidSessionIdException` reads like a
-  test fault.
-
-- **A requirement area silently stops the canvas being trimmed, so trimming
-  always runs first.** `esx_trimmer._floor_coord_bbox` unions every coordinate
-  belonging to a floor into the crop box, so that nothing ends up off the image
-  — and `areas[].area[]` is one of the carriers it walks. An area written before
-  the trim is therefore part of the crop and holds it open. On a plan with no
-  walls or APs yet, `capacity_profiles.area_for_floor` falls back to the canvas
-  basis and the area *is* the whole sheet, so it holds the crop open to the full
-  sheet and `FILL_SKIP_RATIO` then skips the floor with "content already fills
-  100% of the canvas".
-
-  Nothing errors. The file opens, every floor is present, and the plan is simply
-  the size it always was — a clean skip reported for a crop that was prevented.
-  This is why `tools/prep_pipeline.py` has `STEP_ORDER` **and** `ORDER_RULES`:
-  the sequence about to run is checked against the rules before anything is
-  written, and again against what actually ran, so reordering the list fails
-  loudly. `tests/test_prep_pipeline.py` tests it twice — once against the guard,
-  and once by building the project that fails and asserting the floor really was
-  cropped, which still fails with every guard deleted.
-
-  The reverse constraint does not exist: injecting wall *types* adds no wall
-  *segments*, so it cannot change the area basis and can run either side of the
-  area step. Only trim-before-areas is real. An early draft of this had the
-  order wrong for a plausible-sounding reason, which is the argument for the
-  rules being executable rather than written down.
-
-- **A note's photo does not live in `pictureNotes.json`, and AP notes are one
-  object type rather than two.** This was written down wrongly once and the
-  wrong version cost a round of design work, so: observed in a real project
-  Ekahau itself wrote (its own `Office-Onsite-Example` with a text note and a
-  picture note added through the Ekahau UI), `pictureNotes.json` was **absent
-  from the archive entirely**.
-
-  What is actually there is `notes.json`, whose entries are
-  `{id, text, imageIds[], history?}`. A picture note is one of those with
-  `imageIds` populated - and usually `text: ""`, because a note taken for its
-  photo often has nothing typed on it. So there is no separate picture-note
-  object to look for: there is a note, and it may have images.
-
-  Access points reference notes by `noteIds`, which is an array, and **one AP
-  can carry several** - in that sample `Cisco: Entrance` holds a text note and
-  a picture note. Resolve every id, not the first.
-
-  Two consequences for anything that reads them. A note with no text but an
-  image is still a note; dropping it because `text` is empty loses exactly the
-  one an installer took a photo for, which is why `notesForAp()` in
-  `web/assets/js/report.js` skips an entry only when text *and* images are both
-  empty. And `pictureNotes.json` is some other feature - it carries
-  `location.coord`, so most likely standalone pins on the plan - and is not the
-  place to look for what is attached to an AP.
-
-  The Report's AP notes page renders the text and marks the attachment rather
-  than printing the image. That is deliberate and there is no image layout path
-  to fall back on: see the option's own description in `report.js`.
-
-- **Owner filter (Mine/Others/All)** in Cloud Manager used to persist to
-  `localStorage` across page loads/sessions, which meant it could get
-  silently stuck on "Mine" or "Others" on one machine while defaulting
-  correctly on another — this once looked like a data bug ("only 3 sites
-  show up") when it was actually a stale filter. It was then made in-memory
-  only, which cost a click on every load for anyone who really does work
-  mostly in their own projects.
-
-  Since v2.51.0 it is **two settings, not one**, and the split is what keeps
-  the old bug from coming back:
-
-  - **What the list opens on** is `cloud.default_owner_filter` in
-    `~/.wd_wireless_tools/settings.json` (Settings → Default view). **It ships
-    as `"mine"`** — `DEFAULTS["cloud"]["default_owner_filter"]` in
-    `tools/settings.py`, and `renderOwnerFilterNotice` says so in its own
-    comment. This note said `"all"` until 2026-09-20, which is the dangerous
-    direction for a note to be wrong in: a session trusting it would "correct"
-    a default that is not wrong. The `"all"` in the picture is the *fallback*
-    — `loadDefaultOwnerFilter` applies it when there is no server or the
-    settings file cannot be read, because showing everything is the safe way
-    to be wrong. It is *not* in `localStorage` — a per-browser copy is exactly
-    how two machines came to disagree about how many sites there were.
-  - **What is on screen now** is the toolbar Owner toggle, and it lasts until
-    the page is reloaded. Nothing in the toolbar writes to the settings file.
-
-  **The saved half survives everything.** Measured on 2026-09-20 by writing
-  settings on one install, deleting that install outright, standing a newer
-  one up against the same user directory and reading back: every value
-  identical, nested `report_defaults` included. So a report that the filter
-  "does not survive an upgrade" is not about persistence — it is the toolbar
-  half, resetting on the reload that an upgrade happens to include.
-
-  **And the notice does not cover the case where that matters most.**
-  `renderOwnerFilterNotice` takes the `cur === 'all'` branch first and
-  **returns early**: that branch explains that other people's projects cannot
-  be edited, and never says the choice is temporary. So switching the toolbar
-  to All — the one state that is both off the shipped default and silently
-  reverting — is the one state with no "just for this visit" warning. The
-  `mine` branch hides the notice entirely when it is not an override, which is
-  deliberate. Reported to whoever owns `cloud.js`; do not write this off as
-  covered on the strength of the sentence that used to be here, which claimed
-  every filter narrower than All was explained.
-
-  An empty list does name the filter that emptied it, and a listing that comes
-  back with no `currentUser` turns the filter off and says why, because
-  otherwise a saved "Mine" would render an empty page indistinguishable from
-  an empty cloud account. `tests/test_cloud_owner_filter.py` drives that
-  through the real functions in Node — don't relax it.
-- **Every matched row gives each side its own checkbox**, on every tab:
-  `s-c:`/`s-l:` for sites and for top-level projects, `ct-c:`/`ct-l:` for the
-  files nested under a site. Selecting either side resolves back to the single
-  pair record in `selectedSyncItems()` for bulk Sync, but is deletable
-  independently in `bulkDelete()` — the kind stays `'cloud'`/`'local'` and
-  never collapses to a combined pair-delete. A cloud delete cannot be undone
-  and a local one can be (download it again), so they are not one decision.
-
-  **The Projects tab was the exception until v2.142.0**, and it is worth
-  knowing why: its rows set neither key, so both cells fell back to the row
-  key, one tick selected the pair, and ticking the cloud box deleted the local
-  `.esx` as well — while the local box beside it still rendered unticked.
-  `tests/test_cloud_each_side_has_its_own_checkbox.py` holds it now.
-
-- **There is no typed-`DELETE` gate any more, and that is deliberate.** A
-  second modal asking him to type `DELETE` used to stand in front of every
-  cloud delete. It went because the ceremony was attached to a sentence that
-  did not say what was going: the first dialog greyed out the list behind it
-  and the second said only "this project".
-
-  Naming the thing is the protection now. The dialog carries the project's
-  name, the site it is in, when it last changed and who else loses access —
-  for every item, never abbreviated to "and 12 more".
-  `tests/test_cloud_delete_identity.py` asserts the old modal's *absence* as
-  well as the new content, so putting it back fails the suite rather than
-  quietly returning. The Duplicates tab was still deleting through a bare
-  `window.confirm()` and was brought onto the same dialog in v2.145.0.
-
-  **Noting how this one got here, because the rule it broke is one this file
-  enforces on the app.** `TheAppOnlyPointsAtControlsThatExist` fails the suite
-  when the product bolds the name of a control nothing renders. These notes are
-  held to no such check, so they went on naming a deleted modal while the app
-  could not have. A session reads this file as authority, so an instruction
-  here pointing at a control that is gone is the same defect as the Sync dialog
-  spending a release recommending a button greyed out for every row he had. No
-  check is proposed - a test parsing prose for control names would fire on
-  every historical passage in the file, of which there are many by design - but
-  that leaves a documentation pass as the only mechanism, which is an argument
-  for running one more often than every forty-five minor versions.
-
-## The dev toolbar — WaxFrame Professional's method, ported
-
-**The toolbar is permanent. Do not remove it.** *"I always like to keep a dev
-toolbar on all of my projects, hence me making you copy it to this one from
-WaxFrame Professional."* It is standing furniture in his products, not
-scaffolding put up for one job, and it was asked for on its own terms.
-
-That matters because of how it arrived here: the first thing it hosted was a
-one-off repair, and he has said the repair itself is disposable - *"once it's
-done then we're going to pull all this code out because it's only a one shot
-deal"*. **That applies to the realign action, not to the toolbar.** A future
-session reading the history could easily reach the opposite conclusion, which
-is the whole reason this paragraph is at the top of the section.
-
-What is disposable, and what is not:
-
-* **`tools/cloud_realign.py`, its endpoint, its button and its tests** - the
-  one-off. The ninety-project event came from a single bulk cloud rename. Once
-  he has run it, it can come out in one commit. See "The first action" below
-  for what is safe to delete with it.
-* **The toolbar itself** - permanent.
-* **`tools/housekeeping.py`** - also not a one-off. Session debris accumulates
-  continuously; that action is what recovered 12.73 GB and found twenty-seven
-  files of his workplace data sitting in `%TEMP%`.
-
-**The underlying condition the realign action fixes is not a one-off either**,
-even though the bulk event was. Renaming any cloud project without pulling
-leaves that pair reading "cloud newer", because Ekahau stamps `modifiedAt` on a
-rename and the local copy does not move. One or two at a time is already
-handled by `fixInternalName` in `cloud.js`, which has named the difference and
-offered to correct it since v2.112.0. The bulk tool exists because ninety at
-once is not a per-row job.
-
-**This is WaxFrame's dev toolbar, not an interpretation of it.** The first
-build reshaped it into a vertical panel of named actions and dropped the
-password gate. Both were reasoned and both were wrong to decide here, and he
-said so plainly: *"That is NOT what I asked for. I asked for the method that we
-used in WaxFrame Pro to be used in this project."* He has two products and
-wants them to work the same way; consistency across them beats either
-individual layout choice.
-
-**It is written to be copied again**, since he keeps one in every project, and
-the split is the same shape the updater uses - see "Porting the updater to the
-other apps".
-
-* **`wd-dev.js` is the portable half.** The only app-specific things in it are
-  `LS_DEV` / `LS_POS` (`wd_dev`, `wd_dev_toolbar_pos`) and `DEV_PW_HASH` -
-  and the hash is the one thing that should *not* change, since he wants one
-  dev password across products.
-* **`wd-dev-actions.js` is entirely this app's**, 37 references to its
-  endpoints. That is the file a new project replaces wholesale.
-* **What it needs from the host**, checked rather than assumed: `WD.toast` and
-  `WD.toggleMenu`. It also renders into the suite's `.modal` / `.btn` /
-  `.progress-track` classes, so a new project supplies those or the
-  `.dev-*` block in `wd-tools.css` comes across with it.
-
-**The rule that follows from that:** where something in WaxFrame genuinely
-cannot carry over, raise it rather than substituting an answer. "WaxFrame does
-X, it cannot work here because Y, so I propose Z" is the shape. Silently
-improving on an established pattern of his is the failure.
-
-    web/assets/js/wd-dev.js          gate, dispatcher, drag, mount
-    web/assets/js/wd-dev-actions.js  every button's markup and handler
-    wd-tools.css                     `.dev-toolbar`, `.dev-flyout`, at the end
-
-### The method, part by part
-
-* **Gate** — `localStorage['wd_dev'] === '1'`, set by a SHA-256 password
-  modal. WaxFrame: `waxframe_dev`, `DEV_PW_HASH`, `submitDevPassword`. A wrong
-  password **closes the modal and says nothing** - telling a guesser they were
-  close is worse than silence.
-* **Entry point** — a nav item under an **Advanced** heading opens the modal,
-  and a second item, hidden until dev mode is on, leaves it. WaxFrame:
-  `#navDevSection`, `.active` to reveal.
-* **Layout** — one horizontal strip: a `⚙ DEV` label that is also the drag
-  handle, buttons carrying an emoji, a short label and a `title`, `|`
-  separators grouping them, and a hover flyout for a cluster. WaxFrame does the
-  flyout with its five Scenes buttons; the Cloud pair uses it here.
-* **Registration** — declarative, in markup:
-  `data-action="call" data-fn="WD.Dev.housekeepLook"`, run by one delegated
-  click listener that walks up to the nearest `[data-action]`. The name is
-  resolved by walking a dotted path over `window` and binding the result -
-  **a lookup, not `eval`**, so it stays safe under a strict CSP. WaxFrame:
-  `callAction` / `resolveDotted` in `helper-handlers.js`. `data-arg`,
-  `data-arg-this`, `data-arg-event`, `data-stop`, `data-prevent` and
-  `call-chain` all carry over.
-* **Drag** — by the label, position in `localStorage['wd_dev_toolbar_pos']`,
-  restored on load and cleared on exit. WaxFrame: `attachDevToolbarDrag`.
-* **Detail goes in a modal**, not in the strip. WaxFrame shows a
-  Troubleshooting Card; this shows `#devResultModal`. Either way the strip
-  stays a strip.
-
-### Injecting into nineteen pages means finding nineteen menus
-
-**The entry went into `#mainMenu`, and only three pages call it that.** Cloud
-Manager, Squirrel and Rename use that id; Home is `homeMenu`, Scale is
-`scaleMenu`, each guide has its own, and the drop-zone tools carry **two**
-menus apiece - `dzMenu` before a file is loaded and `helpMenu` after. So on
-sixteen of nineteen pages the Dev Tools entry silently never appeared, and he
-reported it the only way it looks from outside: *"I see no link in nav
-hamburger menu."*
-
-The fix is to target the **classes**, which is what `WD.toggleMenu` already
-does: `.main-menu, .help-menu, .wd-menu`. Every menu on the page gets an
-entry, the row class matches the menu it lands in (`help-menu-item` in a
-`help-menu`, `menu-item` elsewhere), and the exit wrapper is a **class** not
-an id, because a page with two menus would otherwise have two elements sharing
-`#navDevSection` and only the first would ever be found.
-
-**The testing lesson is the bigger one.** `test_dev_toolbar_browser.py` drives
-`cloud.html` and nothing else, and `cloud.html` is one of the three pages that
-happened to work. One page tested, nineteen shipped.
-`tests/test_dev_nav_on_every_page.py` now walks every page that loads
-`wd-dev.js`, reading that list off disk rather than from a hand-written array,
-and checks the entry is present, in every menu, visible with dev mode off, and
-that clicking it opens the modal. Reverting the injection to the single id
-fails it on sixteen pages by name.
-
-Two things that page needs to know, both found by driving it:
-
-* **Some pages hide their whole app screen until the tool is in use.** Cloud
-  Manager's `#appScreen` is `display: none` until it has a session, so on the
-  login screen the topbar and its hamburger are not on the page at all. A
-  visibility check has to reveal that first, or it is asserting about a menu he
-  cannot see yet either.
-* **The entry must be visible while dev mode is OFF**, because it is the way
-  *in*. Only the exit item is hidden until dev mode is on. Getting those two
-  backwards leaves `?dev=1` as the only route, which looks exactly like the bug
-  above.
-
-**`setup.html` has no hamburger at all** and that is fine - it is the first-run
-screen. `?dev=1` works there, and the test records the absence as intended
-rather than leaving it to look like a gap.
-
-### The one thing that could not carry over
-
-**WaxFrame is one page; this suite is nineteen.** WaxFrame writes the toolbar,
-the modal and the nav entries straight into `index.html`. Copying that here
-would mean the same block in nineteen files, drifting the moment one is edited,
-and there is no server-side include to share it. So the *identical markup* is
-injected once from `wd-dev.js` - same elements, same classes, same data
-attributes, same dispatcher. Only where the string lives differs.
-
-The dispatcher is also **scoped to `#wdDevRoot`**. The rest of this suite wires
-its controls with inline `onclick`, and a document-wide `[data-action]` walk
-would eventually pick up a click meant for a tool. Converting the whole app to
-the WaxFrame dispatcher is a separate job with its own risk.
-
-### What is his rather than WaxFrame's, and is kept
-
-* `--pink` and `--lime` instead of WaxFrame's amber. No tool in this suite uses
-  pink for its chrome, so the strip cannot be mistaken for part of one, and
-  lime marks the half of each pair that writes nothing.
-* **`?dev=1`, and deliberately no key chord.** He was explicit about never
-  landing in dev mode by accident. Both routes in are deliberate; the password
-  modal is WaxFrame's and the query parameter is his.
-* **The two-stage dry run**, expressed in WaxFrame's idiom: the live button is
-  rendered `disabled` and only its own preview turns it on. A failed preview
-  leaves it dead and a completed run disarms it. That is what stands between a
-  mis-click and ninety rewritten project files.
-
-**The dev password is the same one WaxFrame Professional uses**, and only
-the hash lives here: *"The password should use the same hash I currently use
-on WaxFrame Pro."* An earlier build generated its own, reasoning that a
-password should not be shared between two products. He overruled that - it is
-his password and his two products, and he would rather remember one.
-
-**The plaintext is in neither repository**, and `tests/test_dev_password_hash.py`
-holds that: it checks the constant here matches WaxFrame's `DEV_PW_HASH` by
-reading both files (skipped where WaxFrame is not installed), and scans the
-gate, its tests and this file for anything shaped like a password being written
-down - naming the file and line, never the value.
-
-Both repositories are public, so the hash now appears in two public places.
-That is no more exposed than it already was, but one recovered password opens
-both products rather than one. **The flag in `localStorage` is obfuscation,
-not security**: it keeps a curious user out of a maintenance surface on a
-localhost-bound server, and anyone with a console can set it directly.
-
-**Since 2026-09-21 the two actions that *write* are not gated by the flag.**
-They are gated by the server, which starts every run locked and needs the
-password proved to it - `/api/dev/unlock`, compared with
-`hmac.compare_digest` against the hash read out of `wd-dev.js`, so there is
-still exactly one copy of it. The password modal unlocks the server at the
-same time as it sets the flag, so the ordinary route in is unchanged; via
-`?dev=1` the first writing action asks once, which is friction at the moment
-of an irreversible action rather than in front of a read.
-
-**The survey is deliberately not behind it**, and that is the interesting
-half. It is a read, it returns counts rather than values, and the toolbar
-exists to answer "is there junk everywhere" in five seconds - charging a
-password for that is the guard-on-the-normal-case failure this file keeps
-writing rules against.
-
-**It is not a claim that the API is authenticated.** `/api/cloud/*` can
-delete cloud projects and `/api/update` installs code, and neither is behind
-this; locking the dev panel while leaving those open would be theatre. What
-holds for those is the rule the Cloud Manager audit established - every
-destructive action re-derives its target server-side before it writes - and
-`housekeeping.stop_processes` was brought onto it in the same pass, having
-been the one action that passed request data straight to `taskkill /F`.
-`tests/test_the_dev_actions_that_write_need_the_server.py` has the whole
-reasoning, including what the gate is and is not worth.
-
-**Testing the gate without the secret.** `WD.Dev._hash` and
-`WD.Dev._expectedHash` are exposed so a test can hash a string it invented,
-point the gate at that digest, and drive the real submit path - the input is
-read, hashed with the real SHA-256, compared, and on a match the flag is
-written and the toolbar mounts. Neither seam weakens anything: the constant is
-readable in the file and the flag is settable from any console.
-
-### The labels have to say what the button does
-
-He opened the first WaxFrame-method build and said: *"there are items in here
-and I don't know what they do."* The buttons were emoji plus a short phrase
-with the explanation in a `title`, which is hover-to-reveal - and his standing
-rules are that every control carries a text label and that nothing a decision
-rests on hides behind a hover.
-
-So the strip carries readable names, **nothing in the strip writes to
-anything**, and each button opens a panel - WaxFrame's modal, where WaxFrame
-already puts detail. The panel states in plain words what the action looks at,
-what it changes, what it backs up, what it will not do, and that the preview
-changes nothing; the controls sit underneath that. The hover flyout went with
-it, being the thing the rule rules out.
-
-Read-only versus writing stays visible in colour as well as words: the preview
-control is lime and says it changes nothing, the live one is pink and stays
-`disabled` until its own preview comes back clean. The live button **names the
-count** once it arms - "Align 87 projects for real" rather than "Align them for
-real", because that is the moment the number matters.
-
-**The preview report is the screen he decides on**, at around ninety pairs, so
-it gets the room: a wider modal, full names never truncated, and the skipped
-ones grouped by reason with a count per group rather than ninety flat rows.
-
-### The client is not the guard, so stop making him pay for it
-
-He ran the clean-up, got a result, and reported: *"there was no way to make it
-run for real and then when I went back it needed for me to do it again to do a
-preview and run for real was grayed out. This is counterproductive."* Two
-separate faults, and both were self-inflicted friction rather than safety.
-
-**The control was armed; it was just off screen.** The panel's buttons sat
-inside the scrolling body, above the output. A housekeeping report on his
-machine is **six screens tall**, so the moment he scrolled down to read it the
-armed "Delete 4,084 items" button was above the fold with nothing to indicate
-it existed. The controls live in the modal's own footer now, outside the
-scroll. **A control he has to scroll back up to find is a control he does not
-have.**
-
-**Closing the panel threw the result away.** Reopening reset the pending list
-and disarmed the live button, so he had to re-run the whole thing. That
-mattered most for realign, which downloads ninety cloud projects to prove them
-identical before it will offer to write.
-
-Keeping the result is safe, and this is the load-bearing part: **the button
-state is not the safety mechanism.** `housekeeping.sweep` looks every path up
-in a fresh survey and skips anything no longer deletable;
-`cloud_realign.realign` re-downloads and re-compares each pair before touching
-it. Both re-derive their work at write time. The armed button is a
-convenience; the server is the guard. Disarming on close bought nothing and
-cost him the run.
-
-A remembered result says so - when it was taken, and that the server re-checks
-anyway - because showing a stale answer as though it were fresh would be worse
-than clearing it. A *spent* delete list is still cleared after a sweep: keeping
-a preview is the fix, keeping a list that has already been acted on is not.
-
-`test_the_controls_stay_on_screen_however_long_the_report_is` and
-`test_reopening_the_panel_keeps_the_result_and_stays_armed` hold both, and both
-go red on the old behaviour.
-
-### Knowing it is running, and knowing it is done
-
-*"How will I know after the alignment is complete?"* Fair question, and the
-answer was "you won't, until it finishes".
-
-**The server was already reporting progress and nothing was listening.**
-`cloud_realign.realign` calls its `progress_cb` once per pair - "Checking 34 of
-90" - and `server.py` exposes that at `/api/cloud/progress`, keyed by an
-`opId`. The toolbar sent no `opId`, so ninety cloud downloads happened behind a
-button reading "Aligning..." and nothing else. On a fleet that size that is
-minutes of a screen indistinguishable from a hung one.
-
-It sends one now and polls every 250 ms, same shape Cloud Manager's ops deck
-uses, into the suite's existing `.progress-track` / `.progress-fill`. The
-poller stops when the call returns, or it would keep overwriting the report he
-is trying to read.
-
-**The finished state says so in words.** A report appearing where a progress
-bar was is a weak signal, so a live run leads with a lime banner - "Finished.
-71 projects are now in step with the cloud - those rows will stop reporting the
-cloud as newer. Nothing was uploaded, and nothing was deleted from the cloud."
-- and the panel retitles itself to "Realign - finished". A preview never says
-"Finished"; the two states must not read alike.
-
-One wording trap worth keeping in mind: `plural(n, 'one', 'some')` produced
-**"3 some failed"**, which read fine in the source and not on screen. It was
-caught by photographing the finished state rather than by any assertion, and
-`test_a_finished_run_reads_as_a_sentence` exists because that class of mistake
-survives a read-through.
-
-**Adding an action:** one button in `Dev.toolbarInnerHtml` and one handler
-below it in `wd-dev-actions.js`. WaxFrame's convention is that every
-dev-toolbar button's handler lives in one file - `wf-debug.js` - so nothing in
-that file is dead and no button calls something that is gone.
-
-**Testing it.** `tests/test_dev_toolbar_browser.py` drives the real toolbar in
-Firefox, Chrome and Edge over a plain `http.server` on `web/` - never
-`server.py`, which opens a browser window nobody closes. It works the password
-gate, the dispatcher, the flyout, the drag and both actions, and stubs `WD.api`
-because that is the seam the handlers use. **Selenium Manager drops
-`geckodriver/` and `se-metadata.json` into the working directory** on first
-use; both are gitignored, and a 4 MB binary is one `git add -A` from the
-repository if those entries ever go.
-
-### The first action, and the trap in it
-
-**This one is disposable - see the top of this section.** When he has run it
-against his fleet and is satisfied, it comes out: `tools/cloud_realign.py`,
-`CLOUD_ACTIONS["realign_renamed"]` in `server.py`, the `wdRealignOpenBtn`
-button and the `Dev.openRealign` / `realignPreview` / `realignRun` /
-`realignReport` block in `wd-dev-actions.js`, `tests/test_cloud_realign.py`,
-`tests/test_dev_toolbar_report.py`, and the realign tests inside
-`tests/test_dev_toolbar_browser.py`. Nothing else depends on it.
-
-Two things to keep on the way out. `_rewrite_project_json` in
-`cloud_manager.py` was extracted for this, but `set_internal_project_name` is
-its other caller - **it stays**. And the progress polling in
-`wd-dev-actions.js` is generic; any future action that runs for minutes wants
-it.
-
-Three more files mention it and none of them depend on it - the references are
-prose in comments: `tools/housekeeping.py` twice ("same rule as the realign
-action", about re-deriving before writing) and one slice-marker comment in
-`tests/test_housekeeping_report.py`. Reword them; nothing breaks either way.
-The slice markers themselves (`function mb(bytes)` to `Dev.housekeepLook`)
-survive the removal untouched.
-
-`tools/cloud_realign.py` settles the pairs that read "cloud newer" only
-because the cloud project was renamed. Roughly ninety of them, from a rename
-we did. It proves each pair identical with `esx_compare.compare_esx` -
-**not** with `build_matches`'s rename heuristic, whose own docstring says it
-does not prove content - then corrects the name inside the .esx and the date,
-backing up each file it rewrites.
-
-**The trap: `os.utime` is not enough and looks like it is.**
-`get_local_esx_files` reports a local file's `mtime` as
-`internalMtime or fs_mtime` - the `history.modifiedAt` written inside
-`project.json` - because a filesystem date resets on copy or sync and the
-internal one does not. So setting only the disk timestamp leaves every row
-still saying "cloud newer" while every filesystem assertion passes. Both are
-set. `test_the_date_the_tool_compares_is_the_one_that_moves` asserts on what
-`get_local_esx_files` returns, which is the number the row is built from, and
-that test fails on the `os.utime`-only version.
-
-`_rewrite_project_json` in `cloud_manager.py` is the shared back-up, rebuild,
-replace-atomically, prune path, extracted from `set_internal_project_name`
-when this became its second caller. It writes nothing when the mutation
-changes nothing, which is what makes both callers safe to re-run.
-### The second action
-
-`tools/housekeeping.py` answers "is there junk everywhere", and the rule it is
-built on is in the section below: artifacts go in one place. Three things about
-it are worth knowing before changing it.
-
-**It flags on what is inside an `.esx`, not on the extension.** The first
-version counted every `.esx` in a temp folder as his data and lit up 2,226
-entries - all of them fixtures the suite had written. The second counted every
-archive it could not open and lit up 683 - stub files the suite writes to
-exercise error paths. It now reads `project.json` and runs the detector over
-the name and author, with a size floor so a genuinely truncated project still
-gets listed. **A flag that fires on everything is one he learns to scroll
-past**, and this is the category he actually cares about.
-
-**Bound every quantifier in a scanning regex.** The obvious email pattern
-backtracks quadratically on long runs of its own character class with no `@` -
-which is what a log file is. One 393 KB file took **163 seconds**, and the
-first real survey never finished. The bounded form is 0.005 s on the same
-input. `tests/test_no_real_world_data.py` carries the same unbounded pattern
-and has not been bitten because it only reads small tracked files; if it ever
-starts reading logs, bound it there too.
-
-**The registration lookup must name its repository.** `git worktree list` run
-outside a repository exits non-zero and returns nothing, so every worktree
-looked abandoned - including live ones. The server is started from wherever the
-launcher is, so the default `cwd` was wrong. **The failure direction is toward
-deleting more**, which is why it has its own test. Found by driving the real
-action against the real machine, not by any unit test, which is the argument
-for doing that once per feature.
-
-
-## Every session gets its own worktree
-
-**Do not work directly in the shared checkout.** Several sessions run against
-this repository at once, and until 2026-09-17 they all shared one working tree,
-one index and one HEAD. Every incident of that day traces back to that single
-fact:
-
-- a session went to stage its own CSS and found `HEAD` already contained it,
-  because another session had committed the file out from under it
-- a documentation-only commit run with no pathspec swallowed another session's
-  fully staged work - fifteen files and a version bump - and published it under
-  a message saying no version bump was needed
-- `v2.103.14` landed on somebody else's commit, because `main` moved between
-  the push and a bare `git tag`
-- `v2.102.0` shipped dead, because a module was present in the shared tree and
-  untracked, so the local suite passed and CI did not
-- uncommitted routing edits sitting in the shared tree failed CI for a session
-  that had not touched them
-- a session left a landmine where a plain `git add` would have reverted three
-  version numbers
-- and the clean-slate operation itself opened with `tools/cloud_manager.py`
-  holding another session's stale work-in-progress, six lines of committed code
-  behind the tree it was sitting in
-
-Each of those has a rule written against it elsewhere in this file - name the
-SHA, name the paths, content-based staging. Those rules exist because the tree
-is shared. Stop sharing the tree and most of them stop being load-bearing.
-
-**Permanent reusable "slot" worktrees were tried and rejected on 2026-09-29.**
-Six fixed worktrees per repo, to get round the desktop app's one-session-per-
-folder lock. Safe here, because this repo commits its guardrails, but not in
-WaxFrame Professional, whose `CLAUDE.md`, `.confidential-terms` and
-`.claude/launch.json` are gitignored: a worktree starts without them, and its
-confidentiality check passes with no term list to check against. He chose the
-same arrangement in every project over parallelism in one. Do not propose it
-again unless that changes.
-
-### Where they live
-
-    C:\wd-worktrees\<session-name>\
-
-**Outside Dropbox, deliberately.** This repository lives inside a Dropbox
-folder and a worktree is a full second copy of the tree, so a worktree kept
-under the repo gets uploaded and re-downloaded in its entirety, and Dropbox
-takes file locks on files git is in the middle of writing.
-
-An earlier draft of this note kept them at `.claude/worktrees/` and suppressed
-the sync with an NTFS alternate data stream (`com.dropbox.ignored`). That
-works, and it is the wrong shape: it defends against a problem rather than not
-having it, and it stays correct only while one invisible attribute survives
-every fresh clone, restore and copy. `C:\wd-worktrees` is not Dropbox's
-business in the first place. If you find a worktree under `.claude/worktrees/`,
-it predates this note - move it.
-
-The directory is created on demand; nothing needs to exist first.
-
-### How to create one
-
-```powershell
-git fetch origin
-git worktree add -b claude/<session-name> C:\wd-worktrees\<session-name> origin/main
-```
-
-Branch off `origin/main`, not off the shared checkout's `HEAD` - the shared
-checkout may be mid-edit, and that is the whole problem being avoided. Then
-work in there: it has its own index, its own HEAD and its own working files, so
-`git add`, `git commit` and `git stash` all become ordinary again.
-
-Two things are still shared and are worth knowing. The **object store** is
-shared, which is why this is cheap rather than a second clone. And the **stash
-stack** is shared, so a bare `git stash pop` in a worktree can still take
-somebody else's entry - prefer a throwaway WIP commit, or `git stash push -m
-"<unique tag>"` and `git stash apply <sha>` by id.
-
-### Your copy goes stale while you work, and nothing tells you
-
-**A worktree is only current at the moment it is created.** It is branched from
-`origin/main`, which is correct - and from that second onward, every other
-session's finished work lands on `main` and yours does not move. Nothing warns
-you. No command you run in your own worktree behaves any differently. The copy
-you are reasoning about is simply, silently, no longer what is on `main`.
-
-The instruction below - fetch and rebase before pushing - is correct and it is
-**late**. It catches the problem at the last possible moment, after all the work
-is done, which is the most expensive place to discover that somebody deleted a
-module you spent the afternoon calling.
-
-So: **`git fetch origin && git rebase origin/main` at the start of the session,
-and again before starting any large change** - not only at push time. Then
-re-read this file, because it is the thing most likely to have changed
-underneath you, and a stale copy of it is how a session confidently rebuilds
-something another session has just deliberately removed.
-
-Measured on 2026-09-19, which is why this is here. One branch held finished work
-for thirteen hours while `main` moved five times - a bug fix, a release, two
-documentation passes and an edit to this file. Every rebase was clean, so
-nothing was lost. What it cost was a version number: two sessions independently
-wrote `2.140.0` into `versions.json`, git saw identical bytes and therefore no
-conflict, and the collision was caught by eye rather than by any tool. **A
-rebase you do early is a rebase against a small difference.** See "The one thing
-a worktree does not protect you from" below for the version half of that.
-
-### How work merges back
-
-`main` is still the only branch anybody publishes, and routine work still goes
-straight to it - no PR. From inside the worktree:
-
-```powershell
-python -m unittest discover -s tests          # green first
-git fetch origin
-git rebase origin/main                        # not interactive, no editor
-python -m unittest discover -s tests          # green again, after the rebase
-git push origin HEAD:main
-```
-
-The second run is not ceremony. A rebase replays your commits onto code you
-have not tested against, and that is exactly how a green branch turns into a
-red `main`.
-
-If the push is rejected because `main` moved, fetch and rebase again. Never
-force-push `main`. It was force-pushed once, on 2026-09-17, for the history
-rewrite, with the repository owner's explicit say-so for that one operation.
-
-Then wait for CI, and tag from the shared checkout as the release process
-describes - naming the SHA, as always.
-
-### The one thing a worktree does not protect you from
-
-**Two sessions can pick the same version number, and git will not notice.**
-
-On 2026-09-17 two worktrees bumped `versions.json` from 2.107.0 to 2.108.0
-within minutes of each other, for different features. The second rebase applied
-cleanly and reported nothing, because both sides had written the *same* bytes -
-a conflict needs the two versions to differ. `main` ended up with two unrelated
-commits both titled v2.108.0, and the suite version no longer distinguished
-them. Nothing was lost and CI stayed green, which is what makes it easy to miss.
-
-A worktree isolates your files. It does not reserve a version number. So before
-you bump:
-
-```powershell
-git fetch origin
-git show origin/main:web/assets/versions.json
-```
-
-and bump from *that*, not from what your worktree had when you created it. If
-somebody has taken the number you were going to use, take the next one - and if
-you only notice after pushing, bump again in a follow-up commit rather than
-leaving two changes wearing one number, because the release workflow matches a
-tag to exactly one `versions.json`.
-
-### Remove it when you are finished
-
-A worktree left behind is a stale branch, a second copy of the tree, and a
-place rule zero material sits unnoticed. From the shared checkout:
-
-```powershell
-git worktree remove C:\wd-worktrees\<session-name>
-git branch -d claude/<session-name>
-git worktree prune -v
-```
-
-`git worktree remove` refuses if the tree has uncommitted changes, which is the
-correct behaviour - look at what is in there before reaching for `--force`.
-
-**If a teardown ever fails on a perfectly clean worktree**, with:
-
-    error: failed to delete '...': Permission denied
-
-that is not a lock on the contents. Git deletes every file successfully and
-then cannot remove the now-empty directory, because something outside git is
-holding a handle on it. The registration *is* cleared - `git worktree list`
-stops showing it - so the state is half-done while looking finished. Finish it:
-
-```powershell
-Remove-Item C:\wd-worktrees\<session-name> -Recurse -Force
-git worktree prune -v
-```
-
-**Measured on 2026-09-17, and it is the argument for the location.** A worktree
-under the repo inside Dropbox failed teardown exactly this way. Three
-create-and-remove cycles at `C:\wd-worktrees` - 380 files each - all exited 0
-with the directory gone. So the handle was Dropbox's, and moving out of Dropbox
-did not merely avoid the sync traffic, it removed the failure. Keep the
-`Remove-Item` line anyway: a virus scanner or an open editor can hold a handle
-just as well.
-
-**And most often it is your own session holding it.** On 2026-09-18 a teardown
-failed this way outside Dropbox entirely, with `Remove-Item -Force` *also*
-failing on a directory that was already empty. The holder was a `python.exe`
-this session had started itself, hours earlier, as a long-running background
-command that never returned - its working directory was inside the worktree,
-so an empty folder could not be removed while it lived.
-
-Nothing about that is visible from git, from the error, or from listing the
-folder. What finds it is asking which processes are running out of the path:
-
-```powershell
-Get-CimInstance Win32_Process |
-  Where-Object { $_.CommandLine -like "*<worktree-name>*" } |
-  Select-Object ProcessId, Name, CommandLine
-```
-
-Stop the ones that are yours - check the command line rather than the name,
-for the same reason as `firefox.exe` - and the removal then succeeds. **A
-backgrounded command that has not returned is still a live process**, so kill
-it before teardown rather than discovering it as a permission error. The dev
-toolbar's housekeeping action lists exactly these, which is the other half of
-why it exists.
-
-### Prune does not clean up after an abandoned session
-
-**`git worktree prune` cannot see the failure mode that actually happens.**
-An earlier version of this note said to prune at the start of every session and
-left it there. That instruction is not wrong, it is inert: prune only clears
-registrations whose *directory has gone missing*. A session that dies mid-task
-leaves the directory sitting there intact, so prune looks straight past it,
-exits 0 and prints nothing.
-
-Measured on 2026-09-18, on a worktree created and then abandoned without
-teardown:
-
-    git worktree prune -v     # exit 0, no output
-    git worktree list         # still lists it
-    Test-Path <dir>           # still True
-
-So a green prune at session start is not evidence that `C:\wd-worktrees` is
-clean. On 2026-09-18 that folder held six entries: three live, and three that
-several sessions had each reported removing on completion. Nothing had errored.
-The teardown step simply never ran, and prune could not tell anyone.
-
-**Reconcile the directory against git instead.** At the start of a session, and
-again when you finish:
-
-```powershell
-git fetch origin
-git worktree prune -v
-foreach ($d in Get-ChildItem C:\wd-worktrees -Directory) {
-    $reg  = (git worktree list) -match [regex]::Escape($d.Name)
-    $age  = (New-TimeSpan -Start $d.LastWriteTime).TotalHours
-    "{0,-22} registered={1,-5} idleHours={2:N1}" -f $d.Name, [bool]$reg, $age
-}
-```
-
-Anything idle for hours is a candidate. Anything **not registered** is not a
-worktree at all and no git command will ever clean it - see below. Do not
-delete another session's work on a timer: confirm it is finished before
-removing it, then tear it down properly. `git branch -d` (not `-D`) is the
-check that matters - it refuses unless the branch is merged, so a clean
-`-d` is your evidence the work shipped.
-
-### `C:\wd-worktrees` holds worktrees and nothing else
-
-Two of the six entries found on 2026-09-18 - `manual-review` and
-`ux-sweep-work` - were **not worktrees**. They were ordinary folders a session
-had created next to the real ones to hold screenshots, audit scripts, browser
-profiles and a draft commit message. `git worktree list` never showed them,
-`git worktree remove` did not apply, and prune had nothing to prune. They were
-invisible to every step of this convention while sitting in the middle of it.
-
-Session scratch goes in your scratchpad or inside your own worktree, where it
-leaves with the worktree. If you put a loose folder or a stray `.txt` in
-`C:\wd-worktrees`, nothing in this file will ever clean it up and it becomes
-David's problem on his own C: drive - and see the rule below, which covers
-every other place this has gone wrong.
-
-**Report what you found and removed rather than cleaning quietly** - rule zero
-material has sat in exactly these forgotten corners before.
-
-## Session artifacts go in one place, and nowhere else
-
-**One root per session, and that root is your scratchpad.** Screenshots,
-scratch scripts, probe output, downloaded ZIPs, audit results, draft commit
-messages - all of it, under the scratchpad directory the session is given, or
-inside your own worktree where it leaves with the worktree. Nothing else is a
-legal destination.
-
-**Not his Desktop.** That is the example to name, because it is the one he can
-see: `cloud-flat-1920.png`, `cloud-flat-before.png`, `cloud-heldback-1366x900.png`
-and six more sat on his Desktop on 2026-09-18, written there by sessions taking
-UI screenshots. Nobody was going to clean those up, he did not put them there,
-and they are the first thing he looks at every morning.
-
-Not `~/Downloads`. Not the repository root. Not a sibling folder next to your
-worktree. Not a hand-rolled directory in `%TEMP%` - use the scratchpad, which is
-already per-session and already isolated.
-
-### Why this is a rule and not a preference
-
-A disk sweep on 2026-09-17 recovered **12.73 GB** of session debris: roughly
-7,900 leaked temp directories and 7,000 abandoned repository clones. **Twenty
-seven files carrying real workplace data** were sitting in `%TEMP%` - rule zero
-material, in a forgotten corner, exactly where it has been found before. Four
-worktrees outlived the sessions that reported removing them, and 21 orphaned
-Firefox processes were found in one sweep.
-
-He asked the question that produced this rule: *"how do I know, once we've done
-all the work, when to be able to clean stuff up? Because now I feel like we've
-got files fucking everywhere across the board, and I don't know if you clean up
-your own work or not."* The honest answer was that we did not.
-
-Scattering is what made that unanswerable. Debris in one known root can be
-listed, counted and cleared; debris across `%TEMP%`, the Desktop, Downloads and
-the repo cannot be, and nothing can ever tell him whether the machine is clean.
-
-### The suite cleans up after itself, and a test holds it
-
-**The biggest single leaker was this test suite**, which is worth knowing
-because it was not carelessness - it was two defensible decisions:
-
-* `tests/test_cloud_pull.py` had a `setUp` with `mkdtemp` and no `tearDown`.
-  One directory per test method: **1,314** of them.
-* `tests/__init__.py` created one per run and left it deliberately, so the
-  evidence survived a failure, reasoning that "the OS clears the temp tree
-  anyway". **It does not on Windows.** 143 of them.
-
-Both are fixed, and `WD_KEEP_TEST_USER_DIR=1` keeps the evidence when you
-actually want it. Measured either side of the fix: **116 directories leaked per
-suite run before, 1 after** - and that one is Chrome's, not ours.
-
-`TheSuiteCleansUpAfterItself` in `tests/test_housekeeping.py` is the ratchet. It
-walks the AST for `mkdtemp` **calls** and fails if the enclosing function has no
-cleanup in it. Calls, not the substring - matching text made the checker fail on
-its own source, and a checker that has to exempt itself has a hole in it.
-
-### And there is now a button for the rest
-
-`tools/housekeeping.py`, reachable from the dev toolbar, inventories what our
-tooling leaves behind and says what is safe to remove. It is what turns "I
-wonder if there is junk everywhere" into a five-second answer. Read its module
-docstring before changing it - particularly the part about why it flags on what
-is *inside* an `.esx` rather than on the extension, which is the difference
-between a useful list and 2,226 false alarms.
-
-It only ever deletes inside roots we own, never from the Desktop, and it
-re-derives the list at delete time instead of trusting what the page sends.
-
-**"Re-derives instead of trusting what the page sends" was true of `sweep`
-and not of `stop_processes`**, which took every process id in the request
-body and passed it to `taskkill /F`. Windows reuses process ids, so a page
-holding ids from an earlier survey could stop his browser, Ekahau with
-unsaved work, or a service. Fixed on 2026-09-21 by asking a fresh
-`list_processes()` and refusing anything not on it - the shape the sentence
-above already described. Nothing in the UI had ever called it, which is why
-it went unnoticed: **an endpoint with no caller still has every capability
-it was written with.** `stop_process` is the single-process killer and takes
-no decisions; `stop_processes` is the only thing that may call it.
-
-The other half of that sentence - "inside roots we own" - depends on
-`refused_roots()` knowing where the user directory *is*. It read the
-hard-coded default rather than `user_dir()`, so with `WD_USER_DIR` set it
-guarded a folder nobody was using. See the note on `refused_roots` itself.
-
-
-## Memory across sessions, generally
-
-Claude Code cloud sessions have no memory of past conversations by default
-— only what's readable in the repo at session start (this file, code,
-`BACKLOG.md`). If something matters for next time, write it here rather
-than assuming it'll be remembered.
-
-**Reconcile `C:\wd-worktrees` at the start of every session too**, for the same
-reason — see "Every session gets its own worktree" above. Note that `git
-worktree prune` on its own will not tell you the folder is dirty: it only
-clears registrations whose directory is already gone, so an abandoned worktree
-and a loose scratch folder both survive it silently. Compare the directory
-listing against `git worktree list`, not prune's exit code.
+- **Every tracked text file is stored with LF.** `core.autocrlf` only filters
+  `git add`; `git hash-object -w --stdin` **without `--path`** applies no filter
+  and once committed a 32-line change as a 20,434-line diff.
+  `tests/test_every_tracked_file_is_stored_with_lf.py` reads the index. To
+  repair, rewrite the blob and re-stage; use `\r+\n` because a mixed edit can
+  leave `\r\r\n`. `*.bat text eol=crlf` in `.gitattributes` is a checkout rule
+  only.
+
+- **Write the character, not an escape for it.** Patch scripts have produced
+  `\\u2019` on screen and heredocs have eaten `\25BE`.
+  `EscapeSequencesDoNotReachTheScreenTests` in
+  `tests/test_cloud_list_design.py` catches double escapes. If a heredoc keeps
+  mangling backslashes, use the editing tools.
+
+- **Pass `encoding="utf-8"` to every `subprocess.run` that reads Node's
+  output.** `text=True` uses the locale - cp1252 on Windows - so a probe passes
+  in CI and fails on his machine.
+
+- **CI runs Python 3.10 and 3.14; he runs 3.12.** A check on *how* the
+  interpreter reports something is a check on its version - e.g.
+  `SyntaxWarning` vs `DeprecationWarning`. Assert that it happened, not its
+  class or wording. Matrix: `[windows-latest, macos-latest]` x
+  `['3.10', '3.14']`.
+
+- **`zip_update` replaces a user's install and is now tested end to end** by
+  `TheRealUpdateRunsTests` in
+  `tests/test_release_archive_paths_are_contained.py`, after a shadowed
+  variable once pointed it at a temp directory that was then deleted.
+
+- **A wall template updates every type it carries, including Ekahau's stock
+  ones - and three are recoloured on purpose:** `Elevator Shaft` green,
+  `Door, Steel Fire/Exit` orange, `Window, Thick` `#0093EA`, because Ekahau's
+  greys for those are hard to tell apart. Do not "restore" Ekahau's defaults
+  or add a skip-stock-types guard - both were done once and he asked for them
+  reversed. The `kept` / `keptPhrase` reporting is still in `walls.js`.
+
+- **AP notes pages print last.** Every renderer in `report.js` concatenates
+  `apNotesPages(...)` **in its return expression**
+  (`tests/test_ap_notes_last.py`), because the section is unbounded.
+
+- **Per-page orientation works in Firefox, Chrome and Edge**, via named
+  `@page` rules in `web/assets/wd-tools.css` (measured). **The invariant: layout
+  and sheet must never disagree** - where named pages are unavailable, pick one
+  orientation for the whole document. **A whitespace text node beside a
+  `display:none` sibling gets its own print box in Firefox** and can give
+  page one the default paper; `dropPrintWhitespace` in `report.js` strips them
+  (`tests/test_report_first_sheet_orientation_browser.py`). Label-placer
+  clipping is a separate defect (`tests/test_marker_bounds.py`).
+
+- **A requirement area stops the canvas being trimmed, so trimming always runs
+  first.** `esx_trimmer._floor_coord_bbox` includes area coordinates in the
+  crop, and on an empty plan the area is the whole sheet, so the floor is
+  skipped as "already fills 100%". `STEP_ORDER` and `ORDER_RULES` in
+  `tools/prep_pipeline.py` enforce it; `tests/test_prep_pipeline.py` tests it
+  twice. Wall-type injection can run either side.
+
+- **AP notes live in `notes.json`, not `pictureNotes.json`.** Entries are
+  `{id, text, imageIds[], history?}`; a picture note is a note with
+  `imageIds` and often empty text. An AP's `noteIds` is an array - resolve
+  every id. `notesForAp()` skips a note only when text **and** images are both
+  empty. `pictureNotes.json` is a different feature (pins with
+  `location.coord`).
+
+- **Owner filter is two settings.** What the list opens on is
+  `cloud.default_owner_filter` in `settings.json` (Settings → Default view),
+  **shipping as `"mine"`**; `loadDefaultOwnerFilter` falls back to `"all"`
+  only when settings cannot be read. The toolbar toggle is in-memory and
+  resets on reload, which an upgrade includes - and
+  `renderOwnerFilterNotice` says so in every state. Never put it in
+  `localStorage`. `tests/test_cloud_owner_filter.py`.
+
+- **Every matched row gives each side its own checkbox** (`s-c:`/`s-l:`,
+  `ct-c:`/`ct-l:`). Selecting either resolves to the pair for bulk Sync, but
+  deletes stay `'cloud'` or `'local'` - a cloud delete cannot be undone.
+  `tests/test_cloud_each_side_has_its_own_checkbox.py`.
+
+- **There is no typed-`DELETE` gate, deliberately.** The delete dialog names
+  every item - project, site, last change, who loses access - never "and 12
+  more". `tests/test_cloud_delete_identity.py` asserts the old modal's absence.
+
+- **A note here can go stale just like UI text can.** Nothing checks this
+  file's claims against the code. When something here contradicts the code,
+  trust the code, fix the note, and say so in the commit.
+
+## The dev toolbar
+
+**The toolbar is permanent.** *"I always like to keep a dev toolbar on all of
+my projects."* It is **WaxFrame Professional's method, not an
+interpretation of it** - the first build reshaped it and he rejected that:
+*"I asked for the method that we used in WaxFrame Pro."* Where something in
+WaxFrame cannot carry over, say "WaxFrame does X, it cannot work here because
+Y, so I propose Z" - do not silently improve on it.
+
+    web/assets/js/wd-dev.js          gate, dispatcher, drag, mount (portable)
+    web/assets/js/wd-dev-actions.js  every button's markup and handler (this app's)
+    wd-tools.css                     `.dev-*` rules, at the end
+
+**The method:**
+
+* **Gate**: `localStorage['wd_dev'] === '1'`, set by a SHA-256 password modal.
+  A wrong password closes the modal silently. `?dev=1` is the other route in;
+  **no key chord**, ever.
+* **Entry**: a Dev Tools item under **Advanced** in every menu, visible while
+  dev mode is **off** (it is the way in); an exit item appears when on.
+  Injected by **class** - `.main-menu, .help-menu, .wd-menu` - because pages
+  name their menus differently and drop-zone tools have two.
+  `tests/test_dev_nav_on_every_page.py` walks every page that loads
+  `wd-dev.js`. `setup.html` has no menu, by design.
+* **Layout**: one horizontal strip, `⚙ DEV` label as drag handle, position in
+  `localStorage['wd_dev_toolbar_pos']`. Buttons carry **readable names**, and
+  **nothing in the strip writes** - each opens a panel that states what it
+  looks at, changes and will not do.
+* **Dispatch**: `data-action="call" data-fn="WD.Dev.x"`, scoped to
+  `#wdDevRoot`.
+* **Adding an action**: one button in `Dev.toolbarInnerHtml`, one handler in
+  `wd-dev-actions.js`.
+
+**The password is the same hash WaxFrame Professional uses**, at his request.
+The plaintext is in neither repository; `tests/test_dev_password_hash.py`
+checks the hashes match and scans for anything password-shaped. The flag is
+obfuscation, not security. **The two housekeeping actions that write are gated
+by the server**: every run starts locked and `/api/dev/unlock` checks the
+password with `hmac.compare_digest`. The survey is a read and is deliberately
+not gated. This is not a claim that the rest of the API is authenticated -
+what protects `/api/cloud/*` is that every destructive action re-derives its
+target server-side. `tests/test_the_dev_actions_that_write_need_the_server.py`.
+
+**Panel behaviour, each from something he hit:**
+
+* **Controls live in the modal footer, outside the scroll.** A report six
+  screens tall put the armed button off-screen.
+* **Closing and reopening keeps the last result and stays armed**, stamped
+  with when it was taken. That is safe because **the client is not the
+  guard** - the server re-derives everything at write time. A spent delete
+  list is cleared.
+* **Preview is lime and says it changes nothing; the live control is pink,
+  `disabled` until its own preview succeeds, and names the count.**
+* A long run shows progress by sending an `opId` and polling
+  `/api/cloud/progress` every 250 ms (`startPolling` in `wd-dev-actions.js`).
+  A finished run says "Finished" in words; a preview never does.
+
+**Testing it**: `tests/test_dev_toolbar_browser.py` drives it in all three
+browsers over plain `http.server` on `web/`, with `WD.api` stubbed.
+`WD.Dev._hash` / `_expectedHash` let a test drive the real gate with an
+invented password. Selenium Manager drops `geckodriver/` and
+`se-metadata.json` into the working directory; both are gitignored.
+
+**The realign action was a one-off and was removed in v2.193.0**, after it had
+been run. `tools/cloud_realign.py` stays: Cloud Manager's reconcile action on
+selected rows (`reconcile_pairs`) uses it. Its trap still applies there:
+`get_local_esx_files` reports `internalMtime or fs_mtime`, so **`os.utime`
+alone does not move the date the row compares** - both are set.
+
+### Housekeeping
+
+`tools/housekeeping.py` inventories session debris and says what is safe to
+remove. Read its module docstring before changing it.
+
+* **It flags on what is inside an `.esx`** (name and author in
+  `project.json`), not the extension - the extension-based version flagged
+  2,226 test fixtures.
+* **Bound every quantifier in a scanning regex.** An unbounded email pattern
+  took 163 seconds on one log file.
+* **`git worktree list` must be run with the repository as `cwd`**; outside a
+  repo it returns nothing and every worktree looks abandoned - the failure is
+  toward deleting more.
+* **It deletes only inside roots we own, and re-derives the list at delete
+  time.** `stop_processes` checks every PID against a fresh
+  `list_processes()` because Windows reuses PIDs; `stop_process` is only
+  called through it. `refused_roots()` uses `user_dir()`, not the default.
+
+## Worktrees and session artifacts
+
+**Local sessions work in their own worktree, never the shared checkout.**
+Several sessions run against his local repository at once, and a shared tree,
+index and HEAD caused a string of incidents: commits swallowing another
+session's staged work, a tag on the wrong commit, a release with an untracked
+module. A cloud session is already its own clone and needs none of this.
+
+The rules, for a local session:
+
+* **Worktrees live at `C:\wd-worktrees\<session-name>\`**, outside Dropbox,
+  branched from `origin/main`:
+  `git worktree add -b claude/<name> C:\wd-worktrees\<name> origin/main`.
+* **Fetch and rebase at the start and before any large change**, not only at
+  push time, and re-read this file - it is what most often changes underneath
+  you.
+* **Merge back**: suite green, `git fetch`, `git rebase origin/main`, suite
+  green again, `git push origin HEAD:main`. **Never force-push `main`.**
+* **The stash stack is shared** across worktrees; stash with a unique message
+  and apply by id.
+* **Remove it when finished** (`git worktree remove`, `git branch -d`,
+  `git worktree prune -v`). **Prune does not find an abandoned worktree** -
+  only one whose directory is gone. Reconcile the directory listing against
+  `git worktree list`. A teardown that fails with `Permission denied` on an
+  empty directory is usually a process of your own still running inside it.
+* **`C:\wd-worktrees` holds worktrees and nothing else.**
+* **Permanent "slot" worktrees were tried and rejected** on 2026-09-29; do not
+  propose them again.
+
+The full commands, the reconcile script and the incident record are in
+`docs/dev-notes/local-worktrees.md`.
+
+**Session artifacts go in one place: your scratchpad**, or inside your own
+worktree. Screenshots, scratch scripts, probe output, downloads, draft commit
+messages - **never his Desktop**, not `~/Downloads`, not the repo root, not a
+hand-made `%TEMP%` folder. A 2026-09-17 sweep recovered 12.73 GB of session
+debris and found 27 files of real workplace data in `%TEMP%`.
+
+**The suite cleans up after itself.** `TheSuiteCleansUpAfterItself` in
+`tests/test_housekeeping.py` fails if a function calls `mkdtemp` without
+cleanup. `WD_KEEP_TEST_USER_DIR=1` keeps the test user directory when you want
+the evidence. **Report what you found and removed rather than cleaning
+quietly.**
+
+## Memory across sessions
+
+Sessions have no memory of past conversations - only what is in the repo
+(this file, the code, `BACKLOG.md`, `docs/dev-notes/`). If something matters
+for next time, write it here, and keep it to the rule and the reason. The
+history belongs in the commit message.
