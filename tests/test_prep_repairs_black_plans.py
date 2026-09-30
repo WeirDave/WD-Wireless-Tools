@@ -71,9 +71,14 @@ function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replac
 function escAttr(s) { return esc(s).replace(/"/g,'&quot;'); }
 function plural(n, one, many) { return n === 1 ? one : (many || one + 's'); }
 function clearanceLine() { return ''; }
-function syncSavedBoxes() {}
+function marginWords() { return 'Normal, 10 ft'; }
+function selectedText() { return ''; }
+function renderSwap() {}
 function renderMap() {}
-eval(fn('function stepCard(title, badge, badgeCls, lines) {'));
+function syncTrimControls() {}
+var trim = { boxes: {}, loaded: true, projectId: '' }, lastPlan = null, fromDisk = false;
+eval(fn('function trimFloorLine(f) {'));
+eval(fn('function setStatus(step, text, cls) {'));
 eval(fn('function setGo(on, note) {'));
 eval(fn('function renderPreview(r) {'));
 """
@@ -89,7 +94,8 @@ renderPreview({ ok: true, steps: ['trim'], step: { trim: {
   floors: [{ id: 'f1', name: 'Ground', action: 'skipped',
              reason: 'content already fills 100% of the canvas', repaired: true }] } } });
 console.log(JSON.stringify({ off: mk('prepGoBtn').disabled,
-                             html: mk('prepPreview').innerHTML }));
+                             html: mk('prepStatus-trim').textContent + ' '
+                                   + mk('prepTrimFloors').innerHTML }));
 """)
         self.assertFalse(out["off"], "Prepare stays disabled with a repair to write")
         self.assertIn("1 to repair", out["html"])

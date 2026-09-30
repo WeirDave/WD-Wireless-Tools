@@ -323,7 +323,7 @@ class BothToolsOfferTheSameFiveAndACustomBox(unittest.TestCase):
             with self.subTest(page=label):
                 html = path.read_text(encoding="utf-8")
                 sel = html[html.index("Margin" if label.startswith("plan")
-                                      else "Leave a margin of"):]
+                                      else 'id="prepMargin"'):]
                 sel = sel[:sel.index("</select>")]
                 self.assertNotIn("pixel", sel.lower())
 

@@ -1,8 +1,8 @@
 # Prep as one workbench: the plan
 
-Status: proposed on 2026-09-29, not started beyond the first fix. The
-layout mockup is a private artifact that the maintainer holds. This file is
-the working record.
+Status: the layout was approved on 2026-09-30 and shipped in suite 2.195.0
+(Prep 2.0.0). The layout mockup is a private artifact that the maintainer
+holds. This file is the working record; "Still to do" below is what is left.
 
 ## The goal
 
@@ -97,18 +97,39 @@ namespacing the handlers needs nothing new from `wd-shared.js`.
    now would rewrite them twice, because phase 2 moves the box editor anyway.
    Until phase 2 lands, the two canvases are separate code with the same
    numbers. A change to one of them needs the same change in the other.
-2. The PlanTrim box editor as a module on `WD.PlanView`, through its
-   `onDown`/`onMove`/`onUp` hooks. PlanTrim's own canvas code is deleted,
-   and its slicing tests are rewritten against the module. Prep's Trim stage
-   gets drawing, Suggest and Apply to all. Boxes are saved to
-   `plantrim_store`, so both tools see them. Carry over the sideways-swipe fix
-   from 2.192.0: PlanTrim's `onWheel` still zooms out on a wheel event with no
-   vertical movement.
-3. The new Prep layout, with Trim mounted. Capacity becomes a module: apply,
-   capture, and the area overlay on the canvas.
-4. Walls as a module: template choice and the wall-type editor. Settle the
-   duplicate merge.
-5. Optional: Wall Swap inside Prep, shown only when the project has walls.
+2. **Done in suite 2.195.0, for Prep:** `WD.BoxEditor` in `wd-planview.js`
+   is PlanTrim's box editor as a tool that mounts on `WD.PlanView` through
+   `onDown`/`onMove`/`onUp`, with boxes in plan units scaled onto the image.
+   Prep's Trim stage has drawing, handles, Suggest (`/api/prep/suggest`), Draw
+   my own, Apply to all and Back to automatic. Boxes are saved to
+   `plantrim_store` under the project id as soon as a drag ends, and the page
+   sends its own set as `boxes` (an empty map is "all automatic"); before the
+   first preview it asks for the saved ones with `useBoxes=1`.
+   `tests/test_plan_view.py::TheBoxEditor` and
+   `tests/test_prep_trim_options.py::TheTrimStageDrivesTheBoxes` hold it.
+3. **Done in suite 2.195.0:** the layout - rail, shared canvas, right panel,
+   footer. The Areas stage draws each floor's area from `outline` (added to
+   `capacity_profiles.plan_application`: the kept polygon, or the computed
+   rectangle when one is made or redrawn) and captures a template in a modal
+   through the existing `/api/capacity/analyze`, `derive` and `save` routes.
+4. **Partly done in suite 2.195.0:** the Walls stage picks the template and
+   lists every type added or updated. Editing types stays in Quick Walls, and
+   Prep reloads the templates when its tab becomes visible again.
+5. **Partly done in suite 2.195.0:** Wall swap is on the rail, unavailable
+   with its reason on a project with no walls, and pointing to Quick Walls'
+   Wall Swap where there are walls (`wallCount` in the plan's `project`).
+
+## Still to do
+
+- **PlanTrim is not on `WD.BoxEditor` yet.** Its own canvas code still exists,
+  because about fifty tests slice it by name. Until it moves, the two box
+  editors are separate code with the same numbers (handle sizes, the 8-unit
+  minimum side, the edge-drag rule); a change to one needs the same change in
+  the other. The boxes themselves are already shared, through the store.
+- The wall-type editor inside Prep, and the duplicate wall-template merge
+  (`mergeTemplateTypes` in `walls.js`, its port in `tools/wall_inject.py`).
+- Wall Swap inside Prep. It edits the archive in the browser with JSZip, which
+  Prep, being server-side, does not.
 
 Each phase ships on its own and leaves every page working.
 

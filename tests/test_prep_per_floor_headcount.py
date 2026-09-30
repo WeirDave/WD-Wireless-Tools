@@ -216,7 +216,7 @@ function last(kind) { return calls.filter(u => u.indexOf('/prep/' + kind) >= 0).
     arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)) }], value: '' } });
   for (let i = 0; i < 8; i++) await flush();
 
-  const html = el('prepPreview').innerHTML;
+  const html = el('prepAreaFloors').innerHTML;
   const tags = html.match(/<input[^>]*data-fn="prepFloorOccupants"[^>]*>/g) || [];
   check('each floor renders a People on this floor box: ' + tags.length, tags.length === 2);
   const hit = tags[0] && delegated(tags[0], 'prepFloorOccupants');

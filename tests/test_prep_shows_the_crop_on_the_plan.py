@@ -168,47 +168,57 @@ function mk(id) { return els[id] || (els[id] = { id, hidden: true, innerHTML: ''
   children: [], classList: { toggle() {} } }); }
 globalThis.document = { getElementById: mk };
 const shown = [];
-var map = { floors: [], current: null, images: {}, zip: null };
+var map = { floors: [], current: null };
+var stage = 'trim', lastPlan = null;
 function $(id) { return mk(id); }
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 function escAttr(s) { return esc(s).replace(/"/g,'&quot;'); }
+function plural(n, one, many) { return n === 1 ? one : (many || one + 's'); }
 function showMapFloor() { shown.push(map.current); }
+function syncTrimControls() {}
+eval(fn('function byId(list, key, id) {'));
+eval(fn('function trimFloor(id) {'));
+eval(fn('function areaFloor(id) {'));
+eval(fn('function planFloors(r) {'));
 eval(fn('function mapFloorState(f) {'));
-eval(fn('function renderMap(t) {'));
+eval(fn('function areaFloorState(f) {'));
+eval(fn('function renderMap(r) {'));
 const window = {};
 eval(fn('window.prepMapSelect = function (id) {'));
-renderMap({ floors: [
-  { id: 'a', name: 'Ground', action: 'skipped', reason: 'content already fills it' },
-  { id: 'b', name: 'Level 2', action: 'trimmed', oldSize: [800, 600], newSize: [200, 100], offset: [1, 2] },
-]});
+lastPlan = { ok: true, project: { floors: [{ id: 'a', name: 'Ground', w: 800, h: 600 },
+                                          { id: 'b', name: 'Level 2', w: 800, h: 600 }] },
+  step: { trim: { floors: [
+    { id: 'a', name: 'Ground', action: 'skipped', reason: 'content already fills it' },
+    { id: 'b', name: 'Level 2', action: 'trimmed', source: 'manual', areaSavedPct: 64,
+      oldSize: [800, 600], newSize: [200, 100], offset: [1, 2] }] } } };
+renderMap(lastPlan);
 const opened = map.current;
 const html = mk('prepMapStrip').innerHTML;
 const rows = [...html.matchAll(/data-fn="([^"]+)" data-arg="([^"]+)"/g)].map(m => [m[1], m[2]]);
 const [fnName, arg] = rows[0];
 window[fnName](arg);
 console.log(JSON.stringify({ opened, rows, now: map.current, shown,
-                             visible: !mk('prepMap').hidden }));
+                             mine: /Your box/.test(html) }));
 """)
-        self.assertTrue(out["visible"])
         self.assertEqual(out["opened"], "b", "opens on the floor that is being cropped")
         self.assertEqual(out["rows"], [["prepMapSelect", "a"], ["prepMapSelect", "b"]])
         self.assertEqual(out["now"], "a")
         self.assertEqual(out["shown"], ["b", "a"])
+        self.assertTrue(out["mine"], "a floor cropped to his box says so")
 
-    def test_no_trim_step_hides_the_map(self):
+    def test_a_project_with_no_floors_says_so(self):
         out = node(r"""
 const els = {};
-function mk(id) { return els[id] || (els[id] = { hidden: false, innerHTML: '' }); }
+function mk(id) { return els[id] || (els[id] = { hidden: true, innerHTML: 'x', textContent: '' }); }
 var map = { floors: [], current: null };
 function $(id) { return mk(id); }
-eval(fn('function renderMap(t) {'));
-renderMap(null);
-const a = mk('prepMap').hidden;
-mk('prepMap').hidden = false;
-renderMap({ error: 'cannot' });
-console.log(JSON.stringify([a, mk('prepMap').hidden]));
+eval(fn('function planFloors(r) {'));
+eval(fn('function renderMap(r) {'));
+renderMap({ ok: true, step: {} });
+console.log(JSON.stringify([mk('prepMapStrip').innerHTML, mk('prepMapEmpty').hidden,
+                            mk('prepMapEmpty').textContent]));
 """)
-        self.assertEqual(out, [True, True])
+        self.assertEqual(out, ["", False, "This project has no floor plans."])
 
 
 if __name__ == "__main__":

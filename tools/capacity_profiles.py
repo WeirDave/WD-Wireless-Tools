@@ -729,6 +729,22 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
             info["skipped"] = False
             info["action"] = "create an area from %s" % _basis_words(info.get("basis"))
 
+        # The outline the floor ends up with, for anything that draws it: a
+        # new or redrawn area is the computed rectangle, anything else keeps
+        # the polygon that is already there, vertex for vertex.
+        kept = None
+        if info["mode"] == "replace" and not info.get("reshape"):
+            kept = primary
+        elif info["mode"] == "populate":
+            kept = target
+        if kept is not None:
+            info["outline"] = [{"x": p.get("x"), "y": p.get("y")}
+                               for p in (kept.get("area") or [])
+                               if isinstance(p, dict)]
+        elif info["mode"] != "none":
+            info["outline"] = [dict(p) for p in info["polygon"]]
+        info["outlineIsNew"] = kept is None and info["mode"] != "none"
+
         # Kept for callers written against the old shape.
         info["hasExistingRequirement"] = bool(with_capacity)
         info["rows"] = floor_counts["rows"]

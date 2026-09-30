@@ -35,7 +35,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v1.20.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.14.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.5.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v1.15.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v2.0.0 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -157,12 +157,15 @@ Read the device mix out of a project you have already set up in Ekahau, and appl
 
 Get a freshly imported project ready to draw in, in one pass over the file instead of three.
 
+- One workbench: the stages down the left, one plan canvas in the middle that every stage draws on, the current stage's settings on the right, and a footer that always says what **Prepare** will write
+- The Trim stage is PlanTrim's box editor on the plan: drag a box, adjust it by its handles, Suggest, Draw my own, Apply to all floors, Back to automatic. Boxes are shared with PlanTrim, so a box drawn in either tool is used by both
+- The Areas stage draws each floor's requirement area on the plan as it will sit on the cropped sheet, and captures a new capacity template from a finished project without leaving Prep
 - Crops the empty canvas off each CAD sheet, puts a requirement area on every floor and loads your wall types, from one load and one save
 - Takes a headcount per floor for the requirement areas, the same way Capacity does
 - Keeps or replaces the devices on floors that already have them, starting from the same saved default as Capacity, with a choice per floor
 - Runs the steps in the order they need: trim, then areas, then wall types
 - A requirement area counts as something that must stay on the plan, so an area put in before the trim holds the crop open and the trim then reports there was nothing to crop — which looks exactly like success. The order is enforced in code, not left to whoever calls it
-- Previews every step before anything is written, floor by floor, and draws each plan with the trim on it — the paper being cut shaded, a dashed line round what is kept — the same view as PlanTrim
+- Previews every stage before anything is written, floor by floor, on the plan itself
 - Re-runnable: wall types that already match the template are left alone, a trimmed floor is skipped, and a floor that already has a requirement area is left alone
 - Except the one case worth re-running for — an area that still covers the whole plan had nothing to measure when it was made, and tightens to the walls once you have drawn them. A polygon you moved, redrew or cut around an atrium is never touched
 - **Open from disk** reads the project where it sits — nothing is uploaded, and on a project of a couple of hundred megabytes that is the difference between a preview that keeps up and one that does not
@@ -236,7 +239,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.194.0
+WIRELESS TOOLS  v2.195.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
