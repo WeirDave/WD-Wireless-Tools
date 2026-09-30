@@ -255,5 +255,164 @@ class PrepExistingDevicesControlTests(unittest.TestCase):
         self.run_page("everything")
 
 
+class PrepPerFloorExistingTests(unittest.TestCase):
+    """Each floor that already has devices can take its own choice."""
+
+    # The fixture and helpers only - inheriting the class would run its tests twice.
+    tearDown = PrepExistingDevicesTests.tearDown
+    expected = PrepExistingDevicesTests.expected
+    run_prep = PrepExistingDevicesTests.run_prep
+
+    def setUp(self):
+        PrepExistingDevicesTests.setUp(self)
+        self.both = with_areas(self.built, self.dir / "both.esx", [
+            {"id": "big", "floorPlanId": FLOOR, "requirementId": "req-1",
+             "capacityItems": items(100), "area": BIG},
+            {"id": "upstairs", "floorPlanId": FLOOR_2, "requirementId": "req-1",
+             "capacityItems": items(70), "area": BIG},
+        ])
+
+    def test_one_floor_replaced_the_other_kept(self):
+        _r, dest = self.run_prep(self.both, "out.esx", existing="keep",
+                                 floor_existing={FLOOR_2: "devices"})
+        areas = read_areas(dest)
+        self.assertEqual(floor_total(areas, FLOOR), 100)
+        self.assertEqual(floor_total(areas, FLOOR_2), self.expected(200))
+
+    def test_a_floor_can_opt_out_of_a_building_wide_replace(self):
+        _r, dest = self.run_prep(self.both, "out.esx", existing="devices",
+                                 floor_existing={FLOOR: "keep"})
+        areas = read_areas(dest)
+        self.assertEqual(floor_total(areas, FLOOR), 100)
+        self.assertEqual(floor_total(areas, FLOOR_2), self.expected(200))
+
+    def test_the_preview_shows_each_floors_choice(self):
+        plan = prep_pipeline.plan(self.both, steps=["areas"], template=self.tpl,
+                                  occupants=200, existing="keep",
+                                  floor_existing={FLOOR_2: "reshape"})
+        by = {f["floorPlanId"]: f for f in plan["step"]["areas"]["floors"]}
+        self.assertEqual(by[FLOOR]["existingChoice"], "keep")
+        self.assertTrue(by[FLOOR]["skipped"])
+        self.assertEqual(by[FLOOR_2]["existingChoice"], "reshape")
+        self.assertFalse(by[FLOOR_2]["skipped"])
+
+    def placeholder(self):
+        return with_areas(self.built, self.dir / "ph.esx", [
+            {"id": "ph", "floorPlanId": FLOOR, "requirementId": "req-1",
+             "capacityItems": items(77), "area": CANVAS}])
+
+    def test_a_floor_set_to_keep_is_not_re_measured(self):
+        """Keep chosen for that floor is an instruction to leave it alone."""
+        _r, dest = self.run_prep(self.placeholder(), "out.esx",
+                                 floor_existing={FLOOR: "keep"})
+        kept = [a for a in read_areas(dest) if a["id"] == "ph"]
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(kept[0]["area"], CANVAS)
+        self.assertEqual(floor_total(read_areas(dest), FLOOR), 77)
+
+    def test_the_building_default_still_re_measures_a_placeholder(self):
+        """Unchanged: the shipped Keep default is not an instruction per floor."""
+        _r, dest = self.run_prep(self.placeholder(), "out.esx")
+        self.assertFalse([a for a in read_areas(dest) if a["id"] == "ph"])
+
+    def test_the_route_passes_the_floor_choices_through(self):
+        import server
+        tpl = dict(self.tpl, _file="x_capacitytemplate.json")
+        orig = cap.list_templates
+        cap.list_templates = lambda: {"templates": [tpl]}
+        try:
+            client = server.app.test_client()
+            q = ("?name=both.esx&steps=areas&retighten=1"
+                 "&capacityTemplate=x_capacitytemplate.json&occupants=200&existing=keep"
+                 "&floorExisting=" + json.dumps({FLOOR_2: "devices"}))
+            r = client.post("/api/prep/plan" + q, data=self.both.read_bytes(),
+                            headers={"X-WD-Wireless-Tools": "1"})
+        finally:
+            cap.list_templates = orig
+        body = r.get_json()
+        self.assertTrue(body["ok"], body)
+        choices = {f["floorPlanId"]: f["existingChoice"]
+                   for f in body["step"]["areas"]["floors"]}
+        self.assertEqual(choices, {FLOOR: "keep", FLOOR_2: "devices"})
+
+
+PER_FLOOR_HARNESS = PAGE_HARNESS.split("(async () => {")[0].replace(
+    "floors: [{ floorPlanId: 'f-1', floorName: 'Level 1', mode: 'replace', skipped: false,\n"
+    "             action: 'replace 150 devices with 600, keep the outline',\n"
+    "             totalDevices: 600, basis: 'walls' }] } } };",
+    "floors: [\n"
+    "    { floorPlanId: \"f-'1\", floorName: 'Level 1', mode: 'replace', skipped: true,\n"
+    "      existingChoice: 'keep', existingDevices: 150, action: 'keep - already has 150 devices',\n"
+    "      totalDevices: 600, basis: 'walls' },\n"
+    "    { floorPlanId: 'f-2', floorName: 'Level 2', mode: 'create', skipped: false,\n"
+    "      action: 'create', totalDevices: 600, basis: 'walls' }] } } };") + r"""
+(async () => {
+  eval(src);
+  docListeners.DOMContentLoaded();
+  for (let i = 0; i < 5; i++) await flush();
+  open('Invented.esx');
+  for (let i = 0; i < 8; i++) await flush();
+
+  const html = el('prepPreview').innerHTML;
+  const tags = html.match(/<select[^>]*data-fn="prepFloorExisting"[^>]*>/g) || [];
+  check('only the floor that already has devices gets a choice: ' + tags.length,
+        tags.length === 1);
+  const hit = tags[0] && delegated(tags[0], 'prepFloorExisting');
+  check("the choice names its floor, apostrophe and all", hit && hit.args[0] === "f-'1");
+  check('it passes its value on change',
+        hit && /data-action-change="call"/.test(hit.tag) && /data-arg-value="1"/.test(hit.tag));
+  check('it shows the current choice', /value="keep" selected/.test(html));
+  check('it says how many devices are there', /already has 150 devices/.test(html));
+  check('nothing per-floor is sent before a choice is made',
+        param(last('plan'), 'floorExisting') === null);
+
+  window[hit.fn].apply(null, hit.args.concat(['reshape']));
+  for (let i = 0; i < 4; i++) await flush();
+  const per = JSON.parse(param(last('plan'), 'floorExisting') || 'null');
+  check('the floor choice reaches the preview: ' + JSON.stringify(per),
+        per && per["f-'1"] === 'reshape' && Object.keys(per).length === 1);
+
+  window.prepRun();
+  for (let i = 0; i < 5; i++) await flush();
+  const run = JSON.parse(param(last('run'), 'floorExisting') || 'null');
+  check('prepare sends the same choice', run && run["f-'1"] === 'reshape');
+
+  window[hit.fn].apply(null, hit.args.concat(['keep']));
+  for (let i = 0; i < 4; i++) await flush();
+  check('choosing what the dropdown above already says clears the floor',
+        param(last('plan'), 'floorExisting') === null);
+
+  window[hit.fn].apply(null, hit.args.concat(['devices']));
+  for (let i = 0; i < 4; i++) await flush();
+  el('prepExisting').value = 'reshape';
+  window.prepExistingAll();
+  for (let i = 0; i < 4; i++) await flush();
+  check('changing the dropdown above resets every floor',
+        param(last('plan'), 'floorExisting') === null
+        && param(last('plan'), 'existing') === 'reshape');
+
+  window[hit.fn].apply(null, hit.args.concat(['keep']));
+  for (let i = 0; i < 4; i++) await flush();
+  open('Other.esx');
+  for (let i = 0; i < 8; i++) await flush();
+  check('another project starts with no floor choices',
+        param(last('plan'), 'floorExisting') === null);
+
+  if (failures.length) { console.error(failures.join('\n')); process.exit(1); }
+  process.exit(0);
+})().catch(e => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class PrepPerFloorExistingControlTests(unittest.TestCase):
+    def test_the_floor_choice_reaches_the_server(self):
+        r = subprocess.run(["node", "-e", PER_FLOOR_HARNESS, str(PREP_JS), ""],
+                           capture_output=True, text=True, encoding="utf-8",
+                           timeout=120)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).strip())
+
+
 if __name__ == "__main__":
     unittest.main()
