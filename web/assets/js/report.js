@@ -3991,6 +3991,7 @@
       floorPlanForAp: floorPlanForAp,
     };
     host.innerHTML = r.render(aps, opts, ctx);
+    dropPrintWhitespace(host);
     // Every report, not only the one whose postRender happened to ask.
     applyPageOrientation(host, opts);
     document.title = reportDocTitle();
@@ -4000,6 +4001,28 @@
       } catch (e) { console.error('postRender', e); }
     }
   };
+
+  /* Firefox gives a whitespace-only text node its own box in print when it
+     sits beside a display:none sibling - the review bar, the print hint, the
+     modals and scripts after the workspace. That box belongs to no named
+     page, so the sheet it lands on takes the default paper: one before the
+     cover made page one portrait whatever the cover asked for, and one after
+     the last section added a blank trailing sheet. Chromium draws neither.
+     Measured in Firefox 153 through geckodriver's Print Page: an all-landscape
+     report printed P L L L L L + blank before this, L L L L L L after.
+
+     Only the chain from the canvas up to the root matters, and every child on
+     it is a block or hidden, so the text removed here renders as nothing on
+     screen either. */
+  function dropPrintWhitespace(host) {
+    for (var el = host; el; el = el.parentElement) {
+      var nodes = el.childNodes;
+      for (var i = nodes.length - 1; i >= 0; i--) {
+        var n = nodes[i];
+        if (n.nodeType === 3 && !/\S/.test(n.nodeValue)) el.removeChild(n);
+      }
+    }
+  }
 
   // Label text is composable so one report can show just the name while another
   // carries the detail an installer needs without a second lookup.
@@ -5178,14 +5201,11 @@
         dozen pages is what he ended up doing.
 
         Mixing orientations within one document is driven by named @page rules.
-        Chrome and Edge honour them - measured by printing the same six-page
-        document from each and reading the sheet sizes back out of the PDF.
-
-        What happens elsewhere is NOT established. Firefox reports the `page`
-        property as supported, so it may well honour them too; a headless print
-        could not be driven here to find out. Until someone checks, this button
-        is offered as the remedy for a report that comes out clipped rather
-        than as a claim about any particular browser. */
+        Chrome, Edge and Firefox honour them - measured by printing the real
+        report from each and reading the sheet sizes back out of the PDF
+        (tests/test_report_first_sheet_orientation_browser.py). Firefox's
+        portrait first sheet was whitespace beside hidden elements, not the
+        named pages; see dropPrintWhitespace. */
     return '<div class="rep-orient noprint" data-for="' + WD.escAttr(fpId) + '">'
       + '<span class="rep-orient-label">Page</span>'
       + btn('auto', 'Auto') + btn('portrait', 'Portrait') + btn('landscape', 'Landscape')
@@ -5193,9 +5213,10 @@
       + '<button type="button" class="rep-orient-all"'
       +   ' data-action="call" data-fn="matchAllPageOrient" data-arg="' + WD.escAttr(fpId) + '"'
       +   ' title="Give every page in this report the orientation this one is using.'
-      +   ' Mixing portrait and landscape in one document is verified in Chrome'
-      +   ' and Edge. If pages come out clipped in another browser, use this to'
-      +   ' put the whole report one way round.">Match all pages</button>'
+      +   ' Mixing portrait and landscape in one document is'
+      +   ' verified in Chrome, Edge and Firefox.'
+      +   ' Use this to put the whole report one way round.">'
+      +   'Match all pages</button>'
       + '</div>';
   }
 

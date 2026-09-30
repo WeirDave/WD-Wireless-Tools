@@ -162,21 +162,22 @@ class PageOrientationTests(unittest.TestCase):
         self.assertIn("sizePlacementPlansForPrint(host, currentOpts)", body)
 
     def test_the_button_claims_only_what_was_measured(self):
-        """Chrome and Edge were measured - the same six-page document printed
-        from each, sheet sizes read back out of the PDF. Firefox was not: it
-        reports the `page` property as supported, so it may well honour named
-        pages, and a headless print could not be driven here to find out.
+        """Chrome, Edge and Firefox are all measured now: the real report is
+        printed in each and the sheet sizes read back out of the PDF by
+        test_report_first_sheet_orientation_browser.
 
         An earlier version of this asserted Firefox was broken, and shipped a
         print-time warning gated on CSS.supports('page','auto') - which returns
         true in Firefox too, so it could never have fired there anyway. Both
-        the claim and the detection were withdrawn. If the wording ever names
-        a browser as broken again, it needs a measurement behind it.
+        the claim and the detection were withdrawn. Firefox's portrait first
+        sheet turned out to be whitespace beside hidden elements, not named
+        pages. If the wording ever names a browser as broken again, it needs a
+        measurement behind it.
         """
         start = self.js.index("class=\"rep-orient-all\"")
         window = self.js[start:start + 900]
-        self.assertIn("verified in Chrome", window)
-        self.assertNotIn("Firefox", window,
+        self.assertIn("verified in Chrome, Edge and Firefox", window)
+        self.assertNotIn("another browser", window,
                          "do not name a browser as broken without measuring it")
 
     def test_no_capability_sniffing_survives(self):
