@@ -2446,196 +2446,281 @@ action against the real machine, not by any unit test, which is the argument
 for doing that once per feature.
 
 
-## Every session works in a slot
+## Every session gets its own worktree
 
-**There are six permanent worktrees, and a session on his machine works in
-one of them.** Not in the shared checkout, and not in a worktree it creates
-for itself.
+**Do not work directly in the shared checkout.** Several sessions run against
+this repository at once, and until 2026-09-17 they all shared one working tree,
+one index and one HEAD. Every incident of that day traces back to that single
+fact:
 
-    C:\wd-worktrees\slot-1   branch claude/slot-1
-    C:\wd-worktrees\slot-2   branch claude/slot-2
-    ...
-    C:\wd-worktrees\slot-6   branch claude/slot-6
+- a session went to stage its own CSS and found `HEAD` already contained it,
+  because another session had committed the file out from under it
+- a documentation-only commit run with no pathspec swallowed another session's
+  fully staged work - fifteen files and a version bump - and published it under
+  a message saying no version bump was needed
+- `v2.103.14` landed on somebody else's commit, because `main` moved between
+  the push and a bare `git tag`
+- `v2.102.0` shipped dead, because a module was present in the shared tree and
+  untracked, so the local suite passed and CI did not
+- uncommitted routing edits sitting in the shared tree failed CI for a session
+  that had not touched them
+- a session left a landmine where a plain `git add` would have reverted three
+  version numbers
+- and the clean-slate operation itself opened with `tools/cloud_manager.py`
+  holding another session's stale work-in-progress, six lines of committed code
+  behind the tree it was sitting in
 
-**Why slots, and why six.** The Claude desktop app allows **one active session
-per directory**, and a finished session keeps holding its folder until it is
-archived. Measured on 2026-09-29: eleven sessions across five project folders
-left nowhere to start anything, so work was piled onto whichever session
-already existed and new sessions failed to start. A worktree is a separate
-directory, so it sidesteps that lock. Six gives room to start work while
-finished sessions wait to be archived.
+Each of those has a rule written against it elsewhere in this file - name the
+SHA, name the paths, content-based staging. Those rules exist because the tree
+is shared. Stop sharing the tree and most of them stop being load-bearing.
 
-**Why named as slots rather than per task.** A worktree per task accumulates:
-`C:\wd-worktrees` has twice been found full of worktrees and loose folders
-that sessions reported removing and never did. A fixed set of six is reused
-rather than created and torn down, so there is nothing to forget.
+**Permanent reusable "slot" worktrees were tried and rejected on 2026-09-29.**
+Six fixed worktrees per repo, to get round the desktop app's one-session-per-
+folder lock. Safe here, because this repo commits its guardrails, but not in
+WaxFrame Professional, whose `CLAUDE.md`, `.confidential-terms` and
+`.claude/launch.json` are gitignored: a worktree starts without them, and its
+confidentiality check passes with no term list to check against. He chose the
+same arrangement in every project over parallelism in one. Do not propose it
+again unless that changes.
 
-### The shared checkout is his
+### Where they live
 
-    C:\Dropbox\Websites\02 - Tools and Apps\GitHub Projects\WD-Wireless-Tools
+    C:\wd-worktrees\<session-name>\
 
-**No session works there.** It is David's own working copy. It stays on
-`main`, and nothing in it is edited, staged, committed, stashed or checked
-out by a session. Before this arrangement several sessions shared that one
-tree, index and HEAD, and every incident of 2026-09-17 traced back to it: a
-commit that swallowed another session's staged work, `v2.103.14` tagged on
-somebody else's commit, `v2.102.0` shipping with an untracked module, CI
-failing on another session's uncommitted edits. The rules elsewhere in this
-file about naming the SHA, naming the paths and content-based staging exist
-because the tree was shared.
+**Outside Dropbox, deliberately.** This repository lives inside a Dropbox
+folder and a worktree is a full second copy of the tree, so a worktree kept
+under the repo gets uploaded and re-downloaded in its entirety, and Dropbox
+takes file locks on files git is in the middle of writing.
 
-If a session is started in the shared checkout anyway, it does its work in a
-free slot by absolute path and leaves the shared checkout exactly as it found
-it.
+An earlier draft of this note kept them at `.claude/worktrees/` and suppressed
+the sync with an NTFS alternate data stream (`com.dropbox.ignored`). That
+works, and it is the wrong shape: it defends against a problem rather than not
+having it, and it stays correct only while one invisible attribute survives
+every fresh clone, restore and copy. `C:\wd-worktrees` is not Dropbox's
+business in the first place. If you find a worktree under `.claude/worktrees/`,
+it predates this note - move it.
 
-Slots live outside Dropbox deliberately. A worktree is a full second copy of
-the tree; under Dropbox it is uploaded and re-downloaded in its entirety, and
-Dropbox holds file handles that make git fail on directories it is writing.
+The directory is created on demand; nothing needs to exist first.
 
-### Starting: confirm the slot is clean, and say so
-
-**The previous occupant may have left something.** Before any work, from
-inside the slot:
+### How to create one
 
 ```powershell
 git fetch origin
-git status --porcelain                 # must print nothing
-git cherry origin/main HEAD            # any line starting "+" is unshipped
-git rev-parse --abbrev-ref HEAD        # must be claude/slot-N
+git worktree add -b claude/<session-name> C:\wd-worktrees\<session-name> origin/main
 ```
 
-A line starting `-` from `git cherry` is a commit already on `main` under a
-different id (a rebase does that); it is shipped and can be dropped.
+Branch off `origin/main`, not off the shared checkout's `HEAD` - the shared
+checkout may be mid-edit, and that is the whole problem being avoided. Then
+work in there: it has its own index, its own HEAD and its own working files, so
+`git add`, `git commit` and `git stash` all become ordinary again.
 
-- **Clean:** `git reset --hard origin/main`, then start. State in the first
-  report that the slot was clean and at which `origin/main` commit.
-- **Not clean:** do not discard it, and do not stop to ask - nobody is at the
-  keyboard. Keep it on a branch, then reset:
+Two things are still shared and are worth knowing. The **object store** is
+shared, which is why this is cheap rather than a second clone. And the **stash
+stack** is shared, so a bare `git stash pop` in a worktree can still take
+somebody else's entry - prefer a throwaway WIP commit, or `git stash push -m
+"<unique tag>"` and `git stash apply <sha>` by id.
 
-  ```powershell
-  git add -A
-  git commit -m "WIP left in slot-N"                # only if status was dirty
-  git branch rescue/slot-N-<yyyymmdd-hhmm>
-  git reset --hard origin/main
-  git clean -fd
-  ```
+### Your copy goes stale while you work, and nothing tells you
 
-  Report what was found and the rescue branch name. The rescue branch is
-  local only; it is never pushed.
+**A worktree is only current at the moment it is created.** It is branched from
+`origin/main`, which is correct - and from that second onward, every other
+session's finished work lands on `main` and yours does not move. Nothing warns
+you. No command you run in your own worktree behaves any differently. The copy
+you are reasoning about is simply, silently, no longer what is on `main`.
 
-Then re-read this file from the slot, because it is the thing most likely to
-have changed since the last session.
+The instruction below - fetch and rebase before pushing - is correct and it is
+**late**. It catches the problem at the last possible moment, after all the work
+is done, which is the most expensive place to discover that somebody deleted a
+module you spent the afternoon calling.
 
-### Working, and merging back
+So: **`git fetch origin && git rebase origin/main` at the start of the session,
+and again before starting any large change** - not only at push time. Then
+re-read this file, because it is the thing most likely to have changed
+underneath you, and a stale copy of it is how a session confidently rebuilds
+something another session has just deliberately removed.
 
-The slot has its own index, HEAD and working files, so `git add`, `git commit`
-and the rest are ordinary. `main` is still the only branch anybody publishes,
-and routine work goes straight to it - no PR. **The slot branch is never
-pushed.**
+Measured on 2026-09-19, which is why this is here. One branch held finished work
+for thirteen hours while `main` moved five times - a bug fix, a release, two
+documentation passes and an edit to this file. Every rebase was clean, so
+nothing was lost. What it cost was a version number: two sessions independently
+wrote `2.140.0` into `versions.json`, git saw identical bytes and therefore no
+conflict, and the collision was caught by eye rather than by any tool. **A
+rebase you do early is a rebase against a small difference.** See "The one thing
+a worktree does not protect you from" below for the version half of that.
+
+### How work merges back
+
+`main` is still the only branch anybody publishes, and routine work still goes
+straight to it - no PR. From inside the worktree:
 
 ```powershell
-python scripts/run_tests.py                   # green first
+python -m unittest discover -s tests          # green first
 git fetch origin
 git rebase origin/main                        # not interactive, no editor
-python scripts/run_tests.py                   # green again, after the rebase
+python -m unittest discover -s tests          # green again, after the rebase
 git push origin HEAD:main
 ```
 
 The second run is not ceremony. A rebase replays your commits onto code you
-have not tested against, and that is how a green branch turns into a red
-`main`. If the push is rejected because `main` moved, fetch and rebase again.
-Never force-push `main`. It was force-pushed once, on 2026-09-17, for the
-history rewrite, with the repository owner's explicit say-so for that one
-operation.
+have not tested against, and that is exactly how a green branch turns into a
+red `main`.
 
-The release is automatic from there - see "A version bump on `main` is a
-release".
+If the push is rejected because `main` moved, fetch and rebase again. Never
+force-push `main`. It was force-pushed once, on 2026-09-17, for the history
+rewrite, with the repository owner's explicit say-so for that one operation.
 
-**Rebase early as well as late.** A slot is only current at the moment it is
-reset; from then on every other session's work lands on `main` and yours does
-not move, and nothing warns you. On 2026-09-19 a branch held finished work for
-thirteen hours while `main` moved five times, and two sessions independently
-wrote `2.140.0`. So `git fetch origin && git rebase origin/main` before
-starting any large change, not only at push time.
+Then wait for CI, and tag from the shared checkout as the release process
+describes - naming the SHA, as always.
+
+### The one thing a worktree does not protect you from
 
 **Two sessions can pick the same version number, and git will not notice.**
-On 2026-09-17 two worktrees bumped 2.107.0 to 2.108.0 within minutes; the
-second rebase applied cleanly because both sides wrote the same bytes. A slot
-isolates files; it does not reserve a version. Bump from
-`git show origin/main:web/assets/versions.json`, not from what the slot had
-when you started, and if a collision is only noticed after pushing, bump again
-in a follow-up commit.
 
-**Two things are still shared between slots.** The object store, which is why
-six slots are cheap. And the **stash stack** - a bare `git stash pop` can take
-another slot's entry. Prefer a throwaway WIP commit, or
-`git stash push -m "<unique tag>"` and `git stash apply <sha>` by id.
+On 2026-09-17 two worktrees bumped `versions.json` from 2.107.0 to 2.108.0
+within minutes of each other, for different features. The second rebase applied
+cleanly and reported nothing, because both sides had written the *same* bytes -
+a conflict needs the two versions to differ. `main` ended up with two unrelated
+commits both titled v2.108.0, and the suite version no longer distinguished
+them. Nothing was lost and CI stayed green, which is what makes it easy to miss.
 
-### Finishing: push, then reset the slot and leave it
-
-**Slots are never deleted.** When the work is pushed:
+A worktree isolates your files. It does not reserve a version number. So before
+you bump:
 
 ```powershell
 git fetch origin
-git cherry origin/main HEAD            # nothing starting "+" - it all shipped
-git reset --hard origin/main
-git clean -fd
-git status --porcelain                 # prints nothing
+git show origin/main:web/assets/versions.json
 ```
 
-and leave the folder where it is for the next occupant. Do not run
-`git worktree remove`, `git branch -d claude/slot-N` or `Remove-Item` on a
-slot.
+and bump from *that*, not from what your worktree had when you created it. If
+somebody has taken the number you were going to use, take the next one - and if
+you only notice after pushing, bump again in a follow-up commit rather than
+leaving two changes wearing one number, because the release workflow matches a
+tag to exactly one `versions.json`.
 
-Stop any process the session started from inside the slot before finishing -
-a backgrounded command that never returned is still a live process with its
-working directory in the slot. On 2026-09-18 one such `python.exe` held a
-worktree folder that nothing could remove. Find them by command line, not by
-name:
+### Remove it when you are finished
+
+A worktree left behind is a stale branch, a second copy of the tree, and a
+place rule zero material sits unnoticed. From the shared checkout:
+
+```powershell
+git worktree remove C:\wd-worktrees\<session-name>
+git branch -d claude/<session-name>
+git worktree prune -v
+```
+
+`git worktree remove` refuses if the tree has uncommitted changes, which is the
+correct behaviour - look at what is in there before reaching for `--force`.
+
+**If a teardown ever fails on a perfectly clean worktree**, with:
+
+    error: failed to delete '...': Permission denied
+
+that is not a lock on the contents. Git deletes every file successfully and
+then cannot remove the now-empty directory, because something outside git is
+holding a handle on it. The registration *is* cleared - `git worktree list`
+stops showing it - so the state is half-done while looking finished. Finish it:
+
+```powershell
+Remove-Item C:\wd-worktrees\<session-name> -Recurse -Force
+git worktree prune -v
+```
+
+**Measured on 2026-09-17, and it is the argument for the location.** A worktree
+under the repo inside Dropbox failed teardown exactly this way. Three
+create-and-remove cycles at `C:\wd-worktrees` - 380 files each - all exited 0
+with the directory gone. So the handle was Dropbox's, and moving out of Dropbox
+did not merely avoid the sync traffic, it removed the failure. Keep the
+`Remove-Item` line anyway: a virus scanner or an open editor can hold a handle
+just as well.
+
+**And most often it is your own session holding it.** On 2026-09-18 a teardown
+failed this way outside Dropbox entirely, with `Remove-Item -Force` *also*
+failing on a directory that was already empty. The holder was a `python.exe`
+this session had started itself, hours earlier, as a long-running background
+command that never returned - its working directory was inside the worktree,
+so an empty folder could not be removed while it lived.
+
+Nothing about that is visible from git, from the error, or from listing the
+folder. What finds it is asking which processes are running out of the path:
 
 ```powershell
 Get-CimInstance Win32_Process |
-  Where-Object { $_.CommandLine -like "*slot-N*" } |
+  Where-Object { $_.CommandLine -like "*<worktree-name>*" } |
   Select-Object ProcessId, Name, CommandLine
 ```
 
-### If a slot is missing or broken
+Stop the ones that are yours - check the command line rather than the name,
+for the same reason as `firefox.exe` - and the removal then succeeds. **A
+backgrounded command that has not returned is still a live process**, so kill
+it before teardown rather than discovering it as a permission error. The dev
+toolbar's housekeeping action lists exactly these, which is the other half of
+why it exists.
 
-Recreate it with the same name, off `origin/main`:
+### Prune does not clean up after an abandoned session
+
+**`git worktree prune` cannot see the failure mode that actually happens.**
+An earlier version of this note said to prune at the start of every session and
+left it there. That instruction is not wrong, it is inert: prune only clears
+registrations whose *directory has gone missing*. A session that dies mid-task
+leaves the directory sitting there intact, so prune looks straight past it,
+exits 0 and prints nothing.
+
+Measured on 2026-09-18, on a worktree created and then abandoned without
+teardown:
+
+    git worktree prune -v     # exit 0, no output
+    git worktree list         # still lists it
+    Test-Path <dir>           # still True
+
+So a green prune at session start is not evidence that `C:\wd-worktrees` is
+clean. On 2026-09-18 that folder held six entries: three live, and three that
+several sessions had each reported removing on completion. Nothing had errored.
+The teardown step simply never ran, and prune could not tell anyone.
+
+**Reconcile the directory against git instead.** At the start of a session, and
+again when you finish:
 
 ```powershell
 git fetch origin
 git worktree prune -v
-git worktree add -B claude/slot-N C:\wd-worktrees\slot-N origin/main
+foreach ($d in Get-ChildItem C:\wd-worktrees -Directory) {
+    $reg  = (git worktree list) -match [regex]::Escape($d.Name)
+    $age  = (New-TimeSpan -Start $d.LastWriteTime).TotalHours
+    "{0,-22} registered={1,-5} idleHours={2:N1}" -f $d.Name, [bool]$reg, $age
+}
 ```
 
-`-B` resets the branch if it still exists. Check first that nothing unshipped
-is on it (`git cherry origin/main claude/slot-N`).
+Anything idle for hours is a candidate. Anything **not registered** is not a
+worktree at all and no git command will ever clean it - see below. Do not
+delete another session's work on a timer: confirm it is finished before
+removing it, then tear it down properly. `git branch -d` (not `-D`) is the
+check that matters - it refuses unless the branch is merged, so a clean
+`-d` is your evidence the work shipped.
 
-### `C:\wd-worktrees` holds the six slots and nothing else
+### `C:\wd-worktrees` holds worktrees and nothing else
 
-Session scratch goes in the session's scratchpad or inside its own slot, where
-`git clean` removes it. A loose folder or file in `C:\wd-worktrees` is
-invisible to every git command - `manual-review` and `ux-sweep-work` sat there
-on 2026-09-18 as ordinary folders of screenshots and scripts that no git
-command would ever clean up - and it becomes David's problem on his own C:
-drive.
+Two of the six entries found on 2026-09-18 - `manual-review` and
+`ux-sweep-work` - were **not worktrees**. They were ordinary folders a session
+had created next to the real ones to hold screenshots, audit scripts, browser
+profiles and a draft commit message. `git worktree list` never showed them,
+`git worktree remove` did not apply, and prune had nothing to prune. They were
+invisible to every step of this convention while sitting in the middle of it.
 
-Per-task worktrees from before this arrangement belong to the session that
-made them; that session tears its own down. Do not create new ones. If one is
-found idle and its branch is merged (`git branch -d` succeeds, not `-D`),
-removing it is fine - report what was removed rather than cleaning quietly,
-because rule zero material has sat in these corners before.
+Session scratch goes in your scratchpad or inside your own worktree, where it
+leaves with the worktree. If you put a loose folder or a stray `.txt` in
+`C:\wd-worktrees`, nothing in this file will ever clean it up and it becomes
+David's problem on his own C: drive - and see the rule below, which covers
+every other place this has gone wrong.
 
-The dev toolbar's housekeeping action treats a registered worktree as in use
-and never offers it for deletion, so the slots are safe from it.
+**Report what you found and removed rather than cleaning quietly** - rule zero
+material has sat in exactly these forgotten corners before.
 
 ## Session artifacts go in one place, and nowhere else
 
 **One root per session, and that root is your scratchpad.** Screenshots,
 scratch scripts, probe output, downloaded ZIPs, audit results, draft commit
 messages - all of it, under the scratchpad directory the session is given, or
-inside your own slot, where `git clean` removes it. Nothing else is a
+inside your own worktree where it leaves with the worktree. Nothing else is a
 legal destination.
 
 **Not his Desktop.** That is the example to name, because it is the one he can
@@ -2645,7 +2730,7 @@ UI screenshots. Nobody was going to clean those up, he did not put them there,
 and they are the first thing he looks at every morning.
 
 Not `~/Downloads`. Not the repository root. Not a sibling folder next to your
-slot. Not a hand-rolled directory in `%TEMP%` - use the scratchpad, which is
+worktree. Not a hand-rolled directory in `%TEMP%` - use the scratchpad, which is
 already per-session and already isolated.
 
 ### Why this is a rule and not a preference
@@ -2722,6 +2807,9 @@ Claude Code cloud sessions have no memory of past conversations by default
 `BACKLOG.md`). If something matters for next time, write it here rather
 than assuming it'll be remembered.
 
-**Check your slot is clean at the start of every session, and say so** -
-see "Every session works in a slot" above. The previous occupant may have
-left something, and nothing else will tell you.
+**Reconcile `C:\wd-worktrees` at the start of every session too**, for the same
+reason — see "Every session gets its own worktree" above. Note that `git
+worktree prune` on its own will not tell you the folder is dirty: it only
+clears registrations whose directory is already gone, so an abandoned worktree
+and a loose scratch folder both survive it silently. Compare the directory
+listing against `git worktree list`, not prune's exit code.
