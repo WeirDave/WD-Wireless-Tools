@@ -3809,10 +3809,11 @@ async function settlePair(cloudId, localPath, opts) {
    and date into the local file leaves both sides saying the same thing and
    neither of them newer.
 
-   **This is the dev toolbar's realign, scoped to a selection**, not a second
-   implementation of it. `tools/cloud_realign.py` was written as a function
-   taking a `CloudManager` for exactly this, and there is no second copy of
-   "write to his project files" anywhere.
+   **`tools/cloud_realign.py` does the work**, scoped to a selection. It was
+   written as a function taking a `CloudManager` for exactly this, and there
+   is no second copy of "write to his project files" anywhere. (The dev
+   toolbar's whole-account sweep over the same function was a one-off repair
+   and was removed in v2.193.0.)
 
    Two passes, and the first one is the real work: the preview downloads and
    compares every pair and then writes nothing, so what he agrees to is the

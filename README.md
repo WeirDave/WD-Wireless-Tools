@@ -236,7 +236,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.192.0
+WIRELESS TOOLS  v2.193.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.

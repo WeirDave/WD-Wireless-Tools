@@ -1488,20 +1488,12 @@ CLOUD_ACTIONS = {
     "compare_with_cloud": lambda d: cm.compare_with_cloud(
         d["path"], d.get("cloudId"), _progress_setter(d.get("opId")),
         cloud_mtime=d.get("cloudMtime")),
-    # Dev toolbar. Aligns local files whose cloud twin was renamed and is
-    # therefore reported newer. The default here is the safe one on purpose:
-    # `bool(d.get("dryRun"))` would have made an absent field mean "write to
-    # his projects", so only an explicit `false` starts a live run.
-    "realign_renamed": lambda d: cloud_realign.realign(
-        cm, dry_run=d.get("dryRun", True) is not False,
-        progress_cb=_progress_setter(d.get("opId")), limit=d.get("limit")),
-    # The same operation, scoped to the rows he picked. The dev toolbar's
-    # version sweeps the account as a one-off repair; this is the everyday
-    # case, and sharing the function is deliberate - a second implementation
-    # of "write to his project files" is not something to have two of.
+    # Aligns local files whose cloud twin was renamed and is therefore
+    # reported newer, scoped to the rows he picked.
     #
-    # `dryRun` defaults to True here as it does there, so an absent field
-    # means "decide and report" rather than "write to his projects".
+    # `dryRun` defaults to True on purpose: `bool(d.get("dryRun"))` would make
+    # an absent field mean "write to his projects", so only an explicit
+    # `false` starts a live run.
     "reconcile_pairs": lambda d: cloud_realign.realign(
         cm, dry_run=d.get("dryRun", True) is not False,
         progress_cb=_progress_setter(d.get("opId")),

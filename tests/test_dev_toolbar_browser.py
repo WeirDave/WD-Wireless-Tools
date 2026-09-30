@@ -117,26 +117,11 @@ def _driver(kind, binary):
 
 
 #: Replaces `WD.api`, recording what each handler asked for and answering with
-#: the shape the server returns. Both endpoints, because the strip carries
-#: both actions at once now.
+#: the shape the server returns.
 STUB_API = """
 window.__devCalls = [];
 window.WD.api = function (action, body) {
   window.__devCalls.push({ action: action, body: body });
-  if (action === 'cloud/realign_renamed') {
-    var dry = !body || body.dryRun !== false;
-    return Promise.resolve({
-      ok: true, dryRun: dry, examined: 2,
-      aligned: [{ name: 'Maple Depot Survey', folder: 'Maple Depot',
-                  path: 'C:/Projects/Maple Depot/Maple Depot Survey.esx',
-                  actions: ['Set the name inside the file to match the cloud',
-                            'Set the modified date to the cloud\\u2019s'],
-                  newDate: '2026-04-15T14:30:00.000Z' }],
-      skipped: [{ name: 'Birch Yard Walkthrough', folder: 'Birch Yard',
-                  reason: 'The designs genuinely differ - 3 access points added.' }],
-      failed: [], counts: { aligned: 1, skipped: 1, failed: 0 }
-    });
-  }
   if (action === 'dev/housekeeping_survey') {
     return Promise.resolve({
       ok: true, dataScanComplete: true, liveWindowMinutes: 20,
@@ -673,11 +658,6 @@ class ToolbarInABrowser(unittest.TestCase):
             "leaving dev mode made a call other than the lock: %s" % calls)
 
     # ══ the panels explain themselves ═════════════════════════════
-    def open_realign(self):
-        self.click("#wdRealignOpenBtn")
-        self.wait_for(lambda: self.find("#wdRealignPreviewBtn") is not None,
-                      "the realign panel")
-
     def open_housekeeping(self):
         self.click("#wdHousekeepOpenBtn")
         self.wait_for(lambda: self.find("#wdHousekeepLookBtn") is not None,
@@ -686,27 +666,6 @@ class ToolbarInABrowser(unittest.TestCase):
     def panel_text(self):
         body = self.find("#devResultBody")
         return body.text if body else ""
-
-    def test_the_realign_panel_explains_itself_before_he_can_run_it(self):
-        """It rewrites ninety live project files. He should not have to ask
-        anyone what it does."""
-        self.unlocked()
-        self.open_realign()
-        text = self.panel_text().lower()
-        for needed in ("cloud newer", "no copy is kept", "nothing is uploaded",
-                       "preview", "modified date"):
-            self.assertIn(needed, text,
-                          "the realign panel never says %r" % needed)
-
-    def test_the_realign_panel_is_readable_without_hovering(self):
-        """Nothing that matters may live in a `title`."""
-        self.unlocked()
-        self.open_realign()
-        facts = self.driver.find_elements(By.CSS_SELECTOR, ".dev-panel-facts dd")
-        self.assertGreaterEqual(len(facts), 4)
-        for f in facts:
-            self.assertTrue(f.is_displayed())
-            self.assertGreater(len(f.text.strip()), 30)
 
     def test_the_housekeeping_panel_explains_what_it_will_not_touch(self):
         self.unlocked()
@@ -719,239 +678,21 @@ class ToolbarInABrowser(unittest.TestCase):
         """Lime for the one that changes nothing, pink for the one that
         writes. The distinction was his, and it survives the rebuild."""
         self.unlocked()
-        self.open_realign()
+        self.open_housekeeping()
         safe = self.driver.execute_script(
             "return getComputedStyle(document.getElementById("
-            "'wdRealignPreviewBtn')).borderTopColor;")
+            "'wdHousekeepLookBtn')).borderTopColor;")
         write = self.driver.execute_script(
             "return getComputedStyle(document.getElementById("
-            "'wdRealignRunBtn')).borderTopColor;")
+            "'wdHousekeepSweepBtn')).borderTopColor;")
         self.assertNotEqual(safe, write)
         self.assertEqual(safe.replace(" ", ""), "rgb(132,204,22)")   # --lime
 
     def test_the_safe_control_says_it_changes_nothing(self):
         self.unlocked()
-        self.open_realign()
-        label = self.find("#wdRealignPreviewBtn").text.lower()
+        self.open_housekeeping()
+        label = self.find("#wdHousekeepLookBtn").text.lower()
         self.assertIn("changes nothing", label)
-
-    # ══ realign, and the two-stage dry run ════════════════════════
-    def test_the_realign_live_button_is_dead_until_a_preview_runs(self):
-        """His requirement, in WaxFrame's idiom: the live control is rendered
-        `disabled` and only its own preview turns it on."""
-        self.unlocked()
-        self.open_realign()
-        self.assertFalse(self.find("#wdRealignRunBtn").is_enabled())
-
-    def test_the_realign_preview_asks_for_a_dry_run(self):
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: len(self.calls()) == 1, "the preview call")
-        call = self.calls()[0]
-        self.assertEqual(call["action"], "cloud/realign_renamed")
-        self.assertIs(call["body"]["dryRun"], True)
-
-    def test_the_realign_preview_shows_its_report(self):
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: "Maple Depot Survey" in self.panel_text(),
-                      "the preview report")
-        text = self.panel_text()
-        self.assertIn("Nothing has been changed", text)
-        self.assertIn("genuinely differ", text)
-
-    def test_a_clean_preview_arms_the_realign_live_button_and_names_the_count(self):
-        """"Align 1 project for real" tells him more than "Align them for
-        real" at the moment it matters."""
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(),
-                      "the live button to arm")
-        self.assertIn("1 project", self.find("#wdRealignRunBtn").text)
-
-    def test_a_preview_with_nothing_to_do_leaves_the_live_button_dead(self):
-        """Arming a button that would rewrite nothing is an invitation to
-        press it and wonder what happened."""
-        self.unlocked()
-        self.driver.execute_script("""
-          window.__devCalls = [];
-          window.WD.api = function (a, b) {
-            window.__devCalls.push({ action: a, body: b });
-            return Promise.resolve({ ok: true, dryRun: true, examined: 0,
-              aligned: [], skipped: [], failed: [],
-              counts: { aligned: 0, skipped: 0, failed: 0 } });
-          };
-        """)
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: "Nothing to do" in self.panel_text(), "the report")
-        self.assertFalse(self.find("#wdRealignRunBtn").is_enabled())
-
-    def test_a_failed_preview_leaves_the_realign_live_button_dead(self):
-        self.unlocked()
-        self.driver.execute_script(
-            "window.__devCalls = [];"
-            "window.WD.api = function () {"
-            "  return Promise.resolve({ error: 'Not connected' }); };")
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: "Not connected" in self.panel_text(), "the error")
-        self.assertFalse(self.find("#wdRealignRunBtn").is_enabled())
-
-    def test_the_realign_live_run_sends_dry_run_false(self):
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
-        self.driver.execute_script("window.confirm = function () { return true; };")
-        self.click("#wdRealignRunBtn")
-        self.wait_for(lambda: len(self.calls()) == 2, "the live call")
-        self.assertIs(self.calls()[1]["body"]["dryRun"], False)
-
-    def test_a_declined_confirm_sends_no_realign(self):
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
-        self.driver.execute_script("window.confirm = function () { return false; };")
-        self.click("#wdRealignRunBtn")
-        self.assertEqual(len(self.calls()), 1)
-
-    def test_the_realign_live_button_disarms_after_a_run(self):
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
-        self.driver.execute_script("window.confirm = function () { return true; };")
-        self.click("#wdRealignRunBtn")
-        self.wait_for(lambda: len(self.calls()) == 2, "the live call")
-        self.wait_for(lambda: not self.find("#wdRealignRunBtn").is_enabled(),
-                      "it to disarm")
-
-    # ══ knowing it is running, and knowing it is done ═════════════
-    def slow_realign(self):
-        """A realign that does not answer immediately, with the server's
-        progress endpoint answering as the real one does. Ninety cloud
-        downloads take minutes; this is the shape of that wait."""
-        self.driver.execute_script("""
-          window.__devCalls = [];
-          window.__resolve = null;
-          window.WD.api = function (a, b) {
-            window.__devCalls.push({ action: a, body: b });
-            return new Promise(function (res) { window.__resolve = res; });
-          };
-          var realFetch = window.fetch;
-          window.fetch = function (url) {
-            if (String(url).indexOf('/api/cloud/progress') === 0) {
-              return Promise.resolve({ json: function () {
-                return Promise.resolve({ current: 34, total: 90,
-                  message: 'Checking 34 of 90…' });
-              } });
-            }
-            return realFetch.apply(this, arguments);
-          };
-        """)
-
-    def test_it_says_where_it_has_got_to_while_it_runs(self):
-        """**The server was already reporting this and nothing listened.**
-        `cloud_realign` calls its progress callback once per pair and
-        `server.py` exposes it at `/api/cloud/progress`; the toolbar sent no
-        `opId`, so ninety downloads happened behind a button reading
-        "Aligning..." and nothing else. On a fleet this size that is minutes
-        of a screen indistinguishable from a hung one."""
-        self.unlocked()
-        self.slow_realign()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: "Checking 34 of 90" in self.panel_text(),
-                      "the progress line")
-        # Scoped to the panel: Cloud Manager's own ops deck has a
-        # `.progress-fill` too, and an unscoped query finds that one instead.
-        pct = self.driver.execute_script(
-            "var f = document.getElementById('devPanelOut')"
-            "          .querySelector('.progress-fill');"
-            "return f ? f.style.width : null;")
-        self.assertEqual(pct, "38%")
-
-    def test_the_request_carries_an_op_id_so_progress_can_be_found(self):
-        """The id is what ties the poll to the run. Without it the server
-        writes progress into a slot nobody reads."""
-        self.unlocked()
-        self.slow_realign()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: len(self.calls()) == 1, "the call")
-        self.assertTrue(self.calls()[0]["body"].get("opId"),
-                        "no opId sent, so nothing can report progress")
-
-    def test_the_polling_stops_when_the_run_returns(self):
-        """A poller left running would keep overwriting the report he is
-        trying to read."""
-        self.unlocked()
-        self.slow_realign()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: "Checking 34 of 90" in self.panel_text(), "progress")
-        self.driver.execute_script("""
-          window.__resolve({ ok: true, dryRun: true, examined: 1,
-            aligned: [{ name: 'Maple Depot Survey', folder: 'Maple Depot',
-                        actions: ['Set the modified date to the cloud’s'] }],
-            skipped: [], failed: [],
-            counts: { aligned: 1, skipped: 0, failed: 0 } });
-        """)
-        self.wait_for(lambda: "Maple Depot Survey" in self.panel_text(), "the report")
-        time.sleep(0.6)      # longer than the 250ms poll interval
-        self.assertIn("Maple Depot Survey", self.panel_text())
-        self.assertNotIn("Checking 34 of 90", self.panel_text())
-
-    def test_a_finished_run_says_so_in_words(self):
-        """"How will I know after the alignment is complete?" A report
-        appearing where a progress bar was is a weak signal."""
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
-        self.driver.execute_script("window.confirm = function () { return true; };")
-        self.click("#wdRealignRunBtn")
-        self.wait_for(lambda: "Finished" in self.panel_text(), "the done banner")
-        text = self.panel_text()
-        self.assertIn("in step with the cloud", text)
-        self.assertIn("stop reporting the cloud as newer", text)
-        self.assertIn("Nothing was uploaded", text)
-
-    def test_the_finished_run_retitles_the_panel(self):
-        """The heading agrees with the banner, so a glance is enough."""
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
-        self.driver.execute_script("window.confirm = function () { return true; };")
-        self.click("#wdRealignRunBtn")
-        self.wait_for(
-            lambda: "finished" in self.find("#devResultTitle").text.lower(),
-            "the retitled panel")
-
-    def test_a_preview_never_claims_to_have_finished_anything(self):
-        """The two states must not read alike - that is the whole point of
-        the banner."""
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: "Nothing has been changed" in self.panel_text(),
-                      "the preview")
-        self.assertNotIn("Finished", self.panel_text())
 
     # ══ housekeeping ══════════════════════════════════════════════
     def test_the_housekeeping_delete_button_is_dead_until_it_has_looked(self):
@@ -1036,21 +777,6 @@ class ToolbarInABrowser(unittest.TestCase):
         text = self.panel_text()
         self.assertIn("just now", text)
         self.assertIn("re-checks every file", text)
-
-    def test_the_realign_preview_survives_closing_the_panel_too(self):
-        """The expensive one. A realign preview downloads ninety cloud
-        projects to prove them identical; throwing that away because he shut
-        a dialog is the costliest version of this bug."""
-        self.unlocked()
-        self.stub()
-        self.open_realign()
-        self.click("#wdRealignPreviewBtn")
-        self.wait_for(lambda: self.find("#wdRealignRunBtn").is_enabled(), "arm")
-        self.click("#devResultModal .btn")
-        self.open_realign()
-        self.assertTrue(self.find("#wdRealignRunBtn").is_enabled())
-        self.assertIn("1 project", self.find("#wdRealignRunBtn").text)
-        self.assertIn("Maple Depot Survey", self.panel_text())
 
     def test_the_controls_stay_on_screen_however_long_the_report_is(self):
         """**The other half of what he hit.** The controls used to sit inside

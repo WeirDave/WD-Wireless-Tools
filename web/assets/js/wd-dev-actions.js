@@ -7,14 +7,14 @@
    buttons, and a button that calls nothing is worse than no button.
 
    The buttons are wired declaratively - `data-action="call"` with
-   `data-fn="WD.Dev.openRealign"` - and run by the dispatcher in wd-dev.js.
+   `data-fn="WD.Dev.openHousekeeping"` - and run by the dispatcher in wd-dev.js.
    That is WaxFrame's `data-fn="WF_DEBUG.bundleForScout"` shape, one for one.
 
    Why the labels are words rather than emoji with a tooltip
    ---------------------------------------------------------
    He opened the first build of this and said: *"there are items in here and I
-   don't know what they do."* Fair. The buttons were `🔍 Preview Realign` and
-   `✅ Align For Real` with the explanation in a `title`, and his standing
+   don't know what they do."* Fair. The buttons were emoji plus a short
+   phrase with the explanation in a `title`, and his standing
    rules are that every control says what it is and that nothing a decision
    depends on hides behind a hover.
 
@@ -54,11 +54,6 @@
      that the control opens something rather than doing something. */
   Dev.toolbarInnerHtml = function () {
     return '' +
-      '<button id="wdRealignOpenBtn" type="button" ' +
-              'data-action="call" data-fn="WD.Dev.openRealign" ' +
-              'title="Open the realign panel">' +
-        'Realign renamed cloud projects…</button>' +
-      '<span class="dev-toolbar-sep">|</span>' +
       '<button id="wdHousekeepOpenBtn" type="button" ' +
               'data-action="call" data-fn="WD.Dev.openHousekeeping" ' +
               'title="Open the clean-up panel">' +
@@ -79,17 +74,15 @@
 
      **Closing the panel used to throw this away.** He looked, closed it, came
      back, and had to look again from scratch with the live button greyed out -
-     "this is counterproductive", and he was right. Re-deriving a five-second
-     survey is annoying; re-running a realign preview that downloads ninety
-     cloud projects to prove them identical is worse.
+     "this is counterproductive", and he was right. Re-deriving the survey is
+     annoying, and a long preview thrown away is worse.
 
-     Keeping it is safe because **the client is not the guard**. Both
-     endpoints re-derive their work at write time: `housekeeping.sweep` looks
+     Keeping it is safe because **the client is not the guard**. The
+     endpoint re-derives its work at write time: `housekeeping.sweep` looks
      every path up in a fresh survey and skips anything that is no longer
-     deletable, and `cloud_realign.realign` re-downloads and re-compares each
-     pair before touching it. The armed button is a convenience; the server is
+     deletable. The armed button is a convenience; the server is
      the safety. Disarming on close bought nothing and cost him the result. */
-  var lastRun = { realign: null, housekeeping: null };
+  var lastRun = { housekeeping: null };
 
   function stamp(at) {
     var mins = Math.floor((Date.now() - at) / 60000);
@@ -175,59 +168,6 @@
   }
   Dev._callWriting = callWriting;
 
-  /* ── Realign renamed cloud projects ──────────────────────────
-     Roughly ninety pairs read "cloud newer" because the cloud projects were
-     renamed and the local copies were not. Server side is
-     `tools/cloud_realign.py`; it proves each pair identical by comparing
-     contents, not names. */
-
-  Dev.openRealign = function () {
-    Dev.showResult('Realign renamed cloud projects', panel({
-      lead: 'Renaming a project in Ekahau Cloud moves its modified date. ' +
-            'The local copy did not change, so Cloud Manager starts ' +
-            'reporting "cloud newer" on files whose designs are identical. ' +
-            'This settles those pairs without pulling anything down.',
-      facts: [
-        { q: 'What it looks at',
-          a: 'Every matched pair where the cloud side reads newer. For each ' +
-             'one it downloads the cloud copy and compares every document ' +
-             'and every floor plan image against your local file - not the ' +
-             'names, which cannot prove the contents match.' },
-        { q: 'What it changes',
-          a: 'On pairs proved identical: the project name stored inside the ' +
-             '.esx, and the file’s modified date, set to the cloud ' +
-             'project’s own date. Nothing else in the file is touched.' },
-        { q: 'How it writes',
-          a: 'No copy is kept. The rebuilt .esx goes to a temporary file and ' +
-             'is renamed over the top, so each file is either entirely the ' +
-             'old one or entirely the new one, never half of either. The one ' +
-             'field it changes is the project name, which the cloud also ' +
-             'holds.' },
-        { q: 'What it will not do',
-          a: 'Nothing is uploaded and nothing is deleted from the cloud. ' +
-             'Pairs whose designs genuinely differ are skipped and listed ' +
-             'with the reason. It is safe to run again if it is interrupted.' },
-        { q: 'Before you press anything',
-          a: 'Preview first. It does the same downloading and comparing and ' +
-             'then writes nothing, so what it lists is what the live run ' +
-             'would do. The live button stays dead until a preview succeeds.' }
-      ],
-    }),
-    safeBtn('wdRealignPreviewBtn', 'WD.Dev.realignPreview',
-            'Preview — changes nothing',
-            'Work out what would change and report it. Writes nothing.') +
-    writeBtn('wdRealignRunBtn', 'WD.Dev.realignRun',
-             'Align them for real',
-             'Preview first. This rewrites the files the preview listed.'));
-
-    // Put back what the last preview found, if there was one, so closing the
-    // panel does not cost him the run.
-    restore('realign', 'wdRealignRunBtn', function (r) {
-      return 'Align ' + plural(r.aligned.length, 'project', 'projects') +
-             ' for real';
-    }, realignReport);
-  };
-
   /* Re-render a remembered result and re-arm its live control. */
   function restore(key, runBtnId, labelFor, render) {
     var last = lastRun[key];
@@ -245,13 +185,11 @@
   }
 
   /* ── progress, while it runs ─────────────────────────────────
-     **The server was already reporting this and nothing was listening.**
-     `cloud_realign.realign` calls its `progress_cb` once per pair - "Checking
-     34 of 90" - and `server.py` wires that to `/api/cloud/progress` keyed by
-     an `opId`. The toolbar was not sending an `opId`, so ninety cloud
-     downloads happened behind a button that said "Aligning..." and nothing
-     else. On a fleet this size that is minutes of a screen that looks
-     identical to a hung one.
+     Kept for any action that runs for minutes. No current button uses it;
+     the one that did (the one-off realign, removed in v2.193.0) ran ninety
+     cloud downloads behind a button reading "Aligning..." until this was
+     added. A server operation reports through `progress_cb`, which
+     `server.py` exposes at `/api/cloud/progress` keyed by an `opId`.
 
      Same shape Cloud Manager uses: make an id, send it, poll every 250 ms,
      stop when the call returns. */
@@ -293,174 +231,6 @@
         .catch(function () { /* a dropped poll is not a failed operation */ });
     }, 250);
   }
-
-  function realignCall(dryRun, lead) {
-    var opId = 'dev-realign-' + Date.now() + '-' +
-               Math.random().toString(16).slice(2, 8);
-    startPolling(opId, lead);
-    return WD.api('cloud/realign_renamed', { dryRun: dryRun, opId: opId })
-      .then(function (r) { stopPolling(); return r; })
-      .catch(function (e) { stopPolling(); throw e; });
-  }
-
-  /* The report he decides on, at his scale - around ninety pairs.
-     Full names, never truncated, and the skipped ones grouped by reason so
-     the shape of the problem is visible without reading ninety lines. */
-  function realignReport(r, isPreview) {
-    if (!r) return '<p class="dev-result-error">No answer from the server.</p>';
-    var aligned = r.aligned || [], skipped = r.skipped || [], failed = r.failed || [];
-    var out = [];
-
-    /* **"How will I know when it is done?"** A report appearing where a
-       progress bar was is a weak signal, so the finished state says so in
-       words, at the top, and says what it means for him - the whole reason he
-       ran it was to stop those rows claiming there was work to pull. */
-    if (isPreview) {
-      out.push('<p class="dev-result-lead">' +
-        'Checked ' + plural(r.examined || 0, 'pair', 'pairs') + '. ' +
-        '<strong>Nothing has been changed.</strong></p>');
-    } else {
-      var done = aligned.length;
-      out.push('<p class="dev-result-done">' +
-        '<strong>Finished.</strong> ' +
-        (done
-          ? plural(done, 'project is', 'projects are') + ' now in step with ' +
-            'the cloud — those rows will stop reporting the cloud as ' +
-            'newer. Nothing was uploaded, and nothing was deleted from the ' +
-            'cloud.'
-          : 'No project needed changing.') +
-        (failed.length
-          ? ' ' + (failed.length === 1
-                    ? 'One failed and is listed below'
-                    : failed.length + ' failed and are listed below') +
-            ' — running this again picks up what is left.'
-          : '') +
-        '</p>');
-      out.push('<p class="dev-result-lead">Checked ' +
-        plural(r.examined || 0, 'pair', 'pairs') + '.</p>');
-    }
-
-    out.push('<ul class="dev-result-tally">' +
-      '<li><strong>' + aligned.length + '</strong> ' +
-        (isPreview ? 'would be aligned' : 'aligned') + '</li>' +
-      '<li><strong>' + skipped.length + '</strong> skipped</li>' +
-      '<li><strong>' + failed.length + '</strong> failed</li></ul>');
-
-    if (aligned.length) {
-      out.push('<h4 class="dev-result-section">' +
-        (isPreview ? 'Would align — ' : 'Aligned — ') +
-        plural(aligned.length, 'project', 'projects') +
-        '</h4><ul class="dev-result-list">' +
-        aligned.map(function (f) {
-          return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
-            (f.folder ? '<span class="dev-result-sub">' + esc(f.folder) + '</span>' : '') +
-            ((f.actions || []).length
-              ? '<ul class="dev-result-acts">' + f.actions.map(function (a) {
-                  return '<li>' + esc(a) + '</li>'; }).join('') + '</ul>' : '') +
-            (f.newDate ? '<span class="dev-result-sub">New date: ' +
-              esc(f.newDate) + '</span>' : '') +
-            (f.warning ? '<span class="dev-result-warn">' +
-              esc(f.warning) + '</span>' : '') +
-          '</li>';
-        }).join('') + '</ul>');
-    }
-
-    if (skipped.length) {
-      /* Grouped, because ninety pairs skipped one-by-one is a wall. The
-         reason is the thing he is scanning for, so it is the heading. */
-      var byReason = {};
-      var order = [];
-      skipped.forEach(function (f) {
-        var key = f.reason || 'No reason given.';
-        if (!byReason[key]) { byReason[key] = []; order.push(key); }
-        byReason[key].push(f);
-      });
-      out.push('<h4 class="dev-result-section">Skipped — ' +
-        plural(skipped.length, 'project', 'projects') + '</h4>');
-      order.forEach(function (reason) {
-        var group = byReason[reason];
-        out.push('<p class="dev-result-reason">' + esc(reason) +
-          ' <span class="dev-result-count">' +
-          plural(group.length, 'project', 'projects') + '</span></p>' +
-          '<ul class="dev-result-list">' + group.map(function (f) {
-            return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
-              (f.folder ? '<span class="dev-result-sub">' + esc(f.folder) +
-                '</span>' : '') + '</li>';
-          }).join('') + '</ul>');
-      });
-    }
-
-    if (failed.length) {
-      out.push('<h4 class="dev-result-section">Failed — ' +
-        plural(failed.length, 'project', 'projects') +
-        '</h4><ul class="dev-result-list">' +
-        failed.map(function (f) {
-          return '<li><span class="dev-result-name">' + esc(f.name) + '</span>' +
-            '<span class="dev-result-error">' +
-              esc(f.error || 'Unknown error.') + '</span></li>';
-        }).join('') + '</ul>');
-    }
-
-    if (!aligned.length && !skipped.length && !failed.length) {
-      out.push('<p class="dev-result-lead">Nothing to do — no pair is ' +
-        'reporting the cloud as newer.</p>');
-    }
-    return out.join('');
-  }
-
-  Dev.realignPreview = function () {
-    busy('wdRealignPreviewBtn', true, 'Comparing…');
-    Dev.setEnabled('wdRealignRunBtn', false);
-    return realignCall(true,
-        'Downloading each cloud copy and comparing it. This takes a moment ' +
-        'per project, so a large fleet takes a few minutes.'
-      ).then(function (r) {
-      busy('wdRealignPreviewBtn', false);
-      if (r && r.error) { fail(r.error); return; }
-      Dev.setPanelOutput(realignReport(r, true));
-      // The only path that arms the live button, and only on a clean
-      // preview. A failed one leaves it dead, which is what we want.
-      var n = (r && r.aligned && r.aligned.length) || 0;
-      lastRun.realign = { result: r, isPreview: true, at: Date.now(),
-                          armable: n > 0 };
-      Dev.setEnabled('wdRealignRunBtn', n > 0);
-      var btn = document.getElementById('wdRealignRunBtn');
-      if (btn && n > 0) {
-        // Name the number. "Align them for real" and "Align 87 projects for
-        // real" are different amounts of information at the moment it counts.
-        btn.textContent = 'Align ' + plural(n, 'project', 'projects') +
-                          ' for real';
-        delete btn.dataset.wasLabel;
-      }
-    }).catch(function (e) {
-      busy('wdRealignPreviewBtn', false);
-      fail(e);
-    });
-  };
-
-  Dev.realignRun = function () {
-    if (!window.confirm(
-        'This rewrites the project name and modified date inside the local ' +
-        '.esx files the preview listed, backing each one up first. ' +
-        'Nothing is uploaded or deleted. Continue?')) return;
-    busy('wdRealignRunBtn', true, 'Aligning…');
-    return realignCall(false,
-        'Re-checking each pair and writing the ones that are still identical. ' +
-        'Every file is backed up before it is touched.'
-      ).then(function (r) {
-      busy('wdRealignRunBtn', false);
-      Dev.setEnabled('wdRealignRunBtn', false);
-      if (r && r.error) { fail(r.error); return; }
-      lastRun.realign = { result: r, isPreview: false, at: Date.now(),
-                          armable: false };
-      Dev.setPanelOutput(realignReport(r, false));
-      Dev.setPanelTitle('Realign — finished');
-    }).catch(function (e) {
-      busy('wdRealignRunBtn', false);
-      Dev.setEnabled('wdRealignRunBtn', false);
-      fail(e);
-    });
-  };
 
   /* ── Clean up leftover files ─────────────────────────────────
      "how do I know, once we've done all the work, when to be able to clean
@@ -720,7 +490,6 @@
 
   /* Exposed for the tests, which run the real renderers against real payloads
      rather than reading this file. */
-  Dev._realignReport = realignReport;
   Dev._surveyReport = surveyReport;
   Dev._sweepReport = sweepReport;
   Dev._housekeepingPending = function () { return sweepable.slice(); };

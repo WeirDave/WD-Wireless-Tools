@@ -57,8 +57,7 @@ PORT_HINT = 8903
 
 #: Text that only the dev toolbar puts on a page. Read off the strip's own
 #: labels, so a rename breaks this loudly rather than silently passing.
-STRIP_MARKERS = ("Realign renamed cloud projects",
-                 "Clean up leftover files",
+STRIP_MARKERS = ("Clean up leftover files",
                  "About dev mode")
 
 try:  # pragma: no cover - availability varies by machine
@@ -169,7 +168,7 @@ class TheToolbarIsNotOnThePaper(unittest.TestCase):
         self.open("report.html", "?dev=1")
         strip = self.driver.find_element(By.ID, "devToolbar")
         self.assertTrue(strip.is_displayed())
-        self.assertIn("Realign renamed cloud projects",
+        self.assertIn("Clean up leftover files",
                       strip.get_attribute("textContent"))
 
     def test_an_open_panel_does_not_print_either(self):
@@ -184,13 +183,13 @@ class TheToolbarIsNotOnThePaper(unittest.TestCase):
         so that nobody later reads it as part of what proved the fix."""
         self.open("report.html", "?dev=1")
         self.driver.execute_script(
-            "document.getElementById('wdRealignOpenBtn').click();")
+            "document.getElementById('wdHousekeepOpenBtn').click();")
         time.sleep(0.3)
         self.assertTrue(
             self.driver.find_element(By.ID, "devResultModal").is_displayed())
         printed = self.printed_text()
-        for marker in ("Renaming a project in Ekahau Cloud",
-                       "What it will not do"):
+        for marker in ("Development sessions leave things behind",
+                       "What it will not touch"):
             self.assertNotIn(marker, printed,
                              "the open dev panel printed onto the sheet")
 

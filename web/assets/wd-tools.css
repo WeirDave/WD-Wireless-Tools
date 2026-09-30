@@ -10252,12 +10252,10 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 /* A preview writes nothing, and says so in lime. WaxFrame tints its
    Deep Dive toggle the same way, for the same reason: the button whose
    consequences differ should not look like the ones beside it. */
-.dev-toolbar button#wdRealignPreviewBtn,
 .dev-toolbar button#wdHousekeepLookBtn {
   border-color: var(--lime);
   color: var(--lime);
 }
-.dev-toolbar button#wdRealignPreviewBtn:hover:not(:disabled),
 .dev-toolbar button#wdHousekeepLookBtn:hover:not(:disabled) {
   background: var(--lime);
   border-color: var(--lime);
@@ -10294,9 +10292,9 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
    Troubleshooting Card - rather than growing the strip into a panel.
    Same idea: the strip stays a strip. */
 .dev-result-modal {
-  /* Wider and taller than a normal modal: the realign preview is the screen
-     he makes the decision on, and at ninety pairs a narrow column of
-     truncated names is not a thing anyone can read. */
+  /* Wider and taller than a normal modal: a report is the screen he makes
+     the decision on, and a narrow column of truncated names is not a thing
+     anyone can read. */
   max-width: 860px;
   width: min(860px, calc(100vw - 48px));
 }

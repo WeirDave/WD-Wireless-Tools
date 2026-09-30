@@ -63,8 +63,8 @@ globalThis.WD = WD;
 eval(slice(actions, '  function esc(s)', '  Dev.toolbarInnerHtml'));
 // Single-line markers only: the checked-out file has CRLF endings, so a
 // marker spanning two lines silently never matches. `indexOf(to, a)`
-// searches forward from the start marker, so the bare register line finds
-// the housekeeping one rather than the realign one above it.
+// searches forward from the start marker, so the end marker is found after
+// the start rather than anywhere else in the file.
 eval(slice(actions, '  function mb(bytes)', '  Dev.housekeepLook'));
 """
 

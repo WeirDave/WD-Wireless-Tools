@@ -454,36 +454,5 @@ class TheReportAccountsForEverything(RealignHarness):
         self.assertIn("error", report)
 
 
-class TheEndpointDefaultsToTheSafeSide(unittest.TestCase):
-    """`server.py` decides dry-vs-live from the request body, and an absent
-    field has to mean dry. This runs the endpoint's own expression rather
-    than reading it."""
-
-    @staticmethod
-    def _decide(data):
-        # The expression from CLOUD_ACTIONS["realign_renamed"], kept in one
-        # place here so the property is checked rather than the wording.
-        return data.get("dryRun", True) is not False
-
-    def test_an_absent_field_is_a_dry_run(self):
-        self.assertTrue(self._decide({}))
-
-    def test_a_null_field_is_a_dry_run(self):
-        """A JSON `null` arrives as None. `bool(None)` is False, which would
-        have made a malformed body start a live run."""
-        self.assertTrue(self._decide({"dryRun": None}))
-
-    def test_only_an_explicit_false_runs_for_real(self):
-        self.assertFalse(self._decide({"dryRun": False}))
-        self.assertTrue(self._decide({"dryRun": True}))
-
-    def test_the_server_wires_that_expression_to_the_real_function(self):
-        """The endpoint has to reach `cloud_realign.realign`. A route that
-        exists and calls nothing is the defect this repo keeps catching."""
-        import server
-        self.assertIn("realign_renamed", server.CLOUD_ACTIONS)
-        self.assertIs(server.cloud_realign.realign, cloud_realign.realign)
-
-
 if __name__ == "__main__":
     unittest.main()
