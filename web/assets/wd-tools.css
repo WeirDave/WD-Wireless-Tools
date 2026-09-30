@@ -8635,7 +8635,8 @@ body.tool-plantrim .topbar {
   font-size: 13px;
 }
 
-.pt-floor.is-trimmed { border-left: 3px solid var(--pt-accent); }
+.pt-floor.is-trimmed,
+.pt-floor.is-repaired { border-left: 3px solid var(--pt-accent); }
 .pt-floor.is-skipped { opacity: 0.75; }
 .pt-floor.is-refused { border-left: 3px solid var(--amber, #d97706); }
 
@@ -8648,7 +8649,8 @@ body.tool-plantrim .topbar {
   border: 1px solid var(--border);
 }
 
-.pt-floor.is-trimmed .pt-badge { background: var(--pt-accent); color: #05221f; border-color: transparent; }
+.pt-floor.is-trimmed .pt-badge,
+.pt-floor.is-repaired .pt-badge { background: var(--pt-accent); color: #05221f; border-color: transparent; }
 
 .pt-floor-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 
