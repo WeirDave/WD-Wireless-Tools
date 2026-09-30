@@ -294,6 +294,25 @@
     return seg.sample || '';
   }
 
+  /* A floor number for naming, which is not the same thing as `order`.
+
+     `order` sorts the tabs and is 0 when buildingFloors.json has nothing to
+     say - fine for sorting, wrong for a name, because every floor then gets
+     the same token. Precedence: WD.storeyNumber (the floor's own name, then
+     Ekahau's number, read for the version that wrote it), then any number in the name,
+     then position in the list, which is always distinct. */
+  function numberFloors(floors, buildingFloors) {
+    var byPlan = {};
+    (buildingFloors || []).forEach(function (bf) { byPlan[bf.floorPlanId] = bf; });
+    floors.forEach(function (f, i) {
+      var n = WD.storeyNumber(f.name, byPlan[f.id] || null, buildingFloors);
+      if (n != null) { f.num = n; return; }
+      var m = String(f.name || '').match(/\d+/);
+      f.num = m ? parseInt(m[0], 10) : (i + 1);
+    });
+    return floors;
+  }
+
   function buildStructuredName(floor, num, ap) {
     var sep = $('arSepStructured').value;
     var parts = [];
@@ -1165,23 +1184,7 @@
 
       S.floors.sort(function (a, b) { return a.order - b.order; });
 
-      /* A floor number for naming, which is not the same thing as `order`.
-
-         `order` sorts the tabs and is 0 when buildingFloors.json has nothing
-         to say - which is fine for sorting and wrong for a name, because
-         every floor then gets the same token. Precedence, most authoritative
-         first: what Ekahau recorded, then a number in the floor's own name
-         ("01 - Ground", "Level 2", "3rd floor"), then its position in the
-         list, which is always distinct even when nothing else is. */
-      var fromBuilding = {};
-      ((bfData && bfData.buildingFloors) || []).forEach(function (bf) {
-        if (bf.floorNumber != null) fromBuilding[bf.floorPlanId] = bf.floorNumber;
-      });
-      S.floors.forEach(function (f, i) {
-        if (fromBuilding[f.id] != null) { f.num = fromBuilding[f.id]; return; }
-        var m = String(f.name || '').match(/\d+/);
-        f.num = m ? parseInt(m[0], 10) : (i + 1);
-      });
+      numberFloors(S.floors, (bfData && bfData.buildingFloors) || []);
     });
   }
 
