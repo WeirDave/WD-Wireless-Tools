@@ -211,8 +211,10 @@
     </main>
     <!-- Print lives in the bar above the first sheet, and a report runs to
          dozens of sheets. Shown once that bar has scrolled away. -->
-    <button type="button" class="btn btn-blue rep-to-top noprint" id="repToTop" hidden
-            data-action="call" data-fn="scrollReportToTop" title="Back to the top, where Print is">&uarr; Back to top</button>
+    <div class="rep-float-actions noprint" id="repFloatActions" hidden>
+      <button type="button" class="btn btn-secondary" data-action="call" data-fn="scrollReportToTop" title="Back to the top of the report">&uarr; Back to top</button>
+      <button type="button" class="btn btn-blue" data-action="call" data-fn="printReport">&#128424; Print / Save PDF</button>
+    </div>
   </section>
 </div>
 

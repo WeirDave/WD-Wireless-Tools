@@ -1,15 +1,17 @@
-"""The Report's "Back to top" button.
+"""The Report's floating "Back to top" and "Print / Save PDF" buttons.
 
 Print lives in the bar above the first sheet, and a report runs to dozens of
 sheets, so reaching Print from the bottom meant scrolling the whole document
-back up. A floating button appears once that bar has scrolled away and takes
-the page back to it.
+back up. Once that bar has scrolled away, a floating pair stands in for it:
+Back to top, and a Print that runs the same handler as the bar's.
 
 What is held here, by running the real code rather than reading it:
 
-* the handler the button's `data-fn` names is defined by `report.js`, and
+* the handler Back to top's `data-fn` names is defined by `report.js`, and
   calling it scrolls the window to the top;
-* it appears only on the review stage, and only once scrolled past the bar;
+* the floating Print calls exactly what the review bar's Print calls;
+* the pair appears only on the review stage, and only once scrolled past the
+  bar;
 * it is `noprint` - a `position: fixed` element otherwise prints on sheet one.
 """
 from __future__ import annotations
@@ -27,23 +29,57 @@ REPORT_HTML = ROOT / "web" / "report.html"
 NODE = shutil.which("node")
 
 
-class _FindButton(HTMLParser):
+class _Markup(HTMLParser):
+    """The floating group, its buttons, and the review bar's buttons."""
+
     def __init__(self):
         super().__init__()
-        self.attrs = None
+        self.group = None
+        self.floating, self.bar = [], []
+        self._in = []  # stack of (tag, which) for open divs
 
     def handle_starttag(self, tag, attrs):
         d = dict(attrs)
-        if d.get("id") == "repToTop":
-            self.attrs = d
+        if tag == "div":
+            which = None
+            if d.get("id") == "repFloatActions":
+                self.group, which = d, "floating"
+            elif "rep-review-bar" in d.get("class", "").split():
+                which = "bar"
+            self._in.append(which or (self._in[-1] if self._in else None))
+        elif tag == "button" and self._in and self._in[-1]:
+            getattr(self, self._in[-1]).append(d)
+
+    def handle_endtag(self, tag):
+        if tag == "div" and self._in:
+            self._in.pop()
 
 
-def _button():
-    p = _FindButton()
+def _markup():
+    p = _Markup()
     p.feed(REPORT_HTML.read_text(encoding="utf-8"))
-    if p.attrs is None:
-        raise AssertionError("report.html has no #repToTop")
-    return p.attrs
+    if p.group is None:
+        raise AssertionError("report.html has no #repFloatActions")
+    return p
+
+
+def _floating(label):
+    m = _markup()
+    hits = [b for b in m.floating if b.get("data-fn") and label(b)]
+    if len(hits) != 1:
+        raise AssertionError("expected one floating button, got %r" % hits)
+    return hits[0]
+
+
+def _to_top():
+    return _floating(lambda b: b.get("data-fn") != _bar_print().get("data-fn"))
+
+
+def _bar_print():
+    hits = [b for b in _markup().bar if "btn-blue" in b.get("class", "").split()]
+    if len(hits) != 1:
+        raise AssertionError("expected one Print in the review bar, got %r" % hits)
+    return hits[0]
 
 
 PROBE = r"""
@@ -76,7 +112,7 @@ const window = {
   addEventListener(ev, fn) { listeners[ev] = fn; },
 };
 const document = {
-  getElementById(id) { return id === 'repToTop' ? btn : (stages[id] || null); },
+  getElementById(id) { return id === 'repFloatActions' ? btn : (stages[id] || null); },
 };
 var currentStage = 'template', configureDirty = false;
 var STAGE_ORDER = ['template', 'configure', 'review'], STAGE_ELS = {};
@@ -86,9 +122,9 @@ function syncDocTitle() {}
 
 eval(constLine);
 eval(slice('  function showStage(name) {'));
-eval(slice('  function syncToTopButton() {'));
+eval(slice('  function syncFloatActions() {'));
 eval(slice('  window.scrollReportToTop = function () {'));
-eval("window.addEventListener('scroll', syncToTopButton, { passive: true });");
+eval("window.addEventListener('scroll', syncFloatActions, { passive: true });");
 
 const out = {};
 showStage('review');
@@ -113,7 +149,7 @@ class BackToTopRuns(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         r = subprocess.run([NODE, "-e", PROBE, str(REPORT_JS),
-                            _button().get("data-fn", "")],
+                            _to_top().get("data-fn", "")],
                            capture_output=True, encoding="utf-8", timeout=60)
         if r.returncode != 0:
             raise AssertionError((r.stdout + r.stderr).strip())
@@ -132,14 +168,25 @@ class BackToTopRuns(unittest.TestCase):
         self.assertEqual(self.out["clickScrolls"][0]["top"], 0)
 
 
-class TheButtonIsWired(unittest.TestCase):
-    def test_it_is_a_call_action(self):
-        self.assertEqual(_button().get("data-action"), "call")
+class TheButtonsAreWired(unittest.TestCase):
+    def test_there_are_exactly_two(self):
+        self.assertEqual(len(_markup().floating), 2)
 
-    def test_it_starts_hidden_and_never_prints(self):
-        b = _button()
-        self.assertIn("hidden", b)
-        self.assertIn("noprint", b.get("class", "").split())
+    def test_back_to_top_is_a_call_action(self):
+        self.assertEqual(_to_top().get("data-action"), "call")
+
+    def test_floating_print_calls_what_the_bars_print_calls(self):
+        bar = _bar_print()
+        floating = [b for b in _markup().floating
+                    if b.get("data-fn") == bar.get("data-fn")]
+        self.assertEqual(len(floating), 1, "no floating Print")
+        for k in ("data-action", "data-fn", "data-arg"):
+            self.assertEqual(floating[0].get(k), bar.get(k), k)
+
+    def test_the_group_starts_hidden_and_never_prints(self):
+        g = _markup().group
+        self.assertIn("hidden", g)
+        self.assertIn("noprint", g.get("class", "").split())
 
 
 if __name__ == "__main__":
