@@ -1563,17 +1563,48 @@ Choose one of three modes:
 
   > Before **v2.99.8** this read only the first of those three, which Ekahau
   > fills in only for floors attached to a building. A project without one had
-  > every floor auto-detect as `00`, and with **Per Floor** scope that produced
+  > every floor auto-detect as `00`, and with **Per Floor** scope (now
+  > **Numbering → Restart each floor**) that produced
   > the same set of names on every floor. If you labelled a multi-floor project
   > on an earlier build, check it for repeated names.
 
 - **Simple** — prefix + separator + sequential number with configurable leading zeros and start number.
 - **MAC** — names derived from each AP's MAC address.
 
-### Scope
+### Floors to rename
 
-- **All APs** — one continuous sequence across the entire project.
-- **Per Floor** — restart numbering on each floor.
+Decides which floors get new names. A floor that is left out keeps every name
+it has, exactly, in the downloaded `.esx`.
+
+- **Whole project** *(default)* — every floor is renamed.
+- **This floor only** — only the floor on screen when the button is pressed.
+  Looking at another floor tab afterwards does not change it; press the button
+  again on another floor to move it. This is the one to use after adding a
+  floor to a project that is already labelled.
+- **Choose floors** — a list of floors with a checkbox each, plus **Tick all**
+  and **Tick none**. It opens with the floor on screen ticked.
+
+Floors that are not being renamed show dimmed in the floor tabs, their AP
+markers are faded, and the preview heading says **this floor is not being
+renamed**.
+
+### Numbering
+
+Decides how the counter runs. It has nothing to do with which floors are
+renamed.
+
+- **Continuous** — one sequence across the floors, in floor order. A floor that
+  is not being renamed still counts, so a floor labelled on its own gets the
+  numbers it would have had in a full run.
+- **Restart each floor** — the counter starts again on each floor.
+
+**The project's own names set this when they show it.** If two or more floors'
+numbers start from the same value, Numbering is set to **Restart each floor**;
+if the floors' ranges run on without overlapping, it is set to **Continuous**.
+The note at the top of the Name Pattern section says which, and it can be
+changed. Before AP Labeler 2.14.0 this section was called **Scope**, with the
+options **All APs** and **Per Floor**, and **Per Floor** never limited which
+floors were renamed.
 
 ### Ordering
 
@@ -1636,7 +1667,7 @@ Two extra controls appear when it is chosen:
   - **Colour through building** — every blue on every floor, then every green on
     every floor.
 
-  Choosing **Colour through building** switches **Scope** to **All APs** and
+  Choosing **Colour through building** switches **Numbering** to **Continuous** and
   says so. The two cannot both be true: carrying one colour up through the
   building has already spent the per-floor counter by the time it comes back
   down for the next colour.
@@ -1665,7 +1696,7 @@ itself omits that shared stem from both columns.
 
 **If any two APs would end up with the same name**, an amber line appears above
 the preview naming them and suggesting the two fixes — add a **Floor** segment,
-or set **Scope** to **All APs** so the counter keeps going instead of restarting
+or set **Numbering** to **Continuous** so the counter keeps going instead of restarting
 on each floor. It is a warning, not a block: the Download button stays
 available, because a name you chose deliberately is your decision. Ekahau will
 accept duplicate names, and you will not be able to tell those APs apart

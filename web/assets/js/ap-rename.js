@@ -61,6 +61,15 @@
   /* ── naming mode ────────────────────────────────────────────────── */
   var _mode = 'structured';
   var _scope = 'all';
+  /* Which floors get new names, which is a different question from how the
+     counter runs. They used to be one control called Scope, and "Per Floor"
+     read as "rename per floor" when it only ever meant "restart the counter on
+     each floor" - so adding one floor to a finished project and labelling it
+     renumbered every floor already done. 'all' | 'current' | 'chosen'. A floor
+     left out keeps every name it has, exactly. */
+  var _floorPick = 'all';
+  var _onlyFloor = null;
+  var _chosenFloors = {};
   /* 'floor' finishes a floor before moving up; 'color' carries one colour
      through the whole building. Only consulted when ordering is by-color. */
   var _nesting = 'floor';
@@ -101,11 +110,100 @@
     var desc = $('arScopeDesc');
     if (desc) {
       desc.textContent = s === 'perFloor'
-        ? 'Each floor restarts numbering independently.'
-        : 'One continuous sequence across the entire project.';
+        ? 'The counter starts again on each floor. This only changes the numbers; which floors are renamed is set above.'
+        : 'One sequence across the floors, in floor order. A floor that is not being renamed still counts, so a floor labelled on its own gets the numbers it would have had in a full run.';
     }
     updateAll();
   };
+
+  function floorIncluded(fpId) {
+    if (!fpId || fpId === '__unplaced') return false;
+    if (_floorPick === 'current') return fpId === _onlyFloor;
+    if (_floorPick === 'chosen') return !!_chosenFloors[fpId];
+    return true;
+  }
+
+  function floorName(fpId) {
+    var f = S.floors.find(function (x) { return x.id === fpId; });
+    return f ? f.name : '';
+  }
+
+  /* "This floor only" is pinned to the floor on screen when it is chosen, not
+     to whichever tab is showing later. Looking at another floor to check it
+     must not quietly change what the download renames. */
+  window.arSetFloorPick = function (mode) {
+    if (mode === 'current') {
+      var cur = S.currentFloor && S.currentFloor !== '__unplaced'
+        ? S.currentFloor : (S.floors[0] && S.floors[0].id);
+      _onlyFloor = cur || null;
+    }
+    if (mode === 'chosen' && !Object.keys(_chosenFloors).some(function (k) { return _chosenFloors[k]; })) {
+      var start = _floorPick === 'current' ? _onlyFloor : S.currentFloor;
+      if (start && start !== '__unplaced') _chosenFloors[start] = true;
+    }
+    _floorPick = mode;
+    renderFloorPick();
+    updateAll();
+  };
+
+  window.arToggleFloorPick = function (fpId, checked) {
+    _chosenFloors[fpId] = !!checked;
+    renderFloorPick();
+    updateAll();
+  };
+
+  window.arFloorPickAll = function (on) {
+    S.floors.forEach(function (f) { _chosenFloors[f.id] = !!on; });
+    renderFloorPick();
+    updateAll();
+  };
+
+  function renderFloorPick() {
+    document.querySelectorAll('#arFloorPickTabs .ar-scope-tab').forEach(function (t) {
+      t.classList.toggle('active', t.getAttribute('data-arg') === _floorPick);
+    });
+    var desc = $('arFloorPickDesc');
+    var list = $('arFloorPickList');
+    var picked = S.floors.filter(function (f) { return floorIncluded(f.id); });
+    var kept = S.floors.length - picked.length;
+    if (desc) {
+      if (_floorPick === 'all') {
+        desc.textContent = 'Every floor is renamed.';
+      } else if (_floorPick === 'current') {
+        desc.innerHTML = 'Only <b>' + esc(floorName(_onlyFloor) || 'no floor') + '</b> is renamed. '
+          + 'The other ' + kept + ' floor' + (kept === 1 ? '' : 's') + ' keep their names exactly. '
+          + 'Switching tabs does not change this; press the button again on another floor to move it.';
+      } else {
+        desc.innerHTML = picked.length
+          ? '<b>' + picked.length + ' of ' + S.floors.length + '</b> floors are renamed. The rest keep their names exactly.'
+          : '<b>No floors ticked</b>, so nothing will be renamed.';
+      }
+    }
+    if (list) {
+      list.hidden = _floorPick !== 'chosen';
+      if (_floorPick === 'chosen') {
+        var html = '<div class="ar-fp-bulk">'
+          + '<button type="button" data-action="call" data-fn="arFloorPickAll" data-arg-json="true">Tick all</button>'
+          + '<button type="button" data-action="call" data-fn="arFloorPickAll" data-arg-json="false">Tick none</button></div>';
+        S.floors.forEach(function (f) {
+          html += '<label class="ar-fp-row"><input type="checkbox"'
+            + (_chosenFloors[f.id] ? ' checked' : '')
+            + ' data-action-change="call" data-fn="arToggleFloorPick" data-arg="' + escAttr(f.id) + '" data-arg-checked="1">'
+            + '<span class="ar-fp-name">' + esc(f.name) + '</span>'
+            + '<span class="ar-fp-count">' + floorAPCount(f.id) + ' APs</span></label>';
+        });
+        list.innerHTML = html;
+      } else {
+        list.innerHTML = '';
+      }
+    }
+    $('arFloorTabs').querySelectorAll('.ar-floor-tab').forEach(function (t) {
+      var id = t.getAttribute('data-fp');
+      var off = id !== '__unplaced' && !floorIncluded(id);
+      t.classList.toggle('is-kept', off);
+      t.title = off ? 'Not being renamed - these APs keep their names' : '';
+    });
+  }
 
   /* Colour-major and "restart numbering each floor" cannot both be true.
 
@@ -139,7 +237,7 @@
         ? 'Not available while numbering a colour through the whole building — the sequence leaves each floor and comes back.'
         : '';
     });
-    if (forced) toast('Scope set to All APs — colour-through-building is one continuous sequence', 'info');
+    if (forced) toast('Numbering set to Continuous — colour-through-building is one continuous sequence', 'info');
     if (!forced) updateAll();
   };
 
@@ -378,7 +476,35 @@
     var tag = segments[counterAt].tag;
     if (!tag && segments[counterAt].digits < 2) return null;
 
+    /* How the existing numbers run is part of the scheme too. Two or more
+       floors whose numbers all start from the same value restart per floor;
+       floors whose ranges never overlap are one continuous run. Anything else
+       says nothing and leaves the Numbering setting alone. Without this, a new
+       floor added to a project numbered per floor came out continuing from the
+       floor below - AP041 where every other floor starts at AP001. */
+    var restarts = null;
+    if (floorIds.length > 1) {
+      var ranges = floorIds.map(function (fid) {
+        var nums = floors[fid].map(function (e) {
+          var m = COUNTER_RE.exec(partAt(e, counterAt));
+          return m ? parseInt(m[2], 10) : NaN;
+        }).filter(function (n) { return isFinite(n); });
+        return nums.length
+          ? { lo: Math.min.apply(null, nums), hi: Math.max.apply(null, nums) } : null;
+      }).filter(Boolean);
+      if (ranges.length > 1) {
+        var sameStart = ranges.every(function (r) { return r.lo === ranges[0].lo; });
+        var sorted = ranges.slice().sort(function (a, b) { return a.lo - b.lo; });
+        var disjoint = sorted.every(function (r, k) {
+          return k === 0 || r.lo > sorted[k - 1].hi;
+        });
+        if (sameStart) restarts = true;
+        else if (disjoint) restarts = false;
+      }
+    }
+
     return {
+      restarts: restarts,
       segments: segments,
       sep: det.sep,
       matched: matched.length,
@@ -451,6 +577,10 @@
       if (has) sepSel.value = read.sep;
     }
     _inferred = read;
+    if (read.restarts !== null && _nesting !== 'color') {
+      _scope = read.restarts ? 'perFloor' : 'all';
+      arSetScope(_scope);
+    }
     renderSegments();
     renderInferredNote(read);
     updateAll();
@@ -507,6 +637,11 @@
     var odd = all ? ''
       : ' The other ' + (read.total - read.matched)
         + ' do not follow it and were ignored.';
+    if (read.restarts === true && _nesting !== 'color') {
+      floorNote += ' Numbers start again on each floor, so Numbering is set to Restart each floor.';
+    } else if (read.restarts === false) {
+      floorNote += ' Numbers run on from floor to floor, so Numbering is set to Continuous.';
+    }
     box.innerHTML =
       '<div class="ar-inf-head">Read from this project</div>' +
       '<div class="ar-inf-body">Filled in from the names ' + esc(from) +
@@ -949,6 +1084,7 @@
       return JSZip.loadAsync(buf);
     }).then(function (zip) {
       S.zip = zip;
+      _floorPick = 'all'; _onlyFloor = null; _chosenFloors = {};
       S.manualOrder = [];
       S.manualUndo = [];
       return parseEsx(zip);
@@ -1068,6 +1204,7 @@
         showFloor(this.getAttribute('data-fp'));
       });
     });
+    renderFloorPick();
   }
 
   function floorAPCount(fpId) {
@@ -1962,6 +2099,11 @@
       var item = { ap: step.ap, oldName: step.ap.name,
                    newName: generateName(settings, step.floor, num, step.ap),
                    floorId: step.floor.id, num: num };
+      if (!floorIncluded(step.floor.id)) {
+        item.newName = item.oldName;
+        item.num = null;
+        item.kept = true;
+      }
       num++;
       /* Colour-major is listed in the order it will number, because that
          sequence is the thing being chosen and it is invisible anywhere else.
@@ -2096,7 +2238,8 @@
 
       var marker = document.createElement('div');
       marker.className = 'ar-marker' + (manual ? ' is-clickable' : '') +
-        (manual && idx === sorted.length - 1 ? ' is-last' : '');
+        (manual && idx === sorted.length - 1 ? ' is-last' : '') +
+        (item.kept ? ' is-kept' : '');
       if (manual) {
         marker.onclick = function (e) { e.stopPropagation(); arManualClick(ap.id); };
       }
@@ -2122,8 +2265,9 @@
 
       var tip = document.createElement('span');
       tip.className = 'ar-tip';
-      tip.textContent = ap.name + ' → ' + newName +
-        (manual ? '  (click to remove)' : '');
+      tip.textContent = item.kept
+        ? ap.name + '  (this floor keeps its names)'
+        : ap.name + ' → ' + newName + (manual ? '  (click to remove)' : '');
       marker.appendChild(tip);
 
       box.appendChild(marker);
@@ -2187,7 +2331,9 @@
       });
     }
     var changed = items.filter(function (it) { return it.oldName !== it.newName; }).length;
-    $('arPreviewHead').textContent = 'Preview (' + items.length + ' APs, ' + changed + ' labeled)';
+    var keptHere = S.currentFloor && S.currentFloor !== '__unplaced' && !floorIncluded(S.currentFloor);
+    $('arPreviewHead').textContent = 'Preview (' + items.length + ' APs, ' + changed + ' labeled)'
+      + (keptHere ? ' \u2014 this floor is not being renamed' : '');
 
     var stemOld = commonStem(items.map(function (it) { return it.oldName || ''; }));
     var stemNew = commonStem(items.map(function (it) { return it.newName || ''; }));
@@ -2266,7 +2412,7 @@
       var curShown = curTxt;
       var newShown = newTxt;
       html += '<tr class="' + (isDiff ? 'changed' : '') +
-        (it.unnumbered ? ' unnumbered' : '') + '">' +
+        (it.unnumbered || it.kept ? ' unnumbered' : '') + '">' +
         '<td class="ar-num">' + seq + '</td>' +
         '<td class="ar-cur" title="' + escAttr(curTxt) + '">' + swatch + esc(curShown) + '</td>' +
         '<td class="ar-arrow">→</td>' +
@@ -2314,8 +2460,11 @@
           + (dupes.length === 1 ? '' : 's')
           + ' would be used more than once</b> — ' + shown
           + '. Ekahau will take them, and you will not be able to tell those '
-          + 'APs apart afterwards. Add a Floor segment, or switch Scope to '
-          + '"All APs" so the counter keeps going instead of restarting.';
+          + 'APs apart afterwards. Add a Floor segment, or switch Numbering to '
+          + '"Continuous" so the counter keeps going instead of restarting.'
+          + (_floorPick !== 'all'
+             ? ' If a new name matches one on a floor that is not being renamed, rename that floor too.'
+             : '');
         warn.hidden = false;
       } else {
         warn.hidden = true;
@@ -2506,8 +2655,8 @@
       panel: 'arSidebar',
       container: '.ar-split',
       key: 'wd.aprename.sidebarWidth',
-      min: 300,
-      def: 340,
+      min: 380,
+      def: 480,
       maxRatio: 0.6
     });
   }

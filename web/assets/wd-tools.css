@@ -10627,7 +10627,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-stem-chg { font-size:9px; font-weight:700; letter-spacing:.4px; padding:1px 5px; border-radius:3px; color:var(--indigo,#6366f1); background:rgba(99,102,241,.16); }
 [data-theme="light"] .tool-aprename .ar-stem-chg { color:#4338ca; background:rgba(67,56,202,.12); }
 .tool-aprename .ar-stem-line { display:flex; align-items:baseline; gap:8px; font-family:var(--mono,monospace); font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
-.tool-aprename .ar-stem-key { flex:0 0 54px; font-family:var(--sans,sans-serif); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); }
+.tool-aprename .ar-stem-key { flex:0 0 auto; min-width:54px; white-space:nowrap; font-family:var(--sans,sans-serif); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); }
 .tool-aprename .ar-stem-val { font-weight:700; color:var(--text,#ddd); }
 [data-theme="light"] .tool-aprename .ar-stem-val { color:#222; }
 .tool-aprename .ar-stem-line.is-new .ar-stem-val { color:var(--indigo,#6366f1); }
@@ -10654,7 +10654,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
    the table grew to whatever the project needed, and Undo went below the fold
    on a floor with any real number of APs. min-height:0 on the scroller is what
    lets a flex child actually shrink instead of being sized by its content. */
-.tool-aprename .ar-sidebar { width:340px; min-width:280px; overflow:hidden; border-left:1px solid var(--border,#333); padding:12px 14px; display:flex; flex-direction:column; gap:10px; background:var(--bg-2,#181828); }
+.tool-aprename .ar-sidebar { width:480px; min-width:380px; overflow:hidden; border-left:1px solid var(--border,#333); padding:12px 14px; display:flex; flex-direction:column; gap:10px; background:var(--bg-2,#181828); }
 .tool-aprename .ar-side-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; display:flex; flex-direction:column; gap:12px; padding-right:2px; }
 .tool-aprename .ar-side-dock { flex:0 0 auto; display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border,#333); padding-top:10px; }
 /* Bounded so a 400-AP floor scrolls inside the table instead of pushing the
@@ -10781,6 +10781,15 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 [data-theme="light"] .tool-aprename .ar-scope-tab { background:var(--bg-3,#eee); color:var(--text-2,#666); }
 [data-theme="light"] .tool-aprename .ar-scope-tab.active { background:#ea580c; color:#fff; }
 .tool-aprename .ar-scope-desc { font-size:11px; color:var(--text-2,#888); line-height:1.5; }
+.tool-aprename .ar-fp-list { display:flex; flex-direction:column; gap:2px; margin-top:6px; }
+.tool-aprename .ar-fp-bulk { display:flex; gap:6px; margin-bottom:4px; }
+.tool-aprename .ar-fp-bulk button { font-size:11px; padding:3px 10px; border:1px solid var(--border,#333); border-radius:4px; background:var(--bg-3,#252538); color:var(--text,#ddd); cursor:pointer; }
+.tool-aprename .ar-fp-row { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:4px; font-size:13px; cursor:pointer; }
+.tool-aprename .ar-fp-row:hover { background:var(--bg-3,#252538); }
+.tool-aprename .ar-fp-name { flex:1; min-width:0; }
+.tool-aprename .ar-fp-count { font-size:11px; color:var(--text-2,#888); }
+.tool-aprename .ar-floor-tab.is-kept { opacity:.5; font-style:italic; }
+.tool-aprename .ar-marker.is-kept { opacity:.45; }
 .tool-aprename .ar-nest { margin-top:10px; display:flex; flex-direction:column; gap:5px; }
 .tool-aprename .ar-nest-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); }
 .tool-aprename .ar-inferred { margin:0 0 10px; padding:8px 10px; border-radius:5px; border:1px solid rgba(59,130,246,.35); background:rgba(59,130,246,.10); }
