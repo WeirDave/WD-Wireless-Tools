@@ -229,6 +229,10 @@ class FloorResult:
     #: margin was applied: ``{"left": .., "top": .., "right": .., "bottom": ..}``.
     #: None on a plan with no scale, or where no ink was measured.
     clearance: dict | None = None
+    #: A vector plan an earlier trim left without its page behind the drawing,
+    #: put back on this save. Independent of ``action``: a floor with nothing
+    #: left to cut can still need it.
+    repaired: bool = False
 
     @property
     def trimmed(self) -> bool:
@@ -248,6 +252,10 @@ class TrimReport:
         return sum(1 for f in self.floors if f.trimmed)
 
     @property
+    def repaired_count(self) -> int:
+        return sum(1 for f in self.floors if f.repaired)
+
+    @property
     def saved_bytes(self) -> int:
         return max(0, self.bytes_before - self.bytes_after)
 
@@ -259,6 +267,8 @@ class TrimReport:
         parts = [
             f"{self.source.name}: {self.trimmed_count} of {len(self.floors)} floor plans trimmed"
         ]
+        if self.repaired_count:
+            parts.append(f"{self.repaired_count} repaired")
         if self.bytes_before and self.bytes_after:
             delta = self.bytes_after - self.bytes_before
             pct = abs(delta) / self.bytes_before * 100
@@ -659,13 +669,125 @@ def svg_viewport(blob: bytes):
     return m.start(), m.end(), w, h, vb
 
 
+def _svg_num(v: float) -> str:
+    return f"{v:.6f}".rstrip("0").rstrip(".") or "0"
+
+
+# Lengths a drawing can give as a percentage of the page, on the elements that
+# take them from the page. Everything else a percentage appears on - gradient
+# stops, filter regions - is measured against something a crop does not move.
+_SVG_PCT_ELEMENT = re.compile(
+    rb"<(?:rect|image|use|foreignObject|line|circle|ellipse|text|tspan)\b[^>]*>")
+_SVG_PCT_ATTR = re.compile(
+    rb'(\s)(x|y|width|height|x1|y1|x2|y2|cx|cy|r|rx|ry)(\s*=\s*)(["\'])\s*'
+    rb'([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*%\s*\4')
+_SVG_ACROSS = frozenset((b"x", b"width", b"x1", b"x2", b"cx", b"rx"))
+_SVG_DOWN = frozenset((b"y", b"height", b"y1", b"y2", b"cy", b"ry"))
+# A percentage inside any of these is of a box other than the page, so turning
+# it into page units would move it. Only the unit declarations that change what
+# an element's *content* is measured against count; a gradient's own units do
+# not touch any element this edits.
+_SVG_OTHER_BOX = re.compile(
+    rb"<svg\b|<symbol\b|(?:clipPathUnits|maskContentUnits|patternContentUnits)"
+    rb"\s*=\s*[\"']objectBoundingBox")
+
+
+def _left_by_an_earlier_trim(w, h, vb) -> bool:
+    """The root has the exact shape an earlier crop wrote.
+
+    Ekahau writes no viewBox. Every crop before 2.190.0 added one whose size is
+    the new width and height and whose origin is where the crop started. That
+    is the signature; a crop from the origin (only the right and bottom cut)
+    moved nothing and never needed repair.
+    """
+    return bool(vb and (vb[0] or vb[1])
+                and abs(vb[2] - w) < 1e-6 and abs(vb[3] - h) < 1e-6)
+
+
+def _percent_basis(w, h, vb):
+    """The page size a percentage in this document was written against.
+
+    For a document an earlier crop left behind, the page began at the user-space
+    origin and reached at least to the far edge of what is shown - the original
+    size is not recorded anywhere, and that is the smallest page that puts back
+    everything visible. A "100%" background drawn from the origin then covers
+    the window again, which is the case that matters.
+    """
+    if _left_by_an_earlier_trim(w, h, vb):
+        return vb[0] + vb[2], vb[1] + vb[3]
+    if vb:
+        return vb[2], vb[3]
+    return w, h
+
+
+def _svg_percentages(body: bytes) -> bool:
+    return any(_SVG_PCT_ATTR.search(tag)
+               for tag in _SVG_PCT_ELEMENT.findall(body))
+
+
+def svg_percentages_unresolvable(blob: bytes) -> bool:
+    """True when a percentage is measured against a box other than the page.
+
+    A crop has to turn page percentages into lengths, and inside a nested
+    viewport or an object-bounding-box unit the same number means something
+    else. Rather than guess, the floor is refused.
+    """
+    info = svg_viewport(blob)
+    if info is None:
+        return False
+    body = blob[info[1]:]
+    return _svg_percentages(body) and bool(_SVG_OTHER_BOX.search(body))
+
+
+def _resolve_svg_percentages(body: bytes, basis) -> bytes:
+    """Replace page percentages in *body* with the lengths they stood for.
+
+    A percentage is of the viewBox, and a crop moves the viewBox: a background
+    drawn at ``width="100%"`` from the origin stops covering a window that no
+    longer starts there, and what shows through is whatever is behind the
+    image. Fixed to the page it was written against, it covers what it did.
+    """
+    bw, bh = basis
+    diag = ((bw * bw + bh * bh) / 2.0) ** 0.5
+
+    def attr(m):
+        name, pct = m.group(2), float(m.group(5)) / 100.0
+        whole = bw if name in _SVG_ACROSS else bh if name in _SVG_DOWN else diag
+        return (m.group(1) + name + m.group(3) + m.group(4)
+                + _svg_num(pct * whole).encode() + m.group(4))
+
+    return _SVG_PCT_ELEMENT.sub(lambda t: _SVG_PCT_ATTR.sub(attr, t.group(0)), body)
+
+
+def repair_svg(blob: bytes):
+    """Put back what an earlier crop lost from a vector plan, or None.
+
+    Crops before 2.190.0 moved the viewBox and left page percentages in place,
+    so a white page drawn at 100% stopped covering the plan and the drawing sat
+    on transparency. Only the percentages change; the drawing is untouched.
+    None when the document is not in that shape or has nothing to put back.
+    """
+    info = svg_viewport(blob)
+    if info is None:
+        return None
+    start, end, w, h, vb = info
+    if not _left_by_an_earlier_trim(w, h, vb):
+        return None
+    body = blob[end:]
+    if not _svg_percentages(body) or _SVG_OTHER_BOX.search(body):
+        return None
+    return blob[:end] + _resolve_svg_percentages(body, _percent_basis(w, h, vb))
+
+
 def crop_svg(blob: bytes, box) -> bytes:
     """Crop a vector floor plan by moving its window, not its pixels.
 
     An SVG has no pixel grid to cut, so the crop is a viewBox edit: the same
     drawing, shown through a smaller opening, with width and height reduced to
-    match. Only the root tag is rewritten - the body, which is most of several
-    megabytes, is copied through untouched.
+    match. The body is copied through untouched apart from one thing: a length
+    given as a percentage of the page is written out as the length it was, since
+    the page it was a percentage of is the thing being cut. Left alone, a white
+    background drawn at 100% from the origin no longer covers the window.
 
     Where the document already carries a viewBox, the box arrives in the
     declared pixel space and is converted into user units before being applied,
@@ -680,6 +802,13 @@ def crop_svg(blob: bytes, box) -> bytes:
     if new_w <= 0 or new_h <= 0:
         raise TrimError("the crop of the SVG floor plan has no area")
 
+    body = blob[end:]
+    if _svg_percentages(body):
+        if _SVG_OTHER_BOX.search(body):  # pragma: no cover - refused by _plan_floor
+            raise TrimError("the SVG floor plan sizes parts of itself in "
+                            "percentages a crop cannot keep")
+        body = _resolve_svg_percentages(body, _percent_basis(w, h, vb))
+
     if vb:
         sx, sy = vb[2] / w, vb[3] / h
         view = (vb[0] + x0 * sx, vb[1] + y0 * sy, new_w * sx, new_h * sy)
@@ -688,13 +817,9 @@ def crop_svg(blob: bytes, box) -> bytes:
         # Ekahau's exporter writes.
         view = (x0, y0, new_w, new_h)
 
-    def fmt(v):
-        return f"{v:.6f}".rstrip("0").rstrip(".") or "0"
-
     tag = blob[start:end]
-    tag = _SVG_ATTR.sub(lambda m: m.group(0), tag)      # no-op, keeps the regex warm
-    for attr, value in (("width", fmt(new_w)), ("height", fmt(new_h)),
-                        ("viewBox", " ".join(fmt(v) for v in view))):
+    for attr, value in (("width", _svg_num(new_w)), ("height", _svg_num(new_h)),
+                        ("viewBox", " ".join(_svg_num(v) for v in view))):
         pattern = re.compile(rb'\b' + attr.encode() + rb'\s*=\s*(["\']).*?\1',
                              re.S | re.I)
         replacement = f'{attr}="{value}"'.encode()
@@ -702,7 +827,7 @@ def crop_svg(blob: bytes, box) -> bytes:
             tag = pattern.sub(replacement, tag, count=1)
         else:
             tag = tag[:-1].rstrip() + b" " + replacement + b">"
-    return blob[:start] + tag + blob[end:]
+    return blob[:start] + tag + body
 
 
 def _crop_image(blob: bytes, box, kind: str) -> bytes:
@@ -832,6 +957,9 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin,
         viewport = svg_viewport(blob)
         if viewport is None:
             return refuse("the SVG floor plan has no readable <svg> element to crop")
+        if svg_percentages_unresolvable(blob):
+            return refuse("the SVG floor plan sizes parts of itself in percentages "
+                          "of a nested frame, which a crop cannot keep in place")
         w, h = int(round(viewport[2])), int(round(viewport[3]))
     else:
         Image = _require_pillow()
@@ -1277,6 +1405,19 @@ def _run(source: Path, dest: Path | None, margin, dry_run: bool,
         result, box = _plan_floor(members, plan, images, margin,
                                   manual_box=(boxes or {}).get(plan.get("id")))
         report.floors.append(result)
+
+        # Repaired before any crop, so a floor cut again this time starts from
+        # a page that covers it; crop_svg would get the same answer on its own,
+        # and this is also the only path for a floor with nothing left to cut.
+        blob = images.get(plan.get("imageId"))
+        if blob is not None and image_kind(blob) == "SVG":
+            fixed = repair_svg(blob)
+            if fixed is not None:
+                result.repaired = True
+                images[plan["imageId"]] = fixed
+                if not dry_run:
+                    new_images[plan["imageId"]] = fixed
+
         if box is None or dry_run:
             continue
 
@@ -1392,6 +1533,7 @@ def _floor_json(f: FloorResult) -> dict:
         # Metres of drawing beyond the building, each way, before any margin.
         # The page turns it into feet; it is sent metric because the file is.
         "clearance": f.clearance,
+        "repaired": f.repaired,
     }
 
 
@@ -1403,6 +1545,7 @@ def _report_json(report: TrimReport, dest: Path | None = None) -> dict:
         "dest": str(dest) if dest else None,
         "floors": [_floor_json(f) for f in report.floors],
         "trimmedCount": report.trimmed_count,
+        "repairedCount": report.repaired_count,
         "floorCount": len(report.floors),
         "bytesBefore": report.bytes_before,
         "bytesAfter": report.bytes_after,
