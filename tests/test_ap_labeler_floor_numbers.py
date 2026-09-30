@@ -103,10 +103,10 @@ class EveryFloorGetsItsOwnNumber(unittest.TestCase):
         """)
 
     def test_ekahaus_stacking_position_is_not_the_storey(self):
-        """The reported case. buildingFloors.json numbers a building's floors
-        by stacking position from 0, so a plan named "Floor 1" carries 0 and
-        "Floor 3" carries 2. Printed as it stands, the first floor's APs were
-        named "00" and the third floor's "02"."""
+        """The reported case. Current Ekahau versions store a building's first
+        floor as 0, so a plan named "Floor 1" carries 0 and "Floor 3" carries
+        2. Read as stored, the first floor's APs were named "00" and the
+        third floor's "02"."""
         self.run_block("""
           const floors = numberFloors([
             { id: 'f1', name: 'Floor 1' },
@@ -122,8 +122,8 @@ class EveryFloorGetsItsOwnNumber(unittest.TestCase):
         """)
 
     def test_a_building_with_unnumbered_names_counts_from_one(self):
-        """With nothing in the name, the stacking position is all there is,
-        and it is shifted so the bottom floor is 1 rather than 0."""
+        """With nothing in the name, Ekahau's number is all there is. A
+        building with a floor at 0 is a current project, so it is shifted."""
         self.run_block("""
           const floors = numberFloors([
             { id: 'f1', name: 'Ground' },
@@ -149,6 +149,20 @@ class EveryFloorGetsItsOwnNumber(unittest.TestCase):
           eq('level', getFloorNumber(floors[0]), '04');
           eq('ordinal', getFloorNumber(floors[1]), '03');
           eq('fl-', getFloorNumber(floors[2]), '07');
+          done();
+        """)
+
+    def test_an_older_project_that_counts_from_one_is_read_as_stored(self):
+        """Older Ekahau versions stored the first floor as 1. No floor at 0 in
+        the building means that convention, and nothing is shifted."""
+        self.run_block("""
+          const floors = numberFloors([
+            { id: 'f1', name: 'Dock' },
+            { id: 'f2', name: 'Offices' },
+          ], [{ floorPlanId: 'f1', buildingId: 'b', floorNumber: 1 },
+              { floorPlanId: 'f2', buildingId: 'b', floorNumber: 2 }]);
+          eq('first',  getFloorNumber(floors[0]), '01');
+          eq('second', getFloorNumber(floors[1]), '02');
           done();
         """)
 

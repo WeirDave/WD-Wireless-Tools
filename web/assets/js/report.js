@@ -1831,7 +1831,7 @@
   function floorNumberFor(fp) {
     if (!fp || fp.id === '_none') return null;
     var bf = proj.buildingFloors && proj.buildingFloors[fp.id];
-    return WD.storeyNumber(fp.name, bf ? bf.floorNumber : null);
+    return WD.storeyNumber(fp.name, bf || null, proj.buildingFloors);
   }
 
   function floorPlanImageUrl(fp) {

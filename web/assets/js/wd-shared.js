@@ -262,29 +262,48 @@
   };
 
   /* ── The storey a floor plan is on ───────────────────────────────
-     `buildingFloors[].floorNumber` is Ekahau's stacking position inside a
-     building, counted from 0 - not the storey number anyone says out loud.
-     The Report printed "Floor 0" over a plan named "Floor 1", and the Labeler
-     named that floor's APs "00"; the third floor up came out as 2. Both tools
-     read the stored value as if it were the label.
+     `buildingFloors[].floorNumber` changed meaning between Ekahau versions.
+     Current versions store the first floor of a building as 0; older
+     projects stored it as 1. Printed as it stands, a current project headed
+     "Floor 1" as "Floor 0" in the Report and named its APs "00" in the
+     Labeler, and the third floor came out as 2.
 
-     So the floor's own name wins, because it is what the designer typed and
-     what Ekahau shows: a number after a floor word ("Level 3", "FL-2"), an
-     ordinal ("3rd Floor"), or a leading number ("01 - Ground"). Only when the
-     name says nothing is the stacking position used, shifted to count from 1.
-     A negative position (below the bottom floor Ekahau counts from) is left
-     alone rather than shifted towards zero. Null when neither says anything,
-     so each tool can fall back in its own way. */
-  WD.storeyNumber = function (name, stackPosition) {
+     The file carries no version marker for this, so the building itself is
+     the evidence: a building with a floor stored as 0 counts from zero, and
+     its non-negative numbers are shifted up by one. A building whose lowest
+     floor is 1 or above is an older project and is read as stored.
+
+     The floor's own name still wins over either, because it is what the
+     designer typed: a number after a floor word ("Level 4", "FL-2"), an
+     ordinal ("3rd Floor"), or a leading number ("01 - Ground"). Null when
+     neither says anything, so each tool can fall back in its own way. */
+  WD.storeyNumber = function (name, bf, buildingFloors) {
     var s = String(name || '');
     var m = s.match(/\b(?:floor|flr|fl|level|lvl|lev|storey|story)\s*[-#.:]?\s*(\d+)/i)
          || s.match(/\b(\d+)\s*(?:st|nd|rd|th)\b/i)
          || s.match(/^\s*(\d+)\b/);
     if (m) return parseInt(m[1], 10);
-    if (stackPosition === null || stackPosition === undefined || stackPosition === '') return null;
-    var n = Number(stackPosition);
+    var raw = bf ? bf.floorNumber : null;
+    if (raw === null || raw === undefined || raw === '') return null;
+    var n = Number(raw);
     if (!isFinite(n)) return null;
-    return n >= 0 ? n + 1 : n;
+    return (n >= 0 && WD.floorsCountFromZero(bf, buildingFloors)) ? n + 1 : n;
+  };
+
+  // True when the building `bf` sits in has a floor stored as 0. Floors with
+  // no buildingId are judged together, as one building.
+  WD.floorsCountFromZero = function (bf, buildingFloors) {
+    var list = buildingFloors || [];
+    if (!Array.isArray(list)) {
+      list = Object.keys(list).map(function (k) { return list[k]; });
+    }
+    var home = bf ? (bf.buildingId || null) : null;
+    if (bf && Number(bf.floorNumber) === 0) return true;
+    return list.some(function (x) {
+      return x && (x.buildingId || null) === home
+        && x.floorNumber !== null && x.floorNumber !== undefined && x.floorNumber !== ''
+        && Number(x.floorNumber) === 0;
+    });
   };
 
   /* ── Legibility on a user-chosen colour ──────────────────────────

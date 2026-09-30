@@ -1,9 +1,9 @@
 """The Report's "Floor N" heading names the storey, not Ekahau's stack slot.
 
-`buildingFloors[].floorNumber` counts a building's floors from 0 by stacking
-position. The Report printed it as it stood, so a plan named "Floor 1" was
-headed "Floor 0" and "Floor 3" was headed "Floor 2" - on the sheets an
-installer uses to find the right floor. This runs the real `floorNumberFor`
+Current Ekahau versions store a building's first floor as 0; older projects
+stored it as 1. The Report printed the value as it stood, so on a current
+project a plan named "Floor 1" was headed "Floor 0" and "Floor 3" was headed
+"Floor 2" - on the sheets an installer uses to find the right floor. This runs the real `floorNumberFor`
 and `segFloorHeading` out of report.js against the real WD.storeyNumber.
 """
 from __future__ import annotations
@@ -35,6 +35,7 @@ function cut(src, from) {
 }
 globalThis.WD = {};
 eval(cut(shared, '  WD.storeyNumber = function') + ';');
+eval(cut(shared, '  WD.floorsCountFromZero = function') + ';');
 eval(cut(report, '  function floorNumberFor(fp) {'));
 eval(cut(report, '  function segFloorHeading(opts) {'));
 let proj = { buildingFloors: {} };
@@ -78,6 +79,31 @@ class TheHeadingNamesTheStorey(unittest.TestCase):
         self.run_block("""
           proj.buildingFloors = { g: { floorPlanId: 'g', floorNumber: 0 } };
           eq('ground', heading({ id: 'g', name: 'Ground' }), 'Floor 1');
+        """)
+
+    def test_an_older_project_that_counts_from_one_is_read_as_stored(self):
+        self.run_block("""
+          proj.buildingFloors = {
+            a: { floorPlanId: 'a', buildingId: 'b1', floorNumber: 1 },
+            c: { floorPlanId: 'c', buildingId: 'b1', floorNumber: 3 },
+          };
+          eq('old first', heading({ id: 'a', name: 'Warehouse' }), 'Floor 1');
+          eq('old third', heading({ id: 'c', name: 'Offices' }), 'Floor 3');
+        """)
+
+    def test_the_building_decides_not_the_floor_alone(self):
+        """An unnamed upper floor in a current project is shifted because its
+        building has a floor at 0; a second, older building beside it is not."""
+        self.run_block("""
+          proj.buildingFloors = {
+            g:  { floorPlanId: 'g',  buildingId: 'new', floorNumber: 0 },
+            u:  { floorPlanId: 'u',  buildingId: 'new', floorNumber: 2 },
+            o1: { floorPlanId: 'o1', buildingId: 'old', floorNumber: 1 },
+            o2: { floorPlanId: 'o2', buildingId: 'old', floorNumber: 2 },
+          };
+          eq('new upper', heading({ id: 'u',  name: 'Roof plant' }), 'Floor 3');
+          eq('old first', heading({ id: 'o1', name: 'Dock' }), 'Floor 1');
+          eq('old second', heading({ id: 'o2', name: 'Mezz' }), 'Floor 2');
         """)
 
     def test_no_building_and_no_number_keeps_the_plan_name(self):
