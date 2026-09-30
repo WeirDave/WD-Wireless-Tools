@@ -169,6 +169,12 @@ class DevGateEndToEnd(unittest.TestCase):
         temp.mkdir()
         for var in ("TEMP", "TMP", "TMPDIR"):
             env[var] = str(temp)
+        # Its Desktop and Downloads are read off the home directory, so that
+        # moves too - the runner's, or his own, is none of this test's business.
+        home = cls.scratch / "home"
+        home.mkdir()
+        for var in ("HOME", "USERPROFILE"):
+            env[var] = str(home)
         cls.proc = subprocess.Popen(
             [sys.executable, "server.py"], cwd=str(run), env=env,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -356,6 +362,14 @@ class DevGateEndToEnd(unittest.TestCase):
     def test_the_survey_still_runs_on_that_route(self):
         """The read is not behind the gate, on any route in."""
         self.open_page("/settings?dev=1")
+        # The survey also asks Windows for its process list, a cold
+        # PowerShell and CIM query that took past Selenium's default 30 s on
+        # a runner busy with four browser workers. What is under test is that
+        # the read is not gated, not how quickly Windows answers, so the wait
+        # is longer here - and still bounded, so a hang fails rather than
+        # stalls.
+        self.driver.set_script_timeout(120)
+        self.addCleanup(self.driver.set_script_timeout, 30)
         result = self.driver.execute_async_script("""
           var done = arguments[arguments.length - 1];
           WD.api('dev/housekeeping_survey', {})
