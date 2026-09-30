@@ -579,20 +579,33 @@
 
   // ── the map: what the trim keeps, drawn on the plan ─────────────────────────
   //
-  // PlanTrim's proposed-crop view, read-only. The box comes straight out of the
-  // plan report the cards below are quoting, so the picture and the numbers
-  // cannot disagree. A dropped project is already in the browser and is read
-  // with JSZip; one opened from disk never is, so its images come one floor at
-  // a time from /api/prep/image.
+  // PlanTrim's proposed-crop view, read-only, on the suite's shared plan canvas
+  // (WD.PlanView) - so it zooms and pans the way PlanTrim does, and draws the
+  // plan on the same white page. The box comes straight out of the plan report
+  // the cards below are quoting, so the picture and the numbers cannot
+  // disagree. WD.ProjectFile fetches the floor images: from the dropped file
+  // with JSZip, or one floor at a time from /api/prep/image when the project
+  // was opened from disk and is deliberately not in the browser.
 
-  var map = { floors: [], current: null, images: {}, zip: null };
+  var map = { floors: [], current: null, file: null, view: null };
 
   function resetMap() {
     map.floors = [];
     map.current = null;
-    map.images = {};
-    map.zip = null;
+    map.file = null;
+    if (map.view) map.view.setImage(null);
     $('prepMap').hidden = true;
+  }
+
+  function mapFile() {
+    if (!map.file) {
+      map.file = fromDisk
+        ? WD.ProjectFile.fromServer(function (id) {
+            return '/api/prep/image?floor=' + encodeURIComponent(id);
+          })
+        : WD.ProjectFile.fromBytes(fileBytes);
+    }
+    return map.file;
   }
 
   /* The kept rectangle in the displayed image's own pixels, or null.
@@ -660,60 +673,6 @@
     return map.floors.filter(function (f) { return f.id === map.current; })[0] || null;
   }
 
-  function sniffImageType(bytes) {
-    var i = 0;
-    if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) i = 3;
-    while (i < bytes.length && (bytes[i] === 0x20 || bytes[i] === 0x0A
-                                || bytes[i] === 0x0D || bytes[i] === 0x09)) i++;
-    return bytes[i] === 0x3C ? 'image/svg+xml' : '';
-  }
-
-  function floorImageBlob(id) {
-    if (fromDisk) {
-      return fetch('/api/prep/image?floor=' + encodeURIComponent(id), {
-        method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
-      }).then(function (r) {
-        if (!r.ok) {
-          return r.json().then(function (j) { throw new Error(j.error || 'no image'); },
-                               function () { throw new Error('no image'); });
-        }
-        return r.blob();
-      });
-    }
-    if (!fileBytes || typeof JSZip === 'undefined') return Promise.reject(new Error('no image'));
-    if (!map.zip) map.zip = JSZip.loadAsync(fileBytes);
-    return map.zip.then(function (zip) {
-      var fp = zip.file('floorPlans.json');
-      if (!fp) throw new Error('This project has no floor plans.');
-      return fp.async('string').then(function (txt) {
-        var plan = (JSON.parse(txt).floorPlans || []).filter(function (p) { return p.id === id; })[0];
-        var entry = plan && plan.imageId && zip.file('image-' + plan.imageId);
-        if (!entry) throw new Error('This floor has no image in the archive.');
-        return entry.async('uint8array');
-      });
-    }).then(function (bytes) {
-      var type = sniffImageType(bytes);
-      return new Blob([bytes], type ? { type: type } : undefined);
-    });
-  }
-
-  function floorImage(id) {
-    if (map.images[id]) return map.images[id];
-    map.images[id] = floorImageBlob(id).then(function (blob) {
-      return new Promise(function (resolve, reject) {
-        var url = URL.createObjectURL(blob);
-        var im = new Image();
-        im.onload = function () { URL.revokeObjectURL(url); resolve(im); };
-        im.onerror = function () {
-          URL.revokeObjectURL(url);
-          reject(new Error('This floor plan image could not be displayed.'));
-        };
-        im.src = url;
-      });
-    });
-    return map.images[id];
-  }
-
   function showMapFloor() {
     var f = currentMapFloor();
     if (!f) return;
@@ -726,66 +685,60 @@
         ? f.name + ': not cropped again. Trimmed by an earlier version, it lost the white page '
           + 'behind the drawing; preparing puts it back.'
         : f.name + ': not cropped' + (f.reason ? ' — ' + f.reason : '') + '.';
-    floorImage(id).then(function (im) {
-      if (map.current !== id) return;
+    var file = mapFile();
+    file.image(id).then(function (im) {
+      if (map.current !== id || map.file !== file) return;
       empty.hidden = true;
-      drawMap(im, f);
+      mapView().setImage(im);
     }, function (e) {
-      if (map.current !== id) return;
-      clearMapCanvas();
+      if (map.current !== id || map.file !== file) return;
+      mapView().setImage(null);
       empty.hidden = false;
       empty.textContent = e.message || 'This floor plan could not be displayed.';
     });
   }
 
-  function clearMapCanvas() {
-    var cv = $('prepMapCanvas');
-    cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+  // Made on first use rather than at load, so the stage exists and has a size.
+  function mapView() {
+    if (!map.view) {
+      map.view = WD.PlanView.create({
+        canvas: $('prepMapCanvas'),
+        stage: $('prepMapStage'),
+        dragPans: true,
+        overlay: drawKept,
+      });
+    }
+    return map.view;
   }
 
-  function drawMap(im, f) {
-    var cv = $('prepMapCanvas');
-    var r = cv.getBoundingClientRect();
-    var dpr = window.devicePixelRatio || 1;
-    cv.width = Math.max(1, Math.round(r.width * dpr));
-    cv.height = Math.max(1, Math.round(r.height * dpr));
-    var g = cv.getContext('2d');
-    g.clearRect(0, 0, cv.width, cv.height);
-    var iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height;
-    if (!iw || !ih) return;
-    // The whole sheet, because what is being cut away is the point.
-    var s = Math.min(cv.width / iw, cv.height / ih) * 0.97;
-    var ox = (cv.width - iw * s) / 2, oy = (cv.height - ih * s) / 2;
-    g.imageSmoothingEnabled = true;
-    // Paper under the plan, as in PlanTrim. A CAD plan is an SVG with a
-    // transparent background, and on the dark stage transparency reads as
-    // grey lines on black.
-    g.fillStyle = '#fff';
-    g.fillRect(ox, oy, iw * s, ih * s);
-    g.drawImage(im, ox, oy, iw * s, ih * s);
-
-    var b = mapKeptBox(f, iw, ih);
+  // Shades the paper being cut away and dashes the edge of what is kept. The
+  // whole sheet is framed, because what goes is the point of the picture.
+  function drawKept(g, pv) {
+    var f = currentMapFloor();
+    var im = pv.img;
+    var b = mapKeptBox(f, im && im.width, im && im.height);
     if (!b) return;
-    var x = ox + b[0] * s, y = oy + b[1] * s;
-    var w = (b[2] - b[0]) * s, h = (b[3] - b[1]) * s;
+    var dpr = window.devicePixelRatio || 1;
+    var s0 = pv.toScreen(0, 0), s1 = pv.toScreen(im.width, im.height);
+    var k0 = pv.toScreen(b[0], b[1]), k1 = pv.toScreen(b[2], b[3]);
     g.save();
     g.fillStyle = 'rgba(0,0,0,0.55)';
     g.beginPath();
-    g.rect(ox, oy, iw * s, ih * s);
-    g.rect(x, y, w, h);
+    g.rect(s0.x, s0.y, s1.x - s0.x, s1.y - s0.y);
+    g.rect(k0.x, k0.y, k1.x - k0.x, k1.y - k0.y);
     g.fill('evenodd');
     g.restore();
     g.save();
     g.strokeStyle = 'rgba(74,158,255,0.95)';
     g.lineWidth = 2 * dpr;
     g.setLineDash([7 * dpr, 5 * dpr]);
-    g.strokeRect(x, y, w, h);
+    g.strokeRect(k0.x, k0.y, k1.x - k0.x, k1.y - k0.y);
     g.restore();
   }
 
-  window.addEventListener('resize', function () {
-    if (!$('prepMap').hidden && map.current) showMapFloor();
-  });
+  window.prepMapFit = function () {
+    if (map.view) map.view.reset();
+  };
 
   // ── the run ────────────────────────────────────────────────────────────────
 

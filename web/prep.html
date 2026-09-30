@@ -239,8 +239,13 @@
         <p class="ptb-intro">
           The same view as PlanTrim: the shaded paper is cut away, the dashed line is what is
           kept. Pick a floor to see its crop. It redraws when you change the margin.
+          Scroll to zoom and drag to move the plan; <b>Fit</b> shows the whole sheet again.
         </p>
         <div class="ptb-strip" id="prepMapStrip"></div>
+        <div class="prep-map-tools">
+          <button type="button" class="btn btn-sec" data-action="call" data-fn="prepMapFit"
+                  title="Show the whole sheet again">Fit</button>
+        </div>
         <div class="ptb-stage" id="prepMapStage">
           <canvas id="prepMapCanvas"></canvas>
           <div class="ptb-empty" id="prepMapEmpty">Loading the floor plan&hellip;</div>
@@ -273,6 +278,7 @@
 <script src="/assets/js/wd-shared.js"></script>
 <script src="/assets/js/wd-dev.js"></script>
 <script src="/assets/js/wd-dev-actions.js"></script>
+<script src="/assets/js/wd-planview.js"></script>
 <script src="/assets/js/prep.js"></script>
 </body>
 </html>

@@ -85,12 +85,25 @@ namespacing the handlers needs nothing new from `wd-shared.js`.
 
 0. **Done in suite 2.191.2:** Prep's plan view draws on white, and Prep writes
    the 2.190.0 repair for plans an earlier trim left dark.
-1. `WD.PlanView` and `WD.ProjectFile`, extracted from PlanTrim. PlanTrim runs
-   on them with no visible change. Prep's map moves onto them and gains pan
-   and zoom.
-2. The PlanTrim box editor as a module. Prep's Trim stage gets drawing,
-   Suggest and Apply to all, and boxes are saved to `plantrim_store`, so both
-   tools see them.
+1. **Done in suite 2.192.0:** `WD.PlanView` and `WD.ProjectFile` in
+   `web/assets/js/wd-planview.js`. They reproduce PlanTrim's canvas behaviour:
+   the white page, a zoom step of 1.15 clamped to 0.02-20, and pan through
+   `WD.PanZoom`. Prep's map runs on them and gains zoom, pan and a **Fit**
+   button. `tests/test_plan_view.py` holds them, in Node and in all three
+   browsers.
+   **PlanTrim itself is not on them yet, and that was deliberate.** About
+   fifty tests in `test_plantrim_boxes.py` and `test_plantrim_svg_background.py`
+   slice PlanTrim's canvas functions out by name and position. Moving the code
+   now would rewrite them twice, because phase 2 moves the box editor anyway.
+   Until phase 2 lands, the two canvases are separate code with the same
+   numbers. A change to one of them needs the same change in the other.
+2. The PlanTrim box editor as a module on `WD.PlanView`, through its
+   `onDown`/`onMove`/`onUp` hooks. PlanTrim's own canvas code is deleted,
+   and its slicing tests are rewritten against the module. Prep's Trim stage
+   gets drawing, Suggest and Apply to all. Boxes are saved to
+   `plantrim_store`, so both tools see them. Carry over the sideways-swipe fix
+   from 2.192.0: PlanTrim's `onWheel` still zooms out on a wheel event with no
+   vertical movement.
 3. The new Prep layout, with Trim mounted. Capacity becomes a module: apply,
    capture, and the area overlay on the canvas.
 4. Walls as a module: template choice and the wall-type editor. Settle the
