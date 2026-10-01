@@ -141,15 +141,23 @@
           <canvas id="ptbCanvas"></canvas>
           <div class="ptb-empty" id="ptbEmpty">Select a floor to draw on.</div>
         </div>
-        <div class="pb-canvas-hint">Drag a rectangle around what to keep. Drag a handle to adjust it.
-          <kbd>Space</kbd>-drag pans; the wheel zooms.</div>
+        <div class="pb-canvas-hint">Drag a box around what to keep &middot; the mouse wheel zooms &middot;
+          hold <kbd>Space</kbd> and drag to move around the plan.</div>
       </main>
 
       <aside class="pb-panel" aria-label="Crop settings">
         <section class="pb-section">
-          <h2 class="pb-title">Draw what to keep</h2>
-          <p class="pb-lead">Everything outside the rectangle is cut away. With no rectangle,
-            the drawing is found automatically.</p>
+          <h2 class="pb-title">Keep the building, lose the rest</h2>
+          <p class="pb-lead">A sheet from the architect carries a lot that has no place in a
+            Wi-Fi design: the title block, borders and notes, the parking lot, and white
+            space. PlanTrim cuts it away so the floor plan is centred and easy to work on.</p>
+          <ul class="ptb-ways">
+            <li><b>Let PlanTrim find the building.</b> It does this for every floor as soon
+              as the project opens; the dashed outline on the plan is what it will keep,
+              with the margin below around it.</li>
+            <li><b>Or draw it yourself.</b> Drag a box on the plan around what to keep.
+              Anything outside the box is cut. Drag a corner or an edge to adjust it.</li>
+          </ul>
           <div class="ptb-cropbar">
             <button class="btn btn-primary ptb-cropbtn" id="ptbCrop" data-action="call" data-fn="ptbCropBox" hidden>
               &#9986; Crop to this box
@@ -159,7 +167,7 @@
           </div>
           <p class="ptb-hint" id="ptbHint"></p>
           <div class="pb-field">
-            <label for="ptbMargin">Margin around the drawing</label>
+            <label for="ptbMargin">Space to leave around the building</label>
             <select id="ptbMargin" class="prep-input" data-action-change="call" data-fn="ptbSetMargin" data-arg-value="1"
                     title="How much whitespace to leave around the building when trimming automatically">
               <option value="tight">Tight &mdash; 3 ft (0.9 m)</option>
@@ -183,10 +191,20 @@
                     title="Discard the rectangle and let detection decide this floor">Back to automatic</button>
           </div>
           <div class="ptb-evidence" id="ptbEvidence" hidden></div>
-          <p class="pb-note">Rectangles you draw here are the same ones Prep&rsquo;s Trim stage
-            uses for this project. Draw in either tool and both use them.</p>
-          <p class="pb-hint">The margin is measured on the plan&rsquo;s own scale, so it is the
-            same real distance on every sheet, and it is the same setting as Prep&rsquo;s.</p>
+          <div class="ptb-corners">
+            <div class="ptb-corners-head">Check the corners before you cut</div>
+            <p class="pb-hint">Faint or thin lines are easy to lose at the edge. Each button
+              zooms right in on one corner of what will be kept.</p>
+            <div class="ptb-corner-btns" role="group" aria-label="Zoom to a corner">
+              <button class="btn btn-sec" data-action="call" data-fn="ptbCheckCorner" data-arg-json="0" title="Zoom in on the top-left corner of what will be kept">&#8598; Top left</button>
+              <button class="btn btn-sec" data-action="call" data-fn="ptbCheckCorner" data-arg-json="1" title="Zoom in on the top-right corner of what will be kept">Top right &#8599;</button>
+              <button class="btn btn-sec" data-action="call" data-fn="ptbCheckCorner" data-arg-json="3" title="Zoom in on the bottom-left corner of what will be kept">&#8601; Bottom left</button>
+              <button class="btn btn-sec" data-action="call" data-fn="ptbCheckCorner" data-arg-json="2" title="Zoom in on the bottom-right corner of what will be kept">Bottom right &#8600;</button>
+            </div>
+          </div>
+          <p class="pb-hint">The space is a real distance on the plan&rsquo;s own scale, so it is
+            the same on every floor. A box you draw here is also used by Prep&rsquo;s Trim
+            step for this project, and the other way round.</p>
         </section>
         <!-- Hidden sinks: the analyze path still writes its error text here. -->
         <div id="ptFloors" hidden></div>

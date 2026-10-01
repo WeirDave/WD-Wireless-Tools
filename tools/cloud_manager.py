@@ -28,10 +28,33 @@ from tools import applog
 from tools.settings import load_settings as _load_suite_settings
 from tools.settings import update_settings as _update_suite_settings
 
-try:
-    import browser_cookie3
-except ImportError:
-    browser_cookie3 = None
+#: Loaded the first time browser cookies are read, not when the server
+#: starts. On Windows it imports win32com, whose type-library cache is a file
+#: that two processes starting together can catch half-written - which is
+#: what CI saw, as `EOFError: Ran out of input` from `import server`. Nothing
+#: but the sign-in needs it, so nothing else pays for it. Tests replace this
+#: name directly, with None or a fake, as before.
+_NOT_LOADED = object()
+browser_cookie3 = _NOT_LOADED
+
+
+def _cookie_reader():
+    """The browser_cookie3 module, None when it is not installed.
+
+    A failure other than "not installed" is logged and not remembered, so the
+    next sign-in tries again rather than treating the reader as missing for
+    the rest of the session."""
+    global browser_cookie3
+    if browser_cookie3 is _NOT_LOADED:
+        try:
+            import browser_cookie3 as module
+        except ImportError:
+            module = None
+        except Exception as e:  # noqa: BLE001 - a broken import is not a crash
+            applog.note_failure("loading the browser cookie reader", e)
+            return None
+        browser_cookie3 = module
+    return browser_cookie3
 
 try:
     import keyring
@@ -772,10 +795,11 @@ class EkahauAPI:
 
 
 def try_browser_cookies():
-    if browser_cookie3 is None:
+    reader = _cookie_reader()
+    if reader is None:
         return None
-    browsers = [("Chrome", browser_cookie3.chrome), ("Firefox", browser_cookie3.firefox),
-                ("Edge", browser_cookie3.edge), ("Opera", browser_cookie3.opera)]
+    browsers = [("Chrome", reader.chrome), ("Firefox", reader.firefox),
+                ("Edge", reader.edge), ("Opera", reader.opera)]
     for _name, func in browsers:
         try:
             jar = func(domain_name=".ekahau.cloud")

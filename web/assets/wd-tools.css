@@ -11988,3 +11988,16 @@ body.tool-aprename .pb-panel select { font-size: var(--rd-body); }
 :is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-intro,
 :is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-toggle-name { font-size: var(--rd-body); }
 :is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-row label, :is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-quick-row label { font-size: var(--rd-small); }
+
+/* -- PlanTrim: the job in words, the corners, a tall building ----------- */
+.ptb-ways { margin: 0 0 var(--sp-3); padding-left: 18px; font-size: var(--rd-small); line-height: 1.55; color: var(--text-2); }
+.ptb-ways li { margin-bottom: var(--sp-2); }
+.ptb-ways b { color: var(--text); }
+.ptb-corners { margin: var(--sp-3) 0; padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); }
+.ptb-corners-head { font-size: var(--rd-body); font-weight: 600; margin-bottom: var(--sp-1); }
+.ptb-corner-btns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin-top: var(--sp-2); }
+.ptb-corner-btns .btn { padding: 8px 10px; }
+.pb-rail #ptbStrip { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pb-rail #ptbStrip.is-compact .ptb-row-detail { display: none; }
+.pb-rail #ptbStrip.is-compact .ptb-row { padding-top: 6px; padding-bottom: 6px; }
+body.tool-plantrim .pb-rail { overflow: hidden; }

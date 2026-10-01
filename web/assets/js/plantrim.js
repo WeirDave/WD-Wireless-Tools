@@ -733,20 +733,24 @@
     hint.className = 'ptb-hint';
 
     if (!b) {
-      out.textContent = 'Automatic';
+      out.textContent = 'Automatic \u2014 PlanTrim finds the building';
+      out.title = '';
       out.className = 'ptb-readout';
       clear.disabled = true;
       all.disabled = true;
-      hint.textContent = box.img
-        ? 'Drag a rectangle over the part of the sheet to keep.'
-        : '';
+      // The panel above already says how to draw one; repeating it here
+      // was the same sentence twice.
+      hint.textContent = '';
       return;
     }
     var w = Math.round(Math.abs(b[2] - b[0]));
     var h = Math.round(Math.abs(b[3] - b[1]));
     var f = floorById(box.current);
-    var pct = (f && f.w) ? Math.round((1 - (w * h) / (f.w * f.h)) * 100) : 0;
-    out.textContent = w + ' \u00d7 ' + h + ' px';
+    // Never below zero: a box dragged past the sheet's edge is clamped to it,
+    // and "drops -5%" was the arithmetic showing through.
+    var pct = (f && f.w) ? Math.max(0, Math.round((1 - (w * h) / (f.w * f.h)) * 100)) : 0;
+    out.textContent = 'Your box';
+    out.title = w + ' \u00d7 ' + h + ' pixels';
     out.className = 'ptb-readout is-manual';
     clear.disabled = false;
     all.disabled = box.floors.length < 2;
@@ -755,8 +759,9 @@
       hint.className = 'ptb-hint is-bad';
       hint.textContent = 'That rectangle is too small to crop to.';
     } else {
-      hint.textContent = 'Keeps ' + w + ' \u00d7 ' + h + ' of ' + f.w + ' \u00d7 ' + f.h +
-                         ' \u2014 drops ' + pct + '% of the sheet. Drag a handle to adjust.';
+      hint.textContent = (pct ? 'Your box cuts away ' + pct + '% of the sheet.'
+                              : 'Your box keeps the whole sheet.')
+        + ' Drag a corner or an edge to adjust it.';
     }
   }
 
@@ -994,15 +999,19 @@
     }
     var beyond = clearanceText(f) + aside;
     if (f.action === 'trimmed') {
+      // What it does to the sheet, in words; the pixel sizes are for anyone
+      // who wants them, on hover. "less about the dimensions per se ...
+      // nobody really gives them rats".
       var dims = f.oldSize[0] + '\u00d7' + f.oldSize[1] + ' \u2192 ' +
-                 f.newSize[0] + '\u00d7' + f.newSize[1];
-      var saved = (f.areaSavedPct ? '  \u2212' + f.areaSavedPct + '%' : '') + beyond;
+                 f.newSize[0] + '\u00d7' + f.newSize[1] + ' pixels';
+      var cut = f.areaSavedPct ? 'cuts away ' + f.areaSavedPct + '% of the sheet'
+                               : 'keeps nearly all of the sheet';
       if (f.source === 'manual') {
-        return { word: 'Your box', cls: 'is-manual', detail: dims + saved };
+        return { word: 'Your box', cls: 'is-manual', detail: cut + beyond, title: dims };
       }
       return {
-        word: 'Automatic', cls: 'is-auto',
-        detail: dims + saved + (drawn ? '  \u00b7 your box was not used' : ''),
+        word: 'Automatic', cls: 'is-auto', title: dims,
+        detail: cut + beyond + (drawn ? '  \u00b7 your box was not used' : ''),
       };
     }
     if (f.action !== 'trimmed' && f.repaired) {
@@ -1044,12 +1053,20 @@
       var st = floorState(rep, f.id);
       var here = f.id === box.current;
       return '<button type="button" class="ptb-row ' + st.cls +
-               (here ? ' is-current' : '') + '" data-floor="' + WD.escAttr(f.id) + '">' +
+               (here ? ' is-current' : '') + '" data-floor="' + WD.escAttr(f.id) + '"' +
+               ' title="' + WD.escAttr(floorLabel(f.name) + ' \u2014 ' + st.word + ': '
+                 + st.detail + (st.title ? ' (' + st.title + ')' : '')) + '">' +
                '<span class="ptb-row-name">' + WD.esc(floorLabel(f.name)) + '</span>' +
                '<span class="ptb-row-state">' + WD.esc(st.word) + '</span>' +
                '<span class="ptb-row-detail">' + WD.esc(st.detail) + '</span>' +
              '</button>';
     }).join('');
+    /* A 43-storey building: past eight floors each card drops to its name
+       and its state, the detail moves to the tooltip, and the list scrolls
+       inside the rail with the floor being worked on kept in view. */
+    if (el.classList) el.classList.toggle('is-compact', box.floors.length > 8);
+    var curRow = el.querySelector && el.querySelector('.ptb-row.is-current');
+    if (curRow && curRow.scrollIntoView) curRow.scrollIntoView({ block: 'nearest' });
     var next = $('ptbNext');
     if (next) {
       next.hidden = box.floors.length < 2;
@@ -1118,6 +1135,31 @@
     // with - the drawing framed, whatever has been drawn or cropped since -
     // rather than a fresh fit around whatever is currently on it.
     fitView(true);
+    draw();
+  };
+
+  /* "I need to be able to make sure I can zoom in and examine the corners
+     of this and make sure that I'm not cutting away stuff that I might need
+     later maybe the drawing is a little sketchy". Each corner button frames
+     one corner of what will be kept - his box, or the automatic outline when
+     there is none - close enough to see a faint line either side of the cut.
+     Corners are numbered clockwise from top left: 0 TL, 1 TR, 2 BR, 3 BL.
+     Reset view goes back to the whole plan. */
+  window.ptbCheckCorner = function (corner) {
+    if (!box.img) return;
+    var cv = $('ptbCanvas');
+    var b = box.boxes[box.current] || proposedBox()
+      || [0, 0, box.img.width, box.img.height];
+    var x = (corner === 1 || corner === 2) ? Math.max(b[0], b[2]) : Math.min(b[0], b[2]);
+    var y = (corner === 2 || corner === 3) ? Math.max(b[1], b[3]) : Math.min(b[1], b[3]);
+    var longSide = Math.max(Math.abs(b[2] - b[0]), Math.abs(b[3] - b[1]), 1);
+    // A window a sixth of the kept region across, so the corner and what is
+    // on both sides of the cut line fill the stage.
+    var span = longSide / 6;
+    box.view.scale = Math.min(cv.width, cv.height) / span;
+    box.view.x = cv.width / 2 - x * box.view.scale;
+    box.view.y = cv.height / 2 - y * box.view.scale;
+    box.autoFramed = false;
     draw();
   };
 
