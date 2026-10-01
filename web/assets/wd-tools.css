@@ -9671,8 +9671,11 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
   letter-spacing: .01em;
 }
 
-/* Round icon buttons become pills so the text has somewhere to sit. */
-.icon-btn:has(.ib-label) {
+/* Round icon buttons become pills so the text has somewhere to sit. The
+   Peek badge is one too: as a 26px circle its label spilled over the folder's
+   file counts beside it. */
+.icon-btn:has(.ib-label),
+.src-badge:has(.ib-label) {
   width: auto; height: 26px;
   border-radius: var(--r-lg);
   padding: 0 10px 0 8px;
@@ -9706,7 +9709,8 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
      leaves whichever comes first standing in for both. */
   .row-detail { flex-wrap: wrap; }
   .row-detail .rd-text { flex: 1 1 100%; }
-  .icon-btn:has(.ib-label) {
+  .icon-btn:has(.ib-label),
+  .src-badge:has(.ib-label) {
     width: 26px; height: 26px; border-radius: 50%; padding: 0;
   }
   .gut-arrow:has(.ib-label) {
