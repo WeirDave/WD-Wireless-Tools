@@ -6871,6 +6871,41 @@ body.swap-resizing *, body.wd-resizing * { cursor: col-resize !important; user-s
 
 .swap-status { display: none; }}
 
+/* ---------------------------------------------------------------------
+   Visual Swap's sidebar: every control reachable, every word readable.
+
+   On a 1366-wide laptop the Selected panel was squeezed to fit the window,
+   and its own `overflow: hidden` cut off everything below the list -
+   "Change checked to", Swap and Delete selected - with no scroll bar to
+   reach them. Only the list of walls shrinks and scrolls now; the panel
+   never goes below the height of its own controls, and when the window is
+   shorter than the whole sidebar, the sidebar scrolls.
+   --------------------------------------------------------------------- */
+.swap-panel-selection { flex: 1 0 auto; min-height: 0; }
+.swap-panel-selection .swap-panel-body { flex: 1 1 auto; min-height: 0; }
+.swap-panel-selection .swap-panel-body > * { flex: 0 0 auto; }
+.swap-panel-selection .swap-panel-body > .swap-sel-breakdown {
+  flex: 1 1 auto; min-height: 140px; max-height: 52vh; overflow-y: auto;
+}
+#swapLegend { max-height: 30vh; }
+
+/* Read at arm's length on a large monitor, not leaned into. */
+.swap-sidebar { gap: var(--sp-3); padding: var(--sp-3); }
+.swap-panel-header { font-size: var(--fs-small); padding: 10px 14px; }
+.swap-panel-body { padding: 10px 12px; gap: var(--sp-2); }
+.swap-panel-hint, .swap-empty { font-size: 14px; line-height: 1.5; }
+.swap-legend-row, .swap-sel-row { font-size: var(--fs-emph); padding: 7px 8px; }
+.swap-legend-count, .swap-sel-group-count { font-size: 14px; }
+.swap-seg-row { font-size: 14px; }
+.swap-seg-len { font-size: var(--fs-small); }
+.swap-collapse-all { font-size: var(--fs-small); padding: 5px 12px; }
+.swap-numbers-toggle { font-size: 14px; }
+.swap-swap-label, .swap-quick-row label { font-size: var(--fs-small); }
+.swap-target-select { font-size: 14px; padding: 7px 10px; }
+.swap-quick-row { grid-template-columns: 64px 1fr; }
+.swap-footer-hint { font-size: var(--fs-small); }
+.swap-sel-count { font-size: var(--fs-small); }
+
 
 .wd-stale-banner {
   position: fixed;
