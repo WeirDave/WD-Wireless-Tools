@@ -125,17 +125,37 @@ class _StubApi(SimpleHTTPRequestHandler):
         super().do_GET()
 
 
+#: Waits for the page to be wired before dropping, then for the floors to
+#: appear, rather than for fixed times. Fixed sleeps (1.2 s, then 2.5 s) lost
+#: the drop on a cold Edge start in CI with four workers sharing the runner:
+#: the drop fired before ap-rename.js had bound its handler, and the floors
+#: never came. Each wait is still bounded.
 DROP_JS = r"""
 var done = arguments[arguments.length - 1];
-var bytes = Uint8Array.from(atob(arguments[0]), function (c) { return c.charCodeAt(0); });
-var file = new File([bytes], 'floors-fixture.esx', { type: 'application/octet-stream' });
-var dt = new DataTransfer();
-dt.items.add(file);
-document.getElementById('dropzone').dispatchEvent(
-  new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
-setTimeout(function () {
-  done(document.querySelectorAll('#arFloorTabs .ar-floor-tab').length);
-}, 2500);
+var b64 = arguments[0];
+var started = Date.now();
+function count() { return document.querySelectorAll('#arFloorTabs .ar-floor-tab').length; }
+function ready() {
+  return document.readyState === 'complete' && typeof window.arDownload === 'function';
+}
+(function waitReady() {
+  if (!ready()) {
+    if (Date.now() - started > 20000) { done(-1); return; }
+    setTimeout(waitReady, 100);
+    return;
+  }
+  var bytes = Uint8Array.from(atob(b64), function (c) { return c.charCodeAt(0); });
+  var file = new File([bytes], 'floors-fixture.esx', { type: 'application/octet-stream' });
+  var dt = new DataTransfer();
+  dt.items.add(file);
+  document.getElementById('dropzone').dispatchEvent(
+    new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  (function waitFloors() {
+    var n = count();
+    if (n >= 3 || Date.now() - started > 30000) { done(n); return; }
+    setTimeout(waitFloors, 100);
+  })();
+})();
 """
 
 #: Presses Download and hands back the names in the archive it built.
@@ -219,7 +239,6 @@ class OnlyTheChosenFloorsAreRenamedTests(unittest.TestCase):
                 driver.set_window_size(1600, 1000)
                 driver.set_script_timeout(60)
                 driver.get(self.url)
-                time.sleep(1.2)
                 tabs = driver.execute_async_script(DROP_JS, self.b64)
                 self.assertEqual(tabs, 3, f"{kind}: the project did not load")
                 yield kind, driver
