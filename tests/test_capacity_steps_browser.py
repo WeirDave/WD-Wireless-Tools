@@ -35,6 +35,8 @@ class CapacityStepsRespond(BrowserPagesHarness):
         cls._tmp = tempfile.TemporaryDirectory()
         cls.esx = Path(cls._tmp.name) / "invented-capacity.esx"
         build_esx(cls.esx)
+        cls.bare = Path(cls._tmp.name) / "invented-no-profiles.esx"
+        build_esx(cls.bare, with_capacity=False)
 
     @classmethod
     def tearDownClass(cls):
@@ -50,6 +52,24 @@ class CapacityStepsRespond(BrowserPagesHarness):
         WebDriverWait(drv, 20).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, "#capTemplates .cap-tpl"))
         time.sleep(0.3)
+
+    def test_a_template_that_cannot_apply_says_where_the_reason_is(self):
+        """A project without the template's profiles cannot take it. The
+        footer used to say only "Nothing to apply." beside a greyed button,
+        with the reason two screens up."""
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                drv.set_window_size(1366, 1000)
+                drv.get(self.base + "/capacity")
+                WebDriverWait(drv, 15).until(
+                    lambda d: d.find_elements(By.ID, "fileInput"))
+                drv.find_element(By.ID, "fileInput").send_keys(str(self.bare))
+                WebDriverWait(drv, 20).until(lambda d: "does not have" in d.find_element(
+                    By.ID, "capPlan").text)
+                note = drv.find_element(By.ID, "capApplyNote").text
+                self.assertIn("cannot be applied", note)
+                self.assertIn("Apply it to this project", note)
+                self.assertFalse(drv.find_element(By.ID, "capApplyBtn").is_enabled())
 
     def test_the_template_list_is_the_first_card(self):
         for kind, drv in self.each_browser():

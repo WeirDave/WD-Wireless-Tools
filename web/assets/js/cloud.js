@@ -4110,7 +4110,7 @@ function fixInternalName(localPath, cloudName, label, cloudId) {
   if (cloudId) _setRowBusy(cloudId, localPath, 'Setting the name inside the file\u2026');
   const { promise } = opEnqueue({
     title: `Setting the project name inside "${label}" to "${cloudName}"`,
-    sub: 'Rewrites the name stored in the .esx. The previous file is backed up.',
+    sub: 'Rewrites the name stored in the .esx. The cloud still holds the project.',
     type: 'rename', pollBackend: false, undoable: false,
     //: The row's ceiling starts when this starts, not when it was queued.
     busyRow: { cloudId, localPath, label: 'Setting the name inside the file…' },
@@ -4157,7 +4157,7 @@ function bulkFixInternalNames() {
   rows.forEach(d => fixInternalName(
     d.localPath, d.cloudName, d.localName || d.cloudName));
   toast(`Setting the project name inside ${rows.length} file`
-    + (rows.length === 1 ? '' : 's') + ' — each is backed up first', 'info');
+    + (rows.length === 1 ? '' : 's'), 'info');
 }
 
 /* Send the local file up over the cloud project it is paired with.

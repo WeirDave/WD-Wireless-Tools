@@ -779,13 +779,15 @@ Traps:
   empty. `pictureNotes.json` is a different feature (pins with
   `location.coord`).
 
-- **Owner filter is two settings.** What the list opens on is
+- **The owner filter is saved.** What the list opens on is
   `cloud.default_owner_filter` in `settings.json` (Settings → Default view),
   **shipping as `"mine"`**; `loadDefaultOwnerFilter` falls back to `"all"`
-  only when settings cannot be read. The toolbar toggle is in-memory and
-  resets on reload, which an upgrade includes - and
-  `renderOwnerFilterNotice` says so in every state. Never put it in
-  `localStorage`. `tests/test_cloud_owner_filter.py`.
+  only when settings cannot be read. Pressing All / Mine / Others in the
+  toolbar writes that same setting (`setOwnerFilterUI`), at his request - it
+  used to reset on reload and he re-picked Mine after every update. That is
+  safe only because `renderOwnerFilterNotice` names any filter narrower than
+  All above the list. Never put it in `localStorage`.
+  `tests/test_cloud_owner_filter.py`.
 
 - **Every matched row gives each side its own checkbox** (`s-c:`/`s-l:`,
   `ct-c:`/`ct-l:`). Selecting either resolves to the pair for bulk Sync, but

@@ -1046,8 +1046,9 @@ def _missing_message(missing) -> str:
             "Ekahau ships these as stock content in a new project, so if this is "
             "a project you have just created, check the names match what your "
             "Ekahau version calls them - they differ between releases. "
-            "Otherwise add them in Ekahau, or capture the template again from a "
-            "project that has them so it can bring its own copies."
+            "Otherwise add them in Ekahau, or open the template with Edit in "
+            "Capacity while a project that has them is open and save it, so it "
+            "carries its own copies."
         )
     for m in ambiguous:
         parts.append(

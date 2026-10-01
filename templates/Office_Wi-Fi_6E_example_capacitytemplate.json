@@ -1,7 +1,7 @@
 {
   "name": "Office, Wi-Fi 6E (example)",
   "schema": 1,
-  "description": "One worked example, not a recommendation. It assumes every person carries three devices: a laptop, a work phone and a personal phone, at one each per head. The laptop is mostly on a normal SLA with a tenth of it conferencing; the work phone splits evenly between normal and background; the personal phone is almost all background. Your mix will differ - capture your own from an .esx rather than editing this by hand. Every profile named here is Ekahau stock content, present in a new project, so this template applies without creating anything.",
+  "description": "One worked example, not a recommendation. It assumes every person carries three devices: a laptop, a work phone and a personal phone, at one each per head. The laptop is mostly on a normal SLA with a tenth of it conferencing; the work phone splits evenly between normal and background; the personal phone is almost all background. Your mix will differ - build your own with New template, or Edit this one and save it as your copy. Every profile named here is Ekahau stock content, present in a new project, so this template applies without creating anything.",
   "capturedFrom": "hand-authored; profile names verified against 109 real projects",
   "capturedOccupants": 500,
   "requirementName": "Ekahau Best Practices",

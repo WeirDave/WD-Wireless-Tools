@@ -330,10 +330,17 @@ class NothingPromisesACopyThatIsNoLongerKeptTests(unittest.TestCase):
         "backups/&lt;site&gt;/",
         "previous copy kept",
         "previous local cop",
+        "backed up first",
+        "is backed up.",
+        "previous file is backed up",
     ]
 
     def test_no_dialog_promises_a_copy_of_the_file_it_replaces(self):
-        text = CLOUD_JS.read_text(encoding="utf-8")
+        """The page's own tooltips and help dialog count too: three of the
+        promises outlived the cleanup in cloud.html, which this used not to
+        read."""
+        text = (CLOUD_JS.read_text(encoding="utf-8")
+                + (ROOT / "web" / "cloud.html").read_text(encoding="utf-8"))
         found = [phrase for phrase in self.WRONG if phrase in text]
         self.assertEqual(
             [], found,
