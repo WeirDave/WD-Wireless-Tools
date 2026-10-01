@@ -26,9 +26,7 @@ from __future__ import annotations
 
 from tests import browsers as _browsers
 
-import contextlib
 import re
-import socket
 import threading
 import time
 import unittest
@@ -39,8 +37,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
-#: Its own port range, so it never collides with the other browser test.
-PORT_HINT = 8841
 
 try:  # pragma: no cover - availability varies by machine
     from selenium import webdriver
@@ -101,17 +97,6 @@ def pages_with_a_menu():
     return out
 
 
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
-
-
 class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -154,9 +139,9 @@ class EveryPage(unittest.TestCase):
         if not Path(cls.binary).exists():
             raise unittest.SkipTest("%s is not installed here" % cls.kind)
 
-        cls.port = _free_port(PORT_HINT)
-        cls.server = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(QuietHandler, directory=str(WEB)))
+        cls.server = _browsers.ExclusiveServer(
+            ("127.0.0.1", 0), partial(QuietHandler, directory=str(WEB)))
+        cls.port = cls.server.server_address[1]
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
 

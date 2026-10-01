@@ -38,7 +38,6 @@ from tests import browsers as _browsers
 
 import contextlib
 import json
-import socket
 import threading
 import unittest
 from functools import partial
@@ -47,8 +46,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-#: An odd high port of this file's own - 8675 is his running instance.
-PORT_HINT = 8847
 
 try:  # pragma: no cover - availability varies by machine
     from selenium import webdriver
@@ -58,17 +55,6 @@ try:  # pragma: no cover - availability varies by machine
     HAVE_SELENIUM = True
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
-
-
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
 
 
 class StubBackend(SimpleHTTPRequestHandler):
@@ -100,7 +86,7 @@ class StubBackend(SimpleHTTPRequestHandler):
         return self._send({"ok": True})
 
 
-class QuietServer(ThreadingHTTPServer):
+class QuietServer(_browsers.ExclusiveServer):
     """A browser that abandons a download is not a failure.
 
     Chrome fetches the page's multi-size favicon after the load event, and the
@@ -216,9 +202,9 @@ class MenuItemsCanBeClicked(unittest.TestCase):
         if not Path(cls.binary).exists():
             raise unittest.SkipTest("%s is not installed here" % cls.kind)
 
-        cls.port = _free_port(PORT_HINT)
         cls.server = QuietServer(
-            ("127.0.0.1", cls.port), partial(StubBackend, directory=str(WEB)))
+            ("127.0.0.1", 0), partial(StubBackend, directory=str(WEB)))
+        cls.port = cls.server.server_address[1]
         cls.addClassCleanup(cls._stop_server)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
 

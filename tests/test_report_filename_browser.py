@@ -26,10 +26,8 @@ from __future__ import annotations
 from tests import browsers as _browsers
 
 import base64
-import contextlib
 import json
 import shutil
-import socket
 import tempfile
 import threading
 import time
@@ -41,9 +39,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
-#: An unusual port, and not one anybody reaches for. 8675 is his own running
-#: instance and must never be bound.
-PORT_HINT = 8834
 
 BROWSERS = [
     ("firefox", _browsers.find("firefox")),
@@ -60,17 +55,6 @@ try:  # pragma: no cover - availability varies by machine
     HAVE_SELENIUM = True
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
-
-
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
 
 
 class _StubApi(SimpleHTTPRequestHandler):
@@ -153,9 +137,9 @@ class DroppedFileNamesTheReport(unittest.TestCase):
         esx = make_esx(cls.tmp / ESX_NAME)
         cls.b64 = base64.b64encode(esx.read_bytes()).decode("ascii")
         cls.size = esx.stat().st_size
-        cls.port = _free_port(PORT_HINT)
-        cls.httpd = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(_StubApi, directory=str(WEB)))
+        cls.httpd = _browsers.ExclusiveServer(
+            ("127.0.0.1", 0), partial(_StubApi, directory=str(WEB)))
+        cls.port = cls.httpd.server_address[1]
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
         cls.thread.start()
         cls.url = "http://127.0.0.1:%d/report.html" % cls.port

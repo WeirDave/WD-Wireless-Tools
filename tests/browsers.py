@@ -32,6 +32,7 @@ import shutil
 import socket
 import threading
 import sys
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 #: Returned when a browser is not on this machine. Not "" - see the module
@@ -328,6 +329,27 @@ def shut_down(driver) -> list:
             killed.append(pid)
     return killed
 
+
+
+class ExclusiveServer(ThreadingHTTPServer):
+    """A stub server on a port nobody else can be on.
+
+    Every browser module used to choose its port by probing upward from a
+    hint (8791, 8834, 8841, 8847, 8911, 8931, 8951, 8967...) and then binding
+    it. The ranges overlap, four modules run at once in CI, and a probe only
+    shows that a port is free at that instant - so two modules could pick the
+    same one. `http.server` sets SO_REUSEADDR, and on Windows that lets both
+    bind it. The page's requests then reach either stub; answered by the
+    wrong one, the page under test is not the page the test wrote. It surfaced
+    as unrelated, rotating failures: Labeler floors that never loaded in Edge
+    and then Chrome, Cloud menu items "drawn" nowhere.
+
+    Bind port 0 and read `server_address[1]`: the OS assigns a free port
+    atomically, and with no reuse a port in use cannot be taken.
+    `tests/test_every_stub_server_has_a_port_of_its_own.py` holds every
+    module to it.
+    """
+    allow_reuse_address = False
 
 #: How long to wait for a `serve_forever` loop to acknowledge a shutdown
 #: before giving up on it and closing the socket anyway.

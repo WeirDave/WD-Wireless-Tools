@@ -22,9 +22,7 @@ from __future__ import annotations
 
 from tests import browsers as _browsers
 
-import contextlib
 import json
-import socket
 import threading
 import unittest
 from functools import partial
@@ -33,9 +31,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-#: Deliberately an odd high port, and a different one per session - 8675 is
-#: his own running instance.
-PORT_HINT = 8791
 
 try:  # pragma: no cover - availability varies by machine
     from selenium import webdriver
@@ -52,17 +47,6 @@ BROWSERS = [
 ME = "me@example.invalid"
 MATE = "colleague@example.invalid"
 RECENT = ["firstcontact@example.invalid", "secondcontact@example.invalid"]
-
-
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
 
 
 class StubBackend(SimpleHTTPRequestHandler):
@@ -162,9 +146,9 @@ class ShareDialogInABrowser(unittest.TestCase):
         if not Path(cls.binary).exists():
             raise unittest.SkipTest("%s is not installed here" % cls.kind)
 
-        cls.port = _free_port(PORT_HINT)
-        cls.server = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(StubBackend, directory=str(WEB)))
+        cls.server = _browsers.ExclusiveServer(
+            ("127.0.0.1", 0), partial(StubBackend, directory=str(WEB)))
+        cls.port = cls.server.server_address[1]
         #: Registered before the driver starts, so a browser that will not
         #: launch cannot leave the port held.
         cls.addClassCleanup(cls._stop_server)

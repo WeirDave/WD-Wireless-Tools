@@ -24,8 +24,6 @@ from pathlib import Path
 from tests import browsers as _browsers
 from tests import test_column_grid_picker_browser as _picker
 
-#: Not 8675, and not the port the column grid picker test uses.
-PORT_HINT = 8911
 
 SETUP_JS = r"""
 var done = arguments[arguments.length - 1];
@@ -80,9 +78,9 @@ class CellsCanBeCombinedInTheDialog(unittest.TestCase):
         cls.addClassCleanup(shutil.rmtree, cls.tmp, True)
         esx = make_esx(cls.tmp / "grid-fixture.esx", aps=12, placed=True)
         cls.b64 = base64.b64encode(esx.read_bytes()).decode("ascii")
-        cls.port = _picker._free_port(PORT_HINT)
-        cls.httpd = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(_picker._StubApi, directory=str(_picker.WEB)))
+        cls.httpd = _browsers.ExclusiveServer(
+            ("127.0.0.1", 0), partial(_picker._StubApi, directory=str(_picker.WEB)))
+        cls.port = cls.httpd.server_address[1]
         threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
         cls.url = "http://127.0.0.1:%d/report.html" % cls.port
 

@@ -528,6 +528,22 @@ function renderAll() {
   renderHotkeyPanel();
   renderList();
   refreshWallAudit();
+  renderWillWrite();
+}
+
+/* The footer says what Save will write, beside the button that writes it -
+   the promise the workbench footer makes in every tool that has one. */
+function willWriteText(name, types) {
+  if (!name) return '';
+  const keyed = types.filter(wt => wt.keybindNumber >= 1 && wt.keybindNumber <= 9).length;
+  return 'Saves ' + name.replace('.esx', '_modified.esx') + ' with ' + types.length
+    + ' wall type' + (types.length === 1 ? '' : 's') + ' and ' + keyed
+    + ' shortcut' + (keyed === 1 ? '' : 's') + '. Your file is not changed.';
+}
+
+function renderWillWrite() {
+  const note = document.getElementById('wallsWillWrite');
+  if (note) note.textContent = willWriteText(fileName, wallTypes);
 }
 
 function renderHotkeyPanel() {

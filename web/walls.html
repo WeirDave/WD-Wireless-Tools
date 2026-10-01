@@ -113,56 +113,70 @@
       </button>
     </div>
   </div>
-  <div class="editor-body">
-    <div id="templateBar" class="template-bar">
-        <span class="template-bar-label">Template</span>
-        <select id="templateSelect" class="template-select" data-action-change="call" data-fn="onTemplateSelectChange">
-        </select>
-        <button class="btn btn-primary" id="tplApplyBtn" data-action="call" data-fn="applySelectedTemplate" disabled>Apply</button>
-        <button class="btn" data-action="call" data-fn="saveAsTemplate" title="Save current wall types + shortcuts as a template">Save Template</button>
-        <button class="btn btn-reset-defaults" data-action="call" data-fn="resetToEkahauDefaults" title="Reset wall types to Ekahau factory defaults">Ekahau Defaults</button>
-        <button class="btn" data-action="call" data-fn="openTemplateModal" title="Manage saved templates">Manage</button>
-        <span class="template-bar-sep"></span>
-        <label class="template-bar-auto">
-          <input type="checkbox" id="autoApplyCheck" data-action-change="call" data-fn="toggleAutoApply">
-          <span>Auto-apply on open</span>
-        </label>
-        <span class="template-bar-auto-note" id="autoApplyNote"></span>
-    </div>
+  <!-- The workbench shell the file tools share: the 1-9 shortcuts on the
+       rail, the project's wall types in the middle, the template in the panel
+       on the right, and Save in a footer that says what it will write. -->
+  <div class="pb-body walls-wb">
 
-    <div class="columns">
-      <div class="hotkey-sidebar">
-        <div class="hotkey-panel">
-          <div class="hotkey-panel-header">Keyboard Shortcuts</div>
-          <div id="hotkeySlots"></div>
-        </div>
-        <button class="btn btn-primary walls-save-btn" id="saveBtn" data-action="call" data-fn="saveEsx">Save the *.esx</button>
-        <div class="quick-tips">
-          <p><b>Two ways to assign a shortcut, and they do the same thing.</b></p>
-          <p><strong>Drag</strong> a wall type from the list onto a slot &mdash; or drag a
-             slot onto another slot to swap or move it.</p>
-          <p>Or pick a slot from the menu on each wall type's key button. The button is
-             the current setting: it reads the slot the type holds, or <strong>Set
-             key</strong> when it holds none, whichever way it was assigned.</p>
-          <p>Shortcuts <strong>[1]-[9]</strong> map to Ekahau's keyboard wall picker:
-             press the number while drawing walls to pick that type.</p>
-          <p>Use the <strong>Template</strong> bar above to save, apply, and manage setups.</p>
+    <nav class="pb-rail walls-rail" aria-label="Keyboard shortcuts">
+      <div class="pb-rail-head">Keyboard shortcuts</div>
+      <div class="hotkey-panel">
+        <div id="hotkeySlots"></div>
+      </div>
+      <div class="pb-rail-foot quick-tips">
+        <p><b>Two ways to assign a shortcut, and they do the same thing.</b></p>
+        <p><strong>Drag</strong> a wall type from the list onto a slot &mdash; or drag a
+           slot onto another slot to swap or move it.</p>
+        <p>Or pick a slot from the menu on each wall type's key button. The button is
+           the current setting: it reads the slot the type holds, or <strong>Set
+           key</strong> when it holds none, whichever way it was assigned.</p>
+        <p>Shortcuts <strong>[1]-[9]</strong> map to Ekahau's keyboard wall picker:
+           press the number while drawing walls to pick that type.</p>
+      </div>
+    </nav>
+
+    <main class="pb-main walls-main">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <span id="wallCount" class="wall-count"></span>
+          <button class="btn" data-action="call" data-fn="openAddModal">+ Add Wall Type</button>
+          <button class="btn btn-visual-swap" data-action="call" data-fn="openSwapModal" title="Bulk swap walls on the floor plan — draw a box, pick a new type"><span class="swap-ico">&#x1F5BC;</span> Visual Swap</button>
         </div>
       </div>
+      <div id="wallAudit" class="wall-audit" hidden></div>
+      <div id="wallList" class="wall-list"></div>
+    </main>
 
-      <div>
-        <div class="toolbar">
-          <div class="toolbar-left">
-            <span id="wallCount" class="wall-count"></span>
-            <button class="btn" data-action="call" data-fn="openAddModal">+ Add Wall Type</button>
-            <button class="btn btn-visual-swap" data-action="call" data-fn="openSwapModal" title="Bulk swap walls on the floor plan — draw a box, pick a new type"><span class="swap-ico">&#x1F5BC;</span> Visual Swap</button>
+    <aside class="pb-panel walls-panel" aria-label="Template">
+      <section class="pb-section">
+        <h2 class="pb-title">Template</h2>
+        <p class="pb-lead">A template is a set of wall types and shortcuts. Applying one
+          adds the types this project lacks and sets the ones it has to the template's
+          colour, number key and attenuation.</p>
+        <div id="templateBar" class="template-bar">
+          <label class="template-bar-label" for="templateSelect">Saved templates</label>
+          <select id="templateSelect" class="template-select" data-action-change="call" data-fn="onTemplateSelectChange">
+          </select>
+          <button class="btn btn-sec" id="tplApplyBtn" data-action="call" data-fn="applySelectedTemplate" disabled>Apply</button>
+          <div class="pb-grid2">
+            <button class="btn btn-sec" data-action="call" data-fn="saveAsTemplate" title="Save current wall types + shortcuts as a template">Save Template</button>
+            <button class="btn btn-sec" data-action="call" data-fn="openTemplateModal" title="Manage saved templates">Manage</button>
           </div>
+          <button class="btn btn-sec btn-reset-defaults" data-action="call" data-fn="resetToEkahauDefaults" title="Reset wall types to Ekahau factory defaults">Ekahau Defaults</button>
+          <label class="template-bar-auto pb-check">
+            <input type="checkbox" id="autoApplyCheck" data-action-change="call" data-fn="toggleAutoApply">
+            <span>Auto-apply on open</span>
+          </label>
+          <span class="template-bar-auto-note" id="autoApplyNote"></span>
         </div>
-        <div id="wallAudit" class="wall-audit" hidden></div>
-        <div id="wallList" class="wall-list"></div>
-      </div>
-    </div>
+      </section>
+    </aside>
   </div>
+
+  <footer class="pb-footer">
+    <div class="pb-willwrite" id="wallsWillWrite"></div>
+    <button class="btn btn-primary pb-prepare" id="saveBtn" data-action="call" data-fn="saveEsx">Save the *.esx</button>
+  </footer>
 </div>
 
 <div id="modal" class="modal-overlay" data-action="backdrop-call" data-fn="closeModal">

@@ -108,9 +108,41 @@
     </div>
   </div>
 
-  <div class="cap-wrap">
+  <!-- The workbench shell the file tools share. Capacity has no plan to draw
+       on, so the middle is its three steps; the rail jumps between them, and
+       the one verb sits in the footer with the sentence that says what it
+       will write. -->
+  <div class="pb-body">
+   <nav class="pb-rail" aria-label="Steps">
+    <div class="pb-rail-head">Steps</div>
+    <div class="pb-stage">
+      <button type="button" class="pb-stage-open" data-action="scroll-target" data-target="capStep1">
+        <span class="pb-stage-name">1 &middot; What this project asks for</span>
+        <span class="pb-stage-status">The requirement areas, devices and usage read from the open project</span>
+      </button>
+    </div>
+    <div class="pb-stage">
+      <button type="button" class="pb-stage-open" data-action="scroll-target" data-target="capDeriveCard">
+        <span class="pb-stage-name">2 &middot; Save as a template</span>
+        <span class="pb-stage-status">Opens once the project has requirement areas to read; stored per person, so it fits any size of building</span>
+      </button>
+    </div>
+    <div class="pb-stage">
+      <button type="button" class="pb-stage-open" data-action="scroll-target" data-target="capStep3">
+        <span class="pb-stage-name">3 &middot; Apply a template</span>
+        <span class="pb-stage-status">A headcount per floor turns a template into requirement areas</span>
+      </button>
+    </div>
+    <div class="pb-rail-foot">
+      Your project file is never written to. Applying builds a new copy and
+      downloads it, so keeping it is your decision.
+    </div>
+   </nav>
 
-    <div class="cap-card">
+   <main class="pb-main cap-main">
+   <div class="cap-wrap">
+
+    <div class="cap-card" id="capStep1">
       <div class="cap-step">1 &mdash; What this project is asking for</div>
       <div id="capExtract"></div>
     </div>
@@ -136,7 +168,7 @@
       </div>
     </div>
 
-    <div class="cap-card">
+    <div class="cap-card" id="capStep3">
       <div class="cap-step">3 &mdash; Apply a template to this project</div>
       <div class="cap-tpl-list" id="capTemplates"></div>
       <div class="cap-row mt-12">
@@ -168,21 +200,19 @@
         devices cleared so it stops counting twice.
       </p>
       <div id="capPlan"></div>
-
-      <div class="cap-row cap-apply">
-        <button class="btn btn-primary" id="capApplyBtn" data-action="call" data-fn="capApply" disabled>
-          Apply and download
-        </button>
-        <span class="cap-hint" id="capApplyNote">Pick a template first.</span>
-      </div>
       <div id="capResult"></div>
     </div>
 
-    <p class="cap-hint text-center">
-      Your project file is never written to. Applying builds a new copy and downloads it,
-      so keeping it is your decision.
-    </p>
+   </div>
+   </main>
   </div>
+
+  <footer class="pb-footer">
+    <div class="pb-willwrite" id="capApplyNote">Pick a template first.</div>
+    <button class="btn btn-primary pb-prepare" id="capApplyBtn" data-action="call" data-fn="capApply" disabled>
+      Apply and download
+    </button>
+  </footer>
 </div>
 
 <div id="toast" class="toast"></div>

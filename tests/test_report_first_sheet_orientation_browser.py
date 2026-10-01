@@ -40,14 +40,11 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from tests.pdf_sheets import orientations
-from tests.test_report_filename_browser import DROP_JS, _StubApi, _free_port
+from tests.test_report_filename_browser import DROP_JS, _StubApi
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
-#: Not 8675, which is his own running instance, and not a neighbour of the
-#: other browser tests' hints.
-PORT_HINT = 8872
 
 try:  # pragma: no cover - availability varies by machine
     from selenium import webdriver
@@ -91,9 +88,9 @@ class EverySheetIsThePaperItsPageAskedFor(unittest.TestCase):
         # so the maps have something on them.
         esx = make_esx(cls.tmp / "Sample.esx", floors=2, aps=6, placed=True)
         cls.b64 = base64.b64encode(esx.read_bytes()).decode("ascii")
-        cls.port = _free_port(PORT_HINT)
-        cls.httpd = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(_StubApi, directory=str(WEB)))
+        cls.httpd = _browsers.ExclusiveServer(
+            ("127.0.0.1", 0), partial(_StubApi, directory=str(WEB)))
+        cls.port = cls.httpd.server_address[1]
         cls.addClassCleanup(_browsers.stop_server, cls.httpd)
         cls.thread = threading.Thread(target=cls.httpd.serve_forever, daemon=True)
         cls.thread.start()

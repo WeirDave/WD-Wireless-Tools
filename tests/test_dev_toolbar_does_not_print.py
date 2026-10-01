@@ -40,8 +40,6 @@ from __future__ import annotations
 
 from tests import browsers as _browsers
 
-import contextlib
-import socket
 import threading
 import time
 import unittest
@@ -52,8 +50,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
-#: Its own port range, clear of the other browser suites and of his 8675.
-PORT_HINT = 8903
 
 #: Text that only the dev toolbar puts on a page. Read off the strip's own
 #: labels, so a rename breaks this loudly rather than silently passing.
@@ -78,17 +74,6 @@ except ImportError:  # pragma: no cover
 FIREFOX = _browsers.find("firefox")
 
 
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
-
-
 class QuietHandler(SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -109,9 +94,9 @@ class TheToolbarIsNotOnThePaper(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.port = _free_port(PORT_HINT)
-        cls.server = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(QuietHandler, directory=str(WEB)))
+        cls.server = _browsers.ExclusiveServer(
+            ("127.0.0.1", 0), partial(QuietHandler, directory=str(WEB)))
+        cls.port = cls.server.server_address[1]
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
 
