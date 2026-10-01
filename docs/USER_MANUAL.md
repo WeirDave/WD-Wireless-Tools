@@ -1736,6 +1736,11 @@ carrying 1,500 devices is stored as "three devices per person, split like so".
 Applied to a 200-person building it writes 600. Headcount is the only number you
 type.
 
+The page is laid out like Prep and PlanTrim: the three steps are listed down
+the left (click one to jump to it), the steps themselves fill the middle, and
+**Apply and download** sits in the footer at the bottom right, beside a line
+saying what it will write.
+
 ### Capture a template
 
 Open an `.esx` that is already set up the way you want. Capacity reads the
