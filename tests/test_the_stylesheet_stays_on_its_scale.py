@@ -26,7 +26,7 @@ from pathlib import Path
 CSS = Path(__file__).resolve().parent.parent / "web" / "assets" / "wd-tools.css"
 
 #: Lower these when you remove debt. Never raise them.
-MAX_COLOUR_LITERALS = 1008
+MAX_COLOUR_LITERALS = 987
 MAX_FONT_SIZES = 41
 
 RADIUS_TOKENS = {"--r-xs", "--r-sm", "--r-md", "--r-lg", "--radius-pill", "--radius"}
