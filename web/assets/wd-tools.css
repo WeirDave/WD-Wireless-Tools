@@ -5804,6 +5804,12 @@ body.tool-report {
 
 .rep-check.with-desc input { margin-top: 3px; }
 
+/* A dropdown goes under its label at the option's full width. Beside the
+   label it was squeezed to 46-96px in a three-column grid, so "Auto - when
+   the plan shows numbers" read "Auto - wh". */
+.rep-check.with-desc:has(> select) { flex-wrap: wrap; }
+.rep-check.with-desc > select { flex: 1 1 100%; max-width: 100%; min-width: 0; }
+
 .rep-check .rep-btn-right { margin-left: auto; white-space: nowrap; }
 .rep-check .rep-input-sm { width: 60px; margin-left: auto; }
 
@@ -12097,4 +12103,44 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
   .s-main details.s-section:not([open]) { display: none; }
   .s-main details.s-section[open] > summary { pointer-events: none; }
   .s-main details.s-section[open] > summary::before { content: none; }
+}
+
+/* Report's wizard screens, at the same arm's-length sizes as the workbench
+   tools. Screen only: the printed sheets have their own sizes and are
+   measured from the PDF. */
+@media screen {
+  body.tool-report .rep-template-facts { font-size: 14px; }
+  body.tool-report .rep-template-fact b { font-size: 13px; }
+  body.tool-report .rep-template-subtitle { font-size: 15px; }
+  body.tool-report .rep-template-expand,
+  body.tool-report .rep-template-pill,
+  body.tool-report .rep-step-num { font-size: 13px; }
+  body.tool-report .rep-cat-heading,
+  body.tool-report .rep-step-label { font-size: 14px; }
+  body.tool-report .rep-sb-field b,
+  body.tool-report .rep-sb-empty,
+  body.tool-report .rep-sb-actions .btn { font-size: 13px; }
+  body.tool-report .rep-sb-field .val,
+  body.tool-report .rep-sb-field .empty { font-size: 14px; }
+
+  /* Configure. */
+  body.tool-report .rep-preview-desc,
+  body.tool-report .rep-preview-meta,
+  body.tool-report .rep-preview-body span,
+  body.tool-report .rep-check-desc { font-size: 14px; }
+  body.tool-report .rep-preview-body b,
+  body.tool-report .rep-check-label,
+  body.tool-report .rep-ap-row-name { font-size: 15px; }
+  body.tool-report .rep-ap-row-model,
+  body.tool-report .rep-ap-count,
+  body.tool-report .rep-set-badge,
+  body.tool-report .rep-set-revert,
+  body.tool-report .rep-groupby-pill,
+  body.tool-report .rep-groupby-label,
+  body.tool-report .rep-opts-subhead-note,
+  body.tool-report .rep-remembered-state,
+  body.tool-report .rep-remembered-clear,
+  body.tool-report .rep-cover-thumb-empty,
+  body.tool-report .rep-logo-btn,
+  body.tool-report .rep-config-card .btn-sm { font-size: 13px; }
 }
