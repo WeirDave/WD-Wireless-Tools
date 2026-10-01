@@ -5068,27 +5068,14 @@ body.tool-scale {
   padding: var(--sp-6) var(--sp-6) 60px;
 }
 
-/* A converter is used, not admired: the title is one compact row beside a
-   small logo, so the two inputs sit just under the header instead of half
-   way down the window behind a 180px logo. */
-.scale-hero {
-  display: grid; grid-template-columns: auto 1fr; column-gap: var(--sp-4);
-  align-items: center; margin-bottom: var(--sp-6);
-}
-
-.scale-hero-title {
-  font-size: var(--fs-title); font-weight: 700; letter-spacing: 0.2px;
-  margin-bottom: var(--sp-1);
-}
-
-.scale-hero-sub {
-  color: var(--text-2); font-size: 14px; line-height: 1.55;
-}
-
-.scale-hero-examples {
-  color: var(--text-2); font-size: 14px;
-  margin: var(--sp-1) 0 0; line-height: 1.55;
-}
+/* The converter is the tool, so it is at the top; the name, the logo and the
+   paste examples sit beneath it at full size rather than shrunk beside a
+   title. "you shrunk down the graphic ... the scale and unit converter
+   should be on the bottom below all that." */
+.scale-hero { text-align: center; margin-top: var(--sp-8); }
+.scale-hero-title { font-size: 26px; font-weight: 700; letter-spacing: 0.2px; margin-bottom: var(--sp-2); }
+.scale-hero-sub { color: var(--text-2); font-size: var(--fs-emph); max-width: 780px; margin: 0 auto; line-height: 1.55; }
+.scale-hero-examples { color: var(--text-2); font-size: var(--fs-emph); max-width: 780px; margin: 6px auto 0; line-height: 1.55; }
 
 .scale-hero-sub code, .scale-hero-examples code {
   padding: 2px 6px; border-radius: var(--r-xs);
@@ -5096,9 +5083,9 @@ body.tool-scale {
   font-family: var(--mono); font-size: 12px; color: var(--text);
 }
 
-.scale-hero-logo { grid-row: 1 / span 3; margin: 0; }
+.scale-hero-logo { margin: 0 0 var(--sp-6); }
 
-.scale-hero-logo img { max-height: 64px; display: block; }
+.scale-hero-logo img { max-height: 180px; }
 
 .scale-grid {
   display: grid; grid-template-columns: 1fr auto 1fr; gap: 20px;
