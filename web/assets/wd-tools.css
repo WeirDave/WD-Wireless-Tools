@@ -8754,8 +8754,6 @@ body.pt-busy { cursor: progress; }
 body.tool-plantrim .dropzone-logo { background-image: url(plantrim-v1.0-560x480.png); }
 
 /* ── AP Labeler header & dropzone ───────────────────────────── */
-body.tool-aprename .header-actions .btn-primary { background: var(--indigo); border-color: var(--indigo); }
-body.tool-aprename .header-actions .btn-primary:hover { background: var(--indigo-dark); border-color: var(--indigo-dark); }
 
 body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x560.png); }
 
@@ -10545,10 +10543,21 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
    Moved out of ap-rename.html. */
 /* ── AP Labeler ───────────────────────────────────────────────── */
 .tool-aprename .ar-main    { display:flex; flex-direction:column; flex:1; overflow:hidden; height:calc(100vh - 52px); }
-.tool-aprename .ar-floor-tabs { display:flex; gap:0; border-bottom:1px solid var(--border,#333); overflow-x:auto; background:var(--bg-2,#1a1a2e); flex-shrink:0; }
-.tool-aprename .ar-floor-tab  { padding:8px 16px; font-size:13px; border:none; background:none; color:var(--text-2,#888); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap; }
-.tool-aprename .ar-floor-tab:hover  { color:var(--text,#ddd); }
-.tool-aprename .ar-floor-tab.active { color:var(--text,#fff); border-bottom-color:var(--indigo,var(--indigo)); font-weight:600; }
+/* The workbench row: rail, plan, panel. The footer below it never scrolls. */
+.tool-aprename .ar-wb { display:flex; flex:1; min-height:0; overflow:hidden; }
+.tool-aprename .ar-rail { width:220px; }
+/* Floors are cards on the rail, the way PlanTrim's and Prep's are, and the one
+   being looked at is in AP Labeler's own colour. */
+.tool-aprename .ar-floor-tabs { display:flex; flex-direction:column; gap:var(--sp-2); }
+.tool-aprename .ar-floor-tab  {
+  display:block; width:100%; text-align:left; padding:10px; font:inherit; font-size:13px; font-weight:600;
+  border:1px solid var(--border); border-radius:var(--r-md); background:var(--bg);
+  color:var(--text); cursor:pointer; overflow-wrap:anywhere;
+}
+.tool-aprename .ar-floor-tab:hover  { border-color:var(--tool-accent); }
+.tool-aprename .ar-floor-tab.active {
+  border-color:var(--tool-accent); background:color-mix(in srgb, var(--tool-accent) 12%, var(--bg));
+}
 .tool-aprename .ar-split   { display:flex; flex:1; overflow:hidden; }
 .tool-aprename .ar-plan-wrap { flex:1; overflow:hidden; background:#0c0c14; display:flex; align-items:center; justify-content:center; padding:16px; position:relative; cursor:grab; }
 [data-theme="light"] .tool-aprename .ar-plan-wrap { background:#e8e8ee; }
@@ -10585,8 +10594,8 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 .tool-aprename .ar-cseq-row:hover { transform:translateY(-2px); box-shadow:var(--shadow-lift,0 4px 12px rgba(0,0,0,.35)); border-color:var(--cseq-color,var(--text-3,#888)); }
 .tool-aprename .ar-cseq-row:active { cursor:grabbing; }
 .tool-aprename .ar-cseq-row.dragging { opacity:.35; }
-.tool-aprename .ar-cseq-row.dragover { background-color:var(--accent-dim,rgba(99,102,241,.18)); border-color:var(--cseq-color,var(--indigo,var(--indigo))); box-shadow:inset 0 0 0 1px var(--cseq-color,var(--indigo,var(--indigo))); }
-.tool-aprename .ar-cseq-row:focus-visible { outline:2px solid var(--indigo,var(--indigo)); outline-offset:2px; }
+.tool-aprename .ar-cseq-row.dragover { background-color:var(--accent-dim,color-mix(in srgb, var(--tool-accent) 18%, transparent)); border-color:var(--cseq-color,var(--tool-accent)); box-shadow:inset 0 0 0 1px var(--cseq-color,var(--tool-accent)); }
+.tool-aprename .ar-cseq-row:focus-visible { outline:2px solid var(--tool-accent); outline-offset:2px; }
 .tool-aprename .ar-cseq-edge { position:absolute; left:0; top:0; bottom:0; width:8px; border-radius:6px 0 0 6px; background:var(--cseq-color,#888); }
 .tool-aprename .ar-cseq-dot { display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; border-radius:50%; border:1px solid rgba(0,0,0,.35); font-size:10px; font-weight:700; flex:none; box-sizing:border-box; }
 .tool-aprename .ar-cseq-name { flex:1; color:var(--text,#ddd); }
@@ -10595,14 +10604,14 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 [data-theme="light"] .tool-aprename .ar-cseq-row { background:var(--surface,#fff); }
 [data-theme="light"] .tool-aprename .ar-cseq-new { color:#1d4ed8; border-color:rgba(37,99,235,.4); background:rgba(37,99,235,.1); }
 .tool-aprename .ar-col-note { font-size:11px; color:var(--text-3,#888); line-height:1.55; }
-.tool-aprename .ar-marker.is-unnumbered { background:#fff; color:var(--indigo,var(--indigo)); border:2px dashed var(--indigo,var(--indigo)); box-shadow:0 0 0 1px rgba(0,0,0,.35), 0 1px 4px rgba(0,0,0,.45); font-weight:800; font-size:13px; }
-.tool-aprename .ar-marker.is-unnumbered:hover { background:var(--indigo,var(--indigo)); color:#fff; border-style:solid; }
-.tool-aprename .ar-marker.is-last { box-shadow:0 0 0 3px rgba(99,102,241,.55),0 1px 4px rgba(0,0,0,.5); }
+.tool-aprename .ar-marker.is-unnumbered { background:#fff; color:var(--tool-accent); border:2px dashed var(--tool-accent); box-shadow:0 0 0 1px rgba(0,0,0,.35), 0 1px 4px rgba(0,0,0,.45); font-weight:800; font-size:13px; }
+.tool-aprename .ar-marker.is-unnumbered:hover { background:var(--tool-accent); color:#fff; border-style:solid; }
+.tool-aprename .ar-marker.is-last { box-shadow:0 0 0 3px color-mix(in srgb, var(--tool-accent) 55%, transparent),0 1px 4px rgba(0,0,0,.5); }
 
-.tool-aprename .ar-manual { margin-top:8px; padding:8px; border:1px solid var(--indigo,var(--indigo)); border-radius:var(--r-xs); background:hsla(239,84%,67%,.08); }
+.tool-aprename .ar-manual { margin-top:8px; padding:8px; border:1px solid var(--tool-accent); border-radius:var(--r-xs); background:color-mix(in srgb, var(--tool-accent) 8%, transparent); }
 .tool-aprename .ar-manual-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .tool-aprename .ar-manual-next { font-size:13px; color:var(--text-2,#888); }
-.tool-aprename .ar-manual-next b { color:var(--indigo,var(--indigo)); font-size:16px; font-family:var(--mono,monospace); }
+.tool-aprename .ar-manual-next b { color:var(--tool-accent); font-size:16px; font-family:var(--mono,monospace); }
 .tool-aprename .ar-manual-count { font-size:11px; font-family:var(--mono,monospace); color:var(--text-2,#888); }
 .tool-aprename .ar-manual-hint { font-size:11px; line-height:1.5; color:var(--text-2,#888); margin:6px 0 8px; }
 .tool-aprename .ar-manual-btns { display:flex; gap:6px; }
@@ -10613,11 +10622,11 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 [data-theme="light"] .tool-aprename .ar-marker .ar-tip { background:#fff; color:#222; box-shadow:0 2px 8px rgba(0,0,0,.15); }
 .tool-aprename .ar-marker.is-wide { width:auto; min-width:26px; border-radius:var(--r-lg); padding:0 5px; font-size:9px; }
 .tool-aprename .ar-show-all-btn { background:var(--bg-2,#1e1e2e); color:var(--text-2,#aaa); border:1px solid var(--border,#444); border-radius:var(--r-xs); padding:4px 12px; cursor:pointer; font-size:12px; }
-.tool-aprename .ar-show-all-btn:hover { background:var(--indigo,var(--indigo)); color:#fff; border-color:var(--indigo,var(--indigo)); }
+.tool-aprename .ar-show-all-btn:hover { background:var(--tool-accent); color:#fff; border-color:var(--tool-accent); }
 [data-theme="light"] .tool-aprename .ar-show-all-btn { background:#f5f5f5; color:#555; border-color:#ccc; }
 
 .tool-aprename .ar-splitter { flex:0 0 auto; width:6px; cursor:col-resize; background:var(--border,#333); opacity:.5; transition:opacity .12s, background .12s; }
-.tool-aprename .ar-splitter:hover, .tool-aprename .ar-splitter:focus-visible, body.wd-resizing .tool-aprename .ar-splitter { opacity:1; background:var(--indigo,var(--indigo)); outline:none; }
+.tool-aprename .ar-splitter:hover, .tool-aprename .ar-splitter:focus-visible, body.wd-resizing .tool-aprename .ar-splitter { opacity:1; background:var(--tool-accent); outline:none; }
 body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select:none !important; }
 
 /* The preview is a diff, so it has to be scannable. Names never wrap
@@ -10634,14 +10643,14 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-stem { display:block; padding:7px 9px 8px; border:1px solid var(--border,#333); border-bottom:none; border-radius:4px 4px 0 0; background:var(--bg-3,#252538); }
 [data-theme="light"] .tool-aprename .ar-stem { background:var(--bg-3,#eee); }
 .tool-aprename .ar-stem-cap { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); margin-bottom:5px; }
-.tool-aprename .ar-stem-chg { font-size:9px; font-weight:700; letter-spacing:.4px; padding:1px 5px; border-radius:var(--r-xs); color:var(--indigo,var(--indigo)); background:rgba(99,102,241,.16); }
-[data-theme="light"] .tool-aprename .ar-stem-chg { color:#4338ca; background:rgba(67,56,202,.12); }
+.tool-aprename .ar-stem-chg { font-size:9px; font-weight:700; letter-spacing:.4px; padding:1px 5px; border-radius:var(--r-xs); color:var(--tool-accent); background:color-mix(in srgb, var(--tool-accent) 16%, transparent); }
+[data-theme="light"] .tool-aprename .ar-stem-chg { color:var(--tool-title); background:color-mix(in srgb, var(--tool-accent) 12%, transparent); }
 .tool-aprename .ar-stem-line { display:flex; align-items:baseline; gap:8px; font-family:var(--mono,monospace); font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
 .tool-aprename .ar-stem-key { flex:0 0 auto; min-width:54px; white-space:nowrap; font-family:var(--sans,sans-serif); font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); }
 .tool-aprename .ar-stem-val { font-weight:700; color:var(--text,#ddd); }
 [data-theme="light"] .tool-aprename .ar-stem-val { color:#222; }
-.tool-aprename .ar-stem-line.is-new .ar-stem-val { color:var(--indigo,var(--indigo)); }
-[data-theme="light"] .tool-aprename .ar-stem-line.is-new .ar-stem-val { color:#4338ca; }
+.tool-aprename .ar-stem-line.is-new .ar-stem-val { color:var(--tool-accent); }
+[data-theme="light"] .tool-aprename .ar-stem-line.is-new .ar-stem-val { color:var(--tool-title); }
 .tool-aprename .ar-stem-tail { color:var(--text-3,#666); font-weight:400; }
 .tool-aprename .ar-stem-none { color:var(--text-3,#666); font-weight:400; font-style:italic; font-family:var(--sans,sans-serif); font-size:12px; }
 /* The two name columns show the whole name, wrapping rather than being cut.
@@ -10653,8 +10662,8 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
   font-family:var(--mono,monospace); white-space:normal; overflow-wrap:anywhere;
   word-break:break-word; line-height:1.35;
 }
-.tool-aprename .ar-preview td.ar-new { color:var(--indigo,var(--indigo)); font-weight:600; }
-[data-theme="light"] .tool-aprename .ar-preview td.ar-new { color:#4338ca; }
+.tool-aprename .ar-preview td.ar-new { color:var(--tool-accent); font-weight:600; }
+[data-theme="light"] .tool-aprename .ar-preview td.ar-new { color:var(--tool-title); }
 .tool-aprename .ar-preview .ar-stem-mute { color:var(--text-3,#666); font-weight:400; }
 
 /* The sidebar is a column that does not itself scroll: the settings above
@@ -10677,7 +10686,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-fold-caret { margin-left:auto; font-size:10px; opacity:.6; transition:transform .12s; }
 .tool-aprename .ar-foldable.is-folded .ar-fold-caret { transform:rotate(-90deg); }
 .tool-aprename .ar-foldable.is-folded > *:not(.ar-section-head) { display:none; }
-.tool-aprename .ar-foldable > .ar-section-head:focus-visible { outline:2px solid var(--indigo,var(--indigo)); outline-offset:2px; border-radius:var(--r-xs); }
+.tool-aprename .ar-foldable > .ar-section-head:focus-visible { outline:2px solid var(--tool-accent); outline-offset:2px; border-radius:var(--r-xs); }
 [data-theme="light"] .tool-aprename .ar-sidebar { background:var(--bg-2,#f4f4f8); }
 .tool-aprename .ar-group   { display:flex; flex-direction:column; gap:5px; }
 .tool-aprename .ar-lbl     { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--text-2,#888); }
@@ -10708,7 +10717,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 [data-theme="light"] .tool-aprename .ar-preview th { background:var(--bg-3,#eee); }
 .tool-aprename .ar-preview td  { padding:3px 8px; border-top:1px solid var(--border,#2a2a3a); }
 [data-theme="light"] .tool-aprename .ar-preview td { border-top-color:var(--border,#ddd); }
-.tool-aprename .ar-preview tr.changed td { background:hsla(239,84%,67%,.1); }
+.tool-aprename .ar-preview tr.changed td { background:color-mix(in srgb, var(--tool-accent) 10%, transparent); }
 .tool-aprename .ar-preview tr.unnumbered td { opacity:.5; }
 .tool-aprename .ar-preview .ar-num   { color:var(--text-2,#666); width:28px; text-align:right; }
 .tool-aprename .ar-preview .ar-arrow { color:var(--text-2,#666); width:22px; text-align:center; }
@@ -10717,10 +10726,10 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 
 .tool-aprename .ar-mode-tabs { display:flex; gap:0; border:1px solid var(--border,#444); border-radius:var(--r-xs); overflow:hidden; }
 .tool-aprename .ar-mode-tab  { flex:1; padding:5px 10px; font-size:12px; font-weight:600; border:none; cursor:pointer; background:var(--bg-3,#252538); color:var(--text-2,#888); transition:background .15s,color .15s; }
-.tool-aprename .ar-mode-tab.active { background:var(--indigo,var(--indigo)); color:#fff; }
+.tool-aprename .ar-mode-tab.active { background:var(--tool-accent); color:#fff; }
 .tool-aprename .ar-mode-tab:not(.active):hover { background:var(--bg-2,#2a2a3e); color:var(--text,#ddd); }
 [data-theme="light"] .tool-aprename .ar-mode-tab { background:var(--bg-3,#eee); color:var(--text-2,#666); }
-[data-theme="light"] .tool-aprename .ar-mode-tab.active { background:var(--indigo,var(--indigo)); color:#fff; }
+[data-theme="light"] .tool-aprename .ar-mode-tab.active { background:var(--tool-accent); color:#fff; }
 
 .tool-aprename .ar-auto-lbl { display:flex; align-items:center; gap:3px; font-size:11px; color:var(--text-2,#888); white-space:nowrap; cursor:pointer; user-select:none; }
 .tool-aprename .ar-auto-lbl input { margin:0; }
@@ -10729,7 +10738,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-section { display:flex; flex-direction:column; gap:8px; padding-bottom:10px; border-bottom:1px solid var(--border,#333); }
 .tool-aprename .ar-section:last-of-type { padding-bottom:4px; border-bottom:none; }
 .tool-aprename .ar-section-head { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--text-2,#888); }
-.tool-aprename .ar-section-num { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:var(--r-xs); background:hsla(239,84%,67%,.12); color:var(--indigo,var(--indigo)); font-size:10px; font-weight:700; font-family:var(--mono,monospace); }
+.tool-aprename .ar-section-num { display:inline-flex; align-items:center; justify-content:center; width:18px; height:18px; border-radius:var(--r-xs); background:color-mix(in srgb, var(--tool-accent) 12%, transparent); color:var(--tool-accent); font-size:10px; font-weight:700; font-family:var(--mono,monospace); }
 
 .tool-aprename .ar-segments { display:flex; flex-direction:column; gap:5px; }
 /* Wraps rather than pushing the whole column sideways. A counter row is
@@ -10741,7 +10750,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 /* A hint long enough to explain itself has to be allowed onto its own line;
    at the dock's width it was running underneath the remove button. */
 .tool-aprename .ar-seg-lbl.ar-seg-hint { flex:1 0 100%; white-space:normal; line-height:1.35; }
-.tool-aprename .ar-seg-row:hover { border-color:hsla(239,84%,67%,.3); }
+.tool-aprename .ar-seg-row:hover { border-color:color-mix(in srgb, var(--tool-accent) 30%, transparent); }
 [data-theme="light"] .tool-aprename .ar-seg-row { background:var(--bg-3,#f0f0f4); }
 .tool-aprename .ar-seg-handle { cursor:grab; color:var(--text-3,#555); font-size:13px; padding:0 2px; user-select:none; line-height:1; }
 .tool-aprename .ar-seg-handle:hover { color:var(--text-2,#888); }
@@ -10750,8 +10759,8 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 [data-theme="light"] .tool-aprename .ar-seg-type.t-text { background:#e4e4ed; color:#6b6b82; }
 .tool-aprename .ar-seg-type.t-floor { background:hsla(160,64%,52%,.12); color:var(--green-light); }
 [data-theme="light"] .tool-aprename .ar-seg-type.t-floor { background:hsla(160,96%,26%,.1); color:#059669; }
-.tool-aprename .ar-seg-type.t-counter { background:hsla(239,84%,67%,.12); color:var(--indigo,var(--indigo)); }
-[data-theme="light"] .tool-aprename .ar-seg-type.t-counter { background:hsla(239,84%,67%,.1); color:#4338ca; }
+.tool-aprename .ar-seg-type.t-counter { background:color-mix(in srgb, var(--tool-accent) 12%, transparent); color:var(--tool-accent); }
+[data-theme="light"] .tool-aprename .ar-seg-type.t-counter { background:color-mix(in srgb, var(--tool-accent) 10%, transparent); color:var(--tool-title); }
 .tool-aprename .ar-seg-input { flex:1; min-width:0; font-family:var(--mono,monospace); font-size:12px; font-weight:500; color:var(--text,#ddd); background:none; border:none; outline:none; padding:2px 0; }
 .tool-aprename .ar-seg-input::placeholder { color:var(--text-3,#555); }
 .tool-aprename .ar-seg-input[type="number"] { -moz-appearance:textfield; }
@@ -10759,7 +10768,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-seg-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance:none; margin:0; }
 [data-theme="light"] .tool-aprename .ar-seg-input { color:var(--text,#222); }
 .tool-aprename .ar-seg-input-bordered { background:var(--bg-2,#1e1e2e); border:1px solid var(--border,#444); border-radius:var(--r-xs); padding:2px 5px; }
-.tool-aprename .ar-seg-input-bordered:focus { border-color:var(--indigo,var(--indigo)); }
+.tool-aprename .ar-seg-input-bordered:focus { border-color:var(--tool-accent); }
 [data-theme="light"] .tool-aprename .ar-seg-input-bordered { background:var(--bg-2,#fff); }
 .tool-aprename .ar-seg-lbl { font-size:10px; color:var(--text-3,#666); white-space:nowrap; user-select:none; }
 .tool-aprename .ar-seg-meta { font-size:10px; color:var(--text-3,#555); white-space:nowrap; font-family:var(--mono,monospace); }
@@ -10772,8 +10781,8 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
    was "buried" - by the person who designed the tool. A name here is
    built from parts, so the control that adds a part has to read as the
    next thing to do. */
-.tool-aprename .ar-add-btn { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; padding:9px 12px; border:1px solid var(--indigo,var(--indigo)); border-radius:var(--r-sm); background:hsla(239,84%,67%,.10); color:var(--indigo,var(--indigo)); font-size:13px; font-family:inherit; font-weight:600; cursor:pointer; transition:all .12s; }
-.tool-aprename .ar-add-btn:hover { background:hsla(239,84%,67%,.20); border-color:var(--indigo,var(--indigo)); }
+.tool-aprename .ar-add-btn { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; padding:9px 12px; border:1px solid var(--tool-accent); border-radius:var(--r-sm); background:color-mix(in srgb, var(--tool-accent) 10%, transparent); color:var(--tool-accent); font-size:13px; font-family:inherit; font-weight:600; cursor:pointer; transition:all .12s; }
+.tool-aprename .ar-add-btn:hover { background:color-mix(in srgb, var(--tool-accent) 20%, transparent); border-color:var(--tool-accent); }
 .tool-aprename .ar-add-menu { position:absolute; top:100%; left:0; right:0; margin-top:3px; background:var(--bg-3,#252538); border:1px solid var(--border,#444); border-radius:var(--r-xs); box-shadow:0 6px 20px rgba(0,0,0,.4); z-index:10; overflow:hidden; }
 [data-theme="light"] .tool-aprename .ar-add-menu { background:#fff; box-shadow:0 6px 20px rgba(0,0,0,.12); }
 .tool-aprename .ar-add-item { display:flex; align-items:center; gap:7px; padding:7px 10px; border:none; background:none; color:var(--text,#ddd); font-family:inherit; font-size:12px; cursor:pointer; width:100%; text-align:left; }

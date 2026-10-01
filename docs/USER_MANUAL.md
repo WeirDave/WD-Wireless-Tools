@@ -1172,8 +1172,7 @@ The **Cut and save** button in the footer changes with the work left to do. Whil
 is still set to automatic it reads **Cut and save**, and the note beside it
 counts what will happen. Once every crop on the table is a box you drew
 yourself it reads **Save trimmed .esx** instead — the cutting decisions are all
-made and the only thing left is writing the file. The button in the top right
-does the same job from anywhere on the page.
+made and the only thing left is writing the file.
 
 ### Vector plans — DWG and PDF imports
 
@@ -1595,13 +1594,13 @@ it has, exactly, in the downloaded `.esx`.
 
 - **Whole project** *(default)* — every floor is renamed.
 - **This floor only** — only the floor on screen when the button is pressed.
-  Looking at another floor tab afterwards does not change it; press the button
+  Looking at another floor afterwards does not change it; press the button
   again on another floor to move it. This is the one to use after adding a
   floor to a project that is already labelled.
 - **Choose floors** — a list of floors with a checkbox each, plus **Tick all**
   and **Tick none**. It opens with the floor on screen ticked.
 
-Floors that are not being renamed show dimmed in the floor tabs, their AP
+Floors that are not being renamed show dimmed in the floor list down the left, their AP
 markers are faded, and the preview heading says **this floor is not being
 renamed**.
 
@@ -1705,7 +1704,7 @@ number column.
 
 ### Preview and download
 
-The preview table shows the first five current→new name mappings with a toggle to expand. Once satisfied, click **Download labeled .esx** to save the renamed file.
+The preview table shows the first five current→new name mappings with a toggle to expand. Once satisfied, click **Download labeled .esx** in the footer at the bottom right to save the renamed file. The footer says how many access points the download will rename.
 
 Above the table, a line shows what every name on the floor has in common before
 and after, so the part that is actually changing is the part you read. The table

@@ -106,12 +106,20 @@
     </div>
     <div class="header-actions">
       <button class="btn btn-sec" data-action="call" data-fn="arLoadNew">Open another</button>
-      <button class="btn btn-primary" id="arDownloadBtn" data-action="call" data-fn="arDownload" disabled>Download labeled .esx</button>
     </div>
   </div>
 
+  <!-- The workbench shell Prep and PlanTrim use: floors down the left, the
+       plan, the naming panel on the right (still resizable), and the one verb
+       in a footer that says what it will write. -->
   <div class="ar-main">
-    <div id="arFloorTabs" class="ar-floor-tabs"></div>
+   <div class="ar-wb">
+    <nav class="pb-rail ar-rail" aria-label="Floors">
+      <div class="pb-rail-head">Floors</div>
+      <div id="arFloorTabs" class="ar-floor-tabs"></div>
+      <div class="pb-rail-foot">Click a floor to see it. A floor left out of
+        <b>Floors to rename</b> is dimmed here and keeps its names.</div>
+    </nav>
     <div class="ar-split">
       <div class="ar-plan-wrap" id="arPlanWrap">
         <div class="ar-no-plan" id="arNoPlan">Loading floor plans&hellip;</div>
@@ -362,6 +370,11 @@
 
       </div>
     </div>
+   </div>
+    <footer class="pb-footer ar-footer">
+      <div class="pb-willwrite" id="arWillWrite"></div>
+      <button class="btn btn-primary pb-prepare" id="arDownloadBtn" data-action="call" data-fn="arDownload" disabled>Download labeled .esx</button>
+    </footer>
   </div>
 </div>
 

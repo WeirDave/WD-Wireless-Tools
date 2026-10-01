@@ -2475,6 +2475,20 @@
       }
     }
     $('arDownloadBtn').disabled = !hasChanges;
+    var note = $('arWillWrite');
+    if (note) note.textContent = willWriteText(S.preview, dupes.length);
+  }
+
+  /* The footer says what the download will do, beside the button that does
+     it - the same promise the workbench footer makes in Prep and PlanTrim. */
+  function willWriteText(items, dupes) {
+    if (!items || !items.length) return '';
+    var n = items.filter(function (it) { return it.oldName !== it.newName; }).length;
+    if (!n) return 'Nothing to rename: every access point already has the name this pattern gives it.';
+    return n + ' of ' + items.length + ' access point' + (items.length === 1 ? '' : 's')
+      + ' will be renamed'
+      + (dupes ? ', with ' + dupes + ' name' + (dupes === 1 ? '' : 's') + ' used more than once' : '')
+      + '. A new copy is downloaded; your file is not changed.';
   }
 
   window._arShowAll = function () {
