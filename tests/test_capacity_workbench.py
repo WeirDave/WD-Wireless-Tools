@@ -9,7 +9,8 @@ footer, which never scrolls away, beside the sentence saying what it will do.
 Read from the page as the browser builds it:
 
 * every step on the rail points at a card that exists - a rail entry that
-  scrolls nowhere is a control that does nothing;
+  goes nowhere is a control that does nothing. What pressing one does is
+  driven in a browser by `test_capacity_steps_browser.py`;
 * the footer is outside the scrolling column, and holds the button and its
   note.
 """
@@ -35,8 +36,8 @@ class _Page(HTMLParser):
         if d.get("id"):
             self.ids.add(d["id"])
             self.where[d["id"]] = list(self.stack)
-        if d.get("data-action") == "scroll-target":
-            self.jumps.append((d.get("data-target"), list(self.stack)))
+        if d.get("data-fn") == "capGoTo":
+            self.jumps.append((d.get("data-arg"), list(self.stack)))
         if tag == "footer":
             self.where["<footer>"] = list(self.stack)
         if tag not in self.VOID:
@@ -56,7 +57,8 @@ def _page():
 class CapacityShell(unittest.TestCase):
     def test_the_rail_has_the_three_steps(self):
         on_rail = [t for t, stack in _page().jumps if "pb-rail" in stack]
-        self.assertEqual(on_rail, ["capStep1", "capDeriveCard", "capStep3"])
+        # Applying a template is the everyday job, so it comes first.
+        self.assertEqual(on_rail, ["capStep3", "capStep1", "capDeriveCard"])
 
     def test_every_step_points_at_a_card_that_exists(self):
         p = _page()

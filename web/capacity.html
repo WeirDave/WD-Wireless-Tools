@@ -111,26 +111,28 @@
   <!-- The workbench shell the file tools share. Capacity has no plan to draw
        on, so the middle is its three steps; the rail jumps between them, and
        the one verb sits in the footer with the sentence that says what it
-       will write. -->
+       will write. Applying a template is the everyday job, so it is first:
+       it used to be third, below a read-only table, and was found by
+       scrolling past two cards that offered nothing to click. -->
   <div class="pb-body">
    <nav class="pb-rail" aria-label="Steps">
     <div class="pb-rail-head">Steps</div>
-    <div class="pb-stage">
-      <button type="button" class="pb-stage-open" data-action="scroll-target" data-target="capStep1">
-        <span class="pb-stage-name">1 &middot; What this project asks for</span>
-        <span class="pb-stage-status">The requirement areas, devices and usage read from the open project</span>
+    <div class="pb-stage is-current" data-step="capStep3">
+      <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capStep3">
+        <span class="pb-stage-name">1 &middot; Apply a template</span>
+        <span class="pb-stage-status">Pick a template and a headcount per floor; the project gets requirement areas to match</span>
       </button>
     </div>
-    <div class="pb-stage">
-      <button type="button" class="pb-stage-open" data-action="scroll-target" data-target="capDeriveCard">
-        <span class="pb-stage-name">2 &middot; Save as a template</span>
-        <span class="pb-stage-status">Opens once the project has requirement areas to read; stored per person, so it fits any size of building</span>
+    <div class="pb-stage" data-step="capStep1">
+      <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capStep1">
+        <span class="pb-stage-name">2 &middot; What this project asks for</span>
+        <span class="pb-stage-status">Read only: the devices and usage already set up in the open project</span>
       </button>
     </div>
-    <div class="pb-stage">
-      <button type="button" class="pb-stage-open" data-action="scroll-target" data-target="capStep3">
-        <span class="pb-stage-name">3 &middot; Apply a template</span>
-        <span class="pb-stage-status">A headcount per floor turns a template into requirement areas</span>
+    <div class="pb-stage" data-step="capDeriveCard">
+      <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capDeriveCard">
+        <span class="pb-stage-name">3 &middot; Save as a template</span>
+        <span class="pb-stage-status">Turns step 2 into a template you can apply to any size of building</span>
       </button>
     </div>
     <div class="pb-rail-foot">
@@ -142,35 +144,10 @@
    <main class="pb-main cap-main">
    <div class="cap-wrap">
 
-    <div class="cap-card" id="capStep1">
-      <div class="cap-step">1 &mdash; What this project is asking for</div>
-      <div id="capExtract"></div>
-    </div>
-
-    <div class="cap-card" id="capDeriveCard" hidden>
-      <div class="cap-step">2 &mdash; Turn it into a template</div>
-      <div class="cap-row">
-        <label for="capOccupants">This project was designed for</label>
-        <input type="number" id="capOccupants" class="cap-input cap-input--num" min="1" step="1" value="500"
-               data-action-input="call" data-fn="capDerive">
-        <label for="capOccupants">people</label>
-      </div>
-      <p class="cap-hint">
-        Everything is stored per person, so a template captured from a 500-person
-        building applies correctly to a 200-person one. Check the per-person column
-        below matches what you intended before saving.
-      </p>
-      <div id="capDerived"></div>
-      <div class="cap-row mt-12">
-        <label for="capName">Save as</label>
-        <input type="text" id="capName" class="cap-input cap-input--name" placeholder="e.g. Office, Wi-Fi 6E">
-        <button class="btn btn-primary" data-action="call" data-fn="capSave">Save template</button>
-      </div>
-    </div>
-
     <div class="cap-card" id="capStep3">
-      <div class="cap-step">3 &mdash; Apply a template to this project</div>
-      <div class="cap-tpl-list" id="capTemplates"></div>
+      <div class="cap-step">1 &mdash; Apply a template to this project</div>
+      <p class="cap-lead">Pick a template:</p>
+      <div class="cap-tpl-list" id="capTemplates" role="radiogroup" aria-label="Templates"></div>
       <div class="cap-row mt-12">
         <label for="capHeadcount">Each floor is for</label>
         <input type="number" id="capHeadcount" class="cap-input cap-input--num" min="1" step="1" value="200"
@@ -201,6 +178,32 @@
       </p>
       <div id="capPlan"></div>
       <div id="capResult"></div>
+    </div>
+
+    <div class="cap-card" id="capStep1">
+      <div class="cap-step">2 &mdash; What this project is asking for <span class="cap-step-note">read only</span></div>
+      <div id="capExtract"></div>
+    </div>
+
+    <div class="cap-card" id="capDeriveCard" hidden>
+      <div class="cap-step">3 &mdash; Save it as a template</div>
+      <div class="cap-row">
+        <label for="capOccupants">This project was designed for</label>
+        <input type="number" id="capOccupants" class="cap-input cap-input--num" min="1" step="1" value="500"
+               data-action-input="call" data-fn="capDerive">
+        <label for="capOccupants">people</label>
+      </div>
+      <p class="cap-hint">
+        Everything is stored per person, so a template captured from a 500-person
+        building applies correctly to a 200-person one. Check the per-person column
+        below matches what you intended before saving.
+      </p>
+      <div id="capDerived"></div>
+      <div class="cap-row mt-12">
+        <label for="capName">Save as</label>
+        <input type="text" id="capName" class="cap-input cap-input--name" placeholder="e.g. Office, Wi-Fi 6E">
+        <button class="btn btn-primary" data-action="call" data-fn="capSave">Save template</button>
+      </div>
     </div>
 
    </div>

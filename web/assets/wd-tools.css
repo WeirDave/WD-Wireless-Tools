@@ -10939,6 +10939,27 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
   border: 1px solid var(--border); border-radius: var(--r-sm); cursor: pointer;
 }
 .cap-tpl.is-on { border-color: var(--blue); background: var(--surface-hover); }
+/* A template is a choice, so it looks like one: a radio dot, a hover, and the
+   whole row is the button. It was a plain row that gave no sign it could be
+   pressed. */
+button.cap-tpl { width: 100%; text-align: left; font: inherit; color: var(--text); background: transparent; cursor: pointer; }
+button.cap-tpl:hover { border-color: var(--text-3); background: var(--surface-hover); }
+.cap-tpl-dot {
+  flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--text-3); box-sizing: border-box;
+}
+.cap-tpl.is-on .cap-tpl-dot { border-color: var(--blue); background: radial-gradient(var(--blue) 0 45%, transparent 50%); }
+.cap-lead { margin: 0 0 var(--sp-2); font-size: var(--fs-emph); font-weight: 600; }
+.cap-step-note {
+  margin-left: var(--sp-2); padding: 1px 8px; border-radius: var(--radius-pill);
+  border: 1px solid var(--border); color: var(--text-2);
+  font-size: var(--fs-small); font-weight: 600; text-transform: none; letter-spacing: 0;
+}
+.cap-card.is-flash { animation: cap-flash 1.2s ease-out; }
+@keyframes cap-flash {
+  0% { box-shadow: 0 0 0 3px var(--tool-accent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
 .cap-tpl-name { font-size: 13px; font-weight: 600; flex: 1 1 auto; }
 .cap-tpl-meta { font-size: 11px; color: var(--text-3); }
 .cap-apply { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
