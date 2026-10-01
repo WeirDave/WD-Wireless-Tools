@@ -50,11 +50,31 @@ def _rules(css: str) -> list[tuple[str, str]]:
     return _RULES
 
 
+def _parts(sel: str) -> list[str]:
+    """A selector list split on its top-level commas - the ones not inside
+    `:is(...)`. Matching the whole list with one regular expression
+    backtracked exponentially on long lists and hung the suite."""
+    out, depth, cur = [], 0, ""
+    for ch in sel:
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        if ch == "," and depth == 0:
+            out.append(cur.strip())
+            cur = ""
+        else:
+            cur += ch
+    out.append(cur.strip())
+    return out
+
+
 def _blocks(css: str, selector_re: str) -> dict[str, str]:
-    """Custom properties declared in rules whose selector matches."""
+    """Custom properties declared in rules where one selector in the list
+    matches `selector_re` in full."""
     out: dict[str, str] = {}
     for sel, body in _rules(css):
-        if re.fullmatch(selector_re, sel):
+        if any(re.fullmatch(selector_re, part) for part in _parts(sel)):
             for name, value in re.findall(r"(--[\w-]+)\s*:\s*([^;]+);", body):
                 out[name] = value.strip()
     return out
@@ -74,11 +94,12 @@ class Palette:
         if theme == "light":
             self.vars.update(_blocks(css, r'\[data-theme="light"\]'))
         self.vars.update(_blocks(css, r"body"))
-        tool_sel = rf"(?:[^,]*,\s*)*body\.{tool}(?:\s*,[^,]*)*"
-        self.vars.update(_blocks(css, tool_sel))
+        self.vars.update(_blocks(css, rf"body\.{tool}"))
         if theme == "light":
+            # `[data-theme="light"] body.tool-x`, or the same inside `:is(...)`
+            # alongside other tools.
             self.vars.update(_blocks(
-                css, rf'\[data-theme="light"\] (?::is\()?(?:[^,]*,\s*)*body\.{tool}(?:\s*,[^,)]*)*\)?'))
+                css, rf'\[data-theme="light"\] (?:body\.{tool}|:is\((?:[^()]*,\s*)?body\.{tool}(?:\s*,[^()]*)?\))'))
 
     def resolve(self, value: str, depth: int = 0) -> tuple[float, float, float]:
         if depth > 12:

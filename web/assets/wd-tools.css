@@ -11905,3 +11905,86 @@ body.tool-aprename .pb-panel select { font-size: var(--rd-body); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   vertical-align: middle;
 }
+
+/* Arriving at a section from a tool's Settings link: it is opened, scrolled
+   to, and marked for a moment so the eye lands on it. */
+.s-section.is-arrived { animation: s-arrived 1.6s ease-out; }
+@keyframes s-arrived {
+  0% { box-shadow: 0 0 0 3px var(--accent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+
+/* The states the first measurement did not see - an empty list, a warning,
+   a dialog, the colour sequence, the wall audit, a project still being
+   read. Found by listing every class in these five tools set below 13px;
+   Prep's "Reading the project..." was caught by CI, which was slower to read
+   the project than this machine. `:is(...)` puts these above the older
+   per-tool rules they replace. */
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-add-badge,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-cseq-dot,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-cseq-new,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .cap-badge,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-badge,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-chip,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-step,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-order,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .wall-keybind-badge,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-floor-label,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-sel-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-sel-group-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-auto-lbl,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-lbl,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-nest-label,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-manual-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-fp-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-panel-header,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-swap-label,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .hotkey-panel-header,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-collapse-all,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-seg-len { font-size: var(--rd-tag); }
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-col-note,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-cseq-lab,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-cseq-row,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-dupe-warn,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-manual-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-tip,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-add-item,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-show-all-btn,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .cap-done,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .cap-facts,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .pb-check,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .pb-field,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .pb-floor,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .pb-inline,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-done,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-empty,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-facts,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-toggle-why,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-warn,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-cut-note,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-evidence,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-floor,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-margin-group,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-empty,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-floor-picker,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-floorbar,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-status,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-footer-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-numbers-toggle,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-panel-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-panhint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-legend-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-seg-row,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-target-select,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .template-bar-auto,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .tpl-folder-info,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .tpl-save-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .tpl-share-desc,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .wall-audit-detail,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .wall-audit-why { font-size: var(--rd-small); }
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-seg-input,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-sep-input,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-intro,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-toggle-name { font-size: var(--rd-body); }
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-row label, :is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-quick-row label { font-size: var(--rd-small); }

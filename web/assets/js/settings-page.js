@@ -47,14 +47,44 @@
      page is eight sections long, so a section that opens below the fold
      leaves the person who clicked the gear looking at the top of the page,
      hunting for the control they just asked for. Scroll to it as well. */
+  /* Arriving for one tool, that tool's section is the page: the others fold
+     so the one asked for is at the top rather than wherever the page's end
+     lets it scroll to, and every other section is still one click away. The
+     second scroll is for the overviews and templates that load in above it
+     after the first.
+
+     Everything it needs is inside it: tests run this function on its own,
+     lifted out of the file. */
   function openHashSection() {
-    var hash = location.hash.replace('#', '');
+    /* Where each tool's settings live. A tool with no section of its own is
+       sent to the one that holds its settings, rather than to the top of the
+       page: "I don't need to open up settings and have to rifle through the
+       damn settings box in order to find my [settings] for Quick Walls". */
+    var SECTION_FOR = {
+      plantrim: 'elsewhere', aprename: 'elsewhere', rename: 'elsewhere',
+      prep: 'capacity'
+    };
+    /* Both spellings are accepted - `#capacity` and `#sec-capacity` -
+       because links were written both ways and only one of them ever worked:
+       the `#sec-` form looked for `sec-sec-capacity` and landed at the top. */
+    var hash = String(location.hash || '').replace(/^#/, '').replace(/^sec-/, '');
     if (!hash) return;
-    var sec = document.getElementById('sec-' + hash);
+    var sec = document.getElementById('sec-' + (SECTION_FOR[hash] || hash));
     if (!sec) return;
+    if (document.querySelectorAll) {
+      Array.prototype.forEach.call(document.querySelectorAll('details.s-section'),
+        function (d) { d.open = d === sec; });
+    }
     sec.open = true;
     sec.scrollIntoView({ block: 'start' });
+    setTimeout(function () { sec.scrollIntoView({ block: 'start' }); }, 400);
+    if (sec.classList) {
+      sec.classList.remove('is-arrived');
+      void sec.offsetWidth;
+      sec.classList.add('is-arrived');
+    }
   }
+  window.addEventListener('hashchange', openHashSection);
 
 
   function populate() {
