@@ -966,7 +966,7 @@ Crops the empty paper off each CAD sheet and moves every AP, wall and area with 
 - **Draw my own** starts a box from what automatic keeps, with handles on it.
 - **Apply to all floors** copies this floor's box to every other floor of the same sheet size.
 - **Back to automatic** takes this floor's box away.
-- **Margin around the drawing** is the same setting as PlanTrim's Margin, measured on each plan's own scale.
+- **Space to leave around the building** is the same setting as PlanTrim's, measured on each plan's own scale.
 
 Boxes are PlanTrim's own, saved for this project as soon as you let go, so a box drawn in either tool is the one both use - and a box drawn in PlanTrim shows here as **Your box** when the project opens.
 
@@ -1028,7 +1028,7 @@ The exception is the whole reason to run it a second time. The first pass has no
 
 ### If a step cannot run
 
-Prep refuses rather than guessing, and nothing is written when it does. The most common case is a capacity template that does not carry definitions for profiles the target project has never seen — it names each missing profile, and the fix is to open that template with **Edit** in Capacity, with a project open that has those profiles, and save it again — or add those profiles in Ekahau first.
+Prep refuses rather than guessing, and nothing is written when it does. The step in the left-hand list says **Cannot run — select this step to read why**; select it and the full reason is at the top of that step's panel. The most common case is a capacity template that does not carry definitions for profiles the target project has never seen — it names each missing profile, and the fix is to open that template with **Edit** in Capacity, with a project open that has those profiles, and save it again — or add those profiles in Ekahau first.
 
 ---
 
@@ -1041,8 +1041,20 @@ of white paper around the building. In Ekahau that means you zoom past empty
 space all day, the file is larger than it needs to be, and heat maps render
 across acres of nothing.
 
-Think of it as scissors on a large sheet: you decide what to keep and everything
-outside that rectangle is cut away. The part that matters is what happens to
+The panel on the right says it in one line: **Keep the building, lose the
+rest.** There are two ways to say what to keep:
+
+- **Let PlanTrim find the building.** It does this for every floor as soon as
+  the project opens. The dashed outline on the plan is what will be kept, with
+  the **Space to leave around the building** around it.
+- **Or draw it yourself.** Drag a box on the plan around what to keep. Anything
+  outside the box is cut. Useful for sketchy drawings, or a PDF or JPG where
+  the detector cannot tell the building from the notes.
+
+**Check the corners before you cut.** Faint or thin lines are easy to lose at
+the edge. The four buttons under that heading — **Top left**, **Top right**,
+**Bottom left**, **Bottom right** — each zoom right in on one corner of what
+will be kept. **↺ Reset view** goes back to the whole sheet. The part that matters is what happens to
 what is already drawn on the plan. Access points, walls, areas, notes, survey
 routes and reference points all have coordinates measured from the corner of the
 sheet — move the corner and every one of them has to move with it, or your APs
@@ -1083,11 +1095,15 @@ follow.
 
 | What a row says | What it means |
 | --- | --- |
-| **Automatic** | PlanTrim found the drawing inside the sheet and will crop to it. The sizes and the percentage saved are the real numbers for that floor. |
+| **Automatic** | PlanTrim found the drawing inside the sheet and will crop to it. The row says how much of the sheet it cuts away; hover for the sizes in pixels. |
 | **Your box** | You drew a rectangle and cropped to it. Those are your numbers, not the detector's. |
 | **Nothing to do** | The drawing already fills the sheet, so there is no margin worth cutting. The floor is copied through unchanged. |
 | **Cannot crop** | Something makes a crop unsafe — a geo-anchored plan, for example, whose coordinates are tied to the world rather than to the sheet. The reason is on the row. |
 | **· your box was not used** | You drew a rectangle on that floor and did not press Crop. A rectangle you have not cropped does nothing, and the row says so rather than letting you think it counted. |
+
+On a tall building — past eight floors — the cards become a compact list that
+scrolls inside the left-hand rail, so even forty floors stay reachable without
+pushing the rest of the page away.
 
 **Floor 02 — 2 of 3** under the cards says which floor you are on and how far
 through you are. **Next floor →** steps to the next and greys out on the last.
@@ -1101,7 +1117,7 @@ the same thing.
 
 ### Margin — how much to leave around the building
 
-**Margin around the drawing**, in the panel on the right, decides how far out from the
+**Space to leave around the building**, in the panel on the right, decides how far out from the
 drawing the automatic crop stops. Every setting is a real-world distance
 measured on the plan's own scale, so the same choice means the same distance on
 the ground whatever resolution the sheet was exported at.
@@ -1121,13 +1137,8 @@ canvas that was not in the drawing. If the margin ends up covering the whole
 sheet, the floor simply reports *Nothing to do*.
 
 **This is the same setting Prep uses** (Prep → *1 · Trim the canvas* →
-*Margin around the drawing*). Change it in either tool and both follow, so a project you prepare in Prep
+*Space to leave around the building*). Change it in either tool and both follow, so a project you prepare in Prep
 is cropped the way you set it here.
-
-> **Changed in v2.103.17.** These used to be 3, 6 and 10 *metres* displayed in
-> feet, which read as 10, 20 and 33 ft — and **Tight** was not a distance at all
-> but a flat ten pixels, so it meant something different on every drawing. They
-> are round numbers of feet now and every one converts through the plan's scale.
 
 ### Drawing your own rectangle
 
@@ -1705,14 +1716,20 @@ number column.
 
 ### Preview and download
 
-The preview table shows the first five current→new name mappings with a toggle to expand. Once satisfied, click **Download labeled .esx** in the footer at the bottom right to save the renamed file. The footer says how many access points the download will rename.
+Right under **Name Pattern**, a short example shows what the pattern does:
+the first two APs and the last one, old name beside new. The last one is
+there because a counter or a floor number that goes wrong usually shows at the
+end. **Show all N names** opens every name in a large window; **Close** or
+Escape puts it away. Once satisfied, click **Download labeled .esx** in the
+footer at the bottom right to save the renamed file. The footer says how many
+access points the download will rename.
 
 Above the table, a line shows what every name on the floor has in common before
 and after, so the part that is actually changing is the part you read. The table
 itself omits that shared stem from both columns.
 
 **If any two APs would end up with the same name**, an amber line appears above
-the preview naming them and suggesting the two fixes — add a **Floor** segment,
+the example naming them and suggesting the two fixes — add a **Floor** segment,
 or set **Numbering** to **Continuous** so the counter keeps going instead of restarting
 on each floor. It is a warning, not a block: the Download button stays
 available, because a name you chose deliberately is your decision. Ekahau will
