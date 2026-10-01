@@ -530,7 +530,11 @@
     api('plan', fileBytes, applyQuery()).then(function (r) {
       if (!r || !r.ok) {
         host.innerHTML = '<div class="cap-empty">' + esc((r && r.error) || 'Could not plan that.') + '</div>';
-        setApply(false, 'Nothing to apply.');
+        // The reason is in the card above; the footer points at it rather
+        // than repeat a paragraph, and never just says "nothing".
+        setApply(false, 'This template cannot be applied to this project - the reason is under '
+          + '2 — Apply it to this project.');
+        $('capApplyBtn').textContent = 'Apply and download';
         return;
       }
       // The button says what it will do, so the count is on the button rather
