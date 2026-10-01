@@ -454,10 +454,11 @@
           <input type="text" id="shareEmail" placeholder="email@company.com"
                  autocomplete="off" aria-autocomplete="list"
                  aria-controls="shareSuggest"
-                 data-action-input="call" data-fn="_shareEmailInput" data-arg-event="1"
-                 data-action-paste="call" data-fn="_shareEmailPaste" data-arg-event="1"
-                 data-action-blur="call" data-fn="_shareEmailBlur"
-                 data-action-keydown="call" data-fn="_shareEmailKey" data-arg-event="1">
+                 data-arg-event="1"
+                 data-action-input="call" data-fn-input="_shareEmailInput"
+                 data-action-paste="call" data-fn-paste="_shareEmailPaste"
+                 data-action-blur="call" data-fn-blur="_shareEmailBlur"
+                 data-action-keydown="call" data-fn-keydown="_shareEmailKey">
           <div class="share-suggest" id="shareSuggest" hidden></div>
         </div>
         <select id="shareRole" title="Hover each option for a description of the role">

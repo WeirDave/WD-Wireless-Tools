@@ -225,6 +225,17 @@ class ShareDialogInABrowser(unittest.TestCase):
             "Share 2 projects with 2 people",
             self.js("document.getElementById('shareApplyBtn').textContent"))
 
+    def test_typing_an_address_and_pressing_enter_adds_it(self):
+        """The box declared four `data-fn` attributes; HTML keeps the first,
+        so keydown ran the input handler and Enter added nothing."""
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.common.keys import Keys
+        box = self.driver.find_element(By.ID, "shareEmail")
+        box.send_keys(MATE, Keys.ENTER)
+        self.assertIn(MATE, self.js(
+            "document.getElementById('shareChips').textContent"))
+        self.assertEqual("", box.get_attribute("value"))
+
     # -- what it is about to act on -------------------------------------
 
     def test_the_dialog_lists_the_projects(self):

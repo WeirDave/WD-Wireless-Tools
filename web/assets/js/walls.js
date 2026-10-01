@@ -560,11 +560,11 @@ function renderHotkeyPanel() {
              draggable="true"
              title="Drag to move this shortcut to another slot"
              data-slot="${n}"
-             data-action-dragstart="call" data-fn="onSlotDragStart"
-             data-action-dragend="call"
-             data-action-dragover="call"
-             data-action-dragleave="call"
-             data-action-drop="call"
+             data-action-dragstart="call" data-fn-dragstart="onSlotDragStart"
+             data-action-dragend="call" data-fn-dragend="onSlotDragEnd"
+             data-action-dragover="call" data-fn-dragover="onSlotDragOver"
+             data-action-dragleave="call" data-fn-dragleave="onSlotDragLeave"
+             data-action-drop="call" data-fn-drop="onSlotDrop"
              data-arg-event="1" data-arg-this="1">
           <span class="hotkey-swatch"></span>
           <div class="hotkey-num">${n}</div>
@@ -575,9 +575,9 @@ function renderHotkeyPanel() {
       html += `
         <div class="hotkey-slot"
              data-slot="${n}"
-             data-action-dragover="call" data-fn="onSlotDragOver"
-             data-action-dragleave="call"
-             data-action-drop="call"
+             data-action-dragover="call" data-fn-dragover="onSlotDragOver"
+             data-action-dragleave="call" data-fn-dragleave="onSlotDragLeave"
+             data-action-drop="call" data-fn-drop="onSlotDrop"
              data-arg-event="1" data-arg-this="1">
           <div class="hotkey-num">${n}</div>
           <div class="hotkey-empty">drag here</div>
@@ -638,8 +638,8 @@ function renderWallCard(wt, i) {
     <div class="wall-card" draggable="true"
          style="--wall-color:${safeColor(wt.color)}"
          data-card-index="${i}"
-         data-action-dragstart="call" data-fn="onCardDragStart"
-         data-action-dragend="call"
+         data-action-dragstart="call" data-fn-dragstart="onCardDragStart"
+         data-action-dragend="call" data-fn-dragend="onCardDragEnd"
          data-arg-event="1" data-arg-this="1">
       <div class="wall-swatch"></div>
       <div class="wall-info">
