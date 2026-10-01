@@ -421,6 +421,16 @@ apart by one colour.
   on a tool without one, two tools sharing one, or a title under 3:1 on its
   own bar in either theme. A new tool page needs a line in the block.
 
+### The shared look is on scales, and the debt only goes down
+
+Corners use `--r-xs/sm/md/lg` (4/6/8/12) or `--radius-pill`; type uses
+`--fs-meta/small/body/emph/section/title`; spacing `--sp-*` on a 4px grid.
+`tests/test_the_stylesheet_stays_on_its_scale.py` fails on an off-scale
+corner and on any growth in colour literals or distinct font sizes in
+`wd-tools.css` - **lower its constants when you remove debt, never raise
+them.** Swap a literal for a token only where the token is not redefined per
+theme, or the light theme changes under you; compare before/after pixels.
+
 ## The Ekahau AP colour palette
 
 `WD.EKAHAU_COLORS` in `web/assets/js/wd-shared.js` is the only copy. Anything
