@@ -217,6 +217,7 @@
     $('dropzone').style.display = 'none';
     $('editor').classList.add('active');
     $('fileBadge').textContent = name;
+    $('fileBadge').title = name;
     $('fileBadge').style.display = 'inline-block';
     $('prepResult').innerHTML = '';
     lastWritten = null;

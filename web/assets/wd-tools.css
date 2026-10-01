@@ -10727,7 +10727,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-row > * { flex:1; }
 .tool-aprename .ar-field-lbl { font-size:11px; color:var(--text-2,#999); margin-bottom:2px; }
 .tool-aprename .ar-example { font-size:12px; color:var(--text-2,#999); padding:2px 0; }
-.tool-aprename .header .file-badge { max-width:27vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tool-aprename .header .file-badge { max-width:max(120px, calc(50vw - 380px)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .tool-aprename .ar-sep     { border-top:1px solid var(--border,#333); margin:2px 0; }
 .tool-aprename .ar-check-row { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text,#ccc); }
 .tool-aprename .ar-check-row input[type="checkbox"] { margin:0; }
@@ -11843,3 +11843,65 @@ body.tool-aprename .pb-panel select { font-size: var(--rd-body); }
 .tool-aprename .ar-inf-body code { font-size: var(--rd-small); }
 .tool-aprename .ar-floor-count { opacity: .6; font-size: var(--rd-small); }
 .tool-aprename .ar-zoom-bar span { font-size: var(--rd-small); }
+
+/* -- AP Labeler: the pattern's answer, right under the pattern ---------- */
+.tool-aprename .ar-example-section { display: flex; flex-direction: column; gap: var(--sp-2); }
+.tool-aprename .ar-example { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tool-aprename .ar-example td {
+  padding: 6px 8px; border-top: 1px solid var(--border);
+  font-family: var(--mono); font-size: var(--rd-body);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tool-aprename .ar-example td.ar-arrow { width: 28px; text-align: center; color: var(--text-3); font-family: inherit; }
+.tool-aprename .ar-example td.ar-cur { color: var(--text-2); }
+.tool-aprename .ar-example td.ar-new { color: var(--tool-accent); font-weight: 600; }
+[data-theme="light"] .tool-aprename .ar-example td.ar-new { color: var(--tool-title); }
+.tool-aprename .ar-example-gap td { text-align: center; color: var(--text-3); padding: 0; border-top: 0; line-height: 1; }
+.tool-aprename .ar-example-none { color: var(--text-2); font-family: inherit; }
+.tool-aprename .ar-show-all {
+  align-self: flex-start; padding: 6px 14px; cursor: pointer;
+  background: transparent; color: var(--text); font-size: var(--rd-small); font-weight: 600;
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+}
+.tool-aprename .ar-show-all:hover { border-color: var(--tool-accent); }
+
+/* Every name, in a window big enough to read it in. */
+.tool-aprename .modal.ar-all {
+  width: min(1100px, 92vw); height: min(86vh, 1000px);
+  display: flex; flex-direction: column; gap: var(--sp-3); overflow: hidden;
+}
+.tool-aprename .ar-all-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.tool-aprename .ar-all-head h3 { margin: 0; font-size: var(--fs-section); }
+.tool-aprename .ar-all .ar-preview { flex: 1 1 auto; min-height: 0; max-height: none; font-size: var(--rd-body); }
+
+/* -- AP Labeler: a tall building on the floors rail ---------------------- */
+/* The floor list scrolls inside the rail, so the rail's heading and note stay
+   where they are however many floors there are. */
+.tool-aprename .ar-rail { overflow: hidden; }
+.tool-aprename .ar-floor-tabs { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.tool-aprename .ar-floor-tabs.is-compact {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px; align-content: start;
+}
+.tool-aprename .ar-floor-tabs.is-compact .ar-floor-tab {
+  padding: 7px 6px; text-align: center; border-radius: var(--r-sm);
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 4px;
+}
+.tool-aprename .ar-floor-tabs.is-compact .ar-floor-count { font-size: var(--rd-tag); }
+.tool-aprename .ar-fp-rows {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 8px;
+  max-height: 34vh; overflow-y: auto; padding-right: 2px;
+}
+.tool-aprename .ar-fp-row { font-size: var(--rd-small); }
+
+/* -- The open file's name never runs under the tool's title -------------- */
+/* The title is centred on the window and the file name grows from the left,
+   so a long project name on a half-width window ran straight underneath
+   "WD Capacity". The name stops short of where the title can start - half
+   the window, less half the widest title and the buttons before it - and
+   shows the whole name on hover. */
+.header .file-badge, .swap-topbar .file-badge {
+  max-width: max(120px, calc(50vw - 380px));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  vertical-align: middle;
+}

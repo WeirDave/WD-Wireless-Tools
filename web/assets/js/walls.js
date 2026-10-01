@@ -377,6 +377,7 @@ async function loadFile(file) {
     document.getElementById('dzTopbar').style.display = 'none';
     document.getElementById('editor').classList.add('active');
     document.getElementById('fileBadge').textContent = fileName;
+    document.getElementById('fileBadge').title = fileName + '  —  click to open another .esx';
     document.getElementById('fileBadge').style.display = 'inline';
     renderAll();
     tryAutoApply();

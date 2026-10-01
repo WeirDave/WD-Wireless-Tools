@@ -260,6 +260,22 @@
           </div>
         </div>
 
+        <!-- ═══ WHAT THE NAMES WILL LOOK LIKE ═══
+             Directly under the pattern, because it is the pattern's answer:
+             "here's how you've chosen to name it and here's what the name is
+             going to look like". A few examples, not every AP - the whole list
+             is one press away in its own window. -->
+        <div class="ar-section ar-example-section" id="arExampleSection">
+          <div class="ar-preview-head" id="arPreviewHead">Preview</div>
+          <div class="ar-dupe-warn" id="arDupeWarn" hidden></div>
+          <div class="ar-stem" id="arStem" hidden></div>
+          <table class="ar-example">
+            <tbody id="arExampleBody"></tbody>
+          </table>
+          <button type="button" class="ar-show-all" id="arShowAllBtn"
+                  data-action="call" data-fn="arShowAllNames">Show every name</button>
+        </div>
+
         <!-- ═══ SECTION 2: FLOORS TO RENAME ═══ -->
         <div class="ar-section ar-foldable" data-fold="floors">
           <div class="ar-section-head" data-fold-toggle tabindex="0" role="button" aria-expanded="true"
@@ -355,22 +371,26 @@
                       title="Clear every manual number on this project">Clear all</button>
             </div>
           </div>
-          <div class="ar-preview-wrap">
-            <div class="ar-preview-head" id="arPreviewHead">Preview</div>
-            <div class="ar-dupe-warn" id="arDupeWarn" hidden></div>
-            <div class="ar-stem" id="arStem" hidden></div>
-            <div class="ar-preview" id="arPreview">
-              <table>
-                <thead><tr><th class="ar-num">#</th><th>Current</th><th class="ar-arrow"></th><th>New</th></tr></thead>
-                <tbody id="arPreviewBody"></tbody>
-              </table>
-            </div>
-          </div>
         </div>
 
       </div>
     </div>
    </div>
+    <!-- Every name, old and new, for when the examples are not enough. -->
+    <div class="modal-overlay ar-all-modal" id="arAllModal" data-action="backdrop-call" data-fn="arCloseAllNames">
+      <div class="modal ar-all" role="dialog" aria-modal="true" aria-labelledby="arAllTitle">
+        <div class="ar-all-head">
+          <h3 id="arAllTitle">Every name on this floor</h3>
+          <button type="button" class="btn btn-sec" data-action="call" data-fn="arCloseAllNames">Close</button>
+        </div>
+        <div class="ar-preview" id="arPreview">
+          <table>
+            <thead><tr><th class="ar-num">#</th><th>Current</th><th class="ar-arrow"></th><th>New</th></tr></thead>
+            <tbody id="arPreviewBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
     <footer class="pb-footer ar-footer">
       <div class="pb-willwrite" id="arWillWrite"></div>
       <button class="btn btn-primary pb-prepare" id="arDownloadBtn" data-action="call" data-fn="arDownload" disabled>Download labeled .esx</button>

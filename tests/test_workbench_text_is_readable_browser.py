@@ -68,6 +68,16 @@ class TheWorkbenchToolsAreReadable(BrowserPagesHarness):
         cls.plan = plan_esx(d / "invented-plan.esx")
         cls.walls = walls_esx(d / "invented-walls.esx")
         cls.aps = make_esx(d / "invented-aps.esx", floors=2, aps=8, placed=True)
+        #: A long name, the shape real project files have: site, building,
+        #: street address, floors, design stage. Invented throughout.
+        import shutil
+        cls.long_names = {}
+        for key, src in (("capacity", cls.capacity), ("plan", cls.plan),
+                         ("walls", cls.walls), ("aps", cls.aps)):
+            dst = d / ("Invented Campus - Building 12 - 1234 Example Street, "
+                       "Exampletown - Floors 1 to 9 - Predictive %s.esx" % key)
+            shutil.copy(src, dst)
+            cls.long_names[key] = dst
 
     @classmethod
     def tearDownClass(cls):
@@ -104,6 +114,48 @@ class TheWorkbenchToolsAreReadable(BrowserPagesHarness):
 
     def test_ap_labeler(self):
         self.check("/aprename", self.aps, "#arPreview td")
+
+
+    # -- the open file's name and the tool's title ----------------------------
+
+    OVERLAP = """
+      var b = document.getElementById('fileBadge').getBoundingClientRect();
+      var t = Array.prototype.map.call(
+          document.querySelectorAll('.header-center h1'),
+          function (e) { return e.getBoundingClientRect(); })
+        .filter(function (r) { return r.width > 0; })[0];
+      return {badgeRight: b.right, titleLeft: t ? t.left : null};
+    """
+
+    def check_title_clear(self, path, key, ready):
+        """Split screen on his monitor: a long project name ran underneath
+        the centred title."""
+        for kind, drv in self.each_browser():
+            for width in (1280, 1100):
+                with self.subTest(browser=kind, page=path, width=width):
+                    drv.set_window_size(width, 900)
+                    drv.get(self.base + path)
+                    WebDriverWait(drv, 15).until(
+                        lambda d: d.find_elements(By.ID, "fileInput"))
+                    drv.find_element(By.ID, "fileInput").send_keys(
+                        str(self.long_names[key]))
+                    WebDriverWait(drv, 30).until(
+                        lambda d: d.find_elements(By.CSS_SELECTOR, ready))
+                    r = drv.execute_script(self.OVERLAP)
+                    self.assertIsNotNone(r["titleLeft"], r)
+                    self.assertLessEqual(r["badgeRight"], r["titleLeft"], r)
+
+    def test_capacity_title_is_clear(self):
+        self.check_title_clear("/capacity", "capacity", "#capTemplates .cap-tpl")
+
+    def test_plantrim_title_is_clear(self):
+        self.check_title_clear("/plantrim", "plan", ".pb-rail .ptb-row")
+
+    def test_quick_walls_title_is_clear(self):
+        self.check_title_clear("/walls", "walls", ".wall-card")
+
+    def test_ap_labeler_title_is_clear(self):
+        self.check_title_clear("/aprename", "aps", "#arPreview td")
 
 
 if __name__ == "__main__":

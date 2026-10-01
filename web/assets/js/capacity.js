@@ -54,6 +54,7 @@
       $('dropzone').style.display = 'none';
       $('editor').classList.add('active');
       $('fileBadge').textContent = fileName;
+      $('fileBadge').title = fileName + '  —  click to open another .esx';
       $('fileBadge').style.display = 'inline-block';
       return api('analyze', buf, '?name=' + encodeURIComponent(fileName));
     }).then(function (r) {
