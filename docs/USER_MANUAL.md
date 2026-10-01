@@ -1059,21 +1059,24 @@ refused rather than written out with a scale that has quietly shifted.
 
 1. **Open the `.esx`** — drop it on the page or click to browse. Every floor
    plan in it is read and measured.
-2. **Read the floor list** — each floor gets a row saying what will happen to it
-   and how much it saves. Automatic is proposed for every floor.
+2. **Read the floors down the left** — each floor gets a card saying what will
+   happen to it and how much it saves. Automatic is proposed for every floor.
+   The plan fills the middle, and this floor's controls are on the right.
 3. **Adjust what you want to** — happy with automatic, do nothing. Otherwise
    draw a rectangle and press **Crop to this box**.
-4. **Cut and save** — the wide button under the plan writes the new copy, and
-   you choose where it goes.
+4. **Cut and save** — the button at the bottom right writes the new copy, and
+   you choose where it goes. The footer it sits in never scrolls away, and says
+   what the save will do.
 
 ![PlanTrim with a project open and a crop box drawn](../web/assets/manual/plantrim-loaded.png)
 
-*Each floor lists what the crop would do before you commit to it — here, 37% of each sheet is empty paper.*
+*The floors down the left say what the crop will do to each before anything is written: Floor 01 is cropped to a drawn box, Floor 02 automatically. The footer says what Cut and save will write.*
 
 ### The floor list
 
-The strip above the plan is the whole state of the job: one row per floor plan,
-named the way the project names it, with the row you are working on highlighted.
+The floors down the left are the whole state of the job: one card per floor
+plan, named the way the project names it, with the one you are working on
+highlighted.
 Click any row to jump to that floor — nothing is locked and there is no order to
 follow.
 
@@ -1085,7 +1088,7 @@ follow.
 | **Cannot crop** | Something makes a crop unsafe — a geo-anchored plan, for example, whose coordinates are tied to the world rather than to the sheet. The reason is on the row. |
 | **· your box was not used** | You drew a rectangle on that floor and did not press Crop. A rectangle you have not cropped does nothing, and the row says so rather than letting you think it counted. |
 
-**Floor 02 — 2 of 3** under the list says which floor you are on and how far
+**Floor 02 — 2 of 3** under the cards says which floor you are on and how far
 through you are. **Next floor →** steps to the next and greys out on the last.
 
 Each row also says **how much drawing lies beyond the building**, in feet, in
@@ -1097,7 +1100,7 @@ the same thing.
 
 ### Margin — how much to leave around the building
 
-The **Margin** dropdown in the bar above the plan decides how far out from the
+**Margin around the drawing**, in the panel on the right, decides how far out from the
 drawing the automatic crop stops. Every setting is a real-world distance
 measured on the plan's own scale, so the same choice means the same distance on
 the ground whatever resolution the sheet was exported at.
@@ -1116,8 +1119,8 @@ everything there is and stops at the edge, so you cannot end up with blank
 canvas that was not in the drawing. If the margin ends up covering the whole
 sheet, the floor simply reports *Nothing to do*.
 
-**This is the same setting Prep uses** (Prep → *What to do* → *Leave a margin
-of*). Change it in either tool and both follow, so a project you prepare in Prep
+**This is the same setting Prep uses** (Prep → *1 · Trim the canvas* →
+*Margin around the drawing*). Change it in either tool and both follow, so a project you prepare in Prep
 is cropped the way you set it here.
 
 > **Changed in v2.103.17.** These used to be 3, 6 and 10 *metres* displayed in
@@ -1165,7 +1168,7 @@ canvas in the suite.
 
 ### Finishing
 
-The wide button under the plan changes with the work left to do. While any floor
+The **Cut and save** button in the footer changes with the work left to do. While any floor
 is still set to automatic it reads **Cut and save**, and the note beside it
 counts what will happen. Once every crop on the table is a box you drew
 yourself it reads **Save trimmed .esx** instead — the cutting decisions are all

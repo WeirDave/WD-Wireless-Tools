@@ -105,85 +105,103 @@
     </div>
     <div class="header-actions">
       <button class="btn btn-sec" data-action="call" data-fn="ptLoadNewFile">Open another</button>
-      <button class="btn btn-sec" id="ptSaveBtn" data-action="call" data-fn="ptTrim" disabled
-              title="Same as Cut and save, next to the plan">Save trimmed .esx</button>
     </div>
   </div>
 
-  <div class="pt-wrap">
-    <div class="pt-card" id="ptBoxCard" hidden>
-      <div class="pt-step">Draw what to keep</div>
-      <p class="ptb-intro">
-        Drag a rectangle around what to keep &mdash; everything outside it is cut away.
-        Drag the handles to adjust. <kbd>Space</kbd>+drag pans, scroll zooms.
-        <strong>Your original file is never changed.</strong>
-      </p>
-      <div class="ptb-strip" id="ptbStrip"></div>
-      <div class="ptb-bar">
-        <span class="ptb-where" id="ptbFloorCount"></span>
-        <button class="btn btn-sm" id="ptbNext" data-action="call" data-fn="ptbNextFloor" hidden>Next floor &rarr;</button>
-        <span class="ptb-readout" id="ptbReadout">Automatic</span>
-        <span class="ptb-margin-group">
-          <label for="ptbMargin">Margin:</label>
-          <select id="ptbMargin" data-action-change="call" data-fn="ptbSetMargin" data-arg-value="1"
-                  title="How much whitespace to leave around the building when trimming automatically">
-            <option value="tight">Tight &mdash; 3 ft (0.9 m)</option>
-            <option value="normal" selected>Normal &mdash; 10 ft (3 m)</option>
-            <option value="wide">Wide &mdash; 20 ft (6.1 m)</option>
-            <option value="extra-wide">Extra wide &mdash; 35 ft (10.7 m)</option>
-            <option value="parking-lot">Parking lot &mdash; 200 ft (61 m)</option>
-            <option value="custom">Custom&hellip;</option>
-          </select>
-          <span id="ptbMarginCustomWrap" hidden><input type="number" id="ptbMarginFt"
-                 min="1" max="2000" step="1" value="200" class="w-num-sm"
-                 title="How far out to keep, in feet"
-                 data-action-change="call" data-fn="ptbSetCustomMargin" data-arg-value="1"> ft</span>
-        </span>
-        <span class="ptb-spacer"></span>
-        <button class="btn btn-sm ptb-reset" id="ptbFit" data-action="call" data-fn="ptbFitView"
-                title="Put the zoom and the position back to how this plan opened. It does not discard a rectangle you drew - that is Back to automatic - and it does not change the margin, which is a saved preference.">&#8634; Reset view</button>
-        <button class="btn btn-sm" id="ptbSuggest" data-action="call" data-fn="ptbSuggest"
-                title="Compare the sheets of this set to each other and propose a rectangle">Suggest from the set</button>
-        <button class="btn btn-sm" id="ptbApplyAll" data-action="call" data-fn="ptbApplyToAll" disabled
-                title="Use this floor's rectangle on every other floor">Apply to all floors</button>
-        <button class="btn btn-sm" id="ptbClear" data-action="call" data-fn="ptbClearBox" disabled
-                title="Discard the rectangle and let detection decide this floor">Back to automatic</button>
-      </div>
-      <div class="ptb-cropbar">
-        <button class="btn btn-primary ptb-cropbtn" id="ptbCrop" data-action="call" data-fn="ptbCropBox" hidden>
-          &#9986; Crop to this box
-        </button>
-        <button class="btn btn-sm" id="ptbEdit" data-action="call" data-fn="ptbEditBox" hidden
-                title="Put the handles back on this box">Edit box</button>
-      </div>
-      <div class="ptb-stage" id="ptbStage">
-        <canvas id="ptbCanvas"></canvas>
-        <div class="ptb-empty" id="ptbEmpty">Select a floor to draw on.</div>
-      </div>
-      <div class="ptb-actions">
-        <button class="btn btn-primary ptb-cut" id="ptbCut" data-action="call" data-fn="ptCut" disabled>
-          Cut and save
-        </button>
-        <span class="ptb-cut-note" id="ptbCutNote"></span>
-      </div>
-      <div class="ptb-hint" id="ptbHint"></div>
-      <div class="ptb-evidence" id="ptbEvidence" hidden></div>
+  <!-- PlanTrim in Prep's workbench shell: the floors down the left, the plan
+       in the middle, this floor's controls on the right, and the one verb in
+       a footer that never scrolls away. Every id is the one the page had
+       before, so plantrim.js and its tests did not move. -->
+  <div class="pt-shell" id="ptBoxCard" hidden>
+    <div class="pb-body">
+
+      <nav class="pb-rail" aria-label="Floors">
+        <div class="pb-rail-head">Floors</div>
+        <div class="ptb-strip" id="ptbStrip"></div>
+        <div class="pt-rail-next">
+          <span class="ptb-where" id="ptbFloorCount"></span>
+          <button class="btn btn-sec btn-sm" id="ptbNext" data-action="call" data-fn="ptbNextFloor" hidden>Next floor &rarr;</button>
+        </div>
+        <div class="pb-rail-foot">
+          Nothing is written until you press <b>Cut and save</b>. Your original file is
+          never modified &mdash; you get a new copy to download.
+        </div>
+      </nav>
+
+      <main class="pb-main">
+        <div class="pb-floorbar">
+          <span class="ptb-readout" id="ptbReadout">Automatic</span>
+          <span class="ptb-spacer"></span>
+          <div class="pb-view-tools">
+            <button class="btn btn-sec pb-fit" id="ptbFit" data-action="call" data-fn="ptbFitView"
+                    title="Put the zoom and the position back to how this plan opened. It does not discard a rectangle you drew - that is Back to automatic - and it does not change the margin, which is a saved preference.">&#8634; Reset view</button>
+          </div>
+        </div>
+        <div class="ptb-stage pb-canvas" id="ptbStage">
+          <canvas id="ptbCanvas"></canvas>
+          <div class="ptb-empty" id="ptbEmpty">Select a floor to draw on.</div>
+        </div>
+        <div class="pb-canvas-hint">Drag a rectangle around what to keep. Drag a handle to adjust it.
+          <kbd>Space</kbd>-drag pans; the wheel zooms.</div>
+      </main>
+
+      <aside class="pb-panel" aria-label="Crop settings">
+        <section class="pb-section">
+          <h2 class="pb-title">Draw what to keep</h2>
+          <p class="pb-lead">Everything outside the rectangle is cut away. With no rectangle,
+            the drawing is found automatically.</p>
+          <div class="ptb-cropbar">
+            <button class="btn btn-primary ptb-cropbtn" id="ptbCrop" data-action="call" data-fn="ptbCropBox" hidden>
+              &#9986; Crop to this box
+            </button>
+            <button class="btn btn-sec btn-sm" id="ptbEdit" data-action="call" data-fn="ptbEditBox" hidden
+                    title="Put the handles back on this box">Edit box</button>
+          </div>
+          <p class="ptb-hint" id="ptbHint"></p>
+          <div class="pb-field">
+            <label for="ptbMargin">Margin around the drawing</label>
+            <select id="ptbMargin" class="prep-input" data-action-change="call" data-fn="ptbSetMargin" data-arg-value="1"
+                    title="How much whitespace to leave around the building when trimming automatically">
+              <option value="tight">Tight &mdash; 3 ft (0.9 m)</option>
+              <option value="normal" selected>Normal &mdash; 10 ft (3 m)</option>
+              <option value="wide">Wide &mdash; 20 ft (6.1 m)</option>
+              <option value="extra-wide">Extra wide &mdash; 35 ft (10.7 m)</option>
+              <option value="parking-lot">Parking lot &mdash; 200 ft (61 m)</option>
+              <option value="custom">Custom&hellip;</option>
+            </select>
+            <span id="ptbMarginCustomWrap" class="pb-inline" hidden><input type="number" id="ptbMarginFt"
+                   class="prep-input prep-input--num" min="1" max="2000" step="1" value="200"
+                   title="How far out to keep, in feet"
+                   data-action-change="call" data-fn="ptbSetCustomMargin" data-arg-value="1"> ft</span>
+          </div>
+          <div class="pb-grid2">
+            <button class="btn btn-sec" id="ptbSuggest" data-action="call" data-fn="ptbSuggest"
+                    title="Compare the sheets of this set to each other and propose a rectangle">Suggest from the set</button>
+            <button class="btn btn-sec" id="ptbApplyAll" data-action="call" data-fn="ptbApplyToAll" disabled
+                    title="Use this floor's rectangle on every other floor">Apply to all floors</button>
+            <button class="btn btn-sec" id="ptbClear" data-action="call" data-fn="ptbClearBox" disabled
+                    title="Discard the rectangle and let detection decide this floor">Back to automatic</button>
+          </div>
+          <div class="ptb-evidence" id="ptbEvidence" hidden></div>
+          <p class="pb-note">Rectangles you draw here are the same ones Prep&rsquo;s Trim stage
+            uses for this project. Draw in either tool and both use them.</p>
+          <p class="pb-hint">The margin is measured on the plan&rsquo;s own scale, so it is the
+            same real distance on every sheet, and it is the same setting as Prep&rsquo;s.</p>
+        </section>
+        <!-- Hidden sinks: the analyze path still writes its error text here. -->
+        <div id="ptFloors" hidden></div>
+        <div id="ptSizeNote" hidden></div>
+      </aside>
     </div>
 
-    <!-- The per-floor state used to be listed again here, below and away from
-         the canvas. Two copies of the same facts is how the flow came apart, so
-         the strip inside the drawing card is now the only place it lives.
-         ptFloors and ptSizeNote stay as hidden sinks because the analyze path
-         still writes its error text into them. -->
-    <div id="ptFloors" hidden></div>
-    <div id="ptSizeNote" hidden></div>
+    <div class="pb-result"><div class="pt-result" id="ptResult" hidden></div></div>
 
-    <div class="pt-result" id="ptResult" hidden></div>
-
-    <p class="pt-footer-hint">
-      Nothing is written until you press <strong>Save trimmed .esx</strong>. Your original file is
-      never modified — you get a new copy to download.
-    </p>
+    <footer class="pb-footer ptb-actions">
+      <div class="pb-willwrite ptb-cut-note" id="ptbCutNote"></div>
+      <button class="btn btn-primary pb-prepare ptb-cut" id="ptbCut" data-action="call" data-fn="ptCut" disabled>
+        Cut and save
+      </button>
+    </footer>
   </div>
 </div>
 
