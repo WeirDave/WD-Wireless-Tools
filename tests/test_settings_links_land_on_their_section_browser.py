@@ -89,5 +89,34 @@ class EveryLinkLands(BrowserPagesHarness):
                         self.assertIn(r["id"], expected)
 
 
+    def test_the_side_list_opens_one_section_and_marks_it(self):
+        """The list down the side of a wide window is how a section is chosen
+        on the page itself: pressing one shows that section alone and marks
+        it, and every section is in the list."""
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                drv.set_window_size(1600, 900)
+                drv.get(self.base + "/settings")
+                time.sleep(1.2)
+                count = drv.execute_script(
+                    "return [document.querySelectorAll('.s-nav-item').length,"
+                    " document.querySelectorAll('details.s-section').length];")
+                self.assertEqual(count[0], count[1])
+                drv.execute_script(
+                    "document.querySelector('.s-nav-item[data-sec=\"sec-walls\"]').click();")
+                time.sleep(0.8)
+                r = drv.execute_script("""
+                  var shown = Array.prototype.filter.call(
+                    document.querySelectorAll('details.s-section'),
+                    function (d) { return d.getBoundingClientRect().height > 0; })
+                    .map(function (d) { return d.id; });
+                  var cur = Array.prototype.map.call(
+                    document.querySelectorAll('.s-nav-item.is-current'),
+                    function (b) { return b.getAttribute('data-sec'); });
+                  return {shown: shown, current: cur};""")
+                self.assertEqual(r["shown"], ["sec-walls"])
+                self.assertEqual(r["current"], ["sec-walls"])
+
+
 if __name__ == "__main__":
     unittest.main()

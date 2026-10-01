@@ -56,6 +56,13 @@
     <a href="/">&larr; Home</a>
   </div>
 
+  <!-- The sections, listed down the side, each in its tool's colour. The
+       list is built from the sections themselves (SP.buildNav), so it cannot
+       name one that is not here. -->
+  <div class="s-layout">
+  <nav class="s-nav" id="sNav" aria-label="Settings sections"></nav>
+  <div class="s-main">
+
   <!-- General -->
   <details class="s-section" id="sec-general" open>
     <summary>General</summary>
@@ -287,13 +294,10 @@
           <option value="">None &mdash; do not apply a template on its own</option>
         </select>
         <div class="hint mt-4 s-warn" id="sWallsDefaultTplMissing" hidden></div>
-        <div class="hint mt-4" id="sWallsDefaultTplNote">This is the template
-          <b>Auto-apply on open</b> puts into a project as soon as you open one, and the
-          one the picker in Quick Walls starts on. Until now it was not chosen at all: it
-          silently became whichever template you last pressed <b>Apply</b> on, so
-          applying Ekahau Default once to reset a project made that the template every
-          later project was given. Pressing <b>Apply</b> no longer changes it &mdash;
-          this is the only place it is set.</div>
+        <div class="hint mt-4" id="sWallsDefaultTplNote">The template the picker in Quick
+          Walls starts on, and the one <b>Auto-apply on open</b> puts into a project as soon as
+          it is opened. Pressing <b>Apply</b> in Quick Walls uses a template on one project and
+          does not change this; it is only set here.</div>
       </div>
       <div class="s-field">
         <div class="hint">The rest of the wall template controls stay in Quick Walls, on
@@ -397,6 +401,8 @@
     <button class="btn" data-action="call" data-fn="location.reload">Cancel</button>
     <button class="btn btn-blue" data-action="call" data-fn="SP.save">Save</button>
   </div>
+  </div><!-- /s-main -->
+  </div><!-- /s-layout -->
 </div>
 
 <!-- Nothing is written until this has been read and confirmed. He has had

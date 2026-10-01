@@ -671,11 +671,23 @@
     return String((opt && opt.text) || (sel && sel.value) || '');
   }
 
+  /* A step that cannot run says so on the rail in one line; the reason, which
+     can run to a paragraph naming every missing profile, is in the step's own
+     panel. Written whole on the rail it was a column of red text that pushed
+     the other steps off the screen. */
   function setStatus(step, text, cls) {
     var el = $('prepStatus-' + step);
     if (!el) return;
-    el.textContent = text;
+    var bad = cls === 'is-bad';
+    var long = bad && String(text).length > 90;
+    el.textContent = long ? 'Cannot run \u2014 select this step to read why' : text;
+    if ('title' in el) el.title = long ? String(text) : '';
     el.className = 'pb-stage-status' + (cls ? ' ' + cls : '');
+    var reason = $('prepReason-' + step);
+    if (reason) {
+      reason.hidden = !bad;
+      reason.textContent = bad ? String(text) : '';
+    }
   }
 
   // The footer's note is markup the renderer built from escaped parts.
@@ -1092,8 +1104,9 @@
         : b ? 'Your box keeps ' + Math.round(b[2] - b[0]) + ' × ' + Math.round(b[3] - b[1])
               + ' of this sheet.' + (same ? '' : ' No other floor is the same size, so it '
               + 'cannot be applied to them.')
-          : 'Automatic: the drawing is found on its own. Drag a rectangle on the plan to '
-            + 'choose what to keep instead.';
+          : 'Automatic: Prep finds the building and keeps it, with the space above around '
+            + 'it - the dashed outline on the plan. To choose for yourself, drag a box on '
+            + 'the plan around what to keep.';
     }
     showEvidence();
     if (f) captionFor(f);

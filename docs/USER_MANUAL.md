@@ -1028,7 +1028,7 @@ The exception is the whole reason to run it a second time. The first pass has no
 
 ### If a step cannot run
 
-Prep refuses rather than guessing, and nothing is written when it does. The most common case is a capacity template that does not carry definitions for profiles the target project has never seen — it names each missing profile, and the fix is to re-capture the template from its source project, or add those profiles in Ekahau first.
+Prep refuses rather than guessing, and nothing is written when it does. The most common case is a capacity template that does not carry definitions for profiles the target project has never seen — it names each missing profile, and the fix is to open that template with **Edit** in Capacity, with a project open that has those profiles, and save it again — or add those profiles in Ekahau first.
 
 ---
 
@@ -1727,33 +1727,69 @@ Save and load naming patterns as templates. Templates are stored server-side in 
 
 ## Capacity
 
-Capacity reads the device mix out of a project you have already set up in
-Ekahau and applies those ratios to another building. It exists so the thinking
-you did once — how many devices a person carries, of which kinds, doing what —
-does not have to be re-entered on every site.
+Capacity puts a device mix into a project from a template: how many devices a
+person carries, of which kinds, doing what. A template is built once — in
+Capacity, from Ekahau's own device and usage profiles, or read out of a project
+already set up — so that thinking does not have to be re-entered on every site.
 
 **What it stores is ratios, not counts.** A project designed for 500 people
 carrying 1,500 devices is stored as "three devices per person, split like so".
 Applied to a 200-person building it writes 600. Headcount is the only number you
 type.
 
-The page is laid out like Prep and PlanTrim: the three steps are listed down
-the left (click one to jump to it), the steps themselves fill the middle, and
-**Apply and download** sits in the footer at the bottom right, beside a line
-saying what it will write.
+The page follows the job, top to bottom, and the same three steps are listed
+down the left — click one to jump to it:
 
-### Capture a template
+1. **Template** — pick the device mix, or build or change one.
+2. **Apply it to this project** — headcount, floor by floor, then
+   **Apply and download** (bottom right).
+3. **What this project already has** — read only; also where a template can be
+   made from a project that is already set up.
 
-Open an `.esx` that is already set up the way you want. Capacity reads the
-requirement areas and lists what it found: each device profile, each usage
-profile, and the device count against it. Rows are shown exactly as authored —
-two rows can name the same device and usage profile and still mean different
-things, so they are never merged.
+**The quick way, once a default is set:** open the project, check the headcount,
+press **Apply and download**. The default template is already picked and the
+plan already worked out.
 
-Type how many people that project was designed for, check the per-person column
-matches what you intended, name the template and save it. Templates live in
-`~/.wd_wireless_tools/capacity/`, outside the install folder, so an update never
-touches them.
+### Templates
+
+A template is a short list of devices. Each row is one kind of device:
+
+| Column | What it means |
+| --- | --- |
+| **Device profile** | Ekahau's device profile — the kind of client (laptop, phone, tablet…) |
+| **Usage profile** | What that device is doing (web browsing, video, voice…) |
+| **Devices per person** | How many of that device each person carries. Decimals are fine: **0.5** means one for every two people |
+
+The total per person, and what that comes to for the headcount on the page,
+updates as the rows change.
+
+The buttons under the template list:
+
+- **New template** — opens the editor with one empty row. The **Device
+  profile** and **Usage profile** lists offer every profile in the open
+  project, which is Ekahau's own set. **+ Add a device** adds a row,
+  **Remove** takes one away, **Save template** keeps it and picks it.
+- **Edit** — opens the chosen template in the same editor. Renaming it there
+  renames it; it does not leave a second copy behind. Editing the shipped
+  example saves a copy with **(my copy)** in its name, and the example stays as
+  it was.
+- **Duplicate** — starts a new template from the chosen one.
+- **★ Make default** — the chosen template becomes the default, marked
+  **★ default** in the list. Every project opened in Capacity from then on
+  starts on it, and Prep's **Capacity template** picker starts on it too.
+  With only one template and no default, that one is picked.
+- **Delete** — asks first: the first press changes the button to name the
+  template, the second press deletes it.
+
+**A template from a project that is already set up.** Under **3 — What this
+project already has**, **Make a template from this project…** opens the editor
+filled in from that project's devices. Type how many people that project was
+designed for and the devices per person are worked out. Rows are kept exactly
+as authored — two rows can name the same device and usage profile and still
+mean different things, so they are never merged.
+
+Templates live in `~/.wd_wireless_tools/capacity/`, outside the install folder,
+so an update never touches them.
 
 ### Apply a template
 
@@ -1813,7 +1849,8 @@ than guessing. Ekahau ships both `Conferencing, GoToMeeting` and `Conferencing,
 Lync/Skype`, so a template row saying only `Conferencing` is ambiguous and is
 reported as such.
 
-A template captured from a project carries the profile definitions with it, so
+A template built or saved in Capacity carries the definitions of the profiles it
+uses, so
 it can create a profile the target project does not have. The example template
 shipped with the suite names only Ekahau stock profiles, so it applies to a new
 project without creating anything.
@@ -2063,6 +2100,13 @@ than the document: it is saved once, on this machine, in
 `~/.wd_wireless_tools/settings.json`, and is the same whichever browser you open
 the suite in.
 
+**Finding a section.** The list down the left names every section — General,
+then one per tool, in that tool's colour. Click one and that section alone is
+shown. **Settings** in any tool's menu opens this page on that tool's section.
+**Save** and **Cancel** stay at the bottom of the window while you scroll. On a
+narrow window the list sits above the sections, and the sections fold open and
+closed instead.
+
 Two things are worth knowing before the list.
 
 **A setting has exactly one home.** Some live on the Settings page, some on the
@@ -2182,6 +2226,13 @@ page.
 Everything else in a report's options panel is remembered **per report type**
 when you press **Save these as my defaults** — see *Settings that stay set*.
 
+### Capacity
+
+| Setting | Where | What it does |
+| --- | --- | --- |
+| **Floors that already have devices** | Settings | What a run does to a floor that already carries devices. Ships as **Keep them as they are**; changing it on the Capacity or Prep page affects that run only |
+| **Default template** | Capacity | The template Capacity and Prep start on. Set with **★ Make default** under Capacity's template list |
+
 ### Squirrel
 
 All on the Settings page, and all about how a folder is sorted:
@@ -2200,7 +2251,7 @@ All on the Settings page, and all about how a folder is sorted:
 
 | Setting | Where | What it does |
 | --- | --- | --- |
-| **Trim margin** | PlanTrim | How much room is left around the building when a floor plan is cropped. Prep's trim step reads and writes the same setting |
+| **Trim margin** | PlanTrim | **Space to leave around the building** — how much room is left around the building when a floor plan is cropped. Prep's trim step reads and writes the same setting |
 | **Trim margin, custom distance** | PlanTrim | The distance used when the margin is set to a custom one rather than a preset |
 
 Both are chosen in PlanTrim, on the plan you are trimming, and both are listed

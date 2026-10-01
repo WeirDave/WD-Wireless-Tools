@@ -11527,7 +11527,7 @@ body.tool-walls .pb-footer .pb-prepare:hover { background: var(--green-dark); bo
 .s-field input[type="text"], .s-field textarea, .s-field select {
   width: 100%; padding: 8px 10px; border-radius: var(--r-sm);
   border: 1px solid var(--border); background: var(--bg);
-  color: var(--text); font-size: 13px; font-family: inherit;
+  color: var(--text); font-size: 14px; font-family: inherit;
 }
 .s-field input[type="text"]:focus, .s-field textarea:focus, .s-field select:focus {
   border-color: var(--border-focus); outline: none;
@@ -12031,3 +12031,66 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
   text-transform: none; letter-spacing: 0; font-size: var(--rd-body); color: var(--text);
 }
 :is(body.tool-capacity, body.tool-prep) .cap-floor-people .cap-sub { font-size: var(--rd-small); }
+
+/* -- Home on a large monitor ------------------------------------------------
+   At 2519 wide the launcher was a 1180px strip of 16px names and 12.5px
+   descriptions in the middle of the screen. Past 1800px it grows, and its
+   type with it; a laptop keeps the sizes it fits at. */
+@media (min-width: 1800px) and (min-height: 1000px) {
+  body.tool-home .wrap { max-width: 1620px; }
+  body.tool-home .launcher { --tile-icon-size: 128px; max-width: 1560px; gap: 18px; }
+  body.tool-home .tile { padding: 20px 24px; gap: 20px; }
+  body.tool-home .tile-name { font-size: 22px; }
+  body.tool-home .tile-desc { font-size: 16px; }
+  body.tool-home .tile-ver { font-size: 13px; }
+  body.tool-home .tagline { font-size: 17px; }
+}
+
+/* -- Settings: a section list down the side, and words that can be read ---
+   It was a 700px column of closed boxes in 11-13px type, in the middle of
+   the screen. On a wide window the sections are listed down the left, each
+   in its tool's colour; the open one is the page. Save and Cancel stay at
+   the bottom of the window. */
+.settings-wrap { max-width: 1200px; }
+.s-layout { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 28px; align-items: start; }
+.s-nav { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 4px; }
+.s-nav-item {
+  text-align: left; padding: 10px 14px; border-radius: var(--r-sm); cursor: pointer;
+  background: transparent; border: 1px solid transparent; color: var(--text-2);
+  font: inherit; font-size: 15px; font-weight: 600;
+  border-left: 4px solid var(--s-accent, var(--border));
+}
+.s-nav-item:hover { background: var(--surface-hover); color: var(--text); }
+.s-nav-item.is-current { background: var(--surface); color: var(--text); border-color: var(--border); border-left-color: var(--s-accent, var(--accent)); }
+.s-nav-item[data-sec="sec-organizer"] { --s-accent: var(--amber); }
+.s-nav-item[data-sec="sec-cloud"]     { --s-accent: var(--blue); }
+.s-nav-item[data-sec="sec-report"]    { --s-accent: var(--rose); }
+.s-nav-item[data-sec="sec-walls"]     { --s-accent: var(--green); }
+.s-nav-item[data-sec="sec-capacity"]  { --s-accent: var(--azure); }
+.s-nav-item[data-sec="sec-elsewhere"] { --s-accent: var(--teal); }
+@media (max-width: 1000px) {
+  .s-layout { grid-template-columns: 1fr; }
+  .s-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+}
+.settings-title { font-size: 24px; }
+.s-section summary { font-size: 16px; padding: 14px 18px; }
+.s-body { padding: 18px 20px; }
+.s-field label { font-size: 13px; }
+.s-field .hint, .s-field .hint.mt-4 { font-size: 14px; line-height: 1.55; color: var(--text-2); }
+.s-radio-group label { font-size: 15px; }
+.s-ov-title { font-size: 13px; }
+.s-ov-row { font-size: 14px; }
+.s-ov-where { font-size: 13px; }
+.settings-footer {
+  position: sticky; bottom: 0; padding: 12px 0; margin-top: 8px;
+  background: var(--bg); border-top: 1px solid var(--border);
+}
+.settings-footer .rerun-link { font-size: 14px; }
+/* With the list down the side doing the choosing, the main column is the one
+   section that is open; the others would only repeat the list. Its heading
+   stays as the title and does not fold away, which would leave a blank page. */
+@media (min-width: 1001px) {
+  .s-main details.s-section:not([open]) { display: none; }
+  .s-main details.s-section[open] > summary { pointer-events: none; }
+  .s-main details.s-section[open] > summary::before { content: none; }
+}
