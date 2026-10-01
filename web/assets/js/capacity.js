@@ -167,20 +167,45 @@
       templates = (r && r.templates) || [];
       var host = $('capTemplates');
       if (!templates.length) {
-        host.innerHTML = '<div class="cap-empty">No templates yet. Capture one above.</div>';
+        host.innerHTML = '<div class="cap-empty">No templates yet. Open a project that has '
+          + 'requirement areas and save one in step 3.</div>';
         return;
       }
       host.innerHTML = templates.map(function (t) {
-        return '<div class="cap-tpl' + (t._file === chosen ? ' is-on' : '') + '" '
+        var on = t._file === chosen;
+        return '<button type="button" class="cap-tpl' + (on ? ' is-on' : '') + '" '
+          + 'role="radio" aria-checked="' + (on ? 'true' : 'false') + '" '
           + 'data-action="call" data-fn="capChoose" data-arg="'
           + WD.escAttr(t._file) + '">'
+          + '<span class="cap-tpl-dot" aria-hidden="true"></span>'
           + '<span class="cap-tpl-name">' + esc(t.name) + '</span>'
           + '<span class="cap-tpl-meta">' + Number(t.devicesPerOccupant || 0).toFixed(2)
           + ' per person · ' + (t.items || []).length + ' rows'
-          + (t._builtin ? ' · example' : '') + '</span></div>';
+          + (t._builtin ? ' · example' : '') + '</span></button>';
       }).join('');
     });
   }
+
+  /* The rail's steps. They only scrolled, and on a tall window every card was
+     already on screen, so pressing one visibly did nothing - "you can't click
+     on it or anything". Now the step is marked current, its card is scrolled
+     to and outlined, and a step that is not open yet says why. */
+  window.capGoTo = function (id) {
+    var card = $(id);
+    document.querySelectorAll('.pb-rail .pb-stage').forEach(function (st) {
+      st.classList.toggle('is-current', st.getAttribute('data-step') === id);
+    });
+    if (!card) return;
+    if (card.hidden) {
+      WD.toast('Saving a template opens once a project with requirement areas '
+        + 'is open - step 2 shows what this one has.', 'info');
+      return;
+    }
+    card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    card.classList.remove('is-flash');
+    void card.offsetWidth;
+    card.classList.add('is-flash');
+  };
 
   window.capChoose = function (file) {
     chosen = file;

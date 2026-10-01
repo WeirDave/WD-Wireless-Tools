@@ -1202,7 +1202,11 @@
   // Labeler share one implementation rather than two copies that drift.
   const SIDEBAR_KEY = 'wd.walls.swapSidebarWidth';
   const SIDEBAR_MIN = 260;
-  const SIDEBAR_DEFAULT = 320;
+  // A share of the window rather than a fixed 320px: on a 2560-wide monitor
+  // 320 left the sidebar a strip beside a wall of empty stage, and the tree,
+  // the swap controls and Quick Swap were all fighting for it.
+  const SIDEBAR_DEFAULT = Math.max(380, Math.min(560, Math.round(
+    (typeof window !== 'undefined' && window.innerWidth ? window.innerWidth : 1600) * 0.22)));
   let _splitter = null;
 
   function reflowSidebarWidth() {

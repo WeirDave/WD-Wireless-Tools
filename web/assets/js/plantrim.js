@@ -429,6 +429,17 @@
   function $(id) { return document.getElementById(id); }
 
   // ------------------------------------------------------------ view maths
+  /* True when a saved box [x0, y0, x1, y1] lies on a sheet of `size` [w, h].
+     A pixel of slack either way, because a box clamped to the edge is stored
+     as the edge. An unknown sheet size cannot rule a box out. */
+  function fitsSheet(b, size) {
+    if (!b || b.length !== 4) return false;
+    if (!(b[2] > b[0] && b[3] > b[1])) return false;
+    if (!size || !(size[0] > 0) || !(size[1] > 0)) return true;
+    return b[0] >= -1 && b[1] >= -1 && b[2] <= size[0] + 1 && b[3] <= size[1] + 1;
+  }
+  window.__ptFitsSheet = fitsSheet;
+
   function toImage(px, py) {
     return { x: (px - box.view.x) / box.view.scale, y: (py - box.view.y) / box.view.scale };
   }
@@ -921,6 +932,11 @@
     // is not a decision yet, so it lives for the session and no longer - which
     // also keeps the stored shape exactly four numbers.
     var stored = {};
+    // A box set aside because it belongs to a larger copy of this sheet stays
+    // stored unless this file has its own box for that floor now.
+    Object.keys(box.setAside || {}).forEach(function (id) {
+      stored[id] = box.setAside[id];
+    });
     Object.keys(box.boxes).forEach(function (id) {
       if (box.applied && box.applied[id]) stored[id] = box.boxes[id];
     });
@@ -949,6 +965,9 @@
      tests slice this file from `function floorState` and a helper outside that
      boundary is simply undefined when they run it. */
   function floorState(rep, id) {
+    var aside = box.setAside && box.setAside[id]
+      ? '  \u00b7 a box saved for a larger copy of this sheet does not fit this one, so it was not used'
+      : '';
     // How much drawing the sheet carries beyond the building, each way.
     // Without it, choosing a margin is guesswork: a 200 ft margin on a sheet
     // with 80 ft of site drawn on it is not a wider crop, it is "keep
@@ -973,7 +992,7 @@
         ? { word: 'Your box', cls: 'is-manual', detail: 'drawn \u2014 not cropped yet' }
         : { word: 'Reading\u2026', cls: 'is-pending', detail: '' };
     }
-    var beyond = clearanceText(f);
+    var beyond = clearanceText(f) + aside;
     if (f.action === 'trimmed') {
       var dims = f.oldSize[0] + '\u00d7' + f.oldSize[1] + ' \u2192 ' +
                  f.newSize[0] + '\u00d7' + f.newSize[1];
@@ -1323,10 +1342,27 @@
       var saved = res[1] || {};
       box.boxes = {};
       box.applied = {};
-      // Anything that was stored had been cropped, so it comes back cropped.
+      box.setAside = {};
+      var sheets = {};
+      (doc.floorPlans || []).forEach(function (f) {
+        if (f && f.id) sheets[f.id] = [Math.round(f.width || 0), Math.round(f.height || 0)];
+      });
+      // Anything that was stored had been cropped, so it comes back cropped -
+      // but only onto a sheet it fits. Boxes are keyed by the project's id, and
+      // a trimmed copy keeps that id, so opening the output of an earlier trim
+      // laid the box drawn on the full-size original over the smaller sheet:
+      // it landed off the drawing, the view framed it and pushed the plan to
+      // the edge, everything was shaded as "thrown away", and the handles were
+      // off the plan where nothing could be grabbed. A box that does not fit is
+      // kept in the store, untouched, for the file it was drawn on.
       Object.keys(saved).forEach(function (id) {
-        box.boxes[id] = saved[id].slice(0, 4);
-        box.applied[id] = true;
+        var b = saved[id].slice(0, 4);
+        if (fitsSheet(b, sheets[id])) {
+          box.boxes[id] = b;
+          box.applied[id] = true;
+        } else {
+          box.setAside[id] = b;
+        }
       });
       var formats = {};
       try {
