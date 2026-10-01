@@ -1,10 +1,13 @@
-"""Starting the server does not load the browser cookie reader.
+"""A broken browser cookie reader does not stop the server starting.
 
-`import server` imported `browser_cookie3`, which on Windows imports win32com,
+`import server` imports `browser_cookie3`, which on Windows imports win32com,
 whose type-library cache is a file two processes starting together can catch
 half-written. CI did exactly that - `EOFError: Ran out of input` raised from
-`import server` in a test that only wanted the app. The reader is loaded the
-first time Cloud Manager reads browser cookies instead.
+`import server` in a test that only wanted the app. Such a failure is now
+logged and the reader is tried again at sign-in.
+
+Loading it only at sign-in, inside a request thread, was tried first and hung
+CI's Windows / Python 3.10 job, so it is still loaded at start.
 """
 from __future__ import annotations
 
@@ -19,18 +22,24 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parent.parent
 
 
-class TheServerStartsWithoutIt(unittest.TestCase):
-    def test_importing_the_server_leaves_it_unloaded(self):
+class TheServerStartsWithABrokenReader(unittest.TestCase):
+    def test_a_reader_that_fails_to_load_leaves_the_server_running(self):
         with tempfile.TemporaryDirectory() as d:
-            env = dict(os.environ, WD_USER_DIR=d)
+            fake = Path(d) / "fake"
+            fake.mkdir()
+            (fake / "browser_cookie3.py").write_text(
+                'raise EOFError("Ran out of input")\n', encoding="utf-8")
+            env = dict(os.environ, WD_USER_DIR=str(Path(d) / "user"),
+                       PYTHONPATH=os.pathsep.join([str(fake), str(ROOT)]))
             r = subprocess.run(
                 [sys.executable, "-c",
-                 "import sys, server; print('browser_cookie3' in sys.modules)"],
+                 "import server; from tools import cloud_manager as cm; "
+                 "print(cm.browser_cookie3 is cm._NOT_LOADED)"],
                 cwd=ROOT, env=env, capture_output=True, text=True,
                 encoding="utf-8", timeout=120)
         if r.returncode != 0:
             raise AssertionError((r.stdout + r.stderr).strip())
-        self.assertEqual(r.stdout.strip().splitlines()[-1], "False")
+        self.assertEqual(r.stdout.strip().splitlines()[-1], "True")
 
 
 class ItLoadsWhenCookiesAreRead(unittest.TestCase):

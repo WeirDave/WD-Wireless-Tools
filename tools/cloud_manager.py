@@ -28,14 +28,21 @@ from tools import applog
 from tools.settings import load_settings as _load_suite_settings
 from tools.settings import update_settings as _update_suite_settings
 
-#: Loaded the first time browser cookies are read, not when the server
-#: starts. On Windows it imports win32com, whose type-library cache is a file
-#: that two processes starting together can catch half-written - which is
-#: what CI saw, as `EOFError: Ran out of input` from `import server`. Nothing
-#: but the sign-in needs it, so nothing else pays for it. Tests replace this
-#: name directly, with None or a fake, as before.
+#: Loaded when the server starts, on the main thread. On Windows it imports
+#: win32com, whose type-library cache is a file that two processes starting
+#: together can catch half-written - CI saw `EOFError: Ran out of input` from
+#: `import server`. That failure no longer stops the server: the name stays
+#: _NOT_LOADED and the sign-in tries again. Loading it lazily instead, inside
+#: a request thread, was tried and hung CI's Windows / Python 3.10 job, so the
+#: first attempt stays here. Tests replace this name with None or a fake.
 _NOT_LOADED = object()
-browser_cookie3 = _NOT_LOADED
+try:
+    import browser_cookie3
+except ImportError:
+    browser_cookie3 = None
+except Exception as _e:  # noqa: BLE001 - a broken import is not a crash
+    applog.note_failure("loading the browser cookie reader", _e)
+    browser_cookie3 = _NOT_LOADED
 
 
 def _cookie_reader():
