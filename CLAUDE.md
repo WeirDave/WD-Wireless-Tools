@@ -400,6 +400,27 @@ need a trusted root certificate on a **work machine** - not to be suggested.
 The full API notes - endpoints, what is established, the one cheap route still
 open - are in `docs/dev-notes/ekahau-cloud-api.md`.
 
+## Every tool has its own brand colour
+
+*"all tools should have their own unique color branding"* - said as the
+suite-wide visual refresh began. **A refresh unifies the look, never the
+colours.** Type, spacing, panels and components are shared; a tool is told
+apart by one colour.
+
+* **One block sets it**: the brand block in `web/assets/wd-tools.css`
+  (`--tool-accent`, and `--tool-title` where the accent is not legible as a
+  title). Header tint, title, drop box and the current item on a workbench
+  rail all read it. Never write a per-tool header rule again.
+* **The Home tile is the reference** for which colour a tool is: Cloud blue,
+  Capacity azure, AP Labeler purple, PlanTrim teal, Prep lime, Quick Walls
+  green, Report rose, Scale red, Squirrel amber (organizer and rename are one
+  tool, one colour). Home, Settings, Setup and the User Guide stay neutral.
+* **Status colours are not brands**: `--ok`, `--attn`, `--danger` mean the
+  same thing in every tool.
+* `tests/test_every_tool_has_its_own_brand.py` resolves the colours and fails
+  on a tool without one, two tools sharing one, or a title under 3:1 on its
+  own bar in either theme. A new tool page needs a line in the block.
+
 ## The Ekahau AP colour palette
 
 `WD.EKAHAU_COLORS` in `web/assets/js/wd-shared.js` is the only copy. Anything

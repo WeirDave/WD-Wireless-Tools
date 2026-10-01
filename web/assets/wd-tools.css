@@ -359,22 +359,12 @@ mark {
 
 
 
-body.tool-organizer .topbar h1 { color: var(--amber); }
-body.tool-cloud     .topbar h1 { color: var(--blue); }
-body.tool-scale     .topbar h1 { color: var(--purple); }
 
 
 
 
 
 
-body.tool-organizer .topbar { background: linear-gradient(rgba(217,119,6,0.18), rgba(217,119,6,0.18)), var(--navy); }
-body.tool-cloud     .topbar { background: linear-gradient(rgba(14,165,233,0.18), rgba(14,165,233,0.18)), var(--navy); }
-body.tool-scale     .topbar { background: linear-gradient(rgba(139,92,246,0.20), rgba(139,92,246,0.20)), var(--navy); }
-
-[data-theme="light"] body.tool-organizer .topbar { background: linear-gradient(rgba(217,119,6,0.14), rgba(217,119,6,0.14)), var(--surface); }
-[data-theme="light"] body.tool-cloud     .topbar { background: linear-gradient(rgba(14,165,233,0.14), rgba(14,165,233,0.14)), var(--surface); }
-[data-theme="light"] body.tool-scale     .topbar { background: linear-gradient(rgba(139,92,246,0.14), rgba(139,92,246,0.14)), var(--surface); }
 
 .topbar-right {
   flex: 1; display: flex; align-items: center; gap: 10px;
@@ -438,21 +428,10 @@ body.tool-scale     .topbar { background: linear-gradient(rgba(139,92,246,0.20),
 
 
 
-body.tool-walls .header h1,
-body.tool-walls .dz-topbar h1 { color: var(--green); }
-body.tool-report .dz-topbar h1 { color: var(--rose); }
 
 
 
 
-body.tool-walls .header, body.tool-walls .dz-topbar { background: linear-gradient(rgba(21,128,61,0.18), rgba(21,128,61,0.18)), var(--navy); }
-body.tool-report .dz-topbar { background: linear-gradient(rgba(159,27,88,0.20), rgba(159,27,88,0.20)), var(--navy); }
-body.tool-report .report-wiz-topbar { background: linear-gradient(rgba(159,27,88,0.20), rgba(159,27,88,0.20)), var(--surface); }
-
-[data-theme="light"] body.tool-walls .header,
-[data-theme="light"] body.tool-walls .dz-topbar { background: linear-gradient(rgba(21,128,61,0.14), rgba(21,128,61,0.14)), var(--head-bg); }
-[data-theme="light"] body.tool-report .dz-topbar { background: linear-gradient(rgba(159,27,88,0.14), rgba(159,27,88,0.14)), var(--head-bg); }
-[data-theme="light"] body.tool-report .report-wiz-topbar { background: linear-gradient(rgba(159,27,88,0.14), rgba(159,27,88,0.14)), var(--head-bg); }
 
 .header .file-badge, .report-wiz-topbar .file-badge {
   font-family: var(--mono); font-size: 12px; color: var(--text);
@@ -4255,14 +4234,7 @@ body.tool-cloud .toolbar input.search:focus {
    drifted: Quick Walls and AP Labeler coloured the resting box, Report and
    PlanTrim only the hover, Prep and Capacity nothing, so four of six drop
    boxes were a grey outline that did not read as a target. */
-body { --dz-accent: var(--blue); }
-body.tool-walls    { --dz-accent: var(--green); }
-body.tool-report   { --dz-accent: var(--rose); }
-body.tool-aprename { --dz-accent: var(--indigo); }
-body.tool-plantrim { --dz-accent: var(--pt-accent); }
-body.tool-prep     { --dz-accent: var(--lime); }
-body.tool-capacity { --dz-accent: var(--azure); }
-body.tool-rename   { --dz-accent: var(--amber); }
+body { --dz-accent: var(--tool-accent); }
 
 .dropzone:hover .dropzone-cta, .dropzone.dragover .dropzone-cta {
   border-color: var(--dz-accent);
@@ -4559,32 +4531,67 @@ body.tool-walls .toolbar {
 
 [data-theme="light"] .dz-topbar h1 .ver { color: var(--text-2); }
 
-/* Prep, Capacity and PlanTrim had no header colour at all: Quick Walls,
-   Report and AP Labeler each carry their own tint rules, these three never
-   got one (PlanTrim's target `.topbar`, which its page does not use), so
-   their bars were the plain default. Driven by --dz-accent, so the header,
-   the drop box and the Home tile cannot disagree. --dz-title is the title
-   colour, darker where the accent is too pale to read on the light bar.
-   Held by tests/test_every_tool_header_carries_its_colour.py. */
-body.tool-prep, body.tool-capacity, body.tool-plantrim { --dz-title: var(--dz-accent); }
-[data-theme="light"] body.tool-prep { --dz-title: var(--lime-dark); }
-body.tool-capacity { --dz-title: color-mix(in srgb, var(--azure) 70%, white); }
-[data-theme="light"] body.tool-capacity { --dz-title: var(--dz-accent); }
-body.tool-prep :is(.dz-topbar, .header),
-body.tool-capacity :is(.dz-topbar, .header),
-body.tool-plantrim :is(.dz-topbar, .header) {
-  background: linear-gradient(color-mix(in srgb, var(--dz-accent) 18%, transparent),
-                              color-mix(in srgb, var(--dz-accent) 18%, transparent)), var(--navy);
+/* Brand: every tool has its own colour, and this is the only place it is set.
+
+   "all tools should have their own unique color branding" - so the shared
+   look (type, spacing, panels, buttons) is the same everywhere, and the tool
+   is told apart by one colour: the header tint, the title, the drop box, the
+   current item on a workbench rail. The Home tile is the reference for which
+   colour a tool is; AP Labeler (indigo drop box, purple tile) and Scale
+   (purple header, red tile) disagreed with their own tiles until this block.
+
+   --tool-accent is the brand. --tool-title is the same hue made legible as a
+   title on that tool's tinted bar, per theme. Status colours (--ok, --attn,
+   --danger) are not brands and never stand in for one. Squirrel is one tool
+   on two pages (organizer, rename), so it is one colour on both.
+
+   Held by tests/test_every_tool_has_its_own_brand.py (unique, legible, and
+   every tool page covered) and tests/test_every_tool_header_carries_its_colour.py
+   (painted, in a browser). */
+body                 { --tool-accent: var(--blue); --tool-title: var(--tool-accent); }
+body.tool-cloud      { --tool-accent: var(--blue); }
+body.tool-capacity   { --tool-accent: var(--azure);  --tool-title: color-mix(in srgb, var(--azure) 70%, white); }
+body.tool-aprename   { --tool-accent: var(--purple); }
+body.tool-plantrim   { --tool-accent: #14b8a6; }
+body.tool-prep       { --tool-accent: var(--lime); }
+body.tool-walls      { --tool-accent: var(--green);  --tool-title: #22c55e; }
+body.tool-report     { --tool-accent: var(--rose);   --tool-title: var(--rose-bright); }
+body.tool-scale      { --tool-accent: var(--red);    --tool-title: var(--red-light); }
+body.tool-organizer,
+body.tool-rename     { --tool-accent: var(--amber); }
+[data-theme="light"] body.tool-cloud     { --tool-title: var(--blue-dark); }
+[data-theme="light"] body.tool-capacity  { --tool-title: var(--azure); }
+[data-theme="light"] body.tool-aprename  { --tool-title: var(--purple-dark); }
+[data-theme="light"] body.tool-plantrim  { --tool-accent: #0d9488; --tool-title: var(--teal-dark); }
+[data-theme="light"] body.tool-prep      { --tool-title: #4d7c0f; }
+[data-theme="light"] body.tool-walls     { --tool-title: var(--green); }
+[data-theme="light"] body.tool-report    { --tool-title: var(--rose); }
+[data-theme="light"] body.tool-scale     { --tool-title: var(--red); }
+[data-theme="light"] :is(body.tool-organizer, body.tool-rename) { --tool-title: var(--amber-dark); }
+
+/* The bar and its title, on every tool page. Home, Settings, Setup and the
+   User Guide are the suite rather than a tool and stay neutral. */
+:is(body.tool-cloud, body.tool-capacity, body.tool-aprename, body.tool-plantrim,
+    body.tool-prep, body.tool-walls, body.tool-report, body.tool-scale,
+    body.tool-organizer, body.tool-rename) {
+  --tool-tint: color-mix(in srgb, var(--tool-accent) 18%, transparent);
 }
-[data-theme="light"] body.tool-prep :is(.dz-topbar, .header),
-[data-theme="light"] body.tool-capacity :is(.dz-topbar, .header),
-[data-theme="light"] body.tool-plantrim :is(.dz-topbar, .header) {
-  background: linear-gradient(color-mix(in srgb, var(--dz-accent) 14%, transparent),
-                              color-mix(in srgb, var(--dz-accent) 14%, transparent)), var(--head-bg);
+[data-theme="light"] :is(body.tool-cloud, body.tool-capacity, body.tool-aprename,
+    body.tool-plantrim, body.tool-prep, body.tool-walls, body.tool-report,
+    body.tool-scale, body.tool-organizer, body.tool-rename) {
+  --tool-tint: color-mix(in srgb, var(--tool-accent) 14%, transparent);
 }
-body.tool-prep :is(.dz-topbar, .header) h1,
-body.tool-capacity :is(.dz-topbar, .header) h1,
-body.tool-plantrim :is(.dz-topbar, .header) h1 { color: var(--dz-title); }
+body:not(.tool-home):not(.tool-guide) :is(.topbar, .header, .dz-topbar, .report-wiz-topbar) {
+  background: linear-gradient(var(--tool-tint, transparent), var(--tool-tint, transparent)), var(--navy);
+}
+[data-theme="light"] body:not(.tool-home):not(.tool-guide) :is(.topbar, .header, .dz-topbar, .report-wiz-topbar) {
+  background: linear-gradient(var(--tool-tint, transparent), var(--tool-tint, transparent)), var(--head-bg);
+}
+:is(body.tool-cloud, body.tool-capacity, body.tool-aprename, body.tool-plantrim,
+    body.tool-prep, body.tool-walls, body.tool-report, body.tool-scale,
+    body.tool-organizer, body.tool-rename) :is(.topbar, .header, .dz-topbar, .report-wiz-topbar) h1 {
+  color: var(--tool-title);
+}
 
 .header-center { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none; }
 
@@ -5254,7 +5261,7 @@ body.tool-report {
 
 .report-toolbar-center { flex: 1; text-align: center; }
 
-.report-toolbar-center h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.2px; color: var(--rose); }
+.report-toolbar-center h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: 0.2px; color: var(--tool-title); }
 
 .report-wiz-topbar .ver { font-weight: 500; color: var(--text-2); font-size: 14px; margin-left: 6px; }
 
@@ -8570,7 +8577,6 @@ body.tool-plantrim {
   min-height: 100vh;
 }
 
-body.tool-plantrim .topbar h1 { color: var(--pt-accent); }
 
 body.tool-plantrim {
   --pt-accent: #14b8a6;
@@ -8579,13 +8585,6 @@ body.tool-plantrim {
 
 [data-theme="light"] body.tool-plantrim { --pt-accent: #0d9488; }
 
-body.tool-plantrim .topbar {
-  background: linear-gradient(var(--pt-accent-dim), var(--pt-accent-dim)), var(--navy);
-}
-
-[data-theme="light"] body.tool-plantrim .topbar {
-  background: linear-gradient(rgba(13,148,136,0.12), rgba(13,148,136,0.12)), var(--head-bg);
-}
 
 .pt-topbar { padding: 10px 20px; border-bottom: 1px solid var(--border); }
 
@@ -8730,12 +8729,6 @@ body.pt-busy { cursor: progress; }
 body.tool-plantrim .dropzone-logo { background-image: url(plantrim-v1.0-560x480.png); }
 
 /* ── AP Labeler header & dropzone ───────────────────────────── */
-body.tool-aprename .header h1,
-body.tool-aprename .dz-topbar h1 { color: var(--indigo); }
-body.tool-aprename .header,
-body.tool-aprename .dz-topbar { background: linear-gradient(rgba(99,102,241,0.18), rgba(99,102,241,0.18)), var(--navy); }
-[data-theme="light"] body.tool-aprename .header,
-[data-theme="light"] body.tool-aprename .dz-topbar { background: linear-gradient(rgba(99,102,241,0.14), rgba(99,102,241,0.14)), var(--head-bg); }
 body.tool-aprename .header-actions .btn-primary { background: var(--indigo); border-color: var(--indigo); }
 body.tool-aprename .header-actions .btn-primary:hover { background: var(--indigo-dark); border-color: var(--indigo-dark); }
 
@@ -11101,7 +11094,7 @@ body.tool-prep .editor.active, body.tool-plantrim .editor.active { overflow: hid
   display: flex; align-items: flex-start; gap: 8px; padding: 10px;
   border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
 }
-.pb-stage.is-current { border-color: var(--lime); background: color-mix(in srgb, var(--lime) 12%, var(--bg)); }
+.pb-stage.is-current { border-color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 12%, var(--bg)); }
 .pb-stage.is-off .pb-stage-name { color: var(--text-3); }
 .pb-stage input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
 .pb-stage-open {
@@ -11123,8 +11116,8 @@ body.tool-prep .editor.active, body.tool-plantrim .editor.active { overflow: hid
   padding: 5px 11px; border-radius: 6px; border: 1px solid var(--border);
   background: transparent; color: var(--text-2); font: inherit; font-size: 12.5px; cursor: pointer;
 }
-.pb-floor:hover { border-color: var(--lime); }
-.pb-floor.is-current { border-color: var(--lime); color: var(--text); background: color-mix(in srgb, var(--lime) 14%, transparent); }
+.pb-floor:hover { border-color: var(--tool-accent); }
+.pb-floor.is-current { border-color: var(--tool-accent); color: var(--text); background: color-mix(in srgb, var(--tool-accent) 14%, transparent); }
 .pb-floor-state { font-size: 11px; opacity: 0.85; }
 .pb-floor.is-manual .pb-floor-state { color: var(--blue); opacity: 1; }
 .pb-floor.is-refused .pb-floor-state { color: var(--amber, #f0ad4e); opacity: 1; }
@@ -11194,9 +11187,9 @@ body.tool-prep .editor.active, body.tool-plantrim .editor.active { overflow: hid
   grid-template-columns: 1fr auto; row-gap: 3px; padding: 10px;
   border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
 }
-.pb-rail .ptb-row:hover { border-color: var(--lime); background: var(--bg); }
+.pb-rail .ptb-row:hover { border-color: var(--tool-accent); background: var(--bg); }
 .pb-rail .ptb-row.is-current {
-  border-color: var(--lime); background: color-mix(in srgb, var(--lime) 12%, var(--bg));
+  border-color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 12%, var(--bg));
 }
 .pb-rail .ptb-row-name { font-size: 13px; font-weight: 600; }
 .pb-rail .ptb-row-detail,

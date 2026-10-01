@@ -1,4 +1,8 @@
-"""Every file-based tool's header bar is tinted with that tool's colour.
+"""Every tool's header bar is tinted with that tool's colour.
+
+Since suite 2.197.0 the colours come from one brand block in wd-tools.css
+(tests/test_every_tool_has_its_own_brand.py), and Cloud Manager, Scale and
+Squirrel - whose bar is `.topbar` - are measured here too.
 
 Quick Walls, Report and AP Labeler each carried their own header rules;
 Prep, Capacity and PlanTrim never got any - PlanTrim's targeted `.topbar`,
@@ -19,7 +23,8 @@ if harness.HAVE_SELENIUM:
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
 
-TOOLS = ["/walls", "/report", "/aprename", "/plantrim", "/prep", "/capacity"]
+TOOLS = ["/walls", "/report", "/aprename", "/plantrim", "/prep", "/capacity",
+         "/cloud", "/scale", "/squirrel"]
 
 #: What the title is when no tool colour applies: white on the dark bar, the
 #: body text colour on the light one.
@@ -28,7 +33,7 @@ UNCOLOURED = {"rgb(255, 255, 255)", "rgb(17, 24, 39)"}
 MEASURE = """
 document.documentElement.setAttribute('data-theme', arguments[0]);
 var out = [];
-['.dz-topbar', '.header'].forEach(function (sel) {
+['.dz-topbar', '.header', '.topbar'].forEach(function (sel) {
   var bar = document.querySelector(sel);
   if (!bar) return;
   var h1 = bar.querySelector('h1');
@@ -48,7 +53,7 @@ class EveryToolHeaderCarriesItsColourTests(harness.BrowserPagesHarness):
     def bars(self, drv, path, theme):
         drv.get(self.base + path)
         WebDriverWait(drv, 15).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".dz-topbar")))
+            EC.presence_of_element_located((By.CSS_SELECTOR, ".dz-topbar, .topbar")))
         return drv.execute_script(MEASURE, theme)
 
     def test_every_header_is_tinted_and_its_title_coloured(self):
