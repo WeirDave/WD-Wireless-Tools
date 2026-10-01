@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import socket
 import threading
 import time
 import unittest
@@ -40,7 +39,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-PORT_HINT = 8951
 ME = "me@example.invalid"
 MATE = "colleague@example.invalid"
 
@@ -53,17 +51,6 @@ except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
 
 BROWSERS = _browsers.triple()
-
-
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
 
 
 #: One of each answer, and the third is the point.
@@ -205,9 +192,9 @@ class OwnershipIsOnTheRow(unittest.TestCase):
             raise unittest.SkipTest("selenium is not installed")
         if not Path(cls.binary).exists():
             raise unittest.SkipTest("%s is not installed here" % cls.kind)
-        cls.port = _free_port(PORT_HINT)
-        cls.server = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(_Stub, directory=str(WEB)))
+        cls.server = _browsers.ExclusiveServer(
+            ("127.0.0.1", 0), partial(_Stub, directory=str(WEB)))
+        cls.port = cls.server.server_address[1]
         cls.addClassCleanup(cls._stop_server)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()
         cls.driver = _driver(cls.kind, cls.binary)

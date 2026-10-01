@@ -31,7 +31,6 @@ from tests import browsers as _browsers
 import contextlib
 import json
 import os
-import socket
 import threading
 import unittest
 from unittest import mock
@@ -52,20 +51,6 @@ BROWSERS = [
     ("edge", _browsers.find("edge")),
 ]
 
-#: Deliberately not 8675, which is the port a real install uses, and
-#: deliberately not a round number several sessions would reach for.
-PORT_HINT = 47311
-
-
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
 
 
 def _driver(kind, binary):
@@ -178,12 +163,13 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
         for patcher in cls._patches:
             patcher.start()
 
-        cls.port = _free_port(PORT_HINT)
         # `make_server` rather than `main()`: `main()` spawns `_open_browser`
         # unconditionally, and every test server started that way has left a
         # real Firefox window on the desktop that nobody closes.
-        cls.httpd = make_server("127.0.0.1", cls.port, server.app,
+        cls.httpd = make_server("127.0.0.1", 0, server.app,
                                 threaded=True)
+        # Port 0: the OS assigns a free one. See tests/browsers.ExclusiveServer.
+        cls.port = cls.httpd.server_port
         cls.thread = threading.Thread(target=cls.httpd.serve_forever,
                                       daemon=True)
         cls.thread.start()

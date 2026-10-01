@@ -36,9 +36,7 @@ from __future__ import annotations
 
 from tests import browsers as _browsers
 
-import contextlib
 import re
-import socket
 import sys
 import threading
 import unittest
@@ -50,7 +48,6 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 JS = ROOT / "web" / "assets" / "js"
-PORT_HINT = 8791
 
 try:
     from selenium import webdriver
@@ -74,17 +71,6 @@ HOSTILE = """x&quot;);window.__pwned=true;//' <img src=x onerror="window.__pwned
 #: A guard that breaks these is worse than the bug - he has projects with
 #: apostrophes and ampersands in their names.
 ORDINARY = """O'Brien & Sons - "North" <Wing> \\ 50%"""
-
-
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -408,9 +394,9 @@ class HostileValues(unittest.TestCase):
                 "renderers": _renderers()},
             encoding="utf-8")
 
-        cls.port = _free_port(PORT_HINT)
-        cls.server = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(QuietHandler, directory=str(cls.tmp)))
+        cls.server = _browsers.ExclusiveServer(
+            ("127.0.0.1", 0), partial(QuietHandler, directory=str(cls.tmp)))
+        cls.port = cls.server.server_address[1]
         cls.addClassCleanup(cls.server.server_close)
         cls.addClassCleanup(cls.server.shutdown)
         threading.Thread(target=cls.server.serve_forever, daemon=True).start()

@@ -21,14 +21,13 @@ from unittest import mock
 
 from tests import browsers as _browsers
 from tests.test_strict_pages_work_in_a_browser import (
-    BROWSERS, HAVE_SELENIUM, _driver, _free_port)
+    BROWSERS, HAVE_SELENIUM, _driver)
 
 if HAVE_SELENIUM:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
 
-PORT_HINT = 47391
 
 #: Which rows the cards are on, where the last one ends, and whether anything
 #: is wider than its box. The last-folder hint is shown with a long path,
@@ -90,9 +89,10 @@ class BrowserPagesHarness(unittest.TestCase):
         ]
         for patcher in cls._patches:
             patcher.start()
-        cls.port = _free_port(PORT_HINT)
-        cls.httpd = make_server("127.0.0.1", cls.port, server.app,
+        cls.httpd = make_server("127.0.0.1", 0, server.app,
                                 threaded=True)
+        # Port 0: the OS assigns a free one. See tests/browsers.ExclusiveServer.
+        cls.port = cls.httpd.server_port
         cls.thread = threading.Thread(target=cls.httpd.serve_forever,
                                       daemon=True)
         cls.thread.start()

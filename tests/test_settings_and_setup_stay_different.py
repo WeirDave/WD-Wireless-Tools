@@ -26,10 +26,8 @@ from __future__ import annotations
 
 from tests import browsers as _browsers
 
-import contextlib
 import json
 import re
-import socket
 import threading
 import time
 import unittest
@@ -40,9 +38,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
-#: Its own port range, clear of 8675 (his own instance) and of the other
-#: browser tests here.
-PORT_HINT = 8967
 
 BROWSERS = [
     ("firefox", _browsers.find("firefox")),
@@ -126,17 +121,6 @@ PAGES = {"settings": ("settings.html", "sSfList"),
          "setup": ("setup.html", "sfList")}
 
 
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
-
-
 class _StubApi(SimpleHTTPRequestHandler):
     """web/ as files, /api/* as JSON. Never server.py, which opens a browser
     window on his desktop that nobody closes.
@@ -181,9 +165,9 @@ class SetupStaysBiggerThanSettingsTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.port = _free_port(PORT_HINT)
-        cls.httpd = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(_StubApi, directory=str(WEB)))
+        cls.httpd = _browsers.ExclusiveServer(
+            ("127.0.0.1", 0), partial(_StubApi, directory=str(WEB)))
+        cls.port = cls.httpd.server_address[1]
         threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
 
     @classmethod
