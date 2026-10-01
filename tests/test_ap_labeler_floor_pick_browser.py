@@ -21,10 +21,8 @@ from __future__ import annotations
 from tests import browsers as _browsers
 
 import base64
-import contextlib
 import io
 import json
-import socket
 import threading
 import time
 import unittest
@@ -36,8 +34,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
-#: Not 8675, which is his own running instance.
-PORT_HINT = 8931
 
 BROWSERS = _browsers.triple()
 
@@ -86,15 +82,19 @@ def _fixture() -> bytes:
     return buf.getvalue()
 
 
-def _free_port(start):
-    for port in range(start, start + 40):
-        with contextlib.closing(socket.socket()) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
-    raise RuntimeError("no free port near %d" % start)
+class _ExclusiveServer(ThreadingHTTPServer):
+    """A stub server no other test can share a port with.
+
+    The port used to be chosen by probing from 8931 and then binding it. With
+    four workers running browser modules at once, another module could probe
+    the same free port in the gap, and on Windows `SO_REUSEADDR` - which
+    `http.server` sets - lets two servers bind one port. The page's requests
+    then reach either stub, and a page answered by the wrong one never loads
+    the project: "0 != 3", in Edge on one run and Chrome on the next. Port 0
+    lets the OS hand out a free port atomically, and no reuse means a port in
+    use cannot be taken.
+    """
+    allow_reuse_address = False
 
 
 class _StubApi(SimpleHTTPRequestHandler):
@@ -140,7 +140,7 @@ function ready() {
 }
 (function waitReady() {
   if (!ready()) {
-    if (Date.now() - started > 20000) { done(-1); return; }
+    if (Date.now() - started > 20000) { done({ n: -1, path: location.pathname, note: 'page never ready' }); return; }
     setTimeout(waitReady, 100);
     return;
   }
@@ -152,7 +152,11 @@ function ready() {
     new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
   (function waitFloors() {
     var n = count();
-    if (n >= 3 || Date.now() - started > 30000) { done(n); return; }
+    if (n >= 3 || Date.now() - started > 30000) {
+      var note = document.getElementById('arNoPlan');
+      done({ n: n, path: location.pathname, note: note ? note.textContent : null });
+      return;
+    }
     setTimeout(waitFloors, 100);
   })();
 })();
@@ -195,9 +199,9 @@ class OnlyTheChosenFloorsAreRenamedTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.b64 = base64.b64encode(_fixture()).decode("ascii")
-        cls.port = _free_port(PORT_HINT)
-        cls.httpd = ThreadingHTTPServer(
-            ("127.0.0.1", cls.port), partial(_StubApi, directory=str(WEB)))
+        cls.httpd = _ExclusiveServer(
+            ("127.0.0.1", 0), partial(_StubApi, directory=str(WEB)))
+        cls.port = cls.httpd.server_address[1]
         threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
         cls.url = "http://127.0.0.1:%d/ap-rename.html" % cls.port
 
@@ -239,8 +243,8 @@ class OnlyTheChosenFloorsAreRenamedTests(unittest.TestCase):
                 driver.set_window_size(1600, 1000)
                 driver.set_script_timeout(60)
                 driver.get(self.url)
-                tabs = driver.execute_async_script(DROP_JS, self.b64)
-                self.assertEqual(tabs, 3, f"{kind}: the project did not load")
+                got = driver.execute_async_script(DROP_JS, self.b64)
+                self.assertEqual(got["n"], 3, f"{kind}: the project did not load: {got}")
                 yield kind, driver
             finally:
                 _browsers.shut_down(driver)
