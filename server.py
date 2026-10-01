@@ -707,6 +707,16 @@ def api_capacity(action):
                 data.get("extracted") or {}, data.get("occupants"), data.get("name") or ""))
         if action == "save":
             return jsonify(capacity_profiles.save_template(data.get("template") or {}))
+        if action == "build":
+            built = capacity_profiles.build_template(data.get("spec") or {})
+            if not built.get("ok"):
+                return jsonify(built)
+            saved = capacity_profiles.save_template(built)
+            if saved.get("ok") and data.get("replaces") and data.get("replaces") != saved.get("file"):
+                # Renamed in the editor: the old file goes, so one template
+                # does not become two. A shipped example is never deleted.
+                capacity_profiles.delete_template(data.get("replaces"))
+            return jsonify(dict(saved, template=built))
         if action == "delete":
             return jsonify(capacity_profiles.delete_template(data.get("file") or ""))
     except Exception as e:

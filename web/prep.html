@@ -177,9 +177,10 @@
 
       <section class="pb-section" id="prepPanel-trim">
         <h2 class="pb-title" id="prepTrimTitle">Trim</h2>
+        <div class="cap-warn prep-reason" id="prepReason-trim" role="status" hidden></div>
         <p class="pb-lead" id="prepTrimFloor"></p>
         <div class="pb-field" id="prepTrimOpts">
-          <label for="prepMargin">Margin around the drawing</label>
+          <label for="prepMargin">Space to leave around the building</label>
           <select id="prepMargin" class="prep-input" data-action-change="call" data-fn="prepSetMargin" data-arg-value="1">
             <option value="tight">Tight &mdash; 3 ft (0.9 m)</option>
             <option value="normal" selected>Normal &mdash; 10 ft (3 m)</option>
@@ -217,6 +218,7 @@
 
       <section class="pb-section" id="prepPanel-areas" hidden>
         <h2 class="pb-title">Requirement areas</h2>
+        <div class="cap-warn prep-reason" id="prepReason-areas" role="status" hidden></div>
         <div class="pb-field" id="prepAreaOpts">
           <label for="prepCapTpl">Capacity template</label>
           <select id="prepCapTpl" class="prep-input" data-action-change="call" data-fn="prepSyncStepUi"></select>
@@ -256,6 +258,7 @@
 
       <section class="pb-section" id="prepPanel-walls" hidden>
         <h2 class="pb-title">Wall types</h2>
+        <div class="cap-warn prep-reason" id="prepReason-walls" role="status" hidden></div>
         <div class="pb-field" id="prepWallOpts">
           <label for="prepWallTpl">Wall template</label>
           <select id="prepWallTpl" class="prep-input" data-action-change="call" data-fn="prepSyncStepUi"></select>

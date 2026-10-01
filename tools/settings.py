@@ -192,6 +192,10 @@ DEFAULTS = {
         # the Capacity page changes one run and writes nothing here. Ships as
         # "keep" because the other two change numbers he set.
         "existing_devices": "keep",
+        # The template Capacity picks the moment a project is opened, by file
+        # name. Empty means none is picked until one is chosen. Set with
+        # "Make default" on the Capacity page.
+        "default_template": "",
     },
     "walls": {
         # Opening a project from disk lets Quick Walls show you the folder it

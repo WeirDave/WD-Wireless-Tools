@@ -38,9 +38,42 @@
       checkCloud();
       loadOverviews();
       loadWallTemplates();
+      buildNav();
       openHashSection();
+      markNav();
     });
   }
+
+  /* The side list of sections. Pressing one goes through the same route a
+     tool's Settings link takes - the hash - so arriving from a tool and
+     choosing here open a section the same way. */
+  function buildNav() {
+    var nav = document.getElementById('sNav');
+    if (!nav) return;
+    var secs = document.querySelectorAll('details.s-section');
+    nav.innerHTML = Array.prototype.map.call(secs, function (d) {
+      var sum = d.querySelector('summary');
+      var name = d.id.replace(/^sec-/, '');
+      return '<button type="button" class="s-nav-item" data-sec="' + WD.escAttr(d.id) + '"'
+        + ' data-action="call" data-fn="SP.goSection" data-arg="' + WD.escAttr(name) + '">'
+        + WD.esc(sum ? sum.textContent.trim() : name) + '</button>';
+    }).join('');
+    Array.prototype.forEach.call(secs, function (d) {
+      d.addEventListener('toggle', markNav);
+    });
+  }
+
+  function markNav() {
+    var open = document.querySelector('details.s-section[open]');
+    Array.prototype.forEach.call(document.querySelectorAll('.s-nav-item'), function (b) {
+      b.classList.toggle('is-current', !!open && b.getAttribute('data-sec') === open.id);
+    });
+  }
+
+  SP.goSection = function (name) {
+    if (location.hash === '#' + name) openHashSection();
+    else location.hash = name;
+  };
 
   /* Arriving from a tool's gear button, e.g. Cloud Manager sends
      `/settings#cloud`. Opening the section is not enough on its own: this
@@ -84,7 +117,7 @@
       sec.classList.add('is-arrived');
     }
   }
-  window.addEventListener('hashchange', openHashSection);
+  window.addEventListener('hashchange', function () { openHashSection(); markNav(); });
 
 
   function populate() {
@@ -638,6 +671,7 @@
      three keys here named modals that no longer exist. */
   var WHERE = {
     'walls-tool':    'Quick Walls',
+    'capacity-tool': 'Capacity',
     'plantrim-tool': 'PlanTrim',
     'rename-page':   'Rename',
     'aprename-tool': 'AP Labeler'

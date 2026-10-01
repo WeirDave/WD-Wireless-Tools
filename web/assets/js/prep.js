@@ -53,12 +53,33 @@
      an empty set meaning every floor is automatic. */
   var trim = { boxes: {}, loaded: false, projectId: '', suggestions: {} };
 
+  /* The capacity template Capacity's "Make default" chose. Prep starts on it
+     too, until a template is picked here by hand. */
+  var savedCapTemplate = '';
+  var capTplTouched = false;
+
+  function selectDefaultCapTemplate() {
+    var sel = $('prepCapTpl');
+    if (!sel || capTplTouched || !savedCapTemplate) return false;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === savedCapTemplate) {
+        if (sel.value === savedCapTemplate) return false;
+        sel.value = savedCapTemplate;
+        return true;
+      }
+    }
+    return false;
+  }
+
   function loadExistingDefault() {
     return WD.api('settings/get').then(function (r) {
-      var v = r && r.settings && r.settings.capacity && r.settings.capacity.existing_devices;
+      var cap = (r && r.settings && r.settings.capacity) || {};
+      var v = cap.existing_devices;
       if (EXISTING_CHOICES.indexOf(v) >= 0) savedExisting = v;
+      if (typeof cap.default_template === 'string') savedCapTemplate = cap.default_template;
     }).catch(function () { /* keep the shipped default */ }).then(function () {
       if ($('prepExisting')) $('prepExisting').value = savedExisting;
+      if (selectDefaultCapTemplate()) syncStepUi();
       // A project opened before the setting arrived previewed on "keep".
       if (loaded()) preview();
     });
@@ -171,7 +192,8 @@
 
       $('prepCapTpl').innerHTML = capTemplates.length
         ? capTemplates.map(function (t) {
-            var sel = t._file === keepCap ? ' selected' : '';
+            var want = capTplTouched ? keepCap : (savedCapTemplate || keepCap);
+            var sel = t._file === want ? ' selected' : '';
             return '<option value="' + escAttr(t._file) + '"' + sel + '>' + esc(t.name) + '</option>';
           }).join('')
         : '<option value="">No capacity templates saved yet</option>';
@@ -180,7 +202,7 @@
       // than being offered and then refused by the server.
       if (!wallTemplates.length) disableStep('walls', 'Save one in Quick Walls first.');
       else enableStep('walls');
-      if (!capTemplates.length) disableStep('areas', 'Capture one from a project first.');
+      if (!capTemplates.length) disableStep('areas', 'Build one in Capacity first.');
       else enableStep('areas');
       syncStepUi();
     }).catch(function () { /* the pickers stay empty; the notes explain */ });
@@ -649,11 +671,23 @@
     return String((opt && opt.text) || (sel && sel.value) || '');
   }
 
+  /* A step that cannot run says so on the rail in one line; the reason, which
+     can run to a paragraph naming every missing profile, is in the step's own
+     panel. Written whole on the rail it was a column of red text that pushed
+     the other steps off the screen. */
   function setStatus(step, text, cls) {
     var el = $('prepStatus-' + step);
     if (!el) return;
-    el.textContent = text;
+    var bad = cls === 'is-bad';
+    var long = bad && String(text).length > 90;
+    el.textContent = long ? 'Cannot run \u2014 select this step to read why' : text;
+    if ('title' in el) el.title = long ? String(text) : '';
     el.className = 'pb-stage-status' + (cls ? ' ' + cls : '');
+    var reason = $('prepReason-' + step);
+    if (reason) {
+      reason.hidden = !bad;
+      reason.textContent = bad ? String(text) : '';
+    }
   }
 
   // The footer's note is markup the renderer built from escaped parts.
@@ -1070,8 +1104,9 @@
         : b ? 'Your box keeps ' + Math.round(b[2] - b[0]) + ' × ' + Math.round(b[3] - b[1])
               + ' of this sheet.' + (same ? '' : ' No other floor is the same size, so it '
               + 'cannot be applied to them.')
-          : 'Automatic: the drawing is found on its own. Drag a rectangle on the plan to '
-            + 'choose what to keep instead.';
+          : 'Automatic: Prep finds the building and keeps it, with the space above around '
+            + 'it - the dashed outline on the plan. To choose for yourself, drag a box on '
+            + 'the plan around what to keep.';
     }
     showEvidence();
     if (f) captionFor(f);
@@ -1508,6 +1543,9 @@
     loadTemplates();
     loadMargin();
     loadExistingDefault();
+    // A template picked here by hand wins over the saved default for the rest
+    // of the visit.
+    $('prepCapTpl').addEventListener('change', function () { capTplTouched = true; });
 
     $('fileInput').addEventListener('change', function (e) {
       if (e.target.files[0]) loadFile(e.target.files[0]);

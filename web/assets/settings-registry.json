@@ -223,6 +223,15 @@
       }
     },
     {
+      "key": "capacity.default_template",
+      "label": "Default capacity template",
+      "category": "preference",
+      "owner": "Capacity",
+      "section": "capacity",
+      "home": "capacity-tool",
+      "control": "capMakeDefault"
+    },
+    {
       "key": "cloud.tree_default_open",
       "label": "Sites open as",
       "category": "preference",

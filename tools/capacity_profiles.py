@@ -183,6 +183,33 @@ def extract(esx_path) -> dict:
         "usageProfileCount": len({r["usageProfileId"] for r in rows}),
         "profileDefs": _capture_profile_defs(
             index, rows, requirement_ids[0] if requirement_ids else None),
+        # Every device and usage profile the project has, with what each one
+        # depends on, so a template can be built from Ekahau's own profiles
+        # rather than only captured from areas someone already filled in.
+        "available": _available_profiles(index),
+    }
+
+
+def _available_profiles(index: dict) -> dict:
+    """Every device and usage profile in the project, by name.
+
+    `devices` and `usages` are the names, sorted, for the editor's pickers;
+    `defs` holds each one's object and dependencies, so a template built from
+    them carries them to a project that lacks them."""
+    out = {"devices": {}, "usages": {}}
+    for obj_id, entry in index.items():
+        bucket = {"deviceProfiles": "devices",
+                  "usageProfiles": "usages"}.get(entry.get("collection"))
+        if not bucket:
+            continue
+        label = _label_for(entry)
+        if not label or label in out[bucket]:
+            continue
+        out[bucket][label] = _with_deps(index, obj_id)
+    return {
+        "devices": sorted(out["devices"], key=str.lower),
+        "usages": sorted(out["usages"], key=str.lower),
+        "defs": out,
     }
 
 
@@ -295,6 +322,67 @@ def derive_template(extracted: dict, occupants, name: str) -> dict:
         # Schema 2 carries the profile objects. A schema 1 template still
         # applies - to a project that already has profiles by those names.
         "profileDefs": extracted.get("profileDefs") or {},
+    }
+
+
+def build_template(spec: dict) -> dict:
+    """A template from rows typed in the editor, ready to save.
+
+    `spec` carries `name`, `description`, `items` - each a device profile
+    name, a usage profile name and devices per person - and `defs`, the
+    profile objects the page has to hand (the open project's, and the ones
+    the template being edited already carried). Only the definitions the
+    rows use are kept.
+    """
+    name = str(spec.get("name") or "").strip()
+    if not name:
+        return {"ok": False, "error": "Give the template a name."}
+    items, problems = [], []
+    for i, row in enumerate(spec.get("items") or [], 1):
+        device = str((row or {}).get("device") or "").strip()
+        usage = str((row or {}).get("usage") or "").strip()
+        try:
+            per = float((row or {}).get("perOccupant"))
+        except (TypeError, ValueError):
+            per = -1.0
+        if not device or not usage:
+            problems.append("row %d needs both a device profile and a usage profile" % i)
+            continue
+        if per <= 0:
+            problems.append("row %d needs a number of devices per person above 0" % i)
+            continue
+        items.append({"device": device, "usage": usage, "perOccupant": round(per, 6)})
+    if problems:
+        return {"ok": False, "error": "Not saved: " + "; ".join(problems) + "."}
+    if not items:
+        return {"ok": False, "error": "Add at least one device to the template."}
+
+    total = sum(i["perOccupant"] for i in items)
+    # Stored against 100 people so the saved file reads naturally by eye; it
+    # is the per-person number that is applied.
+    for i in items:
+        i["shareOfTotal"] = round(i["perOccupant"] / total, 6) if total else 0.0
+        i["capturedCount"] = round(i["perOccupant"] * 100, 2)
+
+    defs = spec.get("defs") or {}
+    dev_defs = (defs.get("devices") or {})
+    use_defs = (defs.get("usages") or {})
+    profile_defs = {
+        "devices": {i["device"]: dev_defs[i["device"]] for i in items if dev_defs.get(i["device"])},
+        "usages": {i["usage"]: use_defs[i["usage"]] for i in items if use_defs.get(i["usage"])},
+        "requirement": defs.get("requirement") or [],
+    }
+    return {
+        "ok": True,
+        "name": name,
+        "schema": 2,
+        "description": str(spec.get("description") or "").strip(),
+        "capturedFrom": str(spec.get("capturedFrom") or "built in Capacity"),
+        "capturedOccupants": 100,
+        "requirementName": str(spec.get("requirementName") or "Ekahau Best Practices"),
+        "devicesPerOccupant": round(total, 6),
+        "items": items,
+        "profileDefs": profile_defs,
     }
 
 

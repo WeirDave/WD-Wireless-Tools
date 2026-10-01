@@ -8,7 +8,7 @@ third card, which gave no sign it could be chosen.
 
 Driven through the real app with an invented project: pressing a step marks
 it current and outlines its card; the template list is the first card;
-choosing a template marks it chosen and plans it.
+a lone template is picked and planned without a click.
 """
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ class CapacityStepsRespond(BrowserPagesHarness):
                 self.open_project(drv)
                 first = drv.execute_script(
                     "return document.querySelector('.cap-wrap .cap-card').id;")
-                self.assertEqual(first, "capStep3")
+                self.assertEqual(first, "capStepTpl")
 
     def test_pressing_a_step_marks_it_and_outlines_its_card(self):
         for kind, drv in self.each_browser():
@@ -77,23 +77,19 @@ class CapacityStepsRespond(BrowserPagesHarness):
                 self.assertEqual(r["current"], ["capStep1"])
                 self.assertTrue(r["flashed"], "the card gave no sign it was reached")
 
-    def test_choosing_a_template_marks_it_and_plans_it(self):
-        """Whether Apply then arms depends on the project - this invented one
-        already has devices on its floor, and the default keeps them - so
-        what is asserted is that the choice registered and was planned."""
+    def test_a_lone_template_is_picked_and_planned_without_a_click(self):
+        """With only the shipped example there is nothing to choose between,
+        so it is picked and planned the moment the project opens."""
         for kind, drv in self.each_browser():
             with self.subTest(browser=kind):
                 self.open_project(drv)
                 note = lambda: drv.find_element(By.ID, "capApplyNote").text
-                self.assertEqual(note(), "Pick a template first.")
-                drv.find_element(By.CSS_SELECTOR, "#capTemplates .cap-tpl").click()
                 WebDriverWait(drv, 15).until(
                     lambda d: note() not in ("Pick a template first.", ""))
                 checked = drv.execute_script(
                     "return document.querySelector('#capTemplates .cap-tpl')"
                     ".getAttribute('aria-checked');")
                 self.assertEqual(checked, "true")
-
 
 if __name__ == "__main__":
     unittest.main()
