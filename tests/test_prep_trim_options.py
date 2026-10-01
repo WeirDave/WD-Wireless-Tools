@@ -334,7 +334,7 @@ global.fetch = (url) => {
   calls.push(url);
   const body = url.indexOf('/prep/plan') >= 0
     ? { ok: true, steps: ['trim'], project: { projectId: 'prj-9', floors: FLOORS,
-          boxes: { f1: [10, 20, 700, 500] }, wallCount: 0 },
+          boxes: { f1: [10, 20, 700, 500] } },
         step: { trim: { trimmedCount: 1, floorCount: 3, floors: [
           { id: 'f1', name: 'Ground', action: 'trimmed', source: 'manual', areaSavedPct: 30,
             oldSize: [800, 600], newSize: [690, 480], offset: [10, 20] },

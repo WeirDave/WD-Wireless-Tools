@@ -108,7 +108,6 @@ function $(id) { return el[id] || (el[id] = { id, hidden: false, innerHTML: '', 
 function esc(s) { return String(s); }
 function plural(n, one) { return n === 1 ? one : one + 's'; }
 function renderMap() {}
-function renderSwap() {}
 function syncTrimControls() {}
 function marginWords() { return ''; }
 function selectedText() { return 'His template'; }

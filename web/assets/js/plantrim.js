@@ -86,8 +86,14 @@
 
   // The box editor re-runs analyze after every change, so the list below the
   // canvas always describes what Save would actually produce.
+  // A request that arrives while a reading is in flight is queued, not
+  // dropped. Dropping it lost a Crop pressed during the first reading: the
+  // box was cropped and saved, and the floor still said "Automatic · your box
+  // was not used" until something else happened to ask again.
   window.__ptAnalyze = function () {
-    if (state.bytes && !state.busy) analyze();
+    if (!state.bytes) return;
+    if (state.busy) { state.again = true; return; }
+    analyze();
   };
 
   // The set comparison needs the whole archive, so it goes to the server the
@@ -110,11 +116,6 @@
     if (cut) {
       cut.disabled = on || !hasWork(state.report);
       if (on && label) cut.textContent = label;
-    }
-    var save = $('ptSaveBtn');
-    if (save) {
-      save.disabled = on || !hasWork(state.report);
-      if (label) save.textContent = label;
     }
     document.body.classList.toggle('pt-busy', on);
   }
@@ -205,6 +206,9 @@
       .catch(function (e) {
         $('ptFloors').innerHTML = '<div class="pt-empty pt-bad">' + esc(String(e)) + '</div>';
         busy(false, 'Save trimmed .esx');
+      })
+      .then(function () {
+        if (state.again && state.bytes) { state.again = false; return analyze(); }
       });
   }
 

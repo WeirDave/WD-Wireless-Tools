@@ -73,7 +73,6 @@ function plural(n, one, many) { return n === 1 ? one : (many || one + 's'); }
 function clearanceLine() { return ''; }
 function marginWords() { return 'Normal, 10 ft'; }
 function selectedText() { return ''; }
-function renderSwap() {}
 function renderMap() {}
 function syncTrimControls() {}
 var trim = { boxes: {}, loaded: true, projectId: '' }, lastPlan = null, fromDisk = false;

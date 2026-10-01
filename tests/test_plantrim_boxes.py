@@ -583,12 +583,14 @@ class ActionVisibilityTests(unittest.TestCase):
         self.assertIn('id="ptbCut"', self.html)
         self.assertIn("Cut and save", self.html)
 
-    def test_the_cut_action_sits_inside_the_box_card(self):
+    def test_the_cut_action_sits_in_the_workbench_footer(self):
+        """The workbench shell (suite 2.196.0): the verb is in the footer under
+        the plan, the strip and the plan are in the body above it."""
         card = self.html[self.html.index('id="ptBoxCard"'):]
-        card = card[:card.index('id="ptResult"')]
-        self.assertIn('id="ptbCut"', card, "the verb must live with the canvas")
-        self.assertIn('id="ptbStage"', card)
-        self.assertIn('id="ptbStrip"', card)
+        body, footer = card.split("<footer", 1)
+        self.assertIn('id="ptbCut"', footer, "the verb must be in the footer")
+        self.assertIn('id="ptbStage"', body)
+        self.assertIn('id="ptbStrip"', body)
 
     def test_suggest_is_not_the_loudest_control(self):
         """Suggest used to be the primary button, above the thing it modified."""
@@ -613,10 +615,35 @@ class ActionVisibilityTests(unittest.TestCase):
         return out
 
     def test_the_action_row_is_pinned(self):
-        self.assertIn(".ptb-actions", css_for("plantrim.html"))
+        """The footer is a sibling of the scrolling columns, never inside one,
+        and does not shrink - so the verb cannot scroll out of view."""
+        from html.parser import HTMLParser
+
+        class Parents(HTMLParser):
+            VOID = {"input", "br", "img", "meta", "link", "hr", "source"}
+
+            def __init__(self):
+                super().__init__()
+                self.stack, self.footer_parent = [], None
+
+            def handle_starttag(self, tag, attrs):
+                d = dict(attrs)
+                if tag == "footer" and "ptb-actions" in (d.get("class") or ""):
+                    self.footer_parent = self.stack[-1] if self.stack else None
+                if tag not in self.VOID:
+                    self.stack.append(d.get("id") or d.get("class") or tag)
+
+            def handle_endtag(self, tag):
+                if tag not in self.VOID and self.stack:
+                    self.stack.pop()
+
+        parents = Parents()
+        parents.feed(self.html)
+        self.assertEqual(parents.footer_parent, "ptBoxCard",
+                         "the action footer must sit beside the columns, not in one")
         css = css_for("plantrim.html")
-        row = css[css.index(".ptb-actions {"):]
-        self.assertIn("position: sticky", row[:300])
+        row = css[css.index(".pb-footer {"):]
+        self.assertIn("flex-shrink: 0", row[:200])
 
     def test_there_is_a_way_back_to_a_fitted_view(self):
         """The control exists and is wired to the handler that fits the view.
