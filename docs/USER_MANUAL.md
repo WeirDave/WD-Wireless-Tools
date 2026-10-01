@@ -726,7 +726,7 @@ the original file is never modified — you always save a copy.
 
 ![Quick Walls with a project open, showing the wall type list](../web/assets/manual/walls-loaded.png)
 
-*The template bar sits above the wall list. Each type shows its colour, its thickness and the number key that draws it.*
+*The keyboard shortcuts are down the left, the wall types fill the middle, and the template controls sit in the panel on the right. Each type shows its colour, its thickness and the number key that draws it.*
 
 ### Remap walls
 
@@ -883,10 +883,10 @@ unaffected. Anything the template says nothing about is left alone.
 reaches a project — every Ekahau project already contains the standard set, so a
 template that skipped them could never change anything you can see.
 
-> **Ekahau Defaults is the one that removes things.** The **button** beside the
-> template bar is the deliberate way back to factory: it replaces your wall
+> **Ekahau Defaults is the one that removes things.** The **button** in the
+> Template panel is the deliberate way back to factory: it replaces your wall
 > types with Ekahau's own, names what it is about to remove, and asks first. Use
-> it to start over — not to add the defaults. For that, apply *Ekahau Defaults*
+> it to start over — not to add the defaults. For that, apply *Ekahau Default*
 > from the **dropdown**, which adds what is missing and removes nothing. That is
 > also how you put a single standard type back after changing one.
 
@@ -926,8 +926,9 @@ Templates live in two places, and the split matters:
 
 ### Saving your work
 
-**Save .esx** in the template bar writes your changes into a copy of the project
-file, and a system dialog lets you choose the name and location. The original is
+The `Save the *.esx` button, in the footer at the bottom right, writes your changes into a copy of the project
+file, named after the original with `_modified` added. The footer says how many wall types and
+shortcuts it will write. A system dialog lets you choose the name and location. The original is
 never modified.
 
 > Use a naming convention like `SiteName_v2.esx` so the original is always there
@@ -2138,10 +2139,10 @@ something you use.
 If the saved template is later deleted, the setting keeps its name and both
 screens say it no longer exists, rather than quietly switching to another one.
 
-The other template controls stay on the **Template** bar above the wall list in
+The other template controls stay in the **Template** panel on the right of
 Quick Walls: the picker, **Apply**, **Save Template**, **Manage**, and the
 **Auto-apply on open** tick box. They stay there because the choice is made
-while looking at the template it applies. Beside that tick box, the bar names
+while looking at the template it applies. Under that tick box, the panel names
 the template it will apply and links to the Settings page.
 
 ### Report
