@@ -10705,7 +10705,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-side-dock { flex:0 0 auto; display:flex; flex-direction:column; gap:8px; border-top:1px solid var(--border,#333); padding-top:10px; }
 /* Bounded so a 400-AP floor scrolls inside the table instead of pushing the
    controls off the panel. */
-.tool-aprename .ar-side-dock .ar-preview { max-height:34vh; min-height:96px; }
+.tool-aprename .ar-side-dock .ar-preview { max-height:28vh; min-height:96px; }
 .tool-aprename .ar-side-dock .ar-manual { margin-top:0; }
 /* Folding, same shape as the Quick Walls panel. Collapse Name Pattern once it
    is set and the colour sequence gets the column. */
@@ -10727,7 +10727,7 @@ body.wd-resizing, body.wd-resizing * { cursor:col-resize !important; user-select
 .tool-aprename .ar-row > * { flex:1; }
 .tool-aprename .ar-field-lbl { font-size:11px; color:var(--text-2,#999); margin-bottom:2px; }
 .tool-aprename .ar-example { font-size:12px; color:var(--text-2,#999); padding:2px 0; }
-.tool-aprename .header .file-badge { max-width:27vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tool-aprename .header .file-badge { max-width:max(120px, calc(50vw - 380px)); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .tool-aprename .ar-sep     { border-top:1px solid var(--border,#333); margin:2px 0; }
 .tool-aprename .ar-check-row { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--text,#ccc); }
 .tool-aprename .ar-check-row input[type="checkbox"] { margin:0; }
@@ -11751,3 +11751,253 @@ body.wd-embedded .settings-wrap { padding-top: 16px; }
 .prep-map .ptb-stage canvas { cursor: grab; }
 .prep-map .ptb-stage.is-panning canvas { cursor: grabbing; }
 .prep-map-tools { display: flex; justify-content: flex-end; margin: 6px 0; }
+
+/* =====================================================================
+   The workbench tools, readable at arm's length
+   =====================================================================
+   "I want the font to be large enough for a 60 year old person like myself
+   wearing readers can see". Measured in Firefox before this block: the five
+   workbench tools set their explanations at 11-12px and their badges at
+   9-10px - and he runs the browser at 90%, so 11px reached the screen as
+   about 10. Nothing a person is meant to read is under 14px here, names and
+   primary labels are 15-16px, and the smallest thing on the page - an
+   uppercase badge or column head - is 13px.
+
+   The sizes are this block's own variables so the scale can be moved in one
+   place, and so the stylesheet's count of distinct font sizes does not grow.
+   `tests/test_workbench_text_is_readable_browser.py` measures the result. */
+body.tool-capacity, body.tool-plantrim, body.tool-aprename,
+body.tool-walls, body.tool-prep, body.tool-walls #swapModal {
+  --rd-tag: 13px;      /* uppercase badges, column heads, tiny counters */
+  --rd-small: 14px;    /* hints, notes, details, secondary values       */
+  --rd-body: 15px;     /* labels, controls, ordinary reading            */
+  --rd-name: 16px;     /* the name of the thing: a step, a wall, a floor */
+}
+
+/* -- the shared shell ------------------------------------------------- */
+.pb-rail-head { font-size: var(--rd-tag); }
+.pb-rail-foot, .pb-rail-foot p { font-size: var(--rd-small); line-height: 1.55; }
+.pb-stage-name { font-size: var(--rd-name); }
+.pb-stage-status, .pb-stage-note { font-size: var(--rd-small); }
+.pb-willwrite { font-size: var(--rd-body); }
+.pb-footer .btn { font-size: var(--rd-body); }
+.pb-canvas-hint, .pb-hint, .pb-note, .pb-item, .pb-subhead { font-size: var(--rd-small); }
+.pb-lead { font-size: var(--rd-body); line-height: 1.55; }
+.pb-floor-name { font-size: var(--rd-body); }
+.pb-floor-state, .pb-zoom-level { font-size: var(--rd-tag); }
+.pb-body .btn-sec, .pb-body .pb-fit, .pb-body .pb-zoom { font-size: var(--rd-small); }
+.pb-body kbd { font-size: var(--rd-tag); }
+.pb-panel label { font-size: var(--rd-small); }
+
+/* -- Capacity ---------------------------------------------------------- */
+.cap-step { font-size: var(--rd-tag); }
+.cap-hint, .cap-empty, .cap-warn, .cap-sub, .cap-tpl-meta { font-size: var(--rd-small); }
+.cap-table td { font-size: var(--rd-small); }
+.cap-table th { font-size: var(--rd-tag); }
+.cap-row label, .cap-input { font-size: var(--rd-body); }
+.cap-tpl-name { font-size: var(--rd-name); }
+.cap-step-note { font-size: var(--rd-tag); }
+.cap-wrap { max-width: 1280px; }
+
+/* -- PlanTrim ---------------------------------------------------------- */
+.ptb-row-name { font-size: var(--rd-body); }
+.ptb-row-detail, .ptb-hint, .ptb-readout, .ptb-where { font-size: var(--rd-small); }
+.ptb-row-state { font-size: var(--rd-tag); }
+.pb-panel .btn-sm { font-size: var(--rd-tag); }
+
+/* -- Quick Walls -------------------------------------------------------- */
+body.tool-walls .wall-name { font-size: var(--rd-name); }
+body.tool-walls .wall-meta, body.tool-walls .wall-meta span { font-size: var(--rd-tag); }
+body.tool-walls .wall-height-badge { font-size: var(--rd-tag); }
+body.tool-walls .wall-act { font-size: var(--rd-small); }
+body.tool-walls .hotkey-num, body.tool-walls .hotkey-name { font-size: var(--rd-body); }
+body.tool-walls .hotkey-empty, body.tool-walls .wall-group-header { font-size: var(--rd-tag); }
+body.tool-walls .template-bar-label { font-size: var(--rd-body); }
+body.tool-walls .template-bar-auto-note, body.tool-walls .wall-count { font-size: var(--rd-small); }
+
+/* -- AP Labeler -------------------------------------------------------- */
+body.tool-aprename .ar-section-head, body.tool-aprename .ar-section-num,
+body.tool-aprename .ar-fold-caret, body.tool-aprename .ar-seg-type,
+body.tool-aprename .ar-stem-key, body.tool-aprename .ar-stem-cap,
+body.tool-aprename .ar-stem-chg, body.tool-aprename .ar-marker,
+body.tool-aprename .ar-templates-arrow, body.tool-aprename th { font-size: var(--rd-tag); }
+body.tool-aprename .ar-seg-lbl, body.tool-aprename .ar-seg-meta,
+body.tool-aprename .ar-seg-hint, body.tool-aprename .ar-inf-body,
+body.tool-aprename .ar-inf-head, body.tool-aprename .ar-scope-desc,
+body.tool-aprename .ar-field-lbl, body.tool-aprename .ar-preview-head,
+body.tool-aprename .ar-stem-none, body.tool-aprename summary,
+body.tool-aprename .pb-panel code { font-size: var(--rd-small); }
+body.tool-aprename .ar-mode-tab, body.tool-aprename .ar-scope-tab,
+body.tool-aprename .ar-floor-tab, body.tool-aprename .ar-add-btn,
+body.tool-aprename .ar-stem-val, body.tool-aprename .ar-stem-tail,
+body.tool-aprename td, body.tool-aprename .pb-panel input,
+body.tool-aprename .pb-panel select { font-size: var(--rd-body); }
+/* Rules above this block that name their element under a container win on
+   specificity, so they are matched at the same depth here. */
+.pb-rail .ptb-row-detail,
+.pb-rail .ptb-row.is-refused .ptb-row-detail,
+.pb-rail .ptb-row.is-skip .ptb-row-detail { font-size: var(--rd-small); }
+.tool-aprename .ar-preview th, .tool-aprename .ar-templates-detail summary { font-size: var(--rd-tag); }
+.tool-aprename .ar-manual-btns button, .tool-aprename .ar-preset-bar button,
+.tool-aprename .ar-fp-bulk button, .tool-aprename .ar-zoom-bar button,
+.tool-aprename .ar-inf-body code { font-size: var(--rd-small); }
+.tool-aprename .ar-floor-count { opacity: .6; font-size: var(--rd-small); }
+.tool-aprename .ar-zoom-bar span { font-size: var(--rd-small); }
+
+/* -- AP Labeler: the pattern's answer, right under the pattern ---------- */
+.tool-aprename .ar-example-section { display: flex; flex-direction: column; gap: var(--sp-2); }
+.tool-aprename .ar-example { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.tool-aprename .ar-example td {
+  padding: 6px 8px; border-top: 1px solid var(--border);
+  font-family: var(--mono); font-size: var(--rd-body);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tool-aprename .ar-example td.ar-arrow { width: 28px; text-align: center; color: var(--text-3); font-family: inherit; }
+.tool-aprename .ar-example td.ar-cur { color: var(--text-2); }
+.tool-aprename .ar-example td.ar-new { color: var(--tool-accent); font-weight: 600; }
+[data-theme="light"] .tool-aprename .ar-example td.ar-new { color: var(--tool-title); }
+.tool-aprename .ar-example-gap td { text-align: center; color: var(--text-3); padding: 0; border-top: 0; line-height: 1; }
+.tool-aprename .ar-example-none { color: var(--text-2); font-family: inherit; }
+.tool-aprename .ar-show-all {
+  align-self: flex-start; padding: 6px 14px; cursor: pointer;
+  background: transparent; color: var(--text); font-size: var(--rd-small); font-weight: 600;
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+}
+.tool-aprename .ar-show-all:hover { border-color: var(--tool-accent); }
+
+/* Every name, in a window big enough to read it in. */
+.tool-aprename .modal.ar-all {
+  width: min(1100px, 92vw); height: min(86vh, 1000px);
+  display: flex; flex-direction: column; gap: var(--sp-3); overflow: hidden;
+}
+.tool-aprename .ar-all-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.tool-aprename .ar-all-head h3 { margin: 0; font-size: var(--fs-section); }
+.tool-aprename .ar-all .ar-preview { flex: 1 1 auto; min-height: 0; max-height: none; font-size: var(--rd-body); }
+
+/* -- AP Labeler: a tall building on the floors rail ---------------------- */
+/* The floor list scrolls inside the rail, so the rail's heading and note stay
+   where they are however many floors there are. */
+.tool-aprename .ar-rail { overflow: hidden; }
+.tool-aprename .ar-floor-tabs { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 2px; }
+.tool-aprename .ar-floor-tabs.is-compact {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 6px; align-content: start;
+}
+.tool-aprename .ar-floor-tabs.is-compact .ar-floor-tab {
+  padding: 7px 6px; text-align: center; border-radius: var(--r-sm);
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 0 4px;
+}
+.tool-aprename .ar-floor-tabs.is-compact .ar-floor-count { font-size: var(--rd-tag); }
+.tool-aprename .ar-fp-rows {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 8px;
+  max-height: 34vh; overflow-y: auto; padding-right: 2px;
+}
+.tool-aprename .ar-fp-row { font-size: var(--rd-small); }
+
+/* -- The open file's name never runs under the tool's title -------------- */
+/* The title is centred on the window and the file name grows from the left,
+   so a long project name on a half-width window ran straight underneath
+   "WD Capacity". The name stops short of where the title can start - half
+   the window, less half the widest title and the buttons before it - and
+   shows the whole name on hover. */
+.header .file-badge, .swap-topbar .file-badge {
+  max-width: max(120px, calc(50vw - 380px));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Arriving at a section from a tool's Settings link: it is opened, scrolled
+   to, and marked for a moment so the eye lands on it. */
+.s-section.is-arrived { animation: s-arrived 1.6s ease-out; }
+@keyframes s-arrived {
+  0% { box-shadow: 0 0 0 3px var(--accent); }
+  100% { box-shadow: 0 0 0 3px transparent; }
+}
+
+/* The states the first measurement did not see - an empty list, a warning,
+   a dialog, the colour sequence, the wall audit, a project still being
+   read. Found by listing every class in these five tools set below 13px;
+   Prep's "Reading the project..." was caught by CI, which was slower to read
+   the project than this machine. `:is(...)` puts these above the older
+   per-tool rules they replace. */
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-add-badge,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-cseq-dot,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-cseq-new,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .cap-badge,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-badge,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-chip,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-step,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-order,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .wall-keybind-badge,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-floor-label,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-sel-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-sel-group-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-auto-lbl,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-lbl,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-nest-label,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-manual-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-fp-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-panel-header,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-swap-label,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .hotkey-panel-header,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-collapse-all,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-seg-len { font-size: var(--rd-tag); }
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-col-note,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-cseq-lab,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-cseq-row,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-dupe-warn,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-manual-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-tip,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-add-item,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-show-all-btn,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .cap-done,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .cap-facts,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .pb-check,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .pb-field,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .pb-floor,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .pb-inline,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-done,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-empty,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-facts,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-toggle-why,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-warn,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-cut-note,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-evidence,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-floor,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-margin-group,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-empty,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-floor-picker,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-floorbar,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-status,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-footer-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-numbers-toggle,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-panel-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-panhint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-legend-count,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-seg-row,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-target-select,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .template-bar-auto,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .tpl-folder-info,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .tpl-save-hint,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .tpl-share-desc,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .wall-audit-detail,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .wall-audit-why { font-size: var(--rd-small); }
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-seg-input,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ar-sep-input,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .ptb-intro,
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-toggle-name { font-size: var(--rd-body); }
+:is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .prep-row label, :is(body.tool-capacity, body.tool-plantrim, body.tool-aprename, body.tool-walls, body.tool-prep) .swap-quick-row label { font-size: var(--rd-small); }
+
+/* -- PlanTrim: the job in words, the corners, a tall building ----------- */
+.ptb-ways { margin: 0 0 var(--sp-3); padding-left: 18px; font-size: var(--rd-small); line-height: 1.55; color: var(--text-2); }
+.ptb-ways li { margin-bottom: var(--sp-2); }
+.ptb-ways b { color: var(--text); }
+.ptb-corners { margin: var(--sp-3) 0; padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); }
+.ptb-corners-head { font-size: var(--rd-body); font-weight: 600; margin-bottom: var(--sp-1); }
+.ptb-corner-btns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); margin-top: var(--sp-2); }
+.ptb-corner-btns .btn { padding: 8px 10px; }
+.pb-rail #ptbStrip { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.pb-rail #ptbStrip.is-compact .ptb-row-detail { display: none; }
+.pb-rail #ptbStrip.is-compact .ptb-row { padding-top: 6px; padding-bottom: 6px; }
+body.tool-plantrim .pb-rail { overflow: hidden; }

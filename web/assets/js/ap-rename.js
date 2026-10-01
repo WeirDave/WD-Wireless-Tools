@@ -184,7 +184,10 @@
       if (_floorPick === 'chosen') {
         var html = '<div class="ar-fp-bulk">'
           + '<button type="button" data-action="call" data-fn="arFloorPickAll" data-arg-json="true">Tick all</button>'
-          + '<button type="button" data-action="call" data-fn="arFloorPickAll" data-arg-json="false">Tick none</button></div>';
+          + '<button type="button" data-action="call" data-fn="arFloorPickAll" data-arg-json="false">Tick none</button></div>'
+          // The rows scroll in a box of their own: sixty floors laid out one
+          // per line pushed Numbering and Ordering 1,800px down the panel.
+          + '<div class="ar-fp-rows">';
         S.floors.forEach(function (f) {
           html += '<label class="ar-fp-row"><input type="checkbox"'
             + (_chosenFloors[f.id] ? ' checked' : '')
@@ -192,6 +195,7 @@
             + '<span class="ar-fp-name">' + esc(f.name) + '</span>'
             + '<span class="ar-fp-count">' + floorAPCount(f.id) + ' APs</span></label>';
         });
+        html += '</div>';
         list.innerHTML = html;
       } else {
         list.innerHTML = '';
@@ -1193,14 +1197,21 @@
     var html = '';
     S.floors.forEach(function (f) {
       var n = floorAPCount(f.id);
-      html += '<button class="ar-floor-tab" data-fp="' + escAttr(f.id) + '">' +
-              esc(f.name) + ' <span style="opacity:.5;font-size:11px">(' + n + ')</span></button>';
+      html += '<button class="ar-floor-tab" data-fp="' + escAttr(f.id) + '" title="'
+              + escAttr(f.name + ' \u2014 ' + n + ' access point' + (n === 1 ? '' : 's')) + '">' +
+              '<span class="ar-floor-name">' + esc(f.name) + '</span>'
+              + ' <span class="ar-floor-count">(' + n + ')</span></button>';
     });
     var unplaced = S.aps.filter(function (a) { return !a.floorPlanId; }).length;
     if (unplaced) {
       html += '<button class="ar-floor-tab" data-fp="__unplaced" style="opacity:.6">Unplaced (' + unplaced + ')</button>';
     }
     $('arFloorTabs').innerHTML = html;
+    /* "what happens if we have 60 floors or 100 floors". One full-width card
+       per floor ran the list three screens tall. Past a handful of floors the
+       rail becomes a grid of compact buttons that scrolls on its own, so the
+       note under it stays put and every floor is a short scroll away. */
+    $('arFloorTabs').classList.toggle('is-compact', S.floors.length > COMPACT_FLOORS);
 
     $('arFloorTabs').querySelectorAll('.ar-floor-tab').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -1210,6 +1221,8 @@
     renderFloorPick();
   }
 
+  var COMPACT_FLOORS = 8;
+
   function floorAPCount(fpId) {
     return S.aps.filter(function (a) { return a.floorPlanId === fpId; }).length;
   }
@@ -1218,7 +1231,10 @@
     S.currentFloor = fpId;
     resetZoom();
     $('arFloorTabs').querySelectorAll('.ar-floor-tab').forEach(function (t) {
-      t.classList.toggle('active', t.getAttribute('data-fp') === fpId);
+      var on = t.getAttribute('data-fp') === fpId;
+      t.classList.toggle('active', on);
+      // Floor 47 chosen from anywhere else stays in sight on the rail.
+      if (on && t.scrollIntoView) t.scrollIntoView({ block: 'nearest' });
     });
 
     if (fpId === '__unplaced') {
@@ -2366,18 +2382,23 @@
     }
 
     var body = $('arPreviewBody');
+    var example = $('arExampleBody');
+    var showAll = $('arShowAllBtn');
     if (!items.length) {
       body.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:var(--text-2,#666)">No access points on this floor</td></tr>';
+      if (example) example.innerHTML = '<tr><td class="ar-example-none">No access points on this floor</td></tr>';
+      if (showAll) showAll.hidden = true;
       return;
     }
     var html = '';
     var manual = $('arOrder').value === 'manual';
-    // Every AP, every time. It used to show five and hide the rest behind
-    // "Show all 39 (34 more)", which is a truncated list standing between him
-    // and the only question this panel answers - is this the rename I want? -
-    // and the panel already scrolls, so nothing was gained by the cut.
-    // "It would be better if it was easily readable and lengthy than if it's
-    // brief in order to save screen real estate."
+    // Every AP, in the full list - which now lives in its own window
+    // (arShowAllNames). The panel shows a few examples under the pattern
+    // instead: "we don't really need to see every single solitary access
+    // point we just need to see what it's going to look like ... if we want
+    // to list all of them ... that should be a pop out". An earlier request
+    // ("easily readable and lengthy" rather than cut short) still holds for
+    // the list itself, which is complete and large in the window.
     var visCount = items.length;
     items.forEach(function (it, i) {
       if (i >= visCount) return;
@@ -2424,7 +2445,52 @@
     });
 
     body.innerHTML = html;
+    if (example) example.innerHTML = exampleRows(items);
+    if (showAll) {
+      showAll.hidden = false;
+      showAll.textContent = 'Show all ' + items.length + ' name' + (items.length === 1 ? '' : 's');
+    }
   }
+
+  /* The examples under the pattern: the first, second and last name on the
+     floor in the order they will be numbered, so both ends of the sequence
+     are visible - the last one is where a counter that runs out of digits or
+     a floor token that is wrong shows up. */
+  var EXAMPLE_ROWS = 3;
+  function exampleRows(items) {
+    var pick = items.length <= EXAMPLE_ROWS ? items.slice()
+      : items.slice(0, EXAMPLE_ROWS - 1).concat([items[items.length - 1]]);
+    var out = '';
+    pick.forEach(function (it, i) {
+      if (i === EXAMPLE_ROWS - 1 && items.length > EXAMPLE_ROWS) {
+        out += '<tr class="ar-example-gap"><td colspan="3">\u22ee</td></tr>';
+      }
+      out += '<tr class="' + (it.oldName !== it.newName ? 'changed' : '') + '">'
+        + '<td class="ar-cur" title="' + escAttr(it.oldName || '') + '">' + esc(it.oldName || '\u2014') + '</td>'
+        + '<td class="ar-arrow">\u2192</td>'
+        + '<td class="ar-new" title="' + escAttr(it.newName || '') + '">' + esc(it.newName || '') + '</td>'
+        + '</tr>';
+    });
+    return out;
+  }
+
+  window.arShowAllNames = function () {
+    var m = $('arAllModal');
+    if (!m) return;
+    var floor = (S.floors || []).filter(function (f) { return f.id === S.currentFloor; })[0];
+    $('arAllTitle').textContent = 'Every name' + (floor && floor.name ? ' on floor ' + floor.name : '');
+    m.classList.add('active');
+  };
+  window.arCloseAllNames = function () {
+    var m = $('arAllModal');
+    if (m) m.classList.remove('active');
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      var m = $('arAllModal');
+      if (m && m.classList.contains('active')) window.arCloseAllNames();
+    }
+  });
 
   /* Two APs must never leave here with one name.
 

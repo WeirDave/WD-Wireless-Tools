@@ -28,10 +28,40 @@ from tools import applog
 from tools.settings import load_settings as _load_suite_settings
 from tools.settings import update_settings as _update_suite_settings
 
+#: Loaded when the server starts, on the main thread. On Windows it imports
+#: win32com, whose type-library cache is a file that two processes starting
+#: together can catch half-written - CI saw `EOFError: Ran out of input` from
+#: `import server`. That failure no longer stops the server: the name stays
+#: _NOT_LOADED and the sign-in tries again. Loading it lazily instead, inside
+#: a request thread, was tried and hung CI's Windows / Python 3.10 job, so the
+#: first attempt stays here. Tests replace this name with None or a fake.
+_NOT_LOADED = object()
 try:
     import browser_cookie3
 except ImportError:
     browser_cookie3 = None
+except Exception as _e:  # noqa: BLE001 - a broken import is not a crash
+    applog.note_failure("loading the browser cookie reader", _e)
+    browser_cookie3 = _NOT_LOADED
+
+
+def _cookie_reader():
+    """The browser_cookie3 module, None when it is not installed.
+
+    A failure other than "not installed" is logged and not remembered, so the
+    next sign-in tries again rather than treating the reader as missing for
+    the rest of the session."""
+    global browser_cookie3
+    if browser_cookie3 is _NOT_LOADED:
+        try:
+            import browser_cookie3 as module
+        except ImportError:
+            module = None
+        except Exception as e:  # noqa: BLE001 - a broken import is not a crash
+            applog.note_failure("loading the browser cookie reader", e)
+            return None
+        browser_cookie3 = module
+    return browser_cookie3
 
 try:
     import keyring
@@ -772,10 +802,11 @@ class EkahauAPI:
 
 
 def try_browser_cookies():
-    if browser_cookie3 is None:
+    reader = _cookie_reader()
+    if reader is None:
         return None
-    browsers = [("Chrome", browser_cookie3.chrome), ("Firefox", browser_cookie3.firefox),
-                ("Edge", browser_cookie3.edge), ("Opera", browser_cookie3.opera)]
+    browsers = [("Chrome", reader.chrome), ("Firefox", reader.firefox),
+                ("Edge", reader.edge), ("Opera", reader.opera)]
     for _name, func in browsers:
         try:
             jar = func(domain_name=".ekahau.cloud")

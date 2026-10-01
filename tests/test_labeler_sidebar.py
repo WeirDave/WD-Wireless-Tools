@@ -54,10 +54,12 @@ class TheSettingsScrollAndTheControlsStay(unittest.TestCase):
         self.assertIn("min-height:0", rule)
         self.assertIn("overflow-y:auto", rule)
 
-    def test_the_preview_is_bounded_so_it_scrolls_instead_of_growing(self):
-        rule = rule_for("ap-rename.html", ".tool-aprename .ar-side-dock .ar-preview")
-        self.assertTrue(rule, "no rule bounding the docked preview anywhere")
-        self.assertIn("max-height", rule)
+    def test_the_full_list_scrolls_inside_its_window(self):
+        """The full list moved out of the panel into its own window; it fills
+        that window and scrolls there rather than growing past it."""
+        rule = rule_for("ap-rename.html", ".tool-aprename .ar-all .ar-preview")
+        self.assertTrue(rule, "no rule for the full list's window anywhere")
+        self.assertIn("min-height: 0", rule)
 
     def test_the_numbering_controls_are_docked_not_scrolled(self):
         """Losing Undo below the fold during a long manual run is the
@@ -67,7 +69,6 @@ class TheSettingsScrollAndTheControlsStay(unittest.TestCase):
         self.assertIn('id="arManualUndo"', dock)
         self.assertIn('id="arManualClear"', dock)
         self.assertIn('id="arManualNext"', dock)
-        self.assertIn('id="arPreview"', dock)
 
     def test_the_preview_header_stays_put_while_the_rows_scroll(self):
         rule = rule_for("ap-rename.html", ".tool-aprename .ar-preview th")
