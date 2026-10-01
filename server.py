@@ -1020,14 +1020,12 @@ def _prep_project_facts(src):
     * ``floors`` - every floor's id, name and size in plan units, which is the
       space a box is drawn in. A project opened from disk is never in the
       browser, so this is the only place the page can learn them.
-    * ``wallCount`` - wall segments already drawn. Wall Swap only means
-      something once there are walls to swap.
 
     Any failure to read them is silent and means "none" - a convenience that
     cannot be loaded must never stop a prepare.
     """
     import zipfile
-    facts = {"projectId": "", "boxes": {}, "floors": [], "wallCount": 0}
+    facts = {"projectId": "", "boxes": {}, "floors": []}
     try:
         with zipfile.ZipFile(src) as z:
             names = set(z.namelist())
@@ -1041,9 +1039,6 @@ def _prep_project_facts(src):
                      "h": round(float(f.get("height") or 0))}
                     for f in json.loads(z.read("floorPlans.json")).get("floorPlans") or []
                     if isinstance(f, dict) and f.get("id")]
-            if "wallSegments.json" in names:
-                facts["wallCount"] = len(
-                    json.loads(z.read("wallSegments.json")).get("wallSegments") or [])
     except Exception:
         return facts
     if facts["projectId"]:

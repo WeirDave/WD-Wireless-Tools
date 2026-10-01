@@ -948,7 +948,7 @@ Prep does the setup work on a freshly imported project in one pass over the file
 
 ### The workbench
 
-- **The stages**, down the left in the order they run: **1 · Trim the canvas**, **2 · Requirement areas**, **3 · Wall types** and **4 · Wall swap**. Each has a tick box to include it and a one-line status - *"2 of 3 floors cropped · Normal, 10 ft · 1 your box"*. Click a stage to open it. A stage left out stays on the rail, dimmed, and still opens.
+- **The stages**, down the left in the order they run: **1 · Trim the canvas**, **2 · Requirement areas** and **3 · Wall types**. Each has a tick box to include it and a one-line status - *"2 of 3 floors cropped · Normal, 10 ft · 1 your box"*. Click a stage to open it. A stage left out stays on the rail, dimmed, and still opens.
 - **The plan**, in the middle, shared by every stage. The floors run along its top; click one to see it. **Fit**, **−** and **+** sit beside them, the wheel zooms, and Space-drag, a middle drag or a right drag pans. On every stage but Trim a plain drag pans too.
 - **The stage's settings**, on the right.
 - **The footer**, always in view: *"Will write: trim 2 floors · requirement areas on 3 floors · 6 wall types added"*, and the **Prepare** button.
@@ -981,9 +981,7 @@ Puts a requirement area on every floor from a capacity template and a headcount.
 
 Applies a Quick Walls template exactly as Quick Walls does: types the project lacks are added, and the ones it already has - every Ekahau project carries Ekahau's stock types - are set to the template's colour, number key and attenuation. The panel lists each type being added or updated. To change the template itself, edit it in Quick Walls; Prep picks up the change when you come back.
 
-### 4 · Wall swap
-
-Wall swap changes the type of walls already drawn, so it only means something on a project that has walls - a project you are preparing again after drawing. On a new project it says why it is not available. Where there are walls, it says how many and points to Quick Walls' Wall Swap, run on the prepared copy.
+Prep is for getting a new project ready to draw on. Changing the type of walls already drawn - when an import flattened concrete and steel onto one type - is a later job, done in Quick Walls' **Wall Swap**.
 
 ### Prepare
 

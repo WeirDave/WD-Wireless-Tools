@@ -11103,7 +11103,6 @@ body.tool-prep .editor.active { overflow: hidden; }
 }
 .pb-stage.is-current { border-color: var(--lime); background: color-mix(in srgb, var(--lime) 12%, var(--bg)); }
 .pb-stage.is-off .pb-stage-name { color: var(--text-3); }
-.pb-stage--optional { border-style: dashed; background: transparent; }
 .pb-stage input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; }
 .pb-stage-open {
   flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px;

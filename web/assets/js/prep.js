@@ -37,7 +37,7 @@
   var floorOcc = {};         // floorPlanId -> headcount typed for that floor
   var floorExist = {};       // floorPlanId -> keep / devices / reshape for that floor
   var stage = 'trim';        // the stage whose panel and overlay are showing
-  var STAGES = ['trim', 'areas', 'walls', 'swap'];
+  var STAGES = ['trim', 'areas', 'walls'];
   // Settings → Capacity → Floors that already have devices. Read only: the
   // dropdown here changes one run and never writes back. A failed read or an
   // unknown value leaves "keep", which changes nothing he set.
@@ -624,7 +624,6 @@
       $('prepWallList').innerHTML = wl.join('');
     }
 
-    renderSwap(proj);
     renderMap(r);
     syncTrimControls();
 
@@ -660,25 +659,6 @@
   function setGo(on, note) {
     $('prepGoBtn').disabled = !on;
     $('prepGoNote').innerHTML = note || '';
-  }
-
-  // Wall Swap replaces walls already drawn, so it has nothing to do on a new
-  // project. It stays on the rail with the reason, because a control that
-  // vanishes is its own kind of puzzle.
-  function renderSwap(proj) {
-    var n = (proj && proj.wallCount) || 0;
-    setStatus('swap', n ? n + ' ' + plural(n, 'wall') + ' drawn · swap them in Quick Walls'
-                        : 'Only when the project already has walls', n ? '' : 'is-off');
-    $('prepSwapInfo').innerHTML = n
-      ? '<div class="pb-item">This project already has <b>' + n + '</b> '
-        + plural(n, 'wall segment') + '. Visual Wall Swap changes the type of walls already '
-        + 'drawn, by picking them on the plan. It runs in Quick Walls, on the prepared copy: '
-        + 'prepare first, then open that copy in '
-        + '<a href="/walls" target="_blank" rel="noopener">Quick Walls</a> and use its '
-        + 'Wall Swap.</div>'
-      : '<div class="pb-item prep-sub">Not available on this project: it has no walls yet, '
-        + 'so there is nothing to swap. Wall Swap is for a project you are preparing again '
-        + 'after drawing, when some walls went in on the wrong type.</div>';
   }
 
   // ── stages ─────────────────────────────────────────────────────────────────

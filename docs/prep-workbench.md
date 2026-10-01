@@ -15,7 +15,6 @@ tools, not cut-down copies:
 | 1 Trim | PlanTrim | margin preset, reuse of boxes already drawn in PlanTrim, read-only crop preview | drawing and editing a box, Suggest, Apply to all, pan and zoom, saving boxes back |
 | 2 Requirement areas | Capacity | apply a template, headcount, per-floor headcount, existing-device choice | capturing a template from a project, managing templates, seeing the area on the plan |
 | 3 Wall types | Quick Walls | apply a saved template | editing types, keybinds, save/import/export, the wall audit |
-| 4 Wall swap (optional) | Quick Walls → Visual Wall Swap | nothing | all of it; matters only on a re-run, once walls exist |
 
 The standalone PlanTrim, Capacity and Quick Walls pages stay. Each becomes a
 thin shell that mounts the same module Prep mounts, so the two cannot drift
@@ -115,9 +114,9 @@ namespacing the handlers needs nothing new from `wd-shared.js`.
 4. **Partly done in suite 2.195.0:** the Walls stage picks the template and
    lists every type added or updated. Editing types stays in Quick Walls, and
    Prep reloads the templates when its tab becomes visible again.
-5. **Partly done in suite 2.195.0:** Wall swap is on the rail, unavailable
-   with its reason on a project with no walls, and pointing to Quick Walls'
-   Wall Swap where there are walls (`wallCount` in the plan's `project`).
+5. **Removed in suite 2.196.0:** Wall swap is not a Prep stage. Prep readies
+   a new project; swapping wall types happens after import, once a flattened
+   import is noticed, and stays in Quick Walls. Do not put it back on the rail.
 
 ## Still to do
 
@@ -128,8 +127,6 @@ namespacing the handlers needs nothing new from `wd-shared.js`.
   the other. The boxes themselves are already shared, through the store.
 - The wall-type editor inside Prep, and the duplicate wall-template merge
   (`mergeTemplateTypes` in `walls.js`, its port in `tools/wall_inject.py`).
-- Wall Swap inside Prep. It edits the archive in the browser with JSZip, which
-  Prep, being server-side, does not.
 
 Each phase ships on its own and leaves every page working.
 
@@ -138,5 +135,5 @@ Each phase ships on its own and leaves every page working.
 - The standalone tools stay, as shells over the shared modules.
 - Capturing a Capacity template happens inside Prep, not only through a link
   to Capacity.
-- Wall Swap is last, and optional.
+- Wall Swap is not part of Prep (decided after 2.195.0 shipped it on the rail).
 - The one-write model stays. Nothing is written until **Prepare** is pressed.
