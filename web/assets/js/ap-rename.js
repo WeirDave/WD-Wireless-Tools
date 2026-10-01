@@ -1194,7 +1194,7 @@
     S.floors.forEach(function (f) {
       var n = floorAPCount(f.id);
       html += '<button class="ar-floor-tab" data-fp="' + escAttr(f.id) + '">' +
-              esc(f.name) + ' <span style="opacity:.5;font-size:11px">(' + n + ')</span></button>';
+              esc(f.name) + ' <span class="ar-floor-count">(' + n + ')</span></button>';
     });
     var unplaced = S.aps.filter(function (a) { return !a.floorPlanId; }).length;
     if (unplaced) {
