@@ -117,22 +117,22 @@
   <div class="pb-body">
    <nav class="pb-rail" aria-label="Steps">
     <div class="pb-rail-head">Steps</div>
-    <div class="pb-stage is-current" data-step="capStep3">
+    <div class="pb-stage is-current" data-step="capStepTpl">
+      <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capStepTpl">
+        <span class="pb-stage-name">1 &middot; Template</span>
+        <span class="pb-stage-status">The device mix: which devices, on which usage, how many per person</span>
+      </button>
+    </div>
+    <div class="pb-stage" data-step="capStep3">
       <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capStep3">
-        <span class="pb-stage-name">1 &middot; Apply a template</span>
-        <span class="pb-stage-status">Pick a template and a headcount per floor; the project gets requirement areas to match</span>
+        <span class="pb-stage-name">2 &middot; Apply it to this project</span>
+        <span class="pb-stage-status">People per floor, and what happens to floors that already have devices</span>
       </button>
     </div>
     <div class="pb-stage" data-step="capStep1">
       <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capStep1">
-        <span class="pb-stage-name">2 &middot; What this project asks for</span>
-        <span class="pb-stage-status">Read only: the devices and usage already set up in the open project</span>
-      </button>
-    </div>
-    <div class="pb-stage" data-step="capDeriveCard">
-      <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capDeriveCard">
-        <span class="pb-stage-name">3 &middot; Save as a template</span>
-        <span class="pb-stage-status">Turns step 2 into a template you can apply to any size of building</span>
+        <span class="pb-stage-name">3 &middot; What this project already has</span>
+        <span class="pb-stage-status">Read from the open project; can be made into a template</span>
       </button>
     </div>
     <div class="pb-rail-foot">
@@ -144,11 +144,24 @@
    <main class="pb-main cap-main">
    <div class="cap-wrap">
 
-    <div class="cap-card" id="capStep3">
-      <div class="cap-step">1 &mdash; Apply a template to this project</div>
-      <p class="cap-lead">Pick a template:</p>
+    <div class="cap-card" id="capStepTpl">
+      <div class="cap-step">1 &mdash; Template</div>
+      <p class="cap-lead">Which template goes into this project:</p>
       <div class="cap-tpl-list" id="capTemplates" role="radiogroup" aria-label="Templates"></div>
-      <div class="cap-row mt-12">
+      <div class="cap-tpl-actions">
+        <button type="button" class="btn btn-sec" id="capEditBtn" data-action="call" data-fn="capEditChosen" disabled>Edit</button>
+        <button type="button" class="btn btn-sec" id="capNewBtn" data-action="call" data-fn="capNewTemplate">New template</button>
+        <button type="button" class="btn btn-sec" id="capDupBtn" data-action="call" data-fn="capDuplicateChosen" disabled>Duplicate</button>
+        <button type="button" class="btn btn-sec" id="capMakeDefault" data-action="call" data-fn="capMakeDefault" disabled
+                title="Pick this template every time a project is opened">&#9733; Make default</button>
+        <button type="button" class="btn btn-sec cap-danger" id="capDeleteBtn" data-action="call" data-fn="capDeleteChosen" disabled>Delete</button>
+      </div>
+      <div id="capTplView"></div>
+    </div>
+
+    <div class="cap-card" id="capStep3">
+      <div class="cap-step">2 &mdash; Apply it to this project</div>
+      <div class="cap-row">
         <label for="capHeadcount">Each floor is for</label>
         <input type="number" id="capHeadcount" class="cap-input cap-input--num" min="1" step="1" value="200"
                data-action-input="call" data-fn="capPlan">
@@ -163,51 +176,64 @@
         </select>
       </div>
       <p class="cap-hint">
-        Floors hold different numbers of people, so every floor below has its own
-        <b>People on this floor</b> box. Leave it blank to use the number above,
-        type a number to override it, or type 0 to leave that floor alone.
-      </p>
-      <p class="cap-hint">
-        An area you drew yourself is filled in, not replaced &mdash; your outline is kept
-        exactly as it is and only the devices are written into it. A floor whose area
-        <em>already carries devices</em> is kept as it is unless you choose otherwise
-        above, or per floor below. That dropdown starts on the default saved in
-        <a href="/settings#capacity">Settings &rarr; Capacity</a>. Replacing sets the floor to the new number &mdash; it
-        never adds to what was there, and any second capacity area on that floor has its
-        devices cleared so it stops counting twice.
+        Each floor below can have its own number of people: leave it blank to use the number
+        above, or type 0 to leave that floor alone. An area you drew yourself keeps its outline
+        and only gets the devices. Replacing sets a floor to the new number &mdash; it never adds
+        to what was there. The starting choice for floors with devices is set in
+        <a href="/settings#capacity">Settings &rarr; Capacity</a>.
       </p>
       <div id="capPlan"></div>
       <div id="capResult"></div>
     </div>
 
     <div class="cap-card" id="capStep1">
-      <div class="cap-step">2 &mdash; What this project is asking for <span class="cap-step-note">read only</span></div>
+      <div class="cap-step">3 &mdash; What this project already has <span class="cap-step-note">read only</span></div>
       <div id="capExtract"></div>
-    </div>
-
-    <div class="cap-card" id="capDeriveCard" hidden>
-      <div class="cap-step">3 &mdash; Save it as a template</div>
-      <div class="cap-row">
-        <label for="capOccupants">This project was designed for</label>
-        <input type="number" id="capOccupants" class="cap-input cap-input--num" min="1" step="1" value="500"
-               data-action-input="call" data-fn="capDerive">
-        <label for="capOccupants">people</label>
-      </div>
-      <p class="cap-hint">
-        Everything is stored per person, so a template captured from a 500-person
-        building applies correctly to a 200-person one. Check the per-person column
-        below matches what you intended before saving.
-      </p>
-      <div id="capDerived"></div>
       <div class="cap-row mt-12">
-        <label for="capName">Save as</label>
-        <input type="text" id="capName" class="cap-input cap-input--name" placeholder="e.g. Office, Wi-Fi 6E">
-        <button class="btn btn-primary" data-action="call" data-fn="capSave">Save template</button>
+        <button type="button" class="btn btn-sec" id="capFromProject" data-action="call" data-fn="capTemplateFromProject" hidden>
+          Make a template from this project&hellip;</button>
       </div>
     </div>
 
    </div>
    </main>
+  </div>
+
+  <!-- The template editor: a template is a list of devices - a device
+       profile, a usage profile, and how many of it each person carries. -->
+  <div class="modal-overlay cap-editor-overlay" id="capEditor" data-action="backdrop-call" data-fn="capEditorClose">
+    <div class="modal cap-editor" role="dialog" aria-modal="true" aria-labelledby="capEdTitle">
+      <h3 id="capEdTitle">Edit template</h3>
+      <p class="cap-hint" id="capEdIntro"></p>
+      <div class="cap-ed-fields">
+        <label for="capEdName">Name</label>
+        <input type="text" id="capEdName" class="cap-input" placeholder="e.g. Corporate office, laptop and two phones">
+        <label for="capEdDesc">Notes <span class="cap-sub">(optional)</span></label>
+        <input type="text" id="capEdDesc" class="cap-input" placeholder="e.g. Everyone has a laptop and a work phone; personal phones on background">
+      </div>
+      <div class="cap-row cap-ed-from" id="capEdFrom" hidden>
+        <label for="capEdPeople">This project was designed for</label>
+        <input type="number" id="capEdPeople" class="cap-input cap-input--num" min="1" step="1" value="100"
+               data-action-input="call" data-fn="capEdPeople" data-arg-value="1">
+        <label for="capEdPeople">people &mdash; each device count below is divided by it</label>
+      </div>
+      <div class="cap-ed-tablewrap">
+        <table class="cap-table cap-ed-table">
+          <thead><tr><th>Device profile</th><th>Usage profile</th><th class="cap-n">Devices per person</th>
+            <th class="cap-n" id="capEdForHead">For 200 people</th><th></th></tr></thead>
+          <tbody id="capEdRows"></tbody>
+        </table>
+      </div>
+      <div class="cap-ed-under">
+        <button type="button" class="btn btn-sec" data-action="call" data-fn="capEdAdd">+ Add a device</button>
+        <span class="cap-ed-total" id="capEdTotal"></span>
+      </div>
+      <div class="cap-warn" id="capEdError" hidden></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-sec" data-action="call" data-fn="capEditorClose">Cancel</button>
+        <button type="button" class="btn btn-primary" id="capEdSave" data-action="call" data-fn="capEdSave">Save template</button>
+      </div>
+    </div>
   </div>
 
   <footer class="pb-footer">

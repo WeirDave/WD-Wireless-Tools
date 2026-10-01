@@ -12001,3 +12001,33 @@ body.tool-aprename .pb-panel select { font-size: var(--rd-body); }
 .pb-rail #ptbStrip.is-compact .ptb-row-detail { display: none; }
 .pb-rail #ptbStrip.is-compact .ptb-row { padding-top: 6px; padding-bottom: 6px; }
 body.tool-plantrim .pb-rail { overflow: hidden; }
+
+/* -- Capacity: templates you can build, edit and make the default ------- */
+.cap-tpl-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin: var(--sp-3) 0; }
+.cap-tpl-actions .btn { font-size: var(--rd-small); padding: 7px 14px; }
+.cap-tpl-default {
+  margin-left: var(--sp-2); padding: 1px 8px; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--tool-accent) 18%, transparent); color: var(--text);
+  font-size: var(--rd-tag); font-weight: 600;
+}
+.cap-danger:not(:disabled):hover, .cap-danger.is-armed { border-color: var(--danger); color: var(--danger); }
+.modal.cap-editor {
+  width: min(1100px, 94vw); max-height: 90vh; display: flex; flex-direction: column; gap: var(--sp-3);
+}
+.cap-editor h3 { margin: 0; font-size: var(--fs-section); }
+.cap-ed-fields { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-2) var(--sp-3); align-items: center; }
+.cap-ed-fields label { font-size: var(--rd-small); color: var(--text-2); }
+.cap-ed-fields .cap-input { width: 100%; font-size: var(--rd-body); }
+.cap-ed-tablewrap { flex: 1 1 auto; min-height: 120px; overflow-y: auto; }
+.cap-ed-table select.cap-input { width: 100%; font-size: var(--rd-small); }
+.cap-ed-table td { vertical-align: middle; }
+.cap-ed-table .cap-input--num { width: 90px; }
+.cap-ed-remove { font-size: var(--rd-tag); padding: 4px 10px; }
+.cap-ed-under { display: flex; align-items: center; gap: var(--sp-4); flex-wrap: wrap; }
+.cap-ed-total { font-size: var(--rd-body); font-weight: 600; }
+.cap-editor .modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+/* A sentence is not a heading: these read as words, not as a label strip. */
+.cap-editor .cap-ed-from label, .cap-editor .cap-ed-fields label {
+  text-transform: none; letter-spacing: 0; font-size: var(--rd-body); color: var(--text);
+}
+:is(body.tool-capacity, body.tool-prep) .cap-floor-people .cap-sub { font-size: var(--rd-small); }

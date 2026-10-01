@@ -638,6 +638,7 @@
      three keys here named modals that no longer exist. */
   var WHERE = {
     'walls-tool':    'Quick Walls',
+    'capacity-tool': 'Capacity',
     'plantrim-tool': 'PlanTrim',
     'rename-page':   'Rename',
     'aprename-tool': 'AP Labeler'

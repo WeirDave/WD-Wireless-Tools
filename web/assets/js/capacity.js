@@ -1,4 +1,11 @@
-/* WD Capacity — capture a device mix from one project, apply it to another.
+/* WD Capacity — put a device mix into a project, from a template.
+
+ * A template is a list of devices: a device profile, a usage profile, and how
+ * many of it each person carries. It is built and edited here, from the
+ * profiles Ekahau puts in every project, or made from a project that already
+ * has capacity set up. The default template is picked the moment a project
+ * opens, so the usual run is open, check, apply.
+ *
  *
  * Applying is gated behind the preview above it: the button does exactly what
  * the plan just described, and the file you loaded is never written to. The
@@ -10,8 +17,7 @@
 
   var fileBytes = null;      // the .esx currently loaded, as an ArrayBuffer
   var fileName = '';
-  var extracted = null;      // what capture read out of it
-  var derived = null;        // that, turned into per-person ratios
+  var extracted = null;      // what was read out of the open project
   var templates = [];
   var chosen = null;         // filename of the template selected for apply
   var floorOcc = {};         // floorPlanId -> headcount typed for that floor
@@ -47,7 +53,7 @@
     fileName = file.name;
     floorOcc = {};
     floorExist = {};
-    // A new project starts from the saved default again.
+    // A new project starts from the saved defaults again.
     $('capExisting').value = savedExisting;
     file.arrayBuffer().then(function (buf) {
       fileBytes = buf;
@@ -60,8 +66,17 @@
     }).then(function (r) {
       extracted = r && r.ok ? r : null;
       renderExtract(r);
-      capDerive();
-      capPlan();
+      /* "once a template is [made] it would automatically load in that
+         default template unless you chose or altered otherwise and then they
+         could just immediately save". The default is picked and planned the
+         moment the project opens, so Apply is ready without a click. */
+      return loadTemplates().then(function () {
+        if (!chosen && defaultTemplate && templateByFile(defaultTemplate)) chosen = defaultTemplate;
+        // With a single template there is nothing to choose between.
+        if (!chosen && templates.length === 1) chosen = templates[0]._file;
+        renderTemplates();
+        capPlan();
+      });
     }).catch(function (e) {
       WD.toast('Could not read that file: ' + e.message, 'error');
     });
@@ -69,16 +84,17 @@
 
   function renderExtract(r) {
     var host = $('capExtract');
+    var fromBtn = $('capFromProject');
     if (!r || !r.ok) {
       host.innerHTML = '<div class="cap-empty">' + esc((r && r.error) || 'Could not read that project.') + '</div>';
-      $('capDeriveCard').hidden = true;
+      fromBtn.hidden = true;
       return;
     }
     if (!r.rows.length) {
-      host.innerHTML = '<div class="cap-empty">No capacity items in this project. '
-        + 'Set the areas up in Ekahau first — device counts, device profiles and usage '
-        + 'profiles — then capture from it.</div>';
-      $('capDeriveCard').hidden = true;
+      host.innerHTML = '<div class="cap-empty">This project has no capacity set up yet - '
+        + 'nothing in its requirement areas says how many devices to plan for. Pick a '
+        + 'template in step 1 to add it.</div>';
+      fromBtn.hidden = true;
       return;
     }
     var rows = r.rows.map(function (x) {
@@ -90,18 +106,10 @@
       + '<th style="text-align:right">Devices</th></tr></thead><tbody>' + rows
       + '<tr><td colspan="2" class="cap-total">Total</td><td class="cap-n cap-total">'
       + r.totalDevices + '</td></tr></tbody></table>'
-      + '<p class="cap-hint">'
-      + esc(r.rows.length) + ' rows, ' + esc(r.deviceProfileCount) + ' device profile'
-      + (r.deviceProfileCount === 1 ? '' : 's') + ' across ' + esc(r.usageProfileCount)
-      + ' usage profile' + (r.usageProfileCount === 1 ? '' : 's')
-      + (r.requirementName ? ', requirement &ldquo;' + esc(r.requirementName) + '&rdquo;' : '')
-      + '. Rows are shown exactly as authored — two rows can share a device and a usage '
-      + 'profile and still mean different things.</p>'
+      + (r.requirementName ? '<p class="cap-hint">Requirement: &ldquo;'
+          + esc(r.requirementName) + '&rdquo;.</p>' : '')
       + warnings(r);
-    $('capDeriveCard').hidden = false;
-    if (!$('capName').value) {
-      $('capName').value = fileName.replace(/\.esx(\.zip)?$/i, '');
-    }
+    fromBtn.hidden = false;
   }
 
   function warnings(r) {
@@ -114,104 +122,366 @@
     }
     if (r.otherAreasDiffer) {
       out += '<div class="cap-warn">More than one area carries capacity and they do not agree. '
-        + 'The largest was captured; the others were left out rather than averaged into a '
+        + 'The largest is shown; the others were left out rather than averaged into a '
         + 'mixture that describes no real space.</div>';
     }
     return out;
   }
 
-  // ── capture → ratios ───────────────────────────────────────────────────────
-  window.capDerive = function () {
-    var host = $('capDerived');
-    if (!extracted) { host.innerHTML = ''; derived = null; return; }
-    jsonApi('derive', {
-      extracted: extracted,
-      occupants: $('capOccupants').value,
-      name: $('capName').value,
-    }).then(function (r) {
-      if (!r || !r.ok) {
-        derived = null;
-        host.innerHTML = '<div class="cap-empty">' + esc((r && r.error) || 'Could not work that out.') + '</div>';
-        return;
-      }
-      derived = r;
-      var rows = r.items.map(function (i) {
-        return '<tr><td>' + esc(shortDevice(i.device)) + '</td><td class="cap-sub">' + esc(i.usage)
-          + '</td><td class="cap-n">' + i.capturedCount + '</td><td class="cap-n"><b>'
-          + i.perOccupant.toFixed(2) + '</b></td><td class="cap-n cap-sub">'
-          + (i.shareOfTotal * 100).toFixed(1) + '%</td></tr>';
-      }).join('');
-      host.innerHTML =
-        '<table class="cap-table"><thead><tr><th>Device profile</th><th>Usage profile</th>'
-        + '<th style="text-align:right">Captured</th><th style="text-align:right">Per person</th>'
-        + '<th style="text-align:right">Share</th></tr></thead><tbody>' + rows
-        + '<tr><td colspan="3" class="cap-total">Devices per person</td>'
-        + '<td class="cap-n cap-total">' + r.devicesPerOccupant.toFixed(2) + '</td><td></td></tr>'
-        + '</tbody></table>';
-    });
-  };
-
-  window.capSave = function () {
-    if (!derived) { WD.toast('Nothing to save yet', 'warn'); return; }
-    var body = JSON.parse(JSON.stringify(derived));
-    body.name = $('capName').value || body.name;
-    jsonApi('save', { template: body }).then(function (r) {
-      if (!r || !r.ok) { WD.toast((r && r.error) || 'Could not save', 'error'); return; }
-      WD.toast('Saved "' + body.name + '"', 'success');
-      loadTemplates();
-    });
-  };
-
   // ── templates ──────────────────────────────────────────────────────────────
+  var defaultTemplate = '';
+
+  function templateByFile(file) {
+    for (var i = 0; i < templates.length; i++) if (templates[i]._file === file) return templates[i];
+    return null;
+  }
+
   function loadTemplates() {
-    jsonApi('templates', {}).then(function (r) {
+    return jsonApi('templates', {}).then(function (r) {
       templates = (r && r.templates) || [];
-      var host = $('capTemplates');
-      if (!templates.length) {
-        host.innerHTML = '<div class="cap-empty">No templates yet. Open a project that has '
-          + 'requirement areas and save one in step 3.</div>';
-        return;
-      }
+      if (chosen && !templateByFile(chosen)) chosen = null;
+      renderTemplates();
+    });
+  }
+
+  function renderTemplates() {
+    var host = $('capTemplates');
+    if (!templates.length) {
+      host.innerHTML = '<div class="cap-empty">No templates yet. Press <b>New template</b> '
+        + 'to build one, or make one from a project that already has capacity set up.</div>';
+    } else {
       host.innerHTML = templates.map(function (t) {
         var on = t._file === chosen;
+        var isDefault = t._file === defaultTemplate;
         return '<button type="button" class="cap-tpl' + (on ? ' is-on' : '') + '" '
           + 'role="radio" aria-checked="' + (on ? 'true' : 'false') + '" '
           + 'data-action="call" data-fn="capChoose" data-arg="'
           + WD.escAttr(t._file) + '">'
           + '<span class="cap-tpl-dot" aria-hidden="true"></span>'
-          + '<span class="cap-tpl-name">' + esc(t.name) + '</span>'
+          + '<span class="cap-tpl-name">' + esc(t.name)
+          + (isDefault ? ' <span class="cap-tpl-default">&#9733; default</span>' : '') + '</span>'
           + '<span class="cap-tpl-meta">' + Number(t.devicesPerOccupant || 0).toFixed(2)
-          + ' per person · ' + (t.items || []).length + ' rows'
-          + (t._builtin ? ' · example' : '') + '</span></button>';
+          + ' devices per person' + (t._builtin ? ' &middot; shipped example' : '') + '</span></button>';
       }).join('');
-    });
+    }
+    renderTemplateView();
   }
+
+  /* The mix the chosen template puts in, at this project's headcount - the
+     thing to check before pressing Apply. */
+  function renderTemplateView() {
+    var t = templateByFile(chosen);
+    var has = !!t;
+    $('capEditBtn').disabled = !has;
+    $('capDupBtn').disabled = !has;
+    $('capMakeDefault').disabled = !has || chosen === defaultTemplate;
+    $('capMakeDefault').textContent = has && chosen === defaultTemplate
+      ? '★ This is the default' : '★ Make default';
+    var del = $('capDeleteBtn');
+    del.disabled = !has || t._builtin;
+    del.title = has && t._builtin ? 'A shipped example cannot be deleted' : '';
+    resetDelete();
+    var host = $('capTplView');
+    if (!t) {
+      host.innerHTML = templates.length
+        ? '<div class="cap-empty">Pick a template above.</div>' : '';
+      return;
+    }
+    var people = Number($('capHeadcount').value) || 0;
+    var rows = (t.items || []).map(function (i) {
+      return '<tr><td>' + esc(shortDevice(i.device)) + '</td><td class="cap-sub">' + esc(i.usage)
+        + '</td><td class="cap-n">' + fmtPer(i.perOccupant) + '</td><td class="cap-n">'
+        + (people ? Math.round(i.perOccupant * people) : '–') + '</td></tr>';
+    }).join('');
+    host.innerHTML = (t.description ? '<p class="cap-hint">' + esc(t.description) + '</p>' : '')
+      + '<table class="cap-table"><thead><tr><th>Device profile</th><th>Usage profile</th>'
+      + '<th style="text-align:right">Per person</th><th style="text-align:right">For '
+      + (people || '–') + ' people</th></tr></thead><tbody>' + rows
+      + '<tr><td colspan="2" class="cap-total">Total</td><td class="cap-n cap-total">'
+      + fmtPer(t.devicesPerOccupant) + '</td><td class="cap-n cap-total">'
+      + (people ? Math.round((t.devicesPerOccupant || 0) * people) : '–')
+      + '</td></tr></tbody></table>';
+  }
+
+  function fmtPer(n) {
+    n = Number(n) || 0;
+    var s = n.toFixed(2);
+    return s.replace(/0$/, '').replace(/\.0?$/, '');
+  }
+
+  window.capChoose = function (file) {
+    chosen = file;
+    renderTemplates();
+    capPlan();
+  };
+
+  window.capMakeDefault = function () {
+    if (!chosen) return;
+    WD.api('settings/update', { patch: { capacity: { default_template: chosen } } })
+      .then(function () {
+        defaultTemplate = chosen;
+        renderTemplates();
+        WD.toast('"' + (templateByFile(chosen) || {}).name + '" is picked whenever a project is opened', 'success');
+      }).catch(function () { WD.toast('Could not save the default', 'error'); });
+  };
+
+  /* Delete asks by changing the button rather than opening a dialog: the
+     first press names what will go, the second deletes. A template file is
+     not in any project, so this cannot change a project. */
+  var _deleteArmed = null;
+  function resetDelete() {
+    var del = $('capDeleteBtn');
+    if (_deleteArmed) clearTimeout(_deleteArmed);
+    _deleteArmed = null;
+    del.textContent = 'Delete';
+    del.classList.remove('is-armed');
+  }
+  window.capDeleteChosen = function () {
+    var t = templateByFile(chosen);
+    if (!t || t._builtin) return;
+    var del = $('capDeleteBtn');
+    if (!_deleteArmed) {
+      del.textContent = 'Press again to delete “' + t.name + '”';
+      del.classList.add('is-armed');
+      _deleteArmed = setTimeout(resetDelete, 5000);
+      return;
+    }
+    resetDelete();
+    jsonApi('delete', { file: t._file }).then(function (r) {
+      if (!r || !r.ok) { WD.toast((r && r.error) || 'Could not delete', 'error'); return; }
+      WD.toast('Deleted "' + t.name + '"', 'success');
+      if (defaultTemplate === t._file) {
+        defaultTemplate = '';
+        WD.api('settings/update', { patch: { capacity: { default_template: '' } } });
+      }
+      chosen = null;
+      loadTemplates().then(capPlan);
+    });
+  };
 
   /* The rail's steps. They only scrolled, and on a tall window every card was
      already on screen, so pressing one visibly did nothing - "you can't click
      on it or anything". Now the step is marked current, its card is scrolled
-     to and outlined, and a step that is not open yet says why. */
+     to and outlined. */
   window.capGoTo = function (id) {
     var card = $(id);
     document.querySelectorAll('.pb-rail .pb-stage').forEach(function (st) {
       st.classList.toggle('is-current', st.getAttribute('data-step') === id);
     });
     if (!card) return;
-    if (card.hidden) {
-      WD.toast('Saving a template opens once a project with requirement areas '
-        + 'is open - step 2 shows what this one has.', 'info');
-      return;
-    }
     card.scrollIntoView({ block: 'start', behavior: 'smooth' });
     card.classList.remove('is-flash');
     void card.offsetWidth;
     card.classList.add('is-flash');
   };
 
-  window.capChoose = function (file) {
-    chosen = file;
-    loadTemplates();
-    capPlan();
+  // ── the editor ─────────────────────────────────────────────────────────────
+  /* A template is a list of devices: a device profile, a usage profile, and
+     how many of that each person carries. The profiles offered are the ones
+     in the open project - Ekahau puts its stock profiles in every project -
+     plus any the template already names. "it needs to be built utilizing the
+     stuff that's in [Ekahau] So that they can choose you know the device
+     types the amount of devices etc And then how many people And then how
+     many devices per people". */
+  var ed = null;   // { replaces, rows: [{device, usage, per, count}], fromProject, defs }
+
+  function edDefs(base) {
+    var avail = (extracted && extracted.available && extracted.available.defs) || {};
+    var defs = { devices: {}, usages: {}, requirement: [] };
+    var bd = (base && base.profileDefs) || {};
+    ['devices', 'usages'].forEach(function (k) {
+      Object.keys(bd[k] || {}).forEach(function (n) { defs[k][n] = bd[k][n]; });
+      Object.keys(avail[k] || {}).forEach(function (n) { defs[k][n] = avail[k][n]; });
+    });
+    defs.requirement = bd.requirement
+      || (extracted && extracted.profileDefs && extracted.profileDefs.requirement) || [];
+    return defs;
+  }
+
+  function choices(kind) {
+    var names = {};
+    ((extracted && extracted.available && extracted.available[kind]) || [])
+      .forEach(function (n) { names[n] = true; });
+    if (ed) ed.rows.forEach(function (r) {
+      var v = kind === 'devices' ? r.device : r.usage;
+      if (v) names[v] = true;
+    });
+    return Object.keys(names).sort(function (a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; });
+  }
+
+  function openEditor(title, intro, name, desc, rows, opts) {
+    ed = { rows: rows, replaces: opts.replaces || null, fromProject: !!opts.fromProject,
+           defs: edDefs(opts.base), base: opts.base || null };
+    $('capEdTitle').textContent = title;
+    $('capEdIntro').textContent = intro;
+    $('capEdName').value = name;
+    $('capEdDesc').value = desc || '';
+    $('capEdFrom').hidden = !ed.fromProject;
+    $('capEdError').hidden = true;
+    renderEditorRows();
+    $('capEditor').classList.add('active');
+    setTimeout(function () { $('capEdName').focus(); }, 0);
+  }
+
+  function rowsFromTemplate(t) {
+    return (t.items || []).map(function (i) {
+      return { device: i.device, usage: i.usage, per: Number(i.perOccupant) || 0 };
+    });
+  }
+
+  window.capEditChosen = function () {
+    var t = templateByFile(chosen);
+    if (!t) return;
+    if (t._builtin) {
+      openEditor('Edit a copy of "' + t.name + '"',
+        'This is a shipped example, so your changes are saved as a template of your own.',
+        t.name.replace(/\s*\(example\)\s*$/i, '') + ' (my copy)', t.description,
+        rowsFromTemplate(t), { base: t });
+      return;
+    }
+    openEditor('Edit "' + t.name + '"', '', t.name, t.description,
+               rowsFromTemplate(t), { base: t, replaces: t._file });
+  };
+
+  window.capDuplicateChosen = function () {
+    var t = templateByFile(chosen);
+    if (!t) return;
+    openEditor('New template from "' + t.name + '"', 'A copy to change; the original stays as it is.',
+               t.name + ' (copy)', t.description, rowsFromTemplate(t), { base: t });
+  };
+
+  window.capNewTemplate = function () {
+    var dev = choices('devices'), use = choices('usages');
+    openEditor('New template',
+      'Add a row for each kind of device a person carries, and how many of it per person.',
+      '', '', [{ device: dev[0] || '', usage: use[0] || '', per: 1 }], {});
+  };
+
+  window.capTemplateFromProject = function () {
+    if (!extracted || !extracted.rows || !extracted.rows.length) return;
+    $('capEdPeople').value = '100';
+    var rows = extracted.rows.map(function (r) {
+      return { device: r.device, usage: r.usage, count: r.deviceCount, per: r.deviceCount / 100 };
+    });
+    openEditor('New template from this project',
+      'Starts from the devices this project already has. Enter how many people it was designed for, then check the numbers per person.',
+      fileName.replace(/\.esx(\.zip)?$/i, ''), '', rows,
+      { fromProject: true, base: { profileDefs: extracted.profileDefs } });
+  };
+
+  window.capEdPeople = function (value) {
+    var people = Number(value) || 0;
+    if (!ed || people <= 0) return;
+    ed.rows.forEach(function (r) { if (r.count != null) r.per = r.count / people; });
+    renderEditorRows();
+  };
+
+  window.capEditorClose = function () {
+    $('capEditor').classList.remove('active');
+    ed = null;
+  };
+
+  window.capEdAdd = function () {
+    if (!ed) return;
+    var dev = choices('devices'), use = choices('usages');
+    ed.rows.push({ device: dev[0] || '', usage: use[0] || '', per: 1 });
+    renderEditorRows();
+  };
+
+  window.capEdRemove = function (i) {
+    if (!ed) return;
+    ed.rows.splice(Number(i), 1);
+    renderEditorRows();
+  };
+
+  window.capEdSet = function (i, field, value) {
+    if (!ed || !ed.rows[Number(i)]) return;
+    var row = ed.rows[Number(i)];
+    if (field === 'per') {
+      row.per = Number(value);
+      delete row.count;   // typed by hand: no longer tied to the project's count
+    } else {
+      row[field] = value;
+    }
+    renderEditorTotals();
+  };
+
+  function optionList(names, current) {
+    return names.map(function (n) {
+      return '<option value="' + WD.escAttr(n) + '"' + (n === current ? ' selected' : '') + '>'
+        + esc(n) + '</option>';
+    }).join('');
+  }
+
+  function renderEditorRows() {
+    if (!ed) return;
+    var dev = choices('devices'), use = choices('usages');
+    $('capEdRows').innerHTML = ed.rows.map(function (r, i) {
+      return '<tr>'
+        + '<td><select class="cap-input" aria-label="Device profile" data-action-change="call"'
+        + ' data-fn="capEdSet" data-arg="' + i + '" data-arg2="device" data-arg-value="1">'
+        + optionList(dev, r.device) + '</select></td>'
+        + '<td><select class="cap-input" aria-label="Usage profile" data-action-change="call"'
+        + ' data-fn="capEdSet" data-arg="' + i + '" data-arg2="usage" data-arg-value="1">'
+        + optionList(use, r.usage) + '</select></td>'
+        + '<td class="cap-n"><input type="number" class="cap-input cap-input--num" min="0" step="0.05"'
+        + ' aria-label="Devices per person" value="' + WD.escAttr(fmtPer(r.per)) + '"'
+        + ' data-action-input="call" data-fn="capEdSet" data-arg="' + i + '" data-arg2="per"'
+        + ' data-arg-value="1"></td>'
+        + '<td class="cap-n cap-ed-for" data-row="' + i + '"></td>'
+        + '<td><button type="button" class="btn btn-sec cap-ed-remove" title="Remove this row"'
+        + ' data-action="call" data-fn="capEdRemove" data-arg="' + i + '">Remove</button></td>'
+        + '</tr>';
+    }).join('');
+    renderEditorTotals();
+  }
+
+  function renderEditorTotals() {
+    if (!ed) return;
+    var people = Number($('capHeadcount').value) || 200;
+    $('capEdForHead').textContent = 'For ' + people + ' people';
+    var total = 0;
+    ed.rows.forEach(function (r, i) {
+      var per = Number(r.per) || 0;
+      total += per;
+      var cell = document.querySelector('.cap-ed-for[data-row="' + i + '"]');
+      if (cell) cell.textContent = String(Math.round(per * people));
+    });
+    $('capEdTotal').textContent = ed.rows.length
+      ? 'In total ' + fmtPer(total) + ' device' + (total === 1 ? '' : 's') + ' per person — '
+        + Math.round(total * people) + ' for ' + people + ' people.'
+      : 'No devices yet.';
+  }
+
+  window.capEdSave = function () {
+    if (!ed) return;
+    var spec = {
+      name: $('capEdName').value,
+      description: $('capEdDesc').value,
+      items: ed.rows.map(function (r) {
+        return { device: r.device, usage: r.usage, perOccupant: r.per };
+      }),
+      defs: ed.defs,
+      capturedFrom: ed.fromProject ? fileName : ((ed.base && ed.base.capturedFrom) || ''),
+      requirementName: (ed.base && ed.base.requirementName)
+        || (extracted && extracted.requirementName) || '',
+    };
+    jsonApi('build', { spec: spec, replaces: ed.replaces }).then(function (r) {
+      if (!r || !r.ok) {
+        var box = $('capEdError');
+        box.textContent = (r && r.error) || 'Could not save the template.';
+        box.hidden = false;
+        return;
+      }
+      WD.toast('Saved "' + spec.name.trim() + '"', 'success');
+      if (ed.replaces && defaultTemplate === ed.replaces && r.file !== ed.replaces) {
+        defaultTemplate = r.file;
+        WD.api('settings/update', { patch: { capacity: { default_template: r.file } } });
+      }
+      chosen = r.file;
+      window.capEditorClose();
+      loadTemplates().then(capPlan);
+    });
   };
 
   function applyQuery() {
@@ -249,6 +519,7 @@
 
   // ── apply preview ──────────────────────────────────────────────────────────
   window.capPlan = function () {
+    renderTemplateView();
     var host = $('capPlan');
     $('capResult').innerHTML = '';
     if (!fileBytes || !chosen) {
@@ -493,8 +764,10 @@
 
   function loadExistingDefault() {
     return WD.api('settings/get').then(function (r) {
-      var v = r && r.settings && r.settings.capacity && r.settings.capacity.existing_devices;
+      var cap = (r && r.settings && r.settings.capacity) || {};
+      var v = cap.existing_devices;
       if (EXISTING_CHOICES.indexOf(v) >= 0) savedExisting = v;
+      if (typeof cap.default_template === 'string') defaultTemplate = cap.default_template;
     }).catch(function () { /* keep the shipped default */ }).then(function () {
       $('capExisting').value = savedExisting;
     });
@@ -513,9 +786,12 @@
     input.addEventListener('change', function () {
       if (input.files.length) loadFile(input.files[0]);
     });
-    $('capName').addEventListener('input', function () { /* name is read at save */ });
-    loadTemplates();
-    loadExistingDefault().then(capPlan);
+    if (document.addEventListener) {
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && $('capEditor').classList.contains('active')) window.capEditorClose();
+      });
+    }
+    loadExistingDefault().then(loadTemplates).then(capPlan);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

@@ -53,12 +53,33 @@
      an empty set meaning every floor is automatic. */
   var trim = { boxes: {}, loaded: false, projectId: '', suggestions: {} };
 
+  /* The capacity template Capacity's "Make default" chose. Prep starts on it
+     too, until a template is picked here by hand. */
+  var savedCapTemplate = '';
+  var capTplTouched = false;
+
+  function selectDefaultCapTemplate() {
+    var sel = $('prepCapTpl');
+    if (!sel || capTplTouched || !savedCapTemplate) return false;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === savedCapTemplate) {
+        if (sel.value === savedCapTemplate) return false;
+        sel.value = savedCapTemplate;
+        return true;
+      }
+    }
+    return false;
+  }
+
   function loadExistingDefault() {
     return WD.api('settings/get').then(function (r) {
-      var v = r && r.settings && r.settings.capacity && r.settings.capacity.existing_devices;
+      var cap = (r && r.settings && r.settings.capacity) || {};
+      var v = cap.existing_devices;
       if (EXISTING_CHOICES.indexOf(v) >= 0) savedExisting = v;
+      if (typeof cap.default_template === 'string') savedCapTemplate = cap.default_template;
     }).catch(function () { /* keep the shipped default */ }).then(function () {
       if ($('prepExisting')) $('prepExisting').value = savedExisting;
+      if (selectDefaultCapTemplate()) syncStepUi();
       // A project opened before the setting arrived previewed on "keep".
       if (loaded()) preview();
     });
@@ -171,7 +192,8 @@
 
       $('prepCapTpl').innerHTML = capTemplates.length
         ? capTemplates.map(function (t) {
-            var sel = t._file === keepCap ? ' selected' : '';
+            var want = capTplTouched ? keepCap : (savedCapTemplate || keepCap);
+            var sel = t._file === want ? ' selected' : '';
             return '<option value="' + escAttr(t._file) + '"' + sel + '>' + esc(t.name) + '</option>';
           }).join('')
         : '<option value="">No capacity templates saved yet</option>';
@@ -180,7 +202,7 @@
       // than being offered and then refused by the server.
       if (!wallTemplates.length) disableStep('walls', 'Save one in Quick Walls first.');
       else enableStep('walls');
-      if (!capTemplates.length) disableStep('areas', 'Capture one from a project first.');
+      if (!capTemplates.length) disableStep('areas', 'Build one in Capacity first.');
       else enableStep('areas');
       syncStepUi();
     }).catch(function () { /* the pickers stay empty; the notes explain */ });
@@ -1508,6 +1530,9 @@
     loadTemplates();
     loadMargin();
     loadExistingDefault();
+    // A template picked here by hand wins over the saved default for the rest
+    // of the visit.
+    $('prepCapTpl').addEventListener('change', function () { capTplTouched = true; });
 
     $('fileInput').addEventListener('change', function (e) {
       if (e.target.files[0]) loadFile(e.target.files[0]);
