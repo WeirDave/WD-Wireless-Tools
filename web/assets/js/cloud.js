@@ -2136,7 +2136,13 @@ function renderCluster(cl) {
 
     if (it.matched) rowCls.push('is-matched');
     else rowCls.push('is-extra');
-    const dateStr = it.mtime ? `${fmtExactDate(it.mtime)} · ${fmtRelDate(it.mtime)}` : '—';
+    // The relative part is only added while it says something the full date
+    // does not; past a week fmtRelDate returns a short date, which printed the
+    // same day twice ("September 21, 2026 at 2:13 PM · Sep 21, 2026").
+    const ageDays = it.mtime ? (Date.now() / 1000 - it.mtime) / 86400 : 0;
+    const dateStr = !it.mtime ? '—'
+      : ageDays < 7 ? `${fmtExactDate(it.mtime)} · ${fmtRelDate(it.mtime)}`
+      : fmtExactDate(it.mtime);
     const sizeStr = fmtBytes(it.size);
 
     h += `<div class="${rowCls.join(' ')}" data-iid="${a(iid)}">`;

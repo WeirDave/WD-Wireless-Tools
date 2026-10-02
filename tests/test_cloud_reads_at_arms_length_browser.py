@@ -53,6 +53,22 @@ def _data():
             "orphans": {"cloudOnly": [], "localOnly": []}}
 
 
+def _dups():
+    """Two copies of one invented file, a month old and a day old."""
+    now = int(time.time())
+    items = [{"side": "local", "path": "D:\\P\\Invented Copy.esx",
+              "name": "Invented Copy", "size": 1000, "mtime": now - 30 * 86400,
+              "owner": "", "matched": False},
+             {"side": "local", "path": "D:\\Old\\Invented Copy.esx",
+              "name": "Invented Copy", "size": 900, "mtime": now - 86400,
+              "owner": "", "matched": False}]
+    return {"clusters": [{"key": "inventedcopy", "displayName": "Invented Copy",
+                          "items": items, "sides": {"cloud": 0, "local": 2},
+                          "shape": "local-only", "newestId": items[1]["path"],
+                          "largestId": items[0]["path"]}],
+            "summary": {"total": 1, "mixed": 0, "localOnly": 1, "cloudOnly": 0}}
+
+
 class _Stub(SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -76,7 +92,7 @@ class _Stub(SimpleHTTPRequestHandler):
         if self.path.endswith("/get_data"):
             return self._send(_data())
         if self.path.endswith("/get_duplicates"):
-            return self._send({"clusters": []})
+            return self._send(_dups())
         return self._send({"ok": True})
 
 
@@ -172,6 +188,25 @@ class CloudManagerReads(unittest.TestCase):
                 self.assertGreaterEqual(p["okTop"], 0, p)
                 self.assertLessEqual(p["okBottom"], p["vh"], p)
                 self.driver.execute_script("_resolveConfirmAction(false);")
+
+
+    def test_a_duplicate_shows_its_date_once(self):
+        """Past a week the relative date is itself a short date, and the row
+        printed "September 21, 2026 at 2:13 PM · Sep 21, 2026"."""
+        self.open(1366, 1000)
+        self.driver.execute_script("switchTab('duplicates');")
+        dates = []
+        for _ in range(40):
+            dates = self.driver.execute_script(
+                "return Array.prototype.map.call(document.querySelectorAll("
+                "'.dup-item-date'), function (d) { return d.textContent; });")
+            if dates:
+                break
+            time.sleep(0.25)
+        self.assertEqual(len(dates), 2, dates)
+        old, recent = dates
+        self.assertNotIn("·", old)
+        self.assertIn("ago", recent)
 
 
 def _case(kind, binary):

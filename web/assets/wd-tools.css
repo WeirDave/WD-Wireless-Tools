@@ -12143,6 +12143,12 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
   body.tool-report .rep-cover-thumb-empty,
   body.tool-report .rep-logo-btn,
   body.tool-report .rep-config-card .btn-sm { font-size: 13px; }
+
+  /* Review & Print: the advice above the sheets and each sheet's
+     orientation buttons are screen-only, so they read at screen sizes. */
+  body.tool-report .rep-print-hint { font-size: 14px; }
+  body.tool-report :is(.rep-orient-btn, .rep-orient-all, .rep-orient-label,
+    .rep-orient-now) { font-size: 13px; }
 }
 
 /* Quick Walls' dialogs, laid out for reading. The wall-type editor was four
@@ -12230,3 +12236,23 @@ body.tool-cloud #confirmActionModal .modal:has(table.sync-plan) :is(h3, .modal-a
 }
 body.tool-cloud .modal .confirm-body table.sync-plan { font-size: 14px; }
 body.tool-cloud .modal .confirm-body :is(p, .sub) { font-size: 14px; }
+
+/* Squirrel (Organize and Rename), on the same scale. Measured with an
+   invented folder at 1366x1080: the file table 12px, its headings, file
+   extensions and badges 10-11px, Rename's token buttons and hints 12px and
+   its top-row buttons 11px. */
+body:is(.tool-organizer, .tool-rename) :is(td, .org-size, .summary-chip,
+  .dest-label, .root-path, .sr-token-btn, .sr-hint, .sr-token-hint,
+  .org-modal-desc, .org-suggest-sub) { font-size: 14px; }
+body:is(.tool-organizer, .tool-rename) :is(th, .file-ext, .new-sub-badge,
+  .site-badge, .staying-label, .org-extract-meta, .org-rename-warn,
+  .org-bulk-label, .org-error-chip, .org-token-label) { font-size: 13px; }
+body:is(.tool-organizer, .tool-rename) .btn.btn-sm { font-size: 13px; }
+body.tool-organizer #rootPath, body.tool-organizer .root-path { font-size: 14px; }
+/* Duplicate Projects, on the same scale: dates, sizes and the legend were
+   12px, tags and pills 9-11px. */
+body.tool-cloud :is(.dup-item-date, .dup-item-size, .dup-explain-legend,
+  .dup-explain-title, .dup-item-loc, .ib-label) { font-size: 14px; }
+body.tool-cloud :is(.dup-count-pill, .dup-explain-tag, .dup-item-owner,
+  .dup-pill, .dup-shape, .manual-count, .dup-chevron) { font-size: 13px; }
+body.tool-cloud .dup-item-name { font-size: 15px; }
