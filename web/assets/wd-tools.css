@@ -12195,3 +12195,38 @@ body.tool-walls .modal.modal-wall-edit .modal-body {
 }
 body.tool-walls .modal.modal-wall-edit .modal-header,
 body.tool-walls .modal.modal-wall-edit .modal-footer { flex: 0 0 auto; }
+
+/* Cloud Manager, readable at arm's length - the same scale as the workbench
+   tools. Measured at 1366x1080 before this: project names 12.5px, dates 11px,
+   type tags 10.5px, the explanation under a row and every row button 12px.
+   This is his daily tool and the list is read a row at a time, so the name is
+   the largest thing on it. `:is()` because the older rules are spread across
+   the stylesheet at mixed depths. */
+body.tool-cloud :is(.lr-cell .cell-name, .ledger.tree .tree-parent .lr-cell .cell-name) {
+  font-size: 15px;
+}
+body.tool-cloud .lr-cell.child-row .cell-name { font-size: 14px; }
+body.tool-cloud :is(.cell-meta, .owner-tag, .shared-tag, .ptype-tag, .lr-cell .ptype-tag,
+  .match-badge, .glh-letter, .lh-cell, .jump-letter, .owner-toggle-label,
+  .view-btn, .ghost-add) { font-size: 13px; }
+body.tool-cloud :is(.row-detail .rd-text, .ub-text, .own-note-text,
+  .sum-n, .sum-l, .sum-sep, .rd-btn, .row-menu-item, .owner-btn, .tab,
+  .tab-group-label, .ops-deck-btn) { font-size: 14px; }
+body.tool-cloud .btn:not(.btn-icon) { font-size: 14px; }
+/* The Sync everything plan is three tables in the shared confirm dialog,
+   which is sized for a sentence: at 1366 it was about 430px wide and broke
+   "What differs", file names and "Download" mid-word. The dialog widens only
+   when it is carrying the plan, its tables read at 14px, and the buttons stay
+   at the bottom while the plan scrolls. */
+body.tool-cloud #confirmActionModal .modal:has(table.sync-plan) {
+  width: min(1040px, 94vw); max-width: none;
+  display: flex; flex-direction: column; max-height: 90vh; overflow: hidden;
+}
+body.tool-cloud #confirmActionModal .modal:has(table.sync-plan) .confirm-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px;
+}
+body.tool-cloud #confirmActionModal .modal:has(table.sync-plan) :is(h3, .modal-actions) {
+  flex: 0 0 auto;
+}
+body.tool-cloud .modal .confirm-body table.sync-plan { font-size: 14px; }
+body.tool-cloud .modal .confirm-body :is(p, .sub) { font-size: 14px; }
