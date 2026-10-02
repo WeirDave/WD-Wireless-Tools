@@ -58,6 +58,9 @@ DEFAULTS = {
                  {"type": "counter", "tag": "AP", "start": 1, "digits": 3}],
 }
 
+#: Long enough that every test opens its project before the defaults land.
+SETTINGS_DELAY = 1.5
+
 FLOORS = [("fa", "Level 1"), ("fb", "Level 2")]
 
 
@@ -109,6 +112,11 @@ class _StubApi(SimpleHTTPRequestHandler):
         if length:
             self.rfile.read(length)
         if self.path == "/api/settings/get":
+            # His saved pattern arrives late on purpose. On a slow machine the
+            # project was read before it landed, and the late defaults then
+            # wrote over the scheme adopted from the project - seen once in
+            # CI's Firefox on Windows. The delay makes that race certain.
+            time.sleep(SETTINGS_DELAY)
             self._json({"ok": True, "settings": {"aprename": {"defaults": DEFAULTS}}})
         else:
             self._json({"ok": True})

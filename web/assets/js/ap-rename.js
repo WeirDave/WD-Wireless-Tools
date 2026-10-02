@@ -980,6 +980,7 @@
      offered the previous building's site text and per-AP samples while the
      note under it said his own pattern had been left as it was. */
   var _ownPattern = null;
+  var _defaultsReady = Promise.resolve();
 
   function rememberOwnPattern() {
     var sel = $('arSepStructured');
@@ -1188,7 +1189,10 @@
     $('arDownloadBtn').disabled = true;
     $('arFloorTabs').innerHTML = '';
 
-    file.arrayBuffer().then(function (buf) {
+    // His saved pattern arrives from the server after the page starts. A
+    // project dropped before it lands was adopted and then overwritten by
+    // the late defaults, so reading waits for them.
+    _defaultsReady.then(function () { return file.arrayBuffer(); }).then(function (buf) {
       return JSZip.loadAsync(buf);
     }).then(function (zip) {
       S.zip = zip;
@@ -2900,7 +2904,9 @@
   /* ── init ───────────────────────────────────────────────────────── */
   renderSegments();
   rememberOwnPattern();
-  loadDefaults();
+  // Bounded: a server that never answers must not leave a project unopened.
+  _defaultsReady = Promise.race([loadDefaults(),
+    new Promise(function (r) { setTimeout(r, 5000); })]);
 
   window.__aprename = {
     loadFile: loadFile,
