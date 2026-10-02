@@ -846,9 +846,23 @@ function closeKeybindMenus() {
   if (dz) dz.classList.remove('open');
 }
 
-function deleteWall(i) {
-  const name = wallTypes[i].name;
-  if (confirm('Remove "' + name + '"?')) {
+// Removing a type that is drawn leaves those walls pointing at nothing. It
+// asks rather than refuses - nothing is written until Save, so reopening the
+// file undoes it - but it says how many walls, and where to move them first.
+// Counted afresh: Visual Swap rewrites the segments after the counts were
+// first read, and a stale count would name walls that have since moved.
+async function deleteWall(i) {
+  const wt = wallTypes[i];
+  const name = wt.name;
+  await loadSegmentCounts();
+  const used = segmentsUsing(wt);
+  const msg = used
+    ? '"' + name + '" is used by ' + used + ' drawn wall segment' + (used === 1 ? '' : 's')
+      + ' in this project.\n\nRemoving it leaves ' + (used === 1 ? 'that wall' : 'those walls')
+      + ' with no wall type. To move them to another type first, use Visual Swap'
+      + ' → Quick swap by type.\n\nRemove "' + name + '" anyway?'
+    : 'Remove "' + name + '"? No drawn walls use it.';
+  if (confirm(msg)) {
     wallTypes.splice(i, 1);
     renderAll();
   }

@@ -238,6 +238,9 @@
     const wrap = $('swapCanvasWrap');
     if (wrap) wrap.classList.remove('pan-active');
     clearSelectionState();
+    // The segments were rewritten here; the editor's "N drawn segments use
+    // this type" and Delete's warning read counts taken when the file opened.
+    if (typeof window.loadSegmentCounts === 'function') window.loadSegmentCounts();
   };
 
   async function loadEsxData(zip) {

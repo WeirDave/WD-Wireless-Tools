@@ -58,7 +58,7 @@
 <div id="dropzone" class="dropzone">
   <div id="dropzoneLogo" class="dropzone-logo"></div>
   <p class="dropzone-ver" data-ver="walls">v&hellip;</p>
-  <p class="dropzone-sub">Ekahau Workflow Optimization Utility</p>
+  <p class="dropzone-sub">Your wall types and number keys, in any project</p>
   <p class="dropzone-desc">Edits an Ekahau project's wall types in bulk — set attenuation, color, and thickness once per type, bind each to a number key, then reuse the whole set as a template on future projects instead of rebuilding wall types by hand every time.</p>
   <div class="dropzone-divider"></div>
   <p class="dropzone-cta">Drop <span class="ext">.esx</span> file here or click to browse</p>
@@ -67,7 +67,7 @@
   <ul class="dropzone-steps">
     <li data-step="1."><strong>Open</strong> an Ekahau project file (.esx)</li>
     <li data-step="2."><strong>Edit</strong> wall types, assign keyboard shortcuts [1]-[9]</li>
-    <li data-step="3."><strong>Save</strong> the modified .esx and reload in Ekahau</li>
+    <li data-step="3."><strong>Save</strong> a new copy and open it in Ekahau</li>
   </ul>
 </div>
 <input type="file" id="fileInput" accept=".esx" hidden>
@@ -187,17 +187,17 @@
     </div>
     <div class="modal-body">
       <div class="field-row-4">
-        <div class="field">
+        <div class="field fld-name">
           <label>Name</label>
           <input type="text" id="fName" placeholder="e.g. Concrete, Heavy">
           <div class="field-desc">Descriptive label shown in Ekahau and on your floor plan.</div>
         </div>
-        <div class="field field-color">
+        <div class="field field-color fld-color">
           <label>Color</label>
           <input type="color" id="fColor" value="#808080">
-          <div class="field-desc">Distinct color for the plan view — pick something that stands out.</div>
+          <div class="field-desc">How Ekahau draws this type on the plan.</div>
         </div>
-        <div class="field">
+        <div class="field fld-thick">
           <label>
             <span>Thickness</span>
             <span class="unit-toggle" role="group" aria-label="Unit for thickness">
@@ -208,7 +208,7 @@
           <input type="number" id="fThickness" step="0.001" min="0" value="0.1">
           <div class="field-desc">Real-world wall thickness. Ekahau uses this with attenuation to model signal loss. <a href="/scale" target="_blank" rel="noopener">Convert units →</a></div>
         </div>
-        <div class="field">
+        <div class="field fld-vert">
           <label>
             <span>Vertical extent</span>
             <span class="wt-vert-unit" id="fVertUnit">ft</span>
@@ -232,7 +232,7 @@
           <div class="field-desc" id="fVertSummary"></div>
           <div class="wt-vert-impact" id="fVertImpact" hidden></div>
         </div>
-        <div class="field">
+        <div class="field fld-key">
           <label>Keyboard Shortcut</label>
           <select id="fKeybind">
             <option value="">None</option>
@@ -329,7 +329,7 @@
         <input type="text" id="tplSaveName" placeholder="e.g. Standard Layout, Warehouse">
       </div>
       <p class="tpl-save-hint">
-        Saves all <span id="tplSaveCount">0</span> wall types and their keybind assignments.
+        Saves all <span id="tplSaveCount">0</span> wall types in this project, with their number keys.
       </p>
     </div>
     <div class="modal-footer">
