@@ -1601,11 +1601,28 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
             #: heuristic - and the entry went on refusing the pair with
             #: nothing on screen saying why. Every weaker pass still honours
             #: it; there is nothing stronger than the id to overrule it with.
-            hit = next((i for i, l in enumerate(unmatched_local)
-                        if (l.get("projectId") or "").strip().lower() == cid),
-                       None)
-            if hit is not None:
-                _take(c, hit, "id")
+            #: **Every file carrying the id, and the right one of them.**
+            #: Saving a project under a new name in Ekahau keeps its id, so
+            #: "Predictive Design" and "Predictive Design - with DWG" in one
+            #: folder are both this project. The first one alphabetically used
+            #: to win: the cloud copy of the DWG file paired with the *older*
+            #: file, the file he was working on was listed as local-only under
+            #: the cloud's own name, the older one vanished behind it, and a
+            #: comparison or a download ran against the wrong file. The file
+            #: named like the cloud project wins; failing that, the one whose
+            #: date is nearest the cloud's.
+            same_id = [i for i, l in enumerate(unmatched_local)
+                       if (l.get("projectId") or "").strip().lower() == cid]
+            if same_id:
+                want = re.sub(r'\s+', ' ', str(c.get("name") or "")).strip().casefold()
+                cm_ = int(c.get("mtime") or 0)
+
+                def _rank(i):
+                    l = unmatched_local[i]
+                    ln = re.sub(r'\s+', ' ', str(l.get("name") or "")).strip().casefold()
+                    return (ln != want, abs(cm_ - int(l.get("mtime") or 0)),
+                            ln)
+                _take(c, min(same_id, key=_rank), "id")
                 continue
         still_after_id.append(c)
 
