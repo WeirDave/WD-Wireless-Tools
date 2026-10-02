@@ -1589,7 +1589,8 @@ CLOUD_ACTIONS = {
     "rename_local": lambda d: cm.rename_local(d["path"], d["name"]),
     "delete_local": lambda d: cm.delete_local(d["path"]),
     "create_local_folder": lambda d: cm.create_local_folder(d["name"]),
-    "move_local_to_site": lambda d: cm.move_local_to_site(d["path"], d["folder"]),
+    "move_local_to_site": lambda d: cm.move_local_to_site(
+        d["path"], d["folder"], tidy_source=bool(d.get("tidySource"))),
     "merge_preview": lambda d: cm.merge_preview(d["src"], d["dst"]),
     "merge_execute": lambda d: cm.merge_execute(d["src"], d["dst"], d.get("ops", [])),
     "merge_preview_many": lambda d: cm.merge_preview_many(d.get("srcs", []), d["dst"]),

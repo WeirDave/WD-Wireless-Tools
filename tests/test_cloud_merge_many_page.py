@@ -259,7 +259,9 @@ class ThePageBuildsTheRequestTests(unittest.TestCase):
           setRule('newer');
           await confirmMerge();
           let call = calls.find(c => c[0] === 'merge_execute_many');
-          eq('incoming is newer, so it overwrites', call[1][0].ops[0].action, 'overwrite');
+          //: The server decides "keep newer" on what is there when the file's
+          //: turn comes - see test_cloud_merge_keeps_the_newest_copy.
+          eq('keep newer is decided by the server', call[1][0].ops[0].action, 'newer');
 
           calls.length = 0;
           setPreview({
