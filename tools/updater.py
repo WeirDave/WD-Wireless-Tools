@@ -135,7 +135,17 @@ WINGET_TIMEOUT = 600
 
 
 class UpdateError(Exception):
-    """Anything the user needs to read in plain language."""
+    """Anything the user needs to read in plain language.
+
+    `intact` says whether the install folder is still exactly as it was. Most
+    refusals are raised before anything is written, so it defaults to True;
+    the few places that fail after writing pass False, and the page only says
+    "nothing was left half-installed" when this is True.
+    """
+
+    def __init__(self, message="", intact: bool = True):
+        super().__init__(message)
+        self.intact = intact
 
 
 # ================================================================ versions ==
@@ -561,7 +571,11 @@ def git_update(root: Path | None = None, channel: str = "release", log=None,
             }
 
     say(f"Checking out {label}…")
-    _run_git(["-c", "advice.detachedHead=false", "checkout", "--force", target], root)
+    try:
+        _run_git(["-c", "advice.detachedHead=false", "checkout", "--force", target], root)
+    except UpdateError as exc:
+        # A checkout that fails may already have written some files.
+        raise UpdateError(str(exc), intact=False) from exc
 
     after = local_version(root, cfg)
     say(f"Now on v{after}." if after else f"Now on {label}.")
@@ -707,22 +721,52 @@ def convert_to_git(root: Path | None = None, log=None, install_git_if_missing: b
     backup = _backup_install(root, current, cfg)
     say(f"Backup: {backup}")
 
-    say("Setting up git in this folder…")
-    _run_git(["init"], root)
-    _run_git(["remote", "add", "origin", cfg.clone_url], root)
-    say("Fetching release history…")
-    _run_git(["fetch", "--tags", "--prune", "origin"], root)
+    # Everything after `git init` is undone on failure. A `.git` left behind
+    # by a fetch that failed made the folder read as a git install: convert
+    # was refused from then on, and the next "Update now" jumped straight to
+    # the newest tag - the very thing converting promises not to do.
+    git_dir = root / ".git"
+    checked_out = False
+    try:
+        say("Setting up git in this folder…")
+        _run_git(["init"], root)
+        _run_git(["remote", "add", "origin", cfg.clone_url], root)
+        say("Fetching release history…")
+        _run_git(["fetch", "--tags", "--prune", "origin"], root)
 
-    tag = f"v{current}"
-    if not _tag_exists(root, tag):
-        latest = _latest_release_tag(root)
-        if not latest:
-            raise UpdateError("No release tags found on the remote.")
-        say(f"No release tag matches v{current}; adopting {latest} instead.")
-        tag = latest
+        tag = f"v{current}"
+        if not _tag_exists(root, tag):
+            latest = _latest_release_tag(root)
+            if not latest:
+                raise UpdateError("No release tags found on the remote.")
+            say(f"No release tag matches v{current}; adopting {latest} instead.")
+            tag = latest
 
-    say(f"Adopting {tag}…")
-    _run_git(["-c", "advice.detachedHead=false", "checkout", "--force", tag], root)
+        say(f"Adopting {tag}…")
+        checked_out = True   # from here a failure may have rewritten files
+        _run_git(["-c", "advice.detachedHead=false", "checkout", "--force", tag], root)
+    except Exception as exc:
+        # Git writes its object files read-only, and on Windows rmtree cannot
+        # remove a read-only file, so make them writable first.
+        for dirpath, _dirs, files in os.walk(git_dir):
+            for name in files:
+                try:
+                    os.chmod(os.path.join(dirpath, name), 0o600)
+                except OSError:
+                    pass
+        shutil.rmtree(git_dir, ignore_errors=True)
+        undone = ("The git setup was undone" if not git_dir.exists() else
+                  f"The new {git_dir} could not be removed - delete it by hand")
+        detail = str(exc).rstrip(". ") or type(exc).__name__
+        if checked_out:
+            raise UpdateError(
+                f"Switching to git updates failed partway: {detail}. {undone}, "
+                f"but files may already have changed. The copy taken first is "
+                f"intact at {backup}.", intact=False) from exc
+        raise UpdateError(
+            f"Switching to git updates failed: {detail}. {undone}, so this is "
+            f"still a ZIP install. The copy taken first is kept at {backup}.",
+            intact=not git_dir.exists()) from exc
 
     after = local_version(root, cfg)
     say("This install now updates through git.")
@@ -1005,6 +1049,12 @@ def _validate_payload(tree: Path, expected_version: str, cfg: AppConfig = CONFIG
 def _backup_install(root: Path, version: str, cfg: AppConfig = CONFIG) -> Path:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = root.parent / f"{root.name}.previous-v{version or 'unknown'}-{stamp}"
+    # A failed attempt keeps its copy, so a retry inside the same second
+    # would otherwise collide with it and fail before doing anything.
+    n = 1
+    while backup.exists():
+        backup = root.parent / f"{root.name}.previous-v{version or 'unknown'}-{stamp}-{n}"
+        n += 1
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".git", "tmp", "venv", ".venv")
     shutil.copytree(root, backup, ignore=ignore)
     return backup
@@ -1152,7 +1202,8 @@ def zip_update(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
         except Exception as e:
             raise UpdateError(
                 f"Install failed partway through: {e}. "
-                f"Your previous copy is intact at {backup}."
+                f"Your previous copy is intact at {backup}.",
+                intact=False,
             )
 
         say(f"Updated to v{new_version}.")
@@ -1193,9 +1244,17 @@ def detect_install(root: Path | None = None, cfg: AppConfig = CONFIG) -> dict:
         return base
 
     if git_repo and has_git:
-        base.update(method="git", reason="Tracked by git — updates pull from GitHub.")
         proc = _run_git(["rev-parse", "--abbrev-ref", "HEAD"], root, check=False)
-        base["ref"] = (proc.stdout or "").strip() or "detached"
+        ref = (proc.stdout or "").strip()
+        base["ref"] = ref or "detached"
+        if not ref or ref == "HEAD":
+            reason = "Tracked by git — updates pull from GitHub."
+        else:
+            # perform_update pulls this branch when it has moved on, rather
+            # than looking for a newer release tag, so the panel says so.
+            reason = (f"Tracked by git, following {ref} — updates "
+                      f"fast-forward {ref} to what GitHub has.")
+        base.update(method="git", reason=reason)
         return base
 
     if git_repo and not has_git:
@@ -1259,6 +1318,19 @@ def perform_update(mode: str | None = None, channel: str = "release", log=None,
             raise UpdateError("This install is not tracked by git.")
         if not info["gitAvailable"]:
             raise UpdateError("Git is not installed or not on PATH.")
+        # A clone that follows a branch is offered "N new commits on main" by
+        # the status check, which asks remote_branch_state(). git_update asks a
+        # different question - is there a newer *tag* - and for a branch the
+        # answer is permanently no, because the version bump lands on the
+        # branch before the tag. So "Update now" answered "Already up to date"
+        # and moved nothing. The update has to ask the question the banner
+        # asked. Reaching here means is_dev_checkout() said no, so the branch
+        # has no unpushed commits and no edited tracked files; dev_pull checks
+        # both again and only fast-forwards.
+        if channel == "release":
+            branch = remote_branch_state(cfg=cfg)
+            if branch and branch.get("behind"):
+                return dev_pull(log=log, cfg=cfg)
         return git_update(channel=channel, log=log, cfg=cfg)
     if chosen == "convert":
         return convert_to_git(log=log, install_git_if_missing=install_git_if_missing, cfg=cfg)
