@@ -103,6 +103,18 @@ class GridStorage(unittest.TestCase):
         self.assertEqual(report_store.grids_for_project(PROJECT)["floors"], {})
         self.assertEqual(report_store.load_grids()["projects"], {})
 
+    def test_ids_are_matched_on_clear_the_way_save_stored_them(self):
+        """save_grid strips both ids. clear_grid looked the project up
+        stripped and removed it unstripped, so clearing its last floor left an
+        empty project behind - and an unstripped floor id cleared nothing."""
+        report_store.save_grid(PROJECT, FLOOR_A, a_grid())
+        report_store.save_grid(PROJECT, FLOOR_B, a_grid())
+        report_store.clear_grid(" " + PROJECT + " ", FLOOR_A + " ")
+        self.assertEqual(sorted(report_store.grids_for_project(PROJECT)["floors"]),
+                         [FLOOR_B])
+        report_store.clear_grid(" " + PROJECT + " ", FLOOR_B)
+        self.assertEqual(report_store.load_grids()["projects"], {})
+
     def test_clearing_a_floor_that_was_never_set_is_not_an_error(self):
         self.assertTrue(report_store.clear_grid(PROJECT, "nope")["ok"])
 
