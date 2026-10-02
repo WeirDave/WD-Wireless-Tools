@@ -1137,17 +1137,54 @@ function _updateFolderStatus() {
   }
 }
 
+/* Settings → Default subfolders, as names: what a new site folder gets.
+   null when nothing is saved, which means every destination, as before.
+   The server resolves the same list in folder_organizer._get_destinations;
+   this mirrors it for the boxes ticked when the dialog opens. */
+function _defaultSubfolderNames(cfg) {
+  cfg = cfg || {};
+  if (!Array.isArray(cfg.subfolders)) return null;
+  const names = cfg.subfolder_names || {};
+  const builtin = { images: 1, floorplans: 1, reports: 1 };
+  const out = [];
+  cfg.subfolders.forEach(k => {
+    const name = String((builtin[k] ? (names[k] || k) : names[k]) || '').trim();
+    if (name && out.indexOf(name) < 0) out.push(name);
+  });
+  (cfg.custom_destinations || []).forEach(c => {
+    const name = c && typeof c === 'object' ? String(c.name || c.key || '').trim() : '';
+    if (name && out.indexOf(name) < 0) out.push(name);
+  });
+  return out;
+}
+
 function _renderSubfolderPicker() {
   const host = document.getElementById('newFolderSubs');
   if (!host) return;
   const dests = destinationList(cachedConfig);
-  host.innerHTML = dests.map(d => {
-    const cls = destinationCssClass(d.key);
+  const defaults = _defaultSubfolderNames(cachedConfig);
+  const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+  // Ticked: Settings → Default subfolders, in its order. A subfolder added
+  // there is not an organize destination, so it may not be in `dests`; it is
+  // still one a new folder gets. Unticked after them: destinations left off
+  // that list, offered rather than hidden.
+  const rows = [];
+  const used = new Set();
+  (defaults || []).forEach(n => {
+    const d = dests.find(x => same(x.name, n));
+    if (d) used.add(d);
+    rows.push({ name: n, key: d ? d.key : '', builtin: d ? d.builtin : false, checked: true });
+  });
+  dests.forEach(d => {
+    if (!used.has(d)) rows.push({ name: d.name, key: d.key, builtin: d.builtin, checked: !defaults });
+  });
+  host.innerHTML = rows.map(r => {
+    const cls = r.key ? destinationCssClass(r.key) : 'dest-custom';
     return `<label class="org-sub-check">`
-      + `<input type="checkbox" class="org-sub-cb" checked>`
+      + `<input type="checkbox" class="org-sub-cb"${r.checked ? ' checked' : ''}>`
       + `<span class="org-sub-swatch ${cls}"></span>`
-      + `<input type="text" class="org-sub-name-input" value="${escAttr(d.name)}">`
-      + (d.builtin ? '' : `<span class="org-sub-tag">custom</span>`)
+      + `<input type="text" class="org-sub-name-input" value="${escAttr(r.name)}">`
+      + (r.builtin || !r.key ? '' : `<span class="org-sub-tag">custom</span>`)
       + `</label>`;
   }).join('');
 }

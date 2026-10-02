@@ -627,7 +627,60 @@ def _get_destinations(cfg: dict) -> list:
             "json_keywords": [str(k).strip().lower() for k in (c.get("json_keywords") or []) if str(k).strip()],
             "builtin": False,
         })
-    return builtins
+    return _apply_default_subfolders(cfg, builtins, seen_keys, seen_names)
+
+
+def _apply_default_subfolders(cfg: dict, dests: list, seen_keys: set,
+                              seen_names: set) -> list:
+    """Honour Settings → Default subfolders: its order, its removals, its
+    additions. Each entry gains `create` - whether a new site folder gets it.
+
+    Settings and Setup saved `subfolders` and promised "Created automatically
+    in new site folders", and nothing read it: a removed "reports" was still
+    created and an added subfolder never was. The split is deliberate:
+
+    * **Creating a site folder follows the list exactly** (`create`).
+    * **Organizing does not shrink with it.** A built-in left off the list is
+      still returned, after the listed ones, with `create: False` - it is
+      where reports are sorted to, and a file organized there makes the
+      folder then, which is a move he asked for. Dropping it would have
+      turned "do not pre-make an empty reports folder" into "stop sorting
+      reports".
+    * Added subfolders have no extensions, so they never take a file; they
+      are created, and skipped by the scan like any managed subfolder.
+    * Custom destinations (Squirrel's own editor) are created, as before.
+
+    A missing or malformed list means every destination, as it always did.
+    """
+    if not isinstance(cfg.get("subfolders"), list):
+        for d in dests:
+            d["create"] = True
+        return dests
+    names = cfg.get("subfolder_names") or {}
+    if not isinstance(names, dict):
+        names = {}
+    by_key = {d["key"]: d for d in dests if d["builtin"]}
+    listed, done = [], set()
+    for raw in cfg["subfolders"]:
+        key = str(raw or "").strip()
+        if not key or key in done:
+            continue
+        done.add(key)
+        if key in by_key:
+            listed.append(dict(by_key[key], create=True))
+            continue
+        if key in seen_keys:
+            continue
+        name = _sanitize_folder_name(str(names.get(key) or "").strip())
+        if not name or name.lower() in seen_names:
+            continue
+        seen_keys.add(key)
+        seen_names.add(name.lower())
+        listed.append({"key": key, "name": name, "exts": [], "pdf_keywords": [],
+                       "json_keywords": [], "builtin": False, "create": True})
+    unlisted = [dict(d, create=False) for d in dests if d["builtin"] and d["key"] not in done]
+    customs = [dict(d, create=True) for d in dests if not d["builtin"]]
+    return listed + unlisted + customs
 
 
 def _effective_skip(cfg: dict) -> set:
@@ -736,7 +789,7 @@ class FolderOrganizer:
             return {"ok": False, "error": f"'{safe_name}' exists but isn't a folder"}
         if subfolders is None:
             cfg = _load_config()
-            picked_names = [d["name"] for d in _get_destinations(cfg)]
+            picked_names = [d["name"] for d in _get_destinations(cfg) if d.get("create", True)]
         else:
             picked_names = []
             seen = set()
