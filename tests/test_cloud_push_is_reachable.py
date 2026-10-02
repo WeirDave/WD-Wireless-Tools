@@ -253,8 +253,16 @@ class TheAppOnlyPointsAtControlsThatExistTests(unittest.TestCase):
     #: those instructions with "Use <b>Confirm this pair</b>", and keying only
     #: on arrows left the guard matching nothing at all - which it reported,
     #: because a guard with no subjects is not a passing guard.
+    #:
+    #: "Undo it from <b>Not a match</b> in Settings" named a control that
+    #: does not exist and passed: it was neither shape, and the only place
+    #: looked in was cloud.js while the real one is a menu item in cloud.html.
+    #: "from" now counts as naming, and a label in the page counts as existing.
+    #: It was also split across two string literals, which no reading of the
+    #: source can join; `test_cloud_row_text_says_what_is_true` reads that
+    #: dialog as rendered and looks the control up on the page.
     NAMED = re.compile(r"<b>([^<]*?)</b>")
-    USE_NAMED = re.compile(r"[Uu]se <b>([^<]*?)</b>")
+    USE_NAMED = re.compile(r"(?:[Uu]se|from) <b>([^<]*?)</b>")
     ARROWS = ("&#11014;", "&#11015;")
 
     def test_every_control_the_text_names_is_a_real_label(self):
@@ -267,7 +275,9 @@ class TheAppOnlyPointsAtControlsThatExistTests(unittest.TestCase):
         named = {n for n in named if "${" not in n}
         self.assertTrue(named, "no instructional references found at all - "
                                "has the phrasing changed?")
-        missing = [n for n in named if (">" + n + "<") not in js]
+        html = (ROOT / "web" / "cloud.html").read_text(encoding="utf-8")
+        missing = [n for n in named if (">" + n + "<") not in js
+                   and not re.search(r">(?:· )?" + re.escape(n) + "<", html)]
         self.assertEqual(
             [], missing,
             "the app tells him to use a control that nothing renders: "
