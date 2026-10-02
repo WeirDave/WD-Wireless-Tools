@@ -394,6 +394,7 @@ if ($method -eq 'git' -and -not $hasGit) {
 }
 if ($method -eq 'git' -and -not $hasGit) { $method = 'zip' }
 
+$script:partway = $null
 try {
   # ---- git path ---------------------------------------------------------------
   if ($method -eq 'git' -and ($isGitInstall -or -not $existing)) {
@@ -533,9 +534,13 @@ try {
         }
 
         Write-Step 'Installing…'
+        # From here a failure leaves a mix of old and new files, so the
+        # catch below must not claim otherwise.
+        $script:partway = if ($backup) { $backup } else { $target }
         New-Item -ItemType Directory -Path $target -Force | Out-Null
         Copy-Item -Path (Join-Path $tree '*') -Destination $target -Recurse -Force
 
+        $script:partway = $null
         if ($currentVersion) { Write-Ok "Updated v$currentVersion -> v$newVersion" }
         else { Write-Ok "Installed v$newVersion" }
 
@@ -625,7 +630,14 @@ try {
 } catch {
   Write-Host ''
   Write-Err "Failed: $($_.Exception.Message)"
-  Write-Err 'Nothing was left half-installed.'
+  if ($script:partway -and $script:partway -ne $target) {
+    Write-Err 'The update stopped while copying files, so this folder holds a mix of old and new.'
+    Write-Err "The complete previous version is kept at: $($script:partway)"
+  } elseif ($script:partway) {
+    Write-Err 'The install stopped while copying files, so this folder is incomplete. Run this again.'
+  } else {
+    Write-Err 'Nothing was left half-installed.'
+  }
   Write-Host ''
   Write-Host "Releases: https://github.com/$Repo/releases"
   if ($Host.Name -eq 'ConsoleHost') { Read-Host 'Press Enter to close' | Out-Null }
