@@ -3112,6 +3112,8 @@ body.tool-cloud .toolbar input.search:focus {
    makes the actions wrap first, and it still shrinks below that when there is
    genuinely no room. */
 .row-detail .rd-text { flex: 1 1 30rem; max-width: 100%; color: var(--text); }
+.row-detail .rd-diffs summary { cursor: pointer; color: var(--text-2); }
+.row-detail .rd-diffs ul { margin: var(--sp-1) 0 0; padding-left: var(--sp-5); }
 /* Horizontal, with room, and no wrapping at a desktop width: full labels
    rather than truncations was the whole complaint. */
 .row-detail .rd-actions {
