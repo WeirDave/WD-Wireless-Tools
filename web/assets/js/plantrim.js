@@ -183,6 +183,11 @@
 
   // ----------------------------------------------------------------- analyze
   function analyze() {
+    // Opening a second file calls this while the first file's reading is still
+    // out, so two can be in flight; whichever answered last became the report,
+    // and the second file could be described by the first one's floors. Only
+    // the newest request may write anything.
+    var seq = state.seq = (state.seq || 0) + 1;
     busy(true, 'Reading…');
     $('ptFloors').innerHTML = '<div class="pt-empty">Reading floor plans…</div>';
     $('ptSizeNote').textContent = '';
@@ -191,6 +196,7 @@
     return postEsx('analyze', state.bytes, analyzeParams())
       .then(function (r) { return r.json(); })
       .then(function (res) {
+        if (seq !== state.seq) return;
         if (!res || !res.ok) {
           $('ptFloors').innerHTML = '<div class="pt-empty pt-bad">' +
             esc((res && res.error) || 'Could not read that project') + '</div>';
@@ -204,10 +210,12 @@
         if (window.__ptRefit) window.__ptRefit();
       })
       .catch(function (e) {
+        if (seq !== state.seq) return;
         $('ptFloors').innerHTML = '<div class="pt-empty pt-bad">' + esc(String(e)) + '</div>';
         busy(false, 'Save trimmed .esx');
       })
       .then(function () {
+        if (seq !== state.seq) return;
         if (state.again && state.bytes) { state.again = false; return analyze(); }
       });
   }
@@ -404,7 +412,7 @@
   // adjust" destroyed the work rather than doing nothing.
   var HANDLE_HIT_CSS = 16;   // how close a press counts as grabbing a handle
   var HANDLE_DRAW_CSS = 11;  // how big the handle looks
-  var MIN_SIDE = 8;          // image px; matches MIN_MANUAL_SIDE server-side
+  var MIN_SIDE = 8;          // plan units; matches MIN_MANUAL_SIDE server-side
 
   function dpr() { return window.devicePixelRatio || 1; }
   function hitRadius() { return HANDLE_HIT_CSS * dpr(); }
@@ -413,7 +421,14 @@
   var box = {
     zip: null,
     floors: [],             // { id, name, imageId, w, h }
-    boxes: {},              // floorPlanId -> [x0,y0,x1,y1] in image pixels
+    boxes: {},              // floorPlanId -> [x0,y0,x1,y1] in plan units
+    // The view works in plan units - floorPlans.json's width and height, the
+    // space the server crops in - and the image is stretched onto them. They
+    // are not always the image's own pixels: an SVG sized `612pt` decodes 816
+    // pixels wide on a 612-unit plan, and drawing in image pixels while
+    // clamping to and sending plan units cropped a different region from the
+    // one drawn. Set with img, from the floor it belongs to.
+    plan: null,             // { w, h }
     // A drawn rectangle is a draft until Crop is pressed, the way a marquee is
     // in any image editor. Only applied boxes reach the server, so a box he
     // drew and did not crop changes nothing - which is what makes the Crop
@@ -489,13 +504,14 @@
       var px = f.newSize[0] * pad, py = f.newSize[1] * pad;
       var x0 = Math.max(0, f.offset[0] - px);
       var y0 = Math.max(0, f.offset[1] - py);
-      var x1 = Math.min(box.img.width, f.offset[0] + f.newSize[0] + px);
-      var y1 = Math.min(box.img.height, f.offset[1] + f.newSize[1] + py);
+      var x1 = Math.min(box.plan ? box.plan.w : box.img.width, f.offset[0] + f.newSize[0] + px);
+      var y1 = Math.min(box.plan ? box.plan.h : box.img.height, f.offset[1] + f.newSize[1] + py);
       if (x1 - x0 > 1 && y1 - y0 > 1) {
         return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
       }
     }
-    return { x: 0, y: 0, w: box.img.width, h: box.img.height };
+    return { x: 0, y: 0, w: box.plan ? box.plan.w : box.img.width,
+             h: box.plan ? box.plan.h : box.img.height };
   }
 
   function fitView(ignoreBox) {
@@ -532,10 +548,11 @@
     // A plan is drawn on paper. Where a drawing is transparent, the dark stage
     // showing through turns a line drawing into grey lines on black, which is
     // not how it looks on any page it is printed on.
+    var pw = box.plan ? box.plan.w : box.img.width;
+    var ph = box.plan ? box.plan.h : box.img.height;
     g.fillStyle = '#fff';
-    g.fillRect(tl.x, tl.y, box.img.width * box.view.scale, box.img.height * box.view.scale);
-    g.drawImage(box.img, tl.x, tl.y,
-                box.img.width * box.view.scale, box.img.height * box.view.scale);
+    g.fillRect(tl.x, tl.y, pw * box.view.scale, ph * box.view.scale);
+    g.drawImage(box.img, tl.x, tl.y, pw * box.view.scale, ph * box.view.scale);
 
     var b = box.boxes[box.current];
     if (!b) {
@@ -1117,6 +1134,9 @@
     $('ptbEmpty').hidden = true;
     if (!f) return;
     loadImage(f).then(function () {
+      // Next floor pressed twice: the earlier floor's plan can finish decoding
+      // last, and laying out for it would frame the wrong sheet.
+      if (box.current !== id) return;
       sizeCanvas();
       fitView();
       draw();
@@ -1149,7 +1169,8 @@
     if (!box.img) return;
     var cv = $('ptbCanvas');
     var b = box.boxes[box.current] || proposedBox()
-      || [0, 0, box.img.width, box.img.height];
+      || [0, 0, box.plan ? box.plan.w : box.img.width,
+          box.plan ? box.plan.h : box.img.height];
     var x = (corner === 1 || corner === 2) ? Math.max(b[0], b[2]) : Math.min(b[0], b[2]);
     var y = (corner === 2 || corner === 3) ? Math.max(b[1], b[3]) : Math.min(b[1], b[3]);
     var longSide = Math.max(Math.abs(b[2] - b[0]), Math.abs(b[3] - b[1]), 1);
@@ -1257,8 +1278,12 @@
         return;
       }
       box.suggestions = {};
-      var filled = 0;
+      var filled = 0, kept = 0;
       (res.suggestions || []).forEach(function (s) {
+        // A cropped floor is his decision, and its box is what persist() sends
+        // to the store - overwriting it put a suggestion he never checked into
+        // the saved crop. A suggestion only fills floors still undecided.
+        if (box.applied && box.applied[s.floorId]) { if (s.box) kept++; return; }
         box.suggestions[s.floorId] = s;
         if (s.box) { box.boxes[s.floorId] = s.box.slice(); filled++; }
       });
@@ -1267,11 +1292,13 @@
       updateReadout();
       showEvidence();
       reanalyze();
+      var left = kept ? '; left ' + kept + ' cropped floor' +
+                        (kept === 1 ? '' : 's') + ' as cropped' : '';
       if (!filled) {
-        WD.toast('Nothing to suggest from this set', 'error');
+        WD.toast('Nothing to suggest from this set' + left, 'error');
       } else {
         WD.toast('Proposed a rectangle for ' + filled + ' floor' +
-                 (filled === 1 ? '' : 's') + ' — check it before saving',
+                 (filled === 1 ? '' : 's') + ' — check it before saving' + left,
                  'success');
       }
     }).catch(function (e) {
@@ -1304,18 +1331,28 @@
       $('ptbEmpty').textContent = 'This floor has no image in the archive.';
       return Promise.resolve();
     }
+    var zip = box.zip;
+    // Only the floor still selected may become the picture. A large plan for
+    // a floor already left behind decodes after the next one's, and showing it
+    // put one floor's sheet under another's name - and a box drawn on it was
+    // saved against the floor that was selected.
+    function stale() { return box.current !== f.id || box.zip !== zip; }
     return entry.async('uint8array').then(function (bytes) {
       return new Promise(function (resolve) {
         var type = WD.imageMime(bytes, f.format);
         var url = URL.createObjectURL(new Blob([bytes], type ? { type: type } : undefined));
         var im = new Image();
         im.onload = function () {
+          if (stale()) { URL.revokeObjectURL(url); resolve(); return; }
           box.img = im;
           box.imgFor = f.imageId;
+          box.plan = (f.w > 0 && f.h > 0) ? { w: f.w, h: f.h }
+                                          : { w: im.width, h: im.height };
           URL.revokeObjectURL(url);
           resolve();
         };
         im.onerror = function () {
+          if (stale()) { URL.revokeObjectURL(url); resolve(); return; }
           box.img = null;
           $('ptbEmpty').hidden = false;
           $('ptbEmpty').textContent = type

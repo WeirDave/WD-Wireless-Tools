@@ -1856,7 +1856,8 @@ a detail.
 
 Words work too (`ft`, `feet`, `in`, `inches`, `m`, `metres`), curly quotes
 pasted from a PDF are accepted, and the metric side accepts a comma as the
-decimal point.
+decimal point - except before exactly three digits, where it separates
+thousands (`1,500 mm` is fifteen hundred millimetres).
 
 - **A bare number means feet on one side and metres on the other**, so check
   which box you are typing into.
