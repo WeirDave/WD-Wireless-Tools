@@ -7,6 +7,10 @@
     segments: [],
     segmentsByFloor: new Map(),
     wallPoints: new Map(),
+    // wallPoints.json as read, so a delete can drop the points it frees and
+    // write every other point back as the object it was, in its place.
+    wallPointsDoc: null,
+    wallPointsKey: 'wallPoints',
     imageBlobs: new Map(),
     loadedImage: null,
     imgW: 0, imgH: 0,
@@ -172,6 +176,15 @@
   }
   // --- end pure history core ---
 
+  /* A segment with no type id at all is not the same as one whose type was
+     deleted: Ekahau draws both, but only the second is something the user
+     removed. Both used to read "(deleted wall type)". */
+  function typeLabel(typeId) {
+    if (!typeId) return '(no wall type)';
+    const wt = typeById(typeId);
+    return wt?.name || '(deleted wall type)';
+  }
+
   function colorOf(seg) {
     const wt = typeById(seg.typeId);
     return wt ? safeColor(wt.color) : '#888';
@@ -263,9 +276,13 @@
     state.floors = floors;
 
     state.wallPoints.clear();
+    state.wallPointsDoc = null;
     const wpFile = zip.file('wallPoints.json');
     if (wpFile) {
       const j = JSON.parse(await wpFile.async('string'));
+      state.wallPointsKey = Array.isArray(j.wallPoints) || !Array.isArray(j.wallpoints)
+        ? 'wallPoints' : 'wallpoints';
+      if (Array.isArray(j[state.wallPointsKey])) state.wallPointsDoc = j;
       const list = j.wallPoints || j.wallpoints || [];
       list.forEach(p => {
         const loc = p.location || p;
@@ -350,6 +367,11 @@
     try { img = await loadImageForFloor(floor); }
     catch (e) { console.warn('Floor image failed to load:', e); }
 
+    // Another floor was picked while this image decoded. A big plan decodes
+    // after a small one picked after it, and finishing here would put this
+    // floor's image and size under the newer floor's walls.
+    if (state.currentFloorId !== floorId) return;
+
     state.loadedImage = img;
     state.imgW = floor.w || (img ? img.naturalWidth  : 1000);
     state.imgH = floor.h || (img ? img.naturalHeight : 800);
@@ -403,8 +425,11 @@
     counts.forEach((count, typeId) => {
       const wt = typeById(typeId);
       rows.push({
-        typeId,
-        name: wt?.name || '(deleted wall type)',
+        // The row selects by the same key the selection groups by, so walls
+        // with no type are reachable from their row - a null id used to
+        // render as an empty data-arg that selectAllOfType ignored.
+        key: typeId || NO_TYPE,
+        name: typeLabel(typeId),
         color: wt ? safeColor(wt.color) : '#888',
         count,
       });
@@ -417,7 +442,7 @@
       return;
     }
     el.innerHTML = rows.map(r => `
-      <button class="swap-legend-row" data-action="call" data-fn="selectAllOfType" data-arg="${escAttr(r.typeId)}" title="Select all ${escAttr(r.name)} walls on this floor">
+      <button class="swap-legend-row" data-action="call" data-fn="selectAllOfType" data-arg="${escAttr(r.key)}" title="Select all ${escAttr(r.name)} walls on this floor">
         <span class="swap-legend-swatch" style="--swap-swatch:${r.color}"></span>
         <span class="swap-legend-name">${esc(r.name)}</span>
         <span class="swap-legend-count">${r.count}</span>
@@ -494,7 +519,7 @@
         const wt = typeById(g.typeId);
         map.set(key, {
           key,
-          name: wt?.name || '(deleted wall type)',
+          name: typeLabel(g.typeId),
           color: wt ? safeColor(wt.color) : '#888',
           segs: [],
         });
@@ -839,9 +864,9 @@
     render();
   };
 
-  window.selectAllOfType = function (typeId) {
-    if (!typeId) return;
-    addToSelection(state.segGeom.filter(g => g.typeId === typeId).map(g => g.id));
+  window.selectAllOfType = function (key) {
+    if (!key) return;
+    addToSelection(state.segGeom.filter(g => groupKeyOf(g) === key).map(g => g.id));
     renderSelection();
     render();
   };
@@ -1220,7 +1245,12 @@
     if (_splitter) _splitter.set(px, persist);
   }
 
+  // Mounted once per page. mountSplitter binds the drag handlers only on its
+  // first call (`_wdBound`), so mounting on every open left the drag writing
+  // the first instance's width while resize reflowed a later instance's - a
+  // width dragged after reopening snapped back on the next window resize.
   function installSplitter() {
+    if (_splitter) { _splitter.reflow(); return; }
     _splitter = WD.mountSplitter({
       splitter: 'swapSplitter',
       panel: 'swapSidebar',
@@ -1431,7 +1461,11 @@
       render();
       return;
     }
-    // Idle: identify the wall under the pointer and light up its row.
+    // Idle: identify the wall under the pointer and light up its row - but
+    // only when the pointer is on the plan. This listener is on window, so
+    // over the sidebar it hit-tested a point beyond the canvas edge: it wiped
+    // the hover a row had just set and lit walls nobody could see.
+    if (e.target !== canvas()) return;
     const hit = hitAt(p);
     const id = hit ? hit.id : null;
     if (id !== state.hoverSegId) {
@@ -1709,6 +1743,7 @@
     });
 
     state.segments = state.segments.filter(seg => !doomed.has(seg.id));
+    const removedPoints = dropFreedPoints(removed.map(r => r.seg));
     rebuildFloorIndex();
     state.segGeom = state.segGeom.filter(g => !doomed.has(g.id));
 
@@ -1716,9 +1751,10 @@
     pruneExcluded();
 
     const label = `Delete ${n} wall${n === 1 ? '' : 's'}`;
-    pushHistory({ kind: 'delete', label, removed, before, after: selectionSnapshot() });
+    pushHistory({ kind: 'delete', label, removed, removedPoints, before, after: selectionSnapshot() });
 
     writeSegmentsBack();
+    if (removedPoints.length) writeWallPointsBack();
     populateFloorSelect();
     $('swapFloorSelect').value = state.currentFloorId;
     renderLegend();
@@ -1734,14 +1770,63 @@
     return { selected: [...state.selected], excluded: [...state.excluded] };
   }
 
+  // Only what is drawn on the floor in view. A selection restored from
+  // another floor was invisible yet counted, and "Delete N segments" acted on
+  // walls the user could not see.
   function restoreSelection(snap) {
     if (!snap) return;
-    state.selected = new Set(snap.selected);
-    state.excluded = new Set(snap.excluded);
+    const here = new Set(state.segGeom.map(g => g.id));
+    state.selected = new Set(snap.selected.filter(id => here.has(id)));
+    state.excluded = new Set(snap.excluded.filter(id => here.has(id)));
     pruneExcluded();
   }
 
+  function segmentPointIds(seg) {
+    const pts = seg.wallPoints || seg.points;
+    return Array.isArray(pts) ? pts.map(extractPointRef).filter(Boolean) : [];
+  }
+
+  /* A wall point no segment uses is a point Ekahau keeps in the file and
+     never draws. Only the points this delete freed are dropped - a point
+     still used by any remaining segment, on any floor, stays - and they are
+     returned with their positions so an undo puts back exactly what was
+     there. Points that were already unused when the file opened are not
+     this tool's to tidy. */
+  function dropFreedPoints(removedSegs) {
+    const doc = state.wallPointsDoc;
+    if (!doc) return [];
+    const freed = new Set();
+    removedSegs.forEach(seg => segmentPointIds(seg).forEach(id => freed.add(id)));
+    state.segments.forEach(seg => segmentPointIds(seg).forEach(id => freed.delete(id)));
+    if (!freed.size) return [];
+    const list = doc[state.wallPointsKey];
+    const out = [];
+    list.forEach((point, index) => {
+      if (point && freed.has(point.id)) out.push({ index, point });
+    });
+    if (out.length) doc[state.wallPointsKey] = list.filter(pt => !(pt && freed.has(pt.id)));
+    return out;
+  }
+
+  function restoreFreedPoints(removedPoints) {
+    const doc = state.wallPointsDoc;
+    if (!doc || !removedPoints || !removedPoints.length) return;
+    doc[state.wallPointsKey] = restoreRemoved(doc[state.wallPointsKey],
+      removedPoints.map(r => ({ index: r.index, seg: r.point })));
+    writeWallPointsBack();
+  }
+
+  function redropFreedPoints(removedPoints) {
+    const doc = state.wallPointsDoc;
+    if (!doc || !removedPoints || !removedPoints.length) return;
+    const gone = new Set(removedPoints.map(r => r.point.id));
+    doc[state.wallPointsKey] = doc[state.wallPointsKey].filter(pt => !(pt && gone.has(pt.id)));
+    writeWallPointsBack();
+  }
+
   function pushHistory(entry) {
+    // The floor the edit was made on, so undo and redo can show it there.
+    entry.floorId = state.currentFloorId;
     // Anything redoable is discarded the moment a new edit lands.
     state.history.length = state.historyIndex + 1;
     state.history.push(entry);
@@ -1800,7 +1885,22 @@
     updateHistoryButtons();
   }
 
-  window.swapUndo = function () {
+  /* An undo or redo of an edit made on another floor goes to that floor
+     first, so what changed is on screen and its selection comes back where
+     it can be seen. The alternative - staying put and dropping the selection
+     - would change walls out of sight with nothing to show for it.
+     Synchronous when the floor is already shown; the image load is the only
+     wait. */
+  async function showEntryFloor(entry) {
+    const fid = entry.floorId;
+    if (!fid || fid === state.currentFloorId
+        || !state.floors.some(f => f.id === fid)) return;
+    const fsel = $('swapFloorSelect');
+    if (fsel) fsel.value = fid;
+    await switchFloor(fid);
+  }
+
+  window.swapUndo = async function () {
     if (!canUndo()) { toast('Nothing to undo'); return; }
     const entry = state.history[state.historyIndex];
     if (entry.kind === 'type') {
@@ -1808,16 +1908,19 @@
       refreshGeomTypes();
     } else if (entry.kind === 'delete') {
       state.segments = restoreRemoved(state.segments, entry.removed);
+      restoreFreedPoints(entry.removedPoints);
       rebuildFloorIndex();
       rebuildGeomForCurrentFloor();
     }
-    restoreSelection(entry.before);
     state.historyIndex--;
+    writeSegmentsBack();
+    await showEntryFloor(entry);
+    restoreSelection(entry.before);
     afterHistoryStep();
     toast('Undid: ' + entry.label, 'success');
   };
 
-  window.swapRedo = function () {
+  window.swapRedo = async function () {
     if (!canRedo()) { toast('Nothing to redo'); return; }
     const entry = state.history[state.historyIndex + 1];
     if (entry.kind === 'type') {
@@ -1826,11 +1929,14 @@
     } else if (entry.kind === 'delete') {
       const gone = new Set(entry.removed.map(r => r.seg.id));
       state.segments = state.segments.filter(seg => !gone.has(seg.id));
+      redropFreedPoints(entry.removedPoints);
       rebuildFloorIndex();
       rebuildGeomForCurrentFloor();
     }
-    restoreSelection(entry.after);
     state.historyIndex++;
+    writeSegmentsBack();
+    await showEntryFloor(entry);
+    restoreSelection(entry.after);
     afterHistoryStep();
     toast('Redid: ' + entry.label, 'success');
   };
@@ -1881,6 +1987,12 @@
     zip.file('wallSegments.json', payload);
   }
 
+  function writeWallPointsBack() {
+    const zip = window.esxZip;
+    if (!zip || !state.wallPointsDoc) return;
+    zip.file('wallPoints.json', JSON.stringify(state.wallPointsDoc, null, 2));
+  }
+
   window.__wallsSwap = {
     getView: () => ({ ...state.view }),
     getFitScale: () => state.fitScale,
@@ -1893,6 +2005,12 @@
     }),
     getSegTypes: () => state.segments.map(x => ({ id: x.id, type: segmentTypeId(x) })),
     getSegmentCount: () => state.segments.length,
+    getFloor: () => state.currentFloorId,
+    getFloorSegIds: () => state.segGeom.map(g => g.id),
+    getPlan: () => ({
+      w: state.imgW, h: state.imgH,
+      imageWidth: state.loadedImage ? state.loadedImage.naturalWidth : 0,
+    }),
     getSidebarPref: () => (_splitter ? _splitter.get() : SIDEBAR_DEFAULT),
     getSidebarWidth: () => {
       const el = $('swapSidebar');
