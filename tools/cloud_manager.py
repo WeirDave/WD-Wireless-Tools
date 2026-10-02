@@ -3146,8 +3146,10 @@ class CloudManager:
             target.mkdir(parents=True)
 
 
+            # `create` is Settings → Default subfolders; see
+            # folder_organizer._apply_default_subfolders.
             destinations = _get_suite_destinations()
-            subfolder_names = [d["name"] for d in destinations]
+            subfolder_names = [d["name"] for d in destinations if d.get("create", True)]
             for name in subfolder_names:
                 (target / name).mkdir(exist_ok=True)
             return {"ok": True, "path": str(target), "subfolders": subfolder_names}
@@ -3185,7 +3187,8 @@ class CloudManager:
 
 
                 for d in _get_suite_destinations():
-                    (dest_dir / d["name"]).mkdir(exist_ok=True)
+                    if d.get("create", True):
+                        (dest_dir / d["name"]).mkdir(exist_ok=True)
 
             result = self.api.download_project(project_id, progress_cb=progress_cb)
             if isinstance(result, dict) and result.get("error"):

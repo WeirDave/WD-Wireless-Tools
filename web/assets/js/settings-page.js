@@ -319,9 +319,11 @@
     });
   };
 
+  /* Setup refuses to be framed, so inside the panel this navigates the tool
+     window rather than the panel, which would show a refused page. */
   SP.rerunSetup = function () {
     API('settings/reset_setup', {}).then(function () {
-      window.location.href = '/setup';
+      (EMBEDDED ? window.top : window).location.href = '/setup';
     });
   };
 

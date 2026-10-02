@@ -934,7 +934,14 @@ def fetch_latest_release(cfg: AppConfig = CONFIG, timeout: int | None = None):
             return cached
         raise UpdateError(f"GitHub returned HTTP {r.status_code}.")
 
-    data = r.json()
+    try:
+        data = r.json()
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        # An empty or non-object body is an answer with nothing in it, not a
+        # crash - the status check says "could not check" and moves on.
+        raise UpdateError("GitHub's answer did not name a release.")
     tag = str(data.get("tag_name") or "")
     if not TAG_RE.match(tag):
         raise UpdateError(f"GitHub returned an unexpected release tag: {tag or '(none)'}")

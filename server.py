@@ -711,11 +711,15 @@ def api_capacity(action):
             built = capacity_profiles.build_template(data.get("spec") or {})
             if not built.get("ok"):
                 return jsonify(built)
-            saved = capacity_profiles.save_template(built)
-            if saved.get("ok") and data.get("replaces") and data.get("replaces") != saved.get("file"):
-                # Renamed in the editor: the old file goes, so one template
-                # does not become two. A shipped example is never deleted.
-                capacity_profiles.delete_template(data.get("replaces"))
+            # `replaces` is the template being edited. Removing it when the
+            # name moved on, and refusing a name another template already
+            # has, both happen in `save_template`: deciding here compared the
+            # two file names as strings, which on Windows and macOS deleted a
+            # template renamed only in case, and nothing stopped a save over
+            # a different template of the same name.
+            saved = capacity_profiles.save_template(built, replaces=data.get("replaces"))
+            if not saved.get("ok"):
+                return jsonify(saved)
             return jsonify(dict(saved, template=built))
         if action == "delete":
             return jsonify(capacity_profiles.delete_template(data.get("file") or ""))
@@ -1983,7 +1987,7 @@ def api_update_status():
         # The notes are the only thing left that needs the API, and nothing
         # depends on them, so a short wait and a quiet failure.
         try:
-            release = updater.fetch_latest_release(timeout=updater.NOTES_TIMEOUT)
+            release = _latest_release_or_raise(timeout=updater.NOTES_TIMEOUT)
             if release["tag"] == tag:
                 payload["latest"]["notes"] = release["notes"][:4000]
                 payload["latest"]["url"] = release["url"]
@@ -1992,7 +1996,7 @@ def api_update_status():
         return jsonify(payload)
 
     try:
-        release = updater.fetch_latest_release()
+        release = _latest_release_or_raise()
         payload["latest"] = {
             "tag": release["tag"],
             "version": release["version"],
@@ -2004,6 +2008,23 @@ def api_update_status():
     except updater.UpdateError as e:
         payload["latestError"] = str(e)
     return jsonify(payload)
+
+
+def _latest_release_or_raise(**kw):
+    """`fetch_latest_release`, with "no answer" turned into "could not check".
+
+    Anything but a release with a tag - None, an empty body - was indexed as
+    one and took the status check down with a 500, when what it means is the
+    same as GitHub not answering: the page's "could not check" path.
+    """
+    release = updater.fetch_latest_release(**kw)
+    if not isinstance(release, dict) or not release.get("tag"):
+        raise updater.UpdateError("GitHub did not say which release is the newest.")
+    release = dict(release)
+    release.setdefault("version", str(release["tag"]).lstrip("v"))
+    release.setdefault("url", updater.GITHUB_RELEASES_URL)
+    release["notes"] = release.get("notes") or ""
+    return release
 
 
 @app.route("/api/update", methods=["POST"])

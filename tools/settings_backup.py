@@ -84,6 +84,25 @@ NEVER_EXPORT = ("cookies.enc", "cookies.json", "acorn_state", "organizer_undo")
 MACHINE_SPECIFIC_SETTINGS = ("global.output_dir",)
 MACHINE_SPECIFIC_BROWSER = ("wd-project-directory", "wd-rename-root")
 
+#: Settings that describe this machine's history rather than a choice, so an
+#: import never writes them. "Last exported" is the one: the bundle is built
+#: before the export is stamped, so it carries the previous time, and
+#: importing it put that older time back over the real one.
+NOT_IMPORTED_SETTINGS = ("global.last_settings_export",)
+
+
+def _without_history(settings: dict) -> dict:
+    out = copy.deepcopy(settings or {})
+    for dotted in NOT_IMPORTED_SETTINGS:
+        *parents, leaf = dotted.split(".")
+        node = out
+        for key in parents:
+            node = node.get(key) if isinstance(node, dict) else None
+        if isinstance(node, dict):
+            node.pop(leaf, None)
+    return out
+
+
 #: The only localStorage keys a restore puts back.
 #:
 #: The registry's own rule: ui-state "deliberately stays in localStorage:
@@ -308,7 +327,7 @@ def preview_import(bundle: dict, browser: dict | None = None,
             f"listed below and anything unrecognised is listed as well, so "
             f"nothing is dropped without being named.")
 
-    incoming_settings = _flatten(bundle.get("settings") or {})
+    incoming_settings = _flatten(_without_history(bundle.get("settings") or {}))
     current_settings = _flatten(_settings.load_settings())
     known = set(_flatten(copy.deepcopy(_settings.DEFAULTS)))
     result["settings"] = _diff_map(incoming_settings, current_settings, known)
@@ -530,7 +549,7 @@ def apply_import(bundle: dict, sections=("settings", "files"),
 
     applied = {"settings": 0, "files": []}
     if "settings" in want:
-        incoming = bundle.get("settings") or {}
+        incoming = _without_history(bundle.get("settings") or {})
         if incoming:
             _settings.update_settings(incoming)
             applied["settings"] = len(_flatten(incoming))
