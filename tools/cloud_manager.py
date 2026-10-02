@@ -1518,20 +1518,29 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
         #: this is an extra fact on the row, not a replacement for one.
         divergence = sync_state.verdict_for(
             _sync_points, c.get("id"), l.get("path"),
-            c.get("mtime"), l.get("mtime"))
+            c.get("mtime"), l.get("mtime"), l.get("size"))
+        #: Edited on disk with the date inside left where it was. The dates
+        #: cannot see that, so without this the row read in step and offered
+        #: nothing - and a pull was free to overwrite the edit.
+        undated_edit = sync_state.edited_in_place(
+            _sync_points.get(str(c.get("id"))), l.get("path"),
+            l.get("mtime"), l.get("size"))
+        if undated_edit and not stale:
+            stale = "local_newer"
         #: What a content comparison last found about these two, if it still
         #: describes them. This is what stops him being asked the same
         #: question after every reload: the answer is on the row when the
         #: list is built, rather than only in the page that asked for it.
         comparison = sync_state.comparison_for(
             _sync_points, c.get("id"), l.get("path"),
-            c.get("mtime"), l.get("mtime"))
+            c.get("mtime"), l.get("mtime"), l.get("size"))
         matched.append({"cloud": c, "local": l, "matchType": mtype,
                         "score": round(min(disp, 1.0), 2),
                         "namesDiffer": c["name"].strip() != l["name"].strip(),
                         "staleness": stale,
                         "divergence": divergence,
                         "comparison": comparison,
+                        "localEditedUndated": undated_edit,
                         "differenceKind": _difference(c, l, stale)})
 
     def _resolve_pass(cands, conflicts, mtype, base):
@@ -3003,7 +3012,8 @@ class CloudManager:
                                   or fs_m,
                                   _esx_meta(src_p, fs_m).get("internalMtime")
                                   or fs_m,
-                                  direction="push")
+                                  direction="push",
+                                  local_size=_esx_size(src_p))
             except Exception as e:
                 applog.note_failure("recording the sync point", e)
 
@@ -3470,6 +3480,19 @@ class CloudManager:
                 raise
             _ESX_META_CACHE.pop(str(target), None)
             _ESX_TYPE_CACHE.pop(str(target), None)
+            #: A download is a sync point like a pull, and it is the usual
+            #: start of local work - so without a note here an edit to a
+            #: freshly downloaded copy had nothing to be measured against.
+            #: The archive carries the cloud's own `project.json`, so the
+            #: date inside it is the cloud's date as well.
+            try:
+                fs_m = int(target.stat().st_mtime)
+                inner = _esx_meta(target, fs_m).get("internalMtime") or fs_m
+                sync_state.record(project_id, str(target), inner, inner,
+                                  direction="download",
+                                  local_size=_esx_size(target))
+            except Exception as e:
+                applog.note_failure("recording the sync point", e)
             if progress_cb:
                 progress_cb(stage="done", current=100, total=100,
                             message="Done.")
@@ -3542,6 +3565,26 @@ class CloudManager:
 
 
         _NEWER_TOLERANCE_S = 60
+        #: The date inside is not the only evidence of local work: a file
+        #: rewritten since the last sync without that date moving is an edit
+        #: all the same, and this is the step that would overwrite it.
+        try:
+            local_edited = sync_state.edited_in_place(
+                sync_state.load().get(str(project_id)), str(src),
+                local_internal_mtime, _esx_size(src))
+        except Exception:
+            local_edited = False
+        if local_edited:
+            return {
+                "error": "local_newer",
+                "message": ("The local file has been saved since it was last "
+                            "synced with the cloud, although the date inside "
+                            "it did not change. Overwriting it would lose "
+                            "that work. Upload local to cloud first, or skip "
+                            "this pair."),
+                "localMtime": local_internal_mtime,
+                "cloudMtime": cloud_mtime,
+            }
         if local_internal_mtime and cloud_mtime and (local_internal_mtime > cloud_mtime + _NEWER_TOLERANCE_S):
             return {
                 "error": "local_newer",
@@ -3606,7 +3649,7 @@ class CloudManager:
         try:
             sync_state.record(project_id, str(src), cloud_mtime,
                               new_meta.get("internalMtime") or new_fs_mtime,
-                              direction="pull")
+                              direction="pull", local_size=_esx_size(src))
         except Exception as e:
             applog.note_failure("recording the sync point", e)
 
@@ -3785,7 +3828,7 @@ class CloudManager:
             try:
                 sync_state.record_comparison(
                     cloud_project_id, str(src), cloud_mtime, local_mtime,
-                    result)
+                    result, local_size=_esx_size(src))
                 result["checkedAt"] = int(time.time())
             except Exception as exc:
                 # A comparison he can read now matters more than a record of

@@ -119,7 +119,7 @@ def save(pairs: dict, _path=None) -> None:
 
 
 def record(cloud_id, local_path, cloud_mtime, local_mtime,
-           direction="", _path=None) -> None:
+           direction="", _path=None, local_size=None) -> None:
     """Note that these two were the same, just now.
 
     Called after an operation that has made them identical - a download over
@@ -131,6 +131,9 @@ def record(cloud_id, local_path, cloud_mtime, local_mtime,
     one side's date, so a comparison taken before it describes two files that
     no longer exist in that state. The sync point it writes is the stronger
     fact anyway - `classify` reads it and reports `in_sync`.
+
+    `local_size` is the file's size on disk at that moment - see
+    `edited_in_place` for why a date alone is not enough.
     """
     if not cloud_id or not local_path:
         return
@@ -142,7 +145,39 @@ def record(cloud_id, local_path, cloud_mtime, local_mtime,
         "syncedAt": int(time.time()),
         "direction": direction or "",
     }
+    if local_size:
+        pairs[str(cloud_id)]["localSize"] = int(local_size)
     save(pairs, _path)
+
+
+def edited_in_place(record_entry, local_path, local_mtime, local_size) -> bool:
+    """Has the local file been rewritten since the sync point, although the
+    date inside it says it has not?
+
+    Every other verdict here reads `history.modifiedAt` from inside the .esx,
+    on the premise that every Ekahau save stamps it. A save that does not
+    leaves the edit invisible: the row reads in step, and a pull from the
+    cloud is allowed to overwrite the edit, because the guard reads the same
+    date. A changed size is the evidence that needs no date - a rewritten,
+    deflated archive of the same length is not a realistic coincidence - and
+    it is deliberately the only evidence: the filesystem date moves on copy
+    and on sync-client touches, and a false "edited" would refuse a pull.
+
+    Only answers when the record carries a size; older records say nothing.
+    A moved internal date is left to `classify`, which already sees it.
+    """
+    if not record_entry or not local_size:
+        return False
+    was_size = int(record_entry.get("localSize") or 0)
+    if not was_size:
+        return False
+    if _norm(record_entry.get("localPath")) != _norm(local_path):
+        return False
+    was_local = int(record_entry.get("localMtime") or 0)
+    now_local = int(local_mtime or 0)
+    if was_local and now_local and abs(now_local - was_local) > TOLERANCE_S:
+        return False
+    return int(local_size) != was_size
 
 
 #: The fields of a comparison worth keeping. `differences` is deliberately
@@ -153,7 +188,7 @@ _VERDICT_FIELDS = ("identical", "designDiffers", "renamedOnly", "summary",
 
 
 def record_comparison(cloud_id, local_path, cloud_mtime, local_mtime,
-                      verdict, _path=None) -> None:
+                      verdict, _path=None, local_size=None) -> None:
     """Note what a content comparison found, and what the pair looked like.
 
     "there are three files that say they needed to be checked, and when I
@@ -189,11 +224,14 @@ def record_comparison(cloud_id, local_path, cloud_mtime, local_mtime,
         "checkedAt": int(time.time()),
         "verdict": {k: verdict.get(k) for k in _VERDICT_FIELDS},
     }
+    if local_size:
+        entry["comparison"]["localSize"] = int(local_size)
     pairs[str(cloud_id)] = entry
     save(pairs, _path)
 
 
-def comparison_for(pairs, cloud_id, local_path, cloud_mtime, local_mtime):
+def comparison_for(pairs, cloud_id, local_path, cloud_mtime, local_mtime,
+                   local_size=None):
     """The stored comparison, if it still describes these two files.
 
     Returns None rather than a stale answer. The retirement rule is the one
@@ -217,6 +255,9 @@ def comparison_for(pairs, cloud_id, local_path, cloud_mtime, local_mtime):
     if not was_c or not was_l or not now_c or not now_l:
         return None
     if abs(now_c - was_c) > TOLERANCE_S or abs(now_l - was_l) > TOLERANCE_S:
+        return None
+    # A rewrite the date inside did not record retires it too.
+    if edited_in_place(cmp_rec, local_path, local_mtime, local_size):
         return None
 
     verdict = cmp_rec.get("verdict")
@@ -250,7 +291,8 @@ def prune(live_cloud_ids, _path=None) -> int:
     return len(dead)
 
 
-def classify(record_entry, cloud_mtime, local_mtime, local_path):
+def classify(record_entry, cloud_mtime, local_mtime, local_path,
+             local_size=None):
     """Which of the five states this pair is in, given what was recorded.
 
     `record_entry` is one value out of `load()`, or None.
@@ -277,7 +319,9 @@ def classify(record_entry, cloud_mtime, local_mtime, local_path):
     # copy is a change, and treating it as "unchanged" would let it be
     # silently overwritten by the other side.
     cloud_moved = abs(now_cloud - was_cloud) > TOLERANCE_S
-    local_moved = abs(now_local - was_local) > TOLERANCE_S
+    local_moved = (abs(now_local - was_local) > TOLERANCE_S
+                   or edited_in_place(record_entry, local_path, local_mtime,
+                                      local_size))
 
     if cloud_moved and local_moved:
         return BOTH_CHANGED
@@ -288,7 +332,8 @@ def classify(record_entry, cloud_mtime, local_mtime, local_path):
     return IN_SYNC
 
 
-def verdict_for(pairs, cloud_id, local_path, cloud_mtime, local_mtime):
+def verdict_for(pairs, cloud_id, local_path, cloud_mtime, local_mtime,
+                local_size=None):
     """`classify` against a loaded map, for callers holding many pairs."""
     return classify((pairs or {}).get(str(cloud_id)),
-                    cloud_mtime, local_mtime, local_path)
+                    cloud_mtime, local_mtime, local_path, local_size)
