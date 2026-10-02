@@ -11,8 +11,6 @@ import io
 import json
 import os
 import re
-import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 from tools.user_dir import user_dir
@@ -80,6 +78,56 @@ def _is_inside(path: Path, root: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _occupied_by_another(src: Path, dst: Path) -> bool:
+    """Whether renaming ``src`` to ``dst`` would land on a different file.
+
+    ``dst.exists()`` alone is wrong on Windows and macOS: their file systems
+    ignore case, so for ``Floor Plan.png`` -> ``floor plan.png`` the target
+    "exists" and is ``src`` itself, and a case-only rename was skipped as
+    "target exists" every time. ``samefile`` tells the two apart; when it
+    cannot find ``dst`` at all, nothing is there under that name.
+    """
+    if not dst.exists():
+        return False
+    try:
+        return not os.path.samefile(src, dst)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
+def _rename(src: Path, dst: Path) -> None:
+    """``os.rename``, going through a temporary name for a case-only change,
+    which some case-insensitive file systems otherwise refuse or ignore."""
+    if (src.parent == dst.parent and src.name != dst.name
+            and src.name.casefold() == dst.name.casefold()):
+        tmp = src.with_name(".wd-rename-%s-%s" % (os.getpid(), src.name))
+        os.rename(str(src), str(tmp))
+        try:
+            os.rename(str(tmp), str(dst))
+        except OSError:
+            os.rename(str(tmp), str(src))
+            raise
+        return
+    os.rename(str(src), str(dst))
+
+
+def _bad_new_name(name: str) -> bool:
+    """A new name is a name, not a path: a separator or ``..`` in a request
+    field would rename a file out of the folder that was previewed."""
+    return (not name or name in (".", "..")
+            or "/" in name or "\\" in name)
+
+
+def _same_root(a, b) -> bool:
+    try:
+        ra, rb = Path(a).resolve(), Path(b).resolve()
+    except (OSError, RuntimeError):
+        return False
+    return os.path.normcase(str(ra)) == os.path.normcase(str(rb))
 
 
 def _split_ext(name: str) -> tuple[str, str]:
@@ -196,22 +244,62 @@ def migrate_rename_cfg(rn: dict) -> dict:
     return {**DEFAULT_FILE_RULES, **rn}
 
 
-def _check_collisions(renames: list) -> None:
-    """Mark entries with duplicate new_name values as ``collision``."""
-    counts: dict[str, int] = {}
+def _names_in(d: Path) -> set:
+    try:
+        return {p.name.casefold() for p in d.iterdir()}
+    except OSError:
+        return set()
+
+
+def _check_collisions(renames: list, dir_of=None,
+                      current_key: str = "current") -> None:
+    """Mark ``rename`` entries that would not happen as ``collision``.
+
+    Two kinds. Several items renamed to one name. And a name already on disk:
+    only comparing new names with each other passed ``Mike`` -> ``Mike - 2026``
+    beside an existing ``Mike - 2026``, and the execute then refused it. Names
+    are compared casefolded because Windows and macOS do. The disk check
+    replays the renames in list order - the order execute runs them - so an
+    existing name counts as free only once an earlier row has renamed it away.
+
+    ``dir_of(row)`` gives the directory a row renames inside; without it only
+    the first kind is checked.
+    """
+    counts: dict = {}
     for r in renames:
         if r.get("status") != "rename":
             continue
-        key = (r.get("folder", ""), r["new_name"])
+        key = (str(dir_of(r)) if dir_of else r.get("folder", ""),
+               r["new_name"].casefold())
         counts[key] = counts.get(key, 0) + 1
     for r in renames:
         if r.get("status") != "rename":
             continue
-        key = (r.get("folder", ""), r["new_name"])
+        key = (str(dir_of(r)) if dir_of else r.get("folder", ""),
+               r["new_name"].casefold())
         if counts.get(key, 0) > 1:
             r["status"] = "collision"
             r.setdefault("warnings", []).append(
                 f"Collision: multiple items would be renamed to '{r['new_name']}'")
+    if dir_of is None:
+        return
+    present: dict = {}
+    for r in renames:
+        if r.get("status") != "rename":
+            continue
+        d = dir_of(r)
+        k = str(d)
+        if k not in present:
+            present[k] = _names_in(d)
+        names = present[k]
+        cur, new = r[current_key].casefold(), r["new_name"].casefold()
+        if new in names and new != cur:
+            r["status"] = "collision"
+            r.setdefault("warnings", []).append(
+                f"Collision: '{r['new_name']}' already exists in this folder")
+            continue
+        names.discard(cur)
+        names.add(new)
 
 
 def _squirrel_layout(skip: set | None,
@@ -528,7 +616,8 @@ class RenameManager:
                 "warnings": warnings,
             })
 
-        _check_collisions(renames)
+        root_path = Path(root)
+        _check_collisions(renames, lambda r: root_path)
         return {
             "ok": True,
             "renames": renames,
@@ -563,7 +652,7 @@ class RenameManager:
                 "status": _token_status(folder, new_name, warnings),
                 "warnings": warnings,
             })
-        _check_collisions(renames)
+        _check_collisions(renames, lambda r: root_path)
         return {
             "ok": True,
             "renames": renames,
@@ -585,14 +674,19 @@ class RenameManager:
                 continue
             src = root_path / current
             dst = root_path / new_name
+            if (_bad_new_name(new_name) or _bad_new_name(current)
+                    or not _is_inside(dst, root_path)
+                    or not _is_inside(src, root_path)):
+                errors.append(f"Not a folder name: {new_name}")
+                continue
             if not src.is_dir():
                 errors.append(f"Folder not found: {current}")
                 continue
-            if dst.exists():
+            if _occupied_by_another(src, dst):
                 errors.append(f"Target already exists: {new_name}")
                 continue
             try:
-                os.rename(str(src), str(dst))
+                _rename(src, dst)
                 undo_log.append({"old": current, "new": new_name})
                 renamed += 1
             except OSError as e:
@@ -688,7 +782,7 @@ class RenameManager:
                         "warnings": warnings,
                     })
 
-        _check_collisions(renames)
+        _check_collisions(renames, lambda r: root_path / r["folder"])
         return {
             "ok": True,
             "renames": renames,
@@ -709,14 +803,19 @@ class RenameManager:
                 continue
             src = root_path / folder / current
             dst = root_path / folder / new_name
+            if (_bad_new_name(new_name) or _bad_new_name(current)
+                    or not _is_inside(dst, root_path)
+                    or not _is_inside(src, root_path)):
+                errors.append(f"Not a file name: {folder}/{new_name}")
+                continue
             if not src.is_file():
                 errors.append(f"File not found: {folder}/{current}")
                 continue
-            if dst.exists():
+            if _occupied_by_another(src, dst):
                 errors.append(f"Target exists: {folder}/{new_name}")
                 continue
             try:
-                os.rename(str(src), str(dst))
+                _rename(src, dst)
                 undo_log.append({"folder": folder, "old": current,
                                  "new": new_name})
                 renamed += 1
@@ -812,6 +911,7 @@ class RenameManager:
                     "path": str(f),
                     "old_name": f.name,
                     "new_name": new_name,
+                    "status": "rename",
                 })
             return found
 
@@ -835,10 +935,15 @@ class RenameManager:
             items.extend(scan_dir(root_path, root_path))
         else:
             items.extend(scan_site(root_path))
+        _check_collisions(items, lambda r: Path(r["dir"]),
+                          current_key="old_name")
         return {"ok": True, "items": items, "count": len(items),
-                "scanned": scanned}
+                "scanned": scanned,
+                "collisions": sum(1 for i in items
+                                  if i["status"] == "collision")}
 
-    def execute_bulk_rename(self, items: list | None = None) -> dict:
+    def execute_bulk_rename(self, items: list | None = None,
+                            root: str | None = None) -> dict:
         if not items:
             return {"ok": False, "error": "Nothing to rename"}
         renamed = 0
@@ -862,14 +967,14 @@ class RenameManager:
                                 "status": "error",
                                 "reason": "invalid target name"})
                 continue
-            if dst.exists():
+            if _occupied_by_another(src, dst):
                 skipped += 1
                 details.append({"old_name": src.name, "new_name": new_name,
                                 "status": "skipped",
                                 "reason": "target exists"})
                 continue
             try:
-                src.rename(dst)
+                _rename(src, dst)
                 renamed += 1
                 undo_log.append({"path": str(dst), "old_name": src.name,
                                  "new_name": new_name})
@@ -882,6 +987,7 @@ class RenameManager:
 
         if undo_log:
             undo_data = {
+                "root": root,
                 "renames": undo_log,
                 "timestamp": datetime.now().isoformat(),
             }
@@ -907,9 +1013,9 @@ class RenameManager:
         orphans = []
         matched_ids = set()
 
-        for folder_dir in sorted(root_path.iterdir()):
-            if not folder_dir.is_dir():
-                continue
+        names, _ = _site_folder_names(
+            root_path, _squirrel_layout(None, None)[0])
+        for folder_dir in (root_path / n for n in names):
             site, method, conf = self._match_folder_to_site(
                 folder_dir.name, sites, column_map)
             files = [f.name for f in folder_dir.iterdir() if f.is_file()]
@@ -944,58 +1050,75 @@ class RenameManager:
 
     # ── Undo ──
 
-    def undo_last(self, operation_type: str) -> dict:
+    def undo_last(self, operation_type: str, root: str | None = None) -> dict:
+        """Reverse the last rename of ``operation_type``.
+
+        ``root`` is the folder the page is showing. The log is one per type,
+        not per folder, so without it an Undo pressed over one folder reverted
+        an older rename somewhere else; a log for a different folder is
+        refused rather than run.
+
+        An entry is reverted only if its original name is free - a file saved
+        under that name since is not overwritten - and every entry that could
+        not be reverted stays in the log, so Undo can be pressed again once
+        the way is clear.
+        """
         undo_file = _undo_path(operation_type)
         if not undo_file.exists():
             return {"error": f"No undo log for {operation_type}"}
         with open(undo_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-        root_path = Path(data["root"]) if "root" in data else None
+        if root is not None and not (data.get("root")
+                                     and _same_root(data["root"], root)):
+            where = data.get("root") or "another folder"
+            return {"error": "The last rename of this kind was made in "
+                             f"{where}, not in the folder shown here, so it "
+                             "was not undone."}
+        root_path = Path(data["root"]) if data.get("root") else None
         reverted = 0
         errors = []
+        skipped = []
+        kept = []
 
-        if operation_type == "folders":
-            for entry in reversed(data.get("renames", [])):
-                src = root_path / entry["new"]
-                dst = root_path / entry["old"]
-                if not src.exists():
-                    errors.append(f"Not found: {entry['new']}")
-                    continue
-                try:
-                    os.rename(str(src), str(dst))
-                    reverted += 1
-                except OSError as e:
-                    errors.append(
-                        f"Failed: {entry['new']} → {entry['old']}: {e}")
-        elif operation_type == "files":
-            for entry in reversed(data.get("renames", [])):
+        def paths(entry):
+            if operation_type == "folders":
+                return (root_path / entry["new"], root_path / entry["old"],
+                        entry["new"], entry["old"])
+            if operation_type == "files":
                 folder = entry.get("folder", "")
-                src = root_path / folder / entry["new"]
-                dst = root_path / folder / entry["old"]
-                if not src.exists():
-                    errors.append(f"Not found: {folder}/{entry['new']}")
-                    continue
-                try:
-                    os.rename(str(src), str(dst))
-                    reverted += 1
-                except OSError as e:
-                    errors.append(str(e))
-        elif operation_type == "bulk":
-            for entry in reversed(data.get("renames", [])):
-                dst_path = Path(entry["path"])
-                src = dst_path
-                dst = dst_path.parent / entry["old_name"]
-                if not src.exists():
-                    errors.append(f"Not found: {entry['path']}")
-                    continue
-                try:
-                    os.rename(str(src), str(dst))
-                    reverted += 1
-                except OSError as e:
-                    errors.append(str(e))
+                return (root_path / folder / entry["new"],
+                        root_path / folder / entry["old"],
+                        f"{folder}/{entry['new']}", f"{folder}/{entry['old']}")
+            src = Path(entry["path"])
+            return (src, src.parent / entry["old_name"],
+                    entry["path"], entry["old_name"])
 
-        os.remove(str(undo_file))
-        return {"ok": True, "reverted": reverted, "errors": errors}
+        for entry in reversed(data.get("renames", [])):
+            src, dst, src_label, dst_label = paths(entry)
+            if not src.exists():
+                errors.append(f"Not found: {src_label}")
+                kept.append(entry)
+                continue
+            if _occupied_by_another(src, dst):
+                skipped.append(f"{dst_label} exists again, so {src_label} "
+                               "was left as it is")
+                kept.append(entry)
+                continue
+            try:
+                _rename(src, dst)
+                reverted += 1
+            except OSError as e:
+                errors.append(f"Failed: {src_label} → {dst_label}: {e}")
+                kept.append(entry)
+
+        if kept:
+            data["renames"] = list(reversed(kept))
+            with open(undo_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        else:
+            os.remove(str(undo_file))
+        return {"ok": True, "reverted": reverted, "skipped": skipped,
+                "errors": errors, "remaining": len(kept)}
 
     # ── Profiles ──
 
@@ -1081,10 +1204,8 @@ class RenameManager:
         if not columns:
             columns = ["site_name"]
 
-        folders = sorted(
-            [d.name for d in root_path.iterdir() if d.is_dir()],
-            key=str.lower,
-        )
+        folders, _ = _site_folder_names(
+            root_path, _squirrel_layout(None, None)[0])
 
         output = io.StringIO()
         writer = csv.writer(output)
@@ -1115,18 +1236,10 @@ class RenameManager:
             " (folders only - files appear in the preview)')\n"
             "print(p or '')\n"
         )
-        try:
-            kwargs = {}
-            if sys.platform == "win32":
-                kwargs["creationflags"] = 0x08000000
-            out = subprocess.run(
-                [sys.executable, "-c", code],
-                capture_output=True, text=True, timeout=180, **kwargs,
-            )
-            path = out.stdout.strip()
-            return {"path": path} if path else {"path": ""}
-        except Exception:
-            return {"path": ""}
+        # Through Squirrel's helpers, so a dialog that cannot open says so
+        # instead of reading as a cancel and leaving a button that does nothing.
+        from tools import folder_organizer as fo
+        return fo._picked(fo._tk_dialog_result(code), "folder")
 
     @staticmethod
     def get_default_root() -> dict:

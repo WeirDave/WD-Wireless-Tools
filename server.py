@@ -931,9 +931,10 @@ RENAME_ACTIONS = {
                                 d.get("root"), d.get("rules"),
                                 skip=set(d["skip"]) if "skip" in d else None,
                                 subfolder_names=d.get("subfolder_names")),
-    "execute_bulk_rename":  lambda d: rm.execute_bulk_rename(d.get("items")),
+    "execute_bulk_rename":  lambda d: rm.execute_bulk_rename(d.get("items"),
+                                                             d.get("root")),
     "gap_report":           lambda d: rm.gap_report(d["root"]),
-    "undo_last":            lambda d: rm.undo_last(d["type"]),
+    "undo_last":            lambda d: rm.undo_last(d["type"], d.get("root")),
     "save_profile":         lambda d: rm.save_profile(
                                 d["name"], d.get("folder_format", ""),
                                 d.get("file_format", ""), d.get("separator", " - "),
