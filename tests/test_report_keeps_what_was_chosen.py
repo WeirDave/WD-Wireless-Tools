@@ -315,6 +315,31 @@ class UnitsAreTheChosenOnes(ReportCase):
         """)
 
 
+class ThePlacementLabelsSecondLineIsLegible(ReportCase):
+    """The second line of a Placement Map label (model, height) printed at
+    5.8pt, under the 6pt floor. A drawing prints about 7.2in (518.4pt) across
+    its long edge - the assumption the label placer's own floor is written
+    against - so a font size in drawing units converts to points by that."""
+
+    def test_every_second_line_prints_at_6pt_or_more(self):
+        self.run_block(r"""
+          open();
+          const html = render('placement', { inclOmni: true, labelHeight: true, labelModel: true });
+          const svgs = html.match(/<svg[^>]*viewBox="[^"]*"[^>]*>[\s\S]*?<\/svg>/g) || [];
+          let seen = 0;
+          svgs.forEach(s => {
+            const vb = s.match(/viewBox="([^"]*)"/)[1].split(/\s+/).map(Number);
+            const longEdge = Math.max(vb[2], vb[3]);
+            (s.match(/class="rep-mark-sub"[^>]*font-size="([\d.]+)"/g) || []).forEach(t => {
+              seen++;
+              const pt = +t.match(/font-size="([\d.]+)"/)[1] / longEdge * 518.4;
+              check('a label second line at ' + pt.toFixed(2) + 'pt', pt >= 6);
+            });
+          });
+          check('the fixture drew second lines to measure', seen >= 5);
+        """)
+
+
 class SmallerFixesFromTheSecondReview(ReportCase):
 
     def test_the_aim_sheet_gives_an_omni_ap_no_azimuth(self):
