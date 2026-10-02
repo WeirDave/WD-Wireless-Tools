@@ -1089,6 +1089,8 @@
     folderLookup = (res && res.reason) || 'failed';
   }
 
+  var PER_PROJECT_OPTS = ['segCols', 'segRows', 'cropBoxes', 'segMerges'];
+
   async function loadFile(file, folderName) {
     if (!file.name.toLowerCase().endsWith('.esx')) {
       showToast('Not an .esx file', 'error'); return;
@@ -1117,6 +1119,13 @@
       // across to a different project would silently compare two files nobody
       // put together.
       baseline = null; baselineName = ''; baselineError = '';
+      // The grid, crop and combined sections were drawn on the last
+      // project's plans, and are keyed by floor id - so a revision of it
+      // would silently inherit them on floors nobody looked at. They are
+      // never saved as defaults (the grid button is not a value), so
+      // dropping them loses nothing the person chose to keep; the report's
+      // ordinary options stay as they were.
+      PER_PROJECT_OPTS.forEach(function (k) { delete currentOpts[k]; });
 
       dropzone.hidden = true;
       document.getElementById('dzTopbar').hidden = true;
@@ -1943,7 +1952,10 @@
   }
 
   function apGroupKey(ap, dim) {
-    if (dim === 'color') return ap.color || '__nocolor';
+    // Keyed on the palette key, not the stored value: '#6D6D6D' and
+    // '#6B6B6B' are both Gray, and '#ff0000' is '#FF0000', so keying on the
+    // raw value made two groups with the same heading.
+    if (dim === 'color') return ap.color ? WD.ekahauColorKey(ap.color) : '__nocolor';
     if (dim === 'model') return (ap.vendor || 'Unknown') + '|' + (ap.model || 'Unknown');
     if (dim === 'floor') return (ap.location && ap.location.floorPlanId) || '__nofloor';
     if (dim === 'building') {
@@ -2053,7 +2065,7 @@
       var swatch = '';
       if (apGroupBy === 'color') {
         swatch = (k !== '__nocolor')
-          ? '<span class="rep-ap-group-swatch" style="--swatch:' + WD.escAttr(k) + '"></span>'
+          ? '<span class="rep-ap-group-swatch" style="--swatch:' + WD.escAttr(WD.EKAHAU_COLORS[k] || k) + '"></span>'
           : '<span class="rep-ap-group-swatch rep-ap-group-swatch--empty"></span>';
       }
       html += '<div class="rep-ap-group' + (collapsed ? ' is-collapsed' : '') + '" data-group-key="' + WD.escAttr(k) + '">'
@@ -2569,7 +2581,10 @@
       btn.type = 'button';
       btn.className = 'rep-remembered-clear';
       btn.textContent = 'Reset to shipped defaults';
-      btn.setAttribute('onclick', 'clearReportOptionDefaults()');
+      // Declared, not an onclick: the page's script-src has no
+      // 'unsafe-inline', so an onclick attribute is simply never run.
+      btn.setAttribute('data-action', 'call');
+      btn.setAttribute('data-fn', 'clearReportOptionDefaults');
       wrap.appendChild(btn);
     } else if (!savedCount && existing) {
       existing.remove();
@@ -3337,6 +3352,15 @@
       _gridCols * _gridRows + ' cells'
       + (groups.length ? ' in ' + sectionCount + ' sections' : '')
       + ', ' + aps.length + ' APs on this floor';
+    var cropWarn = document.getElementById('gridCropWarn');
+    if (cropWarn) {
+      var left = outsideCropNames(apsOutsideCrop(aps, W, H, _cropBox));
+      cropWarn.textContent = left.length
+        ? 'The crop leaves out ' + left.length + ' AP' + (left.length === 1 ? '' : 's')
+          + ', which will not be on any section sheet: ' + left.join(', ')
+        : '';
+      cropWarn.hidden = !left.length;
+    }
     updateMergeControls(groups);
 
     var vw = 1000, vh = 1000 * (H / W);
@@ -3744,7 +3768,21 @@
       var msg = 'Crop' + (merge ? ' and combined sections' : '')
         + ' applied to all ' + fps.length + ' floors.';
       if (fps.length > 1) msg += ' Check each floor — images may not be aligned.';
-      showToast(msg);
+      // The crop was drawn on one floor; on the others it can cut APs off
+      // their sheets without anyone looking at those floors.
+      var cut = [];
+      if (crop) {
+        fps.forEach(function (f) {
+          var left = outsideCropNames(apsOutsideCrop(filterApsForFloor(f), f.width, f.height, crop));
+          if (left.length) cut.push((f.name || 'Floor') + ': ' + left.join(', '));
+        });
+      }
+      if (cut.length) {
+        msg += ' The crop leaves APs off the section sheets — ' + cut.join('; ') + '.';
+        showToast(msg, 'warn');
+      } else {
+        showToast(msg);
+      }
     } else {
       saveCurrentFloorCrop();
       var name = (proj.floorPlans[_gridFloorIdx] || {}).name || 'Floor';
@@ -4643,9 +4681,32 @@
              count: groups.length - kept.length };
   }
 
-  function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml, pageHeaded) {
+  /* The APs a crop leaves out of a sectioned floor. A section sheet only
+     covers the cropped area, so an AP outside it was on no sheet and no index
+     dot and nothing said so. It is named instead - never moved, because a
+     marker drawn anywhere but where the AP is would be worse than none. The
+     same test as the one that assigns APs to cells, so the two cannot
+     disagree about who is in. */
+  function apsOutsideCrop(aps, W, H, cropBox) {
+    var cb = cropBox || { x: 0, y: 0, w: 1, h: 1 };
+    var ox = cb.x * W, oy = cb.y * H, rw = cb.w * W, rh = cb.h * H;
+    return (aps || []).filter(function (ap) {
+      var c = ap.location && ap.location.coord; if (!c) return false;
+      return c.x < ox || c.x > ox + rw || c.y < oy || c.y > oy + rh;
+    });
+  }
+
+  function outsideCropNames(aps) {
+    return aps.map(function (ap) { return ap.name || '(unnamed)'; })
+      .sort(function (a, b) { return a.localeCompare(b, undefined, { numeric: true }); });
+  }
+
+  /* The sections a sectioned floor is printed in, empty ones included.
+     The contents page counts from this too, so it states the number of
+     sheets that print rather than columns times rows. */
+  function buildSegSections(W, H, aps, grid, cropBox, segMerge) {
     var cols = grid.cols, rows = grid.rows;
-    var cb = opts.cropBox || { x: 0, y: 0, w: 1, h: 1 };
+    var cb = cropBox || { x: 0, y: 0, w: 1, h: 1 };
     var ox = cb.x * W, oy = cb.y * H;
     var rw = cb.w * W, rh = cb.h * H;
     var cw = rw / cols, ch = rh / rows;
@@ -4663,7 +4724,13 @@
       var ri = Math.min(rows - 1, Math.max(0, Math.floor((c.y - oy) / ch)));
       cells[ri * cols + ci].aps.push(ap);
     });
-    cells = segSections(cells, cols, rows, opts.segMerge);
+    return segSections(cells, cols, rows, segMerge);
+  }
+
+  function renderAntennaSegmentedOverview(url, W, H, aps, opts, ctx, grid, keyHtml, pageHeaded) {
+    var cols = grid.cols, rows = grid.rows;
+    var cb = opts.cropBox || { x: 0, y: 0, w: 1, h: 1 };
+    var cells = buildSegSections(W, H, aps, grid, cb, opts.segMerge);
     var combined = cells.filter(function (cell) { return cell.members > 1; }).length;
 
     var nonEmpty = cells.filter(function (cell) { return cell.aps.length; });
@@ -4676,6 +4743,13 @@
       + ') so AP markers stay legible.'
       + (emptyLabels.length ? ' No APs in section' + (emptyLabels.length === 1 ? '' : 's') + ' ' + emptyLabels.join(', ') + ' — skipped.' : '')
       + '</div>';
+    var outside = outsideCropNames(apsOutsideCrop(aps, W, H, cb));
+    if (outside.length) {
+      out += '<div class="rep-seg-note rep-seg-note--outside">' + outside.length
+        + (outside.length === 1 ? ' AP lies' : ' APs lie')
+        + ' outside the cropped area and ' + (outside.length === 1 ? 'is' : 'are')
+        + ' not on these sheets: ' + WD.esc(outside.join(', ')) + '</div>';
+    }
     // The AP Placement Map already heads the page with this floor directly
     // above the index; a second heading here printed "Floor N" twice in a row.
     out += renderAntennaGridIndex(url, W, H, cells, nonEmpty, cb, pageHeaded ? '' : segFloorHeading(opts));
@@ -5987,7 +6061,11 @@
     var antennasSection = opts.antennas !== false ? summaryAntennas() : '';
 
 
-    return head + strip + perFloorSection + bandSection + modelsSection + antennasSection + apNotesPages(aps, opts, ctx)
+    return head + strip + perFloorSection + bandSection + modelsSection + antennasSection
+      /* Every access point, as the Audit does: this report hides the AP
+         filter (``noApFilter``), so the filtered list has lost every omni
+         AP and their notes with it, with no control to bring them back. */
+      + apNotesPages(proj.accessPoints, opts, ctx)
       + REPORT_FOOTER;
   }
 
@@ -6200,7 +6278,10 @@
       + '</section>';
 
     return head + apSection + perFloorSection + antSection + mountSection + notes
-      + apNotesPages(aps, opts, ctx)
+      /* Every access point, as the Audit does: this report hides the AP
+         filter (``noApFilter``), so the filtered list has lost every omni
+         AP and their notes with it, with no control to bring them back. */
+      + apNotesPages(proj.accessPoints, opts, ctx)
       + REPORT_FOOTER;
   }
 
@@ -6489,7 +6570,11 @@
       + '</div>'
       + '</section>';
 
-    return head + summary + overlays + tableSection + method + apNotesPages(aps, opts, ctx)
+    return head + summary + overlays + tableSection + method
+      /* Every access point, as the Audit does: this report hides the AP
+         filter (``noApFilter``), so the filtered list has lost every omni
+         AP and their notes with it, with no control to bring them back. */
+      + apNotesPages(proj.accessPoints, opts, ctx)
       + REPORT_FOOTER;
   }
 
@@ -6853,7 +6938,9 @@
       var floorAps = byFloor[fp.id];
       if (!floorAps || !floorAps.length) return;
       floorAps.slice()
-        .sort(function (a, b) { return (a.name || '').localeCompare(b.name || ''); })
+        .sort(function (a, b) {
+          return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
+        })
         .forEach(function (ap) { sorted.push({ ap: ap, floor: fp }); });
     });
 
@@ -7495,8 +7582,14 @@
         var W = fp.width || 1, H = fp.height || 1;
         var grid = computeAntennaGrid(W, H, byFloor[fp.id], opts, fp.metersPerUnit);
         if (grid.cols * grid.rows > 1) {
+          // Counted the way the floor prints: empty sections are skipped and
+          // combined ones are one sheet, so cols × rows overstated it.
+          var printed = buildSegSections(W, H, byFloor[fp.id], grid,
+            opts.cropBoxes && opts.cropBoxes[fp.id],
+            opts.segMerges && opts.segMerges[fp.id])
+            .filter(function (sec) { return sec.aps.length; }).length;
           parts.push('Sectional grid overview');
-          parts.push((grid.cols * grid.rows) + ' detail sections with AP placement maps');
+          parts.push(printed + ' detail section' + (printed === 1 ? '' : 's') + ' with AP placement maps');
         } else {
           parts.push('Full floor plan with AP placements');
         }
@@ -7710,10 +7803,11 @@
         var radios = proj.radios.filter(function (x) { return x.accessPointId === ap.id; });
         var txParts = [], chParts = [];
         radios.forEach(function (rd) {
-          var txp = rd.transmitPower != null ? rd.transmitPower : 15;
+          // A radio with no stored power prints a dash. It used to print
+          // 15 dBm, a figure the design never held.
           var band = _covBandFromChannel(rd.channelByCenterFrequencyDefinedNarrowChannels);
           var bandLabel = _covBandLabel(band);
-          txParts.push(ctx.fmt(txp, 1) + ' dBm');
+          txParts.push(rd.transmitPower != null ? ctx.fmt(rd.transmitPower, 1) + ' dBm' : '—');
           var ch = rd.channelByCenterFrequencyDefinedNarrowChannels;
           if (ch && ch.length) {
             chParts.push(freqToChannel(ch[0]) + ' <span class="rep-alt">(' + bandLabel + ')</span>');
@@ -7722,35 +7816,37 @@
         cpCells = '<td class="rep-nowrap">' + (txParts.length ? txParts.join(', ') : '—') + '</td>'
           + '<td class="rep-nowrap">' + (chParts.length ? chParts.join(', ') : '—') + '</td>';
       }
-      var dirCells = '';
+      // Azimuth and tilt genuinely do not apply to an omni, but mount,
+      // height and antenna do - an omni still hangs at a height off a
+      // ceiling, and the installer needs all three. They were once blanked
+      // for omni APs because they sat in the directional branch, and later
+      // dropped from every floor with no directional AP on it - the common
+      // all-ceiling-omni floor printed no mount or height at all. Only
+      // azimuth and tilt depend on `showDir`.
+      var dir = r ? r.antennaDirection : null;
+      var tilt = r ? r.antennaTilt : null;
+      var height = r ? r.antennaHeight : null;
+      var mount = r ? r.antennaMounting : '—';
+      var isOmni = apIsOmniOnly(ap);
+      var heightStr = ctx.fmtLength(height, opts, 1);
+      var dirCells = '<td>' + WD.esc(mount || '—') + '</td>'
+        + '<td class="rep-nowrap-print">' + heightStr + '</td>';
       if (showDir) {
-        var dir = r ? r.antennaDirection : null;
-        var tilt = r ? r.antennaTilt : null;
-        var height = r ? r.antennaHeight : null;
-        var mount = r ? r.antennaMounting : '—';
-        var isOmni = apIsOmniOnly(ap);
-        var heightStr = ctx.fmtLength(height, opts, 1);
         var azStr = isOmni ? '<span class="rep-alt">Omni</span>'
           : dir == null ? '—'
           : (opts.compass
               ? ctx.fmt(dir, 1) + '° <span class="rep-alt">(' + ctx.compass(dir) + ')</span>'
               : ctx.fmt(dir, 1) + '°');
         var tiltStr = isOmni ? '—' : (tilt == null ? '—' : ctx.fmt(tilt, 1) + '°');
-        // Azimuth and tilt genuinely do not apply to an omni, but mount and
-        // height do - an omni still hangs at a height off a ceiling, and the
-        // installer needs both. These used to be blanked for omni APs purely
-        // because they sat in the directional branch.
-        dirCells = '<td>' + WD.esc(mount || '—') + '</td>'
-          + '<td class="rep-nowrap-print">' + heightStr + '</td>'
-          + '<td class="rep-az">' + azStr + '</td>'
-          + '<td>' + tiltStr + '</td>'
-          /* The code, not the name. A part number is around fifty characters
-             and this sheet has eleven columns; see `antennaKeys` for what
-             printing it here costs. "Antennas in use" carries the same code
-             beside the full name, and the tooltip still has it on screen. */
-          + '<td class="rep-az" title="' + WD.escAttr(ant ? ant.name : '') + '">'
-          + WD.esc(ant ? (antKeys[ant.id] || ant.name) : '—') + '</td>';
+        dirCells += '<td class="rep-az">' + azStr + '</td>'
+          + '<td>' + tiltStr + '</td>';
       }
+      /* The code, not the name. A part number is around fifty characters
+         and this sheet has eleven columns; see `antennaKeys` for what
+         printing it here costs. "Antennas in use" carries the same code
+         beside the full name, and the tooltip still has it on screen. */
+      dirCells += '<td class="rep-az" title="' + WD.escAttr(ant ? ant.name : '') + '">'
+        + WD.esc(ant ? (antKeys[ant.id] || ant.name) : '—') + '</td>';
       rows += '<tr' + (nameIssue ? ' class="rep-loc-warn-row"' : '') + '>'
         + '<td class="rep-num">' + WD.esc(lbl) + '</td>'
         + '<td class="rep-name">' + WD.esc(ap.name || '(unnamed)') + '</td>'
@@ -7768,15 +7864,15 @@
         + '</tr>';
     });
 
-    var dirHeaders = showDir
-      ? '<th>Mount</th><th>Height</th><th>Azimuth</th><th>Tilt</th><th>Ant.</th>'
-      : '';
+    var dirHeaders = '<th>Mount</th><th>Height</th>'
+      + (showDir ? '<th>Azimuth</th><th>Tilt</th>' : '')
+      + '<th>Ant.</th>';
     var cpHeaders = showCP ? '<th>TX Power</th><th>Channel</th>' : '';
     /* The footer spans the table, so a column added above and not counted here
        leaves the subtotal row short and the last column hanging outside it. */
     var colCount = 4 + (oneFloor ? 0 : 1) + (oneBuilding ? 0 : 1)
       + (showGrid ? 1 : 0)
-      + (showCP ? 2 : 0) + (showDir ? 5 : 0) + (opts.nameAudit ? 1 : 0);
+      + (showCP ? 2 : 0) + 3 + (showDir ? 2 : 0) + (opts.nameAudit ? 1 : 0);
 
     // Relative print widths. These are normalized below so optional columns
     // still consume exactly 100% without making the whole PDF scale down.
@@ -7788,7 +7884,7 @@
       { key: 'num', weight: 9 },
       { key: 'name', weight: 30 },
       { key: 'vendor', weight: 12 },
-      { key: 'model', weight: 12 },
+      { key: 'model', weight: 16 },
     ];
     if (!oneFloor) printCols.push({ key: 'floor', weight: 16 });
     if (!oneBuilding) printCols.push({ key: 'building', weight: 14 });
@@ -7800,17 +7896,21 @@
       printCols.push({ key: 'tx', weight: 20 });
       printCols.push({ key: 'channel', weight: 22 });
     }
+    // Mount, Height and Antenna print on every floor now, all-omni ones
+    // included, so their share comes off somewhere. Height holds one unit,
+    // "10.5 ft" or "3.20 m" - its header is the wider of the two - and the
+    // width it gives back goes to the model, which was ellipsised first.
+    printCols.push({ key: 'mount', weight: 12 });
+    printCols.push({ key: 'height', weight: 11 });
     if (showDir) {
-      printCols.push({ key: 'mount', weight: 12 });
-      printCols.push({ key: 'height', weight: 17 });
       printCols.push({ key: 'azimuth', weight: 12 });
       printCols.push({ key: 'tilt', weight: 8 });
-      // An antenna part number is the longest value in the row and "14 dBm"
-      // is not, so the width follows the content rather than the header.
-      // It holds a code now, not a part number, so it needs almost nothing -
-      // and the AP name and model get the width back.
-      printCols.push({ key: 'antenna', weight: 10 });
     }
+    // An antenna part number is the longest value in the row and "14 dBm"
+    // is not, so the width follows the content rather than the header.
+    // It holds a code now, not a part number, so it needs almost nothing -
+    // and the AP name and model get the width back.
+    printCols.push({ key: 'antenna', weight: 10 });
     if (opts.nameAudit) printCols.push({ key: 'audit', weight: 12 });
     var printWeight = printCols.reduce(function (sum, col) { return sum + col.weight; }, 0);
     var colgroup = '<colgroup>' + printCols.map(function (col) {
