@@ -90,6 +90,20 @@ class StoreTests(unittest.TestCase):
         # The most recent survives; the oldest is what goes.
         self.assertIn(f"proj-{plantrim_store.MAX_PROJECTS + 24}", data)
 
+    def test_the_project_being_worked_on_is_not_the_one_evicted(self):
+        """Saving again moves a project to the newest end. Assigning to the
+        existing key kept its first position, so the project open in the page
+        was the oldest entry and the next new project evicted it."""
+        plantrim_store.save("proj-active", {"f1": [1, 2, 300, 400]})
+        for i in range(plantrim_store.MAX_PROJECTS - 1):
+            plantrim_store.save(f"proj-{i}", {"f1": [1, 2, 30, 40]})
+        plantrim_store.save("proj-active", {"f1": [5, 5, 305, 405]})
+        plantrim_store.save("proj-new", {"f1": [1, 2, 30, 40]})
+        self.assertEqual(plantrim_store.load("proj-active"),
+                         {"f1": [5.0, 5.0, 305.0, 405.0]})
+        self.assertEqual(plantrim_store.load("proj-0"), {},
+                         "the oldest untouched project should have gone")
+
     def test_no_project_id_stores_nothing(self):
         self.assertEqual(plantrim_store.save("", {"f": [0, 0, 1, 1]}), {})
         self.assertEqual(plantrim_store.load(""), {})

@@ -85,6 +85,9 @@ def save(project_id: str, boxes) -> dict:
     data = _load_all()
     cleaned = clean_boxes(boxes)
     if cleaned:
+        # Popped first: assigning to an existing key keeps its old position, so
+        # the project being worked on stayed oldest and was the first evicted.
+        data.pop(project_id, None)
         data[project_id] = cleaned
     else:
         data.pop(project_id, None)
