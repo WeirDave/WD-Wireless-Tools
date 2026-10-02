@@ -50,8 +50,12 @@
      store, so a box drawn in either tool is the box both use. Until the first
      preview comes back the page does not know them, so it asks the server to
      use whatever is saved (`useBoxes=1`); from then on it sends its own set,
-     an empty set meaning every floor is automatic. */
-  var trim = { boxes: {}, loaded: false, projectId: '', suggestions: {} };
+     an empty set meaning every floor is automatic.
+
+     `setAside` holds saved boxes the server would not use because they do not
+     fit this file's sheet - drawn on the full-size original, which a cropped
+     copy shares its id with. They stay in the store for that file. */
+  var trim = { boxes: {}, loaded: false, projectId: '', suggestions: {}, setAside: {} };
 
   /* The capacity template Capacity's "Make default" chose. Prep starts on it
      too, until a template is picked here by hand. */
@@ -233,7 +237,7 @@
     fileName = name;
     floorOcc = {};             // floors belong to one project
     floorExist = {};
-    trim = { boxes: {}, loaded: false, projectId: '', suggestions: {} };
+    trim = { boxes: {}, loaded: false, projectId: '', suggestions: {}, setAside: {} };
     lastPlan = null;
     if ($('prepExisting')) $('prepExisting').value = savedExisting;
     $('dropzone').style.display = 'none';
@@ -513,6 +517,7 @@
     if (!trim.loaded && proj.boxes) {
       trim.boxes = {};
       Object.keys(proj.boxes).forEach(function (id) { trim.boxes[id] = proj.boxes[id].slice(0, 4); });
+      trim.setAside = proj.boxesSetAside || {};
       trim.loaded = true;
     }
     if (proj.projectId) trim.projectId = proj.projectId;
@@ -546,9 +551,16 @@
       if (n) writes.push('trim ' + n + ' ' + plural(n, 'floor'));
       if (fixed) writes.push('repair ' + fixed + ' ' + plural(fixed, 'plan'));
       var lines = (t.floors || []).map(trimFloorLine);
-      $('prepTrimFloors').innerHTML = lines.length
+      var aside = (t.floors || []).filter(function (f) {
+        return (trim.setAside || {})[f.id] && !(trim.boxes || {})[f.id];
+      }).map(function (f) {
+        return '<div class="prep-warn"><b>' + esc(f.name) + '</b>: the box saved for '
+          + 'this floor was set aside. It was drawn on a larger sheet, and this plan '
+          + 'has already been cropped, so using it would crop it a second time.</div>';
+      });
+      $('prepTrimFloors').innerHTML = (lines.length
         ? lines.map(function (l) { return '<div class="pb-item">' + l + '</div>'; }).join('')
-        : '<div class="prep-empty">No floor plans in this project.</div>';
+        : '<div class="prep-empty">No floor plans in this project.</div>') + aside.join('');
     }
 
     // ── areas ──
@@ -1067,7 +1079,12 @@
   function boxesChanged() {
     trim.loaded = true;
     if (trim.projectId) {
-      WD.api('plantrim/boxes_save', { projectId: trim.projectId, boxes: trim.boxes })
+      // A set-aside box stays stored, for the file it was drawn on, unless
+      // this file now has its own box for that floor - as PlanTrim does.
+      var stored = {};
+      Object.keys(trim.setAside || {}).forEach(function (id) { stored[id] = trim.setAside[id]; });
+      Object.keys(trim.boxes).forEach(function (id) { stored[id] = trim.boxes[id]; });
+      WD.api('plantrim/boxes_save', { projectId: trim.projectId, boxes: stored })
         .catch(function () { /* a lost box is a redraw, not a failure worth a toast */ });
     }
     if (map.view) map.view.draw();

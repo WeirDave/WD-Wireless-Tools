@@ -1051,11 +1051,22 @@ def _prep_project_facts(src):
                     if isinstance(f, dict) and f.get("id")]
     except Exception:
         return facts
+    facts["boxesSetAside"] = {}
     if facts["projectId"]:
         try:
             facts["boxes"] = plantrim_store.load(facts["projectId"]) or {}
         except Exception:
             facts["boxes"] = {}
+    # A cropped copy keeps the project id, so a box drawn on the full-size
+    # original comes back for the smaller "(prepared)" sheet. Used there it
+    # crops the plan a second time and cuts whatever was placed since. Such a
+    # box is set aside - still stored, for the file it was drawn on - and named
+    # to the page so it can say why it was not used.
+    sheets = {f["id"]: (f["w"], f["h"]) for f in facts["floors"]}
+    for fid in list(facts["boxes"]):
+        size = sheets.get(fid)
+        if size and not esx_trimmer.box_fits_sheet(facts["boxes"][fid], *size):
+            facts["boxesSetAside"][fid] = facts["boxes"].pop(fid)
     return facts
 
 

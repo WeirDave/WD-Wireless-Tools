@@ -190,12 +190,23 @@ class ManualBoxTests(unittest.TestCase):
         self.assertEqual(rep.floors[0].action, "skipped")
         self.assertIn("whole canvas", rep.floors[0].reason)
 
-    def test_a_box_is_clamped_to_the_image(self):
-        """Dragging past the edge keeps the edge, it does not fail."""
-        rep = esx_trimmer.analyze(self.src, boxes={FLOOR: [-500, -500, 950, 1150]})
+    def test_a_box_at_the_edge_is_kept_within_a_pixel(self):
+        """A drag to the edge is clamped by the editor and stored as the edge,
+        rounding included, so a pixel either way is still that edge."""
+        rep = esx_trimmer.analyze(self.src, boxes={FLOOR: [-1, -1, 950, 1150]})
         floor = rep.floors[0]
         self.assertEqual(floor.action, "trimmed", floor.reason)
         self.assertEqual(floor.offset, (0, 0))
+
+    def test_a_box_that_overhangs_the_sheet_is_refused_not_clamped(self):
+        """Both editors clamp a drag before it is sent, so a box past the edge
+        was drawn on another sheet - the full-size original of a copy that has
+        since been cropped. Clamping it cropped that copy a second time."""
+        for box in ([-500, -500, 950, 1150], [150, 150, SHEET_W + 400, SHEET_H + 300]):
+            with self.subTest(box=box):
+                floor = esx_trimmer.analyze(self.src, boxes={FLOOR: box}).floors[0]
+                self.assertEqual(floor.action, "refused")
+                self.assertIn("does not fit", floor.reason)
 
     def test_a_reversed_drag_is_normalised(self):
         """Dragging up-left gives the same box as dragging down-right."""

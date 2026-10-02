@@ -21,30 +21,36 @@
     var ftRe = /(-?\d+(?:\.\d+)?)\s*(?:'|ft\b|feet\b|foot\b)/;
     var ftMatch = s.match(ftRe);
     var rest = s;
+    var sign = 1;
     if (ftMatch) {
       totalIn += parseFloat(ftMatch[1]) * IN_PER_FT;
       rest = s.slice(ftMatch.index + ftMatch[0].length);
       matched = true;
+      // -4'-6" is minus four and a half feet, not minus four plus six inches.
+      if (ftMatch[1].charAt(0) === '-') sign = -1;
     }
 
     rest = rest.trim();
+    // In 4'-6" the dash joins feet to inches; it is not a sign. Read as one,
+    // 4'-6" came out as 42 inches instead of 54.
+    if (ftMatch) rest = rest.replace(/^-\s*/, '');
     if (rest) {
       var mixRe = /^(-?\d+)[\s-]+(\d+)\s*\/\s*(\d+)\s*(?:"|in\b|inch\b|inches\b)?/;
       var m = rest.match(mixRe);
       if (m) {
-        totalIn += parseInt(m[1], 10) + parseInt(m[2], 10) / parseInt(m[3], 10);
+        totalIn += sign * (parseInt(m[1], 10) + parseInt(m[2], 10) / parseInt(m[3], 10));
         matched = true;
       } else {
         var fracRe = /^(-?\d+)\s*\/\s*(\d+)\s*(?:"|in\b|inch\b|inches\b)?/;
         m = rest.match(fracRe);
         if (m) {
-          totalIn += parseInt(m[1], 10) / parseInt(m[2], 10);
+          totalIn += sign * (parseInt(m[1], 10) / parseInt(m[2], 10));
           matched = true;
         } else {
           var inRe = /^(-?\d+(?:\.\d+)?)\s*(?:"|in\b|inch\b|inches\b)?/;
           m = rest.match(inRe);
           if (m && m[0].length > 0) {
-            totalIn += parseFloat(m[1]);
+            totalIn += sign * parseFloat(m[1]);
             matched = true;
           }
         }

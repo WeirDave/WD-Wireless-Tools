@@ -187,6 +187,28 @@ def _stale_to_retighten(members: dict, floor_occupants=None, floor_existing=None
             if s["floorPlanId"] not in zero and s["floorPlanId"] not in kept]
 
 
+def _placeholders_to_replace(path, order, template, retighten,
+                             floor_occupants=None, floor_existing=None) -> set:
+    """The placeholder areas the areas step of this same run will replace.
+
+    The trim runs first (``ORDER_RULES``) and a whole-canvas placeholder holds
+    its crop open to the full sheet, so with Re-measure ticked the trim skipped
+    as "already fills 100%" on account of an area about to be deleted. The
+    trimmer is told to leave these out of its bounds and to fit them to the
+    new canvas; they stay canvas rectangles, so the areas step still finds and
+    replaces them - and if that step refuses, what is left is a placeholder on
+    the trimmed plan, the same as a run without Re-measure would leave.
+
+    Not the placeholders dropped before the trim: dropping is the areas step's
+    to do, all or nothing, and doing it earlier would leave a floor with no
+    area at all whenever that step then refused.
+    """
+    if "trim" not in order or "areas" not in order or not template or not retighten:
+        return set()
+    return {s["areaId"] for s in _stale_to_retighten(
+        _members(Path(path)), floor_occupants, floor_existing) if s.get("areaId")}
+
+
 def _drop_areas(src: Path, dest: Path, area_ids: set) -> None:
     """Copy the project across without the named areas.
 
@@ -231,7 +253,11 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
 
     if "trim" in order:
         try:
-            report = esx_trimmer.analyze(path, margin=margin, boxes=boxes)
+            report = esx_trimmer.analyze(
+                path, margin=margin, boxes=boxes,
+                placeholders=_placeholders_to_replace(
+                    path, order, template, retighten, floor_occupants,
+                    floor_existing))
             out["step"]["trim"] = esx_trimmer._report_json(report)
         except esx_trimmer.TrimError as exc:
             out["step"]["trim"] = {"ok": False, "error": str(exc)}
@@ -337,7 +363,11 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
             if step == "trim":
                 try:
                     out = nxt()
-                    report = esx_trimmer.trim(cur, dest=out, margin=margin, boxes=boxes)
+                    report = esx_trimmer.trim(
+                        cur, dest=out, margin=margin, boxes=boxes,
+                        placeholders=_placeholders_to_replace(
+                            cur, order, template, retighten, floor_occupants,
+                            floor_existing))
                 except esx_trimmer.TrimError as exc:
                     refuse("trim", f"Trimming refused: {exc}")
                     continue
