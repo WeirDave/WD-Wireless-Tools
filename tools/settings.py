@@ -257,27 +257,94 @@ def _migrate_settings(settings):
     return settings
 
 
-def load_settings(_path=None):
+class SettingsUnreadable(Exception):
+    """settings.json exists but could not be read as a JSON object.
+
+    Nothing is ever written over such a file. This used to be swallowed:
+    load returned the defaults, setup_complete read False, and the next save
+    of any preference wrote the defaults over his file - a UTF-8 byte-order
+    mark from a text editor was enough to lose every setting.
+    """
+
+
+_reported_unreadable = set()
+
+
+def _read_saved(path):
+    """The saved dict, None when there is no file, or SettingsUnreadable."""
+    if not path.exists():
+        return None
+    try:
+        # utf-8-sig: Notepad and other editors save UTF-8 with a BOM, and a
+        # BOM is not a reason to treat the file as unreadable.
+        with open(path, encoding="utf-8-sig") as f:
+            saved = json.load(f)
+        if not isinstance(saved, dict):
+            raise ValueError("it does not hold a JSON object")
+        return saved
+    except Exception as exc:
+        problem = SettingsUnreadable(
+            f"Your settings file {path} could not be read ({exc}). Nothing "
+            "was saved, so it is left exactly as it is. Fix or move that file, "
+            "then try again.")
+        try:
+            st = path.stat()
+            stamp = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            stamp = None
+        # Logged once per version of the file, not on every page load.
+        if (str(path), stamp) not in _reported_unreadable:
+            _reported_unreadable.add((str(path), stamp))
+            try:
+                from tools import applog
+                applog.note_failure("reading settings", exc)
+            except Exception:
+                pass
+        raise problem from exc
+
+
+def settings_unreadable(_path=None):
+    """The plain-language problem with settings.json, or None if it is fine."""
+    try:
+        _read_saved(Path(_path) if _path else SETTINGS_FILE)
+    except SettingsUnreadable as exc:
+        return str(exc)
+    return None
+
+
+def load_settings(_path=None, strict=False):
     """Load settings.json, filling in defaults for any missing keys.
 
     *_path* overrides SETTINGS_FILE so callers with a patched config
     directory can pass their own location.
+
+    A file that exists but cannot be read gives the defaults to a reader, so
+    every page still opens, unless *strict*, which raises SettingsUnreadable.
+    Anything that writes loads strictly.
     """
     path = Path(_path) if _path else SETTINGS_FILE
     settings = copy.deepcopy(DEFAULTS)
-    if path.exists():
-        try:
-            with open(path, encoding="utf-8") as f:
-                saved = json.load(f)
-            settings = _deep_merge(settings, saved)
-        except Exception:
-            pass
+    try:
+        saved = _read_saved(path)
+    except SettingsUnreadable:
+        if strict:
+            raise
+        saved = None
+    if saved is not None:
+        settings = _deep_merge(settings, saved)
     return _migrate_settings(settings)
 
 
-def save_settings(settings, _path=None):
-    """Write settings.json atomically."""
+def save_settings(settings, _path=None, replace_unreadable=False):
+    """Write settings.json atomically.
+
+    Refuses to write over a settings.json that exists and cannot be read,
+    unless *replace_unreadable* - which only an import passes, after it has
+    copied the file aside.
+    """
     path = Path(_path) if _path else SETTINGS_FILE
+    if not replace_unreadable:
+        _read_saved(path)
     parent = path.parent
     parent.mkdir(parents=True, exist_ok=True)
     tmp_fd, tmp_path = tempfile.mkstemp(
@@ -326,22 +393,31 @@ def _replace_whole_values(merged, patch):
     return merged
 
 
-def update_settings(patch, _path=None):
+def update_settings(patch, _path=None, replace_unreadable=False):
     """Deep-merge *patch* into current settings, save, and return the result.
 
     Deep merge everywhere except REPLACE_NOT_MERGE - see the note there for
     why a keyed store cannot be merged.
+
+    Raises SettingsUnreadable rather than merging into the defaults when the
+    file on disk cannot be read; see that class.
     """
-    current = load_settings(_path=_path)
+    current = load_settings(_path=_path, strict=not replace_unreadable)
     merged = _replace_whole_values(_deep_merge(current, patch), patch)
-    save_settings(merged, _path=_path)
+    save_settings(merged, _path=_path, replace_unreadable=replace_unreadable)
     return merged
 
 
 def needs_setup():
-    """True when the first-run wizard should be shown."""
+    """True when the first-run wizard should be shown.
+
+    Not for a file that exists and cannot be read: that is someone's
+    configured install with a damaged file, and Setup would save defaults.
+    """
     if not SETTINGS_DIR.exists() or not SETTINGS_FILE.exists():
         return True
+    if settings_unreadable():
+        return False
     settings = load_settings()
     return not settings.get("setup_complete", False)
 

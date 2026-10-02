@@ -89,7 +89,12 @@ class DailyCappedFileHandler(logging.FileHandler):
         self._retain_days = retain_days
         self._max_file_bytes = max_file_bytes
         self._max_total_bytes = max_total_bytes
-        self._day = self._today()
+        # The day the live file belongs to is the day it was last written,
+        # not the day this process started. Starting from today meant a live
+        # file left from a launch a month ago was continued as if it were
+        # today's: never rolled, so never pruned, and the seven-day window -
+        # this log holds real paths - did not apply to it.
+        self._day = self._live_day() or self._today()
         self._live.parent.mkdir(parents=True, exist_ok=True)
         # mode "a": the existing file is continued, never replaced.
         super().__init__(str(self._live), mode="a", encoding="utf-8",
@@ -100,6 +105,12 @@ class DailyCappedFileHandler(logging.FileHandler):
     @staticmethod
     def _today() -> str:
         return _dt.date.today().isoformat()
+
+    def _live_day(self):
+        try:
+            return _dt.date.fromtimestamp(self._live.stat().st_mtime).isoformat()
+        except (OSError, ValueError, OverflowError):
+            return None
 
     def _archive_name(self, day: str) -> Path:
         stem = self._live.stem

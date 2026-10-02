@@ -441,6 +441,20 @@ try {
         }
       }
 
+      # `checkout --force` below discards every other edit to a tracked file,
+      # silently. Stop and name them instead, as the in-app updater does
+      # (_dirty_paths in tools/updater.py). Untracked files are never touched
+      # by a checkout, and a permissions-only change is not an edit.
+      $edited = @(Invoke-Git -Arguments @('-c', 'core.fileMode=false', 'status', '--porcelain') -WorkDir $target |
+                  ForEach-Object { "$_" } |
+                  Where-Object { $_.Trim() -and -not $_.StartsWith('??') } |
+                  ForEach-Object { $_.Substring(3).Trim('"') })
+      if ($edited.Count -gt 0) {
+        throw ("This install has local edits that an update would overwrite: " +
+               ($edited -join ', ') + ". Nothing was changed. Revert or move " +
+               "them, then run this again.")
+      }
+
       Write-Step "Checking out $label…"
       Invoke-Git -Arguments @('-c', 'advice.detachedHead=false', 'checkout', '--force', $ref) -WorkDir $target | Out-Null
       $newVersion = Get-SuiteVersion $target

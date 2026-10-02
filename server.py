@@ -2072,15 +2072,20 @@ def api_update():
         return jsonify({
             "ok": False,
             "error": str(e),
+            # Whether the install folder is as it was. The page says "nothing
+            # was left half-installed" only on this, never by default.
+            "intact": bool(getattr(e, "intact", False)),
             "steps": steps,
             "install": updater.detect_install(),
             "releasesUrl": updater.GITHUB_RELEASES_URL,
         }), 200
     except Exception as e:
         print(f"  [update] FAILED: {e}", flush=True)
+        applog.note_failure("update", e)
         return jsonify({
             "ok": False,
             "error": f"Unexpected error during update: {e}",
+            "intact": False,
             "steps": steps,
             "releasesUrl": updater.GITHUB_RELEASES_URL,
         }), 200
