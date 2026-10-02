@@ -1144,7 +1144,7 @@ function indexRowData() {
       localName: p.local.name, localPath: p.local.path,
       mismatch: p.namesDiffer,
       matchType: p.matchType,
-      differenceKind: p.differenceKind || null,
+      differenceKind: p.differenceKind || null, localEditedUndated: !!p.localEditedUndated,
       /* Which side is newer, and both dates, travel with the row you can
          select. They used to exist only on the render row, so Sync - which
          reads rowData - could not see that a pair needed content moved and
@@ -1405,7 +1405,7 @@ function _siteHoldsVisible(cloudObj, localObj, pred) {
            local: p.local, matchType: p.matchType,
            staleness: p.staleness || null, namesDiffer: !!p.namesDiffer,
            comparison: p.comparison || null,
-           differenceKind: p.differenceKind || null }))
+           differenceKind: p.differenceKind || null, localEditedUndated: !!p.localEditedUndated }))
       || (kids.cloudOnly || []).some(c => ok({
            status: 'orphan', cloud: c, local: null }))
       || (kids.localOnly || []).some(l => ok({
@@ -2608,7 +2608,7 @@ function renderLedger(hit) {
        missed one is silent: the row renders perfectly and simply never knows
        it has been answered. */
     comparison: p.comparison || null,
-    differenceKind: p.differenceKind || null,
+    differenceKind: p.differenceKind || null, localEditedUndated: !!p.localEditedUndated,
     cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || ''),
     /* One key per side, the same as the Sites tab and nested project rows.
        Without these both cells fell back to `r.key`, so the two checkboxes
@@ -2702,7 +2702,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
     status: p.namesDiffer ? 'mismatch' : 'synced', key: 'p:' + p.cloud.id, kind: 'sites',
     matchType: p.matchType, staleness: p.staleness || null,
     comparison: p.comparison || null,
-    differenceKind: p.differenceKind || null,
+    differenceKind: p.differenceKind || null, localEditedUndated: !!p.localEditedUndated,
     cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || ''),
     cloudCheckKey: 's-c:' + p.cloud.id, localCheckKey: 's-l:' + p.local.path,
   }));
@@ -2798,7 +2798,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
                     cloud: p.cloud, local: p.local, matchType: p.matchType,
                     staleness: p.staleness || null,
                     comparison: p.comparison || null,
-                    differenceKind: p.differenceKind || null };
+                    differenceKind: p.differenceKind || null, localEditedUndated: !!p.localEditedUndated };
       if (passOwner && !passOwner(row)) return;
       if (activeFilter !== 'all' && !(projPass || pass)(row.status, row)) return;
       childPairs.push(row);
@@ -3295,7 +3295,7 @@ function _siteMatchesFilterAlone(r) {
 function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteName, passFilter) {
   const rows = [];
   (children.matched || []).forEach(p => rows.push({
-    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, staleness: p.staleness || null, comparison: p.comparison || null, differenceKind: p.differenceKind || null, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
+    status: p.namesDiffer ? 'mismatch' : 'synced', matchType: p.matchType, staleness: p.staleness || null, comparison: p.comparison || null, differenceKind: p.differenceKind || null, localEditedUndated: !!p.localEditedUndated, cloud: p.cloud, local: p.local, sort: (p.cloud.name || p.local.name || '')
   }));
   (children.cloudOnly || []).forEach(c => rows.push({ status: 'orphan', cloud: c, local: null, sort: c.name || '' }));
   (children.localOnly || []).forEach(l => rows.push({ status: 'orphan', cloud: null, local: l, sort: l.name || '' }));
@@ -4602,6 +4602,12 @@ function rowDetailHtml(r, stripe) {
          long form put the same two lines of prose on seven consecutive rows,
          which is the noise this band exists to avoid. */
       : 'The cloud copy has a later date. A real change, or just a rename?');
+  } else if (stale === 'local_newer' && r.localEditedUndated) {
+    /* The dates on this row agree, so "later date" would be false. The file
+       changed size since it was last synced, and Ekahau left the date inside
+       it alone - which is the edit the dates alone could never show. */
+    sentences.push('Your local copy has been saved since it was last synced, '
+      + 'although the date inside it did not change.');
   } else if (stale === 'local_newer') {
     sentences.push(r.differenceKind === 'renamed'
       ? 'Your local copy was renamed — that is what moved its date, and no '
