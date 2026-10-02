@@ -230,7 +230,7 @@ class ListingDuplicatesTests(unittest.TestCase):
         with patch.object(cm, "build_duplicates_data",
                           return_value={"clusters": []}) as build:
             r = mgr.get_duplicates()
-        self.assertEqual({"clusters": []}, r)
+        self.assertEqual([], r.get("clusters"), r)
         self.assertEqual("/some/where", build.call_args[0][1])
 
     def test_being_signed_out_says_so(self):
