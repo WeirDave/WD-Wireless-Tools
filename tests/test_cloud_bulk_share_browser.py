@@ -196,6 +196,21 @@ class ShareDialogInABrowser(unittest.TestCase):
         self.assertTrue(self.js(
             "!document.getElementById('shareModal').hidden"))
 
+    def test_nothing_in_the_dialog_is_below_thirteen_pixels(self):
+        """The note under the address box was 11px and the project list 12."""
+        small = self.js("""(function () {
+          var out = [], root = document.getElementById('shareModal');
+          var w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT), n;
+          while ((n = w.nextNode())) {
+            if (!n.textContent.trim()) continue;
+            var el = n.parentElement;
+            if (!el.getBoundingClientRect().width) continue;
+            var fs = parseFloat(getComputedStyle(el).fontSize);
+            if (fs < 13) out.push(el.className + ' ' + fs);
+          }
+          return out; })()""")
+        self.assertEqual(small, [])
+
     def test_there_is_a_control_that_shares(self):
         """The report: "there is no Apply ... the only option is Add or
         Close"."""

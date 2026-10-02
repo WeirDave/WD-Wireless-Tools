@@ -12256,3 +12256,13 @@ body.tool-cloud :is(.dup-item-date, .dup-item-size, .dup-explain-legend,
 body.tool-cloud :is(.dup-count-pill, .dup-explain-tag, .dup-item-owner,
   .dup-pill, .dup-shape, .manual-count, .dup-chevron) { font-size: 13px; }
 body.tool-cloud .dup-item-name { font-size: 15px; }
+/* The Share dialog: the note under the address box was 11px, the list of
+   projects being shared and its label 11-12px. */
+body.tool-cloud #shareModal :is(.share-add-note, .share-add-label, .share-targets-head,
+  .share-targets-skipped, .share-targets-unproven, .share-email,
+  .share-group-toggle-label, .share-group-manage-caret, .share-group-members-hint,
+  .share-group-member-empty, .share-danger-label, .share-danger-label-quiet,
+  .share-danger-hint-quiet, .share-danger-warning, .share-name, .share-recent-label,
+  .share-recent-pick, .share-recent-forget) { font-size: 13px; }
+body.tool-cloud #shareModal :is(li, .share-group-member-row .share-name) { font-size: 14px; }
+body.tool-cloud #shareModal .share-group-member-row .share-email { font-size: 13px; }
