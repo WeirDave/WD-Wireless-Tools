@@ -1227,7 +1227,8 @@ this report only; **Edit defaults…** opens the panel for the saved values. Onl
 templates that print these fields show this part of the card.
 
 **Cover page** — **Include cover page** is on by default. The cover carries
-your image, the site name, the counts and the date. **Cover image &
+your image, the site name, the counts and the date; on the Change / Audit
+Report it also names the before and after files. **Cover image &
 defaults…** opens a panel where you **Choose image…** (or **Remove** it) and
 preview the file name the PDF will be offered. The image is stored by the app
 on this machine, not in the browser, so switching browsers or clearing site

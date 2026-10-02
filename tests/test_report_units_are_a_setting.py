@@ -269,6 +269,8 @@ class ThereIsOnlyOneCopyOfThem(unittest.TestCase):
         const PERSON_LEVEL_OPTS = ['units', 'segGranularity'];
         let currentOpts = {}, optOverrides = {}, currentReportId = null;
         let templateConfirmed = false, configureDirty = false;
+        let _autoSaveTimer = null, optsSeededFor = null;
+        const flushAutoSave = () => {};
         const REPORTS = { placement: { status: 'ready' } };
         const RETIRED_REPORTS = {};
         const reportOptionDefaults = () => stored;
