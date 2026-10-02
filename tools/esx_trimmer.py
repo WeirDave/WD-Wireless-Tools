@@ -423,7 +423,7 @@ _KIND_LABELS = {
 }
 
 
-def _floor_coords(members: dict, floor_id: str):
+def _floor_coords(members: dict, floor_id: str, placeholders=()):
     """Yield ``(coord, kind, name)`` for every coordinate on one floor.
 
     One traversal, used to bound the coordinates, to find the ones a drawn box
@@ -431,6 +431,8 @@ def _floor_coords(members: dict, floor_id: str):
     drift, and the consequence of missing a carrier is an object stranded off
     the plan - so the kind and the name ride along with the coordinate rather
     than being looked up again somewhere else.
+
+    *placeholders* names requirement areas to leave out (see ``_run``).
     """
     def take(c):
         if isinstance(c, dict) and isinstance(c.get("x"), (int, float)):
@@ -450,6 +452,8 @@ def _floor_coords(members: dict, floor_id: str):
         kind = _KIND_LABELS.get(name, key)
         for item in _entries(members, name, key):
             if item.get("floorPlanId") == floor_id:
+                if name == "areas.json" and item.get("id") in placeholders:
+                    continue
                 label = item.get("name") or ""
                 for c in item.get("area") or []:
                     c = take(c)
@@ -521,14 +525,14 @@ def stranded_objects(members: dict, floor_id: str, box):
     return items, total
 
 
-def _floor_coord_bbox(members: dict, floor_id: str):
+def _floor_coord_bbox(members: dict, floor_id: str, placeholders=()):
     """Bounding box of every coordinate that belongs to one floor.
 
     The crop must never land inside this box or metadata would end up off the
     image, so it is unioned into the final bounds.
     """
     xs, ys = [], []
-    for c, _kind, _name in _floor_coords(members, floor_id):
+    for c, _kind, _name in _floor_coords(members, floor_id, placeholders):
         xs.append(float(c["x"]))
         ys.append(float(c["y"]))
     if not xs:
@@ -546,8 +550,16 @@ def _entries(members: dict, name: str, key: str):
     return items if isinstance(items, list) else []
 
 
+#: The older layout keeps every walk in one ``surveys.json`` (see the v1.9.16
+#: release note; report.js still reads it). Matching only ``survey-*.json``
+#: left those walks unmoved by a crop, outside the bounds and unchecked.
+_LEGACY_SURVEYS = "surveys.json"
+
+
 def _survey_members(members: dict):
-    return [n for n in members if n.startswith("survey-") and n.endswith(".json")]
+    return [n for n in members
+            if n == _LEGACY_SURVEYS
+            or (n.startswith("survey-") and n.endswith(".json"))]
 
 
 def _shift_coord(c, dx: float, dy: float, clamp=None) -> bool:
@@ -902,7 +914,7 @@ def _companion(plan: dict, images: dict):
 
 
 def _plan_floor(members: dict, plan: dict, images: dict, margin,
-                manual_box=None) -> tuple:
+                manual_box=None, placeholders=()) -> tuple:
     """Decide what to do with one floor. Returns (FloorResult, box or None).
 
     *margin* may be an ``int`` (pixel count, legacy), a ``float`` (metres), or
@@ -1022,7 +1034,7 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin,
     # The crop must contain the drawing, every coordinate, and whatever region
     # Ekahau itself is displaying. Union all three, then clamp.
     x0, y0, x1, y1 = bounds
-    coord_box = _floor_coord_bbox(members, fid)
+    coord_box = _floor_coord_bbox(members, fid, placeholders)
     if coord_box:
         x0 = min(x0, coord_box[0] - mpx)
         y0 = min(y0, coord_box[1] - mpx)
@@ -1059,6 +1071,38 @@ def _plan_floor(members: dict, plan: dict, images: dict, margin,
 MIN_MANUAL_SIDE = 8
 
 
+#: How far a box may stray past the sheet and still be taken as drawn on it.
+#: A box dragged to the edge is stored as the edge, rounding included; the
+#: same pixel PlanTrim's ``fitsSheet`` allows.
+BOX_SHEET_SLACK = 1.0
+
+
+def box_fits_sheet(box, w, h) -> bool:
+    """Does *box* lie on a ``w`` x ``h`` sheet, give or take a pixel?
+
+    Both editors clamp a drag to the sheet before it is sent or saved, so a box
+    that overhangs was drawn on a different sheet. The case that matters: boxes
+    are saved under the project's id, and a cropped copy keeps that id, so the
+    box drawn on the full-size original came back for the smaller output.
+    Clamping it to that sheet cropped the plan a second time and cut whatever
+    had been placed on it since. An unknown sheet size cannot rule a box out.
+    """
+    try:
+        x0, y0, x1, y1 = (float(v) for v in box)
+    except (TypeError, ValueError):
+        return False
+    x0, x1 = sorted((x0, x1))
+    y0, y1 = sorted((y0, y1))
+    try:
+        w, h = float(w or 0), float(h or 0)
+    except (TypeError, ValueError):
+        return True
+    if not (w > 0 and h > 0):
+        return True
+    s = BOX_SHEET_SLACK
+    return x0 >= -s and y0 >= -s and x1 <= w + s and y1 <= h + s
+
+
 def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip) -> tuple:
     """Honour a drawn box, refusing only what cannot be made safe.
 
@@ -1079,6 +1123,11 @@ def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip) -> tuple:
 
     x0, x1 = sorted((x0, x1))
     y0, y1 = sorted((y0, y1))
+    if not box_fits_sheet((x0, y0, x1, y1), w, h):
+        return refuse(
+            f"the drawn area ({x0}, {y0} to {x1}, {y1}) does not fit this "
+            f"{w}x{h} plan - it was drawn on a larger copy of the sheet, and "
+            "this one has already been cropped")
     x0 = max(0, min(x0, w))
     y0 = max(0, min(y0, h))
     x1 = max(0, min(x1, w))
@@ -1124,7 +1173,7 @@ def _inside(c, box) -> bool:
     return x0 <= float(c["x"]) <= x1 and y0 <= float(c["y"]) <= y1
 
 
-def cut_outside(members: dict, floor_id: str, box) -> int:
+def cut_outside(members: dict, floor_id: str, box, changed: set | None = None) -> int:
     """Remove everything on *floor_id* that falls outside *box*.
 
     A drawn box is a pair of scissors: what is inside is kept and what is
@@ -1137,7 +1186,15 @@ def cut_outside(members: dict, floor_id: str, box) -> int:
     referenced by its segments, so removing either without removing what points
     at it would ship a project with dangling ids - corruption the user cannot
     see and did not ask for. Those cascades are followed here.
+
+    Every member it modifies is added to *changed*. The caller must write each
+    one: a file whose only object on this floor was cut has nothing left for
+    the offset to move, and keying the rewrite on the offset alone copied the
+    original bytes through - the cut object came back, off the plan, while its
+    radios were gone.
     """
+    if changed is None:
+        changed = set()
     removed = 0
     dropped_aps: set = set()
     dropped_wall_points: set = set()
@@ -1160,6 +1217,7 @@ def cut_outside(members: dict, floor_id: str, box) -> int:
             kept.append(item)
         if len(kept) != len(doc[key]):
             doc[key] = kept
+            changed.add(member)
 
     # An area is a polygon: if any corner is outside the cut it is not wholly
     # kept, and half an attenuation area is a worse claim than none.
@@ -1178,6 +1236,7 @@ def cut_outside(members: dict, floor_id: str, box) -> int:
             kept.append(item)
         if len(kept) != len(doc[key]):
             doc[key] = kept
+            changed.add(member)
 
     # A reference point can be projected onto several floors; only this floor's
     # projection is cut.
@@ -1196,6 +1255,7 @@ def cut_outside(members: dict, floor_id: str, box) -> int:
                 kept.append(pr)
             if len(kept) != len(projs):
                 item["projections"] = kept
+                changed.add("referencePoints.json")
 
     # Survey route points are samples along a walk: drop the ones outside and
     # keep the rest of the walk, which is what cutting the sheet would leave.
@@ -1219,6 +1279,8 @@ def cut_outside(members: dict, floor_id: str, box) -> int:
                         removed += 1
                         continue
                     keep.append(rp)
+                if len(keep) != len(pts):
+                    changed.add(member)
                 if keep:
                     new_legs.append(keep if isinstance(leg, list) else keep[0])
             survey["routePoints"] = new_legs
@@ -1227,16 +1289,22 @@ def cut_outside(members: dict, floor_id: str, box) -> int:
     if dropped_wall_points:
         doc = members.get("wallSegments.json")
         if isinstance(doc, dict) and isinstance(doc.get("wallSegments"), list):
-            doc["wallSegments"] = [
+            kept = [
                 seg for seg in doc["wallSegments"]
                 if not (set(seg.get("wallPoints") or []) & dropped_wall_points)
             ]
+            if len(kept) != len(doc["wallSegments"]):
+                doc["wallSegments"] = kept
+                changed.add("wallSegments.json")
     if dropped_aps:
         for member, key in _AP_REFERENCING:
             doc = members.get(member)
             if isinstance(doc, dict) and isinstance(doc.get(key), list):
-                doc[key] = [r for r in doc[key]
-                            if r.get("accessPointId") not in dropped_aps]
+                kept = [r for r in doc[key]
+                        if r.get("accessPointId") not in dropped_aps]
+                if len(kept) != len(doc[key]):
+                    doc[key] = kept
+                    changed.add(member)
 
     return removed
 
@@ -1346,14 +1414,15 @@ def _rebase_crop_rect(plan: dict, dx: float, dy: float, new_w: int, new_h: int) 
 
 
 def analyze(source: Path, margin: int | str = DEFAULT_MARGIN,
-            boxes=None) -> TrimReport:
+            boxes=None, placeholders=()) -> TrimReport:
     """Report what trimming would do, without writing anything."""
-    return _run(Path(source), None, margin, dry_run=True, boxes=boxes)
+    return _run(Path(source), None, margin, dry_run=True, boxes=boxes,
+                placeholders=placeholders)
 
 
 def trim(source: Path, dest: Path | None = None,
          margin: int | str = DEFAULT_MARGIN,
-         in_place: bool = False, boxes=None) -> TrimReport:
+         in_place: bool = False, boxes=None, placeholders=()) -> TrimReport:
     """Trim *source* into *dest* (or alongside it) and return a report.
 
     Never writes over the input while working: the archive is built at a
@@ -1364,11 +1433,40 @@ def trim(source: Path, dest: Path | None = None,
         dest = source
     elif dest is None:
         dest = source.with_name(source.stem + " (trimmed)" + source.suffix)
-    return _run(source, Path(dest), margin, dry_run=False, boxes=boxes)
+    return _run(source, Path(dest), margin, dry_run=False, boxes=boxes,
+                placeholders=placeholders)
+
+
+def _fit_placeholders(members: dict, floor_id: str, ids, w: float, h: float) -> bool:
+    """Pull each named area onto the new canvas, corner by corner.
+
+    A placeholder is the old canvas rectangle, so after the offset it overhangs
+    the crop on every side; clamped, it is the new canvas rectangle - still the
+    shape the areas step recognises as its own and replaces.
+    """
+    changed = False
+    for item in _entries(members, "areas.json", "areas"):
+        if item.get("floorPlanId") != floor_id or item.get("id") not in ids:
+            continue
+        for c in item.get("area") or []:
+            if isinstance(c, dict) and isinstance(c.get("x"), (int, float)):
+                x = min(max(float(c["x"]), 0.0), w)
+                y = min(max(float(c["y"]), 0.0), h)
+                if (x, y) != (c["x"], c["y"]):
+                    c["x"], c["y"] = x, y
+                    changed = True
+    return changed
 
 
 def _run(source: Path, dest: Path | None, margin, dry_run: bool,
-         boxes=None) -> TrimReport:
+         boxes=None, placeholders=()) -> TrimReport:
+    """*placeholders* names requirement areas that still cover the whole canvas
+    and that the caller is about to replace (Prep's Re-measure). They are left
+    out of the bounds - otherwise a placeholder holds the crop open to the full
+    sheet and the floor skips as "already fills 100%" - and are fitted to the
+    new canvas rather than cut or shifted off it.
+    """
+    placeholders = set(placeholders or ())
     if not source.exists():
         raise TrimError(f"no such file: {source}")
 
@@ -1403,7 +1501,8 @@ def _run(source: Path, dest: Path | None, margin, dry_run: bool,
 
     for plan in plans:
         result, box = _plan_floor(members, plan, images, margin,
-                                  manual_box=(boxes or {}).get(plan.get("id")))
+                                  manual_box=(boxes or {}).get(plan.get("id")),
+                                  placeholders=placeholders)
         report.floors.append(result)
 
         # Repaired before any crop, so a floor cut again this time starts from
@@ -1448,11 +1547,12 @@ def _run(source: Path, dest: Path | None, margin, dry_run: bool,
         # referenced it. Automatic bounds always contain every coordinate, so
         # there is nothing to cut on that path.
         if result.source == "manual":
-            result.dropped_count = cut_outside(members, plan["id"], (x0, y0, x1, y1))
-            if result.dropped_count:
-                dirty.update(("wallSegments.json", "simulatedRadios.json",
-                              "measuredRadios.json"))
+            result.dropped_count = cut_outside(members, plan["id"],
+                                               (x0, y0, x1, y1), dirty)
         touched = offset_metadata(members, plan["id"], float(x0), float(y0))
+        if placeholders and _fit_placeholders(members, plan["id"], placeholders,
+                                              float(x1 - x0), float(y1 - y0)):
+            dirty.add("areas.json")
         _assert_nothing_off_the_plan(members, plan["id"],
                                      float(x1 - x0), float(y1 - y0))
         dirty.update(name for name, count in touched.items() if count)
