@@ -118,7 +118,18 @@ function _renameInsertToken(fieldId) {
 
 // ── Tabs ──
 
+/* Undo reverses the rename this page just made, in the folder it made it in.
+   It used to pick the kind of undo from whichever tab was open, so renaming
+   folders, switching to Rules and pressing Undo reverted an older bulk rename
+   from some other folder. The operation is remembered when it runs, and the
+   button goes away once the tab or the folder changes. */
+function _forgetRenameUndo() {
+  _renameState.lastOp = null;
+  document.getElementById('renameUndoBtn').hidden = true;
+}
+
 function switchRenameTab(tab) {
+  if (tab !== _renameState.tab) _forgetRenameUndo();
   _renameState.tab = tab;
   document.querySelectorAll('#renameTabs .sr-tab').forEach(el => {
     el.classList.toggle('active', el.getAttribute('data-tab') === tab);
@@ -205,7 +216,9 @@ function _updateRenameExample() {
 
 async function pickRenameRoot() {
   const r = await renameApi('pick_folder');
-  if (!r.path) return;
+  // A cancel stays silent; a picker that could not open says so.
+  if (!r.ok) { if (r.error && r.error !== 'No folder selected') toast(r.error, 'error'); return; }
+  if (r.path !== _renameState.root) _forgetRenameUndo();
   _renameState.root = r.path;
   localStorage.setItem('wd-rename-root', r.path);
   const el = document.getElementById('renameRootLabel');
@@ -294,8 +307,12 @@ function _renderRulesPreview() {
   const items = _renameState.items;
   const list = document.getElementById('renamePreviewList');
   const countEl = document.getElementById('renamePreviewCount');
-  countEl.textContent = items.length ? '(' + items.length + ')' : '';
-  document.getElementById('renameApplyBtn').disabled = items.length === 0;
+  const clashes = items.filter(x => x.status === 'collision').length;
+  const runnable = items.length - clashes;
+  countEl.textContent = items.length
+    ? '(' + runnable + ' to rename' + (clashes ? ', ' + clashes + ' collision' + (clashes !== 1 ? 's' : '') : '') + ')'
+    : '';
+  document.getElementById('renameApplyBtn').disabled = runnable === 0;
   if (!items.length) {
     const n = _renameState.scanned || 0;
     list.innerHTML = '<div class="org-extract-empty">' + (n
@@ -304,11 +321,12 @@ function _renderRulesPreview() {
     return;
   }
   list.innerHTML = items.map(it =>
-    '<div class="org-rename-row">' +
+    '<div class="org-rename-row' + (it.status === 'collision' ? ' rn-st-collision' : '') + '">' +
       '<span class="org-rename-site">' + esc(it.site) + '</span>' +
       '<span class="org-rename-old">' + esc(it.old_name) + '</span>' +
       '<span class="org-rename-arrow">&#8594;</span>' +
       '<span class="org-rename-new">' + esc(it.new_name) + '</span>' +
+      (it.warnings && it.warnings.length ? '<span class="org-rename-warn">' + esc(it.warnings.join('; ')) + '</span>' : '') +
     '</div>'
   ).join('');
 }
@@ -385,9 +403,12 @@ async function doRename() {
     }
   };
 
+  const root = _renameState.root;
   if (tab === 'rules') {
+    const items = _renameState.items.filter(x => x.status !== 'collision');
+    if (!items.length) { btn.textContent = originalLabel; btn.disabled = false; return; }
     await remember({ file_rules: _getRuleValues() });
-    r = await renameApi('execute_bulk_rename', { items: _renameState.items });
+    r = await renameApi('execute_bulk_rename', { items, root });
   } else {
     const renames = _renameState.items.filter(x => x.status === 'rename');
     if (!renames.length) { btn.textContent = originalLabel; btn.disabled = false; return; }
@@ -395,7 +416,7 @@ async function doRename() {
       ? { folder_format: document.getElementById('rnFolderFormat').value }
       : { file_format: document.getElementById('rnFileFormat').value });
     const action = tab === 'folders' ? 'execute_folder_rename' : 'execute_file_rename';
-    r = await renameApi(action, { root: _renameState.root, renames });
+    r = await renameApi(action, { root, renames });
   }
 
   btn.textContent = originalLabel;
@@ -405,19 +426,29 @@ async function doRename() {
   if (r.skipped) parts.push(r.skipped + ' skipped');
   if (r.errors && r.errors.length) parts.push(r.errors.length + ' error' + (r.errors.length !== 1 ? 's' : ''));
   toast(parts.join(' · '));
-  document.getElementById('renameUndoBtn').hidden = false;
+  if (r.renamed) {
+    const typeMap = { folders: 'folders', files: 'files', rules: 'bulk' };
+    _renameState.lastOp = { type: typeMap[tab], root };
+    document.getElementById('renameUndoBtn').hidden = false;
+  }
 
   await _runRenamePreview();
 }
 
-// Bug 8 fix: map tab to correct undo type
 async function renameUndo() {
-  const typeMap = { folders: 'folders', files: 'files', rules: 'bulk' };
-  const type = typeMap[_renameState.tab] || _renameState.tab;
-  const r = await renameApi('undo_last', { type });
+  const op = _renameState.lastOp;
+  if (!op) { document.getElementById('renameUndoBtn').hidden = true; return; }
+  const r = await renameApi('undo_last', { type: op.type, root: op.root });
   if (r.error) { toast(r.error, 'error'); return; }
-  toast('Reverted ' + (r.reverted || 0) + ' item' + ((r.reverted || 0) !== 1 ? 's' : ''));
-  document.getElementById('renameUndoBtn').hidden = true;
+  const n = r.reverted || 0;
+  const skipped = r.skipped || [];
+  const errors = r.errors || [];
+  const parts = ['Reverted ' + n + ' item' + (n !== 1 ? 's' : '')];
+  if (skipped.length) parts.push(skipped.length + ' left as they are: ' + skipped.join('; '));
+  if (errors.length) parts.push(errors.length + ' error' + (errors.length !== 1 ? 's' : '') + ': ' + errors.join('; '));
+  toast(parts.join(' · '), skipped.length || errors.length ? 'error' : undefined);
+  // What could not be reverted stays in the log, so Undo stays offered.
+  if (!r.remaining) _forgetRenameUndo();
   await _runRenamePreview();
 }
 

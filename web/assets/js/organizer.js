@@ -242,12 +242,13 @@ function renderPreview() {
   const suggestBanner = document.getElementById('orgSuggestBanner');
   if (suggestBanner) suggestBanner.innerHTML = renderSuggestBanner();
 
+  const skippedNote = unreadableNotice(d.unreadable);
   if (d.sites.length === 0) {
-    document.getElementById('siteList').innerHTML = '<div class="org-empty">No site folders with loose files found.</div>' + (advanced ? renderDupSection() : '');
+    document.getElementById('siteList').innerHTML = skippedNote + '<div class="org-empty">No site folders with loose files found.</div>' + (advanced ? renderDupSection() : '');
     return;
   }
 
-  let html = '';
+  let html = skippedNote;
   for (const site of d.sites) {
     const moveCount = site.moves.length;
     const stayCount = site.staying.length;
@@ -327,6 +328,18 @@ function renderPreview() {
   }
   if (advanced) html += renderDupSection();
   document.getElementById('siteList').innerHTML = html;
+}
+
+/* Folders the scan could not read. They are left out of the preview and
+   Organize does not touch them, so the page says which ones and why. */
+function unreadableNotice(list) {
+  if (!list || !list.length) return '';
+  const n = list.length;
+  return '<div class="org-empty">'
+    + n + ' folder' + (n !== 1 ? 's were' : ' was') + ' skipped because '
+    + (n !== 1 ? 'they' : 'it') + ' could not be read:<ul>'
+    + list.map(u => '<li><b>' + esc(u.folder) + '</b> - ' + esc(u.reason) + '</li>').join('')
+    + '</ul></div>';
 }
 
 function renderDupSection() {
@@ -527,8 +540,11 @@ function renderResults(r) {
     html += `<span class="site-name">${esc(site.folder)}</span><span class="site-chevron">▾</span></div>`;
     html += '<div class="site-body"><table class="file-table"><thead><tr><th>File</th><th>Destination</th><th>Status</th></tr></thead><tbody>';
     for (const m of site.moves) {
-      html += `<tr><td>${esc(m.name)}</td>`;
-      html += `<td>${m.target}/`;
+      // An entry with no file name is the whole folder failing - the server
+      // could not create a subfolder in it or list it - so it names the
+      // folder's files as a group and has no destination to show.
+      html += `<tr><td>${m.name ? esc(m.name) : '<i>All files in this folder</i>'}</td>`;
+      html += `<td>${m.target ? esc(m.target) + '/' : '—'}`;
       if (m.renamed_to) html += ` <span class="renamed">(→ ${esc(m.renamed_to)})</span>`;
       html += '</td>';
       html += `<td><span class="result-status result-${m.status}">${m.status}</span>`;
