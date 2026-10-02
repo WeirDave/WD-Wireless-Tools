@@ -1846,6 +1846,7 @@ a detail.
 | --- | --- | --- |
 | Imperial | `536'4"` | 536 feet 4 inches |
 | Imperial | `4' 6-1/2"` or `4' 6 1/2"` | 4 feet 6½ inches |
+| Imperial | `24′ 7½″` or `7 ½"` | single-character fractions (½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ and the rest) and prime marks, as CAD writes them |
 | Imperial | `536.333'` | decimal feet |
 | Imperial | `6436"` | inches only |
 | Imperial | `536` | a bare number is **feet** |
