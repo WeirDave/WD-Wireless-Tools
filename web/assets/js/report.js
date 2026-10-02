@@ -4335,7 +4335,9 @@
       var legibleFloor = Math.max(scaleW, scaleH) * 0.0135;
       var labelFont = Math.max(legibleFloor,
                                minDim * 0.02 * Math.min(1, 4 / Math.max(4, label.length)));
-      var subFont = labelFont * 0.72;
+      // The second line (model, height, channel) is read off the same sheet,
+      // so it gets the same floor. At 72% of the name it printed at 5.8pt.
+      var subFont = Math.max(labelFont * 0.72, legibleFloor);
       var textW = Math.max(label.length * labelFont * 0.62, sub.length * subFont * 0.6);
       var pillW = Math.max(minDim * 0.03, textW) + padX * 2;
       var boxH = sub ? pillH + subFont * 1.25 : pillH;
