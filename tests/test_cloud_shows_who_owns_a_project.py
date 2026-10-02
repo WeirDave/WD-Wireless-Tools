@@ -232,11 +232,20 @@ class OwnershipIsOnTheRow(unittest.TestCase):
           try { setOwnerFilterUI('all'); } catch (e) {}
           try { refreshData(false); } catch (e) {}
         """, ME)
-        for _ in range(60):
-            if self.driver.execute_script(
-                    "return document.querySelectorAll('.ledger-row').length"):
+        #: Wait for the three rows the tests read, not for any row. The
+        #: first render can be replaced by a second refresh (the owner filter
+        #: and the tab switch each ask for the list), and a wait that stopped
+        #: at the first row let a test read the list mid-redraw: Edge in CI
+        #: once got `{}` on a commit whose previous run had passed. Bounded,
+        #: and loud when the bound is hit, rather than carrying on silently.
+        deadline = time.monotonic() + 45
+        count = 0
+        while time.monotonic() < deadline:
+            count = len(json.loads(self.driver.execute_script(EDGE)))
+            if count == 3:
                 break
             time.sleep(0.25)
+        self.assertEqual(3, count, "the three rows never finished drawing")
 
     def _edges(self):
         got = json.loads(self.driver.execute_script(EDGE))
