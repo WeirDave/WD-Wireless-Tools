@@ -78,6 +78,15 @@ CASES = {
     "4-1/2'": 54,
     "1 1/2": 18,
     "10 ft 6": 126,
+    # Single-character fractions and prime marks, as CAD writes them.
+    "24′ 7½″": 295.5,
+    "½\"": 0.5,
+    "7½\"": 7.5,
+    "7 ½\"": 7.5,
+    "4′-6¾″": 54.75,
+    "3⅛\"": 3.125,
+    "1⅔'": 20,
+    "5′ 2⅜″": 62.375,
 }
 
 #: Text with something the parser did not read is refused, not half read.

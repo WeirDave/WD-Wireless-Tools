@@ -6,9 +6,17 @@
 
   function parseImperial(raw) {
     if (raw == null) return null;
-    var s = String(raw).trim().toLowerCase()
+    // CAD title blocks and dimension strings write fractions as one character
+    // (7½"). Each becomes its ASCII fraction with a space before it, so 7½,
+    // 7 ½ and ½ all reach the same mixed-number and fraction rules as 7 1/2.
+    var VULGAR = { '½': '1/2', '⅓': '1/3', '⅔': '2/3', '¼': '1/4', '¾': '3/4',
+                   '⅕': '1/5', '⅖': '2/5', '⅗': '3/5', '⅘': '4/5', '⅙': '1/6',
+                   '⅚': '5/6', '⅛': '1/8', '⅜': '3/8', '⅝': '5/8', '⅞': '7/8' };
+    var s = String(raw).toLowerCase()
+      .replace(/[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, function (c) { return ' ' + VULGAR[c]; })
       .replace(/[′’]/g, "'")
-      .replace(/[″”]/g, '"');
+      .replace(/[″”]/g, '"')
+      .trim();
     if (!s) return null;
 
     // The whole text has to be one dimension. Reading only the parts a
