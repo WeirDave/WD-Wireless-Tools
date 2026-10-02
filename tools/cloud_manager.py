@@ -448,7 +448,11 @@ def _repoint_one(local_path, moves):
             # The tail keeps its own spelling where lower() kept the length,
             # which it does for every name but a few non-Latin ones.
             tail = cur[len(o):] if len(norm) == len(cur) else norm[len(o):]
-            cur, hit = str(new) + tail.replace(chr(92), "/"), True
+            # The tail takes the new path's separator: "/" glued onto a
+            # Windows path stored "New Pier/Survey.esx", which no other
+            # path in the stores is written as.
+            sep = chr(92) if chr(92) in str(new) else "/"
+            cur, hit = str(new) + tail.replace(chr(92), "/").replace("/", sep), True
     return cur if hit else None
 
 

@@ -145,5 +145,20 @@ class RepointPairingsTests(_Case):
         cm.repoint_pairings([("/w/Old.esx", "/w/New.esx")])   # must not raise
 
 
+
+class AFileUnderARenamedFolderKeepsItsSeparatorsTests(unittest.TestCase):
+    """A Windows CI run stored "...\\New Pier/Harbour Survey.esx": the part
+    under the renamed folder was glued on with "/". Spelled with Windows
+    separators here so every platform runs it."""
+
+    def test_a_windows_path_stays_a_windows_path(self):
+        got = cm._repoint_one(r"C:\P\Old Pier\Harbour Survey.esx",
+                              [(r"C:\P\Old Pier", r"C:\P\New Pier")])
+        self.assertEqual(got, r"C:\P\New Pier\Harbour Survey.esx")
+
+    def test_a_posix_path_stays_a_posix_path(self):
+        got = cm._repoint_one("/p/Old Pier/a/b.esx", [("/p/Old Pier", "/p/New Pier")])
+        self.assertEqual(got, "/p/New Pier/a/b.esx")
+
 if __name__ == "__main__":
     unittest.main()

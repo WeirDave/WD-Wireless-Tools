@@ -263,7 +263,7 @@ fi
 if [ "$METHOD" = "git" ] && { [ "$IS_GIT" -eq 1 ] || [ "$EXISTING" -eq 0 ]; }; then
   # ---- git path --------------------------------------------------------------
   if [ "$EXISTING" -eq 0 ] && [ "$IS_GIT" -eq 0 ]; then
-    step "Cloning $REPO…"
+    step "Cloning ${REPO}…"
     mkdir -p "$TARGET"
     git clone --quiet "$CLONE_URL" "$TARGET"
   else
@@ -315,7 +315,7 @@ if [ "$METHOD" = "git" ] && { [ "$IS_GIT" -eq 1 ] || [ "$EXISTING" -eq 0 ]; }; t
       exit 1
     fi
 
-    step "Checking out $LABEL…"
+    step "Checking out ${LABEL}…"
     git -C "$TARGET" -c advice.detachedHead=false checkout --force "$REF" >/dev/null
     NEW="$(suite_version "$TARGET")"
     if [ -n "$CURRENT" ]; then ok "Updated v$CURRENT -> v$NEW"; else ok "Installed v$NEW"; fi
@@ -344,7 +344,7 @@ else
     STAGING="$(mktemp -d "${TMPDIR:-/tmp}/WDWirelessToolsUpdate.XXXXXX")"
     trap 'rm -rf "$STAGING"' EXIT
 
-    step "Downloading $TAG…"
+    step "Downloading ${TAG}…"
     curl -fsSL -o "$STAGING/release.zip" "$BASE/$ASSET" \
       || { err "Release download failed."; exit 1; }
 
