@@ -858,7 +858,8 @@ def api_plantrim(action):
 ORGANIZER_ACTIONS = {
     "pick_folder":  lambda d: fo.pick_folder(),
     "set_folder":   lambda d: fo.set_folder(d["path"]),
-    "scan":         lambda d: fo.scan(d.get("root")),
+    "scan":         lambda d: fo.scan(d.get("root"), d.get("excluded"),
+                                      d.get("overrides")),
     "execute":      lambda d: fo.execute(d.get("root"), d.get("excluded"), d.get("overrides")),
     "undo":         lambda d: fo.undo(d.get("root")),
     "has_undo":     lambda d: fo.has_undo(d.get("root")),
@@ -938,7 +939,8 @@ RENAME_ACTIONS = {
     "save_profile":         lambda d: rm.save_profile(
                                 d["name"], d.get("folder_format", ""),
                                 d.get("file_format", ""), d.get("separator", " - "),
-                                d.get("file_rules")),
+                                d.get("file_rules"),
+                                overwrite=d.get("overwrite") is True),
     "delete_profile":       lambda d: rm.delete_profile(d["name"]),
     "list_profiles":        lambda d: rm.list_profiles(),
     "generate_csv_template": lambda d: rm.generate_csv_template(d.get("format", "")),

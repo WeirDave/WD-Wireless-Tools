@@ -296,6 +296,29 @@ def _esx_floor_plan_names(path: Path) -> list[str] | None:
     return [fp.get("name") or "Unnamed" for fp in (body.get("floorPlans") or [])]
 
 
+def _esx_extracted_stems(path: Path) -> set[str]:
+    """Lowercased stems Extract floor plans writes for this .esx: each floor
+    under its own name, and `<name> (raster)` for a second image. Those
+    files are named after the floor, not after an `imageName`, so the
+    unreferenced check listed Squirrel's own output as unreferenced. A stem
+    he typed over in the extract dialog is not knowable here."""
+    try:
+        with zipfile.ZipFile(path, "r") as z:
+            if "floorPlans.json" not in z.namelist():
+                return set()
+            body = json.loads(z.read("floorPlans.json"))
+    except (zipfile.BadZipFile, OSError, json.JSONDecodeError):
+        return set()
+    stems: set[str] = set()
+    for fp in (body.get("floorPlans") or []):
+        fallback = f"floor-{fp.get('id')}"
+        stem = (_sanitize_folder_name(fp.get("name") or fallback)
+                or fallback).lower()
+        stems.add(stem)
+        stems.add(stem + " (raster)")
+    return stems
+
+
 def _acorn_path(esx_path: Path) -> Path:
     """Where Squirrel stashes its info note for a given .esx — same folder,
     named after the project so multiple .esx files in one site don't collide."""
@@ -626,24 +649,24 @@ def _get_destinations(cfg: dict) -> list:
     builtins = [
         {
             "key": "images",
-            "name": names.get("images", "images") or "images",
-            "exts": [e.lower() for e in (cfg.get("image_ext") or [])],
+            "name": _sanitize_folder_name(names.get("images") or "") or "images",
+            "exts": _normalize_exts(cfg.get("image_ext")),
             "pdf_keywords": [],
             "json_keywords": [],
             "builtin": True,
         },
         {
             "key": "floorplans",
-            "name": names.get("floorplans", "floorplans") or "floorplans",
-            "exts": [e.lower() for e in (cfg.get("plan_ext") or [])],
+            "name": _sanitize_folder_name(names.get("floorplans") or "") or "floorplans",
+            "exts": _normalize_exts(cfg.get("plan_ext")),
             "pdf_keywords": [],
             "json_keywords": [],
             "builtin": True,
         },
         {
             "key": "reports",
-            "name": names.get("reports", "reports") or "reports",
-            "exts": [e.lower() for e in (cfg.get("report_ext") or [])],
+            "name": _sanitize_folder_name(names.get("reports") or "") or "reports",
+            "exts": _normalize_exts(cfg.get("report_ext")),
             "pdf_keywords": [k.lower() for k in (cfg.get("report_keywords") or [])],
             "json_keywords": [k.lower() for k in (cfg.get("json_report_keywords") or [])],
             "builtin": True,
@@ -778,6 +801,15 @@ def _classify(file: Path, cfg: dict) -> str | None:
     return None
 
 
+def _choices(excluded: list | None, overrides: list | None) -> tuple:
+    """The page's unticked files and changed destinations, keyed by
+    ``(folder, name)``. Scan and execute read them the same way."""
+    excl = {(item["folder"], item["name"]) for item in (excluded or [])}
+    ovr = {(item["folder"], item["name"]): item["target"]
+           for item in (overrides or [])}
+    return excl, ovr
+
+
 class FolderOrganizer:
     """Stateless-ish organizer.  All state lives in the config file."""
 
@@ -794,15 +826,37 @@ class FolderOrganizer:
     def set_config(self, updates: dict) -> dict:
         cfg = _load_config()
 
+        # A destination name is one folder. "photos/2026" made Organize fail
+        # for every site with an error about a folder that could not be
+        # read, so it is refused here, naming the field.
+        names = updates.get("subfolder_names")
+        if isinstance(names, dict):
+            for key, name in names.items():
+                name = str(name or "").strip()
+                if name and _sanitize_folder_name(name) != name:
+                    return {"ok": False, "error":
+                            f'The {key} destination name "{name}" is not a '
+                            'folder name: it cannot contain / \\ : * ? " '
+                            "< > | or end with a dot."}
+
         for key in DEFAULT_CONFIG:
             if key in updates:
                 cfg[key] = updates[key]
         _save_config(cfg)
         return {"ok": True, "config": cfg}
 
+    # Settings -> Default subfolders owns these. Squirrel's Reset Defaults
+    # used to reset them too, and removed subfolders he had added there.
+    _NOT_RESET = ("subfolders", "subfolder_names")
+
     def reset_config(self) -> dict:
-        _save_config(dict(DEFAULT_CONFIG))
-        return {"ok": True, "config": dict(DEFAULT_CONFIG)}
+        current = _load_config()
+        cfg = json.loads(json.dumps(DEFAULT_CONFIG))
+        for key in self._NOT_RESET:
+            if key in current:
+                cfg[key] = current[key]
+        _save_config(cfg)
+        return {"ok": True, "config": cfg}
 
 
     def create_project_folder(self, name: str, root: str | None = None,
@@ -1179,20 +1233,37 @@ class FolderOrganizer:
         return {"ok": True, "path": path}
 
 
-    def _scan_dir(self, site_dir: Path, cfg: dict, totals: dict) -> dict | None:
-        """Scan a single directory for loose files, return a site entry or None."""
+    def _scan_dir(self, site_dir: Path, cfg: dict, totals: dict,
+                  folder_label: str | None = None, excl: set | None = None,
+                  overrides: dict | None = None) -> dict | None:
+        """Scan a single directory for loose files, return a site entry or None.
+
+        ``excl`` and ``overrides`` are the page's unticked files and changed
+        destinations, keyed by ``(folder_label, name)`` as execute keys
+        them. They change only the names a collision hands out: a file left
+        behind, or sent elsewhere, takes no name in the folder it is not
+        going to, so the second of two clashing files then keeps its own
+        name - which is what execute does."""
         destinations = _get_destinations(cfg)
+        label = folder_label or site_dir.name
+        excl = excl or set()
+        overrides = overrides or {}
         subfolder_display = [d["name"] for d in destinations]
         existing_subs = [name for name in subfolder_display if (site_dir / name).is_dir()]
-        missing_subs = [name for name in subfolder_display if name not in existing_subs]
+        # Only what Organize makes up front is "missing": a folder that
+        # Default subfolders left off is made when a file goes into it.
+        missing_subs = [d["name"] for d in destinations
+                        if d.get("create", True) and d["name"] not in existing_subs]
 
 
         referenced_names: set[str] = set()
+        extracted: set[str] = set()
         esx_count = 0
         for f in site_dir.iterdir():
             if f.is_file() and f.suffix.lower() == ".esx":
                 esx_count += 1
                 referenced_names |= _esx_image_names(f)
+                extracted |= _esx_extracted_stems(f)
 
         moves = []
         staying = []
@@ -1216,9 +1287,13 @@ class FolderOrganizer:
                 totals["skipped"] += 1
             else:
                 renamed_target = _apply_rename(f.name, site_dir.name, cfg)
+                going_to = overrides.get((label, f.name), target)
+                dest = site_dir / _dest_name(cfg, going_to) / renamed_target
                 dest_dir_name = _dest_name(cfg, target)
-                dest = site_dir / dest_dir_name / renamed_target
-                final = _unique_path(dest, taken)
+                if (label, f.name) in excl:
+                    final = dest
+                else:
+                    final = _unique_path(dest, taken)
                 renamed = (final.name != f.name)
                 moves.append({
                     "name": f.name,
@@ -1241,7 +1316,8 @@ class FolderOrganizer:
                 for f in sub_dir.iterdir():
                     if not f.is_file() or f.name.startswith("."):
                         continue
-                    if _stem_lower(f.name) not in referenced_names:
+                    if (_stem_lower(f.name) not in referenced_names
+                            and _stem_lower(f.name) not in extracted):
                         try:
                             fsize = f.stat().st_size
                         except OSError:
@@ -1267,7 +1343,8 @@ class FolderOrganizer:
             }
         return None
 
-    def scan(self, root: str | None = None) -> dict:
+    def scan(self, root: str | None = None, excluded: list | None = None,
+             overrides: list | None = None) -> dict:
         """
         Scan the root folder and return a dry-run preview.
         Returns a list of site folders, each with their proposed moves.
@@ -1280,6 +1357,7 @@ class FolderOrganizer:
 
         cfg = _load_config()
         skip = _effective_skip(cfg)
+        excl, ovr = _choices(excluded, overrides)
 
         sites = []
         totals = {d["key"]: 0 for d in _get_destinations(cfg)}
@@ -1296,7 +1374,8 @@ class FolderOrganizer:
             # half-way through adds nothing to the totals.
             local = dict.fromkeys(totals, 0)
             try:
-                entry = self._scan_dir(site_dir, cfg, local)
+                entry = self._scan_dir(site_dir, cfg, local, site_dir.name,
+                                       excl, ovr)
             except OSError as e:
                 unreadable.append({"folder": site_dir.name,
                                    "reason": _why_unreadable(e)})
@@ -1307,9 +1386,10 @@ class FolderOrganizer:
                 sites.append(entry)
 
         if not site_dirs and not unreadable:
-            entry = self._scan_dir(root_path, cfg, totals)
+            label = root_path.name + "  (root folder)"
+            entry = self._scan_dir(root_path, cfg, totals, label, excl, ovr)
             if entry:
-                entry["folder"] = root_path.name + "  (root folder)"
+                entry["folder"] = label
                 entry["is_root"] = True
                 sites.append(entry)
 
@@ -1421,9 +1501,13 @@ class FolderOrganizer:
     def _execute_files(self, site_dir: Path, cfg: dict, excl: set,
                        overrides: dict, totals: dict, folder_label: str,
                        undo_log: dict, site_moves: list) -> None:
+        # Up front, only what Default subfolders lists. A destination it
+        # left off is made below when the first file moves into it, and
+        # logged so Undo removes it; making it here put an empty folder in
+        # every site, and with nothing moved no undo log was written.
         for d in _get_destinations(cfg):
             sub_path = site_dir / d["name"]
-            if not sub_path.exists():
+            if d.get("create", True) and not sub_path.exists():
                 sub_path.mkdir()
                 undo_log["created_dirs"].append(str(sub_path))
 
@@ -1463,6 +1547,9 @@ class FolderOrganizer:
                 continue
             final = _unique_path(dest)
             try:
+                if not final.parent.is_dir():
+                    final.parent.mkdir()
+                    undo_log["created_dirs"].append(str(final.parent))
                 shutil.move(str(f), str(final))
                 site_moves.append({
                     "name": f.name,
@@ -1500,14 +1587,7 @@ class FolderOrganizer:
         cfg = _load_config()
         skip = _effective_skip(cfg)
 
-        excl = set()
-        for item in (excluded or []):
-            excl.add((item["folder"], item["name"]))
-
-
-        ovr = {}
-        for item in (overrides or []):
-            ovr[(item["folder"], item["name"])] = item["target"]
+        excl, ovr = _choices(excluded, overrides)
 
         results = []
         totals = {d["key"]: 0 for d in _get_destinations(cfg)}
