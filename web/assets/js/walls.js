@@ -193,10 +193,37 @@ function preserveId(wt) {
 // How a template type is matched to one already in the project: Ekahau's own
 // key where there is one, otherwise the name with punctuation and case thrown
 // away, so "Dry Wall" and "Drywall" are the same type.
+//
+// Letters and digits in any script. `[^a-z0-9]` reduced every Cyrillic, Greek
+// or CJK name to the empty string, so all of them matched each other and a
+// template wrote one over another. A name with nothing left matches nothing:
+// null, which every caller treats as "no counterpart".
 function matchKey(wt) {
   const k = (wt && wt.key ? String(wt.key) : '').trim();
   if (k) return 'k:' + k;
-  return 'n:' + String((wt && wt.name) || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const n = String((wt && wt.name) || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  return n ? 'n:' + n : null;
+}
+
+// The key for a wall type made here. Ekahau's own types carry a key and
+// matching tries it before the name, so a key derived from "Concrete" that
+// equals Ekahau's `Concrete` made the custom type the stock one: it listed
+// under Standard Ekahau, and a template carrying "Wall, Concrete" overwrote
+// it. So a key already used by another type, or by any stock type, is never
+// handed out. A name with no Latin letters gets a random one - a fixed
+// fallback like "Custom" would be the same key in every project, and matching
+// on it would merge unrelated types across projects.
+function customKeyFor(name, self) {
+  const taken = new Set();
+  wallTypes.forEach(w => { if (w !== self && w.key) taken.add(String(w.key)); });
+  const stock = (typeof _ekahauDefaults !== 'undefined' && _ekahauDefaults)
+    ? _ekahauDefaults.wallTypes : [];
+  (stock || []).forEach(w => { if (w.key) taken.add(String(w.key)); });
+  const base = String(name || '').replace(/[^a-zA-Z0-9]/g, '')
+    || 'Custom' + crypto.randomUUID().replace(/-/g, '').slice(0, 12);
+  let key = base;
+  for (let n = 2; taken.has(key); n++) key = base + n;
+  return key;
 }
 
 // Is this one of the wall types Ekahau itself ships?
@@ -208,7 +235,7 @@ function isStockType(wt) {
     ? _ekahauDefaults.wallTypes : null;
   if (!src) return false;
   const key = matchKey(wt);
-  return src.some(d => matchKey(d) === key);
+  return key !== null && src.some(d => matchKey(d) === key);
 }
 
 // The fields a template can carry that would show up in Ekahau. `id`, `key`
@@ -259,7 +286,7 @@ function templateWouldChange(have, want) {
 function mergeTemplateTypes(newTypes, opts) {
   const fromDefaults = !!(opts && opts.fromDefaults);
   const where = new Map();
-  wallTypes.forEach((wt, i) => where.set(matchKey(wt), i));
+  wallTypes.forEach((wt, i) => { const k = matchKey(wt); if (k !== null) where.set(k, i); });
 
   let added = 0, updated = 0;
   const kept = [];
@@ -267,11 +294,16 @@ function mergeTemplateTypes(newTypes, opts) {
   (newTypes || []).forEach(src => {
     const copy = JSON.parse(JSON.stringify(src));
     const key = matchKey(copy);
-    const at = where.get(key);
+    const at = key === null ? undefined : where.get(key);
     if (at === undefined) {
-      copy.id = preserveId(src);
+      // Wall segments find their type by id, so two types sharing one leaves
+      // the drawing ambiguous. A template captured from another project can
+      // carry an id this project already gives a different type.
+      let id = preserveId(src);
+      if (wallTypes.some(w => w.id === id)) id = crypto.randomUUID();
+      copy.id = id;
       wallTypes.push(copy);
-      where.set(key, wallTypes.length - 1);
+      if (key !== null) where.set(key, wallTypes.length - 1);
       added++;
     } else {
       const have = wallTypes[at];
@@ -280,16 +312,16 @@ function mergeTemplateTypes(newTypes, opts) {
       updated++;
     }
     if (copy.keybindNumber >= 1 && copy.keybindNumber <= 9) {
-      claimed.push([copy.keybindNumber, matchKey(copy)]);
+      claimed.push([copy.keybindNumber, copy]);
     }
   });
 
   // A shortcut can only belong to one type. Where the template claims a number
   // an untouched type was holding, the template wins and the old one loses the
   // binding rather than the two silently colliding.
-  claimed.forEach(([num, key]) => {
+  claimed.forEach(([num, owner]) => {
     wallTypes.forEach(wt => {
-      if (wt.keybindNumber === num && matchKey(wt) !== key) delete wt.keybindNumber;
+      if (wt.keybindNumber === num && wt !== owner) delete wt.keybindNumber;
     });
   });
 
@@ -777,7 +809,9 @@ function showKeybindMenu(e, el) {
   menu.style.position = 'fixed';
   menu.style.zIndex = '200';
 
-  const rect = e.currentTarget.getBoundingClientRect();
+  // The element argument, not e.currentTarget: under WD.actions' delegated
+  // dispatch currentTarget is the document, which has no bounding rect.
+  const rect = el.getBoundingClientRect();
   menu.style.top = (rect.bottom + 4) + 'px';
   menu.style.right = (window.innerWidth - rect.right) + 'px';
 
@@ -1113,7 +1147,7 @@ function saveWallType() {
   const wt = {
     ...existing,
     name: name,
-    key: existing.key || name.replace(/[^a-zA-Z0-9]/g, ''),
+    key: existing.key || customKeyFor(name, existing),
     color: document.getElementById('fColor').value,
     thickness: displayToM(document.getElementById('fThickness').value),
     lowerEdge: vLower,
@@ -1337,19 +1371,31 @@ function closeSaveTplModal() {
   document.getElementById('saveTplModal').classList.remove('active');
 }
 
+// Save a template, asking first when it would replace one already saved.
+// The server decides that, not the cached list: two names can sanitise to one
+// file name ("A/B" and "A_B"), and an import never looked at all. So the save
+// goes out plain, a conflict comes back naming the template in that file, and
+// only a confirmed answer resends it with `overwrite`. Null means he said no.
+async function saveTemplateAsking(name, types) {
+  let r = await tplApi('save', { name: name, wallTypes: types });
+  if (r && r.conflict) {
+    const what = r.existing === name
+      ? `A template named "${name}" is already saved.`
+      : `"${name}" would be saved to the same file as the template "${r.existing}".`;
+    if (!confirm(`${what}\n\nReplace "${r.existing}" with this one? The template it replaces is not kept.`)) {
+      return null;
+    }
+    r = await tplApi('save', { name: name, wallTypes: types, overwrite: true });
+  }
+  return r;
+}
+
 async function confirmSaveTemplate() {
   const name = document.getElementById('tplSaveName').value.trim();
   if (!name) { showToast('Name is required'); return; }
 
-  const existing = _tplCache.find(t => t.name === name);
-  if (existing) {
-    if (!confirm(`Template "${name}" already exists. Overwrite?`)) return;
-  }
-
-  const r = await tplApi('save', {
-    name: name,
-    wallTypes: JSON.parse(JSON.stringify(wallTypes)),
-  });
+  const r = await saveTemplateAsking(name, JSON.parse(JSON.stringify(wallTypes)));
+  if (r === null) return;
 
   if (!r.ok) { showToast('Save failed: ' + (r.error || 'unknown error')); return; }
 
@@ -1399,7 +1445,8 @@ document.getElementById('tplImportInput').addEventListener('change', async (e) =
       showToast('Invalid template file — must have "name" and "wallTypes"');
       return;
     }
-    const r = await tplApi('save', { name: tpl.name, wallTypes: tpl.wallTypes });
+    const r = await saveTemplateAsking(tpl.name, tpl.wallTypes);
+    if (r === null) { showToast(`Not imported - "${tpl.name}" was left as it was`); e.target.value = ''; return; }
     if (!r.ok) { showToast('Import failed: ' + (r.error || 'unknown')); return; }
 
     await loadTemplatesFromServer();

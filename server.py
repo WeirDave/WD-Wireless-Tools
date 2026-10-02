@@ -959,7 +959,8 @@ def api_rename(action):
 TEMPLATE_ACTIONS = {
     "get_folder":   lambda d: ts.get_folder(),
     "scan":         lambda d: ts.scan(),
-    "save":         lambda d: ts.save(d["name"], d["wallTypes"]),
+    "save":         lambda d: ts.save(d["name"], d["wallTypes"],
+                                      overwrite=bool(d.get("overwrite"))),
     "delete":       lambda d: ts.delete(d["filename"]),
     "reset":        lambda d: ts.reset(d["filename"]),
     "defaults":     lambda d: ts.get_defaults(),

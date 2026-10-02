@@ -16,8 +16,9 @@ Severity is the total attenuation multiplied by how many segments carry it.
 Fifty-two segments of 27 dB is a different problem from four, and the point of
 the report is to say which drawing to fix first.
 
-Repair follows the trimmer's posture: back up before writing, touch nothing but
-the field being corrected, and refuse anything that cannot be verified.
+Repair follows the trimmer's posture: write atomically (a temp file renamed
+over the original, with no copy kept), touch nothing but the field being
+corrected, and refuse anything that cannot be verified.
 """
 from __future__ import annotations
 
@@ -50,7 +51,13 @@ PARTIAL_HEIGHT_NAME = re.compile(
 DELIBERATELY_FULL_HEIGHT = re.compile(r"framery", re.I)
 
 # A height stated in the type's own name - "Warehouse Rack Wall - 16ft".
-NAME_STATES_HEIGHT = re.compile(r"(\d+(?:\.\d+)?)\s*(ft|foot|feet|'|m)\b", re.I)
+#
+# The foot mark is its own alternative, without the `\b`: a word boundary
+# after `'` needs a word character next, so "Rack - 16'" at the end of a name,
+# or "16' tall", never matched. The typographic apostrophe and the prime are
+# what a word processor or a CAD title turns `'` into.
+NAME_STATES_HEIGHT = re.compile(
+    r"(\d+(?:\.\d+)?)\s*(?:(ft|foot|feet|m)\b|['’′])", re.I)
 
 # Heights for types we ship or Ekahau ships, so a repair can offer a value
 # rather than only a complaint.
@@ -117,7 +124,7 @@ def _suggest_height(name: str) -> tuple[float | None, str]:
     m = NAME_STATES_HEIGHT.search(name)
     if m:
         value = float(m.group(1))
-        unit = m.group(2).lower()
+        unit = (m.group(2) or "ft").lower()
         metres = value if unit == "m" else value * FT
         return round(metres, 4), f"stated in the name ({m.group(0).strip()})"
     known = KNOWN_HEIGHTS_M.get(name.strip().lower())
@@ -334,7 +341,8 @@ def _cli(argv: list[str]) -> int:
         print("Nothing was written. Re-run with --fix to set the heights above.")
         return 0
 
-    print("Correcting. The previous copy of each project is kept beside it.\n")
+    print("Correcting. Each project is rewritten in place; no copy of the "
+          "original is made.\n")
     failed = 0
     for r in reports:
         heights = {f.wall_type: f.suggested_m for f in r.findings

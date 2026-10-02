@@ -121,6 +121,38 @@ class AuditTests(unittest.TestCase):
         self.assertAlmostEqual(f.suggested_m, round(16 * FT, 4), places=3)
         self.assertIn("stated in the name", f.suggestion_source)
 
+    def test_a_height_written_with_a_foot_mark_is_read(self):
+        """`16'` is how a height is usually typed. The pattern ended in `\\b`,
+        which after an apostrophe needs a word character next, so a name ending
+        in the mark - or with a space after it - was never seen at all."""
+        for name in ("Invented Rack - 16'", "Invented Rack 16' tall",
+                     "Invented Rack 16’", "Invented Rack 16′",
+                     "Invented Rack 16 '"):
+            with self.subTest(name=name):
+                p = self.tmp / "mark.esx"
+                _project(p, [_wall_type(name, 18.0, 1.5, tid="r")], {"r": 3})
+                found = audit_project(p).findings
+                self.assertEqual(len(found), 1, name)
+                self.assertAlmostEqual(found[0].suggested_m, round(16 * FT, 4),
+                                       places=3)
+                self.assertIn("stated in the name", found[0].suggestion_source)
+
+    def test_metres_and_feet_words_still_read(self):
+        for name, metres in (("Invented Rack 5 m", 5.0),
+                             ("Invented Rack 12 feet", 12 * FT),
+                             ("Invented Rack 3.5m", 3.5)):
+            with self.subTest(name=name):
+                p = self.tmp / "unit.esx"
+                _project(p, [_wall_type(name, 18.0, 1.5, tid="r")], {"r": 3})
+                self.assertAlmostEqual(audit_project(p).findings[0].suggested_m,
+                                       round(metres, 4), places=3)
+
+    def test_a_possessive_is_not_a_height(self):
+        p = self.tmp / "possessive.esx"
+        _project(p, [_wall_type("Invented Owner's Rack", 18.0, 1.5, tid="r")],
+                 {"r": 3})
+        self.assertEqual(audit_project(p).findings, [])
+
     def test_a_name_with_no_height_is_left_alone(self):
         """"Warehouse Rack Wall" states nothing, so there is nothing to
         contradict. Inventing a height for it is what put wrong values in the
@@ -221,6 +253,38 @@ class RepairTests(unittest.TestCase):
     def test_no_temp_file_is_left_behind(self):
         repair_project(self.p, {"Shelf, Warehouse": 10.0})
         self.assertEqual(list(self.tmp.glob("*.tmp")), [])
+
+
+class TheCommandLineSaysWhatItKeepsTests(unittest.TestCase):
+    """`--fix` used to announce that the previous copy of each project was
+    kept beside it. `repair_project` renames the rebuilt file over the
+    original and keeps nothing, so that sentence told someone they could get
+    back a file that no longer existed."""
+
+    def test_fix_promises_no_copy_and_leaves_none(self):
+        import contextlib
+        import io
+        from tests.test_cloud_ops_queue import NothingPromisesACopyThatIsNoLongerKeptTests
+        from tools.wall_audit import _cli
+
+        tmp = Path(tempfile.mkdtemp(prefix="wd-wallcli-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        p = tmp / "invented.esx"
+        _project(p, [_wall_type("Invented Rack - 16ft", 18.0, 1.5, tid="r")],
+                 {"r": 4})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            code = _cli([str(tmp), "--fix"])
+        text = out.getvalue()
+        self.assertEqual(code, 0, text)
+        self.assertEqual(sorted(f.name for f in tmp.iterdir()), ["invented.esx"])
+        promised = [w for w in NothingPromisesACopyThatIsNoLongerKeptTests.WRONG
+                    + ["previous copy", "is kept beside"] if w in text]
+        self.assertEqual(promised, [], text)
+        self.assertIn("no copy", text.lower())
+        with zipfile.ZipFile(p) as z:
+            types = json.loads(z.read("wallTypes.json"))["wallTypes"]
+        self.assertAlmostEqual(types[0]["upperEdge"], round(16 * FT, 4), places=3)
 
 
 if __name__ == "__main__":
