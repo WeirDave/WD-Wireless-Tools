@@ -11326,7 +11326,7 @@ body.tool-prep .editor.active, body.tool-plantrim .editor.active, body.tool-capa
    the rail and the panel beside it, a 1600px window asked for three columns
    in a column a thousand pixels wide, and every name broke a letter per line.
    The buttons sit under the name, so a long name is never squeezed by them. */
-.walls-main .wall-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: var(--sp-2); }
+.walls-main .wall-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--sp-2); }
 .walls-main .wall-card { grid-template-columns: 1fr; gap: var(--sp-2); }
 /* The footer's verb is the same filled button in every workbench tool. Quick
    Walls draws its other buttons as outlined pills, and that rule outranks the
@@ -12144,3 +12144,54 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
   body.tool-report .rep-logo-btn,
   body.tool-report .rep-config-card .btn-sm { font-size: 13px; }
 }
+
+/* Quick Walls' dialogs, laid out for reading. The wall-type editor was four
+   columns: at a laptop's width "Stops short of the ceiling" wrapped onto four
+   lines and Name sat over an empty half-screen. Now two columns - name and
+   colour, thickness and key - and the height choice across the full width,
+   since it is the one with an explanation that matters. */
+body.tool-walls .modal.modal-wall-edit { width: 820px; }
+body.tool-walls .field-row-4 {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "name color" "thick key" "vert vert";
+  gap: 18px 24px;
+}
+body.tool-walls .fld-name  { grid-area: name; }
+body.tool-walls .fld-color { grid-area: color; }
+body.tool-walls .fld-thick { grid-area: thick; }
+body.tool-walls .fld-key   { grid-area: key; }
+body.tool-walls .fld-vert  { grid-area: vert; }
+body.tool-walls .field-row-4 .field-color input[type="color"] { width: 120px; height: 38px; }
+body.tool-walls .modal-header h3 {
+  font-family: inherit; font-size: 18px; font-weight: 700;
+}
+body.tool-walls .modal .field label {
+  font-family: inherit; font-size: 13px; font-weight: 700;
+}
+body.tool-walls .modal .field input[type="text"],
+body.tool-walls .modal .field input[type="number"],
+body.tool-walls .modal .field select { font-size: 15px; padding: 8px 10px; }
+body.tool-walls .modal .field-desc,
+body.tool-walls .modal .section-desc,
+body.tool-walls .tpl-save-hint { font-family: inherit; font-size: 14px; line-height: 1.5; }
+body.tool-walls .modal .field-desc code { font-size: 13px; }
+body.tool-walls .wt-vert-modes { max-width: 560px; }
+body.tool-walls .wt-vert-mode { font-size: 14px; padding: 9px 12px; }
+body.tool-walls .wt-vert-unit,
+body.tool-walls .wt-vert-in > span { font-size: 13px; }
+body.tool-walls .wt-vert-inputs { max-width: 560px; }
+body.tool-walls .wt-vert-impact { font-size: 14px; max-width: 560px; }
+body.tool-walls .band-section h4 { font-size: 13px; }
+body.tool-walls .band-header span,
+body.tool-walls .band-label { font-size: 13px; }
+body.tool-walls .band-row input { font-size: 15px; }
+/* Cancel and Save stay on screen: the form scrolls, the footer does not. At a
+   laptop's height the footer sat half below the window. */
+body.tool-walls .modal.modal-wall-edit {
+  display: flex; flex-direction: column; overflow: hidden; max-height: 92vh;
+}
+body.tool-walls .modal.modal-wall-edit .modal-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+}
+body.tool-walls .modal.modal-wall-edit .modal-header,
+body.tool-walls .modal.modal-wall-edit .modal-footer { flex: 0 0 auto; }

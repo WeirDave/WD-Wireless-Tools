@@ -678,15 +678,16 @@ a height badge (*Auto*, or the height the type stops at).
 | **Set key** / **Key 3** | Opens a menu of keys 1–9. The button shows the current key, or **Set key** when there is none. The menu also offers **Remove shortcut** |
 | **Edit** | Opens the type: name, colour, thickness, height, key, attenuation |
 | **Clone** | Opens the editor filled in from this type, named "(Copy)", with no key. Nothing is added until you press **Add** |
-| **Delete** | Removes the type after one confirmation |
+| **Delete** | Removes the type after one confirmation, which says how many drawn walls use it |
 | **+ Add Wall Type** | A blank form, for exact values from a datasheet |
 
 Cloning a type whose numbers you already trust is usually faster than a blank
 form.
 
-> **Delete does not check whether the type is drawn.** Walls already drawn
-> with a deleted type are left without one. To move those walls to another
-> type first, use Visual Swap (below).
+> **Deleting a type that is drawn leaves those walls with no type.** The
+> confirmation says how many drawn wall segments use it. To move them to
+> another type first, use **Visual Swap → Quick swap by type**, then delete.
+> Nothing is written until you save, so reopening the file undoes a delete.
 
 ### What a wall type holds
 
