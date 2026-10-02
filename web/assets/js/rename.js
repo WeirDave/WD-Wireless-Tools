@@ -340,12 +340,24 @@ function _renderTokenPreview(tab) {
   const unmatchedCount = items.filter(x => x.status === 'unmatched').length;
   const collisionCount = items.filter(x => x.status === 'collision').length;
   const incompleteCount = items.filter(x => x.status === 'incomplete').length;
+  const checkCount = items.filter(x => x.status === 'check').length;
+  // How a folder was paired with its CSV row, said on the row. "Part of the
+  // address" is a guess: its row comes back as `check` and Apply leaves it out.
+  const matchedBy = {
+    'exact': 'matched on id',
+    'contains-id': 'matched on id in name',
+    'id-contains': 'matched on name in id',
+    'address': 'matched on address',
+    'address-partial': 'matched on part of address',
+    'deprecated': 'matched on old name',
+  };
   const parts = [];
   if (renameCount) parts.push(renameCount + ' to rename');
   if (correctCount) parts.push(correctCount + ' already correct');
   if (unmatchedCount) parts.push(unmatchedCount + ' unmatched');
   if (collisionCount) parts.push(collisionCount + ' collision' + (collisionCount !== 1 ? 's' : ''));
   if (incompleteCount) parts.push(incompleteCount + ' need' + (incompleteCount === 1 ? 's' : '') + ' a value');
+  if (checkCount) parts.push(checkCount + ' to check, not applied');
   countEl.textContent = parts.length ? '(' + parts.join(', ') + ')' : '';
   document.getElementById('renameApplyBtn').disabled = renameCount === 0;
 
@@ -362,10 +374,12 @@ function _renderTokenPreview(tab) {
       '<span class="org-rename-old">' + current + '</span>' +
       '<span class="org-rename-arrow">&#8594;</span>' +
       '<span class="org-rename-new">' + (it.new_name ? esc(it.new_name) : '—') + '</span>' +
+      (matchedBy[it.method] ? '<span class="sr-hint">' + esc(matchedBy[it.method]) + '</span>' : '') +
       (it.warnings && it.warnings.length ? '<span class="org-rename-warn">' + esc(it.warnings.join('; ')) + '</span>' : '') +
     '</div>';
   }).join('');
 }
+
 
 // ── Execute ──
 
@@ -678,13 +692,20 @@ async function showRenameProfiles() {
 async function doSaveRenameProfile() {
   const name = document.getElementById('renameProfileNameInput').value.trim();
   if (!name) { toast('Enter a profile name', 'error'); return; }
-  await renameApi('save_profile', {
+  const body = {
     name,
     folder_format: document.getElementById('rnFolderFormat').value,
     file_format: document.getElementById('rnFileFormat').value,
     separator: '',
     file_rules: _getRuleValues(),
-  });
+  };
+  // The server says when the name is taken; replacing it is asked, by name.
+  let r = await renameApi('save_profile', body);
+  if (r && r.conflict) {
+    if (!confirm('A profile named "' + name + '" is already saved.\n\nReplace "' + name + '" with this one? The profile it replaces is not kept.')) return;
+    r = await renameApi('save_profile', Object.assign({}, body, { overwrite: true }));
+  }
+  if (!r || !r.ok) { toast('Profile not saved' + (r && r.error ? ': ' + r.error : ''), 'error'); return; }
   document.getElementById('renameProfileNameInput').value = '';
   toast('Profile "' + name + '" saved');
   showRenameProfiles();

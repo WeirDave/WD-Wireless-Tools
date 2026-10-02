@@ -281,7 +281,7 @@ function renderPreview() {
       html += '</tr></thead><tbody>';
       for (const m of site.moves) {
         const id = site.folder + '::' + m.name;
-        const renamedBit = m.renamed_to ? ` <span class="renamed">(→ ${esc(m.renamed_to)})</span>` : '';
+        const renamedBit = ` <span class="renamed" data-renamed-site="${escAttr(site.folder)}" data-renamed-file="${escAttr(m.name)}"${m.renamed_to ? '' : ' hidden'}>${m.renamed_to ? `(→ ${esc(m.renamed_to)})` : ''}</span>`;
         let destCell;
         if (advanced) {
           destCell = `<select class="dest-select ${destinationCssClass(m.target)}" data-site="${escAttr(site.folder)}" data-file="${escAttr(m.name)}" data-original="${m.target}" data-action-change="call" data-fn="onDestChange" data-arg-this="1">`
@@ -442,6 +442,7 @@ async function doUndo() {
 
 function toggleAll(checked) {
   document.querySelectorAll('#siteList input[type="checkbox"]').forEach(cb => cb.checked = checked);
+  refreshMoveNames();
 }
 /* Arguments the other way round since backlog item 10: the delegated
    dispatcher builds them in one declared order - `data-arg` first, then the
@@ -449,10 +450,12 @@ function toggleAll(checked) {
    which is the markup a few hundred lines above. */
 function toggleSite(siteName, headerCb) {
   document.querySelectorAll(`#siteList input[data-site="${CSS.escape(siteName)}"]`).forEach(cb => cb.checked = headerCb.checked);
+  refreshMoveNames();
 }
 function onDestChange(sel) {
   sel.className = 'dest-select dest-' + sel.value;
   if (sel.value !== sel.dataset.original) sel.classList.add('overridden');
+  refreshMoveNames();
 }
 
 let _lastChecked = null;
@@ -470,6 +473,7 @@ document.addEventListener('click', function(e) {
     }
   }
   _lastChecked = cb;
+  refreshMoveNames();
 });
 
 function bulkSetDest(target) {
@@ -486,8 +490,8 @@ function bulkSetDest(target) {
   toast(`Set ${checked.length} file${checked.length !== 1 ? 's' : ''} → ${target}/`);
 }
 
-async function doExecute() {
-  if (!scanData || !currentRoot) return;
+/* The unticked files and changed destinations, as execute takes them. */
+function organizeChoices() {
   const excluded = [];
   document.querySelectorAll('#siteList input[data-file]').forEach(cb => {
     if (!cb.checked) {
@@ -500,6 +504,41 @@ async function doExecute() {
       overrides.push({ folder: sel.dataset.site, name: sel.dataset.file, target: sel.value });
     }
   });
+  return { excluded, overrides };
+}
+
+/* A collision's "(1)" name depends on which files go where: untick the first
+   of two clashing files, or send it elsewhere, and the second keeps its own
+   name. The preview asked once, with everything ticked, and went on showing
+   the "(1)" that execute would not write. So a change asks the server again
+   with the choices and rewrites only the names - ticks and selections stay.
+   A reply to an older change is dropped. */
+let _namesSeq = 0;
+let _namesTimer = null;
+function refreshMoveNames() {
+  clearTimeout(_namesTimer);
+  _namesTimer = setTimeout(refreshMoveNamesNow, 150);
+}
+async function refreshMoveNamesNow() {
+  if (!scanData || !currentRoot) return;
+  const seq = ++_namesSeq;
+  const choices = organizeChoices();
+  const r = await api('scan', { root: currentRoot, excluded: choices.excluded, overrides: choices.overrides });
+  if (seq !== _namesSeq || !r || !r.ok) return;
+  const names = new Map();
+  for (const site of (r.sites || [])) {
+    for (const m of (site.moves || [])) names.set(site.folder + '::' + m.name, m.renamed_to || '');
+  }
+  document.querySelectorAll('#siteList span.renamed[data-renamed-file]').forEach(span => {
+    const to = names.get(span.dataset.renamedSite + '::' + span.dataset.renamedFile) || '';
+    span.textContent = to ? '(→ ' + to + ')' : '';
+    span.hidden = !to;
+  });
+}
+
+async function doExecute() {
+  if (!scanData || !currentRoot) return;
+  const { excluded, overrides } = organizeChoices();
   const totalChecked = document.querySelectorAll('#siteList input[data-file]:checked').length;
   if (totalChecked === 0) { toast('No files selected to move', 'error'); return; }
   const overrideNote = overrides.length ? `\n${overrides.length} file${overrides.length !== 1 ? 's' : ''} reassigned to a different folder.` : '';
@@ -746,15 +785,21 @@ async function migrateSubfolders() {
     floorplans: (document.getElementById('cfgSubPlans').value || '').trim() || 'floorplans',
     reports: (document.getElementById('cfgSubReports').value || '').trim() || 'reports',
   };
+  // The folders on disk carry the saved names, not the shipped ones: after
+  // one migration "images" is gone, and renaming from it moved nothing. The
+  // shipped name is the source only when the typed name is already saved -
+  // saved first, migrated second.
   const renames = {};
-  const defaults = { images: 'images', floorplans: 'floorplans', reports: 'reports' };
+  const saved = (cachedConfig && cachedConfig.subfolder_names) || {};
   for (const key of ['images','floorplans','reports']) {
-    if (wanted[key] && wanted[key] !== defaults[key]) {
-      renames[defaults[key]] = wanted[key];
+    const from = (saved[key] || '').trim() || key;
+    const source = from !== wanted[key] ? from : key;
+    if (wanted[key] && wanted[key] !== source) {
+      renames[source] = wanted[key];
     }
   }
   if (!Object.keys(renames).length) {
-    toast('No renames to apply — Destination names still match the defaults', 'info');
+    toast('No renames to apply — the destination names are the ones the folders already have', 'info');
     return;
   }
   const summary = Object.entries(renames).map(([o, n]) => `${o}/ → ${n}/`).join('\n');
@@ -811,7 +856,13 @@ function _extractTokens(template) {
 }
 
 function _rememberedToken(token) {
-  if (token === 'date') return new Date().toISOString().slice(0, 10);
+  // The local date, as Rename's {date} is. toISOString() is UTC, which in
+  // the evening west of Greenwich is already tomorrow.
+  if (token === 'date') {
+    const d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+      + '-' + String(d.getDate()).padStart(2, '0');
+  }
   try { return localStorage.getItem('wd-create-token-' + token) || ''; }
   catch (e) { return ''; }
 }

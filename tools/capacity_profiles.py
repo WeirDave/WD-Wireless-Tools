@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import os
 import re
 import zipfile
@@ -387,6 +388,13 @@ def build_template(spec: dict) -> dict:
     }
 
 
+def _device_count(exact: float) -> int:
+    """Devices for a fractional count: half rounds up, as the page's
+    ``Math.round`` does. ``round()`` rounds half to even, so 22.5 laptops
+    were 22 in the file and 23 on the page."""
+    return int(math.floor(exact + 0.5))
+
+
 def apply_headcount(template: dict, occupants) -> dict:
     """Scale a template to a headcount. The only input at apply time."""
     try:
@@ -402,7 +410,7 @@ def apply_headcount(template: dict, occupants) -> dict:
         rows.append({
             "device": item.get("device", ""),
             "usage": item.get("usage", ""),
-            "deviceCount": int(round(exact)),
+            "deviceCount": _device_count(exact),
             "exact": exact,
         })
     return {
@@ -419,7 +427,11 @@ def apply_headcount(template: dict, occupants) -> dict:
 # touch it.
 
 def _safe_filename(name: str) -> str:
-    stem = re.sub(r"[^A-Za-z0-9 _-]+", "", str(name)).strip() or "capacity"
+    """Letters and digits of any script stay: keeping A-Z only sent every
+    Cyrillic, Greek or CJK name to "capacity", so a second one was refused
+    as a clash with the first. `templateFileFor` in capacity.js mirrors it."""
+    stem = "".join(c for c in str(name)
+                   if c.isalnum() or c in " _-").strip() or "capacity"
     return stem.replace(" ", "_") + TPL_SUFFIX
 
 
