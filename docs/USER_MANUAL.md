@@ -928,7 +928,8 @@ headcount. The plan shows each area in pink with its people and devices.
 - **People on each floor, unless set below** is what every floor gets. Under
   **Per floor**, each **People on this floor** box can be left blank (use the
   number above), given its own number, or set to **0** to leave that floor
-  alone.
+  alone. Each floor shows the multiplier, as in Capacity: *250 people × 3
+  devices each = 750 devices*.
 - **Floors that already have devices** works as in Capacity — **Keep them as
   they are**, **Replace device counts, keep the area outline** or **Replace
   device counts and redraw the area** — starting on the default in

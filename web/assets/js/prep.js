@@ -406,7 +406,27 @@
       + plural(f.existingDevices || 0, 'device') + '</span></span>';
   }
 
-  function floorPeopleHtml(f, i) {
+  /* People, the template's devices per person, and the devices that come to -
+     the same line Capacity shows. Without the multiplier, 250 people on a
+     3-per-person template showing 750 devices read as the floor's number being
+     added to the one above. Each device row is rounded on its own, so at small
+     headcounts the total is not exactly people x per; that case says so.
+     Plain text: it also goes into a title attribute. */
+  function multiplierText(people, per, total) {
+    var devices = total + ' ' + plural(total, 'device');
+    if (per == null || people == null) return devices;
+    var exact = Math.floor(Number(people) * Number(per) + 0.5) === total;
+    return fmtNum(people) + ' people × ' + fmtNum(per) + ' devices each '
+      + (exact ? '= ' : '≈ ') + devices
+      + (exact ? '' : ' (each device type is rounded on its own)');
+  }
+
+  function fmtNum(n) {
+    n = Number(n) || 0;
+    return String(Math.round(n * 100) / 100);
+  }
+
+  function floorPeopleHtml(f, i, per) {
     var id = 'prepFloorOcc' + i;
     var own = Object.prototype.hasOwnProperty.call(floorOcc, f.floorPlanId);
     return '<span class="prep-floor-people">'
@@ -418,7 +438,7 @@
       + ' data-arg="' + escAttr(f.floorPlanId) + '" data-arg-value="1"> '
       + '<span class="prep-sub">' + (f.mode === 'none' ? 'nobody here'
           : (own ? '' : 'the number above · ')
-            + (f.totalDevices || 0) + ' ' + plural(f.totalDevices || 0, 'device'))
+            + esc(multiplierText(f.occupants, per, f.totalDevices || 0)))
       + '</span></span>';
   }
 
@@ -595,12 +615,14 @@
             + esc(f.basis) + ')</span>'
           : '';
         return '<div class="pb-item"><b>' + esc(f.floorName || f.floorPlanId) + '</b> — '
-          + esc(f.action) + size + '<br>' + floorPeopleHtml(f, i) + floorExistingHtml(f, i)
+          + esc(f.action) + size + '<br>' + floorPeopleHtml(f, i, a.devicesPerPerson) + floorExistingHtml(f, i)
           + '</div>';
       });
       rows.push('<p class="pb-hint">' + (a.willWrite
         ? (a.devicesWritten != null ? a.devicesWritten : a.totalDevices) + ' devices for '
-          + people + ' people across the floors being written.'
+          + people + ' people'
+          + (a.devicesPerPerson != null ? ' at ' + fmtNum(a.devicesPerPerson) + ' devices each' : '')
+          + ' across the floors being written.'
         : 'No floor is being written.')
         + (a.measuredBeforeTrim ? ' Sizes are measured on the plan as it is now; the trim '
           + 'runs first, so they are measured again on the cropped canvas when you prepare.' : '')
@@ -796,8 +818,9 @@
                + plural(f.existingDevices || 0, 'device'), detail: '' };
     }
     var n = f.occupants || 0;
+    var a = lastPlan && lastPlan.step && lastPlan.step.areas;
     return { cls: 'is-auto', word: n + ' ' + plural(n, 'person', 'people'),
-             detail: (f.totalDevices || 0) + ' ' + plural(f.totalDevices || 0, 'device') };
+             detail: multiplierText(n, a && a.devicesPerPerson, f.totalDevices || 0) };
   }
 
   function byId(list, key, id) {

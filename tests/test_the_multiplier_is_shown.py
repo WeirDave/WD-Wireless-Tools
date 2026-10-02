@@ -1,4 +1,4 @@
-"""Capacity shows the devices-per-person multiplier between people and devices.
+"""Capacity and Prep show the devices-per-person multiplier between people and devices.
 
 A floor typed as 250 people on the shipped example template (3 devices per
 person) came out as 750 devices, beside floors of 600 and 300. With only the
@@ -9,7 +9,8 @@ showed the x3 that joins the two.
 The plan here is built by the real `plan_application` from a synthetic
 project and the shipped template, then drawn by the real `capacity.js` in
 Node, so the multiplier on screen is the one the server works out and the
-device count beside it is the one the file gets.
+device count beside it is the one the file gets. Prep's requirement-area
+step uses the same plan, and is checked the same way through `prep.js`.
 """
 import json
 import shutil
@@ -24,10 +25,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tests"))
 
-from tools import capacity_profiles as cap  # noqa: E402
+from tools import capacity_profiles as cap, prep_pipeline  # noqa: E402
 from test_capacity_profiles import FLOOR, FLOOR_2, build_esx  # noqa: E402
 
 CAPACITY_JS = ROOT / "web" / "assets" / "js" / "capacity.js"
+PREP_JS = ROOT / "web" / "assets" / "js" / "prep.js"
 EXAMPLE = ROOT / "templates" / "Office_Wi-Fi_6E_example_capacitytemplate.json"
 
 
@@ -157,6 +159,102 @@ class ThePageShowsTheMultiplier(unittest.TestCase):
         # wrong sum on screen.
         html = self.render(15)
         self.assertIn("15 people &times; 3 devices each &asymp; 48 devices", html)
+        self.assertNotIn("= 48 devices", html)
+
+
+PREP_HARNESS = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const PLAN = JSON.parse(process.argv[2]);
+const els = {};
+function el(id) {
+  if (!els[id]) els[id] = {
+    id, innerHTML: '', textContent: '', value: '', checked: false, hidden: false,
+    disabled: false, style: {}, files: [], title: '', options: [],
+    classList: { add() {}, remove() {}, toggle() {} },
+    listeners: {}, addEventListener(t, f) { this.listeners[t] = f; }, click() {},
+    appendChild() {}, querySelector() { return null; }, querySelectorAll() { return []; },
+    setAttribute() {}, removeAttribute() {},
+  };
+  return els[id];
+}
+el('prepStep-areas').checked = true;
+el('prepOccupants').value = process.argv[3];
+el('prepCapTpl').value = 'x_capacitytemplate.json';
+const docListeners = {};
+global.document = { readyState: 'complete', getElementById: el,
+                    addEventListener(t, f) { docListeners[t] = f; },
+                    createElement: () => el('_tmp' + Math.random()),
+                    querySelectorAll: () => [], body: { appendChild() {} } };
+global.window = global;
+global.addEventListener = () => {};
+global.URL = { createObjectURL: () => 'blob:x', revokeObjectURL() {} };
+global.WD = {
+  esc: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+  escAttr: s => String(s).replace(/&/g, '&amp;').replace(/'/g, '&#39;')
+                         .replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
+  toast() {}, applyVersions() {}, savedWallTemplateName: () => Promise.resolve(''),
+  api: (action) => fetch('/api/' + action).then(r => r.json()),
+};
+global.fetch = (url) => {
+  const body = url.indexOf('/prep/plan') >= 0 ? PLAN
+    : url.indexOf('templates') >= 0 ? { templates: [] }
+    : { ok: true, settings: {} };
+  return Promise.resolve({ json: () => Promise.resolve(body), ok: true, status: 200,
+                           headers: { get: () => null } });
+};
+const flush = () => new Promise(r => setTimeout(r, 0));
+(async () => {
+  eval(src);
+  docListeners.DOMContentLoaded();
+  for (let i = 0; i < 5; i++) await flush();
+  el('fileInput').listeners.change({ target: { files: [{ name: 'Invented.esx',
+    arrayBuffer: () => Promise.resolve(new ArrayBuffer(4)) }], value: '' } });
+  for (let i = 0; i < 8; i++) await flush();
+  window.prepStage('areas');
+  process.stdout.write(JSON.stringify({ html: el('prepAreaFloors').innerHTML,
+                                        strip: el('prepMapStrip').innerHTML }));
+  process.exit(0);
+})().catch(e => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class PrepShowsTheMultiplier(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.blank = blank_two_floor_project(Path(self.tmp.name))
+        self.tpl = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def render(self, headcount, floor_occupants=None):
+        plan = prep_pipeline.plan(self.blank, steps=["areas"], template=self.tpl,
+                                  occupants=headcount, floor_occupants=floor_occupants)
+        self.assertTrue(plan["step"]["areas"]["ok"], plan["step"]["areas"].get("error"))
+        self.assertAlmostEqual(plan["step"]["areas"]["devicesPerPerson"], 3.0)
+        r = subprocess.run(["node", "-e", PREP_HARNESS, str(PREP_JS),
+                            json.dumps(plan), str(headcount)],
+                           capture_output=True, text=True, encoding="utf-8",
+                           timeout=120)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).strip())
+        return json.loads(r.stdout)
+
+    def test_each_floor_shows_people_times_devices_each(self):
+        html = self.render(200, {FLOOR: 250})["html"]
+        self.assertIn("250 people × 3 devices each = 750 devices", html)
+        self.assertIn("200 people × 3 devices each = 600 devices", html)
+        self.assertIn("1350 devices for 450 people at 3 devices each", html)
+
+    def test_the_floor_strip_tooltip_shows_the_multiplier(self):
+        strip = self.render(200, {FLOOR: 250})["strip"]
+        self.assertIn('title="250 people × 3 devices each = 750 devices"', strip)
+
+    def test_a_total_that_rounding_moved_is_not_shown_as_an_exact_sum(self):
+        html = self.render(15)["html"]
+        self.assertIn("15 people × 3 devices each ≈ 48 devices", html)
         self.assertNotIn("= 48 devices", html)
 
 
