@@ -227,6 +227,19 @@ def _atomic_private_write(path, data):
             pass
 
 
+def _atomic_json_write(path, obj):
+    """Write a decisions file whole or not at all.
+
+    These files hold his pairing decisions. Opened in place with "w", a write
+    that failed partway - a value that would not serialise, a full disk, a
+    killed process - had already truncated the file, and every decision in it
+    was gone on the next read. The JSON is built in memory first, so a value
+    that will not serialise never reaches the disk.
+    """
+    data = json.dumps(obj, indent=2).encode("utf-8")
+    _atomic_private_write(Path(path), data)
+
+
 def _decrypt_cookie_data(key, token):
     """Decrypt only a canonical Fernet token.
 
@@ -342,8 +355,7 @@ def load_not_matches():
 
 def save_not_matches(pairs):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(NOT_MATCH_FILE, "w") as f:
-        json.dump({"pairs": pairs}, f, indent=2)
+    _atomic_json_write(NOT_MATCH_FILE, {"pairs": pairs})
 
 
 def not_matches_set():
@@ -364,8 +376,7 @@ def load_manual_matches():
 
 def save_manual_matches(pairs):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(MANUAL_MATCH_FILE, "w") as f:
-        json.dump({"pairs": pairs}, f, indent=2)
+    _atomic_json_write(MANUAL_MATCH_FILE, {"pairs": pairs})
 
 
 def _ov_key(cloud_id, local_path):
@@ -404,8 +415,7 @@ def load_external_overrides():
 
 def save_external_overrides(entries):
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(EXTERNAL_OVERRIDE_FILE, "w") as f:
-        json.dump({"entries": entries}, f, indent=2)
+    _atomic_json_write(EXTERNAL_OVERRIDE_FILE, {"entries": entries})
 
 
 def external_overrides_map():
@@ -1694,6 +1704,27 @@ def owner_in(users):
     return ""
 
 
+def _shared_with_in(users):
+    """Everyone but the owner, out of a list of user rows, sorted and folded.
+
+    The dataset listing's `datasetUsers` is where Ekahau says who a project
+    is shared with; the raw `get_projects()` record does not carry it.
+    """
+    return sorted({
+        (u.get("username") or "").strip().lower()
+        for u in (users or [])
+        if u.get("role") != "OWNER" and u.get("username")
+    })
+
+
+def _group_role_in(shares, group_id):
+    """The role a sharing group holds in a project's share list, or ''."""
+    for u in (shares or []):
+        if u.get("groupId") == group_id and u.get("role"):
+            return u["role"]
+    return ""
+
+
 def cloud_owner_map(api):
     """{project id: (owner, created_by)} for the account, in two calls.
 
@@ -1745,11 +1776,7 @@ def build_sites_data(api, output_dir):
                 dataset_to_site[eid] = sid
             if eid:
                 users = entry.get("datasetUsers") or []
-                shared_with = sorted({
-                    (u.get("username") or "").strip().lower()
-                    for u in users
-                    if u.get("role") != "OWNER" and u.get("username")
-                })
+                shared_with = _shared_with_in(users)
 
 
                 current_owner = next(
@@ -1918,12 +1945,12 @@ def build_sites_data(api, output_dir):
                 except ValueError:
                     continue
                 c["unassigned"] = True
-                children["matched"].append({
-                    "cloud": c, "local": l_item,
-                    "matchType": pair.get("matchType"),
-                    "score": pair.get("score"),
-                    "namesDiffer": pair.get("namesDiffer"),
-                })
+                #: The whole pair, not a hand-picked few keys. Copying only
+                #: matchType/score/namesDiffer dropped `staleness`,
+                #: `divergence` and the stored comparison, so a cross-matched
+                #: pair showed no newer/older state and Sync everything filed
+                #: it as in sync.
+                children["matched"].append({**pair, "cloud": c, "local": l_item})
 
 
                 children["mismatches"] = [e for e in children["matched"] if e.get("namesDiffer")]
@@ -1968,11 +1995,7 @@ def build_projects_data(api, output_dir):
                     site_ids.setdefault(sname, sid)
             if eid:
                 users = entry.get("datasetUsers") or []
-                shared_with = sorted({
-                    (u.get("username") or "").strip().lower()
-                    for u in users
-                    if u.get("role") != "OWNER" and u.get("username")
-                })
+                shared_with = _shared_with_in(users)
 
 
                 current_owner = next(
@@ -2686,11 +2709,37 @@ class CloudManager:
                 "cloudMtime": cloud_mtime,
             }
 
+        #: **Only proof refuses**, the same three-state reading the share
+        #: gates use - and proven somebody else's is refused here,
+        #: before the upload, because the last step is a delete Ekahau would
+        #: answer 403 to, leaving a duplicate behind. `ownershipBlock` /
+        #: `iOwn` in cloud.js is the client half; this is the half that
+        #: does not depend on what the page believed when it was drawn.
+        #: Not being able to read ownership is not evidence about anyone.
+        try:
+            state, owner_email = self._ownership([cloud_project_id]).get(
+                cloud_project_id, (UNPROVEN, ""))
+        except Exception:
+            state, owner_email = UNPROVEN, ""
+        if state == NOT_MINE:
+            return {"error": "\"%s\" belongs to %s, so it cannot be replaced "
+                             "from this account - only its owner can delete "
+                             "it. Nothing was uploaded and nothing was deleted."
+                             % (old_name or "That project",
+                                owner_email or "someone else"),
+                    "step": "ownership", "deletedOld": False,
+                    "oldId": cloud_project_id}
+
+        #: Site and shares both come from the dataset listing. The raw
+        #: `get_projects()` record carries no `sharedWith`, so reading it
+        #: there named nobody, every time.
         site_id = None
+        lost = []
         try:
             for entry in self.api.get_dataset_listing():
                 if entry.get("id") == cloud_project_id:
                     site_id = entry.get("siteId")
+                    lost = _shared_with_in(entry.get("datasetUsers"))
                     break
         except Exception:
             site_id = None
@@ -2809,22 +2858,52 @@ class CloudManager:
         #: left for `prune` rather than deleted here: the delete above may
         #: have failed, and forgetting a pair that still exists would be a
         #: fact thrown away to tidy up.
-        try:
-            src_p = Path(esx_path)
-            fs_m = int(src_p.stat().st_mtime)
-            sync_state.record(new_id, str(src_p),
-                              _parse_cloud_mtime(check.get("project") or {})
-                              or fs_m,
-                              _esx_meta(src_p, fs_m).get("internalMtime") or fs_m,
-                              direction="push")
-        except Exception as e:
-            applog.note_failure("recording the sync point", e)
+        #:
+        #: **Only when the sync-back happened.** Without it the local file is
+        #: not the copy Ekahau now holds - it lacks the new project id and
+        #: the cloud's dates - so claiming they are in step would be a note
+        #: of something that is not true.
+        if up.get("syncedBack"):
+            try:
+                src_p = Path(esx_path)
+                fs_m = int(src_p.stat().st_mtime)
+                sync_state.record(new_id, str(src_p),
+                                  _parse_cloud_mtime(check.get("project") or {})
+                                  or fs_m,
+                                  _esx_meta(src_p, fs_m).get("internalMtime")
+                                  or fs_m,
+                                  direction="push")
+            except Exception as e:
+                applog.note_failure("recording the sync point", e)
 
-        lost = [s for s in (old.get("sharedWith") or []) if s]
+        #: `siteId` only when the new project really was filed there; the old
+        #: one's site is not where an unassigned upload is.
         out = {"ok": True, "newId": new_id, "oldId": cloud_project_id,
                "name": check.get("name") or old_name,
-               "deletedOld": True, "siteId": site_id,
+               "deletedOld": True,
+               "siteId": site_id if up.get("assigned") else None,
                "renamedTo": up.get("renamedTo")}
+        #: The upload's own partial failures are the replace's too. Dropped,
+        #: the replace said "done" over a project left out of its site or a
+        #: local file that never received the new id.
+        warnings = []
+        if up.get("assignError"):
+            out["assignError"] = up["assignError"]
+            warnings.append(
+                "The new copy is in the cloud, but it could not be put in the "
+                "old project's site (%s). Assign it to that site in Ekahau "
+                "Cloud." % up["assignError"])
+        if up.get("syncBackError"):
+            out["syncBackError"] = up["syncBackError"]
+            warnings.append(
+                "The new copy is in the cloud, but it could not be downloaded "
+                "back over your local file (%s), so the two are not recorded "
+                "as in step. Download it from the cloud before editing it "
+                "locally." % up["syncBackError"])
+        if not warnings and up.get("warning"):
+            warnings.append(up["warning"])
+        if warnings:
+            out["warning"] = " ".join(warnings)
         if lost:
             out["lostShares"] = lost
             out["note"] = ("The old copy was shared with %d %s. A share belongs "
@@ -2945,8 +3024,12 @@ class CloudManager:
             local_id = _esx_meta(src, int(src.stat().st_mtime)).get("projectId")
         except Exception:
             local_id = ""
+        #: `project` is the listing record itself: its date is the cloud
+        #: side of the sync point the replace records. Without it the
+        #: replace recorded the local file's disk time as the cloud date,
+        #: and the next local edit read as both sides changed.
         return {"ok": True, "name": (found.get("name") or "").strip(),
-                "localProjectId": local_id}
+                "localProjectId": local_id, "project": found}
 
 
     def upload_project(self, esx_path, site_id=None, progress_cb=None):
@@ -3233,8 +3316,25 @@ class CloudManager:
             if progress_cb:
                 progress_cb(stage="save", current=97, total=100,
                             message=f"Saving {safe_name} to disk…")
-            with open(target, "wb") as f:
-                f.write(esx_bytes)
+            #: Built beside the target and renamed over it, as
+            #: `verify_replace_local` does. Opening the existing .esx with
+            #: "wb" truncated it first, so a write that failed partway on
+            #: "overwrite" left neither his file nor the cloud's.
+            tmp = target.with_name(target.name + ".wd-download.tmp")
+            _bm = _lp()
+            tmp_w, target_w = _bm.write_path(tmp), _bm.write_path(target)
+            try:
+                with open(tmp_w, "wb") as f:
+                    f.write(esx_bytes)
+                os.replace(tmp_w, target_w)
+            except Exception:
+                try:
+                    os.unlink(tmp_w)
+                except OSError:
+                    pass
+                raise
+            _ESX_META_CACHE.pop(str(target), None)
+            _ESX_TYPE_CACHE.pop(str(target), None)
             if progress_cb:
                 progress_cb(stage="done", current=100, total=100,
                             message="Done.")
@@ -3825,16 +3925,25 @@ class CloudManager:
                     "projectIds": owned_ids,
                     "projectUserGroupDto": {**group_dto, "toggleGroupShare": False},
                 })
-                r = self.api._write(
-                    "PUT", "/shareapi/v1/projects/users/toggle-userGroup", {
-                    "projectIds": owned_ids,
-                    "projectUserGroupDto": {**group_dto, "toggleGroupShare": True},
-                })
-                results["groupShared"] = True
-                results["groupRole"] = group_role
-                results["groupStatus"] = r.status_code
             except Exception as e:
                 results["groupError"] = str(e)
+            else:
+                #: OFF went through, so a failure from here on leaves these
+                #: projects with no group share at all - which may be less
+                #: than they had before he pressed anything. Say so by name.
+                try:
+                    r = self.api._write(
+                        "PUT", "/shareapi/v1/projects/users/toggle-userGroup", {
+                        "projectIds": owned_ids,
+                        "projectUserGroupDto": {**group_dto, "toggleGroupShare": True},
+                    })
+                    results["groupShared"] = True
+                    results["groupRole"] = group_role
+                    results["groupStatus"] = r.status_code
+                except Exception as e:
+                    results["groupError"] = self._group_share_lost_message(
+                        owned_ids, group_role, e)
+                    results["groupUnsharedIds"] = list(owned_ids)
 
         #: **`ok` means something happened.** Every failure above is caught
         #: into `emailError` / `groupError`, and this used to set `ok: True`
@@ -3975,6 +4084,37 @@ class CloudManager:
         except Exception as e:
             return {"error": str(e)}
 
+    def _project_names(self, ids):
+        """Names for ids, in order, falling back to the id when unlisted."""
+        try:
+            names = {p.get("id"): (p.get("name") or "").strip()
+                     for p in self.api.get_projects() or []}
+        except Exception:
+            names = {}
+        return [names.get(pid) or pid for pid in ids]
+
+    def _group_share_lost_message(self, ids, role, err):
+        """The sharing group was switched off and could not be switched back.
+
+        Said in words, naming every project, because the raw error ("429
+        rate limited") does not tell him that the group no longer has these
+        projects at all.
+        """
+        names = self._project_names(ids)
+        return ("The sharing group was removed from %d project%s so it could "
+                "be re-added with the current members, and re-adding it "
+                "failed (%s). These now have no group share: %s. Share them "
+                "with the group again (%s)."
+                % (len(ids), "" if len(ids) == 1 else "s", err,
+                   ", ".join('"%s"' % n for n in names),
+                   "can edit" if role == "WRITE_USER" else "can view"))
+
+    def _done_suffix(self, done):
+        if not done:
+            return ""
+        return (" %d other project%s had already been refreshed."
+                % (len(done), "" if len(done) == 1 else "s"))
+
     def refresh_group_shares(self, group_name="My Sharing Group", dry_run=False,
                              project_ids=None):
         """Force-refresh the user's Sharing Group membership on every owned
@@ -4017,6 +4157,7 @@ class CloudManager:
 
 
             confirmed_ids = []
+            known_roles = {}
             if project_ids is not None:
                 #: The same three-state reading the bulk share uses, and for
                 #: the same reason: this path takes the projects he ticked in
@@ -4058,6 +4199,7 @@ class CloudManager:
                             continue
                         if any(u.get("groupId") == group_id for u in shares):
                             confirmed_ids.append(pid)
+                            known_roles[pid] = _group_role_in(shares, group_id)
                     except Exception:
                         continue
 
@@ -4073,36 +4215,74 @@ class CloudManager:
                 return {"ok": True, "count": 0, "message": msg}
 
 
-            role = "WRITE_USER"
-            try:
+            #: **Each project at its own role.** The role used to be read off
+            #: the first project and applied to all of them, so a refresh
+            #: across a read-only and a writable project turned one into the
+            #: other. Grouped by role, each batch goes OFF and back ON at the
+            #: role it already had. A project whose group role cannot be read
+            #: is left alone rather than given a guessed one.
+            by_role, unreadable = {}, []
+            for pid in confirmed_ids:
+                role = known_roles.get(pid)
+                if not role:
+                    try:
+                        raw = self.api.list_project_shares(pid) or {}
+                        shares = raw.get(pid, []) if isinstance(raw, dict) else []
+                        role = _group_role_in(shares, group_id)
+                    except Exception:
+                        role = ""
+                if role:
+                    by_role.setdefault(role, []).append(pid)
+                else:
+                    unreadable.append(pid)
 
-                raw = self.api.list_project_shares(confirmed_ids[0]) or {}
-                shares = raw.get(confirmed_ids[0], []) if isinstance(raw, dict) else []
-                first_gu = next((u for u in shares if u.get("groupId") == group_id), None)
-                if first_gu and first_gu.get("role"):
-                    role = first_gu["role"]
-            except Exception:
-                pass
+            done = []
+            for role, ids in by_role.items():
+                group_dto = {
+                    "userGroupId": group_id,
+                    "userGroupName": group_name_actual,
+                    "role": role,
+                }
+                try:
+                    self.api._write(
+                        "PUT", "/shareapi/v1/projects/users/toggle-userGroup", {
+                        "projectIds": ids,
+                        "projectUserGroupDto": {**group_dto, "toggleGroupShare": False},
+                    })
+                except Exception as e:
+                    return {"error": "The group share could not be refreshed: "
+                                     "%s.%s" % (e, self._done_suffix(done)),
+                            "refreshedIds": done}
+                try:
+                    self.api._write(
+                        "PUT", "/shareapi/v1/projects/users/toggle-userGroup", {
+                        "projectIds": ids,
+                        "projectUserGroupDto": {**group_dto, "toggleGroupShare": True},
+                    })
+                except Exception as e:
+                    return {"error": self._group_share_lost_message(ids, role, e)
+                                     + self._done_suffix(done),
+                            "unsharedIds": list(ids), "refreshedIds": done}
+                done.extend(ids)
 
-            group_dto = {
-                "userGroupId": group_id,
-                "userGroupName": group_name_actual,
-                "role": role,
-            }
-            self.api._write(
-                "PUT", "/shareapi/v1/projects/users/toggle-userGroup", {
-                "projectIds": confirmed_ids,
-                "projectUserGroupDto": {**group_dto, "toggleGroupShare": False},
-            })
-            self.api._write(
-                "PUT", "/shareapi/v1/projects/users/toggle-userGroup", {
-                "projectIds": confirmed_ids,
-                "projectUserGroupDto": {**group_dto, "toggleGroupShare": True},
-            })
-            return {"ok": True, "count": len(confirmed_ids),
-                    "projectIds": confirmed_ids, "role": role,
+            if not done:
+                return {"ok": True, "count": 0, "skippedIds": unreadable,
+                        "message": "The group's role could not be read on any "
+                                   "of the selected projects, so none was "
+                                   "changed."}
+            roles = sorted(by_role)
+            msg = (f"Refreshed group membership on {len(done)} "
+                   f"project{'s' if len(done) != 1 else ''}.")
+            if unreadable:
+                msg += (f" {len(unreadable)} left unchanged - the group's role "
+                        f"on {'it' if len(unreadable) == 1 else 'them'} could "
+                        f"not be read.")
+            return {"ok": True, "count": len(done),
+                    "projectIds": done, "skippedIds": unreadable,
+                    "role": roles[0] if len(roles) == 1 else None,
+                    "roles": {r: list(ids) for r, ids in by_role.items()},
                     "groupId": group_id, "groupName": group_name_actual,
-                    "message": f"Refreshed group membership on {len(confirmed_ids)} project{'s' if len(confirmed_ids) != 1 else ''}."}
+                    "message": msg}
         except Exception as e:
             return {"error": str(e)}
 

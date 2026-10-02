@@ -4250,6 +4250,10 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName, ov
          to the project id and this makes a new project. Success is not a
          reason to drop the one sentence he has to act on. */
       if (r && r.note) toast(r.note, 'warn');
+      /* `warning` is the upload's own partial: the new copy could not be put
+         in the old project's site, or could not be downloaded back over the
+         local file. The replace still succeeded, and that is not all of it. */
+      if (r && r.warning) toast(r.warning, 'warn');
       return r;
     },
   });
