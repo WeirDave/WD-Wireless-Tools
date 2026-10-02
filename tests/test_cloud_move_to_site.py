@@ -44,6 +44,8 @@ function cut(from, to) {
   return source.slice(a, b);
 }
 eval(cut('function isProjectSyncItem(d) {', '/* What a Sync in this direction'));
+// A colleague's project is not movable, so ownership comes with it.
+eval(cut('function ownershipBlock(cloudObj) {', '/* One key per project'));
 
 const failures = [];
 function check(what, cond) { if (!cond) failures.push(what); }
