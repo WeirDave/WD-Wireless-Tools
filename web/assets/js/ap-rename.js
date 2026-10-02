@@ -9,6 +9,7 @@
     aps: [],
     floors: [],
     imageFormats: {},
+    imageRes: {},      // image id -> {w, h} pixels, from images.json
     floorImageUrls: {},
     currentFloor: null,
     sorted: [],
@@ -291,6 +292,12 @@
      rather than losing a component and colliding with somebody. */
   function keptPart(seg, ap) {
     if (seg.value) return seg.value;            // he typed a literal: use it
+    /* A floor column whose tokens are not the floor numbers ("F1", "F2") is
+       carried per floor, so an AP on that floor whose own name does not follow
+       the shape still gets its floor's token rather than another floor's. */
+    if (seg.byFloor && ap && seg.byFloor[ap.floorPlanId] != null) {
+      return seg.byFloor[ap.floorPlanId];
+    }
     var name = (ap && ap.name) || '';
     var parts = name.split(seg.sep || '-');
     var i = seg.index || 0;
@@ -583,9 +590,22 @@
       return;
     }
 
-    _segments = read.segments.map(function (seg) {
+    read.floorKept = false;
+    _segments = read.segments.map(function (seg, i) {
       if (seg.type === 'text')    return { type: 'text', value: seg.value };
-      if (seg.type === 'floor')   return { type: 'floor', value: '' };
+      if (seg.type === 'floor') {
+        /* Floor rebuilds the token from the storey number, two digits. That
+           reproduces the names only when the column already holds exactly
+           that: a project written "F1" / "F2" came out "01" / "02" on every
+           AP, so adopting its own scheme renamed the whole building. When the
+           tokens are anything else, each floor keeps the one it has. */
+        var tokens = floorTokens(read, i);
+        if (tokensAreFloorNumbers(tokens)) return { type: 'floor', value: '' };
+        read.floorKept = true;
+        var first = S.floors.find(function (f) { return tokens[f.id] != null; });
+        return { type: 'keep', index: i, sep: read.sep, value: '',
+                 sample: first ? tokens[first.id] : '', byFloor: tokens };
+      }
       if (seg.type === 'keep')    return { type: 'keep', index: seg.index,
                                            sep: seg.sep, value: '',
                                            sample: seg.sample };
@@ -607,6 +627,26 @@
     renderSegments();
     renderInferredNote(read);
     updateAll();
+  }
+
+  /* floorId -> the token in column `i` of the names that follow the scheme.
+     Constant within a floor, or inferSegments would not have called it one. */
+  function floorTokens(read, i) {
+    var parts = read.segments.length, out = {};
+    S.aps.forEach(function (ap) {
+      var bits = String(ap.name || '').split(read.sep);
+      if (bits.length !== parts || !ap.floorPlanId) return;
+      if (out[ap.floorPlanId] == null) out[ap.floorPlanId] = bits[i];
+    });
+    return out;
+  }
+
+  function tokensAreFloorNumbers(tokens) {
+    var ids = Object.keys(tokens);
+    return ids.length > 0 && ids.every(function (fid) {
+      var floor = S.floors.find(function (f) { return f.id === fid; });
+      return !!floor && tokens[fid] === getFloorNumber(floor);
+    });
   }
 
   /* The builder has to look like what it is: a name built from parts.
@@ -654,7 +694,10 @@
       ? 'all ' + read.matched + ' AP' + (read.matched === 1 ? '' : 's')
       : read.matched + ' of ' + read.total + ' APs';
     var floorNote = read.floors > 1
-      ? ' The segment that changes between floors is set to Floor.'
+      ? (read.floorKept
+          ? ' The segment that changes between floors is not the floor number, '
+            + 'so each floor keeps the one it has.'
+          : ' The segment that changes between floors is set to Floor.')
       : ' Only one floor here, so nothing could show which segment is the '
         + 'floor — every fixed part was left as text.';
     var odd = all ? ''
@@ -720,9 +763,18 @@
         startIn.className = 'ar-seg-input ar-seg-input-bordered';
         startIn.style.flex = '0 0 40px';
         startIn.style.textAlign = 'center';
-        startIn.value = seg.start || 1;
+        startIn.value = counterStart(seg.start);
         startIn.min = '0';
-        startIn.addEventListener('input', function () { seg.start = parseInt(this.value, 10) || 1; updateAll(); renderSegments(); });
+        /* No renderSegments() here: rebuilding the list destroyed the box being
+           typed in after one keystroke, so 101 could not be entered. Only this
+           row's own example follows the number. */
+        startIn.addEventListener('input', function () {
+          var n = parseInt(this.value, 10);
+          if (isNaN(n) || n < 0) return;        // an emptied box mid-edit keeps the last number
+          seg.start = n;
+          meta.textContent = '→ ' + padNum(n, seg.digits || 3);
+          updateAll();
+        });
         row.appendChild(startIn);
         var digLbl = document.createElement('span');
         digLbl.className = 'ar-seg-lbl';
@@ -742,7 +794,7 @@
         row.appendChild(digIn);
         var meta = document.createElement('span');
         meta.className = 'ar-seg-meta';
-        meta.textContent = '→ ' + padNum(seg.start || 1, seg.digits || 3);
+        meta.textContent = '→ ' + padNum(counterStart(seg.start), seg.digits || 3);
         row.appendChild(meta);
       } else if (seg.type === 'keep') {
         /* Same shape as Floor, and for the same reason: the value is read per
@@ -914,17 +966,51 @@
   function loadDefaults() {
     return apiSettings('get').then(function (res) {
       var d = res && res.ok && res.settings && res.settings.aprename;
-      if (d && d.defaults) applySettings(d.defaults);
+      if (d && d.defaults) { applySettings(d.defaults); rememberOwnPattern(); }
       if (d && d.templates) { S.templates = d.templates; renderTemplateSelect(); }
       updateAll();
     }).catch(function () { /* offline or older server: keep the built-ins */ });
+  }
+
+  /* His own pattern - the saved defaults, or the built-ins - as it stood
+     before any project's scheme was adopted over it.
+
+     Opening a second project used to start from the first one's adopted
+     scheme: a project named AP-1, AP-2 has nothing to adopt, so it was
+     offered the previous building's site text and per-AP samples while the
+     note under it said his own pattern had been left as it was. */
+  var _ownPattern = null;
+  var _defaultsReady = Promise.resolve();
+
+  function rememberOwnPattern() {
+    var sel = $('arSepStructured');
+    _ownPattern = {
+      // byFloor is one project's floor ids, and means nothing in the next.
+      segments: JSON.parse(JSON.stringify(_segments, function (k, v) {
+        return k === 'byFloor' ? undefined : v;
+      })),
+      sepS: sel ? sel.value : null,
+      scope: _scope
+    };
+  }
+
+  /* Only undoes an adoption. A pattern he typed over a project that had no
+     scheme is his, and stays for the next one. */
+  function restoreOwnPattern() {
+    if (!_inferred || !_ownPattern) return;
+    _segments = JSON.parse(JSON.stringify(_ownPattern.segments));
+    var sel = $('arSepStructured');
+    if (sel && _ownPattern.sepS != null) sel.value = _ownPattern.sepS;
+    if (_nesting !== 'color') arSetScope(_ownPattern.scope);
+    _inferred = null;
+    renderSegments();
   }
 
   window.arSaveDefaults = function () {
     var s = getSettings();
     delete s.macAddr;
     apiSettings('update', { patch: { aprename: { defaults: s } } }).then(function (res) {
-      if (res && res.ok) toast('Saved as defaults', 'success');
+      if (res && res.ok) { rememberOwnPattern(); toast('Saved as defaults', 'success'); }
       else toast('Could not save defaults', 'error');
     }).catch(function () { toast('Could not save defaults', 'error'); });
   };
@@ -954,13 +1040,13 @@
           o.index = s.index || 0; o.sep = s.sep || '-'; o.sample = s.sample || '';
           if (s.value) o.value = s.value;
         }
-        if (s.type === 'counter') { o.tag = s.tag || ''; o.start = s.start || 1; o.digits = s.digits || 3; }
+        if (s.type === 'counter') { o.tag = s.tag || ''; o.start = counterStart(s.start); o.digits = s.digits || 3; }
         return o;
       }),
       sepS:      $('arSepStructured').value,
       prefix:    $('arPrefix').value,
       sep:       $('arSep').value,
-      startNum:  parseInt($('arStart').value, 10) || 1,
+      startNum:  counterStart($('arStart').value),
       digits:    (parseInt($('arDigits').value, 10) || 0) + 1,
       macAddr:   $('arMacAddr').value,
       macFormat: $('arMacFormat').value,
@@ -987,7 +1073,7 @@
         if (o.type === 'keep')    return { type: 'keep', index: o.index || 0,
                                            sep: o.sep || '-', value: o.value || '',
                                            sample: o.sample || '' };
-        if (o.type === 'counter') return { type: 'counter', tag: o.tag || '', start: o.start || 1, digits: o.digits || 3 };
+        if (o.type === 'counter') return { type: 'counter', tag: o.tag || '', start: counterStart(o.start), digits: o.digits || 3 };
         return { type: 'text', value: '' };
       });
       padSegments();
@@ -1103,7 +1189,10 @@
     $('arDownloadBtn').disabled = true;
     $('arFloorTabs').innerHTML = '';
 
-    file.arrayBuffer().then(function (buf) {
+    // His saved pattern arrives from the server after the page starts. A
+    // project dropped before it lands was adopted and then overwritten by
+    // the late defaults, so reading waits for them.
+    _defaultsReady.then(function () { return file.arrayBuffer(); }).then(function (buf) {
       return JSZip.loadAsync(buf);
     }).then(function (zip) {
       S.zip = zip;
@@ -1120,6 +1209,7 @@
         $('arNoPlan').textContent = 'This project has no access points.';
         return;
       }
+      restoreOwnPattern();
       adoptProjectScheme();
       renderFloorTabs();
       showFloor(S.floors[0].id);
@@ -1177,8 +1267,12 @@
       });
 
       S.imageFormats = {};
+      S.imageRes = {};
       ((imgData && imgData.images) || []).forEach(function (img) {
         S.imageFormats[img.id] = img.imageFormat || '';
+        if (img.resolutionWidth > 0 && img.resolutionHeight > 0) {
+          S.imageRes[img.id] = { w: img.resolutionWidth, h: img.resolutionHeight };
+        }
       });
 
       ((bfData && bfData.buildingFloors) || []).forEach(function (bf) {
@@ -1294,28 +1388,35 @@
     return S.aps.filter(function (a) { return a.floorPlanId === fpId; });
   }
 
-  function getSpacingUnits(axis) {
+  /* Line spacing, in the floor's own coordinates, for the floor being sorted.
+
+     This read the floor on screen and the image displayed for it, so every
+     other floor was converted with the wrong floor's size - and with the
+     Unplaced tab open, or a plan that failed to decode, spacing was quietly
+     off everywhere. The download then depended on which tab was showing.
+     The image's pixel size comes from the project (images.json), and where
+     that is silent floorPlans.json's width/height are the image's pixels. */
+  function getSpacingUnits(axis, floor) {
     var px = parseInt($('arSpacing').value, 10);
     if (!px || px <= 0) return 0;
-    var floor = S.currentFloor ? S.floors.find(function (f) { return f.id === S.currentFloor; }) : null;
     if (!floor) return 0;
-    var img = $('arPlanImg');
-    if (!img || !img.naturalWidth) return 0;
     var dim = axis === 'y' ? floor.height : floor.width;
-    var imgPx = axis === 'y' ? img.naturalHeight : img.naturalWidth;
+    var res = floor.imageId && S.imageRes && S.imageRes[floor.imageId];
+    var imgPx = res ? (axis === 'y' ? res.h : res.w) : 0;
+    if (!imgPx) return px;
     return (px / imgPx) * dim;
   }
 
-  function sortAPs(aps, method) {
+  function sortAPs(aps, method, floor) {
     if (!aps.length) return [];
     var sorted = aps.slice();
     switch (method) {
-      case 'row-ltr':   return sortByRow(sorted, false);
-      case 'row-rtl':   return sortByRow(sorted, true);
+      case 'row-ltr':   return sortByRow(sorted, false, floor);
+      case 'row-rtl':   return sortByRow(sorted, true, floor);
       case 'proximity':  return sortProximity(sorted);
-      case 'row-snake':  return sortSnake(sorted);
-      case 'col-ttb':    return sortByColumn(sorted, false);
-      case 'col-btt':    return sortByColumn(sorted, true);
+      case 'row-snake':  return sortSnake(sorted, floor);
+      case 'col-ttb':    return sortByColumn(sorted, false, floor);
+      case 'col-btt':    return sortByColumn(sorted, true, floor);
       case 'clockwise':  return sortRadial(sorted, true);
       case 'counter-clockwise': return sortRadial(sorted, false);
       case 'by-color':   return sortByColorGroup(sorted, _colorOrder);
@@ -1371,19 +1472,34 @@
     updateAll();
   };
 
+  /* The number the next click on the floor on screen will get, read off the
+     sequence that does the numbering. Start plus clicks-so-far is only right
+     for a continuous run; restarting per floor counts this floor's clicks. */
+  function manualNextNum() {
+    var settings = getSettings();
+    var seq = buildSequence(settings);
+    if (_scope === 'perFloor') {
+      seq = seq.filter(function (step) { return step.floor.id === S.currentFloor; });
+    }
+    return getStartNum(settings) + seq.length;
+  }
+
   window.arManualUndo = function () {
     if (!S.manualUndo.length) { toast('Nothing to undo'); return; }
-    var before = S.manualOrder.length;
+    var before = S.manualOrder.slice();
+    var numWas = {};
+    (S.preview || []).forEach(function (it) { numWas[it.ap.id] = it.num; });
     S.manualOrder = S.manualUndo.pop();
     updateAll();
     // Name the number that came free, so a run of undos is followable without
     // reading the panel between each one.
-    var settings = getSettings();
-    var freed = getStartNum(settings) + S.manualOrder.length;
-    if (S.manualOrder.length < before) {
+    var released = before.filter(function (id) { return S.manualOrder.indexOf(id) < 0; });
+    if (S.manualOrder.length < before.length) {
+      var freed = released.length && numWas[released[0]] != null
+        ? numWas[released[0]] : manualNextNum();
       toast('Released ' + freed + ' — next up again');
     } else {
-      toast('Undo — next is ' + freed);
+      toast('Undo — next is ' + manualNextNum());
     }
   };
 
@@ -1404,8 +1520,7 @@
     if (!on) return;
     var placed = 0;
     S.floors.forEach(function (f) { placed += getFloorAPs(f.id).length; });
-    var settings = getSettings();
-    $('arManualNext').textContent = String(getStartNum(settings) + S.manualOrder.length);
+    $('arManualNext').textContent = String(manualNextNum());
     $('arManualCount').textContent = S.manualOrder.length + ' of ' + placed + ' numbered';
     $('arManualUndo').disabled = !S.manualUndo.length;
     $('arManualClear').disabled = !S.manualOrder.length;
@@ -1790,9 +1905,9 @@
 
   /* A real snake: rows top to bottom, every other row reversed, so the walk
      turns at the end of a row instead of flying back to the near edge. */
-  function sortSnake(aps) {
+  function sortSnake(aps, floor) {
     if (aps.length < 2) return aps.slice();
-    var sp = getSpacingUnits('y');
+    var sp = getSpacingUnits('y', floor);
     var rows = sp > 0 ? clusterByFixedSpacing(aps, 'y', sp) : clusterByAxis(aps, 'y');
     rows.sort(function (a, b) { return avg(a, 'y') - avg(b, 'y'); });
     var result = [];
@@ -1930,9 +2045,9 @@
     return _improvePath(result);
   }
 
-  function sortByRow(aps, reverse) {
+  function sortByRow(aps, reverse, floor) {
     if (aps.length < 2) return aps.slice();
-    var sp = getSpacingUnits('y');
+    var sp = getSpacingUnits('y', floor);
     var rows = sp > 0 ? clusterByFixedSpacing(aps, 'y', sp) : clusterByAxis(aps, 'y');
     rows.sort(function (a, b) { return avg(a, 'y') - avg(b, 'y'); });
     var result = [];
@@ -1945,9 +2060,9 @@
     return result;
   }
 
-  function sortByColumn(aps, reverse) {
+  function sortByColumn(aps, reverse, floor) {
     if (aps.length < 2) return aps.slice();
-    var sp = getSpacingUnits('x');
+    var sp = getSpacingUnits('x', floor);
     var cols = sp > 0 ? clusterByFixedSpacing(aps, 'x', sp) : clusterByAxis(aps, 'x');
     cols.sort(function (a, b) { return avg(a, 'x') - avg(b, 'x'); });
     var result = [];
@@ -2025,6 +2140,13 @@
     return s;
   }
 
+  /* A counter may start at 0 - the box allows it - so a missing start is 1
+     and a zero stays zero. `|| 1` turned 0 into 1. */
+  function counterStart(v) {
+    var n = parseInt(v, 10);
+    return isNaN(n) ? 1 : n;
+  }
+
   function generateName(settings, floor, num, ap) {
     if (settings.mode === 'structured') return buildStructuredName(floor, num, ap);
     if (settings.mode === 'mac')        return buildMacName(num);
@@ -2034,7 +2156,7 @@
   function getStartNum(settings) {
     if (settings.mode === 'structured') {
       for (var i = 0; i < _segments.length; i++) {
-        if (_segments[i].type === 'counter') return _segments[i].start || 1;
+        if (_segments[i].type === 'counter') return counterStart(_segments[i].start);
       }
       return 1;
     }
@@ -2084,8 +2206,23 @@
       });
       return seq;
     }
+    /* Manual and continuous: the clicks are the sequence, across floors.
+       Walking floors first renumbered a run that started upstairs and came
+       down by floor order instead of by the order he clicked. Restarting per
+       floor numbers each floor's own clicks, which the floor walk below does. */
+    if (settings.order === 'manual' && _scope !== 'perFloor') {
+      var floorById = {}, apById = {};
+      S.floors.forEach(function (f) { floorById[f.id] = f; });
+      S.aps.forEach(function (ap) { apById[ap.id] = ap; });
+      S.manualOrder.forEach(function (id) {
+        var ap = apById[id];
+        var floor = ap && floorById[ap.floorPlanId];
+        if (floor) seq.push({ floor: floor, ap: ap });
+      });
+      return seq;
+    }
     S.floors.forEach(function (floor) {
-      sortAPs(getFloorAPs(floor.id), settings.order).forEach(function (ap) {
+      sortAPs(getFloorAPs(floor.id), settings.order, floor).forEach(function (ap) {
         seq.push({ floor: floor, ap: ap });
       });
     });
@@ -2217,7 +2354,7 @@
     var manual = settings.order === 'manual';
     renderGuideLines(box, floor, settings.order);
     var floorAPs = getFloorAPs(S.currentFloor);
-    var sorted = sortAPs(floorAPs, settings.order);
+    var sorted = sortAPs(floorAPs, settings.order, floor);
     S.sorted = sorted;
 
     // Manual mode still draws the APs nobody has clicked yet — you cannot pick
@@ -2590,7 +2727,7 @@
     $('arDownloadBtn').disabled = true;
     $('arDownloadBtn').textContent = 'Building…';
 
-    S.zip.generateAsync({ type: 'blob' }).then(function (blob) {
+    S.zip.generateAsync({ type: 'blob', compression: 'DEFLATE' }).then(function (blob) {
       var name = S.file.name.replace(/\.esx$/i, '') + ' (labeled).esx';
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
@@ -2766,7 +2903,10 @@
 
   /* ── init ───────────────────────────────────────────────────────── */
   renderSegments();
-  loadDefaults();
+  rememberOwnPattern();
+  // Bounded: a server that never answers must not leave a project unopened.
+  _defaultsReady = Promise.race([loadDefaults(),
+    new Promise(function (r) { setTimeout(r, 5000); })]);
 
   window.__aprename = {
     loadFile: loadFile,

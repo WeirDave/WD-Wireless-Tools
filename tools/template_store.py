@@ -258,13 +258,27 @@ class TemplateStore:
         return {"ok": True, "folder": str(USER_DIR),
                 "templates": [found[k] for k in sorted(found)]}
 
-    def save(self, name: str, wall_types: list) -> dict:
-        """Save a template to the user folder."""
+    def save(self, name: str, wall_types: list, overwrite: bool = False) -> dict:
+        """Save a template to the user folder.
+
+        A file already at the target is a conflict unless ``overwrite`` is
+        set, and the reply names the template in it. Two display names can
+        sanitise to one filename ("A/B" and "A_B"), so the page cannot tell
+        from names alone what a save would replace - only the folder can.
+        """
         USER_DIR.mkdir(parents=True, exist_ok=True)
 
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in name)
         filename = f"{safe_name}{TPL_SUFFIX}"
         filepath = USER_DIR / filename
+
+        if filepath.is_file() and not overwrite:
+            there = _read_template(filepath, builtin=False)
+            existing = (there or {}).get("name") or filepath.stem
+            return {"ok": False, "conflict": True, "file": filename,
+                    "existing": existing,
+                    "error": f'A template named "{existing}" is already saved '
+                             f"as {filename}."}
 
         tpl = {
             "name": name,

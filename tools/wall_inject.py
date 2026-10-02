@@ -180,7 +180,12 @@ def inject_into_members(members: dict, wall_types: list) -> dict:
     existing = doc["wallTypes"]
     find = _match(existing)
     used_ids = {w.get("id") for w in existing if w.get("id")}
-    by_key = {_key(w.get("name")): w for w in (wall_types or [])}
+    # The first entry of a name, as `plan_into_members` keeps it: a dict
+    # comprehension keeps the last, and the preview would describe one wall
+    # type while another was written.
+    by_key = {}
+    for w in wall_types or []:
+        by_key.setdefault(_key(w.get("name")), w)
     incoming = []
 
     for entry in plan["update"]:

@@ -338,9 +338,12 @@ class NothingPromisesACopyThatIsNoLongerKeptTests(unittest.TestCase):
     def test_no_dialog_promises_a_copy_of_the_file_it_replaces(self):
         """The page's own tooltips and help dialog count too: three of the
         promises outlived the cleanup in cloud.html, which this used not to
-        read."""
+        read. The wall audit's `--fix` is read too: it rewrites projects in
+        place and once announced that the previous copy was kept beside each.
+        """
         text = (CLOUD_JS.read_text(encoding="utf-8")
-                + (ROOT / "web" / "cloud.html").read_text(encoding="utf-8"))
+                + (ROOT / "web" / "cloud.html").read_text(encoding="utf-8")
+                + (ROOT / "tools" / "wall_audit.py").read_text(encoding="utf-8"))
         found = [phrase for phrase in self.WRONG if phrase in text]
         self.assertEqual(
             [], found,

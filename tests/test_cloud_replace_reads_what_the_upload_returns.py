@@ -67,6 +67,8 @@ class _StubEkahau:
     `get_projects`, which is the shape of an eventually-consistent listing.
     """
 
+    user_email = "survey.lead@example.invalid"
+
     def __init__(self, *, listing_lag: int = 0, never_appears: bool = False):
         self.projects = [{"id": "old-1", "name": "Riverside Block - Phase 3"}]
         self.datasets = [{"id": "old-1", "siteId": "site-9"}]
@@ -197,8 +199,15 @@ class TheSharesGoWithTheOldProjectTests(_Base):
 
     def test_a_successful_replace_reports_the_shares_it_dropped(self):
         mgr, api = self._mgr()
-        api.projects[0]["sharedWith"] = ["colleague.one@example.invalid",
-                                         "colleague.two@example.invalid"]
+        # Where the real API says it: the dataset listing's `datasetUsers`.
+        # The raw project record carries no `sharedWith`; a stub that put one
+        # there proved a contract Ekahau does not have, and the real replace
+        # named nobody.
+        api.datasets[0]["datasetUsers"] = [
+            {"role": "OWNER", "username": "survey.lead@example.invalid"},
+            {"role": "WRITE_USER", "username": "colleague.two@example.invalid"},
+            {"role": "READ_USER", "username": "Colleague.One@example.invalid"},
+        ]
         out = mgr.replace_cloud_project(str(self.esx), "old-1")
 
         self.assertTrue(out.get("ok"), out)

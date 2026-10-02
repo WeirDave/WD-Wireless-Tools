@@ -684,7 +684,7 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
         self.assertIsNotNone(select, "the spatial ordering dropdown is gone")
         offered = set(re.findall(r'<option value="([^"]+)"', select.group(1)))
 
-        body = re.search(r"function sortAPs\(aps, method\) \{(.*?)\n  \}", js, re.S)
+        body = re.search(r"function sortAPs\(aps, method[^)]*\) \{(.*?)\n  \}", js, re.S)
         self.assertIsNotNone(body, "sortAPs is gone or has been reshaped")
         handled = set(re.findall(r"case '([^']+)':", body.group(1)))
 

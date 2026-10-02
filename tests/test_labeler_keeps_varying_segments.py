@@ -70,6 +70,8 @@ globalThis.padNum = function (n, digits) {
 eval(cut('var SEPARATOR_CANDIDATES', '/* entries: [{ name, floorId }]'));
 eval(cut('function inferSegments(entries)', "/* Read the project's own scheme"));
 eval(cut('function keptPart(seg, ap)', '/* ── reading the scheme'));
+// getSettings writes a counter's start through it.
+eval(cut('function counterStart(v)', 'function generateName('));
 
 // The save and load halves, taken out of the real functions rather than
 // retyped: getSettings writes a segment out, applySettings maps it back.

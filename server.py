@@ -711,11 +711,15 @@ def api_capacity(action):
             built = capacity_profiles.build_template(data.get("spec") or {})
             if not built.get("ok"):
                 return jsonify(built)
-            saved = capacity_profiles.save_template(built)
-            if saved.get("ok") and data.get("replaces") and data.get("replaces") != saved.get("file"):
-                # Renamed in the editor: the old file goes, so one template
-                # does not become two. A shipped example is never deleted.
-                capacity_profiles.delete_template(data.get("replaces"))
+            # `replaces` is the template being edited. Removing it when the
+            # name moved on, and refusing a name another template already
+            # has, both happen in `save_template`: deciding here compared the
+            # two file names as strings, which on Windows and macOS deleted a
+            # template renamed only in case, and nothing stopped a save over
+            # a different template of the same name.
+            saved = capacity_profiles.save_template(built, replaces=data.get("replaces"))
+            if not saved.get("ok"):
+                return jsonify(saved)
             return jsonify(dict(saved, template=built))
         if action == "delete":
             return jsonify(capacity_profiles.delete_template(data.get("file") or ""))
@@ -927,9 +931,10 @@ RENAME_ACTIONS = {
                                 d.get("root"), d.get("rules"),
                                 skip=set(d["skip"]) if "skip" in d else None,
                                 subfolder_names=d.get("subfolder_names")),
-    "execute_bulk_rename":  lambda d: rm.execute_bulk_rename(d.get("items")),
+    "execute_bulk_rename":  lambda d: rm.execute_bulk_rename(d.get("items"),
+                                                             d.get("root")),
     "gap_report":           lambda d: rm.gap_report(d["root"]),
-    "undo_last":            lambda d: rm.undo_last(d["type"]),
+    "undo_last":            lambda d: rm.undo_last(d["type"], d.get("root")),
     "save_profile":         lambda d: rm.save_profile(
                                 d["name"], d.get("folder_format", ""),
                                 d.get("file_format", ""), d.get("separator", " - "),
@@ -959,7 +964,8 @@ def api_rename(action):
 TEMPLATE_ACTIONS = {
     "get_folder":   lambda d: ts.get_folder(),
     "scan":         lambda d: ts.scan(),
-    "save":         lambda d: ts.save(d["name"], d["wallTypes"]),
+    "save":         lambda d: ts.save(d["name"], d["wallTypes"],
+                                      overwrite=bool(d.get("overwrite"))),
     "delete":       lambda d: ts.delete(d["filename"]),
     "reset":        lambda d: ts.reset(d["filename"]),
     "defaults":     lambda d: ts.get_defaults(),
@@ -1051,11 +1057,22 @@ def _prep_project_facts(src):
                     if isinstance(f, dict) and f.get("id")]
     except Exception:
         return facts
+    facts["boxesSetAside"] = {}
     if facts["projectId"]:
         try:
             facts["boxes"] = plantrim_store.load(facts["projectId"]) or {}
         except Exception:
             facts["boxes"] = {}
+    # A cropped copy keeps the project id, so a box drawn on the full-size
+    # original comes back for the smaller "(prepared)" sheet. Used there it
+    # crops the plan a second time and cuts whatever was placed since. Such a
+    # box is set aside - still stored, for the file it was drawn on - and named
+    # to the page so it can say why it was not used.
+    sheets = {f["id"]: (f["w"], f["h"]) for f in facts["floors"]}
+    for fid in list(facts["boxes"]):
+        size = sheets.get(fid)
+        if size and not esx_trimmer.box_fits_sheet(facts["boxes"][fid], *size):
+            facts["boxesSetAside"][fid] = facts["boxes"].pop(fid)
     return facts
 
 
@@ -1983,7 +2000,7 @@ def api_update_status():
         # The notes are the only thing left that needs the API, and nothing
         # depends on them, so a short wait and a quiet failure.
         try:
-            release = updater.fetch_latest_release(timeout=updater.NOTES_TIMEOUT)
+            release = _latest_release_or_raise(timeout=updater.NOTES_TIMEOUT)
             if release["tag"] == tag:
                 payload["latest"]["notes"] = release["notes"][:4000]
                 payload["latest"]["url"] = release["url"]
@@ -1992,7 +2009,7 @@ def api_update_status():
         return jsonify(payload)
 
     try:
-        release = updater.fetch_latest_release()
+        release = _latest_release_or_raise()
         payload["latest"] = {
             "tag": release["tag"],
             "version": release["version"],
@@ -2004,6 +2021,23 @@ def api_update_status():
     except updater.UpdateError as e:
         payload["latestError"] = str(e)
     return jsonify(payload)
+
+
+def _latest_release_or_raise(**kw):
+    """`fetch_latest_release`, with "no answer" turned into "could not check".
+
+    Anything but a release with a tag - None, an empty body - was indexed as
+    one and took the status check down with a 500, when what it means is the
+    same as GitHub not answering: the page's "could not check" path.
+    """
+    release = updater.fetch_latest_release(**kw)
+    if not isinstance(release, dict) or not release.get("tag"):
+        raise updater.UpdateError("GitHub did not say which release is the newest.")
+    release = dict(release)
+    release.setdefault("version", str(release["tag"]).lstrip("v"))
+    release.setdefault("url", updater.GITHUB_RELEASES_URL)
+    release["notes"] = release.get("notes") or ""
+    return release
 
 
 @app.route("/api/update", methods=["POST"])

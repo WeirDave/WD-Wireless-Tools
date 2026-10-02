@@ -242,12 +242,13 @@ function renderPreview() {
   const suggestBanner = document.getElementById('orgSuggestBanner');
   if (suggestBanner) suggestBanner.innerHTML = renderSuggestBanner();
 
+  const skippedNote = unreadableNotice(d.unreadable);
   if (d.sites.length === 0) {
-    document.getElementById('siteList').innerHTML = '<div class="org-empty">No site folders with loose files found.</div>' + (advanced ? renderDupSection() : '');
+    document.getElementById('siteList').innerHTML = skippedNote + '<div class="org-empty">No site folders with loose files found.</div>' + (advanced ? renderDupSection() : '');
     return;
   }
 
-  let html = '';
+  let html = skippedNote;
   for (const site of d.sites) {
     const moveCount = site.moves.length;
     const stayCount = site.staying.length;
@@ -327,6 +328,18 @@ function renderPreview() {
   }
   if (advanced) html += renderDupSection();
   document.getElementById('siteList').innerHTML = html;
+}
+
+/* Folders the scan could not read. They are left out of the preview and
+   Organize does not touch them, so the page says which ones and why. */
+function unreadableNotice(list) {
+  if (!list || !list.length) return '';
+  const n = list.length;
+  return '<div class="org-empty">'
+    + n + ' folder' + (n !== 1 ? 's were' : ' was') + ' skipped because '
+    + (n !== 1 ? 'they' : 'it') + ' could not be read:<ul>'
+    + list.map(u => '<li><b>' + esc(u.folder) + '</b> - ' + esc(u.reason) + '</li>').join('')
+    + '</ul></div>';
 }
 
 function renderDupSection() {
@@ -527,8 +540,11 @@ function renderResults(r) {
     html += `<span class="site-name">${esc(site.folder)}</span><span class="site-chevron">▾</span></div>`;
     html += '<div class="site-body"><table class="file-table"><thead><tr><th>File</th><th>Destination</th><th>Status</th></tr></thead><tbody>';
     for (const m of site.moves) {
-      html += `<tr><td>${esc(m.name)}</td>`;
-      html += `<td>${m.target}/`;
+      // An entry with no file name is the whole folder failing - the server
+      // could not create a subfolder in it or list it - so it names the
+      // folder's files as a group and has no destination to show.
+      html += `<tr><td>${m.name ? esc(m.name) : '<i>All files in this folder</i>'}</td>`;
+      html += `<td>${m.target ? esc(m.target) + '/' : '—'}`;
       if (m.renamed_to) html += ` <span class="renamed">(→ ${esc(m.renamed_to)})</span>`;
       html += '</td>';
       html += `<td><span class="result-status result-${m.status}">${m.status}</span>`;
@@ -1137,17 +1153,54 @@ function _updateFolderStatus() {
   }
 }
 
+/* Settings → Default subfolders, as names: what a new site folder gets.
+   null when nothing is saved, which means every destination, as before.
+   The server resolves the same list in folder_organizer._get_destinations;
+   this mirrors it for the boxes ticked when the dialog opens. */
+function _defaultSubfolderNames(cfg) {
+  cfg = cfg || {};
+  if (!Array.isArray(cfg.subfolders)) return null;
+  const names = cfg.subfolder_names || {};
+  const builtin = { images: 1, floorplans: 1, reports: 1 };
+  const out = [];
+  cfg.subfolders.forEach(k => {
+    const name = String((builtin[k] ? (names[k] || k) : names[k]) || '').trim();
+    if (name && out.indexOf(name) < 0) out.push(name);
+  });
+  (cfg.custom_destinations || []).forEach(c => {
+    const name = c && typeof c === 'object' ? String(c.name || c.key || '').trim() : '';
+    if (name && out.indexOf(name) < 0) out.push(name);
+  });
+  return out;
+}
+
 function _renderSubfolderPicker() {
   const host = document.getElementById('newFolderSubs');
   if (!host) return;
   const dests = destinationList(cachedConfig);
-  host.innerHTML = dests.map(d => {
-    const cls = destinationCssClass(d.key);
+  const defaults = _defaultSubfolderNames(cachedConfig);
+  const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+  // Ticked: Settings → Default subfolders, in its order. A subfolder added
+  // there is not an organize destination, so it may not be in `dests`; it is
+  // still one a new folder gets. Unticked after them: destinations left off
+  // that list, offered rather than hidden.
+  const rows = [];
+  const used = new Set();
+  (defaults || []).forEach(n => {
+    const d = dests.find(x => same(x.name, n));
+    if (d) used.add(d);
+    rows.push({ name: n, key: d ? d.key : '', builtin: d ? d.builtin : false, checked: true });
+  });
+  dests.forEach(d => {
+    if (!used.has(d)) rows.push({ name: d.name, key: d.key, builtin: d.builtin, checked: !defaults });
+  });
+  host.innerHTML = rows.map(r => {
+    const cls = r.key ? destinationCssClass(r.key) : 'dest-custom';
     return `<label class="org-sub-check">`
-      + `<input type="checkbox" class="org-sub-cb" checked>`
+      + `<input type="checkbox" class="org-sub-cb"${r.checked ? ' checked' : ''}>`
       + `<span class="org-sub-swatch ${cls}"></span>`
-      + `<input type="text" class="org-sub-name-input" value="${escAttr(d.name)}">`
-      + (d.builtin ? '' : `<span class="org-sub-tag">custom</span>`)
+      + `<input type="text" class="org-sub-name-input" value="${escAttr(r.name)}">`
+      + (r.builtin || !r.key ? '' : `<span class="org-sub-tag">custom</span>`)
       + `</label>`;
   }).join('');
 }

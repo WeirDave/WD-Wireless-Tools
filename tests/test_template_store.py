@@ -51,6 +51,46 @@ class TemplateStoreTests(unittest.TestCase):
         self.assertTrue(deleted["ok"])
         self.assertEqual(self.store.scan()["templates"], [])
 
+    def test_a_name_that_lands_on_an_existing_file_is_a_conflict(self):
+        """"Invented A/B" and "Invented A_B" are two names and one filename.
+        Saving the second used to replace the first without a word."""
+        first = self.store.save("Invented A/B", [{"name": "One"}])
+        self.assertTrue(first["ok"], first)
+        second = self.store.save("Invented A_B", [{"name": "Two"}])
+        self.assertFalse(second.get("ok"), second)
+        self.assertTrue(second.get("conflict"), second)
+        self.assertEqual(second.get("existing"), "Invented A/B")
+        self.assertEqual(second.get("file"), first["file"])
+        kept = self.store.scan()["templates"]
+        self.assertEqual([(t["name"], t["wallTypes"]) for t in kept],
+                         [("Invented A/B", [{"name": "One"}])])
+
+    def test_overwrite_replaces_when_asked(self):
+        self.store.save("Invented A/B", [{"name": "One"}])
+        r = self.store.save("Invented A_B", [{"name": "Two"}], overwrite=True)
+        self.assertTrue(r["ok"], r)
+        kept = self.store.scan()["templates"]
+        self.assertEqual([(t["name"], t["wallTypes"]) for t in kept],
+                         [("Invented A_B", [{"name": "Two"}])])
+
+    def test_the_server_route_reports_the_conflict_and_honours_overwrite(self):
+        import server
+        client = server.app.test_client()
+        hdr = {"X-WD-Wireless-Tools": "1"}
+        r = client.post("/api/templates/save", headers=hdr,
+                        json={"name": "Invented Route", "wallTypes": [{"name": "One"}]})
+        self.assertTrue(r.get_json()["ok"], r.get_json())
+        r = client.post("/api/templates/save", headers=hdr,
+                        json={"name": "Invented Route", "wallTypes": [{"name": "Two"}]})
+        self.assertTrue(r.get_json().get("conflict"), r.get_json())
+        r = client.post("/api/templates/save", headers=hdr,
+                        json={"name": "Invented Route", "wallTypes": [{"name": "Two"}],
+                              "overwrite": True})
+        self.assertTrue(r.get_json()["ok"], r.get_json())
+        got = [t["wallTypes"] for t in self.store.scan()["templates"]
+               if t["name"] == "Invented Route"]
+        self.assertEqual(got, [[{"name": "Two"}]])
+
     def test_delete_rejects_path_traversal(self):
         self.folder.mkdir()
         outside = self.folder.parent / "outside.json"
@@ -90,7 +130,8 @@ class TemplateStoreTests(unittest.TestCase):
     def test_user_copy_shadows_builtin_without_editing_it(self):
         builtin_path = self._write_builtin("Shipped", [{"name": "Brick"}])
         self.store.scan()  # trigger migration first
-        self.store.save("Shipped", [{"name": "Mine"}])
+        # The scan seeded his own copy, so this is a replace he confirmed.
+        self.store.save("Shipped", [{"name": "Mine"}], overwrite=True)
 
         templates = self.store.scan()["templates"]
         self.assertEqual(len(templates), 1, "user copy should shadow, not duplicate")
@@ -111,7 +152,7 @@ class TemplateStoreTests(unittest.TestCase):
     def test_reset_restores_the_builtin(self):
         self._write_builtin("Shipped", [{"name": "Brick"}])
         self.store.scan()
-        self.store.save("Shipped", [{"name": "Mine"}])
+        self.store.save("Shipped", [{"name": "Mine"}], overwrite=True)
         result = self.store.reset(f"Shipped{SUFFIX}")
         self.assertTrue(result["ok"])
         templates = self.store.scan()["templates"]

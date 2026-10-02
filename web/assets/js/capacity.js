@@ -329,13 +329,36 @@
     });
   }
 
+  /* The file a name is saved under - `_safe_filename` in capacity_profiles.py,
+     which drops punctuation, so "Lab #1" and "Lab 1" are one file. */
+  function templateFileFor(name) {
+    var stem = String(name).replace(/[^A-Za-z0-9 _-]+/g, '').trim() || 'capacity';
+    return stem.replace(/ /g, '_') + '_capacitytemplate.json';
+  }
+
+  /* A name for a copy that no template already has. Duplicating twice used
+     to propose "<name> (copy)" both times, and the second save went over the
+     first copy. The server refuses that now; this keeps it from coming up. */
+  function freeTemplateName(base, tag) {
+    var taken = {};
+    templates.forEach(function (t) {
+      if (t._builtin) return;
+      taken[String(t._file).toLowerCase()] = true;
+      taken[templateFileFor(t.name).toLowerCase()] = true;
+    });
+    for (var n = 1; ; n++) {
+      var name = base + ' (' + tag + (n > 1 ? ' ' + n : '') + ')';
+      if (!taken[templateFileFor(name).toLowerCase()]) return name;
+    }
+  }
+
   window.capEditChosen = function () {
     var t = templateByFile(chosen);
     if (!t) return;
     if (t._builtin) {
       openEditor('Edit a copy of "' + t.name + '"',
         'This is a shipped example, so your changes are saved as a template of your own.',
-        t.name.replace(/\s*\(example\)\s*$/i, '') + ' (my copy)', t.description,
+        freeTemplateName(t.name.replace(/\s*\(example\)\s*$/i, ''), 'my copy'), t.description,
         rowsFromTemplate(t), { base: t });
       return;
     }
@@ -347,7 +370,7 @@
     var t = templateByFile(chosen);
     if (!t) return;
     openEditor('New template from "' + t.name + '"', 'A copy to change; the original stays as it is.',
-               t.name + ' (copy)', t.description, rowsFromTemplate(t), { base: t });
+               freeTemplateName(t.name, 'copy'), t.description, rowsFromTemplate(t), { base: t });
   };
 
   window.capNewTemplate = function () {

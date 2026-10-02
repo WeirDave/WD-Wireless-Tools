@@ -735,6 +735,9 @@ function toggleLive() {
 function liveBusy() {
   if (document.querySelector('.modal-overlay.active')) return true;
   if (selected.size > 0) return true;
+  //: The Duplicates tab's ticks live in the DOM, not in `selected`, so a
+  //: refresh redrew the clusters and cleared them under him.
+  if (document.querySelector('.dup-item-check:checked')) return true;
   const sb = document.getElementById('searchBox');
   if (sb && document.activeElement === sb && sb.value) return true;
   return false;
@@ -1192,7 +1195,12 @@ function indexRowData() {
       };
     });
   };
-  (data.matched || []).forEach(p => indexChildren(p.cloud && p.cloud.children, p.cloud.name, p.cloud.id));
+  /* A child's `siteName` is where a download of it lands, so for a matched
+     site it is the paired local folder, not the cloud site's name. A site
+     paired with a folder of another name - by code, or linked by hand - got
+     a second folder named after the cloud site on every download. */
+  (data.matched || []).forEach(p => indexChildren(p.cloud && p.cloud.children,
+    (p.local && p.local.isDir && p.local.name) || p.cloud.name, p.cloud.id));
   (data.cloudOnly || []).forEach(s => indexChildren(s.children, s.name, s.id));
   (data.localOnly || []).forEach(f => indexChildren(f.children, f.name, null));
 }
@@ -2023,13 +2031,11 @@ function cssEscape(s) {
   return String(s).replace(/["\\]/g, '\\$&');
 }
 
-function renderDuplicates() {
-  const el = document.getElementById('rowsContainer');
-  const legend = document.querySelector('.col-legend');
-  if (legend) legend.style.display = 'none';
-
+/* The clusters the Duplicates tab is showing: the chip and the search, once.
+   "Delete all N extras" acts on exactly these - it used to walk every
+   cluster in the account while the list showed a filtered few. */
+function _dupVisibleClusters() {
   const clusters = (dupData && dupData.clusters) || [];
-
   let filtered = clusters;
   if (activeFilter === 'dup-mixed')      filtered = clusters.filter(c => c.shape === 'mixed');
   else if (activeFilter === 'dup-local') filtered = clusters.filter(c => c.shape === 'local-only');
@@ -2040,8 +2046,33 @@ function renderDuplicates() {
     filtered = filtered.filter(c => c.items.some(i => (i.name || '').toLowerCase().includes(q))
                                   || (c.key || '').includes(q));
   }
+  return filtered;
+}
+
+/* What "extra" means in one cluster. Where a matched pair exists, every
+   unmatched copy. Where nothing is matched - a cloud-only or local-only
+   cluster - every copy is unmatched, so "the unmatched ones" was all of them;
+   the newest is kept, as the cluster's own "Keep newest" does. A cluster whose
+   newest cannot be found gives nothing rather than everything. */
+function _dupExtrasOf(cl) {
+  if (cl.items.some(i => i.matched)) return cl.items.filter(i => !i.matched);
+  if (!cl.items.some(i => (i.id || i.path) === cl.newestId)) return [];
+  return cl.items.filter(i => (i.id || i.path) !== cl.newestId);
+}
+
+function renderDuplicates() {
+  const el = document.getElementById('rowsContainer');
+  const legend = document.querySelector('.col-legend');
+  if (legend) legend.style.display = 'none';
+
+  const clusters = (dupData && dupData.clusters) || [];
+  const filtered = _dupVisibleClusters();
+  const tbBtn = document.getElementById('dupDeleteAllToolbarBtn');
+  const tbCount = document.getElementById('dupDeleteAllToolbarCount');
 
   if (!filtered.length) {
+    if (tbBtn) tbBtn.hidden = true;
+    if (tbCount) tbCount.textContent = 0;
     el.innerHTML = `<div class="dup-empty">
       <div class="dup-empty-icon">&#128193;</div>
       <div class="dup-empty-title">${clusters.length ? 'No duplicates match this filter' : 'No duplicates found'}</div>
@@ -2052,10 +2083,7 @@ function renderDuplicates() {
     return;
   }
 
-  const totalExtras = filtered.reduce(
-    (n, cl) => n + cl.items.filter(i => !i.matched).length, 0);
-  const tbBtn = document.getElementById('dupDeleteAllToolbarBtn');
-  const tbCount = document.getElementById('dupDeleteAllToolbarCount');
+  const totalExtras = filtered.reduce((n, cl) => n + _dupExtrasOf(cl).length, 0);
   if (tbBtn) tbBtn.hidden = totalExtras <= 0;
   if (tbCount) tbCount.textContent = totalExtras;
 
@@ -2303,12 +2331,9 @@ function dupDeleteExtras(key) {
 }
 
 function dupDeleteAllExtras() {
-  const clusters = (dupData && dupData.clusters) || [];
   const toDelete = [];
-  clusters.forEach(cl => {
-    cl.items.forEach(it => { if (!it.matched) toDelete.push(it); });
-  });
-  if (!toDelete.length) { toast('No unmatched extras across any cluster', 'info'); return; }
+  _dupVisibleClusters().forEach(cl => { toDelete.push(..._dupExtrasOf(cl)); });
+  if (!toDelete.length) { toast('No extras in the clusters shown', 'info'); return; }
   _bulkDeleteItems(toDelete, null);
 }
 function dupDeleteChecked(key) {
@@ -2955,8 +2980,8 @@ async function heldBackNoneOfThese(localPath) {
     '<p>Stop suggesting ' + (n === 1 ? 'this pairing' : 'these ' + n + ' pairings')
     + ' for <b>' + e(group.local.name) + '</b>.</p>'
     + '<p class="sub">The file stays where it is and stays unpaired. Nothing is '
-    + 'uploaded, downloaded, renamed or deleted. You can undo it from '
-    + '<b>Not a match</b> in Settings if you change your mind.</p>',
+    + 'uploaded, downloaded, renamed or deleted. If you change your mind, '
+    + 'undo it from <b>Manage Not-a-Match</b> in the main menu.</p>',
     'None of these');
   if (!ok) return;
 
@@ -3987,8 +4012,7 @@ async function reconcileNow(pair) {
 
 /* Every selected pair a comparison has already proved identical. */
 function bulkReconcile() {
-  const picked = selectedSyncItems().filter(d => d && d.kind === 'pair'
-                                                 && d.cloudId);
+  const picked = selectedSyncItems().filter(isFilePairItem);
   if (!picked.length) {
     toast('Select some matched rows first', 'info');
     return;
@@ -4226,6 +4250,10 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName, ov
          to the project id and this makes a new project. Success is not a
          reason to drop the one sentence he has to act on. */
       if (r && r.note) toast(r.note, 'warn');
+      /* `warning` is the upload's own partial: the new copy could not be put
+         in the old project's site, or could not be downloaded back over the
+         local file. The replace still succeeded, and that is not all of it. */
+      if (r && r.warning) toast(r.warning, 'warn');
       return r;
     },
   });
@@ -4363,20 +4391,23 @@ function rowDetailHtml(r, stripe) {
        honoured by every matching pass, so the project lands here and the
        sentence reported his own decision as a fact about the disk. The file
        is still there, which is why the download then refused. */
+    //: Raw text: `sentences` is escaped once where it lands (`e(sentences
+    //: .join(' '))`) and `rdAction` escapes its title, so escaping here too
+    //: showed "R&D Lab" as "R&amp;D Lab".
     if (c.rejectedPairing) {
       sentences.push('Unpaired because you marked this and '
-        + e(c.rejectedLocalName || 'a local file')
+        + (c.rejectedLocalName || 'a local file')
         + ' as not a match. That file is still on disk.');
       acts.push(rdAction('link', 'Undo not-a-match',
         'undoNotMatch', [c.id, np(c.rejectedLocalPath || '')],
-        { primary: true, title: 'Pair these two again. ' + a(c.rejectedLocalPath || '') }));
+        { primary: true, title: 'Pair these two again. ' + (c.rejectedLocalPath || '') }));
     } else if (c.nameCollision) {
       /* Nothing he did - two cloud projects share a name and the other one
          took the local file. Nothing *pairs* with this project, which is
          what unpaired means, but a file of its own name is sitting there
          and the download is about to say so. */
       sentences.push('Nothing is paired with this project, but a file of the '
-        + 'same name is already on disk: ' + e(c.collidingLocalName || '')
+        + 'same name is already on disk: ' + (c.collidingLocalName || '')
         + '. Downloading will ask what to do about it.');
     } else {
       sentences.push(kind === 'sites'
@@ -4392,8 +4423,10 @@ function rowDetailHtml(r, stripe) {
   } else if (r.status === 'orphan' && l && !c) {
     icon = 'up';
     sentences.push('This local file has nothing matching it in Ekahau Cloud.');
+    //: The site the file's folder is paired with, so it does not land
+    //: unassigned - the same id bulk Sync's upload already passes.
     acts.push(rdAction('up', 'Upload',
-      'uploadFromLocal', [np(l.path), l.name],
+      'uploadFromLocal', [np(l.path), l.name, r.parentSiteId || null],
       { primary: true, writes: 'cloud', title: 'Upload this .esx to Ekahau Cloud as a new project.' }));
     acts.push(rdAction('link', 'Link to a cloud project…',
       'openLinkPicker', ['local', np(l.path), l.name],
@@ -5081,7 +5114,7 @@ function cloudCell(r, localCodes) {
     if (isSites) {
       return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Create a cloud site from this folder" data-action="call" data-fn="createFromLocal" data-arg="${a(r.local.name)}">${ic('plus')}<span>Cloud site</span></button></div>`;
     }
-    return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Upload .esx to Ekahau Cloud" data-action="call" data-fn="uploadFromLocal" data-arg="${p(r.local.path)}" data-arg2="${a(r.local.name)}">${ic('up')}<span>Upload</span></button></div>`;
+    return `<div class="lr-cell cloud empty${indentCls}">${chevron}<button class="ghost-add" title="Upload .esx to Ekahau Cloud" data-action="call" data-fn="uploadFromLocal" data-args-json="${a(JSON.stringify([np(r.local.path), r.local.name, r.parentSiteId || null]))}">${ic('up')}<span>Upload</span></button></div>`;
   }
   const c = r.cloud, isMis = r.status === 'mismatch', thing = isSites ? 'cloud site' : 'cloud project';
   const me = ((data && data.currentUser) || '').toLowerCase();
@@ -5262,9 +5295,12 @@ function localCell(r, cloudCodes) {
       : '',
     isSites ? menuItem('merge', 'Merge into another folder…', 'startMerge', [np(l.path), l.name]) : '',
     menuItem('rename', `Rename this ${thing}…`, 'startRename', ['local', np(l.path), l.name, kindAttr]),
+    //: Only a row with a cloud side has a cloud copy to download again.
     menuItem('trash', `Delete this ${thing}${isSites ? ' and its contents' : ''}`,
       'startDelete', ['local', np(l.path), l.name, l.isDir, kindAttr],
-      { danger: true, title: 'A local delete can be undone by downloading the cloud copy again.' }),
+      { danger: true, title: r.cloud
+          ? 'A local delete can be undone by downloading the cloud copy again.'
+          : 'There is no cloud copy of this, so a local delete cannot be undone.' }),
   ], `Actions for this ${thing}`);
 
   return `<div class="lr-cell local${dup ? ' dup' : ''}${indentCls}"${dup ? ` title="A cloud ${isSites ? 'site' : 'project'} shares code ${a(l.code)} — likely the same place"` : ''}>`
@@ -6984,21 +7020,9 @@ async function bulkVerifyNameMatches() {
     seen.add(pair.cloudId);
     targets.push(pair);
   };
-  selected.forEach(k => {
-    const d = rowData[k]; if (!d) return;
-    if (d.kind === 'pair') { pushIfPair(d); return; }
-
-    if (k.startsWith('ct-c:')) {
-      pushIfPair(rowData['ct:' + k.slice('ct-c:'.length)]);
-    } else if (k.startsWith('ct-l:')) {
-
-      for (const rk in rowData) {
-        if (!rk.startsWith('ct:')) continue;
-        const rd = rowData[rk];
-        if (rd.kind === 'pair' && rd.localPath === d.path) { pushIfPair(rd); break; }
-      }
-    }
-  });
+  //: The same resolution the bulk bar counts with - either side's checkbox,
+  //: on either tab, stands for its pair.
+  selectedSyncItems().filter(isFilePairItem).forEach(pushIfPair);
   if (!targets.length) {
     toast('Select some "Name matches" pairs first', 'info');
     return;
@@ -7502,14 +7526,15 @@ function showMergeModal(prev) {
     + (prev.nConflicts ? `, <b>${prev.nConflicts}</b> already exist.` : `.`)
     + crossHtml
     + ` Untick any file you don't want to move — it stays put in its source folder.`;
+  /* `hidden`, not style.display: the wrap ships with the attribute, and
+     `[hidden]{display:none !important}` in wd-tools.css beats any inline
+     style - the choice stayed invisible and the preset rule overwrote. */
+  wrap.hidden = !prev.nConflicts;
   if (prev.nConflicts) {
-    wrap.style.display = '';
     const saved = mergeRule();
     const preset = saved === 'ask' ? 'newer' : saved;
     document.querySelectorAll('input[name="mrule"]').forEach(r => { r.checked = (r.value === preset); });
     document.getElementById('mergeRemember').checked = false;
-  } else {
-    wrap.style.display = 'none';
   }
   let h = '';
   sources.forEach((s, si) => {
@@ -7968,6 +7993,25 @@ function updateBulkBar() {
   //: Offered, but not confirmed as his - see the split below.
   const unprovenToShare = new Map();
   const myEmail = ((data && data.currentUser) || '').toLowerCase();
+  /* Pairs are counted from what the actions will act on. Every matched row
+     now gives each side its own checkbox (`s-c:`/`s-l:`, `ct-c:`/`ct-l:`),
+     whose rows are kind cloud or local, so counting `kind === 'pair'` over
+     the raw keys found none: "Make matching pairs agree…" was always off,
+     and Verify was off on the Flat tab. `selectedSyncItems` resolves either
+     side to its pair, and `bulkReconcile` and `bulkVerifyNameMatches` read
+     the same list, so the count and the action cannot disagree. */
+  const syncItems = selectedSyncItems();
+  syncItems.forEach(d => {
+    if (!isFilePairItem(d)) return;
+    pairCount++;
+    if (d.matchType === 'exact' && !verifyablePairIds.has(d.cloudId)) {
+      verifyablePairIds.add(d.cloudId);
+      verifyableCount++;
+    }
+  });
+  //: Cloud projects in the selection that a colleague owns, left out of
+  //: Delete and Move the way the row menu refuses them - by name, not quietly.
+  const notMineToChange = _selectedNotMine();
   selected.forEach(k => {
     const d = rowData[k]; if (!d) return;
 
@@ -7975,41 +8019,15 @@ function updateBulkBar() {
     if (d.kind === 'pair') {
       localFolderCount++;
       if (currentTab === 'projects' || isTreeChild) deletableCount++;
-
-      if (d.matchType === 'exact' && (currentTab === 'projects' || isTreeChild)) {
-        if (!verifyablePairIds.has(d.cloudId)) {
-          verifyablePairIds.add(d.cloudId);
-          verifyableCount++;
-        }
-      }
-    }
-
-    if (k.startsWith('ct-c:')) {
-      const cloudId = k.slice('ct-c:'.length);
-      const pair = rowData['ct:' + cloudId];
-      if (pair && pair.kind === 'pair' && pair.matchType === 'exact' && !verifyablePairIds.has(cloudId)) {
-        verifyablePairIds.add(cloudId);
-        verifyableCount++;
-      }
-    } else if (k.startsWith('ct-l:')) {
-
-      for (const rk in rowData) {
-        if (!rk.startsWith('ct:')) continue;
-        const rd = rowData[rk];
-        if (rd.kind === 'pair' && rd.localPath === d.path
-            && rd.matchType === 'exact'
-            && !verifyablePairIds.has(rd.cloudId)) {
-          verifyablePairIds.add(rd.cloudId);
-          verifyableCount++;
-          break;
-        }
-      }
     }
 
     const cloudIdOfRow = d.cloudId || (d.kind === 'cloud' ? d.id : null);
-    if ((d.kind === 'pair' || d.kind === 'cloud') && cloudIdOfRow) {
+    //: Only a project is shared; a site row is kind cloud too, and its id
+    //: handed to the share call is a project id that does not exist.
+    if ((d.kind === 'pair' || d.kind === 'cloud') && cloudIdOfRow && isProjectSyncItem(d)) {
       const state = ownershipOf({ owner: d.cloudOwner });
-      const rowName = d.cloudName || d.localName || cloudIdOfRow;
+      //: A pair row carries `cloudName`; a cloud side carries `name`.
+      const rowName = d.cloudName || d.name || d.localName || cloudIdOfRow;
       if (state !== 'theirs') {
         ownedCloudIds.add(cloudIdOfRow);
         //: The name as well as the id, so the share dialog can list what it
@@ -8030,8 +8048,7 @@ function updateBulkBar() {
           { name: rowName, owner: d.cloudOwner || '' });
       }
     }
-    if (d.kind === 'pair' && d.cloudId) pairCount++;
-    if (d.kind === 'cloud' || d.kind === 'local') deletableCount++;
+    if (d.kind === 'local' || (d.kind === 'cloud' && !_projectNotMine(d))) deletableCount++;
     if (d.kind === 'local') localFolderCount++;
     /* A project, on whichever tab it was selected from. This used to require
        the Projects tab, which hid "Move to site…" entirely on the Sites tab -
@@ -8043,7 +8060,6 @@ function updateBulkBar() {
     if (movableSidesOf(d).length) movableCount++;
 
   });
-  const syncItems = selectedSyncItems();
   const planToLocal = syncPlan(syncItems, 'to-local');
   const planToCloud = syncPlan(syncItems, 'to-cloud');
   /* Why a bulk button is off has to reach him, and until now none of it did.
@@ -8111,13 +8127,55 @@ function updateBulkBar() {
     ([id, v]) => ({ id: id, name: v.name, owner: v.owner }));
   window._bulkShareUnproven = Array.from(unprovenToShare.entries()).map(
     ([id, name]) => ({ id: id, name: name }));
-  setBtn('bulkDeleteBtn', true, deletableCount > 0, 'Bulk delete only works on cloud-only or local-only rows');
+  const notMineWhy = notMineToChange.length
+    ? `${notMineToChange.length === 1 ? 'The selected project is' : 'The selected projects are'}`
+      + ` owned by someone else. Ekahau only lets the owner change a project.`
+    : '';
+  setBtn('bulkDeleteBtn', true, deletableCount > 0,
+    notMineWhy || 'Bulk delete only works on cloud-only or local-only rows');
   setBtn('compareBtn', currentTab === 'sites', localFolderCount >= 2, 'Select 2+ local folders to compare');
-  setBtn('bulkMoveBtn', true, movableCount > 0, 'Select cloud projects or local .esx files first');
+  setBtn('bulkMoveBtn', true, movableCount > 0,
+    notMineWhy || 'Select cloud projects or local .esx files first');
 }
 
 function isProjectSyncItem(d) {
   return !!d && (currentTab === 'projects' || d.entityKind === 'projects');
+}
+
+/* A matched project: its local side is an .esx. A matched site is kind
+   'pair' as well, and its local side is a folder. */
+function isFilePairItem(d) {
+  return !!d && d.kind === 'pair' && !!d.cloudId
+    && /\.esx$/i.test(String(d.localPath || ''));
+}
+
+/* A cloud project in the selection that somebody else owns. The row menu
+   refuses Move and Delete on one (`ownershipBlock`); the bulk actions ask the
+   same fact, not the owner filter. A site is not gated, as on the row. */
+function _projectNotMine(d) {
+  return !!d && (d.kind === 'cloud' || d.kind === 'pair') && isProjectSyncItem(d)
+    && ownershipOf({ owner: d.cloudOwner }) === 'theirs';
+}
+
+/* Those projects, once each, with who owns them - for saying what was left
+   out. */
+function _selectedNotMine() {
+  const seen = new Map();
+  selected.forEach(k => {
+    const d = rowData[k];
+    if (!_projectNotMine(d)) return;
+    const id = d.cloudId || d.id;
+    if (!seen.has(id)) {
+      seen.set(id, { id, name: d.cloudName || d.name || id, owner: d.cloudOwner || '' });
+    }
+  });
+  return [...seen.values()];
+}
+
+function _notMineSentence(list, verb) {
+  return `${list.length} project${list.length === 1 ? ' was' : 's were'} left out`
+    + ` — Ekahau only lets a project's owner ${verb} it: `
+    + list.map(x => `${x.name}${x.owner ? ' (' + x.owner + ')' : ''}`).join(', ') + '.';
 }
 
 /* Which sides of a selected row can be moved into a site.
@@ -8139,6 +8197,9 @@ function isProjectSyncItem(d) {
    `assign_to_site` must never be handed one. Same idiom as `isFilePair`. */
 function movableSidesOf(d) {
   if (!d || !isProjectSyncItem(d)) return [];
+  //: A colleague's project cannot be moved; a pair is left whole rather than
+  //: moving its local end alone, which would split it across two sites.
+  if (_projectNotMine(d)) return [];
   if (d.kind === 'cloud') {
     return [{ kind: 'cloud', id: d.id, name: d.name, size: d.size, owner: d.owner }];
   }
@@ -8755,10 +8816,21 @@ function syncEverythingPlan() {
   (data.matched || []).forEach(pr => {
     takePair(pr);
     takeSiteName(pr);
-    const site = (pr.cloud && pr.cloud.name) || (pr.local && pr.local.name) || '';
+    //: The folder a fresh download lands in: the paired local folder where
+    //: there is one, as `indexRowData` does for the row's own Download.
+    const site = (pr.local && !isFile(pr.local) && pr.local.name)
+      || (pr.cloud && pr.cloud.name) || (pr.local && pr.local.name) || '';
     walkKids((pr.cloud && pr.cloud.children) || (pr.local && pr.local.children), site);
   });
-  (data.cloudOnly || []).forEach(c => { takeCloud(c); walkKids(c.children, c.name); });
+  /* On the Sites tab `data.cloudOnly` is sites, and a site id handed to
+     `download_project` is not a project. Only its children are downloads.
+     `typeof` for the probes that slice this function out on its own, as in
+     `ownershipOf`. */
+  const onSites = typeof currentTab !== 'undefined' && currentTab === 'sites';
+  (data.cloudOnly || []).forEach(c => {
+    if (!onSites) takeCloud(c);
+    walkKids(c.children, c.name);
+  });
   (data.localOnly || []).forEach(l => walkKids(l.children, l.name));
   if (data.orphans) (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
 
@@ -9132,8 +9204,19 @@ async function syncEverything() {
       title: d.siteName ? 'Downloading "' + d.name + '.esx" → ' + d.siteName
                         : 'Downloading "' + d.name + '.esx"',
       type: 'download', pollBackend: true, undoable: false,
-      retryFn: async (newId) => pyApi('download_project', d.id, destFolder, newId),
-      run: async (opId) => pyApi('download_project', d.id, destFolder, opId),
+      /* Thrown, as the pulls above do: the queue counts a returned
+         `{error}` as done, and the run reported "updated - local and cloud
+         now match" over downloads that were all refused. */
+      retryFn: async (newId) => {
+        const r = await pyApi('download_project', d.id, destFolder, newId);
+        if (r && r.error) throw new Error(r.error);
+        return r;
+      },
+      run: async (opId) => {
+        const r = await pyApi('download_project', d.id, destFolder, opId);
+        if (r && r.error) throw new Error(r.error);
+        return r;
+      },
     });
     waits.push(promise.then(() => { results.done++; })
                       .catch(() => { results.failed++; }));
@@ -9193,21 +9276,28 @@ function bulkDelete() {
   const entries = [...selected].map(k => ({ k, d: rowData[k] })).filter(x => x.d);
   const items = [];
   let nPair = 0;
+  //: Someone else's cloud project is left out and named, as the row menu
+  //: refuses it; Ekahau would answer the delete with 403.
+  const notMine = _selectedNotMine();
   for (const { k, d } of entries) {
     const ctx = contextForKey(k);
     if (d.kind === 'cloud' || d.kind === 'local') {
+      if (_projectNotMine(d)) continue;
       items.push({ ...d, context: ctx });
     } else if (d.kind === 'pair') {
 
       const isTreeChild = k.startsWith('ct:');
       if (currentTab === 'sites' && !isTreeChild) continue;
-      nPair++;
-      items.push({ kind: 'cloud', id: d.cloudId, name: d.cloudName, context: ctx });
+      if (!_projectNotMine(d)) {
+        nPair++;
+        items.push({ kind: 'cloud', id: d.cloudId, name: d.cloudName, context: ctx });
+      }
       items.push({ kind: 'local', path: d.localPath, name: d.localName, isDir: false, context: ctx });
     }
   }
   if (!items.length) {
-    toast('Nothing to delete. Select a cloud or local checkbox on one or more rows first.', 'info');
+    toast(notMine.length ? _notMineSentence(notMine, 'delete')
+      : 'Nothing to delete. Select a cloud or local checkbox on one or more rows first.', 'info');
     return;
   }
   const nCloud = items.filter(d => d.kind === 'cloud').length;
@@ -9261,7 +9351,8 @@ function bulkDelete() {
         : anyCloud
           ? cloudSentence + ` The local files listed below are deleted from`
             + ` this computer as well, and no copy of them is kept.`
-          : ` This cannot be undone.`);
+          : ` This cannot be undone.`)
+    + (notMine.length ? ' ' + e(_notMineSentence(notMine, 'delete')) : '');
   _setDeleteBtn(cloudOnly ? 'Delete from cloud' : 'Delete');
   // A count is not something anyone can check. Name them, since the list they
   // would otherwise be read from is greyed out behind this dialog.
@@ -9633,6 +9724,13 @@ async function confirmRename() {
   const both = _renameBothWanted();
   const partnerDone = both && _renamePartnerAlreadyNamed(n);
   closeModal('renameModal');
+  /* Where the .esx is once the renames have landed. `rename_local` moves the
+     file, so the path captured above is gone by the time the inside name is
+     written - every local rename reported "Local file not found". */
+  let esxNow = localEsx;
+  const followLocal = (side, r) => {
+    if (localEsx && side === 'local' && r && r.newPath) esxNow = r.newPath;
+  };
 
   if (!both || partnerDone) {
     opEnqueue({
@@ -9644,7 +9742,8 @@ async function confirmRename() {
       run: async () => {
         const r = await _renameOneSide(rt.side, rt.idOrPath, rt.kind, n);
         if (r && r.error) throw new Error(r.error);
-        await _alignInternalName(localEsx, n);
+        followLocal(rt.side, r);
+        await _alignInternalName(esxNow, n);
         _scheduleOpRefresh();
         return r;
       },
@@ -9676,8 +9775,9 @@ async function confirmRename() {
         `The ${mine} is now "${n}". The ${theirs} is still "${partner.name}" `
         + `— renaming it failed: ${r.error}`);
     }
+    followLocal(partner.side, r);
     //: Both visible names have landed, so the third one follows them.
-    await _alignInternalName(localEsx, n);
+    await _alignInternalName(esxNow, n);
     return r;
   };
 
@@ -9692,6 +9792,7 @@ async function confirmRename() {
         // the dangerous one below.
         throw new Error(`Nothing was renamed — the ${mine} rename failed: ${first.error}`);
       }
+      followLocal(rt.side, first);
       firstDone = true;
       return renamePartner();
     },
@@ -9701,6 +9802,7 @@ async function confirmRename() {
       ? renamePartner()
       : _renameOneSide(rt.side, rt.idOrPath, rt.kind, n).then(r => {
           if (r && r.error) throw new Error(r.error);
+          followLocal(rt.side, r);
           firstDone = true;
           return renamePartner();
         })),
@@ -10230,7 +10332,12 @@ async function bulkMoveToSite() {
       size: sd.size, owner: sd.owner,
       destValue: '', destNewName: '', destAuto: false,
     }));
-  if (!targets.length) { toast('Select cloud projects or local .esx files first', 'info'); return; }
+  const notMine = _selectedNotMine();
+  if (notMine.length) toast(_notMineSentence(notMine, 'move'), 'info');
+  if (!targets.length) {
+    if (!notMine.length) toast('Select cloud projects or local .esx files first', 'info');
+    return;
+  }
   _moveToSiteTargets = targets;
   await _openMoveToSitePicker();
 }

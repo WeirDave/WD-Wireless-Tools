@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 import zipfile
 from pathlib import Path
@@ -447,16 +448,60 @@ def list_templates() -> dict:
     return {"ok": True, "templates": out, "folder": str(USER_DIR)}
 
 
-def save_template(template: dict) -> dict:
+def _same_file(a: Path, b: Path) -> bool:
+    """True when two names reach one file.
+
+    Not a name comparison. On Windows and macOS `Lab_1` and `lab_1` are one
+    file, and asking whether the strings differ was how a case-only rename
+    wrote the template and then deleted it as "the old one".
+    """
+    if a.name == b.name:
+        return True
+    try:
+        return os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def save_template(template: dict, replaces: str | None = None) -> dict:
+    """Write a template under its name, and never over a different one.
+
+    `replaces` is the file this save stands in for - the template being
+    edited. That file may be overwritten, and is removed when the name moved
+    on; any other file at the target is another template, and the save is
+    refused rather than writing over it. Names map to files through
+    `_safe_filename`, which drops punctuation, so "Lab #1" and "Lab 1" are the
+    same file and the refusal names the template already there.
+    """
     if not template.get("items"):
         return {"ok": False, "error": "Nothing to save - the template has no capacity items."}
     USER_DIR.mkdir(parents=True, exist_ok=True)
     filename = _safe_filename(template.get("name", "capacity"))
     path = USER_DIR / filename
+    old = USER_DIR / Path(replaces).name if replaces else None
+    if old is not None and not old.is_file():
+        old = None          # a shipped example, or already gone: nothing to remove
+    same = old is not None and _same_file(old, path)
+    if path.exists() and not same:
+        try:
+            there = json.loads(path.read_text(encoding="utf-8")).get("name") or filename
+        except Exception:
+            there = filename
+        return {"ok": False, "exists": True,
+                "error": f'A template called "{there}" already exists. '
+                         f'Choose another name, or edit that one instead.'}
+    if same and old.name != path.name:
+        # A case-only rename. Renaming first carries the file across without a
+        # moment in which neither name holds it.
+        os.replace(old, path)
     body = dict(template)
     body.pop("_file", None)
     body.pop("_builtin", None)
     path.write_text(json.dumps(body, indent=2), encoding="utf-8")
+    if old is not None and not same:
+        # Renamed in the editor: the old file goes, so one template does not
+        # become two. Only after the new one is written.
+        old.unlink()
     return {"ok": True, "file": filename, "path": str(path)}
 
 
@@ -1196,7 +1241,12 @@ def apply_to(src_path, dest_path, template, occupants,
             else:
                 populated += 1
             target["capacityItems"] = items_for(floor)
-            if req_id:
+            # His area keeps the requirement he gave it. The plan says only
+            # devices are written into an area that is already there; putting
+            # the template's requirement on it as well changed what the area
+            # demands of the design without saying so. An area with none gets
+            # the template's, since it has nothing to lose.
+            if req_id and not target.get("requirementId"):
                 target["requirementId"] = req_id
             if mode == "replace" and floor.get("reshape") and floor.get("polygon"):
                 target["area"] = [{"x": p["x"], "y": p["y"]} for p in floor["polygon"]]

@@ -10,6 +10,7 @@ JSON HTTP endpoints.
 """
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -22,6 +23,8 @@ from tools import image_format
 from tools.rename_manager import (
     apply_file_rules as _apply_file_rules,
     migrate_rename_cfg as _migrate_rename_cfg_impl,
+    _occupied_by_another,
+    _rename,
     _split_ext,
 )
 from tools.user_dir import user_dir
@@ -525,18 +528,60 @@ def _save_config(cfg):
         json.dump(cfg, f, indent=2)
 
 
-def _unique_path(dest: Path) -> Path:
-    """Return *dest* if it doesn't exist, else append (1), (2), … to stem."""
-    if not dest.exists():
-        return dest
+def _unique_path(dest: Path, taken: set | None = None) -> Path:
+    """Return *dest* if it doesn't exist, else append (1), (2), … to stem.
+
+    *taken* is for a dry run: the names already handed out to earlier files
+    in the same scan, which do not exist yet. Without it two files bound for
+    one name both previewed unchanged, and Organize then renamed the second.
+    The chosen name is added to it.
+    """
+    def free(p: Path) -> bool:
+        return not p.exists() and (
+            taken is None or os.path.normcase(str(p)) not in taken)
+    candidate = dest
     stem, ext = dest.stem, dest.suffix
-    parent = dest.parent
     i = 1
-    while True:
-        candidate = parent / f"{stem} ({i}){ext}"
-        if not candidate.exists():
-            return candidate
+    while not free(candidate):
+        candidate = dest.parent / f"{stem} ({i}){ext}"
         i += 1
+    if taken is not None:
+        taken.add(os.path.normcase(str(candidate)))
+    return candidate
+
+
+def _why_unreadable(exc: OSError) -> str:
+    """An OSError in words a person can act on."""
+    if isinstance(exc, PermissionError):
+        return "access to it was denied"
+    return "it could not be read (%s)" % (exc.strerror or type(exc).__name__)
+
+
+def _site_dirs(root_path: Path, skip: set, unreadable: list | None = None) -> list:
+    """The folders under *root_path* that are sites, after the skip list.
+
+    One rule for Preview and Organize alike. The root itself is treated as
+    the site only when this is empty: Preview once fell back to the root
+    whenever no site had anything to show, Organize only when there were no
+    site folders, so loose files beside an empty site folder were previewed
+    as moves and then left where they were.
+
+    A child whose type cannot even be read is a site that cannot be read; it
+    is listed in *unreadable* and still counts as a site folder.
+    """
+    out = []
+    for d in sorted(root_path.iterdir()):
+        if d.name.lower() in skip or d.name.startswith("."):
+            continue
+        try:
+            if not d.is_dir():
+                continue
+        except OSError as e:
+            if unreadable is not None:
+                unreadable.append({"folder": d.name, "reason": _why_unreadable(e)})
+            continue
+        out.append(d)
+    return out
 
 
 _BUILTIN_KEYS = ("images", "floorplans", "reports")
@@ -627,7 +672,60 @@ def _get_destinations(cfg: dict) -> list:
             "json_keywords": [str(k).strip().lower() for k in (c.get("json_keywords") or []) if str(k).strip()],
             "builtin": False,
         })
-    return builtins
+    return _apply_default_subfolders(cfg, builtins, seen_keys, seen_names)
+
+
+def _apply_default_subfolders(cfg: dict, dests: list, seen_keys: set,
+                              seen_names: set) -> list:
+    """Honour Settings → Default subfolders: its order, its removals, its
+    additions. Each entry gains `create` - whether a new site folder gets it.
+
+    Settings and Setup saved `subfolders` and promised "Created automatically
+    in new site folders", and nothing read it: a removed "reports" was still
+    created and an added subfolder never was. The split is deliberate:
+
+    * **Creating a site folder follows the list exactly** (`create`).
+    * **Organizing does not shrink with it.** A built-in left off the list is
+      still returned, after the listed ones, with `create: False` - it is
+      where reports are sorted to, and a file organized there makes the
+      folder then, which is a move he asked for. Dropping it would have
+      turned "do not pre-make an empty reports folder" into "stop sorting
+      reports".
+    * Added subfolders have no extensions, so they never take a file; they
+      are created, and skipped by the scan like any managed subfolder.
+    * Custom destinations (Squirrel's own editor) are created, as before.
+
+    A missing or malformed list means every destination, as it always did.
+    """
+    if not isinstance(cfg.get("subfolders"), list):
+        for d in dests:
+            d["create"] = True
+        return dests
+    names = cfg.get("subfolder_names") or {}
+    if not isinstance(names, dict):
+        names = {}
+    by_key = {d["key"]: d for d in dests if d["builtin"]}
+    listed, done = [], set()
+    for raw in cfg["subfolders"]:
+        key = str(raw or "").strip()
+        if not key or key in done:
+            continue
+        done.add(key)
+        if key in by_key:
+            listed.append(dict(by_key[key], create=True))
+            continue
+        if key in seen_keys:
+            continue
+        name = _sanitize_folder_name(str(names.get(key) or "").strip())
+        if not name or name.lower() in seen_names:
+            continue
+        seen_keys.add(key)
+        seen_names.add(name.lower())
+        listed.append({"key": key, "name": name, "exts": [], "pdf_keywords": [],
+                       "json_keywords": [], "builtin": False, "create": True})
+    unlisted = [dict(d, create=False) for d in dests if d["builtin"] and d["key"] not in done]
+    customs = [dict(d, create=True) for d in dests if not d["builtin"]]
+    return listed + unlisted + customs
 
 
 def _effective_skip(cfg: dict) -> set:
@@ -736,7 +834,7 @@ class FolderOrganizer:
             return {"ok": False, "error": f"'{safe_name}' exists but isn't a folder"}
         if subfolders is None:
             cfg = _load_config()
-            picked_names = [d["name"] for d in _get_destinations(cfg)]
+            picked_names = [d["name"] for d in _get_destinations(cfg) if d.get("create", True)]
         else:
             picked_names = []
             seen = set()
@@ -1098,6 +1196,7 @@ class FolderOrganizer:
 
         moves = []
         staying = []
+        taken: set = set()
         for f in sorted(site_dir.iterdir()):
             if not f.is_file():
                 continue
@@ -1119,7 +1218,7 @@ class FolderOrganizer:
                 renamed_target = _apply_rename(f.name, site_dir.name, cfg)
                 dest_dir_name = _dest_name(cfg, target)
                 dest = site_dir / dest_dir_name / renamed_target
-                final = _unique_path(dest)
+                final = _unique_path(dest, taken)
                 renamed = (final.name != f.name)
                 moves.append({
                     "name": f.name,
@@ -1187,19 +1286,27 @@ class FolderOrganizer:
         totals["skipped"] = 0
 
 
-        site_dirs = []
-        for site_dir in sorted(root_path.iterdir()):
-            if not site_dir.is_dir():
+        # A folder that cannot be read is skipped and named, not allowed to
+        # fail the whole scan: one locked folder among forty hid the other
+        # thirty-nine.
+        unreadable: list = []
+        site_dirs = _site_dirs(root_path, skip, unreadable)
+        for site_dir in site_dirs:
+            # Counted apart and added on success, so a folder that fails
+            # half-way through adds nothing to the totals.
+            local = dict.fromkeys(totals, 0)
+            try:
+                entry = self._scan_dir(site_dir, cfg, local)
+            except OSError as e:
+                unreadable.append({"folder": site_dir.name,
+                                   "reason": _why_unreadable(e)})
                 continue
-            if site_dir.name.lower() in skip or site_dir.name.startswith("."):
-                continue
-            site_dirs.append(site_dir)
-            entry = self._scan_dir(site_dir, cfg, totals)
+            for k, v in local.items():
+                totals[k] += v
             if entry:
                 sites.append(entry)
 
-
-        if not sites:
+        if not site_dirs and not unreadable:
             entry = self._scan_dir(root_path, cfg, totals)
             if entry:
                 entry["folder"] = root_path.name + "  (root folder)"
@@ -1218,6 +1325,7 @@ class FolderOrganizer:
             "duplicates": duplicates,
             "duplicate_count": len(duplicates),
             "unreferenced_count": unreferenced_total,
+            "unreadable": unreadable,
             "destinations": [{"key": d["key"], "name": d["name"], "builtin": d["builtin"]}
                              for d in _get_destinations(cfg)],
         }
@@ -1234,9 +1342,13 @@ class FolderOrganizer:
 
             candidate_dirs = [site_dir] + [site_dir / sf for sf in subfolder_names]
             for d in candidate_dirs:
-                if not d.is_dir():
+                try:
+                    if not d.is_dir():
+                        continue
+                    files = list(d.iterdir())
+                except OSError:
                     continue
-                for f in d.iterdir():
+                for f in files:
                     if not f.is_file():
                         continue
                     if f.name.startswith("."):
@@ -1280,14 +1392,41 @@ class FolderOrganizer:
 
         Appends to `undo_log["moves"]` and `undo_log["created_dirs"]` so a later
         undo() call can walk the log in reverse.
+
+        `folder_label` is what the page calls this folder, and only matches
+        its exclusions and overrides. The `{folder}` in a rename rule is the
+        folder's real name, as Preview shows it: in root-as-site mode the
+        label carries "  (root folder)", and that once reached file names.
+
+        A folder that cannot be written or read becomes one error entry
+        (`name` empty, `target` None) instead of an exception, so the other
+        sites are still organized and the moves made so far stay undoable.
         """
+        site_moves = []
+        try:
+            self._execute_files(site_dir, cfg, excl, overrides, totals,
+                                folder_label, undo_log, site_moves)
+        except OSError as e:
+            totals["errors"] += 1
+            site_moves.append({
+                "name": "",
+                "target": None,
+                "status": "error",
+                "error": "Could not organize this folder: " + _why_unreadable(e),
+            })
+        if site_moves:
+            return {"folder": folder_label, "moves": site_moves}
+        return None
+
+    def _execute_files(self, site_dir: Path, cfg: dict, excl: set,
+                       overrides: dict, totals: dict, folder_label: str,
+                       undo_log: dict, site_moves: list) -> None:
         for d in _get_destinations(cfg):
             sub_path = site_dir / d["name"]
             if not sub_path.exists():
                 sub_path.mkdir()
                 undo_log["created_dirs"].append(str(sub_path))
 
-        site_moves = []
         for f in sorted(site_dir.iterdir()):
             if not f.is_file():
                 continue
@@ -1310,7 +1449,7 @@ class FolderOrganizer:
                 target = overrides[override_key]
 
             src_path = f
-            renamed_target = _apply_rename(f.name, folder_label, cfg)
+            renamed_target = _apply_rename(f.name, site_dir.name, cfg)
             dest_dir_name = _dest_name(cfg, target)
             dest = site_dir / dest_dir_name / renamed_target
             if not _is_inside(dest, site_dir):
@@ -1345,10 +1484,6 @@ class FolderOrganizer:
                 })
                 totals["errors"] += 1
 
-        if site_moves:
-            return {"folder": folder_label, "moves": site_moves}
-        return None
-
     def execute(self, root: str | None = None, excluded: list | None = None,
                 overrides: list | None = None) -> dict:
         """
@@ -1381,45 +1516,45 @@ class FolderOrganizer:
         undo_log = {"root": str(root_path), "moves": [], "created_dirs": []}
 
 
-        found_sites = False
-        for site_dir in sorted(root_path.iterdir()):
-            if not site_dir.is_dir():
-                continue
-            if site_dir.name.lower() in skip or site_dir.name.startswith("."):
-                continue
-            found_sites = True
-            entry = self._execute_dir(site_dir, cfg, excl, ovr, totals,
-                                      site_dir.name, undo_log)
-            if entry:
-                results.append(entry)
-
-
-        if not found_sites:
-            label = root_path.name + "  (root folder)"
-            entry = self._execute_dir(root_path, cfg, excl, ovr, totals,
-                                      label, undo_log)
-            if entry:
-                results.append(entry)
-
-
         undo_file = _undo_path(root_path)
-        if undo_log["moves"]:
-            UNDO_DIR.mkdir(parents=True, exist_ok=True)
-            with open(undo_file, "w") as f:
-                json.dump(undo_log, f, indent=2)
-        elif undo_file.exists():
-            try:
-                undo_file.unlink()
-            except Exception:
-                pass
+        try:
+            unreadable: list = []
+            site_dirs = _site_dirs(root_path, skip, unreadable)
+            for u in unreadable:
+                totals["errors"] += 1
+                results.append({"folder": u["folder"], "moves": [{
+                    "name": "", "target": None, "status": "error",
+                    "error": "Could not organize this folder: " + u["reason"],
+                }]})
+            for site_dir in site_dirs:
+                entry = self._execute_dir(site_dir, cfg, excl, ovr, totals,
+                                          site_dir.name, undo_log)
+                if entry:
+                    results.append(entry)
 
+            if not site_dirs and not unreadable:
+                label = root_path.name + "  (root folder)"
+                entry = self._execute_dir(root_path, cfg, excl, ovr, totals,
+                                          label, undo_log)
+                if entry:
+                    results.append(entry)
+        finally:
+            # Whatever moved is undoable, even if something above raised. A
+            # run that moved nothing leaves the previous log alone: deleting
+            # it made the last real organize impossible to undo.
+            if undo_log["moves"]:
+                UNDO_DIR.mkdir(parents=True, exist_ok=True)
+                with open(undo_file, "w") as f:
+                    json.dump(undo_log, f, indent=2)
+
+        undo_now = self.has_undo(str(root_path))
         return {
             "ok": True,
             "root": str(root_path),
             "totals": totals,
             "sites": results,
-            "undo_available": len(undo_log["moves"]) > 0,
-            "undo_count": len(undo_log["moves"]),
+            "undo_available": undo_now["available"],
+            "undo_count": undo_now["count"],
         }
 
 
@@ -1709,13 +1844,13 @@ class FolderOrganizer:
                 details.append({"old_name": src.name, "new_name": new_name,
                                 "status": "error", "reason": "invalid target name"})
                 continue
-            if dst.exists():
+            if _occupied_by_another(src, dst):
                 skipped += 1
                 details.append({"old_name": src.name, "new_name": new_name,
                                 "status": "skipped", "reason": "target exists"})
                 continue
             try:
-                src.rename(dst)
+                _rename(src, dst)
                 renamed += 1
                 details.append({"old_name": src.name, "new_name": new_name, "status": "renamed"})
             except Exception as e:

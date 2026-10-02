@@ -209,5 +209,26 @@ class TheComparisonTellsRenamesFromRealChangesTests(unittest.TestCase):
         self.assertNotIn("SITE1 New Convention", blob)
 
 
+class ACaseOnlyDifferenceIsNotARenameTests(unittest.TestCase):
+    """`nameState` folds case; `renamed` compared exactly. So "Cedar Hall"
+    against "CEDAR HALL" came back `nameState: same` and `renamedOnly: True`
+    in one result - the row said the names agree and that it was renamed."""
+
+    def test_the_halves_of_the_result_agree(self):
+        r = compare_esx(esx(project_name="Cedar Hall"),
+                        esx(project_name="CEDAR HALL"),
+                        local_file_stem="CEDAR HALL")
+        self.assertEqual("same", r["nameState"])
+        self.assertFalse(r["renamed"], r)
+        self.assertFalse(r["renamedOnly"], r)
+        self.assertTrue(r["identical"], r)
+
+    def test_a_real_rename_still_reads_as_one(self):
+        r = compare_esx(esx(project_name="Cedar Hall"),
+                        esx(project_name="Cedar Hall East"),
+                        local_file_stem="Cedar Hall")
+        self.assertTrue(r["renamedOnly"], r)
+
+
 if __name__ == "__main__":
     unittest.main()
