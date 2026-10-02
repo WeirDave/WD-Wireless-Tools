@@ -8944,8 +8944,9 @@ async function syncEverything() {
       + '<th>Last saved</th></tr></thead>'
       + '<tbody>' + _syncPickRowsHtml(plan.down, 'down', '&#11015; cloud &rarr; local', true) + '</tbody>'
       + '</table></div>'
-      + '<p class="sub">All ' + plan.down.length + ' listed above — scroll the '
-      + 'box for the rest. Each local file is replaced by the copy Ekahau is '
+      + '<p class="sub">' + (plan.down.length > 6
+          ? 'All ' + plan.down.length + ' are listed - scroll the box to see them. ' : '')
+      + 'Each local file is replaced by the copy Ekahau is '
       + 'holding, and that cloud copy stays there afterwards.</p>';
 
     const unchecked = plan.down.filter(
