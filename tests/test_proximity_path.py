@@ -34,7 +34,7 @@ NODE_PRELUDE = r"""
 const fs = require('fs');
 const source = fs.readFileSync(process.argv[1], 'utf8');
 const a = source.indexOf('  function _dist(a, b) {');
-const b = source.indexOf('  function sortByRow(aps, reverse)');
+const b = source.indexOf('  function sortByRow(aps, reverse');
 if (a < 0 || b < 0) throw new Error('the proximity block moved');
 eval(source.slice(a, b));
 
