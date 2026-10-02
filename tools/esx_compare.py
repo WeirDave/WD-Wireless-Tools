@@ -188,10 +188,15 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes,
 
     local_name = _names(_as_json(local.get("project.json", b"")))
     cloud_name = _names(_as_json(cloud.get("project.json", b"")))
-    renamed = bool(local_name and cloud_name and local_name != cloud_name)
 
     def _same(a, b):
         return a.strip().casefold() == b.strip().casefold()
+
+    #: Folded the same way `nameState` folds, or a case-only difference read
+    #: as "renamed" beside a `nameState` of "same" - two halves of one result
+    #: disagreeing about the one thing the row was showing.
+    renamed = bool(local_name and cloud_name
+                   and not _same(local_name, cloud_name))
 
     if cloud_name and local_name:
         internal_ok = _same(local_name, cloud_name)
