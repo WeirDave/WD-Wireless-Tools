@@ -50,6 +50,12 @@ INLINE_SCRIPT = re.compile(r'<script\b(?![^>]*\bsrc=)[^>]*>', re.I)
 #: `onclick="` built by JavaScript - the same defect wearing a template
 #: literal. Deliberately loose: any `on<event>=` next to a quote in a JS file.
 JS_INLINE_ATTR = re.compile(r'\son(' + "|".join(EVENTS) + r')\s*=\s*[\\"\'`]', re.I)
+#: The same handler set through the DOM: `setAttribute('onclick', '...')`
+#: is a string the policy blocks exactly as it blocks one in markup. The
+#: Report's "Reset to shipped defaults" button was added this way, beside a
+#: delegated twin, and did nothing whenever it was the one on screen.
+JS_SET_INLINE_ATTR = re.compile(
+    r'setAttribute\(\s*["\'`]on(' + "|".join(EVENTS) + r')["\'`]', re.I)
 SCRIPT_SRC = re.compile(r'<script[^>]*\bsrc="([^"]+)"', re.I)
 DATA_FN = re.compile(r'data-fn="([^"]+)"')
 
@@ -130,8 +136,9 @@ class AStrictPageHasNoInlineScriptTests(unittest.TestCase):
         found = {}
         for name in sorted(strict_pages()):
             for script in scripts_for(name):
-                hits = JS_INLINE_ATTR.findall(
-                    script.read_text(encoding="utf-8", errors="ignore"))
+                text = script.read_text(encoding="utf-8", errors="ignore")
+                hits = (JS_INLINE_ATTR.findall(text)
+                        + JS_SET_INLINE_ATTR.findall(text))
                 if hits:
                     found.setdefault(name, []).append(
                         "%s (%d)" % (script.name, len(hits)))
