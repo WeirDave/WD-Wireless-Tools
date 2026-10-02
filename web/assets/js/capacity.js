@@ -644,12 +644,13 @@
           + esc(f.floorName || 'Floor plan') + '</span>'
           + '<span class="cap-badge cap-badge--' + cls + '">' + esc(f.action) + '</span></div>'
           + '<div class="cap-facts">' + facts + '</div>'
-          + floorPeopleHtml(f, i) + '</div>';
+          + floorPeopleHtml(f, i, r.devicesPerPerson) + '</div>';
       }).join('');
       var perFloorTable = r.rows.length
         ? '<table class="cap-table"><thead><tr><th>Device profile</th><th>Usage profile</th>'
           + '<th style="text-align:right">Devices</th></tr></thead><tbody>' + counts
-          + '<tr><td colspan="2" class="cap-total">Per floor, for ' + r.occupants + ' people</td>'
+          + '<tr><td colspan="2" class="cap-total">Per floor, '
+          + multiplierText(r.occupants, r.devicesPerPerson, r.totalDevices) + '</td>'
           + '<td class="cap-n cap-total">' + r.totalDevices + '</td></tr></tbody></table>'
         : '';
       var existingNote = r.floorsWithDevices
@@ -693,6 +694,21 @@
       + '</select></div>';
   }
 
+  /* People, the template's devices per person, and the devices that come to.
+     The multiplier is the point: 250 people on a 3-per-person template read
+     as 750 "people" stacked on the building number when only the people and
+     the devices were shown. Each device row is rounded on its own (see
+     devicesFor), so at small headcounts the total can sit a few above or
+     below people x per; that is said rather than shown as a wrong sum. */
+  function multiplierText(people, per, total) {
+    var devices = total + ' device' + (total === 1 ? '' : 's');
+    if (per == null || people == null) return devices;
+    var exact = Math.floor(Number(people) * Number(per) + 0.5) === total;
+    return fmtPeople(people) + ' people &times; ' + fmtPer(per) + ' devices each '
+      + (exact ? '= ' : '&asymp; ') + devices
+      + (exact ? '' : ' (each device type is rounded on its own)');
+  }
+
   function fmtPeople(n) {
     n = Number(n) || 0;
     return n === Math.round(n) ? String(n) : n.toFixed(1);
@@ -700,7 +716,7 @@
 
   // Each floor takes its own headcount. Left blank, it uses the building
   // number above - shown as the placeholder so the fallback is visible.
-  function floorPeopleHtml(f, i) {
+  function floorPeopleHtml(f, i, per) {
     var id = 'capFloorOcc' + i;
     var own = Object.prototype.hasOwnProperty.call(floorOcc, f.floorPlanId);
     return '<div class="cap-row cap-floor-people">'
@@ -712,7 +728,7 @@
       + ' data-arg="' + WD.escAttr(f.floorPlanId) + '" data-arg-value="1">'
       + '<span class="cap-sub">' + (f.mode === 'none' ? 'nobody here'
           : (own ? '' : 'building number &middot; ')
-            + (f.totalDevices || 0) + ' device' + (f.totalDevices === 1 ? '' : 's'))
+            + multiplierText(f.occupants, per, f.totalDevices || 0))
       + '</span></div>';
   }
 
@@ -768,7 +784,9 @@
     var bits = ['Wrote <b>' + esc(name) + '</b> — '
       + r.floorsWritten.length + ' floor'
       + (r.floorsWritten.length === 1 ? '' : 's') + ', '
-      + r.devicesWritten + ' devices for ' + fmtPeople(r.occupantsWritten) + ' people.'];
+      + r.devicesWritten + ' devices for ' + fmtPeople(r.occupantsWritten) + ' people'
+      + (r.devicesPerPerson != null ? ' at ' + fmtPer(r.devicesPerPerson) + ' devices each' : '')
+      + '.'];
     if (r.floorsSkipped.length) {
       bits.push(r.floorsSkipped.length + ' floor'
         + (r.floorsSkipped.length === 1 ? '' : 's') + ' left alone: '
