@@ -142,6 +142,10 @@ class ACaseOnlyRenameKeepsTheTemplate(Base):
     def test_two_names_for_one_file_do_not_delete_it(self):
         if not _can_symlink(cap.USER_DIR):
             self.skipTest("symbolic links are not available here")
+        if _case_insensitive(cap.USER_DIR):
+            # The two names are already one file here, so there is nothing
+            # to alias; test_on_a_case_insensitive_disk runs the real thing.
+            self.skipTest("this disk is case-insensitive")
         first = self.build("Invented Office", 1.0)
         new_file = cap._safe_filename("invented office")
         os.symlink(cap.USER_DIR / first["file"], cap.USER_DIR / new_file)

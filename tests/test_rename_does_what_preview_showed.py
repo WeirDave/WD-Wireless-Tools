@@ -221,11 +221,18 @@ class ACaseOnlyRenameApplies(_Base):
         site.mkdir()
         (site / "Floor Plan.png").write_text("1")
         (site / "floor plan.png").write_text("2")
+        # On a case-insensitive disk (Windows, macOS) the second write lands
+        # on the first file, so the other file has to differ by more than
+        # case; it is still a different file the rename must not replace.
+        other = "floor plan.png"
+        if (site / "Floor Plan.png").read_text() == "2":
+            other = "Floor-Plan.png"
+            (site / other).write_text("2")
         r = self.mgr.execute_bulk_rename(
             [{"path": str(site / "Floor Plan.png"),
-              "new_name": "floor plan.png"}], str(self.root))
+              "new_name": other}], str(self.root))
         self.assertEqual(r["renamed"], 0)
-        self.assertEqual((site / "floor plan.png").read_text(), "2")
+        self.assertEqual((site / other).read_text(), "2")
 
 
 class ThePreviewSeesNamesAlreadyOnDisk(_Base):

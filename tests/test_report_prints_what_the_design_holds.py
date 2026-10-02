@@ -117,7 +117,8 @@ const toasts = [];
 WD.toast = (msg, kind) => toasts.push({ msg, kind: kind || '' });
 globalThis.JSZip = require(JSZIP);
 
-let rsrc = fs.readFileSync(REPORT, 'utf8');
+// A Windows checkout has CRLF line endings; the hook looks for LF.
+let rsrc = fs.readFileSync(REPORT, 'utf8').replace(/\r\n/g, '\n');
 const tail = '  renderTemplateGallery();\n})();';
 const at = rsrc.lastIndexOf(tail);
 if (at < 0) throw new Error('the end of report.js moved; the test hook has nowhere to go');
