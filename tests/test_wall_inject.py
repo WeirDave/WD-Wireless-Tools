@@ -211,6 +211,29 @@ class WallInjection(unittest.TestCase):
         self.assertEqual(report["add"], [])
         self.assertIn("no name", report["skip"][0]["why"])
 
+    def test_a_repeated_type_writes_the_entry_the_preview_described(self):
+        """The plan keeps the first of two entries with one name and skips the
+        second; the write used to look the name up in a dict that kept the
+        last, so the preview described one wall type and another was written.
+        """
+        first = dict(wall_type("Invented Pod"), color="#111111")
+        second = dict(wall_type("Invented Pod"), color="#999999")
+        report = wall_inject.inject(self.esx, [first, second])
+        self.assertEqual(report["add"], [{"name": "Invented Pod"}])
+        self.assertEqual(len(report["skip"]), 1)
+        pods = [w for w in read_member(self.esx, "wallTypes.json")["wallTypes"]
+                if w["name"] == "Invented Pod"]
+        self.assertEqual([w["color"] for w in pods], ["#111111"])
+
+        # And the same for a type the project already has.
+        first = dict(wall_type("Concrete", 30.0), color="#222222")
+        second = dict(wall_type("Concrete", 30.0), color="#888888")
+        report = wall_inject.inject(self.esx, [first, second])
+        self.assertEqual([u["name"] for u in report["update"]], ["Concrete"])
+        concrete = [w for w in read_member(self.esx, "wallTypes.json")["wallTypes"]
+                    if w["name"] == "Concrete"]
+        self.assertEqual([w["color"] for w in concrete], ["#222222"])
+
 
 if __name__ == "__main__":
     unittest.main()
