@@ -42,6 +42,7 @@
   var apDisabled = new Set();
   var currentReportId = DEFAULT_REPORT_ID;
   var currentOpts = {};
+  var optsSeededFor = null;     // the report whose saved options currentOpts holds
 
   var apGroupBy = 'none';
   var apSearch = '';
@@ -808,10 +809,21 @@
     Object.keys(savedReportDefaults || {}).forEach(function (k) {
       if (k !== currentReportId) next[k] = savedReportDefaults[k];
     });
+    // A pending autosave would write the values being reset straight back.
+    if (_autoSaveTimer) { clearTimeout(_autoSaveTimer); _autoSaveTimer = null; }
     pushSettings({ report_defaults: next })
       .then(function () {
-        currentOpts = {};
-        optOverrides = {};
+        /* Only what the button saves goes back - the panel's options. The
+           grid, crop and combined sections, a typed client name and a page
+           turned this session are not defaults, and `currentOpts = {}` used
+           to throw them away with the rest. */
+        (currentReport().sidebar || []).forEach(function (opt) {
+          if (opt.id.charAt(0) === '_' || opt.type === 'text') return;
+          delete currentOpts[opt.id];
+          delete optOverrides[opt.id];
+        });
+        // Review was still showing the document built from the old values.
+        configureDirty = true;
         renderReportOpts();
         showToast('Back to the shipped defaults for this report', 'success');
       })
@@ -825,24 +837,30 @@
   function scheduleAutoSave() {
     if (!settingsAvailable) return;
     if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
-    _autoSaveTimer = setTimeout(function () {
-      _autoSaveTimer = null;
-      var next = {};
-      Object.keys(savedReportDefaults || {}).forEach(function (k) { next[k] = savedReportDefaults[k]; });
-      next[currentReportId] = collectSidebarValues();
-      pushSettings({ report_defaults: next })
-        .then(function () {
-          savedReportDefaults = next;
-          refreshRememberedState();
-          var dot = document.getElementById('autoSaveIndicator');
-          if (dot) {
-            dot.textContent = 'Saved';
-            dot.classList.add('is-saved');
-            setTimeout(function () { dot.classList.remove('is-saved'); }, 1200);
-          }
-        })
-        .catch(function () {});
-    }, AUTO_SAVE_DELAY);
+    _autoSaveTimer = setTimeout(flushAutoSave, AUTO_SAVE_DELAY);
+  }
+
+  /* Reads the current report when it runs, so `selectReport` runs it before
+     switching rather than letting the timer save one report's change under
+     the next one's name. */
+  function flushAutoSave() {
+    if (_autoSaveTimer) clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = null;
+    var next = {};
+    Object.keys(savedReportDefaults || {}).forEach(function (k) { next[k] = savedReportDefaults[k]; });
+    next[currentReportId] = collectSidebarValues();
+    pushSettings({ report_defaults: next })
+      .then(function () {
+        savedReportDefaults = next;
+        refreshRememberedState();
+        var dot = document.getElementById('autoSaveIndicator');
+        if (dot) {
+          dot.textContent = 'Saved';
+          dot.classList.add('is-saved');
+          setTimeout(function () { dot.classList.remove('is-saved'); }, 1200);
+        }
+      })
+      .catch(function () {});
   }
 
   // ── Report preview (what this report produces) ─────────────────────────
@@ -1377,9 +1395,10 @@
     if (ant.directional === false) return false;
     return !/omni/i.test(ant.name || '');
   }
-  function radioIsDirectional(r) {
+  // `antennas`: the project the radio belongs to, when it is not the open one.
+  function radioIsDirectional(r, antennas) {
     if (!r || r.antennaDirection == null) return false;
-    return antennaIsDirectional(proj.antennas[r.antennaTypeId]);
+    return antennaIsDirectional((antennas || proj.antennas)[r.antennaTypeId]);
   }
   function apIsOmniOnly(ap) {
     var rs = proj.radios.filter(function (r) { return r.accessPointId === ap.id; });
@@ -1434,7 +1453,9 @@
     // Pre-2.32 reports carried a boolean "show both units" flag; anyone who
     // had turned it off wanted metric only.
     if (opts.imperial === false) return 'meters';
-    return 'feet';
+    // A report with no units option of its own (the Placement Map) prints in
+    // the unit chosen in Settings, not in feet regardless.
+    return unitsPref === 'meters' ? 'meters' : 'feet';
   }
   /* Drop a trailing zero that says nothing - 12.50 is 12.5 - but only after a
      decimal point.
@@ -1458,6 +1479,7 @@
   }
   function freqToChannel(freqMHz) {
     if (!freqMHz) return '—';
+    if (Number(freqMHz) === 2484) return 14;   // Japan's channel 14 is off the 5 MHz step
     if (freqMHz >= 2412 && freqMHz <= 2484) return Math.round((freqMHz - 2407) / 5);
     if (freqMHz >= 5170 && freqMHz <= 5885) return Math.round((freqMHz - 5000) / 5);
     if (freqMHz >= 5955 && freqMHz <= 7115) return Math.round((freqMHz - 5950) / 5);
@@ -1934,14 +1956,15 @@
       + '<tbody>' + rows + '</tbody></table>';
   }
 
+  /* The name on the cover, the header strip and the footer: the same one the
+     file name carries. It used to cut the last " - x" off the .esx stem (v1.7.1,
+     to drop a qualifier such as "EXT PD"), which was then also what the file
+     name did, so the two agreed. The file name moved to `projectNameSource` -
+     folder first, the stem kept whole, generic stems refused - and this did
+     not follow: "Main Campus - Building C.esx" covered as "Main Campus" and
+     "final.esx" as "final" under a file named for the folder. */
   function siteName() {
-    var stem = fileName.replace(/\.esx$/i, '');
-    var i = stem.lastIndexOf(' - ');
-    if (i > 0) {
-      var suffix = stem.slice(i + 3);
-      if (suffix.length <= 30 && suffix.indexOf(',') === -1) return stem.slice(0, i);
-    }
-    return stem;
+    return projectName() || String(fileName || '').replace(/\.esx$/i, '');
   }
 
   function apModelDesignator(ap) {
@@ -1993,16 +2016,11 @@
     return key;
   }
 
-  function renderApFilter() {
-    var host = document.getElementById('apFilterList');
-    var countHost = document.getElementById('apCount');
-    if (!host) return;
-    if (!proj.accessPoints.length) {
-      host.innerHTML = '<div class="rep-ap-empty">No APs found in this .esx.</div>';
-      if (countHost) countHost.textContent = '0 APs';
-      return;
-    }
-
+  /* What the AP panel lists: `eligible` passes the report's omni/directional
+     filter, `filtered` is what the search leaves of that. The count, the
+     group badges and Toggle all read these, so none of them can act on or
+     count an AP the panel is not showing. */
+  function apFilterLists() {
     var r = currentReport();
     var sidebarDefaults = {};
     (r.sidebar || []).forEach(function (o) { sidebarDefaults[o.id] = !!o.default; });
@@ -2021,14 +2039,30 @@
     var filtered = q
       ? eligible.filter(function (ap) { return (ap.name || '').toLowerCase().indexOf(q) !== -1; })
       : eligible.slice();
+    return { eligible: eligible, filtered: filtered };
+  }
 
-    if (countHost) {
-      var eligibleChecked = eligible.filter(function (a) { return !apDisabled.has(a.id); }).length;
-      var suffix = (eligible.length !== proj.accessPoints.length)
-        ? ' (' + (proj.accessPoints.length - eligible.length) + ' hidden by filter)'
-        : '';
-      countHost.textContent = eligibleChecked + ' of ' + eligible.length + ' checked' + suffix;
+  function apCountText(eligible) {
+    var eligibleChecked = eligible.filter(function (a) { return !apDisabled.has(a.id); }).length;
+    var suffix = (eligible.length !== proj.accessPoints.length)
+      ? ' (' + (proj.accessPoints.length - eligible.length) + ' hidden by filter)'
+      : '';
+    return eligibleChecked + ' of ' + eligible.length + ' checked' + suffix;
+  }
+
+  function renderApFilter() {
+    var host = document.getElementById('apFilterList');
+    var countHost = document.getElementById('apCount');
+    if (!host) return;
+    if (!proj.accessPoints.length) {
+      host.innerHTML = '<div class="rep-ap-empty">No APs found in this .esx.</div>';
+      if (countHost) countHost.textContent = '0 APs';
+      return;
     }
+
+    var lists = apFilterLists();
+    var eligible = lists.eligible, filtered = lists.filtered;
+    if (countHost) countHost.textContent = apCountText(eligible);
 
     if (!filtered.length) {
       host.innerHTML = '<div class="rep-ap-empty">No APs match "' + WD.esc(apSearch) + '"</div>';
@@ -2098,18 +2132,16 @@
   window.toggleAp = function (cb) {
     var id = cb.getAttribute('data-ap-id');
     if (cb.checked) apDisabled.delete(id); else apDisabled.add(id);
+    var lists = apFilterLists();
     var countHost = document.getElementById('apCount');
-    if (countHost) {
-      var count = proj.accessPoints.length - apDisabled.size;
-      countHost.textContent = count + ' of ' + proj.accessPoints.length + ' checked';
-    }
+    if (countHost) countHost.textContent = apCountText(lists.eligible);
     if (apGroupBy !== 'none') {
       var ap = proj.accessPoints.find(function (a) { return a.id === id; });
       if (ap) {
         var k = apGroupKey(ap, apGroupBy);
         var group = document.querySelector('.rep-ap-group[data-group-key="' + CSS.escape(k) + '"]');
         if (group) {
-          var apsInGroup = proj.accessPoints.filter(function (a) { return apGroupKey(a, apGroupBy) === k; });
+          var apsInGroup = lists.filtered.filter(function (a) { return apGroupKey(a, apGroupBy) === k; });
           var checkedInGroup = apsInGroup.filter(function (a) { return !apDisabled.has(a.id); }).length;
           var badge = group.querySelector('.rep-ap-group-count');
           if (badge) badge.textContent = checkedInGroup + ' of ' + apsInGroup.length;
@@ -2149,7 +2181,8 @@
   };
 
   window.toggleGroupAll = function (key) {
-    var apsInGroup = proj.accessPoints.filter(function (ap) { return apGroupKey(ap, apGroupBy) === key; });
+    var apsInGroup = apFilterLists().filtered
+      .filter(function (ap) { return apGroupKey(ap, apGroupBy) === key; });
     var anyChecked = apsInGroup.some(function (a) { return !apDisabled.has(a.id); });
     apsInGroup.forEach(function (a) {
       if (anyChecked) apDisabled.add(a.id); else apDisabled.delete(a.id);
@@ -2294,7 +2327,15 @@
     id = RETIRED_REPORTS[id] || id;
     if (!REPORTS[id]) return;
     if (REPORTS[id].status === 'coming-soon') return;
-    if (id !== currentReportId) {
+    // A change made in the last 1.5 s belongs to the report it was made on;
+    // left to the timer it was saved under whichever report was current then.
+    if (_autoSaveTimer) flushAutoSave();
+    /* `currentReportId` starts as the default report, so "is this a different
+       report" alone skipped the seeding on the first pick of that one: the
+       panel said "Your saved defaults" over shipped values, and the first
+       change autosaved the shipped values over the saved ones. */
+    if (id !== currentReportId || optsSeededFor !== id) {
+      optsSeededFor = id;
       currentReportId = id;
       currentOpts = {};
       optOverrides = {};
@@ -3964,7 +4005,9 @@
     return opts;
   }
 
-  function renderCover(count, dateStr, r, countLabel, opts, ctx) {
+  // extraRows: [[label, value], ...] for what only one report knows, such as
+  // the two files a change report compares.
+  function renderCover(count, dateStr, r, countLabel, opts, ctx, extraRows) {
     var logo = (coverImage && coverImage.url)
       ? '<div class="rep-cover-logo-wrap"><img class="rep-cover-logo" src="' + WD.escAttr(coverImage.url) + '" alt="Cover image"></div>'
       : '';
@@ -3976,6 +4019,9 @@
       if (opts.preparedBy) metaRows.push('<div><b>Prepared by:</b> ' + WD.esc(opts.preparedBy) + '</div>');
       if (opts.projectRef) metaRows.push('<div><b>Project ref:</b> ' + WD.esc(opts.projectRef) + '</div>');
       if (opts.revision)   metaRows.push('<div><b>Revision:</b> ' + WD.esc(opts.revision) + '</div>');
+      (extraRows || []).forEach(function (row) {
+        if (row[1]) metaRows.push('<div><b>' + WD.esc(row[0]) + ':</b> ' + WD.esc(row[1]) + '</div>');
+      });
       if (metaRows.length) meta = '<div class="rep-cover-meta">' + metaRows.join('') + '</div>';
     }
     var displayDate = (ctx && ctx.dateReadable) ? ctx.dateReadable : dateStr;
@@ -4036,7 +4082,12 @@
       dateReadable: dateReadable,
       proj: proj,
       coverImage: coverImage,
-      cover: function (count, ds, label, opts2, ctx2) { return renderCover(count, ds, r, label, opts2, ctx2); },
+      /* Six reports called this without their options, so their cover never
+         printed Client, Prepared by or Project ref and its orientation
+         picker read an empty set. A cover always belongs to this render. */
+      cover: function (count, ds, label, opts2, ctx2, extraRows) {
+        return renderCover(count, ds, r, label, opts2 || opts, ctx2 || ctx, extraRows);
+      },
       inlineHeader: function (count, ds, label) { return renderInlineHeader(count, ds, r, label); },
       primaryRadio: primaryRadio,
       compass: compass, metersToFt: metersToFt, fmt: fmt,
@@ -4141,7 +4192,7 @@
     if (opts.labelHeight && ctx) {
       var rh = ctx.primaryRadio(ap.id);
       if (rh && typeof rh.antennaHeight === 'number') {
-        extra.push(fmtLength(rh.antennaHeight, opts, 1));
+        extra.push(fmtLength(rh.antennaHeight, opts));
       }
     }
     return { main: main, sub: extra.join(' · ') };
@@ -4284,7 +4335,9 @@
       var legibleFloor = Math.max(scaleW, scaleH) * 0.0135;
       var labelFont = Math.max(legibleFloor,
                                minDim * 0.02 * Math.min(1, 4 / Math.max(4, label.length)));
-      var subFont = labelFont * 0.72;
+      // The second line (model, height, channel) is read off the same sheet,
+      // so it gets the same floor. At 72% of the name it printed at 5.8pt.
+      var subFont = Math.max(labelFont * 0.72, legibleFloor);
       var textW = Math.max(label.length * labelFont * 0.62, sub.length * subFont * 0.6);
       var pillW = Math.max(minDim * 0.03, textW) + padX * 2;
       var boxH = sub ? pillH + subFont * 1.25 : pillH;
@@ -6744,7 +6797,8 @@
     var result = compareProjects(baseline, proj, { threshold: threshold });
 
     var head = opts.cover
-      ? ctx.cover(proj.accessPoints.length, ctx.dateStr, 'Access points')
+      ? ctx.cover(proj.accessPoints.length, ctx.dateStr, 'Access points', opts, ctx,
+                  [['Before', baselineName], ['After', fileName]])
       : ctx.inlineHeader(proj.accessPoints.length, ctx.dateStr, 'Access points');
 
     /* ── which two files, in which order ─────────────────────────────────── */
@@ -6776,8 +6830,10 @@
     /* ── the counts ──────────────────────────────────────────────────────── */
     var bRadios = radioIndexFor(baseline), aRadios = radioIndexFor(proj);
     function countDirectional(project, idx) {
+      // Each side against its own antennas: the before file's panel may be
+      // one the after file no longer carries, which counted it as zero.
       return (project.accessPoints || []).filter(function (a) {
-        return radioIsDirectional(idx[a.id]);
+        return radioIsDirectional(idx[a.id], project.antennas || {});
       }).length;
     }
     var statRows = [
@@ -6907,7 +6963,7 @@
       + apRowsTable('Added', addedRows, false)
       + apRowsTable('Removed', removedRows, false)
       + floorSections
-      + REPORT_FOOTER
+      + renderReportFooter(opts, ctx)
       /* Every access point, not the filtered list. This report hides the AP
          filter panel (``noApFilter``), and with it hidden ``renderReport``
          defaults "include omni" to off - so passing the filtered list here
@@ -6955,12 +7011,15 @@
       var tilt = r ? r.antennaTilt : null;
       var height = r ? r.antennaHeight : null;
 
-      var heightStr = ctx.fmtLength(height, opts, 1);
-      var azStr = dir == null ? '<span class="rep-alt">omni</span>'
+      var heightStr = ctx.fmtLength(height, opts);
+      // An omni antenna has nothing to aim, whatever direction the file
+      // stores for it; `dir == null` alone printed one as "0° (N)".
+      var omni = apIsOmniOnly(ap) || !radioIsDirectional(r);
+      var azStr = omni ? '<span class="rep-alt">omni</span>'
         : (opts.compass !== false
             ? ctx.fmt(dir, 1) + '° <span class="rep-alt">(' + ctx.compass(dir) + ')</span>'
             : ctx.fmt(dir, 1) + '°');
-      var tiltStr = tilt == null ? '—' : ctx.fmt(tilt, 1) + '°';
+      var tiltStr = (omni || tilt == null) ? '—' : ctx.fmt(tilt, 1) + '°';
 
       var lbl = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
       rows += '<tr>'
@@ -7278,8 +7337,8 @@
           + '<td>' + fmt(txp, 1) + ' dBm</td>'
           + '<td>' + fmt(gain, 1) + ' dBi</td>'
           + '<td>' + fmt(eirp, 1) + ' dBm</td>'
-          + '<td>' + fmt(rGood, 1) + ' m</td>'
-          + '<td>' + fmt(rWeak, 1) + ' m</td>'
+          + '<td>' + fmtLength(rGood, opts, 1) + '</td>'
+          + '<td>' + fmtLength(rWeak, opts, 1) + '</td>'
           + '</tr>';
       });
     if (!rows) return '';
@@ -7578,7 +7637,11 @@
       if (!byFloor[fp.id] || !byFloor[fp.id].length) return;
       var apCount = byFloor[fp.id].length;
       var parts = [];
-      if (opts.segmented && fp.id !== '_none') {
+      if (fp.id !== '_none' && !floorPlanImageUrl(fp)) {
+        // The floor prints its table under "Floor plan image not available",
+        // so the contents must not promise sections or a plan for it.
+        parts.push('No floor plan image in the project');
+      } else if (opts.segmented && fp.id !== '_none') {
         var W = fp.width || 1, H = fp.height || 1;
         var grid = computeAntennaGrid(W, H, byFloor[fp.id], opts, fp.metersPerUnit);
         if (grid.cols * grid.rows > 1) {
@@ -7828,7 +7891,7 @@
       var height = r ? r.antennaHeight : null;
       var mount = r ? r.antennaMounting : '—';
       var isOmni = apIsOmniOnly(ap);
-      var heightStr = ctx.fmtLength(height, opts, 1);
+      var heightStr = ctx.fmtLength(height, opts);
       var dirCells = '<td>' + WD.esc(mount || '—') + '</td>'
         + '<td class="rep-nowrap-print">' + heightStr + '</td>';
       if (showDir) {
@@ -8638,8 +8701,6 @@
             { value: 'meters', label: 'Metres' },
           ],
           description: 'Distances and heights are written in this unit. An .esx stores everything in metres, so this is a display choice; it does not change either project.' },
-        { id: 'cover', label: 'Cover page', default: true,
-          description: 'A title page naming both files. Off puts the same information in a header strip instead.' },
         { id: 'confidential', label: 'Confidentiality notice in footer', default: false,
           description: 'Adds "CONFIDENTIAL" to the report footer.' },
         { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'never',

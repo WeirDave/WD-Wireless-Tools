@@ -43,6 +43,7 @@ try:  # pragma: no cover - availability varies by machine
     from selenium.common.exceptions import WebDriverException
     from selenium.webdriver.common.by import By
     from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.support.ui import Select
     HAVE_SELENIUM = True
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
@@ -58,8 +59,20 @@ DEFAULTS = {
                  {"type": "counter", "tag": "AP", "start": 1, "digits": 3}],
 }
 
+#: A template he saved, offered in the Load template list. Invented.
+TEMPLATE = {
+    "name": "Invented template", "mode": "structured", "scope": "all",
+    "order": "proximity", "sepS": "-",
+    "segments": [{"type": "text", "value": "TPL"}, {"type": "floor"},
+                 {"type": "counter", "tag": "AP", "start": 1, "digits": 3}],
+}
+
 #: Long enough that every test opens its project before the defaults land.
 SETTINGS_DELAY = 1.5
+
+#: Longer than the Labeler waits for the defaults (5 s) before it opens a
+#: project anyway, so the defaults land on a project already on screen.
+SETTINGS_LATE = 6.5
 
 FLOORS = [("fa", "Level 1"), ("fb", "Level 2")]
 
@@ -96,6 +109,8 @@ PLACEHOLDER = [["AP-1", "AP-2"], ["AP-3", "AP-4"]]
 
 
 class _StubApi(SimpleHTTPRequestHandler):
+    delay = SETTINGS_DELAY
+
     def log_message(self, *a):
         pass
 
@@ -116,8 +131,9 @@ class _StubApi(SimpleHTTPRequestHandler):
             # project was read before it landed, and the late defaults then
             # wrote over the scheme adopted from the project - seen once in
             # CI's Firefox on Windows. The delay makes that race certain.
-            time.sleep(SETTINGS_DELAY)
-            self._json({"ok": True, "settings": {"aprename": {"defaults": DEFAULTS}}})
+            time.sleep(self.delay)
+            self._json({"ok": True, "settings": {"aprename": {
+                "defaults": DEFAULTS, "templates": [TEMPLATE]}}})
         else:
             self._json({"ok": True})
 
@@ -187,14 +203,15 @@ var tries = 0;
 """
 
 
-@unittest.skipUnless(HAVE_SELENIUM, "selenium is not installed")
-class TheLabelerInABrowserTests(unittest.TestCase):
+class _InABrowser:
+    stub = _StubApi
+
     @classmethod
     def setUpClass(cls):
         cls.schemed = base64.b64encode(_esx(SCHEMED)).decode("ascii")
         cls.placeholder = base64.b64encode(_esx(PLACEHOLDER)).decode("ascii")
         cls.httpd = _ExclusiveServer(
-            ("127.0.0.1", 0), partial(_StubApi, directory=str(WEB)))
+            ("127.0.0.1", 0), partial(cls.stub, directory=str(WEB)))
         cls.port = cls.httpd.server_address[1]
         threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
         cls.url = "http://127.0.0.1:%d/ap-rename.html" % cls.port
@@ -257,6 +274,14 @@ class TheLabelerInABrowserTests(unittest.TestCase):
         aps = json.loads(z.read("accessPoints.json"))["accessPoints"]
         return {a["id"]: a["name"] for a in aps}
 
+    def _preview(self, driver) -> dict:
+        return driver.execute_script(
+            "var o = {}; window.__aprename.getState().preview.forEach("
+            "function (it) { o[it.ap.id] = it.newName; }); return o;")
+
+
+@unittest.skipUnless(HAVE_SELENIUM, "selenium is not installed")
+class TheLabelerInABrowserTests(_InABrowser, unittest.TestCase):
     def test_an_adopted_scheme_writes_the_names_back_unchanged(self):
         for kind, driver in self._each_browser():
             with self.subTest(browser=kind):
@@ -284,6 +309,39 @@ class TheLabelerInABrowserTests(unittest.TestCase):
                     sorted(names.values()),
                     ["HQZ-01-AP001", "HQZ-01-AP002", "HQZ-02-AP003", "HQZ-02-AP004"],
                     names)
+
+    def test_a_template_picked_over_an_adopted_scheme_carries_to_the_next_project(self):
+        """Loading a template is choosing a pattern. Over an adopted scheme it
+        used to be thrown away when the next project opened, and his saved
+        defaults came back in its place."""
+        for kind, driver in self._each_browser():
+            with self.subTest(browser=kind):
+                self._open(driver, self.schemed, "schemed-site.esx")
+                summary = driver.find_element(By.CSS_SELECTOR, ".ar-templates-detail > summary")
+                driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", summary)
+                summary.click()
+                Select(driver.find_element(By.ID, "arTemplateSelect")).select_by_value("0")
+                time.sleep(0.3)
+                self._open(driver, self.placeholder, "fresh-survey.esx")
+                self.assertEqual(
+                    sorted(self._preview(driver).values()),
+                    ["TPL-01-AP001", "TPL-01-AP002", "TPL-02-AP003", "TPL-02-AP004"])
+
+    def test_a_segment_typed_over_an_adopted_scheme_carries_to_the_next_project(self):
+        for kind, driver in self._each_browser():
+            with self.subTest(browser=kind):
+                self._open(driver, self.schemed, "schemed-site.esx")
+                box = driver.find_element(
+                    By.CSS_SELECTOR, '#arSegments .ar-seg-row input.ar-seg-input')
+                self.assertEqual(box.get_attribute("value"), "QRX")
+                box.send_keys(Keys.CONTROL, "a")
+                box.send_keys("ZZQ")
+                time.sleep(0.3)
+                self._open(driver, self.placeholder, "fresh-survey.esx")
+                names = self._preview(driver)
+                self.assertEqual(len(names), 4, names)
+                for name in names.values():
+                    self.assertTrue(name.startswith("ZZQ-"), names)
 
     def _start_box(self, driver):
         boxes = driver.find_elements(By.CSS_SELECTOR, '#arSegments input[type="number"]')
@@ -327,6 +385,43 @@ class TheLabelerInABrowserTests(unittest.TestCase):
                 stored = [i.filename for i in z.infolist()
                           if i.compress_type != zipfile.ZIP_DEFLATED]
                 self.assertEqual(stored, [], "written without compression")
+
+
+
+class _LateStubApi(_StubApi):
+    delay = SETTINGS_LATE
+
+
+@unittest.skipUnless(HAVE_SELENIUM, "selenium is not installed")
+class DefaultsThatLandAfterTheWaitTests(_InABrowser, unittest.TestCase):
+    """The Labeler waits a bounded time for the saved pattern, then opens the
+    project anyway. Defaults that landed after that were applied over the
+    scheme already adopted from the project on screen."""
+    stub = _LateStubApi
+
+    def test_late_defaults_leave_the_adopted_scheme_and_serve_the_next_project(self):
+        want = {f"{fid}-{k + 1}": n
+                for (fid, _), row in zip(FLOORS, SCHEMED)
+                for k, n in enumerate(row)}
+        for kind, driver in self._each_browser():
+            with self.subTest(browser=kind):
+                self._open(driver, self.schemed, "schemed-site.esx")
+                self.assertEqual(self._preview(driver), want, "not adopted at all")
+                # Until the defaults have landed, then a moment more.
+                landed = time.monotonic() + SETTINGS_LATE + 3
+                while time.monotonic() < landed and not driver.execute_script(
+                        "return document.getElementById('arTemplateSelect')"
+                        ".options.length > 1;"):
+                    time.sleep(0.2)
+                time.sleep(0.5)
+                self.assertTrue(driver.execute_script(
+                    "return document.getElementById('arTemplateSelect').options.length > 1;"),
+                    "the settings never arrived")
+                self.assertEqual(self._preview(driver), want)
+                self._open(driver, self.placeholder, "fresh-survey.esx")
+                self.assertEqual(
+                    sorted(self._preview(driver).values()),
+                    ["HQZ-01-AP001", "HQZ-01-AP002", "HQZ-02-AP003", "HQZ-02-AP004"])
 
 
 if __name__ == "__main__":

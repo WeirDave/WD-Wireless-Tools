@@ -210,7 +210,8 @@ class MovesGoThroughTheQueueLikeEverythingElse(unittest.TestCase):
     def test_each_move_is_queued(self):
         self.assertIn("opEnqueue({", self.body)
         self.assertIn("pyApi('assign_to_site', siteId, t.id)", self.body)
-        self.assertIn("pyApi('move_local_to_site', t.path, folder)", self.body)
+        self.assertIn("pyApi('move_local_to_site', t.path, folder, !!t.tidySource)",
+                      self.body)
 
     def test_a_single_failed_move_can_be_retried(self):
         """The point of the deck. A blocking loop gave him no way to retry

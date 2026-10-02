@@ -6,63 +6,65 @@
 
   function parseImperial(raw) {
     if (raw == null) return null;
-    var s = String(raw).trim().toLowerCase()
+    // CAD title blocks and dimension strings write fractions as one character
+    // (7½"). Each becomes its ASCII fraction with a space before it, so 7½,
+    // 7 ½ and ½ all reach the same mixed-number and fraction rules as 7 1/2.
+    var VULGAR = { '½': '1/2', '⅓': '1/3', '⅔': '2/3', '¼': '1/4', '¾': '3/4',
+                   '⅕': '1/5', '⅖': '2/5', '⅗': '3/5', '⅘': '4/5', '⅙': '1/6',
+                   '⅚': '5/6', '⅛': '1/8', '⅜': '3/8', '⅝': '5/8', '⅞': '7/8' };
+    var s = String(raw).toLowerCase()
+      .replace(/[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, function (c) { return ' ' + VULGAR[c]; })
       .replace(/[′’]/g, "'")
-      .replace(/[″”]/g, '"');
+      .replace(/[″”]/g, '"')
+      .trim();
     if (!s) return null;
 
-    if (/^-?\d+(?:\.\d+)?$/.test(s)) {
-      return parseFloat(s) * IN_PER_FT;
+    // The whole text has to be one dimension. Reading only the parts a
+    // pattern recognised gave a confident wrong answer instead of an error:
+    // `5ft6in` came out as 5 inches (no word boundary between `ft` and `6`),
+    // and `4 1/2'` as 24 inches (the `1/2` was taken for inches and the 4
+    // for feet). A number is a decimal, a fraction, or a whole number and a
+    // fraction joined by a space or a dash; a unit is not followed by a
+    // letter, so `5ft6in` still splits.
+    var NUM = '(\\d+[\\s-]+\\d+\\s*/\\s*\\d+|\\d+\\s*/\\s*\\d+|\\d+(?:\\.\\d+)?|\\.\\d+)';
+    var FT = "(?:'|feet|foot|ft)(?![a-z])";
+    var IN = '("|inches|inch|in)(?![a-z])';
+    var m = new RegExp('^(-)?\\s*(?:' + NUM + '\\s*' + FT + ')?\\s*(-\\s*)?(?:' +
+                       NUM + '\\s*(?:' + IN + ')?)?$').exec(s);
+    if (!m || (m[2] == null && m[4] == null)) return null;
+    // In 4'-6" the dash joins feet to inches; it is not a sign. Read as one,
+    // 4'-6" came out as 42 inches instead of 54. Without feet before it, a
+    // dash there is a second minus sign and nothing a drawing writes.
+    if (m[3] && m[2] == null) return null;
+
+    function value(t) {
+      var mix = /^(\d+)[\s-]+(\d+)\s*\/\s*(\d+)$/.exec(t);
+      if (mix) return parseInt(mix[1], 10) + parseInt(mix[2], 10) / parseInt(mix[3], 10);
+      var frac = /^(\d+)\s*\/\s*(\d+)$/.exec(t);
+      if (frac) return parseInt(frac[1], 10) / parseInt(frac[2], 10);
+      return parseFloat(t);
     }
 
     var totalIn = 0;
-    var matched = false;
-
-    var ftRe = /(-?\d+(?:\.\d+)?)\s*(?:'|ft\b|feet\b|foot\b)/;
-    var ftMatch = s.match(ftRe);
-    var rest = s;
-    var sign = 1;
-    if (ftMatch) {
-      totalIn += parseFloat(ftMatch[1]) * IN_PER_FT;
-      rest = s.slice(ftMatch.index + ftMatch[0].length);
-      matched = true;
-      // -4'-6" is minus four and a half feet, not minus four plus six inches.
-      if (ftMatch[1].charAt(0) === '-') sign = -1;
+    if (m[2] != null) totalIn += value(m[2]) * IN_PER_FT;
+    if (m[4] != null) {
+      // A number with no unit and no feet before it is feet, as a bare number
+      // is: `1 1/2` is a foot and a half. After feet it is the inches.
+      totalIn += value(m[4]) * (m[2] == null && !m[5] ? IN_PER_FT : 1);
     }
-
-    rest = rest.trim();
-    // In 4'-6" the dash joins feet to inches; it is not a sign. Read as one,
-    // 4'-6" came out as 42 inches instead of 54.
-    if (ftMatch) rest = rest.replace(/^-\s*/, '');
-    if (rest) {
-      var mixRe = /^(-?\d+)[\s-]+(\d+)\s*\/\s*(\d+)\s*(?:"|in\b|inch\b|inches\b)?/;
-      var m = rest.match(mixRe);
-      if (m) {
-        totalIn += sign * (parseInt(m[1], 10) + parseInt(m[2], 10) / parseInt(m[3], 10));
-        matched = true;
-      } else {
-        var fracRe = /^(-?\d+)\s*\/\s*(\d+)\s*(?:"|in\b|inch\b|inches\b)?/;
-        m = rest.match(fracRe);
-        if (m) {
-          totalIn += sign * (parseInt(m[1], 10) / parseInt(m[2], 10));
-          matched = true;
-        } else {
-          var inRe = /^(-?\d+(?:\.\d+)?)\s*(?:"|in\b|inch\b|inches\b)?/;
-          m = rest.match(inRe);
-          if (m && m[0].length > 0) {
-            totalIn += sign * parseFloat(m[1]);
-            matched = true;
-          }
-        }
-      }
-    }
-
-    return matched ? totalIn : null;
+    if (!isFinite(totalIn)) return null;
+    // -4'-6" is minus four and a half feet, not minus four plus six inches.
+    return m[1] ? -totalIn : totalIn;
   }
 
   function parseMetric(raw) {
     if (raw == null) return null;
-    var s = String(raw).trim().toLowerCase().replace(/,/g, '.');
+    // A comma followed by exactly three digits and no more is a thousands
+    // separator - `1,500 mm` is fifteen hundred millimetres, and reading it as
+    // a decimal point gave 1.5. Any other comma is the decimal point.
+    var s = String(raw).trim().toLowerCase()
+      .replace(/(\d),(?=\d{3}(?!\d))/g, '$1')
+      .replace(/,/g, '.');
     if (!s) return null;
 
     if (/^-?\d+(?:\.\d+)?$/.test(s)) {
@@ -72,27 +74,31 @@
     var totalMM = 0;
     var matched = false;
 
-    var mmRe = /(-?\d+(?:\.\d+)?)\s*(?:mm\b|millimet(?:er|re)s?\b)/g;
+    // A unit is not followed by a letter; `\b` there missed `12m500mm`.
+    var mmRe = /(-?\d+(?:\.\d+)?)\s*(?:millimet(?:er|re)s?|mm)(?![a-z])/g;
     s = s.replace(mmRe, function (_, num) {
       totalMM += parseFloat(num);
       matched = true;
       return ' ';
     });
 
-    var cmRe = /(-?\d+(?:\.\d+)?)\s*(?:cm\b|centimet(?:er|re)s?\b)/g;
+    var cmRe = /(-?\d+(?:\.\d+)?)\s*(?:centimet(?:er|re)s?|cm)(?![a-z])/g;
     s = s.replace(cmRe, function (_, num) {
       totalMM += parseFloat(num) * 10;
       matched = true;
       return ' ';
     });
 
-    var mRe = /(-?\d+(?:\.\d+)?)\s*(?:m\b|meters?\b|metres?\b)/g;
+    var mRe = /(-?\d+(?:\.\d+)?)\s*(?:meters?|metres?|m)(?![a-z])/g;
     s = s.replace(mRe, function (_, num) {
       totalMM += parseFloat(num) * 1000;
       matched = true;
       return ' ';
     });
 
+    // Anything left over was not read, so the answer would describe only part
+    // of what was typed: `12 m abc` is not 12 metres, and `3m50` is not 3.
+    if (s.trim()) return null;
     return matched ? totalMM : null;
   }
 

@@ -367,8 +367,12 @@ def clear_grid(project_id: str, floor_id: str) -> dict:
     interrupted bay, a skewed or rotated grid, a building carrying two grids of
     its own. Printing something plausible instead is the failure.
     """
+    # Stripped the way save_grid stores them, or removing the last floor left
+    # an empty project behind under the stripped key.
+    project_id = (project_id or "").strip()
+    floor_id = (floor_id or "").strip()
     data = load_grids()
-    floors = (data.get("projects") or {}).get((project_id or "").strip())
+    floors = (data.get("projects") or {}).get(project_id)
     if not floors or floor_id not in floors:
         return {"ok": True, "floors": floors or {}}
     del floors[floor_id]

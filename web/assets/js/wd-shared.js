@@ -1342,8 +1342,14 @@
         '<div class="wd-update-headline">' +
           '<span class="wd-update-warn">&#9888;</span> Update didn’t complete</div>' +
         '<div class="wd-update-note">' + esc(msg) + '</div>' +
-        '<div class="wd-update-note">Nothing was left half-installed' +
-          (was ? ' — you’re still on v' + esc(was) + '.' : '.') + '</div>' +
+        /* Only when the server says so. A switch to git that failed after
+           `git init`, or a ZIP update that failed while copying, is not
+           "nothing left half-installed", and the message above says where
+           the copy taken first is. */
+        (res.intact === true
+          ? '<div class="wd-update-note">Nothing was left half-installed' +
+            (was ? ' — you’re still on v' + esc(was) + '.' : '.') + '</div>'
+          : '') +
         stepsHtml(res.steps) +
         alternativesHtml(true) });
       wire();
@@ -2237,6 +2243,14 @@
       return function (e) {
         var el = e.target && e.target.closest ? e.target.closest(selector) : null;
         if (!el) return;
+        /* mouseenter and mouseleave do not bubble; they are caught here in the
+           capture phase, so a child's enter or leave also reaches this point
+           with the child as target. Answering it ran the row's leave handler
+           when the pointer moved from the row onto its own button, and Visual
+           Swap's highlight dropped while the pointer was still on the row.
+           Only the element's own enter and leave count, as without
+           delegation. */
+        if ((type === 'mouseenter' || type === 'mouseleave') && e.target !== el) return;
         /* The dev toolbar has its own scoped dispatcher and would otherwise
            run this one as well, firing every handler twice. */
         if (el.closest('#wdDevRoot')) return;

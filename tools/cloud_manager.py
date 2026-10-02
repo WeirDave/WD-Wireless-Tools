@@ -433,6 +433,80 @@ def manual_matches_map():
     return by_cloud, pairs
 
 
+def _repoint_one(local_path, moves):
+    """Where *local_path* is after *moves* ([(old, new)], in the order they
+    happened), or None if none of them touched it. A move of a folder carries
+    everything under it."""
+    cur = str(local_path or "")
+    hit = False
+    for old, new in moves:
+        norm = cur.replace(chr(92), "/").lower()
+        o = str(old).replace(chr(92), "/").lower().rstrip("/")
+        if norm == o:
+            cur, hit = str(new), True
+        elif norm.startswith(o + "/"):
+            # The tail keeps its own spelling where lower() kept the length,
+            # which it does for every name but a few non-Latin ones.
+            tail = cur[len(o):] if len(norm) == len(cur) else norm[len(o):]
+            # The tail takes the new path's separator: "/" glued onto a
+            # Windows path stored "New Pier/Survey.esx", which no other
+            # path in the stores is written as.
+            sep = chr(92) if chr(92) in str(new) else "/"
+            cur, hit = str(new) + tail.replace(chr(92), "/").replace("/", sep), True
+    return cur if hit else None
+
+
+def repoint_pairings(moves):
+    """Make his pairing decisions follow a file or folder that moved.
+
+    Not-a-match, the manual links and a local-only External/mine mark are all
+    keyed by local path. Every operation here that moves or renames a local
+    .esx or folder - Rename, Flag for review, Move to site, Merge - left them
+    naming the old path, so a pair he had split was auto-paired again after
+    Move to site, and a link he made broke on the next rename. Each store is
+    rewritten whole (atomically) and only when something in it changed.
+
+    Never raises: the move has already happened by the time this runs, and
+    reporting it as failed would be the worse lie.
+    """
+    moves = [(o, n) for o, n in (moves or []) if o and n and str(o) != str(n)]
+    if not moves:
+        return
+    try:
+        _repoint_stores(moves)
+    except Exception as e:  # noqa: BLE001 - see the docstring
+        applog.note_failure("carrying pairing decisions to a moved file", e)
+
+
+def _repoint_stores(moves):
+    for load, save in ((load_not_matches, save_not_matches),
+                       (load_manual_matches, save_manual_matches)):
+        pairs, changed, seen, kept = load(), False, set(), []
+        for p in pairs:
+            np_ = _repoint_one(p["localPath"], moves)
+            if np_ is not None:
+                p = dict(p, localPath=np_)
+                changed = True
+            key = _nm_pair_key(p["cloudId"], p["localPath"])
+            if key in seen:
+                changed = True
+                continue
+            seen.add(key)
+            kept.append(p)
+        if changed:
+            save(kept)
+    entries, changed = load_external_overrides(), False
+    for e in entries:
+        if e.get("cloudId") or not e.get("localPath"):
+            continue          # keyed by cloud id, which a local move cannot touch
+        np_ = _repoint_one(e["localPath"], moves)
+        if np_ is not None:
+            e["localPath"], e["key"], changed = np_, _ov_key("", np_), True
+    if changed:
+        by_key = {e["key"]: e for e in entries}
+        save_external_overrides(list(by_key.values()))
+
+
 class EkahauAPI:
     def __init__(self, cookies, csrf_token):
         self.http = requests.Session()
@@ -695,7 +769,8 @@ class EkahauAPI:
         try:
             batch = self.get(f"{API_BASE}/{project_id}/batch").json()
         except Exception as e:
-            return {"error": f"Could not fetch project data: {e}"}
+            return {"error": f"Could not fetch project data: {e}",
+                    "sessionDead": _session_is_dead(e)}
 
         proj_name = ((batch.get("project") or {}).get("name")
                      or (batch.get("project") or {}).get("title")
@@ -728,7 +803,8 @@ class EkahauAPI:
                     r.raise_for_status()
                     zf.writestr(f"image-{image_id}", r.content)
                 except Exception as e:
-                    return {"error": f"Failed fetching image {image_id}: {e}"}
+                    return {"error": f"Failed fetching image {image_id}: {e}",
+                            "sessionDead": _session_is_dead(e)}
                 done_images += 1
                 if progress_cb and n_images > 0:
                     pct = base_pct + int(85 * done_images / n_images)
@@ -1115,6 +1191,27 @@ def _force_remove(func, path, exc_info):
         func(path)
     except Exception:
         pass
+
+
+def _remove_if_holds_no_file(folder, base):
+    """Remove *folder* only if no file is anywhere inside it - empty
+    subfolders are all it may hold. Bottom-up `rmdir`, never `rmtree`, so a
+    file that appears meanwhile stops it rather than going with it. Never the
+    output folder itself. True when it was removed."""
+    try:
+        folder = Path(folder)
+        if not folder.is_dir() or folder.resolve() == Path(base).resolve():
+            return False
+        _assert_inside(folder, base)
+        everything = list(folder.rglob("*"))
+        if any(not p.is_dir() for p in everything):
+            return False
+        for d in sorted(everything, key=lambda p: len(p.parts), reverse=True):
+            d.rmdir()
+        folder.rmdir()
+        return True
+    except (OSError, ValueError):
+        return False
 
 
 def _timestamped_path(p, mtime):
@@ -2014,6 +2111,27 @@ def build_projects_data(api, output_dir):
     except Exception:
         pass
 
+    mm_map, _ = manual_matches_map()
+    nm = not_matches_set()
+
+    #: Cloud site name -> the local folder it is paired with, by the same
+    #: matcher the Sites tab uses. A download from this tab went to a folder
+    #: named after the cloud site, so a site paired with a folder of another
+    #: name - by code, or linked by hand - grew a second folder on every
+    #: Download and every Sync everything. The page lands a download in
+    #: `siteFolder` where there is one.
+    site_folder = {}
+    try:
+        site_rows = [{"id": sid, "name": sname, "code": extract_site_code(sname)}
+                     for sname, sid in site_ids.items()]
+        folder_rows = [{"path": f["path"], "name": f["name"], "code": f["code"],
+                        "isDir": True}
+                       for f in get_local_folders(output_dir)]
+        for pair in build_matches(site_rows, folder_rows, nm, mm_map)["matched"]:
+            site_folder[pair["cloud"]["name"]] = pair["local"]["name"]
+    except Exception as e:
+        applog.note_failure("pairing cloud sites with local folders", e)
+
     cloud = []
     for pr in api.get_projects():
         name = pr.get("name") or pr.get("title") or "Untitled"
@@ -2053,6 +2171,7 @@ def build_projects_data(api, output_dir):
 
 
                       "siteName": site_name,
+                      "siteFolder": site_folder.get(site_name, "") if site_name else "",
                       "siteId": dataset_site_id.get(pid, "")})
     local = [{"path": f["path"], "name": f["name"], "code": extract_site_code(f["name"]),
               "isDir": False, "folder": f["folder"],
@@ -2063,7 +2182,6 @@ def build_projects_data(api, output_dir):
               #: Same reasoning as the cloud side above.
               "meta": _row_meta(int(f.get("size") or 0), int(f.get("mtime") or 0))}
              for f in get_local_esx_files(output_dir)]
-    mm_map, _ = manual_matches_map()
 
     #: Drop sync points for projects that are no longer in the account.
     #:
@@ -2078,7 +2196,7 @@ def build_projects_data(api, output_dir):
     except Exception as e:
         applog.note_failure("pruning sync points", e)
 
-    result = build_matches(cloud, local, not_matches_set(), mm_map)
+    result = build_matches(cloud, local, nm, mm_map)
     result["siteIds"] = site_ids
     return result
 
@@ -2415,6 +2533,17 @@ def share_message_verdict(message) -> str:
     return "unknown"
 
 
+def _session_is_dead(e):
+    """See `CloudManager._session_is_dead`; a function so the API layer can
+    say so too, on the calls that return their error rather than raise it."""
+    if isinstance(e, (requests.exceptions.TooManyRedirects,
+                      requests.exceptions.ConnectionError)):
+        return True
+    resp = getattr(e, "response", None)
+    return (isinstance(e, requests.exceptions.HTTPError)
+            and resp is not None and resp.status_code == 401)
+
+
 class CloudManager:
     def __init__(self):
         self.api = None
@@ -2446,12 +2575,7 @@ class CloudManager:
           right: a 401 is the server answering and refusing the cookie. And
           `self.api` was kept, so every retry replayed the same dead cookie
           until the app was restarted."""
-        if isinstance(e, (requests.exceptions.TooManyRedirects,
-                          requests.exceptions.ConnectionError)):
-            return True
-        resp = getattr(e, "response", None)
-        return (isinstance(e, requests.exceptions.HTTPError)
-                and resp is not None and resp.status_code == 401)
+        return _session_is_dead(e)
 
     def _handle_api_error(self, e):
         if self._session_is_dead(e):
@@ -2535,7 +2659,13 @@ class CloudManager:
             return {"error": self.SESSION_EXPIRED, "sessionExpired": True}
         try:
             od = self.config.get("output_dir", "")
-            return build_duplicates_data(self.api, od)
+            data = build_duplicates_data(self.api, od)
+            #: So the tab can tell his copies from a colleague's: Ekahau only
+            #: lets the owner delete, and "Keep newest" kept a colleague's
+            #: copy while deleting every one of his.
+            data["currentUser"] = (getattr(self.api, "user_email", "")
+                                   or "").strip().lower()
+            return data
         except Exception as e:
             return self._api_error(e)
 
@@ -2545,7 +2675,7 @@ class CloudManager:
         try:
             return self.api.rename_project(cloud_id, name) if kind == "projects" else self.api.rename_site(cloud_id, name)
         except Exception as e:
-            return {"error": str(e)}
+            return self._api_error(e)
 
     def delete_cloud(self, kind, cloud_id):
         if not self._ensure():
@@ -2553,7 +2683,7 @@ class CloudManager:
         try:
             return self.api.delete_project(cloud_id) if kind == "projects" else self.api.delete_sites([cloud_id])
         except Exception as e:
-            return {"error": str(e)}
+            return self._api_error(e)
 
     def create_site(self, name):
         if not self._ensure():
@@ -2561,7 +2691,7 @@ class CloudManager:
         try:
             return self.api.create_site(name)
         except Exception as e:
-            return {"error": str(e)}
+            return self._api_error(e)
 
     def assign_to_site(self, site_id, dataset_id):
         if not self._ensure():
@@ -2569,7 +2699,7 @@ class CloudManager:
         try:
             return self.api.assign_to_site(site_id, dataset_id)
         except Exception as e:
-            return {"error": str(e)}
+            return self._api_error(e)
 
     def rename_local(self, path, new_name):
         try:
@@ -2596,6 +2726,7 @@ class CloudManager:
             if new.exists() and not same:
                 return {"error": "A file/folder with that name already exists"}
             old.rename(new)
+            repoint_pairings([(str(old), str(new))])
             return {"ok": True, "newPath": str(new)}
         except Exception as e:
             return {"error": str(e)}
@@ -3260,22 +3391,26 @@ class CloudManager:
             if not safe_folder or '..' in safe_folder or '/' in safe_folder or '\\' in safe_folder:
                 return {"error": "Invalid site folder name"}
             dest_dir = Path(base) / safe_folder
+            if dest_dir.exists() and not dest_dir.is_dir():
+                return {"error": "Destination is not a folder"}
+            _assert_inside(dest_dir, base)
+
+            #: The bytes first, the folder after. The folder was made before
+            #: the fetch, so a download that failed - an expired sign-in
+            #: above all - left a new, empty site folder behind, which the
+            #: list then showed as a local-only site.
+            result = self.api.download_project(project_id, progress_cb=progress_cb)
+            if isinstance(result, dict) and result.get("error"):
+                if result.get("sessionDead"):
+                    self.api = None
+                    return {"error": self.SESSION_EXPIRED, "sessionExpired": True}
+                return {k: v for k, v in result.items() if k != "sessionDead"}
             is_new_folder = not dest_dir.exists()
             if is_new_folder:
                 dest_dir.mkdir(parents=True)
-            elif not dest_dir.is_dir():
-                return {"error": "Destination is not a folder"}
-            _assert_inside(dest_dir, base)
-            if is_new_folder:
-
-
                 for d in _get_suite_destinations():
                     if d.get("create", True):
                         (dest_dir / d["name"]).mkdir(exist_ok=True)
-
-            result = self.api.download_project(project_id, progress_cb=progress_cb)
-            if isinstance(result, dict) and result.get("error"):
-                return result
             esx_bytes = result["esx"]
             proj_name = result["name"]
 
@@ -3342,7 +3477,7 @@ class CloudManager:
             #: it did - writing a new file and overwriting one are not
             #: the same event to report.
             return {"ok": True, "path": str(target), "name": proj_name,
-                    "replaced": replaced}
+                    "replaced": replaced, "createdFolder": is_new_folder}
         except Exception as e:
             return {"error": str(e)}
 
@@ -4373,11 +4508,17 @@ class CloudManager:
         except Exception as e:
             return {"error": str(e)}
 
-    def move_local_to_site(self, esx_path, dest_folder_name):
+    def move_local_to_site(self, esx_path, dest_folder_name, tidy_source=False):
         """Move a local .esx file into a site folder under output_dir.
 
         Creates the destination folder if it doesn't exist. Refuses if a file
         with the same name is already there (caller can rename first).
+
+        *tidy_source* is sent only by the download of a project in no cloud
+        site, which first lands in a new folder named after the project and is
+        then sorted under a site from here. That folder used to stay behind,
+        holding only the empty default subfolders, and was listed as a
+        local-only site. It is removed only when nothing in it is a file.
         """
         base = self.config.get("output_dir", "")
         if not base:
@@ -4402,7 +4543,11 @@ class CloudManager:
                     return {"ok": True, "newPath": str(target), "unchanged": True}
                 return {"error": f"'{src.name}' already exists in {safe}"}
             shutil.move(str(src), str(target))
-            return {"ok": True, "newPath": str(target)}
+            repoint_pairings([(str(src), str(target))])
+            out = {"ok": True, "newPath": str(target)}
+            if tidy_source and _remove_if_holds_no_file(src.parent, base):
+                out["removedFolder"] = str(src.parent)
+            return out
         except Exception as e:
             return {"error": str(e)}
 
@@ -4480,7 +4625,12 @@ class CloudManager:
 
             # What the destination will hold as the run proceeds: what is there
             # now, plus whatever each earlier source will have put there.
-            placed = {}          # rel -> the source folder that will place it
+            #: rel.casefold() -> (the source folder that will place it, its
+            #: mtime). Case-folded because Windows and macOS treat
+            #: `Report.pdf` and `report.pdf` as one file: keyed exactly, two
+            #: sources carrying those were both "new", and the second was
+            #: silently skipped on his machine.
+            placed = {}
             sources, refused = [], []
             total_clean = total_conflicts = total_cross = 0
 
@@ -4493,17 +4643,37 @@ class CloudManager:
                 files = one.get("files") or []
                 n_conf = n_cross = 0
                 for rec in files:
-                    rel = rec["rel"]
-                    if not rec.get("conflict") and rel in placed:
+                    key = rec["rel"].replace("\\", "/").casefold()
+                    earlier = placed.get(key)
+                    if not rec.get("conflict") and earlier:
                         # Clean against the destination as it is now, and not
                         # clean against the destination as it will be.
                         rec["conflict"] = True
-                        rec["fromSource"] = placed[rel]
+                        rec["fromSource"] = earlier[0]
                         rec["newer"] = "unknown"
                         n_cross += 1
+                    elif rec.get("conflict") and earlier:
+                        # In the destination already *and* in an earlier
+                        # source. Judged against the destination alone, two
+                        # sources both read "incoming is newer" and the one
+                        # that ran second overwrote the newest copy. What it
+                        # meets is the newer of the two; "Keep newer" is
+                        # decided again at execute time on what is there.
+                        rec["alsoIn"] = earlier[0]
+                        theirs = max(rec.get("dstMtime") or 0, earlier[1])
+                        mine = rec.get("srcMtime") or 0
+                        rec["dstMtime"] = theirs
+                        rec["newer"] = ("src" if mine > theirs + 1
+                                        else "dst" if theirs > mine + 1 else "same")
                     if rec.get("conflict"):
                         n_conf += 1
-                    placed.setdefault(rel, one["srcName"])
+                    if earlier:
+                        # Still named after the first folder to place it; the
+                        # date is the newest copy any of them carries.
+                        placed[key] = (earlier[0],
+                                       max(earlier[1], rec.get("srcMtime") or 0))
+                    else:
+                        placed[key] = (one["srcName"], rec.get("srcMtime") or 0)
                 sources.append({
                     "srcPath": sp, "srcName": one["srcName"],
                     "nClean": len(files) - n_conf, "nConflicts": n_conf,
@@ -4568,7 +4738,9 @@ class CloudManager:
 
     def merge_execute(self, src_path, dst_path, ops):
         """Apply per-file operations. ops: [{rel, action}] where action is
-        move | overwrite | keepboth | skip. Never deletes the source folder."""
+        move | overwrite | keepboth | skip | newer. Never deletes the source
+        folder. ``newer`` overwrites only when the incoming file is newer than
+        what the destination holds at that moment, and skips otherwise."""
         try:
             od = self.config.get("output_dir", "")
             if not od:
@@ -4582,6 +4754,7 @@ class CloudManager:
                 return {"error": "Source and destination are the same folder"}
             moved = overwritten = keptboth = skipped = 0
             errors = []
+            moves = []
             for op in ops or []:
                 rel = op.get("rel")
                 action = op.get("action", "move")
@@ -4604,21 +4777,37 @@ class CloudManager:
                     continue
                 try:
                     d.parent.mkdir(parents=True, exist_ok=True)
+                    if action == "newer" and d.exists():
+                        #: "Keep newer", decided here on what the destination
+                        #: holds *now*. Decided in the preview, against the
+                        #: destination before the run, two sources that both
+                        #: beat it each sent "overwrite", and whichever ran
+                        #: second replaced the newest copy - the order of the
+                        #: folders chose which work was lost.
+                        action = ("overwrite"
+                                  if s.stat().st_mtime > d.stat().st_mtime + 1
+                                  else "skip")
                     if not d.exists():
                         shutil.move(str(s), str(d)); moved += 1
+                        moves.append((str(s), str(d)))
                     elif action == "overwrite":
                         d.unlink(); shutil.move(str(s), str(d)); overwritten += 1
+                        moves.append((str(s), str(d)))
                     elif action == "keepboth":
 
 
                         s_m, d_m = s.stat().st_mtime, d.stat().st_mtime
                         if s_m >= d_m:
 
-                            d.rename(_timestamped_path(d, d_m))
+                            aside = _timestamped_path(d, d_m)
+                            d.rename(aside)
                             shutil.move(str(s), str(d))
+                            moves += [(str(d), str(aside)), (str(s), str(d))]
                         else:
 
-                            shutil.move(str(s), str(_timestamped_path(d, s_m)))
+                            aside = _timestamped_path(d, s_m)
+                            shutil.move(str(s), str(aside))
+                            moves.append((str(s), str(aside)))
                         keptboth += 1
                     else:
                         skipped += 1
@@ -4640,6 +4829,7 @@ class CloudManager:
             #: Deleting a folder that really is empty loses nothing, so the
             #: measurement is what changes rather than a prompt being added in
             #: front of it.
+            repoint_pairings(moves)
             try:
                 src_empty = not any(p.is_file() for p in src.rglob("*"))
             except OSError:

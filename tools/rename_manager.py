@@ -350,13 +350,88 @@ def _site_folder_names(root_path: Path, skip: set) -> tuple[list, bool]:
 _FILE_TOKENS_WITHOUT_CSV = {"original", "index", "folder", "date"}
 
 
-def _token_status(current: str, new_name: str, warnings: list) -> str:
+def _token_status(current: str, new_name: str, warnings: list,
+                  method: str = "") -> str:
     """``incomplete`` when a token had no value, so the new name carries a
     ``__token__`` placeholder. Offering that as a rename would put the
-    placeholder on disk; the page applies only ``rename`` rows."""
+    placeholder on disk; the page applies only ``rename`` rows.
+
+    ``check`` when the folder was paired with its CSV row only on part of an
+    address. That pairing is a guess, so the row is shown for a look and
+    left out of what Apply sends, the same way an incomplete row is."""
     if new_name == current:
         return "already_correct"
-    return "incomplete" if warnings else "rename"
+    if warnings:
+        return "incomplete"
+    return "check" if method in _GUESSED_MATCHES else "rename"
+
+
+# Ways of pairing a folder with a CSV row that are a guess rather than a fact.
+_GUESSED_MATCHES = {"address-partial"}
+_GUESSED_MATCH_WARNING = ("Matched only on part of the address - check this "
+                          "is the right site")
+
+
+def _header_token_key(header: str) -> str:
+    """The ``{token}`` a CSV column fills. The format is read with
+    a ``{word characters}`` pattern, so a header like ``Site Code`` has to become
+    ``Site_Code``: offered as ``{Site Code}`` it never filled, and the brace
+    text went into the new folder name."""
+    return re.sub(r"\W+", "_", (header or "").strip()).strip("_")
+
+
+def _header_token_keys(headers: list) -> dict:
+    """``{token key: header}`` for every header with a usable key. Two
+    headers that reduce to one key keep the first; the second gets ``_2``."""
+    keys = {}
+    for h in headers or []:
+        k = _header_token_key(h)
+        if not k:
+            continue
+        base, n = k, 2
+        while k in keys:
+            k = f"{base}_{n}"
+            n += 1
+        keys[k] = h
+    return keys
+
+
+def _site_values(site: dict, headers: list) -> dict:
+    """A CSV row's values under both its header names and its token keys."""
+    values = dict(site or {})
+    for key, header in _header_token_keys(headers).items():
+        values.setdefault(key, (site or {}).get(header, ""))
+    return values
+
+
+def _boundary_spans(needle: str, hay: str) -> list:
+    """Where ``needle`` occurs in ``hay`` with no letter or digit either
+    side, so ``ST1`` is in ``ST1 Clinic`` and not in ``ST12 Old Annex``."""
+    if not needle:
+        return []
+    return [m.span() for m in re.finditer(
+        r"(?<![^\W_])" + re.escape(needle) + r"(?![^\W_])", hay)]
+
+
+def _on_token_boundary(needle: str, hay: str) -> bool:
+    return bool(_boundary_spans(needle, hay))
+
+
+def _one_id_match(ids: list, hay: str):
+    """The one site whose id (``(id_lower, site)`` pairs) is in ``hay``, or
+    None. An id found only inside a longer id's occurrence - ``ST1`` in
+    ``ST1-A Wing`` - gives way to the longer one; two ids found apart are
+    ambiguous, and an ambiguous folder is left unmatched, never guessed."""
+    found = [(i, s, _boundary_spans(i, hay)) for i, s in ids]
+    found = [f for f in found if f[2]]
+    kept = []
+    for i, s, spans in found:
+        longer = [sp for j, _, sps in found if len(j) > len(i) for sp in sps]
+        covered = all(any(a <= x and y <= b for a, b in longer)
+                      for x, y in spans)
+        if not covered:
+            kept.append(s)
+    return kept[0] if len(kept) == 1 else None
 
 
 # ── Token-format rename ─────────────────────────────────────────────
@@ -384,6 +459,10 @@ def apply_token_format(fmt: str, separator: str, values: dict) -> tuple[str, lis
         return val
 
     result = token_re.sub(_replace, fmt)
+    # Anything still in braces is a token nothing fills - a header with a
+    # space in it, a typo. It is not a name.
+    for left in re.findall(r"\{[^{}]*\}", result):
+        warnings.append(f"No value for {left} - no token by that name")
     result = re.sub(r'[<>:"/\\|?*]', "_", result)
     return result, warnings
 
@@ -413,7 +492,8 @@ class RenameManager:
     def get_tokens(self) -> dict:
         """Return the full token list: builtins + any CSV-derived columns."""
         d = self.get_directory()
-        csv_tokens = d.get("tokens", [])
+        csv_tokens = (list(_header_token_keys(d.get("headers")))
+                      if d.get("headers") else d.get("tokens", []))
         combined = list(BUILTIN_TOKENS)
         seen = set(BUILTIN_TOKEN_KEYS)
         for tok in csv_tokens:
@@ -426,19 +506,26 @@ class RenameManager:
     # ── CSV / Directory ──
 
     def load_directory(self, csv_text: str, column_map: dict) -> dict:
-        reader = csv.DictReader(io.StringIO(csv_text))
-        if not reader.fieldnames:
+        # Headers are stripped: `site_code, site_name` is two columns named
+        # `site_code` and `site_name`, which is what the page's column
+        # picker shows and sends back.
+        reader = csv.reader(io.StringIO(csv_text))
+        first = next(reader, None)
+        headers = [h.strip() for h in (first or [])]
+        if not any(headers):
             return {"error": "CSV has no header row"}
-        headers = list(reader.fieldnames)
         rows = []
-        for row in reader:
-            rows.append({h: (row.get(h) or "").strip() for h in headers})
+        for raw in reader:
+            if not any(c.strip() for c in raw):
+                continue
+            rows.append({h: (raw[i] if i < len(raw) else "").strip()
+                         for i, h in enumerate(headers)})
 
         primary_col = column_map.get("primary", "")
         if primary_col and primary_col not in headers:
             return {"error": f"Primary column '{primary_col}' not found in CSV"}
 
-        tokens = list(headers)
+        tokens = list(_header_token_keys(headers))
         directory = {
             "headers": headers,
             "column_map": column_map,
@@ -498,13 +585,21 @@ class RenameManager:
                 if val and val.lower() == fn_lower:
                     return site, "exact", 1.0
 
+        # An id inside the folder name counts only on a token boundary and
+        # only when it names one site: taking the first id that was a
+        # substring renamed "ST12 Old Annex" after site ST1.
         if primary_col:
-            for site in sites:
-                val = (site.get(primary_col) or "").strip()
-                if val and val.lower() in fn_lower:
-                    return site, "contains-id", 0.8
-                if val and fn_lower in val.lower():
-                    return site, "id-contains", 0.7
+            ids = [((site.get(primary_col) or "").strip().lower(), site)
+                   for site in sites]
+            ids = [(i, s) for i, s in ids if i]
+            site = _one_id_match(ids, fn_lower)
+            if site:
+                return site, "contains-id", 0.8
+            # The folder name inside an id: no longest-wins here, the
+            # folder is the short side, so only a single candidate counts.
+            within = [s for i, s in ids if _on_token_boundary(fn_lower, i)]
+            if len(within) == 1:
+                return within[0], "id-contains", 0.7
 
         if address_col:
             for site in sites:
@@ -596,6 +691,8 @@ class RenameManager:
         if "error" in match_result:
             return match_result
 
+        headers = self._load_sites()[2]
+        today = datetime.now().strftime("%Y-%m-%d")
         renames = []
         for m in match_result["matches"]:
             if not m["site"]:
@@ -603,16 +700,28 @@ class RenameManager:
                     "current": m["folder"],
                     "new_name": None,
                     "status": "unmatched",
+                    "method": m["method"],
                     "warnings": [],
                 })
                 continue
+            # {date} and {folder} fill here as they do without a CSV; a CSV
+            # column of that name, when it has a value, comes first.
+            values = _site_values(m["site"], headers)
+            if not (values.get("date") or "").strip():
+                values["date"] = today
+            if not (values.get("folder") or "").strip():
+                values["folder"] = m["folder"]
             new_name, warnings = apply_token_format(
-                format_str, separator, m["site"])
-            status = _token_status(m["folder"], new_name, warnings)
+                format_str, separator, values)
+            status = _token_status(m["folder"], new_name, warnings,
+                                   m["method"])
+            if status == "check":
+                warnings.append(_GUESSED_MATCH_WARNING)
             renames.append({
                 "current": m["folder"],
                 "new_name": new_name,
                 "status": status,
+                "method": m["method"],
                 "warnings": warnings,
             })
 
@@ -626,6 +735,8 @@ class RenameManager:
                 1 for r in renames if r["status"] == "already_correct"),
             "unmatched_count": sum(
                 1 for r in renames if r["status"] == "unmatched"),
+            "check_count": sum(
+                1 for r in renames if r["status"] == "check"),
         }
 
     def _preview_folder_rename_manual(self, root: str, format_str: str,
@@ -746,11 +857,13 @@ class RenameManager:
 
         renames = []
         for folder_dir, dirs in scans:
+            method = ""
             if sites:
                 site, method, confidence = self._match_folder_to_site(
                     folder_dir.name, sites, column_map)
                 if not site:
                     continue
+                site = _site_values(site, headers)
             else:
                 site = {}
             for d in dirs:
@@ -766,21 +879,29 @@ class RenameManager:
                     ext = fpath.suffix
                     stem = _split_ext(fpath.name)[0]
                     values = dict(site)
-                    values.setdefault("folder", folder_dir.name)
-                    values.setdefault("date", today)
+                    if not (values.get("folder") or "").strip():
+                        values["folder"] = folder_dir.name
+                    if not (values.get("date") or "").strip():
+                        values["date"] = today
                     values["original"] = stem
                     values["index"] = str(idx)
                     new_stem, warnings = apply_token_format(
                         format_str, separator, values)
                     new_name = new_stem + ext
-                    status = _token_status(fpath.name, new_name, warnings)
-                    renames.append({
+                    status = _token_status(fpath.name, new_name, warnings,
+                                           method)
+                    if status == "check":
+                        warnings.append(_GUESSED_MATCH_WARNING)
+                    row = {
                         "folder": rel,
                         "current": fpath.name,
                         "new_name": new_name,
                         "status": status,
                         "warnings": warnings,
-                    })
+                    }
+                    if method:
+                        row["method"] = method
+                    renames.append(row)
 
         _check_collisions(renames, lambda r: root_path / r["folder"])
         return {
@@ -1124,8 +1245,15 @@ class RenameManager:
 
     def save_profile(self, name: str, folder_fmt: str = "",
                      file_fmt: str = "", separator: str = " - ",
-                     file_rules: dict | None = None) -> dict:
+                     file_rules: dict | None = None,
+                     overwrite: bool = False) -> dict:
+        """Save a profile. One already saved under ``name`` is a conflict
+        unless ``overwrite`` is set, so the page can ask before replacing
+        it - a save used to replace it without a word."""
         profiles = self._load_profiles()
+        if name in profiles and not overwrite:
+            return {"ok": False, "conflict": True, "existing": name,
+                    "error": f'A profile named "{name}" is already saved.'}
         profiles[name] = {
             "folder_format": folder_fmt,
             "file_format": file_fmt,

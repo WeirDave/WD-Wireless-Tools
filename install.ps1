@@ -394,6 +394,7 @@ if ($method -eq 'git' -and -not $hasGit) {
 }
 if ($method -eq 'git' -and -not $hasGit) { $method = 'zip' }
 
+$script:partway = $null
 try {
   # ---- git path ---------------------------------------------------------------
   if ($method -eq 'git' -and ($isGitInstall -or -not $existing)) {
@@ -439,6 +440,20 @@ try {
           }
           Invoke-Git -Arguments @('checkout', '--', $rel) -WorkDir $target -AllowFailure | Out-Null
         }
+      }
+
+      # `checkout --force` below discards every other edit to a tracked file,
+      # silently. Stop and name them instead, as the in-app updater does
+      # (_dirty_paths in tools/updater.py). Untracked files are never touched
+      # by a checkout, and a permissions-only change is not an edit.
+      $edited = @(Invoke-Git -Arguments @('-c', 'core.fileMode=false', 'status', '--porcelain') -WorkDir $target |
+                  ForEach-Object { "$_" } |
+                  Where-Object { $_.Trim() -and -not $_.StartsWith('??') } |
+                  ForEach-Object { $_.Substring(3).Trim('"') })
+      if ($edited.Count -gt 0) {
+        throw ("This install has local edits that an update would overwrite: " +
+               ($edited -join ', ') + ". Nothing was changed. Revert or move " +
+               "them, then run this again.")
       }
 
       Write-Step "Checking out $label…"
@@ -519,9 +534,13 @@ try {
         }
 
         Write-Step 'Installing…'
+        # From here a failure leaves a mix of old and new files, so the
+        # catch below must not claim otherwise.
+        $script:partway = if ($backup) { $backup } else { $target }
         New-Item -ItemType Directory -Path $target -Force | Out-Null
         Copy-Item -Path (Join-Path $tree '*') -Destination $target -Recurse -Force
 
+        $script:partway = $null
         if ($currentVersion) { Write-Ok "Updated v$currentVersion -> v$newVersion" }
         else { Write-Ok "Installed v$newVersion" }
 
@@ -611,7 +630,14 @@ try {
 } catch {
   Write-Host ''
   Write-Err "Failed: $($_.Exception.Message)"
-  Write-Err 'Nothing was left half-installed.'
+  if ($script:partway -and $script:partway -ne $target) {
+    Write-Err 'The update stopped while copying files, so this folder holds a mix of old and new.'
+    Write-Err "The complete previous version is kept at: $($script:partway)"
+  } elseif ($script:partway) {
+    Write-Err 'The install stopped while copying files, so this folder is incomplete. Run this again.'
+  } else {
+    Write-Err 'Nothing was left half-installed.'
+  }
   Write-Host ''
   Write-Host "Releases: https://github.com/$Repo/releases"
   if ($Host.Name -eq 'ConsoleHost') { Read-Host 'Press Enter to close' | Out-Null }

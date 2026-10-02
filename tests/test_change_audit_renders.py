@@ -54,6 +54,9 @@ function floorPlanImageUrl(fp) { return 'blob:' + fp.id; }
 function apNotesPages() { return '<!--notes-->'; }
 function sortedFloorOrder() { return proj.floorPlans.slice(); }
 const REPORT_FOOTER = '<footer class="rep-doc-foot"></footer>';
+function renderReportFooter() { return REPORT_FOOTER; }
+// unitsOf falls back to the Settings unit when a report has no units option.
+var unitsPref = 'feet';
 
 const ctx = {
   dateStr: '2026-01-01', dateReadable: '1 January 2026',

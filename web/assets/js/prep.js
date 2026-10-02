@@ -1322,7 +1322,10 @@
       if (!r || !r.ok) { WD.toast((r && r.error) || 'Could not save', 'error'); return; }
       WD.toast('Saved "' + body.name + '"', 'success');
       window.prepCaptureClose();
-      // Selected by its file, which is how the list names it.
+      // Selected by its file, which is how the list names it. Capturing it is
+      // choosing it: left untouched, the reload below put the saved default
+      // back over the template he had just made.
+      capTplTouched = true;
       $('prepCapTpl').value = r.file;
       $('prepCapTpl').innerHTML = '<option value="' + escAttr(r.file) + '" selected>'
         + esc(body.name) + '</option>';

@@ -1227,7 +1227,8 @@ this report only; **Edit defaults…** opens the panel for the saved values. Onl
 templates that print these fields show this part of the card.
 
 **Cover page** — **Include cover page** is on by default. The cover carries
-your image, the site name, the counts and the date. **Cover image &
+your image, the site name, the counts and the date; on the Change / Audit
+Report it also names the before and after files. **Cover image &
 defaults…** opens a panel where you **Choose image…** (or **Remove** it) and
 preview the file name the PDF will be offered. The image is stored by the app
 on this machine, not in the browser, so switching browsers or clearing site
@@ -1845,6 +1846,7 @@ a detail.
 | --- | --- | --- |
 | Imperial | `536'4"` | 536 feet 4 inches |
 | Imperial | `4' 6-1/2"` or `4' 6 1/2"` | 4 feet 6½ inches |
+| Imperial | `24′ 7½″` or `7 ½"` | single-character fractions (½ ¼ ¾ ⅛ ⅜ ⅝ ⅞ and the rest) and prime marks, as CAD writes them |
 | Imperial | `536.333'` | decimal feet |
 | Imperial | `6436"` | inches only |
 | Imperial | `536` | a bare number is **feet** |
@@ -1855,7 +1857,8 @@ a detail.
 
 Words work too (`ft`, `feet`, `in`, `inches`, `m`, `metres`), curly quotes
 pasted from a PDF are accepted, and the metric side accepts a comma as the
-decimal point.
+decimal point - except before exactly three digits, where it separates
+thousands (`1,500 mm` is fifteen hundred millimetres).
 
 - **A bare number means feet on one side and metres on the other**, so check
   which box you are typing into.

@@ -220,7 +220,9 @@ def export_bundle(browser: dict | None = None, root: Path | None = None) -> dict
         "app": APP_NAME,
         "appVersion": _app_version(),
         "exportedAt": _now_iso(),
-        "settings": _settings.load_settings(),
+        # Strict: exporting the defaults in place of an unreadable file would
+        # hand him a backup that restores nothing he set.
+        "settings": _settings.load_settings(strict=True),
         "files": _collect_files(root),
         "browser": dict(browser or {}),
         "notes": {
@@ -551,7 +553,13 @@ def apply_import(bundle: dict, sections=("settings", "files"),
     if "settings" in want:
         incoming = _without_history(bundle.get("settings") or {})
         if incoming:
-            _settings.update_settings(incoming)
+            # An import is the way back from a settings.json that cannot be
+            # read, so it may replace one - but only once backup_current has
+            # copied that very file aside, byte for byte.
+            copied = bool(backup.get("backup")) and (
+                Path(root / "settings.json").resolve()
+                == Path(_settings.SETTINGS_FILE).resolve())
+            _settings.update_settings(incoming, replace_unreadable=copied)
             applied["settings"] = len(_flatten(incoming))
 
     if "files" in want:

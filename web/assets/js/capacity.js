@@ -188,10 +188,11 @@
       return;
     }
     var people = Number($('capHeadcount').value) || 0;
-    var rows = (t.items || []).map(function (i) {
+    var n = devicesFor(t.items || [], people);
+    var rows = (t.items || []).map(function (i, k) {
       return '<tr><td>' + esc(shortDevice(i.device)) + '</td><td class="cap-sub">' + esc(i.usage)
         + '</td><td class="cap-n">' + fmtPer(i.perOccupant) + '</td><td class="cap-n">'
-        + (people ? Math.round(i.perOccupant * people) : '–') + '</td></tr>';
+        + (people ? n.rows[k] : '–') + '</td></tr>';
     }).join('');
     host.innerHTML = (t.description ? '<p class="cap-hint">' + esc(t.description) + '</p>' : '')
       + '<table class="cap-table"><thead><tr><th>Device profile</th><th>Usage profile</th>'
@@ -199,8 +200,19 @@
       + (people || '–') + ' people</th></tr></thead><tbody>' + rows
       + '<tr><td colspan="2" class="cap-total">Total</td><td class="cap-n cap-total">'
       + fmtPer(t.devicesPerOccupant) + '</td><td class="cap-n cap-total">'
-      + (people ? Math.round((t.devicesPerOccupant || 0) * people) : '–')
+      + (people ? n.total : '–')
       + '</td></tr></tbody></table>';
+  }
+
+  /* Devices per row at a headcount, and their total, as `apply_headcount` in
+     capacity_profiles.py writes them: each row rounded half up, the total the
+     sum of the rows. Rounding the total on its own showed 75 where the file
+     got 78. */
+  function devicesFor(items, people) {
+    var rows = items.map(function (i) {
+      return Math.floor((Number(i.perOccupant != null ? i.perOccupant : i.per) || 0) * people + 0.5);
+    });
+    return { rows: rows, total: rows.reduce(function (a, b) { return a + b; }, 0) };
   }
 
   function fmtPer(n) {
@@ -330,9 +342,10 @@
   }
 
   /* The file a name is saved under - `_safe_filename` in capacity_profiles.py,
-     which drops punctuation, so "Lab #1" and "Lab 1" are one file. */
+     which drops punctuation, so "Lab #1" and "Lab 1" are one file. Letters
+     and digits of every script are kept, as there. */
   function templateFileFor(name) {
-    var stem = String(name).replace(/[^A-Za-z0-9 _-]+/g, '').trim() || 'capacity';
+    var stem = String(name).replace(/[^\p{L}\p{N} _-]+/gu, '').trim() || 'capacity';
     return stem.replace(/ /g, '_') + '_capacitytemplate.json';
   }
 
@@ -464,15 +477,15 @@
     var people = Number($('capHeadcount').value) || 200;
     $('capEdForHead').textContent = 'For ' + people + ' people';
     var total = 0;
+    var n = devicesFor(ed.rows, people);
     ed.rows.forEach(function (r, i) {
-      var per = Number(r.per) || 0;
-      total += per;
+      total += Number(r.per) || 0;
       var cell = document.querySelector('.cap-ed-for[data-row="' + i + '"]');
-      if (cell) cell.textContent = String(Math.round(per * people));
+      if (cell) cell.textContent = String(n.rows[i]);
     });
     $('capEdTotal').textContent = ed.rows.length
       ? 'In total ' + fmtPer(total) + ' device' + (total === 1 ? '' : 's') + ' per person — '
-        + Math.round(total * people) + ' for ' + people + ' people.'
+        + n.total + ' for ' + people + ' people.'
       : 'No devices yet.';
   }
 
@@ -541,7 +554,14 @@
   };
 
   // ── apply preview ──────────────────────────────────────────────────────────
+  // The headcount box plans on every keystroke, and replies can come back in
+  // any order: a late answer for "20" landing after the one for "200" left a
+  // card describing a headcount Apply would not write. Each plan is numbered,
+  // only the newest one's reply is drawn, and Apply waits for it.
+  var planSeq = 0;
+
   window.capPlan = function () {
+    var seq = ++planSeq;
     renderTemplateView();
     var host = $('capPlan');
     $('capResult').innerHTML = '';
@@ -550,7 +570,9 @@
       setApply(false, chosen ? 'Load a project first.' : 'Pick a template first.');
       return;
     }
+    setApply(false, 'Working out what applying it would do…');
     api('plan', fileBytes, applyQuery()).then(function (r) {
+      if (seq !== planSeq) return;
       if (!r || !r.ok) {
         host.innerHTML = '<div class="cap-empty">' + esc((r && r.error) || 'Could not plan that.') + '</div>';
         // The reason is in the card above; the footer points at it rather
@@ -647,6 +669,10 @@
         + '.'
         + (r.orphanAreasIgnored ? ' ' + r.orphanAreasIgnored
             + ' orphaned area ignored.' : '') + '</p>';
+    }).catch(function (e) {
+      if (seq !== planSeq) return;
+      host.innerHTML = '<div class="cap-empty">' + esc('Could not plan that: ' + e.message) + '</div>';
+      setApply(false, 'The plan could not be worked out, so there is nothing to apply.');
     });
   };
 

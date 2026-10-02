@@ -858,7 +858,8 @@ def api_plantrim(action):
 ORGANIZER_ACTIONS = {
     "pick_folder":  lambda d: fo.pick_folder(),
     "set_folder":   lambda d: fo.set_folder(d["path"]),
-    "scan":         lambda d: fo.scan(d.get("root")),
+    "scan":         lambda d: fo.scan(d.get("root"), d.get("excluded"),
+                                      d.get("overrides")),
     "execute":      lambda d: fo.execute(d.get("root"), d.get("excluded"), d.get("overrides")),
     "undo":         lambda d: fo.undo(d.get("root")),
     "has_undo":     lambda d: fo.has_undo(d.get("root")),
@@ -938,7 +939,8 @@ RENAME_ACTIONS = {
     "save_profile":         lambda d: rm.save_profile(
                                 d["name"], d.get("folder_format", ""),
                                 d.get("file_format", ""), d.get("separator", " - "),
-                                d.get("file_rules")),
+                                d.get("file_rules"),
+                                overwrite=d.get("overwrite") is True),
     "delete_profile":       lambda d: rm.delete_profile(d["name"]),
     "list_profiles":        lambda d: rm.list_profiles(),
     "generate_csv_template": lambda d: rm.generate_csv_template(d.get("format", "")),
@@ -1587,7 +1589,8 @@ CLOUD_ACTIONS = {
     "rename_local": lambda d: cm.rename_local(d["path"], d["name"]),
     "delete_local": lambda d: cm.delete_local(d["path"]),
     "create_local_folder": lambda d: cm.create_local_folder(d["name"]),
-    "move_local_to_site": lambda d: cm.move_local_to_site(d["path"], d["folder"]),
+    "move_local_to_site": lambda d: cm.move_local_to_site(
+        d["path"], d["folder"], tidy_source=bool(d.get("tidySource"))),
     "merge_preview": lambda d: cm.merge_preview(d["src"], d["dst"]),
     "merge_execute": lambda d: cm.merge_execute(d["src"], d["dst"], d.get("ops", [])),
     "merge_preview_many": lambda d: cm.merge_preview_many(d.get("srcs", []), d["dst"]),
@@ -2069,15 +2072,20 @@ def api_update():
         return jsonify({
             "ok": False,
             "error": str(e),
+            # Whether the install folder is as it was. The page says "nothing
+            # was left half-installed" only on this, never by default.
+            "intact": bool(getattr(e, "intact", False)),
             "steps": steps,
             "install": updater.detect_install(),
             "releasesUrl": updater.GITHUB_RELEASES_URL,
         }), 200
     except Exception as e:
         print(f"  [update] FAILED: {e}", flush=True)
+        applog.note_failure("update", e)
         return jsonify({
             "ok": False,
             "error": f"Unexpected error during update: {e}",
+            "intact": False,
             "steps": steps,
             "releasesUrl": updater.GITHUB_RELEASES_URL,
         }), 200

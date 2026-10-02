@@ -42,7 +42,7 @@ const API_MAP = {
   delete_cloud: ['delete_cloud', ['kind', 'id']],
   create_site: ['create_site', ['name']],
   create_local_folder: ['create_local_folder', ['name']],
-  move_local_to_site: ['move_local_to_site', ['path', 'folder']],
+  move_local_to_site: ['move_local_to_site', ['path', 'folder', 'tidySource']],
   rename_local: ['rename_local', ['path', 'name']],
   delete_local: ['delete_local', ['path']],
   merge_preview: ['merge_preview', ['src', 'dst']],
@@ -819,23 +819,50 @@ function switchTab(kind) {
 
 function expandAllSites() {
   collapsed.clear();
-  _treeClosedFor = null;
+  _treeVisit().all = 'open';
+  _treeMarkAllSeen();
   renderRows();
 }
 
-/* Which data set the sites were last closed for.
+/* The sites this visit to the tab has already decided about, and whether
+   Expand all or Collapse all is in force.
 
-   The list opens site-first, so every site starts closed - but only once per
-   data set. Closing them again on each background refresh would shut whatever
-   he had just opened, every few seconds, while he was reading it. */
+   The list opens site-first, and each site is decided once per visit - not
+   once per data set. Keyed by data set, as it was, two things went wrong:
+   Expand all cleared the record, so the refresh after his next action closed
+   every site again; and any action that changed a count made a "new" data
+   set, which shut the sites he had opened by hand. Now a site is decided the
+   first time it is seen, Expand all and Collapse all hold until he leaves
+   the tab, and a site that appears later follows whichever is in force. */
 let _treeClosedFor = null;
+
+function _treeVisit() {
+  if (!_treeClosedFor || _treeClosedFor.tab !== currentTab) {
+    _treeClosedFor = { tab: currentTab, seen: new Set(), all: '' };
+  }
+  return _treeClosedFor;
+}
+
+function _treeSiteKeys() {
+  const keys = [];
+  if (!data) return keys;
+  (data.matched || []).forEach(p => keys.push('site:' + p.cloud.id));
+  (data.cloudOnly || []).forEach(s => keys.push('site:' + s.id));
+  (data.localOnly || []).forEach(f => keys.push('folder:' + f.path));
+  return keys;
+}
+
+function _treeMarkAllSeen() {
+  const visit = _treeVisit();
+  _treeSiteKeys().forEach(k => visit.seen.add(k));
+}
 
 function closeSitesOnFirstSight() {
   if (!data) return;
-  const stamp = currentTab + ':' + ((data.matched || []).length + ':'
-    + (data.cloudOnly || []).length + ':' + (data.localOnly || []).length);
-  if (_treeClosedFor === stamp) return;
-  _treeClosedFor = stamp;
+  if (!_treeClosedFor || _treeClosedFor.tab !== currentTab) {
+    _treeClosedFor = { tab: currentTab, seen: new Set(), all: '' };
+  }
+  const visit = _treeClosedFor;
 
   /* A site that wants something opens; a site that is finished stays shut.
 
@@ -852,9 +879,13 @@ function closeSitesOnFirstSight() {
     const d = siteDigest(children);
     return !!d && (d.attention > 0 || d.unpaired > 0);
   };
-  //: His choice, and `attention` is only one of the three.
-  if (_treeOpenMode === 'all') return;
   const shut = (key, children) => {
+    if (visit.seen.has(key)) return;        // decided already, this visit
+    visit.seen.add(key);
+    if (visit.all === 'open') return;
+    if (visit.all === 'shut') { collapsed.add(key); return; }
+    //: His choice, and `attention` is only one of the three.
+    if (_treeOpenMode === 'all') return;
     if (_treeOpenMode === 'none' || !wantsHim(children)) collapsed.add(key);
   };
   (data.matched || []).forEach(p => shut('site:' + p.cloud.id,
@@ -864,10 +895,9 @@ function closeSitesOnFirstSight() {
 }
 function collapseAllSites() {
   if (!data) return;
-  _treeClosedFor = null;
-  (data.matched || []).forEach(p => collapsed.add('site:' + p.cloud.id));
-  (data.cloudOnly || []).forEach(s => collapsed.add('site:' + s.id));
-  (data.localOnly || []).forEach(f => collapsed.add('folder:' + f.path));
+  _treeVisit().all = 'shut';
+  _treeMarkAllSeen();
+  _treeSiteKeys().forEach(k => collapsed.add(k));
   renderRows();
 }
 
@@ -897,13 +927,32 @@ function refreshData(silent, opts) {
       .then(d => onDuplicates(tab, JSON.stringify(d)))
       .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
   } else {
+    const seq = ++_dataSeq;
+    if (!background) _dataSeqAsked = seq;
     pyApi('get_data', tab)
-      .then(d => onData(tab, JSON.stringify(d), { background }))
+      .then(d => {
+        /* Answers can arrive out of order: two actions finishing close
+           together each ask for the list, and the first, slower listing
+           landed last and drew the list as it was before the second. An
+           answer older than one already applied is dropped. A newer
+           background answer stands in for an older one he asked for, so his
+           action's result still lands on screen rather than behind the bar. */
+        if (seq < _dataSeqApplied) return;
+        const owed = _dataSeqAsked > _dataSeqApplied && _dataSeqAsked <= seq;
+        _dataSeqApplied = seq;
+        onData(tab, JSON.stringify(d), { background: background && !owed });
+      })
       .catch(err => { if (!silent) toast('Load failed: ' + err.message, 'error'); });
 
     refreshDupIndex();
   }
 }
+
+/* `get_data` requests in the order they were sent: the newest sent, the
+   newest applied, and the newest one he asked for (not a background poll). */
+let _dataSeq = 0;
+let _dataSeqApplied = 0;
+let _dataSeqAsked = 0;
 
 /* What the last background poll found and has not been allowed to apply. */
 let _pendingData = null;
@@ -1105,7 +1154,9 @@ function indexRowData() {
       localMtime: Number(p.local.mtime) || 0,
 
       cloudOwner: (p.cloud.owner || ''),
-      siteName: p.cloud.siteName || '',
+      //: Where a download lands: the folder the server paired with this
+      //: project's cloud site, where there is one - see `siteFolder`.
+      siteName: p.cloud.siteFolder || p.cloud.siteName || '',
       entityKind,
     };
     // Independent per-side entries — same pattern as the ct-c:/ct-l: keys
@@ -1115,7 +1166,9 @@ function indexRowData() {
     rowData['s-c:' + p.cloud.id] = {
       kind: 'cloud', id: p.cloud.id, name: p.cloud.name,
       cloudOwner: (p.cloud.owner || ''),
-      siteName: p.cloud.siteName || '',
+      //: Where a download lands: the folder the server paired with this
+      //: project's cloud site, where there is one - see `siteFolder`.
+      siteName: p.cloud.siteFolder || p.cloud.siteName || '',
       entityKind,
     };
     rowData['s-l:' + p.local.path] = {
@@ -1134,7 +1187,7 @@ function indexRowData() {
       kind: 'cloud', id: s.id, name: s.name,
       cloudOwner: (s.owner || ''),
 
-      siteName: s.siteName || '',
+      siteName: s.siteFolder || s.siteName || '',
       // Carried so bulk Sync can create the missing local folder AND move
       // every cloud project already sitting under this site in one shot.
       children: s.children,
@@ -1239,10 +1292,11 @@ function _passOwnerForCounts(cloudObj, localObj) {
   if (!me) return true;
   const co = (cloudObj && cloudObj.owner || '').toLowerCase();
   const lo = (localObj && localObj.owner || '').toLowerCase();
-  const otherCloud = co && co.indexOf('@') > -1 && co !== me;
-  const otherLocal = lo && lo.indexOf('@') > -1 && lo !== me;
-  if (own === 'mine')   return !otherCloud && !otherLocal;
-  if (own === 'others') return otherCloud || otherLocal;
+  //: The cloud owner alone wherever there is a cloud side - see buildPassOwner.
+  const other = cloudObj ? !!(co && co.indexOf('@') > -1 && co !== me)
+                         : !!(lo && lo.indexOf('@') > -1 && lo !== me);
+  if (own === 'mine')   return !other;
+  if (own === 'others') return other;
   return true;
 }
 
@@ -1465,9 +1519,9 @@ function _isExternal(cloudObj, localObj) {
   if (!me) return false;
   const co = (cloudObj && cloudObj.owner || '').toLowerCase();
   const lo = (localObj && localObj.owner || '').toLowerCase();
-  const otherCloud = co && co.indexOf('@') > -1 && co !== me;
-  const otherLocal = lo && lo.indexOf('@') > -1 && lo !== me;
-  return !!(otherCloud || otherLocal);
+  //: The cloud owner alone wherever there is a cloud side - see buildPassOwner.
+  return cloudObj ? !!(co && co.indexOf('@') > -1 && co !== me)
+                  : !!(lo && lo.indexOf('@') > -1 && lo !== me);
 }
 
 
@@ -2055,9 +2109,40 @@ function _dupVisibleClusters() {
    the newest is kept, as the cluster's own "Keep newest" does. A cluster whose
    newest cannot be found gives nothing rather than everything. */
 function _dupExtrasOf(cl) {
-  if (cl.items.some(i => i.matched)) return cl.items.filter(i => !i.matched);
-  if (!cl.items.some(i => (i.id || i.path) === cl.newestId)) return [];
-  return cl.items.filter(i => (i.id || i.path) !== cl.newestId);
+  if (cl.items.some(i => i.matched)) {
+    return cl.items.filter(i => !i.matched && !_dupTheirs(i));
+  }
+  const keeper = _dupKeeper(cl, 'newest');
+  if (!keeper) return [];
+  return cl.items.filter(i => i !== keeper && !_dupTheirs(i));
+}
+
+/* A cloud copy somebody else provably owns. Ekahau refuses its delete with
+   403, so it is never offered as an extra and never chosen as the one copy
+   to keep. Unproven ownership is attempted, as everywhere else in the tool:
+   an owner that is missing, or no signed-in account to compare with, is not
+   evidence that it is someone else's. */
+function _dupTheirs(it) {
+  if (!it || it.side !== 'cloud') return false;
+  const me = String((typeof dupData !== 'undefined' && dupData && dupData.currentUser)
+    || (typeof data !== 'undefined' && data && data.currentUser) || '').toLowerCase();
+  const owner = String(it.owner || '').toLowerCase();
+  return !!(me && owner.indexOf('@') > -1 && owner !== me);
+}
+
+/* The copy a cluster keeps: the newest (or largest) the server named, unless
+   that is a colleague's - then the newest (or largest) of the copies he can
+   act on. Keeping the colleague's copy deleted every one of his own and left
+   him with nothing of his. Null when there is nothing to choose from. */
+function _dupKeeper(cl, mode) {
+  const field = mode === 'largest' ? 'size' : 'mtime';
+  const wanted = mode === 'largest' ? cl.largestId : cl.newestId;
+  const named = cl.items.find(i => (i.id || i.path) === wanted);
+  if (!named) return null;
+  if (!_dupTheirs(named)) return named;
+  const his = cl.items.filter(i => !_dupTheirs(i));
+  if (!his.length) return null;
+  return his.reduce((a, b) => ((Number(b[field]) || 0) > (Number(a[field]) || 0) ? b : a));
 }
 
 function renderDuplicates() {
@@ -2264,6 +2349,15 @@ function _findCluster(key) {
 
 async function _bulkDeleteItems(items, clusterKey) {
   if (!items.length) return;
+  /* A colleague's cloud copy is left out and named, never sent: Ekahau
+     answers 403 to anyone but the owner. */
+  const notMine = items.filter(_dupTheirs);
+  items = items.filter(it => !_dupTheirs(it));
+  const leftOut = notMine.length
+    ? _notMineSentence(notMine.map(it => ({ name: it.name || it.id, owner: it.owner || '' })),
+                       'delete')
+    : '';
+  if (!items.length) { toast(leftOut, 'info'); return; }
   /* The same dialog the rest of the tool deletes through.
 
      This was `confirm()` with a newline-joined list of names and sizes - for
@@ -2294,7 +2388,8 @@ async function _bulkDeleteItems(items, clusterKey) {
         ? ' Once this runs, the cloud side will not exist anymore, for anyone.'
           + ' There is no trash to recover it from.'
         : ' This cannot be undone.')
-    + '</p>' + _deleteWhatHtml(entries);
+    + '</p>' + _deleteWhatHtml(entries)
+    + (leftOut ? '<p class="sub">' + e(leftOut) + '</p>' : '');
   const go = await showConfirmModal(
     anyCloud ? 'Delete from Ekahau Cloud?' : 'Delete?',
     body,
@@ -2317,8 +2412,13 @@ async function _bulkDeleteItems(items, clusterKey) {
 function dupKeep(key, mode) {
   const cl = _findCluster(key);
   if (!cl) return;
-  const keeperId = mode === 'newest' ? cl.newestId : cl.largestId;
-  const toDelete = cl.items.filter(it => (it.id || it.path) !== keeperId);
+  const keeper = _dupKeeper(cl, mode === 'newest' ? 'newest' : 'largest');
+  if (!keeper) {
+    toast('Nothing in this cluster was deleted — every copy belongs to someone '
+          + 'else, and Ekahau only lets a project\'s owner delete it.', 'info');
+    return;
+  }
+  const toDelete = cl.items.filter(it => it !== keeper);
   _bulkDeleteItems(toDelete, key);
 }
 
@@ -3112,10 +3212,17 @@ function buildPassOwner(own, me) {
 
     const co = (row.cloud && row.cloud.owner || '').toLowerCase();
     const lo = (row.local && row.local.owner || '').toLowerCase();
-    const otherCloud = co && co.indexOf('@') > -1 && co !== me;
-    const otherLocal = lo && lo.indexOf('@') > -1 && lo !== me;
-    if (own === 'mine')   return !otherCloud && !otherLocal;
-    if (own === 'others') return otherCloud || otherLocal;
+    /* **Where there is a cloud side, its owner decides alone.** The local
+       file's owner is `history.createdBy`, the person who made it, and
+       ownership can be transferred without the creator moving with it. A
+       project a colleague made and handed to him was hidden under Mine,
+       shown under Others and counted External. The creator is all a
+       local-only file has, so it still answers there. Same rule in
+       `_passOwnerForCounts` and `_isExternal`. */
+    const other = row.cloud ? !!(co && co.indexOf('@') > -1 && co !== me)
+                            : !!(lo && lo.indexOf('@') > -1 && lo !== me);
+    if (own === 'mine')   return !other;
+    if (own === 'others') return other;
     return true;
   };
 }
@@ -3874,6 +3981,13 @@ async function reconcilePairs(pairs) {
     return;
   }
   if (!preview) return;
+  /* Removed from the queue before it ran. That settles as `{cancelled}`,
+     which has no `aligned` - and read on as a result it said "Nothing
+     needed changing" about pairs nobody had looked at. */
+  if (preview.cancelled) {
+    toast('Check cancelled — nothing was compared or changed', 'info');
+    return;
+  }
 
   const willFix = preview.aligned || [];
   const wontFix = preview.skipped || [];
@@ -3941,6 +4055,10 @@ async function reconcilePairs(pairs) {
     return;
   }
   if (!done) return;
+  if (done.cancelled) {
+    toast('Cancelled — none of your local files were changed', 'info');
+    return;
+  }
   _reportReconcile(done);
 }
 
@@ -3999,6 +4117,10 @@ async function reconcileNow(pair) {
     return;
   }
   if (!done) return;
+  if (done.cancelled) {
+    toast(`${label}: cancelled — your local file was not changed`, 'info');
+    return;
+  }
   //: A refusal is an answer with a reason - the design moved since the
   //: comparison, or the local copy became the newer one. Say which.
   if (!(done.aligned || []).length && !(done.failed || []).length) {
@@ -7588,7 +7710,10 @@ async function confirmMerge() {
          than guessing. Losing a copy is the one outcome this must not
          produce on a comparison it could not make. */
       if (f.fromSource) return { rel: f.rel, action: 'keepboth' };
-      return { rel: f.rel, action: f.newer === 'src' ? 'overwrite' : 'skip' };
+      /* The server compares on what is there when this file's turn comes.
+         Sending "overwrite" from the preview's comparison let a second
+         source that also beat the original replace the first, newer one. */
+      return { rel: f.rel, action: 'newer' };
     }),
   }));
   const btn = document.getElementById('mergeBtn'); btn.disabled = true;
@@ -8788,7 +8913,8 @@ function syncEverythingPlan() {
   const takeCloud = (c, siteName) => {
     if (!c || !c.id || seenCloud.has(c.id)) return;
     seenCloud.add(c.id);
-    fresh.push({ id: c.id, name: c.name || '', siteName: siteName || c.siteName || '' });
+    fresh.push({ id: c.id, name: c.name || '',
+                 siteName: siteName || c.siteFolder || c.siteName || '' });
   };
 
   const walkKids = (kids, siteName) => {
@@ -10190,7 +10316,11 @@ async function downloadThenMove(projectId, projectName) {
       _scheduleOpRefresh();
     } else {
       toast(`Downloaded "${r.name || projectName}" — pick a site to sort it under`, 'success');
-      _moveToSiteTargets = [{ kind: 'local', path: r.path, name: r.name || projectName }];
+      /* `tidySource`: the folder this download just made, named after the
+         project, is removed after the move if it holds no file - otherwise
+         it stayed, empty, and was listed as a local-only site. */
+      _moveToSiteTargets = [{ kind: 'local', path: r.path, name: r.name || projectName,
+                              tidySource: !!r.createdFolder }];
       await _openMoveToSitePicker();
     }
   } catch (err) {
@@ -10819,10 +10949,10 @@ async function confirmMoveToSite() {
       type: 'op', pollBackend: false, undoable: false,
       retryFn: async () => (t.kind === 'cloud'
         ? pyApi('assign_to_site', siteId, t.id)
-        : pyApi('move_local_to_site', t.path, folder)),
+        : pyApi('move_local_to_site', t.path, folder, !!t.tidySource)),
       run: async () => (t.kind === 'cloud'
         ? pyApi('assign_to_site', siteId, t.id)
-        : pyApi('move_local_to_site', t.path, folder)),
+        : pyApi('move_local_to_site', t.path, folder, !!t.tidySource)),
     });
     waits.push(promise.then(r => {
       if (r && r.error) {

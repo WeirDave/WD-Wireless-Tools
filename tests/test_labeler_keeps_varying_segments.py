@@ -75,12 +75,15 @@ eval(cut('function counterStart(v)', 'function generateName('));
 
 // The save and load halves, taken out of the real functions rather than
 // retyped: getSettings writes a segment out, applySettings maps it back.
-eval(cut('function getSettings()', 'function applySettings(s)'));
-var _reloadBody = cut('_segments = s.segments.map(function (o) {',
-                      '      padSegments();');
-eval('function reload(o) { ' + _reloadBody
-       .replace('_segments = s.segments.map(function (o) {', 'return (function () {')
-       .replace(/\}\);\s*$/, '})(); }'));
+eval(cut('function getSettings()', "/* A saved pattern's segments"));
+eval(cut('var MIN_VISIBLE_SEGMENTS', '/* Said when the file'));
+eval(cut('function segmentsFromSettings(s)', 'function applySettings(s)'));
+// One segment through the real loader; padding puts blanks before a
+// counter and after anything else, so it is the last or the first.
+function reload(o) {
+  var list = segmentsFromSettings({ segments: [o] });
+  return list[o.type === 'counter' ? list.length - 1 : 0];
+}
 
 function nameEach(segments, entries) {
   _segments = segments;

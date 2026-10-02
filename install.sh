@@ -20,6 +20,13 @@
 #
 # The app has an Update button that does the same thing (About -> Update now).
 
+# Everything is inside main(), called on the last line, so bash has read the
+# whole script before any of it runs. bash reads a script as it goes, and the
+# ZIP path copies a new install.sh over this very file: without the wrapper it
+# carried on reading the new file at the old byte offset, ran garbage, skipped
+# the dependency step and "Ready", and exited 127. The same wrapper keeps a
+# `curl | bash` cut off mid-download from running half a script.
+main() {
 set -euo pipefail
 
 REPO="WeirDave/WD-Wireless-Tools"
@@ -256,7 +263,7 @@ fi
 if [ "$METHOD" = "git" ] && { [ "$IS_GIT" -eq 1 ] || [ "$EXISTING" -eq 0 ]; }; then
   # ---- git path --------------------------------------------------------------
   if [ "$EXISTING" -eq 0 ] && [ "$IS_GIT" -eq 0 ]; then
-    step "Cloning $REPO…"
+    step "Cloning ${REPO}…"
     mkdir -p "$TARGET"
     git clone --quiet "$CLONE_URL" "$TARGET"
   else
@@ -295,7 +302,20 @@ if [ "$METHOD" = "git" ] && { [ "$IS_GIT" -eq 1 ] || [ "$EXISTING" -eq 0 ]; }; t
       esac
     done < <(git -C "$TARGET" status --porcelain -- templates 2>/dev/null || true)
 
-    step "Checking out $LABEL…"
+    # `checkout --force` below discards every other edit to a tracked file,
+    # silently. Stop and name them instead, as the in-app updater does
+    # (_dirty_paths in tools/updater.py). Untracked files are never touched
+    # by a checkout, and a permissions-only change is not an edit.
+    DIRTY="$(git -C "$TARGET" -c core.fileMode=false status --porcelain 2>/dev/null \
+             | grep -v '^??' | cut -c4- | tr -d '"' || true)"
+    if [ -n "$DIRTY" ]; then
+      err "This install has local edits that an update would overwrite:"
+      printf '%s\n' "$DIRTY" | sed 's/^/    /' >&2
+      err "Nothing was changed. Revert or move them, then run this again."
+      exit 1
+    fi
+
+    step "Checking out ${LABEL}…"
     git -C "$TARGET" -c advice.detachedHead=false checkout --force "$REF" >/dev/null
     NEW="$(suite_version "$TARGET")"
     if [ -n "$CURRENT" ]; then ok "Updated v$CURRENT -> v$NEW"; else ok "Installed v$NEW"; fi
@@ -324,7 +344,7 @@ else
     STAGING="$(mktemp -d "${TMPDIR:-/tmp}/WDWirelessToolsUpdate.XXXXXX")"
     trap 'rm -rf "$STAGING"' EXIT
 
-    step "Downloading $TAG…"
+    step "Downloading ${TAG}…"
     curl -fsSL -o "$STAGING/release.zip" "$BASE/$ASSET" \
       || { err "Release download failed."; exit 1; }
 
@@ -444,3 +464,6 @@ if [ "$NO_LAUNCH" -eq 0 ] && [ "$IN_PLACE" -eq 0 ] && [ -t 0 ]; then
       ;;
   esac
 fi
+}
+
+main "$@"; exit $?

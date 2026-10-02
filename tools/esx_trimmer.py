@@ -1173,7 +1173,8 @@ def _inside(c, box) -> bool:
     return x0 <= float(c["x"]) <= x1 and y0 <= float(c["y"]) <= y1
 
 
-def cut_outside(members: dict, floor_id: str, box, changed: set | None = None) -> int:
+def cut_outside(members: dict, floor_id: str, box, changed: set | None = None,
+                keep=()) -> int:
     """Remove everything on *floor_id* that falls outside *box*.
 
     A drawn box is a pair of scissors: what is inside is kept and what is
@@ -1192,6 +1193,11 @@ def cut_outside(members: dict, floor_id: str, box, changed: set | None = None) -
     the offset to move, and keying the rewrite on the offset alone copied the
     original bytes through - the cut object came back, off the plan, while its
     radios were gone.
+
+    *keep* names requirement areas to leave alone - the placeholders ``_run``
+    fits onto the new canvas. A placeholder is the whole old canvas, so every
+    corner lies outside any drawn box; cut first, it was gone before it could be
+    fitted, and a Re-measure that then refused left the floor with no area.
     """
     if changed is None:
         changed = set()
@@ -1227,7 +1233,8 @@ def cut_outside(members: dict, floor_id: str, box, changed: set | None = None) -
             continue
         kept = []
         for item in doc[key]:
-            if item.get("floorPlanId") == floor_id:
+            if item.get("floorPlanId") == floor_id and not (
+                    member == "areas.json" and item.get("id") in keep):
                 pts = [c for c in (item.get("area") or [])
                        if isinstance(c, dict) and isinstance(c.get("x"), (int, float))]
                 if pts and not all(_inside(c, box) for c in pts):
@@ -1548,7 +1555,8 @@ def _run(source: Path, dest: Path | None, margin, dry_run: bool,
         # there is nothing to cut on that path.
         if result.source == "manual":
             result.dropped_count = cut_outside(members, plan["id"],
-                                               (x0, y0, x1, y1), dirty)
+                                               (x0, y0, x1, y1), dirty,
+                                               keep=placeholders)
         touched = offset_metadata(members, plan["id"], float(x0), float(y0))
         if placeholders and _fit_placeholders(members, plan["id"], placeholders,
                                               float(x1 - x0), float(y1 - y0)):

@@ -265,13 +265,16 @@ class FolderOrganizerTests(unittest.TestCase):
     def test_config_persistence_is_isolated_to_test_state(self):
         changed = self.organizer.set_config({"subfolder_names": {
             "images": "photos", "floorplans": "plans", "reports": "docs",
-        }})
+        }, "image_ext": [".bmp"]})
         self.assertTrue(changed["ok"])
         loaded = self.organizer.get_config()["config"]
         self.assertEqual(loaded["subfolder_names"]["images"], "photos")
         self.assertTrue((self.state / "organizer_config.json").is_file())
         reset = self.organizer.reset_config()["config"]
-        self.assertEqual(reset["subfolder_names"]["images"], "images")
+        self.assertIn(".png", reset["image_ext"])
+        # Settings -> Default subfolders owns the subfolder names; Reset
+        # Defaults here leaves them (test_squirrel_organize_review_round_two).
+        self.assertEqual(reset["subfolder_names"]["images"], "photos")
 
     def test_flat_root_folder_organize_and_undo(self):
         flat = self.base / "flat"

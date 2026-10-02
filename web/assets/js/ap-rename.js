@@ -658,17 +658,19 @@
      the structure legible before anything is typed. */
   var MIN_VISIBLE_SEGMENTS = 3;
 
-  function padSegments() {
+  function padSegments(list) {
+    list = list || _segments;
     var counterAt = -1;
-    _segments.forEach(function (seg, i) {
+    list.forEach(function (seg, i) {
       if (seg.type === 'counter') counterAt = i;
     });
-    while (_segments.length < MIN_VISIBLE_SEGMENTS) {
+    while (list.length < MIN_VISIBLE_SEGMENTS) {
       var blank = { type: 'text', value: '' };
-      if (counterAt >= 0) _segments.splice(counterAt, 0, blank);
-      else _segments.push(blank);
+      if (counterAt >= 0) list.splice(counterAt, 0, blank);
+      else list.push(blank);
       counterAt = counterAt >= 0 ? counterAt + 1 : counterAt;
     }
+    return list;
   }
 
   /* Said when the file's names carry no structure to borrow. Worth saying
@@ -887,8 +889,24 @@
         menu.hidden = true;
         renderSegments();
         updateAll();
+        claimPattern();
       });
     });
+  })();
+
+  /* Every hand edit to a segment - typed, removed, dragged - reaches here
+     after its own handler has updated the model. Setting a value from code
+     fires no event, so adopting a scheme does not count as his edit. */
+  (function () {
+    var box = $('arSegments');
+    if (box) ['input', 'change', 'drop'].forEach(function (ev) {
+      box.addEventListener(ev, claimPattern);
+    });
+    if (box) box.addEventListener('click', function (e) {
+      if (e.target && e.target.closest && e.target.closest('.ar-seg-rm')) claimPattern();
+    });
+    var sep = $('arSepStructured');
+    if (sep) sep.addEventListener('change', claimPattern);
   })();
 
   (function () {
@@ -966,7 +984,11 @@
   function loadDefaults() {
     return apiSettings('get').then(function (res) {
       var d = res && res.ok && res.settings && res.settings.aprename;
-      if (d && d.defaults) { applySettings(d.defaults); rememberOwnPattern(); }
+      /* The wait for these is bounded, so they can land after a project is
+         on screen. Applied then, they wrote over the scheme adopted from it;
+         they are his pattern for the next project instead. */
+      if (d && d.defaults && _projectShown) _ownPattern = ownPatternFrom(d.defaults);
+      else if (d && d.defaults) { applySettings(d.defaults); rememberOwnPattern(); }
       if (d && d.templates) { S.templates = d.templates; renderTemplateSelect(); }
       updateAll();
     }).catch(function () { /* offline or older server: keep the built-ins */ });
@@ -981,6 +1003,7 @@
      note under it said his own pattern had been left as it was. */
   var _ownPattern = null;
   var _defaultsReady = Promise.resolve();
+  var _projectShown = false;
 
   function rememberOwnPattern() {
     var sel = $('arSepStructured');
@@ -992,6 +1015,23 @@
       sepS: sel ? sel.value : null,
       scope: _scope
     };
+  }
+
+  function ownPatternFrom(s) {
+    var mine = _ownPattern || {};
+    return {
+      segments: segmentsFromSettings(s) || mine.segments,
+      sepS: s.sepS != null ? s.sepS : mine.sepS,
+      scope: s.nesting === 'color' ? 'all' : (s.scope || mine.scope)
+    };
+  }
+
+  /* A template loaded or a segment edited is his choice, made over whatever
+     was on screen - an adopted scheme included. Left marked as adopted, it
+     was undone by the next project, which brought the saved defaults back. */
+  function claimPattern() {
+    _inferred = null;
+    rememberOwnPattern();
   }
 
   /* Only undoes an adoption. A pattern he typed over a project that had no
@@ -1057,6 +1097,33 @@
     };
   }
 
+  /* A saved pattern's segments, or null when it carries none. */
+  function segmentsFromSettings(s) {
+    if (s.segments && Array.isArray(s.segments)) {
+      return padSegments(s.segments.map(function (o) {
+        if (o.type === 'text')    return { type: 'text', value: o.value || '' };
+        if (o.type === 'floor')   return { type: 'floor', value: o.value || '' };
+        if (o.type === 'keep')    return { type: 'keep', index: o.index || 0,
+                                           sep: o.sep || '-', value: o.value || '',
+                                           sample: o.sample || '' };
+        if (o.type === 'counter') return { type: 'counter', tag: o.tag || '', start: counterStart(o.start), digits: o.digits || 3 };
+        return { type: 'text', value: '' };
+      }));
+    }
+    // Migrate old structured fields into segments
+    if (!s.segments && (s.clli != null || s.building != null || s.apTag != null)) {
+      var list = [];
+      if (s.clli)     list.push({ type: 'text', value: s.clli });
+      if (s.building) list.push({ type: 'text', value: s.building });
+      if (s.floorAuto !== false) list.push({ type: 'floor' });
+      else if (s.floor) list.push({ type: 'text', value: s.floor });
+      if (s.suite)    list.push({ type: 'text', value: s.suite });
+      list.push({ type: 'counter', tag: s.apTag || 'AP', start: s.startNumS || 1, digits: s.digitsS || 3 });
+      return list;
+    }
+    return null;
+  }
+
   function applySettings(s) {
     if (s.mode) arSetMode(s.mode);
     if (s.nesting) arSetNesting(s.nesting);
@@ -1066,30 +1133,8 @@
     if (s.nesting === 'color') arSetScope('all');
     if (s.order)     $('arOrder').value = s.order;
     if (Array.isArray(s.colorOrder)) _colorOrder = s.colorOrder.slice();
-    if (s.segments && Array.isArray(s.segments)) {
-      _segments = s.segments.map(function (o) {
-        if (o.type === 'text')    return { type: 'text', value: o.value || '' };
-        if (o.type === 'floor')   return { type: 'floor', value: o.value || '' };
-        if (o.type === 'keep')    return { type: 'keep', index: o.index || 0,
-                                           sep: o.sep || '-', value: o.value || '',
-                                           sample: o.sample || '' };
-        if (o.type === 'counter') return { type: 'counter', tag: o.tag || '', start: counterStart(o.start), digits: o.digits || 3 };
-        return { type: 'text', value: '' };
-      });
-      padSegments();
-      renderSegments();
-    }
-    // Migrate old structured fields into segments
-    if (!s.segments && (s.clli != null || s.building != null || s.apTag != null)) {
-      _segments = [];
-      if (s.clli)     _segments.push({ type: 'text', value: s.clli });
-      if (s.building) _segments.push({ type: 'text', value: s.building });
-      if (s.floorAuto !== false) _segments.push({ type: 'floor' });
-      else if (s.floor) _segments.push({ type: 'text', value: s.floor });
-      if (s.suite)    _segments.push({ type: 'text', value: s.suite });
-      _segments.push({ type: 'counter', tag: s.apTag || 'AP', start: s.startNumS || 1, digits: s.digitsS || 3 });
-      renderSegments();
-    }
+    var segs = segmentsFromSettings(s);
+    if (segs) { _segments = segs; renderSegments(); }
     if (s.sepS != null)     $('arSepStructured').value = s.sepS;
     if (s.prefix != null)   $('arPrefix').value = s.prefix;
     if (s.sep != null)      $('arSep').value = s.sep;
@@ -1209,6 +1254,7 @@
         $('arNoPlan').textContent = 'This project has no access points.';
         return;
       }
+      _projectShown = true;
       restoreOwnPattern();
       adoptProjectScheme();
       renderFloorTabs();
@@ -2763,6 +2809,7 @@
     var idx = parseInt(this.value, 10);
     if (isNaN(idx) || !S.templates[idx]) return;
     applySettings(S.templates[idx]);
+    claimPattern();
     toast('Loaded template “' + S.templates[idx].name + '”', 'success');
   });
 
