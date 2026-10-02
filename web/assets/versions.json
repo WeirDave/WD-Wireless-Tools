@@ -1,5 +1,5 @@
 {
-  "suite": "2.209.0",
+  "suite": "2.210.0",
   "cloud": "4.81.0",
   "walls": "7.74.0",
   "report": "2.69.0",
@@ -7,6 +7,6 @@
   "squirrel": "1.30.0",
   "plantrim": "2.3.0",
   "aprename": "2.18.0",
-  "capacity": "1.10.0",
+  "capacity": "1.11.0",
   "prep": "2.5.0"
 }

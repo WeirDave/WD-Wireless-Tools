@@ -754,6 +754,16 @@ def _device_total(area) -> int:
     return total
 
 
+def _devices_per_person(template: dict) -> float:
+    total = 0.0
+    for item in template.get("items", []):
+        try:
+            total += float(item.get("perOccupant") or 0)
+        except (TypeError, ValueError):
+            pass
+    return round(total, 4)
+
+
 def plan_application(esx_path, template, occupants, replace_existing=False,
                      floor_occupants=None, existing=None, floor_existing=None):
     """Work out what applying this template would do, without writing anything.
@@ -923,6 +933,11 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
     return {
         "ok": True,
         "source": esx_path.name,
+        # Devices each person carries, summed across the template's rows. The
+        # page shows it between people and devices: without it, 250 people
+        # coming out as 750 devices on a 3-per-person template read as the
+        # per-floor number being added to the building number.
+        "devicesPerPerson": _devices_per_person(template),
         # The project headcount and what it comes to on one floor. Where every
         # floor has its own number there is no project headcount, and these
         # describe nothing - hence the totals below.
@@ -1323,6 +1338,7 @@ def apply_to(src_path, dest_path, template, occupants,
         "totalDevices": counts["totalDevices"],
         "rows": counts["rows"],
         "floorsWritten": written,
+        "devicesPerPerson": plan["devicesPerPerson"],
         "perFloor": plan["perFloor"],
         "occupantsWritten": plan["occupantsWritten"],
         "devicesWritten": plan["devicesWritten"],
