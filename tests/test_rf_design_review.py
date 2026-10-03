@@ -250,9 +250,10 @@ class TheReviewPrints(ReportCase):
 class TheApScheduleExports(ReportCase):
 
     def test_the_button_reaches_a_handler_that_saves_the_schedule(self):
-        html = REPORT_HTML.read_text(encoding="utf-8")
         self.run_block(DELEGATED_JS + PROJECT + r"""
-          const page = """ + json.dumps(html) + r""";
+          // Read by Node, not inlined: the page would push the command line
+          // past Windows' 32K limit (WinError 206).
+          const page = fs.readFileSync(""" + json.dumps(str(REPORT_HTML)) + r""", 'utf8');
           const hit = delegated(page, 'exportApSchedule');
           check('the review bar has the export button', !!hit);
           openReview();
