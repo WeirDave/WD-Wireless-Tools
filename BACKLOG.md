@@ -5,10 +5,41 @@ history and GitHub Releases.
 
 Priorities: **P1** = blocking · **P2** = wanted · **P3** = future enhancement.
 
-Last reviewed against **v2.156.0**, 2026-09-20. Every item below was opened in
+Last reviewed against **v2.214.0**, 2026-10-03. Every item below was opened in
 the code and checked; what each check found is recorded on the item, including
 where the check found the item itself was wrong. The pass before this one was
-against v2.145.0 on 2026-09-19.
+against v2.156.0 on 2026-09-20, and before that v2.145.0 on 2026-09-19.
+
+**The 2026-10-03 pass found one stale entry and nothing new to open.** Suite-wide
+item 9 - `/api/report/open_esx` reads any `.esx` the browser names - had been
+untrue since v2.191.1 and was still the list's one open item; it is closed
+below with the reading of the code that closes it. The pass went outside the
+list, as the two before it learned to, and looked at: remote branches for work
+finished and never merged (none - every branch is level with `main`), open
+issues and pull requests (none), the dependency floors under `pip-audit`
+(clean, and every installed package is at or above its floor), every
+`tests/`, `tools/`, `scripts/` and `docs/` path the notes name (all exist, bar
+a placeholder and `tools/backups.py`, which was removed on purpose), the
+last 25 release notes against the style rules (clean), and the User
+Guide against the features of v2.211.0-v2.214.0 (all documented). The
+ratchets stand: no public function in `tools/` is named by no test, every
+handler named in markup is defined, and the source-string debt is 310
+assertions in 57 files, down from the 358 in 61 that the 2026-09-17 survey
+counted.
+
+**The commit messages of the two 2026-10-02 functional reviews were read for
+anything left unfixed, because that is where the previous passes' misses
+lived.** One thing was: `install.ps1` printed "Nothing was left half-installed"
+after a ZIP copy that failed partway, recorded only as "left for its own change"
+in the message of `d303ca9`. It is fixed - the catch block now tracks how far
+the copy got (`$script:partway`) and names the kept previous version - so it is
+noted here and not reopened.
+
+**Stale numbers that are history, not errors:** item 4 below says Cloud
+Manager has 51 server actions; `CLOUD_ACTIONS` has 52 now. The 51 is the count
+at the time item 4 closed, and `tests/test_every_cloud_action_is_tested.py`
+holds the real number at "every one named by a test", so it was left as
+written.
 
 **Two items were added on 2026-09-21 by the security sweep** - items 9 and 10
 under Suite-wide. Both are things that sweep deliberately did *not* do, written
@@ -894,18 +925,35 @@ tag. Four mutants were watched failing: one action put back on a tag, one
 version comment stripped, `dependabot.yml` deleted, and its ecosystem changed
 to one that does not watch actions.
 
-#### 9. P3 — `/api/report/open_esx` reads any `.esx` the browser names
+#### 9. ~~P3 — `/api/report/open_esx` reads any `.esx` the browser names~~ — closed in v2.191.1, found closed on 2026-10-03
 
-Recorded rather than opened, because the reasoning for it is sound and written
-in the route: Report parses the archive in the browser, the native picker
-hands back a path, and going through the server is the only way the page learns
-which *folder* the project is in - which is what names the saved report.
+The entry below was true when written and stopped being true in v2.191.1,
+which closed the "open code scanning alerts that are real". Nothing updated it,
+so it sat here as the list's only open item for a month. **The route does not
+read any path it is given.** `/api/organizer/pick_esx_file` records each path
+the native picker hands back in `_PICKED_ESX`, keyed by the exact string the
+page received; `/api/report/open_esx` looks the request's path up in that table
+and reads the **recorded** path, never the one in the request. A path the
+picker did not hand out in this run answers `403 "Choose the file again."`
+whether or not the file exists.
 
-What it means is that script running inside a page can read any `.esx` on the
-disk, not only the one that was opened. That is a real consequence of the
-same-origin trust model rather than a bug in this route, and item 10 above is
-what actually narrows it. Closing this one on its own would break "open from
-disk" and buy little.
+`tests/test_report_filename.py` runs both halves:
+`test_a_path_the_picker_did_not_hand_out_is_not_read` copies a real `.esx` to a
+new location, names it, and asserts `403` with no archive bytes back;
+`test_the_picker_route_records_what_it_hands_out` drives the picker route and
+then reads the file it returned. Neither asserts on source text.
+
+**What remains, and why it is not an item.** Script already running inside a
+page could re-read a file the user chose in an earlier dialog during the same
+run. That is the same-origin trust model, which the strict
+Content-Security-Policy (item 10) is what protects, and it exposes nothing the
+user had not already opened. "Open from disk" still works and still tells the
+page which folder the project is in, which is what names the saved report.
+
+The original reasoning is kept because it is why the route goes through the
+server at all: Report parses the archive in the browser, the native picker
+hands back a path, and the server is the only way the page learns which
+*folder* the project is in.
 
 #### 8. ~~P2 — 831 lines of CSS still live in eight pages rather than the stylesheet~~ — shipped in v2.154.0
 

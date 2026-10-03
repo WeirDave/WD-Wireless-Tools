@@ -324,6 +324,14 @@ the first place, so the residual is narrower than it was when this was written.
 The route is POST, so it also requires the custom header a cross-site form
 cannot set.
 
+**Update 2026-10-03: the paragraph above is out of date, and its first
+sentence is no longer true.** v2.191.1 narrowed the route: it reads only a path
+the native `.esx` picker handed out in this run (`_PICKED_ESX` in `server.py`),
+reads the recorded path rather than the one in the request, and answers `403`
+for anything else, existing file or not. `tests/test_report_filename.py` runs
+both the refusal and the accepted path. The paragraph is left as written for
+the reasoning; BACKLOG.md item 9 carries the correction.
+
 **The API still trusts same-origin, and there is nothing further to add.** The
 cross-site half was closed in v2.157.0 and holds: a foreign Host, a foreign
 Origin and any state-changing request without the custom header are all
