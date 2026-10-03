@@ -8,7 +8,7 @@ Two things are checked here and they are the same thing from either end.
 
 **The colour**, because a list of ninety has to answer "whose is this"
 without a hover. His projects carry the cloud accent down the edge of the
-cell, other people's carry the orange the owner address is already written
+cell, other people's carry the violet the owner address is already written
 in, and the Owner toggle above the list carries the same two colours on the
 side each of its buttons selects.
 

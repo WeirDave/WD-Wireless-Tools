@@ -2263,7 +2263,9 @@ function renderCluster(cl) {
     h += `<span class="dup-item-side ${sideCls}">${sideIcon}</span>`;
 
     const loc = it.location || (it.side === 'cloud' ? '(no site)' : '');
-    const owner = it.owner ? `<span class="dup-item-owner">· ${e(it.owner)}</span>` : '';
+    const dupMe = ((data && data.currentUser) || '').toLowerCase();
+    const dupOther = it.owner && dupMe && String(it.owner).toLowerCase() !== dupMe;
+    const owner = it.owner ? `<span class="dup-item-owner${dupOther ? ' is-other' : ''}">· ${e(it.owner)}</span>` : '';
     const matchedPill = it.matched ? '<span class="dup-pill matched">matched</span>' : '';
     h += `<div>
       <div class="dup-item-name">${e(it.name)}${matchedPill}</div>
@@ -2681,7 +2683,11 @@ function renderLedger(hit) {
     groupRows.forEach(r => {
       {
       const _stripe = (z++ % 2) === 1;
-      const _det = rowDetailHtml(r, _stripe);
+      const _det = _isExternal(r.cloud, r.local)
+        //: The band under the row carries the row's owner colour too - see
+        //: `.row-detail.is-external` in wd-tools.css.
+        ? rowDetailHtml(r, _stripe).replace('class="row-detail ', 'class="row-detail is-external ')
+        : rowDetailHtml(r, _stripe);
       h += `<div class="ledger-row ${r.status}${_stripe ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
     }
     });
@@ -2888,7 +2894,11 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
       });
       {
       const _stripe = (z++ % 2) === 1;
-      const _det = rowDetailHtml(r, _stripe);
+      const _det = _isExternal(r.cloud, r.local)
+        //: The band under the row carries the row's owner colour too - see
+        //: `.row-detail.is-external` in wd-tools.css.
+        ? rowDetailHtml(r, _stripe).replace('class="row-detail ', 'class="row-detail is-external ')
+        : rowDetailHtml(r, _stripe);
       /* The whole row opens the site.
 
          "it seems the only way I can expand a site is to use the chevron,
@@ -2940,7 +2950,11 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
       const r = { status: 'orphan', key: 'op:' + o.id, kind: 'projects', noCheckbox: true, cloud: o, local: null };
       {
       const _stripe = (i % 2) === 1;
-      const _det = rowDetailHtml(r, _stripe);
+      const _det = _isExternal(r.cloud, r.local)
+        //: The band under the row carries the row's owner colour too - see
+        //: `.row-detail.is-external` in wd-tools.css.
+        ? rowDetailHtml(r, _stripe).replace('class="row-detail ', 'class="row-detail is-external ')
+        : rowDetailHtml(r, _stripe);
       h += `<div class="ledger-row orphan${_stripe ? ' stripe' : ''}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
     }
     });
@@ -3335,7 +3349,11 @@ function renderTreeChildren(children, hit, passOwner, parentSiteId, parentSiteNa
     r.parentSiteName = parentSiteName;
     {
       const _stripe = (i % 2) === 1;
-      const _det = rowDetailHtml(r, _stripe);
+      const _det = _isExternal(r.cloud, r.local)
+        //: The band under the row carries the row's owner colour too - see
+        //: `.row-detail.is-external` in wd-tools.css.
+        ? rowDetailHtml(r, _stripe).replace('class="row-detail ', 'class="row-detail is-external ')
+        : rowDetailHtml(r, _stripe);
       h += `<div class="ledger-row tree-child ${r.status}${_stripe ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}">${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
     }
   });
@@ -8046,7 +8064,7 @@ function renderOwnerFilterNotice() {
   }
 
   el.hidden = false;
-  el.className = 'owner-notice';
+  el.className = 'owner-notice' + (cur === 'others' ? ' is-others' : '');
   el.innerHTML = '<span class="own-note-icon">&#128065;</span>'
     + '<span class="own-note-text"><b>Owner filter: '
     + e(OWNER_FILTER_LABEL[cur]) + '</b> — sites and projects owned by '

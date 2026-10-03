@@ -187,6 +187,21 @@
   --accent-fill-hi: #388bfd;
   --accent-ink:     #ffffff;
 
+  /* **Whose project it is, in one pair of colours.** "if the cloud manager is
+     going to use a different color to indicate other people's projects then
+     it needs to use that color throughout including the buttons." Mine is the
+     accent; somebody else's is this violet, everywhere it is drawn - the dot,
+     the name, the address, the Others toggle, the External card, and the
+     controls on the row. It was violet on the name and orange on the dot and
+     the toggle, and orange already meant "not shared" two cards along.
+     `--owner-mine` is taken at the root on purpose: an External row remaps
+     `--accent` for its own buttons, and a mine-dot inside it must not follow. */
+  --owner-mine:         var(--accent);
+  --owner-other:        var(--purple);
+  --owner-other-fill:   var(--purple-dark);
+  --owner-other-fill-hi:#6d28d9;
+  --owner-other-ink:    var(--accent-ink);
+
   /* One control height and one row height, so the list has a rhythm rather
      than a ragged edge. */
   --ctl-h: 26px;
@@ -266,6 +281,8 @@
   --accent-fill:    #0969da;
   --accent-fill-hi: #0550ae;
   --accent-ink:     #ffffff;
+
+  --owner-other:        var(--purple-dark);
 
 }
 
@@ -2170,7 +2187,7 @@ body.tool-cloud .dup-toolbar-btn {
 .dash-card.unassigned    { --dc: var(--slate);  --dc-active: rgba( 93, 91, 96,0.40); }
 .dash-card.cloud-only    { --dc: var(--blue-soft);       --dc-active: rgba(107,179,224,0.26); }
 .dash-card.local-only    { --dc: var(--purple-soft);       --dc-active: rgba(180,140,232,0.26); }
-.dash-card.external      { --dc: var(--purple);            --dc-active: rgba(139, 92,246,0.22); }
+.dash-card.external      { --dc: var(--owner-other);       --dc-active: rgba(139, 92,246,0.22); }
 /* An attention colour, not a category one: this card exists to be noticed
    when it is non-zero. Orange is unused elsewhere on this row. */
 .dash-card.unshared      { --dc: var(--orange);            --dc-active: rgba(234, 88, 12, 0.26); }
@@ -2433,6 +2450,7 @@ body.tool-cloud .dup-toolbar-btn {
 .dup-item-owner {
   color: var(--text-3); font-size: 11px; margin-left: 4px;
 }
+.dup-item-owner.is-other { color: var(--owner-other); font-weight: 600; }
 
 .dup-explain-tag {
   display: inline-block; padding: 1px 7px;
@@ -2667,9 +2685,7 @@ body.tool-cloud .toolbar input.search:focus {
   margin-left: 4px; white-space: nowrap;
 }
 
-.owner-tag.other { color: var(--orange); }
-
-[data-theme="dark"] .owner-tag.other { color: var(--type-measured); }
+.owner-tag.other { color: var(--owner-other); font-weight: 600; }
 
 .ptype-tag {
   font-size: 10px; font-weight: 700; letter-spacing: 0.2px;
@@ -2790,7 +2806,7 @@ body.tool-cloud .toolbar input.search:focus {
 .owner-btn:hover:not(.active) { background: var(--surface-hover); color: var(--text); }
 
 .owner-btn.active {
-  background: var(--purple); color: #fff;
+  background: var(--text-2); color: var(--bg);
   box-shadow: 0 1px 2px rgba(0,0,0,0.15);
 }
 
@@ -2799,15 +2815,15 @@ body.tool-cloud .toolbar input.search:focus {
 
    The two sides are the two answers, so each carries the colour its rows
    carry in the list below: yours in the cloud accent, other people's in the
-   same orange the owner address is written in. All keeps the neutral purple,
+   same violet the owner address is written in. All is neutral,
    because it is not one answer - it is both, and colouring it as either
    would say something untrue about what is on screen.
 
    The unselected buttons carry a dot rather than a fill, so the pairing is
    readable before it is chosen. Colour is never the only signal: the button
    still says Mine or Others, and the active one is still filled. */
-.owner-btn[data-owner="mine"].active   { background: var(--accent); }
-.owner-btn[data-owner="others"].active { background: var(--orange); color: #1b1200; }
+.owner-btn[data-owner="mine"].active   { background: var(--owner-mine); color: var(--accent-ink); }
+.owner-btn[data-owner="others"].active { background: var(--owner-other-fill); color: var(--owner-other-ink); }
 
 .owner-btn[data-owner="mine"]:not(.active)::before,
 .owner-btn[data-owner="others"]:not(.active)::before {
@@ -2815,8 +2831,8 @@ body.tool-cloud .toolbar input.search:focus {
   width: 7px; height: 7px; border-radius: 50%;
   margin-right: 5px; vertical-align: middle;
 }
-.owner-btn[data-owner="mine"]:not(.active)::before   { background: var(--accent); }
-.owner-btn[data-owner="others"]:not(.active)::before { background: var(--orange); }
+.owner-btn[data-owner="mine"]:not(.active)::before   { background: var(--owner-mine); }
+.owner-btn[data-owner="others"]:not(.active)::before { background: var(--owner-other); }
 
 /* **And the same two colours on the row, at rest.** A hundred rows answer
    "whose is this" without a hover, and without a column of addresses - the
@@ -2840,8 +2856,8 @@ body.tool-cloud .toolbar input.search:focus {
   border-radius: 50%; margin-right: 6px;
   vertical-align: middle; flex: none;
 }
-.own-dot[data-own="mine"]    { background: var(--accent); }
-.own-dot[data-own="theirs"]  { background: var(--orange); }
+.own-dot[data-own="mine"]    { background: var(--owner-mine); }
+.own-dot[data-own="theirs"]  { background: var(--owner-other); }
 .own-dot[data-own="unknown"] {
   background: transparent;
   box-shadow: inset 0 0 0 2px var(--text-3);
@@ -2859,12 +2875,13 @@ body.tool-cloud .toolbar input.search:focus {
 .owner-notice {
   display: flex; align-items: center; gap: 10px;
   margin: 0 0 8px; padding: 8px 12px;
-  border: 1px solid var(--purple); border-left-width: 4px; border-radius: var(--r-sm);
+  border: 1px solid var(--owner-mine); border-left-width: 4px; border-radius: var(--r-sm);
   background: var(--surface-raised);
   font-size: 12px; color: var(--text);
 }
 .owner-notice[hidden] { display: none; }
 .owner-notice.is-info { border-color: var(--border); border-left-color: var(--text-2); }
+.owner-notice.is-others { border-color: var(--owner-other); }
 .own-note-icon { flex: 0 0 auto; font-size: 14px; line-height: 1; }
 .own-note-text { flex: 1 1 auto; }
 .own-note-btn { flex: 0 0 auto; padding: 4px 10px; font-size: 12px; }
@@ -2983,8 +3000,8 @@ body.tool-cloud .toolbar input.search:focus {
    the two. Only drawn where a mark exists, so a row that reads External
    because the owner genuinely is somebody else carries nothing extra. */
 .match-badge.mb-ovr { margin-left: 6px; }
-.match-badge.mb-ovr.ovr-external::before { background: var(--attn); }
-.match-badge.mb-ovr.ovr-mine::before     { background: var(--ok); }
+.match-badge.mb-ovr.ovr-external::before { background: var(--owner-other); }
+.match-badge.mb-ovr.ovr-mine::before     { background: var(--owner-mine); }
 
 /* Proven identical is the one state worth reading without looking for it - it
    is the answer to "is this done". */
@@ -3696,11 +3713,25 @@ body.tool-cloud .toolbar input.search:focus {
   box-shadow: inset 3px 0 0 var(--red), inset -3px 0 0 var(--amber);
 }
 
-.ledger-row.is-external .lr-cell:not(.empty) { box-shadow: inset 3px 0 0 var(--purple); }
-.ledger-row.is-external .lr-cell.cloud .cell-name { color: var(--purple); }
-[data-theme="light"] .ledger-row.is-external .lr-cell.cloud .cell-name { color: var(--purple-dark); }
-.ledger-row.is-external .owner-tag { color: var(--purple); font-weight: 600; }
-[data-theme="light"] .ledger-row.is-external .owner-tag { color: var(--purple-dark); }
+.ledger-row.is-external .lr-cell:not(.empty) { box-shadow: inset 3px 0 0 var(--owner-other); }
+.ledger-row.is-external .lr-cell.cloud .cell-name { color: var(--owner-other); }
+
+/* **The controls on somebody else's row are in their colour too.** The row
+   and the band under it take the other-owner violet as their accent, so the
+   recommended button, focus rings, the tick boxes and the row menu all say
+   whose project they act on, without a rule per control. Disabled controls
+   stay grey: unavailable is the louder fact. */
+.ledger-row.is-external, .row-detail.is-external {
+  --accent:         var(--owner-other);
+  --accent-fill:    var(--owner-other-fill);
+  --accent-fill-hi: var(--owner-other-fill-hi);
+  --accent-ink:     var(--owner-other-ink);
+}
+.ledger-row.is-external .rowchk { accent-color: var(--owner-other); }
+.ledger-row.is-external .row-menu > summary { color: var(--owner-other); }
+.row-detail.is-external .rd-btn:not(.primary):not(.quiet):not(.is-disabled) {
+  border-color: var(--owner-other);
+}
 
 .ledger.tree .tree-parent .lr-cell.cloud, .ledger.tree .tree-parent .lr-cell.local { font-weight: 700; }
 

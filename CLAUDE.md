@@ -417,6 +417,13 @@ apart by one colour.
   tool, one colour). Home, Settings, Setup and the User Guide stay neutral.
 * **Status colours are not brands**: `--ok`, `--attn`, `--danger` mean the
   same thing in every tool.
+* **Ownership in Cloud Manager is one pair of tokens**: `--owner-mine` (the
+  accent) and `--owner-other` / `--owner-other-fill` (violet). Anything that
+  says "somebody else's" - dot, name, address, Others toggle, External card,
+  and every control on the row - reads them; an External row remaps
+  `--accent` to them. It was violet on the name and orange on the dot, and he
+  asked for one colour "throughout including the buttons".
+  `tests/test_cloud_other_owner_is_one_colour.py`.
 * `tests/test_every_tool_has_its_own_brand.py` resolves the colours and fails
   on a tool without one, two tools sharing one, or a title under 3:1 on its
   own bar in either theme. A new tool page needs a line in the block.
