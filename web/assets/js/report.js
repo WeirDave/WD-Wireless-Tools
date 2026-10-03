@@ -504,8 +504,10 @@
     return v || '';
   }
 
-  function reportDocTitle() {
-    return buildDocTitle(currentReport().docName, currentRevisionValue(),
+  // *docName* names something saved beside the report, such as the AP
+  // schedule, so that it is named the same way from the same place.
+  function reportDocTitle(docName) {
+    return buildDocTitle(docName || currentReport().docName, currentRevisionValue(),
                          projectName(), includeRevisionInName);
   }
 
@@ -2199,7 +2201,7 @@
     { key: 'analysis', label: 'Site Analysis',
       ids: ['summary', 'coverage', 'interference', 'bom'] },
     { key: 'audit', label: 'Audit & Change',
-      ids: ['audit'] },
+      ids: ['design', 'audit'] },
   ];
 
   var expandedTemplateId = null;
@@ -6972,6 +6974,686 @@
       + apNotesPages(proj.accessPoints, opts, ctx);
   }
 
+  /* ══ RF design review ══════════════════════════════════════════════════
+
+     A pre-flight check on the design before it leaves the designer: the
+     mistakes that are cheap to fix in Ekahau and expensive to find on site.
+     Every rule reads only what the .esx stores - channel, width, transmit
+     power, antenna, mount, name, position - and says on the page what it
+     checked, so a clean result means something.
+
+     Kept as plain functions over a parsed project with no DOM, like the
+     comparison above, because the awkward parts are arithmetic.
+
+     **Channels are 20 MHz centre frequencies.** Ekahau stores a bonded
+     channel as the list of the 20 MHz channels it covers, so the width is
+     the length of that list times twenty, and two radios share air when
+     their lists share any frequency - a 36/80 and a 44/20 are co-channel,
+     which is what a reuse check has to catch. The channel printed for a
+     bonded block is its lowest 20 MHz channel; the page says so. */
+
+  var DR_DEFAULT_CCI_M = 20;
+  var DR_PLANS_24 = { '1-6-11': [1, 6, 11], '1-5-9-13': [1, 5, 9, 13] };
+  // 2.4 GHz should run at least this far below 5 GHz on the same AP, or the
+  // 2.4 cell outgrows the 5 GHz one and dual-band clients stick to 2.4.
+  var DR_BAND_BALANCE_DB = 3;
+  // At or below this a mount height is the field's empty value, not a height.
+  var DR_UNSET_HEIGHT_M = 0.5;
+  var DR_SEVERITY_ORDER = { fix: 0, check: 1, note: 2 };
+  var DR_SEVERITY_LABEL = { fix: 'Fix', check: 'Check', note: 'Note' };
+  var DR_SEVERITY_CHIP = { fix: 'high', check: 'medium', note: 'low' };
+
+  function drRadioInfo(r) {
+    var f = (r.channelByCenterFrequencyDefinedNarrowChannels || [])
+      .map(Number).filter(function (x) { return isFinite(x) && x > 0; })
+      .sort(function (a, b) { return a - b; });
+    return {
+      radio: r,
+      freqs: f,
+      band: f.length ? _covBandFromChannel(f) : null,
+      channel: f.length ? freqToChannel(f[0]) : null,
+      width: f.length * 20,
+      tx: typeof r.transmitPower === 'number' && isFinite(r.transmitPower) ? r.transmitPower : null,
+    };
+  }
+
+  // "36/80" for a bonded block, "6" for a plain 20 MHz channel.
+  function drChannelText(info) {
+    if (info.channel == null) return '—';
+    return info.width > 20 ? info.channel + '/' + info.width : String(info.channel);
+  }
+
+  // Bluetooth and other non-Wi-Fi radios carry no channel plan, and a
+  // radio switched off in the design is not on the air.
+  function drIsLiveWifi(r) {
+    return !!r && r.enabled !== false
+      && (!r.radioTechnology || r.radioTechnology === 'IEEE802_11');
+  }
+
+  function drSharesAir(a, b) {
+    for (var i = 0; i < a.freqs.length; i++) {
+      if (b.freqs.indexOf(a.freqs[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  // 5 GHz UNII-2 and UNII-2e: 52 to 144.
+  function drIsDfs(info) {
+    return info.band === 'FIVE' && info.freqs.some(function (f) { return f >= 5250 && f <= 5730; });
+  }
+
+  // Preferred scanning channels: 5, 21, 37 ... 229. A 6 GHz-only client finds
+  // an AP by scanning these, so a block holding none of them is found late
+  // or not at all unless something else advertises it.
+  function drHoldsPsc(info) {
+    return info.freqs.some(function (f) {
+      var ch = freqToChannel(f);
+      return typeof ch === 'number' && ch >= 5 && (ch - 5) % 16 === 0;
+    });
+  }
+
+  function drGenericName(name) {
+    var n = String(name || '').trim();
+    if (!n) return 'No name';
+    if (/^[0-9a-f]{2}([:\-.]?[0-9a-f]{2}){5}$/i.test(n)) return 'A MAC address as the name';
+    if (/^(simulated|measured)?[\s\-_]*(ap|access[\s\-_]*point)[\s\-_#]*\d*$/i.test(n)) {
+      return 'Ekahau’s default name';
+    }
+    return '';
+  }
+
+  function drNameSort(a, b) {
+    return String((a.ap && a.ap.name) || a.floor).localeCompare(String((b.ap && b.ap.name) || b.floor), undefined, { numeric: true })
+      || String(a.detail || '').localeCompare(String(b.detail || ''));
+  }
+  /* The review itself. *p* is a parsed project; *aps* the access points to
+     review (the AP filter panel applies); *o* the options:
+
+       cciMeters  co-channel neighbours closer than this are listed
+       plan24     '1-6-11' or '1-5-9-13'
+       txCeiling  a radio above this many dBm is listed; null for no check
+       bandBalance  check 2.4 GHz runs DR_BAND_BALANCE_DB below 5 GHz
+
+     Returns { findings, channelUse, pairs, radiosReviewed, apsReviewed }.
+     ``pairs`` is every co-channel pair under the distance, per floor and band,
+     which is what the channel map draws its lines from. */
+  function designReview(p, aps, o) {
+    o = o || {};
+    var cci = Number(o.cciMeters);
+    if (!isFinite(cci) || cci <= 0) cci = DR_DEFAULT_CCI_M;
+    var plan = DR_PLANS_24[o.plan24] || DR_PLANS_24['1-6-11'];
+    var ceiling = (o.txCeiling == null || o.txCeiling === '' || o.txCeiling === 'off')
+      ? null : Number(o.txCeiling);
+    if (ceiling != null && !isFinite(ceiling)) ceiling = null;
+
+    var floors = {};
+    (p.floorPlans || []).forEach(function (f) { floors[f.id] = f; });
+    function floorOf(ap) {
+      var id = ap.location && ap.location.floorPlanId;
+      return (id && floors[id]) || null;
+    }
+    function floorName(ap) {
+      var f = floorOf(ap);
+      return f ? (f.name || 'Floor plan') : '(No floor plan)';
+    }
+
+    var radiosByAp = {};
+    (p.radios || []).forEach(function (r) {
+      if (!r || !r.accessPointId) return;
+      (radiosByAp[r.accessPointId] = radiosByAp[r.accessPointId] || []).push(r);
+    });
+
+    var F = {};
+    function finding(id, severity, title, why) {
+      if (!F[id]) F[id] = { id: id, severity: severity, title: title, why: why, rows: [] };
+      return F[id];
+    }
+    function add(id, severity, title, why, ap, detail) {
+      finding(id, severity, title, why).rows.push({ ap: ap, floor: floorName(ap), detail: detail || '' });
+    }
+
+    /* ── naming and placement ───────────────────────────────────────────── */
+    var byName = {};
+    aps.forEach(function (ap) {
+      var key = String(ap.name || '').trim().toLowerCase();
+      if (key) (byName[key] = byName[key] || []).push(ap);
+    });
+    Object.keys(byName).forEach(function (k) {
+      var group = byName[k];
+      if (group.length < 2) return;
+      group.forEach(function (ap, i) {
+        // The rows would otherwise read identically, and the point is to find
+        // each one in Ekahau: the model and channels are what tell them apart.
+        var tell = (radiosByAp[ap.id] || []).filter(drIsLiveWifi).map(drRadioInfo)
+          .filter(function (info) { return info.freqs.length; })
+          .map(function (info) { return _covBandLabel(info.band) + ' ch ' + drChannelText(info); });
+        add('dupName', 'fix', 'Access points sharing a name',
+            'The name is what goes on the label, in the controller and in the ticket. Two APs with one name are one AP to everyone after the designer.',
+            ap, (i + 1) + ' of ' + group.length + ' with this name'
+              + (ap.model ? ' \u00b7 ' + ap.model : '')
+              + (tell.length ? ' \u00b7 ' + tell.join(', ') : ''));
+      });
+    });
+    aps.forEach(function (ap) {
+      var g = drGenericName(ap.name);
+      if (g) {
+        add('genericName', 'check', 'Access points without a real name',
+            'An installer cannot tell these apart on site, and the controller will learn them by MAC address.',
+            ap, g);
+      }
+      if (!floorOf(ap)) {
+        add('noFloor', 'check', 'Access points on no floor plan',
+            'Nothing here says where these go. Every placement sheet leaves them out.', ap, '');
+      }
+      if (!String(ap.model || '').trim()) {
+        add('noModel', 'check', 'Access points with no model',
+            'The Bill of Materials counts them as "Unknown", and the prediction used a generic radio.', ap, '');
+      }
+    });
+
+    /* ── per radio ──────────────────────────────────────────────────────── */
+    var placed = [];          // { ap, info, floor, x, y }
+    var radiosReviewed = 0;
+    aps.forEach(function (ap) {
+      var rs = (radiosByAp[ap.id] || []).filter(drIsLiveWifi);
+      var infos = rs.map(drRadioInfo);
+      radiosReviewed += infos.length;
+
+      var primary = rs[0] || null;
+      var height = primary && typeof primary.antennaHeight === 'number' ? primary.antennaHeight : null;
+      if (rs.length && (height == null || height <= DR_UNSET_HEIGHT_M)) {
+        add('noHeight', 'check', 'Access points with no mount height',
+            'The prediction assumed a height nobody chose, and the installer has nothing to hang it at.',
+            ap, height == null ? 'Not recorded' : fmt(height, 2) + ' m');
+      }
+      var aimless = rs.filter(function (r) {
+        return antennaIsDirectional(p.antennas && p.antennas[r.antennaTypeId])
+          && (r.antennaDirection == null || !isFinite(Number(r.antennaDirection)));
+      });
+      if (aimless.length) {
+        add('noAzimuth', 'fix', 'Directional antennas with no azimuth',
+            'A directional antenna with no bearing cannot be aimed, and the prediction pointed it somewhere by default.',
+            ap, (p.antennas[aimless[0].antennaTypeId] || {}).name || 'Directional antenna');
+      }
+
+      var five = null, two = null;
+      infos.forEach(function (info) {
+        if (!info.freqs.length) {
+          add('noChannel', 'check', 'Radios with no channel',
+              'The design never committed to a channel, so nothing about reuse can be read from it.', ap, '');
+          return;
+        }
+        var ch = drChannelText(info);
+        var bandText = _covBandLabel(info.band);
+        if (info.tx == null) {
+          add('noTx', 'check', 'Radios with no transmit power',
+              'The prediction used a default, and the controller profile has no number to copy.',
+              ap, bandText + ' ch ' + ch);
+        } else if (ceiling != null && info.tx > ceiling) {
+          add('txCeiling', 'check', 'Radios above ' + fmt(ceiling, 1) + ' dBm',
+              'A cell sized by AP power that clients cannot answer at is a one-way link. Phones transmit around 14–17 dBm.',
+              ap, bandText + ' ch ' + ch + ' at ' + fmt(info.tx, 1) + ' dBm');
+        }
+        if (info.band === 'TWO') {
+          if (!two || (info.tx != null && (two.tx == null || info.tx > two.tx))) two = info;
+          if (info.width > 20) {
+            add('wide24', 'fix', '2.4 GHz radios wider than 20 MHz',
+                'There is room for one 40 MHz channel in 2.4 GHz, so every other radio overlaps it.',
+                ap, 'ch ' + ch);
+          }
+          var off = info.freqs.map(freqToChannel).filter(function (c) { return plan.indexOf(c) === -1; });
+          if (off.length && info.width === 20) {
+            add('off24', 'fix', '2.4 GHz channels off the ' + plan.join('/') + ' plan',
+                'Channels between the plan’s overlap two of its channels at once: adjacent-channel interference rather than reuse.',
+                ap, 'ch ' + ch);
+          }
+        } else if (info.band === 'FIVE') {
+          if (!five || (info.tx != null && (five.tx == null || info.tx > five.tx))) five = info;
+          if (info.width >= 160) {
+            add('wide160', 'check', '5 GHz radios at 160 MHz',
+                'There are two 160 MHz channels in 5 GHz, so reuse between neighbours is almost certain.',
+                ap, 'ch ' + ch);
+          }
+          if (drIsDfs(info)) {
+            add('dfs', 'note', '5 GHz radios on DFS channels',
+                'Radar detection can move these off channel for a minute or more. Fine for most sites; worth knowing near an airport, a port or weather radar.',
+                ap, 'ch ' + ch);
+          }
+        } else if (info.band === 'SIX') {
+          if (!drHoldsPsc(info)) {
+            add('psc', 'note', '6 GHz radios with no preferred scanning channel',
+                'A 6 GHz-only client looks on the preferred scanning channels (5, 21, 37 …) first. Fine where the AP is also discoverable on 5 GHz.',
+                ap, 'ch ' + ch);
+          }
+        }
+        var f = floorOf(ap);
+        var c = ap.location && ap.location.coord;
+        if (f && c && isFinite(c.x) && isFinite(c.y)) {
+          placed.push({ ap: ap, info: info, floor: f, x: c.x, y: c.y });
+        }
+      });
+
+      if (o.bandBalance !== false && two && five && two.tx != null && five.tx != null
+          && two.tx > five.tx - DR_BAND_BALANCE_DB) {
+        add('bandBalance', 'check',
+            '2.4 GHz less than ' + DR_BAND_BALANCE_DB + ' dB below 5 GHz',
+            'With 2.4 GHz as loud as 5 GHz, the 2.4 cell is the bigger one and dual-band clients stay on it.',
+            ap, '2.4 GHz ' + fmt(two.tx, 1) + ' dBm, 5 GHz ' + fmt(five.tx, 1) + ' dBm');
+      }
+    });
+
+    /* ── co-channel neighbours, per floor ───────────────────────────────── */
+    var pairs = [];
+    var unscaled = {};
+    var byFloorBand = {};
+    placed.forEach(function (pl) {
+      var key = pl.floor.id + '\u0000' + pl.info.band;
+      (byFloorBand[key] = byFloorBand[key] || []).push(pl);
+    });
+    Object.keys(byFloorBand).forEach(function (key) {
+      var list = byFloorBand[key];
+      var mPerU = Number(list[0].floor.metersPerUnit);
+      if (!(mPerU > 0)) { unscaled[list[0].floor.id] = list[0].floor; return; }
+      list.forEach(function (a) { a.near = null; a.within = 0; });
+      for (var i = 0; i < list.length; i++) {
+        for (var j = i + 1; j < list.length; j++) {
+          var a = list[i], b = list[j];
+          if (a.ap.id === b.ap.id || !drSharesAir(a.info, b.info)) continue;
+          var d = Math.hypot(a.x - b.x, a.y - b.y) * mPerU;
+          if (!a.near || d < a.near.d) a.near = { ap: b.ap, d: d, info: b.info };
+          if (!b.near || d < b.near.d) b.near = { ap: a.ap, d: d, info: a.info };
+          if (d < cci) {
+            a.within++; b.within++;
+            pairs.push({ floorId: a.floor.id, band: a.info.band, a: a, b: b, meters: d });
+          }
+        }
+      }
+      list.forEach(function (pl) {
+        if (!pl.near || pl.near.d >= cci) return;
+        add('cci-' + pl.info.band, 'check',
+            _covBandLabel(pl.info.band) + ' co-channel neighbours closer than ' + fmtLength(cci, o),
+            pl.info.band === 'TWO'
+              ? 'Two radios on the same channel within earshot share one channel\u2019s airtime. With three channels in 2.4 GHz, a long list here usually means too many 2.4 GHz radios are on: turn some off or down rather than re-channel.'
+              : 'Two radios on the same channel within earshot share one channel\u2019s airtime between both cells.',
+            pl.ap,
+            'ch ' + drChannelText(pl.info) + ': ' + (pl.near.ap.name || '(unnamed)')
+              + ' (ch ' + drChannelText(pl.near.info) + ') at ' + fmtLength(pl.near.d, o)
+              + (pl.within > 1 ? ' · ' + pl.within + ' within ' + fmtLength(cci, o) : ''));
+      });
+    });
+    Object.keys(unscaled).forEach(function (id) {
+      var f = unscaled[id];
+      finding('noScale', 'note', 'Floors with no scale',
+              'Distances cannot be measured on a plan that was never scaled, so co-channel neighbours were not checked there.')
+        .rows.push({ ap: null, floor: f.name || 'Floor plan', detail: '' });
+    });
+
+    /* ── channel use, per floor and band ────────────────────────────────── */
+    var use = {};
+    placed.forEach(function (pl) {
+      var fk = pl.floor.id;
+      use[fk] = use[fk] || { floor: pl.floor, bands: {} };
+      var b = use[fk].bands[pl.info.band] = use[fk].bands[pl.info.band] || { radios: 0, channels: {} };
+      b.radios++;
+      var ck = drChannelText(pl.info);
+      b.channels[ck] = b.channels[ck] || { text: ck, first: pl.info.freqs[0], count: 0 };
+      b.channels[ck].count++;
+    });
+
+    var findings = Object.keys(F).map(function (k) {
+      F[k].rows.sort(drNameSort);
+      return F[k];
+    }).sort(function (a, b) {
+      return DR_SEVERITY_ORDER[a.severity] - DR_SEVERITY_ORDER[b.severity]
+        || b.rows.length - a.rows.length || a.title.localeCompare(b.title);
+    });
+
+    return {
+      findings: findings,
+      channelUse: use,
+      pairs: pairs,
+      cciMeters: cci,
+      plan24: plan,
+      radiosReviewed: radiosReviewed,
+      apsReviewed: aps.length,
+    };
+  }
+
+  function drOptions(opts) {
+    return {
+      cciMeters: opts.cciDistance,
+      plan24: opts.plan24,
+      txCeiling: opts.txCeiling,
+      bandBalance: opts.bandBalance !== false,
+      units: opts.units,
+    };
+  }
+
+  function renderDesignReviewReport(aps, opts, ctx) {
+    var head = opts.cover
+      ? ctx.cover(aps.length, ctx.dateStr, 'Access points reviewed')
+      : ctx.inlineHeader(aps.length, ctx.dateStr, 'Access points reviewed');
+    var res = designReview(proj, aps, drOptions(opts));
+    var shown = res.findings.filter(function (f) {
+      return opts.showNotes !== false || f.severity !== 'note';
+    });
+
+    var counts = { fix: 0, check: 0, note: 0 };
+    res.findings.forEach(function (f) { counts[f.severity] += f.rows.length; });
+    var verdict = counts.fix
+      ? counts.fix + ' item' + (counts.fix === 1 ? '' : 's') + ' to fix before this design is handed over.'
+      : counts.check
+        ? 'Nothing to fix. ' + counts.check + ' item' + (counts.check === 1 ? '' : 's') + ' worth a second look.'
+        : 'Nothing to fix and nothing to check. That is a result, not an empty report.';
+
+    var score = '<section class="rep-floor-section rep-dr-flow">'
+      + '<h2 class="rep-floor-title">Result</h2>'
+      + '<div class="rep-hotspot-stats">'
+      +   '<div class="rep-hotspot-stat rep-hotspot-stat--severity"><b>' + counts.fix + '</b><span>Fix</span></div>'
+      +   '<div class="rep-hotspot-stat rep-hotspot-stat--carrier"><b>' + counts.check + '</b><span>Check</span></div>'
+      +   '<div class="rep-hotspot-stat rep-hotspot-stat--iphone"><b>' + counts.note + '</b><span>Note</span></div>'
+      +   '<div class="rep-hotspot-stat rep-hotspot-stat--total"><b>' + res.radiosReviewed + '</b><span>Radios reviewed</span></div>'
+      + '</div>'
+      + '<p class="rep-aud-note rep-dr-verdict">' + WD.esc(verdict) + '</p>'
+      + '<p class="rep-aud-note">Co-channel neighbours are listed when they are closer than '
+      +   WD.esc(fmtLength(res.cciMeters, opts)) + ' on the same floor. 2.4 GHz is checked against the '
+      +   WD.esc(res.plan24.join('/')) + ' plan.'
+      +   (opts.txCeiling && opts.txCeiling !== 'off'
+            ? ' Transmit power is checked against ' + WD.esc(opts.txCeiling) + ' dBm.' : '')
+      + '</p>'
+      + '</section>';
+
+    var summary = '';
+    if (shown.length) {
+      summary = '<section class="rep-floor-section rep-dr-flow">'
+        + '<h2 class="rep-floor-title">Findings</h2>'
+        + '<table class="rep-ap-table rep-dr-summary">'
+        + '<colgroup><col style="width:12%"><col style="width:40%"><col style="width:10%"><col style="width:38%"></colgroup>'
+        + '<thead><tr><th></th><th>Finding</th><th class="rep-num">Count</th><th>Why it matters</th></tr></thead><tbody>'
+        + shown.map(function (f) {
+            return '<tr><td>' + drChip(f.severity) + '</td>'
+              + '<td class="rep-name">' + WD.esc(f.title) + '</td>'
+              + '<td class="rep-az">' + f.rows.length + '</td>'
+              + '<td>' + WD.esc(f.why) + '</td></tr>';
+          }).join('')
+        + '</tbody></table></section>';
+    }
+
+    var detail = shown.map(function (f) {
+      var floorOnly = f.id === 'noScale';
+      return '<section class="rep-floor-section rep-dr-flow rep-dr-finding">'
+        + '<h2 class="rep-floor-title">' + drChip(f.severity) + ' ' + WD.esc(f.title)
+        +   ' (' + f.rows.length + ')</h2>'
+        + '<p class="rep-aud-note">' + WD.esc(f.why) + '</p>'
+        + '<table class="rep-ap-table">'
+        + (floorOnly
+            ? '<colgroup><col style="width:100%"></colgroup><thead><tr><th>Floor</th></tr></thead>'
+            : '<colgroup><col style="width:30%"><col style="width:24%"><col style="width:46%"></colgroup>'
+              + '<thead><tr><th>Access point</th><th>Floor</th><th>Detail</th></tr></thead>')
+        + '<tbody>' + f.rows.map(function (r) {
+            if (floorOnly) return '<tr><td class="rep-name">' + WD.esc(r.floor) + '</td></tr>';
+            return '<tr><td class="rep-name">' + WD.esc((r.ap && r.ap.name) || '(unnamed)') + '</td>'
+              + '<td class="rep-name">' + WD.esc(r.floor) + '</td>'
+              + '<td>' + WD.esc(r.detail || '—') + '</td></tr>';
+          }).join('') + '</tbody></table></section>';
+    }).join('');
+
+    var channelPlan = opts.channelTable !== false ? renderDrChannelUse(res) : '';
+
+    var maps = '';
+    if (opts.channelMap !== false) {
+      var band = opts.mapBand === 'TWO' || opts.mapBand === 'SIX' ? opts.mapBand : 'FIVE';
+      sortedFloorOrder({}).forEach(function (fp) {
+        if (fp.id === '_none') return;
+        maps += renderDrChannelMap(fp, aps, res, band, opts);
+      });
+    }
+
+    var method = '<section class="rep-floor-section rep-dr-flow rep-cov-method">'
+      + '<h2 class="rep-floor-title">What was checked</h2>'
+      + '<div class="rep-hotspot-method">'
+      + '<p>Every rule reads the design as Ekahau stores it: channel, width, transmit power, antenna, '
+      +   'mount height, name and position. Nothing is predicted or re-simulated here.</p>'
+      + '<p><b>Co-channel neighbours</b> are two radios in the same band whose channels share any 20 MHz '
+      +   'channel, on the same floor, closer than the distance chosen. A bonded channel is printed as its '
+      +   'lowest 20 MHz channel and its width, so 36/80 is 36 to 48. Distance is straight-line on the plan; '
+      +   'walls are not counted, and neither is reuse between floors, which depends on the slab.</p>'
+      + '<p><b>Disabled radios</b> and radios that are not Wi-Fi are left out of every check.</p>'
+      + '</div></section>';
+
+    return head + score + summary + channelPlan + detail + maps + method
+      + renderReportFooter(opts, ctx);
+  }
+
+  function drChip(sev) {
+    return '<span class="rep-sev-chip rep-sev-chip--' + DR_SEVERITY_CHIP[sev] + '">'
+      + DR_SEVERITY_LABEL[sev] + '</span>';
+  }
+
+  function renderDrChannelUse(res) {
+    var rows = '';
+    sortedFloorOrder({}).forEach(function (fp) {
+      var u = res.channelUse[fp.id];
+      if (!u) return;
+      ['TWO', 'FIVE', 'SIX'].forEach(function (band) {
+        var b = u.bands[band];
+        if (!b) return;
+        var chans = Object.keys(b.channels).map(function (k) { return b.channels[k]; })
+          .sort(function (x, y) { return x.first - y.first; });
+        rows += '<tr><td class="rep-name">' + WD.esc(fp.name || 'Floor plan') + '</td>'
+          + '<td class="rep-nowrap">' + _covBandLabel(band) + '</td>'
+          + '<td class="rep-az">' + b.radios + '</td>'
+          + '<td>' + chans.map(function (c) {
+              return WD.esc(c.text) + ' <span class="rep-alt">×' + c.count + '</span>';
+            }).join(' · ') + '</td></tr>';
+      });
+    });
+    if (!rows) return '';
+    return '<section class="rep-floor-section rep-dr-flow">'
+      + '<h2 class="rep-floor-title">Channel plan</h2>'
+      + '<p class="rep-aud-note">How many radios use each channel, per floor. An uneven spread is reuse '
+      +   'concentrated on a few channels.</p>'
+      + '<table class="rep-ap-table rep-dr-chan">'
+      + '<colgroup><col style="width:24%"><col style="width:12%"><col style="width:10%"><col style="width:54%"></colgroup>'
+      + '<thead><tr><th>Floor</th><th>Band</th><th class="rep-num">Radios</th><th>Channel × radios</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table></section>';
+  }
+
+  /* One colour per channel on a floor, from a fixed list so a channel keeps
+     its colour from one floor to the next. Twelve, because more than that on
+     one plan cannot be told apart anyway and the label carries the number. */
+  var DR_CHANNEL_COLOURS = ['#1e77ac', '#d97706', '#16a34a', '#9333ea', '#dc2626', '#0891b2',
+    '#a16207', '#db2777', '#4d7c0f', '#4338ca', '#0f766e', '#6b7280'];
+
+  function renderDrChannelMap(fp, aps, res, band, opts) {
+    var url = floorPlanImageUrl(fp);
+    var onFloor = aps.filter(function (ap) {
+      return ap.location && ap.location.floorPlanId === fp.id && ap.location.coord;
+    });
+    var marks = [];
+    onFloor.forEach(function (ap) {
+      proj.radios.forEach(function (r) {
+        if (r.accessPointId !== ap.id || !drIsLiveWifi(r)) return;
+        var info = drRadioInfo(r);
+        if (info.band !== band) return;
+        marks.push({ ap: ap, info: info });
+      });
+    });
+    if (!marks.length) return '';
+    var title = WD.esc(fp.name || 'Floor plan') + ' — ' + _covBandLabel(band) + ' channels';
+    if (!url) {
+      return '<section class="rep-floor-section"><h2 class="rep-floor-title">' + title + '</h2>'
+        + '<div class="rep-empty-small">Floor plan image not available.</div></section>';
+    }
+    var W = fp.width || 1, H = fp.height || 1;
+    var minDim = Math.min(W, H);
+    // Floored like every other marker in this file: a fraction of the drawing
+    // is not a size on paper.
+    var font = Math.max(Math.max(W, H) * 0.0135, minDim * 0.022);
+    /* Keyed on the lowest 20 MHz channel, not the label: a 36 and a 36/80
+       share air and should look like it. Partial overlaps (a 44 inside a
+       36/80) are what the dashed line is for. */
+    var order = [];
+    marks.forEach(function (m) {
+      if (order.indexOf(m.info.channel) === -1) order.push(m.info.channel);
+    });
+    order.sort(function (a, b) { return a - b; });
+    function colourOf(info) {
+      return DR_CHANNEL_COLOURS[order.indexOf(info.channel) % DR_CHANNEL_COLOURS.length];
+    }
+    var sw = minDim * 0.004;
+    var lines = res.pairs.filter(function (pr) {
+      return pr.floorId === fp.id && pr.band === band;
+    }).map(function (pr) {
+      return '<line class="rep-dr-cci" x1="' + pr.a.x + '" y1="' + pr.a.y + '" x2="' + pr.b.x
+        + '" y2="' + pr.b.y + '" stroke="#dc2626" stroke-width="' + sw
+        + '" stroke-dasharray="' + (sw * 3) + ' ' + (sw * 2) + '"/>';
+    }).join('');
+    var pins = marks.map(function (m) {
+      var c = m.ap.location.coord;
+      var label = drChannelText(m.info);
+      var bw = Math.max(minDim * 0.03, label.length * font * 0.62) + minDim * 0.012;
+      var bh = Math.max(minDim * 0.028, font * 1.45);
+      return '<g class="rep-dr-mark" transform="translate(' + c.x + ',' + c.y + ')">'
+        + '<rect x="' + (-bw / 2) + '" y="' + (-bh / 2) + '" width="' + bw + '" height="' + bh
+        + '" rx="' + (minDim * 0.005) + '" fill="' + colourOf(m.info) + '" stroke="#fff" stroke-width="'
+        + (minDim * 0.003) + '"/>'
+        + '<text y="' + (font * 0.35) + '" text-anchor="middle" font-size="' + font
+        + '" fill="#fff" font-weight="700">' + WD.esc(label) + '</text></g>';
+    }).join('');
+    var nLines = res.pairs.filter(function (pr) { return pr.floorId === fp.id && pr.band === band; }).length;
+    return '<section class="rep-floor-section rep-cov-section rep-dr-map">'
+      + '<h2 class="rep-floor-title">' + title + '</h2>'
+      + '<div class="rep-overview">'
+      +   '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
+      +     '<img src="' + url + '" alt="Floor plan">'
+      +     '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + lines + pins + '</svg>'
+      +   '</div>'
+      +   '<div class="rep-cov-key">Each marker is a radio, labelled with its channel. '
+      +     (nLines
+            ? 'A dashed red line joins two co-channel radios closer than '
+              + WD.esc(fmtLength(res.cciMeters, opts)) + ' (' + nLines + ' on this floor).'
+            : 'No co-channel radios are closer than ' + WD.esc(fmtLength(res.cciMeters, opts)) + ' on this floor.')
+      +   '</div>'
+      + '</div>'
+      + '</section>';
+  }
+
+  /* ══ AP schedule (CSV) ═════════════════════════════════════════════════
+
+     One row per access point, every radio in its own band's columns, for the
+     spreadsheet the job runs on: the controller's provisioning sheet, the
+     installer's checklist, the cable schedule. Built from the same parsed
+     project the reports print from, so the two never disagree.
+
+     Lengths follow the units setting and the header names the unit, because
+     a bare "3.05" in a column is a number nobody can check. */
+
+  function csvCell(v) {
+    if (v == null) return '';
+    var s = String(v);
+    /* A cell that starts like a formula is run as one when the file is opened
+       in a spreadsheet. A number is left alone - "-10" is a tilt - and
+       anything else starting with = + - @ gets a leading apostrophe. */
+    if (/^[=+\-@\t\r]/.test(s) && !/^[+\-]?\d+(\.\d+)?$/.test(s)) s = "'" + s;
+    return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function apScheduleRows(aps, opts) {
+    var metres = unitsOf(opts) === 'meters';
+    var unit = metres ? 'm' : 'ft';
+    function len(m) {
+      if (m == null || !isFinite(m)) return '';
+      return metres ? fmtFixed(m, 2) : fmtFixed(m * M_TO_FT, 1);
+    }
+    var bands = [['TWO', '2.4 GHz'], ['FIVE', '5 GHz'], ['SIX', '6 GHz']];
+    var head = ['AP name', 'Floor', 'Building', 'Vendor', 'Model', 'Mount',
+      'Height (' + unit + ')', 'Azimuth (°)', 'Tilt (°)', 'Antenna'];
+    bands.forEach(function (b) {
+      head.push(b[1] + ' channel', b[1] + ' width (MHz)', b[1] + ' TX (dBm)');
+    });
+    head.push('Grid', 'X (' + unit + ')', 'Y (' + unit + ')', 'Notes');
+    var rows = [head];
+
+    aps.slice().sort(function (a, b) {
+      var fa = floorPlanForAp(a), fb = floorPlanForAp(b);
+      return String(fa ? fa.name : '\uffff').localeCompare(String(fb ? fb.name : '\uffff'), undefined, { numeric: true })
+        || String(a.name || '').localeCompare(String(b.name || ''), undefined, { numeric: true });
+    }).forEach(function (ap) {
+      var fp = floorPlanForAp(ap);
+      var bf = fp && proj.buildingFloors[fp.id];
+      var bld = bf && proj.buildings[bf.buildingId];
+      var rs = proj.radios.filter(function (r) {
+        return r.accessPointId === ap.id && drIsLiveWifi(r);
+      });
+      var r0 = primaryRadio(ap.id);
+      var ant = r0 && proj.antennas[r0.antennaTypeId];
+      var directional = !!(r0 && antennaIsDirectional(ant));
+      var row = [
+        ap.name || '',
+        fp ? (fp.name || '') : '',
+        bld ? (bld.name || '') : '',
+        ap.vendor || '',
+        ap.model || '',
+        (r0 && r0.antennaMounting) || '',
+        len(r0 ? r0.antennaHeight : null),
+        directional && r0.antennaDirection != null ? fmt(r0.antennaDirection, 1) : '',
+        directional && r0.antennaTilt != null ? fmt(r0.antennaTilt, 1) : '',
+        ant ? (ant.name || '') : '',
+      ];
+      var infos = rs.map(drRadioInfo);
+      bands.forEach(function (b) {
+        var mine = infos.filter(function (i) { return i.band === b[0]; });
+        // A tri-radio AP can run two 5 GHz radios; both go in the one cell.
+        row.push(mine.map(function (i) { return i.channel; }).join(' / '),
+                 mine.map(function (i) { return i.width; }).join(' / '),
+                 mine.map(function (i) { return i.tx == null ? '' : fmt(i.tx, 1); }).join(' / '));
+      });
+      var c = ap.location && ap.location.coord;
+      var mPerU = fp && Number(fp.metersPerUnit) > 0 ? Number(fp.metersPerUnit) : null;
+      row.push(gridRefForAp(ap) || '',
+               c && mPerU ? len(c.x * mPerU) : '',
+               c && mPerU ? len(c.y * mPerU) : '',
+               notesForAp(ap, { proj: proj }).map(function (n) {
+                 return n.text || (n.images ? '[photo]' : '');
+               }).filter(Boolean).join(' | '));
+      rows.push(row);
+    });
+    return rows;
+  }
+
+  function apScheduleCsv(aps, opts) {
+    // The byte-order mark is what makes Excel read UTF-8 rather than the
+    // locale's code page; without it "°" and "×" arrive as two characters.
+    return '\ufeff' + apScheduleRows(aps, opts).map(function (row) {
+      return row.map(csvCell).join(',');
+    }).join('\r\n') + '\r\n';
+  }
+
+  function apScheduleFileName() {
+    return reportDocTitle('AP Schedule') + '.csv';
+  }
+
+  /* Every access point ticked in the AP filter panel, whichever report is
+     open: the schedule is the whole job, and a report's omni / directional
+     switch is about what that report prints. */
+  window.exportApSchedule = function () {
+    var aps = (proj.accessPoints || []).filter(function (a) { return !apDisabled.has(a.id); });
+    if (!aps.length) {
+      showToast('There are no access points to export. Open an .esx, or tick some in the AP filter.', 'info');
+      return;
+    }
+    var name = apScheduleFileName();
+    var blob = new Blob([apScheduleCsv(aps, collectOpts())], { type: 'text/csv;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    showToast('Saved ' + name + ' — ' + aps.length + ' access point'
+      + (aps.length === 1 ? '' : 's') + '.', 'success');
+  };
+
   function renderAimReport(aps, opts, ctx) {
     var head = opts.cover
       ? ctx.cover(aps.length, ctx.dateStr, 'Access points to aim')
@@ -8201,6 +8883,37 @@
     +   '<rect x="10" y="104" width="45" height="4" rx="1" fill="#efe6fd"/>'
     + '</svg>';
 
+  /* A findings table with severity chips over a small channel map. */
+  var PREVIEW_DESIGN = ''
+    + '<svg viewBox="0 0 92 116" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+    +   '<rect x="4" y="4" width="84" height="108" rx="3" fill="#ffffff" stroke="#e11d48" stroke-width="0.8"/>'
+    +   '<rect x="10" y="12" width="46" height="4" rx="1" fill="#e11d48"/>'
+    +   '<rect x="10" y="20" width="16" height="9" rx="1" fill="#fff" stroke="#dc2626" stroke-width="0.5"/>'
+    +   '<text x="18" y="26.5" font-size="4" font-weight="800" fill="#dc2626" text-anchor="middle">2</text>'
+    +   '<rect x="29" y="20" width="16" height="9" rx="1" fill="#fff" stroke="#d97706" stroke-width="0.5"/>'
+    +   '<text x="37" y="26.5" font-size="4" font-weight="800" fill="#d97706" text-anchor="middle">7</text>'
+    +   '<rect x="48" y="20" width="16" height="9" rx="1" fill="#fff" stroke="#64748b" stroke-width="0.5"/>'
+    +   '<text x="56" y="26.5" font-size="4" font-weight="800" fill="#64748b" text-anchor="middle">3</text>'
+    +   '<rect x="10" y="34" width="10" height="3" rx="1.2" fill="#fde2e2"/>'
+    +   '<rect x="23" y="34.4" width="56" height="2" rx="0.4" fill="#c8d4e0"/>'
+    +   '<rect x="10" y="40" width="10" height="3" rx="1.2" fill="#fdf0d5"/>'
+    +   '<rect x="23" y="40.4" width="48" height="2" rx="0.4" fill="#c8d4e0"/>'
+    +   '<rect x="10" y="46" width="10" height="3" rx="1.2" fill="#fdf0d5"/>'
+    +   '<rect x="23" y="46.4" width="52" height="2" rx="0.4" fill="#c8d4e0"/>'
+    +   '<rect x="10" y="56" width="72" height="48" rx="1" fill="#f4f6f8" stroke="#c8d4e0" stroke-width="0.4"/>'
+    +   '<line x1="24" y1="70" x2="40" y2="78" stroke="#dc2626" stroke-width="0.8" stroke-dasharray="2 1.2"/>'
+    +   '<rect x="19" y="67" width="10" height="5" rx="1" fill="#1e77ac"/>'
+    +   '<text x="24" y="70.8" font-size="3" font-weight="700" fill="#fff" text-anchor="middle">36</text>'
+    +   '<rect x="35" y="75" width="10" height="5" rx="1" fill="#1e77ac"/>'
+    +   '<text x="40" y="78.8" font-size="3" font-weight="700" fill="#fff" text-anchor="middle">36</text>'
+    +   '<rect x="56" y="64" width="10" height="5" rx="1" fill="#d97706"/>'
+    +   '<text x="61" y="67.8" font-size="3" font-weight="700" fill="#fff" text-anchor="middle">52</text>'
+    +   '<rect x="60" y="88" width="12" height="5" rx="1" fill="#16a34a"/>'
+    +   '<text x="66" y="91.8" font-size="3" font-weight="700" fill="#fff" text-anchor="middle">149</text>'
+    +   '<rect x="24" y="92" width="12" height="5" rx="1" fill="#9333ea"/>'
+    +   '<text x="30" y="95.8" font-size="3" font-weight="700" fill="#fff" text-anchor="middle">100</text>'
+    + '</svg>';
+
   var PREVIEW_AUDIT = ''
     + '<svg viewBox="0 0 92 116" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
     +   '<rect x="4" y="4" width="84" height="108" rx="3" fill="#ffffff" stroke="#5fab4f" stroke-width="0.8"/>'
@@ -8660,6 +9373,81 @@
             + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderAimReport,
+    },
+    design: {
+      id: 'design',
+      label: 'RF Design Review',
+      description: 'A pre-flight check on the design: co-channel neighbours, the 2.4 GHz plan, power balance, and the naming and mounting gaps that cost a site visit.',
+      readBy: 'The designer, before the design goes to the client or the installer',
+      output: 'A list of what to fix and what to check, a channel plan per floor, and a channel map per floor',
+      docName: 'RF Design Review',
+      coverBrand: 'Report · RF Design Review',
+      status: 'ready',
+      preview: PREVIEW_DESIGN,
+      bestFor: 'Peer review and self-review before hand-off, and the first look at a design somebody else drew.',
+      sections: [
+        { icon: '✅', title: 'Result',
+          description: 'How many items to fix, to check and to note, and one line saying whether the design is ready to hand over.' },
+        { icon: '📶', title: 'Channel plan',
+          description: 'Per floor and band, how many radios use each channel and width, so reuse piled onto a few channels shows at a glance.' },
+        { icon: '🔍', title: 'Findings',
+          description: 'Co-channel neighbours closer than a distance you choose, 2.4 GHz channels off the 1/6/11 plan or wider than 20 MHz, 160 MHz on 5 GHz, 2.4 GHz as loud as 5 GHz, radios above a power ceiling, no channel or power set, directional antennas with no azimuth, duplicate and default AP names, no model, no mount height. DFS use and 6 GHz preferred scanning channels are noted.' },
+        { icon: '🗺️', title: 'Channel map per floor',
+          description: 'Every radio in one band on the plan, coloured and labelled by channel, with a dashed red line between co-channel radios that are too close.' },
+      ],
+      sidebar: [
+        { id: 'cciDistance', type: 'select', label: 'Co-channel neighbours closer than', default: '20',
+          options: [
+            { value: '10', label: '10 m (33 ft)' },
+            { value: '15', label: '15 m (49 ft)' },
+            { value: '20', label: '20 m (66 ft)' },
+            { value: '30', label: '30 m (98 ft)' },
+          ],
+          description: 'Two radios on the same floor whose channels overlap are listed when they are closer than this. Straight-line on the plan; walls are not counted. Tighten it for a dense, well-walled office; loosen it for an open warehouse.' },
+        { id: 'plan24', type: 'select', label: '2.4 GHz channel plan', default: '1-6-11',
+          options: [
+            { value: '1-6-11',   label: '1 / 6 / 11 (Americas)' },
+            { value: '1-5-9-13', label: '1 / 5 / 9 / 13 (Europe and most of the world)' },
+          ],
+          description: 'A 2.4 GHz radio on any other channel overlaps two of these at once.' },
+        { id: 'txCeiling', type: 'select', label: 'Flag transmit power above', default: '20',
+          options: [
+            { value: 'off', label: 'Do not check' },
+            { value: '14',  label: '14 dBm' },
+            { value: '17',  label: '17 dBm' },
+            { value: '20',  label: '20 dBm' },
+            { value: '23',  label: '23 dBm' },
+          ],
+          description: 'A radio louder than the clients can answer builds a cell they can hear and not talk back to. Phones transmit around 14–17 dBm.' },
+        { id: 'bandBalance', label: 'Check 2.4 GHz runs at least 3 dB below 5 GHz', default: true,
+          description: 'On a dual-band AP, a 2.4 GHz radio as loud as the 5 GHz one makes the bigger cell, and dual-band clients stay on it.' },
+        { id: 'showNotes', label: 'Include notes (DFS, 6 GHz scanning channels)', default: true,
+          description: 'Notes are true and usually fine. Turn them off for a shorter document.' },
+        { id: 'channelTable', label: 'Channel plan table', default: true,
+          description: 'How many radios use each channel, per floor and band.' },
+        { id: 'channelMap', label: 'Channel map per floor', default: true,
+          description: 'The plan with every radio of one band on it, labelled by channel, and too-close co-channel pairs joined by a dashed red line.' },
+        { id: 'mapBand', type: 'select', label: 'Band on the channel map', default: 'FIVE',
+          options: [
+            { value: 'FIVE', label: '5 GHz' },
+            { value: 'TWO',  label: '2.4 GHz' },
+            { value: 'SIX',  label: '6 GHz' },
+          ],
+          description: 'One band per map, because channels from two bands on one plan cannot be read.' },
+        { id: 'units', type: 'select', label: 'Measurement units', default: 'feet',
+          options: [
+            { value: 'feet',   label: 'Feet' },
+            { value: 'meters', label: 'Metres' },
+          ],
+          description: 'Distances are written in this unit. The co-channel distance above is chosen in metres and printed in this unit.' },
+        { id: 'inclDirectional', label: 'Include directional APs', default: true,
+          description: 'Review directional APs.' },
+        { id: 'inclOmni', label: 'Include omni APs', default: true,
+          description: 'Review omni APs.' },
+        { id: 'confidential', label: 'Confidentiality notice in footer', default: false,
+          description: 'Adds "CONFIDENTIAL" to the report footer.' },
+      ],
+      render: renderDesignReviewReport,
     },
     audit: {
       id: 'audit',

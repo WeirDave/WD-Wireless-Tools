@@ -1197,7 +1197,8 @@ a different project.
 ### Report templates
 
 The template step groups the cards under *Installation & Placement*,
-*Site Analysis* and *Audit & Change*. **▸ Details** on a card lists what is
+*Site Analysis* and *Audit & Change*; the RF Design Review is under
+*Audit & Change*. **▸ Details** on a card lists what is
 inside before you pick it.
 
 | Template | For | What you get |
@@ -1210,6 +1211,36 @@ inside before you pick it.
 | **Interference / Rogue Devices** | Whoever has to go and find them | Phone hotspots, MiFi and wide-channel rogue Wi-Fi from the passive survey, scored by severity, with per-floor detection maps if you want them |
 | **Bill of Materials** | Whoever raises the purchase order | AP, antenna and mount quantities per model, for the project and per floor |
 | **Change / Audit Report** | Whoever has to show the build matches the design | What moved, was added and was removed between two `.esx` files, listed per floor |
+| **RF Design Review** | The designer, before the design goes to the client or the installer | What to fix and what to check in the design, a channel plan per floor, and a channel map per floor |
+
+**RF Design Review** is a pre-flight check of the design as Ekahau stores
+it. It lists, under **Fix**, **Check** and **Note**:
+
+* co-channel neighbours: two radios on the same floor whose channels overlap
+  (a 36/80 and a 44/20 count) closer than **Co-channel neighbours closer
+  than** (default 20 m), each with its nearest neighbour and the distance;
+* 2.4 GHz radios off the **2.4 GHz channel plan** (default 1 / 6 / 11) or
+  wider than 20 MHz, and 5 GHz radios at 160 MHz;
+* 2.4 GHz radios less than 3 dB below the 5 GHz radio on the same AP
+  (**Check 2.4 GHz runs at least 3 dB below 5 GHz**, on by default);
+* radios above **Flag transmit power above** (default 20 dBm), and radios
+  with no channel or no transmit power;
+* directional antennas with no azimuth, APs sharing a name, Ekahau's default
+  names, no model, no mount height, and APs on no floor plan;
+* as notes: DFS channels, 6 GHz channels with no preferred scanning channel,
+  and floors with no scale, where distances cannot be measured.
+
+**Channel map per floor** draws one band (**Band on the channel map**,
+default 5 GHz) with every radio labelled by its channel and a dashed red line
+between co-channel radios that are too close. Disabled radios and radios that
+are not Wi-Fi are left out of every check.
+
+**AP schedule (CSV)** is on the review step of every report, beside
+**Print / Save PDF**. It saves one row per access point ticked in the AP
+filter: name, floor, building, vendor, model, mount, height, azimuth, tilt,
+antenna, then channel, width and transmit power for 2.4, 5 and 6 GHz, the
+column grid reference, the position on the plan, and the AP's notes. Lengths
+are in the unit chosen in Settings, and the header says which.
 
 **Change / Audit Report** needs a second file. On the Configure step, use
 **Earlier project to compare against** to pick the "before" `.esx`; the project

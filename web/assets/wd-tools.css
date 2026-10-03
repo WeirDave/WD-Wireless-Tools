@@ -7479,6 +7479,11 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-toc { page-break-inside: avoid; }
   .rep-toc + .rep-floor-section { page-break-before: auto; }
   .rep-summary-hero + .rep-floor-section:not(.rep-summary-hero) { page-break-before: auto; }
+  /* The RF Design Review's findings run on from one to the next: a finding
+     can be one row, and a sheet each printed a two-row design as 21 pages.
+     The channel maps still start their own. */
+  .rep-dr-flow + .rep-dr-flow { page-break-before: auto; break-before: auto; }
+  .rep-dr-flow + .rep-dr-flow { margin-top: 14px !important; }
   .rep-toc-subtitle { color: #555 !important; }
   .rep-toc-detail { color: #888 !important; }
   .rep-toc-list li { color: #111 !important; }
