@@ -113,8 +113,44 @@ def _collection(doc):
     return key, by_id
 
 
+#: How many field names a difference reports. Enough to tell "the position
+#: moved" from "every item gained a bookkeeping field", short enough for a row.
+MAX_REPORTED_FIELDS = 4
+
+
+def _differing_fields(pairs):
+    """Field names that differ across (local, cloud) item pairs, most common
+    first. Names only - never values, because this reaches the page and the
+    log, and a value can be a real AP or site name."""
+    counts = {}
+    for left, right in pairs:
+        left = _strip_volatile(left) if isinstance(left, dict) else {}
+        right = _strip_volatile(right) if isinstance(right, dict) else {}
+        for key in set(left) | set(right):
+            if _canonical(left.get(key)) != _canonical(right.get(key)):
+                counts[key] = counts.get(key, 0) + 1
+    ranked = sorted(counts, key=lambda k: (-counts[k], k))
+    return ranked[:MAX_REPORTED_FIELDS]
+
+
+def _without_id(item):
+    return _canonical({k: v for k, v in item.items() if k != "id"})
+
+
 def _describe_collection(local_doc, cloud_doc):
-    """{'added': n, 'removed': n, 'changed': n} or None if not a collection."""
+    """{'added', 'removed', 'changed', 'fields', 'newIdsOnly'} or None if not
+    a collection.
+
+    "Real changes: access points, antenna types, application profiles, areas
+    and 13 more" - on a project he had only re-saved - with nothing on the row
+    to say what had changed. Two facts make that checkable:
+
+    * `fields` - which fields differ on the changed items. One field across
+      every item is a format difference; a position on three is an edit.
+    * `newIdsOnly` - removed items whose content reappears, unchanged, under a
+      new id. Items are matched by id, so a save that re-numbers them reads as
+      everything deleted and re-added.
+    """
     lkey, litems = _collection(local_doc)
     ckey, citems = _collection(cloud_doc)
     if litems is None or citems is None or lkey != ckey:
@@ -125,8 +161,20 @@ def _describe_collection(local_doc, cloud_doc):
                and _canonical(litems[i]) != _canonical(citems[i])]
     if not (added or removed or changed):
         return None
+    pool = {}
+    for i in added:
+        pool.setdefault(_without_id(citems[i]), []).append(i)
+    new_ids_only = 0
+    for i in removed:
+        twins = pool.get(_without_id(litems[i]))
+        if twins:
+            twins.pop()
+            new_ids_only += 1
     return {"noun": lkey, "added": len(added),
-            "removed": len(removed), "changed": len(changed)}
+            "removed": len(removed), "changed": len(changed),
+            "newIdsOnly": new_ids_only,
+            "fields": _differing_fields(
+                [(litems[i], citems[i]) for i in changed])}
 
 
 def _names(doc):
@@ -261,6 +309,8 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes,
         entry = {"member": member, "state": "differs"}
         if detail:
             entry.update(detail)
+        elif isinstance(ldoc, dict) and isinstance(cdoc, dict):
+            entry["fields"] = _differing_fields([(ldoc, cdoc)])
         (meta_diffs if is_meta else design_diffs).append(entry)
 
     out["differences"] = (design_diffs + meta_diffs)[:MAX_REPORTED_MEMBERS]

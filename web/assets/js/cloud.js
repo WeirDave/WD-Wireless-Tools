@@ -4460,6 +4460,41 @@ async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matc
    lifts it slightly, so it reads as attached to the row above rather than as
    another project. */
 
+/* What a comparison actually found, one line per part of the project.
+
+   "Real changes: access points, antenna types, application profiles, areas
+   and 13 more" - and nothing to open. The result already carried a count per
+   part and is now told which fields moved, so he can see whether three access
+   points were moved or every item gained one bookkeeping field before he
+   decides which copy to keep. Native <details>: no handler, nothing to wire. */
+function compareDetailsHtml(cmp) {
+  const diffs = (cmp && cmp.designDiffers && Array.isArray(cmp.differences))
+    ? cmp.differences : [];
+  if (!diffs.length) return '';
+  const words = s => String(s || '').replace(/\.json$/, '')
+    .replace(/([a-z])([A-Z])/g, '$1 $2').toLowerCase();
+  const line = d => {
+    if (d.kind === 'floor plan image') return 'A floor plan image differs.';
+    if (d.state === 'only in local') return words(d.member) + ': only in your local file.';
+    if (d.state === 'only in cloud') return words(d.member) + ': only in the cloud copy.';
+    const bits = [];
+    if (d.changed) bits.push(d.changed + ' changed');
+    if (d.removed) bits.push(d.removed + ' only in local');
+    if (d.added) bits.push(d.added + ' only in cloud');
+    let text = words(d.noun || d.member) + (bits.length ? ': ' + bits.join(', ') : ': differs');
+    if (d.newIdsOnly) {
+      text += ' (' + d.newIdsOnly + ' of those are the same item under a new ID)';
+    }
+    if (Array.isArray(d.fields) && d.fields.length) {
+      text += ' - fields: ' + d.fields.join(', ');
+    }
+    return text;
+  };
+  return `<details class="rd-diffs"><summary>What differs (${diffs.length})</summary><ul>`
+    + diffs.map(d => `<li>${e(line(d))}</li>`).join('')
+    + `</ul></details>`;
+}
+
 function rowDetailHtml(r, stripe) {
   /* The row that needs him, and what he can do about it.
 
@@ -4739,7 +4774,7 @@ function rowDetailHtml(r, stripe) {
   return `<div class="row-detail ${tone}${stripe ? ' stripe' : ''} status-${r.status || ''}">`
     + `<span class="rd-lane cloud">`
     +   `<span class="rd-icon">${ic(icon)}</span>`
-    +   `<span class="rd-text">${e(sentences.join(' '))}</span>`
+    +   `<span class="rd-text">${e(sentences.join(' '))}${compareDetailsHtml(cmp)}</span>`
     +   `<span class="rd-actions">${left}</span>`
     + `</span>`
     + `<span class="rd-gut"></span>`
