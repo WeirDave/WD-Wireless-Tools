@@ -118,6 +118,44 @@ class QuickWallsControlsWork(BrowserPagesHarness):
         time.sleep(0.5)
         drv.set_script_timeout(15)
 
+    def asked_confirms(self, drv, how_many=1, timeout=20):
+        """The questions the page has put to `window.confirm`, once they arrive.
+
+        The question is asked only after the page's first save request has
+        come back naming a conflict, so it lands a server round-trip after the
+        click. A fixed `time.sleep(1.0)` read `[]` on Firefox in CI on a
+        loaded runner - the save request had not gone out yet - while Chrome
+        and Edge passed the same run. This polls, bounded, and hands back
+        whatever has been asked by the deadline so the caller's assertion names
+        it instead of the test stalling.
+        """
+        deadline = time.monotonic() + timeout
+        asked = []
+        while time.monotonic() < deadline:
+            asked = drv.execute_script("return window.__asked;")
+            if len(asked) >= how_many:
+                break
+            time.sleep(0.1)
+        # Settle briefly, so a second, unwanted question is still caught.
+        time.sleep(0.25)
+        return drv.execute_script("return window.__asked;") or asked
+
+    def scan_until(self, drv, prefix, expected, timeout=20):
+        """The saved templates under `prefix`, once they read `expected`.
+
+        After a confirmed answer the page sends a second, overwriting save, so
+        reading the folder the instant the question appears would race it.
+        Returns the last reading on timeout, for the assertion to show.
+        """
+        deadline = time.monotonic() + timeout
+        found = None
+        while time.monotonic() < deadline:
+            found = drv.execute_async_script(SCAN, prefix)
+            if found == expected:
+                break
+            time.sleep(0.2)
+        return found
+
     def test_set_key_opens_the_shortcut_menu(self):
         for kind, drv in self.each_browser():
             with self.subTest(browser=kind):
@@ -179,8 +217,7 @@ class QuickWallsControlsWork(BrowserPagesHarness):
                     box.send_keys("Invented A_B")
                     drv.find_element(
                         By.CSS_SELECTOR, 'button[data-fn="confirmSaveTemplate"]').click()
-                    time.sleep(1.0)
-                    return drv.execute_script("return window.__asked;")
+                    return self.asked_confirms(drv)
 
                 asked = press_save(False)
                 self.assertEqual(len(asked), 1, asked)
@@ -192,8 +229,8 @@ class QuickWallsControlsWork(BrowserPagesHarness):
                     "document.getElementById('saveTplModal').classList.remove('active');")
                 asked = press_save(True)
                 self.assertEqual(len(asked), 1, asked)
-                self.assertEqual(drv.execute_async_script(SCAN, PREFIX),
-                                 [["Invented A_B", ["Invented Wall"]]])
+                replaced = [["Invented A_B", ["Invented Wall"]]]
+                self.assertEqual(self.scan_until(drv, PREFIX, replaced), replaced)
                 drv.execute_script("""
                   return fetch('/api/templates/delete', {method: 'POST',
                     headers: {'Content-Type': 'application/json',
@@ -220,8 +257,7 @@ class QuickWallsControlsWork(BrowserPagesHarness):
                       i.value = ''; i.hidden = false; i.style.display = 'block';
                     """)
                     drv.find_element(By.ID, "tplImportInput").send_keys(str(upload))
-                    time.sleep(1.0)
-                    return drv.execute_script("return window.__asked;")
+                    return self.asked_confirms(drv)
 
                 asked = import_it(False)
                 self.assertEqual(len(asked), 1, asked)
@@ -231,8 +267,8 @@ class QuickWallsControlsWork(BrowserPagesHarness):
 
                 asked = import_it(True)
                 self.assertEqual(len(asked), 1, asked)
-                self.assertEqual(drv.execute_async_script(SCAN, PREFIX),
-                                 [["Invented Imported", ["Invented From File"]]])
+                imported = [["Invented Imported", ["Invented From File"]]]
+                self.assertEqual(self.scan_until(drv, PREFIX, imported), imported)
 
 
 if __name__ == "__main__":
