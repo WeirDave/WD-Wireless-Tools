@@ -10445,6 +10445,70 @@ function _fuzzySim(a, b) {
   return Math.max(jaccard, containment);
 }
 
+/* The discriminators below are a port of `discriminators_reason` in
+   tools/cloud_manager.py, and have to agree with it name for name -
+   `tests/test_cloud_site_suggestion.py` runs both over the same pairs. They
+   exist because the suggester had none: a shared site code added a flat +1.0,
+   so a new project for one building of a site was filed under another building
+   of it, and "SITE1 Bldg 7" took the first of "Bldg 5" / "Bldg 6" it reached. */
+const _BUILDING_RE = /\b(?:building|bldg|bld)\b\.?\s*(\d+|[A-Za-z])(?![A-Za-z0-9])/i;
+const _YEARISH_RE = /^(?:19|20)\d{2}$/;
+const _SURVEY_PHASE_TOKENS = [
+  ['baseline', 'baseline'], ['remediation', 'remediation'],
+  ['cleanroom', 'cleanroom'], ['predictive', 'predictive'],
+  ['post-install', 'postinstall'], ['postinstall', 'postinstall'],
+  ['post_install', 'postinstall'], ['pre-install', 'preinstall'],
+  ['preinstall', 'preinstall'], ['as-built', 'asbuilt'], ['asbuilt', 'asbuilt'],
+  ['as-ran', 'asran'], ['asran', 'asran'],
+  ['validation', 'validation'], ['tvr', 'validation'],
+];
+
+function _buildingToken(name) {
+  const m = _BUILDING_RE.exec(name || '');
+  return m ? m[1].toUpperCase() : null;
+}
+function _streetNumber(name) {
+  const stripped = (name || '').trim().replace(/^\s*[A-Za-z]{2,}\d+/, '');
+  const re = /\b(\d{3,6})\b/g;
+  let m;
+  while ((m = re.exec(stripped))) {
+    if (!_YEARISH_RE.test(m[1])) return m[1];
+  }
+  return null;
+}
+function _surveyPhase(name) {
+  const n = (name || '').toLowerCase();
+  for (const [token, phase] of _SURVEY_PHASE_TOKENS) {
+    const esc = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp('(?<![A-Za-z0-9])' + esc + '(?![A-Za-z0-9])').test(n)) return phase;
+  }
+  return null;
+}
+function _discriminatorsConflict(a, b) {
+  const ba = _buildingToken(a), bb = _buildingToken(b);
+  if (ba && bb && ba !== bb) return true;
+  const sa = _streetNumber(a), sb = _streetNumber(b);
+  if (sa && sb && sa !== sb) return true;
+  const pa = _surveyPhase(a), pb = _surveyPhase(b);
+  return !!(pa && pb && pa !== pb);
+}
+
+/* A version or revision tag says which copy of the work this is, not where it
+   is. "v3" on a project and not on its site is noise that dilutes the
+   similarity, and it is what every upload in a fresh round of surveys carries. */
+function _withoutVersionTags(name) {
+  return (name || '').replace(/(?<![A-Za-z0-9])(?:v|rev)\s?\d+(?:\.\d+)*(?![A-Za-z0-9])/gi, ' ');
+}
+
+/* The floor under a shared site code mirrors `_CODE_SIM_FLOOR` in the server's
+   pairing: a code says same place, not same project, so names with nothing
+   else in common are not a match. A tie is not a pick either - two sites the
+   name fits equally well is a question for him, and the first one in the
+   sorted list is not an answer. */
+const _SITE_CODE_SIM_FLOOR = 0.3;
+const _SITE_NAME_SIM_FLOOR = 0.5;
+const _SITE_TIE_MARGIN = 0.05;
+
 function _suggestSiteFor(itemName, sites, t) {
   if (!itemName || !sites || !sites.length) return null;
 
@@ -10460,17 +10524,22 @@ function _suggestSiteFor(itemName, sites, t) {
   }
 
   const itemCode = _extractSiteCode(itemName);
-  let bestIdx = -1, bestScore = 0;
+  const itemWords = _withoutVersionTags(itemName);
+  const scored = [];
   for (let i = 0; i < sites.length; i++) {
     const s = sites[i];
     if (!s || !s.name) continue;
-    let score = _fuzzySim(itemName, s.name);
+    if (_discriminatorsConflict(itemName, s.name)) continue;
+    const sim = _fuzzySim(itemWords, _withoutVersionTags(s.name));
     const siteCode = _extractSiteCode(s.name);
-    if (itemCode && siteCode && itemCode === siteCode) score += 1.0;
-    if (score > bestScore) { bestScore = score; bestIdx = i; }
+    const sameCode = !!(itemCode && siteCode && itemCode === siteCode);
+    if (sameCode ? sim < _SITE_CODE_SIM_FLOOR : sim < _SITE_NAME_SIM_FLOOR) continue;
+    scored.push({ idx: i, score: sim + (sameCode ? 1.0 : 0) });
   }
-
-  return bestScore >= 0.5 ? { idx: bestIdx, score: bestScore } : null;
+  if (!scored.length) return null;
+  scored.sort((x, y) => y.score - x.score);
+  if (scored.length > 1 && scored[0].score - scored[1].score < _SITE_TIE_MARGIN) return null;
+  return scored[0];
 }
 
 async function assignOrphanToSite(projectId, siteId, projectName, siteName) {
