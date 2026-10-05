@@ -709,7 +709,10 @@ function applyLiveUI() {
   if (!b) return;
   const on = liveTimer !== null;
   if (on) {
-    b.textContent = `Live ● ${liveCountdown}s`;
+    /* A tick that finds him busy skips the poll and starts over, so a
+       countdown that runs to zero and does nothing looked like a broken Live.
+       Say it is held, and why it would be. */
+    b.textContent = liveBusy() ? 'Live · paused' : `Live ● ${liveCountdown}s`;
   } else {
     b.textContent = 'Live';
   }
@@ -966,21 +969,32 @@ let _pendingData = null;
 function _viewFingerprint(d) {
   if (!d) return '';
   const sig = [];
+  /* What a row shows about one side, not only which row it is.
+
+     This signed ids and paths alone, so a project saved again from Ekahau -
+     same id, newer date, different size - compared as "nothing changed": the
+     poll finished without raising the bar, the counter ran to zero and
+     started over, and the list stayed as it was until F5. Name, modified
+     date, size and owner are all stable between two polls of unchanged data
+     (they are Ekahau's own `history.modifiedAt` and the file on disk), so
+     they can be compared. */
+  const side = (x) => !x ? '' : '|' + (x.name || '') + '|' + (x.mtime || 0)
+    + '|' + (x.size || 0) + '|' + (x.owner || '');
   const pair = (p) => (p.cloud && p.cloud.id) + '|' + (p.local && p.local.path)
     + '|' + (p.namesDiffer ? 'n' : '') + '|' + (p.staleness || '')
-    + '|' + (p.matchType || '');
+    + '|' + (p.matchType || '') + side(p.cloud) + side(p.local);
   const kids = (c) => {
     if (!c) return;
     (c.matched || []).forEach(p => sig.push('m' + pair(p)));
-    (c.cloudOnly || []).forEach(x => sig.push('c' + x.id));
-    (c.localOnly || []).forEach(x => sig.push('l' + x.path));
+    (c.cloudOnly || []).forEach(x => sig.push('c' + x.id + side(x)));
+    (c.localOnly || []).forEach(x => sig.push('l' + x.path + side(x)));
     (c.heldBack || []).forEach(h => sig.push('h' + (h.cloud && h.cloud.id)
       + '|' + (h.local && h.local.path)));
   };
   (d.matched || []).forEach(p => { sig.push('M' + pair(p));
     kids((p.cloud && p.cloud.children) || (p.local && p.local.children)); });
-  (d.cloudOnly || []).forEach(x => { sig.push('C' + x.id); kids(x.children); });
-  (d.localOnly || []).forEach(x => { sig.push('L' + x.path); kids(x.children); });
+  (d.cloudOnly || []).forEach(x => { sig.push('C' + x.id + side(x)); kids(x.children); });
+  (d.localOnly || []).forEach(x => { sig.push('L' + x.path + side(x)); kids(x.children); });
   kids(d.orphans);
   (d.heldBack || []).forEach(h => sig.push('H' + (h.cloud && h.cloud.id)
     + '|' + (h.local && h.local.path)));
