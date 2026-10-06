@@ -170,6 +170,15 @@
           <span class="template-bar-auto-note" id="autoApplyNote"></span>
         </div>
       </section>
+      <section class="pb-section" id="areaSection">
+        <h2 class="pb-title">Attenuation areas</h2>
+        <p class="pb-lead">Outdoor loss for the plan: a polygon with a loss per foot and a
+          lower and upper edge. Adding one to the project makes it available in Ekahau's
+          attenuation area list; areas you have already drawn are not touched.</p>
+        <div id="areaPresets" class="area-presets"></div>
+        <button class="btn btn-sec" id="areaAddBtn" data-action="call" data-fn="addAreaPresets">Add to project</button>
+        <span class="template-bar-auto-note" id="areaNote"></span>
+      </section>
     </aside>
   </div>
 
@@ -496,6 +505,7 @@
 <script src="/assets/js/wd-shared.js"></script>
 <script src="/assets/js/wd-dev.js"></script>
 <script src="/assets/js/wd-dev-actions.js"></script>
+<script src="/assets/js/walls-areas.js"></script>
 <script src="/assets/js/walls.js"></script>
 <script src="/assets/js/walls-swap.js"></script>
 </body>
