@@ -131,6 +131,8 @@ return JSON.stringify({
 
 def _driver(kind, binary):
     try:
+        if kind == "safari":
+            return _browsers.safari_driver()
         if kind == "firefox":
             opts = webdriver.FirefoxOptions()
             opts.binary_location = binary
@@ -370,6 +372,8 @@ def _case(kind, binary):
 FirefoxMenuItemsCanBeClickedTests = _case("firefox", _browsers.find("firefox"))
 ChromeMenuItemsCanBeClickedTests = _case("chrome", _browsers.find("chrome"))
 EdgeMenuItemsCanBeClickedTests = _case("edge", _browsers.find("edge"))
+SafariMenuItemsCanBeClickedTests = (_case(*_browsers.triple()[3])
+    if len(_browsers.triple()) > 3 else None)
 
 del MenuItemsCanBeClicked   # the base itself is not a case to run
 

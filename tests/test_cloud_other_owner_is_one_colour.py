@@ -285,6 +285,7 @@ def _case(kind, binary):
 FirefoxOtherOwnerIsOneColourTests = _case(*BROWSERS[0])
 ChromeOtherOwnerIsOneColourTests = _case(*BROWSERS[1])
 EdgeOtherOwnerIsOneColourTests = _case(*BROWSERS[2])
+SafariOtherOwnerIsOneColourTests = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del OtherOwnerIsOneColour
 

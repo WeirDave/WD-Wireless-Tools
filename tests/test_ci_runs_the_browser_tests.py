@@ -224,8 +224,10 @@ class NoTestHardcodesWhereABrowserLives(unittest.TestCase):
     def test_it_reports_every_browser_rather_than_only_the_present_ones(self):
         """Returning just what is installed would shrink the matrix quietly
         instead of leaving a skip that can be counted."""
-        self.assertEqual(["firefox", "chrome", "edge"],
-                         [k for k, _ in browsers.triple()])
+        kinds = [k for k, _ in browsers.triple()]
+        self.assertEqual(["firefox", "chrome", "edge"], kinds[:3])
+        # A run that asked for Safari lists it fourth, and nothing else.
+        self.assertIn(kinds[3:], ([], ["safari"]))
 
 
 if __name__ == "__main__":  # pragma: no cover

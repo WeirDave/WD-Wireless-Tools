@@ -13,6 +13,7 @@ whether the radios have a box. Every folder and file name is invented.
 from __future__ import annotations
 
 import threading
+import time
 import unittest
 from functools import partial
 from pathlib import Path
@@ -79,6 +80,20 @@ class MergeConflictChoice(unittest.TestCase):
         cls.driver.set_page_load_timeout(60)
         cls.driver.set_script_timeout(20)
         cls.driver.get("http://127.0.0.1:%d/cloud.html" % cls.port)
+        # `get()` returns on the load event, which can be before the page's own
+        # scripts have defined what the test calls: Edge once answered
+        # "showMergeModal is not defined" on the first call. This module ran in
+        # no CI job until the runner learned to find it, so the race never had
+        # the chance to show.
+        ready = ("return typeof showMergeModal === 'function' && "
+                 "typeof closeModal === 'function' && "
+                 "!!document.getElementById('mergeModal');")
+        deadline = time.monotonic() + 20
+        while not cls.driver.execute_script(ready):
+            if time.monotonic() > deadline:
+                raise AssertionError("cloud.html never defined showMergeModal "
+                                     "and its modal within 20 s")
+            time.sleep(0.1)
 
     def test_a_conflict_shows_the_three_choices(self):
         out = self.driver.execute_script(SHOW, _preview(1))
@@ -106,6 +121,7 @@ def _case(kind, binary):
 FirefoxMergeConflictChoiceTests = _case(*BROWSERS[0])
 ChromeMergeConflictChoiceTests = _case(*BROWSERS[1])
 EdgeMergeConflictChoiceTests = _case(*BROWSERS[2])
+SafariMergeConflictChoiceTests = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del MergeConflictChoice
 

@@ -40,11 +40,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
 
-BROWSERS = [
-    ("firefox", _browsers.find("firefox")),
-    ("chrome", _browsers.find("chrome")),
-    ("edge", _browsers.find("edge")),
-]
+BROWSERS = _browsers.triple()
 
 SITE = "Northwind Traders - Building 4 - 1200 Fake Rd"
 ESX_NAME = "B04 - PD.esx"
@@ -157,6 +153,8 @@ class DroppedFileNamesTheReport(unittest.TestCase):
         if not Path(binary).exists():
             return None
         try:
+            if kind == "safari":
+                return _browsers.safari_driver()
             if kind == "firefox":
                 o = webdriver.FirefoxOptions()
                 o.binary_location = binary

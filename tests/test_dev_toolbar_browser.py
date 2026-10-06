@@ -66,11 +66,7 @@ try:  # pragma: no cover - availability varies by machine
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
 
-BROWSERS = [
-    ("firefox", _browsers.find("firefox")),
-    ("chrome", _browsers.find("chrome")),
-    ("edge", _browsers.find("edge")),
-]
+BROWSERS = _browsers.triple()
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -82,6 +78,8 @@ def _driver(kind, binary):
     """A headless driver, or None when it will not start - so one missing
     browser cannot fail the run on a machine that has the other two."""
     try:
+        if kind == "safari":
+            return _browsers.safari_driver()
         if kind == "firefox":
             opts = webdriver.FirefoxOptions()
             opts.binary_location = binary
@@ -871,10 +869,18 @@ class EdgeToolbarTests(ToolbarInABrowser):
     kind, binary = BROWSERS[2]
 
 
+class SafariToolbarTests(ToolbarInABrowser):
+    """Only in a run that asked for Safari (`WD_BROWSERS=safari`)."""
+    kind, binary = BROWSERS[3] if len(BROWSERS) > 3 else (None, None)
+
+
 def load_tests(loader, tests, pattern):
     """Drop the abstract base class, keep the three real ones."""
     suite = unittest.TestSuite()
-    for cls in (FirefoxToolbarTests, ChromeToolbarTests, EdgeToolbarTests):
+    for cls in (FirefoxToolbarTests, ChromeToolbarTests, EdgeToolbarTests,
+                SafariToolbarTests):
+        if cls.kind is None:
+            continue    # Safari, in a run that did not ask for it
         suite.addTests(loader.loadTestsFromTestCase(cls))
     return suite
 

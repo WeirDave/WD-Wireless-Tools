@@ -275,9 +275,10 @@ move, rename, delete, share and replace-cloud need ownership; **reads do not**.
 plain language and shows the server's message in full - never a raw status or
 a message clipped at `{"s…`.
 
-### Browser verification — Chrome, Edge and Firefox, every time
+### Browser verification — Chrome, Edge, Firefox and Safari, every time
 
-**Anything user-facing is checked in all three.** On his machine:
+**Anything user-facing is checked in all four.** Safari is checked in CI only
+(see the end of this section); on his machine, the other three:
 
     Chrome   C:\Program Files\Google\Chrome\Application\chrome.exe
     Edge     C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe
@@ -288,6 +289,30 @@ a message clipped at `{"s…`.
 before believing the error - a bad path surfaces as
 `NoSuchDriverException`. **Firefox decides print questions**: he prints from
 it, and it has twice carried a print fault Chromium does not.
+
+**Safari is the `safari / macOS` CI job, and nowhere else.** It exists only
+on macOS, has no headless mode and allows one session per machine, so it
+cannot be run on his Windows machine or in a cloud container - **push and read
+the job's log.** `WD_BROWSERS=safari` makes `browsers.triple()` list it as a
+fourth browser, so every module built on `triple()` / `BROWSERS` drives it
+through its `_driver`; `scripts/run_tests.py` then runs the browser modules one
+at a time. Three things hold it honest, each from a way it could have lied:
+
+* **A run that cannot start Safari fails**, and **a module in which no test
+  passed fails** (`drove_nothing`, read off `unittest -v`) - green with Safari
+  never started is the failure this suite already had once for the other
+  three. It counts passes, not skips against runs: a module builds one class
+  per browser, so three class-level skips sit beside however many Safari tests
+  ran.
+* **`browsers.SAFARI_NOT_APPLICABLE` is the only list of modules it does not
+  run**, each with a one-sentence reason that the job prints. It is for a test
+  that is about another browser (Firefox's print pipeline), never for one that
+  fails.
+* **A Safari-only difference is a finding, not noise.** The first full run
+  found `img.naturalHeight` is the on-screen size there, so AP Labeler's
+  spacing lines disagreed with its numbering; Safari's WebDriver also refuses
+  to click an `<option>`, which `browsers._patch_select_for_safari` answers
+  for every `Select` in a Safari run. Fix the page when the page is wrong.
 
 **Printing to PDF.** `webdriver.Firefox(headless)` →
 `driver.print_page(PrintOptions())` returns the PDF through Firefox's real

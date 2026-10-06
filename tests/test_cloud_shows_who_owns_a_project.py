@@ -153,6 +153,8 @@ return JSON.stringify({
 
 def _driver(kind, binary):
     try:
+        if kind == "safari":
+            return _browsers.safari_driver()
         if kind == "firefox":
             o = webdriver.FirefoxOptions()
             o.binary_location = binary
@@ -380,6 +382,7 @@ def _case(kind, binary):
 FirefoxOwnershipOnTheRowTests = _case(*BROWSERS[0])
 ChromeOwnershipOnTheRowTests = _case(*BROWSERS[1])
 EdgeOwnershipOnTheRowTests = _case(*BROWSERS[2])
+SafariOwnershipOnTheRowTests = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del OwnershipIsOnTheRow
 

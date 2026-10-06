@@ -61,11 +61,7 @@ try:
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
 
-BROWSERS = [
-    ("firefox", _browsers.find("firefox")),
-    ("chrome", _browsers.find("chrome")),
-    ("edge", _browsers.find("edge")),
-]
+BROWSERS = _browsers.triple()
 
 #: Invented here, and the copied tree's gate is pointed at its digest.
 PASSPHRASE = "a-string-this-test-invented"
@@ -89,6 +85,8 @@ def _free_port(start):
 
 def _driver(kind, binary):
     try:
+        if kind == "safari":
+            return _browsers.safari_driver()
         if kind == "firefox":
             opts = webdriver.FirefoxOptions()
             opts.binary_location = binary
@@ -448,6 +446,7 @@ def _case(kind, binary):
 DevGateEndToEndInFirefox = _case(*BROWSERS[0])
 DevGateEndToEndInChrome = _case(*BROWSERS[1])
 DevGateEndToEndInEdge = _case(*BROWSERS[2])
+DevGateEndToEndInSafari = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del DevGateEndToEnd  # the base class is not a test case
 

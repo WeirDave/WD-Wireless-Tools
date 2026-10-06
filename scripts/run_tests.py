@@ -44,6 +44,7 @@ test.
 from __future__ import annotations
 
 import argparse
+import ast
 import functools
 import json
 import os
@@ -81,10 +82,41 @@ def discover(names: list[str] | None = None, root: Path = ROOT) -> list[str]:
 
 #: Imports selenium itself, or runs through a harness that did and says so
 #: with `HAVE_SELENIUM` - test_combined_sections_browser is the second kind.
+#: Kept for a file that will not parse; `uses_a_browser` reads the syntax tree.
 _IMPORTS_SELENIUM = re.compile(
     r"^\s*(?:from|import)\s+selenium\b"
     r"|^\s*HAVE_SELENIUM\s*="
     r"|\.HAVE_SELENIUM\b", re.M)
+
+
+def _drives_a_browser(tree: ast.AST) -> bool:
+    """Whether the syntax tree imports selenium, borrows `HAVE_SELENIUM` from
+    another test module, assigns it, or reads it off a harness.
+
+    Read from the tree rather than searched for. The text search matched
+    `from selenium import ...` and `HAVE_SELENIUM =` and nothing else, so a
+    module that did `from tests.x import HAVE_SELENIUM, _driver` - four of
+    them - was not a browser module: the suite jobs switch browsers off, the
+    browser jobs run only the modules this returns, and those four ran in no
+    job at all, skipping silently on every runner.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(a.name.split(".")[0] == "selenium" for a in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            if (node.module or "").split(".")[0] == "selenium":
+                return True
+            if any(a.name == "HAVE_SELENIUM" for a in node.names):
+                return True
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(isinstance(t, ast.Name) and t.id == "HAVE_SELENIUM"
+                   for t in targets):
+                return True
+        elif isinstance(node, ast.Attribute) and node.attr == "HAVE_SELENIUM":
+            return True
+    return False
 
 
 @functools.lru_cache(maxsize=None)
@@ -93,7 +125,10 @@ def uses_a_browser(module: str, root: Path = ROOT) -> bool:
     the word, which a test about this runner has to."""
     text = (root / "tests" / f"{module}.py").read_text(encoding="utf-8",
                                                        errors="replace")
-    return bool(_IMPORTS_SELENIUM.search(text))
+    try:
+        return _drives_a_browser(ast.parse(text))
+    except SyntaxError:
+        return bool(_IMPORTS_SELENIUM.search(text))
 
 
 def load_durations(path: Path = DURATIONS) -> dict[str, float]:
@@ -113,6 +148,8 @@ def order(modules: list[str], durations: dict[str, float],
                                           -durations.get(m, UNKNOWN), m))
 
 
+#: `test_name (tests.module.Class.test_name) ... ok` from `unittest -v`.
+_PASSED = re.compile(r"(?:\.\.\. |^)ok\s*$", re.M)
 _RAN = re.compile(r"^Ran (\d+) tests? in", re.M)
 _SKIPPED = re.compile(r"skipped=(\d+)")
 
@@ -133,6 +170,15 @@ class Result:
         self.output = output
         self.seconds = seconds
         self.ran, self.skipped = summarise(output)
+        # Tests that actually passed, read off `unittest -v` lines. Only a
+        # verbose run has them; a quiet one reads 0.
+        self.passed = len(_PASSED.findall(output))
+        # A module that ran tests, skipped none and exited 0 passed them
+        # all, whatever the lines looked like: a warning printed mid-test
+        # puts "ok" on a line of its own, and Safari run 4 read 18 such
+        # modules as having passed nothing.
+        if code == 0 and self.ran and not self.skipped:
+            self.passed = self.ran
 
     def __repr__(self) -> str:
         return (f"<{self.module}: exit {self.code}, {self.ran} ran>\n"
@@ -144,13 +190,14 @@ class Result:
 
 
 def run_module(module: str, user_root: Path, verbose: bool,
-               timeout: float = MODULE_TIMEOUT, root: Path = ROOT) -> Result:
+               timeout: float = MODULE_TIMEOUT, root: Path = ROOT,
+               detail: bool = False) -> Result:
     user_dir = user_root / module
     user_dir.mkdir()
     env = {**os.environ, "WD_USER_DIR": str(user_dir),
            "PYTHONIOENCODING": "utf-8"}
     cmd = [sys.executable, "-m", "unittest", f"tests.{module}"]
-    if verbose:
+    if verbose or detail:       # `detail`: wanted for Result.passed, not printed
         cmd.append("-v")
     start = time.monotonic()
     try:
@@ -171,10 +218,30 @@ def run_module(module: str, user_root: Path, verbose: bool,
     return Result(module, code, output, time.monotonic() - start)
 
 
+#: A web server's access line, which unittest's progress characters are
+#: interleaved with. A failing browser module's output was 98% of these, and
+#: the one assertion that mattered was lines from the end of a 3,000-line log.
+_ACCESS_LOG = re.compile(r"^(?P<progress>[.FEsxu]*)\d+\.\d+\.\d+\.\d+ - - \[.*$")
+
+
+def without_access_log(output: str) -> str:
+    """The output with the server's access lines removed and the progress
+    characters that shared a line with them kept."""
+    kept = []
+    for line in output.splitlines():
+        m = _ACCESS_LOG.match(line)
+        if m is None:
+            kept.append(line)
+        elif m.group("progress"):
+            kept.append(m.group("progress"))
+    return "\n".join(kept)
+
+
 def run_all(modules: list[str], jobs: int, verbose: bool,
             durations: dict[str, float], out=sys.stdout,
             root: Path = ROOT, timeout: float = MODULE_TIMEOUT,
-            browser_jobs: int | None = None) -> list[Result]:
+            browser_jobs: int | None = None,
+            detail: bool = False) -> list[Result]:
     is_browser = functools.partial(uses_a_browser, root=root)
     queue = order(modules, durations, is_browser)
     lock = threading.RLock()
@@ -217,7 +284,8 @@ def run_all(modules: list[str], jobs: int, verbose: bool,
             print(f"{state} {res.module}  ({res.ran} tests{skipped}, "
                   f"{res.seconds:.1f}s)", file=out, flush=True)
             if verbose or not res.ok:
-                print(res.output.rstrip(), file=out, flush=True)
+                shown = res.output if verbose else without_access_log(res.output)
+                print(shown.rstrip(), file=out, flush=True)
 
     with tempfile.TemporaryDirectory(prefix="wd-tests-userdir-") as users:
         def worker():
@@ -235,7 +303,7 @@ def run_all(modules: list[str], jobs: int, verbose: bool,
                     time.sleep(0.2)
                     continue
                 try:
-                    report(run_module(m, Path(users), verbose, timeout, root))
+                    report(run_module(m, Path(users), verbose, timeout, root, detail))
                 finally:
                     with lock:
                         active["n"] -= 1
@@ -250,6 +318,23 @@ def run_all(modules: list[str], jobs: int, verbose: bool,
         for t in threads:
             t.join()
     return results
+
+
+def drove_nothing(results: list) -> list[str]:
+    """Modules that passed without a single test passing.
+
+    In a run that asked for Safari that is a module that never drove Safari,
+    and "ok" would say it had - the failure the Safari job exists to prevent.
+
+    It counts tests that **passed**, read from `unittest -v`, not skips against
+    runs. A module that builds one class per browser skips the three it cannot
+    drive at class level - three skips - however many tests the Safari class
+    ran, so `skipped >= ran` flagged two modules that had run 2 and 3 Safari
+    tests and passed them. And the earlier `r.ran and ...` let three modules
+    through that had run nothing at all (a class skipped in `setUpClass`
+    reports "0 tests, 3 skipped" and exits 0).
+    """
+    return sorted(r.module for r in results if r.ok and r.passed == 0)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -270,9 +355,25 @@ def main(argv: list[str] | None = None) -> int:
                     help="write each module's duration here as JSON")
     a = ap.parse_args(argv)
 
+    sys.path.insert(0, str(ROOT))
+    from tests import browsers as _browsers
+    safari = _browsers.safari_requested()
+
     modules = discover(a.modules)
-    if a.browsers_only:
+    if a.browsers_only or safari:
         modules = [m for m in modules if uses_a_browser(m)]
+    if safari:
+        # Safari runs one session at a time per machine and has no headless
+        # mode, so the modules go one after another. A run that asked for it
+        # and cannot start it is a failure here, not a skip.
+        if not _browsers.safari_available():
+            print(_browsers.why_missing(), file=sys.stderr)
+            return 1
+        a.jobs, a.browser_jobs = 1, 1
+        for name, why in sorted(_browsers.SAFARI_NOT_APPLICABLE.items()):
+            if name in modules:
+                modules.remove(name)
+                print(f"not run in Safari: {name} - {why}")
     if not modules:
         print("no test modules found", file=sys.stderr)
         return 1
@@ -280,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
     started = time.monotonic()
     print(f"Running {len(modules)} modules on {a.jobs} worker(s)", flush=True)
     results = run_all(modules, a.jobs, a.verbose, load_durations(),
-                      browser_jobs=a.browser_jobs)
+                      browser_jobs=a.browser_jobs, detail=safari)
     elapsed = time.monotonic() - started
 
     if a.record:
@@ -290,6 +391,12 @@ def main(argv: list[str] | None = None) -> int:
             indent=1) + "\n", encoding="utf-8")
 
     failed = sorted(r.module for r in results if not r.ok)
+    if safari:
+        silent = drove_nothing(results)
+        if silent:
+            print("DROVE NO SAFARI TEST (every test skipped): "
+                  + ", ".join(silent))
+        failed = sorted(set(failed) | set(silent))
     lost = sorted(set(modules) - {r.module for r in results})
     ran = sum(r.ran for r in results)
     skipped = sum(r.skipped for r in results)

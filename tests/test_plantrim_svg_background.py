@@ -257,6 +257,8 @@ class TheCroppedPlanIsWhiteInABrowser(unittest.TestCase):
         if not Path(binary).exists():
             return None
         try:
+            if kind == "safari":
+                return _browsers.safari_driver()
             if kind == "firefox":
                 o = webdriver.FirefoxOptions()
                 o.binary_location = binary
@@ -307,8 +309,12 @@ class TheCroppedPlanIsWhiteInABrowser(unittest.TestCase):
                     # two assertions after it are not passing on a blank page.
                     self.assertEqual(self._pixels(driver, LEFT_BY_AN_EARLIER_TRIM)[0],
                                      (32, 32, 32))
-                    self.assertEqual(self._pixels(driver, cut), ((255,) * 3,) * 2)
-                    self.assertEqual(self._pixels(driver, fixed), ((255,) * 3,) * 2)
+                    # Paper, not the dark page behind it. Not byte-exact: Safari's
+                    # colour management reads white as 252, and the fault being
+                    # held is 32 - a long way from either.
+                    for blob in (cut, fixed):
+                        for pixel in self._pixels(driver, blob):
+                            self.assertGreaterEqual(min(pixel), 245, (kind, pixel))
             finally:
                 _browsers.shut_down(driver)
         if not started:

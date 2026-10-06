@@ -45,11 +45,7 @@ try:  # pragma: no cover - availability varies by machine
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
 
-BROWSERS = [
-    ("firefox", _browsers.find("firefox")),
-    ("chrome", _browsers.find("chrome")),
-    ("edge", _browsers.find("edge")),
-]
+BROWSERS = _browsers.triple()
 
 
 
@@ -63,6 +59,8 @@ def _driver(kind, binary):
     if not os.path.exists(binary):
         return None
     try:
+        if kind == "safari":
+            return _browsers.safari_driver()
         if kind == "firefox":
             opts = webdriver.FirefoxOptions()
             opts.binary_location = binary
@@ -313,8 +311,29 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
         deleted. So the page is served from a data URL with no policy on it at
         all: the same probe, the same browsers, nothing but the header
         different."""
-        page = ("data:text/html,<!doctype html><title>probe</title>"
-                "<div id='host'></div>")
+        # Served over http rather than from a data: URL, which Safari treats
+        # differently for scripts: the probe could not run in it, so the
+        # differential read "the probe proves nothing about safari".
+        from functools import partial
+        from http.server import BaseHTTPRequestHandler
+
+        html = (b"<!doctype html><title>probe</title><div id='host'></div>")
+
+        class NoPolicy(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(html)))
+                self.end_headers()
+                self.wfile.write(html)
+
+            def log_message(self, *a, **k):
+                pass
+
+        server = _browsers.ExclusiveServer(("127.0.0.1", 0), NoPolicy)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(_browsers.stop_server, server)
+        page = "http://127.0.0.1:%d/" % server.server_address[1]
         for kind, drv in self.drivers.items():
             with self.subTest(browser=kind):
                 drv.get(page)

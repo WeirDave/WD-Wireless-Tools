@@ -152,12 +152,14 @@ SAFARIDRIVER = "/usr/bin/safaridriver"
 def safari_requested() -> bool:
     """True only when `WD_BROWSERS` names Safari.
 
-    Opt-in, never a default. Safari is deliberately not in `triple()`:
-    every test module builds its drivers from that list and falls through to
-    Edge for any name it does not know, so adding Safari there would launch
-    Edge under Safari's name. A laptop with no `WD_BROWSERS` also should not
-    have a Safari window appear in the middle of the suite. The Safari job
-    asks for it by name and runs the modules that know how to drive it.
+    Opt-in, never a default. A laptop with no `WD_BROWSERS` should not have a
+    Safari window appear in the middle of the suite, and Safari has no
+    headless mode. When it is asked for, `triple()` lists it as a fourth
+    browser and every module that builds its drivers from that list drives it
+    through `safari_driver()`. A module that does not know the name must not
+    be handed it: each one's `_driver` used to fall through to Edge for any
+    kind it did not recognise, which would have launched Edge under Safari's
+    name.
     """
     if not wanted():
         return False
@@ -172,8 +174,10 @@ def safari_available() -> bool:
 
 
 def available() -> list:
-    """Which of the three this machine can actually drive."""
-    return [k for k in ("firefox", "chrome", "edge") if installed(k)]
+    """Which browsers this machine can actually drive: the three, and Safari
+    when the run asked for it and it can be driven."""
+    have = [k for k in ("firefox", "chrome", "edge") if installed(k)]
+    return have + ["safari"] if safari_available() else have
 
 
 def triple() -> list:
@@ -182,8 +186,201 @@ def triple() -> list:
     Every browser is listed whether or not it is present - the tests skip on
     a binary that does not exist, and returning only what is installed would
     silently shrink the matrix instead of reporting a gap.
+
+    A run that asked for Safari (`WD_BROWSERS=safari`) gets a fourth entry,
+    `("safari", <safaridriver>)`, or `NOT_INSTALLED` where it cannot be
+    driven. Any other run gets exactly the three it always did.
     """
-    return [(k, find(k)) for k in ("firefox", "chrome", "edge")]
+    pairs = [(k, find(k)) for k in ("firefox", "chrome", "edge")]
+    if safari_requested():
+        pairs.append(("safari", SAFARIDRIVER if safari_available()
+                      else NOT_INSTALLED))
+    return pairs
+
+
+#: Browser modules the Safari job does not run, and why. Every entry has to
+#: say why in a sentence; `scripts/run_tests.py` prints each one so the list is
+#: read in the CI transcript rather than found in this file, and
+#: `tests/test_ci_splits_and_parallelises_the_suite.py` fails on an entry that
+#: names no module or gives no reason. Not a place to put a test that fails.
+SAFARI_NOT_APPLICABLE = {
+    "test_cloud_name_colours": "drives Firefox only, by construction",
+    "test_dev_mode_can_be_left": "drives Firefox only, and ends on a Firefox print",
+    "test_dev_toolbar_does_not_print": "reads Firefox's print pipeline",
+    "test_modal_buttons_have_room": "drives Firefox only, by construction",
+    "test_nothing_is_left_running": "audits how Firefox is stopped",
+    "test_report_first_sheet_orientation_browser":
+        "prints through WebDriver's Print Page command, which safaridriver does not implement",
+    "test_rf_design_review_browser":
+        "prints through WebDriver's Print Page command, which safaridriver does not implement",
+}
+
+#: Set once the first Safari session has been made.
+_SAFARI_SELECT_PATCHED = False
+
+#: Safari's WebDriver answers a click on an <option> with "element not
+#: interactable", so `Select(...).select_by_value()` - used all over this
+#: suite - fails there on every call. The choice is made the way a page hears
+#: it instead: the option marked selected and `input` / `change` fired on the
+#: <select>.
+_PICK_OPTION_JS = (
+    "var s = arguments[0], o = arguments[1]; o.selected = true;"
+    "s.dispatchEvent(new Event('input', { bubbles: true }));"
+    "s.dispatchEvent(new Event('change', { bubbles: true }));")
+
+
+def _patch_select_for_safari() -> None:
+    """Make `Select` choose by script, for this process, once.
+
+    Only ever applied in a run that asked for Safari - `safari_driver` is the
+    only caller - and that run drives no other browser, so Firefox, Chrome and
+    Edge keep a genuine click.
+    """
+    global _SAFARI_SELECT_PATCHED
+    if _SAFARI_SELECT_PATCHED:
+        return
+    from selenium.webdriver.support.select import Select
+
+    def _set_selected(self, option, *_ignored):
+        if not option.is_selected():
+            self._el.parent.execute_script(_PICK_OPTION_JS, self._el, option)
+
+    Select._set_selected = _set_selected
+    _SAFARI_SELECT_PATCHED = True
+
+
+def select_all(element) -> None:
+    """Select all the text in a field, as a person's Select All does.
+
+    Done by script, not by a key chord. Ctrl+A moves the caret to the start of
+    the line on macOS, so `send_keys(Keys.CONTROL, "a")` followed by typing
+    inserts in front of what was there - three AP Labeler tests typed `101`
+    into a box holding `1`, read `1011` in Safari, and looked like a fault in
+    the page. Cmd+A is the Mac chord, and Safari's WebDriver does not act on
+    it either: its synthesized key events do not run the editing command, and
+    the same three tests failed the same way with it. Selecting the text
+    leaves what the tests are about - what happens when text is typed over a
+    selection - to real key presses.
+    """
+    element.parent.execute_script(
+        "arguments[0].focus(); arguments[0].select();", element)
+
+
+#: Puts files into a file input the way a person's choice does: the input's
+#: `files` set and `input` / `change` fired. Works on an input that is hidden,
+#: which is how every tool here styles its own.
+_UPLOAD_JS = (
+    "var el = arguments[0], files = arguments[1];"
+    "var dt = new DataTransfer();"
+    "files.forEach(function (f) {"
+    "  var bytes = Uint8Array.from(atob(f.b64), function (c) { return c.charCodeAt(0); });"
+    "  dt.items.add(new File([bytes], f.name, { type: f.type }));"
+    "});"
+    "el.files = dt.files;"
+    "el.dispatchEvent(new Event('input', { bubbles: true }));"
+    "el.dispatchEvent(new Event('change', { bubbles: true }));")
+
+
+def upload_by_script(element, paths) -> None:
+    """Hand `paths` to a file input without the driver's file chooser.
+
+    Safari's `send_keys(path)` on a file input is accepted and delivers
+    nothing: the page never sees a change, so every test that opens a project
+    that way waited out its timeout on a page that had nothing loaded - eleven
+    modules on the first full Safari run.
+    """
+    import base64
+    import mimetypes
+    files = []
+    for path in paths:
+        path = Path(path)
+        files.append({
+            "name": path.name,
+            "type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            "b64": base64.b64encode(path.read_bytes()).decode("ascii")})
+    element.parent.execute_script(_UPLOAD_JS, element, files)
+
+
+#: Set once the first Safari session has been made.
+_SAFARI_SEND_KEYS_PATCHED = False
+
+
+def _patch_send_keys_for_safari() -> None:
+    """Route `send_keys(path)` on a file input through `upload_by_script`.
+
+    Only ever applied in a run that asked for Safari, which drives no other
+    browser, so Firefox, Chrome and Edge keep their own file handling.
+    """
+    global _SAFARI_SEND_KEYS_PATCHED
+    if _SAFARI_SEND_KEYS_PATCHED:
+        return
+    from selenium.webdriver.remote.webelement import WebElement
+    original = WebElement.send_keys
+
+    def send_keys(self, *value):
+        if (self.tag_name.lower() == "input"
+                and (self.get_attribute("type") or "").lower() == "file"):
+            upload_by_script(self, [p for p in "".join(map(str, value)).split("\n") if p])
+            return None
+        return original(self, *value)
+
+    WebElement.send_keys = send_keys
+    _SAFARI_SEND_KEYS_PATCHED = True
+
+
+def make_driver(kind, binary):
+    """A driver for `kind`, or None when it will not start. Headless where the
+    browser can be; Safari takes no options. For tests written from here on -
+    the older modules each carry their own copy of this."""
+    try:
+        from selenium import webdriver
+        from selenium.common.exceptions import WebDriverException
+    except ImportError:
+        return None
+    if kind == "safari":
+        return safari_driver()
+    if not Path(binary).exists():
+        return None
+    try:
+        if kind == "firefox":
+            o = webdriver.FirefoxOptions()
+            o.binary_location = binary
+            o.add_argument("-headless")
+            return webdriver.Firefox(options=o)
+        if kind == "chrome":
+            o = webdriver.ChromeOptions()
+            o.binary_location = binary
+            o.add_argument("--headless=new")
+            o.add_argument("--no-sandbox")
+            return webdriver.Chrome(options=o)
+        o = webdriver.EdgeOptions()
+        o.binary_location = binary
+        o.add_argument("--headless=new")
+        return webdriver.Edge(options=o)
+    except (WebDriverException, OSError):
+        return None
+
+
+def safari_driver():
+    """A Safari session, or None when it will not start.
+
+    No options: Safari takes no binary path, cannot be headless, and runs as
+    the logged-in user on the runner's desktop. One session at a time per
+    machine - which is why the Safari job runs its modules one after another.
+    """
+    try:
+        from selenium import webdriver
+        from selenium.common.exceptions import WebDriverException
+    except ImportError:
+        return None
+    _patch_select_for_safari()
+    _patch_send_keys_for_safari()
+    try:
+        return webdriver.Safari()
+    except (WebDriverException, OSError) as exc:
+        print("safaridriver would not start a session: %s"
+              % str(exc).strip().splitlines()[0][:200], file=sys.stderr)
+        return None
 
 
 def on_ci() -> bool:

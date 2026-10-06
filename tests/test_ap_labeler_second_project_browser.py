@@ -225,6 +225,8 @@ class _InABrowser:
         if not Path(binary).exists():
             return None
         try:
+            if kind == "safari":
+                return _browsers.safari_driver()
             if kind == "firefox":
                 o = webdriver.FirefoxOptions()
                 o.binary_location = binary
@@ -334,7 +336,7 @@ class TheLabelerInABrowserTests(_InABrowser, unittest.TestCase):
                 box = driver.find_element(
                     By.CSS_SELECTOR, '#arSegments .ar-seg-row input.ar-seg-input')
                 self.assertEqual(box.get_attribute("value"), "QRX")
-                box.send_keys(Keys.CONTROL, "a")
+                _browsers.select_all(box)
                 box.send_keys("ZZQ")
                 time.sleep(0.3)
                 self._open(driver, self.placeholder, "fresh-survey.esx")
@@ -354,7 +356,7 @@ class TheLabelerInABrowserTests(_InABrowser, unittest.TestCase):
                 self._open(driver, self.placeholder, "fresh-survey.esx")
                 box = self._start_box(driver)
                 box.click()
-                box.send_keys(Keys.CONTROL, "a")
+                _browsers.select_all(box)
                 box.send_keys(Keys.BACKSPACE)
                 box.send_keys("101")
                 time.sleep(0.3)
@@ -371,7 +373,7 @@ class TheLabelerInABrowserTests(_InABrowser, unittest.TestCase):
                 self._open(driver, self.placeholder, "fresh-survey.esx")
                 box = self._start_box(driver)
                 box.click()
-                box.send_keys(Keys.CONTROL, "a")
+                _browsers.select_all(box)
                 box.send_keys("0")
                 time.sleep(0.3)
                 names = self._names(driver)
