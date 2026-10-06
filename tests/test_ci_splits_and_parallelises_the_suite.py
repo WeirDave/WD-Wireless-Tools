@@ -270,6 +270,21 @@ class TheSafariJobCannotPassByDrivingNothing(unittest.TestCase):
         self.assertEqual((r.ran, r.skipped, r.passed), (2, 3, 2))
         self.assertEqual(run_tests.drove_nothing([r]), [])
 
+    def test_a_warning_inside_a_test_does_not_hide_that_it_passed(self):
+        """Safari run 4: 18 modules ran 1-9 tests, skipped none, exited 0, and
+        were reported as driving nothing. A warning printed mid-test puts the
+        `ok` on a line of its own, so no line ended in `... ok`."""
+        noisy = ("test_a (m.T.test_a) ... /x/y.py:1: ResourceWarning: unclosed\n"
+                 "  conn = open()\nok\n"
+                 "test_b (m.T.test_b) ... ok\n"
+                 + "-" * 70 + "\nRan 2 tests in 1s\n\nOK\n")
+        r = run_tests.Result("m", 0, noisy, 1.0)
+        self.assertEqual((r.ran, r.skipped, r.passed), (2, 0, 2))
+        self.assertEqual(run_tests.drove_nothing([r]), [])
+        bare = run_tests.Result(
+            "n", 0, "-" * 70 + "\nRan 5 tests in 1s\n\nOK\n", 1.0)
+        self.assertEqual(bare.passed, 5)
+
     def test_a_module_that_ran_no_test_at_all_did_not_drive_safari(self):
         """A class skipped in setUpClass because the driver would not start
         reports `0 tests, 3 skipped` and exits 0. Three modules did, on the

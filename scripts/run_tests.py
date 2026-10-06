@@ -149,7 +149,7 @@ def order(modules: list[str], durations: dict[str, float],
 
 
 #: `test_name (tests.module.Class.test_name) ... ok` from `unittest -v`.
-_PASSED = re.compile(r"\.\.\. ok\s*$", re.M)
+_PASSED = re.compile(r"(?:\.\.\. |^)ok\s*$", re.M)
 _RAN = re.compile(r"^Ran (\d+) tests? in", re.M)
 _SKIPPED = re.compile(r"skipped=(\d+)")
 
@@ -173,6 +173,12 @@ class Result:
         # Tests that actually passed, read off `unittest -v` lines. Only a
         # verbose run has them; a quiet one reads 0.
         self.passed = len(_PASSED.findall(output))
+        # A module that ran tests, skipped none and exited 0 passed them
+        # all, whatever the lines looked like: a warning printed mid-test
+        # puts "ok" on a line of its own, and Safari run 4 read 18 such
+        # modules as having passed nothing.
+        if code == 0 and self.ran and not self.skipped:
+            self.passed = self.ran
 
     def __repr__(self) -> str:
         return (f"<{self.module}: exit {self.code}, {self.ran} ran>\n"
