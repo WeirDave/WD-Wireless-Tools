@@ -1656,7 +1656,10 @@ changes every name.
 
 For the row and column orderings, **Line Spacing** sets how tall a row (or how
 wide a column) is, in pixels. Leave it blank (*Auto*) unless APs that
-should share a row are being split.
+should share a row are being split. Dashed lines on the plan show where one
+row ends and the next begins, in *Auto* as well as with a number typed in. A
+number under 10 is treated as *Auto* until it is finished, so typing `120`
+does not flood the plan on the way.
 
 If a new survey has to match names from an earlier one, check the preview
 against the existing names before downloading.
