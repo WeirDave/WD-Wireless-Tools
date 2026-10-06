@@ -693,7 +693,7 @@ form.
 
 Attenuation areas have their own tab beside **Wall Types**, named as Ekahau
 names them. The tab lists two outdoor presets, **Tree Canopy** (9 to 35 ft,
-1 / 1.3 / 1.5 dB per foot at 2.4 / 5 / 6 GHz) and **Shrubbery, Low Planting**
+1 / 1.3 / 1.5 dB per foot at 2.4 / 5 / 6 GHz) and **Shrubbery/Low Plants**
 (0 to 4 ft, 1.2 / 1.6 / 1.8 dB per foot), and below them the area types the
 project already has, in feet and dB per foot. **+ Add Tree Canopy & Shrubbery**
 puts both in the project's attenuation area list, so they can be drawn over

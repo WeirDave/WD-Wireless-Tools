@@ -14,6 +14,11 @@
    colour, the two edges and the attenuation on each band. A project with no
    area type to copy from is refused, with the reason, rather than written to.
 
+   Confirmed against a project drawn in Ekahau: the member and its list key are
+   as above, attenuation is stored per metre (the UI's dB/ft divided by 0.3048),
+   edges are metres, bands are TWO / FIVE / SIX, and a custom type has no `key`
+   and no `status`.
+
    Pure functions, no DOM: tests load this file in Node. */
 (function (root) {
   'use strict';
@@ -49,12 +54,13 @@
         && Object.prototype.hasOwnProperty.call(p, 'attenuationFactor'));
   }
 
-  function applyValues(target, preset) {
-    target.name = preset.name;
-    target.color = preset.color;
+  /* `isNew` is the difference between adding a type and correcting one: a new
+     type takes the preset's name and colour, an existing one keeps the name and
+     colour the person gave it in Ekahau and only has its physics set. */
+  function applyValues(target, preset, isNew) {
+    if (isNew) { target.name = preset.name; target.color = preset.color; }
     target.lowerEdge = feetToMetres(preset.lowerEdgeFt);
     target.upperEdge = feetToMetres(preset.upperEdgeFt);
-    if ('key' in target) target.key = preset.name;
     const props = target.propagationProperties;
     BANDS.forEach(band => {
       const value = dbPerFtToPerM(preset.attenuationDbPerFt[band]);
@@ -69,12 +75,20 @@
     return target;
   }
 
-  const sameValues = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  /* Equal, with the tolerance Ekahau's own metre conversion needs: it stores 9 ft
+   as 2.7432000000000003, and a strict compare called that a change. */
+function sameValues(a, b) {
+  if (typeof a === 'number' && typeof b === 'number') return Math.abs(a - b) < 1e-3;
+  if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return a === b;
+  const ka = Object.keys(a), kb = Object.keys(b);
+  return ka.length === kb.length && ka.every(k => k in b && sameValues(a[k], b[k]));
+}
 
   /* What adding the presets to this list would do, and the new list.
      Nothing is mutated. A type already there under the same name is updated in
      place and keeps its id, so areas already drawn with it still resolve;
-     one that already matches is counted, not rewritten. */
+     one that already matches is counted, not rewritten. Its name and colour are
+     never touched. */
   function addPresets(types, presets, newId) {
     const list = Array.isArray(types) ? types : [];
     const shape = list.find(usableShape);
@@ -92,13 +106,15 @@
     (presets || []).forEach(preset => {
       const at = out.findIndex(t => sameName(t && t.name, preset.name));
       if (at >= 0) {
-        const next = applyValues(JSON.parse(JSON.stringify(out[at])), preset);
+        const next = applyValues(JSON.parse(JSON.stringify(out[at])), preset, false);
         if (sameValues(next, out[at])) { unchanged++; return; }
         out[at] = next;
         updated.push(preset.name);
         return;
       }
-      const fresh = applyValues(JSON.parse(JSON.stringify(shape)), preset);
+      const fresh = applyValues(JSON.parse(JSON.stringify(shape)), preset, true);
+      // Ekahau's own custom types carry no `key`; only its stock ones do.
+      delete fresh.key;
       fresh.id = newId();
       out.push(fresh);
       added.push(preset.name);
