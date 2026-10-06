@@ -1,5 +1,5 @@
 """AP Labeler's Line Spacing box, typed into with real key presses in
-Firefox, Chrome and Edge.
+Firefox, Chrome, Edge and Safari.
 
 The first fix for "Auto draws no lines and a number will not go in" was
 checked in one engine. A number box is where engines differ most, so this
@@ -32,6 +32,7 @@ from tests.test_ap_labeler_second_project_browser import (
 )
 
 try:  # pragma: no cover - availability varies by machine
+    from selenium import webdriver
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import Select
 except ImportError:  # pragma: no cover
@@ -164,6 +165,36 @@ class TypingIntoLineSpacingTests(_InABrowser, unittest.TestCase):
                 # x 100 / 400 / 700 of 800: breaks at 250 and 550.
                 self.assertEqual([round(float(a.rstrip("%")), 1) for a in s["at"]],
                                  [31.2, 68.8], s)
+
+
+@unittest.skipUnless(HAVE_SELENIUM, "selenium is not installed")
+class TypingIntoLineSpacingInSafariTests(TypingIntoLineSpacingTests):
+    """The same assertions, in Safari.
+
+    Safari is not in `browsers.triple()` - see `browsers.safari_requested` -
+    so the tests above skip under it and this class is the one that runs. It
+    is asked for by `WD_BROWSERS=safari`, which only the Safari job sets.
+
+    A run that asked for Safari and cannot drive it FAILS. The alternative is
+    a skip, and a job that is green because Safari never started tells
+    nobody anything; that is how Firefox, Chrome and Edge once went four
+    releases untested.
+    """
+
+    def _each_browser(self):
+        if not _browsers.safari_requested():
+            self.skipTest("Safari is only driven when WD_BROWSERS names it; "
+                          "the Safari job does")
+        if not _browsers.safari_available():
+            self.fail(_browsers.why_missing())
+        driver = webdriver.Safari()
+        try:
+            driver.set_window_size(1400, 1000)
+            driver.set_script_timeout(60)
+            driver.get(self.url)
+            yield "safari", driver
+        finally:
+            _browsers.shut_down(driver)
 
 
 if __name__ == "__main__":
