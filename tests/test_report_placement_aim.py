@@ -214,9 +214,9 @@ class ThePlacementMapKeepsEveryNumberReadable(ReportCase):
               ms.forEach(m => {
                 check(W + 'x' + H + ' pill height ' + m.pill.h + ' holds 1.5 x the ' + m.font + ' type',
                       m.pill.h >= m.font * 1.5 - 1e-6);
-                // On paper a plan prints about 7.2in along its long edge; the
-                // number stays above 6pt there.
-                const pt = m.font / Math.max(W, H) * 7.2 * 72;
+                // The worst sheet is a tall plan turned to landscape, whose long
+                // edge prints in 5.75in; the number is still 6pt there.
+                const pt = m.font / Math.max(W, H) * 5.75 * 72;
                 check(W + 'x' + H + ' type is ' + pt.toFixed(1) + 'pt', pt >= 6);
                 check('the pill is wide enough for its text', m.pill.w >= m.text.length * m.font * 0.6);
               });

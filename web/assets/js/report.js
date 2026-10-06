@@ -4532,10 +4532,11 @@
     var dotR = dotSize * 0.25;
     var padX = minDim * 0.006;
     var showCones = opts.showCones !== false;
-    /* Whatever is being drawn - a whole floor or one zoomed cell - prints about
-       7.2in across, so a floor of 1.35% of the long edge lands near 7pt on
-       paper. Anything smaller than that is not worth printing. */
-    var legibleFloor = Math.max(scaleW, scaleH) * 0.0135;
+    /* A share of the long edge, shared with every other report's map numbers
+       (MAP_FONT_FLOOR_FRAC): it is sized for the worst sheet, a tall plan turned
+       to landscape, where the long edge prints 5.75in and 1.35% came out at
+       5.6pt. Anything smaller is not worth printing. */
+    var legibleFloor = Math.max(scaleW, scaleH) * MAP_FONT_FLOOR_FRAC;
 
     /* An AP whose coordinates are off the plan has no place on this drawing.
        It used to get no dot - the SVG clips - but a label, which the placement
