@@ -534,5 +534,27 @@ class EveryPageCanBeTurned(ReportCase):
         """)
 
 
+class AZoomedSectionNamesItsOwnPage(unittest.TestCase):
+    """Measured in Firefox 157 through its own print pipeline (geckodriver's
+    Print Page): a sectioned floor set to Match-all-landscape printed
+    ``LLLLPPPPPLLLLL`` - the first section landscape, every later one portrait -
+    where Chromium printed fifteen landscape sheets. A section sheet inherits
+    the floor's named page in Chromium; Firefox starts it on the unnamed one.
+    Naming it outright gave ``LLLLLLLLLLLLLL``. What CI can hold is that the
+    rule is still there and still gives each orientation its own name."""
+
+    def setUp(self):
+        from pathlib import Path
+        self.css = (Path(__file__).resolve().parent.parent / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
+
+    def test_a_section_sheet_takes_the_name_of_the_orientation_its_floor_asked_for(self):
+        import re
+        port = re.search(r"\.rep-oriented \.rep-seg-cell\s*\{\s*page:\s*placementPortrait;\s*\}", self.css)
+        land = re.search(r"\.rep-oriented\.is-landscape \.rep-seg-cell\s*\{\s*page:\s*placementLandscape;\s*\}", self.css)
+        self.assertTrue(port, "a section sheet has no portrait page name of its own")
+        self.assertTrue(land, "a section sheet on a landscape floor has no landscape page name of its own")
+        self.assertLess(port.start(), land.start(), "the landscape rule must come after the portrait one to win")
+
+
 if __name__ == "__main__":
     unittest.main()

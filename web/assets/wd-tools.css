@@ -7355,6 +7355,12 @@ body.wd-has-stale-banner { padding-top: 52px; }
   @page placementLandscape { size: Letter landscape; }
   .rep-placement-page, .rep-oriented { page: placementPortrait; }
   .rep-placement-page.is-landscape, .rep-oriented.is-landscape { page: placementLandscape; }
+  /* A zoomed section is its own sheet inside a floor's page. Left to inherit,
+     Chromium gives it the floor's orientation, but Firefox starts the new
+     sheet on the unnamed page: a floor set to landscape printed its first
+     section landscape and every later one portrait. Said outright, both agree. */
+  .rep-placement-page .rep-seg-cell, .rep-oriented .rep-seg-cell { page: placementPortrait; }
+  .rep-placement-page.is-landscape .rep-seg-cell, .rep-oriented.is-landscape .rep-seg-cell { page: placementLandscape; }
 
   /* The blank sheet at the end of the document, in Firefox.
 
