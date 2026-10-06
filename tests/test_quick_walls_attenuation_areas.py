@@ -30,14 +30,17 @@ PRESETS = ROOT / "web" / "assets" / "attenuation-area-presets.json"
 
 NODE_TIMEOUT_S = 60
 
-# Property-shaped fixture, invented names. Extra fields (``status``, a
-# reflection coefficient) must survive the clone untouched.
+# Shaped like a stock type in a project drawn in Ekahau - a snake_case ``key``,
+# bands in Ekahau's own TWO / SIX / FIVE order, no ``status`` - with invented
+# values. Fields the code does not own (a reflection coefficient, anything
+# else) must survive the clone untouched.
 EXISTING_TYPE = {
-    "id": "id-existing", "name": "Invented Hedge", "color": "#112233",
-    "status": "CREATED", "lowerEdge": 0, "upperEdge": 2,
+    "id": "id-existing", "name": "Invented Hedge", "key": "invented_hedge",
+    "color": "#112233", "lowerEdge": 0, "upperEdge": 2, "invented_extra": 7,
     "propagationProperties": [
-        {"band": b, "attenuationFactor": 3, "reflectionCoefficient": 0.2}
-        for b in ("FIVE", "SIX", "TWO")],
+        {"band": b, "attenuationFactor": 3, "reflectionCoefficient": 0.2,
+         "diffractionCoefficient": 11}
+        for b in ("TWO", "SIX", "FIVE")],
 }
 
 
@@ -63,7 +66,7 @@ class PresetsLandInTheFileTests(unittest.TestCase):
 
     def test_both_presets_are_added_in_metres_and_per_metre(self):
         plan = self.plan([EXISTING_TYPE])
-        self.assertEqual(plan["added"], ["Tree Canopy", "Shrubbery, Low Planting"])
+        self.assertEqual(plan["added"], ["Tree Canopy", "Shrubbery/Low Plants"])
         types = self.by_name(plan)
 
         canopy = types["Tree Canopy"]
@@ -73,19 +76,27 @@ class PresetsLandInTheFileTests(unittest.TestCase):
         for band, per_ft in {"TWO": 1.0, "FIVE": 1.3, "SIX": 1.5}.items():
             self.assertAlmostEqual(att[band], per_ft / 0.3048, places=3, msg=band)
 
-        shrub = types["Shrubbery, Low Planting"]
+        shrub = types["Shrubbery/Low Plants"]
         self.assertEqual(shrub["lowerEdge"], 0)
         self.assertAlmostEqual(shrub["upperEdge"], 4 * 0.3048, places=4)
         att = {p["band"]: p["attenuationFactor"] for p in shrub["propagationProperties"]}
         for band, per_ft in {"TWO": 1.2, "FIVE": 1.6, "SIX": 1.8}.items():
             self.assertAlmostEqual(att[band], per_ft / 0.3048, places=3, msg=band)
 
+    def test_new_types_take_the_presets_colour(self):
+        types = self.by_name(self.plan([EXISTING_TYPE]))
+        self.assertEqual({types["Tree Canopy"]["color"], types["Shrubbery/Low Plants"]["color"]},
+                         {"#193300"})
+
     def test_the_layout_comes_from_the_project_and_nothing_else_is_lost(self):
         canopy = self.by_name(self.plan([EXISTING_TYPE]))["Tree Canopy"]
-        self.assertEqual(canopy["status"], "CREATED")
+        self.assertEqual(canopy["invented_extra"], 7)
         self.assertTrue(all(p["reflectionCoefficient"] == 0.2
                             for p in canopy["propagationProperties"]))
         self.assertNotEqual(canopy["id"], EXISTING_TYPE["id"])
+
+    def test_a_new_type_carries_no_key_because_ekahaus_custom_types_do_not(self):
+        self.assertTrue(all("key" not in t for t in self.plan([EXISTING_TYPE])["types"][1:]))
 
     def test_existing_types_are_untouched_and_ids_are_unique(self):
         plan = self.plan([EXISTING_TYPE])
@@ -100,14 +111,28 @@ class PresetsLandInTheFileTests(unittest.TestCase):
                          ([], [], 2))
         self.assertEqual(again["types"], once)
 
+    def test_a_type_ekahau_already_holds_in_its_own_float_noise_is_unchanged(self):
+        # Ekahau stores 9 ft as 2.7432000000000003 and 35 ft as 10.668.
+        drawn = [EXISTING_TYPE, {
+            "id": "id-canopy", "name": "Tree Canopy", "color": "#193300",
+            "lowerEdge": 2.7432000000000003, "upperEdge": 10.668,
+            "propagationProperties": [
+                {"band": "TWO", "attenuationFactor": 3.2808, "reflectionCoefficient": 0.5, "diffractionCoefficient": 11},
+                {"band": "SIX", "attenuationFactor": 4.9213, "reflectionCoefficient": 0.5, "diffractionCoefficient": 11},
+                {"band": "FIVE", "attenuationFactor": 4.2651, "reflectionCoefficient": 0.5, "diffractionCoefficient": 11}]}]
+        plan = self.plan(drawn)
+        self.assertEqual((plan["added"], plan["updated"], plan["unchanged"]),
+                         (["Shrubbery/Low Plants"], [], 1))
+
     def test_a_type_with_the_same_name_is_updated_and_keeps_its_id(self):
         stale = json.loads(json.dumps(EXISTING_TYPE))
         stale.update(id="id-mine", name="tree canopy ")
         plan = self.plan([EXISTING_TYPE, stale])
         self.assertEqual(plan["updated"], ["Tree Canopy"])
-        self.assertEqual(plan["added"], ["Shrubbery, Low Planting"])
+        self.assertEqual(plan["added"], ["Shrubbery/Low Plants"])
         updated = [t for t in plan["types"] if t["id"] == "id-mine"][0]
-        self.assertEqual(updated["name"], "Tree Canopy")
+        # The name and colour he gave it in Ekahau are kept; only physics changes.
+        self.assertEqual((updated["name"], updated["color"]), ("tree canopy ", "#112233"))
         self.assertAlmostEqual(updated["upperEdge"], 35 * 0.3048, places=4)
 
     def test_a_project_with_nothing_to_copy_is_refused_with_a_reason(self):
@@ -127,7 +152,7 @@ class PresetsLandInTheFileTests(unittest.TestCase):
 
     def test_presets_file_carries_the_numbers_as_given(self):
         data = {p["name"]: p for p in json.loads(PRESETS.read_text(encoding="utf-8"))["presets"]}
-        canopy, shrub = data["Tree Canopy"], data["Shrubbery, Low Planting"]
+        canopy, shrub = data["Tree Canopy"], data["Shrubbery/Low Plants"]
         self.assertEqual((canopy["lowerEdgeFt"], canopy["upperEdgeFt"]), (9, 35))
         self.assertEqual(canopy["attenuationDbPerFt"], {"TWO": 1.0, "FIVE": 1.3, "SIX": 1.5})
         self.assertEqual((shrub["lowerEdgeFt"], shrub["upperEdgeFt"]), (0, 4))
@@ -217,7 +242,7 @@ class ThePageAddsAndSavesTests(unittest.TestCase):
         r = json.loads(proc.stdout)
         self.assertEqual(r["before"], "", "Add must be available on a project that has the file")
         self.assertFalse(r["savedUntouched"], "Save rewrote the member although nothing changed")
-        self.assertEqual(r["names"], ["Invented Hedge", "Tree Canopy", "Shrubbery, Low Planting"])
+        self.assertEqual(r["names"], ["Invented Hedge", "Tree Canopy", "Shrubbery/Low Plants"])
 
         self.assertTrue(r["reachable"], "the control's handler is not a function")
         self.assertTrue(r["order"], "walls.js uses WDAreas, so walls-areas.js must load first")
@@ -287,7 +312,7 @@ class TheTabTests(unittest.TestCase):
 
     def test_presets_are_listed_with_their_numbers(self):
         html = self.r["before"]["presets"]
-        for needle in ("Tree Canopy", "9\u201335 ft", "Shrubbery, Low Planting", "1.8"):
+        for needle in ("Tree Canopy", "9\u201335 ft", "Shrubbery/Low Plants", "1.8"):
             self.assertIn(needle, html)
         self.assertEqual(self.r["before"]["count"], "1 area type")
         self.assertFalse(self.r["before"]["disabled"])
