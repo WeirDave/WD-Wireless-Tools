@@ -156,3 +156,58 @@ jobs:
 
       - name: Run browser tests
         run: python scripts/run_tests.py --browsers-only
+
+  # Safari, in a job of its own on macOS - the only place it exists.
+  #
+  # It cannot join the matrix above: Safari has no binary to point at and no
+  # headless mode, it runs as the logged-in user on the runner's desktop, and
+  # it is not in `tests.browsers.triple()`, so the other thirteen browser
+  # modules would skip under it. This job names the modules that know how to
+  # drive Safari instead of running all of them to skip most.
+  #
+  # `WD_BROWSERS: safari` is what asks for it (`browsers.safari_requested`),
+  # and a module that is asked to drive Safari and cannot FAILS rather than
+  # skips - a job that is green because Safari never started is the failure
+  # this file already had once, for Firefox, Chrome and Edge.
+  # `tests/test_ci_splits_and_parallelises_the_suite.py` holds all of it.
+  safari:
+    name: safari / macOS
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      WD_BROWSER_TESTS: 'on'
+      WD_BROWSERS: safari
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -r requirements-dev.txt
+
+      # Safari refuses WebDriver sessions until this has been run once.
+      - name: Enable Safari's WebDriver
+        run: sudo safaridriver --enable
+
+      - name: Report which browsers are available
+        run: python -m tests.browsers_report
+
+      - name: Run the Safari tests
+        run: python scripts/run_tests.py test_ap_labeler_spacing_browser

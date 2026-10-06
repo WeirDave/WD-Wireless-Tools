@@ -2427,22 +2427,27 @@
       box.appendChild(line);
     }
 
-    var px = spacingPx();
-    if (!px) {
-      var dim = isRow ? floor.height : floor.width;
-      if (!dim) return;
-      autoBreaks(getFloorAPs(floor.id), isRow ? 'y' : 'x').forEach(function (at) {
+    var dim = isRow ? floor.height : floor.width;
+    if (!dim) return;
+    var axis = isRow ? 'y' : 'x';
+
+    var units = getSpacingUnits(axis, floor);
+    if (!units) {
+      autoBreaks(getFloorAPs(floor.id), axis).forEach(function (at) {
         draw((at / dim * 100).toFixed(3) + '%');
       });
       return;
     }
 
-    var img = $('arPlanImg');
-    if (!img || !img.naturalWidth) return;
-    var imgDim = isRow ? img.naturalHeight : img.naturalWidth;
-    var count = Math.floor(imgDim / px);
-
-    for (var n = 1; n <= count; n++) draw((n * px / imgDim * 100).toFixed(3) + '%');
+    /* The lines sit where the numbering splits rows - multiples of the
+       spacing in the floor's own units - not at multiples of the displayed
+       image's size. This read img.naturalHeight, which is the plan's pixel
+       height in Firefox and Chromium and its on-screen size in Safari: a
+       600 px plan drawn at 496 px got a line every 12 px of 496, 41 lines
+       where the numbering used 50, so the dashes showed rows that were not
+       the ones being numbered. */
+    var count = Math.floor(dim / units);
+    for (var n = 1; n <= count; n++) draw((n * units / dim * 100).toFixed(3) + '%');
   }
 
   function renderMarkers() {
