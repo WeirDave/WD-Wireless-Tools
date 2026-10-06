@@ -5568,7 +5568,45 @@
 
   /* Turn every page that has an opinion, then let the plan pass size the maps
      inside whichever way round they ended up. */
+  /* Every sheet of a report is a page the reader can turn.
+
+     Only the maps, the AP tables and the notes carried a page key; a BOM's
+     tables, the Summary, the Coverage legend, the Design Review's findings and
+     the Interference summary carried none. They always printed portrait, the
+     per-page picker was not offered on them, and "Match all pages" went
+     straight past them - so "all landscape" left a report of portrait sheets
+     between landscape ones. Each top-level section without a key gets one
+     here, named for its heading so a choice made for it is remembered, a
+     picker, and a kind: a table measures itself on Auto and turns when it
+     will not fit across a portrait sheet, anything else stays portrait. */
+  function keyEveryPage(host, opts) {
+    var reportId = currentReportId || 'report';
+    var used = {};
+    for (var i = 0; i < host.children.length; i++) {
+      var sec = host.children[i];
+      if (sec.tagName !== 'SECTION') continue;
+      var existing = sec.getAttribute('data-page-key');
+      if (existing) { used[existing] = true; continue; }
+    }
+    for (var j = 0; j < host.children.length; j++) {
+      var s2 = host.children[j];
+      if (s2.tagName !== 'SECTION' || s2.getAttribute('data-page-key')) continue;
+      var heading = s2.querySelector('.rep-floor-title');
+      // Letters only: a count in the heading ("(21)") must not rename the page.
+      var slug = String((heading && heading.textContent) || '').toLowerCase()
+        .replace(/[^a-z]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || ('page-' + j);
+      var key = 'sec:' + reportId + ':' + slug, n = 1;
+      while (used[key]) key = 'sec:' + reportId + ':' + slug + '-' + (++n);
+      used[key] = true;
+      s2.classList.add('rep-oriented');
+      s2.setAttribute('data-page-key', key);
+      s2.setAttribute('data-page-kind', s2.querySelector('table') ? 'table' : 'text');
+      s2.insertAdjacentHTML('afterbegin', orientPickerHtml(key, opts));
+    }
+  }
+
   function applyPageOrientation(host, opts) {
+    keyEveryPage(host, opts);
     var pages = host.querySelectorAll('[data-page-key]');
     for (var i = 0; i < pages.length; i++) {
       var page = pages[i];

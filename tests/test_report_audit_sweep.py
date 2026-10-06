@@ -112,9 +112,14 @@ function el(tag, classes, attrs) {
               parentElement: null, order: order++ };
   n.classList = {
     contains: c => n.cls.has(c),
+    add: c => { n.cls.add(c); },
     toggle(c, on) { if (on) n.cls.add(c); else n.cls.delete(c); },
   };
   n.getAttribute = k => (k in n.attrs ? n.attrs[k] : null);
+  n.setAttribute = (k, v) => { n.attrs[k] = String(v); };
+  n.inserted = [];
+  n.insertAdjacentHTML = (where, html) => { n.inserted.push([where, html]); };
+  n.textContent = '';
   n.compareDocumentPosition = o => (o.order > n.order ? 4 : 2);
   n.appendChild = c => {
     if (c.parentElement) c.parentElement.children.splice(c.parentElement.children.indexOf(c), 1);
@@ -132,6 +137,8 @@ function el(tag, classes, attrs) {
       : sel === '[data-page-kind="cover"]' ? c => c.attrs['data-page-kind'] === 'cover'
       : sel === '.rep-seg-cell' ? c => c.cls.has('rep-seg-cell')
       : sel === '.rep-orient-now' ? c => c.cls.has('rep-orient-now')
+      : sel === '.rep-floor-title' ? c => c.cls.has('rep-floor-title')
+      : sel === 'table' ? c => c.tagName === 'TABLE'
       : () => false;
     return all().filter(keep);
   };
@@ -464,6 +471,66 @@ class CoverageIsHonestAboutWhatItDraws(ReportCase):
           const row = floorPart(render('coverage', {}), 'Zed-AP1<', '</tr>');
           check('5 GHz, not the first-listed 2.4: ' + row, row.indexOf('5 GHz') >= 0 && row.indexOf('2.4 GHz') < 0);
           check('it names how many radios there are', /1 of 3 radios/.test(row));
+        """)
+
+
+class EveryPageCanBeTurned(ReportCase):
+    """"Match all pages" and the per-page picker went straight past every
+    section that had no page key - a BOM's tables, the Summary, the Coverage
+    legend. They always printed portrait between landscape sheets."""
+
+    def test_an_unkeyed_section_gets_a_key_a_kind_and_a_picker(self):
+        self.run_block(FAKE_DOM + r"""
+          E('(function () { currentReportId = "bom"; })')();
+          const keyEveryPage = E('keyEveryPage');
+          const withTable = section(false);
+          const heading = el('H2', ['rep-floor-title']); heading.textContent = 'Access point quantities (12)';
+          withTable.appendChild(heading); withTable.appendChild(el('TABLE'));
+          const plain = section(false);
+          const host = adopt(el('DIV'), [cover(), withTable, plain, footer()]);
+          keyEveryPage(host, {});
+          eq('named for its heading, count dropped', withTable.attrs['data-page-key'], 'sec:bom:access-point-quantities');
+          eq('a table is a table page', withTable.attrs['data-page-kind'], 'table');
+          check('it is an oriented page', withTable.cls.has('rep-oriented'));
+          check('it has the Auto / Portrait / Landscape picker',
+                withTable.inserted.length === 1 && /data-for="sec:bom:access-point-quantities"/.test(withTable.inserted[0][1]));
+          eq('a page with no table is a text page', plain.attrs['data-page-kind'], 'text');
+          check('with no heading it still gets a distinct key', /^sec:bom:page-/.test(plain.attrs['data-page-key']));
+          check('the cover and footer are left alone', host.children[0].inserted.length === 0 && !('data-page-key' in host.children[3].attrs));
+        """)
+
+    def test_a_page_that_already_has_a_key_is_left_alone(self):
+        self.run_block(FAKE_DOM + r"""
+          const keyEveryPage = E('keyEveryPage');
+          const keyed = section(true, 'placement:fA');
+          const host = adopt(el('DIV'), [cover(), keyed, footer()]);
+          keyEveryPage(host, {});
+          eq('same key', keyed.attrs['data-page-key'], 'placement:fA');
+          eq('no second picker', keyed.inserted.length, 0);
+        """)
+
+    def test_two_pages_with_one_heading_get_two_keys(self):
+        self.run_block(FAKE_DOM + r"""
+          E('(function () { currentReportId = "design"; })')();
+          const keyEveryPage = E('keyEveryPage');
+          function titled(t) { const s = section(false); const h = el('H2', ['rep-floor-title']); h.textContent = t; s.appendChild(h); return s; }
+          const a = titled('Findings'), b = titled('Findings');
+          keyEveryPage(adopt(el('DIV'), [cover(), a, b, footer()]), {});
+          check('distinct: ' + a.attrs['data-page-key'] + ' / ' + b.attrs['data-page-key'],
+                a.attrs['data-page-key'] !== b.attrs['data-page-key']);
+        """)
+
+    def test_match_all_pages_reaches_a_section_that_had_no_key(self):
+        """The whole point: after keying, matchAllPageOrient finds every page."""
+        self.run_block(FAKE_DOM + r"""
+          // The real handler reads the page's DOM; drive the two calls it makes.
+          const keyEveryPage = E('keyEveryPage');
+          E('(function () { currentReportId = "summary"; })')();
+          const plain = section(false), other = section(false);
+          const host = adopt(el('DIV'), [cover(), plain, other, footer()]);
+          keyEveryPage(host, {});
+          const keys = host.querySelectorAll('[data-page-key]').map(n => n.attrs['data-page-key']);
+          eq('three pages carry a key: the cover and both sections', keys.length, 3);
         """)
 
 
