@@ -112,9 +112,14 @@ function el(tag, classes, attrs) {
               parentElement: null, order: order++ };
   n.classList = {
     contains: c => n.cls.has(c),
+    add: c => { n.cls.add(c); },
     toggle(c, on) { if (on) n.cls.add(c); else n.cls.delete(c); },
   };
   n.getAttribute = k => (k in n.attrs ? n.attrs[k] : null);
+  n.setAttribute = (k, v) => { n.attrs[k] = String(v); };
+  n.inserted = [];
+  n.insertAdjacentHTML = (where, html) => { n.inserted.push([where, html]); };
+  n.textContent = '';
   n.compareDocumentPosition = o => (o.order > n.order ? 4 : 2);
   n.appendChild = c => {
     if (c.parentElement) c.parentElement.children.splice(c.parentElement.children.indexOf(c), 1);
@@ -132,6 +137,8 @@ function el(tag, classes, attrs) {
       : sel === '[data-page-kind="cover"]' ? c => c.attrs['data-page-kind'] === 'cover'
       : sel === '.rep-seg-cell' ? c => c.cls.has('rep-seg-cell')
       : sel === '.rep-orient-now' ? c => c.cls.has('rep-orient-now')
+      : sel === '.rep-floor-title' ? c => c.cls.has('rep-floor-title')
+      : sel === 'table' ? c => c.tagName === 'TABLE'
       : () => false;
     return all().filter(keep);
   };
@@ -325,6 +332,252 @@ class SharedHelpersTheReportsRelyOn(ReportCase):
           eq('no radio, so nothing to aim', E('apIsOmniOnly')(p.accessPoints[p.accessPoints.length - 1]), true);
           const html = render('aim', {});
           check('it is not on the Aim Sheet by default: ' + html.slice(0, 200), html.indexOf('Bare AP') < 0);
+        """)
+
+
+LISTENING_PRELUDE_FROM = "addEventListener(){}, removeEventListener(){},\n  matchMedia"
+LISTENING_PRELUDE_TO = ("addEventListener(t, f){ (window.__listeners = window.__listeners || {})[t] = f; }, "
+                        "removeEventListener(){},\n  matchMedia")
+
+
+class APrintedReportIsOnWhitePaper(ReportCase):
+    """The app opens dark. Printing from it put dark-theme colours on white:
+    the BOM's procurement notes at about 2.4:1 with the bold word at 1.2:1,
+    dark chips and stat cards, and near-black margins on a PDF saved with
+    background graphics on. The page is the light theme while it prints."""
+
+    def run_listening(self, checks: str):
+        from tests import test_report_prints_what_the_design_holds as base
+        self.assertIn(LISTENING_PRELUDE_FROM, base.PRELUDE,
+                      "the shared prelude moved; this test captures listeners through it")
+        original = base.PRELUDE
+        base.PRELUDE = original.replace(LISTENING_PRELUDE_FROM, LISTENING_PRELUDE_TO)
+        try:
+            self.run_block(checks)
+        finally:
+            base.PRELUDE = original
+
+    def test_the_page_registers_for_both_print_events(self):
+        self.run_listening(r"""
+          check('beforeprint is listened for', typeof (window.__listeners || {}).beforeprint === 'function');
+          check('afterprint is listened for', typeof (window.__listeners || {}).afterprint === 'function');
+        """)
+
+    def test_printing_switches_to_light_and_afterwards_puts_the_theme_back(self):
+        self.run_listening(r"""
+          const root = document.documentElement;
+          root.setAttribute('data-theme', 'dark');
+          window.__listeners.beforeprint();
+          eq('light while printing', root.getAttribute('data-theme'), 'light');
+          window.__listeners.beforeprint();                       // a second event changes nothing
+          window.__listeners.afterprint();
+          eq('dark again afterwards', root.getAttribute('data-theme'), 'dark');
+          root.setAttribute('data-theme', 'light');
+          window.__listeners.beforeprint(); window.__listeners.afterprint();
+          eq('a light page stays light', root.getAttribute('data-theme'), 'light');
+          let stored = null;
+          try { stored = localStorage.getItem('wd-theme'); } catch (e) {}
+          eq('the stored choice is never written', stored, null);
+        """)
+
+
+class AnEmptyProjectSaysSo(ReportCase):
+
+    def test_a_project_with_no_access_points_does_not_say_to_drop_a_file(self):
+        self.run_block(r"""
+          const p = project(); p.accessPoints = []; p.radios = [];
+          open(p);                                         // a file IS open
+          const html = render('location', {});
+          check('it says what is true: ' + html, /no access points in it/.test(html));
+          check('it does not send anyone to re-open the file', html.indexOf('Drop an .esx') < 0);
+        """)
+
+    def test_with_nothing_open_the_drop_message_is_still_there(self):
+        self.run_block(r"""
+          const none = { accessPoints: [], radios: [], antennas: {}, floorPlans: [], buildings: {}, buildingFloors: {}, images: {}, imageUrls: {}, measurements: [], measuredRadios: [], surveys: [], projectName: '' };
+          E('(function (p) { proj = p; fileName = ""; })')(none);
+          const html = render('location', {});
+          check('drop message with no file: ' + html, html.indexOf('Drop an .esx') >= 0);
+        """)
+
+
+class CoverageIsHonestAboutWhatItDraws(ReportCase):
+
+    def test_two_aps_on_one_spot_get_two_readable_numbers(self):
+        self.run_block(r"""
+          const p = project();
+          // Zed-AP1 is at (100,100) on fA; put another AP exactly on it.
+          p.accessPoints.push({ id: 'twin', name: 'Twin-AP', location: { floorPlanId: 'fA', coord: { x: 100, y: 100 } }, noteIds: [] });
+          p.radios.push({ id: 'rt', accessPointId: 'twin', radioTechnology: 'IEEE802_11', antennaTypeId: 'omni1',
+            transmitPower: 15, channelByCenterFrequencyDefinedNarrowChannels: [5180] });
+          open(p);
+          const html = render('coverage', {});
+          const ground = floorPart(html, 'data-floor-id="fA"', 'data-floor-id="fB"');
+          const spots = (ground.match(/class="rep-cov-mark" transform="translate\(([^)]*)\)"/g) || []);
+          eq('every AP has a number box', spots.length, 7);
+          eq('no two boxes on the same spot', new Set(spots).size, spots.length);
+          check('the moved one says which AP it belongs to', ground.indexOf('class="rep-cov-lead"') >= 0);
+        """)
+
+    def test_a_default_is_starred_not_printed_as_a_stored_value(self):
+        self.run_block(r"""
+          open();                                  // Zed-AP2 has transmitPower null
+          const html = render('coverage', {});
+          const row = floorPart(html, 'Zed-AP2<', '</tr>');
+          check('the assumed power carries a star: ' + row, /15 dBm\*/.test(row));
+          const stored = floorPart(html, 'Zed-AP1<', '</tr>');
+          check('a stored power does not', /20 dBm</.test(stored) && stored.indexOf('dBm*') < 0);
+          check('the page says what the star means', /stores no value for this/.test(html));
+        """)
+
+    def test_a_floor_with_no_scale_draws_no_invented_cell(self):
+        self.run_block(r"""
+          const p = project();
+          delete p.floorPlans[1].metersPerUnit;
+          open(p);
+          const html = render('coverage', {});
+          const upper = floorPart(html, 'data-floor-id="fB"');
+          check('no cell circles on the unscaled floor', upper.split('Methodology')[0].indexOf('class="rep-cov-cell"') < 0);
+          check('the numbers are still there', upper.indexOf('class="rep-cov-mark"') >= 0);
+          check('it says why: ', /has no scale/.test(upper));
+          const ground = floorPart(html, 'data-floor-id="fA"', 'data-floor-id="fB"');
+          check('a scaled floor still draws its cells', ground.indexOf('class="rep-cov-cell"') >= 0);
+        """)
+
+    def test_only_aps_that_are_drawn_are_numbered_and_the_rest_are_named(self):
+        self.run_block(r"""
+          const p = project();
+          p.accessPoints.push({ id: 'bare', name: 'Bare-AP', location: { floorPlanId: 'fA', coord: { x: 10, y: 10 } }, noteIds: [] });
+          p.accessPoints.push({ id: 'adrift', name: 'Adrift-AP', noteIds: [] });
+          p.radios.push({ id: 'ra', accessPointId: 'adrift', radioTechnology: 'IEEE802_11', antennaTypeId: 'omni1' });
+          open(p);
+          const html = render('coverage', {});
+          const nums = (html.match(/<td class="rep-num">(\d+)<\/td>/g) || []).map(x => +x.replace(/\D/g, ''));
+          eq('the table numbers run 1..n with no gap', nums, nums.map((_, i) => i + 1));
+          check('both are named under the table: ' + html.slice(html.indexOf('Not on the map'), html.indexOf('Not on the map') + 200),
+                /Not on the map \(2\)/.test(html) && html.indexOf('Bare-AP \u2014 no radio') >= 0
+                && html.indexOf('Adrift-AP \u2014 on no floor plan') >= 0);
+        """)
+
+    def test_a_tri_band_ap_is_drawn_from_its_5_ghz_radio_and_says_so(self):
+        self.run_block(r"""
+          const p = project();
+          // Zed-AP1: add a 2.4 GHz radio BEFORE its 5 GHz one in file order, and a 6 GHz one.
+          p.radios.unshift({ id: 'r24', accessPointId: 'ap1', radioTechnology: 'IEEE802_11', antennaTypeId: 'omni1',
+            transmitPower: 20, channelByCenterFrequencyDefinedNarrowChannels: [2412] });
+          p.radios.push({ id: 'r6', accessPointId: 'ap1', radioTechnology: 'IEEE802_11', antennaTypeId: 'omni1',
+            transmitPower: 20, channelByCenterFrequencyDefinedNarrowChannels: [5975] });
+          open(p);
+          const row = floorPart(render('coverage', {}), 'Zed-AP1<', '</tr>');
+          check('5 GHz, not the first-listed 2.4: ' + row, row.indexOf('5 GHz') >= 0 && row.indexOf('2.4 GHz') < 0);
+          check('it names how many radios there are', /1 of 3 radios/.test(row));
+        """)
+
+
+class EveryPageCanBeTurned(ReportCase):
+    """"Match all pages" and the per-page picker went straight past every
+    section that had no page key - a BOM's tables, the Summary, the Coverage
+    legend. They always printed portrait between landscape sheets."""
+
+    def test_an_unkeyed_section_gets_a_key_a_kind_and_a_picker(self):
+        self.run_block(FAKE_DOM + r"""
+          E('(function () { currentReportId = "bom"; })')();
+          const keyEveryPage = E('keyEveryPage');
+          const withTable = section(false);
+          const heading = el('H2', ['rep-floor-title']); heading.textContent = 'Access point quantities (12)';
+          withTable.appendChild(heading); withTable.appendChild(el('TABLE'));
+          const plain = section(false);
+          const host = adopt(el('DIV'), [cover(), withTable, plain, footer()]);
+          keyEveryPage(host, {});
+          eq('named for its heading, count dropped', withTable.attrs['data-page-key'], 'sec:bom:access-point-quantities');
+          eq('a table is a table page', withTable.attrs['data-page-kind'], 'table');
+          check('it is an oriented page', withTable.cls.has('rep-oriented'));
+          check('it has the Auto / Portrait / Landscape picker',
+                withTable.inserted.length === 1 && /data-for="sec:bom:access-point-quantities"/.test(withTable.inserted[0][1]));
+          eq('a page with no table is a text page', plain.attrs['data-page-kind'], 'text');
+          check('with no heading it still gets a distinct key', /^sec:bom:page-/.test(plain.attrs['data-page-key']));
+          check('the cover and footer are left alone', host.children[0].inserted.length === 0 && !('data-page-key' in host.children[3].attrs));
+        """)
+
+    def test_a_page_that_already_has_a_key_is_left_alone(self):
+        self.run_block(FAKE_DOM + r"""
+          const keyEveryPage = E('keyEveryPage');
+          const keyed = section(true, 'placement:fA');
+          const host = adopt(el('DIV'), [cover(), keyed, footer()]);
+          keyEveryPage(host, {});
+          eq('same key', keyed.attrs['data-page-key'], 'placement:fA');
+          eq('no second picker', keyed.inserted.length, 0);
+        """)
+
+    def test_two_pages_with_one_heading_get_two_keys(self):
+        self.run_block(FAKE_DOM + r"""
+          E('(function () { currentReportId = "design"; })')();
+          const keyEveryPage = E('keyEveryPage');
+          function titled(t) { const s = section(false); const h = el('H2', ['rep-floor-title']); h.textContent = t; s.appendChild(h); return s; }
+          const a = titled('Findings'), b = titled('Findings');
+          keyEveryPage(adopt(el('DIV'), [cover(), a, b, footer()]), {});
+          check('distinct: ' + a.attrs['data-page-key'] + ' / ' + b.attrs['data-page-key'],
+                a.attrs['data-page-key'] !== b.attrs['data-page-key']);
+        """)
+
+    def test_match_all_pages_reaches_a_section_that_had_no_key(self):
+        """The whole point: after keying, matchAllPageOrient finds every page."""
+        self.run_block(FAKE_DOM + r"""
+          // The real handler reads the page's DOM; drive the two calls it makes.
+          const keyEveryPage = E('keyEveryPage');
+          E('(function () { currentReportId = "summary"; })')();
+          const plain = section(false), other = section(false);
+          const host = adopt(el('DIV'), [cover(), plain, other, footer()]);
+          keyEveryPage(host, {});
+          const keys = host.querySelectorAll('[data-page-key]').map(n => n.attrs['data-page-key']);
+          eq('three pages carry a key: the cover and both sections', keys.length, 3);
+        """)
+
+
+class AZoomedSectionNamesItsOwnPage(unittest.TestCase):
+    """Measured in Firefox 157 through its own print pipeline (geckodriver's
+    Print Page): a sectioned floor set to Match-all-landscape printed
+    ``LLLLPPPPPLLLLL`` - the first section landscape, every later one portrait -
+    where Chromium printed fifteen landscape sheets. A section sheet inherits
+    the floor's named page in Chromium; Firefox starts it on the unnamed one.
+    Naming it outright gave ``LLLLLLLLLLLLLL``. What CI can hold is that the
+    rule is still there and still gives each orientation its own name."""
+
+    def setUp(self):
+        from pathlib import Path
+        self.css = (Path(__file__).resolve().parent.parent / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
+
+    def test_a_section_sheet_takes_the_name_of_the_orientation_its_floor_asked_for(self):
+        import re
+        port = re.search(r"\.rep-oriented \.rep-seg-cell\s*\{\s*page:\s*placementPortrait;\s*\}", self.css)
+        land = re.search(r"\.rep-oriented\.is-landscape \.rep-seg-cell\s*\{\s*page:\s*placementLandscape;\s*\}", self.css)
+        self.assertTrue(port, "a section sheet has no portrait page name of its own")
+        self.assertTrue(land, "a section sheet on a landscape floor has no landscape page name of its own")
+        self.assertLess(port.start(), land.start(), "the landscape rule must come after the portrait one to win")
+
+
+class AMapNumberIsReadableOnEitherSheet(ReportCase):
+    """Found by forcing a 600 x 6000 plan to landscape: its long edge then
+    prints in 5.75in and a number sized at 1.35% of it came out at 5.6pt."""
+
+    def test_the_floor_leaves_a_number_at_least_6pt_on_the_worst_landscape_sheet(self):
+        self.run_block(r"""
+          const frac = E('MAP_FONT_FLOOR_FRAC');
+          const worstLongEdgeIn = E('SHEET_W_IN') - E('SHEET_CHROME_IN') - E('SHEET_SLACK_IN');
+          const pt = frac * worstLongEdgeIn * 72;
+          check('a 6pt floor on the worst sheet, got ' + pt.toFixed(2) + 'pt', pt >= 6);
+        """)
+
+    def test_the_coverage_number_uses_it_on_a_tall_plan(self):
+        self.run_block(r"""
+          const p = project();
+          p.floorPlans[0].width = 600; p.floorPlans[0].height = 6000;
+          p.accessPoints.forEach(a => { if (a.location.floorPlanId === 'fA') { a.location.coord = { x: 300, y: 3000 }; } });
+          open(p);
+          const html = render('coverage', {});
+          const ground = floorPart(html, 'data-floor-id="fA"', 'data-floor-id="fB"');
+          const m = ground.match(/class="rep-cov-num"[^>]*font-size="([\d.]+)"/);
+          check('the number is at least 1.52% of the 6000-unit edge: ' + (m && m[1]), m && parseFloat(m[1]) >= 6000 * 0.0152 - 0.01);
         """)
 
 

@@ -56,6 +56,7 @@ function constant(name) {
   if (!m) throw new Error('moved: ' + name);
   return m[0] + '\n';
 }
+var currentReportId = 'a-report';   // keyEveryPage names pages after it
 let code = '';
 ['SHEET_W_IN', 'SHEET_H_IN', 'ROTATE_GAIN', 'SEG_HEAD_IN', 'SEG_INDEX_HEAD_IN',
  'SEG_BELOW_IN', 'SEG_FOOT_IN', 'SEG_FOOT_CONF_IN', 'KEY_PLAN_W_IN', 'KEY_PLAN_MAX_H_IN'].forEach(n => { code += constant(n); });
@@ -77,6 +78,7 @@ class El {
     const self = this;
     this.classList = {
       contains: (c) => self.cls.has(c),
+      add: (c) => { self.cls.add(c); },
       toggle: (c, on) => { if (on) self.cls.add(c); else self.cls.delete(c); },
     };
     this.style = {
@@ -187,7 +189,7 @@ class TheCoverFollowsTheReport(_NodeProbe):
         """Run through applyPageOrientation, which is what every report
         calls - not only orientCover on its own."""
         self.check("""
-          eval(fn('function autoOrientationFor(') + fn('function seatFooter(') + fn('function applyPageOrientation('));
+          eval(fn('function autoOrientationFor(') + fn('function seatFooter(') + fn('function keyEveryPage(') + fn('function applyPageOrientation('));
           const c = cover();
           const host = new El('', {}, [c, page('placement:f1', true), page('key:f1', false)]);
           host.kids[1].attrs['data-page-kind'] = 'plan';
