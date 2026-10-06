@@ -132,6 +132,25 @@ class TypingIntoLineSpacingTests(_InABrowser, unittest.TestCase):
                 self.assertEqual(seen[2]["n"], 600 // 120, seen[2])
                 self.assertIn("120 px", seen[2]["hint"], seen[2])
 
+    def test_the_lines_follow_the_numbering_not_the_displayed_image(self):
+        """Safari reports an SVG plan's on-screen size (496 px for a 600 px
+        plan here) as its natural size, and the lines were drawn from that:
+        41 where the numbering used 50. A browser that does not do it is made
+        to, so every browser is held to the same answer."""
+        for kind, driver in self._each_browser():
+            with self.subTest(browser=kind):
+                self._ready(driver, "row-ltr")
+                driver.execute_script(
+                    "var i = document.getElementById('arPlanImg');"
+                    "Object.defineProperty(i, 'naturalHeight', { get: function () { return 496; } });"
+                    "Object.defineProperty(i, 'naturalWidth', { get: function () { return 661; } });")
+                box = driver.find_element(By.ID, "arSpacing")
+                box.click()
+                box.send_keys("12")
+                time.sleep(0.3)
+                s = self._state(driver)
+                self.assertEqual(s["n"], 600 // 12, s)
+
     def test_clearing_the_box_returns_to_auto(self):
         for kind, driver in self._each_browser():
             with self.subTest(browser=kind):

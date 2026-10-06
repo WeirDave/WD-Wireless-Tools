@@ -24,13 +24,13 @@ PROBE = r"""
 var MIN = Number((src.match(/var MIN_SPACING_PX = (\d+);/) || [])[1]);
 if (!MIN) throw new Error('MIN_SPACING_PX moved');
 var MIN_SPACING_PX = MIN;
-var S = { floors: [], aps: [], imageRes: {}, currentFloor: 'fl' };
+var S = { floors: [], aps: [], imageRes: { im: { w: 4000, h: 4000 } }, currentFloor: 'fl' };
 var SPACING = { value: '' };
 var IMG = { naturalWidth: 4000, naturalHeight: 4000 };
 function $(id) { return id === 'arSpacing' ? SPACING : id === 'arPlanImg' ? IMG : null; }
 var _nesting = 'floor', _colorOrder = [], _scope = 'all';
 function ap(id, x, y, fl) { return { id: id, floorPlanId: fl || 'fl', x: x, y: y }; }
-var FLOOR = { id: 'fl', width: 1000, height: 1000 };
+var FLOOR = { id: 'fl', width: 1000, height: 1000, imageId: 'im' };
 // Three rows (y about 100, 300, 500) and three columns (x about 100, 500, 900).
 S.aps = [ap('a', 100, 100), ap('b', 500, 102), ap('c', 900, 100),
          ap('d', 100, 300), ap('e', 500, 305), ap('f', 900, 300),
@@ -62,6 +62,10 @@ out.typed12    = draw('row-ltr', '12');
 out.typed120   = draw('row-ltr', '120');
 SPACING.value = '5';  out.unitsFive = getSpacingUnits('y', FLOOR);
 SPACING.value = '10'; out.unitsTen = getSpacingUnits('y', FLOOR);
+// What Safari reports for an SVG plan: the size it is drawn at, not its own.
+IMG = { naturalWidth: 496, naturalHeight: 496 };
+out.safariShapedImage = draw('row-ltr', '120');
+IMG = { naturalWidth: 4000, naturalHeight: 4000 };
 S.aps = [ap('only', 100, 100)];
 out.oneRow = draw('row-ltr', '');
 console.log(JSON.stringify(out));
@@ -99,6 +103,12 @@ class GuideLinesInAutoTests(unittest.TestCase):
         lines = self.got["typed120"]
         self.assertEqual(len(lines), 33, self.got)      # floor(4000 / 120)
         self.assertEqual(lines[0], "h 3.000%", self.got)
+
+    def test_the_lines_do_not_depend_on_the_size_the_browser_reports_for_the_image(self):
+        """Safari reports a plan's displayed size as its natural size. The
+        lines were drawn from it, so there were 41 where the numbering used 50
+        and the dashes showed rows that were not the ones being numbered."""
+        self.assertEqual(self.got["safariShapedImage"], self.got["typed120"], self.got)
 
     def test_the_sort_ignores_what_the_guides_ignore(self):
         self.assertEqual(self.got["unitsFive"], 0, self.got)
