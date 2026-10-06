@@ -56,12 +56,13 @@ function constant(name) {
   if (!m) throw new Error('moved: ' + name);
   return m[0] + '\n';
 }
+var currentReportId = 'a-report';   // keyEveryPage names pages after it
 let code = '';
 ['SHEET_W_IN', 'SHEET_H_IN', 'ROTATE_GAIN', 'SEG_HEAD_IN', 'SEG_INDEX_HEAD_IN',
- 'SEG_BELOW_IN', 'KEY_PLAN_W_IN', 'KEY_PLAN_MAX_H_IN'].forEach(n => { code += constant(n); });
+ 'SEG_BELOW_IN', 'SEG_FOOT_IN', 'SEG_FOOT_CONF_IN', 'KEY_PLAN_W_IN', 'KEY_PLAN_MAX_H_IN'].forEach(n => { code += constant(n); });
 ['function pageOrientMode(', 'function orientCover(', 'function segOverlayRatio(',
  'function segPrintSizeIn(', 'function sizeAntennaSegmentForPrint(',
- 'function segmentedFloorWantsLandscape(', 'function keyPlanHeightIn(',
+ 'function segmentedFloorWantsLandscape(', 'function keyPlanHeightIn(', 'function footerBelowIn(',
  'function resizeSegmentsForPrint('].forEach(s => { code += fn(s); });
 eval(code);
 
@@ -77,6 +78,7 @@ class El {
     const self = this;
     this.classList = {
       contains: (c) => self.cls.has(c),
+      add: (c) => { self.cls.add(c); },
       toggle: (c, on) => { if (on) self.cls.add(c); else self.cls.delete(c); },
     };
     this.style = {
@@ -84,6 +86,14 @@ class El {
       getPropertyValue: (k) => self.props[k] || '',
     };
     this.textContent = '';
+    this.tagName = 'SECTION';
+  }
+  // The calls orientCover makes since the cover began counting every sheet.
+  get children() { return this.kids; }
+  compareDocumentPosition(o) {
+    let root = this; while (root.parent) root = root.parent;
+    const order = [root].concat(root.all());
+    return order.indexOf(o) > order.indexOf(this) ? 4 : 2;
   }
   getAttribute(n) { return n in this.attrs ? this.attrs[n] : null; }
   matches(sel) {
@@ -163,7 +173,8 @@ class TheCoverFollowsTheReport(_NodeProbe):
         """The original fault: the real cover markup had no page key, so
         nothing - not Auto, not Match all pages - could ever turn it."""
         self.check("""
-          eval(fn('function orientPickerHtml(') + fn('function renderCover('));
+          eval(fn('function orientPickerHtml(') + fn('function coverCountLabel(')
+            + fn('function coverFloorCount(') + fn('function renderCover('));
           globalThis.WD = { esc: String, escAttr: String };
           globalThis.proj = { floorPlans: [{}] };
           globalThis.coverImage = null;
@@ -179,7 +190,7 @@ class TheCoverFollowsTheReport(_NodeProbe):
         """Run through applyPageOrientation, which is what every report
         calls - not only orientCover on its own."""
         self.check("""
-          eval(fn('function autoOrientationFor(') + fn('function applyPageOrientation('));
+          eval(fn('function autoOrientationFor(') + fn('function seatFooter(') + fn('function keyEveryPage(') + fn('function applyPageOrientation('));
           const c = cover();
           const host = new El('', {}, [c, page('placement:f1', true), page('key:f1', false)]);
           host.kids[1].attrs['data-page-kind'] = 'plan';

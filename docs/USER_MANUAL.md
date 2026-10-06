@@ -1229,6 +1229,11 @@ inside before you pick it.
 | **Change / Audit Report** | Whoever has to show the build matches the design | What moved, was added and was removed between two `.esx` files, listed per floor |
 | **RF Design Review** | The designer, before the design goes to the client or the installer | What to fix and what to check in the design, a channel plan per floor, and a channel map per floor |
 
+A card the open project cannot fill is greyed and reads **Not for this
+project**, with the reason on it: **Interference / Rogue Devices** needs an
+Ekahau Survey walk in the project, and the plan-based templates need at least
+one access point. It cannot be selected until the project has what it needs.
+
 **RF Design Review** is a pre-flight check of the design as Ekahau stores
 it. It lists, under **Fix**, **Check** and **Note**:
 
@@ -1289,7 +1294,7 @@ you meet on most templates:
 | Option | What it does | Default |
 | --- | --- | --- |
 | **Include directional APs** | APs whose antennas have a specific azimuth | On |
-| **Include omni APs** | APs with only omni antennas | On, except Antenna Aim Sheet (off — that sheet is for aiming; omnis get an "omni" placeholder) |
+| **Include omni APs** | APs with only omni antennas | On, except Antenna Aim Sheet (off — that sheet is for aiming; omnis get an "omni" placeholder, and a directional antenna with no azimuth set reads "no azimuth") |
 | **Measurement units** | **Feet** or **Metres** for heights and distances. The `.esx` always stores metres; this changes only the printout | Feet |
 | **Show compass headings alongside azimuth** | Writes `137° (SE)` instead of `137°` | On |
 | **Confidentiality notice in footer** | Adds "CONFIDENTIAL" to the footer | Off |
@@ -1443,12 +1448,19 @@ the document, after the compass reference page and the AP Labels pages.
 
 ### Page orientation
 
-Above each sheet on the Review step is a *Page* control: **Auto**,
-**Portrait** or **Landscape**. Auto turns a page landscape only when the map
-prints meaningfully larger that way. Section pages follow the same rule, and
-the cover on Auto follows whichever way most sheets run.
+Above every sheet on the Review step is a *Page* control: **Auto**,
+**Portrait** or **Landscape**. Every page of every report has one, tables and
+text pages included. Each page prints in the orientation it shows; choosing one
+for a page changes that page and no other.
 
-**Match all pages** turns every page the same way as the one you pressed it on.
+On **Auto** a map turns landscape only when it prints meaningfully larger that
+way, a table turns landscape when its columns will not fit across a portrait
+sheet, and any other page stays portrait. Section pages follow the map rule,
+and the cover on Auto follows whichever way most sheets run.
+
+**Match all pages** puts every page, the cover included, in the orientation of
+the page you pressed it on. All portrait gives only portrait sheets and all
+landscape gives only landscape sheets, in Firefox, Chrome and Edge.
 
 On a landscape sheet the AP Labels page runs in two columns, as long as every
 AP name on that floor is 44 characters or fewer.

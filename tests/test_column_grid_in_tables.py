@@ -81,6 +81,9 @@ globalThis.CALIBRATION = {
 function apLabel(ap) { return (ap && ap.name) || ''; }
 function apIsOmniOnly() { return false; }
 function radioIsDirectional() { return true; }
+function antennaIsDirectional() { return true; }
+function aimRadio(apId) { return ctx.primaryRadio(apId); }
+function normAzimuth(d) { return d; }
 function shortFloorLabel(n) { return n; }
 function floorPlanForAp(ap) { return FLOOR; }
 function orientPickerHtml(key) { return '<!--orient:' + key + '-->'; }
@@ -90,6 +93,14 @@ function renderCompassReferencePage() { return ''; }
 function apNotesPages() { return ''; }
 function floorPlanImageUrl() { return ''; }
 function buildingNameFor() { return 'Building 1'; }
+// What the installation table now asks of the radios: the live ones, spelled
+// plainly. One stand-in radio is all the grid column needs.
+function liveRadiosOf(id) { return [ctx.primaryRadio(id)]; }
+function humanMount(m) { return m || ''; }
+function fmtMountHeight(m, o) { return ctx.fmtLength(m, o); }
+function normBearing(d) { return d; }
+function drRadioInfo(r) { return r; }
+function drChannelText() { return ''; }
 // The aim report groups by floor before it builds a row. One floor here, so
 // these are the shape rather than the logic - the sort order is not what is
 // under test and a real one would drag in half the file.

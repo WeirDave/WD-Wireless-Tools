@@ -274,6 +274,7 @@ class ThereIsOnlyOneCopyOfThem(unittest.TestCase):
         const REPORTS = { placement: { status: 'ready' } };
         const RETIRED_REPORTS = {};
         const reportOptionDefaults = () => stored;
+        const reportUnavailableReason = () => '';
         const renderTemplateGallery = () => {};
         const renderReportPreview = () => {};
         const renderReportOpts = () => {};
