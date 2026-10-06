@@ -84,6 +84,14 @@ class El {
       getPropertyValue: (k) => self.props[k] || '',
     };
     this.textContent = '';
+    this.tagName = 'SECTION';
+  }
+  // The calls orientCover makes since the cover began counting every sheet.
+  get children() { return this.kids; }
+  compareDocumentPosition(o) {
+    let root = this; while (root.parent) root = root.parent;
+    const order = [root].concat(root.all());
+    return order.indexOf(o) > order.indexOf(this) ? 4 : 2;
   }
   getAttribute(n) { return n in this.attrs ? this.attrs[n] : null; }
   matches(sel) {
@@ -179,7 +187,7 @@ class TheCoverFollowsTheReport(_NodeProbe):
         """Run through applyPageOrientation, which is what every report
         calls - not only orientCover on its own."""
         self.check("""
-          eval(fn('function autoOrientationFor(') + fn('function applyPageOrientation('));
+          eval(fn('function autoOrientationFor(') + fn('function seatFooter(') + fn('function applyPageOrientation('));
           const c = cover();
           const host = new El('', {}, [c, page('placement:f1', true), page('key:f1', false)]);
           host.kids[1].attrs['data-page-kind'] = 'plan';

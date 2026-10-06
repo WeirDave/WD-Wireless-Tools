@@ -6901,7 +6901,8 @@
     // The name beside a circle is what ties it to its row in the table.
     function nameTag(ap, x, y) {
       return '<text class="rep-aud-lbl" x="' + (x + dotR * 1.4) + '" y="' + (y + lblFont * 0.35)
-        + '" font-size="' + lblFont + '" stroke-width="' + (lblFont * 0.18) + '">'
+        + '" font-size="' + lblFont + '" fill="#111" stroke="#fff" stroke-width="' + (lblFont * 0.18)
+        + '" paint-order="stroke" font-weight="700">'
         + WD.esc(apLabel(ap, 'short')) + '</text>';
     }
     result.floorNotes.forEach(function (n) { if (n.floorId === fp.id) shift = n; });

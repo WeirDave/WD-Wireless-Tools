@@ -7069,9 +7069,6 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-mark--omni .rep-mark-pill:not([fill]),
 .rep-mark--loc .rep-mark-pill:not([fill]) { fill: #78716c; }
 .rep-mark-label { fill: #fff; font-weight: 700; overflow: visible; }
-/* The name beside a Change / Audit circle; the white halo keeps it readable
-   over the plan's linework. */
-.rep-aud-lbl { fill: #111; stroke: #fff; paint-order: stroke; font-weight: 700; }
 /* Second line of a label -- model, channel, mount height. Lighter than the name
    so the name still reads first at arm's length. */
 .rep-mark-sub { fill: #fff; font-weight: 500; opacity: 0.85; overflow: visible; }
