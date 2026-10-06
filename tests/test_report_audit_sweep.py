@@ -577,7 +577,47 @@ class AMapNumberIsReadableOnEitherSheet(ReportCase):
           const html = render('coverage', {});
           const ground = floorPart(html, 'data-floor-id="fA"', 'data-floor-id="fB"');
           const m = ground.match(/class="rep-cov-num"[^>]*font-size="([\d.]+)"/);
-          check('the number is at least 1.52% of the 6000-unit edge: ' + (m && m[1]), m && parseFloat(m[1]) >= 6000 * 0.0152 - 0.01);
+          const floor = 6000 * E('MAP_FONT_FLOOR_FRAC');
+          check('the number is at least the floor on the 6000-unit edge: ' + (m && m[1]) + ' vs ' + floor, m && parseFloat(m[1]) >= floor - 0.01);
+        """)
+
+
+    def test_the_section_letters_on_an_ultra_wide_plan_are_not_sized_from_its_short_edge(self):
+        """Sized from the shorter cell edge, a letter on a 9000 x 500 plan came
+        out at 4.5pt on a portrait sheet."""
+        self.run_block(r"""
+          const p = project();
+          p.floorPlans[0].width = 9000; p.floorPlans[0].height = 500;
+          p.accessPoints.forEach(a => { if (a.location.floorPlanId === 'fA') { a.location.coord.x *= 8; a.location.coord.y = 250; } });
+          open(p);
+          const html = render('placement', { segmented: true, segCols: 3, segRows: 1, nameKey: 'never', inclOmni: true });
+          const sizes = (html.match(/class="rep-grid-label[^"]*" font-size="([\d.]+)"/g) || [])
+            .map(x => parseFloat(x.match(/font-size="([\d.]+)"/)[1]));
+          check('there are section letters', sizes.length > 0);
+          const floor = 3000 * E('MAP_FONT_FLOOR_FRAC');          // one cell is 3000 units wide
+          sizes.forEach(z => check('a letter of ' + z + ' is under the floor ' + floor, z >= floor - 0.01));
+        """)
+
+
+class TheInstallationMapIsAFittedPlanPage(ReportCase):
+
+    def test_each_floor_map_is_a_plan_page_and_its_table_is_a_sibling(self):
+        self.run_block(r"""
+          open();
+          const html = render('location', {});
+          const at = html.indexOf('data-page-key="loc-map:fA"');
+          check('the floor has a map page', at >= 0);
+          const open_tag = html.slice(html.lastIndexOf('<section', at), html.indexOf('>', at) + 1);
+          check('it is a fitted plan page: ' + open_tag,
+                /rep-placement-page/.test(open_tag) && /data-page-kind="plan"/.test(open_tag)
+                && /data-floor-id="fA"/.test(open_tag));
+          const end = html.indexOf('</section>', at);
+          check('the AP table is not inside the map page', html.slice(at, end).indexOf('rep-loc-table') < 0);
+          const table = html.indexOf('data-page-key="loc-table:fA"', end);
+          check('the table follows as a page of its own', table > end);
+          const between = html.slice(end, table);
+          check('with nothing but its own opening tag between: ' + between,
+                /^<\/section><section class="rep-loc-page[^>]*$/.test(between));
         """)
 
 

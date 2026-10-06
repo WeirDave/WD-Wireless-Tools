@@ -5429,6 +5429,9 @@
     // shrink every other label on the page.
     var nGrid = allCells.reduce(function (n, c) { return n + (c.members || 1); }, 0);
     var fontSize = Math.min(gw / (nGrid > 0 ? Math.sqrt(nGrid) : 1), gh / (nGrid > 0 ? Math.sqrt(nGrid) : 1)) * 0.4;
+    /* Sized from the shorter cell edge, a letter on an 18:1 plan printed at
+       4.5pt. Floored on the long edge like every other label on a map. */
+    fontSize = Math.max(fontSize, Math.max(gw, gh) * MAP_FONT_FLOOR_FRAC);
     allCells.forEach(function (cell) {
       var cx = (cell.x0 + cell.x1) / 2, cy = (cell.y0 + cell.y1) / 2;
       var hasAps = nonEmptySet[cell.col + ',' + cell.row];
@@ -6608,9 +6611,10 @@
      page gives it. A very tall plan on a landscape sheet prints its long edge
      in the 5.75in the sheet has left (SHEET_W_IN less the furniture and
      slack), and 1.35% of that is 5.6pt - under the 6pt floor, found by forcing
-     a 600 x 6000 plan to landscape. 1.52% is 6.3pt on that worst case and a
-     little over 7.8pt on a plan that fills a portrait sheet. */
-  var MAP_FONT_FLOOR_FRAC = 0.0152;
+     a 600 x 6000 plan to landscape. A zoomed section on a landscape sheet
+     measured 5.35in and printed its labels at 5.86pt at 1.52%. 1.65% is 6.4pt
+     at 5.35in and about 8.5pt on a plan that fills a portrait sheet. */
+  var MAP_FONT_FLOOR_FRAC = 0.0165;
   /* Held apart from the figure above on purpose. That one decides whether
      turning the sheet is worth it, by comparing two scales against each other,
      and it has been right about that since 2.28. This one is only about how
@@ -9573,14 +9577,26 @@
          on an otherwise blank page. Marked here so the print rule can let the
          table follow its heading. */
       var noMap = fp.id === '_none';
-      var out = '<section class="rep-floor-section' + (noMap ? ' rep-floor-nomap' : '')
-        + '" data-floor-idx="' + idx + '">'
-        + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
-      if (!noMap) {
-        out += renderApLocationOverview(fp, sorted, opts, ctx);
+      var out;
+      if (noMap) {
+        out = '<section class="rep-floor-section rep-floor-nomap" data-floor-idx="' + idx + '">'
+          + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>'
+          + renderApLocationTable(sorted, fp, opts, ctx, antKeys)
+          + '</section>';
+      } else {
+        /* The map is a plan page like the Placement Map's, and the table that
+           follows is a page of its own beside it, not a child of it. A map
+           inside a bare section was never fitted to the sheet - a plan taller
+           than about 1.25:1 ran off the bottom, a 600 x 6000 one spread over
+           nine sheets - and a floor of zoomed sections never got Auto's choice
+           of landscape. */
+        out = planPageOpen('loc-map', fp.id, opts)
+            .replace('<section ', '<section data-floor-idx="' + idx + '" ')
+          + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>'
+          + renderApLocationOverview(fp, sorted, opts, ctx)
+          + '</section>'
+          + renderApLocationTable(sorted, fp, opts, ctx, antKeys);
       }
-      out += renderApLocationTable(sorted, fp, opts, ctx, antKeys);
-      out += '</section>';
       sections += out;
       floorIdx++;
     });
@@ -10792,7 +10808,10 @@
             + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderApLocationReport,
-      postRender: applyAntennaSegmentCrop,
+      postRender: function (host, opts) {
+        fitPlanPages(host, opts);
+        return applyAntennaSegmentCrop(host, opts);
+      },
     },
   };
 

@@ -86,7 +86,7 @@ function apLabel(ap, mode) {
 }
 function radioIsDirectional() { return false; }
 function antennaIsDirectional() { return false; }
-const MAP_FONT_FLOOR_FRAC = 0.0152;
+const MAP_FONT_FLOOR_FRAC = 0.0165;
 function aimRadio(apId) { return ctx.primaryRadio(apId); }
 function apIsOmniOnly() { return true; }
 function safeColor(c) { return c || '#000'; }
