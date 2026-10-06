@@ -159,6 +159,49 @@ class PresetsLandInTheFileTests(unittest.TestCase):
         self.assertEqual(shrub["attenuationDbPerFt"], {"TWO": 1.2, "FIVE": 1.6, "SIX": 1.8})
 
 
+@unittest.skipUnless(shutil.which("node"), "node is required")
+class AddOneTypeTests(unittest.TestCase):
+    def add(self, types, **spec):
+        base = {"name": "Invented Reeds", "color": "#445566", "lowerEdgeFt": 0,
+                "upperEdgeFt": 6, "attenuationDbPerFt": {"TWO": 0.5, "FIVE": 0.75, "SIX": 1.25}}
+        base.update(spec)
+        return node(f"console.log(JSON.stringify(A.addType({json.dumps(types)}, "
+                    f"{json.dumps(base)}, newId)));")
+
+    def test_it_is_added_in_metres_with_the_forms_values_and_no_key(self):
+        out = self.add([EXISTING_TYPE])
+        new = out["types"][1]
+        self.assertEqual((new["name"], new["color"]), ("Invented Reeds", "#445566"))
+        self.assertNotIn("key", new)
+        self.assertAlmostEqual(new["upperEdge"], 6 * 0.3048, places=4)
+        att = {p["band"]: p["attenuationFactor"] for p in new["propagationProperties"]}
+        for band, per_ft in {"TWO": 0.5, "FIVE": 0.75, "SIX": 1.25}.items():
+            self.assertAlmostEqual(att[band], per_ft / 0.3048, places=3, msg=band)
+        self.assertEqual(new["invented_extra"], 7)
+        self.assertEqual(out["types"][0], EXISTING_TYPE)
+
+    def test_an_empty_upper_edge_means_auto_and_writes_no_upper_edge(self):
+        new = self.add([EXISTING_TYPE], upperEdgeFt=None)["types"][1]
+        self.assertNotIn("upperEdge", new)
+
+    def test_it_refuses_with_a_reason_and_writes_nothing(self):
+        cases = {
+            "no name": dict(name="  "),
+            "same name as one there": dict(name="invented hedge"),
+            "upper below lower": dict(lowerEdgeFt=5, upperEdgeFt=2),
+            "negative loss": dict(attenuationDbPerFt={"TWO": -1, "FIVE": 1, "SIX": 1}),
+            "a missing band": dict(attenuationDbPerFt={"TWO": 1, "FIVE": None, "SIX": 1}),
+        }
+        for label, spec in cases.items():
+            with self.subTest(label):
+                out = self.add([EXISTING_TYPE], **spec)
+                self.assertNotIn("types", out)
+                self.assertTrue(out["error"].strip())
+
+    def test_a_project_with_nothing_to_copy_is_refused(self):
+        self.assertIn("error", self.add([]))
+
+
 # The page: load a project that has the file, press Add, press Save, read the
 # member back out of the archive that Save generated.
 PAGE_PROBE = r"""
@@ -198,7 +241,7 @@ globalThis.crypto = {randomUUID: (() => { let i = 0; return () => 'u-' + (++i); 
 globalThis.safeColor = c => c; globalThis.esc = x => x;
 globalThis.renderAll = () => {}; globalThis.nativeSave = async () => 'saved';
 globalThis.revealSourceFolder = () => {};
-eval(slice('async function loadAreaTypes') + slice('function areaBlockReason')
+eval(slice('async function loadAreaTypes') + slice('function areaProjectBlock') + slice('function areaBlockReason')
    + slice('function addAreaPresets') + slice('async function saveEsx'));
 globalThis.loadAreaTypes = loadAreaTypes; globalThis.areaBlockReason = areaBlockReason;
 globalThis.addAreaPresets = addAreaPresets; globalThis.saveEsx = saveEsx;
@@ -273,7 +316,7 @@ globalThis.esxZip = {};
 globalThis.areaDoc = {}; globalThis.areaTypes = [EXISTING]; globalThis.areaPresets = PRESETS;
 const consts = src.match(/const perFt = [^\n]*\nconst ftOf = [^\n]*\n/)[0];
 eval(consts + slice('function switchWallsTab') + slice('function areaCard')
-   + slice('function areaBlockReason') + slice('function renderAreaPanel'));
+   + slice('function areaProjectBlock') + slice('function areaBlockReason') + slice('function renderAreaPanel'));
 renderAreaPanel();
 const before = {list: el('areaList').innerHTML, presets: el('areaPresets').innerHTML,
                 count: el('areaCount').textContent, disabled: el('areaAddBtn').disabled};
@@ -316,6 +359,103 @@ class TheTabTests(unittest.TestCase):
             self.assertIn(needle, html)
         self.assertEqual(self.r["before"]["count"], "1 area type")
         self.assertFalse(self.r["before"]["disabled"])
+
+
+MODAL_PROBE = r"""
+const fs = require('fs');
+globalThis.WDAreas = require(process.argv[1]);
+const src = fs.readFileSync(process.argv[2], 'utf8');
+const html = fs.readFileSync(process.argv[3], 'utf8');
+function slice(open) {
+  const a = src.indexOf(open);
+  if (a < 0) throw new Error('moved: ' + open);
+  let b = a, depth = 0, seen = false;
+  while (b < src.length && !(seen && depth === 0)) {
+    if (src[b] === '{') { depth++; seen = true; } else if (src[b] === '}') depth--;
+    b++;
+  }
+  return src.slice(a, b);
+}
+eval(DELEGATED);
+const els = {};
+const el = id => els[id] || (els[id] = {id, value: '', hidden: false, textContent: '',
+  focused: false, classes: new Set(),
+  classList: {add(c) { els[id].classes.add(c); }, remove(c) { els[id].classes.delete(c); }},
+  focus() { els[id].focused = true; }});
+globalThis.document = {getElementById: el};
+globalThis.areaDoc = {attenuationAreaTypes: []}; globalThis.areaKey = 'attenuationAreaTypes';
+globalThis.areaTypes = [EXISTING]; globalThis.areaDoc.attenuationAreaTypes = areaTypes;
+globalThis.areaDirty = false; globalThis.esxZip = {};
+const toasts = []; globalThis.showToast = m => toasts.push(m);
+globalThis.renderAll = () => {};
+globalThis.crypto = {randomUUID: () => 'u-1'};
+eval(slice('function areaProjectBlock') + slice('function openAreaModal')
+   + slice('function closeAreaModal') + slice('function areaNumber') + slice('function saveAreaType'));
+const reach = {};
+['openAreaModal', 'saveAreaType', 'closeAreaModal'].forEach(fn => {
+  const hit = delegated(html, fn);
+  reach[fn] = !!hit && typeof eval(fn) === 'function';
+});
+const fn = (name) => eval(name);
+const set = (id, v) => { el(id).value = v; };
+
+const out = {reach};
+fn('openAreaModal')();
+out.opened = el('areaModal').classes.has('active');
+out.defaults = [el('aLower').value, el('aUpper').value, el('aTwo').value];
+// A duplicate name is explained in the dialog, which stays open.
+set('aName', 'invented hedge');
+fn('saveAreaType')();
+out.dup = {error: el('aError').textContent, hidden: el('aError').hidden,
+           open: el('areaModal').classes.has('active'), count: areaTypes.length, dirty: areaDirty};
+// A valid one is added, the dialog closes, an empty upper edge is Auto.
+set('aName', 'Invented Reeds'); set('aUpper', ''); set('aTwo', '0.5');
+fn('saveAreaType')();
+const added = areaTypes[areaTypes.length - 1];
+out.ok = {count: areaTypes.length, dirty: areaDirty, open: el('areaModal').classes.has('active'),
+          name: added.name, hasUpper: 'upperEdge' in added, id: added.id,
+          twoDbPerM: added.propagationProperties.find(p => p.band === 'TWO').attenuationFactor,
+          inDoc: areaDoc.attenuationAreaTypes === areaTypes, toast: toasts[toasts.length - 1]};
+console.log(JSON.stringify(out));
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is required")
+class TheAddDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        script = (f"const EXISTING = {json.dumps(EXISTING_TYPE)};"
+                  f"const DELEGATED = {json.dumps(DELEGATED_JS)};{MODAL_PROBE}")
+        proc = subprocess.run(["node", "-e", script, str(AREAS_JS), str(WALLS_JS),
+                               str(WALLS_HTML)], capture_output=True, text=True,
+                              encoding="utf-8", timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError((proc.stdout + proc.stderr).strip())
+        cls.r = json.loads(proc.stdout)
+
+    def test_every_control_in_the_dialog_reaches_its_handler(self):
+        self.assertEqual(self.r["reach"], {"openAreaModal": True, "saveAreaType": True,
+                                           "closeAreaModal": True})
+
+    def test_it_opens_with_sensible_defaults(self):
+        self.assertTrue(self.r["opened"])
+        self.assertEqual(self.r["defaults"], ["0", "", "1"])
+
+    def test_a_refusal_is_explained_in_the_dialog_and_adds_nothing(self):
+        d = self.r["dup"]
+        self.assertIn("already has", d["error"])
+        self.assertFalse(d["hidden"])
+        self.assertTrue(d["open"])
+        self.assertEqual((d["count"], d["dirty"]), (1, False))
+
+    def test_a_valid_one_is_added_the_dialog_closes_and_save_will_write_it(self):
+        ok = self.r["ok"]
+        self.assertEqual((ok["count"], ok["dirty"], ok["open"]), (2, True, False))
+        self.assertEqual(ok["name"], "Invented Reeds")
+        self.assertFalse(ok["hasUpper"], "an empty upper edge is Auto")
+        self.assertAlmostEqual(ok["twoDbPerM"], 0.5 / 0.3048, places=3)
+        self.assertTrue(ok["inDoc"])
+        self.assertIn("Save the .esx", ok["toast"])
 
 
 if __name__ == "__main__":

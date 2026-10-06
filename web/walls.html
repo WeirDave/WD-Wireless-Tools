@@ -182,6 +182,7 @@
       <div class="toolbar">
         <div class="toolbar-left">
           <span id="areaCount" class="wall-count"></span>
+          <button class="btn" id="areaNewBtn" data-action="call" data-fn="openAreaModal" title="Create a new attenuation area type in this project">+ Add Attenuation Area</button>
           <button class="btn" id="areaAddBtn" data-action="call" data-fn="addAreaPresets">+ Add Tree Canopy &amp; Shrubbery</button>
           <span class="template-bar-auto-note" id="areaNote"></span>
         </div>
@@ -298,6 +299,53 @@
     <div class="modal-footer">
       <button class="btn" data-action="call" data-fn="closeModal">Cancel</button>
       <button class="btn btn-primary" id="modalSaveBtn" data-action="call" data-fn="saveWallType">Add</button>
+    </div>
+  </div>
+</div>
+
+<div id="areaModal" class="modal-overlay" data-action="backdrop-call" data-fn="closeAreaModal">
+  <div class="modal modal-area-edit">
+    <div class="modal-header">
+      <h3>Add Attenuation Area</h3>
+      <button class="btn btn-icon btn-sm" data-action="call" data-fn="closeAreaModal">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="aName">Name</label>
+        <input type="text" id="aName" placeholder="e.g. Tree Canopy">
+        <div class="field-desc">Shown in Ekahau's attenuation area list. Saved in this project only, not in a wall template.</div>
+      </div>
+      <div class="field">
+        <label for="aColor">Color</label>
+        <input type="color" id="aColor" value="#808080">
+        <div class="field-desc">How Ekahau draws this area on the plan.</div>
+      </div>
+      <div class="area-edit-row">
+        <div class="field">
+          <label for="aLower">Lower edge (ft)</label>
+          <input type="number" id="aLower" step="0.5" min="0" value="0">
+          <div class="field-desc">Height above the floor where the area starts.</div>
+        </div>
+        <div class="field">
+          <label for="aUpper">Upper edge (ft)</label>
+          <input type="number" id="aUpper" step="0.5" min="0" placeholder="Auto">
+          <div class="field-desc">Where it ends. Leave empty to run to the ceiling.</div>
+        </div>
+      </div>
+      <div class="band-section">
+        <h4>Loss per foot</h4>
+        <p class="section-desc">Signal loss in dB for each foot of the area a signal passes through.</p>
+        <div class="area-edit-row">
+          <div class="field"><label for="aTwo">2.4 GHz</label><input type="number" id="aTwo" step="0.01" min="0" value="1"></div>
+          <div class="field"><label for="aFive">5 GHz</label><input type="number" id="aFive" step="0.01" min="0" value="1"></div>
+          <div class="field"><label for="aSix">6 GHz</label><input type="number" id="aSix" step="0.01" min="0" value="1"></div>
+        </div>
+      </div>
+      <div class="area-edit-error" id="aError" role="alert" hidden></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-action="call" data-fn="closeAreaModal">Cancel</button>
+      <button class="btn btn-primary" id="aSaveBtn" data-action="call" data-fn="saveAreaType">Add</button>
     </div>
   </div>
 </div>

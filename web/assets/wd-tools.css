@@ -12389,3 +12389,6 @@ body.tool-cloud #shareModal .share-group-member-row .share-email { font-size: 13
 .area-card .wall-swatch { border-radius: var(--radius) 0 0 var(--radius); }
 body.tool-walls .tab { font-size: var(--rd-small); }
 body.tool-walls .tab.active { background: var(--tool-accent); border-top-color: var(--tool-accent); }
+.modal.modal-area-edit { width: 560px; max-width: 94vw; }
+.area-edit-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--sp-3); }
+.area-edit-error { color: var(--danger); font-size: var(--rd-small); }
