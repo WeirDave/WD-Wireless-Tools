@@ -31,7 +31,7 @@
     "test_labeler_sidebar.py": 7,
     "test_manual_render.py": 3,
     "test_margin_is_a_real_distance.py": 2,
-    "test_marker_channel_label.py": 2,
+    "test_marker_channel_label.py": 1,
     "test_match_lines.py": 3,
     "test_name_scheme_inference.py": 2,
     "test_no_real_world_data.py": 1,

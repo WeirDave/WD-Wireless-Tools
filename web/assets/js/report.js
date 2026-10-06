@@ -1420,13 +1420,68 @@
       return !antennaIsDirectional(a);
     });
   }
+  /* The antennas the design actually uses, not the project's whole antenna
+     library: Ekahau keeps every type in the file, so one library entry with a
+     beam width kept "Antenna specs reference" switched on for a project whose
+     APs are all integrated, and the page it printed listed nothing to read. */
   function hasAnyBeamWidth(p) {
-    var ids = Object.keys(p.antennas || {});
-    return ids.some(function (id) {
-      var a = p.antennas[id];
+    var used = {};
+    (p.radios || []).forEach(function (r) {
+      if (r.antennaTypeId && drIsLiveWifi(r)) used[r.antennaTypeId] = true;
+    });
+    return Object.keys(used).some(function (id) {
+      var a = (p.antennas || {})[id];
       return a && (a.beamWidthHorizontal != null || a.beamWidthVertical != null);
     });
   }
+
+  /* The radios an AP is on the air with. A radio switched off in the design,
+     and a Bluetooth or other non-Wi-Fi radio, carries no channel and no Wi-Fi
+     antenna; the Installation table printed them as live ("15 dBm, 20 dBm",
+     "2402 (2.4 GHz)"), and the BOM and Summary counted their antennas. */
+  function liveRadiosOf(apId) {
+    return proj.radios.filter(function (r) {
+      return r.accessPointId === apId && drIsLiveWifi(r);
+    });
+  }
+
+  /* One spelling of a mount for every report: Ekahau stores CEILING and
+     WALL_MOUNT, the BOM printed "Ceiling" and the Installation table the raw
+     "CEILING". */
+  function humanMount(m) {
+    if (!m) return '';
+    var t = String(m).replace(/_/g, ' ').toLowerCase();
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  /* An .esx band code as people say it. */
+  var BAND_WORDS = { TWO: '2.4 GHz', FIVE: '5 GHz', SIX: '6 GHz' };
+
+  /* A height below zero is a data error, not a mount height: printing
+     "-3.3 ft" tells an installer to dig. A dash says nothing was usable. */
+  function fmtMountHeight(m, opts) {
+    return (typeof m === 'number' && m < 0) ? '\u2014' : fmtLength(m, opts);
+  }
+
+  /* Azimuth is a bearing; 450 is 90. */
+  function normBearing(deg) {
+    return ((deg % 360) + 360) % 360;
+  }
+
+  /* One definition of "floors" for the cover, the overview tile and the
+     header: the real floor plans the APs it covers sit on. "(No floor plan)"
+     is a heading for APs with nowhere to be, not a floor plan, and counting it
+     made a project with none claim one. */
+  function floorCountOf(aps, ctx) {
+    var seen = {};
+    (aps || []).forEach(function (ap) {
+      var fp = ctx.floorPlanForAp(ap);
+      if (fp) seen[fp.id] = true;
+    });
+    return Object.keys(seen).length;
+  }
+
+  function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
 
   function primaryRadio(apId) {
     var rs = proj.radios.filter(function (r) { return r.accessPointId === apId; });
@@ -2149,18 +2204,41 @@
     return proj.imageUrls[imgId] || null;
   }
 
+  /* Antenna types in use, by live Wi-Fi radio, and only ones the project
+     defines: an id with no entry in the antenna library has nothing to list,
+     and counting it made "Antenna types" say five over a table of four. */
   function collectUsedAntennas(aps, ctx) {
     var used = {};
+    function note(x) {
+      if (x.antennaTypeId && proj.antennas[x.antennaTypeId] && drIsLiveWifi(x)) {
+        used[x.antennaTypeId] = true;
+      }
+    }
     if (aps && ctx) {
       aps.forEach(function (ap) {
         if (!ctx.primaryRadio(ap.id)) return;
-        proj.radios.filter(function (x) { return x.accessPointId === ap.id; })
-          .forEach(function (x) { if (x.antennaTypeId) used[x.antennaTypeId] = true; });
+        proj.radios.filter(function (x) { return x.accessPointId === ap.id; }).forEach(note);
       });
     } else {
-      proj.radios.forEach(function (r) { if (r.antennaTypeId) used[r.antennaTypeId] = true; });
+      proj.radios.forEach(note);
     }
     return Object.keys(used);
+  }
+
+  /* How many access points use each antenna type. The column is headed Qty
+     and read "64 APs" while counting radios - a dual-radio AP counted twice -
+     so 150 APs added up to 182. One AP is one, however many of its radios
+     carry the same antenna. */
+  function antennaApCounts(aps) {
+    var counts = {};
+    (aps || []).forEach(function (ap) {
+      var seen = {};
+      liveRadiosOf(ap.id).forEach(function (x) {
+        if (x.antennaTypeId && proj.antennas[x.antennaTypeId]) seen[x.antennaTypeId] = true;
+      });
+      Object.keys(seen).forEach(function (id) { counts[id] = (counts[id] || 0) + 1; });
+    });
+    return counts;
   }
 
   /* An antenna code, and why the table does not print the name.
@@ -2196,13 +2274,13 @@
     ids.forEach(function (id) {
       var a = proj.antennas[id]; if (!a) return;
       var bits = [];
-      if (a.frequencyBand) bits.push(a.frequencyBand);
+      if (a.frequencyBand) bits.push(BAND_WORDS[a.frequencyBand] || a.frequencyBand);
       if (a.apCoupling) bits.push(a.apCoupling.replace(/_/g, ' ').toLowerCase());
       if (a.maxGain != null) bits.push(a.maxGain + ' dBi max gain');
       if (a.beamWidthHorizontal != null) bits.push(a.beamWidthHorizontal + '° h-beam');
       if (a.beamWidthVertical != null) bits.push(a.beamWidthVertical + '° v-beam');
       var countCell = hasCount
-        ? '<td class="rep-num">' + (apCountMap[id] || 0) + ' AP' + ((apCountMap[id] || 0) === 1 ? '' : 's') + '</td>'
+        ? '<td class="rep-num">' + plural(apCountMap[id] || 0, 'AP', 'APs') + '</td>'
         : '';
       rows += '<tr><td class="rep-az">' + WD.esc(keys[id] || '') + '</td>'
         + '<td class="rep-name">' + WD.esc(a.name || id) + '</td><td>'
@@ -4322,7 +4400,8 @@
     var logo = (coverImage && coverImage.url)
       ? '<div class="rep-cover-logo-wrap"><img class="rep-cover-logo" src="' + WD.escAttr(coverImage.url) + '" alt="Cover image"></div>'
       : '';
-    var floorLabel = proj.floorPlans.length === 1 ? 'Floor plan' : 'Floor plans';
+    var floorCount = coverFloorCount(r, ctx);
+    var floorLabel = floorCount === 1 ? 'Floor plan' : 'Floor plans';
     var meta = '';
     if (opts) {
       var metaRows = [];
@@ -4343,20 +4422,49 @@
       + '<h1 class="rep-cover-title">' + WD.esc(siteName()) + '</h1>'
       + meta
       + '<div class="rep-cover-stats">'
-      +   '<div class="rep-cover-stat"><b>' + count + '</b><span>' + WD.esc(countLabel || 'Access points') + '</span></div>'
-      +   '<div class="rep-cover-stat"><b>' + proj.floorPlans.length + '</b><span>' + floorLabel + '</span></div>'
+      +   '<div class="rep-cover-stat"><b>' + count + '</b><span>' + WD.esc(coverCountLabel(count, countLabel)) + '</span></div>'
+      +   '<div class="rep-cover-stat"><b>' + floorCount + '</b><span>' + floorLabel + '</span></div>'
       + '</div>'
       + '<div class="rep-cover-date">Generated ' + WD.esc(displayDate) + '</div>'
       + '</section>';
   }
-  function renderInlineHeader(count, dateStr, r, countLabel) {
+  /* The floors a cover or header states. A report that covers a filtered
+     list of APs counts the floors of that list - with omni APs off, a project
+     whose only directional AP is on one floor said "3 floor plans" over a
+     report of one. A report with no AP filter, or no list, states the
+     project's own floor plans. */
+  /* "1 ACCESS POINTS" - the label is a plural noun and the count is one. */
+  function coverCountLabel(count, label) {
+    var l = label || 'Access points';
+    if (String(count) === '1') l = l.replace(/^Access points\b/, 'Access point').replace(/^Interferers\b/, 'Interferer');
+    return l;
+  }
+
+  function coverFloorCount(r, ctx) {
+    if (ctx && ctx.aps && r && !r.noApFilter) return floorCountOf(ctx.aps, ctx);
+    return proj.floorPlans.length;
+  }
+
+  /* Client, preparer, reference and revision, when the cover is off. They
+     are the four things a reader of a printed sheet asks "whose is this" of,
+     and turning the cover off took them with it; only Revision survived, in
+     the footer. */
+  function renderInlineHeader(count, dateStr, r, countLabel, opts, ctx) {
+    var rows = [];
+    if (opts) {
+      if (opts.clientName) rows.push('<span><b>Client:</b> ' + WD.esc(opts.clientName) + '</span>');
+      if (opts.preparedBy) rows.push('<span><b>Prepared by:</b> ' + WD.esc(opts.preparedBy) + '</span>');
+      if (opts.projectRef) rows.push('<span><b>Project ref:</b> ' + WD.esc(opts.projectRef) + '</span>');
+      if (opts.revision)   rows.push('<span><b>Revision:</b> ' + WD.esc(opts.revision) + '</span>');
+    }
     return '<header class="rep-doc-head">'
       + '<div class="rep-doc-brand"><img class="rep-brand-icon" src="../assets/report-v8.0-560x560.png" alt=""> ' + WD.esc(r.coverBrand) + '</div>'
       + '<h1 class="rep-doc-title">' + WD.esc(siteName()) + '</h1>'
       + '<div class="rep-doc-meta">'
       + '<span><b>' + WD.esc(countLabel || 'APs') + ':</b> ' + count + '</span>'
-      + '<span><b>Floor plans:</b> ' + proj.floorPlans.length + '</span>'
+      + '<span><b>Floor plans:</b> ' + coverFloorCount(r, ctx) + '</span>'
       + '<span><b>Generated:</b> ' + WD.esc(dateStr) + '</span>'
+      + rows.join('')
       + '</div></header>';
   }
 
@@ -4396,6 +4504,7 @@
       dateStr: dateStr,
       dateReadable: dateReadable,
       proj: proj,
+      aps: aps,
       coverImage: coverImage,
       /* Six reports called this without their options, so their cover never
          printed Client, Prepared by or Project ref and its orientation
@@ -4403,7 +4512,9 @@
       cover: function (count, ds, label, opts2, ctx2, extraRows) {
         return renderCover(count, ds, r, label, opts2 || opts, ctx2 || ctx, extraRows);
       },
-      inlineHeader: function (count, ds, label) { return renderInlineHeader(count, ds, r, label); },
+      inlineHeader: function (count, ds, label, opts2, ctx2) {
+        return renderInlineHeader(count, ds, r, label, opts2 || opts, ctx2 || ctx);
+      },
       primaryRadio: primaryRadio,
       compass: compass, metersToFt: metersToFt, fmt: fmt,
       fmtLength: fmtLength, unitsOf: unitsOf,
@@ -5841,6 +5952,11 @@
 
     if (kind === 'table') {
       var table = page.querySelector('table');
+      /* The notes table wraps its text, so its max-content width is the
+         length of the longest note on one line, not what it needs. One long
+         note turned the whole AP Notes page landscape. It always fits across
+         a portrait sheet. */
+      if (table && table.classList && table.classList.contains('rep-notes-table')) return 'portrait';
       var natural = naturalTableWidth(table);
       if (natural > 0) {
         // Two narrow columns of short values want portrait however many rows
@@ -6612,15 +6728,7 @@
 
   function renderAntennaLegend(aps, ctx) {
     var ids = collectUsedAntennas(aps, ctx);
-    var countMap = {};
-    if (aps && ctx) {
-      aps.forEach(function (ap) {
-        proj.radios.filter(function (x) { return x.accessPointId === ap.id; })
-          .forEach(function (x) {
-            if (x.antennaTypeId) countMap[x.antennaTypeId] = (countMap[x.antennaTypeId] || 0) + 1;
-          });
-      });
-    }
+    var countMap = (aps && ctx) ? antennaApCounts(aps) : {};
     var tbl = renderAntennaTable(ids, countMap);
     if (!tbl) return '';
     return '<section class="rep-legend"><h2 class="rep-floor-title">Antennas in use</h2>' + tbl + '</section>';
@@ -6634,29 +6742,33 @@
 
 
     var buildingCount = Object.keys(proj.buildings || {}).length;
-    var radiosCount = (proj.radios || []).length;
-    var antennaTypesUsed = new Set();
-    proj.radios.forEach(function (r) { if (r.antennaTypeId) antennaTypesUsed.add(r.antennaTypeId); });
+    /* Radios on the air: a switched-off radio and a Bluetooth one are in the
+       file but are not part of the Wi-Fi design this sheet summarises. */
+    var liveRadios = (proj.radios || []).filter(drIsLiveWifi);
+    var radiosCount = liveRadios.length;
+    var antennaTypeCount = collectUsedAntennas().length;
     var measuredCount = (proj.measuredRadios || []).length;
     var surveyCount = (proj.surveys || []).length;
 
     var stats = [];
-    stats.push({ label: 'Access points', value: proj.accessPoints.length, cls: 'total' });
-    stats.push({ label: 'Radios', value: radiosCount, cls: 'iphone' });
-    stats.push({ label: 'Floor plans', value: proj.floorPlans.length, cls: 'android' });
-    if (buildingCount) stats.push({ label: 'Buildings', value: buildingCount, cls: 'carrier' });
-    stats.push({ label: 'Antenna types', value: antennaTypesUsed.size, cls: 'total' });
-    if (surveyCount) stats.push({ label: 'Surveys', value: surveyCount, cls: 'iphone' });
-    if (measuredCount) stats.push({ label: 'Measured radios', value: measuredCount, cls: 'android' });
+    stats.push({ one: 'Access point', many: 'Access points', value: proj.accessPoints.length, cls: 'total' });
+    stats.push({ one: 'Radio', many: 'Radios', value: radiosCount, cls: 'iphone' });
+    stats.push({ one: 'Floor plan', many: 'Floor plans', value: proj.floorPlans.length, cls: 'android' });
+    if (buildingCount) stats.push({ one: 'Building', many: 'Buildings', value: buildingCount, cls: 'carrier' });
+    stats.push({ one: 'Antenna type', many: 'Antenna types', value: antennaTypeCount, cls: 'total' });
+    if (surveyCount) stats.push({ one: 'Survey', many: 'Surveys', value: surveyCount, cls: 'iphone' });
+    if (measuredCount) stats.push({ one: 'Measured radio', many: 'Measured radios', value: measuredCount, cls: 'android' });
 
     var statHtml = '<div class="rep-hotspot-stats">'
       + stats.map(function (s) {
           return '<div class="rep-hotspot-stat rep-hotspot-stat--' + s.cls + '"><b>'
-            + WD.esc(String(s.value)) + '</b><span>' + WD.esc(s.label) + '</span></div>';
+            + WD.esc(String(s.value)) + '</b><span>' + WD.esc(s.value === 1 ? s.one : s.many) + '</span></div>';
         }).join('')
       + '</div>';
 
-    var strip = '<section class="rep-floor-section rep-summary-hero">'
+    /* Every section of this report carries rep-flow: Summary and BOM are short
+       tables that were each printed alone on a sheet - one AP made five. */
+    var strip = '<section class="rep-floor-section rep-flow rep-summary-hero">'
       + '<h2 class="rep-floor-title">Project at a glance</h2>'
       + statHtml
       + '</section>';
@@ -6664,39 +6776,47 @@
 
     var perFloorSection = '';
     if (opts.perFloor !== false && proj.floorPlans.length) {
-      var apByFloor = {};
-      proj.accessPoints.forEach(function (a) {
-        var fp = ctx.floorPlanForAp(a);
-        var key = fp ? fp.id : '_unplaced';
-        (apByFloor[key] = apByFloor[key] || []).push(a);
-      });
+      var apByFloor = groupApsByFloor(proj.accessPoints, ctx);
       var rows = '';
-      proj.floorPlans.forEach(function (f) {
+      /* The same order as every other report: building, storey, name. */
+      sortedFloorOrder(apByFloor).forEach(function (f) {
+        if (f.id === '_none') return;
         var apList = apByFloor[f.id] || [];
         var bf = proj.buildingFloors[f.id];
         var buildingName = bf && proj.buildings[bf.buildingId]
           ? proj.buildings[bf.buildingId].name || '' : '';
+        /* The size on paper, where the plan is calibrated: "2600 × 1700 px" is
+           a bitmap's dimensions, which a client cannot use and which wrapped
+           over two lines. */
         var wm = f.width || 0, hm = f.height || 0;
-        var sizeStr = (wm && hm)
-          ? Math.round(wm) + ' × ' + Math.round(hm) + ' px'
-          : '—';
+        var sizeStr = '—';
+        if (wm && hm && f.metersPerUnit > 0) {
+          var wMeters = wm * f.metersPerUnit, hMeters = hm * f.metersPerUnit;
+          sizeStr = unitsOf(opts) === 'meters'
+            ? Math.round(wMeters) + ' × ' + Math.round(hMeters) + ' m'
+            : Math.round(wMeters * M_TO_FT) + ' × ' + Math.round(hMeters * M_TO_FT) + ' ft';
+        } else if (wm && hm) {
+          sizeStr = Math.round(wm) + ' × ' + Math.round(hm) + ' px';
+        }
         rows += '<tr>'
           + '<td class="rep-name">' + WD.esc(f.name || 'Untitled') + '</td>'
           + '<td>' + WD.esc(buildingName) + '</td>'
           + '<td class="rep-az">' + apList.length + '</td>'
-          + '<td class="rep-az">' + WD.esc(sizeStr) + '</td>'
+          + '<td class="rep-num rep-nowrap-print">' + WD.esc(sizeStr) + '</td>'
           + '</tr>';
       });
-      var unplaced = (apByFloor['_unplaced'] || []).length;
+      var unplaced = (apByFloor['_none'] || []).length;
       if (unplaced) {
         rows += '<tr><td class="rep-name"><em>Unplaced</em></td><td></td>'
           + '<td class="rep-az">' + unplaced + '</td>'
-          + '<td class="rep-az">—</td></tr>';
+          + '<td class="rep-num">—</td></tr>';
       }
-      perFloorSection = '<section class="rep-floor-section">'
+      perFloorSection = '<section class="rep-floor-section rep-flow">'
         + '<h2 class="rep-floor-title">Per-floor breakdown</h2>'
-        + '<table class="rep-ap-table"><thead><tr>'
-        + '<th>Floor</th><th>Building</th><th class="rep-num">APs</th><th class="rep-num">Canvas</th>'
+        + '<table class="rep-ap-table">'
+        + '<colgroup><col style="width:36%"><col style="width:28%"><col style="width:12%"><col style="width:24%"></colgroup>'
+        + '<thead><tr>'
+        + '<th>Floor</th><th>Building</th><th class="rep-num">APs</th><th class="rep-num">Size</th>'
         + '</tr></thead><tbody>' + rows + '</tbody></table>'
         + '</section>';
     }
@@ -6706,7 +6826,7 @@
     if (opts.bandBreakdown !== false && radiosCount) {
       var bandCounts = {};
       var total = 0;
-      proj.radios.forEach(function (r) {
+      liveRadios.forEach(function (r) {
         var ant = r.antennaTypeId && proj.antennas[r.antennaTypeId];
         var band = (ant && ant.frequencyBand) || 'Unspecified';
         bandCounts[band] = (bandCounts[band] || 0) + 1;
@@ -6730,7 +6850,7 @@
           + '<td class="rep-az">' + pct + '%</td>'
           + '</tr>';
       }).join('');
-      bandSection = '<section class="rep-floor-section">'
+      bandSection = '<section class="rep-floor-section rep-flow">'
         + '<h2 class="rep-floor-title">Radio band breakdown</h2>'
         + '<p class="rep-summary-hint">One row per radio. Each AP typically has one 2.4 and one 5 GHz radio; 6 GHz appears on Wi-Fi 6E hardware only.</p>'
         + '<table class="rep-ap-table"><thead><tr>'
@@ -6742,21 +6862,38 @@
 
     var modelsSection = '';
     if (opts.topModels !== false && proj.accessPoints.length) {
-      var modelCounts = {};
+      /* Keyed on vendor and model, as the BOM is. The model alone merged two
+         vendors' same-named part, and a vendor-only AP (`model || vendor`)
+         appeared as a model called by its vendor's name. The tail past ten is
+         one "Other" row so the column still adds up to the AP total. */
+      var modelGroups = {};
       proj.accessPoints.forEach(function (a) {
-        var m = (a.model || a.vendor || '').trim() || 'Unknown';
-        modelCounts[m] = (modelCounts[m] || 0) + 1;
+        var vendor = (a.vendor || '').trim() || '\u2014';
+        var model = (a.model || '').trim() || 'Unknown';
+        var key = vendor + '\u0000' + model;
+        if (!modelGroups[key]) modelGroups[key] = { vendor: vendor, model: model, count: 0 };
+        modelGroups[key].count += 1;
       });
-      var entries = Object.keys(modelCounts).map(function (k) { return { model: k, count: modelCounts[k] }; })
-        .sort(function (a, b) { return b.count - a.count || a.model.localeCompare(b.model); })
-        .slice(0, 10);
-      var modelRows = entries.map(function (e) {
-        return '<tr><td class="rep-name">' + WD.esc(e.model) + '</td>'
+      var entries = Object.values(modelGroups)
+        .sort(function (a, b) {
+          return b.count - a.count || a.vendor.localeCompare(b.vendor) || a.model.localeCompare(b.model);
+        });
+      var shown = entries.slice(0, 10), rest = entries.slice(10);
+      var modelRows = shown.map(function (e) {
+        return '<tr><td>' + WD.esc(e.vendor) + '</td><td class="rep-name">' + WD.esc(e.model) + '</td>'
           + '<td class="rep-az">' + e.count + '</td></tr>';
       }).join('');
-      modelsSection = '<section class="rep-floor-section">'
+      if (rest.length) {
+        modelRows += '<tr><td></td><td class="rep-name"><em>Other (' + plural(rest.length, 'model', 'models') + ')</em></td>'
+          + '<td class="rep-az">' + rest.reduce(function (n, e) { return n + e.count; }, 0) + '</td></tr>';
+      }
+      modelRows += '<tr class="rep-bom-total"><td></td><td class="rep-name">Total access points</td>'
+        + '<td class="rep-az">' + proj.accessPoints.length + '</td></tr>';
+      modelsSection = '<section class="rep-floor-section rep-flow">'
         + '<h2 class="rep-floor-title">Top AP models</h2>'
-        + '<table class="rep-ap-table"><thead><tr><th>Model</th><th class="rep-num">Quantity</th></tr></thead>'
+        + '<table class="rep-ap-table">'
+        + '<colgroup><col style="width:28%"><col style="width:57%"><col style="width:15%"></colgroup>'
+        + '<thead><tr><th>Vendor</th><th>Model</th><th class="rep-num">Quantity</th></tr></thead>'
         + '<tbody>' + modelRows + '</tbody></table>'
         + '</section>';
     }
@@ -6779,13 +6916,10 @@
        quantity. Someone reading the summary to size an order got the shorter
        answer for no reason. */
     var ids = collectUsedAntennas();
-    var counts = {};
-    proj.radios.forEach(function (r) {
-      if (r.antennaTypeId) counts[r.antennaTypeId] = (counts[r.antennaTypeId] || 0) + 1;
-    });
+    var counts = antennaApCounts(proj.accessPoints);
     var tbl = renderAntennaTable(ids, counts);
     if (!tbl) return '';
-    return '<section class="rep-floor-section">'
+    return '<section class="rep-floor-section rep-flow">'
       + '<h2 class="rep-floor-title">Antennas in use</h2>' + tbl + '</section>';
   }
 
@@ -6818,7 +6952,7 @@
     }).join('');
     var apTotal = proj.accessPoints.length;
     var apTotalRow = '<tr class="rep-bom-total"><td></td><td class="rep-name">Total access points</td><td class="rep-az">' + apTotal + '</td></tr>';
-    var apSection = '<section class="rep-floor-section">'
+    var apSection = '<section class="rep-floor-section rep-flow">'
       + '<h2 class="rep-floor-title">Access point quantities</h2>'
       + '<table class="rep-ap-table">'
       + '<colgroup><col style="width:28%"><col style="width:57%"><col style="width:15%"></colgroup>'
@@ -6866,7 +7000,7 @@
         + '<td class="rep-az">' + list.length + '</td></tr>';
     });
     var perFloorSection = floorOrderBom.length > 1
-      ? '<section class="rep-floor-section">'
+      ? '<section class="rep-floor-section rep-flow">'
         + '<h2 class="rep-floor-title">Access points per floor</h2>'
         + '<table class="rep-ap-table">'
         + '<colgroup><col style="width:24%"><col style="width:20%">'
@@ -6887,15 +7021,14 @@
       var r = ctx.primaryRadio(a.id);
       var m = r && r.antennaMounting ? String(r.antennaMounting) : '';
       if (!m) { mountMissing += 1; return; }
-      var label = m.replace(/_/g, ' ').toLowerCase();
-      label = label.charAt(0).toUpperCase() + label.slice(1);
+      var label = humanMount(m);
       mountGroups[label] = (mountGroups[label] || 0) + 1;
     });
     var mountRows = Object.keys(mountGroups).sort(function (a, b) {
       return mountGroups[b] - mountGroups[a] || a.localeCompare(b);
     });
     var mountSection = (mountRows.length || mountMissing)
-      ? '<section class="rep-floor-section">'
+      ? '<section class="rep-floor-section rep-flow">'
         + '<h2 class="rep-floor-title">Mount types</h2>'
         + '<p class="rep-summary-hint">One per access point, from the mounting '
         +   'recorded against its radio.</p>'
@@ -6916,18 +7049,25 @@
         + '</section>'
       : '';
 
+    /* Antennas are counted per live Wi-Fi radio, the way an order is placed:
+       a disabled radio and a Bluetooth one carry none of the antennas being
+       bought. A radio with no antenna recorded is its own row rather than a
+       silent gap - the table was 26 over 28 radios, with the two missing
+       explained nowhere, where Mount types says "Not recorded". */
     var antGroups = {};
     var totalAntennas = 0;
+    var antMissing = 0;
     proj.radios.forEach(function (r) {
-      if (!r.antennaTypeId) return;
-      var a = proj.antennas[r.antennaTypeId];
-      if (!a) return;
+      if (!drIsLiveWifi(r)) return;
+      var a = r.antennaTypeId && proj.antennas[r.antennaTypeId];
+      if (!a) { antMissing += 1; return; }
       if (externalOnly && a.apCoupling !== 'EXTERNAL_ANTENNA') return;
       var key = a.id;
       if (!antGroups[key]) antGroups[key] = { antenna: a, count: 0 };
       antGroups[key].count += 1;
       totalAntennas += 1;
     });
+    if (externalOnly) antMissing = 0;      // cannot be told to be external
     var antRows = Object.values(antGroups)
       .sort(function (a, b) {
         return b.count - a.count || (a.antenna.name || '').localeCompare(b.antenna.name || '');
@@ -6935,7 +7075,7 @@
     var antRowsHtml = antRows.map(function (g) {
       var a = g.antenna;
       var coupling = (a.apCoupling || '').replace(/_/g, ' ').toLowerCase() || '—';
-      var band = a.frequencyBand ? ({TWO:'2.4', FIVE:'5', SIX:'6'})[a.frequencyBand] + ' GHz' : '—';
+      var band = a.frequencyBand ? (BAND_WORDS[a.frequencyBand] || a.frequencyBand) : '—';
       var gain = (a.maxGain != null) ? a.maxGain + ' dBi' : '—';
       return '<tr>'
         + '<td class="rep-name">' + WD.esc(a.name || a.id) + '</td>'
@@ -6945,14 +7085,19 @@
         + '<td class="rep-az">' + g.count + '</td>'
         + '</tr>';
     }).join('');
-    var antTotalLabel = externalOnly ? 'Total external antennas' : 'Total antennas (all)';
+    if (antMissing) {
+      antRowsHtml += '<tr><td class="rep-name"><em>Not recorded</em></td><td></td><td></td><td></td>'
+        + '<td class="rep-az">' + antMissing + '</td></tr>';
+    }
+    var antTotalLabel = externalOnly ? 'Total external antennas'
+      : antMissing ? 'Total radios' : 'Total antennas (all)';
     var antTotalRow = '<tr class="rep-bom-total"><td class="rep-name">' + antTotalLabel
-      + '</td><td></td><td></td><td></td><td class="rep-az">' + totalAntennas + '</td></tr>';
+      + '</td><td></td><td></td><td></td><td class="rep-az">' + (totalAntennas + antMissing) + '</td></tr>';
     var antIntro = externalOnly
       ? '<p class="rep-summary-hint">Showing external (procurement-relevant) antennas only. Toggle in the sidebar to see the full antenna list.</p>'
       : '<p class="rep-summary-hint">All antennas including integrated (built-in) ones. Toggle "External only" in the sidebar for a procurement-ready view.</p>';
-    var antSection = antRows.length
-      ? '<section class="rep-floor-section">'
+    var antSection = (antRows.length || antMissing)
+      ? '<section class="rep-floor-section rep-flow">'
         + '<h2 class="rep-floor-title">Antenna quantities</h2>'
         + antIntro
         + '<table class="rep-ap-table">'
@@ -6965,13 +7110,15 @@
         + '<th>Antenna</th><th>Coupling</th><th>Band</th><th>Gain</th><th class="rep-num">Qty</th>'
         + '</tr></thead><tbody>' + antRowsHtml + antTotalRow + '</tbody></table>'
         + '</section>'
-      : '<section class="rep-floor-section">'
+      : '<section class="rep-floor-section rep-flow">'
         + '<h2 class="rep-floor-title">Antenna quantities</h2>'
-        + '<p class="rep-empty-small">No antennas match the current filter. Try turning off "External only" in the sidebar.</p>'
+        + '<p class="rep-empty-small">' + (externalOnly
+            ? 'No external antennas in this project. Turn off "Show external antennas only" in the sidebar to list the built-in ones.'
+            : 'No antennas are recorded against any radio in this project.') + '</p>'
         + '</section>';
 
 
-    var notes = '<section class="rep-floor-section">'
+    var notes = '<section class="rep-floor-section rep-flow">'
       + '<h2 class="rep-floor-title">Notes for procurement</h2>'
       + '<ul class="rep-summary-notes">'
       + '<li>Antenna quantities count each radio-to-antenna assignment. An AP with a dual-band external antenna kit is counted per radio (2×), not per physical part — cross-check against your antenna kit\'s inclusions.</li>'
@@ -9266,7 +9413,7 @@
       + '</footer>';
   }
 
-  function renderLocationTOC(byFloor, floorOrder, opts) {
+  function renderLocationTOC(byFloor, floorOrder, opts, aps, ctx) {
     var items = '';
     floorOrder.forEach(function (fp) {
       if (!byFloor[fp.id] || !byFloor[fp.id].length) return;
@@ -9294,14 +9441,20 @@
       } else {
         parts.push('Floor plan with AP placements');
       }
-      parts.push('Installation table — ' + apCount + ' AP' + (apCount === 1 ? '' : 's'));
+      parts.push('Installation table — ' + plural(apCount, 'AP', 'APs'));
       items += '<li><b>' + WD.esc(fp.name || 'Floor plan') + '</b>'
         + '<div class="rep-toc-detail">' + parts.join('<br>') + '</div></li>';
     });
+    /* Each entry is the heading its page prints, in the order the pages
+       print: the contents said "Antenna reference" and "AP name audit" over
+       sections headed "Antennas in use" and "Naming audit", and named neither
+       the Compass page nor the AP Notes pages. */
     var extra = '';
-    if (opts.nameAudit) extra += '<li><b>AP name audit</b><div class="rep-toc-detail">Naming pattern analysis and outlier detection</div></li>';
-    if (opts.specs) extra += '<li><b>Antenna reference</b><div class="rep-toc-detail">Antenna models, specs, and usage counts</div></li>';
-    if (opts.signOff !== false) extra += '<li><b>Sign-off</b><div class="rep-toc-detail">Prepared / Reviewed / Approved</div></li>';
+    if (opts.nameAudit) extra += '<li><b>Naming audit</b><div class="rep-toc-detail">Naming pattern analysis and outlier detection</div></li>';
+    if (opts.specs) extra += '<li><b>Antennas in use</b><div class="rep-toc-detail">Antenna models, specs, and usage counts</div></li>';
+    if (aps && wantsCompassRef(aps, opts)) extra += '<li><b>Compass &amp; Antenna Alignment Reference</b><div class="rep-toc-detail">Compass rose and guidance for aiming directional antennas</div></li>';
+    if (aps && ctx && wantsApNotes(aps, opts, ctx)) extra += '<li><b>AP Notes</b><div class="rep-toc-detail">Notes recorded against access points, a page per floor</div></li>';
+    if (opts.signOff !== false) extra += '<li><b>Approval</b><div class="rep-toc-detail">Prepared / Reviewed / Approved</div></li>';
     return '<section class="rep-floor-section rep-toc">'
       + '<h2 class="rep-floor-title">Contents</h2>'
       + '<p class="rep-toc-subtitle">Access point installation — sectional placement maps, installation details, and antenna reference for each floor.</p>'
@@ -9310,15 +9463,11 @@
   }
 
   function renderLocationSummary(aps, ctx) {
-    var floorIds = {};
+    var floorCount = floorCountOf(aps, ctx);
+    var buildingIds = {};
     aps.forEach(function (ap) {
       var fp = ctx.floorPlanForAp(ap);
-      floorIds[fp ? fp.id : '_none'] = true;
-    });
-    var floorCount = Object.keys(floorIds).length;
-    var buildingIds = {};
-    proj.floorPlans.forEach(function (fp) {
-      var bf = proj.buildingFloors[fp.id];
+      var bf = fp && proj.buildingFloors[fp.id];
       if (bf && bf.buildingId) buildingIds[bf.buildingId] = true;
     });
     var buildingCount = Object.keys(buildingIds).length;
@@ -9327,16 +9476,19 @@
     var antennaIds = collectUsedAntennas(aps, ctx);
 
     var tiles = '';
-    tiles += '<div class="rep-hotspot-stat"><b>' + aps.length + '</b><span>Access points</span></div>';
-    tiles += '<div class="rep-hotspot-stat"><b>' + floorCount + '</b><span>Floor plans</span></div>';
+    function tile(n, one, many) {
+      return '<div class="rep-hotspot-stat"><b>' + n + '</b><span>' + (n === 1 ? one : many) + '</span></div>';
+    }
+    tiles += tile(aps.length, 'Access point', 'Access points');
+    tiles += tile(floorCount, 'Floor plan', 'Floor plans');
     if (buildingCount > 1) {
-      tiles += '<div class="rep-hotspot-stat"><b>' + buildingCount + '</b><span>Buildings</span></div>';
+      tiles += tile(buildingCount, 'Building', 'Buildings');
     }
     if (directional > 0 && omni > 0) {
-      tiles += '<div class="rep-hotspot-stat"><b>' + directional + '</b><span>Directional</span></div>';
-      tiles += '<div class="rep-hotspot-stat"><b>' + omni + '</b><span>Omni</span></div>';
+      tiles += tile(directional, 'Directional', 'Directional');
+      tiles += tile(omni, 'Omni', 'Omni');
     }
-    tiles += '<div class="rep-hotspot-stat"><b>' + antennaIds.length + '</b><span>Antenna types</span></div>';
+    tiles += tile(antennaIds.length, 'Antenna type', 'Antenna types');
 
     return '<section class="rep-floor-section rep-summary-hero">'
       + '<h2 class="rep-floor-title">Project overview</h2>'
@@ -9372,7 +9524,9 @@
       + '<td class="rep-num"><b>' + totalDir + '</b></td>'
       + '<td class="rep-num"><b>' + totalOmni + '</b></td>'
       + '</tr>';
-    return '<section class="rep-floor-section">'
+    /* rep-matrix: kept whole on a sheet where it fits, so the Total row does
+       not land alone under a repeated header. */
+    return '<section class="rep-floor-section rep-matrix">'
       + '<h2 class="rep-floor-title">Floor summary</h2>'
       + '<table class="rep-ap-table">'
       + '<thead><tr><th>Floor</th><th>Building</th><th>APs</th><th>Directional</th><th>Omni</th></tr></thead>'
@@ -9431,7 +9585,7 @@
       floorIdx++;
     });
 
-    var toc = opts.cover ? renderLocationTOC(byFloor, floorOrder, opts) : '';
+    var toc = opts.cover ? renderLocationTOC(byFloor, floorOrder, opts, aps, ctx) : '';
     var summary = renderLocationSummary(aps, ctx);
     var matrix = renderFloorMatrix(byFloor, floorOrder, ctx);
     var audit = opts.nameAudit ? renderApNameAudit(aps, ctx) : '';
@@ -9489,7 +9643,6 @@
       var buildingName = bf && proj.buildings[bf.buildingId]
         ? proj.buildings[bf.buildingId].name || '—' : '—';
       var r = ctx.primaryRadio(ap.id);
-      var ant = r && proj.antennas[r.antennaTypeId] ? proj.antennas[r.antennaTypeId] : null;
       var nameIssue = '';
       if (opts.nameAudit) {
         if (!ap.name || !ap.name.trim()) nameIssue = 'Missing name';
@@ -9498,9 +9651,8 @@
       }
       var cpCells = '';
       if (showCP) {
-        var radios = proj.radios.filter(function (x) { return x.accessPointId === ap.id; });
         var txParts = [], chParts = [];
-        radios.forEach(function (rd) {
+        liveRadiosOf(ap.id).forEach(function (rd) {
           // A radio with no stored power prints a dash. It used to print
           // 15 dBm, a figure the design never held.
           var band = _covBandFromChannel(rd.channelByCenterFrequencyDefinedNarrowChannels);
@@ -9508,7 +9660,9 @@
           txParts.push(rd.transmitPower != null ? ctx.fmt(rd.transmitPower, 1) + ' dBm' : '—');
           var ch = rd.channelByCenterFrequencyDefinedNarrowChannels;
           if (ch && ch.length) {
-            chParts.push(freqToChannel(ch[0]) + ' <span class="rep-alt">(' + bandLabel + ')</span>');
+            /* "36/80" for a bonded block, as the CSV and the Design Review
+               write it: the table printed "36" for an 80 MHz channel. */
+            chParts.push(drChannelText(drRadioInfo(rd)) + ' <span class="rep-alt">(' + bandLabel + ')</span>');
           }
         });
         cpCells = '<td class="rep-nowrap">' + (txParts.length ? txParts.join(', ') : '—') + '</td>'
@@ -9523,18 +9677,30 @@
       // azimuth and tilt depend on `showDir`.
       var dir = r ? r.antennaDirection : null;
       var tilt = r ? r.antennaTilt : null;
-      var height = r ? r.antennaHeight : null;
-      var mount = r ? r.antennaMounting : '—';
       var isOmni = apIsOmniOnly(ap);
-      var heightStr = ctx.fmtLength(height, opts);
-      var dirCells = '<td>' + WD.esc(mount || '—') + '</td>'
+      /* Every live radio's own mount, height and antenna, distinct values
+         joined the way the channels are. The cells carried the primary
+         radio's alone, beside a channel column that listed all of them. */
+      var live = liveRadiosOf(ap.id);
+      if (!live.length && r) live = [r];
+      function distinct(list) {
+        var out = [];
+        list.forEach(function (v) { if (out.indexOf(v) === -1) out.push(v); });
+        return out;
+      }
+      var mountStr = distinct(live.map(function (x) { return humanMount(x.antennaMounting); })
+        .filter(Boolean)).join(', ');
+      var heightStr = distinct(live.map(function (x) {
+        return x.antennaHeight == null ? '' : fmtMountHeight(x.antennaHeight, opts);
+      }).filter(Boolean)).join(', ') || '\u2014';
+      var dirCells = '<td>' + WD.esc(mountStr || '—') + '</td>'
         + '<td class="rep-nowrap-print">' + heightStr + '</td>';
       if (showDir) {
         var azStr = isOmni ? '<span class="rep-alt">Omni</span>'
           : dir == null ? '—'
           : (opts.compass
-              ? ctx.fmt(dir, 1) + '° <span class="rep-alt">(' + ctx.compass(dir) + ')</span>'
-              : ctx.fmt(dir, 1) + '°');
+              ? ctx.fmt(normBearing(dir), 1) + '° <span class="rep-alt">(' + ctx.compass(dir) + ')</span>'
+              : ctx.fmt(normBearing(dir), 1) + '°');
         var tiltStr = isOmni ? '—' : (tilt == null ? '—' : ctx.fmt(tilt, 1) + '°');
         dirCells += '<td class="rep-az">' + azStr + '</td>'
           + '<td>' + tiltStr + '</td>';
@@ -9543,10 +9709,12 @@
          and this sheet has eleven columns; see `antennaKeys` for what
          printing it here costs. "Antennas in use" carries the same code
          beside the full name, and the tooltip still has it on screen. */
-      dirCells += '<td class="rep-az" title="' + WD.escAttr(ant ? ant.name : '') + '">'
-        + WD.esc(ant ? (antKeys[ant.id] || ant.name) : '—') + '</td>';
+      var ants = distinct(live.map(function (x) { return proj.antennas[x.antennaTypeId]; })
+        .filter(Boolean));
+      dirCells += '<td class="rep-az" title="' + WD.escAttr(ants.map(function (a) { return a.name; }).join(', ')) + '">'
+        + WD.esc(ants.length ? ants.map(function (a) { return antKeys[a.id] || a.name; }).join(', ') : '—') + '</td>';
       rows += '<tr' + (nameIssue ? ' class="rep-loc-warn-row"' : '') + '>'
-        + '<td class="rep-num">' + WD.esc(lbl) + '</td>'
+        + '<td class="rep-num">' + WD.esc(lbl || '—') + '</td>'
         + '<td class="rep-name">' + WD.esc(ap.name || '(unnamed)') + '</td>'
         + '<td class="rep-ellip">' + WD.esc(ap.vendor || '—') + '</td>'
         + '<td class="rep-ellip">' + WD.esc(ap.model || '—') + '</td>'
@@ -9658,7 +9826,9 @@
     if (!issues.length) {
       return '<section class="rep-floor-section">'
         + '<h2 class="rep-floor-title">Naming audit</h2>'
-        + '<div class="rep-seg-note rep-seg-note--ok">All ' + aps.length + ' APs have proper names — no issues detected.</div>'
+        + '<div class="rep-seg-note rep-seg-note--ok">'
+        + (aps.length === 1 ? 'The access point has a proper name' : 'All ' + aps.length + ' APs have proper names')
+        + ' — no issues detected.</div>'
         + '</section>';
     }
     var rows = issues.map(function (i) {
@@ -9668,7 +9838,7 @@
     }).join('');
     return '<section class="rep-floor-section">'
       + '<h2 class="rep-floor-title">Naming audit</h2>'
-      + '<div class="rep-seg-note">' + issues.length + ' AP' + (issues.length === 1 ? '' : 's') + ' with naming issues found.</div>'
+      + '<div class="rep-seg-note">' + plural(issues.length, 'AP', 'APs') + ' with naming issues found.</div>'
       + '<table class="rep-ap-table"><thead><tr><th>AP name</th><th>Floor</th><th>Issue</th></tr></thead>'
       + '<tbody>' + rows + '</tbody></table>'
       + '</section>';
@@ -10145,6 +10315,14 @@
           description: 'Every antenna model referenced with band, coupling, gain, and beam width.' },
       ],
       sidebar: [
+        { id: 'clientName', type: 'text', label: 'Client / company', default: '',
+          placeholder: 'e.g. Acme Corp' },
+        { id: 'preparedBy', type: 'text', label: 'Prepared by', default: '',
+          placeholder: 'e.g. Jane Smith' },
+        { id: 'projectRef', type: 'text', label: 'Project reference', default: '',
+          placeholder: 'e.g. PO-2026-0042' },
+        { id: 'revision', type: 'text', label: 'Revision', default: '',
+          placeholder: 'e.g. v2.0' },
         { id: 'perFloor',      label: 'Per-floor breakdown table', default: true,
           description: 'Table listing each floor plan with its AP count and canvas dimensions.' },
         { id: 'bandBreakdown', label: 'Radio band breakdown', default: true,
@@ -10248,6 +10426,14 @@
           description: 'What this BOM does and does not cover — cable runs, PoE injectors and switch ports still need manual work.' },
       ],
       sidebar: [
+        { id: 'clientName', type: 'text', label: 'Client / company', default: '',
+          placeholder: 'e.g. Acme Corp' },
+        { id: 'preparedBy', type: 'text', label: 'Prepared by', default: '',
+          placeholder: 'e.g. Jane Smith' },
+        { id: 'projectRef', type: 'text', label: 'Project reference', default: '',
+          placeholder: 'e.g. PO-2026-0042' },
+        { id: 'revision', type: 'text', label: 'Revision', default: '',
+          placeholder: 'e.g. v2.0' },
         { id: 'externalOnly', label: 'Show external antennas only', default: false,
           description: 'Filter to procurement-relevant antennas — hides built-in antennas that ship with the AP. Handy for orders like "AP + external antenna kit".' },
         { id: 'apNotes', type: 'select', label: 'AP notes pages', default: 'auto',
@@ -10525,7 +10711,7 @@
         { icon: '🗺️', title: 'Scalable floor plan per floor',
           description: 'Every AP plotted with a labeled rounded marker and directional arrows. Large floors split into zoomed sections so labels stay legible.' },
         { icon: '📋', title: 'Per-floor AP table',
-          description: 'AP names, vendor, model, floor, building, TX power, channel. When directional APs exist, adds mount, height, azimuth, tilt, and antenna columns.' },
+          description: 'AP names, vendor, model, TX power, channel and width, mount, height and antenna code on every floor; azimuth and tilt too where a floor has directional APs. Floor and building are stated once in the heading and caption rather than on every row.' },
         { icon: '📡', title: 'Antenna specs reference',
           description: 'Gain, beam width, and AP usage count for each antenna model.' },
         { icon: '🔍', title: 'Naming audit',
@@ -10557,7 +10743,7 @@
         { id: 'shortLabels', label: 'Short number labels on the plan', default: true,
           description: 'When your AP names end with an "AP" designator (e.g. "…AP42"), show just the "42" on markers. Turn off to always show the full AP name.' },
         { id: 'specs',    label: 'Antenna specs reference', default: true,
-          description: 'Final table listing every antenna model with gain and beam width.',
+          description: 'Final table listing every antenna model in use with gain and beam width.',
           disabledWhen: function (p) { return !hasAnyBeamWidth(p); },
           disabledReason: function () { return 'No beam-width data in this project (all-integrated antennas).'; } },
         { id: 'units', type: 'select', label: 'Measurement units', default: 'feet',

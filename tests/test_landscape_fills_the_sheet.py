@@ -173,7 +173,8 @@ class TheCoverFollowsTheReport(_NodeProbe):
         """The original fault: the real cover markup had no page key, so
         nothing - not Auto, not Match all pages - could ever turn it."""
         self.check("""
-          eval(fn('function orientPickerHtml(') + fn('function renderCover('));
+          eval(fn('function orientPickerHtml(') + fn('function coverCountLabel(')
+            + fn('function coverFloorCount(') + fn('function renderCover('));
           globalThis.WD = { esc: String, escAttr: String };
           globalThis.proj = { floorPlans: [{}] };
           globalThis.coverImage = null;
