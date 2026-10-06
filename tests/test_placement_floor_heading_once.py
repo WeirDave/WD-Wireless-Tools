@@ -63,6 +63,8 @@ function renderAntennaSegmentCell(url, W, H, cell) {
 // Forced to a 3x2 split so the segmented path is the one under test.
 function computeAntennaGrid() { return { cols: 3, rows: 2 }; }
 
+// The index letters are floored on the long edge by the shared map-label constant.
+const MAP_FONT_FLOOR_FRAC = 0.0165;
 eval(sliceBetween('  function segCellLabel(col, row) {', '  /* The Key Plan.'));
 eval(sliceFn('  function renderAntennaOverview(fp, aps, opts, ctx, keyHtml'));
 eval(sliceFn('  function renderPlacementFloorSection(fp, aps, opts, ctx, floorIdx) {'));
