@@ -279,9 +279,14 @@
      neither says anything, so each tool can fall back in its own way. */
   WD.storeyNumber = function (name, bf, buildingFloors) {
     var s = String(name || '');
-    var m = s.match(/\b(?:floor|flr|fl|level|lvl|lev|storey|story)\s*[-#.:]?\s*(\d+)/i)
+    /* The floor word may follow an underscore - "Block B_Level 02", which is
+       how a CAD sheet name arrives - and `\b` is not a boundary there, since
+       "_" is a word character. And a leading number is a storey only when it
+       is one: "200 Sample TF_Overall Plan" is a street number, and headed the
+       sheet "Floor 200". No building has a floor 100. */
+    var m = s.match(/(?:^|[^A-Za-z])(?:floor|flr|fl|level|lvl|lev|storey|story)\s*[-#.:]?\s*(\d+)/i)
          || s.match(/\b(\d+)\s*(?:st|nd|rd|th)\b/i)
-         || s.match(/^\s*(\d+)\b/);
+         || s.match(/^\s*(\d{1,2})\b(?!\d)/);
     if (m) return parseInt(m[1], 10);
     var raw = bf ? bf.floorNumber : null;
     if (raw === null || raw === undefined || raw === '') return null;

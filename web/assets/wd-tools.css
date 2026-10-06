@@ -5516,7 +5516,7 @@ body.tool-report {
   --card-accent-hover: #1d4ed8;
 }
 
-.rep-template-card:hover:not(.is-coming-soon) {
+.rep-template-card:hover:not(.is-coming-soon):not(.is-unavailable) {
   transform: translateY(-4px);
   box-shadow: 0 16px 40px var(--card-shadow);
   border-color: var(--card-accent);
@@ -5529,7 +5529,7 @@ body.tool-report {
   box-shadow: 0 8px 22px var(--card-shadow);
 }
 
-.rep-template-card.is-coming-soon {
+.rep-template-card.is-coming-soon, .rep-template-card.is-unavailable {
   cursor: not-allowed; opacity: 0.65;
   background: var(--surface); border-style: dashed;
   border-top-style: solid;
@@ -5583,6 +5583,8 @@ body.tool-report {
 .rep-template-pill.available { background: var(--card-tint, rgba(6,104,217,0.12)); color: var(--card-accent, var(--nav-blue)); }
 
 .rep-template-pill.soon { background: var(--card-tint, var(--amber-bg)); color: var(--card-accent, var(--amber-dark)); }
+.rep-template-pill.unavailable { background: var(--amber-bg); color: var(--amber-dark); }
+.rep-template-why { margin: 4px 0 0; font-size: 12px; color: var(--amber-dark); }
 
 .rep-template-title {
   margin: 0 0 3px; font-size: 17px; font-weight: 700; color: var(--text);
@@ -7067,6 +7069,9 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-mark--omni .rep-mark-pill:not([fill]),
 .rep-mark--loc .rep-mark-pill:not([fill]) { fill: #78716c; }
 .rep-mark-label { fill: #fff; font-weight: 700; overflow: visible; }
+/* The name beside a Change / Audit circle; the white halo keeps it readable
+   over the plan's linework. */
+.rep-aud-lbl { fill: #111; stroke: #fff; paint-order: stroke; font-weight: 700; }
 /* Second line of a label -- model, channel, mount height. Lighter than the name
    so the name still reads first at arm's length. */
 .rep-mark-sub { fill: #fff; font-weight: 500; opacity: 0.85; overflow: visible; }
@@ -7182,9 +7187,10 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-cov-key-swatch.ring-strong { background: none; border-top: 2px solid var(--text-2); height: 0; margin-top: 4px; width: 16px; }
 .rep-cov-key-swatch.ring-fair   { background: none; border-top: 2px dashed var(--text-2); height: 0; margin-top: 4px; width: 16px; }
 .rep-cov-key-swatch.ring-weak   { background: none; border-top: 2px dotted var(--text-2); height: 0; margin-top: 4px; width: 16px; }
-.rep-cov-band-swatch.two   { background: rgba(14,165,233,0.85); }
-.rep-cov-band-swatch.five  { background: rgba(21,128,61,0.85); }
-.rep-cov-band-swatch.six   { background: rgba(139,92,246,0.85); }
+.rep-cov-band-swatch.two   { background: #1e77ac; }
+.rep-cov-band-swatch.five  { background: #5fab4f; }
+.rep-cov-band-swatch.six   { background: #8b5cf6; }
+.rep-cov-note { margin: 6px 0 0; font-size: 11px; color: var(--text-2); }
 .rep-cov-legend { page-break-inside: avoid; }
 .rep-cov-method { page-break-inside: avoid; }
 .rep-hotspot-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -7206,7 +7212,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-hotspot-floor-count { font-weight: 600; font-size: 14px; color: var(--blue); }
 .rep-hotspot-floor-flags { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; margin: 4px 0 10px; font-size: 11px; }
 .rep-hotspot-floor-flag-ssid { color: var(--text-2); }
-.rep-hotspot-walk { fill: none; stroke: var(--blue); stroke-width: 10; stroke-opacity: 0.75; stroke-linecap: round; stroke-linejoin: round; }
+.rep-hotspot-walk { fill: none; stroke: var(--blue); stroke-width: var(--walk-w, 10); stroke-opacity: 0.75; stroke-linecap: round; stroke-linejoin: round; }
 .rep-hotspot-walk--medium { stroke: var(--amber); }
 .rep-hotspot-walk--high { stroke: var(--red); }
 .rep-hotspot-method { font-size: 12px; line-height: 1.5; }
@@ -7480,6 +7486,13 @@ body.wd-has-stale-banner { padding-top: 52px; }
   /* Height reads as one value - "3.05 m (10 ft)" - so it stays on one line
      rather than pushing every row to two. */
   .rep-ap-table td.rep-nowrap-print { white-space: nowrap !important; }
+  /* A BSSID is one token. Wrapping it mid-address makes two cells of what
+     reads as two addresses; the column is sized to hold all 17 characters. */
+  .rep-ap-table td.rep-az.rep-bssid { white-space: nowrap !important; }
+  /* The longest category, "Wide-channel Wi-Fi", is wider than its column at
+     8pt. A chip that wraps to two lines is legible; one clipped to
+     "Wide-channel W" is not. */
+  .rep-hotspot-table .rep-hotspot-chip { white-space: normal !important; text-align: center; }
   .rep-nowrap, .rep-ap-table td.rep-az { white-space: normal !important; }
   .rep-ap-table .rep-alt { color: #888 !important; }
 

@@ -1404,7 +1404,10 @@
   }
   function apIsOmniOnly(ap) {
     var rs = proj.radios.filter(function (r) { return r.accessPointId === ap.id; });
-    if (!rs.length) return false;
+    /* An AP with no radio has no antenna to aim. It used to count as
+       directional, so the Aim Sheet listed it as "omni" under a cover that
+       counted it among the directional APs. */
+    if (!rs.length) return true;
     return rs.every(function (r) {
       if (!r.antennaTypeId) return true;
       var a = proj.antennas[r.antennaTypeId];
@@ -1422,6 +1425,11 @@
 
   function primaryRadio(apId) {
     var rs = proj.radios.filter(function (r) { return r.accessPointId === apId; });
+    /* A radio switched off in the design is not what the AP is mounted as, and
+       a disabled first radio was supplying the height, mount and antenna of an
+       AP whose live radio is somewhere else entirely. */
+    var live = rs.filter(function (r) { return r.enabled !== false; });
+    if (live.length) rs = live;
     return rs.find(function (r) { return r.radioTechnology === 'IEEE802_11'; }) || rs[0] || null;
   }
   function compass(deg) {
@@ -1504,8 +1512,31 @@
     return byFloor;
   }
 
+  /* Building, then storey, then name - the order the building is climbed in.
+     By name alone "Floor 2 Mezzanine" printed before "Floor 1 Warehouse
+     Level 1", in the maps, the label pages, the notes and every table, while
+     the Summary kept the file's order, so two reports of one project listed
+     its floors differently. A floor with no storey number sorts after the
+     numbered ones in its building, by name. */
   function sortedFloorOrder(byFloor) {
+    function buildingOf(fp) {
+      var bf = proj.buildingFloors && proj.buildingFloors[fp.id];
+      var b = bf && proj.buildings && proj.buildings[bf.buildingId];
+      return (b && b.name) || '';
+    }
     var order = proj.floorPlans.slice().sort(function (a, b) {
+      var ba = buildingOf(a), bb = buildingOf(b);
+      if (ba !== bb) {
+        if (!ba) return 1;
+        if (!bb) return -1;
+        return ba.localeCompare(bb, undefined, { numeric: true });
+      }
+      var na = floorNumberFor(a), nb = floorNumberFor(b);
+      if (na !== nb) {
+        if (na == null) return 1;
+        if (nb == null) return -1;
+        return na - nb;
+      }
       return (a.name || '').localeCompare(b.name || '', undefined, { numeric: true });
     });
     if (byFloor['_none']) order.push({ id: '_none', name: '(No floor plan)' });
@@ -2206,6 +2237,28 @@
 
   var expandedTemplateId = null;
 
+  /* Why a report cannot be made from the open project, or '' when it can.
+
+     The tool knows this before anyone clicks: Interference reads survey
+     measurements, and a design-only project has none, so the card said
+     "Available" and the report was a page saying there is nothing to report on.
+     The card stays, named and greyed, with the reason on it - a card that
+     vanishes would leave the question of where it went. Nothing is refused
+     that could have worked: the Aim Sheet on an all-omni project is not here,
+     because its own "Include omni APs" option lists them. */
+  var NEEDS_ACCESS_POINTS = ['placement', 'aim', 'location', 'bom', 'coverage', 'design'];
+  function reportUnavailableReason(id) {
+    if (!fileName) return '';                       // nothing open yet
+    if (id === 'interference' && !proj.measurements.length) {
+      return 'This project holds a design and no survey walk, so there are no measured '
+        + 'devices to report on. Open an .esx that includes an Ekahau Survey.';
+    }
+    if (NEEDS_ACCESS_POINTS.indexOf(id) !== -1 && !proj.accessPoints.length) {
+      return 'This project has no access points in it.';
+    }
+    return '';
+  }
+
   function renderTemplateGallery() {
     var host = document.getElementById('templateGallery');
     if (!host) return;
@@ -2219,10 +2272,13 @@
       catReports.forEach(function (id) {
         var r = REPORTS[id];
         var isSoon = r.status === 'coming-soon';
-        var isSelected = templateConfirmed && id === currentReportId;
+        var whyNot = isSoon ? '' : reportUnavailableReason(id);
+        var isSelected = templateConfirmed && id === currentReportId && !whyNot;
         var isExpanded = expandedTemplateId === id;
         var pill = isSoon
           ? '<span class="rep-template-pill soon">Coming soon</span>'
+          : whyNot
+          ? '<span class="rep-template-pill unavailable">Not for this project</span>'
           : (isSelected
             ? '<span class="rep-template-pill selected">Selected</span>'
             : '<span class="rep-template-pill available">Available</span>');
@@ -2242,6 +2298,8 @@
 
         var cta = isSoon
           ? '<div class="rep-template-soon-note">In progress — check back soon</div>'
+          : whyNot
+          ? '<div class="rep-template-soon-note">' + WD.esc(whyNot) + '</div>'
           : '<div class="rep-template-cta"><button type="button" class="btn btn-blue" '
             + 'data-action="call" data-fn="selectReport" data-stop="1" data-arg="' + WD.escAttr(id) + '">'
             + (isSelected ? 'Continue with this template' : 'Use this template')
@@ -2252,9 +2310,10 @@
 
         html += '<div class="rep-template-card tpl-' + WD.escAttr(id)
           + (isSoon ? ' is-coming-soon' : '')
+          + (whyNot ? ' is-unavailable' : '')
           + (isSelected ? ' is-selected' : '')
           + (isExpanded ? ' is-expanded' : '')
-          + '"' + (isSoon ? '' : ' data-action="call" data-fn="selectReport" data-arg="' + WD.escAttr(id) + '"')
+          + '"' + (isSoon || whyNot ? '' : ' data-action="call" data-fn="selectReport" data-arg="' + WD.escAttr(id) + '"')
           + '>'
           +   '<div class="rep-template-card-top">'
           +     '<div class="rep-template-preview">' + (r.preview || '') + '</div>'
@@ -2262,6 +2321,7 @@
           +       pill
           +       '<h3 class="rep-template-title">' + WD.esc(r.label) + '</h3>'
           +       '<p class="rep-template-subtitle">' + WD.esc(r.description || '') + '</p>'
+          +       (whyNot ? '<p class="rep-template-why">' + WD.esc(whyNot) + '</p>' : '')
           /* Who it is for and how many pages land on the desk, on the face of
              the card rather than behind the Details toggle. Nine reports that
              all put APs on a floor plan cannot be told apart by expanding nine
@@ -2329,6 +2389,8 @@
     id = RETIRED_REPORTS[id] || id;
     if (!REPORTS[id]) return;
     if (REPORTS[id].status === 'coming-soon') return;
+    var whyNot = reportUnavailableReason(id);
+    if (whyNot) { showToast(whyNot, 'error'); return; }
     // A change made in the last 1.5 s belongs to the report it was made on;
     // left to the timer it was saved under whichever report was current then.
     if (_autoSaveTimer) flushAutoSave();
@@ -5368,6 +5430,32 @@
      resolved to. "Auto" is deliberately resolved first rather than copied: the
      point is that every page ends up the same way round, and copying "auto"
      would leave each page free to decide differently again. */
+  /* The opening of one floor's map sheet, for every report that draws a plan.
+
+     Placement fitted its plans to the sheet and the other reports did not: a
+     map is as wide as the page and as tall as its aspect makes it, so any plan
+     taller than about 1.25:1 ran off the bottom of the sheet - markers 22 to
+     24 of a floor were simply never printed - and a 600 x 6000 plan spread
+     over nine sheets with the heading on one and the key on the last.
+     Placement's own class does the fitting (sizePlacementPlansForPrint) and
+     brings the Auto / Portrait / Landscape picker with it, so a report whose
+     sheet is a plan takes the same markup rather than a second fitting rule. */
+  function planPageOpen(kind, fpId, opts, extraClass) {
+    var key = kind + ':' + fpId;
+    return '<section class="rep-floor-section rep-placement-page rep-oriented'
+      + (extraClass ? ' ' + extraClass : '') + '"'
+      + ' data-floor-id="' + WD.escAttr(fpId) + '"'
+      + ' data-page-key="' + WD.escAttr(key) + '" data-page-kind="plan">'
+      + orientPickerHtml(key, opts);
+  }
+
+  /* Sizes every plan sheet and turns the ones that want turning, then lets the
+     cover follow. The one postRender every plan-per-floor report shares. */
+  function fitPlanPages(host, opts) {
+    applyPageOrientation(host, opts);
+    sizePlacementPlansForPrint(host, opts);
+  }
+
   window.matchAllPageOrient = function (fpId) {
     var host = document.getElementById('reportCanvas');
     if (!host) return;
@@ -5463,6 +5551,28 @@
       if (now) now.textContent = (mode === 'auto' ? 'auto \u2192 ' : '') + want;
     }
     orientCover(host, opts);
+    seatFooter(host);
+  }
+
+  /* The closing credit line prints on the last page, not after it.
+
+     It sits outside every section, on the document's own page - always the
+     portrait one. After a landscape last page (the AP Notes pages are one)
+     that is a change of named page, so the browser starts a new sheet for one
+     line of text: a portrait sheet with nothing on it but the footer, at the
+     end of a BOM, Summary, Coverage or Aim sheet. Inside the last section it
+     takes that section's page, whichever way round it is turned. */
+  function seatFooter(host) {
+    // The document's own footer is a direct child of the canvas. A page can
+    // carry its own footer inside it (the notes pages do), which is not this.
+    var foot = null;
+    for (var i = host.children.length - 1; i >= 0 && !foot; i--) {
+      var kid = host.children[i];
+      if (kid.tagName === 'FOOTER' && kid.classList.contains('rep-doc-foot')) foot = kid;
+    }
+    if (!foot) return;                                      // none, or already seated
+    var prev = foot.previousElementSibling;
+    if (prev && prev.classList.contains('rep-oriented')) prev.appendChild(foot);
   }
 
   /* The cover follows the report.
@@ -5484,7 +5594,22 @@
     var mode = pageOrientMode('cover', opts || {});
     var want = mode;
     if (mode === 'auto') {
-      var pages = host.querySelectorAll('[data-page-key]');
+      /* Every sheet votes, not only the ones that carry a page key. Most of a
+         report's tables and maps carry none and always print portrait, so
+         counting only keyed pages let a single landscape AP Notes page - the
+         only keyed one in a BOM, Summary or Coverage report - turn the cover
+         landscape in front of five portrait sheets. */
+      var pages = [];
+      var keyed = host.querySelectorAll('[data-page-key]');
+      for (var k = 0; k < keyed.length; k++) pages.push(keyed[k]);
+      for (var c = 0; c < host.children.length; c++) {
+        var kid = host.children[c];
+        if (kid.tagName === 'SECTION' && pages.indexOf(kid) === -1) pages.push(kid);
+      }
+      // Document order, so a tie still goes to the sheet bound against the cover.
+      pages.sort(function (a, b) {
+        return (a.compareDocumentPosition(b) & 4) ? -1 : 1;
+      });
       var land = 0, port = 0, first = null;
       for (var i = 0; i < pages.length; i++) {
         var pg = pages[i];
@@ -6355,7 +6480,11 @@
     if (/^wi-?fi\s+hotspot\s+\d+/.test(low)) return 'Carrier hotspot';
     if (/mifi|jetpack/.test(low)) return 'Carrier hotspot';
     if (/[_\-]hotspot\b/.test(low)) return 'Carrier hotspot';
-    if (/^att[a-z0-9]{6,10}$/.test(s)) return 'ATT (phone or gateway)';
+    /* `low`, not `s`: a gateway is "ATTx7Q2Lm", capitals and all, and the
+       prefix is the one thing every one of them shares. Tested against `s`
+       this needed a lowercase "att" that no real SSID has, so the category
+       never matched and the toggle for it did nothing. */
+    if (/^att[a-z0-9]{6,10}$/.test(low)) return 'ATT (phone or gateway)';
     return null;
   }
 
@@ -6364,7 +6493,7 @@
     var bands = {};
     chans.forEach(function (c) {
       if (c < 3000) bands['2.4'] = 1;
-      else if (c >= 5955) bands['6'] = 1;
+      else if (c >= 5955 || c === 5935) bands['6'] = 1;   // 5935 is 6 GHz channel 2
       else bands['5'] = 1;
     });
     return Object.keys(bands).sort().join(' / ') + ' GHz';
@@ -6372,11 +6501,27 @@
 
   function hotspotChannel(chans) {
     if (!chans || !chans.length) return '';
+    function one(c) {
+      if (c >= 2412 && c <= 2484) return (c === 2484 ? 14 : (c - 2407) / 5);
+      if (c >= 5000 && c <= 5900) return ((c - 5000) / 5);
+      if (c === 5935) return 2;
+      if (c >= 5955) return ((c - 5950) / 5);
+      return null;
+    }
+    var six = function (c) { return c >= 5955 || c === 5935; };
+    var sorted = chans.slice().sort(function (a, b) { return a - b; });
+    /* A 320 MHz device is sixteen 20 MHz channels. Listed one by one that was
+       a third of a page tall in a single cell; a run of them is one range. */
+    var run = sorted.length > 2 && sorted.every(function (c, i) {
+      return i === 0 || c - sorted[i - 1] === 20;
+    });
+    if (run && sorted.every(function (c) { return one(c) != null; })) {
+      return 'ch' + one(sorted[0]) + '\u2013' + one(sorted[sorted.length - 1])
+        + (six(sorted[0]) ? '(6E)' : '');
+    }
     return chans.map(function (c) {
-      if (c >= 2412 && c <= 2484) return 'ch' + (c === 2484 ? 14 : (c - 2407) / 5);
-      if (c >= 5000 && c <= 5900) return 'ch' + ((c - 5000) / 5);
-      if (c >= 5955) return 'ch' + ((c - 5950) / 5) + '(6E)';
-      return String(c);
+      var n = one(c);
+      return n == null ? String(c) : 'ch' + n + (six(c) ? '(6E)' : '');
     }).join(', ');
   }
 
@@ -6447,7 +6592,7 @@
 
   function renderInterferenceReport(aps, opts, ctx) {
     if (!proj.measurements.length) {
-      return (opts.cover ? ctx.cover(0, ctx.dateStr, 'Interferers detected') : ctx.inlineHeader(0, ctx.dateStr, 'Interferers detected'))
+      return (opts.cover ? ctx.cover('\u2014', ctx.dateStr, 'Interferers detected') : ctx.inlineHeader('\u2014', ctx.dateStr, 'Interferers detected'))
         + '<section class="rep-floor-section">'
         +   '<h2 class="rep-floor-title">No survey data</h2>'
         +   '<div class="rep-empty-small">This .esx contains only design/planning data — no measured APs to report on. '
@@ -6478,7 +6623,12 @@
       } else {
         return;
       }
-      var floors = Object.keys(floorMap[m.id] || {});
+      /* The project's floor order, not the order the survey happened to visit
+         them in: "Seen on" read "Fl 3, Fl 6, Fl 1". */
+      var floors = Object.keys(floorMap[m.id] || {}).sort(function (a, b) {
+        function at(id) { return proj.floorPlans.findIndex(function (x) { return x.id === id; }); }
+        return at(a) - at(b);
+      });
       var floorNames = floors.map(function (fid) {
         var f = proj.floorPlans.find(function (x) { return x.id === fid; });
         return f ? f.name : '';
@@ -6501,7 +6651,7 @@
     hotspots.sort(function (a, b) {
       return (SEV_RANK[b.severity] - SEV_RANK[a.severity])
         || (catRank[a.category] - catRank[b.category])
-        || (a.ssid || '').toLowerCase().localeCompare((b.ssid || '').toLowerCase());
+        || (a.ssid || '').toLowerCase().localeCompare((b.ssid || '').toLowerCase(), undefined, { numeric: true });
     });
 
     function chip(cat) {
@@ -6534,6 +6684,7 @@
       + '</div></section>';
 
     var overlays = '';
+    var unsurveyed = [];
     if (opts.overview) {
       var floorSevRank = {};
       hotspots.forEach(function (h) {
@@ -6545,6 +6696,12 @@
       proj.floorPlans.forEach(function (fp) {
         var url = proj.imageUrls[fp.bitmapImageId || fp.imageId];
         if (!url) return;
+        /* A floor nobody walked has nothing to map. It printed "0 interferers
+           detected" over a bare plan, which reads as surveyed and clean. */
+        if (!proj.surveys.some(function (sv) { return sv.floorPlanId === fp.id; })) {
+          unsurveyed.push(fp.name || 'Floor plan');
+          return;
+        }
         var floorHotspots = hotspots.filter(function (h) {
           return h.floorIds.indexOf(fp.id) !== -1;
         });
@@ -6554,11 +6711,23 @@
           return sevChip(h.severity) + ' <span class="rep-hotspot-floor-flag-ssid">' + WD.esc(h.ssid) + '</span>';
         }).join(' &nbsp; ');
         if (flagged.length > 6) flaggedChips += ' &nbsp; <span class="rep-hotspot-floor-flag-ssid">+' + (flagged.length - 6) + ' more</span>';
+        /* The heading counts every interferer on the floor but only the
+           Medium and High ones are named above the map. Saying nothing about
+           the rest made "4 interferers detected" sit over one name. */
+        var lowCount = floorHotspots.length - flagged.length;
+        if (lowCount > 0) {
+          flaggedChips += (flaggedChips ? ' &nbsp; ' : '')
+            + '<span class="rep-hotspot-floor-flag-ssid">'
+            + (flaggedChips ? '+ ' : '') + lowCount + ' low-severity not listed here (see the table)</span>';
+        }
         var rank = floorSevRank[fp.id] || 0;
         var walkClass = rank === 2 ? ' rep-hotspot-walk--high' : rank === 1 ? ' rep-hotspot-walk--medium' : '';
         var polylines = surveyPolylinesForFloor(fp.id, walkClass);
-        overlays += '<section class="rep-floor-section">'
-          + '<h2 class="rep-floor-title">Floor ' + WD.esc(fp.name || 'plan')
+        // About 2 pt on paper, whatever the plan's size: a fixed 10 units is a
+        // hairline on a 12000-unit plan and a bar once a crop zooms in.
+        var walkW = (Math.max(fp.width || 1, fp.height || 1) * 0.0035).toFixed(2);
+        overlays += planPageOpen('hotspot', fp.id, opts)
+          + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan')
           +   ' <span class="rep-hotspot-floor-count">- '
           +   floorHotspots.length + ' interferer' + (floorHotspots.length === 1 ? '' : 's') + ' detected</span>'
           + '</h2>'
@@ -6567,35 +6736,58 @@
           +   'data-crop-src="' + WD.escAttr(url) + '" '
           +   'style="--w:' + fp.width + ';--h:' + fp.height + '">'
           +   '<img src="' + url + '" alt="Floor plan">'
-          +   '<svg viewBox="0 0 ' + fp.width + ' ' + fp.height + '" preserveAspectRatio="none">'
+          +   '<svg viewBox="0 0 ' + fp.width + ' ' + fp.height + '" preserveAspectRatio="none" style="--walk-w:' + walkW + '">'
           +     polylines
           +   '</svg>'
           + '</div>'
-          + '<div class="rep-overview-key">Walk path = where scans were captured on this floor '
-          +   '(blue = normal, amber = a medium-severity interferer was seen here, red = a high-severity one). '
-          +   'This traces the walk, not the interferer&#39;s exact position - see &quot;How we classified these&quot; below.</div>'
+          + (polylines
+            ? '<div class="rep-overview-key">Walk path = where scans were captured on this floor '
+              + '(blue = normal, amber = a medium-severity interferer was seen here, red = a high-severity one). '
+              + 'This traces the walk, not the interferer&#39;s exact position - see &quot;How we classified these&quot; below.</div>'
+            : '<div class="rep-overview-key">The survey recorded no walk path for this floor, so there is nothing to draw on it.</div>')
           + '</div></section>';
       });
+    }
+
+    if (opts.overview && unsurveyed && unsurveyed.length) {
+      overlays += '<section class="rep-floor-section"><div class="rep-overview-key">'
+        + 'Not shown: ' + unsurveyed.length + ' floor plan' + (unsurveyed.length === 1 ? '' : 's')
+        + ' with no survey walk (' + unsurveyed.map(function (n) { return WD.esc(n); }).join(', ')
+        + ').</div></section>';
     }
 
     var showChannel = !!opts.channel;
     var rows = hotspots.map(function (h) {
       return '<tr><td>' + chip(h.category) + '</td>'
         + '<td class="rep-name">' + WD.esc(h.ssid) + '</td>'
-        + '<td class="rep-az">' + WD.esc(h.mac) + '</td>'
+        + '<td class="rep-az rep-bssid">' + WD.esc(h.mac) + '</td>'
         + '<td>' + WD.esc(h.band) + '</td>'
         + (showChannel ? '<td>' + WD.esc(h.channel) + '</td>' : '')
         + '<td>' + (h.widthMHz ? h.widthMHz + ' MHz' : '—') + '</td>'
         + '<td>' + sevChip(h.severity) + '</td>'
         + '<td>' + WD.esc(h.security) + '</td>'
-        + '<td>' + (h.floorNames.length ? h.floorNames.map(function (n) { return 'Fl ' + WD.esc(n); }).join(', ') : '—') + '</td>'
+        + '<td>' + (h.floorNames.length ? h.floorNames.map(function (n) { return WD.esc(n); }).join(', ') : '—') + '</td>'
         + '</tr>';
     }).join('');
 
     var colCount = showChannel ? 9 : 8;
-    var tableSection = '<section class="rep-floor-section">'
+    /* Printed with table-layout: fixed, so a table with no widths gets equal
+       ones: the longest category chip, a 17-character BSSID and a floor name
+       each need more than an eighth of the sheet, and the chip was clipped to
+       "Wide-channel W" while the BSSID wrapped mid-address. Weights, not
+       pixels, as the Installation table does it. */
+    var colWeights = showChannel ? [14, 14, 17, 8, 11, 8, 8, 8, 12] : [17, 17, 17, 8, 9, 9, 9, 14];
+    var colgroup = '<colgroup>' + colWeights.map(function (w) {
+      return '<col style="width:' + w + '%">';
+    }).join('') + '</colgroup>';
+    // A page like any other table: measured, turned when it will not fit,
+    // and with the same Auto / Portrait / Landscape picker.
+    var tableSection = '<section class="rep-floor-section rep-oriented"'
+      + ' data-page-key="hotspot-table" data-page-kind="table">'
+      + orientPickerHtml('hotspot-table', opts)
       + '<h2 class="rep-floor-title">All detected interferers</h2>'
-      + '<table class="rep-ap-table">'
+      + '<table class="rep-ap-table rep-hotspot-table">'
+      +   colgroup
       +   '<thead><tr>'
       +     '<th>Category</th><th>SSID</th><th>BSSID</th><th>Band</th>'
       +     (showChannel ? '<th>Channel(s)</th>' : '')
@@ -6612,9 +6804,9 @@
       +   'or as <b>Wide-channel Wi-Fi</b> when it did not match a naming pattern but was still transmitting on '
       +   'a 40MHz+ channel - wide enough to be a plausible interference source on its own:'
       +   '<ul>'
-      +     '<li><b>iPhone / iPad</b> — SSID contains iPhone, iPad, or "’s iPhone" (default iOS Personal Hotspot naming).</li>'
-      +     '<li><b>Android</b> — AndroidAP_XXXX, AndroidShare_XXXX, DIRECT-xx-AndroidAP, or a Samsung Galaxy device name.</li>'
-      +     '<li><b>Carrier hotspot / MiFi</b> — HotspotXXXX, WiFi Hotspot NNNN, or SSIDs containing MiFi / Jetpack (Verizon and T-Mobile default names for standalone hotspot devices).</li>'
+      +     '<li><b>iPhone / iPad</b> — SSID contains iPhone, iPad or iPod, or "’s iPhone" (default iOS Personal Hotspot naming).</li>'
+      +     '<li><b>Android</b> — AndroidAP_XXXX, AndroidShare_XXXX, DIRECT-xx-AndroidAP, or a Galaxy / Samsung Galaxy device name.</li>'
+      +     '<li><b>Carrier hotspot / MiFi</b> — HotspotXXXX, WiFi Hotspot NNNN, SSIDs containing MiFi / Jetpack, or ending in _hotspot / -hotspot (Verizon and T-Mobile default names for standalone hotspot devices).</li>'
       +     '<li><b>ATT (phone or gateway)</b> — SSIDs matching ATT[6-10 chars]. This pattern is used by both AT&amp;T phone hotspots and AT&amp;T home gateways, so treat as suggestive rather than definitive.</li>'
       +     '<li><b>Wide-channel Wi-Fi</b> - any other BSSID using a 40MHz or wider channel. Catches rogue APs and hotspots that do not match a phone-naming pattern.</li>'
       +   '</ul>'
@@ -6699,9 +6891,19 @@
     if (!url) return '';
     var W = fp.width || 1, H = fp.height || 1;
     var minDim = Math.min(W, H);
-    var dotR = minDim * 0.012;
-    var sw = minDim * 0.003;
+    /* Floored on the long edge as every other map's marker is. On a 9000 x 500
+       plan 1.2% of the short side is six units - under half a point on paper -
+       and the changed AP was not there to find. */
+    var dotR = Math.max(minDim * 0.012, Math.max(W, H) * 0.006);
+    var sw = Math.max(minDim * 0.003, dotR * 0.25);
+    var lblFont = dotR * 1.7;
     var shift = null;
+    // The name beside a circle is what ties it to its row in the table.
+    function nameTag(ap, x, y) {
+      return '<text class="rep-aud-lbl" x="' + (x + dotR * 1.4) + '" y="' + (y + lblFont * 0.35)
+        + '" font-size="' + lblFont + '" stroke-width="' + (lblFont * 0.18) + '">'
+        + WD.esc(apLabel(ap, 'short')) + '</text>';
+    }
     result.floorNotes.forEach(function (n) { if (n.floorId === fp.id) shift = n; });
 
     function onThisFloor(loc) { return loc && loc.floorPlanId === fp.id; }
@@ -6725,14 +6927,14 @@
         }
       }
       g += '<circle class="rep-aud-changed" cx="' + ca.x + '" cy="' + ca.y + '" r="' + dotR
-        + '" stroke-width="' + sw + '"/>';
+        + '" stroke-width="' + sw + '"/>' + nameTag(rec.after, ca.x, ca.y);
       drew++;
     });
     result.added.forEach(function (ap) {
       if (!onThisFloor(ap.location)) return;
       var c = apCoord(ap); if (!c) return;
       g += '<circle class="rep-aud-added" cx="' + c.x + '" cy="' + c.y + '" r="' + dotR
-        + '" stroke-width="' + sw + '"/>';
+        + '" stroke-width="' + sw + '"/>' + nameTag(ap, c.x, c.y);
       drew++;
     });
     /* A removed AP is drawn where it used to be, corrected for a re-crop if
@@ -6748,7 +6950,7 @@
         + '<line x1="' + (-dotR) + '" y1="' + (-dotR) + '" x2="' + dotR + '" y2="' + dotR
         + '" stroke-width="' + sw + '"/>'
         + '<line x1="' + (-dotR) + '" y1="' + dotR + '" x2="' + dotR + '" y2="' + (-dotR)
-        + '" stroke-width="' + sw + '"/></g>';
+        + '" stroke-width="' + sw + '"/>' + nameTag(ap, dotR, 0) + '</g>';
       drew++;
     });
     result.unchanged.forEach(function (rec) {
@@ -6759,7 +6961,7 @@
     });
 
     if (!drew) return '';
-    return '<section class="rep-floor-section">'
+    return planPageOpen('audit', fp.id, opts)
       + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + ' — what changed</h2>'
       + '<div class="rep-overview">'
       +   '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
@@ -7057,7 +7259,7 @@
     if (!n) return 'No name';
     if (/^[0-9a-f]{2}([:\-.]?[0-9a-f]{2}){5}$/i.test(n)) return 'A MAC address as the name';
     if (/^(simulated|measured)?[\s\-_]*(ap|access[\s\-_]*point)[\s\-_#]*\d*$/i.test(n)) {
-      return 'Ekahau’s default name';
+      return 'Only \u201cAP\u201d and a number';
     }
     return '';
   }
@@ -7164,7 +7366,7 @@
       if (rs.length && (height == null || height <= DR_UNSET_HEIGHT_M)) {
         add('noHeight', 'check', 'Access points with no mount height',
             'The prediction assumed a height nobody chose, and the installer has nothing to hang it at.',
-            ap, height == null ? 'Not recorded' : fmt(height, 2) + ' m');
+            ap, height == null ? 'Not recorded' : fmtLength(height, o));
       }
       var aimless = rs.filter(function (r) {
         return antennaIsDirectional(p.antennas && p.antennas[r.antennaTypeId])
@@ -7274,7 +7476,7 @@
             _covBandLabel(pl.info.band) + ' co-channel neighbours closer than ' + fmtLength(cci, o),
             pl.info.band === 'TWO'
               ? 'Two radios on the same channel within earshot share one channel\u2019s airtime. With three channels in 2.4 GHz, a long list here usually means too many 2.4 GHz radios are on: turn some off or down rather than re-channel.'
-              : 'Two radios on the same channel within earshot share one channel\u2019s airtime between both cells.',
+              : 'Two radios on the same channel within earshot share one channel\u2019s airtime between both cells. Each radio is listed once, so a pair appears as two rows.',
             pl.ap,
             'ch ' + drChannelText(pl.info) + ': ' + (pl.near.ap.name || '(unnamed)')
               + ' (ch ' + drChannelText(pl.near.info) + ') at ' + fmtLength(pl.near.d, o)
@@ -7283,7 +7485,10 @@
     });
     Object.keys(unscaled).forEach(function (id) {
       var f = unscaled[id];
-      finding('noScale', 'note', 'Floors with no scale',
+      /* 'check', not 'note': the notes can be switched off, and with them went
+         the only sign that co-channel neighbours had not been looked for on
+         this floor - while its map said there were none. */
+      finding('noScale', 'check', 'Floors with no scale',
               'Distances cannot be measured on a plan that was never scaled, so co-channel neighbours were not checked there.')
         .rows.push({ ap: null, floor: f.name || 'Floor plan', detail: '' });
     });
@@ -7312,6 +7517,7 @@
       findings: findings,
       channelUse: use,
       pairs: pairs,
+      unscaled: unscaled,
       cciMeters: cci,
       plan24: plan,
       radiosReviewed: radiosReviewed,
@@ -7338,8 +7544,10 @@
       return opts.showNotes !== false || f.severity !== 'note';
     });
 
+    // What is listed below, not what was found: with the notes switched off the
+    // Note tile still said 15, and the three tiles summed to more than the page.
     var counts = { fix: 0, check: 0, note: 0 };
-    res.findings.forEach(function (f) { counts[f.severity] += f.rows.length; });
+    shown.forEach(function (f) { counts[f.severity] += f.rows.length; });
     var verdict = counts.fix
       ? counts.fix + ' item' + (counts.fix === 1 ? '' : 's') + ' to fix before this design is handed over.'
       : counts.check
@@ -7351,10 +7559,15 @@
       + '<div class="rep-hotspot-stats">'
       +   '<div class="rep-hotspot-stat rep-hotspot-stat--severity"><b>' + counts.fix + '</b><span>Fix</span></div>'
       +   '<div class="rep-hotspot-stat rep-hotspot-stat--carrier"><b>' + counts.check + '</b><span>Check</span></div>'
-      +   '<div class="rep-hotspot-stat rep-hotspot-stat--iphone"><b>' + counts.note + '</b><span>Note</span></div>'
+      +   (opts.showNotes !== false
+            ? '<div class="rep-hotspot-stat rep-hotspot-stat--iphone"><b>' + counts.note + '</b><span>Note</span></div>' : '')
       +   '<div class="rep-hotspot-stat rep-hotspot-stat--total"><b>' + res.radiosReviewed + '</b><span>Radios reviewed</span></div>'
       + '</div>'
       + '<p class="rep-aud-note rep-dr-verdict">' + WD.esc(verdict) + '</p>'
+      + (aps.length < (proj.accessPoints || []).length
+          ? '<p class="rep-aud-note"><b>Reviewed ' + aps.length + ' of ' + proj.accessPoints.length
+            + ' access points.</b> The AP filter and the Include omni / directional options leave the rest out, '
+            + 'and co-channel neighbours are only looked for among the ones reviewed.</p>' : '')
       + '<p class="rep-aud-note">Co-channel neighbours are listed when they are closer than '
       +   WD.esc(fmtLength(res.cciMeters, opts)) + ' on the same floor. 2.4 GHz is checked against the '
       +   WD.esc(res.plan24.join('/')) + ' plan.'
@@ -7522,7 +7735,7 @@
         + '" fill="#fff" font-weight="700">' + WD.esc(label) + '</text></g>';
     }).join('');
     var nLines = res.pairs.filter(function (pr) { return pr.floorId === fp.id && pr.band === band; }).length;
-    return '<section class="rep-floor-section rep-cov-section rep-dr-map">'
+    return planPageOpen('drmap-' + band, fp.id, opts, 'rep-cov-section rep-dr-map')
       + '<h2 class="rep-floor-title">' + title + '</h2>'
       + '<div class="rep-overview">'
       +   '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
@@ -7533,7 +7746,9 @@
       +     (nLines
             ? 'A dashed red line joins two co-channel radios closer than '
               + WD.esc(fmtLength(res.cciMeters, opts)) + ' (' + nLines + ' on this floor).'
-            : 'No co-channel radios are closer than ' + WD.esc(fmtLength(res.cciMeters, opts)) + ' on this floor.')
+            : (res.unscaled && res.unscaled[fp.id]
+                ? 'Not checked: this floor plan has no scale, so distances cannot be measured on it.'
+                : 'No co-channel radios are closer than ' + WD.esc(fmtLength(res.cciMeters, opts)) + ' on this floor.'))
       +   '</div>'
       + '</div>'
       + '</section>';
@@ -7638,7 +7853,11 @@
      open: the schedule is the whole job, and a report's omni / directional
      switch is about what that report prints. */
   window.exportApSchedule = function () {
-    var aps = (proj.accessPoints || []).filter(function (a) { return !apDisabled.has(a.id); });
+    /* A report with no AP filter panel (Change / Audit, Summary, BOM, Interference)
+       has no way to show what was unticked in another report's panel, so it
+       must not apply it: 35 APs became 30 rows with the cause out of sight. */
+    var filtered = !currentReport().noApFilter;
+    var aps = (proj.accessPoints || []).filter(function (a) { return !filtered || !apDisabled.has(a.id); });
     if (!aps.length) {
       showToast('There are no access points to export. Open an .esx, or tick some in the AP filter.', 'info');
       return;
@@ -7873,14 +8092,47 @@
     return r;
   }
 
+  /* The radio an AP's cell is drawn from. An AP draws one cell, and a tri-band
+     AP used to be sized from whichever radio the file listed first - usually
+     2.4 GHz, the biggest cell, which flatters the coverage. The 5 GHz radio is
+     the one a design is sized for, so it is preferred; the Band column says
+     which was used, and how many the AP has. */
   function _covApRadio(ap) {
-
-
+    var rs = proj.radios.filter(function (x) {
+      return x.accessPointId === ap.id && x.enabled !== false
+        && (!x.radioTechnology || x.radioTechnology === 'IEEE802_11');
+    });
+    var five = rs.find(function (x) {
+      var ch = x.channelByCenterFrequencyDefinedNarrowChannels;
+      return ch && ch.length && _covBandFromChannel(ch) === 'FIVE';
+    });
+    if (five) return five;
     var r = primaryRadio(ap.id);
     if (r) return r;
-    var rs = proj.radios.filter(function (x) { return x.accessPointId === ap.id; });
-    return rs[0] || null;
+    return proj.radios.filter(function (x) { return x.accessPointId === ap.id; })[0] || null;
   }
+
+  /* One AP's cell, worked out once for the map and the table so the two cannot
+     disagree. Anything the project does not store is filled in with a default
+     - and said so, because a table that prints "15 dBm" for a radio with no
+     power reads as a stored value. */
+  function _covCell(ap) {
+    var r = _covApRadio(ap);
+    if (!r) return null;
+    var ant = r.antennaTypeId ? proj.antennas[r.antennaTypeId] : null;
+    var chans = r.channelByCenterFrequencyDefinedNarrowChannels;
+    var assumed = {};
+    var gain = ant && ant.maxGain != null ? ant.maxGain : (assumed.gain = true, 3);
+    var txp = r.transmitPower != null ? r.transmitPower : (assumed.tx = true, 15);
+    var band = chans && chans.length ? _covBandFromChannel(chans) : (assumed.band = true, 'FIVE');
+    var radios = proj.radios.filter(function (x) {
+      return x.accessPointId === ap.id && x.enabled !== false
+        && (!x.radioTechnology || x.radioTechnology === 'IEEE802_11');
+    }).length;
+    return { radio: r, gain: gain, txp: txp, eirp: txp + gain, band: band,
+             assumed: assumed, radios: radios };
+  }
+  function _covStar(cell, what) { return cell.assumed[what] ? '*' : ''; }
 
   function renderCoverageReport(aps, opts, ctx) {
     var head = opts.cover
@@ -7891,11 +8143,22 @@
 
     var sections = '';
     var indexById = {};
+    var notDrawn = [];
     var seq = 0;
+    /* Only an AP that has a radio and stands on a floor plan is numbered. An AP
+       with neither got a number all the same, so the markers jumped from 10 to
+       12 with no row for 11, and the cover's count agreed with nothing on the
+       pages. Those APs are named under the table instead. */
     (proj.floorPlans || []).forEach(function (fp) {
-      (byFloor[fp.id] || []).forEach(function (ap) { indexById[ap.id] = ++seq; });
+      (byFloor[fp.id] || []).forEach(function (ap) {
+        if (!_covApRadio(ap)) { notDrawn.push({ ap: ap, why: 'no radio in the project' }); return; }
+        if (!(ap.location && ap.location.coord)) { notDrawn.push({ ap: ap, why: 'not placed on the plan' }); return; }
+        indexById[ap.id] = ++seq;
+      });
     });
-    (byFloor['_none'] || []).forEach(function (ap) { indexById[ap.id] = ++seq; });
+    (byFloor['_none'] || []).forEach(function (ap) {
+      notDrawn.push({ ap: ap, why: _covApRadio(ap) ? 'on no floor plan' : 'on no floor plan, and no radio in the project' });
+    });
 
     (proj.floorPlans || []).forEach(function (fp) {
       var floorAps = byFloor[fp.id];
@@ -7903,7 +8166,7 @@
       sections += renderCoverageFloorSection(fp, floorAps, opts, ctx, indexById);
     });
 
-    var legend = opts.legend !== false ? renderCoverageLegend(aps, opts, ctx, indexById) : '';
+    var legend = opts.legend !== false ? renderCoverageLegend(aps, opts, ctx, indexById, notDrawn) : '';
     var method = renderCoverageMethodology(opts);
 
     return head + sections + legend + method + apNotesPages(aps, opts, ctx)
@@ -7919,9 +8182,14 @@
         + '</section>';
     }
     var W = fp.width || 1, H = fp.height || 1;
-    var mPerU = fp.metersPerUnit || 0.05;
-    var showCells = opts.primaryCells !== false;
-    var showRings = opts.signalRings === true;
+    /* No scale, no cell. A missing metersPerUnit was replaced with 0.05, so an
+       unscaled floor drew circles of a size nobody measured - one of them
+       covered the whole sheet. The pins still go on; the key says why the
+       cells are absent. */
+    var scaled = fp.metersPerUnit > 0;
+    var mPerU = scaled ? fp.metersPerUnit : 1;
+    var showCells = opts.primaryCells !== false && scaled;
+    var showRings = opts.signalRings === true && scaled;
     var showLabels = opts.showApLabels !== false;
     var bandTint = opts.bandColors !== false;
     var minDim = Math.min(W, H);
@@ -7929,14 +8197,11 @@
     var cellsSvg = '', ringsSvg = '', pinsSvg = '';
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord;
-      if (!c) return;
-      var r = _covApRadio(ap);
-      if (!r) return;
-      var ant = r.antennaTypeId ? proj.antennas[r.antennaTypeId] : null;
-      var gain = ant && ant.maxGain != null ? ant.maxGain : 3;
-      var txp = r.transmitPower != null ? r.transmitPower : 15;
-      var eirp = txp + gain;
-      var band = _covBandFromChannel(r.channelByCenterFrequencyDefinedNarrowChannels);
+      if (!c || !indexById[ap.id]) return;
+      var cell = _covCell(ap);
+      if (!cell) return;
+      var eirp = cell.eirp;
+      var band = cell.band;
       var color = bandTint ? _covBandColor(band) : '#0668D9';
 
       var rGood   = _covRadiusMeters(eirp, COV_THRESH_GOOD,   band) / mPerU;
@@ -7969,7 +8234,7 @@
       pinsSvg += '</g>';
     });
 
-    return '<section class="rep-floor-section rep-cov-section">'
+    return planPageOpen('coverage', fp.id, opts, 'rep-cov-section')
       + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>'
       + '<div class="rep-overview">'
       +   '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
@@ -7977,6 +8242,7 @@
       +     '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + cellsSvg + ringsSvg + pinsSvg + '</svg>'
       +   '</div>'
       +   renderCoverageFloorKey(opts)
+      +   (scaled ? '' : '<div class="rep-cov-key">This floor plan has no scale, so no coverage cell can be sized on it. The numbers mark where the APs are.</div>')
       + '</div>'
       + '</section>';
   }
@@ -7985,9 +8251,9 @@
     var items = [];
     if (opts.primaryCells !== false) items.push('<span class="rep-cov-key-swatch cell"></span> Primary cell (&minus;67 dBm)');
     if (opts.signalRings === true) {
-      items.push('<span class="rep-cov-key-swatch ring-strong"></span> Strong &lt;&minus;55');
-      items.push('<span class="rep-cov-key-swatch ring-fair"></span> Fair &lt;&minus;75');
-      items.push('<span class="rep-cov-key-swatch ring-weak"></span> Weak &lt;&minus;80');
+      items.push('<span class="rep-cov-key-swatch ring-strong"></span> Strong ring (&minus;55 dBm)');
+      items.push('<span class="rep-cov-key-swatch ring-fair"></span> Fair ring (&minus;75 dBm)');
+      items.push('<span class="rep-cov-key-swatch ring-weak"></span> Weak ring (&minus;80 dBm)');
     }
     if (opts.bandColors !== false) {
       items.push('<span class="rep-cov-band-swatch two"></span> 2.4 GHz');
@@ -7998,32 +8264,43 @@
     return '<div class="rep-cov-key">' + items.join(' &nbsp;·&nbsp; ') + '</div>';
   }
 
-  function renderCoverageLegend(aps, opts, ctx, indexById) {
+  function renderCoverageLegend(aps, opts, ctx, indexById, notDrawn) {
     var rows = '';
-    aps.slice()
+    var anyAssumed = false;
+    aps.filter(function (ap) { return indexById[ap.id]; })
       .sort(function (a, b) { return (indexById[a.id] || 0) - (indexById[b.id] || 0); })
       .forEach(function (ap) {
-        var r = _covApRadio(ap);
-        if (!r) return;
-        var ant = r.antennaTypeId ? proj.antennas[r.antennaTypeId] : null;
-        var gain = ant && ant.maxGain != null ? ant.maxGain : 3;
-        var txp = r.transmitPower != null ? r.transmitPower : 15;
-        var eirp = txp + gain;
-        var band = _covBandFromChannel(r.channelByCenterFrequencyDefinedNarrowChannels);
+        var cell = _covCell(ap);
+        if (!cell) return;
+        var gain = cell.gain, txp = cell.txp, eirp = cell.eirp, band = cell.band;
+        if (Object.keys(cell.assumed).length) anyAssumed = true;
         var rGood = _covRadiusMeters(eirp, COV_THRESH_GOOD, band);
         var rWeak = _covRadiusMeters(eirp, COV_THRESH_WEAK, band);
         rows += '<tr>'
           + '<td class="rep-num">' + (indexById[ap.id] || '') + '</td>'
           + '<td class="rep-name">' + WD.esc(ap.name) + '</td>'
-          + '<td>' + _covBandLabel(band) + '</td>'
-          + '<td>' + fmt(txp, 1) + ' dBm</td>'
-          + '<td>' + fmt(gain, 1) + ' dBi</td>'
+          + '<td>' + _covBandLabel(band) + _covStar(cell, 'band')
+          +   (cell.radios > 1 ? ' <span class="rep-alt">(1 of ' + cell.radios + ' radios)</span>' : '') + '</td>'
+          + '<td>' + fmt(txp, 1) + ' dBm' + _covStar(cell, 'tx') + '</td>'
+          + '<td>' + fmt(gain, 1) + ' dBi' + _covStar(cell, 'gain') + '</td>'
           + '<td>' + fmt(eirp, 1) + ' dBm</td>'
           + '<td>' + fmtLength(rGood, opts, 1) + '</td>'
           + '<td>' + fmtLength(rWeak, opts, 1) + '</td>'
           + '</tr>';
       });
-    if (!rows) return '';
+    if (!rows && !(notDrawn && notDrawn.length)) return '';
+    var footnotes = '';
+    if (anyAssumed) {
+      footnotes += '<p class="rep-cov-note">* The project stores no value for this, so a default was used: '
+        + '15 dBm transmit power, 3 dBi antenna gain, 5 GHz.</p>';
+    }
+    if (notDrawn && notDrawn.length) {
+      footnotes += '<p class="rep-cov-note"><b>Not on the map (' + notDrawn.length + '):</b> '
+        + notDrawn.map(function (n) {
+            return WD.esc(n.ap.name || '(unnamed)') + ' \u2014 ' + n.why;
+          }).join('; ') + '.</p>';
+    }
+    if (!rows) return '<section class="rep-legend rep-cov-legend"><h2 class="rep-floor-title">Cell sizing per AP</h2>' + footnotes + '</section>';
     return '<section class="rep-legend rep-cov-legend">'
       + '<h2 class="rep-floor-title">Cell sizing per AP</h2>'
       + '<table class="rep-ap-table">'
@@ -8034,6 +8311,7 @@
       +   '</tr></thead>'
       +   '<tbody>' + rows + '</tbody>'
       + '</table>'
+      + footnotes
       + '</section>';
   }
 
@@ -8042,7 +8320,8 @@
       + '<h2 class="rep-floor-title">Methodology &amp; caveats</h2>'
       + '<div class="rep-hotspot-method">'
       +   '<p><b>Model.</b> Cell radii use a simple log-distance path-loss model with exponent <b>n = 3</b> and per-band 1-metre baselines (40 dB at 2.4 GHz, 46.5 dB at 5 GHz, 48 dB at 6 GHz). Received signal is estimated as <b>RSSI = EIRP &minus; PathLoss(d)</b> and solved for the distance <b>d</b> at each threshold.</p>'
-      +   '<p><b>Thresholds.</b> Strong &lt; &minus;55 dBm · Good &minus;55 to &minus;67 · Fair &minus;67 to &minus;75 · Weak &minus;75 to &minus;80. The filled primary cell is drawn at the &minus;67 dBm boundary — the standard threshold for reliable voice and video.</p>'
+      +   '<p><b>Thresholds.</b> Strong: stronger than &minus;55 dBm · Good &minus;55 to &minus;67 · Fair &minus;67 to &minus;75 · Weak &minus;75 to &minus;80. The filled primary cell is drawn at the &minus;67 dBm boundary — the standard threshold for reliable voice and video.</p>'
+      +   '<p><b>One cell per AP.</b> An AP with more than one radio is drawn from its 5 GHz radio if it has one, otherwise from its first radio; the Band column says which, and how many radios the AP has. Cells are not drawn on a floor plan that has no scale.</p>'
       +   '<p><b>What it does not model.</b> Walls, floors, and materials are not attenuated. Directional antennas are treated as omnidirectional for the purpose of cell radius — the extra gain enlarges the circle uniformly rather than shaping a sector. Interference, channel overlap, client-side sensitivity, and airtime utilisation are all outside the scope of this drawing.</p>'
       +   '<p><b>Read this report as.</b> An advisory sanity check for AP placement — "does the map look reasonable, and where are the obvious weak-signal gaps." Not a substitute for a measured predictive survey.</p>'
       + '</div>'
@@ -8059,8 +8338,8 @@
 
     return new Promise(function (resolve) {
       function ready() {
-        try { doCrop(); } catch (e) { console.error('autocrop', e); }
-        resolve();
+        try { Promise.resolve(doCrop()).then(resolve, resolve); }
+        catch (e) { console.error('autocrop', e); resolve(); }
       }
       if (img.complete && img.naturalWidth) ready();
       else { img.addEventListener('load', ready, {once: true});
@@ -8126,21 +8405,32 @@
       out.height = Math.max(1, Math.round(srcH * outScale));
       out.getContext('2d').drawImage(img, srcX, srcY, srcW, srcH,
                                      0, 0, out.width, out.height);
-      out.toBlob(function (blob) {
-        if (!blob) return;
-        var newUrl = URL.createObjectURL(blob);
-        img.src = newUrl;
-        overlayEl.style.setProperty('--w', cW);
-        overlayEl.style.setProperty('--h', cH);
-        svg.setAttribute('viewBox', cx0 + ' ' + cy0 + ' ' + cW + ' ' + cH);
-      }, 'image/jpeg', 0.85);
+      return new Promise(function (done) {
+        out.toBlob(function (blob) {
+          if (!blob) { done(); return; }
+          var newUrl = URL.createObjectURL(blob);
+          img.src = newUrl;
+          overlayEl.style.setProperty('--w', cW);
+          overlayEl.style.setProperty('--h', cH);
+          svg.setAttribute('viewBox', cx0 + ' ' + cy0 + ' ' + cW + ' ' + cH);
+          if (svg.style && svg.style.setProperty && svg.style.getPropertyValue('--walk-w')) {
+            svg.style.setProperty('--walk-w', (Math.max(cW, cH) * 0.0035).toFixed(2));
+          }
+          done();
+        }, 'image/jpeg', 0.85);
+      });
     }
   }
 
+  /* Fitted before the crop and again after it: the crop changes the plan's
+     shape, and a sheet sized for the uncropped plan is the wrong size for it. */
   function applyHotspotAutocrop(host, opts) {
-    if (!opts.autocrop) return;
+    fitPlanPages(host, opts);
+    if (!opts.autocrop) return Promise.resolve();
     var overlays = host.querySelectorAll('.rep-overview-plan[data-crop-src]');
-    for (var i = 0; i < overlays.length; i++) autocropOverlay(overlays[i]);
+    var all = [];
+    for (var i = 0; i < overlays.length; i++) all.push(autocropOverlay(overlays[i]));
+    return Promise.all(all).then(function () { fitPlanPages(host, opts); });
   }
 
   /* ── Compass Reference Page ────────────────────────────────────────────
@@ -9448,6 +9738,7 @@
           description: 'Adds "CONFIDENTIAL" to the report footer.' },
       ],
       render: renderDesignReviewReport,
+      postRender: fitPlanPages,
     },
     audit: {
       id: 'audit',
@@ -9500,7 +9791,7 @@
           description: 'A page per floor listing the notes recorded against each AP on site. Defaults to Never here, because a change report is usually the document that gets handed over and site notes are often your own working annotations. Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderAuditReport,
-      postRender: function (host, opts) { applyPageOrientation(host, opts); },
+      postRender: fitPlanPages,
     },
     coverage: {
       id: 'coverage',
@@ -9517,7 +9808,7 @@
         { icon: '🗺️', title: 'Cell diagram per floor',
           description: 'Each AP gets a translucent circle sized by its estimated primary-service radius (−67 dBm). Overlapping cells show handoff zones.' },
         { icon: '📶', title: 'Signal strength bands',
-          description: 'Optional concentric rings per AP: strong (< −55 dBm) / fair (< −75) / weak (< −80). Weak-signal gaps highlighted.' },
+          description: 'Optional concentric rings per AP, at −55 dBm (strong), −75 dBm (fair) and −80 dBm (weak).' },
         { icon: '📊', title: 'Cell sizing table + methodology',
           description: 'Per-AP TX power, antenna gain, EIRP, and −67 / −80 dBm radii. Plus a plain-English methodology section covering the path-loss model and its limits.' },
       ],
@@ -9549,6 +9840,7 @@
             + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderCoverageReport,
+      postRender: fitPlanPages,
     },
     location: {
       id: 'location',
