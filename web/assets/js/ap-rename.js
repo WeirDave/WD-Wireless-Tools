@@ -1434,6 +1434,18 @@
     return S.aps.filter(function (a) { return a.floorPlanId === fpId; });
   }
 
+  /* The Line Spacing box's own minimum (min="10" in ap-rename.html). Typing
+     "120" passes through "1" and "12", and the guides were drawn for each: one
+     line every pixel is a wall across the plan, rebuilt per keystroke, that
+     read as the box refusing a number. Below the minimum the box means Auto
+     until the number is finished - the sort and the guides agree on that. */
+  var MIN_SPACING_PX = 10;
+
+  function spacingPx() {
+    var px = parseInt($('arSpacing').value, 10);
+    return px >= MIN_SPACING_PX ? px : 0;
+  }
+
   /* Line spacing, in the floor's own coordinates, for the floor being sorted.
 
      This read the floor on screen and the image displayed for it, so every
@@ -1443,8 +1455,8 @@
      The image's pixel size comes from the project (images.json), and where
      that is silent floorPlans.json's width/height are the image's pixels. */
   function getSpacingUnits(axis, floor) {
-    var px = parseInt($('arSpacing').value, 10);
-    if (!px || px <= 0) return 0;
+    var px = spacingPx();
+    if (!px) return 0;
     if (!floor) return 0;
     var dim = axis === 'y' ? floor.height : floor.width;
     var res = floor.imageId && S.imageRes && S.imageRes[floor.imageId];
@@ -2348,6 +2360,25 @@
                order === 'col-ttb' || order === 'col-btt' ||
                order === 'row-snake';
     $('arSpacingRow').hidden = !show;
+    if (show) updateSpacingHint(order);
+  }
+
+  /* The box reads "Auto" when empty, which looks like a fixed choice rather
+     than a blank to type in. Say what Auto is doing and what typing does. */
+  function updateSpacingHint(order) {
+    var hint = $('arSpacingHint');
+    if (!hint) return;
+    var what = order.indexOf('col') === 0 ? 'column' : 'row';
+    var raw = $('arSpacing').value.trim();
+    var px = spacingPx();
+    if (px) {
+      hint.textContent = 'Fixed: a dashed line every ' + px + ' px of the plan image. Clear the box for Auto.';
+    } else if (raw) {
+      hint.textContent = 'Needs at least ' + MIN_SPACING_PX + ' px - using Auto until then.';
+    } else {
+      hint.textContent = 'Auto: dashed lines show where one ' + what + ' ends and the next begins. ' +
+                         'Type a number of pixels to space them evenly instead.';
+    }
   }
 
   /* ── render ────────────────────────────────────────────────────── */
@@ -2361,30 +2392,57 @@
   }
 
 
+  /* Where Auto puts its line breaks: halfway across each gap that
+     clusterByAxis treats as the end of one row (or column) and the start of
+     the next, in the floor's own coordinates. These are the breaks sortByRow /
+     sortByColumn really use, so the lines are the explanation of the order
+     rather than a second opinion about it. */
+  function autoBreaks(aps, axis) {
+    if (aps.length < 2) return [];
+    var clusters = clusterByAxis(aps, axis);
+    clusters.sort(function (a, b) { return avg(a, axis) - avg(b, axis); });
+    var out = [];
+    for (var i = 1; i < clusters.length; i++) {
+      var before = clusters[i - 1], after = clusters[i];
+      var hi = Math.max.apply(null, before.map(function (a) { return a[axis]; }));
+      var lo = Math.min.apply(null, after.map(function (a) { return a[axis]; }));
+      out.push((hi + lo) / 2);
+    }
+    return out;
+  }
+
   function renderGuideLines(box, floor, order) {
     var old = box.querySelectorAll('.ar-guide');
     for (var i = 0; i < old.length; i++) old[i].remove();
 
-    var isRow = order === 'row-ltr' || order === 'row-rtl';
+    var isRow = order === 'row-ltr' || order === 'row-rtl' || order === 'row-snake';
     var isCol = order === 'col-ttb' || order === 'col-btt';
     if (!isRow && !isCol) return;
 
-    var px = parseInt($('arSpacing').value, 10);
-    if (!px || px <= 0) return;
-
-    var img = $('arPlanImg');
-    if (!img || !img.naturalWidth) return;
-    var imgDim = isRow ? img.naturalHeight : img.naturalWidth;
-    var count = Math.floor(imgDim / px);
-
-    for (var n = 1; n <= count; n++) {
-      var pct = (n * px / imgDim * 100).toFixed(3) + '%';
+    function draw(pct) {
       var line = document.createElement('div');
       line.className = 'ar-guide ' + (isRow ? 'ar-guide-h' : 'ar-guide-v');
       if (isRow) line.style.top = pct;
       else       line.style.left = pct;
       box.appendChild(line);
     }
+
+    var px = spacingPx();
+    if (!px) {
+      var dim = isRow ? floor.height : floor.width;
+      if (!dim) return;
+      autoBreaks(getFloorAPs(floor.id), isRow ? 'y' : 'x').forEach(function (at) {
+        draw((at / dim * 100).toFixed(3) + '%');
+      });
+      return;
+    }
+
+    var img = $('arPlanImg');
+    if (!img || !img.naturalWidth) return;
+    var imgDim = isRow ? img.naturalHeight : img.naturalWidth;
+    var count = Math.floor(imgDim / px);
+
+    for (var n = 1; n <= count; n++) draw((n * px / imgDim * 100).toFixed(3) + '%');
   }
 
   function renderMarkers() {
