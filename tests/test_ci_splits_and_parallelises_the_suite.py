@@ -244,6 +244,23 @@ class TheSafariJobCannotPassByDrivingNothing(unittest.TestCase):
         failed = result("c", "F..\n" + "-" * 70 + "\nRan 3 tests in 1s\n\nFAILED (failures=1)\n", code=1)
         self.assertEqual(run_tests.drove_nothing([ran_one, skipped_all, failed]), ["b"])
 
+    def test_a_module_that_ran_no_test_at_all_did_not_drive_safari(self):
+        """A class skipped in setUpClass because the driver would not start
+        reports `0 tests, 3 skipped` and exits 0. Three modules did, on the
+        first full Safari run, and were counted as passing."""
+        skipped_class = run_tests.Result(
+            "d", 0, "sss\n" + "-" * 70 + "\nRan 0 tests in 0.1s\n\nOK (skipped=3)\n", 0.1)
+        self.assertEqual((skipped_class.ran, skipped_class.skipped), (0, 3))
+        self.assertEqual(run_tests.drove_nothing([skipped_class]), ["d"])
+
+    def test_a_failing_modules_output_is_not_buried_in_access_lines(self):
+        noisy = ('.127.0.0.1 - - [06/Oct/2026 14:56:22] "GET /plantrim HTTP/1.1" 200 -\n'
+                 '127.0.0.1 - - [06/Oct/2026 14:56:22] "GET /x.js HTTP/1.1" 200 -\n'
+                 'FAIL: test_a (m.T.test_a)\n'
+                 'AssertionError: 41 != 50\n')
+        self.assertEqual(run_tests.without_access_log(noisy),
+                         '.\nFAIL: test_a (m.T.test_a)\nAssertionError: 41 != 50')
+
     def test_every_module_left_out_of_safari_exists_and_says_why(self):
         mods = set(run_tests.discover([]))
         self.assertTrue(browsers.SAFARI_NOT_APPLICABLE)

@@ -206,6 +206,25 @@ def run_module(module: str, user_root: Path, verbose: bool,
     return Result(module, code, output, time.monotonic() - start)
 
 
+#: A web server's access line, which unittest's progress characters are
+#: interleaved with. A failing browser module's output was 98% of these, and
+#: the one assertion that mattered was lines from the end of a 3,000-line log.
+_ACCESS_LOG = re.compile(r"^(?P<progress>[.FEsxu]*)\d+\.\d+\.\d+\.\d+ - - \[.*$")
+
+
+def without_access_log(output: str) -> str:
+    """The output with the server's access lines removed and the progress
+    characters that shared a line with them kept."""
+    kept = []
+    for line in output.splitlines():
+        m = _ACCESS_LOG.match(line)
+        if m is None:
+            kept.append(line)
+        elif m.group("progress"):
+            kept.append(m.group("progress"))
+    return "\n".join(kept)
+
+
 def run_all(modules: list[str], jobs: int, verbose: bool,
             durations: dict[str, float], out=sys.stdout,
             root: Path = ROOT, timeout: float = MODULE_TIMEOUT,
@@ -252,7 +271,8 @@ def run_all(modules: list[str], jobs: int, verbose: bool,
             print(f"{state} {res.module}  ({res.ran} tests{skipped}, "
                   f"{res.seconds:.1f}s)", file=out, flush=True)
             if verbose or not res.ok:
-                print(res.output.rstrip(), file=out, flush=True)
+                shown = res.output if verbose else without_access_log(res.output)
+                print(shown.rstrip(), file=out, flush=True)
 
     with tempfile.TemporaryDirectory(prefix="wd-tests-userdir-") as users:
         def worker():
@@ -292,11 +312,13 @@ def drove_nothing(results: list) -> list[str]:
 
     In a run that asked for Safari that is a module that never drove Safari,
     and "ok" would say it had - the failure the Safari job exists to prevent.
-    A module that ran no tests at all is not caught here: that is an import
-    error, which already fails.
+    That includes a module that ran **no** test: a class skipped in
+    `setUpClass` - the driver would not start - reports "0 tests, 3 skipped",
+    passes, and drove nothing. Three modules did exactly that on the first
+    full Safari run and `r.ran and ...` let them through.
     """
     return sorted(r.module for r in results
-                  if r.ok and r.ran and r.skipped >= r.ran)
+                  if r.ok and r.skipped >= r.ran)
 
 
 def main(argv: list[str] | None = None) -> int:
