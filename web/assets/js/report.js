@@ -6472,14 +6472,12 @@
     return '<div class="rep-seg-note">' + WD.esc(bits.join(' · ')) + '.</div>';
   }
 
-  function renderAntennaLegend(aps, ctx, opts) {
+  function renderAntennaLegend(aps, ctx) {
     var ids = collectUsedAntennas(aps, ctx);
     var countMap = (aps && ctx) ? antennaApCounts(aps) : {};
     var tbl = renderAntennaTable(ids, countMap);
     if (!tbl) return '';
-    return '<section class="rep-legend rep-oriented" data-page-key="legend" data-page-kind="page">'
-      + orientPickerHtml('legend', opts || {})
-      + '<h2 class="rep-floor-title">Antennas in use</h2>' + tbl + '</section>';
+    return '<section class="rep-legend"><h2 class="rep-floor-title">Antennas in use</h2>' + tbl + '</section>';
   }
 
   function renderSummaryReport(aps, opts, ctx) {
@@ -9206,15 +9204,14 @@
     if (aps && wantsCompassRef(aps, opts)) extra += '<li><b>Compass &amp; Antenna Alignment Reference</b><div class="rep-toc-detail">Compass rose and guidance for aiming directional antennas</div></li>';
     if (aps && ctx && wantsApNotes(aps, opts, ctx)) extra += '<li><b>AP Notes</b><div class="rep-toc-detail">Notes recorded against access points, a page per floor</div></li>';
     if (opts.signOff !== false) extra += '<li><b>Approval</b><div class="rep-toc-detail">Prepared / Reviewed / Approved</div></li>';
-    return '<section class="rep-floor-section rep-toc rep-oriented" data-page-key="toc" data-page-kind="page">'
-      + orientPickerHtml('toc', opts)
+    return '<section class="rep-floor-section rep-toc">'
       + '<h2 class="rep-floor-title">Contents</h2>'
       + '<p class="rep-toc-subtitle">Access point installation — sectional placement maps, installation details, and antenna reference for each floor.</p>'
       + '<ol class="rep-toc-list">' + items + extra + '</ol>'
       + '</section>';
   }
 
-  function renderLocationSummary(aps, ctx, opts) {
+  function renderLocationSummary(aps, ctx) {
     var floorCount = floorCountOf(aps, ctx);
     var buildingIds = {};
     aps.forEach(function (ap) {
@@ -9242,14 +9239,13 @@
     }
     tiles += tile(antennaIds.length, 'Antenna type', 'Antenna types');
 
-    return '<section class="rep-floor-section rep-summary-hero rep-oriented" data-page-key="overview" data-page-kind="page">'
-      + orientPickerHtml('overview', opts || {})
+    return '<section class="rep-floor-section rep-summary-hero">'
       + '<h2 class="rep-floor-title">Project overview</h2>'
       + '<div class="rep-hotspot-stats">' + tiles + '</div>'
       + '</section>';
   }
 
-  function renderFloorMatrix(byFloor, floorOrder, ctx, opts) {
+  function renderFloorMatrix(byFloor, floorOrder, ctx) {
     var rows = '';
     var totalAps = 0, totalDir = 0, totalOmni = 0;
     floorOrder.forEach(function (fp) {
@@ -9279,8 +9275,7 @@
       + '</tr>';
     /* rep-matrix: kept whole on a sheet where it fits, so the Total row does
        not land alone under a repeated header. */
-    return '<section class="rep-floor-section rep-matrix rep-oriented" data-page-key="matrix" data-page-kind="page">'
-      + orientPickerHtml('matrix', opts || {})
+    return '<section class="rep-floor-section rep-matrix">'
       + '<h2 class="rep-floor-title">Floor summary</h2>'
       + '<table class="rep-ap-table">'
       + '<thead><tr><th>Floor</th><th>Building</th><th>APs</th><th>Directional</th><th>Omni</th></tr></thead>'
@@ -9288,9 +9283,8 @@
       + '</section>';
   }
 
-  function renderSignOff(opts) {
-    return '<section class="rep-floor-section rep-signoff rep-oriented" data-page-key="signoff" data-page-kind="page">'
-      + orientPickerHtml('signoff', opts || {})
+  function renderSignOff() {
+    return '<section class="rep-floor-section rep-signoff">'
       + '<h2 class="rep-floor-title">Approval</h2>'
       + '<table class="rep-signoff-table">'
       + '<thead><tr><th></th><th>Name</th><th>Signature</th><th>Date</th></tr></thead>'
@@ -9341,16 +9335,11 @@
     });
 
     var toc = opts.cover ? renderLocationTOC(byFloor, floorOrder, opts, aps, ctx) : '';
-    /* Every page with its own key can be turned by "Match all pages", so the
-       contents, overview, floor summary, audit, legend and approval carry
-       one. The floor maps and their key plans do not: they are drawn by
-       renderAntennaOverview, which sizes a plan for the sheet it prints on and
-       is decided by the plan pass (kind "plan"), not by a page key here. */
-    var summary = renderLocationSummary(aps, ctx, opts);
-    var matrix = renderFloorMatrix(byFloor, floorOrder, ctx, opts);
-    var audit = opts.nameAudit ? renderApNameAudit(aps, ctx, opts) : '';
-    var legend = opts.specs ? renderAntennaLegend(aps, ctx, opts) : '';
-    var signoff = opts.signOff !== false ? renderSignOff(opts) : '';
+    var summary = renderLocationSummary(aps, ctx);
+    var matrix = renderFloorMatrix(byFloor, floorOrder, ctx);
+    var audit = opts.nameAudit ? renderApNameAudit(aps, ctx) : '';
+    var legend = opts.specs ? renderAntennaLegend(aps, ctx) : '';
+    var signoff = opts.signOff !== false ? renderSignOff() : '';
     var foot = renderReportFooter(opts, ctx);
 
     var compassPage = wantsCompassRef(aps, opts) ? renderCompassReferencePage(opts, ctx) : '';
@@ -9570,7 +9559,7 @@
       + '</td></tr></tfoot></table></section>';
   }
 
-  function renderApNameAudit(aps, ctx, opts) {
+  function renderApNameAudit(aps, ctx) {
     var issues = [];
     aps.forEach(function (ap) {
       var name = (ap.name || '').trim();
@@ -9584,8 +9573,7 @@
       }
     });
     if (!issues.length) {
-      return '<section class="rep-floor-section rep-oriented" data-page-key="audit" data-page-kind="page">'
-        + orientPickerHtml('audit', opts || {})
+      return '<section class="rep-floor-section">'
         + '<h2 class="rep-floor-title">Naming audit</h2>'
         + '<div class="rep-seg-note rep-seg-note--ok">'
         + (aps.length === 1 ? 'The access point has a proper name' : 'All ' + aps.length + ' APs have proper names')
@@ -9597,8 +9585,7 @@
         + '<td>' + WD.esc(i.floor) + '</td>'
         + '<td class="rep-loc-warn">' + WD.esc(i.issue) + '</td></tr>';
     }).join('');
-    return '<section class="rep-floor-section rep-oriented" data-page-key="audit" data-page-kind="page">'
-      + orientPickerHtml('audit', opts || {})
+    return '<section class="rep-floor-section">'
       + '<h2 class="rep-floor-title">Naming audit</h2>'
       + '<div class="rep-seg-note">' + plural(issues.length, 'AP', 'APs') + ' with naming issues found.</div>'
       + '<table class="rep-ap-table"><thead><tr><th>AP name</th><th>Floor</th><th>Issue</th></tr></thead>'

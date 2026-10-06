@@ -494,7 +494,8 @@ class EveryFlowingReportCarriesTheClassThePrintRuleKeysOn(ReportCase):
           open(project());
           const loc = render('location', { inclOmni: true });
           check('the floor summary carries rep-matrix',
-                /<section class="rep-floor-section rep-matrix[ "][^>]*>(<div class="rep-orient[\s\S]*?<\/div>)?<h2 class="rep-floor-title">Floor summary/.test(loc));
+                /<section class="rep-floor-section rep-matrix">/.test(loc)
+                && loc.indexOf('Floor summary') > loc.indexOf('rep-matrix'));
           check('the table footer is a real tfoot for the print rule to act on',
                 loc.indexOf('<tfoot><tr><td colspan=') >= 0 && loc.indexOf('class="rep-ap-table rep-loc-table"') >= 0);
           const bom = render('bom', {});
@@ -518,17 +519,6 @@ class PageOrientationForTheInstallationPages(ReportCase):
           const auto = E('autoOrientationFor');
           eq('the notes table wraps, so it is portrait however many columns', auto(page('rep-notes-table')), 'portrait');
           eq('a thirteen-column table that cannot be measured still turns', auto(page('rep-loc-table')), 'landscape');
-        """))
-
-    def test_the_pages_match_all_reaches_have_keys(self):
-        self.run_block(block(r"""
-          open(project());
-          coverOn(true);
-          const html = render('location', { inclOmni: true, nameAudit: true, specs: true, signOff: true });
-          coverOn(false);
-          ['toc', 'overview', 'matrix', 'audit', 'legend', 'signoff'].forEach(k =>
-            check('page key ' + k, html.indexOf('data-page-key="' + k + '" data-page-kind="page"') >= 0
-                  && html.indexOf('data-for="' + k + '"') >= 0));
         """))
 
 
