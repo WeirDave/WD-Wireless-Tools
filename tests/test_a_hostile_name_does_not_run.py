@@ -56,11 +56,7 @@ try:
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
 
-BROWSERS = [
-    ("firefox", _browsers.find("firefox")),
-    ("chrome", _browsers.find("chrome")),
-    ("edge", _browsers.find("edge")),
-]
+BROWSERS = _browsers.triple()
 
 #: Closes a `"`-delimited JavaScript string *via an HTML entity*, which is the
 #: half every one of these missed. It also carries a bare apostrophe, for the
@@ -80,6 +76,8 @@ class QuietHandler(SimpleHTTPRequestHandler):
 
 def _driver(kind, binary):
     try:
+        if kind == "safari":
+            return _browsers.safari_driver()
         if kind == "firefox":
             opts = webdriver.FirefoxOptions()
             opts.binary_location = binary

@@ -32,7 +32,6 @@ from tests.test_ap_labeler_second_project_browser import (
 )
 
 try:  # pragma: no cover - availability varies by machine
-    from selenium import webdriver
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import Select
 except ImportError:  # pragma: no cover
@@ -91,12 +90,9 @@ class TypingIntoLineSpacingTests(_InABrowser, unittest.TestCase):
         super().setUpClass()
         cls.project = base64.b64encode(_esx()).decode("ascii")
 
-    def _pick_order(self, driver, order):
-        Select(driver.find_element(By.ID, "arOrder")).select_by_value(order)
-
     def _ready(self, driver, order):
         self._open(driver, self.project, "invented-site.esx")
-        self._pick_order(driver, order)
+        Select(driver.find_element(By.ID, "arOrder")).select_by_value(order)
         time.sleep(0.4)
 
     def _state(self, driver):
@@ -187,46 +183,6 @@ class TypingIntoLineSpacingTests(_InABrowser, unittest.TestCase):
                 # x 100 / 400 / 700 of 800: breaks at 250 and 550.
                 self.assertEqual([round(float(a.rstrip("%")), 1) for a in s["at"]],
                                  [31.2, 68.8], s)
-
-
-@unittest.skipUnless(HAVE_SELENIUM, "selenium is not installed")
-class TypingIntoLineSpacingInSafariTests(TypingIntoLineSpacingTests):
-    """The same assertions, in Safari.
-
-    Safari is not in `browsers.triple()` - see `browsers.safari_requested` -
-    so the tests above skip under it and this class is the one that runs. It
-    is asked for by `WD_BROWSERS=safari`, which only the Safari job sets.
-
-    A run that asked for Safari and cannot drive it FAILS. The alternative is
-    a skip, and a job that is green because Safari never started tells
-    nobody anything; that is how Firefox, Chrome and Edge once went four
-    releases untested.
-    """
-
-    def _pick_order(self, driver, order):
-        """Safari's WebDriver answers a click on an <option> with "element not
-        interactable" (every test here died on it on the first Safari run),
-        so the choice is made the way the page hears it - the value set and a
-        real `change` event. What is under test is the typing, which still
-        goes through real key presses."""
-        driver.execute_script(
-            "var s = document.getElementById('arOrder'); s.value = arguments[0];"
-            "s.dispatchEvent(new Event('change', { bubbles: true }));", order)
-
-    def _each_browser(self):
-        if not _browsers.safari_requested():
-            self.skipTest("Safari is only driven when WD_BROWSERS names it; "
-                          "the Safari job does")
-        if not _browsers.safari_available():
-            self.fail(_browsers.why_missing())
-        driver = webdriver.Safari()
-        try:
-            driver.set_window_size(1400, 1000)
-            driver.set_script_timeout(60)
-            driver.get(self.url)
-            yield "safari", driver
-        finally:
-            _browsers.shut_down(driver)
 
 
 if __name__ == "__main__":

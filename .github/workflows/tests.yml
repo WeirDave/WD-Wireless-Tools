@@ -161,19 +161,24 @@ jobs:
   #
   # It cannot join the matrix above: Safari has no binary to point at and no
   # headless mode, it runs as the logged-in user on the runner's desktop, and
-  # it is not in `tests.browsers.triple()`, so the other thirteen browser
-  # modules would skip under it. This job names the modules that know how to
-  # drive Safari instead of running all of them to skip most.
+  # the machine allows one Safari session at a time, so its modules run one
+  # after another instead of side by side.
   #
   # `WD_BROWSERS: safari` is what asks for it (`browsers.safari_requested`),
-  # and a module that is asked to drive Safari and cannot FAILS rather than
-  # skips - a job that is green because Safari never started is the failure
-  # this file already had once, for Firefox, Chrome and Edge.
+  # which puts Safari into `browsers.triple()` as a fourth browser for every
+  # module that builds its drivers from it. `scripts/run_tests.py` then runs
+  # every browser module except the few in `browsers.SAFARI_NOT_APPLICABLE`
+  # (each printed with its reason), exits non-zero if Safari cannot be
+  # started, and fails any module that skipped every test - a job that is
+  # green because Safari never started is the failure this file already had
+  # once, for Firefox, Chrome and Edge.
   # `tests/test_ci_splits_and_parallelises_the_suite.py` holds all of it.
   safari:
     name: safari / macOS
     runs-on: macos-latest
-    timeout-minutes: 30
+    # One Safari session at a time, so every browser module runs one after
+    # another. Raised from 30 when it grew from one module to all of them.
+    timeout-minutes: 120
     env:
       WD_BROWSER_TESTS: 'on'
       WD_BROWSERS: safari
@@ -210,4 +215,4 @@ jobs:
         run: python -m tests.browsers_report
 
       - name: Run the Safari tests
-        run: python scripts/run_tests.py test_ap_labeler_spacing_browser
+        run: python scripts/run_tests.py --browsers-only

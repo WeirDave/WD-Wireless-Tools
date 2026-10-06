@@ -101,6 +101,8 @@ class EverySheetIsThePaperItsPageAskedFor(unittest.TestCase):
         if not Path(binary).exists():
             return None
         try:
+            if kind == "safari":
+                return _browsers.safari_driver()
             if kind == "firefox":
                 o = webdriver.FirefoxOptions()
                 o.binary_location = binary

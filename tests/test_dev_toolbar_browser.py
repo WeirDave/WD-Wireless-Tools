@@ -66,11 +66,7 @@ try:  # pragma: no cover - availability varies by machine
 except ImportError:  # pragma: no cover
     HAVE_SELENIUM = False
 
-BROWSERS = [
-    ("firefox", _browsers.find("firefox")),
-    ("chrome", _browsers.find("chrome")),
-    ("edge", _browsers.find("edge")),
-]
+BROWSERS = _browsers.triple()
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -82,6 +78,8 @@ def _driver(kind, binary):
     """A headless driver, or None when it will not start - so one missing
     browser cannot fail the run on a machine that has the other two."""
     try:
+        if kind == "safari":
+            return _browsers.safari_driver()
         if kind == "firefox":
             opts = webdriver.FirefoxOptions()
             opts.binary_location = binary

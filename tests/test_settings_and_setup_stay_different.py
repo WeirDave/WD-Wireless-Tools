@@ -39,11 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
 
-BROWSERS = [
-    ("firefox", _browsers.find("firefox")),
-    ("chrome", _browsers.find("chrome")),
-    ("edge", _browsers.find("edge")),
-]
+BROWSERS = _browsers.triple()
 
 try:  # pragma: no cover - availability varies by machine
     from selenium import webdriver
@@ -180,6 +176,8 @@ class SetupStaysBiggerThanSettingsTests(unittest.TestCase):
         if not Path(binary).exists():
             return None
         try:
+            if kind == "safari":
+                return _browsers.safari_driver()
             if kind == "firefox":
                 o = webdriver.FirefoxOptions()
                 o.binary_location = binary

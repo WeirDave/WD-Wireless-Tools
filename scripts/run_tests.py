@@ -44,6 +44,7 @@ test.
 from __future__ import annotations
 
 import argparse
+import ast
 import functools
 import json
 import os
@@ -81,10 +82,41 @@ def discover(names: list[str] | None = None, root: Path = ROOT) -> list[str]:
 
 #: Imports selenium itself, or runs through a harness that did and says so
 #: with `HAVE_SELENIUM` - test_combined_sections_browser is the second kind.
+#: Kept for a file that will not parse; `uses_a_browser` reads the syntax tree.
 _IMPORTS_SELENIUM = re.compile(
     r"^\s*(?:from|import)\s+selenium\b"
     r"|^\s*HAVE_SELENIUM\s*="
     r"|\.HAVE_SELENIUM\b", re.M)
+
+
+def _drives_a_browser(tree: ast.AST) -> bool:
+    """Whether the syntax tree imports selenium, borrows `HAVE_SELENIUM` from
+    another test module, assigns it, or reads it off a harness.
+
+    Read from the tree rather than searched for. The text search matched
+    `from selenium import ...` and `HAVE_SELENIUM =` and nothing else, so a
+    module that did `from tests.x import HAVE_SELENIUM, _driver` - four of
+    them - was not a browser module: the suite jobs switch browsers off, the
+    browser jobs run only the modules this returns, and those four ran in no
+    job at all, skipping silently on every runner.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            if any(a.name.split(".")[0] == "selenium" for a in node.names):
+                return True
+        elif isinstance(node, ast.ImportFrom):
+            if (node.module or "").split(".")[0] == "selenium":
+                return True
+            if any(a.name == "HAVE_SELENIUM" for a in node.names):
+                return True
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(isinstance(t, ast.Name) and t.id == "HAVE_SELENIUM"
+                   for t in targets):
+                return True
+        elif isinstance(node, ast.Attribute) and node.attr == "HAVE_SELENIUM":
+            return True
+    return False
 
 
 @functools.lru_cache(maxsize=None)
@@ -93,7 +125,10 @@ def uses_a_browser(module: str, root: Path = ROOT) -> bool:
     the word, which a test about this runner has to."""
     text = (root / "tests" / f"{module}.py").read_text(encoding="utf-8",
                                                        errors="replace")
-    return bool(_IMPORTS_SELENIUM.search(text))
+    try:
+        return _drives_a_browser(ast.parse(text))
+    except SyntaxError:
+        return bool(_IMPORTS_SELENIUM.search(text))
 
 
 def load_durations(path: Path = DURATIONS) -> dict[str, float]:
@@ -252,6 +287,18 @@ def run_all(modules: list[str], jobs: int, verbose: bool,
     return results
 
 
+def drove_nothing(results: list) -> list[str]:
+    """Modules that passed having skipped every test.
+
+    In a run that asked for Safari that is a module that never drove Safari,
+    and "ok" would say it had - the failure the Safari job exists to prevent.
+    A module that ran no tests at all is not caught here: that is an import
+    error, which already fails.
+    """
+    return sorted(r.module for r in results
+                  if r.ok and r.ran and r.skipped >= r.ran)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("modules", nargs="*",
@@ -270,9 +317,25 @@ def main(argv: list[str] | None = None) -> int:
                     help="write each module's duration here as JSON")
     a = ap.parse_args(argv)
 
+    sys.path.insert(0, str(ROOT))
+    from tests import browsers as _browsers
+    safari = _browsers.safari_requested()
+
     modules = discover(a.modules)
-    if a.browsers_only:
+    if a.browsers_only or safari:
         modules = [m for m in modules if uses_a_browser(m)]
+    if safari:
+        # Safari runs one session at a time per machine and has no headless
+        # mode, so the modules go one after another. A run that asked for it
+        # and cannot start it is a failure here, not a skip.
+        if not _browsers.safari_available():
+            print(_browsers.why_missing(), file=sys.stderr)
+            return 1
+        a.jobs, a.browser_jobs = 1, 1
+        for name, why in sorted(_browsers.SAFARI_NOT_APPLICABLE.items()):
+            if name in modules:
+                modules.remove(name)
+                print(f"not run in Safari: {name} - {why}")
     if not modules:
         print("no test modules found", file=sys.stderr)
         return 1
@@ -290,6 +353,12 @@ def main(argv: list[str] | None = None) -> int:
             indent=1) + "\n", encoding="utf-8")
 
     failed = sorted(r.module for r in results if not r.ok)
+    if safari:
+        silent = drove_nothing(results)
+        if silent:
+            print("DROVE NO SAFARI TEST (every test skipped): "
+                  + ", ".join(silent))
+        failed = sorted(set(failed) | set(silent))
     lost = sorted(set(modules) - {r.module for r in results})
     ran = sum(r.ran for r in results)
     skipped = sum(r.skipped for r in results)

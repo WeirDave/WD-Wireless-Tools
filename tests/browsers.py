@@ -152,12 +152,14 @@ SAFARIDRIVER = "/usr/bin/safaridriver"
 def safari_requested() -> bool:
     """True only when `WD_BROWSERS` names Safari.
 
-    Opt-in, never a default. Safari is deliberately not in `triple()`:
-    every test module builds its drivers from that list and falls through to
-    Edge for any name it does not know, so adding Safari there would launch
-    Edge under Safari's name. A laptop with no `WD_BROWSERS` also should not
-    have a Safari window appear in the middle of the suite. The Safari job
-    asks for it by name and runs the modules that know how to drive it.
+    Opt-in, never a default. A laptop with no `WD_BROWSERS` should not have a
+    Safari window appear in the middle of the suite, and Safari has no
+    headless mode. When it is asked for, `triple()` lists it as a fourth
+    browser and every module that builds its drivers from that list drives it
+    through `safari_driver()`. A module that does not know the name must not
+    be handed it: each one's `_driver` used to fall through to Edge for any
+    kind it did not recognise, which would have launched Edge under Safari's
+    name.
     """
     if not wanted():
         return False
@@ -172,8 +174,10 @@ def safari_available() -> bool:
 
 
 def available() -> list:
-    """Which of the three this machine can actually drive."""
-    return [k for k in ("firefox", "chrome", "edge") if installed(k)]
+    """Which browsers this machine can actually drive: the three, and Safari
+    when the run asked for it and it can be driven."""
+    have = [k for k in ("firefox", "chrome", "edge") if installed(k)]
+    return have + ["safari"] if safari_available() else have
 
 
 def triple() -> list:
@@ -182,8 +186,84 @@ def triple() -> list:
     Every browser is listed whether or not it is present - the tests skip on
     a binary that does not exist, and returning only what is installed would
     silently shrink the matrix instead of reporting a gap.
+
+    A run that asked for Safari (`WD_BROWSERS=safari`) gets a fourth entry,
+    `("safari", <safaridriver>)`, or `NOT_INSTALLED` where it cannot be
+    driven. Any other run gets exactly the three it always did.
     """
-    return [(k, find(k)) for k in ("firefox", "chrome", "edge")]
+    pairs = [(k, find(k)) for k in ("firefox", "chrome", "edge")]
+    if safari_requested():
+        pairs.append(("safari", SAFARIDRIVER if safari_available()
+                      else NOT_INSTALLED))
+    return pairs
+
+
+#: Browser modules the Safari job does not run, and why. Every entry has to
+#: say why in a sentence; `scripts/run_tests.py` prints each one so the list is
+#: read in the CI transcript rather than found in this file, and
+#: `tests/test_ci_splits_and_parallelises_the_suite.py` fails on an entry that
+#: names no module or gives no reason. Not a place to put a test that fails.
+SAFARI_NOT_APPLICABLE = {
+    "test_cloud_name_colours": "drives Firefox only, by construction",
+    "test_dev_mode_can_be_left": "drives Firefox only, and ends on a Firefox print",
+    "test_dev_toolbar_does_not_print": "reads Firefox's print pipeline",
+    "test_modal_buttons_have_room": "drives Firefox only, by construction",
+    "test_nothing_is_left_running": "audits how Firefox is stopped",
+}
+
+#: Set once the first Safari session has been made.
+_SAFARI_SELECT_PATCHED = False
+
+#: Safari's WebDriver answers a click on an <option> with "element not
+#: interactable", so `Select(...).select_by_value()` - used all over this
+#: suite - fails there on every call. The choice is made the way a page hears
+#: it instead: the option marked selected and `input` / `change` fired on the
+#: <select>.
+_PICK_OPTION_JS = (
+    "var s = arguments[0], o = arguments[1]; o.selected = true;"
+    "s.dispatchEvent(new Event('input', { bubbles: true }));"
+    "s.dispatchEvent(new Event('change', { bubbles: true }));")
+
+
+def _patch_select_for_safari() -> None:
+    """Make `Select` choose by script, for this process, once.
+
+    Only ever applied in a run that asked for Safari - `safari_driver` is the
+    only caller - and that run drives no other browser, so Firefox, Chrome and
+    Edge keep a genuine click.
+    """
+    global _SAFARI_SELECT_PATCHED
+    if _SAFARI_SELECT_PATCHED:
+        return
+    from selenium.webdriver.support.select import Select
+
+    def _set_selected(self, option, *_ignored):
+        if not option.is_selected():
+            self._el.parent.execute_script(_PICK_OPTION_JS, self._el, option)
+
+    Select._set_selected = _set_selected
+    _SAFARI_SELECT_PATCHED = True
+
+
+def safari_driver():
+    """A Safari session, or None when it will not start.
+
+    No options: Safari takes no binary path, cannot be headless, and runs as
+    the logged-in user on the runner's desktop. One session at a time per
+    machine - which is why the Safari job runs its modules one after another.
+    """
+    try:
+        from selenium import webdriver
+        from selenium.common.exceptions import WebDriverException
+    except ImportError:
+        return None
+    _patch_select_for_safari()
+    try:
+        return webdriver.Safari()
+    except (WebDriverException, OSError) as exc:
+        print("safaridriver would not start a session: %s"
+              % str(exc).strip().splitlines()[0][:200], file=sys.stderr)
+        return None
 
 
 def on_ci() -> bool:

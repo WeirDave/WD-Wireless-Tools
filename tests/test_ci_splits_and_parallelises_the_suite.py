@@ -179,15 +179,13 @@ class TheSafariJobCannotPassByDrivingNothing(unittest.TestCase):
         enable = self.script.index("safaridriver --enable")
         self.assertLess(enable, self.script.index("scripts/run_tests.py"))
 
-    def test_it_names_modules_that_exist_and_know_how_to_drive_safari(self):
-        run = re.search(r"python scripts/run_tests\.py ([\w \-]+)$", self.script, re.M)
+    def test_it_runs_every_browser_module_rather_than_a_list_that_can_go_stale(self):
+        run = re.search(r"python scripts/run_tests\.py(.*)$", self.script, re.M)
         self.assertIsNotNone(run, self.script)
-        names = [n for n in run.group(1).split() if not n.startswith("-")]
-        self.assertTrue(names, "the Safari job names no module, so it runs everything and skips most")
-        for name in names:
-            f = ROOT / "tests" / f"{name}.py"
-            self.assertTrue(f.is_file(), name)
-            self.assertIn("safari_available", f.read_text(encoding="utf-8"), name)
+        self.assertIn("--browsers-only", run.group(1))
+        self.assertEqual([w for w in run.group(1).split() if not w.startswith("-")], [],
+                         "naming modules here would leave every other browser "
+                         "module untested in Safari without anyone deciding that")
 
     def test_safari_is_never_part_of_the_default_list(self):
         self.assertEqual([k for k, _ in browsers.triple()],
@@ -223,22 +221,58 @@ class TheSafariJobCannotPassByDrivingNothing(unittest.TestCase):
             self.assertFalse(browsers.safari_available())
             self.assertIn(browsers.SAFARIDRIVER, browsers.why_missing())
 
-    def test_a_run_that_asked_for_safari_and_cannot_drive_it_fails(self):
-        """The thing the whole job exists to prevent: green with Safari never
-        started. Run the real test class with Safari asked for and absent."""
-        import importlib.util
-        if importlib.util.find_spec("selenium") is None:
-            self.skipTest("selenium is not installed")
-        from tests import test_ap_labeler_spacing_browser as mod
+    def test_a_run_that_asked_for_safari_and_cannot_start_it_fails_before_running_anything(self):
+        """The failure the whole job exists to prevent: green with Safari
+        never started. The runner is called in this process with Safari asked
+        for and not drivable, so nothing is launched even on a Mac."""
+        import io
+        import contextlib
+        err = io.StringIO()
         with mock.patch.dict(os.environ, {browsers.SWITCH: "on",
                                           browsers.ONLY: "safari"}), \
-                mock.patch.object(sys, "platform", "linux"):
-            suite = unittest.TestSuite([mod.TypingIntoLineSpacingInSafariTests(
-                "test_auto_draws_the_breaks_between_rows")])
-            result = unittest.TestResult()
-            suite.run(result)
-        self.assertEqual(len(result.failures), 1, (result.failures, result.skipped, result.errors))
-        self.assertEqual(result.skipped, [])
+                mock.patch.object(browsers, "safari_available", return_value=False), \
+                contextlib.redirect_stderr(err):
+            code = run_tests.main(["--browsers-only"])
+        self.assertEqual(code, 1)
+        self.assertIn("Safari", err.getvalue())
+
+    def test_a_module_that_skipped_every_test_did_not_drive_safari(self):
+        def result(name, output, code=0):
+            return run_tests.Result(name, code, output, 1.0)
+        ran_one = result("a", "...ss\n" + "-" * 70 + "\nRan 3 tests in 1s\n\nOK (skipped=2)\n")
+        skipped_all = result("b", "sss\n" + "-" * 70 + "\nRan 3 tests in 1s\n\nOK (skipped=3)\n")
+        failed = result("c", "F..\n" + "-" * 70 + "\nRan 3 tests in 1s\n\nFAILED (failures=1)\n", code=1)
+        self.assertEqual(run_tests.drove_nothing([ran_one, skipped_all, failed]), ["b"])
+
+    def test_every_module_left_out_of_safari_exists_and_says_why(self):
+        mods = set(run_tests.discover([]))
+        self.assertTrue(browsers.SAFARI_NOT_APPLICABLE)
+        for name, why in browsers.SAFARI_NOT_APPLICABLE.items():
+            self.assertIn(name, mods, name)
+            self.assertGreater(len(why.split()), 2, (name, why))
+
+    def test_safari_is_a_fourth_browser_only_when_asked_for(self):
+        with mock.patch.dict(os.environ, {browsers.SWITCH: "on",
+                                          browsers.ONLY: "safari"}):
+            with mock.patch.object(browsers, "safari_available", return_value=False):
+                self.assertEqual([k for k, _ in browsers.triple()],
+                                 ["firefox", "chrome", "edge", "safari"])
+                self.assertEqual(browsers.triple()[-1][1], browsers.NOT_INSTALLED)
+            with mock.patch.object(browsers, "safari_available", return_value=True):
+                self.assertEqual(browsers.triple()[-1],
+                                 ("safari", browsers.SAFARIDRIVER))
+                self.assertIn("safari", browsers.available())
+
+    def test_the_four_browser_modules_that_ran_in_no_job_are_found(self):
+        """`from tests.x import HAVE_SELENIUM, _driver` is a browser module.
+        The detector read only `import selenium` and `HAVE_SELENIUM =`, so
+        these four were in neither the suite jobs (browsers off) nor the
+        browser jobs (modules the detector returns)."""
+        for name in ("test_cloud_merge_conflict_choice_is_visible_browser",
+                     "test_cloud_other_owner_is_one_colour",
+                     "test_cloud_reads_at_arms_length_browser",
+                     "test_settings_links_land_on_their_section_browser"):
+            self.assertTrue(run_tests.uses_a_browser(name), name)
 
 
 class TheSwitchReachesEveryBrowserTest(unittest.TestCase):

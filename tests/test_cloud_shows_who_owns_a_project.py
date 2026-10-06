@@ -153,6 +153,8 @@ return JSON.stringify({
 
 def _driver(kind, binary):
     try:
+        if kind == "safari":
+            return _browsers.safari_driver()
         if kind == "firefox":
             o = webdriver.FirefoxOptions()
             o.binary_location = binary
