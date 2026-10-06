@@ -7360,12 +7360,16 @@ body.wd-has-stale-banner { padding-top: 52px; }
   @page placementLandscape { size: Letter landscape; }
   .rep-placement-page, .rep-oriented { page: placementPortrait; }
   .rep-placement-page.is-landscape, .rep-oriented.is-landscape { page: placementLandscape; }
-  /* A zoomed section is its own sheet inside a floor's page. Left to inherit,
-     Chromium gives it the floor's orientation, but Firefox starts the new
-     sheet on the unnamed page: a floor set to landscape printed its first
-     section landscape and every later one portrait. Said outright, both agree. */
-  .rep-placement-page .rep-seg-cell, .rep-oriented .rep-seg-cell { page: placementPortrait; }
-  .rep-placement-page.is-landscape .rep-seg-cell, .rep-oriented.is-landscape .rep-seg-cell { page: placementLandscape; }
+  /* Everything inside a page carries the page's own name, not only the page.
+     A sheet takes its name from the first box on it, and a sheet that begins
+     part-way through a page - the second sheet of a long table, a zoomed
+     section - begins on a table row or a cell whose own name is the unnamed
+     default. Chromium reads the name through to the ancestor; Firefox 157 does
+     not, and printed such sheets portrait: a landscape floor's later sections,
+     and the later sheets of a table (clipped at the right, or shrunk to 5.6pt
+     to fit). Said on every descendant, both agree. */
+  .rep-placement-page *, .rep-oriented * { page: placementPortrait; }
+  .rep-placement-page.is-landscape *, .rep-oriented.is-landscape * { page: placementLandscape; }
 
   /* The blank sheet at the end of the document, in Firefox.
 

@@ -534,26 +534,32 @@ class EveryPageCanBeTurned(ReportCase):
         """)
 
 
-class AZoomedSectionNamesItsOwnPage(unittest.TestCase):
+class EverythingInAPageNamesItsPage(unittest.TestCase):
     """Measured in Firefox 157 through its own print pipeline (geckodriver's
-    Print Page): a sectioned floor set to Match-all-landscape printed
+    Print Page). A sectioned floor set to Match-all-landscape printed
     ``LLLLPPPPPLLLLL`` - the first section landscape, every later one portrait -
-    where Chromium printed fifteen landscape sheets. A section sheet inherits
-    the floor's named page in Chromium; Firefox starts it on the unnamed one.
-    Naming it outright gave ``LLLLLLLLLLLLLL``. What CI can hold is that the
-    rule is still there and still gives each orientation its own name."""
+    and a 150-row Coverage table printed ``LLLLLLLLPPLLLLL``, its later sheets
+    portrait with the right-hand column clipped; Chromium printed all landscape
+    in both. A sheet takes its name from the first box on it, and a sheet that
+    starts part-way through a page starts on a row or a cell, whose own name is
+    the unnamed default. Naming every descendant gave all landscape. What CI can
+    hold is that the rule is still there, for both orientations, after the rule
+    that names the page itself."""
 
     def setUp(self):
         from pathlib import Path
         self.css = (Path(__file__).resolve().parent.parent / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
 
-    def test_a_section_sheet_takes_the_name_of_the_orientation_its_floor_asked_for(self):
+    def test_every_descendant_of_a_page_carries_the_pages_name(self):
         import re
-        port = re.search(r"\.rep-oriented \.rep-seg-cell\s*\{\s*page:\s*placementPortrait;\s*\}", self.css)
-        land = re.search(r"\.rep-oriented\.is-landscape \.rep-seg-cell\s*\{\s*page:\s*placementLandscape;\s*\}", self.css)
-        self.assertTrue(port, "a section sheet has no portrait page name of its own")
-        self.assertTrue(land, "a section sheet on a landscape floor has no landscape page name of its own")
-        self.assertLess(port.start(), land.start(), "the landscape rule must come after the portrait one to win")
+        page_p = re.search(r"\.rep-oriented \{ page: placementPortrait; \}", self.css)
+        page_l = re.search(r"\.rep-oriented\.is-landscape \{ page: placementLandscape; \}", self.css)
+        kids_p = re.search(r"\.rep-oriented \* \{ page: placementPortrait; \}", self.css)
+        kids_l = re.search(r"\.rep-oriented\.is-landscape \* \{ page: placementLandscape; \}", self.css)
+        self.assertTrue(page_p and page_l, "the page's own name moved")
+        self.assertTrue(kids_p, "a sheet that starts on a row has no portrait name of its own")
+        self.assertTrue(kids_l, "a sheet that starts on a row has no landscape name of its own")
+        self.assertLess(kids_p.start(), kids_l.start(), "landscape must come after portrait to win")
 
 
 class AMapNumberIsReadableOnEitherSheet(ReportCase):
