@@ -148,6 +148,8 @@ def order(modules: list[str], durations: dict[str, float],
                                           -durations.get(m, UNKNOWN), m))
 
 
+#: `test_name (tests.module.Class.test_name) ... ok` from `unittest -v`.
+_PASSED = re.compile(r"\.\.\. ok\s*$", re.M)
 _RAN = re.compile(r"^Ran (\d+) tests? in", re.M)
 _SKIPPED = re.compile(r"skipped=(\d+)")
 
@@ -168,6 +170,9 @@ class Result:
         self.output = output
         self.seconds = seconds
         self.ran, self.skipped = summarise(output)
+        # Tests that actually passed, read off `unittest -v` lines. Only a
+        # verbose run has them; a quiet one reads 0.
+        self.passed = len(_PASSED.findall(output))
 
     def __repr__(self) -> str:
         return (f"<{self.module}: exit {self.code}, {self.ran} ran>\n"
@@ -179,13 +184,14 @@ class Result:
 
 
 def run_module(module: str, user_root: Path, verbose: bool,
-               timeout: float = MODULE_TIMEOUT, root: Path = ROOT) -> Result:
+               timeout: float = MODULE_TIMEOUT, root: Path = ROOT,
+               detail: bool = False) -> Result:
     user_dir = user_root / module
     user_dir.mkdir()
     env = {**os.environ, "WD_USER_DIR": str(user_dir),
            "PYTHONIOENCODING": "utf-8"}
     cmd = [sys.executable, "-m", "unittest", f"tests.{module}"]
-    if verbose:
+    if verbose or detail:       # `detail`: wanted for Result.passed, not printed
         cmd.append("-v")
     start = time.monotonic()
     try:
@@ -228,7 +234,8 @@ def without_access_log(output: str) -> str:
 def run_all(modules: list[str], jobs: int, verbose: bool,
             durations: dict[str, float], out=sys.stdout,
             root: Path = ROOT, timeout: float = MODULE_TIMEOUT,
-            browser_jobs: int | None = None) -> list[Result]:
+            browser_jobs: int | None = None,
+            detail: bool = False) -> list[Result]:
     is_browser = functools.partial(uses_a_browser, root=root)
     queue = order(modules, durations, is_browser)
     lock = threading.RLock()
@@ -290,7 +297,7 @@ def run_all(modules: list[str], jobs: int, verbose: bool,
                     time.sleep(0.2)
                     continue
                 try:
-                    report(run_module(m, Path(users), verbose, timeout, root))
+                    report(run_module(m, Path(users), verbose, timeout, root, detail))
                 finally:
                     with lock:
                         active["n"] -= 1
@@ -308,17 +315,20 @@ def run_all(modules: list[str], jobs: int, verbose: bool,
 
 
 def drove_nothing(results: list) -> list[str]:
-    """Modules that passed having skipped every test.
+    """Modules that passed without a single test passing.
 
     In a run that asked for Safari that is a module that never drove Safari,
     and "ok" would say it had - the failure the Safari job exists to prevent.
-    That includes a module that ran **no** test: a class skipped in
-    `setUpClass` - the driver would not start - reports "0 tests, 3 skipped",
-    passes, and drove nothing. Three modules did exactly that on the first
-    full Safari run and `r.ran and ...` let them through.
+
+    It counts tests that **passed**, read from `unittest -v`, not skips against
+    runs. A module that builds one class per browser skips the three it cannot
+    drive at class level - three skips - however many tests the Safari class
+    ran, so `skipped >= ran` flagged two modules that had run 2 and 3 Safari
+    tests and passed them. And the earlier `r.ran and ...` let three modules
+    through that had run nothing at all (a class skipped in `setUpClass`
+    reports "0 tests, 3 skipped" and exits 0).
     """
-    return sorted(r.module for r in results
-                  if r.ok and r.skipped >= r.ran)
+    return sorted(r.module for r in results if r.ok and r.passed == 0)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -365,7 +375,7 @@ def main(argv: list[str] | None = None) -> int:
     started = time.monotonic()
     print(f"Running {len(modules)} modules on {a.jobs} worker(s)", flush=True)
     results = run_all(modules, a.jobs, a.verbose, load_durations(),
-                      browser_jobs=a.browser_jobs)
+                      browser_jobs=a.browser_jobs, detail=safari)
     elapsed = time.monotonic() - started
 
     if a.record:

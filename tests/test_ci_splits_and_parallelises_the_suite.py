@@ -236,20 +236,46 @@ class TheSafariJobCannotPassByDrivingNothing(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("Safari", err.getvalue())
 
+    @staticmethod
+    def _verbose(passed, skipped_classes=0, failed=0, skipped_tests=0):
+        """Output as `unittest -v` writes it: one line per test, a class-level
+        skip per browser the module could not drive, then the summary."""
+        lines = ["test_%d (m.T.test_%d) ... ok" % (i, i) for i in range(passed)]
+        lines += ["test_s%d (m.T.test_s%d) ... skipped 'too small'" % (i, i)
+                  for i in range(skipped_tests)]
+        lines += ["setUpClass (m.B%d) ... skipped 'not installed here'" % i
+                  for i in range(skipped_classes)]
+        lines += ["test_f%d (m.T.test_f%d) ... FAIL" % (i, i) for i in range(failed)]
+        ran = passed + skipped_tests + failed
+        skipped = skipped_classes + skipped_tests
+        tail = "OK" if not failed else "FAILED (failures=%d)" % failed
+        if skipped:
+            tail += " (skipped=%d)" % skipped
+        return ("\n".join(lines) + "\n" + "-" * 70
+                + "\nRan %d tests in 1s\n\n%s\n" % (ran, tail))
+
     def test_a_module_that_skipped_every_test_did_not_drive_safari(self):
         def result(name, output, code=0):
             return run_tests.Result(name, code, output, 1.0)
-        ran_one = result("a", "...ss\n" + "-" * 70 + "\nRan 3 tests in 1s\n\nOK (skipped=2)\n")
-        skipped_all = result("b", "sss\n" + "-" * 70 + "\nRan 3 tests in 1s\n\nOK (skipped=3)\n")
-        failed = result("c", "F..\n" + "-" * 70 + "\nRan 3 tests in 1s\n\nFAILED (failures=1)\n", code=1)
+        ran_one = result("a", self._verbose(1, skipped_classes=2))
+        skipped_all = result("b", self._verbose(0, skipped_tests=3))
+        failed = result("c", self._verbose(2, failed=1), code=1)
         self.assertEqual(run_tests.drove_nothing([ran_one, skipped_all, failed]), ["b"])
+
+    def test_three_class_skips_do_not_hide_the_safari_tests_that_passed(self):
+        """Two modules ran 2 and 3 Safari tests, passed them, and were flagged
+        because the three browsers they cannot drive count three skips and
+        `skipped >= ran` compared the two."""
+        r = run_tests.Result("m", 0, self._verbose(2, skipped_classes=3), 1.0)
+        self.assertEqual((r.ran, r.skipped, r.passed), (2, 3, 2))
+        self.assertEqual(run_tests.drove_nothing([r]), [])
 
     def test_a_module_that_ran_no_test_at_all_did_not_drive_safari(self):
         """A class skipped in setUpClass because the driver would not start
         reports `0 tests, 3 skipped` and exits 0. Three modules did, on the
         first full Safari run, and were counted as passing."""
         skipped_class = run_tests.Result(
-            "d", 0, "sss\n" + "-" * 70 + "\nRan 0 tests in 0.1s\n\nOK (skipped=3)\n", 0.1)
+            "d", 0, self._verbose(0, skipped_classes=3), 0.1)
         self.assertEqual((skipped_class.ran, skipped_class.skipped), (0, 3))
         self.assertEqual(run_tests.drove_nothing([skipped_class]), ["d"])
 

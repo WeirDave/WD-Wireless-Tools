@@ -298,9 +298,12 @@ fourth browser, so every module built on `triple()` / `BROWSERS` drives it
 through its `_driver`; `scripts/run_tests.py` then runs the browser modules one
 at a time. Three things hold it honest, each from a way it could have lied:
 
-* **A run that cannot start Safari fails**, and **a module that skipped every
-  test fails** (`drove_nothing`) - green with Safari never started is the
-  failure this suite already had once for the other three.
+* **A run that cannot start Safari fails**, and **a module in which no test
+  passed fails** (`drove_nothing`, read off `unittest -v`) - green with Safari
+  never started is the failure this suite already had once for the other
+  three. It counts passes, not skips against runs: a module builds one class
+  per browser, so three class-level skips sit beside however many Safari tests
+  ran.
 * **`browsers.SAFARI_NOT_APPLICABLE` is the only list of modules it does not
   run**, each with a one-sentence reason that the job prints. It is for a test
   that is about another browser (Firefox's print pipeline), never for one that
