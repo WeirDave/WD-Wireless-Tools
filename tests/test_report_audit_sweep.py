@@ -562,6 +562,32 @@ class EverythingInAPageNamesItsPage(unittest.TestCase):
         self.assertLess(kids_p.start(), kids_l.start(), "landscape must come after portrait to win")
 
 
+class AFirstLandscapeSheetDoesNotShrinkTheDocument(unittest.TestCase):
+    """Measured in Firefox 157 through its own print pipeline. A floor split
+    into sections, with the first sheet landscape and a later sheet portrait
+    (the Contents page turned landscape, the cover following it), printed the
+    whole document at 75%: every label 5pt, the maps small. Bisecting the
+    page by hiding boxes found one cause - the right-hand match-line label,
+    anchored ``right: 0.04in`` in a wrapper that Firefox laid out at the
+    landscape width, so it hung 2.5in off the portrait sheet and Firefox
+    shrank everything to fit it. Capping the wrapper at the portrait content
+    width made the same document print at full size. Chromium never did it.
+    CI cannot print in Firefox with a PDF reader, so it holds that the cap is
+    there, only for a portrait page, and is not wider than Letter's content."""
+
+    def setUp(self):
+        from pathlib import Path
+        self.css = (Path(__file__).resolve().parent.parent / "web" / "assets" / "wd-tools.css").read_text(encoding="utf-8")
+
+    def test_a_portrait_sections_wrapper_is_capped_at_the_sheets_content_width(self):
+        import re
+        m = re.search(r"\.rep-placement-page:not\(\.is-landscape\) \.rep-seg-plan-wrap \{ max-width: ([\d.]+)in; \}", self.css)
+        self.assertTrue(m, "a portrait section's match-line label can hang off the sheet and shrink the document")
+        # Letter portrait less the 0.4in side margins of @page
+        self.assertLessEqual(float(m.group(1)), 8.5 - 0.8)
+        self.assertGreaterEqual(float(m.group(1)), 7.0, "capped so far it would crop the map")
+
+
 class AMapNumberIsReadableOnEitherSheet(ReportCase):
     """Found by forcing a 600 x 6000 plan to landscape: its long edge then
     prints in 5.75in and a number sized at 1.35% of it came out at 5.6pt."""

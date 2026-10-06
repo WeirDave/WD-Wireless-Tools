@@ -7397,6 +7397,16 @@ body.wd-has-stale-banner { padding-top: 52px; }
      the rule is skipped and the behaviour is what it was. */
   html:has(.rep-oriented) { page: placementPortrait; }
 
+  /* A zoomed section's match-line label sits at the right edge of its wrapper.
+     When the document's first sheet is landscape, Firefox 157 resolves that
+     edge against the landscape width (10.2in) while the sheet it is printed on
+     is the portrait one (7.7in), sees the label hang off the page, and shrinks
+     the WHOLE document to 75% - every label 5pt and the map small. Measured
+     with the Contents page turned landscape on a floor split into sections.
+     Capping the wrapper at the portrait content width keeps the edge on the
+     sheet; Chromium is unaffected. */
+  .rep-placement-page:not(.is-landscape) .rep-seg-plan-wrap { max-width: 7.6in; }
+
   /* The installation table's own sheet. It gets the same break behaviour the
      bare table had, moved out to the section that now wraps it. */
   .rep-loc-page { page-break-before: always; break-before: page; }
