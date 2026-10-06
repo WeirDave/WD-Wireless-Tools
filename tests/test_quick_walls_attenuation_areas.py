@@ -223,5 +223,75 @@ class ThePageAddsAndSavesTests(unittest.TestCase):
         self.assertTrue(r["order"], "walls.js uses WDAreas, so walls-areas.js must load first")
 
 
+TAB_PROBE = r"""
+const fs = require('fs');
+globalThis.WDAreas = require(process.argv[1]);
+const src = fs.readFileSync(process.argv[2], 'utf8');
+function slice(open) {
+  const a = src.indexOf(open);
+  if (a < 0) throw new Error('moved: ' + open);
+  let b = a, depth = 0, seen = false;
+  while (b < src.length && !(seen && depth === 0)) {
+    if (src[b] === '{') { depth++; seen = true; } else if (src[b] === '}') depth--;
+    b++;
+  }
+  return src.slice(a, b);
+}
+const els = {};
+const el = id => els[id] || (els[id] = {id, hidden: false, innerHTML: '', textContent: '',
+  disabled: false, attrs: {}, on: {},
+  classList: {toggle(c, on) { els[id].on[c] = on; }},
+  setAttribute(k, v) { els[id].attrs[k] = v; }});
+globalThis.document = {getElementById: el};
+globalThis.esc = x => String(x); globalThis.safeColor = c => c;
+globalThis.esxZip = {};
+globalThis.areaDoc = {}; globalThis.areaTypes = [EXISTING]; globalThis.areaPresets = PRESETS;
+const consts = src.match(/const perFt = [^\n]*\nconst ftOf = [^\n]*\n/)[0];
+eval(consts + slice('function switchWallsTab') + slice('function areaCard')
+   + slice('function areaBlockReason') + slice('function renderAreaPanel'));
+renderAreaPanel();
+const before = {list: el('areaList').innerHTML, presets: el('areaPresets').innerHTML,
+                count: el('areaCount').textContent, disabled: el('areaAddBtn').disabled};
+switchWallsTab('areas');
+const onAreas = {walls: el('wallsBody').hidden, areas: el('areasBody').hidden,
+                 tab: el('tabAreas').attrs['aria-selected']};
+switchWallsTab('walls');
+console.log(JSON.stringify({before, onAreas, back: {walls: el('wallsBody').hidden,
+  areas: el('areasBody').hidden}}));
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is required")
+class TheTabTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        script = (f"const EXISTING = {json.dumps(dict(EXISTING_TYPE, lowerEdge=0.9144, upperEdge=3.048))};"
+                  f"const PRESETS = {PRESETS.read_text(encoding='utf-8')}.presets;{TAB_PROBE}")
+        proc = subprocess.run(["node", "-e", script, str(AREAS_JS), str(WALLS_JS)],
+                              capture_output=True, text=True, encoding="utf-8",
+                              timeout=NODE_TIMEOUT_S)
+        if proc.returncode != 0:
+            raise AssertionError((proc.stdout + proc.stderr).strip())
+        cls.r = json.loads(proc.stdout)
+
+    def test_the_tab_swaps_the_two_bodies_and_back(self):
+        self.assertEqual(self.r["onAreas"], {"walls": True, "areas": False, "tab": "true"})
+        self.assertEqual(self.r["back"], {"walls": False, "areas": True})
+
+    def test_the_project_list_shows_feet_and_per_foot(self):
+        # 3 dB/m is 0.91 dB/ft; 0.9144 m and 3.048 m are 3 ft and 10 ft.
+        html = self.r["before"]["list"]
+        self.assertIn("Invented Hedge", html)
+        self.assertIn("0.91", html)
+        self.assertIn("3\u201310 ft", html)
+
+    def test_presets_are_listed_with_their_numbers(self):
+        html = self.r["before"]["presets"]
+        for needle in ("Tree Canopy", "9\u201335 ft", "Shrubbery, Low Planting", "1.8"):
+            self.assertIn(needle, html)
+        self.assertEqual(self.r["before"]["count"], "1 area type")
+        self.assertFalse(self.r["before"]["disabled"])
+
+
 if __name__ == "__main__":
     unittest.main()

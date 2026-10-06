@@ -12305,9 +12305,6 @@ body.tool-cloud #shareModal :is(.share-add-note, .share-add-label, .share-target
 body.tool-cloud #shareModal :is(li, .share-group-member-row .share-name) { font-size: 14px; }
 body.tool-cloud #shareModal .share-group-member-row .share-email { font-size: 13px; }
 
-/* Quick Walls: the attenuation-area presets in the right-hand panel. */
-.area-presets { display: flex; flex-direction: column; gap: var(--sp-2); }
-.area-preset { display: grid; grid-template-columns: auto 1fr; column-gap: var(--sp-2); align-items: center; }
-.area-swatch { width: 12px; height: 12px; border-radius: var(--r-xs); background: var(--wall-color); }
-.area-name { font-weight: 600; }
-.area-meta { grid-column: 2; font-size: var(--fs-meta); color: var(--text-3); }
+/* Quick Walls: the Attenuation Areas tab. */
+.pb-body[hidden] { display: none; }
+body.tool-walls .tab.active { background: var(--tool-accent); border-top-color: var(--tool-accent); }

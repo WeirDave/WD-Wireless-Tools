@@ -600,24 +600,69 @@ function areaBlockReason() {
   return plan.error || '';
 }
 
+function switchWallsTab(which) {
+  const areas = which === 'areas';
+  document.getElementById('wallsBody').hidden = areas;
+  document.getElementById('areasBody').hidden = !areas;
+  [['tabWalls', !areas], ['tabAreas', areas]].forEach(([id, on]) => {
+    const t = document.getElementById(id);
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+
+// Stored per metre; shown per foot, which is how the loss is measured on site.
+const perFt = v => Math.round(v * WDAreas.FT_M * 100) / 100;
+const ftOf = m => Math.round(m / WDAreas.FT_M * 10) / 10;
+
+function areaCard(name, color, meta) {
+  return `
+    <div class="wall-card" style="--wall-color:${safeColor(color)}">
+      <div class="wall-swatch"></div>
+      <div class="wall-info">
+        <div class="wall-name-row"><span class="wall-name">${esc(name)}</span></div>
+        <div class="wall-meta">${meta}</div>
+      </div>
+    </div>`;
+}
+
 function renderAreaPanel() {
-  const box = document.getElementById('areaPresets');
-  if (!box) return;
-  box.innerHTML = areaPresets.map(p => `
-    <div class="area-preset">
-      <span class="area-swatch" style="--wall-color:${safeColor(p.color)}"></span>
-      <span class="area-name">${esc(p.name)}</span>
-      <span class="area-meta">${esc(WDAreas.describe(p))}</span>
-    </div>`).join('');
+  const presets = document.getElementById('areaPresets');
+  if (!presets) return;
+  presets.innerHTML = areaPresets.map(p => {
+    const a = p.attenuationDbPerFt;
+    const have = areaTypes.some(t => String(t && t.name || '').trim().toLowerCase()
+      === p.name.toLowerCase());
+    return areaCard(p.name, p.color,
+      `<span><span class="label">2.4:</span> ${esc(a.TWO)}</span>`
+      + `<span><span class="label">5:</span> ${esc(a.FIVE)}</span>`
+      + `<span><span class="label">6:</span> ${esc(a.SIX)}</span>`
+      + `<span><span class="label">edges:</span> ${esc(p.lowerEdgeFt)}\u2013${esc(p.upperEdgeFt)} ft</span>`
+      + (have ? '<span class="label">in this project</span>' : ''));
+  }).join('');
+
+  document.getElementById('areaList').innerHTML = areaTypes.length
+    ? areaTypes.map(t => {
+      const by = {};
+      (t.propagationProperties || []).forEach(p => { by[p.band] = p.attenuationFactor; });
+      const att = b => by[b] == null ? '\u2014' : perFt(by[b]);
+      const lo = Number.isFinite(t.lowerEdge) ? ftOf(t.lowerEdge) : '?';
+      const hi = Number.isFinite(t.upperEdge) ? ftOf(t.upperEdge) : '?';
+      return areaCard(t.name, t.color,
+        `<span><span class="label">2.4:</span> ${esc(att('TWO'))}</span>`
+        + `<span><span class="label">5:</span> ${esc(att('FIVE'))}</span>`
+        + `<span><span class="label">6:</span> ${esc(att('SIX'))}</span>`
+        + `<span><span class="label">edges:</span> ${esc(lo)}\u2013${esc(hi)} ft</span>`);
+    }).join('')
+    : '<p class="pb-lead">This project has no attenuation area types yet.</p>';
+
+  document.getElementById('areaCount').textContent = areaTypes.length
+    + ' area type' + (areaTypes.length === 1 ? '' : 's');
   const why = areaBlockReason();
-  const btn = document.getElementById('areaAddBtn');
-  if (btn) btn.disabled = !!why;
+  document.getElementById('areaAddBtn').disabled = !!why;
   const note = document.getElementById('areaNote');
-  if (note) {
-    note.textContent = why || (areaTypes.length + ' area type'
-      + (areaTypes.length === 1 ? '' : 's') + ' in this project. 2.4 / 5 / 6 GHz.');
-    note.classList.toggle('is-missing', !!why && !!esxZip);
-  }
+  note.textContent = why;
+  note.classList.toggle('is-missing', !!why && !!esxZip);
 }
 
 function addAreaPresets() {
