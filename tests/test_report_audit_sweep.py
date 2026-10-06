@@ -621,5 +621,40 @@ class TheInstallationMapIsAFittedPlanPage(ReportCase):
         """)
 
 
+class BoxesThatLandOnEachOtherAreSpreadApart(ReportCase):
+
+    def test_the_helper_gives_every_box_a_free_slot_and_keeps_order(self):
+        self.run_block(r"""
+          const spread = E('spreadBoxes');
+          const items = [];
+          for (let i = 0; i < 6; i++) items.push({ x: 100, y: 100, w: 20, h: 10 });   // six on one spot
+          items.push({ x: 500, y: 500, w: 20, h: 10 });                              // one alone
+          const out = spread(items);
+          eq('one result per item, in order', out.length, 7);
+          eq('the first stays where it wanted to be', [out[0].cx, out[0].cy, out[0].moved], [100, 100, false]);
+          eq('the one alone is not moved', out[6].moved, false);
+          for (let i = 0; i < out.length; i++) for (let j = i + 1; j < out.length; j++) {
+            const hit = Math.abs(out[i].cx - out[j].cx) < (out[i].w + out[j].w) / 2
+                     && Math.abs(out[i].cy - out[j].cy) < (out[i].h + out[j].h) / 2;
+            check('boxes ' + i + ' and ' + j + ' do not overlap', !hit);
+          }
+          check('the five that had to move say so', out.slice(1, 6).every(b => b.moved));
+        """)
+
+    def test_two_radios_on_one_design_map_spot_get_two_readable_labels(self):
+        self.run_block(r"""
+          const p = project();
+          // a second 5 GHz radio on Zed-AP1: two markers at one position
+          p.radios.push({ id: 'dup', accessPointId: 'ap1', radioTechnology: 'IEEE802_11', antennaTypeId: 'omni1',
+            transmitPower: 10, channelByCenterFrequencyDefinedNarrowChannels: [5200] });
+          open(p);
+          const html = render('design', { channelMap: true });
+          const ground = floorPart(html, 'data-page-key="drmap-FIVE:fA"', 'data-page-key="drmap-FIVE:fB"');
+          const spots = ground.match(/class="rep-dr-mark" transform="translate\(([^)]*)\)"/g) || [];
+          check('the map has its markers: ' + spots.length, spots.length >= 7);
+          eq('no two on one spot', new Set(spots).size, spots.length);
+        """)
+
+
 if __name__ == "__main__":
     unittest.main()

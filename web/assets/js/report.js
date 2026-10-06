@@ -7614,11 +7614,13 @@
     var lblFont = dotR * 1.7;
     var shift = null;
     // The name beside a circle is what ties it to its row in the table.
+    var tagItems = [];
     function nameTag(ap, x, y) {
-      return '<text class="rep-aud-lbl" x="' + (x + dotR * 1.4) + '" y="' + (y + lblFont * 0.35)
-        + '" font-size="' + lblFont + '" fill="#111" stroke="#fff" stroke-width="' + (lblFont * 0.18)
-        + '" paint-order="stroke" font-weight="700">'
-        + WD.esc(apLabel(ap, 'short')) + '</text>';
+      var text = apLabel(ap, 'short');
+      var w = Math.max(text.length, 1) * lblFont * 0.62;
+      // Laid out after every circle is known, so two tags cannot land on each other.
+      tagItems.push({ text: text, x: x + dotR * 1.4 + w / 2, y: y, w: w, h: lblFont * 1.25 });
+      return '';
     }
     result.floorNotes.forEach(function (n) { if (n.floorId === fp.id) shift = n; });
 
@@ -7667,7 +7669,8 @@
         + '<line x1="' + (-dotR) + '" y1="' + (-dotR) + '" x2="' + dotR + '" y2="' + dotR
         + '" stroke-width="' + sw + '"/>'
         + '<line x1="' + (-dotR) + '" y1="' + dotR + '" x2="' + dotR + '" y2="' + (-dotR)
-        + '" stroke-width="' + sw + '"/>' + nameTag(ap, dotR, 0) + '</g>';
+        + '" stroke-width="' + sw + '"/></g>';
+      nameTag(ap, x, y);
       drew++;
     });
     result.unchanged.forEach(function (rec) {
@@ -7678,6 +7681,11 @@
     });
 
     if (!drew) return '';
+    spreadBoxes(tagItems).forEach(function (box, ti) {
+      g += '<text class="rep-aud-lbl" x="' + (box.cx - box.w / 2) + '" y="' + (box.cy + lblFont * 0.35)
+        + '" font-size="' + lblFont + '" fill="#111" stroke="#fff" stroke-width="' + (lblFont * 0.18)
+        + '" paint-order="stroke" font-weight="700">' + WD.esc(tagItems[ti].text) + '</text>';
+    });
     return planPageOpen('audit', fp.id, opts)
       + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + ' — what changed</h2>'
       + '<div class="rep-overview">'
@@ -8502,12 +8510,21 @@
         + '" y2="' + pr.b.y + '" stroke="#dc2626" stroke-width="' + sw
         + '" stroke-dasharray="' + (sw * 3) + ' ' + (sw * 2) + '"/>';
     }).join('');
-    var pins = marks.map(function (m) {
+    var pinItems = marks.map(function (m) {
+      var c = m.ap.location.coord, label = drChannelText(m.info);
+      return { x: c.x, y: c.y, label: label,
+               w: Math.max(minDim * 0.03, label.length * font * 0.62) + minDim * 0.012,
+               h: Math.max(minDim * 0.028, font * 1.45) };
+    });
+    var pinBoxes = spreadBoxes(pinItems);
+    var pins = marks.map(function (m, mi) {
       var c = m.ap.location.coord;
-      var label = drChannelText(m.info);
-      var bw = Math.max(minDim * 0.03, label.length * font * 0.62) + minDim * 0.012;
-      var bh = Math.max(minDim * 0.028, font * 1.45);
-      return '<g class="rep-dr-mark" transform="translate(' + c.x + ',' + c.y + ')">'
+      var label = pinItems[mi].label, bw = pinItems[mi].w, bh = pinItems[mi].h;
+      var box = pinBoxes[mi];
+      var lead = box.moved
+        ? '<line x1="' + c.x + '" y1="' + c.y + '" x2="' + box.cx + '" y2="' + box.cy + '" stroke="'
+          + colourOf(m.info) + '" stroke-width="' + (minDim * 0.003) + '"/>' : '';
+      return lead + '<g class="rep-dr-mark" transform="translate(' + box.cx + ',' + box.cy + ')">'
         + '<rect x="' + (-bw / 2) + '" y="' + (-bh / 2) + '" width="' + bw + '" height="' + bh
         + '" rx="' + (minDim * 0.005) + '" fill="' + colourOf(m.info) + '" stroke="#fff" stroke-width="'
         + (minDim * 0.003) + '"/>'
@@ -8911,6 +8928,36 @@
   }
   function _covStar(cell, what) { return cell.assumed[what] ? '*' : ''; }
 
+  /* Boxes that land on one another are pushed apart, in order: each takes the
+     nearest free slot around where it wanted to be, searching outward in rings.
+     Returns one {cx, cy, w, h, moved} per item, in the same order. Coverage
+     numbers, Design channel labels and the Change / Audit name tags all use it,
+     so a number that sat under another is no longer lost. */
+  function spreadBoxes(items) {
+    var placed = [];
+    function hits(b) {
+      return placed.some(function (o) {
+        return Math.abs(b.cx - o.cx) < (b.w + o.w) / 2 && Math.abs(b.cy - o.cy) < (b.h + o.h) / 2;
+      });
+    }
+    var dirs = [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+    return items.map(function (it) {
+      var box = { cx: it.x, cy: it.y, w: it.w, h: it.h, moved: false };
+      if (hits(box)) {
+        search:
+        for (var ring = 1; ring <= 4; ring++) {
+          for (var d = 0; d < dirs.length; d++) {
+            var t = { cx: it.x + dirs[d][0] * ring * it.w * 1.1, cy: it.y + dirs[d][1] * ring * it.h * 1.1,
+                      w: it.w, h: it.h, moved: true };
+            if (!hits(t)) { box = t; break search; }
+          }
+        }
+      }
+      placed.push(box);
+      return box;
+    });
+  }
+
   function renderCoverageReport(aps, opts, ctx) {
     var head = opts.cover
       ? ctx.cover(aps.length, ctx.dateStr, 'Access points')
@@ -9012,29 +9059,10 @@
        drawn first - 105 under 115 - was gone, with its row in the table still
        pointing at it. Each box takes the nearest free slot around its AP and,
        when it has moved, a thin line says which AP it belongs to. */
-    var placedBoxes = [];
     var covCornerR = minDim * 0.005;
-    function boxHits(b) {
-      return placedBoxes.some(function (o) {
-        return Math.abs(b.cx - o.cx) < (b.w + o.w) / 2 && Math.abs(b.cy - o.cy) < (b.h + o.h) / 2;
-      });
-    }
-    pinList.forEach(function (pin) {
-      var box = { cx: pin.x, cy: pin.y, w: pin.w, h: pin.h };
-      var moved = false;
-      if (boxHits(box)) {
-        var tries = [];
-        for (var ring = 1; ring <= 4; ring++) {
-          [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(function (d) {
-            tries.push({ cx: pin.x + d[0] * ring * pin.w * 1.1, cy: pin.y + d[1] * ring * pin.h * 1.1,
-                         w: pin.w, h: pin.h });
-          });
-        }
-        for (var t = 0; t < tries.length; t++) {
-          if (!boxHits(tries[t])) { box = tries[t]; moved = true; break; }
-        }
-      }
-      placedBoxes.push(box);
+    var covBoxes = spreadBoxes(pinList);
+    pinList.forEach(function (pin, pi) {
+      var box = covBoxes[pi], moved = box.moved;
       if (moved) {
         pinsSvg += '<line class="rep-cov-lead" x1="' + pin.x + '" y1="' + pin.y + '" x2="' + box.cx + '" y2="' + box.cy
           + '" stroke="' + pin.color + '" stroke-width="' + (minDim * 0.003) + '"/>'

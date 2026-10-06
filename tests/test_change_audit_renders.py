@@ -54,6 +54,8 @@ eval(slice('  var SHORT_LABEL_MAX', '\n  /* A floor plan imported from CAD'));
 function radioIsDirectional(r) { return !!(r && typeof r.antennaDirection === 'number'); }
 function floorPlanImageUrl(fp) { return 'blob:' + fp.id; }
 function apNotesPages() { return '<!--notes-->'; }
+// The overlay lays its name tags out with the shipped box-spreading helper.
+eval(slice('  function spreadBoxes(items) {', '\n  function renderCoverageReport('));
 // How a plan sheet opens (fitting and the orientation picker) is not what this
 // file is about; the sheet's own content is.
 function planPageOpen() { return '<section class="rep-floor-section">'; }
