@@ -617,7 +617,7 @@ const ftOf = m => Math.round(m / WDAreas.FT_M * 10) / 10;
 
 function areaCard(name, color, meta) {
   return `
-    <div class="wall-card" style="--wall-color:${safeColor(color)}">
+    <div class="area-card" style="--wall-color:${safeColor(color)}">
       <div class="wall-swatch"></div>
       <div class="wall-info">
         <div class="wall-name-row"><span class="wall-name">${esc(name)}</span></div>

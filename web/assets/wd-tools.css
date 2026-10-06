@@ -12307,4 +12307,14 @@ body.tool-cloud #shareModal .share-group-member-row .share-email { font-size: 13
 
 /* Quick Walls: the Attenuation Areas tab. */
 .pb-body[hidden] { display: none; }
+/* An attenuation area card is a wall card that is not draggable: its own class
+   because the wall tab's tests, and its drag handlers, count .wall-card. */
+.area-card {
+  position: relative; display: grid; grid-template-columns: 1fr; gap: var(--sp-2);
+  padding: 9px 12px 9px 26px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.area-card .wall-swatch { border-radius: var(--radius) 0 0 var(--radius); }
+body.tool-walls .tab { font-size: var(--rd-small); }
 body.tool-walls .tab.active { background: var(--tool-accent); border-top-color: var(--tool-accent); }
