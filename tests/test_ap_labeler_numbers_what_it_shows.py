@@ -247,8 +247,9 @@ var IMG = null;
 var SPACING = { value: '100' };
 function $(id) { return id === 'arSpacing' ? SPACING : id === 'arPlanImg' ? IMG : null; }
 var _nesting = 'floor', _colorOrder = [], _scope = 'all';
+var MIN_SPACING_PX = Number(src.match(/var MIN_SPACING_PX = (\d+);/)[1]);
 eval(load([
-  '  function getFloorAPs(', '  function getSpacingUnits(', '  function sortAPs(',
+  '  function getFloorAPs(', '  function spacingPx(', '  function getSpacingUnits(', '  function sortAPs(',
   '  function sortByRow(', '  function clusterByAxis(', '  function clusterByFixedSpacing(',
   '  function avg(', '  function buildSequence(',
 ]));
