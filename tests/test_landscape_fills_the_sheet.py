@@ -58,10 +58,10 @@ function constant(name) {
 }
 let code = '';
 ['SHEET_W_IN', 'SHEET_H_IN', 'ROTATE_GAIN', 'SEG_HEAD_IN', 'SEG_INDEX_HEAD_IN',
- 'SEG_BELOW_IN', 'KEY_PLAN_W_IN', 'KEY_PLAN_MAX_H_IN'].forEach(n => { code += constant(n); });
+ 'SEG_BELOW_IN', 'SEG_FOOT_IN', 'SEG_FOOT_CONF_IN', 'KEY_PLAN_W_IN', 'KEY_PLAN_MAX_H_IN'].forEach(n => { code += constant(n); });
 ['function pageOrientMode(', 'function orientCover(', 'function segOverlayRatio(',
  'function segPrintSizeIn(', 'function sizeAntennaSegmentForPrint(',
- 'function segmentedFloorWantsLandscape(', 'function keyPlanHeightIn(',
+ 'function segmentedFloorWantsLandscape(', 'function keyPlanHeightIn(', 'function footerBelowIn(',
  'function resizeSegmentsForPrint('].forEach(s => { code += fn(s); });
 eval(code);
 

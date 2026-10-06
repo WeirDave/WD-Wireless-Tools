@@ -81,6 +81,9 @@ globalThis.CALIBRATION = {
 function apLabel(ap) { return (ap && ap.name) || ''; }
 function apIsOmniOnly() { return false; }
 function radioIsDirectional() { return true; }
+function antennaIsDirectional() { return true; }
+function aimRadio(apId) { return ctx.primaryRadio(apId); }
+function normAzimuth(d) { return d; }
 function shortFloorLabel(n) { return n; }
 function floorPlanForAp(ap) { return FLOOR; }
 function orientPickerHtml(key) { return '<!--orient:' + key + '-->'; }

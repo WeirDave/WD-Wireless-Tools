@@ -999,7 +999,12 @@
 
   window.markConfigDirty = function () { configureDirty = true; };
   window.toggleAllAps = function (checked) {
-    proj.accessPoints.forEach(function (ap) {
+    /* With a search typed in, All and None act on the APs the search leaves
+       showing - the same as a group's Toggle all. None used to clear every AP
+       in the project while the list showed three, so the report quietly lost
+       APs nobody could see. With no search it is the whole project, as ever. */
+    var targets = apSearch.trim() ? apFilterLists().filtered : proj.accessPoints;
+    targets.forEach(function (ap) {
       if (checked) apDisabled.delete(ap.id); else apDisabled.add(ap.id);
     });
     renderApFilter();
@@ -1432,8 +1437,40 @@
     if (live.length) rs = live;
     return rs.find(function (r) { return r.radioTechnology === 'IEEE802_11'; }) || rs[0] || null;
   }
+  /* The radio an antenna is aimed from.
+
+     primaryRadio answers "which radio describes this AP" and returns the first
+     Wi-Fi one. On an AP with a 2.4 GHz omni radio listed ahead of a 5 GHz
+     sector radio that is the omni, so the Aim Sheet printed "omni" for an AP
+     with a 135 degree azimuth and the Placement Map drew no cone for it. Aim
+     and cones ask a different question - which radio has something to point -
+     so they take the first live radio on a directional antenna, preferring
+     one that actually has an azimuth. */
+  function aimRadio(apId) {
+    var rs = proj.radios.filter(function (r) { return r.accessPointId === apId; });
+    var live = rs.filter(function (r) { return r.enabled !== false; });
+    if (live.length) rs = live;
+    var wifi = rs.filter(function (r) { return r.radioTechnology === 'IEEE802_11'; });
+    if (wifi.length) rs = wifi;
+    var directional = rs.filter(function (r) {
+      return antennaIsDirectional(proj.antennas[r.antennaTypeId]);
+    });
+    if (directional.length) {
+      return directional.find(function (r) { return r.antennaDirection != null; })
+        || directional[0];
+    }
+    return primaryRadio(apId);
+  }
+  /* An azimuth as it should be read: 0 to 359.9, however the file stored it.
+     A design can carry 450 or -45; printing those raw sent an installer to
+     "-45 (NW)" with a compass that has no negative side. */
+  function normAzimuth(deg) {
+    var n = ((Number(deg) % 360) + 360) % 360;
+    n = Math.round(n * 10) / 10;
+    return n >= 360 ? 0 : n;
+  }
   function compass(deg) {
-    var dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+    var dirs =['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
     var norm = ((deg % 360) + 360) % 360;
     return dirs[Math.floor((norm + 11.25) / 22.5) % 16];
   }
@@ -3352,6 +3389,8 @@
   // ── Grid configuration modal ──
 
   var _gridCols = 0, _gridRows = 0, _gridFloorIdx = 0;
+  // What the dialog opened with, so Done can tell a change from a look.
+  var _gridInitCols = 0, _gridInitRows = 0;
   var _cropBox = { x: 0, y: 0, w: 1, h: 1 };
   var _cropBoxes = {};
   var _dragState = null;
@@ -3377,6 +3416,8 @@
     var auto = computeAntennaGrid(fp.width, fp.height, aps, {}, fp.metersPerUnit);
     _gridCols = (currentOpts.segCols > 0) ? currentOpts.segCols : auto.cols;
     _gridRows = (currentOpts.segRows > 0) ? currentOpts.segRows : auto.rows;
+    _gridInitCols = _gridCols;
+    _gridInitRows = _gridRows;
     _cropBoxes = {};
     var saved = currentOpts.cropBoxes || {};
     (proj.floorPlans || []).forEach(function (f) {
@@ -3897,8 +3938,19 @@
 
   window.doneGridConfig = function () {
     saveCurrentFloorCrop();
-    currentOpts.segCols = _gridCols;
-    currentOpts.segRows = _gridRows;
+    /* Columns and rows are one setting for every floor, and the dialog opens
+       showing the FIRST floor's automatic grid. Writing it back unconditionally
+       turned opening the dialog and pressing Done into a decision: a floor the
+       automatic count kept to one sheet became six sections. Only a grid the
+       person actually changed is stored. */
+    // Combined sections are cut from that grid, so they pin it too.
+    var pinsGrid = Object.keys(_segMerges).some(function (id) {
+      return segMergeGroups(_segMerges[id], _gridCols, _gridRows).length;
+    });
+    if (_gridCols !== _gridInitCols || _gridRows !== _gridInitRows || pinsGrid) {
+      currentOpts.segCols = _gridCols;
+      currentOpts.segRows = _gridRows;
+    }
     currentOpts.cropBoxes = Object.keys(_cropBoxes).length ? _cropBoxes : null;
     pruneStaleMerges();
     currentOpts.segMerges = Object.keys(_segMerges).length ? _segMerges : null;
@@ -4231,6 +4283,8 @@
   function apMarkerLabel(ap, opts, ctx) {
     var main = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
     var extra = [];
+    // What each extra is called, so a note about dropped detail can say which.
+    var kinds = [];
     /* First of the extras on purpose. The others describe the AP; this one
        says where to stand to find it, which is the question somebody holding
        the drawing is actually asking. An AP with no coordinates, on a floor
@@ -4239,9 +4293,9 @@
        grid reference somebody failed to fill in. */
     if (opts.labelGrid) {
       var gref = gridRefForAp(ap);
-      if (gref) extra.push(gref);
+      if (gref) { extra.push(gref); kinds.push('grid reference'); }
     }
-    if (opts.labelModel && ap.model) extra.push(ap.model);
+    if (opts.labelModel && ap.model) { extra.push(ap.model); kinds.push('model'); }
     if (opts.labelRadio && ctx) {
       var r = ctx.primaryRadio(ap.id);
       var ch = r && r.channelByCenterFrequencyDefinedNarrowChannels;
@@ -4250,19 +4304,24 @@
       // the same document said "ch 1", because the table converts and this did
       // not. An installer reading a frequency where the word "ch" is printed
       // has no way to tell which of the two is lying.
-      if (ch && ch.length) extra.push('ch ' + ch.map(freqToChannel).join('+'));
-      if (r && typeof r.transmitPower === 'number') extra.push(fmt(r.transmitPower, 0) + ' dBm');
+      if (ch && ch.length) { extra.push('ch ' + ch.map(freqToChannel).join('+')); kinds.push('channel'); }
+      /* One decimal where there is one: 14.5 dBm is not 15. The AP schedule
+         prints one decimal, and a label that rounds up read as a different
+         power from the table beside it. */
+      if (r && typeof r.transmitPower === 'number') { extra.push(fmt(r.transmitPower, 1) + ' dBm'); kinds.push('TX power'); }
     }
     if (opts.labelHeight && ctx) {
       var rh = ctx.primaryRadio(ap.id);
       if (rh && typeof rh.antennaHeight === 'number') {
         extra.push(fmtLength(rh.antennaHeight, opts));
+        kinds.push('mount height');
       }
     }
-    return { main: main, sub: extra.join(' · ') };
+    return { main: main, sub: extra.join(' · '), kinds: kinds };
   }
 
-  function buildAntennaMarkers(aps, scaleW, scaleH, opts, ctx, cellBounds, stats) {
+  function buildAntennaMarkers(aps, scaleW, scaleH, opts, ctx, cellBounds, stats, cutBack, pass) {
+    var aps0 = aps;
     var minDim = Math.min(scaleW, scaleH);
     var edgeMargin = minDim * 0.06;
     var sw = minDim * 0.0025;
@@ -4274,6 +4333,29 @@
     var dotR = dotSize * 0.25;
     var padX = minDim * 0.006;
     var showCones = opts.showCones !== false;
+    /* Whatever is being drawn - a whole floor or one zoomed cell - prints about
+       7.2in across, so a floor of 1.35% of the long edge lands near 7pt on
+       paper. Anything smaller than that is not worth printing. */
+    var legibleFloor = Math.max(scaleW, scaleH) * 0.0135;
+
+    /* An AP whose coordinates are off the plan has no place on this drawing.
+       It used to get no dot - the SVG clips - but a label, which the placement
+       pulled onto the nearest corner, so it looked like an AP standing there.
+       It is left off and named instead (stats.offPlan); the sectioned path
+       already does the same for the APs outside a crop. A zoomed cell is
+       handed only the APs inside it, so only a whole-floor map checks. */
+    var offPlan = [];
+    if (!cellBounds) {
+      aps = aps.filter(function (ap) {
+        var c = ap.location && ap.location.coord;
+        if (!c) return true;
+        if (c.x < 0 || c.y < 0 || c.x > scaleW || c.y > scaleH) {
+          offPlan.push(ap.name || 'an unnamed AP');
+          return false;
+        }
+        return true;
+      });
+    }
 
     // Reading order keeps placement deterministic: the same project renders the
     // same way every time, and the top-left AP gets first claim on its space.
@@ -4295,10 +4377,20 @@
        So in a crowded neighbourhood the marker keeps its number and drops the
        rest. The number is what ties it to the AP table and to the name key
        page, both of which carry the model and the height in full. The
-       reduction is counted and said under the map rather than done quietly. */
-    var crowdRadius = minDim * 0.075;
+       reduction is counted and said under the map rather than done quietly.
+
+       "Both" was never true: the name key page lists number and name only, and
+       the Placement Map has no AP table of its own. The AP Installation report
+       is where model, height, channel and TX power are, and the note under the
+       map says so (placementNotes). */
+    /* The label's own size sets how near is too near: on a 600 x 6000 corridor
+       a 7.5%-of-the-short-edge radius is 45 units against a label 80 units
+       tall, so nothing ever counted as crowded and every pill kept its second
+       line. */
+    var crowdRadius = Math.max(minDim * 0.075, legibleFloor * 2.5);
     var crowded = {};
     var reduced = 0;
+    var droppedFields = [];
     aps.forEach(function (ap) {
       if (!ap.location || !ap.location.coord) return;
       var near = 0;
@@ -4310,12 +4402,16 @@
       });
       if (near >= 2) crowded[ap.id] = true;
     });
+    // Anything a previous pass could not find room for is cut back as well.
+    Object.keys(cutBack || {}).forEach(function (id) { crowded[id] = true; });
+    var stackedIds = {};
 
     // Labels already placed, in plan units. A label is never dropped -- on an
     // installer's map an unlabelled AP is worse than a crowded one -- so when
     // every near position is taken the pill moves further out and a leader line
     // is drawn back to the dot.
     var placed = [];
+    var stacked = 0;
 
     /* Every dot's own square is reserved before any label is placed, not as
        each marker is reached. Reserving them as we went meant a label could be
@@ -4332,6 +4428,39 @@
     function collides(r) {
       return placed.some(function (q) {
         return r.x < q.x + q.w && r.x + r.w > q.x && r.y < q.y + q.h && r.y + r.h > q.y;
+      });
+    }
+
+    /* The aiming cones, as points. A label drawn over its own cone hides the
+       one thing the cone is there to show - the label for the AP at 180 degrees
+       sat across the arrow pointing 180 degrees - so a label prefers ground
+       that is clear of every cone, and only when none is left does it give
+       that up. Sampled rather than intersected: the cone is 6% of the short
+       edge long and a label is wider than the spacing between samples. */
+    // Never shorter than a couple of label heights: on a corridor 600 wide the
+    // plain 6% was a 36-unit arrow beside an 80-unit label.
+    var coneLen = Math.max(minDim * 0.06, legibleFloor * 2.2);
+    var conePts = [];
+    if (showCones) {
+      aps.forEach(function (ap) {
+        var c0 = ap.location && ap.location.coord;
+        if (!c0 || !ctx) return;
+        var rr = aimRadio(ap.id);
+        if (!radioIsDirectional(rr)) return;
+        var th = rr.antennaDirection * Math.PI / 180;
+        var ax = Math.sin(th), ay = -Math.cos(th);
+        for (var t = 0.1; t <= 1.001; t += 0.1) {
+          for (var u = -1; u <= 1; u++) {
+            var along = t * coneLen, across = u * t * coneLen * 0.35;
+            conePts.push({ x: c0.x + ax * along - ay * across,
+                           y: c0.y + ay * along + ax * across });
+          }
+        }
+      });
+    }
+    function hitsCone(r) {
+      return conePts.some(function (q) {
+        return q.x > r.x && q.x < r.x + r.w && q.y > r.y && q.y < r.y + r.h;
       });
     }
 
@@ -4370,12 +4499,19 @@
     }
 
     var markers = '';
+    /* Leader lines go under every marker, not beside their own. Drawn with the
+       marker they belong to, a line from one AP ran across the face of a pill
+       placed after it and struck through the number. */
+    var leaders = '';
     ordered.forEach(function (ap) {
       var c = ap.location.coord;
-      var r = ctx ? ctx.primaryRadio(ap.id) : null;
+      var r = ctx ? aimRadio(ap.id) : null;
+      /* A directional antenna with no azimuth is still a directional marker -
+         it just has nothing to point a cone along. */
       var isDirectional = ctx ? radioIsDirectional(r) : false;
+      var dirAntenna = !!(r && antennaIsDirectional(proj.antennas[r.antennaTypeId]));
       var cls = !ctx ? 'rep-mark rep-mark--loc'
-        : isDirectional ? 'rep-mark rep-mark--dir' : 'rep-mark rep-mark--omni';
+        : dirAntenna ? 'rep-mark rep-mark--dir' : 'rep-mark rep-mark--omni';
       /* Resolve to hex before anything is painted or measured. An .esx may
          store "GREEN", and a browser reads that as CSS green (#008000), not
          Ekahau's #00FF00 - so the printed marker was the wrong colour, and the
@@ -4387,16 +4523,17 @@
       var parts = apMarkerLabel(ap, opts, ctx);
       var label = parts.main;
       var sub = parts.sub;
-      if (sub && crowded[ap.id]) { sub = ''; reduced++; }
+      if (sub && crowded[ap.id]) {
+        sub = ''; reduced++;
+        (parts.kinds || []).forEach(function (k) {
+          if (droppedFields.indexOf(k) < 0) droppedFields.push(k);
+        });
+      }
       // The old rule shrank the type in proportion to the name, which put a
       // ten-character AP name at roughly 3pt on a printed page -- unreadable,
       // and on this report the name is the whole point. Shrink only to a floor
       // that still prints legibly, and let the pill grow instead; crowding is
       // what the placement search below is for.
-      // Whatever is being drawn -- a whole floor or one zoomed cell -- prints
-      // about 7.2in across, so a floor of 1.35% of the long edge lands near 7pt
-      // on paper. Anything smaller than that is not worth printing.
-      var legibleFloor = Math.max(scaleW, scaleH) * 0.0135;
       var labelFont = Math.max(legibleFloor,
                                minDim * 0.02 * Math.min(1, 4 / Math.max(4, label.length)));
       // The second line (model, height, channel) is read off the same sheet,
@@ -4404,7 +4541,13 @@
       var subFont = Math.max(labelFont * 0.72, legibleFloor);
       var textW = Math.max(label.length * labelFont * 0.62, sub.length * subFont * 0.6);
       var pillW = Math.max(minDim * 0.03, textW) + padX * 2;
-      var boxH = sub ? pillH + subFont * 1.25 : pillH;
+      /* The pill is as tall as its type needs, not as tall as a fraction of the
+         short edge: on a plan more elongated than about 2.8:1 the type floor
+         (a share of the LONG edge) outgrew the pill (a share of the short one),
+         so the number straddled the pill's top edge and printed as white
+         fragments on the plan. 1.5 x the font is the idiom the mini maps use. */
+      var markH = Math.max(pillH, labelFont * 1.5);
+      var boxH = sub ? markH + subFont * 1.25 : markH;
 
       // The preferred side still follows the antenna and the page edge; the
       // fallbacks fan out from there.
@@ -4447,7 +4590,7 @@
          a leader line costs a reader one glance, a covered label costs them the
          AP. Sixteen angles over three rings is a few hundred rectangle tests
          for a floor of this size, which is nothing. */
-      for (var ring = 1; ring <= 3; ring++) {
+      for (var ring = 1; ring <= 8; ring++) {
         var rad = far + ring * (boxH * 1.6 + gap);
         for (var a = 0; a < 16; a++) {
           var ang = (a / 16) * Math.PI * 2 + (preferAbove ? Math.PI : 0);
@@ -4457,11 +4600,17 @@
       }
 
       var chosen = null;
-      for (var i = 0; i < cands.length; i++) {
-        var rect = { x: c.x + cands[i].x, y: c.y + cands[i].y, w: pillW, h: boxH };
-        if (onPlan(rect) && !collides(rect)) { chosen = cands[i]; placed.push(rect); break; }
+      for (var pass = 0; pass < 2 && !chosen; pass++) {
+        for (var i = 0; i < cands.length; i++) {
+          var rect = { x: c.x + cands[i].x, y: c.y + cands[i].y, w: pillW, h: boxH };
+          if (onPlan(rect) && !collides(rect) && (pass === 1 || !hitsCone(rect))) {
+            chosen = cands[i]; placed.push(rect); break;
+          }
+        }
       }
       if (!chosen) {
+        stacked++;
+        stackedIds[ap.id] = true;
         /* Every clear position on the map is taken, so this one doubles up -
            but it doubles up *on the map*. Off the edge is not a worse-looking
            label, it is no label, which is the one outcome worth ruling out. */
@@ -4473,7 +4622,7 @@
 
       markers += '<g class="' + cls + '" transform="translate(' + c.x + ',' + c.y + ')">';
       if (isDirectional && showCones) {
-        var len = minDim * 0.06;
+        var len = coneLen;
         var coneFill = apColor ? ' fill="' + WD.escAttr(apColor) + '" fill-opacity="0.35" stroke="' + WD.escAttr(apColor) + '"' : '';
         markers += '<g transform="rotate(' + dir + ')">'
           + '<path class="rep-mark-cone" d="M 0 0 L ' + (-len * 0.35) + ' ' + (-len) + ' L ' + (len * 0.35) + ' ' + (-len) + ' Z" stroke-width="' + coneSw + '"' + coneFill + '/></g>';
@@ -4482,8 +4631,9 @@
         var lx = chosen.x + pillW / 2;
         var ly = chosen.y + (chosen.y > 0 ? 0 : boxH);
         var leadStroke = apColor ? ' stroke="' + WD.escAttr(apColor) + '"' : '';
-        markers += '<line class="rep-mark-lead" x1="0" y1="0" x2="' + lx + '" y2="' + ly
-          + '" stroke-width="' + (sw * 0.9) + '"' + leadStroke + '/>';
+        leaders += '<g transform="translate(' + c.x + ',' + c.y + ')">'
+          + '<line class="rep-mark-lead" x1="0" y1="0" x2="' + lx + '" y2="' + ly
+          + '" stroke-width="' + (sw * 0.9) + '"' + leadStroke + '/></g>';
       }
       var dotFill = apColor ? ' fill="' + WD.escAttr(apColor) + '"' : '';
       var pillFill = apColor ? ' fill="' + WD.escAttr(apColor) + '"' : '';
@@ -4497,14 +4647,34 @@
       var edge = apColor ? ' stroke="' + WD.escAttr(WD.outlineOn(apColor)) + '"' : '';
       markers += '<rect class="rep-mark-dot" x="' + (-dotSize / 2) + '" y="' + (-dotSize / 2) + '" width="' + dotSize + '" height="' + dotSize + '" rx="' + dotR + '" ry="' + dotR + '" stroke-width="' + sw + '"' + dotFill + edge + '/>'
         + '<rect class="rep-mark-pill" x="' + chosen.x + '" y="' + chosen.y + '" width="' + pillW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '" stroke-width="' + sw + '"' + pillFill + edge + '/>'
-        + '<text class="rep-mark-label" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '"' + labelFill + '>' + WD.esc(label) + '</text>';
+        + '<text class="rep-mark-label" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + markH / 2 + labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '"' + labelFill + '>' + WD.esc(label) + '</text>';
       if (sub) {
-        markers += '<text class="rep-mark-sub" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + pillH + subFont * 0.55) + '" text-anchor="middle" font-size="' + subFont + '"' + subFill + '>' + WD.esc(sub) + '</text>';
+        markers += '<text class="rep-mark-sub" x="' + (chosen.x + pillW / 2) + '" y="' + (chosen.y + markH + subFont * 0.55) + '" text-anchor="middle" font-size="' + subFont + '"' + subFill + '>' + WD.esc(sub) + '</text>';
       }
       markers += '</g>';
     });
-    if (stats) stats.reduced = reduced;
-    return markers;
+    /* A label that found no clear ground even after the search is the sign that
+       the second line was too much for that neighbourhood. Those APs are cut
+       back to the number and the whole map is laid out again, so the labels
+       they were crowding out get room. A few passes at most; whatever is still
+       stacked after that is counted and said under the map. */
+    if (stacked && (pass || 0) < 3) {
+      var more = Object.assign({}, cutBack || {});
+      var added = false;
+      ordered.forEach(function (ap) {
+        if (stackedIds[ap.id] && !more[ap.id] && apMarkerLabel(ap, opts, ctx).sub) {
+          more[ap.id] = true; added = true;
+        }
+      });
+      if (added) return buildAntennaMarkers(aps0, scaleW, scaleH, opts, ctx, cellBounds, stats, more, (pass || 0) + 1);
+    }
+    if (stats) {
+      stats.reduced = reduced;
+      stats.stacked = stacked;
+      stats.offPlan = offPlan;
+      stats.dropped = droppedFields;
+    }
+    return leaders + markers;
   }
 
   function antennaLabelHint(opts) {
@@ -4520,7 +4690,10 @@
     (aps || []).forEach(function (ap) {
       var raw = ap && ap.color;
       if (!raw) { anyDefault = true; return; }
-      var c = WD.safeColor(raw);
+      /* Through the same resolver the markers use. safeColor alone knows only
+         hex and rgb(), so "red" - how an .esx may spell it - became grey, and
+         the key showed grey dots for a map of red, green and orange ones. */
+      var c = WD.safeColor(WD.resolveApColor(raw));
       if (!seen[c]) { seen[c] = 1; out.push(c); }
     });
     return { colours: out, anyDefault: anyDefault };
@@ -4550,6 +4723,42 @@
       + keySwatch('omni', omniAps) + ' Omni / ceiling &nbsp;·&nbsp; ' + WD.esc(antennaLabelHint(opts));
   }
 
+  /* What a whole-floor map has to say about itself, under the key.
+
+     Three things can be wrong with a map that is otherwise drawn, and each is
+     said in words rather than left for the reader to find: an AP that is not
+     on the plan at all, markers that were cut back to the number, and labels
+     that could not be put clear of one another. */
+  function placementNotes(stats) {
+    var out = '';
+    var off = (stats && stats.offPlan) || [];
+    if (off.length) {
+      out += '<div class="rep-seg-note rep-seg-note--outside">' + off.length
+        + (off.length === 1 ? ' AP lies' : ' APs lie')
+        + ' outside the floor plan and ' + (off.length === 1 ? 'is' : 'are')
+        + ' not on this sheet: ' + WD.esc(off.slice().sort(function (x, y) { return x.localeCompare(y, undefined, { numeric: true }); }).join(', ')) + '</div>';
+    }
+    if (stats && stats.reduced) {
+      var dropped = stats.dropped || [];
+      var what = dropped.length
+        ? dropped.slice(0, -1).join(', ') + (dropped.length > 1 ? ' and ' : '') + dropped[dropped.length - 1]
+        : 'detail';
+      out += '<div class="rep-overview-note">' + stats.reduced + ' marker'
+        + (stats.reduced === 1 ? '' : 's')
+        + ' in tight groups show the number only. The ' + WD.esc(what)
+        + ' of every AP are in the AP Installation report.</div>';
+    }
+    if (stats && stats.stacked) {
+      out += '<div class="rep-overview-note">' + stats.stacked + ' label'
+        + (stats.stacked === 1 ? '' : 's')
+        + ' could not be placed clear of the others on this floor and '
+        + (stats.stacked === 1 ? 'overlaps' : 'overlap')
+        + ' a neighbour. Turn on short number labels, or split the floor plan into sections, to read '
+        + (stats.stacked === 1 ? 'it' : 'them') + '.</div>';
+    }
+    return out;
+  }
+
   function renderAntennaOverview(fp, aps, opts, ctx, keyHtml, pageHeaded) {
     var url = floorPlanImageUrl(fp);
     if (!url) return '<div class="rep-empty-small">Floor plan image not available.</div>';
@@ -4569,14 +4778,7 @@
 
     var stats = {};
     var markers = buildAntennaMarkers(aps, W, H, opts, ctx, null, stats);
-    // Said out loud, next to the key, so nobody wonders why one marker carries
-    // a model and its neighbour does not.
-    var note = stats.reduced
-      ? '<div class="rep-overview-note">' + stats.reduced + ' marker'
-        + (stats.reduced === 1 ? '' : 's')
-        + ' in tight groups show the number only — model and mount height for '
-        + 'every AP are in the AP table.</div>'
-      : '';
+    var note = placementNotes(stats);
     return '<div class="rep-overview">'
       + '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
       +   '<img src="' + url + '" alt="Floor plan">'
@@ -4934,6 +5136,12 @@
       + '</div>';
   }
 
+  /* The thumbnail is 90px wide at the plan's aspect, and no taller than
+     1.1in - .rep-seg-locator in the stylesheet narrows it instead. Without
+     the cap a tall building's thumbnail was 2in tall. */
+  var KEY_PLAN_W_IN = 90 / 96;
+  var KEY_PLAN_MAX_H_IN = 1.1;
+
   /* The Key Plan.
 
      Standard name, deliberately: a construction reader recognises "Key Plan"
@@ -4955,9 +5163,16 @@
 
     var others = '';
     var all = cells || [];
-    // Only worth lettering when the letters will be readable at thumbnail size.
-    var labelAt = Math.min(vW, vH) * 0.055;
-    var showLabels = all.length > 1 && all.length <= 30;
+    /* A letter is only worth printing if it prints at a size somebody can read.
+       The thumbnail is under an inch across, so 5.5% of its short side was
+       1 to 3pt - below what the rest of the report allows and unreadable on a
+       real sheet. The size is now worked out in points: the letters are drawn
+       at 6.5pt on paper, and a cell that cannot hold its letter at that size
+       goes without one rather than getting a smaller letter. The highlighted
+       cell is still filled, so the thumbnail locates the section either way. */
+    var thumbWIn = Math.min(KEY_PLAN_W_IN, KEY_PLAN_MAX_H_IN * vW / vH);
+    var labelAt = (6.5 / 72) / thumbWIn * vW;
+    var showLabels = all.length > 1;
     all.forEach(function (c) {
       var isThis = (c.col === cell.col && c.row === cell.row);
       if (!isThis) {
@@ -4965,11 +5180,14 @@
           + '" height="' + (c.y1 - c.y0) + '" class="rep-seg-locator-other"'
           + ' stroke-width="' + (lw * 0.6) + '"/>';
       }
-      if (showLabels) {
+      var lbl = c.label || segCellLabel(c.col, c.row);
+      var fitsCell = (c.x1 - c.x0) >= String(lbl).length * labelAt * 0.65
+        && (c.y1 - c.y0) >= labelAt * 1.15;
+      if (showLabels && fitsCell) {
         others += '<text x="' + ((c.x0 + c.x1) / 2) + '" y="' + ((c.y0 + c.y1) / 2)
           + '" class="rep-seg-locator-label' + (isThis ? ' is-here' : '') + '"'
           + ' font-size="' + labelAt + '" text-anchor="middle"'
-          + ' dominant-baseline="central">' + WD.esc(c.label || segCellLabel(c.col, c.row)) + '</text>';
+          + ' dominant-baseline="central">' + WD.esc(lbl) + '</text>';
       }
     });
 
@@ -5187,14 +5405,15 @@
     var above = cellPage
       ? SEG_HEAD_IN + keyPlanHeightIn(cellPage)
       : SEG_INDEX_HEAD_IN;
+    var below = SEG_BELOW_IN + footerBelowIn(cellPage);
     if (landscape) {
       maxWidthIn = SHEET_H_IN - (SHEET_W_IN - maxWidthIn);
-      maxHeightIn = SHEET_W_IN - above - SEG_BELOW_IN;
+      maxHeightIn = SHEET_W_IN - above - below;
     } else {
       // Portrait keeps its long-standing figure, except where the header is
       // tall enough to push the map off the sheet - which on a tall building
       // put the header on one sheet and the map on the next.
-      maxHeightIn = Math.min(maxHeightIn, SHEET_H_IN - above - SEG_BELOW_IN);
+      maxHeightIn = Math.min(maxHeightIn, SHEET_H_IN - above - below);
     }
     var widthIn = Math.min(maxWidthIn, maxHeightIn * ratio);
     return { w: widthIn, h: widthIn / ratio };
@@ -5235,12 +5454,19 @@
   var SEG_HEAD_IN = 0.67;
   var SEG_INDEX_HEAD_IN = 1.13;
   var SEG_BELOW_IN = 0.8;
-  /* The thumbnail is 90px wide at the plan's aspect, and no taller than
-     1.1in - .rep-seg-locator in the stylesheet narrows it instead. Without
-     the cap a tall building's thumbnail was 2in tall. */
-  var KEY_PLAN_W_IN = 90 / 96;
-  var KEY_PLAN_MAX_H_IN = 1.1;
-
+  /* The footer follows the last section of a floor, inside the same sheet, and
+     0.8in is the key line and its spare - not the footer as well. On a map that
+     is height-limited the footer did not fit, and one sheet per floor (pages
+     7, 13, 19, 25 and 31 of a 41-page report) carried nothing but the running
+     footer. The last section of a floor gives that room back; the others do
+     not need it. The confidentiality line is a second row. */
+  var SEG_FOOT_IN = 0.45;
+  var SEG_FOOT_CONF_IN = 0.65;
+  function footerBelowIn(cellPage) {
+    var next = cellPage && cellPage.nextElementSibling;
+    if (!next || !next.classList || !next.classList.contains('rep-doc-foot')) return 0;
+    return next.querySelector('.rep-foot-conf') ? SEG_FOOT_CONF_IN : SEG_FOOT_IN;
+  }
   function keyPlanHeightIn(cellPage) {
     var loc = cellPage.querySelector('.rep-seg-locator');
     if (!loc) return 0;
@@ -5299,8 +5525,16 @@
       + orientPickerHtml('placement:' + fp.id, opts)
       + '<div class="rep-placement-sheet">';
     if (heading) {
+      /* The floor's name goes in the sub-line only when the heading is not
+         already it. With no storey number the heading IS the name, and it was
+         printed twice - which on a long CAD sheet title wrapped both and
+         pushed the footer onto a sheet of its own. referencePageHead has the
+         same rule. */
+      var subBits = [];
+      if (fp.name && fp.name !== heading) subBits.push(fp.name);
+      subBits.push(count);
       out += '<div class="rep-seg-floor rep-placement-head">' + WD.esc(heading)
-        + '<span class="rep-placement-sub">' + WD.esc((fp.name || '') + ' · ' + count) + '</span></div>';
+        + '<span class="rep-placement-sub">' + WD.esc(subBits.join(' · ')) + '</span></div>';
     } else {
       out += '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>';
     }
@@ -5918,7 +6152,15 @@
                           : ctx.inlineHeader(aps.length, ctx.dateStr, 'Access points');
     // Carried over from Predictive Design when the two templates merged, so
     // nobody who relied on it lost it.
-    head += opts.summary ? renderSummaryStrip(aps, ctx) : '';
+    /* With a cover the strip belongs on it. After it, the strip is a line on
+       a sheet of its own - the cover ends its page, and the first map, which
+       fills a sheet, cannot share the next one with anything. */
+    var strip = opts.summary ? renderSummaryStrip(aps, ctx) : '';
+    if (strip && opts.cover && /<\/section>\s*$/.test(head)) {
+      head = head.replace(/<\/section>\s*$/, function () { return strip + '</section>'; });
+    } else {
+      head += strip;
+    }
     var byFloor = groupApsByFloor(aps, ctx);
     var floorOrder = sortedFloorOrder(byFloor);
     var sections = '';
@@ -6077,10 +6319,21 @@
       var fp = ctx.floorPlanForAp(ap);
       floorIds[fp ? fp.id : '_none'] = true;
     });
-    var floorCount = Object.keys(floorIds).length;
+    /* "No floor plan" is where APs with no plan are collected, not a floor
+       plan. Counting it made the strip say 4 floor plans over a cover that
+       said 3. */
+    var unplaced = aps.filter(function (ap) {
+      var fp = ctx.floorPlanForAp(ap);
+      return !fp || fp.id === '_none';
+    }).length;
+    var floorCount = Object.keys(floorIds).filter(function (id) { return id !== '_none'; }).length;
     var directional = aps.filter(function (ap) { return !apIsOmniOnly(ap); }).length;
     var omni = aps.length - directional;
-    var bits = [aps.length + ' AP' + (aps.length === 1 ? '' : 's') + ' planned across ' + floorCount + ' floor plan' + (floorCount === 1 ? '' : 's')];
+    var bits = [aps.length + ' AP' + (aps.length === 1 ? '' : 's')
+      + (floorCount
+          ? ' planned across ' + floorCount + ' floor plan' + (floorCount === 1 ? '' : 's')
+            + (unplaced ? ', ' + unplaced + ' of them on no floor plan' : '')
+          : ', none of them on a floor plan')];
     if (directional) bits.push(directional + ' directional');
     if (omni) bits.push(omni + ' omni');
     return '<div class="rep-seg-note">' + WD.esc(bits.join(' · ')) + '.</div>';
@@ -7904,28 +8157,41 @@
 
     var showSignOff = opts.signOff !== false;
     var showGrid = showsGridColumn(opts);
+    /* The # column exists to carry the short number the map prints. With full
+       names on the map - or names that have no short form - it is the AP name
+       a second time, in a column too narrow to hold it ("Dir Ne" touching the
+       name beside it). Where every label IS the name the column is left out. */
+    var showNum = sorted.some(function (item) {
+      return apLabel(item.ap, opts.shortLabels === false ? 'full' : 'short') !== item.ap.name;
+    });
     var rows = '';
     sorted.forEach(function (item, i) {
       var ap = item.ap;
-      var r = ctx.primaryRadio(ap.id);
+      var r = aimRadio(ap.id);
       var ant = r && proj.antennas[r.antennaTypeId] ? proj.antennas[r.antennaTypeId] : null;
       var dir = r ? r.antennaDirection : null;
       var tilt = r ? r.antennaTilt : null;
       var height = r ? r.antennaHeight : null;
 
       var heightStr = ctx.fmtLength(height, opts);
-      // An omni antenna has nothing to aim, whatever direction the file
-      // stores for it; `dir == null` alone printed one as "0° (N)".
-      var omni = apIsOmniOnly(ap) || !radioIsDirectional(r);
+      /* Three different things, which "omni" used to cover. An omni antenna has
+         nothing to aim, whatever direction the file stores for it. A
+         directional antenna with no azimuth is the AP the installer most needs
+         to be told about: it is on this sheet because it needs aiming, and
+         saying "omni" sent nobody to ask where it points. */
+      var omni = !(r && antennaIsDirectional(ant));
+      var noAz = !omni && dir == null;
+      var azNorm = noAz || omni ? null : normAzimuth(dir);
       var azStr = omni ? '<span class="rep-alt">omni</span>'
+        : noAz ? '<span class="rep-aim-missing">no azimuth</span>'
         : (opts.compass !== false
-            ? ctx.fmt(dir, 1) + '° <span class="rep-alt">(' + ctx.compass(dir) + ')</span>'
-            : ctx.fmt(dir, 1) + '°');
+            ? ctx.fmt(azNorm, 1) + '° <span class="rep-alt">(' + ctx.compass(azNorm) + ')</span>'
+            : ctx.fmt(azNorm, 1) + '°');
       var tiltStr = (omni || tilt == null) ? '—' : ctx.fmt(tilt, 1) + '°';
 
       var lbl = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
       rows += '<tr>'
-        + '<td class="rep-num">' + WD.esc(lbl) + '</td>'
+        + (showNum ? '<td class="rep-num">' + WD.esc(lbl) + '</td>' : '')
         + '<td class="rep-name">' + WD.esc(ap.name) + '</td>'
         + '<td>' + WD.esc(item.floor.name || '—') + '</td>'
         + (showGrid ? '<td class="rep-grid-ref">'
@@ -7945,19 +8211,21 @@
        sign-off header clipped to "INSTALLER INITI" running into "DATE". The
        weights are content classes, not guesses - a name and an antenna model
        are long, a tilt is four characters. */
-    var cols = showSignOff
-      ? [5, 22, 9, 12, 6, 8, 22, 8, 8]
-      : [6, 26, 11, 14, 8, 10, 25];
-    /* "AA-12" is the widest a reference gets, so the column is narrow - and it
-       is inserted where the header is rather than appended, or it would sit
-       under Azimuth. The width comes off AP name and Antenna, which are the
-       two that have any to give. */
-    if (showGrid) {
-      cols = cols.slice();
-      cols.splice(3, 0, 7);          // after Floor, which is where the header is
-      cols[1] -= 4;                  // AP name
-      cols[7] -= 3;                  // Antenna, which is index 7 either way
-    }
+    /* One weight per column, by name, so a column that is not printed takes
+       its share with it instead of leaving every index after it pointing at the
+       wrong one. Each set adds to 100. */
+    var W = showSignOff
+      ? { num: 7, name: 20, floor: 9, grid: 0, az: 12, tilt: 6, height: 8, ant: 20, init: 9, date: 9 }
+      : { num: 7, name: 24, floor: 11, grid: 0, az: 14, tilt: 8, height: 10, ant: 26 };
+    /* "AA-12" is the widest a grid reference gets, so the column is narrow. The
+       width comes off AP name and Antenna, which are the two that have any to
+       give. */
+    if (showGrid) { W.grid = 7; W.name -= 4; W.ant -= 3; }
+    /* No # column: its width goes to the name and the antenna, which are the
+       columns that run long. */
+    if (!showNum) { W.name += 4; W.ant += 3; W.num = 0; }
+    var order = ['num', 'name', 'floor', 'grid', 'az', 'tilt', 'height', 'ant', 'init', 'date'];
+    var cols = order.filter(function (k) { return W[k]; }).map(function (k) { return W[k]; });
     var colGroup = '<colgroup>'
       + cols.map(function (w) { return '<col style="width:' + w + '%">'; }).join('')
       + '</colgroup>';
@@ -7966,7 +8234,7 @@
       + '<table class="rep-ap-table rep-aim-table">'
       +   colGroup
       +   '<thead><tr>'
-      +     '<th class="rep-num">#</th>'
+      +     (showNum ? '<th class="rep-num">#</th>' : '')
       +     '<th>AP name</th>'
       +     '<th>Floor</th>'
       +     (showGrid ? '<th>Grid</th>' : '')
@@ -7995,53 +8263,35 @@
       + REPORT_FOOTER;
   }
 
+  /* The aim sheet's floor map is the placement map's markers with the arrows
+     always on. It used to be its own marker code - a box centred on the dot,
+     with a hairline tick - and that had no way to keep two numbers apart (86
+     overlapping pairs on one floor of the odd-geometry fixture), let the tick
+     disappear under the label box at diagonal azimuths, and was not sized for
+     print at all: a 600 x 6000 corridor ran to nine sheets with markers cut at
+     the page breaks. The placement markers move a label off its neighbours and
+     off the arrows, and the sheet is fitted by the same code as every other
+     plan page (planPageOpen / fitPlanPages). */
   function renderAimMiniMap(fp, floorAps, opts, ctx) {
     var url = floorPlanImageUrl(fp);
     if (!url) return '';
     var W = fp.width || 1, H = fp.height || 1;
-    var tickLen = Math.min(W, H) * 0.05;
-    var dotR = Math.min(W, H) * 0.014;
-
-    var minDim = Math.min(W, H);
-    var markers = '';
-    floorAps.forEach(function (ap) {
-      var c = ap.location && ap.location.coord; if (!c) return;
-      var r = ctx.primaryRadio(ap.id);
-      var dir = r ? r.antennaDirection : null;
-      var isDirectional = radioIsDirectional(r);
-      markers += '<g class="rep-aim-mark" transform="translate(' + c.x + ',' + c.y + ')">';
-      if (isDirectional) {
-        markers += '<g transform="rotate(' + dir + ')">'
-          + '<line class="rep-aim-tick" x1="0" y1="0" x2="0" y2="' + (-tickLen) + '"/>'
-          + '</g>';
-      }
-      var label = apLabel(ap, opts.shortLabels === false ? 'full' : 'short');
-      /* Same legibility floor the placement map uses, and for the same
-         reason: a fraction of the short edge is not a size on paper. On a
-         1152x506 floor this printed at 5.4pt - the map is a sanity check
-         before climbing a ladder, and a number you cannot read is not one.
-         1.35% of the long edge lands near 7pt at the width these print. */
-      var legibleFloor = Math.max(W, H) * 0.0135;
-      var labelFont = Math.max(legibleFloor,
-                               minDim * 0.022 * Math.min(1, 3 / Math.max(3, label.length)));
-      var padX = minDim * 0.006;
-      var boxW = Math.max(minDim * 0.03, label.length * labelFont * 0.65) + padX * 2;
-      var boxH = Math.max(minDim * 0.028, labelFont * 1.5);
-      var cornerR = minDim * 0.005;
-      markers += '<rect class="rep-aim-dot" x="' + (-boxW / 2) + '" y="' + (-boxH / 2) + '" width="' + boxW + '" height="' + boxH + '" rx="' + cornerR + '" ry="' + cornerR + '"/>'
-        + '<text class="rep-aim-num" y="' + (labelFont * 0.35) + '" text-anchor="middle" font-size="' + labelFont + '">'
-        + WD.esc(label) + '</text></g>';
+    var stats = {};
+    var markOpts = Object.assign({}, opts, {
+      showCones: true, labelGrid: false, labelModel: false, labelRadio: false, labelHeight: false,
     });
-
+    var markers = buildAntennaMarkers(floorAps, W, H, markOpts, ctx, null, stats);
     var labelHint = antennaLabelHint(opts);
-    return '<section class="rep-floor-section rep-aim-map-section">'
+    return planPageOpen('aim', fp.id, opts, 'rep-aim-map-section')
       + '<h2 class="rep-floor-title">' + WD.esc(fp.name || 'Floor plan') + '</h2>'
       + '<div class="rep-overview">'
       +   '<div class="rep-overview-plan" style="--w:' + W + ';--h:' + H + '">'
       +     '<img src="' + url + '" alt="Floor plan">'
       +     '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + markers + '</svg>'
       +   '</div>'
-      +   '<div class="rep-overview-key">' + WD.esc(labelHint) + '</div>'
+      +   '<div class="rep-overview-key">' + WD.esc(labelHint)
+      +     ' The arrow on a marker points the way its antenna is aimed.'
+      +     placementNotes({ offPlan: stats.offPlan, stacked: stats.stacked }) + '</div>'
       + '</div>'
       + '</section>';
   }
@@ -9405,7 +9655,7 @@
         { id: 'labelRadio', label: 'Add channel & TX power to each label', default: false,
           description: 'A second line under the name, e.g. "ch 36 \u00b7 15 dBm".' },
         { id: 'labelHeight', label: 'Add mount height to each label', default: false,
-          description: 'A second line under the name, e.g. "3.0 m".' },
+          description: 'A second line under the name, e.g. "3.0 m". Written in the unit chosen in Settings, under Report.' },
         { id: 'labelGrid', label: 'Add the column grid reference to each label', default: false,
           description: 'A second line under the name, e.g. "C-4" — the nearest column-grid intersection, which is the coordinate system the crew on site already uses. Set the grid up first with the button below; until at least one floor is calibrated this adds nothing.' },
         { id: '_gridRefSetup', type: 'gridref-button', label: 'Set up column grid…',
@@ -9427,7 +9677,7 @@
             { value: 'coarse',   label: 'Fewer pages — larger sections' },
             { value: 'coarsest', label: 'Fewest pages — largest sections' },
           ],
-          description: 'How much ground one section sheet covers. Construction asked for fewer pages with more around each AP; this is that dial. Remembered for you, not per report.' },
+          description: 'How much ground one section sheet covers. Starts at the size chosen in Settings, under Report; changing it here applies to this report only, for this session, and is not remembered.' },
         { id: '_gridConfig', type: 'grid-button', label: 'Configure grid\u2026',
           description: 'Only used when the split above is on.' },
         { id: 'compassRef', type: 'select', label: 'Compass reference page', default: 'auto',
@@ -9617,13 +9867,13 @@
         { icon: '📋', title: 'Single-page table',
           description: 'Every directional AP as one row: AP name, floor, azimuth (with compass), tilt, mount height (meters + feet), antenna model.' },
         { icon: '🎯', title: 'Per-floor mini-map',
-          description: 'Below the table, a compact floor plan per floor with AP dots and short direction ticks — a quick sanity check before climbing a ladder.' },
+          description: 'Below the table, a floor plan per floor with each AP numbered and an arrow showing the way its antenna points — a quick sanity check before climbing a ladder.' },
         { icon: '✅', title: 'Sign-off row',
           description: 'Installer initials + date column on the right side of each row, so the printed sheet doubles as an as-built.' },
       ],
       sidebar: [
         { id: 'overview', label: 'Per-floor mini-maps', default: true,
-          description: 'Compact floor plan per floor below the table, with AP dots and direction ticks — sanity check before climbing a ladder.' },
+          description: 'A floor plan per floor below the table, with numbered APs and an arrow for the way each antenna points — sanity check before climbing a ladder.' },
         { id: 'signOff',  label: 'Sign-off columns (initials + date)', default: true,
           description: 'Right side of each row keeps two blank cells so the printed sheet doubles as an as-built.' },
         { id: 'gridRef', type: 'check', label: 'Column grid reference', default: false,
@@ -9664,6 +9914,7 @@
             + 'Text only; a note with a photo is listed and marked, but the image is not printed.' },
       ],
       render: renderAimReport,
+      postRender: fitPlanPages,
     },
     design: {
       id: 'design',

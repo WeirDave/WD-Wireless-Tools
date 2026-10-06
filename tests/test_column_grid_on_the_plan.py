@@ -85,6 +85,8 @@ function apLabel(ap, mode) {
   return mode === 'short' ? n.slice(-3) : n;
 }
 function radioIsDirectional() { return false; }
+function antennaIsDirectional() { return false; }
+function aimRadio(apId) { return ctx.primaryRadio(apId); }
 function apIsOmniOnly() { return true; }
 function safeColor(c) { return c || '#000'; }
 function needsDarkText() { return false; }
