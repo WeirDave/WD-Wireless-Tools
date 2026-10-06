@@ -97,8 +97,12 @@ class AimTableColumns(unittest.TestCase):
                                    "AP name needs more room than Tilt")
                 self.assertGreater(by["Antenna"], by["Tilt"] * 2,
                                    "Antenna model needs more room than Tilt")
-                self.assertGreater(by["AP name"], by["#"] * 3,
-                                   "AP name needs more room than the index")
+                # The # column is only printed where its labels differ from
+                # the AP names (see test_report_placement_aim), so a sheet of
+                # full names has no index to compare against.
+                if "#" in by:
+                    self.assertGreater(by["AP name"], by["#"] * 3,
+                                       "AP name needs more room than the index")
 
     def test_a_colgroup_is_actually_emitted(self):
         header, widths = self.widths(grid=False, sign_off=True)

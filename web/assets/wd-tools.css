@@ -7158,9 +7158,13 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-empty--wide p { font-size: 13px; line-height: 1.5; margin: 0 0 8px; }
 .rep-empty--wide .rep-warn { color: var(--danger); font-weight: 600; }
 
-.rep-aim-mark .rep-aim-tick { stroke: var(--rose); stroke-width: 2; stroke-linecap: round; }
-.rep-aim-mark .rep-aim-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
-.rep-aim-mark .rep-aim-num { fill: #fff; font-weight: 700; }
+/* An antenna with no azimuth stored: the row that most needs to be noticed. The
+   outline carries it on a mono printer, where the colour does not. */
+.rep-aim-table .rep-aim-missing {
+  color: var(--danger); font-weight: 700; font-family: var(--mono);
+  border: 1px solid currentColor; border-radius: var(--r-xs); padding: 0 4px;
+  white-space: nowrap;
+}
 /* Widths come from the table's own colgroup in print; on screen the
    sign-off columns still want a floor so they are writeable. */
 .rep-aim-table th.rep-aim-signoff-head { min-width: 64px; }
@@ -7401,13 +7405,19 @@ body.wd-has-stale-banner { padding-top: 52px; }
      key stranded on the next one. */
   .rep-placement-page { page-break-before: always; break-before: page;
                         page-break-inside: avoid; break-inside: avoid; }
-  .rep-doc-head + .rep-placement-page, .rep-cover + .rep-placement-page { page-break-before: auto; }
+  .rep-doc-head + .rep-placement-page, .rep-cover + .rep-placement-page,
+  .rep-doc-head + .rep-seg-note + .rep-placement-page,
+  .rep-cover + .rep-seg-note + .rep-placement-page { page-break-before: auto; }
   .rep-placement-sub { color: #555 !important; }
 
   .rep-seg-index { page-break-before: auto; break-before: auto; }
   .rep-seg-cell { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; }
 
   .rep-aim-map-section { page-break-inside: avoid; }
+  /* Beats the .rep-num rule below (nowrap, 0.58in): a short label such as
+     "Dir Ne" is wider than the column the # gets beside nine others, and
+     nowrap printed it over the AP name. It may break inside the word instead. */
+  .rep-ap-table.rep-aim-table td.rep-num { white-space: normal !important; overflow-wrap: break-word; }
   .rep-cov-section { page-break-inside: avoid; }
   .rep-cov-legend { page-break-inside: avoid; }
   .rep-cov-method { page-break-inside: avoid; }
@@ -9087,6 +9097,11 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 .rep-compass-sect ul {
   font-size: 12px; line-height: 1.55; margin: 0 0 6px;
   padding-left: 18px; color: #333;
+  /* A list is a box of its own, so it sits beside the floated compass or drops
+     below it whole. Left as ordinary flow, its lines wrapped under the float's
+     bottom edge and left a bullet's last words ("azimuth bearing.") hanging
+     alone at the margin. */
+  display: flow-root;
 }
 .rep-compass-sect li { margin-bottom: 4px; }
 
@@ -9109,6 +9124,7 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 @media print {
   .rep-compass-page { page-break-before: always; break-before: page; }
   .rep-compass-left { width: 210px; margin: 0 18px 10px 0; }
+  .rep-compass-sect p, .rep-compass-sect ul { line-height: 1.45; }
   .rep-comp-rose { width: 210px; height: 210px; }
   /* A heading stranded at the foot of a column with its list overleaf is the
      same fault as the page break this whole change is about, one scale down. */

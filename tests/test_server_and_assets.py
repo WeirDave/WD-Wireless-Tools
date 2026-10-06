@@ -841,7 +841,9 @@ assert(JSON.stringify(restored2) === before, 'restore is independent of record o
         rest goes to the AP table.
         """
         js = (ROOT / "web" / "assets" / "js" / "report.js").read_text(encoding="utf-8")
-        self.assertIn("if (sub && crowded[ap.id]) { sub = ''; reduced++; }", js)
+        # The behaviour itself is run in test_report_placement_aim; this only
+        # keeps the rule's shape, however its braces are laid out.
+        self.assertRegex(js, r"if \(sub && crowded\[ap\.id\]\) \{\s*sub = '';\s*reduced\+\+;")
         self.assertIn("rep-overview-note", js,
                       "a reduced label has to be accounted for on the page, "
                       "not dropped quietly")
