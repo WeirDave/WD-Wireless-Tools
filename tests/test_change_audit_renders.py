@@ -49,9 +49,16 @@ const M_TO_FT = 3.28084;
    the two agreed and neither was right. Anything a test is going to make an
    assertion about is the shipped code or it is nothing. */
 eval(slice('  function fmtLength(meters, opts, digits)', '\n  function formatReadableDate('));
+// The overlay names each changed AP with the shipped label rule, not a copy.
+eval(slice('  var SHORT_LABEL_MAX', '\n  /* A floor plan imported from CAD'));
 function radioIsDirectional(r) { return !!(r && typeof r.antennaDirection === 'number'); }
 function floorPlanImageUrl(fp) { return 'blob:' + fp.id; }
 function apNotesPages() { return '<!--notes-->'; }
+// The overlay lays its name tags out with the shipped box-spreading helper.
+eval(slice('  function spreadBoxes(items) {', '\n  function renderCoverageReport('));
+// How a plan sheet opens (fitting and the orientation picker) is not what this
+// file is about; the sheet's own content is.
+function planPageOpen() { return '<section class="rep-floor-section">'; }
 function sortedFloorOrder() { return proj.floorPlans.slice(); }
 const REPORT_FOOTER = '<footer class="rep-doc-foot"></footer>';
 function renderReportFooter() { return REPORT_FOOTER; }

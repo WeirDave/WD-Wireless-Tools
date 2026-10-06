@@ -79,8 +79,10 @@ class TheMarkerLabelConverts(unittest.TestCase):
         """The regression: any `'ch ' + <frequencies>` without the conversion."""
         self.assertNotIn("'ch ' + ch.join(", self.js)
 
-    def test_the_ap_table_still_converts_too(self):
-        self.assertIn("freqToChannel(ch[0])", self.js)
+    # The AP table's own conversion is asserted by rendering it, not by
+    # reading its source: test_2484_mhz_prints_as_channel_14 in
+    # test_report_keeps_what_was_chosen.py and TheChannelKeepsItsWidth in
+    # test_report_install_summary_bom.py print the real Installation table.
 
 
 if __name__ == "__main__":

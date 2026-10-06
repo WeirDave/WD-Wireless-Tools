@@ -5516,7 +5516,7 @@ body.tool-report {
   --card-accent-hover: #1d4ed8;
 }
 
-.rep-template-card:hover:not(.is-coming-soon) {
+.rep-template-card:hover:not(.is-coming-soon):not(.is-unavailable) {
   transform: translateY(-4px);
   box-shadow: 0 16px 40px var(--card-shadow);
   border-color: var(--card-accent);
@@ -5529,7 +5529,7 @@ body.tool-report {
   box-shadow: 0 8px 22px var(--card-shadow);
 }
 
-.rep-template-card.is-coming-soon {
+.rep-template-card.is-coming-soon, .rep-template-card.is-unavailable {
   cursor: not-allowed; opacity: 0.65;
   background: var(--surface); border-style: dashed;
   border-top-style: solid;
@@ -5583,6 +5583,8 @@ body.tool-report {
 .rep-template-pill.available { background: var(--card-tint, rgba(6,104,217,0.12)); color: var(--card-accent, var(--nav-blue)); }
 
 .rep-template-pill.soon { background: var(--card-tint, var(--amber-bg)); color: var(--card-accent, var(--amber-dark)); }
+.rep-template-pill.unavailable { background: var(--amber-bg); color: var(--amber-dark); }
+.rep-template-why { margin: 4px 0 0; font-size: 12px; color: var(--amber-dark); }
 
 .rep-template-title {
   margin: 0 0 3px; font-size: 17px; font-weight: 700; color: var(--text);
@@ -7156,9 +7158,13 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-empty--wide p { font-size: 13px; line-height: 1.5; margin: 0 0 8px; }
 .rep-empty--wide .rep-warn { color: var(--danger); font-weight: 600; }
 
-.rep-aim-mark .rep-aim-tick { stroke: var(--rose); stroke-width: 2; stroke-linecap: round; }
-.rep-aim-mark .rep-aim-dot { fill: var(--rose); stroke: #fff; stroke-width: 1.5; }
-.rep-aim-mark .rep-aim-num { fill: #fff; font-weight: 700; }
+/* An antenna with no azimuth stored: the row that most needs to be noticed. The
+   outline carries it on a mono printer, where the colour does not. */
+.rep-aim-table .rep-aim-missing {
+  color: var(--danger); font-weight: 700; font-family: var(--mono);
+  border: 1px solid currentColor; border-radius: var(--r-xs); padding: 0 4px;
+  white-space: nowrap;
+}
 /* Widths come from the table's own colgroup in print; on screen the
    sign-off columns still want a floor so they are writeable. */
 .rep-aim-table th.rep-aim-signoff-head { min-width: 64px; }
@@ -7182,13 +7188,14 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-cov-key-swatch.ring-strong { background: none; border-top: 2px solid var(--text-2); height: 0; margin-top: 4px; width: 16px; }
 .rep-cov-key-swatch.ring-fair   { background: none; border-top: 2px dashed var(--text-2); height: 0; margin-top: 4px; width: 16px; }
 .rep-cov-key-swatch.ring-weak   { background: none; border-top: 2px dotted var(--text-2); height: 0; margin-top: 4px; width: 16px; }
-.rep-cov-band-swatch.two   { background: rgba(14,165,233,0.85); }
-.rep-cov-band-swatch.five  { background: rgba(21,128,61,0.85); }
-.rep-cov-band-swatch.six   { background: rgba(139,92,246,0.85); }
+.rep-cov-band-swatch.two   { background: #1e77ac; }
+.rep-cov-band-swatch.five  { background: #5fab4f; }
+.rep-cov-band-swatch.six   { background: #8b5cf6; }
+.rep-cov-note { margin: 6px 0 0; font-size: 11px; color: var(--text-2); }
 .rep-cov-legend { page-break-inside: avoid; }
 .rep-cov-method { page-break-inside: avoid; }
 .rep-hotspot-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
-.rep-hotspot-stat { --stat: var(--blue); border: 1px solid var(--border); border-left: 4px solid var(--stat); border-radius: var(--r-sm); padding: 10px 14px; min-width: 120px; }
+.rep-hotspot-stat { --stat: var(--blue); border: 1px solid var(--border); border-left: 4px solid var(--stat); border-radius: var(--r-sm); padding: 10px 14px; min-width: 100px; }
 .rep-hotspot-stat b { display: block; font-size: 22px; font-weight: 800; line-height: 1; color: var(--stat); }
 .rep-hotspot-stat span { font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-2); }
 .rep-hotspot-stat--total { --stat: var(--blue); }
@@ -7206,7 +7213,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-hotspot-floor-count { font-weight: 600; font-size: 14px; color: var(--blue); }
 .rep-hotspot-floor-flags { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 0; margin: 4px 0 10px; font-size: 11px; }
 .rep-hotspot-floor-flag-ssid { color: var(--text-2); }
-.rep-hotspot-walk { fill: none; stroke: var(--blue); stroke-width: 10; stroke-opacity: 0.75; stroke-linecap: round; stroke-linejoin: round; }
+.rep-hotspot-walk { fill: none; stroke: var(--blue); stroke-width: var(--walk-w, 10); stroke-opacity: 0.75; stroke-linecap: round; stroke-linejoin: round; }
 .rep-hotspot-walk--medium { stroke: var(--amber); }
 .rep-hotspot-walk--high { stroke: var(--red); }
 .rep-hotspot-method { font-size: 12px; line-height: 1.5; }
@@ -7242,6 +7249,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-summary-notes b { color: #111; font-weight: 600; }
 [data-theme="dark"] .rep-summary-notes { color: var(--text-2); }
 [data-theme="dark"] .rep-summary-notes b { color: var(--text); }
+
 
 
 
@@ -7352,6 +7360,16 @@ body.wd-has-stale-banner { padding-top: 52px; }
   @page placementLandscape { size: Letter landscape; }
   .rep-placement-page, .rep-oriented { page: placementPortrait; }
   .rep-placement-page.is-landscape, .rep-oriented.is-landscape { page: placementLandscape; }
+  /* Everything inside a page carries the page's own name, not only the page.
+     A sheet takes its name from the first box on it, and a sheet that begins
+     part-way through a page - the second sheet of a long table, a zoomed
+     section - begins on a table row or a cell whose own name is the unnamed
+     default. Chromium reads the name through to the ancestor; Firefox 157 does
+     not, and printed such sheets portrait: a landscape floor's later sections,
+     and the later sheets of a table (clipped at the right, or shrunk to 5.6pt
+     to fit). Said on every descendant, both agree. */
+  .rep-placement-page *, .rep-oriented * { page: placementPortrait; }
+  .rep-placement-page.is-landscape *, .rep-oriented.is-landscape * { page: placementLandscape; }
 
   /* The blank sheet at the end of the document, in Firefox.
 
@@ -7379,6 +7397,16 @@ body.wd-has-stale-banner { padding-top: 52px; }
      the rule is skipped and the behaviour is what it was. */
   html:has(.rep-oriented) { page: placementPortrait; }
 
+  /* A zoomed section's match-line label sits at the right edge of its wrapper.
+     When the document's first sheet is landscape, Firefox 157 resolves that
+     edge against the landscape width (10.2in) while the sheet it is printed on
+     is the portrait one (7.7in), sees the label hang off the page, and shrinks
+     the WHOLE document to 75% - every label 5pt and the map small. Measured
+     with the Contents page turned landscape on a floor split into sections.
+     Capping the wrapper at the portrait content width keeps the edge on the
+     sheet; Chromium is unaffected. */
+  .rep-placement-page:not(.is-landscape) .rep-seg-plan-wrap { max-width: 7.6in; }
+
   /* The installation table's own sheet. It gets the same break behaviour the
      bare table had, moved out to the section that now wraps it. */
   .rep-loc-page { page-break-before: always; break-before: page; }
@@ -7392,13 +7420,19 @@ body.wd-has-stale-banner { padding-top: 52px; }
      key stranded on the next one. */
   .rep-placement-page { page-break-before: always; break-before: page;
                         page-break-inside: avoid; break-inside: avoid; }
-  .rep-doc-head + .rep-placement-page, .rep-cover + .rep-placement-page { page-break-before: auto; }
+  .rep-doc-head + .rep-placement-page, .rep-cover + .rep-placement-page,
+  .rep-doc-head + .rep-seg-note + .rep-placement-page,
+  .rep-cover + .rep-seg-note + .rep-placement-page { page-break-before: auto; }
   .rep-placement-sub { color: #555 !important; }
 
   .rep-seg-index { page-break-before: auto; break-before: auto; }
   .rep-seg-cell { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; }
 
   .rep-aim-map-section { page-break-inside: avoid; }
+  /* Beats the .rep-num rule below (nowrap, 0.58in): a short label such as
+     "Dir Ne" is wider than the column the # gets beside nine others, and
+     nowrap printed it over the AP name. It may break inside the word instead. */
+  .rep-ap-table.rep-aim-table td.rep-num { white-space: normal !important; overflow-wrap: break-word; }
   .rep-cov-section { page-break-inside: avoid; }
   .rep-cov-legend { page-break-inside: avoid; }
   .rep-cov-method { page-break-inside: avoid; }
@@ -7480,6 +7514,13 @@ body.wd-has-stale-banner { padding-top: 52px; }
   /* Height reads as one value - "3.05 m (10 ft)" - so it stays on one line
      rather than pushing every row to two. */
   .rep-ap-table td.rep-nowrap-print { white-space: nowrap !important; }
+  /* A BSSID is one token. Wrapping it mid-address makes two cells of what
+     reads as two addresses; the column is sized to hold all 17 characters. */
+  .rep-ap-table td.rep-az.rep-bssid { white-space: nowrap !important; }
+  /* The longest category, "Wide-channel Wi-Fi", is wider than its column at
+     8pt. A chip that wraps to two lines is legible; one clipped to
+     "Wide-channel W" is not. */
+  .rep-hotspot-table .rep-hotspot-chip { white-space: normal !important; text-align: center; }
   .rep-nowrap, .rep-ap-table td.rep-az { white-space: normal !important; }
   .rep-ap-table .rep-alt { color: #888 !important; }
 
@@ -7538,6 +7579,30 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-summary-bar-outer { background: #eef2f7 !important; }
   .rep-summary-bar-inner { background: var(--rose) !important; }
   .rep-summary-hint { color: #666 !important; }
+}
+
+/* Print rules for the Summary, the Bill of Materials and the Installation
+   report. The sheet is white whatever the screen theme is, so a dark-theme
+   text colour with no print override came out pale grey on white. */
+@media print {
+  /* Summary and BOM are short tables, not one-per-sheet chapters: each
+     section used to start a sheet, so one AP printed five. The class is on
+     those two reports' sections only - Placement, Installation and the rest
+     keep a sheet per section. Measured in Chromium. */
+  .rep-floor-section.rep-flow {
+    page-break-before: auto; break-before: auto;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  /* black, not a hex: the sheet is white, and the stylesheet's colour-literal
+     count only goes down. */
+  .rep-summary-notes, .rep-summary-notes b { color: black !important; }
+  /* Chromium repeats a table-footer-group on every page and, when the last
+     body row fits but the footer does not, pushes the footer alone onto a
+     new sheet under a repeated header - 24 of 25 floors of a long project.
+     As an ordinary row group the footer follows the last row. */
+  .rep-loc-table tfoot { display: table-row-group !important; }
+  /* The floor summary keeps its Total row with the rows it totals. */
+  .rep-matrix { page-break-inside: avoid; break-inside: avoid; }
 }
 
 .org-action-bar { justify-content: flex-end; flex-wrap: wrap; }
@@ -9071,6 +9136,11 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 .rep-compass-sect ul {
   font-size: 12px; line-height: 1.55; margin: 0 0 6px;
   padding-left: 18px; color: #333;
+  /* A list is a box of its own, so it sits beside the floated compass or drops
+     below it whole. Left as ordinary flow, its lines wrapped under the float's
+     bottom edge and left a bullet's last words ("azimuth bearing.") hanging
+     alone at the margin. */
+  display: flow-root;
 }
 .rep-compass-sect li { margin-bottom: 4px; }
 
@@ -9093,6 +9163,7 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
 @media print {
   .rep-compass-page { page-break-before: always; break-before: page; }
   .rep-compass-left { width: 210px; margin: 0 18px 10px 0; }
+  .rep-compass-sect p, .rep-compass-sect ul { line-height: 1.45; }
   .rep-comp-rose { width: 210px; height: 210px; }
   /* A heading stranded at the foot of a column with its list overleaf is the
      same fault as the page break this whole change is about, one scale down. */

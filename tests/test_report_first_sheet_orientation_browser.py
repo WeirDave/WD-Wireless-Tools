@@ -144,7 +144,11 @@ class EverySheetIsThePaperItsPageAskedFor(unittest.TestCase):
                         asked, sheets = self._print(driver, setup)
                         # The fixture's own shape, so a report that rendered
                         # nothing cannot pass by printing nothing.
-                        self.assertEqual(len(asked), 6, asked)
+                        # Cover, two maps, two label pages. A sixth - the
+                        # compass page - used to appear only because the
+                        # factory's APs have no radio and an AP with no radio
+                        # was counted as directional; it is not, so no compass.
+                        self.assertEqual(len(asked), 5, asked)
                         self.assertEqual(
                             sheets, asked,
                             "%s printed %s for pages asking for %s"

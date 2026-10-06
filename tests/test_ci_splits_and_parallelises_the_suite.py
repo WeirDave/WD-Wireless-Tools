@@ -127,7 +127,7 @@ class EachBrowserIsTestedExactlyOnce(unittest.TestCase):
     def test_the_jobs_were_read(self):
         """Every assertion below is vacuous over an empty list."""
         jobs = {r["job"] for r in self.runs}
-        self.assertEqual(jobs, {"test", "browsers"}, self.runs)
+        self.assertEqual(jobs, {"test", "browsers", "safari"}, self.runs)
         self.assertEqual(sum(r["job"] == "test" for r in self.runs), 4)
 
     def test_every_job_says_on_or_off(self):
@@ -144,14 +144,101 @@ class EachBrowserIsTestedExactlyOnce(unittest.TestCase):
     def test_each_browser_is_driven_by_exactly_one_job(self):
         driven = [b for r in self.runs if r["switch"] == "on"
                   for b in r["browsers"]]
-        self.assertEqual(sorted(driven), ["chrome", "edge", "firefox"],
+        self.assertEqual(sorted(driven), ["chrome", "edge", "firefox", "safari"],
                          self.runs)
 
-    def test_every_job_that_drives_a_browser_is_on_windows(self):
-        """What he runs, and where a browser difference would matter to him."""
+    def test_every_job_that_drives_a_browser_is_on_windows_but_safari(self):
+        """What he runs, and where a browser difference would matter to him.
+        Safari exists only on macOS, so its job is the one exception."""
         for r in self.runs:
-            if r["switch"] == "on":
-                self.assertEqual(r["runs_on"], "windows-latest", r)
+            if r["switch"] != "on":
+                continue
+            want = "macos-latest" if r["browsers"] == {"safari"} else "windows-latest"
+            self.assertEqual(r["runs_on"], want, r)
+
+
+class TheSafariJobCannotPassByDrivingNothing(unittest.TestCase):
+    """Safari is opt-in, so a job that asks for it has to be able to fail.
+
+    Safari is not in `triple()`: every test module builds its drivers from
+    that list and falls through to Edge for a name it does not know, so
+    listing it there would start Edge under Safari's name. It is requested by
+    `WD_BROWSERS` instead, and the job names the modules that handle it.
+    """
+
+    def setUp(self):
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.block = _jobs(text)["safari"]
+        self.script = "\n".join(self.block)
+
+    def test_the_job_asks_for_safari_and_for_nothing_else(self):
+        self.assertEqual(_value(self.block, "WD_BROWSERS"), "safari")
+        self.assertEqual(_value(self.block, "WD_BROWSER_TESTS"), "on")
+
+    def test_it_enables_safaris_webdriver_before_it_runs_anything(self):
+        enable = self.script.index("safaridriver --enable")
+        self.assertLess(enable, self.script.index("scripts/run_tests.py"))
+
+    def test_it_names_modules_that_exist_and_know_how_to_drive_safari(self):
+        run = re.search(r"python scripts/run_tests\.py ([\w \-]+)$", self.script, re.M)
+        self.assertIsNotNone(run, self.script)
+        names = [n for n in run.group(1).split() if not n.startswith("-")]
+        self.assertTrue(names, "the Safari job names no module, so it runs everything and skips most")
+        for name in names:
+            f = ROOT / "tests" / f"{name}.py"
+            self.assertTrue(f.is_file(), name)
+            self.assertIn("safari_available", f.read_text(encoding="utf-8"), name)
+
+    def test_safari_is_never_part_of_the_default_list(self):
+        self.assertEqual([k for k, _ in browsers.triple()],
+                         ["firefox", "chrome", "edge"])
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(browsers.ONLY, None)
+            self.assertFalse(browsers.safari_requested())
+            self.assertFalse(browsers.safari_available())
+            self.assertNotIn("safari", browsers.available())
+
+    def test_asking_for_it_is_what_requests_it(self):
+        with mock.patch.dict(os.environ, {browsers.SWITCH: "on",
+                                          browsers.ONLY: "safari"}):
+            self.assertTrue(browsers.safari_requested())
+        with mock.patch.dict(os.environ, {browsers.SWITCH: "on",
+                                          browsers.ONLY: "firefox,chrome"}):
+            self.assertFalse(browsers.safari_requested())
+        with mock.patch.dict(os.environ, {browsers.SWITCH: "off",
+                                          browsers.ONLY: "safari"}):
+            self.assertFalse(browsers.safari_requested())
+
+    def test_it_is_available_only_on_a_mac_with_the_driver_present(self):
+        env = {browsers.SWITCH: "on", browsers.ONLY: "safari"}
+        with mock.patch.dict(os.environ, env), \
+                mock.patch.object(Path, "is_file", return_value=True):
+            with mock.patch.object(sys, "platform", "darwin"):
+                self.assertTrue(browsers.safari_available())
+            with mock.patch.object(sys, "platform", "win32"):
+                self.assertFalse(browsers.safari_available())
+        with mock.patch.dict(os.environ, env), \
+                mock.patch.object(sys, "platform", "darwin"), \
+                mock.patch.object(Path, "is_file", return_value=False):
+            self.assertFalse(browsers.safari_available())
+            self.assertIn(browsers.SAFARIDRIVER, browsers.why_missing())
+
+    def test_a_run_that_asked_for_safari_and_cannot_drive_it_fails(self):
+        """The thing the whole job exists to prevent: green with Safari never
+        started. Run the real test class with Safari asked for and absent."""
+        import importlib.util
+        if importlib.util.find_spec("selenium") is None:
+            self.skipTest("selenium is not installed")
+        from tests import test_ap_labeler_spacing_browser as mod
+        with mock.patch.dict(os.environ, {browsers.SWITCH: "on",
+                                          browsers.ONLY: "safari"}), \
+                mock.patch.object(sys, "platform", "linux"):
+            suite = unittest.TestSuite([mod.TypingIntoLineSpacingInSafariTests(
+                "test_auto_draws_the_breaks_between_rows")])
+            result = unittest.TestResult()
+            suite.run(result)
+        self.assertEqual(len(result.failures), 1, (result.failures, result.skipped, result.errors))
+        self.assertEqual(result.skipped, [])
 
 
 class TheSwitchReachesEveryBrowserTest(unittest.TestCase):

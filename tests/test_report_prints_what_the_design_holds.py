@@ -239,7 +239,7 @@ class TheInstallationTableKeepsMountHeightAndAntenna(ReportCase):
           check('no Azimuth on a floor with nothing to aim: ' + heads, !heads.includes('Azimuth'));
           check('no Tilt on a floor with nothing to aim', !heads.includes('Tilt'));
           const row1 = floorPart(table, 'Zed-AP1<', '</tr>');
-          check('the omni AP prints its mount', row1.includes('CEILING'));
+          check('the omni AP prints its mount', /ceiling/i.test(row1));
           check('the omni AP prints its height', /<td class="rep-nowrap-print">[^<]*\d/.test(row1));
           // Every row has as many cells as there are headers, and the colgroup
           // and footer agree - a column counted in one place only leaves the
