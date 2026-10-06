@@ -7191,7 +7191,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
 .rep-cov-legend { page-break-inside: avoid; }
 .rep-cov-method { page-break-inside: avoid; }
 .rep-hotspot-stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
-.rep-hotspot-stat { --stat: var(--blue); border: 1px solid var(--border); border-left: 4px solid var(--stat); border-radius: var(--r-sm); padding: 10px 14px; min-width: 120px; }
+.rep-hotspot-stat { --stat: var(--blue); border: 1px solid var(--border); border-left: 4px solid var(--stat); border-radius: var(--r-sm); padding: 10px 14px; min-width: 100px; }
 .rep-hotspot-stat b { display: block; font-size: 22px; font-weight: 800; line-height: 1; color: var(--stat); }
 .rep-hotspot-stat span { font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--text-2); }
 .rep-hotspot-stat--total { --stat: var(--blue); }
@@ -7356,6 +7356,12 @@ body.wd-has-stale-banner { padding-top: 52px; }
   @page placementLandscape { size: Letter landscape; }
   .rep-placement-page, .rep-oriented { page: placementPortrait; }
   .rep-placement-page.is-landscape, .rep-oriented.is-landscape { page: placementLandscape; }
+  /* A zoomed section is its own sheet inside a floor's page. Left to inherit,
+     Chromium gives it the floor's orientation, but Firefox starts the new
+     sheet on the unnamed page: a floor set to landscape printed its first
+     section landscape and every later one portrait. Said outright, both agree. */
+  .rep-placement-page .rep-seg-cell, .rep-oriented .rep-seg-cell { page: placementPortrait; }
+  .rep-placement-page.is-landscape .rep-seg-cell, .rep-oriented.is-landscape .rep-seg-cell { page: placementLandscape; }
 
   /* The blank sheet at the end of the document, in Firefox.
 

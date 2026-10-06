@@ -1628,6 +1628,9 @@
   // to put the AP somewhere else. In metres, because that is what an .esx
   // stores; the option that sets it names both units.
   var DEFAULT_MOVE_THRESHOLD_M = 0.5;
+  // A floor with no scale has no metres to threshold in; a move there counts
+  // at this many image pixels, and the report says so.
+  var NO_SCALE_MOVE_PX = 10;
 
   function apCoord(ap) {
     var loc = ap && ap.location;
@@ -1738,14 +1741,32 @@
     var sameSize = Number(b.width) === Number(a.width)
                 && Number(b.height) === Number(a.height);
     if (sameSize) return null;
+    /* A plan re-imported at another resolution doubles every coordinate and
+       halves metersPerUnit, so the two spaces differ by a *scale* as well as
+       an offset. Taking only the offset reported thirty-odd APs as moved by
+       up to 76 ft, and a 810 px "crop", over a building nobody had touched.
+       The scale is known exactly from the two metersPerUnit values, so it is
+       applied first and the median offset is measured after it. */
+    var mb = Number(b.metersPerUnit), ma = Number(a.metersPerUnit);
+    var scale = mb > 0 && ma > 0 && isFinite(mb) && isFinite(ma) ? mb / ma : 1;
+    if (Math.abs(scale - 1) < 1e-6) scale = 1;
     var dxs = [], dys = [];
     pairsOnFloor.forEach(function (p) {
       var cb = apCoord(p.before), ca = apCoord(p.after);
-      if (cb && ca) { dxs.push(ca.x - cb.x); dys.push(ca.y - cb.y); }
+      if (cb && ca) { dxs.push(ca.x - cb.x * scale); dys.push(ca.y - cb.y * scale); }
     });
     // Two points cannot tell a shift from a pair of moves.
-    if (dxs.length < 3) return null;
-    return { dx: median(dxs), dy: median(dys), count: dxs.length };
+    if (dxs.length < 3) {
+      return scale === 1 ? null : { scale: scale, dx: 0, dy: 0, count: dxs.length };
+    }
+    return { scale: scale, dx: median(dxs), dy: median(dys), count: dxs.length };
+  }
+
+  /* Where a before-coordinate lands in the after plan's pixel space. */
+  function shiftPoint(c, shift) {
+    if (!shift) return { x: c.x, y: c.y };
+    var k = shift.scale || 1;
+    return { x: c.x * k + shift.dx, y: c.y * k + shift.dy };
   }
 
   function deg(v) { return typeof v === 'number' && isFinite(v) ? v : null; }
@@ -1767,11 +1788,107 @@
     ((project && project.radios) || []).forEach(function (r) {
       if (!r || !r.accessPointId) return;
       var cur = byAp[r.accessPointId];
-      if (!cur || (r.radioTechnology === 'IEEE802_11' && cur.radioTechnology !== 'IEEE802_11')) {
+      /* A switched-off radio is not what the AP is mounted as: it is skipped
+         for an enabled one, as ``primaryRadio`` does for the open project. */
+      var rLive = r.enabled !== false, curLive = !cur || cur.enabled !== false;
+      if (!cur || (rLive && !curLive)
+          || (rLive === curLive && r.radioTechnology === 'IEEE802_11'
+              && cur.radioTechnology !== 'IEEE802_11')) {
         byAp[r.accessPointId] = r;
       }
     });
     return byAp;
+  }
+
+  function radiosByAp(project) {
+    var byAp = {};
+    ((project && project.radios) || []).forEach(function (r) {
+      if (!r || !r.accessPointId) return;
+      (byAp[r.accessPointId] = byAp[r.accessPointId] || []).push(r);
+    });
+    return byAp;
+  }
+
+  /* What the radios of one AP did between the two files: channel, width and
+     transmit power, a radio switched on or off, a radio added or removed.
+     These are the settings a change-control review is about, and the report
+     used to compare none of them while saying "same hardware". Frequencies
+     are compared as stored - the channel *number* is a display matter and is
+     worked out where it is printed. */
+  function airFreqs(r) {
+    return ((r && r.channelByCenterFrequencyDefinedNarrowChannels) || [])
+      .map(Number).filter(function (x) { return isFinite(x) && x > 0; })
+      .sort(function (x, y) { return x - y; });
+  }
+  function bandLabelOf(freqs) {
+    if (!freqs.length) return '';
+    return freqs[0] < 3000 ? '2.4 GHz' : freqs[0] < 5925 ? '5 GHz' : '6 GHz';
+  }
+  function isWifiRadio(r) {
+    return !r.radioTechnology || r.radioTechnology === 'IEEE802_11';
+  }
+  function radioSlot(r) {
+    return (r.radioTechnology || 'IEEE802_11') + '|' + bandLabelOf(airFreqs(r));
+  }
+  function radioChanges(rbs, ras) {
+    var out = [], pairs = [], usedA = {}, leftB = [];
+    rbs.forEach(function (b, i) {
+      var j = -1;
+      if (b.id) {
+        for (var k = 0; k < ras.length; k++) {
+          if (!usedA[k] && ras[k].id === b.id) { j = k; break; }
+        }
+      }
+      if (j >= 0) { usedA[j] = true; pairs.push([b, ras[j]]); } else { leftB.push(b); }
+    });
+    // Radios without a shared id pair by technology and band, one to one.
+    leftB.forEach(function (b) {
+      var j = -1;
+      for (var k = 0; k < ras.length; k++) {
+        if (!usedA[k] && radioSlot(ras[k]) === radioSlot(b)) { j = k; break; }
+      }
+      if (j >= 0) { usedA[j] = true; pairs.push([b, ras[j]]); }
+      else {
+        out.push({ kind: 'radio', action: 'removed', band: bandLabelOf(airFreqs(b)),
+                   wifi: isWifiRadio(b) });
+      }
+    });
+    ras.forEach(function (a, k) {
+      if (!usedA[k]) {
+        out.push({ kind: 'radio', action: 'added', band: bandLabelOf(airFreqs(a)),
+                   wifi: isWifiRadio(a) });
+      }
+    });
+    pairs.forEach(function (pr) {
+      var b = pr[0], a = pr[1];
+      var fb = airFreqs(b), fa = airFreqs(a);
+      var band = bandLabelOf(fa) || bandLabelOf(fb);
+      var onB = b.enabled !== false, onA = a.enabled !== false;
+      if (onB !== onA) {
+        out.push({ kind: 'radio', action: onA ? 'enabled' : 'disabled', band: band,
+                   wifi: isWifiRadio(a) });
+        return;
+      }
+      // Off, or not Wi-Fi: it has no channel plan to compare.
+      if (!onA || !isWifiRadio(a) || !isWifiRadio(b)) return;
+      var sameList = fb.length === fa.length && fb.every(function (f, i) { return f === fa[i]; });
+      if (!sameList && (fb.length || fa.length)) {
+        if (!fb.length || !fa.length || fb[0] !== fa[0]
+            || (fb.length === fa.length)) {
+          out.push({ kind: 'channel', band: band, fromBand: bandLabelOf(fb),
+                     toBand: bandLabelOf(fa), from: fb, to: fa });
+        }
+        if (fb.length && fa.length && fb.length !== fa.length) {
+          out.push({ kind: 'width', band: band, from: fb.length * 20, to: fa.length * 20 });
+        }
+      }
+      var tb = typeof b.transmitPower === 'number' && isFinite(b.transmitPower) ? b.transmitPower : null;
+      var ta = typeof a.transmitPower === 'number' && isFinite(a.transmitPower) ? a.transmitPower : null;
+      if ((tb === null) !== (ta === null) || (tb !== null && Math.abs(ta - tb) >= 0.05)) {
+        out.push({ kind: 'power', band: band, from: tb, to: ta });
+      }
+    });
+    return out;
   }
 
   /* What is different about one matched pair. An empty list means the AP is
@@ -1804,30 +1921,49 @@
 
     var cb = apCoord(b), ca = apCoord(a);
     if (cb && ca && !floorChanged) {
-      var shift = ctxInfo.shiftFor(la.floorPlanId) || { dx: 0, dy: 0 };
-      var dx = ca.x - (cb.x + shift.dx);
-      var dy = ca.y - (cb.y + shift.dy);
+      var pb = shiftPoint(cb, ctxInfo.shiftFor(la.floorPlanId));
+      var dx = ca.x - pb.x;
+      var dy = ca.y - pb.y;
       var px = Math.sqrt(dx * dx + dy * dy);
       var mpu = ctxInfo.metersPerUnitOf(la.floorPlanId);
-      var metres = mpu ? px * mpu : null;
-      if (metres !== null && metres >= ctxInfo.threshold) {
-        out.push({ kind: 'moved', metres: metres, dx: dx, dy: dy });
+      if (mpu) {
+        var metres = px * mpu;
+        /* ``> 1e-6`` as well as ``>= threshold``: at "any distance" the
+           threshold is 0, and 0 >= 0 reported every AP that had not moved. */
+        if (metres > 1e-6 && metres >= ctxInfo.threshold) {
+          out.push({ kind: 'moved', metres: metres, px: px, dx: dx, dy: dy });
+        }
+      } else if (px > 1e-6 && (ctxInfo.threshold === 0 || px >= NO_SCALE_MOVE_PX)) {
+        /* No scale on this floor: dropping the comparison hid every move on
+           it. It is measured in pixels instead, and the page says so. */
+        out.push({ kind: 'moved', metres: null, px: px, dx: dx, dy: dy });
       }
     } else if ((cb && !ca) || (!cb && ca)) {
       out.push({ kind: cb ? 'unplaced' : 'placed' });
     }
 
     var azB = deg(rb && rb.antennaDirection), azA = deg(ra && ra.antennaDirection);
+    /* Unset to set, or set to unset, is a change too: it used to be skipped
+       because the comparison needed a number on both sides. Not when one side
+       has no radio at all - that is the radio being added or removed, said
+       once below. */
+    var bothRadios = !!(rb && ra);
     var dAz = angleDelta(azA, azB);
     if (dAz !== null && dAz >= 1) {
       out.push({ kind: 'azimuth', from: azB, to: azA, delta: dAz });
+    } else if (bothRadios && (azA === null) !== (azB === null)) {
+      out.push({ kind: 'azimuth', from: azB, to: azA, delta: null });
     }
     var tB = deg(rb && rb.antennaTilt), tA = deg(ra && ra.antennaTilt);
     if (tB !== null && tA !== null && Math.abs(tA - tB) >= 1) {
       out.push({ kind: 'tilt', from: tB, to: tA });
+    } else if (bothRadios && (tA === null) !== (tB === null)) {
+      out.push({ kind: 'tilt', from: tB, to: tA });
     }
     var hB = deg(rb && rb.antennaHeight), hA = deg(ra && ra.antennaHeight);
     if (hB !== null && hA !== null && Math.abs(hA - hB) >= 0.05) {
+      out.push({ kind: 'height', from: hB, to: hA });
+    } else if (bothRadios && (hA === null) !== (hB === null)) {
       out.push({ kind: 'height', from: hB, to: hA });
     }
     var mB = (rb && rb.antennaMounting) || '', mA = (ra && ra.antennaMounting) || '';
@@ -1840,7 +1976,9 @@
                  from: ctxInfo.antennaNameOf(atB, 'before'),
                  to: ctxInfo.antennaNameOf(atA, 'after') });
     }
-    return out;
+    return out.concat(radioChanges(
+      (ctxInfo.beforeRadioList || {})[b.id] || [],
+      (ctxInfo.afterRadioList || {})[a.id] || []));
   }
 
   /* Compare two parsed projects.
@@ -1884,6 +2022,10 @@
     function metersPerUnitOf(id) {
       var f = floorObj(id, 'after');
       var v = f && Number(f.metersPerUnit);
+      if (v && isFinite(v) && v > 0) return v;
+      // The after plan lost its scale: the before plan's still describes it.
+      var fp = floorPairs.find(function (p) { return p.after.id === id; });
+      v = fp && Number(fp.before.metersPerUnit);
       return v && isFinite(v) && v > 0 ? v : null;
     }
 
@@ -1893,21 +2035,24 @@
        floor, so this runs before the per-AP comparison rather than inside it. */
     var shifts = {};
     var floorNotes = [];
+    var onByFloor = {};
     floorPairs.forEach(function (fp) {
       var on = paired.matched.filter(function (m) {
         var la = (m.after.location || {}).floorPlanId;
         var lb = (m.before.location || {}).floorPlanId;
         return la === fp.after.id && lb === fp.before.id;
       });
+      onByFloor[fp.after.id] = on;
       var shift = cropShiftFor(fp, on);
-      if (shift && (Math.abs(shift.dx) > 0.5 || Math.abs(shift.dy) > 0.5)) {
+      if (shift && (Math.abs(shift.dx) > 0.5 || Math.abs(shift.dy) > 0.5
+                    || (shift.scale || 1) !== 1)) {
         shifts[fp.after.id] = shift;
         floorNotes.push({
           floorId: fp.after.id,
           name: fp.after.name || '(unnamed)',
           beforeSize: [Number(fp.before.width) || 0, Number(fp.before.height) || 0],
           afterSize: [Number(fp.after.width) || 0, Number(fp.after.height) || 0],
-          dx: shift.dx, dy: shift.dy, count: shift.count,
+          dx: shift.dx, dy: shift.dy, count: shift.count, scale: shift.scale || 1,
         });
       }
     });
@@ -1915,6 +2060,8 @@
     var info = {
       beforeRadios: radioIndexFor(before),
       afterRadios: radioIndexFor(after),
+      beforeRadioList: radiosByAp(before),
+      afterRadioList: radiosByAp(after),
       floorKeyOf: floorKeyOf,
       floorNameOf: floorNameOf,
       antennaNameOf: antennaNameOf,
@@ -1932,8 +2079,56 @@
       if (ch.length) changed.push(rec); else unchanged.push(rec);
     });
 
+    /* A plan shifted as a whole *without* changing size cannot be told from a
+       real move of every AP, so the moves stay in the table - hiding them is
+       the dangerous failure - but a floor where most of the matched APs moved
+       by the same vector is named, because that pattern is a re-imported
+       image far more often than thirty separate decisions. */
+    var uniformShifts = [];
+    floorPairs.forEach(function (fp) {
+      if (shifts[fp.after.id]) return;
+      var total = (onByFloor[fp.after.id] || []).length;
+      var movedRecs = changed.filter(function (rec) {
+        return rec.floorId === fp.after.id
+          && rec.changes.some(function (c) { return c.kind === 'moved'; });
+      }).map(function (rec) {
+        return rec.changes.find(function (c) { return c.kind === 'moved'; });
+      });
+      if (movedRecs.length < 3) return;
+      var mdx = median(movedRecs.map(function (c) { return c.dx; }));
+      var mdy = median(movedRecs.map(function (c) { return c.dy; }));
+      var len = Math.sqrt(mdx * mdx + mdy * mdy);
+      var tol = Math.max(2, len * 0.03);
+      var same = movedRecs.filter(function (c) {
+        return Math.sqrt((c.dx - mdx) * (c.dx - mdx) + (c.dy - mdy) * (c.dy - mdy)) <= tol;
+      });
+      if (same.length < 3 || same.length * 2 < total) return;
+      var ms = same.map(function (c) { return c.metres; });
+      uniformShifts.push({
+        floorId: fp.after.id, name: fp.after.name || '(unnamed)',
+        count: same.length, total: total, dx: mdx, dy: mdy, px: len,
+        metres: ms.every(function (m) { return m !== null; }) ? median(ms) : null,
+      });
+    });
+
+    var noScaleFloors = [];
+    floorPairs.forEach(function (fp) {
+      if (metersPerUnitOf(fp.after.id)) return;
+      var any = (onByFloor[fp.after.id] || []).some(function (m) {
+        return apCoord(m.before) && apCoord(m.after);
+      });
+      if (any) noScaleFloors.push({ floorId: fp.after.id, name: fp.after.name || '(unnamed)' });
+    });
+
     return {
       threshold: threshold,
+      uniformShifts: uniformShifts,
+      noScaleFloors: noScaleFloors,
+      renamedFloors: floorPairs.filter(function (p) {
+        return String(p.before.name || '') !== String(p.after.name || '');
+      }).map(function (p) {
+        return { from: p.before.name || '(unnamed)', to: p.after.name || '(unnamed)' };
+      }),
       matched: paired.matched.length,
       matchedByName: paired.matched.filter(function (m) { return m.by === 'name'; }).length,
       added: paired.added,
@@ -4226,7 +4421,11 @@
     var r = currentReport();
     syncDocTitle();
     if (!proj.accessPoints.length && !r.noApFilter) {
-      host.innerHTML = '<div class="rep-empty">Drop an .esx to render a report.</div>';
+      /* "Drop an .esx" is for when none is open. With one open and no APs in
+         it, that sent someone to re-open the file they had just opened. */
+      host.innerHTML = '<div class="rep-empty">' + (fileName
+        ? WD.esc(emptyApReason(true, true))
+        : 'Drop an .esx to render a report.') + '</div>';
       return;
     }
 
@@ -5368,6 +5567,31 @@
     return Promise.all(pending);
   }
 
+  /* A printed report is on white paper whatever theme the screen is in.
+
+     The app opens dark, and every colour the print stylesheet does not name is
+     a dark-theme token: the BOM's procurement notes printed in pale grey on
+     white (about 2.4:1) with the bold word in near-white (1.2:1), chips and
+     stat cards came out in dark-theme colours, and a PDF saved with
+     background graphics on had near-black margins on every sheet. Naming every
+     colour for print is a list that is always one rule short, so the page
+     simply is the light theme while it is being printed. The stored choice is
+     never touched; the attribute goes back as soon as printing is done. */
+  var themeBeforePrint = null;
+  function lightThemeForPrint(on) {
+    var root = document.documentElement;
+    if (on) {
+      if (themeBeforePrint === null) themeBeforePrint = root.getAttribute('data-theme') || '';
+      root.setAttribute('data-theme', 'light');
+    } else if (themeBeforePrint !== null) {
+      if (themeBeforePrint) root.setAttribute('data-theme', themeBeforePrint);
+      else root.removeAttribute('data-theme');
+      themeBeforePrint = null;
+    }
+  }
+  window.addEventListener('beforeprint', function () { lightThemeForPrint(true); });
+  window.addEventListener('afterprint', function () { lightThemeForPrint(false); });
+
   window.printReport = async function () {
     syncDocTitle();
     var host = document.getElementById('reportCanvas');
@@ -5655,7 +5879,45 @@
 
   /* Turn every page that has an opinion, then let the plan pass size the maps
      inside whichever way round they ended up. */
+  /* Every sheet of a report is a page the reader can turn.
+
+     Only the maps, the AP tables and the notes carried a page key; a BOM's
+     tables, the Summary, the Coverage legend, the Design Review's findings and
+     the Interference summary carried none. They always printed portrait, the
+     per-page picker was not offered on them, and "Match all pages" went
+     straight past them - so "all landscape" left a report of portrait sheets
+     between landscape ones. Each top-level section without a key gets one
+     here, named for its heading so a choice made for it is remembered, a
+     picker, and a kind: a table measures itself on Auto and turns when it
+     will not fit across a portrait sheet, anything else stays portrait. */
+  function keyEveryPage(host, opts) {
+    var reportId = currentReportId || 'report';
+    var used = {};
+    for (var i = 0; i < host.children.length; i++) {
+      var sec = host.children[i];
+      if (sec.tagName !== 'SECTION') continue;
+      var existing = sec.getAttribute('data-page-key');
+      if (existing) { used[existing] = true; continue; }
+    }
+    for (var j = 0; j < host.children.length; j++) {
+      var s2 = host.children[j];
+      if (s2.tagName !== 'SECTION' || s2.getAttribute('data-page-key')) continue;
+      var heading = s2.querySelector('.rep-floor-title');
+      // Letters only: a count in the heading ("(21)") must not rename the page.
+      var slug = String((heading && heading.textContent) || '').toLowerCase()
+        .replace(/[^a-z]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || ('page-' + j);
+      var key = 'sec:' + reportId + ':' + slug, n = 1;
+      while (used[key]) key = 'sec:' + reportId + ':' + slug + '-' + (++n);
+      used[key] = true;
+      s2.classList.add('rep-oriented');
+      s2.setAttribute('data-page-key', key);
+      s2.setAttribute('data-page-kind', s2.querySelector('table') ? 'table' : 'text');
+      s2.insertAdjacentHTML('afterbegin', orientPickerHtml(key, opts));
+    }
+  }
+
   function applyPageOrientation(host, opts) {
+    keyEveryPage(host, opts);
     var pages = host.querySelectorAll('[data-page-key]');
     for (var i = 0; i < pages.length; i++) {
       var page = pages[i];
@@ -6098,6 +6360,14 @@
      figure carries slack on top of the 1.45in the furniture actually needs, so
      a footer that wraps to a second line still has somewhere to go. */
   var SHEET_CHROME_IN = 1.5;
+  /* The smallest a marker number may be, as a fraction of a plan's long edge.
+     "About 7pt" holds when the long edge prints 7.2in across, which a portrait
+     page gives it. A very tall plan on a landscape sheet prints its long edge
+     in the 5.75in the sheet has left (SHEET_W_IN less the furniture and
+     slack), and 1.35% of that is 5.6pt - under the 6pt floor, found by forcing
+     a 600 x 6000 plan to landscape. 1.52% is 6.3pt on that worst case and a
+     little over 7.8pt on a plan that fills a portrait sheet. */
+  var MAP_FONT_FLOOR_FRAC = 0.0152;
   /* Held apart from the figure above on purpose. That one decides whether
      turning the sheet is worth it, by comparing two scales against each other,
      and it has been right about that since 2.28. This one is only about how
@@ -6989,23 +7259,63 @@
     moved: 'Moved', azimuth: 'Azimuth', tilt: 'Tilt', height: 'Height',
     mount: 'Mount', antenna: 'Antenna', unplaced: 'Taken off the plan',
     placed: 'Placed on the plan',
+    channel: 'Channel', width: 'Width', power: 'TX power', radio: 'Radio',
   };
+
+  // "36" for a plain channel, "36/80" for a bonded block, "unset" for none.
+  function auditChannelText(freqs) {
+    if (!freqs || !freqs.length) return 'unset';
+    var ch = freqToChannel(freqs[0]);
+    return freqs.length > 1 ? ch + '/' + (freqs.length * 20) : String(ch);
+  }
+  function auditSet(c, fmtOne) {
+    if (c.from === null || c.from === undefined) return 'set ' + fmtOne(c.to);
+    return 'unset (was ' + fmtOne(c.from) + ')';
+  }
 
   function describeChange(c, opts, ctx) {
     // No digit count: fmtLength's own default is one decimal in feet and two
     // in metres, which is what every other table in this suite prints, and a
     // report that rounds differently from its siblings reads as a different
     // measurement rather than the same one.
-    if (c.kind === 'moved') return fmtLength(c.metres, opts);
+    if (c.kind === 'moved') {
+      return c.metres === null ? fmt(c.px, 0) + ' px (no scale)' : fmtLength(c.metres, opts);
+    }
     if (c.kind === 'height') {
+      if (c.from === null || c.to === null) {
+        return auditSet(c, function (v) { return fmtLength(v, opts); });
+      }
       return fmtLength(c.from, opts) + ' → ' + fmtLength(c.to, opts);
     }
     if (c.kind === 'azimuth') {
+      if (c.from === null || c.to === null) {
+        return auditSet(c, function (v) { return fmt(v, 0) + '°'; });
+      }
       return fmt(c.from, 0) + '° → ' + fmt(c.to, 0) + '° ('
         + fmt(c.delta, 0) + '°)';
     }
     if (c.kind === 'tilt') {
+      if (c.from === null || c.to === null) {
+        return auditSet(c, function (v) { return fmt(v, 0) + '°'; });
+      }
       return fmt(c.from, 0) + '° → ' + fmt(c.to, 0) + '°';
+    }
+    if (c.kind === 'channel') {
+      var cf = auditChannelText(c.from), ct = auditChannelText(c.to);
+      if (c.fromBand && c.toBand && c.fromBand !== c.toBand) {
+        return c.fromBand + ' ' + cf + ' → ' + c.toBand + ' ' + ct;
+      }
+      return (c.band ? c.band + ': ' : '') + cf + ' → ' + ct;
+    }
+    if (c.kind === 'width') {
+      return (c.band ? c.band + ': ' : '') + c.from + ' → ' + c.to + ' MHz';
+    }
+    if (c.kind === 'power') {
+      var pw = function (v) { return v === null ? 'unset' : (Math.round(v * 10) / 10) + ' dBm'; };
+      return (c.band ? c.band + ': ' : '') + pw(c.from) + ' → ' + pw(c.to);
+    }
+    if (c.kind === 'radio') {
+      return (c.band ? c.band + ' ' : '') + (c.wifi ? '' : 'non-Wi-Fi ') + c.action;
     }
     if (c.kind === 'unplaced' || c.kind === 'placed') return '';
     return String(c.from) + ' → ' + String(c.to);
@@ -7068,8 +7378,9 @@
       if (moved) {
         var cb = apCoord(rec.before);
         if (cb) {
-          var fx = cb.x + (shift ? shift.dx : 0);
-          var fy = cb.y + (shift ? shift.dy : 0);
+          var was = shiftPoint(cb, shift);
+          var fx = was.x;
+          var fy = was.y;
           g += '<circle class="rep-aud-was" cx="' + fx + '" cy="' + fy + '" r="' + dotR
             + '" stroke-width="' + sw + '"/>'
             + '<line class="rep-aud-move" x1="' + fx + '" y1="' + fy + '" x2="' + ca.x
@@ -7095,7 +7406,7 @@
       var pairedBefore = result.floorPairs.find(function (p) { return p.after.id === fp.id; });
       if (!pairedBefore || loc.floorPlanId !== pairedBefore.before.id) return;
       var c = apCoord(ap); if (!c) return;
-      var x = c.x + (shift ? shift.dx : 0), y = c.y + (shift ? shift.dy : 0);
+      var at = shiftPoint(c, shift), x = at.x, y = at.y;
       g += '<g class="rep-aud-removed" transform="translate(' + x + ',' + y + ')">'
         + '<line x1="' + (-dotR) + '" y1="' + (-dotR) + '" x2="' + dotR + '" y2="' + dotR
         + '" stroke-width="' + sw + '"/>'
@@ -7158,7 +7469,7 @@
     /* ── which two files, in which order ─────────────────────────────────── */
     var nBefore = baseline.accessPoints.length;
     var nAfter = proj.accessPoints.length;
-    var whichFiles = '<section class="rep-floor-section">'
+    var whichFiles = '<section class="rep-floor-section rep-dr-flow">'
       + '<h2 class="rep-floor-title">What is being compared</h2>'
       + '<table class="rep-ap-table">'
       + '<colgroup><col style="width:18%"><col style="width:46%"><col style="width:36%"></colgroup>'
@@ -7172,6 +7483,13 @@
       +   WD.esc(fmtLength(threshold, opts)) + ' or more. Smaller differences are '
       +   'left out, because a design nudged by a few centimetres is not an access '
       +   'point somebody put somewhere else.</p>'
+      + (result.noScaleFloors.length
+          ? '<p class="rep-aud-note">' + WD.esc(result.noScaleFloors.map(function (n) { return n.name; }).join(', '))
+            + (result.noScaleFloors.length === 1 ? ' has' : ' have')
+            + ' no scale set, so a move there cannot be measured in distance. It is '
+            + 'measured in image pixels instead, and counts at ' + NO_SCALE_MOVE_PX
+            + ' px or more.</p>'
+          : '')
       + (result.matchedByName
           ? '<p class="rep-aud-note">' + result.matchedByName + ' access point'
             + (result.matchedByName === 1 ? ' was' : 's were')
@@ -7196,7 +7514,7 @@
       ['Directional APs', countDirectional(baseline, bRadios), countDirectional(proj, aRadios)],
       ['Radios', (baseline.radios || []).length, (proj.radios || []).length],
     ];
-    var stats = '<section class="rep-floor-section">'
+    var stats = '<section class="rep-floor-section rep-dr-flow">'
       + '<h2 class="rep-floor-title">Before and after</h2>'
       + '<table class="rep-ap-table">'
       + '<colgroup><col style="width:46%"><col style="width:18%"><col style="width:18%"><col style="width:18%"></colgroup>'
@@ -7222,15 +7540,20 @@
     /* ── a re-cropped plan, said out loud ────────────────────────────────── */
     var cropNote = '';
     if (result.floorNotes.length) {
-      cropNote = '<section class="rep-floor-section">'
-        + '<h2 class="rep-floor-title">Floor plans that were re-cropped</h2>'
+      var rescaled = result.floorNotes.some(function (n) { return n.scale !== 1; });
+      cropNote = '<section class="rep-floor-section rep-dr-flow">'
+        + '<h2 class="rep-floor-title">Floor plans that were re-cropped'
+        + (rescaled ? ' or re-scaled' : '') + '</h2>'
         + '<p class="rep-aud-note">Positions inside an .esx are measured from the '
         + 'corner of the floor plan image, so trimming a plan moves every '
         + 'coordinate on it by the same amount. These floors changed size between '
         + 'the two files. The shift has been measured and taken out, so what is '
         + 'listed below is movement relative to the building rather than to the '
         + 'image — without that, every access point on these floors would be '
-        + 'reported as having moved.</p>'
+        + 'reported as having moved.'
+        + (rescaled ? ' A plan imported again at a different resolution also '
+          + 'changes the scale of every coordinate; that has been allowed for too.' : '')
+        + '</p>'
         + '<table class="rep-ap-table">'
         + '<colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup>'
         + '<thead><tr><th>Floor</th><th class="rep-num">Before</th>'
@@ -7239,7 +7562,8 @@
             return '<tr><td class="rep-name">' + WD.esc(n.name) + '</td>'
               + '<td class="rep-az">' + n.beforeSize[0] + '×' + n.beforeSize[1] + '</td>'
               + '<td class="rep-az">' + n.afterSize[0] + '×' + n.afterSize[1] + '</td>'
-              + '<td class="rep-az">' + fmt(n.dx, 0) + ', ' + fmt(n.dy, 0) + ' px</td></tr>';
+              + '<td class="rep-az">' + (n.scale !== 1 ? 'scaled ×' + fmt(n.scale, 2) + ', ' : '')
+              + fmt(n.dx, 0) + ', ' + fmt(n.dy, 0) + ' px</td></tr>';
           }).join('')
         + '</tbody></table></section>';
     }
@@ -7247,7 +7571,7 @@
     /* ── the changes, per floor ──────────────────────────────────────────── */
     function apRowsTable(title, rows, withChanges) {
       if (!rows.length) return '';
-      return '<section class="rep-floor-section">'
+      return '<section class="rep-floor-section rep-dr-flow">'
         + '<h2 class="rep-floor-title">' + WD.esc(title) + ' (' + rows.length + ')</h2>'
         + '<table class="rep-ap-table">'
         + (withChanges
@@ -7289,13 +7613,63 @@
         + '<td class="rep-name">' + WD.esc(ap.model || '—') + '</td></tr>';
     });
 
+    /* Floors that came or went, or changed name. They used to be computed and
+       never printed: one dropped and one added read "Floor plans 3 → 3". */
+    var floorChangeRows = [];
+    function apsOn(project, id) {
+      return (project.accessPoints || []).filter(function (a) {
+        return (a.location || {}).floorPlanId === id;
+      }).length;
+    }
+    function nAps(n) { return n + ' access point' + (n === 1 ? '' : 's'); }
+    result.addedFloors.forEach(function (f) {
+      floorChangeRows.push('<tr><td class="rep-name">Added</td><td class="rep-name">'
+        + WD.esc(f.name || '(unnamed)') + '</td><td class="rep-name">'
+        + nAps(apsOn(proj, f.id)) + ' on it now</td></tr>');
+    });
+    result.removedFloors.forEach(function (f) {
+      floorChangeRows.push('<tr><td class="rep-name">Removed</td><td class="rep-name">'
+        + WD.esc(f.name || '(unnamed)') + '</td><td class="rep-name">'
+        + nAps(apsOn(baseline, f.id)) + ' were on it</td></tr>');
+    });
+    result.renamedFloors.forEach(function (f) {
+      floorChangeRows.push('<tr><td class="rep-name">Renamed</td><td class="rep-name">'
+        + WD.esc(f.to) + '</td><td class="rep-name">was “' + WD.esc(f.from) + '”</td></tr>');
+    });
+    var floorChanges = floorChangeRows.length
+      ? '<section class="rep-floor-section rep-dr-flow">'
+        + '<h2 class="rep-floor-title">Floor plans changed (' + floorChangeRows.length + ')</h2>'
+        + '<table class="rep-ap-table">'
+        + '<colgroup><col style="width:20%"><col style="width:40%"><col style="width:40%"></colgroup>'
+        + '<thead><tr><th>Change</th><th>Floor plan</th><th>Detail</th></tr></thead>'
+        + '<tbody>' + floorChangeRows.join('') + '</tbody></table></section>'
+      : '';
+
+    var shiftNote = '';
+    if (result.uniformShifts.length) {
+      shiftNote = '<section class="rep-floor-section rep-dr-flow">'
+        + '<h2 class="rep-floor-title">Many access points moved together</h2>'
+        + result.uniformShifts.map(function (u) {
+            return '<p class="rep-aud-note">' + u.count + ' of ' + nAps(u.total) + ' on '
+              + WD.esc(u.name) + ' moved by the same '
+              + WD.esc(u.metres === null ? fmt(u.px, 0) + ' px' : fmtLength(u.metres, opts))
+              + ' in the same direction (' + fmt(u.dx, 0) + ', ' + fmt(u.dy, 0)
+              + ' px). That pattern usually means the floor plan image was shifted or '
+              + 'imported again, not that each access point was moved. They are all '
+              + 'listed below.</p>';
+          }).join('')
+        + '</section>';
+    }
+
     var nothingChanged = '';
-    if (!result.changed.length && !result.added.length && !result.removed.length) {
-      nothingChanged = '<section class="rep-floor-section">'
+    if (!result.changed.length && !result.added.length && !result.removed.length
+        && !floorChangeRows.length && !result.floorNotes.length) {
+      nothingChanged = '<section class="rep-floor-section rep-dr-flow">'
         + '<h2 class="rep-floor-title">Nothing changed</h2>'
         + '<p class="rep-aud-note">All ' + result.unchanged.length + ' access point'
         + (result.unchanged.length === 1 ? ' is' : 's are')
-        + ' the same in both files: same place, same aim, same mount, same hardware. '
+        + ' the same in both files, in everything this report compares: name, model, '
+        + 'floor, position, aim, mount, antenna, channel, width and transmit power. '
         + 'That is a result, not an empty report.</p></section>';
     }
 
@@ -7311,7 +7685,7 @@
        expression - see tests/test_ap_notes_last.py, and the AP Placement Map
        that appended them twenty lines early and put the compass page after
        the lot. */
-    return head + whichFiles + stats + cropNote
+    return head + whichFiles + stats + cropNote + floorChanges + shiftNote
       + nothingChanged
       + apRowsTable('Changed', changedRows, true)
       + apRowsTable('Added', addedRows, false)
@@ -7852,7 +8226,7 @@
     var minDim = Math.min(W, H);
     // Floored like every other marker in this file: a fraction of the drawing
     // is not a size on paper.
-    var font = Math.max(Math.max(W, H) * 0.0135, minDim * 0.022);
+    var font = Math.max(Math.max(W, H) * MAP_FONT_FLOOR_FRAC, minDim * 0.022);
     /* Keyed on the lowest 20 MHz channel, not the label: a 36 and a 36/80
        share air and should look like it. Partial overlaps (a 44 inside a
        36/80) are what the dashed line is for. */
@@ -8345,6 +8719,7 @@
     var minDim = Math.min(W, H);
 
     var cellsSvg = '', ringsSvg = '', pinsSvg = '';
+    var pinList = [];
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord;
       if (!c || !indexById[ap.id]) return;
@@ -8371,15 +8746,51 @@
       /* The number here is what ties a cell on the map to its row in the
          "Cell sizing per AP" table, so it has to survive printing. Floored
          the same way as every other marker in this file. */
-      var covFont = Math.max(Math.max(W, H) * 0.0135, minDim * 0.022);
+      var covFont = Math.max(Math.max(W, H) * MAP_FONT_FLOOR_FRAC, minDim * 0.022);
       var covPadX = minDim * 0.006;
       var covBoxW = Math.max(minDim * 0.03, covLabel.length * covFont * 0.65) + covPadX * 2;
       var covBoxH = Math.max(minDim * 0.028, covFont * 1.5);
-      var covCornerR = minDim * 0.005;
-      pinsSvg += '<g class="rep-cov-mark" transform="translate(' + c.x + ',' + c.y + ')">';
-      pinsSvg += '<rect class="rep-cov-dot" x="' + (-covBoxW / 2) + '" y="' + (-covBoxH / 2) + '" width="' + covBoxW + '" height="' + covBoxH + '" rx="' + covCornerR + '" ry="' + covCornerR + '" fill="' + color + '" stroke="#fff" stroke-width="' + (minDim * 0.003) + '"/>';
+      pinList.push({ x: c.x, y: c.y, label: covLabel, color: color, font: covFont,
+                     w: covBoxW, h: covBoxH });
+    });
+
+    /* Numbers that land on one another are pushed apart. In a dense floor two
+       APs a few metres apart drew their boxes on the same spot, and the one
+       drawn first - 105 under 115 - was gone, with its row in the table still
+       pointing at it. Each box takes the nearest free slot around its AP and,
+       when it has moved, a thin line says which AP it belongs to. */
+    var placedBoxes = [];
+    var covCornerR = minDim * 0.005;
+    function boxHits(b) {
+      return placedBoxes.some(function (o) {
+        return Math.abs(b.cx - o.cx) < (b.w + o.w) / 2 && Math.abs(b.cy - o.cy) < (b.h + o.h) / 2;
+      });
+    }
+    pinList.forEach(function (pin) {
+      var box = { cx: pin.x, cy: pin.y, w: pin.w, h: pin.h };
+      var moved = false;
+      if (boxHits(box)) {
+        var tries = [];
+        for (var ring = 1; ring <= 4; ring++) {
+          [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(function (d) {
+            tries.push({ cx: pin.x + d[0] * ring * pin.w * 1.1, cy: pin.y + d[1] * ring * pin.h * 1.1,
+                         w: pin.w, h: pin.h });
+          });
+        }
+        for (var t = 0; t < tries.length; t++) {
+          if (!boxHits(tries[t])) { box = tries[t]; moved = true; break; }
+        }
+      }
+      placedBoxes.push(box);
+      if (moved) {
+        pinsSvg += '<line class="rep-cov-lead" x1="' + pin.x + '" y1="' + pin.y + '" x2="' + box.cx + '" y2="' + box.cy
+          + '" stroke="' + pin.color + '" stroke-width="' + (minDim * 0.003) + '"/>'
+          + '<circle cx="' + pin.x + '" cy="' + pin.y + '" r="' + (minDim * 0.004) + '" fill="' + pin.color + '"/>';
+      }
+      pinsSvg += '<g class="rep-cov-mark" transform="translate(' + box.cx + ',' + box.cy + ')">';
+      pinsSvg += '<rect class="rep-cov-dot" x="' + (-pin.w / 2) + '" y="' + (-pin.h / 2) + '" width="' + pin.w + '" height="' + pin.h + '" rx="' + covCornerR + '" ry="' + covCornerR + '" fill="' + pin.color + '" stroke="#fff" stroke-width="' + (minDim * 0.003) + '"/>';
       if (showLabels) {
-        pinsSvg += '<text class="rep-cov-num" y="' + (covFont * 0.35) + '" text-anchor="middle" font-size="' + covFont + '" fill="#fff" font-weight="700">' + covLabel + '</text>';
+        pinsSvg += '<text class="rep-cov-num" y="' + (pin.font * 0.35) + '" text-anchor="middle" font-size="' + pin.font + '" fill="#fff" font-weight="700">' + pin.label + '</text>';
       }
       pinsSvg += '</g>';
     });
@@ -9710,7 +10121,7 @@
       noApFilter: true,
       sections: [
         { icon: '📄', title: 'Cover page',
-          description: 'Site name, interferer count, your logo, survey date.' },
+          description: 'Site name, interferer count, your cover image, date generated.' },
         { icon: '📊', title: 'Summary strip',
           description: 'Total, high-severity count, and per-category counts (iPhone / Android / Carrier / Wide-channel).' },
         { icon: '🗺️', title: 'Per-floor detection map',
