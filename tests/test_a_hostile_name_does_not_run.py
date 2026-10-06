@@ -526,6 +526,7 @@ def _case(kind, binary):
 HostileValuesInFirefox = _case(*BROWSERS[0])
 HostileValuesInChrome = _case(*BROWSERS[1])
 HostileValuesInEdge = _case(*BROWSERS[2])
+HostileValuesInSafari = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del HostileValues  # the base class is not a test case
 

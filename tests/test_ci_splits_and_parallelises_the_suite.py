@@ -261,6 +261,23 @@ class TheSafariJobCannotPassByDrivingNothing(unittest.TestCase):
         self.assertEqual(run_tests.without_access_log(noisy),
                          '.\nFAIL: test_a (m.T.test_a)\nAssertionError: 41 != 50')
 
+    def test_no_module_builds_drivers_or_classes_without_a_slot_for_safari(self):
+        """Ten modules built one test class per browser from `BROWSERS[0..2]`
+        and gave Safari none, so each reported `0 tests, 3 skipped` and passed.
+        A module that lists the three has to list a fourth when one is asked
+        for, and a driver builder that knows Firefox has to know Safari."""
+        offenders = []
+        for f in sorted((ROOT / "tests").glob("test_*.py")):
+            text = f.read_text(encoding="utf-8")
+            if f.name == Path(__file__).name:
+                continue
+            if "BROWSERS[2]" in text and not ("BROWSERS[3]" in text
+                                              or "triple()[3]" in text):
+                offenders.append(f.name + ": classes for three browsers only")
+            if 'if kind == "firefox":' in text and 'kind == "safari"' not in text:
+                offenders.append(f.name + ": a driver builder without Safari")
+        self.assertEqual(offenders, [])
+
     def test_every_module_left_out_of_safari_exists_and_says_why(self):
         mods = set(run_tests.discover([]))
         self.assertTrue(browsers.SAFARI_NOT_APPLICABLE)

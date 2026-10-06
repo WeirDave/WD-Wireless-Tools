@@ -869,10 +869,18 @@ class EdgeToolbarTests(ToolbarInABrowser):
     kind, binary = BROWSERS[2]
 
 
+class SafariToolbarTests(ToolbarInABrowser):
+    """Only in a run that asked for Safari (`WD_BROWSERS=safari`)."""
+    kind, binary = BROWSERS[3] if len(BROWSERS) > 3 else (None, None)
+
+
 def load_tests(loader, tests, pattern):
     """Drop the abstract base class, keep the three real ones."""
     suite = unittest.TestSuite()
-    for cls in (FirefoxToolbarTests, ChromeToolbarTests, EdgeToolbarTests):
+    for cls in (FirefoxToolbarTests, ChromeToolbarTests, EdgeToolbarTests,
+                SafariToolbarTests):
+        if cls.kind is None:
+            continue    # Safari, in a run that did not ask for it
         suite.addTests(loader.loadTestsFromTestCase(cls))
     return suite
 

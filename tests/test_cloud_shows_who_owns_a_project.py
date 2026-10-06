@@ -382,6 +382,7 @@ def _case(kind, binary):
 FirefoxOwnershipOnTheRowTests = _case(*BROWSERS[0])
 ChromeOwnershipOnTheRowTests = _case(*BROWSERS[1])
 EdgeOwnershipOnTheRowTests = _case(*BROWSERS[2])
+SafariOwnershipOnTheRowTests = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del OwnershipIsOnTheRow
 

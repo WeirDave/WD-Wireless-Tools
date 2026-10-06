@@ -360,9 +360,16 @@ class EdgeNavTests(EveryPage):
     kind, binary = BROWSERS[2]
 
 
+class SafariNavTests(EveryPage):
+    """Only in a run that asked for Safari (`WD_BROWSERS=safari`)."""
+    kind, binary = BROWSERS[3] if len(BROWSERS) > 3 else (None, None)
+
+
 def load_tests(loader, tests, pattern):
     suite = unittest.TestSuite()
-    for cls in (FirefoxNavTests, ChromeNavTests, EdgeNavTests):
+    for cls in (FirefoxNavTests, ChromeNavTests, EdgeNavTests, SafariNavTests):
+        if cls.kind is None:
+            continue    # Safari, in a run that did not ask for it
         suite.addTests(loader.loadTestsFromTestCase(cls))
     return suite
 

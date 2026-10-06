@@ -217,6 +217,7 @@ def _case(kind, binary):
 FirefoxCloudManagerReadsTests = _case(*BROWSERS[0])
 ChromeCloudManagerReadsTests = _case(*BROWSERS[1])
 EdgeCloudManagerReadsTests = _case(*BROWSERS[2])
+SafariCloudManagerReadsTests = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del CloudManagerReads
 

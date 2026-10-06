@@ -209,6 +209,10 @@ SAFARI_NOT_APPLICABLE = {
     "test_dev_toolbar_does_not_print": "reads Firefox's print pipeline",
     "test_modal_buttons_have_room": "drives Firefox only, by construction",
     "test_nothing_is_left_running": "audits how Firefox is stopped",
+    "test_report_first_sheet_orientation_browser":
+        "prints through WebDriver's Print Page command, which safaridriver does not implement",
+    "test_rf_design_review_browser":
+        "prints through WebDriver's Print Page command, which safaridriver does not implement",
 }
 
 #: Set once the first Safari session has been made.
@@ -245,6 +249,114 @@ def _patch_select_for_safari() -> None:
     _SAFARI_SELECT_PATCHED = True
 
 
+def select_all():
+    """The keys that select all the text in a field: Cmd+A on a Mac, Ctrl+A
+    elsewhere.
+
+    On macOS, Ctrl+A in a text field moves the caret to the start of the line,
+    so `send_keys(Keys.CONTROL, "a")` followed by typing inserts in front of
+    what was there. Three AP Labeler tests did, in Safari - `101` typed into a
+    box holding `1` read `1011` - and looked like a fault in the page.
+    """
+    from selenium.webdriver.common.keys import Keys
+    return (Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL, "a")
+
+
+#: Puts files into a file input the way a person's choice does: the input's
+#: `files` set and `input` / `change` fired. Works on an input that is hidden,
+#: which is how every tool here styles its own.
+_UPLOAD_JS = (
+    "var el = arguments[0], files = arguments[1];"
+    "var dt = new DataTransfer();"
+    "files.forEach(function (f) {"
+    "  var bytes = Uint8Array.from(atob(f.b64), function (c) { return c.charCodeAt(0); });"
+    "  dt.items.add(new File([bytes], f.name, { type: f.type }));"
+    "});"
+    "el.files = dt.files;"
+    "el.dispatchEvent(new Event('input', { bubbles: true }));"
+    "el.dispatchEvent(new Event('change', { bubbles: true }));")
+
+
+def upload_by_script(element, paths) -> None:
+    """Hand `paths` to a file input without the driver's file chooser.
+
+    Safari's `send_keys(path)` on a file input is accepted and delivers
+    nothing: the page never sees a change, so every test that opens a project
+    that way waited out its timeout on a page that had nothing loaded - eleven
+    modules on the first full Safari run.
+    """
+    import base64
+    import mimetypes
+    files = []
+    for path in paths:
+        path = Path(path)
+        files.append({
+            "name": path.name,
+            "type": mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            "b64": base64.b64encode(path.read_bytes()).decode("ascii")})
+    element.parent.execute_script(_UPLOAD_JS, element, files)
+
+
+#: Set once the first Safari session has been made.
+_SAFARI_SEND_KEYS_PATCHED = False
+
+
+def _patch_send_keys_for_safari() -> None:
+    """Route `send_keys(path)` on a file input through `upload_by_script`.
+
+    Only ever applied in a run that asked for Safari, which drives no other
+    browser, so Firefox, Chrome and Edge keep their own file handling.
+    """
+    global _SAFARI_SEND_KEYS_PATCHED
+    if _SAFARI_SEND_KEYS_PATCHED:
+        return
+    from selenium.webdriver.remote.webelement import WebElement
+    original = WebElement.send_keys
+
+    def send_keys(self, *value):
+        if (self.tag_name.lower() == "input"
+                and (self.get_attribute("type") or "").lower() == "file"):
+            upload_by_script(self, [p for p in "".join(map(str, value)).split("\n") if p])
+            return None
+        return original(self, *value)
+
+    WebElement.send_keys = send_keys
+    _SAFARI_SEND_KEYS_PATCHED = True
+
+
+def make_driver(kind, binary):
+    """A driver for `kind`, or None when it will not start. Headless where the
+    browser can be; Safari takes no options. For tests written from here on -
+    the older modules each carry their own copy of this."""
+    try:
+        from selenium import webdriver
+        from selenium.common.exceptions import WebDriverException
+    except ImportError:
+        return None
+    if kind == "safari":
+        return safari_driver()
+    if not Path(binary).exists():
+        return None
+    try:
+        if kind == "firefox":
+            o = webdriver.FirefoxOptions()
+            o.binary_location = binary
+            o.add_argument("-headless")
+            return webdriver.Firefox(options=o)
+        if kind == "chrome":
+            o = webdriver.ChromeOptions()
+            o.binary_location = binary
+            o.add_argument("--headless=new")
+            o.add_argument("--no-sandbox")
+            return webdriver.Chrome(options=o)
+        o = webdriver.EdgeOptions()
+        o.binary_location = binary
+        o.add_argument("--headless=new")
+        return webdriver.Edge(options=o)
+    except (WebDriverException, OSError):
+        return None
+
+
 def safari_driver():
     """A Safari session, or None when it will not start.
 
@@ -258,6 +370,7 @@ def safari_driver():
     except ImportError:
         return None
     _patch_select_for_safari()
+    _patch_send_keys_for_safari()
     try:
         return webdriver.Safari()
     except (WebDriverException, OSError) as exc:

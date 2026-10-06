@@ -19,9 +19,12 @@ import json
 import re
 import shutil
 import subprocess
+import threading
 import time
 import unittest
 import zipfile
+from functools import partial
+from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -529,6 +532,15 @@ class TheCanvasInARealBrowser(unittest.TestCase):
             page = Path(tmp) / "planview.html"
             page.write_text(BROWSER_PAGE % (PLANVIEW_JS.read_text(encoding="utf-8"),
                                             json.dumps(SVG)), encoding="utf-8")
+            # Served, not opened as a file: Safari answers a file: URL from an
+            # automated session with "Failed to open page".
+            handler = type("Quiet", (SimpleHTTPRequestHandler,),
+                           {"log_message": lambda *a, **k: None})
+            server = _browsers.ExclusiveServer(
+                ("127.0.0.1", 0), partial(handler, directory=tmp))
+            threading.Thread(target=server.serve_forever, daemon=True).start()
+            self.addCleanup(_browsers.stop_server, server)
+            url = "http://127.0.0.1:%d/planview.html" % server.server_address[1]
             started = 0
             for kind, binary in _browsers.triple():
                 driver = self._driver(kind, binary)
@@ -538,7 +550,7 @@ class TheCanvasInARealBrowser(unittest.TestCase):
                 try:
                     driver.set_window_size(900, 700)
                     driver.set_script_timeout(20)
-                    driver.get(page.as_uri())
+                    driver.get(url)
                     for _ in range(100):
                         if driver.title == "ready" or driver.title.startswith("ERR"):
                             break

@@ -291,6 +291,7 @@ def _case(kind, binary):
 FirefoxShareDialogTests = _case(*BROWSERS[0])
 ChromeShareDialogTests = _case(*BROWSERS[1])
 EdgeShareDialogTests = _case(*BROWSERS[2])
+SafariShareDialogTests = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del ShareDialogInABrowser   # the base itself is not a case to run
 

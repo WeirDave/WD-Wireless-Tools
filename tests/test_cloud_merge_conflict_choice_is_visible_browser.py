@@ -106,6 +106,7 @@ def _case(kind, binary):
 FirefoxMergeConflictChoiceTests = _case(*BROWSERS[0])
 ChromeMergeConflictChoiceTests = _case(*BROWSERS[1])
 EdgeMergeConflictChoiceTests = _case(*BROWSERS[2])
+SafariMergeConflictChoiceTests = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del MergeConflictChoice
 

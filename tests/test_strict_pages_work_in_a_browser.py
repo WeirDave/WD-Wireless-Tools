@@ -311,8 +311,29 @@ class StrictPagesWorkInEveryBrowserTests(unittest.TestCase):
         deleted. So the page is served from a data URL with no policy on it at
         all: the same probe, the same browsers, nothing but the header
         different."""
-        page = ("data:text/html,<!doctype html><title>probe</title>"
-                "<div id='host'></div>")
+        # Served over http rather than from a data: URL, which Safari treats
+        # differently for scripts: the probe could not run in it, so the
+        # differential read "the probe proves nothing about safari".
+        from functools import partial
+        from http.server import BaseHTTPRequestHandler
+
+        html = (b"<!doctype html><title>probe</title><div id='host'></div>")
+
+        class NoPolicy(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(html)))
+                self.end_headers()
+                self.wfile.write(html)
+
+            def log_message(self, *a, **k):
+                pass
+
+        server = _browsers.ExclusiveServer(("127.0.0.1", 0), NoPolicy)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(_browsers.stop_server, server)
+        page = "http://127.0.0.1:%d/" % server.server_address[1]
         for kind, drv in self.drivers.items():
             with self.subTest(browser=kind):
                 drv.get(page)

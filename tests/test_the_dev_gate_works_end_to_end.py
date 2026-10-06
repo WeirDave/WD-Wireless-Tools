@@ -446,6 +446,7 @@ def _case(kind, binary):
 DevGateEndToEndInFirefox = _case(*BROWSERS[0])
 DevGateEndToEndInChrome = _case(*BROWSERS[1])
 DevGateEndToEndInEdge = _case(*BROWSERS[2])
+DevGateEndToEndInSafari = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
 
 del DevGateEndToEnd  # the base class is not a test case
 
