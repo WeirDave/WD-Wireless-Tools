@@ -328,5 +328,71 @@ class SharedHelpersTheReportsRelyOn(ReportCase):
         """)
 
 
+LISTENING_PRELUDE_FROM = "addEventListener(){}, removeEventListener(){},\n  matchMedia"
+LISTENING_PRELUDE_TO = ("addEventListener(t, f){ (window.__listeners = window.__listeners || {})[t] = f; }, "
+                        "removeEventListener(){},\n  matchMedia")
+
+
+class APrintedReportIsOnWhitePaper(ReportCase):
+    """The app opens dark. Printing from it put dark-theme colours on white:
+    the BOM's procurement notes at about 2.4:1 with the bold word at 1.2:1,
+    dark chips and stat cards, and near-black margins on a PDF saved with
+    background graphics on. The page is the light theme while it prints."""
+
+    def run_listening(self, checks: str):
+        from tests import test_report_prints_what_the_design_holds as base
+        self.assertIn(LISTENING_PRELUDE_FROM, base.PRELUDE,
+                      "the shared prelude moved; this test captures listeners through it")
+        original = base.PRELUDE
+        base.PRELUDE = original.replace(LISTENING_PRELUDE_FROM, LISTENING_PRELUDE_TO)
+        try:
+            self.run_block(checks)
+        finally:
+            base.PRELUDE = original
+
+    def test_the_page_registers_for_both_print_events(self):
+        self.run_listening(r"""
+          check('beforeprint is listened for', typeof (window.__listeners || {}).beforeprint === 'function');
+          check('afterprint is listened for', typeof (window.__listeners || {}).afterprint === 'function');
+        """)
+
+    def test_printing_switches_to_light_and_afterwards_puts_the_theme_back(self):
+        self.run_listening(r"""
+          const root = document.documentElement;
+          root.setAttribute('data-theme', 'dark');
+          window.__listeners.beforeprint();
+          eq('light while printing', root.getAttribute('data-theme'), 'light');
+          window.__listeners.beforeprint();                       // a second event changes nothing
+          window.__listeners.afterprint();
+          eq('dark again afterwards', root.getAttribute('data-theme'), 'dark');
+          root.setAttribute('data-theme', 'light');
+          window.__listeners.beforeprint(); window.__listeners.afterprint();
+          eq('a light page stays light', root.getAttribute('data-theme'), 'light');
+          let stored = null;
+          try { stored = localStorage.getItem('wd-theme'); } catch (e) {}
+          eq('the stored choice is never written', stored, null);
+        """)
+
+
+class AnEmptyProjectSaysSo(ReportCase):
+
+    def test_a_project_with_no_access_points_does_not_say_to_drop_a_file(self):
+        self.run_block(r"""
+          const p = project(); p.accessPoints = []; p.radios = [];
+          open(p);                                         // a file IS open
+          const html = render('location', {});
+          check('it says what is true: ' + html, /no access points in it/.test(html));
+          check('it does not send anyone to re-open the file', html.indexOf('Drop an .esx') < 0);
+        """)
+
+    def test_with_nothing_open_the_drop_message_is_still_there(self):
+        self.run_block(r"""
+          const none = { accessPoints: [], radios: [], antennas: {}, floorPlans: [], buildings: {}, buildingFloors: {}, images: {}, imageUrls: {}, measurements: [], measuredRadios: [], surveys: [], projectName: '' };
+          E('(function (p) { proj = p; fileName = ""; })')(none);
+          const html = render('location', {});
+          check('drop message with no file: ' + html, html.indexOf('Drop an .esx') >= 0);
+        """)
+
+
 if __name__ == "__main__":
     unittest.main()

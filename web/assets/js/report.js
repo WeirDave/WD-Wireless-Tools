@@ -4118,7 +4118,11 @@
     var r = currentReport();
     syncDocTitle();
     if (!proj.accessPoints.length && !r.noApFilter) {
-      host.innerHTML = '<div class="rep-empty">Drop an .esx to render a report.</div>';
+      /* "Drop an .esx" is for when none is open. With one open and no APs in
+         it, that sent someone to re-open the file they had just opened. */
+      host.innerHTML = '<div class="rep-empty">' + (fileName
+        ? WD.esc(emptyApReason(true, true))
+        : 'Drop an .esx to render a report.') + '</div>';
       return;
     }
 
@@ -5256,6 +5260,31 @@
     for (var i = 0; i < overlays.length; i++) pending.push(cropAntennaSegment(overlays[i]));
     return Promise.all(pending);
   }
+
+  /* A printed report is on white paper whatever theme the screen is in.
+
+     The app opens dark, and every colour the print stylesheet does not name is
+     a dark-theme token: the BOM's procurement notes printed in pale grey on
+     white (about 2.4:1) with the bold word in near-white (1.2:1), chips and
+     stat cards came out in dark-theme colours, and a PDF saved with
+     background graphics on had near-black margins on every sheet. Naming every
+     colour for print is a list that is always one rule short, so the page
+     simply is the light theme while it is being printed. The stored choice is
+     never touched; the attribute goes back as soon as printing is done. */
+  var themeBeforePrint = null;
+  function lightThemeForPrint(on) {
+    var root = document.documentElement;
+    if (on) {
+      if (themeBeforePrint === null) themeBeforePrint = root.getAttribute('data-theme') || '';
+      root.setAttribute('data-theme', 'light');
+    } else if (themeBeforePrint !== null) {
+      if (themeBeforePrint) root.setAttribute('data-theme', themeBeforePrint);
+      else root.removeAttribute('data-theme');
+      themeBeforePrint = null;
+    }
+  }
+  window.addEventListener('beforeprint', function () { lightThemeForPrint(true); });
+  window.addEventListener('afterprint', function () { lightThemeForPrint(false); });
 
   window.printReport = async function () {
     syncDocTitle();
