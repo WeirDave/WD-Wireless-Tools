@@ -249,17 +249,21 @@ def _patch_select_for_safari() -> None:
     _SAFARI_SELECT_PATCHED = True
 
 
-def select_all():
-    """The keys that select all the text in a field: Cmd+A on a Mac, Ctrl+A
-    elsewhere.
+def select_all(element) -> None:
+    """Select all the text in a field, as a person's Select All does.
 
-    On macOS, Ctrl+A in a text field moves the caret to the start of the line,
-    so `send_keys(Keys.CONTROL, "a")` followed by typing inserts in front of
-    what was there. Three AP Labeler tests did, in Safari - `101` typed into a
-    box holding `1` read `1011` - and looked like a fault in the page.
+    Done by script, not by a key chord. Ctrl+A moves the caret to the start of
+    the line on macOS, so `send_keys(Keys.CONTROL, "a")` followed by typing
+    inserts in front of what was there - three AP Labeler tests typed `101`
+    into a box holding `1`, read `1011` in Safari, and looked like a fault in
+    the page. Cmd+A is the Mac chord, and Safari's WebDriver does not act on
+    it either: its synthesized key events do not run the editing command, and
+    the same three tests failed the same way with it. Selecting the text
+    leaves what the tests are about - what happens when text is typed over a
+    selection - to real key presses.
     """
-    from selenium.webdriver.common.keys import Keys
-    return (Keys.COMMAND if sys.platform == "darwin" else Keys.CONTROL, "a")
+    element.parent.execute_script(
+        "arguments[0].focus(); arguments[0].select();", element)
 
 
 #: Puts files into a file input the way a person's choice does: the input's

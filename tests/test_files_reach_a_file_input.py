@@ -9,10 +9,11 @@ Two things every browser test leans on, held to one answer in each browser:
   timeout on an empty page: eleven modules on the first full Safari run.
   `tests.browsers` routes it through `upload_by_script` in a Safari run, and
   this holds that what the page reads is the same in all four.
-* **Select All.** Ctrl+A on Windows and Linux, Cmd+A on a Mac, where Ctrl+A
-  moves the caret to the start of the line. Three AP Labeler tests used Ctrl+A,
-  typed `101` into a box that held `1`, read `1011` in Safari and looked like a
-  fault in the page.
+* **Select All.** Ctrl+A moves the caret to the start of the line on a Mac,
+  and Safari's WebDriver does not act on Cmd+A either. Three AP Labeler tests
+  used Ctrl+A, typed `101` into a box that held `1`, read `1011` in Safari and
+  looked like a fault in the page. `select_all(element)` selects by script and
+  the typing that follows is still real key presses.
 
 Served by `http.server`, never `server.py`. Everything here is invented.
 """
@@ -141,7 +142,7 @@ class TheSameThingArrivesInEveryBrowserTests(unittest.TestCase):
             with self.subTest(browser=kind):
                 box = driver.find_element(By.ID, "text")
                 box.click()
-                box.send_keys(*_browsers.select_all())
+                _browsers.select_all(box)
                 box.send_keys("x")
                 self.assertEqual(box.get_attribute("value"), "x")
 
