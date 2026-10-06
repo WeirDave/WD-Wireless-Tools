@@ -91,9 +91,12 @@ class TypingIntoLineSpacingTests(_InABrowser, unittest.TestCase):
         super().setUpClass()
         cls.project = base64.b64encode(_esx()).decode("ascii")
 
+    def _pick_order(self, driver, order):
+        Select(driver.find_element(By.ID, "arOrder")).select_by_value(order)
+
     def _ready(self, driver, order):
         self._open(driver, self.project, "invented-site.esx")
-        Select(driver.find_element(By.ID, "arOrder")).select_by_value(order)
+        self._pick_order(driver, order)
         time.sleep(0.4)
 
     def _state(self, driver):
@@ -180,6 +183,16 @@ class TypingIntoLineSpacingInSafariTests(TypingIntoLineSpacingTests):
     nobody anything; that is how Firefox, Chrome and Edge once went four
     releases untested.
     """
+
+    def _pick_order(self, driver, order):
+        """Safari's WebDriver answers a click on an <option> with "element not
+        interactable" (every test here died on it on the first Safari run),
+        so the choice is made the way the page hears it - the value set and a
+        real `change` event. What is under test is the typing, which still
+        goes through real key presses."""
+        driver.execute_script(
+            "var s = document.getElementById('arOrder'); s.value = arguments[0];"
+            "s.dispatchEvent(new Event('change', { bubbles: true }));", order)
 
     def _each_browser(self):
         if not _browsers.safari_requested():
