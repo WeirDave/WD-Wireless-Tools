@@ -25,6 +25,7 @@ from tests.test_strict_pages_work_in_a_browser import HAVE_SELENIUM
 
 if HAVE_SELENIUM:
     from selenium.webdriver.common.by import By
+    from selenium.common.exceptions import StaleElementReferenceException
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.support.ui import WebDriverWait
 
@@ -76,7 +77,11 @@ class ATallBuilding(BrowserPagesHarness):
         WebDriverWait(drv, 15).until(
             lambda d: d.find_elements(By.ID, "fileInput"))
         drv.find_element(By.ID, "fileInput").send_keys(str(self.esx))
-        WebDriverWait(drv, 30).until(
+        # The example table is rebuilt while the project loads, so a poll can land
+        # on a node that has just been replaced. Safari's WebDriver reports that
+        # as a stale reference instead of "not there yet", and it failed this
+        # module on two CI runs in a row; waiting means asking again.
+        WebDriverWait(drv, 30, ignored_exceptions=(StaleElementReferenceException,)).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, "#arExampleBody tr"))
         time.sleep(0.5)
 
