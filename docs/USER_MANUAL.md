@@ -689,6 +689,22 @@ form.
 > another type first, use **Visual Swap → Quick swap by type**, then delete.
 > Nothing is written until you save, so reopening the file undoes a delete.
 
+### The Attenuation Areas tab
+
+Attenuation areas have their own tab beside **Wall Types**, named as Ekahau
+names them. The tab lists two outdoor presets, **Tree Canopy** (9 to 35 ft,
+1 / 1.3 / 1.5 dB per foot at 2.4 / 5 / 6 GHz) and **Shrubbery, Low Planting**
+(0 to 4 ft, 1.2 / 1.6 / 1.8 dB per foot), and below them the area types the
+project already has, in feet and dB per foot. **+ Add Tree Canopy & Shrubbery**
+puts both in the project's attenuation area list, so they can be drawn over
+outdoor spaces in Ekahau. Quick Walls converts feet to metres on the way in;
+areas already drawn are not changed, and a type with the same name is updated
+in place. Press the save button at the bottom right to write them.
+
+The button is greyed, with the reason beside it, when the project has no
+attenuation area type to copy the file layout from. Add any area type in
+Ekahau once and open the project again.
+
 ### What a wall type holds
 
 - **Name**: the label in Ekahau's wall picker and on the plan. Keep it the

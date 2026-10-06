@@ -179,6 +179,10 @@ function segmentsUsing(wt) {
 
 let esxZip = null;
 let wallTypes = [];
+// Attenuation area types: read from the project, changed only by "Add to
+// project", written back only when changed. See walls-areas.js.
+let areaMember = null, areaDoc = null, areaKey = null, areaTypes = [];
+let areaPresets = [], areaDirty = false;
 let fileName = '';
 let _originalIdMap = {};
 
@@ -405,6 +409,8 @@ async function loadFile(file) {
       }
     }
 
+    await loadAreaTypes();
+
     dropzone.style.display = 'none';
     document.getElementById('dzTopbar').style.display = 'none';
     document.getElementById('editor').classList.add('active');
@@ -562,21 +568,133 @@ function renderAll() {
   renderList();
   refreshWallAudit();
   renderWillWrite();
+  renderAreaPanel();
+}
+
+// ------------------------------------------------- attenuation areas ---
+async function loadAreaTypes() {
+  areaMember = WDAreas.findMember(Object.keys(esxZip.files));
+  areaDoc = null; areaKey = null; areaTypes = []; areaDirty = false;
+  if (areaMember) {
+    try {
+      const doc = JSON.parse(await esxZip.file(areaMember).async('string'));
+      const key = WDAreas.listKey(doc);
+      if (key) { areaDoc = doc; areaKey = key; areaTypes = doc[key]; }
+    } catch (e) { /* unreadable: the panel says it cannot add */ }
+  }
+  if (!areaPresets.length) {
+    try {
+      const r = await fetch('/assets/attenuation-area-presets.json');
+      areaPresets = (await r.json()).presets || [];
+    } catch (e) { areaPresets = []; }
+  }
+}
+
+// Why Add is unavailable, or '' when it is. The control stays visible and says
+// why instead of failing after the click.
+function areaBlockReason() {
+  if (!areaPresets.length) return 'The presets file could not be read.';
+  if (!esxZip) return 'Open a project first.';
+  if (!areaDoc) return 'This project has no readable attenuationAreaTypes.json.';
+  const plan = WDAreas.addPresets(areaTypes, areaPresets, () => 'x');
+  return plan.error || '';
+}
+
+function switchWallsTab(which) {
+  const areas = which === 'areas';
+  document.getElementById('wallsBody').hidden = areas;
+  document.getElementById('areasBody').hidden = !areas;
+  [['tabWalls', !areas], ['tabAreas', areas]].forEach(([id, on]) => {
+    const t = document.getElementById(id);
+    t.classList.toggle('active', on);
+    t.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+
+// Stored per metre; shown per foot, which is how the loss is measured on site.
+const perFt = v => Math.round(v * WDAreas.FT_M * 100) / 100;
+const ftOf = m => Math.round(m / WDAreas.FT_M * 10) / 10;
+
+function areaCard(name, color, meta) {
+  return `
+    <div class="area-card" style="--wall-color:${safeColor(color)}">
+      <div class="wall-swatch"></div>
+      <div class="wall-info">
+        <div class="wall-name-row"><span class="wall-name">${esc(name)}</span></div>
+        <div class="wall-meta">${meta}</div>
+      </div>
+    </div>`;
+}
+
+function renderAreaPanel() {
+  const presets = document.getElementById('areaPresets');
+  if (!presets) return;
+  presets.innerHTML = areaPresets.map(p => {
+    const a = p.attenuationDbPerFt;
+    const have = areaTypes.some(t => String(t && t.name || '').trim().toLowerCase()
+      === p.name.toLowerCase());
+    return areaCard(p.name, p.color,
+      `<span><span class="label">2.4:</span> ${esc(a.TWO)}</span>`
+      + `<span><span class="label">5:</span> ${esc(a.FIVE)}</span>`
+      + `<span><span class="label">6:</span> ${esc(a.SIX)}</span>`
+      + `<span><span class="label">edges:</span> ${esc(p.lowerEdgeFt)}\u2013${esc(p.upperEdgeFt)} ft</span>`
+      + (have ? '<span class="label">in this project</span>' : ''));
+  }).join('');
+
+  document.getElementById('areaList').innerHTML = areaTypes.length
+    ? areaTypes.map(t => {
+      const by = {};
+      (t.propagationProperties || []).forEach(p => { by[p.band] = p.attenuationFactor; });
+      const att = b => by[b] == null ? '\u2014' : perFt(by[b]);
+      const lo = Number.isFinite(t.lowerEdge) ? ftOf(t.lowerEdge) : '?';
+      const hi = Number.isFinite(t.upperEdge) ? ftOf(t.upperEdge) : '?';
+      return areaCard(t.name, t.color,
+        `<span><span class="label">2.4:</span> ${esc(att('TWO'))}</span>`
+        + `<span><span class="label">5:</span> ${esc(att('FIVE'))}</span>`
+        + `<span><span class="label">6:</span> ${esc(att('SIX'))}</span>`
+        + `<span><span class="label">edges:</span> ${esc(lo)}\u2013${esc(hi)} ft</span>`);
+    }).join('')
+    : '<p class="pb-lead">This project has no attenuation area types yet.</p>';
+
+  document.getElementById('areaCount').textContent = areaTypes.length
+    + ' area type' + (areaTypes.length === 1 ? '' : 's');
+  const why = areaBlockReason();
+  document.getElementById('areaAddBtn').disabled = !!why;
+  const note = document.getElementById('areaNote');
+  note.textContent = why;
+  note.classList.toggle('is-missing', !!why && !!esxZip);
+}
+
+function addAreaPresets() {
+  if (areaBlockReason()) return;
+  const plan = WDAreas.addPresets(areaTypes, areaPresets, () => crypto.randomUUID());
+  const changed = plan.added.length + plan.updated.length;
+  if (!changed) { showToast('Those attenuation areas are already in this project', 'success'); return; }
+  areaTypes = plan.types;
+  areaDoc[areaKey] = areaTypes;
+  areaDirty = true;
+  const bits = [];
+  if (plan.added.length) bits.push('added ' + plan.added.join(', '));
+  if (plan.updated.length) bits.push('updated ' + plan.updated.join(', '));
+  showToast(bits.join('; ') + '. Save the .esx to keep it.', 'success');
+  renderAll();
 }
 
 /* The footer says what Save will write, beside the button that writes it -
    the promise the workbench footer makes in every tool that has one. */
-function willWriteText(name, types) {
+function willWriteText(name, types, areaCount) {
   if (!name) return '';
   const keyed = types.filter(wt => wt.keybindNumber >= 1 && wt.keybindNumber <= 9).length;
+  const areas = areaCount == null ? '' : ', ' + areaCount + ' attenuation area type'
+    + (areaCount === 1 ? '' : 's');
   return 'Saves ' + name.replace('.esx', '_modified.esx') + ' with ' + types.length
-    + ' wall type' + (types.length === 1 ? '' : 's') + ' and ' + keyed
+    + ' wall type' + (types.length === 1 ? '' : 's') + areas + ' and ' + keyed
     + ' shortcut' + (keyed === 1 ? '' : 's') + '. Your file is not changed.';
 }
 
 function renderWillWrite() {
   const note = document.getElementById('wallsWillWrite');
-  if (note) note.textContent = willWriteText(fileName, wallTypes);
+  if (note) note.textContent = willWriteText(fileName, wallTypes, areaDirty ? areaTypes.length : null);
 }
 
 function renderHotkeyPanel() {
@@ -1257,6 +1375,9 @@ async function saveEsx() {
   });
   const wtJson = JSON.stringify({ wallTypes: saveTypes }, null, 2);
   esxZip.file('wallTypes.json', wtJson);
+  if (areaDirty && areaMember && areaDoc) {
+    esxZip.file(areaMember, JSON.stringify(areaDoc, null, 2));
+  }
 
   const blob = await esxZip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
   const defaultName = fileName.replace('.esx', '_modified.esx');

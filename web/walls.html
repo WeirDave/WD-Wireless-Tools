@@ -113,10 +113,14 @@
       </button>
     </div>
   </div>
+  <div class="tabs" role="tablist" aria-label="Quick Walls sections">
+    <div class="tab active" id="tabWalls" role="tab" aria-selected="true" data-action="call" data-fn="switchWallsTab" data-arg="walls" title="The project's wall types, keyboard shortcuts and templates">Wall Types</div>
+    <div class="tab" id="tabAreas" role="tab" aria-selected="false" data-action="call" data-fn="switchWallsTab" data-arg="areas" title="Attenuation areas: polygons with a loss per foot and a lower and upper edge, such as a tree canopy or planting bed">Attenuation Areas</div>
+  </div>
   <!-- The workbench shell the file tools share: the 1-9 shortcuts on the
        rail, the project's wall types in the middle, the template in the panel
        on the right, and Save in a footer that says what it will write. -->
-  <div class="pb-body walls-wb">
+  <div class="pb-body walls-wb" id="wallsBody">
 
     <nav class="pb-rail walls-rail" aria-label="Keyboard shortcuts">
       <div class="pb-rail-head">Keyboard shortcuts</div>
@@ -171,6 +175,27 @@
         </div>
       </section>
     </aside>
+  </div>
+
+  <div class="pb-body areas-wb" id="areasBody" hidden>
+    <main class="pb-main walls-main">
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <span id="areaCount" class="wall-count"></span>
+          <button class="btn" id="areaAddBtn" data-action="call" data-fn="addAreaPresets">+ Add Tree Canopy &amp; Shrubbery</button>
+          <span class="template-bar-auto-note" id="areaNote"></span>
+        </div>
+      </div>
+      <p class="pb-lead">Attenuation areas are drawn as polygons in Ekahau, each with a loss
+        per foot and a lower and upper edge &mdash; a tree canopy, a planting bed, a hedge.
+        The two presets below are the outdoor ones kept here so they are not forgotten.
+        Adding them makes them available in Ekahau's attenuation area list; areas already
+        drawn are not touched. Shown in feet and dB per foot, at 2.4 / 5 / 6 GHz.</p>
+      <div class="wall-group-header">Presets</div>
+      <div id="areaPresets" class="wall-list"></div>
+      <div class="wall-group-header">In this project</div>
+      <div id="areaList" class="wall-list"></div>
+    </main>
   </div>
 
   <footer class="pb-footer">
@@ -496,6 +521,7 @@
 <script src="/assets/js/wd-shared.js"></script>
 <script src="/assets/js/wd-dev.js"></script>
 <script src="/assets/js/wd-dev-actions.js"></script>
+<script src="/assets/js/walls-areas.js"></script>
 <script src="/assets/js/walls.js"></script>
 <script src="/assets/js/walls-swap.js"></script>
 </body>

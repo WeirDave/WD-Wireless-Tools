@@ -74,7 +74,7 @@ class TheShell(unittest.TestCase):
 
 PROBE = r"""
 const src = require('fs').readFileSync(process.argv[1], 'utf8');
-const a = src.indexOf('function willWriteText(name, types) {');
+const a = src.indexOf('function willWriteText(name, types');
 if (a < 0) throw new Error('willWriteText moved');
 let b = a, depth = 0, seen = false;
 while (b < src.length && !(seen && depth === 0)) {
@@ -87,6 +87,7 @@ console.log(JSON.stringify({
   none: willWriteText('', [t(1)]),
   some: willWriteText('invented.esx', [t(1), t(2), t(0), t(12), {}]),
   one: willWriteText('invented.esx', [t(3)]),
+  areas: willWriteText('invented.esx', [t(3)], 2),
 }));
 """
 
@@ -111,6 +112,11 @@ class TheFooterSaysWhatSaveWrites(unittest.TestCase):
         """Save drops a keybind outside 1-9, so the sentence does not count one."""
         self.assertIn("5 wall types and 2 shortcuts", self.out["some"])
         self.assertIn("1 wall type and 1 shortcut.", self.out["one"])
+
+    def test_it_names_attenuation_areas_only_when_it_will_write_them(self):
+        self.assertIn("1 wall type, 2 attenuation area types and 1 shortcut.",
+                      self.out["areas"])
+        self.assertNotIn("attenuation", self.out["one"])
 
     def test_it_promises_only_a_copy(self):
         self.assertIn("Your file is not changed", self.out["some"])
