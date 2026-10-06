@@ -8225,6 +8225,7 @@
     var minDim = Math.min(W, H);
 
     var cellsSvg = '', ringsSvg = '', pinsSvg = '';
+    var pinList = [];
     aps.forEach(function (ap) {
       var c = ap.location && ap.location.coord;
       if (!c || !indexById[ap.id]) return;
@@ -8255,11 +8256,47 @@
       var covPadX = minDim * 0.006;
       var covBoxW = Math.max(minDim * 0.03, covLabel.length * covFont * 0.65) + covPadX * 2;
       var covBoxH = Math.max(minDim * 0.028, covFont * 1.5);
-      var covCornerR = minDim * 0.005;
-      pinsSvg += '<g class="rep-cov-mark" transform="translate(' + c.x + ',' + c.y + ')">';
-      pinsSvg += '<rect class="rep-cov-dot" x="' + (-covBoxW / 2) + '" y="' + (-covBoxH / 2) + '" width="' + covBoxW + '" height="' + covBoxH + '" rx="' + covCornerR + '" ry="' + covCornerR + '" fill="' + color + '" stroke="#fff" stroke-width="' + (minDim * 0.003) + '"/>';
+      pinList.push({ x: c.x, y: c.y, label: covLabel, color: color, font: covFont,
+                     w: covBoxW, h: covBoxH });
+    });
+
+    /* Numbers that land on one another are pushed apart. In a dense floor two
+       APs a few metres apart drew their boxes on the same spot, and the one
+       drawn first - 105 under 115 - was gone, with its row in the table still
+       pointing at it. Each box takes the nearest free slot around its AP and,
+       when it has moved, a thin line says which AP it belongs to. */
+    var placedBoxes = [];
+    var covCornerR = minDim * 0.005;
+    function boxHits(b) {
+      return placedBoxes.some(function (o) {
+        return Math.abs(b.cx - o.cx) < (b.w + o.w) / 2 && Math.abs(b.cy - o.cy) < (b.h + o.h) / 2;
+      });
+    }
+    pinList.forEach(function (pin) {
+      var box = { cx: pin.x, cy: pin.y, w: pin.w, h: pin.h };
+      var moved = false;
+      if (boxHits(box)) {
+        var tries = [];
+        for (var ring = 1; ring <= 4; ring++) {
+          [[0, 1], [0, -1], [1, 0], [-1, 0], [1, 1], [-1, 1], [1, -1], [-1, -1]].forEach(function (d) {
+            tries.push({ cx: pin.x + d[0] * ring * pin.w * 1.1, cy: pin.y + d[1] * ring * pin.h * 1.1,
+                         w: pin.w, h: pin.h });
+          });
+        }
+        for (var t = 0; t < tries.length; t++) {
+          if (!boxHits(tries[t])) { box = tries[t]; moved = true; break; }
+        }
+      }
+      placedBoxes.push(box);
+      if (moved) {
+        pinsSvg += '<line class="rep-cov-lead" x1="' + pin.x + '" y1="' + pin.y + '" x2="' + box.cx + '" y2="' + box.cy
+          + '" stroke="' + pin.color + '" stroke-width="' + (minDim * 0.003) + '"/>'
+          + '<circle cx="' + pin.x + '" cy="' + pin.y + '" r="' + (minDim * 0.004) + '" fill="' + pin.color + '"/>';
+      }
+      pinsSvg += '<g class="rep-cov-mark" transform="translate(' + box.cx + ',' + box.cy + ')">';
+      pinsSvg += '<rect class="rep-cov-dot" x="' + (-pin.w / 2) + '" y="' + (-pin.h / 2) + '" width="' + pin.w + '" height="' + pin.h + '" rx="' + covCornerR + '" ry="' + covCornerR + '" fill="' + pin.color + '" stroke="#fff" stroke-width="' + (minDim * 0.003) + '"/>';
       if (showLabels) {
-        pinsSvg += '<text class="rep-cov-num" y="' + (covFont * 0.35) + '" text-anchor="middle" font-size="' + covFont + '" fill="#fff" font-weight="700">' + covLabel + '</text>';
+        pinsSvg += '<text class="rep-cov-num" y="' + (pin.font * 0.35) + '" text-anchor="middle" font-size="' + pin.font + '" fill="#fff" font-weight="700">' + pin.label + '</text>';
       }
       pinsSvg += '</g>';
     });
@@ -9548,7 +9585,7 @@
       noApFilter: true,
       sections: [
         { icon: '📄', title: 'Cover page',
-          description: 'Site name, interferer count, your logo, survey date.' },
+          description: 'Site name, interferer count, your cover image, date generated.' },
         { icon: '📊', title: 'Summary strip',
           description: 'Total, high-severity count, and per-category counts (iPhone / Android / Carrier / Wide-channel).' },
         { icon: '🗺️', title: 'Per-floor detection map',

@@ -394,5 +394,78 @@ class AnEmptyProjectSaysSo(ReportCase):
         """)
 
 
+class CoverageIsHonestAboutWhatItDraws(ReportCase):
+
+    def test_two_aps_on_one_spot_get_two_readable_numbers(self):
+        self.run_block(r"""
+          const p = project();
+          // Zed-AP1 is at (100,100) on fA; put another AP exactly on it.
+          p.accessPoints.push({ id: 'twin', name: 'Twin-AP', location: { floorPlanId: 'fA', coord: { x: 100, y: 100 } }, noteIds: [] });
+          p.radios.push({ id: 'rt', accessPointId: 'twin', radioTechnology: 'IEEE802_11', antennaTypeId: 'omni1',
+            transmitPower: 15, channelByCenterFrequencyDefinedNarrowChannels: [5180] });
+          open(p);
+          const html = render('coverage', {});
+          const ground = floorPart(html, 'data-floor-id="fA"', 'data-floor-id="fB"');
+          const spots = (ground.match(/class="rep-cov-mark" transform="translate\(([^)]*)\)"/g) || []);
+          eq('every AP has a number box', spots.length, 7);
+          eq('no two boxes on the same spot', new Set(spots).size, spots.length);
+          check('the moved one says which AP it belongs to', ground.indexOf('class="rep-cov-lead"') >= 0);
+        """)
+
+    def test_a_default_is_starred_not_printed_as_a_stored_value(self):
+        self.run_block(r"""
+          open();                                  // Zed-AP2 has transmitPower null
+          const html = render('coverage', {});
+          const row = floorPart(html, 'Zed-AP2<', '</tr>');
+          check('the assumed power carries a star: ' + row, /15 dBm\*/.test(row));
+          const stored = floorPart(html, 'Zed-AP1<', '</tr>');
+          check('a stored power does not', /20 dBm</.test(stored) && stored.indexOf('dBm*') < 0);
+          check('the page says what the star means', /stores no value for this/.test(html));
+        """)
+
+    def test_a_floor_with_no_scale_draws_no_invented_cell(self):
+        self.run_block(r"""
+          const p = project();
+          delete p.floorPlans[1].metersPerUnit;
+          open(p);
+          const html = render('coverage', {});
+          const upper = floorPart(html, 'data-floor-id="fB"');
+          check('no cell circles on the unscaled floor', upper.split('Methodology')[0].indexOf('class="rep-cov-cell"') < 0);
+          check('the numbers are still there', upper.indexOf('class="rep-cov-mark"') >= 0);
+          check('it says why: ', /has no scale/.test(upper));
+          const ground = floorPart(html, 'data-floor-id="fA"', 'data-floor-id="fB"');
+          check('a scaled floor still draws its cells', ground.indexOf('class="rep-cov-cell"') >= 0);
+        """)
+
+    def test_only_aps_that_are_drawn_are_numbered_and_the_rest_are_named(self):
+        self.run_block(r"""
+          const p = project();
+          p.accessPoints.push({ id: 'bare', name: 'Bare-AP', location: { floorPlanId: 'fA', coord: { x: 10, y: 10 } }, noteIds: [] });
+          p.accessPoints.push({ id: 'adrift', name: 'Adrift-AP', noteIds: [] });
+          p.radios.push({ id: 'ra', accessPointId: 'adrift', radioTechnology: 'IEEE802_11', antennaTypeId: 'omni1' });
+          open(p);
+          const html = render('coverage', {});
+          const nums = (html.match(/<td class="rep-num">(\d+)<\/td>/g) || []).map(x => +x.replace(/\D/g, ''));
+          eq('the table numbers run 1..n with no gap', nums, nums.map((_, i) => i + 1));
+          check('both are named under the table: ' + html.slice(html.indexOf('Not on the map'), html.indexOf('Not on the map') + 200),
+                /Not on the map \(2\)/.test(html) && html.indexOf('Bare-AP \u2014 no radio') >= 0
+                && html.indexOf('Adrift-AP \u2014 on no floor plan') >= 0);
+        """)
+
+    def test_a_tri_band_ap_is_drawn_from_its_5_ghz_radio_and_says_so(self):
+        self.run_block(r"""
+          const p = project();
+          // Zed-AP1: add a 2.4 GHz radio BEFORE its 5 GHz one in file order, and a 6 GHz one.
+          p.radios.unshift({ id: 'r24', accessPointId: 'ap1', radioTechnology: 'IEEE802_11', antennaTypeId: 'omni1',
+            transmitPower: 20, channelByCenterFrequencyDefinedNarrowChannels: [2412] });
+          p.radios.push({ id: 'r6', accessPointId: 'ap1', radioTechnology: 'IEEE802_11', antennaTypeId: 'omni1',
+            transmitPower: 20, channelByCenterFrequencyDefinedNarrowChannels: [5975] });
+          open(p);
+          const row = floorPart(render('coverage', {}), 'Zed-AP1<', '</tr>');
+          check('5 GHz, not the first-listed 2.4: ' + row, row.indexOf('5 GHz') >= 0 && row.indexOf('2.4 GHz') < 0);
+          check('it names how many radios there are', /1 of 3 radios/.test(row));
+        """)
+
+
 if __name__ == "__main__":
     unittest.main()
