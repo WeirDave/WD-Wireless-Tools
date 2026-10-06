@@ -33,6 +33,11 @@ def main() -> int:
         print("%-18s: %s" % (kind,
                              found if browsers.installed(kind)
                              else "not found"))
+    print("%-18s: %s" % ("safari",
+                           browsers.SAFARIDRIVER if browsers.safari_available()
+                           else ("asked for, NOT drivable here"
+                                 if browsers.safari_requested()
+                                 else "not requested")))
     have = browsers.available()
     print("drivable          :", ", ".join(have) if have else "none")
     if not have:

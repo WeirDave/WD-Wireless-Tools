@@ -143,6 +143,34 @@ def installed(kind: str) -> bool:
     return find(kind) != NOT_INSTALLED
 
 
+#: Where macOS keeps Safari's WebDriver. Safari has no binary to point a
+#: driver at and no headless mode - `safaridriver` drives the one installed
+#: Safari in the logged-in desktop session - so it does not fit `_WHERE`.
+SAFARIDRIVER = "/usr/bin/safaridriver"
+
+
+def safari_requested() -> bool:
+    """True only when `WD_BROWSERS` names Safari.
+
+    Opt-in, never a default. Safari is deliberately not in `triple()`:
+    every test module builds its drivers from that list and falls through to
+    Edge for any name it does not know, so adding Safari there would launch
+    Edge under Safari's name. A laptop with no `WD_BROWSERS` also should not
+    have a Safari window appear in the middle of the suite. The Safari job
+    asks for it by name and runs the modules that know how to drive it.
+    """
+    if not wanted():
+        return False
+    raw = os.environ.get(ONLY, "").strip().lower()
+    return "safari" in {k.strip() for k in raw.split(",")}
+
+
+def safari_available() -> bool:
+    """Requested, on a Mac, and `safaridriver` is there."""
+    return (safari_requested() and sys.platform == "darwin"
+            and Path(SAFARIDRIVER).is_file())
+
+
 def available() -> list:
     """Which of the three this machine can actually drive."""
     return [k for k in ("firefox", "chrome", "edge") if installed(k)]
@@ -168,6 +196,10 @@ def why_missing() -> str:
     if not wanted():
         return ("browser tests are switched off in this run (%s=off); "
                 "CI runs them in a job of their own" % SWITCH)
+    if safari_requested() and not safari_available():
+        return ("Safari was asked for (%s) but %s is not here - Safari can "
+                "only be driven on macOS, after `sudo safaridriver --enable`"
+                % (ONLY, SAFARIDRIVER))
     if set(_WHERE) - chosen():
         return ("this run drives only %s (%s); the other browsers are "
                 "tested in their own jobs"
