@@ -202,12 +202,25 @@ class AddOneTypeTests(unittest.TestCase):
         self.assertIn("error", self.add([]))
 
 
-# The page: load a project that has the file, press Add, press Save, read the
-# member back out of the archive that Save generated.
-PAGE_PROBE = r"""
+# --- the page ---------------------------------------------------------------
+#
+# The whole attenuation-area section of walls.js is loaded into Node against a
+# recording fake of the page, and driven through the controls' own handlers:
+# each handler is pulled out of the markup the real render function produced
+# (tests/delegated.py), not found by name.
+
+PAGE_PRELUDE = r"""
 const fs = require('fs');
 globalThis.WDAreas = require(process.argv[1]);
 const src = fs.readFileSync(process.argv[2], 'utf8');
+const html = fs.readFileSync(process.argv[3], 'utf8');
+eval(DELEGATED);
+
+function between(a, b) {
+  const i = src.indexOf(a), j = src.indexOf(b);
+  if (i < 0 || j < 0) throw new Error('moved: ' + (i < 0 ? a : b));
+  return src.slice(i, j);
+}
 function slice(open) {
   const a = src.indexOf(open);
   if (a < 0) throw new Error('moved: ' + open);
@@ -218,7 +231,37 @@ function slice(open) {
   }
   return src.slice(a, b);
 }
-const members = {'attenuationAreaTypes.json': JSON.stringify({attenuationAreaTypes: [EXISTING]})};
+
+const els = {};
+const el = id => els[id] || (els[id] = {id, value: '', hidden: false, disabled: false,
+  textContent: '', innerHTML: '', attrs: {}, classes: new Set(), focused: false,
+  classList: {add(c) { els[id].classes.add(c); }, remove(c) { els[id].classes.delete(c); },
+              toggle(c, on) { on ? els[id].classes.add(c) : els[id].classes.delete(c); }},
+  setAttribute(k, v) { els[id].attrs[k] = v; }, focus() { els[id].focused = true; }});
+globalThis.document = {getElementById: el};
+const attr = x => String(x).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+  .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+globalThis.esc = attr; globalThis.escAttr = attr; globalThis.safeColor = c => c;
+
+const toasts = []; globalThis.showToast = (m, k) => toasts.push([m, k || '']);
+const confirms = []; let confirmAnswer = true;
+globalThis.confirm = m => { confirms.push(m); return confirmAnswer; };
+globalThis.renderAll = () => renderAreaPanel();
+let uuid = 0; globalThis.crypto = {randomUUID: () => 'new-' + (++uuid)};
+
+const calls = [];            // every request the page made to the server
+let serverReply = body => ({ok: true, presets: PRESETS});
+globalThis.fetch = async (url, init) => {
+  const body = init && init.body ? JSON.parse(init.body) : {};
+  calls.push({url, body});
+  const reply = serverReply(url, body);
+  return {json: async () => reply};
+};
+
+const members = {
+  'attenuationAreaTypes.json': JSON.stringify({attenuationAreaTypes: TYPES}),
+};
+if (typeof DRAWN !== 'undefined') members['attenuationAreas.json'] = DRAWN;
 const written = {};
 globalThis.esxZip = {
   files: members,
@@ -229,233 +272,349 @@ globalThis.esxZip = {
   },
   generateAsync: async () => 'blob',
 };
-globalThis.fileName = 'x.esx';
-globalThis.wallTypes = [];
+globalThis.fileName = 'x.esx'; globalThis.wallTypes = [];
 globalThis.areaMember = null; globalThis.areaDoc = null; globalThis.areaKey = null;
 globalThis.areaTypes = []; globalThis.areaPresets = []; globalThis.areaDirty = false;
-const toasts = [];
-globalThis.showToast = (m) => toasts.push(m);
-globalThis.document = {getElementById: () => null};
-globalThis.fetch = async () => ({json: async () => PRESETS});
-globalThis.crypto = {randomUUID: (() => { let i = 0; return () => 'u-' + (++i); })()};
-globalThis.safeColor = c => c; globalThis.esc = x => x;
-globalThis.renderAll = () => {}; globalThis.nativeSave = async () => 'saved';
-globalThis.revealSourceFolder = () => {};
-eval(slice('async function loadAreaTypes') + slice('function areaProjectBlock') + slice('function areaBlockReason')
-   + slice('function addAreaPresets') + slice('async function saveEsx'));
-globalThis.loadAreaTypes = loadAreaTypes; globalThis.areaBlockReason = areaBlockReason;
-globalThis.addAreaPresets = addAreaPresets; globalThis.saveEsx = saveEsx;
-(async () => {
-  await loadAreaTypes();
-  const before = areaBlockReason();
-  await saveEsx();
-  const savedUntouched = 'attenuationAreaTypes.json' in written;
-  // The control is found in the real page and its own declared handler is the
-  // one that runs, so a misnamed or missing data-fn is a failure here.
-  const html = fs.readFileSync(process.argv[3], 'utf8');
-  eval(DELEGATED);
-  const hit = delegated(html, 'addAreaPresets');
-  if (!hit) throw new Error('no control on walls.html names addAreaPresets');
-  const reachable = typeof globalThis[hit.fn] === 'function';
-  const order = html.indexOf('walls-areas.js') >= 0
-    && html.indexOf('walls-areas.js') < html.indexOf('/assets/js/walls.js');
-  globalThis[hit.fn].apply(null, hit.args);
-  await saveEsx();
-  const out = JSON.parse(written['attenuationAreaTypes.json']);
-  console.log(JSON.stringify({before, savedUntouched, toasts, reachable, order,
-    names: out.attenuationAreaTypes.map(t => t.name)}));
-})().catch(e => { console.error(e.stack); process.exit(1); });
-"""
+globalThis.areaEditing = -1; globalThis.areaUsage = {}; globalThis.areaUsageKnown = false;
+globalThis.nativeSave = async () => 'saved'; globalThis.revealSourceFolder = () => {};
 
+eval(between('async function areaPresetCall', '/* The footer says what Save will write')
+   .replace(/^/, '')
+   + slice('async function saveEsx'));
+const G = n => eval(n);       // the page's own functions, by name
+// The perFt / ftOf helpers are consts in the section, so they are in scope here.
 
-@unittest.skipUnless(shutil.which("node"), "node is required")
-class ThePageAddsAndSavesTests(unittest.TestCase):
-    def test_add_then_save_writes_the_member_and_unchanged_save_does_not(self):
-        script = (f"const EXISTING = {json.dumps(EXISTING_TYPE)};"
-                  f"const PRESETS = {PRESETS.read_text(encoding='utf-8')}.presets;"
-                  f"const DELEGATED = {json.dumps(DELEGATED_JS)};{PAGE_PROBE}")
-        # PAGE_PROBE reads argv[1]/argv[2]; PRESETS is the list the fetch stub returns.
-        script = script.replace("fetch = async () => ({json: async () => PRESETS})",
-                                "fetch = async () => ({json: async () => ({presets: PRESETS})})")
-        proc = subprocess.run(["node", "-e", script, str(AREAS_JS), str(WALLS_JS), str(WALLS_HTML)],
-                              capture_output=True, text=True, encoding="utf-8",
-                              timeout=NODE_TIMEOUT_S)
-        if proc.returncode != 0:
-            raise AssertionError((proc.stdout + proc.stderr).strip())
-        r = json.loads(proc.stdout)
-        self.assertEqual(r["before"], "", "Add must be available on a project that has the file")
-        self.assertFalse(r["savedUntouched"], "Save rewrote the member although nothing changed")
-        self.assertEqual(r["names"], ["Invented Hedge", "Tree Canopy", "Shrubbery/Low Plants"])
-
-        self.assertTrue(r["reachable"], "the control's handler is not a function")
-        self.assertTrue(r["order"], "walls.js uses WDAreas, so walls-areas.js must load first")
-
-
-TAB_PROBE = r"""
-const fs = require('fs');
-globalThis.WDAreas = require(process.argv[1]);
-const src = fs.readFileSync(process.argv[2], 'utf8');
-function slice(open) {
-  const a = src.indexOf(open);
-  if (a < 0) throw new Error('moved: ' + open);
-  let b = a, depth = 0, seen = false;
-  while (b < src.length && !(seen && depth === 0)) {
-    if (src[b] === '{') { depth++; seen = true; } else if (src[b] === '}') depth--;
-    b++;
-  }
-  return src.slice(a, b);
+// The control for `fn`, found in the markup the render produced, then run.
+async function click(container, fn, ...more) {
+  const hit = delegated(el(container).innerHTML, fn);
+  if (!hit) throw new Error('no control in #' + container + ' names ' + fn);
+  if (hit.disabled) return {disabled: true};
+  const out = G(hit.fn)(...hit.args, ...more);
+  if (out && out.then) await out;
+  return {disabled: false, args: hit.args};
 }
-const els = {};
-const el = id => els[id] || (els[id] = {id, hidden: false, innerHTML: '', textContent: '',
-  disabled: false, attrs: {}, on: {},
-  classList: {toggle(c, on) { els[id].on[c] = on; }},
-  setAttribute(k, v) { els[id].attrs[k] = v; }});
-globalThis.document = {getElementById: el};
-globalThis.esc = x => String(x); globalThis.safeColor = c => c;
-globalThis.esxZip = {};
-globalThis.areaDoc = {}; globalThis.areaTypes = [EXISTING]; globalThis.areaPresets = PRESETS;
-const consts = src.match(/const perFt = [^\n]*\nconst ftOf = [^\n]*\n/)[0];
-eval(consts + slice('function switchWallsTab') + slice('function areaCard')
-   + slice('function areaProjectBlock') + slice('function areaBlockReason') + slice('function renderAreaPanel'));
-renderAreaPanel();
-const before = {list: el('areaList').innerHTML, presets: el('areaPresets').innerHTML,
-                count: el('areaCount').textContent, disabled: el('areaAddBtn').disabled};
-switchWallsTab('areas');
-const onAreas = {walls: el('wallsBody').hidden, areas: el('areasBody').hidden,
-                 tab: el('tabAreas').attrs['aria-selected']};
-switchWallsTab('walls');
-console.log(JSON.stringify({before, onAreas, back: {walls: el('wallsBody').hidden,
-  areas: el('areasBody').hidden}}));
 """
 
 
-@unittest.skipUnless(shutil.which("node"), "node is required")
+def page(body: str, types=None, drawn=None, presets=None):
+    """Run `body` in Node against the page; it must `console.log(JSON.stringify(..))`."""
+    prelude = (f"const TYPES = {json.dumps(types if types is not None else [EXISTING_TYPE])};"
+               f"const PRESETS = {json.dumps(presets if presets is not None else PRESET_LIST)};"
+               f"const DELEGATED = {json.dumps(DELEGATED_JS)};")
+    if drawn is not None:
+        prelude += f"const DRAWN = {json.dumps(json.dumps(drawn))};"
+    script = f"{prelude}{PAGE_PRELUDE}(async () => {{ try {{ {body} }} catch (e) {{ console.error(e.stack); process.exit(1); }} }})();"
+    proc = subprocess.run(["node", "-e", script, str(AREAS_JS), str(WALLS_JS), str(WALLS_HTML)],
+                          capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
+    if proc.returncode != 0:
+        raise AssertionError((proc.stdout + proc.stderr).strip())
+    return json.loads(proc.stdout.strip().splitlines()[-1])
+
+
+BUILTIN = {"name": "Invented Canopy", "color": "#102030", "lowerEdgeFt": 9, "upperEdgeFt": 35,
+           "attenuationDbPerFt": {"TWO": 1, "FIVE": 1.3, "SIX": 1.5}, "builtin": True}
+KEPT = {"name": "Invented Reeds", "color": "#405060", "lowerEdgeFt": 0, "upperEdgeFt": None,
+        "attenuationDbPerFt": {"TWO": 0.5, "FIVE": 0.75, "SIX": 1.25}, "builtin": False}
+PRESET_LIST = [BUILTIN, KEPT]
+NODE = unittest.skipUnless(shutil.which("node"), "node is required")
+
+
+@NODE
+class SavingTests(unittest.TestCase):
+    def test_a_save_writes_the_member_only_when_something_changed(self):
+        r = page("""
+          await loadAreaTypes();
+          await G('saveEsx')();
+          const untouched = 'attenuationAreaTypes.json' in written;
+          await click('areasBody', 'x').catch(() => {});
+          const hit = delegated(html, 'openAreaModal');
+          G('openAreaModal')();
+          el('aName').value = 'Invented Marsh';
+          G('saveAreaType')();
+          await G('saveEsx')();
+          const out = JSON.parse(written['attenuationAreaTypes.json']);
+          console.log(JSON.stringify({untouched, names: out.attenuationAreaTypes.map(t => t.name)}));
+        """)
+        self.assertFalse(r["untouched"])
+        self.assertEqual(r["names"], ["Invented Hedge", "Invented Marsh"])
+
+    def test_every_dialog_control_is_declared_in_the_page(self):
+        r = page("""
+          const reach = {};
+          ['openAreaModal', 'saveAreaType', 'closeAreaModal', 'addAreaPresets']
+            .forEach(fn => { const h = delegated(html, fn); reach[fn] = !!h && typeof G(fn) === 'function'; });
+          console.log(JSON.stringify(reach));
+        """)
+        self.assertEqual(r, {"openAreaModal": True, "saveAreaType": True,
+                             "closeAreaModal": True, "addAreaPresets": True})
+
+
+@NODE
+class TheDialogTests(unittest.TestCase):
+    def test_add_refuses_a_duplicate_in_the_dialog_then_adds(self):
+        r = page("""
+          await loadAreaTypes();
+          G('openAreaModal')();
+          const opened = el('areaModal').classes.has('active');
+          const title = el('aTitle').textContent;
+          el('aName').value = 'invented hedge';
+          G('saveAreaType')();
+          const dup = {error: el('aError').textContent, shown: !el('aError').hidden,
+                       open: el('areaModal').classes.has('active'), n: areaTypes.length, dirty: areaDirty};
+          el('aName').value = 'Invented Reeds'; el('aUpper').value = ''; el('aTwo').value = '0.5';
+          G('saveAreaType')();
+          const added = areaTypes[areaTypes.length - 1];
+          console.log(JSON.stringify({opened, title, dup, n: areaTypes.length, dirty: areaDirty,
+            open: el('areaModal').classes.has('active'), hasUpper: 'upperEdge' in added,
+            twoPerM: added.propagationProperties.find(p => p.band === 'TWO').attenuationFactor,
+            toast: toasts[toasts.length - 1][0]}));
+        """)
+        self.assertTrue(r["opened"])
+        self.assertEqual(r["title"], "Add Attenuation Area")
+        self.assertIn("already has", r["dup"]["error"])
+        self.assertTrue(r["dup"]["shown"] and r["dup"]["open"])
+        self.assertEqual((r["dup"]["n"], r["dup"]["dirty"]), (1, False))
+        self.assertEqual((r["n"], r["dirty"], r["open"]), (2, True, False))
+        self.assertFalse(r["hasUpper"], "an empty upper edge is Auto")
+        self.assertAlmostEqual(r["twoPerM"], 0.5 / 0.3048, places=3)
+        self.assertIn("Save the .esx", r["toast"])
+
+    def test_edit_opens_filled_in_feet_and_saves_the_change_keeping_the_id(self):
+        drawn = dict(EXISTING_TYPE, id="id-feet", name="Invented Feet", lowerEdge=2.7432000000000003,
+                     upperEdge=10.668, propagationProperties=[
+                         {"band": b, "attenuationFactor": v, "reflectionCoefficient": 0.5,
+                          "diffractionCoefficient": 11}
+                         for b, v in (("TWO", 3.2808), ("SIX", 4.9213), ("FIVE", 4.2651))])
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          await click('areaList', 'editAreaType');
+          const filled = ['aName', 'aColor', 'aLower', 'aUpper', 'aTwo', 'aFive', 'aSix']
+            .map(id => el(id).value);
+          const title = [el('aTitle').textContent, el('aSaveBtn').textContent];
+          el('aFive').value = '2'; el('aName').value = 'Invented Feet 2';
+          G('saveAreaType')();
+          const t = areaTypes[0];
+          console.log(JSON.stringify({filled, title, id: t.id, name: t.name, n: areaTypes.length,
+            dirty: areaDirty, open: el('areaModal').classes.has('active'),
+            lower: t.lowerEdge, five: t.propagationProperties.find(p => p.band === 'FIVE').attenuationFactor,
+            two: t.propagationProperties.find(p => p.band === 'TWO').attenuationFactor}));
+        """, types=[drawn])
+        self.assertEqual(r["filled"], ["Invented Feet", "#112233", "9", "35", "1", "1.3", "1.5"])
+        self.assertEqual(r["title"], ["Edit Attenuation Area", "Save"])
+        self.assertEqual((r["id"], r["name"], r["n"]), ("id-feet", "Invented Feet 2", 1))
+        self.assertTrue(r["dirty"] and not r["open"])
+        self.assertAlmostEqual(r["five"], 2 / 0.3048, places=3)
+        # Untouched values keep the exact numbers Ekahau stored.
+        self.assertEqual(r["lower"], 2.7432000000000003)
+        self.assertEqual(r["two"], 3.2808)
+
+    def test_opening_and_saving_an_edit_changes_nothing(self):
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          await click('areaList', 'editAreaType');
+          G('saveAreaType')();
+          console.log(JSON.stringify({dirty: areaDirty, same: JSON.stringify(areaTypes) === JSON.stringify(TYPES),
+            open: el('areaModal').classes.has('active'), toast: toasts[toasts.length - 1][0]}));
+        """)
+        self.assertFalse(r["dirty"])
+        self.assertTrue(r["same"])
+        self.assertFalse(r["open"])
+        self.assertIn("Nothing changed", r["toast"])
+
+    def test_edit_refuses_a_name_another_area_has_and_stays_open(self):
+        other = dict(EXISTING_TYPE, id="id-other", name="Invented Other")
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          await click('areaList', 'editAreaType');
+          el('aName').value = 'invented other';
+          G('saveAreaType')();
+          console.log(JSON.stringify({error: el('aError').textContent, open: el('areaModal').classes.has('active'),
+            dirty: areaDirty, name: areaTypes[0].name}));
+        """, types=[EXISTING_TYPE, other])
+        self.assertIn("another attenuation area", r["error"])
+        self.assertTrue(r["open"])
+        self.assertFalse(r["dirty"])
+        self.assertEqual(r["name"], "Invented Hedge")
+
+
+@NODE
+class DeleteTests(unittest.TestCase):
+    USED = {"attenuationAreas": [{"id": "a1", "attenuationAreaTypeId": "id-existing", "floorPlanId": "f",
+                                  "area": []}] * 3}
+
+    def test_an_unused_type_is_removed_after_naming_it(self):
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          const hit = await click('areaList', 'deleteAreaType');
+          console.log(JSON.stringify({disabled: hit.disabled, n: areaTypes.length, dirty: areaDirty,
+            asked: confirms, inDoc: areaDoc.attenuationAreaTypes.length}));
+        """, drawn={"attenuationAreas": []})
+        self.assertFalse(r["disabled"])
+        self.assertEqual((r["n"], r["dirty"], r["inDoc"]), (0, True, 0))
+        self.assertEqual(len(r["asked"]), 1)
+        self.assertIn("Invented Hedge", r["asked"][0])
+
+    def test_a_type_that_drawn_areas_use_cannot_be_deleted_and_says_how_many(self):
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          const tag = el('areaList').innerHTML.match(/<button[^>]*deleteAreaType[^>]*>/)[0];
+          const hit = await click('areaList', 'deleteAreaType');
+          G('deleteAreaType')(0);          // even called directly, it refuses
+          console.log(JSON.stringify({disabled: hit.disabled, title: (tag.match(/title="([^"]*)"/) || [])[1],
+            n: areaTypes.length, dirty: areaDirty, asked: confirms.length,
+            drawn: /drawn:<\\/span> 3/.test(el('areaList').innerHTML),
+            toast: toasts[toasts.length - 1]}));
+        """, drawn=self.USED)
+        self.assertTrue(r["disabled"])
+        self.assertIn("3 drawn areas use this type", r["title"])
+        self.assertEqual((r["n"], r["dirty"], r["asked"]), (1, False, 0))
+        self.assertTrue(r["drawn"])
+        self.assertEqual(r["toast"][1], "error")
+
+    def test_when_it_cannot_tell_what_is_drawn_it_will_not_delete(self):
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          const hit = await click('areaList', 'deleteAreaType');
+          console.log(JSON.stringify({disabled: hit.disabled, known: areaUsageKnown, n: areaTypes.length}));
+        """, drawn="not json")
+        self.assertTrue(r["disabled"])
+        self.assertFalse(r["known"])
+        self.assertEqual(r["n"], 1)
+
+    def test_declining_the_question_removes_nothing(self):
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          confirmAnswer = false;
+          await click('areaList', 'deleteAreaType');
+          console.log(JSON.stringify({n: areaTypes.length, dirty: areaDirty}));
+        """, drawn={"attenuationAreas": []})
+        self.assertEqual((r["n"], r["dirty"]), (1, False))
+
+
+@NODE
+class KeptPresetTests(unittest.TestCase):
+    def test_keep_sends_the_type_in_feet_and_takes_the_servers_list_back(self):
+        drawn = dict(EXISTING_TYPE, id="id-feet", name="Invented Feet", color="#aa5500", lowerEdge=0,
+                     upperEdge=1.2192, propagationProperties=[
+                         {"band": b, "attenuationFactor": v, "reflectionCoefficient": 0.5,
+                          "diffractionCoefficient": 11}
+                         for b, v in (("TWO", 3.937), ("SIX", 5.9055), ("FIVE", 5.2493))])
+        r = page("""
+          await loadAreaTypes();
+          const before = areaPresets.length;
+          serverReply = () => ({ok: true, presets: PRESETS.concat([{name: 'Invented Feet', builtin: false,
+            color: '#AA5500', lowerEdgeFt: 0, upperEdgeFt: 4, attenuationDbPerFt: {TWO: 1.2, FIVE: 1.6, SIX: 1.8}}])});
+          G('renderAreaPanel')();
+          await click('areaList', 'keepAreaPreset');
+          const save = calls.filter(c => /area_preset_save/.test(c.url));
+          console.log(JSON.stringify({before, after: areaPresets.length, save: save.map(c => c.body),
+            toast: toasts[toasts.length - 1][0], dirty: areaDirty,
+            listed: /Invented Feet/.test(el('areaPresets').innerHTML)}));
+        """, types=[drawn])
+        self.assertEqual(r["save"], [{"preset": {
+            "name": "Invented Feet", "color": "#aa5500", "lowerEdgeFt": 0, "upperEdgeFt": 4,
+            "attenuationDbPerFt": {"TWO": 1.2, "FIVE": 1.6, "SIX": 1.8}}}])
+        self.assertEqual((r["before"], r["after"]), (2, 3))
+        self.assertTrue(r["listed"])
+        self.assertFalse(r["dirty"], "keeping a preset must not change the project")
+        self.assertIn("Kept", r["toast"])
+
+    def test_a_refusal_from_the_server_is_shown_and_nothing_is_listed(self):
+        r = page("""
+          await loadAreaTypes();
+          serverReply = () => ({ok: false, error: 'It is a built-in preset.'});
+          G('renderAreaPanel')();
+          await click('areaList', 'keepAreaPreset');
+          console.log(JSON.stringify({n: areaPresets.length, toast: toasts[toasts.length - 1]}));
+        """)
+        self.assertEqual(r["n"], 2)
+        self.assertEqual(r["toast"], ["It is a built-in preset.", "error"])
+
+    def test_an_area_with_no_loss_at_a_band_cannot_be_kept(self):
+        broken = dict(EXISTING_TYPE, propagationProperties=[
+            {"band": "TWO", "attenuationFactor": 3, "reflectionCoefficient": 0.5, "diffractionCoefficient": 11}])
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          await click('areaList', 'keepAreaPreset');
+          console.log(JSON.stringify({asked: calls.filter(c => /area_preset_save/.test(c.url)).length,
+            toast: toasts[toasts.length - 1]}));
+        """, types=[broken])
+        self.assertEqual(r["asked"], 0)
+        self.assertEqual(r["toast"][1], "error")
+
+    def test_only_kept_presets_offer_remove_and_it_names_the_preset(self):
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          const html2 = el('areaPresets').innerHTML;
+          const removes = (html2.match(/removeAreaPreset/g) || []).length;
+          serverReply = () => ({ok: true, presets: [PRESETS[0]]});
+          const hit = await click('areaPresets', 'removeAreaPreset');
+          console.log(JSON.stringify({removes, args: hit.args, asked: confirms,
+            del: calls.filter(c => /area_preset_delete/.test(c.url)).map(c => c.body), n: areaPresets.length}));
+        """)
+        self.assertEqual(r["removes"], 1, "the built-in preset must not offer Remove")
+        self.assertEqual(r["args"], [1])
+        self.assertEqual(r["del"], [{"name": "Invented Reeds"}])
+        self.assertIn("Invented Reeds", r["asked"][0])
+        self.assertEqual(r["n"], 1)
+
+    def test_a_preset_card_adds_just_that_preset(self):
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          await click('areaPresets', 'addOneAreaPreset');
+          console.log(JSON.stringify({names: areaTypes.map(t => t.name), dirty: areaDirty}));
+        """)
+        self.assertEqual(r["names"], ["Invented Hedge", "Invented Canopy"])
+        self.assertTrue(r["dirty"])
+
+    def test_preset_add_is_greyed_with_the_reason_when_the_project_cannot_take_it(self):
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          const hit = await click('areaPresets', 'addOneAreaPreset');
+          console.log(JSON.stringify({disabled: hit.disabled, note: el('areaNote').textContent}));
+        """, types=[])
+        self.assertTrue(r["disabled"])
+        self.assertIn("no attenuation area type", r["note"])
+
+
+@NODE
 class TheTabTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        script = (f"const EXISTING = {json.dumps(dict(EXISTING_TYPE, lowerEdge=0.9144, upperEdge=3.048))};"
-                  f"const PRESETS = {PRESETS.read_text(encoding='utf-8')}.presets;{TAB_PROBE}")
-        proc = subprocess.run(["node", "-e", script, str(AREAS_JS), str(WALLS_JS)],
-                              capture_output=True, text=True, encoding="utf-8",
-                              timeout=NODE_TIMEOUT_S)
-        if proc.returncode != 0:
-            raise AssertionError((proc.stdout + proc.stderr).strip())
-        cls.r = json.loads(proc.stdout)
-
     def test_the_tab_swaps_the_two_bodies_and_back(self):
-        self.assertEqual(self.r["onAreas"], {"walls": True, "areas": False, "tab": "true"})
-        self.assertEqual(self.r["back"], {"walls": False, "areas": True})
+        r = page("""
+          G('switchWallsTab')('areas');
+          const on = {walls: el('wallsBody').hidden, areas: el('areasBody').hidden, tab: el('tabAreas').attrs['aria-selected']};
+          G('switchWallsTab')('walls');
+          console.log(JSON.stringify({on, back: {walls: el('wallsBody').hidden, areas: el('areasBody').hidden}}));
+        """)
+        self.assertEqual(r["on"], {"walls": True, "areas": False, "tab": "true"})
+        self.assertEqual(r["back"], {"walls": False, "areas": True})
 
-    def test_the_project_list_shows_feet_and_per_foot(self):
-        # 3 dB/m is 0.91 dB/ft; 0.9144 m and 3.048 m are 3 ft and 10 ft.
-        html = self.r["before"]["list"]
-        self.assertIn("Invented Hedge", html)
-        self.assertIn("0.91", html)
-        self.assertIn("3\u201310 ft", html)
-
-    def test_presets_are_listed_with_their_numbers(self):
-        html = self.r["before"]["presets"]
-        for needle in ("Tree Canopy", "9\u201335 ft", "Shrubbery/Low Plants", "1.8"):
-            self.assertIn(needle, html)
-        self.assertEqual(self.r["before"]["count"], "1 area type")
-        self.assertFalse(self.r["before"]["disabled"])
-
-
-MODAL_PROBE = r"""
-const fs = require('fs');
-globalThis.WDAreas = require(process.argv[1]);
-const src = fs.readFileSync(process.argv[2], 'utf8');
-const html = fs.readFileSync(process.argv[3], 'utf8');
-function slice(open) {
-  const a = src.indexOf(open);
-  if (a < 0) throw new Error('moved: ' + open);
-  let b = a, depth = 0, seen = false;
-  while (b < src.length && !(seen && depth === 0)) {
-    if (src[b] === '{') { depth++; seen = true; } else if (src[b] === '}') depth--;
-    b++;
-  }
-  return src.slice(a, b);
-}
-eval(DELEGATED);
-const els = {};
-const el = id => els[id] || (els[id] = {id, value: '', hidden: false, textContent: '',
-  focused: false, classes: new Set(),
-  classList: {add(c) { els[id].classes.add(c); }, remove(c) { els[id].classes.delete(c); }},
-  focus() { els[id].focused = true; }});
-globalThis.document = {getElementById: el};
-globalThis.areaDoc = {attenuationAreaTypes: []}; globalThis.areaKey = 'attenuationAreaTypes';
-globalThis.areaTypes = [EXISTING]; globalThis.areaDoc.attenuationAreaTypes = areaTypes;
-globalThis.areaDirty = false; globalThis.esxZip = {};
-const toasts = []; globalThis.showToast = m => toasts.push(m);
-globalThis.renderAll = () => {};
-globalThis.crypto = {randomUUID: () => 'u-1'};
-eval(slice('function areaProjectBlock') + slice('function openAreaModal')
-   + slice('function closeAreaModal') + slice('function areaNumber') + slice('function saveAreaType'));
-const reach = {};
-['openAreaModal', 'saveAreaType', 'closeAreaModal'].forEach(fn => {
-  const hit = delegated(html, fn);
-  reach[fn] = !!hit && typeof eval(fn) === 'function';
-});
-const fn = (name) => eval(name);
-const set = (id, v) => { el(id).value = v; };
-
-const out = {reach};
-fn('openAreaModal')();
-out.opened = el('areaModal').classes.has('active');
-out.defaults = [el('aLower').value, el('aUpper').value, el('aTwo').value];
-// A duplicate name is explained in the dialog, which stays open.
-set('aName', 'invented hedge');
-fn('saveAreaType')();
-out.dup = {error: el('aError').textContent, hidden: el('aError').hidden,
-           open: el('areaModal').classes.has('active'), count: areaTypes.length, dirty: areaDirty};
-// A valid one is added, the dialog closes, an empty upper edge is Auto.
-set('aName', 'Invented Reeds'); set('aUpper', ''); set('aTwo', '0.5');
-fn('saveAreaType')();
-const added = areaTypes[areaTypes.length - 1];
-out.ok = {count: areaTypes.length, dirty: areaDirty, open: el('areaModal').classes.has('active'),
-          name: added.name, hasUpper: 'upperEdge' in added, id: added.id,
-          twoDbPerM: added.propagationProperties.find(p => p.band === 'TWO').attenuationFactor,
-          inDoc: areaDoc.attenuationAreaTypes === areaTypes, toast: toasts[toasts.length - 1]};
-console.log(JSON.stringify(out));
-"""
-
-
-@unittest.skipUnless(shutil.which("node"), "node is required")
-class TheAddDialogTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        script = (f"const EXISTING = {json.dumps(EXISTING_TYPE)};"
-                  f"const DELEGATED = {json.dumps(DELEGATED_JS)};{MODAL_PROBE}")
-        proc = subprocess.run(["node", "-e", script, str(AREAS_JS), str(WALLS_JS),
-                               str(WALLS_HTML)], capture_output=True, text=True,
-                              encoding="utf-8", timeout=NODE_TIMEOUT_S)
-        if proc.returncode != 0:
-            raise AssertionError((proc.stdout + proc.stderr).strip())
-        cls.r = json.loads(proc.stdout)
-
-    def test_every_control_in_the_dialog_reaches_its_handler(self):
-        self.assertEqual(self.r["reach"], {"openAreaModal": True, "saveAreaType": True,
-                                           "closeAreaModal": True})
-
-    def test_it_opens_with_sensible_defaults(self):
-        self.assertTrue(self.r["opened"])
-        self.assertEqual(self.r["defaults"], ["0", "", "1"])
-
-    def test_a_refusal_is_explained_in_the_dialog_and_adds_nothing(self):
-        d = self.r["dup"]
-        self.assertIn("already has", d["error"])
-        self.assertFalse(d["hidden"])
-        self.assertTrue(d["open"])
-        self.assertEqual((d["count"], d["dirty"]), (1, False))
-
-    def test_a_valid_one_is_added_the_dialog_closes_and_save_will_write_it(self):
-        ok = self.r["ok"]
-        self.assertEqual((ok["count"], ok["dirty"], ok["open"]), (2, True, False))
-        self.assertEqual(ok["name"], "Invented Reeds")
-        self.assertFalse(ok["hasUpper"], "an empty upper edge is Auto")
-        self.assertAlmostEqual(ok["twoDbPerM"], 0.5 / 0.3048, places=3)
-        self.assertTrue(ok["inDoc"])
-        self.assertIn("Save the .esx", ok["toast"])
+    def test_the_project_list_shows_feet_and_per_foot_and_the_count(self):
+        t = dict(EXISTING_TYPE, lowerEdge=0.9144, upperEdge=3.048)
+        r = page("""
+          await loadAreaTypes();
+          G('renderAreaPanel')();
+          console.log(JSON.stringify({list: el('areaList').innerHTML, presets: el('areaPresets').innerHTML,
+            count: el('areaCount').textContent, add: el('areaAddBtn').disabled, neu: el('areaNewBtn').disabled}));
+        """, types=[t])
+        self.assertIn("Invented Hedge", r["list"])
+        self.assertIn("0.91", r["list"])
+        self.assertIn("3–10 ft", r["list"])
+        for needle in ("Invented Canopy", "9–35 ft", "Invented Reeds", "0–ceiling", "built in", "kept by you"):
+            self.assertIn(needle, r["presets"])
+        self.assertEqual(r["count"], "1 area type")
+        self.assertFalse(r["add"] or r["neu"])
 
 
 if __name__ == "__main__":

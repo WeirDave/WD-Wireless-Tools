@@ -170,6 +170,7 @@ class EveryUserMadeFileIsCarried(Harness):
         "not_matches.json": '[["cloud-1", "local-1"]]',
         "manual_matches.json": '[["cloud-2", "local-2"]]',
         "share_recipients.json": '["someone@example.com"]',
+        "attenuation-area-presets.json": '{"presets": []}',
     }
 
     def _plant(self):

@@ -183,15 +183,16 @@
         <div class="toolbar-left">
           <span id="areaCount" class="wall-count"></span>
           <button class="btn" id="areaNewBtn" data-action="call" data-fn="openAreaModal" title="Create a new attenuation area type in this project">+ Add Attenuation Area</button>
-          <button class="btn" id="areaAddBtn" data-action="call" data-fn="addAreaPresets">+ Add Tree Canopy &amp; Shrubbery</button>
+          <button class="btn" id="areaAddBtn" data-action="call" data-fn="addAreaPresets">+ Add All Presets</button>
           <span class="template-bar-auto-note" id="areaNote"></span>
         </div>
       </div>
       <p class="pb-lead">Attenuation areas are drawn as polygons in Ekahau, each with a loss
         per foot and a lower and upper edge &mdash; a tree canopy, a planting bed, a hedge.
-        The two presets below are the outdoor ones kept here so they are not forgotten.
-        Adding them makes them available in Ekahau's attenuation area list; areas already
-        drawn are not touched. Shown in feet and dB per foot, at 2.4 / 5 / 6 GHz.</p>
+        Presets are ones kept here so they are not forgotten: two come with the app, and
+        <b>Keep as preset</b> on an area in this project adds one of your own. Adding a preset
+        makes it available in Ekahau's attenuation area list; areas already drawn are not
+        touched. Shown in feet and dB per foot, at 2.4 / 5 / 6 GHz.</p>
       <div class="wall-group-header">Presets</div>
       <div id="areaPresets" class="wall-list"></div>
       <div class="wall-group-header">In this project</div>
@@ -306,7 +307,7 @@
 <div id="areaModal" class="modal-overlay" data-action="backdrop-call" data-fn="closeAreaModal">
   <div class="modal modal-area-edit">
     <div class="modal-header">
-      <h3>Add Attenuation Area</h3>
+      <h3 id="aTitle">Add Attenuation Area</h3>
       <button class="btn btn-icon btn-sm" data-action="call" data-fn="closeAreaModal">&times;</button>
     </div>
     <div class="modal-body">

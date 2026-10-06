@@ -72,6 +72,9 @@ EXPORT_FILES = (
     # match, so on a machine with a different folder it reads as "not
     # compared" - the answer it would have given anyway.
     "sync_state.json",
+    # The attenuation-area presets he keeps from Quick Walls. His own work, in a
+    # file he makes deliberately, so a reinstall must not take it.
+    "attenuation-area-presets.json",
 )
 EXPORT_DIRS = ("templates", "capacity", "report")
 

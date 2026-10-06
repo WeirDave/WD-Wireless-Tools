@@ -52,7 +52,20 @@ class TheTemplateEditor(BrowserPagesHarness):
         drv.find_element(By.ID, "fileInput").send_keys(str(self.esx))
         WebDriverWait(drv, 20).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, "#capTemplates .cap-tpl"))
-        time.sleep(0.4)
+        self.wait_for(drv, lambda d: self.chosen_name(d) is not None
+                      or d.find_element(By.ID, "capApplyNote").text != "",
+                      "a chosen template or an apply note")
+
+    TEMPLATE_NAMES = ("return Array.prototype.map.call(document.querySelectorAll("
+                      "'#capTemplates .cap-tpl-name'), function (b) { return b.textContent; });")
+    TEMPLATE_LABELS = ("return Array.prototype.map.call(document.querySelectorAll("
+                       "'#capTemplates .cap-tpl'), function (b) { return b.textContent; });")
+
+    def wait_for(self, drv, condition, what, timeout=15):
+        """Wait for the page to show the result, never for a guessed number of
+        seconds. A fixed sleep passed on a quiet runner and failed on a busy one,
+        in a different step each time."""
+        WebDriverWait(drv, timeout).until(condition, "the page never showed: " + what)
 
     def chosen_name(self, drv):
         return drv.execute_script("""
@@ -72,14 +85,18 @@ class TheTemplateEditor(BrowserPagesHarness):
         drv.find_element(By.XPATH, "//button[contains(., 'Add a device')]").click()
         rows = drv.find_elements(By.CSS_SELECTOR, "#capEdRows tr")
         self.assertEqual(len(rows), 2)
-        usage = Select(rows[1].find_elements(By.TAG_NAME, "select")[1])
+        usage_el = rows[1].find_elements(By.TAG_NAME, "select")[1]
+        self.wait_for(drv, lambda d: len(Select(usage_el).options) > 0,
+                      "usage choices in the new device row")
+        usage = Select(usage_el)
         usage.select_by_index(len(usage.options) - 1)
         total = drv.find_element(By.ID, "capEdTotal").text
         self.assertIn("3 devices per person", total)
         drv.find_element(By.ID, "capEdSave").click()
         WebDriverWait(drv, 10).until(lambda d: not d.execute_script(
             "return document.getElementById('capEditor').classList.contains('active');"))
-        time.sleep(0.4)
+        self.wait_for(drv, lambda d: self.chosen_name(d) == name,
+                      "the new template chosen")
 
     def test_a_built_template_is_saved_chosen_and_can_be_the_default(self):
         for kind, drv in self.each_browser():
@@ -91,10 +108,11 @@ class TheTemplateEditor(BrowserPagesHarness):
                 view = drv.find_element(By.ID, "capTplView").text
                 self.assertIn("per person", view.lower())
                 drv.find_element(By.ID, "capMakeDefault").click()
-                time.sleep(0.5)
-                files = drv.execute_script(
-                    "return Array.prototype.map.call(document.querySelectorAll("
-                    "'#capTemplates .cap-tpl'), function (b) { return b.textContent; });")
+                self.wait_for(drv, lambda d: any(
+                    name in f and "default" in f
+                    for f in d.execute_script(self.TEMPLATE_LABELS)),
+                    "the built template marked default")
+                files = drv.execute_script(self.TEMPLATE_LABELS)
                 self.assertTrue(any(name in f and "default" in f for f in files), files)
                 saved = self.settings()["capacity"]["default_template"]
                 self.assertTrue(saved.endswith("_capacitytemplate.json"), saved)
@@ -122,17 +140,19 @@ class TheTemplateEditor(BrowserPagesHarness):
                     document.querySelectorAll('#capTemplates .cap-tpl'),
                     function (x) { return /example/.test(x.textContent); })[0];
                   b.click();""")
-                time.sleep(0.3)
+                self.wait_for(drv, lambda d: "example" in (self.chosen_name(d) or ""),
+                              "the shipped example chosen")
                 drv.find_element(By.ID, "capEditBtn").click()
                 name_box = drv.find_element(By.ID, "capEdName")
                 self.assertIn("(my copy)", name_box.get_attribute("value"))
                 name_box.clear()
                 name_box.send_keys("Example copy %s" % kind)
                 drv.find_element(By.ID, "capEdSave").click()
-                time.sleep(0.8)
-                texts = drv.execute_script(
-                    "return Array.prototype.map.call(document.querySelectorAll("
-                    "'#capTemplates .cap-tpl-name'), function (b) { return b.textContent; });")
+                self.wait_for(drv, lambda d: any(
+                    ("Example copy %s" % kind) in t
+                    for t in d.execute_script(self.TEMPLATE_NAMES)),
+                    "the saved copy in the template list")
+                texts = drv.execute_script(self.TEMPLATE_NAMES)
                 self.assertTrue(any("(example)" in t for t in texts), texts)
                 self.assertTrue(any(("Example copy %s" % kind) in t for t in texts), texts)
 
@@ -146,10 +166,10 @@ class TheTemplateEditor(BrowserPagesHarness):
                 btn.click()
                 self.assertIn(name, btn.text)
                 btn.click()
-                time.sleep(0.8)
-                texts = drv.execute_script(
-                    "return Array.prototype.map.call(document.querySelectorAll("
-                    "'#capTemplates .cap-tpl-name'), function (b) { return b.textContent; });")
+                self.wait_for(drv, lambda d: not any(
+                    name in t for t in d.execute_script(self.TEMPLATE_NAMES)),
+                    "the deleted template gone from the list")
+                texts = drv.execute_script(self.TEMPLATE_NAMES)
                 self.assertFalse(any(name in t for t in texts), texts)
 
 

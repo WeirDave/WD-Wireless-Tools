@@ -183,6 +183,9 @@ let wallTypes = [];
 // project", written back only when changed. See walls-areas.js.
 let areaMember = null, areaDoc = null, areaKey = null, areaTypes = [];
 let areaPresets = [], areaDirty = false;
+// Which type the dialog is changing (-1 when it is adding), and how many drawn
+// areas use each type - Delete is offered only where that count is known to be 0.
+let areaEditing = -1, areaUsage = {}, areaUsageKnown = false;
 let fileName = '';
 let _originalIdMap = {};
 
@@ -572,9 +575,26 @@ function renderAll() {
 }
 
 // ------------------------------------------------- attenuation areas ---
+async function areaPresetCall(action, body) {
+  const r = await fetch('/api/walls/' + action, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+    body: JSON.stringify(body || {}),
+  });
+  return r.json();
+}
+
+async function refreshAreaPresets() {
+  try {
+    const res = await areaPresetCall('area_presets');
+    if (res && res.ok !== false && Array.isArray(res.presets)) areaPresets = res.presets;
+  } catch (e) { /* the tab says the presets could not be read */ }
+}
+
 async function loadAreaTypes() {
   areaMember = WDAreas.findMember(Object.keys(esxZip.files));
   areaDoc = null; areaKey = null; areaTypes = []; areaDirty = false;
+  areaEditing = -1; areaUsage = {}; areaUsageKnown = false;
   if (areaMember) {
     try {
       const doc = JSON.parse(await esxZip.file(areaMember).async('string'));
@@ -582,12 +602,23 @@ async function loadAreaTypes() {
       if (key) { areaDoc = doc; areaKey = key; areaTypes = doc[key]; }
     } catch (e) { /* unreadable: the panel says it cannot add */ }
   }
-  if (!areaPresets.length) {
+  // Which types the drawn areas use. No areas file means none are drawn; one
+  // that cannot be read means we cannot say, and Delete says so rather than
+  // guess - a type deleted from under a drawn area is not something to risk.
+  const drawn = Object.keys(esxZip.files).find(n => /^attenuationAreas\.json$/i.test(n));
+  if (!drawn) areaUsageKnown = true;
+  else {
     try {
-      const r = await fetch('/assets/attenuation-area-presets.json');
-      areaPresets = (await r.json()).presets || [];
-    } catch (e) { areaPresets = []; }
+      const doc = JSON.parse(await esxZip.file(drawn).async('string'));
+      const key = WDAreas.listKey(doc);
+      (key ? doc[key] : []).forEach(a => {
+        const id = a && a.attenuationAreaTypeId;
+        if (id) areaUsage[id] = (areaUsage[id] || 0) + 1;
+      });
+      areaUsageKnown = !!key;
+    } catch (e) { areaUsageKnown = false; }
   }
+  if (!areaPresets.length) await refreshAreaPresets();
 }
 
 // Why Add is unavailable, or '' when it is. The control stays visible and says
@@ -619,7 +650,7 @@ function switchWallsTab(which) {
 const perFt = v => Math.round(v * WDAreas.FT_M * 100) / 100;
 const ftOf = m => Math.round(m / WDAreas.FT_M * 10) / 10;
 
-function areaCard(name, color, meta) {
+function areaCard(name, color, meta, actions) {
   return `
     <div class="area-card" style="--wall-color:${safeColor(color)}">
       <div class="wall-swatch"></div>
@@ -627,43 +658,74 @@ function areaCard(name, color, meta) {
         <div class="wall-name-row"><span class="wall-name">${esc(name)}</span></div>
         <div class="wall-meta">${meta}</div>
       </div>
+      ${actions ? `<div class="wall-actions">${actions}</div>` : ''}
     </div>`;
+}
+
+// Why Delete is unavailable for this type, or '' when it is allowed.
+function areaDeleteBlock(t) {
+  if (!areaUsageKnown) return 'Could not read which drawn areas use this type.';
+  const n = areaUsage[t && t.id] || 0;
+  return n
+    ? n + ' drawn area' + (n === 1 ? ' uses' : 's use') + ' this type. Delete or '
+      + 'retype them in Ekahau first.'
+    : '';
 }
 
 function renderAreaPanel() {
   const presets = document.getElementById('areaPresets');
   if (!presets) return;
-  presets.innerHTML = areaPresets.map(p => {
+  const projectWhy = areaProjectBlock();
+  presets.innerHTML = areaPresets.map((p, i) => {
     const a = p.attenuationDbPerFt;
     const have = areaTypes.some(t => String(t && t.name || '').trim().toLowerCase()
       === p.name.toLowerCase());
+    const top = p.upperEdgeFt == null ? 'ceiling' : esc(p.upperEdgeFt) + ' ft';
+    const add = `<button class="btn btn-sm wall-act" data-action="call" data-fn="addOneAreaPreset"
+        data-arg-json="${i}"${projectWhy ? ' disabled' : ''}
+        title="${escAttr(projectWhy || 'Add this preset to the project')}">Add</button>`;
+    const remove = p.builtin ? '' : `<button class="btn btn-sm wall-act btn-danger"
+        data-action="call" data-fn="removeAreaPreset" data-arg-json="${i}"
+        title="Remove this preset from the ones you kept. Projects that already have it are not changed.">Remove</button>`;
     return areaCard(p.name, p.color,
       `<span><span class="label">2.4:</span> ${esc(a.TWO)}</span>`
       + `<span><span class="label">5:</span> ${esc(a.FIVE)}</span>`
       + `<span><span class="label">6:</span> ${esc(a.SIX)}</span>`
-      + `<span><span class="label">edges:</span> ${esc(p.lowerEdgeFt)}\u2013${esc(p.upperEdgeFt)} ft</span>`
-      + (have ? '<span class="label">in this project</span>' : ''));
+      + `<span><span class="label">edges:</span> ${esc(p.lowerEdgeFt)}–${top}</span>`
+      + `<span class="label">${p.builtin ? 'built in' : 'kept by you'}</span>`
+      + (have ? '<span class="label">in this project</span>' : ''),
+      add + remove);
   }).join('');
 
   document.getElementById('areaList').innerHTML = areaTypes.length
-    ? areaTypes.map(t => {
+    ? areaTypes.map((t, i) => {
       const by = {};
       (t.propagationProperties || []).forEach(p => { by[p.band] = p.attenuationFactor; });
-      const att = b => by[b] == null ? '\u2014' : perFt(by[b]);
+      const att = b => by[b] == null ? '—' : perFt(by[b]);
       const lo = Number.isFinite(t.lowerEdge) ? ftOf(t.lowerEdge) : '?';
-      const hi = Number.isFinite(t.upperEdge) ? ftOf(t.upperEdge) : '?';
+      const hi = Number.isFinite(t.upperEdge) ? ftOf(t.upperEdge) : 'ceiling';
+      const used = areaUsage[t.id] || 0;
+      const delWhy = areaDeleteBlock(t);
+      const actions = `<button class="btn btn-sm wall-act" data-action="call" data-fn="editAreaType"
+          data-arg-json="${i}" title="Change this attenuation area's name, colour, edges or loss">Edit</button>
+        <button class="btn btn-sm wall-act" data-action="call" data-fn="keepAreaPreset"
+          data-arg-json="${i}" title="Keep this as a preset of your own, available in every project">Keep as preset</button>
+        <button class="btn btn-sm wall-act btn-danger" data-action="call" data-fn="deleteAreaType"
+          data-arg-json="${i}"${delWhy ? ' disabled' : ''}
+          title="${escAttr(delWhy || 'Remove this attenuation area type from the project')}">Delete</button>`;
       return areaCard(t.name, t.color,
         `<span><span class="label">2.4:</span> ${esc(att('TWO'))}</span>`
         + `<span><span class="label">5:</span> ${esc(att('FIVE'))}</span>`
         + `<span><span class="label">6:</span> ${esc(att('SIX'))}</span>`
-        + `<span><span class="label">edges:</span> ${esc(lo)}\u2013${esc(hi)} ft</span>`);
+        + `<span><span class="label">edges:</span> ${esc(lo)}–${esc(hi)}${hi === 'ceiling' ? '' : ' ft'}</span>`
+        + (areaUsageKnown ? `<span><span class="label">drawn:</span> ${esc(used)}</span>` : ''),
+        actions);
     }).join('')
     : '<p class="pb-lead">This project has no attenuation area types yet.</p>';
 
   document.getElementById('areaCount').textContent = areaTypes.length
     + ' area type' + (areaTypes.length === 1 ? '' : 's');
   const why = areaBlockReason();
-  const projectWhy = areaProjectBlock();
   document.getElementById('areaAddBtn').disabled = !!why;
   document.getElementById('areaNewBtn').disabled = !!projectWhy;
   const note = document.getElementById('areaNote');
@@ -671,17 +733,40 @@ function renderAreaPanel() {
   note.classList.toggle('is-missing', !!(projectWhy || why) && !!esxZip);
 }
 
-function openAreaModal() {
-  if (areaProjectBlock()) return;
-  ['aName'].forEach(id => { document.getElementById(id).value = ''; });
-  document.getElementById('aColor').value = '#808080';
-  document.getElementById('aLower').value = '0';
-  document.getElementById('aUpper').value = '';
-  ['aTwo', 'aFive', 'aSix'].forEach(id => { document.getElementById(id).value = '1'; });
+function showAreaDialog(title, button) {
+  document.getElementById('aTitle').textContent = title;
+  document.getElementById('aSaveBtn').textContent = button;
   const err = document.getElementById('aError');
   err.hidden = true; err.textContent = '';
   document.getElementById('areaModal').classList.add('active');
   document.getElementById('aName').focus();
+}
+
+function openAreaModal() {
+  if (areaProjectBlock()) return;
+  areaEditing = -1;
+  document.getElementById('aName').value = '';
+  document.getElementById('aColor').value = '#808080';
+  document.getElementById('aLower').value = '0';
+  document.getElementById('aUpper').value = '';
+  ['aTwo', 'aFive', 'aSix'].forEach(id => { document.getElementById(id).value = '1'; });
+  showAreaDialog('Add Attenuation Area', 'Add');
+}
+
+function editAreaType(i) {
+  const t = areaTypes[i];
+  if (!t) return;
+  areaEditing = i;
+  const spec = WDAreas.typeToSpec(t);
+  const show = v => (v === null || v === undefined ? '' : String(v));
+  document.getElementById('aName').value = spec.name;
+  document.getElementById('aColor').value = /^#[0-9a-fA-F]{6}$/.test(spec.color) ? spec.color : '#808080';
+  document.getElementById('aLower').value = show(spec.lowerEdgeFt);
+  document.getElementById('aUpper').value = show(spec.upperEdgeFt);
+  document.getElementById('aTwo').value = show(spec.attenuationDbPerFt.TWO);
+  document.getElementById('aFive').value = show(spec.attenuationDbPerFt.FIVE);
+  document.getElementById('aSix').value = show(spec.attenuationDbPerFt.SIX);
+  showAreaDialog('Edit Attenuation Area', 'Save');
 }
 
 function closeAreaModal() {
@@ -694,8 +779,8 @@ function areaNumber(id) {
   return raw === '' ? null : Number(raw);
 }
 
-function saveAreaType() {
-  const plan = WDAreas.addType(areaTypes, {
+function areaFormSpec() {
+  return {
     name: document.getElementById('aName').value,
     color: document.getElementById('aColor').value,
     lowerEdgeFt: areaNumber('aLower'),
@@ -703,34 +788,98 @@ function saveAreaType() {
     attenuationDbPerFt: {
       TWO: areaNumber('aTwo'), FIVE: areaNumber('aFive'), SIX: areaNumber('aSix'),
     },
-  }, () => crypto.randomUUID());
+  };
+}
+
+function areaChanged(types, message) {
+  areaTypes = types;
+  areaDoc[areaKey] = areaTypes;
+  areaDirty = true;
+  showToast(message + ' Save the .esx to keep it.', 'success');
+  renderAll();
+}
+
+function saveAreaType() {
+  const spec = areaFormSpec();
+  const editing = areaEditing >= 0;
+  const plan = editing
+    ? WDAreas.updateType(areaTypes, areaEditing, spec)
+    : WDAreas.addType(areaTypes, spec, () => crypto.randomUUID());
   if (plan.error) {
     const err = document.getElementById('aError');
     err.textContent = plan.error;
     err.hidden = false;
     return;
   }
-  areaTypes = plan.types;
-  areaDoc[areaKey] = areaTypes;
-  areaDirty = true;
   closeAreaModal();
-  showToast('Added ' + plan.added[0] + '. Save the .esx to keep it.', 'success');
-  renderAll();
+  if (editing && !plan.changed) {
+    showToast('Nothing changed on ' + spec.name.trim(), 'success');
+    return;
+  }
+  areaChanged(plan.types, (editing ? 'Updated ' : 'Added ') + spec.name.trim() + '.');
+}
+
+function deleteAreaType(i) {
+  const t = areaTypes[i];
+  if (!t) return;
+  const why = areaDeleteBlock(t);
+  if (why) { showToast(why, 'error'); return; }
+  if (!confirm('Remove "' + (t.name || 'this attenuation area') + '" from this project? '
+    + 'No drawn area uses it. Nothing is written until you save the .esx.')) return;
+  const next = areaTypes.slice();
+  next.splice(i, 1);
+  areaChanged(next, 'Removed ' + (t.name || 'the attenuation area') + '.');
+}
+
+function applyAreaPresets(list) {
+  if (areaProjectBlock()) return;
+  const plan = WDAreas.addPresets(areaTypes, list, () => crypto.randomUUID());
+  const changed = plan.added.length + plan.updated.length;
+  if (!changed) { showToast('Those attenuation areas are already in this project', 'success'); return; }
+  const bits = [];
+  if (plan.added.length) bits.push('added ' + plan.added.join(', '));
+  if (plan.updated.length) bits.push('updated ' + plan.updated.join(', '));
+  areaChanged(plan.types, bits.join('; ') + '.');
 }
 
 function addAreaPresets() {
   if (areaBlockReason()) return;
-  const plan = WDAreas.addPresets(areaTypes, areaPresets, () => crypto.randomUUID());
-  const changed = plan.added.length + plan.updated.length;
-  if (!changed) { showToast('Those attenuation areas are already in this project', 'success'); return; }
-  areaTypes = plan.types;
-  areaDoc[areaKey] = areaTypes;
-  areaDirty = true;
-  const bits = [];
-  if (plan.added.length) bits.push('added ' + plan.added.join(', '));
-  if (plan.updated.length) bits.push('updated ' + plan.updated.join(', '));
-  showToast(bits.join('; ') + '. Save the .esx to keep it.', 'success');
-  renderAll();
+  applyAreaPresets(areaPresets);
+}
+
+function addOneAreaPreset(i) {
+  if (areaPresets[i]) applyAreaPresets([areaPresets[i]]);
+}
+
+// Keeping and removing presets go through the server: they live in the user
+// directory, not in the project and not in any wall template.
+async function keepAreaPreset(i) {
+  const made = WDAreas.presetFromType(areaTypes[i]);
+  if (made.error) { showToast(made.error, 'error'); return; }
+  try {
+    const res = await areaPresetCall('area_preset_save', { preset: made.preset });
+    if (!res || res.ok === false) { showToast((res && res.error) || 'Could not keep that preset.', 'error'); return; }
+    areaPresets = res.presets || areaPresets;
+    showToast('Kept "' + made.preset.name + '" as a preset. It is on this tab in every project.', 'success');
+    renderAll();
+  } catch (e) {
+    showToast('Could not keep that preset: ' + e, 'error');
+  }
+}
+
+async function removeAreaPreset(i) {
+  const p = areaPresets[i];
+  if (!p || p.builtin) return;
+  if (!confirm('Remove the preset "' + p.name + '"? Projects that already have it are not changed.')) return;
+  try {
+    const res = await areaPresetCall('area_preset_delete', { name: p.name });
+    if (!res || res.ok === false) { showToast((res && res.error) || 'Could not remove that preset.', 'error'); return; }
+    areaPresets = res.presets || areaPresets;
+    showToast('Removed the preset "' + p.name + '".', 'success');
+    renderAll();
+  } catch (e) {
+    showToast('Could not remove that preset: ' + e, 'error');
+  }
 }
 
 /* The footer says what Save will write, beside the button that writes it -

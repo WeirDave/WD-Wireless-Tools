@@ -614,6 +614,23 @@ def api_walls(action):
                  "severity": round(f.severity, 1)}
                 for f in findings]})
 
+        if action in ("area_presets", "area_preset_save", "area_preset_delete"):
+            # Attenuation-area presets: the built-in two and the ones he keeps.
+            # Validation failures are an answer, not a fault - they come back
+            # with the reason so the page can show it in place.
+            from tools import area_presets
+            payload = request.get_json(silent=True) or {}
+            try:
+                if action == "area_preset_save":
+                    items = area_presets.save(payload.get("preset"))
+                elif action == "area_preset_delete":
+                    items = area_presets.delete(payload.get("name"))
+                else:
+                    items = area_presets.all_presets()
+            except ValueError as exc:
+                return jsonify({"ok": False, "error": str(exc)})
+            return jsonify({"ok": True, "presets": items})
+
         return jsonify({"error": "unknown action: " + action}), 404
     except Exception as e:
         return _route_failed(e)

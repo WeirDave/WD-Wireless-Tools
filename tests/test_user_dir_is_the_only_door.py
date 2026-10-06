@@ -61,6 +61,7 @@ OWNERS = {
     "tools.template_store": ["USER_DIR"],
     "tools.plantrim_store": ["USER_DIR"],
     "tools.capacity_profiles": ["USER_DIR"],
+    "tools.area_presets": ["USER_DIR", "STORE"],
     "tools.cloud_manager": ["CONFIG_DIR"],
     "tools.folder_organizer": ["CONFIG_DIR"],
     "tools.rename_manager": ["CONFIG_DIR"],
