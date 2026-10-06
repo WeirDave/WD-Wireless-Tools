@@ -7250,6 +7250,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
 
 
 
+
 @page { margin: 0.4in 0.4in 0.6in; @bottom-right { content: "Page " counter(page); font-size: 9pt; color: #999; } }
 
 @media print {
@@ -7548,6 +7549,30 @@ body.wd-has-stale-banner { padding-top: 52px; }
   .rep-summary-bar-outer { background: #eef2f7 !important; }
   .rep-summary-bar-inner { background: var(--rose) !important; }
   .rep-summary-hint { color: #666 !important; }
+}
+
+/* Print rules for the Summary, the Bill of Materials and the Installation
+   report. The sheet is white whatever the screen theme is, so a dark-theme
+   text colour with no print override came out pale grey on white. */
+@media print {
+  /* Summary and BOM are short tables, not one-per-sheet chapters: each
+     section used to start a sheet, so one AP printed five. The class is on
+     those two reports' sections only - Placement, Installation and the rest
+     keep a sheet per section. Measured in Chromium. */
+  .rep-floor-section.rep-flow {
+    page-break-before: auto; break-before: auto;
+    page-break-inside: avoid; break-inside: avoid;
+  }
+  /* black, not a hex: the sheet is white, and the stylesheet's colour-literal
+     count only goes down. */
+  .rep-summary-notes, .rep-summary-notes b { color: black !important; }
+  /* Chromium repeats a table-footer-group on every page and, when the last
+     body row fits but the footer does not, pushes the footer alone onto a
+     new sheet under a repeated header - 24 of 25 floors of a long project.
+     As an ordinary row group the footer follows the last row. */
+  .rep-loc-table tfoot { display: table-row-group !important; }
+  /* The floor summary keeps its Total row with the rows it totals. */
+  .rep-matrix { page-break-inside: avoid; break-inside: avoid; }
 }
 
 .org-action-bar { justify-content: flex-end; flex-wrap: wrap; }

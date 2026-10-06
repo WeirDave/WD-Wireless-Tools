@@ -361,7 +361,7 @@ class SmallerFixesFromTheSecondReview(ReportCase):
           const p = project(); delete p.imageUrls.imA;
           open(p);
           const html = render('location', { inclOmni: true, segmented: true, segCols: 2, segRows: 2 });
-          const toc = floorPart(html, '<section class="rep-floor-section rep-toc">', '</section>');
+          const toc = floorPart(html, '<section class="rep-floor-section rep-toc', '</section>');
           const ground = floorPart(toc, '<b>Ground Sample</b>', '</li>');
           check('no detail sections promised: ' + ground, ground.indexOf('detail section') < 0);
           check('no floor plan promised: ' + ground, ground.indexOf('AP placements') < 0);

@@ -40,6 +40,16 @@ const REPORT_FOOTER = '';
 function apNotesPages() { return ''; }
 function renderAntennaTable() { return '<table></table>'; }
 function collectUsedAntennas() { return []; }
+function drIsLiveWifi(r) {
+  return !!r && r.enabled !== false
+    && (!r.radioTechnology || r.radioTechnology === 'IEEE802_11');
+}
+function humanMount(m) {
+  if (!m) return '';
+  const t = String(m).replace(/_/g, ' ').toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+const BAND_WORDS = { TWO: '2.4 GHz', FIVE: '5 GHz', SIX: '6 GHz' };
 function groupApsByFloor(aps, ctx) {
   const by = {};
   aps.forEach(ap => {
