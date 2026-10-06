@@ -60,7 +60,9 @@
   function applyValues(target, preset, isNew) {
     if (isNew) { target.name = preset.name; target.color = preset.color; }
     target.lowerEdge = feetToMetres(preset.lowerEdgeFt);
-    target.upperEdge = feetToMetres(preset.upperEdgeFt);
+    // No upper edge is Ekahau's "Auto": the area runs to the ceiling.
+    if (preset.upperEdgeFt == null) delete target.upperEdge;
+    else target.upperEdge = feetToMetres(preset.upperEdgeFt);
     const props = target.propagationProperties;
     BANDS.forEach(band => {
       const value = dbPerFtToPerM(preset.attenuationDbPerFt[band]);
@@ -84,6 +86,15 @@ function sameValues(a, b) {
   return ka.length === kb.length && ka.every(k => k in b && sameValues(a[k], b[k]));
 }
 
+  function noShapeError(list) {
+    return list && list.length
+      ? 'None of this project\u2019s attenuation area types has a per-band '
+        + 'attenuation list to copy, so there is nothing safe to build the new '
+        + 'types from.'
+      : 'This project has no attenuation area type to copy the layout from. '
+        + 'Add one in Ekahau (any name), then open the project again.';
+  }
+
   /* What adding the presets to this list would do, and the new list.
      Nothing is mutated. A type already there under the same name is updated in
      place and keeps its id, so areas already drawn with it still resolve;
@@ -92,14 +103,7 @@ function sameValues(a, b) {
   function addPresets(types, presets, newId) {
     const list = Array.isArray(types) ? types : [];
     const shape = list.find(usableShape);
-    if (!shape) {
-      return { error: list.length
-        ? 'None of this project’s attenuation area types has a per-band '
-          + 'attenuation list to copy, so there is nothing safe to build the new '
-          + 'types from.'
-        : 'This project has no attenuation area type to copy the layout from. '
-          + 'Add one in Ekahau (any name), then open the project again.' };
-    }
+    if (!shape) return { error: noShapeError(list) };
     const out = list.slice();
     const added = [], updated = [];
     let unchanged = 0;
@@ -122,6 +126,40 @@ function sameValues(a, b) {
     return { types: out, added, updated, unchanged };
   }
 
+  /* One new type from the form: the same clone-and-overwrite as the presets, so
+     it comes out looking like one Ekahau made. Refused, with the reason, rather
+     than half-written. `upperEdgeFt` empty means Auto. */
+  function addType(types, spec, newId) {
+    const list = Array.isArray(types) ? types : [];
+    const name = String((spec && spec.name) || '').trim();
+    if (!name) return { error: 'Give the attenuation area a name.' };
+    if (list.some(t => sameName(t && t.name, name))) {
+      return { error: 'This project already has an attenuation area named \u201c'
+        + name + '\u201d. Pick another name.' };
+    }
+    const ok = v => typeof v === 'number' && isFinite(v) && v >= 0;
+    const lower = spec.lowerEdgeFt == null ? 0 : spec.lowerEdgeFt;
+    const upper = spec.upperEdgeFt == null ? null : spec.upperEdgeFt;
+    if (!ok(lower)) return { error: 'The lower edge must be a number, 0 or more.' };
+    if (upper !== null && !(ok(upper) && upper > lower)) {
+      return { error: 'The upper edge must be above the lower edge, or left empty '
+        + 'to run to the ceiling.' };
+    }
+    const att = spec.attenuationDbPerFt || {};
+    if (!BANDS.every(b => ok(att[b]))) {
+      return { error: 'Enter the loss in dB per foot at 2.4, 5 and 6 GHz, 0 or more.' };
+    }
+    const shape = list.find(usableShape);
+    if (!shape) return { error: noShapeError(list) };
+    const fresh = applyValues(JSON.parse(JSON.stringify(shape)), {
+      name, color: spec.color, lowerEdgeFt: lower, upperEdgeFt: upper,
+      attenuationDbPerFt: att,
+    }, true);
+    delete fresh.key;
+    fresh.id = newId();
+    return { types: list.concat([fresh]), added: [name] };
+  }
+
   function describe(preset) {
     const a = preset.attenuationDbPerFt;
     return preset.lowerEdgeFt + '–' + preset.upperEdgeFt + ' ft · '
@@ -129,7 +167,7 @@ function sameValues(a, b) {
   }
 
   const api = { FT_M, BANDS, feetToMetres, dbPerFtToPerM, findMember, listKey,
-                usableShape, addPresets, describe };
+                usableShape, noShapeError, addPresets, addType, describe };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.WDAreas = api;
 })(typeof window !== 'undefined' ? window : globalThis);
