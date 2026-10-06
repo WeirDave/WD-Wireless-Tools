@@ -701,6 +701,13 @@ outdoor spaces in Ekahau. Quick Walls converts feet to metres on the way in;
 areas already drawn are not changed, and a type with the same name is updated
 in place. Press the save button at the bottom right to write them.
 
+**+ Add Attenuation Area** makes a new one of your own: a name, a colour, the
+lower and upper edge in feet (leave the upper edge empty and the area runs to
+the ceiling) and the loss in dB per foot at 2.4, 5 and 6 GHz. It is saved in
+the project's attenuation area list, not in a wall template: wall templates
+carry wall types only, and the two are kept apart. A name the project already
+uses is refused, with the reason shown in the dialog.
+
 The button is greyed, with the reason beside it, when the project has no
 attenuation area type to copy the file layout from. Add any area type in
 Ekahau once and open the project again.

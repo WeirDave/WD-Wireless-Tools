@@ -592,12 +592,16 @@ async function loadAreaTypes() {
 
 // Why Add is unavailable, or '' when it is. The control stays visible and says
 // why instead of failing after the click.
-function areaBlockReason() {
-  if (!areaPresets.length) return 'The presets file could not be read.';
+function areaProjectBlock() {
   if (!esxZip) return 'Open a project first.';
   if (!areaDoc) return 'This project has no readable attenuationAreaTypes.json.';
-  const plan = WDAreas.addPresets(areaTypes, areaPresets, () => 'x');
-  return plan.error || '';
+  if (!areaTypes.some(WDAreas.usableShape)) return WDAreas.noShapeError(areaTypes);
+  return '';
+}
+
+function areaBlockReason() {
+  if (!areaPresets.length) return 'The presets file could not be read.';
+  return areaProjectBlock();
 }
 
 function switchWallsTab(which) {
@@ -659,10 +663,59 @@ function renderAreaPanel() {
   document.getElementById('areaCount').textContent = areaTypes.length
     + ' area type' + (areaTypes.length === 1 ? '' : 's');
   const why = areaBlockReason();
+  const projectWhy = areaProjectBlock();
   document.getElementById('areaAddBtn').disabled = !!why;
+  document.getElementById('areaNewBtn').disabled = !!projectWhy;
   const note = document.getElementById('areaNote');
-  note.textContent = why;
-  note.classList.toggle('is-missing', !!why && !!esxZip);
+  note.textContent = projectWhy || why;
+  note.classList.toggle('is-missing', !!(projectWhy || why) && !!esxZip);
+}
+
+function openAreaModal() {
+  if (areaProjectBlock()) return;
+  ['aName'].forEach(id => { document.getElementById(id).value = ''; });
+  document.getElementById('aColor').value = '#808080';
+  document.getElementById('aLower').value = '0';
+  document.getElementById('aUpper').value = '';
+  ['aTwo', 'aFive', 'aSix'].forEach(id => { document.getElementById(id).value = '1'; });
+  const err = document.getElementById('aError');
+  err.hidden = true; err.textContent = '';
+  document.getElementById('areaModal').classList.add('active');
+  document.getElementById('aName').focus();
+}
+
+function closeAreaModal() {
+  document.getElementById('areaModal').classList.remove('active');
+}
+
+// An empty box is "not given", never zero: an empty upper edge means Auto.
+function areaNumber(id) {
+  const raw = document.getElementById(id).value.trim();
+  return raw === '' ? null : Number(raw);
+}
+
+function saveAreaType() {
+  const plan = WDAreas.addType(areaTypes, {
+    name: document.getElementById('aName').value,
+    color: document.getElementById('aColor').value,
+    lowerEdgeFt: areaNumber('aLower'),
+    upperEdgeFt: areaNumber('aUpper'),
+    attenuationDbPerFt: {
+      TWO: areaNumber('aTwo'), FIVE: areaNumber('aFive'), SIX: areaNumber('aSix'),
+    },
+  }, () => crypto.randomUUID());
+  if (plan.error) {
+    const err = document.getElementById('aError');
+    err.textContent = plan.error;
+    err.hidden = false;
+    return;
+  }
+  areaTypes = plan.types;
+  areaDoc[areaKey] = areaTypes;
+  areaDirty = true;
+  closeAreaModal();
+  showToast('Added ' + plan.added[0] + '. Save the .esx to keep it.', 'success');
+  renderAll();
 }
 
 function addAreaPresets() {
