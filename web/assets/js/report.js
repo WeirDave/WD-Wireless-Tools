@@ -6244,6 +6244,14 @@
      figure carries slack on top of the 1.45in the furniture actually needs, so
      a footer that wraps to a second line still has somewhere to go. */
   var SHEET_CHROME_IN = 1.5;
+  /* The smallest a marker number may be, as a fraction of a plan's long edge.
+     "About 7pt" holds when the long edge prints 7.2in across, which a portrait
+     page gives it. A very tall plan on a landscape sheet prints its long edge
+     in the 5.75in the sheet has left (SHEET_W_IN less the furniture and
+     slack), and 1.35% of that is 5.6pt - under the 6pt floor, found by forcing
+     a 600 x 6000 plan to landscape. 1.52% is 6.3pt on that worst case and a
+     little over 7.8pt on a plan that fills a portrait sheet. */
+  var MAP_FONT_FLOOR_FRAC = 0.0152;
   /* Held apart from the figure above on purpose. That one decides whether
      turning the sheet is worth it, by comparing two scales against each other,
      and it has been right about that since 2.28. This one is only about how
@@ -8069,7 +8077,7 @@
     var minDim = Math.min(W, H);
     // Floored like every other marker in this file: a fraction of the drawing
     // is not a size on paper.
-    var font = Math.max(Math.max(W, H) * 0.0135, minDim * 0.022);
+    var font = Math.max(Math.max(W, H) * MAP_FONT_FLOOR_FRAC, minDim * 0.022);
     /* Keyed on the lowest 20 MHz channel, not the label: a 36 and a 36/80
        share air and should look like it. Partial overlaps (a 44 inside a
        36/80) are what the dashed line is for. */
@@ -8589,7 +8597,7 @@
       /* The number here is what ties a cell on the map to its row in the
          "Cell sizing per AP" table, so it has to survive printing. Floored
          the same way as every other marker in this file. */
-      var covFont = Math.max(Math.max(W, H) * 0.0135, minDim * 0.022);
+      var covFont = Math.max(Math.max(W, H) * MAP_FONT_FLOOR_FRAC, minDim * 0.022);
       var covPadX = minDim * 0.006;
       var covBoxW = Math.max(minDim * 0.03, covLabel.length * covFont * 0.65) + covPadX * 2;
       var covBoxH = Math.max(minDim * 0.028, covFont * 1.5);

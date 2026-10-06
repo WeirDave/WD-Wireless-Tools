@@ -556,5 +556,30 @@ class AZoomedSectionNamesItsOwnPage(unittest.TestCase):
         self.assertLess(port.start(), land.start(), "the landscape rule must come after the portrait one to win")
 
 
+class AMapNumberIsReadableOnEitherSheet(ReportCase):
+    """Found by forcing a 600 x 6000 plan to landscape: its long edge then
+    prints in 5.75in and a number sized at 1.35% of it came out at 5.6pt."""
+
+    def test_the_floor_leaves_a_number_at_least_6pt_on_the_worst_landscape_sheet(self):
+        self.run_block(r"""
+          const frac = E('MAP_FONT_FLOOR_FRAC');
+          const worstLongEdgeIn = E('SHEET_W_IN') - E('SHEET_CHROME_IN') - E('SHEET_SLACK_IN');
+          const pt = frac * worstLongEdgeIn * 72;
+          check('a 6pt floor on the worst sheet, got ' + pt.toFixed(2) + 'pt', pt >= 6);
+        """)
+
+    def test_the_coverage_number_uses_it_on_a_tall_plan(self):
+        self.run_block(r"""
+          const p = project();
+          p.floorPlans[0].width = 600; p.floorPlans[0].height = 6000;
+          p.accessPoints.forEach(a => { if (a.location.floorPlanId === 'fA') { a.location.coord = { x: 300, y: 3000 }; } });
+          open(p);
+          const html = render('coverage', {});
+          const ground = floorPart(html, 'data-floor-id="fA"', 'data-floor-id="fB"');
+          const m = ground.match(/class="rep-cov-num"[^>]*font-size="([\d.]+)"/);
+          check('the number is at least 1.52% of the 6000-unit edge: ' + (m && m[1]), m && parseFloat(m[1]) >= 6000 * 0.0152 - 0.01);
+        """)
+
+
 if __name__ == "__main__":
     unittest.main()
