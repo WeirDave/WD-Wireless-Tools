@@ -152,13 +152,15 @@ class EndpointTests(InAScratchDirectory):
         self.assertTrue(body["ok"])
         self.assertEqual(len(body["presets"]), 2)
 
-    def test_a_refusal_comes_back_as_an_answer_with_the_reason(self):
+    def test_a_refusal_is_a_400_carrying_only_the_reason(self):
         code, body = self.post("area_preset_save", {"preset": preset(color="red")})
-        self.assertEqual(code, 200)
+        self.assertEqual(code, 400)
+        self.assertEqual(set(body), {"ok", "error"})
         self.assertFalse(body["ok"])
         self.assertIn("#RRGGBB", body["error"])
+        self.assertNotIn("Traceback", json.dumps(body))
         code, body = self.post("area_preset_delete", {"name": "Tree Canopy"})
-        self.assertFalse(body["ok"])
+        self.assertEqual(code, 400)
         self.assertIn("built-in", body["error"])
 
     def test_a_request_without_the_app_header_is_refused_like_every_api_call(self):

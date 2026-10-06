@@ -616,8 +616,9 @@ def api_walls(action):
 
         if action in ("area_presets", "area_preset_save", "area_preset_delete"):
             # Attenuation-area presets: the built-in two and the ones he keeps.
-            # Validation failures are an answer, not a fault - they come back
-            # with the reason so the page can show it in place.
+            # A refused preset is the request being wrong (a 400, not logged as
+            # a fault); the reason is a sentence from tools/area_presets.py and
+            # goes back through the one helper every route answers with.
             from tools import area_presets
             payload = request.get_json(silent=True) or {}
             try:
@@ -628,7 +629,7 @@ def api_walls(action):
                 else:
                     items = area_presets.all_presets()
             except ValueError as exc:
-                return jsonify({"ok": False, "error": str(exc)})
+                return _route_failed(exc, 400, ok_key=True)
             return jsonify({"ok": True, "presets": items})
 
         return jsonify({"error": "unknown action: " + action}), 404
