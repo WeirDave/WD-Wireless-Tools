@@ -93,10 +93,20 @@ class TheTemplateEditor(BrowserPagesHarness):
         total = drv.find_element(By.ID, "capEdTotal").text
         self.assertIn("3 devices per person", total)
         drv.find_element(By.ID, "capEdSave").click()
-        WebDriverWait(drv, 10).until(lambda d: not d.execute_script(
-            "return document.getElementById('capEditor').classList.contains('active');"))
+        # The editor closes only once the server has built the template, so a
+        # busy runner can take longer than a click-and-look. If it never
+        # closes, say what the page said about why.
+        try:
+            self.wait_for(drv, lambda d: not d.execute_script(
+                "return document.getElementById('capEditor').classList.contains('active');"),
+                "the editor closed after Save", timeout=30)
+        except Exception:
+            shown = drv.execute_script(
+                "var b = document.getElementById('capEdError');"
+                "return b && !b.hidden ? b.textContent : '(no error shown)';")
+            self.fail("the editor stayed open after Save; the page said: %s" % shown)
         self.wait_for(drv, lambda d: self.chosen_name(d) == name,
-                      "the new template chosen")
+                      "the new template chosen", timeout=30)
 
     def test_a_built_template_is_saved_chosen_and_can_be_the_default(self):
         for kind, drv in self.each_browser():
