@@ -77,8 +77,9 @@ class _AcceptsOnlyTheFreshToken:
     """Stands in for Ekahau: a session is good if its AccessToken is the one
     written by the login he just completed."""
     def __init__(self, jar, csrf):
-        self.token = next((c.value for c in jar if c.name == "AccessToken"), "")
+        self.token = next((c["value"] for c in jar if c["name"] == "AccessToken"), "")
         self.failure = ""
+        self.refused = False
 
     def test_connection(self):
         if self.token == "fresh-token":
