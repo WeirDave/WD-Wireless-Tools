@@ -50,6 +50,14 @@ class TheTemplateEditor(BrowserPagesHarness):
         drv.get(self.base + "/capacity")
         WebDriverWait(drv, 15).until(lambda d: d.find_elements(By.ID, "fileInput"))
         drv.find_element(By.ID, "fileInput").send_keys(str(self.esx))
+        # The project is read when #capExtract is filled; the templates list
+        # and the apply note are both on the page before any file is dropped
+        # ("Pick a template first." is the note's starting text), so waiting on
+        # either returns while the analysis is still running and the editor
+        # then opens with no device or usage choices. That was the one cause
+        # behind this module failing in a different step on every run.
+        self.wait_for(drv, lambda d: d.find_element(By.ID, "capExtract").text.strip() != "",
+                      "the project read", timeout=40)
         WebDriverWait(drv, 20).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, "#capTemplates .cap-tpl"))
         self.wait_for(drv, lambda d: self.chosen_name(d) is not None
