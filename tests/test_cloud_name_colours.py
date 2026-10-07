@@ -46,7 +46,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CLOUD_JS = ROOT / "web" / "assets" / "js" / "cloud.js"
 CSS = ROOT / "web" / "assets" / "wd-tools.css"
-FIREFOX = _browsers.find("firefox")
+BROWSERS = _browsers.triple()
 NODE_TIMEOUT_S = 180
 
 #: One site, one file under it - the smallest tree that has all three levels.
@@ -145,20 +145,18 @@ def _distance(a, b):
     return sum((x - y) ** 2 for x, y in zip(a, b)) ** 0.5
 
 
-@unittest.skipUnless(Path(FIREFOX).exists(), "Firefox is not installed")
 @unittest.skipUnless(shutil.which("node"), "node is not installed")
-class NameColoursAreWhatTheyLookLikeTests(unittest.TestCase):
+class _NameColours(unittest.TestCase):
+    """The tests, once; a class per browser is made from it below."""
 
+    kind = ""
+    binary = ""
     colours: dict = {}
 
     @classmethod
     def setUpClass(cls):
-        try:
-            from selenium import webdriver
-            from selenium.webdriver.firefox.options import Options
-        except ImportError:  # pragma: no cover
-            raise unittest.SkipTest("selenium is not installed")
-
+        if not Path(cls.binary).exists():
+            raise unittest.SkipTest(f"{cls.kind} is not installed")
         r = subprocess.run(["node", "-e", RENDER, str(CLOUD_JS)],
                            capture_output=True, text=True, encoding="utf-8",
                            timeout=NODE_TIMEOUT_S)
@@ -171,20 +169,20 @@ class NameColoursAreWhatTheyLookLikeTests(unittest.TestCase):
         #: behind for good.
         cls._tmp = tempfile.mkdtemp()
         cls.addClassCleanup(shutil.rmtree, cls._tmp, True)
-        page = Path(cls._tmp) / "ledger.html"
-        page.write_text(
+        (Path(cls._tmp) / "ledger.html").write_text(
             "<!doctype html><html><head><meta charset='utf-8'><style>"
             + CSS.read_text(encoding="utf-8")
             + "</style><style>body{margin:0;background:var(--bg)}</style>"
             + "</head><body>" + r.stdout + "</body></html>",
             encoding="utf-8")
+        server = _browsers.serve_directory(cls._tmp)
+        cls.addClassCleanup(_browsers.stop_server, server)
 
-        opts = Options()
-        opts.binary_location = FIREFOX
-        opts.add_argument("-headless")
-        drv = webdriver.Firefox(options=opts)
+        drv = _browsers.make_driver(cls.kind, cls.binary)
+        if drv is None:
+            raise unittest.SkipTest(f"{cls.kind} would not start")
         try:
-            drv.get(page.as_uri())
+            drv.get("http://127.0.0.1:%d/ledger.html" % server.server_address[1])
             cls.colours = json.loads(drv.execute_script(READ_COLOURS))
         finally:
             _browsers.shut_down(drv)
@@ -240,6 +238,19 @@ class NameColoursAreWhatTheyLookLikeTests(unittest.TestCase):
         l = _contrast(_rgb(self.colours["siteLocal"]), bg)
         self.assertLess(abs(c - l), 1.5,
                         f"cloud {c:.2f}:1 against local {l:.2f}:1")
+
+
+def _case(kind, binary):
+    return type(f"NameColoursIn{kind.title()}", (_NameColours,),
+                {"kind": kind, "binary": binary})
+
+
+NameColoursInFirefox = _case(*BROWSERS[0])
+NameColoursInChrome = _case(*BROWSERS[1])
+NameColoursInEdge = _case(*BROWSERS[2])
+NameColoursInSafari = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
+# The base class is not a test of any browser; keep the loader from running it.
+del _NameColours
 
 
 if __name__ == "__main__":  # pragma: no cover

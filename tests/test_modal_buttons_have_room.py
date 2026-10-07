@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CSS = ROOT / "web" / "assets" / "wd-tools.css"
 CLOUD_HTML = ROOT / "web" / "cloud.html"
 
-FIREFOX = Path(_browsers.find("firefox"))
+BROWSERS = _browsers.triple()
 
 #: The body `checkAllUncompared()` really passes, for three pairs.
 BODY = (
@@ -88,34 +88,35 @@ def _page() -> str:
             f"</head><body class=\"wd\">{modal}{rest}</body></html>")
 
 
-@unittest.skipUnless(FIREFOX.exists(), "Firefox is not installed")
-class TheButtonsHaveRoom(unittest.TestCase):
-    """Driven in a browser, because the question is a distance in pixels."""
+class _TheButtonsHaveRoom(unittest.TestCase):
+    """Driven in a browser, because the question is a distance in pixels. The
+    tests are written once; a class per browser is made from them below."""
+
+    kind = ""
+    binary = ""
 
     @classmethod
     def setUpClass(cls):
-        try:
-            from selenium import webdriver
-        except ImportError:
-            raise unittest.SkipTest("selenium is not installed")
+        if not Path(cls.binary).exists():
+            raise unittest.SkipTest(f"{cls.kind} is not installed")
         cls.tmp = Path(tempfile.mkdtemp(prefix="wd-modal-"))
-        page = cls.tmp / "modal.html"
-        page.write_text(_page(), encoding="utf-8")
-        o = webdriver.FirefoxOptions()
-        o.binary_location = str(FIREFOX)
-        o.add_argument("-headless")
-        d = webdriver.Firefox(options=o)
+        cls.addClassCleanup(shutil.rmtree, cls.tmp, True)
+        (cls.tmp / "modal.html").write_text(_page(), encoding="utf-8")
+        server = _browsers.serve_directory(cls.tmp)
+        cls.addClassCleanup(_browsers.stop_server, server)
+        d = _browsers.make_driver(cls.kind, cls.binary)
+        if d is None:
+            raise unittest.SkipTest(f"{cls.kind} would not start")
         try:
             d.set_page_load_timeout(60)
             d.set_window_size(1280, 900)
-            d.get(page.as_uri())
+            d.get("http://127.0.0.1:%d/modal.html" % server.server_address[1])
             cls.out = d.execute_script(PROBE)
         finally:
             # Not a bare quit() in a try/except: a driver that has stopped
             # answering raises there, the exception is swallowed, and the
             # browser it started outlives the run.
             _browsers.shut_down(d)
-            shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def test_the_text_is_not_jammed_against_the_buttons(self):
         """The reported defect, as a measurement. It was 0."""
@@ -134,3 +135,16 @@ class TheButtonsHaveRoom(unittest.TestCase):
         flat = [m for m in self.out["all"] if m["total"] < 12]
         self.assertEqual([], flat,
                          f"modals with no room above their buttons: {flat}")
+
+
+def _case(kind, binary):
+    return type(f"TheButtonsHaveRoomIn{kind.title()}", (_TheButtonsHaveRoom,),
+                {"kind": kind, "binary": binary})
+
+
+TheButtonsHaveRoomInFirefox = _case(*BROWSERS[0])
+TheButtonsHaveRoomInChrome = _case(*BROWSERS[1])
+TheButtonsHaveRoomInEdge = _case(*BROWSERS[2])
+TheButtonsHaveRoomInSafari = _case(*BROWSERS[3]) if len(BROWSERS) > 3 else None
+# The base class is not a test of any browser; keep the loader from running it.
+del _TheButtonsHaveRoom
