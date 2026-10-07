@@ -244,7 +244,9 @@ sections before you use them for the first time.
 
 1. Open **Cloud Manager** from Home. If you are not signed in, press
    **Log in to Ekahau Cloud**, sign in in the browser tab that opens, and come
-   back. Cloud Manager picks the session up on its own.
+   back. Cloud Manager picks the session up on its own. If it has not after a
+   few seconds, the screen lists what it found in each browser; **Check again
+   now** looks immediately and **Back** returns to the login button.
 2. The first time, press **Choose Folder** and pick the folder that holds your
    site folders (each with `.esx` files inside), then **Continue**.
 3. Read the list: cloud on the left, local on the right, one row per pair.

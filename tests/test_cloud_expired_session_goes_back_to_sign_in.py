@@ -124,6 +124,7 @@ const said = [], auth = [];
 let stopped = 0;
 function toast(m, kind) { said.push([String(m), kind]); }
 function stopLive() { stopped++; }
+function stopLoginPoll() {}
 function setAuthState(s) { auth.push(s); }
 function e(s) { return String(s); }
 let data = { matched: [1] }, dupData = { x: 1 }, currentTab = 'sites';
