@@ -6,6 +6,17 @@ on:
   pull_request:
     branches: [main]
   workflow_call:
+    inputs:
+      # The release asks for 'off'. Every other trigger (a push, a pull
+      # request, a manual run) has no `inputs.safari` at all, which is why
+      # the job below tests for 'off' rather than for 'on': an absent input
+      # must mean "run it". `!= false` would be wrong the other way - in a
+      # GitHub expression a missing value and `false` both coerce to 0 and
+      # compare equal, which would skip Safari on every pull request.
+      safari:
+        description: "'off' leaves the Safari job out of this run"
+        type: string
+        default: 'on'
   workflow_dispatch:
 
 permissions:
@@ -173,8 +184,16 @@ jobs:
   # green because Safari never started is the failure this file already had
   # once, for Firefox, Chrome and Edge.
   # `tests/test_ci_splits_and_parallelises_the_suite.py` holds all of it.
+  #
+  # **It does not gate a release.** The release re-runs this workflow with
+  # `safari: 'off'` (see `auto-release.yml`). Safari is the one job whose
+  # failures could not be told apart from the runner: it fails on a different
+  # test from one run to the next, on `main` too, and took a finished release
+  # hostage for hours. It still runs, and shows red, on every pull request and
+  # push - that is where it informs a decision rather than makes it.
   safari:
     name: safari / macOS
+    if: ${{ inputs.safari != 'off' }}
     runs-on: macos-latest
     # One Safari session at a time, so every browser module runs one after
     # another. Raised from 30 when it grew from one module to all of them.

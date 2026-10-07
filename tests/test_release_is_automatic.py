@@ -71,6 +71,56 @@ class ABumpOnMainReleasesItselfTests(unittest.TestCase):
         self.assertIn("cancel-in-progress: false", AUTO)
 
 
+TESTS = (FLOW / "tests.yml").read_text(encoding="utf-8")
+
+
+class SafariInformsAPullRequestAndDoesNotGateARelease(unittest.TestCase):
+    """The release was held up for hours by the Safari job: it failed a
+    different test on each run, on `main` as well, and one failure anywhere in
+    the called workflow leaves the whole release unpublished. It is switched
+    off for the release run and nowhere else.
+
+    The condition is the part that could quietly go wrong, so it is pinned
+    exactly. In a GitHub expression a missing value and `false` both coerce to
+    0 and compare equal, so `inputs.safari != false` would skip Safari on
+    every pull request, where `inputs` is empty. Testing a *string* for 'off'
+    is true for an absent input and false only for the release.
+    """
+
+    @staticmethod
+    def _block(text, name):
+        lines = [l for l in text.splitlines() if not l.lstrip().startswith("#")]
+        at = next(i for i, l in enumerate(lines) if re.match(rf"^  {name}:\s*$", l))
+        out = []
+        for l in lines[at + 1:]:
+            if re.match(r"^  \S", l):
+                break
+            out.append(l)
+        return "\n".join(out)
+
+    def test_the_release_turns_safari_off(self):
+        self.assertRegex(self._block(AUTO, "tests"), r"with:\s*\n\s+safari: 'off'")
+
+    def test_the_input_defaults_to_running_it(self):
+        head = TESTS[:TESTS.index("\njobs:")]
+        self.assertRegex(head, r"safari:\s*\n(?:\s+#.*\n|\s+description:.*\n)*\s+type: string"
+                               r"\s*\n\s+default: 'on'")
+
+    def test_the_job_is_skipped_only_for_off(self):
+        self.assertIn("if: ${{ inputs.safari != 'off' }}", self._block(TESTS, "safari"))
+
+    def test_no_other_job_in_the_workflow_is_conditional_on_it(self):
+        """The four suite jobs and the three browser jobs must always run."""
+        for job in ("test", "browsers"):
+            self.assertNotIn("inputs.safari", self._block(TESTS, job))
+
+    def test_the_other_browsers_still_gate_the_release(self):
+        """Turning Safari off must not become turning the browsers off."""
+        self.assertNotIn("inputs.", self._block(TESTS, "browsers"))
+        # That the release still depends on the suite is held, once, by
+        # `test_a_red_suite_produces_no_release` above.
+
+
 class TheReleaseAlwaysCarriesItsAssetsTests(unittest.TestCase):
 
     def test_the_assets_are_built_by_the_automatic_path_too(self):

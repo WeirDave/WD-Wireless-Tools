@@ -86,6 +86,17 @@ at work that were already fixed.
   with a green `tests.yml` run; the release then takes about a minute instead
   of about 27. So **merge main into a PR before merging it.**
   `tests/test_release_skips_a_suite_it_already_ran.py` holds it.
+* **Safari does not gate a release.** `auto-release.yml` calls `tests.yml`
+  with `safari: 'off'`; the job still runs, and shows red, on every pull
+  request and push. It failed a different test on each run, `main` included,
+  and one red job anywhere in the called workflow leaves a finished release
+  unpublished. The condition is `inputs.safari != 'off'` on purpose: a missing
+  input and `false` coerce to 0 and compare equal in a GitHub expression, so
+  `!= false` would skip Safari on every pull request.
+  `SafariInformsAPullRequestAndDoesNotGateARelease` in
+  `tests/test_release_is_automatic.py`. A PR run with Safari red is not a
+  "successful" run to `tested_head.py`, so such a release runs the suite again
+  (about 14 minutes) instead of skipping it.
 * `release.yml` remains for a release published by hand in the GitHub UI and
   for backfilling assets onto a tag whose build failed.
 
@@ -126,7 +137,8 @@ unreleased work he cannot install. A local session pushes straight to `main`.
 All of these, on the PR's **current head**:
 
 1. **Every check has passed**: the four suite jobs, the firefox, chrome and
-   edge jobs, and CodeQL. Red, cancelled or running means no merge.
+   edge jobs, and CodeQL. Red, cancelled or running means no merge. **Safari
+   is not on that list** - it informs, it does not gate (see above).
 2. **The branch contains the latest `main`.** Merge `origin/main` in first and
    let CI run on the result - which is also what lets the release skip its
    own test run.

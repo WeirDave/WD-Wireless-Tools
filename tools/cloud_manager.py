@@ -514,6 +514,11 @@ class EkahauAPI:
         self.csrf_token = csrf_token
         self.user_email = ""
         self.failure = ""
+        #: True only when Ekahau answered and turned the session away (a login
+        #: redirect or a 401). A network that is not up yet, a timeout or a
+        #: 5xx say nothing about the cookie, so they never set it - it is what
+        #: licenses throwing a saved session away.
+        self.refused = False
         if isinstance(cookies, list):
             for c in cookies:
                 self.http.cookies.set(c["name"], c["value"],
@@ -535,6 +540,7 @@ class EkahauAPI:
         need different advice - waking from sleep leaves the network down for
         a while, and "log in again" does nothing for that."""
         self.failure = ""
+        self.refused = False
         try:
             r = self.http.get(f"{EKAHAU_URL}/site-management-api/v1/sites",
                               allow_redirects=False, timeout=15)
@@ -545,6 +551,7 @@ class EkahauAPI:
                 return True
             if r.status_code in (301, 302, 303, 307, 308, 401, 403):
                 self.failure = "Ekahau did not accept the sign-in it was given"
+                self.refused = r.status_code != 403
             else:
                 self.failure = f"Ekahau answered {r.status_code}"
         except requests.exceptions.RequestException:
@@ -976,6 +983,40 @@ def _add_firefox_wal_cookies(reader, jar, domain):
             "Firefox cookie log not read: %s", type(e).__name__)
 
 
+def _cookie_is_expired(c, now=None):
+    expires = getattr(c, "expires", None)
+    return (isinstance(expires, (int, float)) and not isinstance(expires, bool)
+            and expires <= (time.time() if now is None else now))
+
+
+def _live_cookies(jar):
+    """What a browser would actually send: nothing expired, and one cookie
+    per name.
+
+    `browser_cookie3` hands back every row it finds, expired ones included,
+    and a profile that has been signed in on and off for months can hold an
+    old AccessToken beside the current one, under another domain or path. The
+    session built from that jar sent Ekahau whichever it met first. Expired
+    rows are dropped, and where several live ones share a name the one that
+    expires last wins; a session cookie (no expiry) is live by definition and
+    beats a dated one.
+
+    Returns `(live, expired_names)`: the second is what was thrown away, so
+    "your sign-in has expired" can be said instead of "not found"."""
+    now = time.time()
+    best, expired = {}, set()
+    for c in jar:
+        if _cookie_is_expired(c, now):
+            expired.add(c.name)
+            continue
+        expires = getattr(c, "expires", None)
+        rank = float("inf") if expires is None else expires
+        kept = best.get(c.name)
+        if kept is None or rank > kept[0]:
+            best[c.name] = (rank, c)
+    return [c for _rank, c in best.values()], expired - set(best)
+
+
 def try_browser_cookies():
     reader = _cookie_reader()
     notes = []
@@ -989,18 +1030,22 @@ def try_browser_cookies():
             jar = func(domain_name=".ekahau.cloud")
             if name == "Firefox":
                 _add_firefox_wal_cookies(reader, jar, ".ekahau.cloud")
-            names = [c.name for c in jar]
-            csrf = next((c.value for c in jar if c.name == "CSRF-Token"), "")
+            live, expired = _live_cookies(jar)
+            names = [c.name for c in live]
+            csrf = next((c.value for c in live if c.name == "CSRF-Token"), "")
             if "AccessToken" not in names:
-                notes.append(f"{name}: no Ekahau sign-in found")
+                if "AccessToken" in expired:
+                    notes.append(f"{name}: its Ekahau sign-in has expired - log in again")
+                else:
+                    notes.append(f"{name}: no Ekahau sign-in found")
                 continue
             if not csrf:
                 notes.append(f"{name}: sign-in found but no CSRF token")
                 continue
-            api = EkahauAPI(jar, csrf)
+            cookie_list = [{"name": c.name, "value": c.value,
+                            "domain": c.domain, "path": c.path} for c in live]
+            api = EkahauAPI(cookie_list, csrf)
             if api.test_connection():
-                cookie_list = [{"name": c.name, "value": c.value,
-                                "domain": c.domain, "path": c.path} for c in jar]
                 save_cookies_to_disk(cookie_list, csrf)
                 _record_session_search([])
                 return api
@@ -1012,16 +1057,61 @@ def try_browser_cookies():
     return None
 
 
+def _saved_session_stamp():
+    """Which saved session this is, cheaply: size and modification time of the
+    files that hold it. Nothing is read, so nothing secret is held."""
+    stamp = []
+    for path in (ENCRYPTED_COOKIE_FILE, COOKIE_FILE):
+        try:
+            st = path.stat()
+            stamp.append((str(path), st.st_size, st.st_mtime_ns))
+        except OSError:
+            continue
+    return tuple(stamp)
+
+
+def discard_saved_session(only_if_stamp=None):
+    """Delete the saved Cloud session files; True when none is left.
+
+    Only the files - the key in the system vault stays, so the next sign-in is
+    saved without asking the OS for anything. `only_if_stamp` is the stamp
+    taken before the session was tried: if another thread has saved a new one
+    since (a poll and a second tab both landing here), that file is not the
+    one that was refused and it is left alone."""
+    if only_if_stamp is not None and _saved_session_stamp() != only_if_stamp:
+        return False
+    ok = True
+    for path in (ENCRYPTED_COOKIE_FILE, COOKIE_FILE):
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            ok = False
+    return ok
+
+
 def try_saved_cookies():
+    global _saved_session_note
+    stamp = _saved_session_stamp()
     cookies, csrf = load_cookies_from_disk()
     if not cookies or not csrf:
         return None
-    global _saved_session_note
     api = EkahauAPI(cookies, csrf)
     if api.test_connection():
         _saved_session_note = ""
         return api
-    _saved_session_note = f"Saved sign-in: {api.failure or 'not accepted'}"
+    if api.refused:
+        # Ekahau answered and turned it away: this session is dead, and it
+        # would be tried first, and refused again, on every start and every
+        # poll until something replaced it. A browser sign-in replaces it the
+        # moment one is found. Only for a refusal - a network that is not up
+        # yet proves nothing about the cookie, and that one is kept.
+        gone = discard_saved_session(only_if_stamp=stamp)
+        _saved_session_note = ("Saved sign-in: Ekahau no longer accepts it" +
+                               (", so it was removed" if gone else ""))
+        applog.get_logger().info("Saved Cloud sign-in refused by Ekahau; %s",
+                                 "removed" if gone else "could not be removed")
+    else:
+        _saved_session_note = f"Saved sign-in: {api.failure or 'not accepted'}"
     return None
 
 

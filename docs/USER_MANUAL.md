@@ -246,7 +246,10 @@ sections before you use them for the first time.
    **Log in to Ekahau Cloud**, sign in in the browser tab that opens, and come
    back. Cloud Manager picks the session up on its own. If it has not after a
    few seconds, the screen lists what it found in each browser; **Check again
-   now** looks immediately and **Back** returns to the login button.
+   now** looks immediately and **Back** returns to the login button. A saved
+   sign-in that Ekahau no longer accepts is removed automatically, and the
+   screen says so; a browser's expired sign-in is reported as expired and is
+   never sent. Log in again in that browser and it is replaced.
 2. The first time, press **Choose Folder** and pick the folder that holds your
    site folders (each with `.esx` files inside), then **Continue**.
 3. Read the list: cloud on the left, local on the right, one row per pair.

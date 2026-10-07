@@ -138,6 +138,12 @@ jobs:
     needs: decide
     if: needs.decide.outputs.needed == 'true' && needs.decide.outputs.tested != 'true'
     uses: ./.github/workflows/tests.yml
+    with:
+      # Safari informs a pull request and does not gate a release: it has
+      # failed on a different test each run, on main as well, and kept a
+      # finished release unpublished. The other browsers and all four suite
+      # jobs still must pass. `tests.yml` explains why the test is for 'off'.
+      safari: 'off'
 
   publish:
     needs: [decide, tests]
