@@ -22,6 +22,7 @@ the workflow's switch is evaluated for every matrix combination,
 """
 from __future__ import annotations
 
+import ast
 import contextlib
 import io
 import os
@@ -337,6 +338,19 @@ class TheSafariJobCannotPassByDrivingNothing(unittest.TestCase):
                 self.assertEqual(browsers.triple()[-1],
                                  ("safari", browsers.SAFARIDRIVER))
                 self.assertIn("safari", browsers.available())
+
+    def test_a_module_that_gets_its_browser_from_browsers_py_is_found(self):
+        """`test_cloud_name_colours` and `test_modal_buttons_have_room` moved
+        to `browsers.make_driver` and no longer import selenium. A detector
+        that reads only imports would have dropped both from every browser
+        job and left them skipping silently on every runner."""
+        for name in ("test_cloud_name_colours", "test_modal_buttons_have_room"):
+            self.assertTrue(run_tests.uses_a_browser(name), name)
+        for call in ("_browsers.make_driver(k, b)", "_browsers.safari_driver()",
+                     "make_driver(k, b)"):
+            self.assertTrue(run_tests._drives_a_browser(ast.parse(call)), call)
+        self.assertFalse(run_tests._drives_a_browser(
+            ast.parse("_browsers.triple()\nx = make_driver_notes()")))
 
     def test_the_four_browser_modules_that_ran_in_no_job_are_found(self):
         """`from tests.x import HAVE_SELENIUM, _driver` is a browser module.

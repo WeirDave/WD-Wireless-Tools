@@ -204,10 +204,8 @@ def triple() -> list:
 #: `tests/test_ci_splits_and_parallelises_the_suite.py` fails on an entry that
 #: names no module or gives no reason. Not a place to put a test that fails.
 SAFARI_NOT_APPLICABLE = {
-    "test_cloud_name_colours": "drives Firefox only, by construction",
     "test_dev_mode_can_be_left": "drives Firefox only, and ends on a Firefox print",
     "test_dev_toolbar_does_not_print": "reads Firefox's print pipeline",
-    "test_modal_buttons_have_room": "drives Firefox only, by construction",
     "test_nothing_is_left_running": "audits how Firefox is stopped",
     "test_report_first_sheet_orientation_browser":
         "prints through WebDriver's Print Page command, which safaridriver does not implement",
@@ -579,6 +577,26 @@ class ExclusiveServer(ThreadingHTTPServer):
     module to it.
     """
     allow_reuse_address = False
+
+def serve_directory(directory):
+    """Serve `directory` on a port of its own and return the running server;
+    the caller stops it with `stop_server`.
+
+    For a test that writes a page to a temp directory and opens it. It is
+    served rather than opened as a `file:` URL because Safari answers a
+    `file:` URL from an automated session with "Failed to open page", and
+    the other three read an http page the same way they read a file.
+    """
+    import threading
+    from functools import partial
+    from http.server import SimpleHTTPRequestHandler
+    handler = type("Quiet", (SimpleHTTPRequestHandler,),
+                   {"log_message": lambda *a, **k: None})
+    server = ExclusiveServer(("127.0.0.1", 0),
+                             partial(handler, directory=str(directory)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
 
 #: How long to wait for a `serve_forever` loop to acknowledge a shutdown
 #: before giving up on it and closing the socket anyway.
