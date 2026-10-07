@@ -100,10 +100,25 @@ class _StubApi(SimpleHTTPRequestHandler):
         super().do_GET()
 
 
-#: Builds a File from bytes and drops it on the real drop zone. It returns at
-#: once; the test then waits for what the drop causes (the page asking the
-#: server where the job's folder is) instead of for a guessed number of seconds.
+#: Builds a File from bytes and drops it on the real drop zone, then reads the
+#: title after the page has had time to parse and look the folder up. Kept as
+#: it was: test_report_first_sheet_orientation_browser imports it and drives it
+#: with execute_async_script, so it must still call its callback.
 DROP_JS = """
+var done = arguments[arguments.length - 1];
+var bytes = Uint8Array.from(atob(arguments[0]), function (c) { return c.charCodeAt(0); });
+var file = new File([bytes], arguments[1], { type: 'application/octet-stream' });
+var dt = new DataTransfer();
+dt.items.add(file);
+var dz = document.getElementById('dropzone');
+dz.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+setTimeout(function () { done(document.title); }, 2500);
+"""
+
+#: The same drop, returning at once: this file waits for what the drop causes
+#: (the page asking the server where the job's folder is) instead of for a
+#: guessed number of seconds.
+DROP_NOW_JS = """
 var bytes = Uint8Array.from(atob(arguments[0]), function (c) { return c.charCodeAt(0); });
 var file = new File([bytes], arguments[1], { type: 'application/octet-stream' });
 var dt = new DataTransfer();
@@ -191,7 +206,7 @@ class DroppedFileNamesTheReport(unittest.TestCase):
         self.assertTrue(
             self._wait_until(lambda: any(a == "settings/get" for (a, _) in _StubApi.calls), 30),
             "the report page never read its settings")
-        driver.execute_script(DROP_JS, self.b64, ESX_NAME)
+        driver.execute_script(DROP_NOW_JS, self.b64, ESX_NAME)
         # The page parses the file and then asks where the folder is; the answer
         # is local and instant, so once the question has been asked the title
         # only needs to stop moving. A refused lookup leaves the old title, so
