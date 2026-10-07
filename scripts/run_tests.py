@@ -116,7 +116,20 @@ def _drives_a_browser(tree: ast.AST) -> bool:
                 return True
         elif isinstance(node, ast.Attribute) and node.attr == "HAVE_SELENIUM":
             return True
+        elif isinstance(node, ast.Call):
+            # A module that gets its browser from `tests/browsers.py` need not
+            # import selenium itself. The two that were Firefox-only moved to
+            # `browsers.make_driver` and stopped importing it, which would have
+            # taken them out of every browser job the same way.
+            f = node.func
+            name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+            if name in _DRIVER_CALLS:
+                return True
     return False
+
+
+#: Calls into `tests/browsers.py` that start a browser.
+_DRIVER_CALLS = {"make_driver", "safari_driver"}
 
 
 @functools.lru_cache(maxsize=None)

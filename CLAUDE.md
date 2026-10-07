@@ -308,6 +308,12 @@ at a time. Three things hold it honest, each from a way it could have lied:
   run**, each with a one-sentence reason that the job prints. It is for a test
   that is about another browser (Firefox's print pipeline), never for one that
   fails.
+* **A new browser test is written once and given a class per browser**: build
+  its driver with `browsers.make_driver(kind, binary)`, serve a page it writes
+  to a temp directory with `browsers.serve_directory` (Safari refuses `file:`
+  URLs), and make the classes from `browsers.triple()`. `run_tests.py` finds a
+  browser module by its `import selenium` *or* its call to `make_driver` /
+  `safari_driver`; a module that did neither would run in no job at all.
 * **A Safari-only difference is a finding, not noise.** The first full run
   found `img.naturalHeight` is the on-screen size there, so AP Labeler's
   spacing lines disagreed with its numbering; Safari's WebDriver also refuses
