@@ -127,6 +127,10 @@ class TheTemplateEditor(BrowserPagesHarness):
 
                 # A fresh open picks the default without a click.
                 self.open_project(drv)
+                # open_project returns on any apply note, "Pick a template
+                # first." included, which can show before the default lands.
+                self.wait_for(drv, lambda d: self.chosen_name(d) == name,
+                              "the saved default chosen on a fresh open")
                 self.assertEqual(self.chosen_name(drv), name)
                 WebDriverWait(drv, 15).until(lambda d: d.find_element(
                     By.ID, "capApplyNote").text not in ("Pick a template first.", ""))
