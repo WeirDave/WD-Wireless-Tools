@@ -692,24 +692,40 @@ form.
 ### The Attenuation Areas tab
 
 Attenuation areas have their own tab beside **Wall Types**, named as Ekahau
-names them. The tab lists two outdoor presets, **Tree Canopy** (9 to 35 ft,
-1 / 1.3 / 1.5 dB per foot at 2.4 / 5 / 6 GHz) and **Shrubbery/Low Plants**
-(0 to 4 ft, 1.2 / 1.6 / 1.8 dB per foot), and below them the area types the
-project already has, in feet and dB per foot. **+ Add Tree Canopy & Shrubbery**
-puts both in the project's attenuation area list, so they can be drawn over
-outdoor spaces in Ekahau. Quick Walls converts feet to metres on the way in;
-areas already drawn are not changed, and a type with the same name is updated
-in place. Press the save button at the bottom right to write them.
+names them. The tab has two lists, in feet and dB per foot at 2.4 / 5 / 6 GHz:
+**Presets** and **In this project**.
 
-**+ Add Attenuation Area** makes a new one of your own: a name, a colour, the
-lower and upper edge in feet (leave the upper edge empty and the area runs to
-the ceiling) and the loss in dB per foot at 2.4, 5 and 6 GHz. It is saved in
-the project's attenuation area list, not in a wall template: wall templates
-carry wall types only, and the two are kept apart. A name the project already
-uses is refused, with the reason shown in the dialog.
+**Presets** are areas kept so they are not forgotten. Two come with the app,
+**Tree Canopy** (9 to 35 ft, 1 / 1.3 / 1.5 dB per foot) and
+**Shrubbery/Low Plants** (0 to 4 ft, 1.2 / 1.6 / 1.8 dB per foot), marked *built
+in*. The ones you keep yourself are marked *kept by you*. **Add** on a preset
+puts that one in the project's attenuation area list, and **+ Add All Presets**
+puts them all in. Quick Walls converts feet to metres on the way in; areas
+already drawn are not changed, and a type with the same name is updated in
+place, keeping its name and colour. **Remove** on a kept preset takes it off
+the list (projects that already have it are not changed); a built-in preset
+cannot be removed.
 
-The button is greyed, with the reason beside it, when the project has no
-attenuation area type to copy the file layout from. Add any area type in
+**In this project** lists the project's own attenuation area types, each with
+how many areas are drawn with it.
+
+| Button | What it does |
+| --- | --- |
+| **Edit** | Opens the area: name, colour, lower and upper edge, loss at each band. Drawn areas keep working because the type keeps its id. Saving with nothing changed changes nothing |
+| **Keep as preset** | Keeps this area as a preset of your own, on this tab in every project. It does not change the project |
+| **Delete** | Removes the type after one question that names it. Greyed, with the reason, when drawn areas use it - Quick Walls will not remove a type from under an area that is drawn with it. Delete or retype those areas in Ekahau first |
+| **+ Add Attenuation Area** | A blank form for a new one: a name, a colour, the lower and upper edge in feet (leave the upper edge empty and the area runs to the ceiling) and the loss in dB per foot at 2.4, 5 and 6 GHz |
+
+Press the save button at the bottom right to write the project's changes.
+Everything here is saved in the project's attenuation area list, never in a
+wall template: wall templates carry wall types only, and the two are kept
+apart. Presets you keep are stored in your user folder
+(`attenuation-area-presets.json`) and travel with the settings export. A name
+the project already uses, an upper edge at or below the lower edge, or a missing
+or negative loss is refused, with the reason shown in the dialog.
+
+The buttons that add are greyed, with the reason beside them, when the project
+has no attenuation area type to copy the file layout from. Add any area type in
 Ekahau once and open the project again.
 
 ### What a wall type holds
@@ -2448,6 +2464,7 @@ or Finder hides it.
 | --- | --- |
 | `settings.json` | Every preference, whether set on the Settings page or in its tool |
 | `templates/` | Your wall templates, including Quick Walls keyboard shortcuts |
+| `attenuation-area-presets.json` | The attenuation area presets you kept from Quick Walls |
 | `capacity/` | Your capacity templates |
 | `report/` | Your report cover image |
 | `plantrim-boxes.json`, `organizer_config.json` | PlanTrim's crop boxes; Squirrel's folder settings |

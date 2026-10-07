@@ -101,7 +101,9 @@ class _StubApi(SimpleHTTPRequestHandler):
 
 
 #: Builds a File from bytes and drops it on the real drop zone, then reads the
-#: title after the page has had time to parse and look the folder up.
+#: title after the page has had time to parse and look the folder up. Kept as
+#: it was: test_report_first_sheet_orientation_browser imports it and drives it
+#: with execute_async_script, so it must still call its callback.
 DROP_JS = """
 var done = arguments[arguments.length - 1];
 var bytes = Uint8Array.from(atob(arguments[0]), function (c) { return c.charCodeAt(0); });
@@ -111,6 +113,24 @@ dt.items.add(file);
 var dz = document.getElementById('dropzone');
 dz.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
 setTimeout(function () { done(document.title); }, 2500);
+"""
+
+#: The same drop, returning at once: this file waits for what the drop causes
+#: (the page asking the server where the job's folder is) instead of for a
+#: guessed number of seconds.
+DROP_NOW_JS = """
+var bytes = Uint8Array.from(atob(arguments[0]), function (c) { return c.charCodeAt(0); });
+var file = new File([bytes], arguments[1], { type: 'application/octet-stream' });
+var dt = new DataTransfer();
+dt.items.add(file);
+var dz = document.getElementById('dropzone');
+dz.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+"""
+
+READY_JS = """
+return document.readyState === 'complete'
+  && typeof window.renderFilenamePreview === 'function'
+  && !!document.getElementById('dropzone');
 """
 
 PREVIEW_JS = """
@@ -177,11 +197,50 @@ class DroppedFileNamesTheReport(unittest.TestCase):
         _StubApi.answer = answer
         _StubApi.calls = []
         driver.get(self.url)
-        time.sleep(1.2)
-        driver.set_script_timeout(60)
-        title = driver.execute_async_script(DROP_JS, self.b64, ESX_NAME)
+        # Ready is the page's scripts having run and it having read its settings,
+        # not 1.2 seconds. A busy CI runner took longer than that and the drop
+        # landed on a page that was not listening yet, so the title stayed
+        # "WD Report".
+        self.assertTrue(self._wait_until(lambda: driver.execute_script(READY_JS), 30),
+                        "the report page never finished loading")
+        self.assertTrue(
+            self._wait_until(lambda: any(a == "settings/get" for (a, _) in _StubApi.calls), 30),
+            "the report page never read its settings")
+        driver.execute_script(DROP_NOW_JS, self.b64, ESX_NAME)
+        # The page parses the file and then asks where the folder is; the answer
+        # is local and instant, so once the question has been asked the title
+        # only needs to stop moving. A refused lookup leaves the old title, so
+        # "stopped changing" is the signal, not "changed".
+        self._wait_until(
+            lambda: any(a == "report/find_folder" for (a, _) in _StubApi.calls), 30)
+        title = self._settled_title(driver)
         asked = [b for (a, b) in _StubApi.calls if a == "report/find_folder"]
         return title, asked
+
+    @staticmethod
+    def _wait_until(condition, seconds):
+        """Poll for `condition`; return whether it came true. A lookup that
+        never happens is a finding for the assertion that follows, with its own
+        message, not a timeout traceback from here."""
+        end = time.time() + seconds
+        while time.time() < end:
+            if condition():
+                return True
+            time.sleep(0.1)
+        return False
+
+    @staticmethod
+    def _settled_title(driver):
+        """The title once two reads, 0.4 s apart, agree (bounded at 15 s)."""
+        previous = driver.execute_script("return document.title;")
+        end = time.time() + 15
+        while time.time() < end:
+            time.sleep(0.4)
+            current = driver.execute_script("return document.title;")
+            if current == previous:
+                return current
+            previous = current
+        return previous
 
     def _each_browser(self):
         started = 0

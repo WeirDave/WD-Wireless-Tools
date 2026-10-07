@@ -50,9 +50,30 @@ class TheTemplateEditor(BrowserPagesHarness):
         drv.get(self.base + "/capacity")
         WebDriverWait(drv, 15).until(lambda d: d.find_elements(By.ID, "fileInput"))
         drv.find_element(By.ID, "fileInput").send_keys(str(self.esx))
+        # The project is read when #capExtract is filled; the templates list
+        # and the apply note are both on the page before any file is dropped
+        # ("Pick a template first." is the note's starting text), so waiting on
+        # either returns while the analysis is still running and the editor
+        # then opens with no device or usage choices. That was the one cause
+        # behind this module failing in a different step on every run.
+        self.wait_for(drv, lambda d: d.find_element(By.ID, "capExtract").text.strip() != "",
+                      "the project read", timeout=40)
         WebDriverWait(drv, 20).until(
             lambda d: d.find_elements(By.CSS_SELECTOR, "#capTemplates .cap-tpl"))
-        time.sleep(0.4)
+        self.wait_for(drv, lambda d: self.chosen_name(d) is not None
+                      or d.find_element(By.ID, "capApplyNote").text != "",
+                      "a chosen template or an apply note")
+
+    TEMPLATE_NAMES = ("return Array.prototype.map.call(document.querySelectorAll("
+                      "'#capTemplates .cap-tpl-name'), function (b) { return b.textContent; });")
+    TEMPLATE_LABELS = ("return Array.prototype.map.call(document.querySelectorAll("
+                       "'#capTemplates .cap-tpl'), function (b) { return b.textContent; });")
+
+    def wait_for(self, drv, condition, what, timeout=15):
+        """Wait for the page to show the result, never for a guessed number of
+        seconds. A fixed sleep passed on a quiet runner and failed on a busy one,
+        in a different step each time."""
+        WebDriverWait(drv, timeout).until(condition, "the page never showed: " + what)
 
     def chosen_name(self, drv):
         return drv.execute_script("""
@@ -72,14 +93,28 @@ class TheTemplateEditor(BrowserPagesHarness):
         drv.find_element(By.XPATH, "//button[contains(., 'Add a device')]").click()
         rows = drv.find_elements(By.CSS_SELECTOR, "#capEdRows tr")
         self.assertEqual(len(rows), 2)
-        usage = Select(rows[1].find_elements(By.TAG_NAME, "select")[1])
+        usage_el = rows[1].find_elements(By.TAG_NAME, "select")[1]
+        self.wait_for(drv, lambda d: len(Select(usage_el).options) > 0,
+                      "usage choices in the new device row")
+        usage = Select(usage_el)
         usage.select_by_index(len(usage.options) - 1)
         total = drv.find_element(By.ID, "capEdTotal").text
         self.assertIn("3 devices per person", total)
         drv.find_element(By.ID, "capEdSave").click()
-        WebDriverWait(drv, 10).until(lambda d: not d.execute_script(
-            "return document.getElementById('capEditor').classList.contains('active');"))
-        time.sleep(0.4)
+        # The editor closes only once the server has built the template, so a
+        # busy runner can take longer than a click-and-look. If it never
+        # closes, say what the page said about why.
+        try:
+            self.wait_for(drv, lambda d: not d.execute_script(
+                "return document.getElementById('capEditor').classList.contains('active');"),
+                "the editor closed after Save", timeout=30)
+        except Exception:
+            shown = drv.execute_script(
+                "var b = document.getElementById('capEdError');"
+                "return b && !b.hidden ? b.textContent : '(no error shown)';")
+            self.fail("the editor stayed open after Save; the page said: %s" % shown)
+        self.wait_for(drv, lambda d: self.chosen_name(d) == name,
+                      "the new template chosen", timeout=30)
 
     def test_a_built_template_is_saved_chosen_and_can_be_the_default(self):
         for kind, drv in self.each_browser():
@@ -91,10 +126,11 @@ class TheTemplateEditor(BrowserPagesHarness):
                 view = drv.find_element(By.ID, "capTplView").text
                 self.assertIn("per person", view.lower())
                 drv.find_element(By.ID, "capMakeDefault").click()
-                time.sleep(0.5)
-                files = drv.execute_script(
-                    "return Array.prototype.map.call(document.querySelectorAll("
-                    "'#capTemplates .cap-tpl'), function (b) { return b.textContent; });")
+                self.wait_for(drv, lambda d: any(
+                    name in f and "default" in f
+                    for f in d.execute_script(self.TEMPLATE_LABELS)),
+                    "the built template marked default")
+                files = drv.execute_script(self.TEMPLATE_LABELS)
                 self.assertTrue(any(name in f and "default" in f for f in files), files)
                 saved = self.settings()["capacity"]["default_template"]
                 self.assertTrue(saved.endswith("_capacitytemplate.json"), saved)
@@ -109,6 +145,10 @@ class TheTemplateEditor(BrowserPagesHarness):
 
                 # A fresh open picks the default without a click.
                 self.open_project(drv)
+                # open_project returns on any apply note, "Pick a template
+                # first." included, which can show before the default lands.
+                self.wait_for(drv, lambda d: self.chosen_name(d) == name,
+                              "the saved default chosen on a fresh open")
                 self.assertEqual(self.chosen_name(drv), name)
                 WebDriverWait(drv, 15).until(lambda d: d.find_element(
                     By.ID, "capApplyNote").text not in ("Pick a template first.", ""))
@@ -122,17 +162,19 @@ class TheTemplateEditor(BrowserPagesHarness):
                     document.querySelectorAll('#capTemplates .cap-tpl'),
                     function (x) { return /example/.test(x.textContent); })[0];
                   b.click();""")
-                time.sleep(0.3)
+                self.wait_for(drv, lambda d: "example" in (self.chosen_name(d) or ""),
+                              "the shipped example chosen")
                 drv.find_element(By.ID, "capEditBtn").click()
                 name_box = drv.find_element(By.ID, "capEdName")
                 self.assertIn("(my copy)", name_box.get_attribute("value"))
                 name_box.clear()
                 name_box.send_keys("Example copy %s" % kind)
                 drv.find_element(By.ID, "capEdSave").click()
-                time.sleep(0.8)
-                texts = drv.execute_script(
-                    "return Array.prototype.map.call(document.querySelectorAll("
-                    "'#capTemplates .cap-tpl-name'), function (b) { return b.textContent; });")
+                self.wait_for(drv, lambda d: any(
+                    ("Example copy %s" % kind) in t
+                    for t in d.execute_script(self.TEMPLATE_NAMES)),
+                    "the saved copy in the template list")
+                texts = drv.execute_script(self.TEMPLATE_NAMES)
                 self.assertTrue(any("(example)" in t for t in texts), texts)
                 self.assertTrue(any(("Example copy %s" % kind) in t for t in texts), texts)
 
@@ -146,10 +188,10 @@ class TheTemplateEditor(BrowserPagesHarness):
                 btn.click()
                 self.assertIn(name, btn.text)
                 btn.click()
-                time.sleep(0.8)
-                texts = drv.execute_script(
-                    "return Array.prototype.map.call(document.querySelectorAll("
-                    "'#capTemplates .cap-tpl-name'), function (b) { return b.textContent; });")
+                self.wait_for(drv, lambda d: not any(
+                    name in t for t in d.execute_script(self.TEMPLATE_NAMES)),
+                    "the deleted template gone from the list")
+                texts = drv.execute_script(self.TEMPLATE_NAMES)
                 self.assertFalse(any(name in t for t in texts), texts)
 
 

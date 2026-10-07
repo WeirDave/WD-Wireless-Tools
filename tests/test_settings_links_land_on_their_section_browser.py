@@ -58,6 +58,35 @@ class EachToolLinksToASection(unittest.TestCase):
 @unittest.skipUnless(HAVE_SELENIUM, "selenium is not installed")
 class EveryLinkLands(BrowserPagesHarness):
 
+    ARRIVED = """
+      var hit = Array.prototype.filter.call(
+        document.querySelectorAll('.s-section.is-arrived'),
+        function (s) { return s.open; })[0];
+      if (!hit) return null;
+      var b = hit.getBoundingClientRect();
+      var se = document.scrollingElement;
+      return {id: hit.id, top: b.top, win: innerHeight,
+              atEnd: se.scrollTop + se.clientHeight >= se.scrollHeight - 2};"""
+
+    def _arrived_position(self, drv, seconds=20):
+        """Where the opened section sits once it has stopped moving.
+
+        The page opens the section and then scrolls it into place, and how long
+        that takes depends on the runner, so a fixed sleep read the position
+        mid-scroll on a busy one (136px from the top against a limit of 120).
+        Two reads 0.4 s apart that agree are the page having arrived; a section
+        that never opens still returns None for the assertion to name.
+        """
+        previous = None
+        end = time.time() + seconds
+        while time.time() < end:
+            time.sleep(0.4)
+            current = drv.execute_script(self.ARRIVED)
+            if current is not None and current == previous:
+                return current
+            previous = current
+        return previous
+
     def test_each_link_opens_its_section_at_the_top(self):
         links = _links()
         self.assertTrue(links)
@@ -68,16 +97,7 @@ class EveryLinkLands(BrowserPagesHarness):
                     drv.get(self.base + "/settings")
                     drv.get(self.base + "/settings#" + hash_)
                     drv.refresh()
-                    time.sleep(1.2)
-                    r = drv.execute_script("""
-                      var hit = Array.prototype.filter.call(
-                        document.querySelectorAll('.s-section.is-arrived'),
-                        function (s) { return s.open; })[0];
-                      if (!hit) return null;
-                      var b = hit.getBoundingClientRect();
-                      var se = document.scrollingElement;
-                      return {id: hit.id, top: b.top, win: innerHeight,
-                              atEnd: se.scrollTop + se.clientHeight >= se.scrollHeight - 2};""")
+                    r = self._arrived_position(drv)
                     self.assertIsNotNone(r, "#%s opened no section" % hash_)
                     # At the top of the window - or, for a section near the
                     # end of the page, as high as the page can scroll it and

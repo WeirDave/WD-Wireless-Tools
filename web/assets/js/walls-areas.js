@@ -131,24 +131,16 @@ function sameValues(a, b) {
      than half-written. `upperEdgeFt` empty means Auto. */
   function addType(types, spec, newId) {
     const list = Array.isArray(types) ? types : [];
-    const name = String((spec && spec.name) || '').trim();
-    if (!name) return { error: 'Give the attenuation area a name.' };
+    const bad = specError(spec);
+    if (bad) return { error: bad };
+    const name = String(spec.name).trim();
     if (list.some(t => sameName(t && t.name, name))) {
       return { error: 'This project already has an attenuation area named \u201c'
         + name + '\u201d. Pick another name.' };
     }
-    const ok = v => typeof v === 'number' && isFinite(v) && v >= 0;
     const lower = spec.lowerEdgeFt == null ? 0 : spec.lowerEdgeFt;
     const upper = spec.upperEdgeFt == null ? null : spec.upperEdgeFt;
-    if (!ok(lower)) return { error: 'The lower edge must be a number, 0 or more.' };
-    if (upper !== null && !(ok(upper) && upper > lower)) {
-      return { error: 'The upper edge must be above the lower edge, or left empty '
-        + 'to run to the ceiling.' };
-    }
     const att = spec.attenuationDbPerFt || {};
-    if (!BANDS.every(b => ok(att[b]))) {
-      return { error: 'Enter the loss in dB per foot at 2.4, 5 and 6 GHz, 0 or more.' };
-    }
     const shape = list.find(usableShape);
     if (!shape) return { error: noShapeError(list) };
     const fresh = applyValues(JSON.parse(JSON.stringify(shape)), {
@@ -160,6 +152,101 @@ function sameValues(a, b) {
     return { types: list.concat([fresh]), added: [name] };
   }
 
+  const roundTo = (v, places) => {
+    const k = Math.pow(10, places);
+    return Math.round(v * k) / k;
+  };
+  const metresToFeet = m => roundTo(m / FT_M, 3);
+  const perMetreToPerFoot = v => roundTo(v * FT_M, 3);
+
+  /* A type as the form shows it: feet and dB per foot, the units it is measured
+     in. Shown to three places so Ekahau's own rounding (9 ft stored as
+     2.7432000000000003 m) reads as 9. */
+  function typeToSpec(t) {
+    const by = {};
+    ((t && t.propagationProperties) || []).forEach(p => { by[p.band] = p.attenuationFactor; });
+    const per = b => (typeof by[b] === 'number' ? perMetreToPerFoot(by[b]) : null);
+    return {
+      name: (t && t.name) || '',
+      color: (t && t.color) || '#808080',
+      lowerEdgeFt: typeof (t && t.lowerEdge) === 'number' ? metresToFeet(t.lowerEdge) : 0,
+      upperEdgeFt: typeof (t && t.upperEdge) === 'number' ? metresToFeet(t.upperEdge) : null,
+      attenuationDbPerFt: { TWO: per('TWO'), FIVE: per('FIVE'), SIX: per('SIX') },
+    };
+  }
+
+  /* The same check addType makes, shared so Add and Edit refuse the same things.
+     Returns an error string, or '' when the spec is fine. */
+  function specError(spec) {
+    const ok = v => typeof v === 'number' && isFinite(v) && v >= 0;
+    if (!String((spec && spec.name) || '').trim()) return 'Give the attenuation area a name.';
+    const lower = spec.lowerEdgeFt == null ? 0 : spec.lowerEdgeFt;
+    const upper = spec.upperEdgeFt == null ? null : spec.upperEdgeFt;
+    if (!ok(lower)) return 'The lower edge must be a number, 0 or more.';
+    if (upper !== null && !(ok(upper) && upper > lower)) {
+      return 'The upper edge must be above the lower edge, or left empty '
+        + 'to run to the ceiling.';
+    }
+    const att = spec.attenuationDbPerFt || {};
+    if (!BANDS.every(b => ok(att[b]))) {
+      return 'Enter the loss in dB per foot at 2.4, 5 and 6 GHz, 0 or more.';
+    }
+    return '';
+  }
+
+  /* Change one existing type from the form. The id and every field the form
+     does not own are kept, so areas already drawn with it still resolve. A value
+     the form still shows as it was (within the rounding the form applies) keeps
+     the exact number Ekahau stored, so opening and saving changes nothing. */
+  function updateType(types, index, spec) {
+    const list = Array.isArray(types) ? types : [];
+    const current = list[index];
+    if (!current) return { error: 'That attenuation area is no longer in the project.' };
+    const bad = specError(spec);
+    if (bad) return { error: bad };
+    const name = String(spec.name).trim();
+    if (list.some((t, i) => i !== index && sameName(t && t.name, name))) {
+      return { error: 'This project already has another attenuation area named \u201c'
+        + name + '\u201d. Pick another name.' };
+    }
+    const next = JSON.parse(JSON.stringify(current));
+    next.name = name;
+    next.color = spec.color;
+    const near = (a, b, tol) => typeof a === 'number' && Math.abs(a - b) < tol;
+    const lowerM = feetToMetres(spec.lowerEdgeFt == null ? 0 : spec.lowerEdgeFt);
+    if (!near(current.lowerEdge, lowerM, 1e-3)) next.lowerEdge = lowerM;
+    if (spec.upperEdgeFt == null) delete next.upperEdge;
+    else {
+      const upperM = feetToMetres(spec.upperEdgeFt);
+      if (!near(current.upperEdge, upperM, 1e-3)) next.upperEdge = upperM;
+    }
+    const props = next.propagationProperties;
+    BANDS.forEach(band => {
+      const want = dbPerFtToPerM(spec.attenuationDbPerFt[band]);
+      let p = props.find(x => x && x.band === band);
+      if (!p) {
+        p = JSON.parse(JSON.stringify(props.find(x => x && x.band)));
+        p.band = band;
+        props.push(p);
+      }
+      if (!near(p.attenuationFactor, want, 5e-3)) p.attenuationFactor = want;
+    });
+    const out = list.slice();
+    out[index] = next;
+    return { types: out, changed: !sameValues(current, next) };
+  }
+
+  /* A project type as a preset, in the units presets are kept in. Refused when
+     it has no loss at one of the three bands, since a preset carries all three. */
+  function presetFromType(t) {
+    const spec = typeToSpec(t);
+    const att = spec.attenuationDbPerFt;
+    if (!BANDS.every(b => att[b] !== null)) {
+      return { error: 'This area has no loss recorded at every band, so it cannot be kept as a preset.' };
+    }
+    return { preset: spec };
+  }
+
   function describe(preset) {
     const a = preset.attenuationDbPerFt;
     return preset.lowerEdgeFt + '–' + preset.upperEdgeFt + ' ft · '
@@ -167,7 +254,8 @@ function sameValues(a, b) {
   }
 
   const api = { FT_M, BANDS, feetToMetres, dbPerFtToPerM, findMember, listKey,
-                usableShape, noShapeError, addPresets, addType, describe };
+                usableShape, noShapeError, addPresets, addType, updateType,
+                typeToSpec, specError, presetFromType, describe };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.WDAreas = api;
 })(typeof window !== 'undefined' ? window : globalThis);
