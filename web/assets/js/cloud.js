@@ -629,15 +629,97 @@ function rememberProjectDirectory(path) {
 function forgetRememberedProjectDirectory() {
   try { localStorage.removeItem(PROJECT_DIR_STORAGE_KEY); } catch (e) {}
 }
+/* Waiting for the browser sign-in. One poll at a time, never two:
+
+   * It used to be a `setInterval` of three seconds around an `await`, so a
+     check that took longer than that - four browsers' cookie files read and
+     each session tried against Ekahau, up to 15 seconds apiece - was joined
+     by the next, and the next. Clicking the button again added a second
+     interval that nothing would ever stop. Each tick now starts after the
+     last one finished.
+   * It swallowed every failure and said nothing, so "logged in, still not
+     found" looked identical to "not logged in". After a short wait the
+     screen now says what the last look found, browser by browser.
+   * Coming back to this tab checks at once, and there is a button for it:
+     the browser writes its cookies to disk a little after the page has
+     them, and nobody should have to wait out the interval to learn that. */
+const LOGIN_POLL_MS = 2000;
+const LOGIN_SAY_AFTER_MS = 12000;
+const LOGIN_GIVE_UP_MS = 10 * 60 * 1000;
+let _loginPoll = null;
+
+function stopLoginPoll() {
+  if (!_loginPoll) return;
+  _loginPoll.stopped = true;
+  clearTimeout(_loginPoll.timer);
+  _loginPoll = null;
+}
+
+function _setLoginWaitDetail(text) {
+  const el = document.getElementById('authWaitingDetail');
+  if (!el) return;
+  el.textContent = text || '';
+  el.hidden = !text;
+}
+
+async function _loginTick(poll) {
+  if (poll.stopped || poll.busy) return;
+  poll.busy = true;
+  let s = null, failed = '';
+  try {
+    s = await pyApi('get_status');
+  } catch (e) {
+    failed = 'The tool’s own server did not answer.';
+  }
+  poll.busy = false;
+  if (poll.stopped) return;
+  if (s && s.connected) {
+    stopLoginPoll();
+    showApp(s.email);
+    return;
+  }
+  const waited = Date.now() - poll.started;
+  if (waited >= LOGIN_GIVE_UP_MS) {
+    stopLoginPoll();
+    setAuthState('login');
+    toast('No Ekahau Cloud sign-in was found after 10 minutes. Log in again when you are ready.', 'error');
+    return;
+  }
+  if (waited >= LOGIN_SAY_AFTER_MS) {
+    const found = failed || (s && s.detail) || '';
+    _setLoginWaitDetail(found
+      ? 'Not found yet — ' + found + '. Still checking.'
+      : 'Not found yet. Still checking.');
+  }
+  poll.timer = setTimeout(() => _loginTick(poll), LOGIN_POLL_MS);
+}
+
+function checkLoginNow() {
+  if (!_loginPoll) return;
+  clearTimeout(_loginPoll.timer);
+  _loginTick(_loginPoll);
+}
+
+function cancelLogin() {
+  stopLoginPoll();
+  setAuthState('login');
+}
+
 async function openEkahauLogin() {
+  stopLoginPoll();
+  _setLoginWaitDetail('');
   setAuthState('waiting');
-  await pyApi('open_ekahau_login');
-  const iv = setInterval(async () => {
-    try {
-      const s = await pyApi('get_status');
-      if (s.connected) { clearInterval(iv); showApp(s.email); }
-    } catch (e) {}
-  }, 3000);
+  const poll = { stopped: false, busy: false, timer: null, started: Date.now() };
+  _loginPoll = poll;
+  let opened = null;
+  try { opened = await pyApi('open_ekahau_login'); } catch (e) {}
+  if (opened && opened.error) {
+    toast('The browser could not be opened: ' + opened.error, 'error');
+  }
+  poll.timer = setTimeout(() => _loginTick(poll), LOGIN_POLL_MS);
+}
+if (typeof window !== 'undefined' && window.addEventListener) {
+  window.addEventListener('focus', () => { if (_loginPoll) checkLoginNow(); });
 }
 
 async function forgetCloudLogin() {
@@ -656,6 +738,7 @@ async function forgetCloudLogin() {
    polling the same dead session every 30 seconds and nothing on screen that
    would fix it. */
 function backToSignIn(msg) {
+  stopLoginPoll();
   stopLive();
   data = null;
   dupData = null;
@@ -2923,7 +3006,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
       h += `<div class="ledger-row tree-parent is-openable ${r.status}${_stripe ? ' stripe' : ''}${_verifyFailedClass(r)}${_isExternal(r.cloud, r.local) ? ' is-external' : ''}${_det ? ' has-detail' : ''}"`
          + ` data-toggle="${a(r.toggle.key)}" role="button" tabindex="0"`
          + ` aria-expanded="${r.toggle.open}"`
-         + ` title="${r.toggle.open ? 'Collapse' : 'Expand'} this site \u2014 click anywhere on the row">`
+         + ` title="${r.toggle.open ? 'Collapse' : 'Expand'} this site — click anywhere on the row">`
          + `${cloudCell(r, localCodes)}${gutCell(r)}${localCell(r, cloudCodes)}</div>${_det}`;
     }
 
@@ -3084,7 +3167,7 @@ function renderHeldBackSection(heldBack) {
   return `<div class="hb-section${isOpen ? ' open' : ''}">
       <button class="hb-head" data-action="call" data-fn="toggleHeldBack" aria-expanded="${isOpen}">
         <span class="hb-toggle${isOpen ? ' open' : ''}">&#9656;</span>
-        <span class="hb-title">Not paired yet \u2014 ${nFiles} local file${nFiles === 1 ? '' : 's'} we could not match on ${nFiles === 1 ? 'its' : 'their'} own</span>
+        <span class="hb-title">Not paired yet — ${nFiles} local file${nFiles === 1 ? '' : 's'} we could not match on ${nFiles === 1 ? 'its' : 'their'} own</span>
         <span class="hb-sub">These are not part of any site above. Each one is a question: which cloud project is it?</span>
       </button>
       <div class="hb-list"${isOpen ? '' : ' hidden'}>${body}</div>

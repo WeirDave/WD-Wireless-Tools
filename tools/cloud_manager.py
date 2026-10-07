@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import stat
 import subprocess
 import sys
@@ -512,6 +513,7 @@ class EkahauAPI:
         self.http = requests.Session()
         self.csrf_token = csrf_token
         self.user_email = ""
+        self.failure = ""
         if isinstance(cookies, list):
             for c in cookies:
                 self.http.cookies.set(c["name"], c["value"],
@@ -527,6 +529,12 @@ class EkahauAPI:
         })
 
     def test_connection(self):
+        """Whether this session is accepted. `self.failure` says why not, in
+        words fit for the sign-in screen: a 302 or 401 is Ekahau refusing the
+        cookie, anything else is the network or Ekahau itself, and the two
+        need different advice - waking from sleep leaves the network down for
+        a while, and "log in again" does nothing for that."""
+        self.failure = ""
         try:
             r = self.http.get(f"{EKAHAU_URL}/site-management-api/v1/sites",
                               allow_redirects=False, timeout=15)
@@ -535,8 +543,14 @@ class EkahauAPI:
                 if isinstance(data, list) and data:
                     self.user_email = data[0].get("ownerEmail", "")
                 return True
+            if r.status_code in (301, 302, 303, 307, 308, 401, 403):
+                self.failure = "Ekahau did not accept the sign-in it was given"
+            else:
+                self.failure = f"Ekahau answered {r.status_code}"
+        except requests.exceptions.RequestException:
+            self.failure = "could not reach Ekahau Cloud (network not ready?)"
         except Exception:
-            pass
+            self.failure = "Ekahau's reply could not be read"
         return False
 
     def get(self, path):
@@ -887,26 +901,114 @@ class EkahauAPI:
             return {"ok": True, "status": commit_r.status_code}
 
 
+#: Why the last look for a session came back empty, one short line per place
+#: looked. The sign-in screen shows it while it waits: "I logged in and it
+#: still does not find it" had no answer anywhere, because every failure along
+#: the way - a locked cookie file, a browser not installed, a cookie Ekahau
+#: refuses, a network that is not up yet - was swallowed and looked the same.
+#: Names of browsers and plain reasons only: no paths, no cookie values.
+_session_search_notes = []
+_session_search_logged = ""
+_saved_session_note = ""
+
+
+def session_search_summary():
+    return "; ".join(_session_search_notes)
+
+
+def _record_session_search(notes):
+    """Keep the notes for the page, and log them when they change - the page
+    asks every couple of seconds and a log line each time would bury the file."""
+    global _session_search_notes, _session_search_logged
+    _session_search_notes = ([_saved_session_note] if _saved_session_note else []) + list(notes)
+    line = session_search_summary()
+    if line and line != _session_search_logged:
+        applog.get_logger().info("Cloud sign-in not found: %s", line)
+    _session_search_logged = line
+
+
+def _why_a_browser_failed(exc):
+    if isinstance(exc, PermissionError):
+        return "its cookie file is locked while the browser is open"
+    if type(exc).__name__ == "BrowserCookieError":
+        return "not installed, or its cookies cannot be read"
+    return f"could not be read ({type(exc).__name__})"
+
+
+def _firefox_cookies_including_wal(reader, domain):
+    """Firefox's cookies as they are *now*, including what is still in its
+    write-ahead log.
+
+    `browser_cookie3` copies `cookies.sqlite` alone before reading it. Firefox
+    keeps that database in WAL mode, so a cookie it wrote a moment ago - the
+    AccessToken from the login he has just completed - sits in
+    `cookies.sqlite-wal` until the next checkpoint, and the copy has no sign
+    of it. The result is the symptom of "I logged in and it still says I am
+    not": the old, expired AccessToken is found, Ekahau refuses it, and the
+    new one only turns up once Firefox happens to checkpoint. Copying the
+    `-wal` beside the database lets SQLite replay it on open."""
+    source = Path(reader.Firefox(domain_name=domain).cookie_file)
+    wal = Path(str(source) + "-wal")
+    with tempfile.TemporaryDirectory(prefix="wd-ff-cookies-") as tmp:
+        copy = Path(tmp) / "cookies.sqlite"
+        shutil.copyfile(source, copy)
+        if wal.exists():
+            shutil.copyfile(wal, Path(str(copy) + "-wal"))
+        con = sqlite3.connect(str(copy))
+        try:
+            rows = con.execute(
+                "select host, path, isSecure, expiry, name, value, isHttpOnly "
+                "from moz_cookies where host like ?",
+                (f"%{domain}%",)).fetchall()
+        finally:
+            con.close()
+    return [reader.create_cookie(*row) for row in rows]
+
+
+def _add_firefox_wal_cookies(reader, jar, domain):
+    """Lay the log-inclusive Firefox cookies over the jar `browser_cookie3`
+    returned. Best effort: the jar already read is still a valid answer."""
+    try:
+        for cookie in _firefox_cookies_including_wal(reader, domain):
+            jar.set_cookie(cookie)
+    except Exception as e:
+        applog.get_logger().info(
+            "Firefox cookie log not read: %s", type(e).__name__)
+
+
 def try_browser_cookies():
     reader = _cookie_reader()
+    notes = []
     if reader is None:
+        _record_session_search(["the browser cookie reader is not available"])
         return None
     browsers = [("Chrome", reader.chrome), ("Firefox", reader.firefox),
                 ("Edge", reader.edge), ("Opera", reader.opera)]
-    for _name, func in browsers:
+    for name, func in browsers:
         try:
             jar = func(domain_name=".ekahau.cloud")
+            if name == "Firefox":
+                _add_firefox_wal_cookies(reader, jar, ".ekahau.cloud")
             names = [c.name for c in jar]
             csrf = next((c.value for c in jar if c.name == "CSRF-Token"), "")
-            if "AccessToken" in names and csrf:
-                api = EkahauAPI(jar, csrf)
-                if api.test_connection():
-                    cookie_list = [{"name": c.name, "value": c.value,
-                                    "domain": c.domain, "path": c.path} for c in jar]
-                    save_cookies_to_disk(cookie_list, csrf)
-                    return api
-        except Exception:
+            if "AccessToken" not in names:
+                notes.append(f"{name}: no Ekahau sign-in found")
+                continue
+            if not csrf:
+                notes.append(f"{name}: sign-in found but no CSRF token")
+                continue
+            api = EkahauAPI(jar, csrf)
+            if api.test_connection():
+                cookie_list = [{"name": c.name, "value": c.value,
+                                "domain": c.domain, "path": c.path} for c in jar]
+                save_cookies_to_disk(cookie_list, csrf)
+                _record_session_search([])
+                return api
+            notes.append(f"{name}: {api.failure or 'sign-in not accepted'}")
+        except Exception as e:
+            notes.append(f"{name}: {_why_a_browser_failed(e)}")
             continue
+    _record_session_search(notes)
     return None
 
 
@@ -914,8 +1016,13 @@ def try_saved_cookies():
     cookies, csrf = load_cookies_from_disk()
     if not cookies or not csrf:
         return None
+    global _saved_session_note
     api = EkahauAPI(cookies, csrf)
-    return api if api.test_connection() else None
+    if api.test_connection():
+        _saved_session_note = ""
+        return api
+    _saved_session_note = f"Saved sign-in: {api.failure or 'not accepted'}"
+    return None
 
 
 def extract_site_code(name):
@@ -2624,7 +2731,10 @@ class CloudManager:
         connected = self._ensure()
         return {"connected": connected,
                 "email": self.api.user_email if self.api else "",
-                "outputDir": self.config.get("output_dir", "")}
+                "outputDir": self.config.get("output_dir", ""),
+                # Only while signed out, and only a sentence: the sign-in
+                # screen shows it once it has waited a while.
+                "detail": "" if connected else session_search_summary()}
 
     def open_login(self):
         try:
