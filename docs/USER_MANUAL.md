@@ -2391,6 +2391,17 @@ Open **Menu → About & Updates**. It checks for a newer release as it opens;
 Beside the version it says what it compares against: tracking releases,
 tracking a named branch, or installed from a ZIP.
 
+Above the update button, **What’s new since your version** lists what changed in
+every release newer than the installed one, newest first. Each release is a
+collapsed entry headed by its version and one-line title; the newest is open.
+Press an entry to open or close it. The text comes from the published release
+notes, without their **Files changed**, **Verified** and **Verification**
+sections. Up to the 30 most recent releases are read; when every one of them is
+newer than the installed version, the list ends with *Older changes are listed on
+the release page.* With only one newer release the heading reads **What’s new in
+this update**. If the release notes cannot be fetched (for example on a network
+that blocks api.github.com), the list is left out and the panel works as before.
+
 | Install | What an update does |
 | --- | --- |
 | Git | Checks out the newest release; only what changed is downloaded |
