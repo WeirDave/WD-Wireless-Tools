@@ -1094,6 +1094,44 @@
       return 'Update now';
     }
 
+    // What changed in every release newer than this install, drawn above the
+    // update button by the changelog code shared with the other products
+    // (release-changelog.js - identical in each, never edited here). The server
+    // supplies the releases already trimmed (/api/update/status
+    // latest.changes); nothing here talks to GitHub. The script is loaded the
+    // first time a panel has something to show, from the folder this script
+    // came from, so no page needs its own tag for it.
+    function changesHtml() {
+      return (state && state.changes && state.changes.length)
+        ? '<div class="wd-update-changes"></div>' : '';
+    }
+
+    function loadChangelog(done) {
+      if (window.ReleaseChangelog) { done(); return; }
+      var s = document.createElement('script');
+      // Beside this script, carrying whatever query it was loaded with (the
+      // server already revalidates /assets/*.js on every request).
+      s.src = _scriptSrc ? _scriptSrc.replace(/wd-shared\.js(\?.*)?$/, 'release-changelog.js$1')
+                         : '/assets/js/release-changelog.js';
+      s.onload = done;
+      s.onerror = function () { /* the list is optional; the button is not */ };
+      document.head.appendChild(s);
+    }
+
+    function fillChanges() {
+      var box = host && host.querySelector('.wd-update-changes');
+      if (!box || !state || !state.changes || !state.changes.length) return;
+      var mine = host;
+      loadChangelog(function () {
+        // The panel may have been closed or redrawn while the script loaded.
+        var again = mine === host && host.querySelector('.wd-update-changes');
+        if (again && window.ReleaseChangelog) {
+          window.ReleaseChangelog.render(again, {
+            releases: state.changes, truncated: !!state.changesTruncated });
+        }
+      });
+    }
+
     function wire() {
       if (!host) return;
       var go = host.querySelector('.wd-update-goBtn');
@@ -1202,6 +1240,7 @@
            decide what to do about it. */
         var pull = 'git -C "' + (info.root || '.') + '" pull';
         render({ body:
+          changesHtml() +
           '<div class="wd-update-primaryRow">' +
             '<button class="btn btn-primary wd-update-pullBtn" type="button">' +
               'Pull now' +
@@ -1227,6 +1266,7 @@
               '</div>' +
             '</div>' +
           '</details>' });
+        fillChanges();
         wire();
         return;
       }
@@ -1240,6 +1280,7 @@
       }
 
       render({ body:
+        changesHtml() +
         '<div class="wd-update-primaryRow">' +
           '<button class="btn btn-primary wd-update-goBtn" type="button">' +
             esc(primaryLabel()) +
@@ -1250,6 +1291,7 @@
         '</div>' +
         '<div class="wd-update-note">' + esc(info.reason) + '</div>' +
         alternativesHtml(false) });
+      fillChanges();
       wire();
     }
 
@@ -1520,6 +1562,10 @@
           // than "there is a newer release". Saying "Update available:
           // v2.100.19" to someone already on 2.100.20 reads as nonsense, and
           // he is the person this case exists for.
+          // What changed in each release newer than this install, already
+          // trimmed by the server; absent when the release lookup failed.
+          changes: Array.isArray(payload.latest.changes) ? payload.latest.changes : [],
+          changesTruncated: !!payload.latest.changesTruncated,
           tracking: payload.trackingLabel || null,
           branch: (payload.branch && payload.branch.behind)
             ? payload.branch.branch : null,

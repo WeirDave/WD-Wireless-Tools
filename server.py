@@ -2020,13 +2020,19 @@ def api_update_status():
             or bool(branch and branch.get("behind")))
         # The notes are the only thing left that needs the API, and nothing
         # depends on them, so a short wait and a quiet failure.
+        notes_answered = False
         try:
             release = _latest_release_or_raise(timeout=updater.NOTES_TIMEOUT)
+            notes_answered = True
             if release["tag"] == tag:
                 payload["latest"]["notes"] = release["notes"][:4000]
                 payload["latest"]["url"] = release["url"]
         except updater.UpdateError as e:
             payload["notesError"] = str(e)
+        # The API just answered, so ask it for the releases in between. When it
+        # did not, a second question would only be a second wait.
+        if notes_answered and updater.cmp_version(version, current) > 0:
+            _attach_changes(payload, current)
         return jsonify(payload)
 
     try:
@@ -2039,9 +2045,33 @@ def api_update_status():
         }
         payload["latestSource"] = "api"
         payload["updateAvailable"] = updater.cmp_version(release["version"], current) > 0
+        if payload["updateAvailable"]:
+            _attach_changes(payload, current)
     except updater.UpdateError as e:
         payload["latestError"] = str(e)
     return jsonify(payload)
+
+
+def _attach_changes(payload, current):
+    """Add `latest.changes`: every release newer than `current`, newest first.
+
+    Each entry is {version, title, notes, url} - the shape the shared
+    `release-changelog.js` draws above the Update button. `changesTruncated`
+    says a full page came back with every release on it newer, so there may be
+    more than were listed. This is optional data: a failure leaves `changes`
+    out, says why in `changesError`, and never fails the status check.
+    """
+    try:
+        found = updater.releases_since(current, timeout=updater.NOTES_TIMEOUT)
+    except updater.UpdateError as e:
+        payload["changesError"] = str(e)
+        return
+    except Exception as exc:
+        applog.note_failure("update check (reading the releases since this version)", exc)
+        payload["changesError"] = "Could not read what changed in the releases since this version."
+        return
+    payload["latest"]["changes"] = found["changes"]
+    payload["latest"]["changesTruncated"] = bool(found["more"])
 
 
 def _latest_release_or_raise(**kw):

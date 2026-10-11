@@ -1003,6 +1003,171 @@ def fetch_latest_release(cfg: AppConfig = CONFIG, timeout: int | None = None):
     return release
 
 
+
+# ============================================================== changelog ==
+# The update panel shows what changed in every release newer than the one
+# installed, not only the newest. That list comes from the API, so it is
+# optional in the same way the notes are: a short wait, a quiet failure, and
+# nothing in the update itself depends on it.
+
+# How many releases one request asks for. If a full page comes back and every
+# one of them is newer than the install, there may be more than were shown.
+CHANGES_PAGE_SIZE = 30
+# Per release, and for the whole answer. The answer is cached by the browser
+# and rides on every status check, so it is bounded rather than trusted: past
+# the total, older releases keep their version and title but lose their notes.
+CHANGE_NOTES_MAX = 3000
+CHANGES_TOTAL_MAX = 24000
+
+_RECENT_CACHE = {"at": 0.0, "data": None, "etag": None}
+
+# These two mirror `trimNotes` and `parseApiList` in the shared
+# release-changelog.js, which every product carries unchanged; if one changes,
+# so does the other. The notes end at the first `## Files changed`,
+# `## Verified` or `## Verification` heading (any case, two hashes exactly), and
+# a `# ` heading is the title only when it is the very first line.
+_NOTES_STOP_RE = re.compile(r"^##\s+(?:Files changed|Verified|Verification)\b",
+                            re.IGNORECASE | re.MULTILINE)
+_TITLE_RE = re.compile(r"#\s+(.+)\n?")
+
+
+def split_release_body(body) -> tuple[str, str]:
+    """(title, notes) from a release body.
+
+    The body opens with a one-line `# title`, which is shown next to the
+    version instead of inside the notes. It ends with a `## Verified` list and
+    a `## Files changed` list that say how the change was checked and which
+    files it touched - for the person who maintains the code, not for someone
+    deciding whether to update - so the notes stop before whichever comes
+    first. A `# ` heading further down is neither a title nor removed. Text
+    only; nothing here is ever treated as markup.
+    """
+    text = str(body or "").replace("\r\n", "\n").replace("\r", "\n")
+    cut = _NOTES_STOP_RE.search(text)
+    text = (text[:cut.start()] if cut else text).strip()
+    m = _TITLE_RE.match(text)
+    if not m:
+        return "", text
+    return m.group(1).strip(), text[m.end():].strip()
+
+
+def _clip_notes(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    if limit < 200:
+        # What is left of the budget cannot hold a readable line.
+        return ""
+    cut = text[:limit]
+    nl = cut.rfind("\n")
+    if nl > limit // 2:
+        cut = cut[:nl]
+    return cut.rstrip() + "\n\u2026"
+
+
+def fetch_recent_releases(cfg: AppConfig = CONFIG, timeout: int | None = None):
+    """The newest releases, as GitHub lists them (a list of dicts).
+
+    Behaves like `fetch_latest_release`: a short cache, a conditional request
+    so an unchanged answer is free, the shared rate-limit back-off, and every
+    failure is an `UpdateError` carrying a plain-language reason.
+    """
+    import requests
+    import time as _time
+
+    now = _time.time()
+    cached = _RECENT_CACHE["data"]
+    if cached is not None and (now - _RECENT_CACHE["at"]) < _RELEASE_TTL_S:
+        return cached
+
+    # The allowance is shared with the latest-release lookup, so a limit that
+    # one of them hit is a limit for both.
+    if now < _RELEASE_CACHE["blocked_until"]:
+        if cached is not None:
+            return cached
+        raise UpdateError(_rate_limit_message(_RELEASE_CACHE["blocked_until"]))
+
+    headers = {"Accept": "application/vnd.github+json"}
+    if _RECENT_CACHE["etag"] and cached is not None:
+        headers["If-None-Match"] = _RECENT_CACHE["etag"]
+    url = f"https://api.github.com/repos/{cfg.repo}/releases"
+
+    try:
+        r = requests.get(url, headers=headers,
+                         params={"per_page": CHANGES_PAGE_SIZE},
+                         timeout=timeout or NET_TIMEOUT)
+    except Exception as e:
+        if cached is not None:
+            return cached
+        raise UpdateError(f"Could not reach GitHub: {e}")
+
+    if r.status_code == 304 and cached is not None:
+        _RECENT_CACHE["at"] = now
+        return cached
+
+    limited = (r.status_code in (403, 429)
+               and r.headers.get("X-RateLimit-Remaining") == "0")
+    if limited:
+        reset = r.headers.get("X-RateLimit-Reset")
+        try:
+            _RELEASE_CACHE["blocked_until"] = float(reset) if reset else now + 900
+        except (TypeError, ValueError):
+            _RELEASE_CACHE["blocked_until"] = now + 900
+        if cached is not None:
+            return cached
+        raise UpdateError(_rate_limit_message(reset))
+
+    if not r.ok:
+        if cached is not None:
+            return cached
+        raise UpdateError(f"GitHub returned HTTP {r.status_code}.")
+
+    try:
+        data = r.json()
+    except ValueError:
+        data = None
+    if not isinstance(data, list):
+        raise UpdateError("GitHub's answer was not a list of releases.")
+    _RECENT_CACHE.update({"at": now, "data": data, "etag": r.headers.get("ETag")})
+    return data
+
+
+def releases_since(current: str, cfg: AppConfig = CONFIG,
+                   timeout: int | None = None) -> dict:
+    """What changed in every published release newer than `current`.
+
+    Returns {"changes": [{"version", "title", "notes", "url"}, ...], "more": bool},
+    newest first. Drafts and pre-releases are skipped, as is anything whose tag
+    is not a plain version. `more` is True when a full page came back and every
+    release on it was newer, which is the one case where older ones may exist
+    that were not asked for. Raises UpdateError when GitHub cannot be asked.
+    """
+    raw = fetch_recent_releases(cfg, timeout=timeout)
+    published = []
+    for item in raw:
+        if not isinstance(item, dict) or item.get("draft") or item.get("prerelease"):
+            continue
+        tag = str(item.get("tag_name") or "")
+        if not TAG_RE.match(tag):
+            continue
+        published.append((tag.lstrip("v"), item))
+    published.sort(key=lambda pair: parse_version(pair[0]), reverse=True)
+    newer = [(v, item) for v, item in published if cmp_version(v, current) > 0]
+
+    changes = []
+    budget = CHANGES_TOTAL_MAX
+    for version, item in newer:
+        title, notes = split_release_body(item.get("body"))
+        notes = _clip_notes(notes, min(CHANGE_NOTES_MAX, max(budget, 0)))
+        budget -= len(notes)
+        link = str(item.get("html_url") or "")
+        if not link.startswith("https://github.com/"):
+            link = f"{cfg.releases_url}/tag/v{version}"
+        changes.append({"version": version, "title": title, "notes": notes,
+                        "url": link})
+    more = (len(raw) >= CHANGES_PAGE_SIZE and bool(published)
+            and len(newer) == len(published))
+    return {"changes": changes, "more": more}
+
 # ===================================================================== zip ==
 
 def _download(url: str, dest: Path):

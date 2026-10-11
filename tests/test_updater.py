@@ -562,6 +562,13 @@ class BlockedApiTests(unittest.TestCase):
                                     return_value=None)
         self._branch.start()
         self.addCleanup(self._branch.stop)
+        # A notes lookup that succeeds is followed by a lookup of the releases
+        # in between. These tests are about the first; the second is held off
+        # the network here and tested in test_update_changelog.py.
+        self._since = patch.object(updater, "releases_since",
+                                   return_value={"changes": [], "more": False})
+        self._since.start()
+        self.addCleanup(self._since.stop)
 
     def _status(self):
         return json.loads(self.client.get("/api/update/status").data)
