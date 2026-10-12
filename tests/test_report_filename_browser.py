@@ -63,6 +63,8 @@ class _StubApi(SimpleHTTPRequestHandler):
 
     answer = {"ok": False, "reason": "not_found"}
     calls = []
+    #: What settings/get says is saved under "report". Empty is a fresh install.
+    report_settings = {}
 
     def log_message(self, *a):
         pass
@@ -87,7 +89,8 @@ class _StubApi(SimpleHTTPRequestHandler):
         action = self.path[len("/api/"):]
         type(self).calls.append((action, body))
         if action == "settings/get":
-            self._json({"ok": True, "settings": {"report": {}, "aprename": {}}})
+            self._json({"ok": True, "settings": {
+                "report": type(self).report_settings, "aprename": {}}})
         elif action == "report/find_folder":
             self._json(type(self).answer)
         else:
@@ -263,8 +266,24 @@ class DroppedFileNamesTheReport(unittest.TestCase):
         for kind, driver in self._each_browser():
             with self.subTest(browser=kind):
                 title, asked = self._drop(driver, {"ok": True, "folder": SITE})
-                self.assertEqual(title, "Report - AP Installation - " + SITE)
+                self.assertEqual(title, "Report - AP Installation - " + SITE + " - v1")
                 self.assertTrue(asked, "the drop never looked the folder up")
+
+    def test_a_revision_nobody_typed_is_v1_and_one_that_was_typed_wins(self):
+        """Every report carries a revision. Blank used to drop out of the name
+        without a word, which read as the naming scheme not working; v1 is the
+        starting point and is replaced by whatever is saved in Settings."""
+        try:
+            for saved, want in (({}, "v1"), ({"revision": ""}, "v1"),
+                                ({"revision": "Rev B"}, "Rev B")):
+                _StubApi.report_settings = saved
+                for kind, driver in self._each_browser():
+                    with self.subTest(browser=kind, saved=saved):
+                        title, _ = self._drop(driver, {"ok": True, "folder": SITE})
+                        self.assertEqual(
+                            title, "Report - AP Installation - " + SITE + " - " + want)
+        finally:
+            _StubApi.report_settings = {}
 
     def test_it_asks_with_the_name_and_the_byte_size(self):
         """The size is what makes the answer safe to act on: two buildings
@@ -289,7 +308,7 @@ class DroppedFileNamesTheReport(unittest.TestCase):
             for answer, phrase in cases:
                 with self.subTest(browser=kind, reason=answer["reason"]):
                     title, asked = self._drop(driver, answer)
-                    self.assertEqual(title, "Report - AP Installation - B04 - PD")
+                    self.assertEqual(title, "Report - AP Installation - B04 - PD - v1")
                     self.assertTrue(asked, "the drop never looked the folder up")
                     preview = driver.execute_script(PREVIEW_JS)
                     self.assertIn(phrase, preview)

@@ -72,6 +72,7 @@
   var LEGACY_LOGO_KEY = 'wd-report-logo';         // pre-2.17 cover image
   var LEGACY_IDB_NAME = 'wd-report';              // 2.17 cover image
 
+  var DEFAULT_REVISION = 'v1';
   var reportSettings = {};      // camelCase view of the stored defaults
   var includeRevisionInName = true;
   var optOverrides = {};        // id -> true once this report deliberately differs
@@ -95,6 +96,13 @@
       if (typeof v === 'string' && v) reportSettings[id] = v;
       else delete reportSettings[id];
     });
+    /* A report always carries a revision. Left blank it dropped out of the
+       saved name without a word, which read as the naming scheme not working;
+       v1 is there to be changed, and "Include the revision in the saved file
+       name" in Settings -> Report is how it is left off. Applied here, to the
+       one copy every consumer reads, so the file name, the cover, the footer,
+       the sidebar and the preview cannot disagree about it. */
+    if (!reportSettings.revision) reportSettings.revision = DEFAULT_REVISION;
     includeRevisionInName = rep.include_revision_in_filename !== false;
     if (rep.report_defaults && typeof rep.report_defaults === 'object') {
       savedReportDefaults = rep.report_defaults;
