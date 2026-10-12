@@ -221,6 +221,13 @@ class DroppedFileNamesTheReport(unittest.TestCase):
         # "stopped changing" is the signal, not "changed".
         self._wait_until(
             lambda: any(a == "report/find_folder" for (a, _) in _StubApi.calls), 30)
+        # The folder is asked for *before* the project is parsed, so the title
+        # is still the page's own until the parse finishes - and on a slow
+        # runner that is longer than "stopped changing for 0.4 s", which read
+        # "WD Report" back as the settled name. A real project always renames
+        # the tab, so wait for it to leave the page's title first (bounded; a
+        # parse that never finishes is a failure of the assertion below).
+        self._wait_until(lambda: driver.title != "WD Report", 30)
         title = self._settled_title(driver)
         asked = [b for (a, b) in _StubApi.calls if a == "report/find_folder"]
         return title, asked
