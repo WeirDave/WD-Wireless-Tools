@@ -1527,7 +1527,9 @@ and a page cannot change that. The hint above the first sheet says the same.
   *Local project folder* (Settings → General) and uses the folder only on a
   single match. If that cannot answer, open the file with **Open another…**
   and the folder comes with it.
-- The revision goes on the end unless you turn off **Include the revision in
+- The revision starts at `v1` on every report. Change it in Settings → Report, or
+  for one report in its **Configure** step, or edit the name in the Save dialog.
+  It goes on the end unless you turn off **Include the revision in
   the saved file name** in Settings → Report.
 
 **Cover image & defaults…** shows the name both ways, with and without the
@@ -1547,7 +1549,7 @@ In Settings → Report (also **⚙ Report settings…** on the template step):
 
 | Setting | What it is | Ships as |
 | --- | --- | --- |
-| **Client / company**, **Prepared by**, **Project reference**, **Revision** | Starting values for every report | Blank |
+| **Client / company**, **Prepared by**, **Project reference**, **Revision** | Starting values for every report | `v1` |
 | **Include the revision in the saved file name** | Adds the revision to the end of the file name | On |
 | **Measurement units** | Starting unit for every report | Feet |
 | **Section size on large floors** | Starting section size | Standard |

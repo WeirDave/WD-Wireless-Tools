@@ -237,6 +237,10 @@ class ReportsBannerShowsWhatIsSaved(unittest.TestCase):
         const SEG_GRANULARITY = { standard: 1 };
         const applySettingsPayload = (p) => calls.push('apply:' + JSON.stringify(p || null));
         const renderSettingsBanner = () => calls.push('banner');
+        // A project is open when argv[3] says so; the file name is built from
+        // settings, so it is asked to be rebuilt once they have arrived.
+        let fileName = process.argv[3] === 'open' ? 'Invented.esx' : '';
+        const syncDocTitle = () => calls.push('title');
         const WD = { api: () => Promise.resolve({ ok: true, settings: payload }) };
         eval(src.slice(a, b));
         fetchSettings().then(function () {
@@ -246,13 +250,26 @@ class ReportsBannerShowsWhatIsSaved(unittest.TestCase):
         });
     """
 
-    def calls(self, payload):
+    def calls(self, payload, project="none"):
         r = subprocess.run(
-            ["node", "-e", self.PROBE, str(REPORT_JS), json.dumps(payload)],
+            ["node", "-e", self.PROBE, str(REPORT_JS), json.dumps(payload), project],
             capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
         if r.returncode != 0:
             raise AssertionError((r.stdout + r.stderr).strip())
         return json.loads(r.stdout.strip().splitlines()[-1])
+
+    def test_an_open_project_is_renamed_once_the_settings_land(self):
+        """The saved revision is part of the file name, so a project opened
+        before settings/get answered was named without it. With none open the
+        tab keeps its own title."""
+        payload = {"report": {"revision": "Rev B"}}
+        opened = self.calls(payload, project="open")
+        self.assertIn("title", opened, "an open project was never renamed")
+        self.assertGreater(opened.index("title"),
+                           [i for i, c in enumerate(opened) if c.startswith("apply:")][0],
+                           "renamed before the settings were applied")
+        self.assertNotIn("title", self.calls(payload),
+                         "the landing page took a report title with no project open")
 
     def test_the_banner_is_repainted_when_the_settings_land(self):
         calls = self.calls({"report": {"client_name": "Northwind Traders",

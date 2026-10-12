@@ -197,7 +197,7 @@ class TheReviewWorksInABrowser(unittest.TestCase):
 
                 csv = json.loads(driver.execute_async_script(CSV_JS))
                 self.assertFalse(csv.get("missing"), f"{kind}: no CSV button")
-                self.assertEqual(csv["name"], "Report - AP Schedule - Review Sample.csv",
+                self.assertEqual(csv["name"], "Report - AP Schedule - Review Sample - v1.csv",
                                  f"{kind}: file name")
                 lines = [l for l in csv["text"].lstrip("﻿").split("\r\n") if l]
                 self.assertEqual(len(lines), 1 + len(APS), f"{kind}: one row per AP")
