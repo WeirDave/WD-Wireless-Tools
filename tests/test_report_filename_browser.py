@@ -65,6 +65,9 @@ class _StubApi(SimpleHTTPRequestHandler):
     calls = []
     #: What settings/get says is saved under "report". Empty is a fresh install.
     report_settings = {}
+    #: Seconds settings/get takes to answer. A slow CI runner does this to the
+    #: page for real: the project can be open before its settings have arrived.
+    settings_delay = 0
 
     def log_message(self, *a):
         pass
@@ -89,6 +92,8 @@ class _StubApi(SimpleHTTPRequestHandler):
         action = self.path[len("/api/"):]
         type(self).calls.append((action, body))
         if action == "settings/get":
+            if type(self).settings_delay:
+                time.sleep(type(self).settings_delay)
             self._json({"ok": True, "settings": {
                 "report": type(self).report_settings, "aprename": {}}})
         elif action == "report/find_folder":
@@ -284,6 +289,36 @@ class DroppedFileNamesTheReport(unittest.TestCase):
                             title, "Report - AP Installation - " + SITE + " - " + want)
         finally:
             _StubApi.report_settings = {}
+
+    def test_settings_that_arrive_after_the_project_still_reach_the_name(self):
+        """The project was open and named before settings/get answered, so the
+        title was built without the saved revision - or without the v1 default -
+        and nothing named it again. Found on a slow CI runner, where the drop
+        beat the settings by a wide margin; the answer is to re-name the report
+        when settings land. Held here by delaying the answer."""
+        try:
+            for saved, want in (({}, "v1"), ({"revision": "Rev B"}, "Rev B")):
+                _StubApi.report_settings = saved
+                _StubApi.settings_delay = 2.5
+                for kind, driver in self._each_browser():
+                    with self.subTest(browser=kind, saved=saved):
+                        _StubApi.answer = {"ok": False, "reason": "not_found"}
+                        _StubApi.calls = []
+                        driver.get(self.url)
+                        self.assertTrue(self._wait_until(
+                            lambda: driver.execute_script(READY_JS), 30))
+                        # Dropped while settings/get is still in flight.
+                        self.assertTrue(self._wait_until(
+                            lambda: any(a == "settings/get" for (a, _) in _StubApi.calls), 30))
+                        driver.execute_script(DROP_NOW_JS, self.b64, ESX_NAME)
+                        end = "B04 - PD - " + want
+                        self.assertTrue(
+                            self._wait_until(lambda: driver.title.endswith(end), 30),
+                            "the title is %r and never picked up %r after the settings "
+                            "arrived" % (driver.title, want))
+        finally:
+            _StubApi.report_settings = {}
+            _StubApi.settings_delay = 0
 
     def test_it_asks_with_the_name_and_the_byte_size(self):
         """The size is what makes the answer safe to act on: two buildings

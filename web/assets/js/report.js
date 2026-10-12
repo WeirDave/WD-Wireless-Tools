@@ -164,6 +164,11 @@
          saying "Not set" about a value that is set reads as a save that did
          not work. */
       renderSettingsBanner();
+      /* The saved revision (or the v1 default) is part of the file name. A
+         project opened before these arrive was named without it, and nothing
+         named it again. Only with a project open: before one is, the tab keeps
+         its own title rather than becoming "Report - AP Installation - v1". */
+      if (fileName) syncDocTitle();
     });
   }
 
