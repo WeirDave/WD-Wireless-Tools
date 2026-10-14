@@ -55,11 +55,11 @@ def _page():
 
 
 class CapacityShell(unittest.TestCase):
-    def test_the_rail_has_the_three_steps(self):
+    def test_the_rail_has_the_four_steps(self):
         on_rail = [t for t, stack in _page().jumps if "pb-rail" in stack]
         # The template comes first: picking it is the everyday job, and it
         # is preselected from the default.
-        self.assertEqual(on_rail, ["capStepTpl", "capStep3", "capStep1"])
+        self.assertEqual(on_rail, ["capStepTpl", "capStepArea", "capStep3", "capStep1"])
 
     def test_every_step_points_at_a_card_that_exists(self):
         p = _page()

@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from tests.area_stub import with_area_stub
 import zipfile
 from pathlib import Path
 
@@ -136,7 +137,7 @@ class ThePageShowsTheMultiplier(unittest.TestCase):
         plan = cap.plan_application(self.blank, self.tpl, headcount,
                                     floor_occupants=floor_occupants)
         self.assertTrue(plan["ok"], plan.get("error"))
-        r = subprocess.run(["node", "-e", HARNESS, str(CAPACITY_JS),
+        r = subprocess.run(["node", "-e", with_area_stub(HARNESS), str(CAPACITY_JS),
                             json.dumps(plan), str(headcount)],
                            capture_output=True, text=True, encoding="utf-8",
                            timeout=120)
@@ -234,7 +235,7 @@ class PrepShowsTheMultiplier(unittest.TestCase):
                                   occupants=headcount, floor_occupants=floor_occupants)
         self.assertTrue(plan["step"]["areas"]["ok"], plan["step"]["areas"].get("error"))
         self.assertAlmostEqual(plan["step"]["areas"]["devicesPerPerson"], 3.0)
-        r = subprocess.run(["node", "-e", PREP_HARNESS, str(PREP_JS),
+        r = subprocess.run(["node", "-e", with_area_stub(PREP_HARNESS), str(PREP_JS),
                             json.dumps(plan), str(headcount)],
                            capture_output=True, text=True, encoding="utf-8",
                            timeout=120)

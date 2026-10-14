@@ -229,10 +229,57 @@ def _drop_areas(src: Path, dest: Path, area_ids: set) -> None:
 
 # ── the preview ──────────────────────────────────────────────────────────────
 
+def shift_floor_areas(floor_areas, trim_report) -> tuple:
+    """Outlines drawn on the plan as it was, moved onto the plan as it is now.
+
+    A trim subtracts the crop's origin from every coordinate on the floor it
+    crops, so an outline drawn before the trim has to move by the same amount
+    or it lands somewhere else on the cropped sheet. A floor the trim left
+    alone keeps its outline as drawn. A corner that falls outside the new page
+    is held on its edge, the same trade the trimmer makes for any object it
+    cannot place, and the floor is named in the second return so the page can
+    say so.
+    """
+    if isinstance(floor_areas, str):
+        try:
+            floor_areas = json.loads(floor_areas) if floor_areas.strip() else {}
+        except ValueError:
+            floor_areas = {}
+    if not isinstance(floor_areas, dict):
+        return {}, []
+    moved = {f.floor_id: f for f in getattr(trim_report, "floors", [])
+             if getattr(f, "offset", None) and getattr(f, "new_size", None)}
+    out, held = {}, []
+    for fid, pts in floor_areas.items():
+        f = moved.get(fid)
+        if f is None:
+            out[fid] = pts
+            continue
+        dx, dy = f.offset
+        w, h = f.new_size
+        shifted, clipped = [], False
+        for p in pts if isinstance(pts, list) else []:
+            xy = capacity_profiles._point_xy(p)
+            if xy is None:
+                shifted = None
+                break
+            x, y = xy[0] - dx, xy[1] - dy
+            cx, cy = min(max(x, 0.0), float(w)), min(max(y, 0.0), float(h))
+            clipped = clipped or (cx != x or cy != y)
+            shifted.append({"x": cx, "y": cy})
+        if shifted is None:
+            out[fid] = pts
+            continue
+        out[fid] = shifted
+        if clipped:
+            held.append(fid)
+    return out, held
+
+
 def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
          margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET, boxes=None,
          retighten: bool = True, floor_occupants=None, existing=None,
-         floor_existing=None) -> dict:
+         floor_existing=None, floor_areas=None) -> dict:
     """What a run would do, without writing anything.
 
     Each step is previewed by the module that owns it, so the preview cannot
@@ -269,12 +316,16 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
         else:
             area_plan = capacity_profiles.plan_application(
                 path, template, occupants, floor_occupants=floor_occupants,
-                existing=existing, floor_existing=floor_existing)
+                existing=existing, floor_existing=floor_existing,
+                floor_areas=floor_areas)
             if retighten and area_plan.get("ok"):
                 stale = _stale_to_retighten(_members(path), floor_occupants,
                                             floor_existing)
                 area_plan["retighten"] = stale
                 by_floor = {s["floorPlanId"]: s for s in stale}
+                plan_floors = {f.get("id"): f for f in
+                               (_members(path).get("floorPlans.json") or {})
+                               .get("floorPlans", []) if isinstance(f, dict)}
                 for floor in area_plan.get("floors", []):
                     hit = by_floor.get(floor.get("floorPlanId"))
                     if hit and floor.get("skipped"):
@@ -282,6 +333,16 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
                         floor["action"] = (
                             "tighten - the area still covers the whole plan and "
                             f"there are now {hit['newBasis']} to measure")
+                        # The run clears this placeholder first, which leaves
+                        # nothing in the way of an outline he drew.
+                        if floor.get("drawnUnused"):
+                            capacity_profiles.apply_drawn_outline(
+                                floor, plan_floors.get(floor.get("floorPlanId"), {}),
+                                floor["drawnPolygon"])
+                            floor["action"] = ("replace the area that covers the whole "
+                                               "plan with the one you drew")
+                area_plan["drawnUsed"] = sum(
+                    1 for f in area_plan.get("floors", []) if f.get("drawn"))
                 area_plan["willWrite"] = sum(
                     1 for f in area_plan.get("floors", []) if not f["skipped"])
                 area_plan["willSkip"] = sum(
@@ -304,7 +365,7 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
 def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
         occupants=None, margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET,
         boxes=None, retighten: bool = True, floor_occupants=None,
-        existing=None, floor_existing=None) -> dict:
+        existing=None, floor_existing=None, floor_areas=None) -> dict:
     """Do the whole pass and write once.
 
     Each step reads the file the previous step produced, which is what makes
@@ -351,6 +412,9 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
     try:
         cur = src
         seq = 0
+        # Outlines are drawn on the plan as it was opened. Once the trim has
+        # written, they are moved onto the cropped one.
+        drawn_now = floor_areas
 
         def nxt():
             nonlocal seq
@@ -377,6 +441,9 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                 if report.trimmed_count or report.repaired_count:
                     cur = out
                     result["changed"] = True
+                    drawn_now, held = shift_floor_areas(drawn_now, report)
+                    if held:
+                        result["step"]["trim"]["drawnAreasHeldOnEdge"] = held
 
             elif step == "areas":
                 if not template:
@@ -397,7 +464,7 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
                 report = capacity_profiles.apply_to(
                     staged, out, template, occupants, replace_existing=False,
                     floor_occupants=floor_occupants, existing=existing,
-                    floor_existing=floor_existing)
+                    floor_existing=floor_existing, floor_areas=drawn_now)
                 if not report.get("ok"):
                     # `cur` is left where it was, so the staged removal above is
                     # abandoned with everything else this step touched.

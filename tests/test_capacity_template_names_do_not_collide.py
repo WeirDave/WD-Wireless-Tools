@@ -20,6 +20,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from tests.area_stub import with_area_stub
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -237,7 +238,7 @@ class DuplicateProposesAFreeName(unittest.TestCase):
     ]
 
     def run_page(self):
-        r = subprocess.run(["node", "-e", PAGE_HARNESS, str(CAPACITY_JS),
+        r = subprocess.run(["node", "-e", with_area_stub(PAGE_HARNESS), str(CAPACITY_JS),
                             json.dumps(self.TEMPLATES)],
                            capture_output=True, text=True, encoding="utf-8", timeout=120)
         if r.returncode != 0:

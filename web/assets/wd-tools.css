@@ -11430,6 +11430,9 @@ body.tool-prep .editor.active, body.tool-plantrim .editor.active, body.tool-capa
 .cap-main { overflow-y: auto; padding: 0; }
 .cap-main .cap-wrap { margin: 0 auto; }
 .cap-main .cap-card { scroll-margin-top: var(--sp-4); }
+/* The plan inside the "Draw the area" card: a block in a scrolling column, not
+   a flex child of the workbench, so it is sized outright. */
+.cap-card .ptb-stage.pb-canvas { flex: none; height: min(52vh, 520px); margin: var(--sp-2) 0; }
 
 /* Quick Walls in the same shell: the shortcuts on the rail, the wall types in
    the middle (scrolling on their own), the template in the panel. The template

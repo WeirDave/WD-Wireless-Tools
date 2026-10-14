@@ -672,7 +672,8 @@ def api_capacity(action):
                     str(src), tpl, request.args.get("occupants"), replace_existing=replace,
                     floor_occupants=request.args.get("floorOccupants"),
                     existing=request.args.get("existing"),
-                    floor_existing=request.args.get("floorExisting"))
+                    floor_existing=request.args.get("floorExisting"),
+                    floor_areas=request.args.get("floorAreas"))
                 out["source"] = name
                 return jsonify(out)
 
@@ -686,7 +687,8 @@ def api_capacity(action):
                 replace_existing=replace,
                 floor_occupants=request.args.get("floorOccupants"),
                 existing=request.args.get("existing"),
-                floor_existing=request.args.get("floorExisting"))
+                floor_existing=request.args.get("floorExisting"),
+                floor_areas=request.args.get("floorAreas"))
             out["source"] = name
             if not out.get("ok"):
                 return jsonify(out), 400
@@ -702,7 +704,7 @@ def api_capacity(action):
             report = {k: out[k] for k in
                       ("ok", "occupants", "totalDevices", "floorsWritten",
                        "perFloor", "occupantsWritten", "devicesWritten",
-                       "areasReshaped", "areasCleared",
+                       "areasReshaped", "areasCleared", "areasDrawn",
                        "floorsSkipped", "areasReplaced", "areasLeftInPlace",
                        "profilesCreated", "orphanAreasIgnored")}
             response.headers["X-WD-Capacity-Report"] = quote(json.dumps(report))
@@ -1301,6 +1303,7 @@ def api_prep(action):
                       floor_occupants=request.args.get("floorOccupants"),
                       existing=request.args.get("existing"),
                       floor_existing=request.args.get("floorExisting"),
+                      floor_areas=request.args.get("floorAreas"),
                       margin=margin, retighten=retighten, boxes=boxes)
 
         if action == "plan":
@@ -1371,6 +1374,7 @@ def api_prep(action):
             "bytesAfter": trim.get("bytesAfter"),
             "areasWritten": areas.get("floorsWritten"),
             "areasSkipped": areas.get("floorsSkipped"),
+            "areasDrawn": areas.get("areasDrawn") or 0,
             "areasRetightened": [r.get("floorName") for r in (step.get("retighten") or [])],
             "wallTypesAdded": [a.get("name") for a in (walls.get("add") or [])],
             "wallTypesSkipped": len(walls.get("skip") or []),

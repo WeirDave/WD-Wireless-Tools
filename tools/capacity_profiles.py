@@ -691,6 +691,7 @@ def _basis_words(basis) -> str:
         "walls": "the walls you drew",
         "aps": "where the APs are",
         "image": "the floor plan image",
+        "drawn": "the area you drew",
     }.get(basis, "the whole page")
 
 
@@ -744,6 +745,137 @@ def _existing_choices(floor_existing) -> dict:
     return {str(k): v for k, v in floor_existing.items() if v in EXISTING_CHOICES}
 
 
+# ── an area drawn by hand ────────────────────────────────────────────────────
+# Prep and Capacity both let him draw the requirement area on the plan instead
+# of taking the one computed from the walls. The page sends one polygon per
+# floor in that floor's own plan units; everything it may not be is refused
+# here as well, because the page is not the guard.
+#
+# These rules have a twin in wd-areaeditor.js (MIN_SIDE, the three messages);
+# tests/test_area_editor.py runs both on the same shapes.
+
+MIN_DRAWN_SIDE = 8   # plan units, as WD.BoxEditor.MIN_SIDE
+
+
+def _orient(a, b, c) -> float:
+    return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+
+def _edges_cross(a, b, c, d) -> bool:
+    """A proper crossing: each segment strictly straddles the other."""
+    return (_orient(a, b, c) * _orient(a, b, d) < 0
+            and _orient(c, d, a) * _orient(c, d, b) < 0)
+
+
+def polygon_problem(pts) -> str:
+    """Why an outline cannot be a requirement area, or "" when it can.
+
+    `pts` is a list of (x, y). Wording is the page's, word for word.
+    """
+    if len(pts) < 3:
+        return "An area needs at least three corners."
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    if max(xs) - min(xs) < MIN_DRAWN_SIDE or max(ys) - min(ys) < MIN_DRAWN_SIDE:
+        return "That area is too small."
+    n = len(pts)
+    for i in range(n):
+        a, b = pts[i], pts[(i + 1) % n]
+        for j in range(i + 1, n):
+            # Edges that share a corner always touch there; that is not a cross.
+            if (j + 1) % n == i or (i + 1) % n == j:
+                continue
+            if _edges_cross(a, b, pts[j], pts[(j + 1) % n]):
+                return "The outline crosses itself."
+    # After the crossing test: a bow tie nets to zero by the shoelace formula,
+    # and "too small" would be the wrong thing to tell him about it.
+    if _polygon_area({"area": [{"x": x, "y": y} for x, y in pts]}) <= 0:
+        return "That area is too small."
+    return ""
+
+
+def _point_xy(p):
+    if isinstance(p, dict):
+        x, y = p.get("x"), p.get("y")
+    elif isinstance(p, (list, tuple)) and len(p) >= 2:
+        x, y = p[0], p[1]
+    else:
+        return None
+    if isinstance(x, bool) or isinstance(y, bool):
+        return None
+    try:
+        x, y = float(x), float(y)
+    except (TypeError, ValueError):
+        return None
+    return (x, y) if math.isfinite(x) and math.isfinite(y) else None
+
+
+def clean_floor_areas(raw, floors):
+    """({floorPlanId: [{x, y}, ...]}, {floorPlanId: why not}) from what the page sent.
+
+    Points are held inside the floor's own width and height. An outline that
+    cannot be used is named in the second map rather than dropped without a
+    word, so the page can say why the floor went back to automatic.
+    """
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw) if raw.strip() else {}
+        except ValueError:
+            raw = {}
+    if not isinstance(raw, dict):
+        return {}, {}
+    sizes = {f["id"]: (f.get("width"), f.get("height")) for f in floors}
+    good, bad = {}, {}
+    for fid, pts in raw.items():
+        if fid not in sizes:
+            continue
+        xy = [_point_xy(p) for p in pts] if isinstance(pts, list) else []
+        if not xy or any(p is None for p in xy):
+            bad[fid] = "The outline could not be read."
+            continue
+        w, h = sizes[fid]
+        if isinstance(w, (int, float)) and isinstance(h, (int, float)) and w > 0 and h > 0:
+            xy = [(min(max(x, 0.0), float(w)), min(max(y, 0.0), float(h))) for x, y in xy]
+        why = polygon_problem(xy)
+        if why:
+            bad[fid] = why
+        else:
+            good[fid] = [{"x": x, "y": y} for x, y in xy]
+    return good, bad
+
+
+def _drawn_stats(poly, floor) -> dict:
+    """Size figures for a drawn outline, shaped like area_for_floor's."""
+    xs = [p["x"] for p in poly]
+    ys = [p["y"] for p in poly]
+    w_units, h_units = max(xs) - min(xs), max(ys) - min(ys)
+    width, height = float(floor.get("width") or 0), float(floor.get("height") or 0)
+    area_units = _polygon_area({"area": poly})
+    out = {"fractionOfCanvas": round(area_units / (width * height), 4)
+           if width and height else None}
+    mpu = floor.get("metersPerUnit")
+    if isinstance(mpu, (int, float)) and mpu > 0:
+        w_m, h_m = w_units * mpu, h_units * mpu
+        out.update(widthM=round(w_m, 2), heightM=round(h_m, 2),
+                   widthFt=round(w_m / 0.3048, 1), heightFt=round(h_m / 0.3048, 1),
+                   areaSqFt=round(area_units * mpu * mpu / (0.3048 ** 2), 1))
+    return out
+
+
+def apply_drawn_outline(info, floor, poly) -> None:
+    """Make a floor's plan entry use the outline he drew."""
+    info["drawn"] = True
+    info["basis"] = "drawn"
+    info["padMeters"] = 0.0
+    info["polygon"] = [dict(p) for p in poly]
+    info["outline"] = [dict(p) for p in poly]
+    info["outlineIsNew"] = True
+    info.pop("drawnUnused", None)
+    for key in ("widthM", "heightM", "widthFt", "heightFt", "areaSqFt"):
+        info.pop(key, None)
+    info.update(_drawn_stats(poly, floor))
+
+
 def _device_total(area) -> int:
     total = 0
     for item in area.get("capacityItems") or []:
@@ -765,7 +897,8 @@ def _devices_per_person(template: dict) -> float:
 
 
 def plan_application(esx_path, template, occupants, replace_existing=False,
-                     floor_occupants=None, existing=None, floor_existing=None):
+                     floor_occupants=None, existing=None, floor_existing=None,
+                     floor_areas=None):
     """Work out what applying this template would do, without writing anything.
 
     One requirement area per floor plan. A floor that already has a requirement
@@ -776,6 +909,13 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
     ({floorPlanId: headcount}) overrides it floor by floor: a building is
     rarely the same number of people on every storey, and one number applied
     to every floor puts the whole building on each of them.
+
+    `floor_areas` ({floorPlanId: [{x, y}, ...]}) is an outline he drew on the
+    plan. It is written instead of the computed one - into the area already
+    there when there is one, as a new area when there is not - on any floor
+    this run writes at all. A floor that is being left alone ignores it and
+    says so, because drawing an area is not permission to touch a floor he
+    told the run to keep.
     """
     esx_path = Path(esx_path)
     with zipfile.ZipFile(esx_path) as zf:
@@ -790,6 +930,7 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
     floors = [f for f in (members.get("floorPlans.json") or {}).get("floorPlans", [])
               if isinstance(f, dict) and f.get("id")]
     live = {f["id"] for f in floors}
+    drawn_areas, drawn_problems = clean_floor_areas(floor_areas, floors)
 
     # The project headcount is only required where a floor falls back on it.
     if not counts.get("ok") and any(f["id"] not in per_floor for f in floors):
@@ -900,6 +1041,33 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
             info["outline"] = [dict(p) for p in info["polygon"]]
         info["outlineIsNew"] = kept is None and info["mode"] != "none"
 
+        drawn = drawn_areas.get(floor["id"])
+        if floor["id"] in drawn_problems:
+            info["drawnProblem"] = drawn_problems[floor["id"]]
+        if drawn is not None:
+            if info["skipped"]:
+                info["drawnUnused"] = True
+                info["drawnPolygon"] = drawn
+                info["drawnUnusedWhy"] = (
+                    "nobody is on this floor" if info["mode"] == "none" else
+                    "this floor keeps its existing devices and area")
+            else:
+                apply_drawn_outline(info, floor, drawn)
+                rows_n = len(floor_counts["rows"])
+                if info["mode"] == "populate":
+                    info["action"] = ("your area - adding %d capacity items, outline "
+                                      "replaced by the one you drew" % rows_n)
+                elif info["mode"] == "replace":
+                    info["action"] = ("replace %d devices with %d and use the outline "
+                                      "you drew" % (info["existingDevices"],
+                                                    floor_counts["totalDevices"]))
+                    if len(with_capacity) > 1:
+                        info["action"] += (" - the other %d capacity areas are "
+                                           "cleared so they stop adding to the total"
+                                           % (len(with_capacity) - 1))
+                else:
+                    info["action"] = "create the area you drew"
+
         # Kept for callers written against the old shape.
         info["hasExistingRequirement"] = bool(with_capacity)
         info["rows"] = floor_counts["rows"]
@@ -951,6 +1119,7 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
         "devicesWritten": sum(p["totalDevices"] for p in writing),
         "floors": plans,
         "orphanAreasIgnored": orphans,
+        "drawnUsed": sum(1 for p in plans if p.get("drawn")),
         "willWrite": sum(1 for p in plans if not p["skipped"]),
         "willSkip": sum(1 for p in plans if p["skipped"]),
     }
@@ -1133,7 +1302,7 @@ def _missing_message(missing) -> str:
 
 def apply_to(src_path, dest_path, template, occupants,
              replace_existing=False, floor_occupants=None,
-             existing=None, floor_existing=None):
+             existing=None, floor_existing=None, floor_areas=None):
     """Write the template into a project. The only function here that writes.
 
     `src_path` is read and never modified - the written project is a separate
@@ -1151,7 +1320,8 @@ def apply_to(src_path, dest_path, template, occupants,
 
     plan = plan_application(src_path, template, occupants, replace_existing,
                             floor_occupants=floor_occupants,
-                            existing=existing, floor_existing=floor_existing)
+                            existing=existing, floor_existing=floor_existing,
+                            floor_areas=floor_areas)
     if not plan.get("ok"):
         return plan
 
@@ -1175,7 +1345,7 @@ def apply_to(src_path, dest_path, template, occupants,
             "rows": counts["rows"], "floorsWritten": [],
             "floorsSkipped": [f["floorName"] or f["floorPlanId"] for f in plan["floors"]],
             "areasReplaced": 0, "areasLeftInPlace": 0, "profilesCreated": [],
-            "areasReshaped": 0, "areasCleared": 0,
+            "areasReshaped": 0, "areasCleared": 0, "areasDrawn": 0,
             "orphanAreasIgnored": plan["orphanAreasIgnored"],
             "occupantsWritten": 0, "devicesWritten": 0,
             "note": "Every floor already has a requirement area or has nobody "
@@ -1275,7 +1445,8 @@ def apply_to(src_path, dest_path, template, occupants,
             # the template's, since it has nothing to lose.
             if req_id and not target.get("requirementId"):
                 target["requirementId"] = req_id
-            if mode == "replace" and floor.get("reshape") and floor.get("polygon"):
+            if floor.get("polygon") and (
+                    floor.get("drawn") or (mode == "replace" and floor.get("reshape"))):
                 target["area"] = [{"x": p["x"], "y": p["y"]} for p in floor["polygon"]]
                 reshaped += 1
             for other_id in floor.get("clearAreaIds") or []:
@@ -1347,6 +1518,7 @@ def apply_to(src_path, dest_path, template, occupants,
         "areasReplaced": replaced,
         "areasPopulated": populated,
         "areasReshaped": reshaped,
+        "areasDrawn": sum(1 for f in write_floors if f.get("drawn")),
         "areasCleared": len(cleared_ids),
         "areasLeftInPlace": left_in_place,
         "profilesCreated": created,

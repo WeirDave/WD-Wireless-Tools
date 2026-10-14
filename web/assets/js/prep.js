@@ -36,6 +36,9 @@
   var previewSeq = 0;        // so a slow preview cannot land after a newer one
   var floorOcc = {};         // floorPlanId -> headcount typed for that floor
   var floorExist = {};       // floorPlanId -> keep / devices / reshape for that floor
+  // The requirement area he drew on the plan, per floor: [[x, y], ...] in plan
+  // units (WD.AreaEditor). Sent as floorAreas; a floor without one is automatic.
+  var drawn = {};
   var stage = 'trim';        // the stage whose panel and overlay are showing
   var STAGES = ['trim', 'areas', 'walls'];
   // Settings → Capacity → Floors that already have devices. Read only: the
@@ -237,6 +240,8 @@
     fileName = name;
     floorOcc = {};             // floors belong to one project
     floorExist = {};
+    drawn = {};
+    if (map.areaEditor) map.areaEditor.cancel();
     trim = { boxes: {}, loaded: false, projectId: '', suggestions: {}, setAside: {} };
     lastPlan = null;
     if ($('prepExisting')) $('prepExisting').value = savedExisting;
@@ -359,6 +364,8 @@
       if (Object.keys(floorOcc).length) {
         q += '&floorOccupants=' + encodeURIComponent(JSON.stringify(floorOcc));
       }
+      var drawnParam = WD.AreaEditor.param(drawn);
+      if (drawnParam) q += '&floorAreas=' + encodeURIComponent(drawnParam);
     }
     return q;
   }
@@ -451,6 +458,8 @@
       var card = $('prepStageCard-' + s);
       if (card && card.classList) card.classList.toggle('is-off', !$('prepStep-' + s).checked);
     });
+    if (map.areaEditor && !areaToolOn()) map.areaEditor.cancel();
+    WD.AreaEditor.sync();
     preview();
   }
 
@@ -611,11 +620,12 @@
       if (a.willWrite) writes.push('requirement areas on ' + a.willWrite + ' ' + plural(a.willWrite, 'floor'));
       var rows = (a.floors || []).map(function (f, i) {
         var size = f.widthFt
-          ? ' <span class="prep-sub">(' + f.widthFt + ' × ' + f.heightFt + ' ft, from the '
-            + esc(f.basis) + ')</span>'
+          ? ' <span class="prep-sub">(' + f.widthFt + ' × ' + f.heightFt + ' ft, '
+            + (f.basis === 'drawn' ? 'as drawn' : 'from the ' + esc(f.basis)) + ')</span>'
           : '';
         return '<div class="pb-item"><b>' + esc(f.floorName || f.floorPlanId) + '</b> — '
-          + esc(f.action) + size + '<br>' + floorPeopleHtml(f, i, a.devicesPerPerson) + floorExistingHtml(f, i)
+          + esc(f.action) + size + drawnNote(f) + '<br>'
+          + floorPeopleHtml(f, i, a.devicesPerPerson) + floorExistingHtml(f, i)
           + '</div>';
       });
       rows.push('<p class="pb-hint">' + (a.willWrite
@@ -741,6 +751,7 @@
       var card = $('prepStageCard-' + s);
       if (card && card.classList) card.classList.toggle('is-current', s === name);
     });
+    if (map.areaEditor) map.areaEditor.cancel();
     if (lastPlan) renderMap(lastPlan);
     syncTrimControls();
   };
@@ -757,7 +768,7 @@
   // a time from /api/prep/image when the project was opened from disk and is
   // deliberately not in the browser.
 
-  var map = { floors: [], current: null, file: null, view: null, editor: null };
+  var map = { floors: [], current: null, file: null, view: null, editor: null, areaEditor: null };
 
   function resetMap() {
     map.floors = [];
@@ -819,7 +830,8 @@
     }
     var n = f.occupants || 0;
     var a = lastPlan && lastPlan.step && lastPlan.step.areas;
-    return { cls: 'is-auto', word: n + ' ' + plural(n, 'person', 'people'),
+    return { cls: f.drawn ? 'is-manual' : 'is-auto', lead: f.drawn ? 'Your area' : '',
+             word: n + ' ' + plural(n, 'person', 'people'),
              detail: multiplierText(n, a && a.devicesPerPerson, f.totalDevices || 0) };
   }
 
@@ -880,13 +892,15 @@
         + ' data-action="call" data-fn="prepMapSelect" data-arg="' + escAttr(f.id) + '"'
         + (st.detail ? ' title="' + escAttr(st.detail) + '"' : '') + '>'
         + '<span class="pb-floor-name">' + esc(f.name) + '</span>'
-        + (st.word ? ' <span class="pb-floor-state">' + esc(st.word) + '</span>' : '')
+        + (st.word ? ' <span class="pb-floor-state">'
+            + esc((st.lead ? st.lead + ' · ' : '') + st.word) + '</span>' : '')
         + '</button>';
     }).join('');
     showMapFloor();
   }
 
   window.prepMapSelect = function (id) {
+    if (map.areaEditor) map.areaEditor.cancel();
     map.current = id;
     var strip = $('prepMapStrip');
     Array.prototype.forEach.call((strip && strip.children) || [], function (b) {
@@ -912,6 +926,7 @@
       if (map.current !== id || map.file !== file) return;
       empty.hidden = true;
       var pv = mapView();
+      WD.AreaEditor.sync();
       // The same floor again - a new preview, a changed margin - keeps the
       // view where he put it. Only another floor is framed afresh.
       if (pv.img === im) pv.draw();
@@ -935,8 +950,8 @@
         : 'The dashed line is what automatic keeps. Drag a rectangle to choose your own. '
           + 'Space-drag, middle or right drag pans; the wheel zooms.';
     } else if (stage === 'areas') {
-      cap.textContent = 'The requirement area each floor gets, on the plan as it will be '
-        + 'cropped. Drag to move the plan; the wheel zooms.';
+      cap.textContent = 'The requirement area each floor gets. Draw a rectangle or a shape to '
+        + 'choose your own, then drag its corners. Drag the plan to move it; the wheel zooms.';
     } else {
       cap.textContent = 'The sheet as it will come out of the trim. Drag to move the plan; '
         + 'the wheel zooms.';
@@ -960,17 +975,108 @@
         proposed: function () { return autoBox(map.current); },
         enabled: function () { return stage === 'trim' && $('prepStep-trim').checked; },
       });
+      areaEditor();
       map.view = WD.PlanView.create({
         canvas: $('prepMapCanvas'),
         stage: $('prepMapStage'),
         overlay: drawOverlay,
-        dragPans: function () { return !(stage === 'trim' && $('prepStep-trim').checked); },
-        onDown: function (e, p, pv) { return map.editor.onDown(e, p, pv); },
-        onMove: function (e, p, pv, dragging) { map.editor.onMove(e, p, pv, dragging); },
-        onUp: function (e, p, pv) { map.editor.onUp(e, p, pv); },
+        // A plain drag pans, except where a tool has something to grab: the
+        // box on Trim, and the corners of a drawn area (or any drag at all
+        // while one is being drawn) on Areas.
+        dragPans: function (e, p, pv) {
+          if (stage === 'trim' && $('prepStep-trim').checked) return false;
+          if (areaToolOn()) return !map.areaEditor.claims(e, p, pv);
+          return true;
+        },
+        onDown: function (e, p, pv) { return tool().onDown(e, p, pv); },
+        onMove: function (e, p, pv, dragging) { tool().onMove(e, p, pv, dragging); },
+        onUp: function (e, p, pv) { tool().onUp(e, p, pv); },
       });
     }
     return map.view;
+  }
+
+  function areaToolOn() { return stage === 'areas' && $('prepStep-areas').checked; }
+  function tool() { return areaToolOn() ? map.areaEditor : map.editor; }
+
+  // The area tool, shared with Capacity. Made once, whenever first asked for.
+  function areaEditor() {
+    if (map.areaEditor) return map.areaEditor;
+    map.areaEditor = WD.AreaEditor.create({
+      get: function () { return drawn[map.current] || null; },
+      set: function (p) {
+        if (p) drawn[map.current] = p;
+        else delete drawn[map.current];
+      },
+      commit: function () { areasChanged(); },
+      size: function () { return floorSize(map.current); },
+      enabled: areaToolOn,
+      onMode: function () { WD.AreaEditor.sync(); },
+    });
+    WD.AreaEditor.bind({
+      editor: map.areaEditor,
+      floor: currentMapFloor,
+      drawn: function () { return drawn[map.current] || null; },
+      enabled: function () {
+        return areaToolOn() && !!map.current && !!floorSize(map.current) &&
+               !!(map.view && map.view.img);
+      },
+      why: areaWhy,
+      clear: function () { delete drawn[map.current]; areasChanged(); },
+    });
+    return map.areaEditor;
+  }
+
+  // Why the buttons are off, or what to know about the floor on show.
+  function areaWhy() {
+    if (!$('prepStep-areas').checked) {
+      return 'Requirement areas is not ticked, so no area is written. Tick it on the left to draw one.';
+    }
+    if (!map.current || !(map.view && map.view.img)) return 'The plan is still loading.';
+    var af = areaFloor(map.current);
+    if (af && af.drawnUnused) return drawnUnusedText(af);
+    return '';
+  }
+
+  function drawnUnusedText(f) {
+    return 'The area you drew here is not used: '
+      + (f.mode === 'none' ? 'nobody is on this floor.'
+        : 'the floor keeps its existing devices and area. Choose Replace under “Floors that '
+          + 'already have devices” to use it.');
+  }
+
+  // The preview is asked again so the strip, the panel and the footer describe
+  // what was just drawn.
+  function areasChanged() {
+    if (map.view) map.view.draw();
+    WD.AreaEditor.sync();
+    preview();
+  }
+
+  // One line under a floor's row about the area drawn on it, or nothing.
+  function drawnNote(f) {
+    var line = '';
+    if (f.drawnProblem) {
+      line = 'The area you drew was not used: ' + f.drawnProblem;
+    } else if (f.drawnUnused) {
+      line = drawnUnusedText(f);
+    } else if (f.drawn && outsideKept(f.floorPlanId)) {
+      line = 'Part of the area you drew is outside the cropped sheet; that corner is held on '
+        + 'the edge of it.';
+    }
+    return line ? '<br><span class="prep-sub prep-drawn-note">' + esc(line) + '</span>' : '';
+  }
+
+  // Whether any corner of the area drawn on this floor falls outside the box
+  // the trim keeps: the area is written on the cropped sheet.
+  function outsideKept(id) {
+    var d = drawn[id];
+    var tf = $('prepStep-trim').checked ? trimFloor(id) : null;
+    if (!d || !tf || tf.action !== 'trimmed' || !tf.offset || !tf.newSize) return false;
+    return d.some(function (c) {
+      return c[0] < tf.offset[0] || c[1] < tf.offset[1] ||
+             c[0] > tf.offset[0] + tf.newSize[0] || c[1] > tf.offset[1] + tf.newSize[1];
+    });
   }
 
   // A floor's size in plan units: the space a box is drawn in and the report
@@ -1007,17 +1113,22 @@
     var k1 = kept && pv.toScreen(kept[2], kept[3]);
     if (stage !== 'areas' || !$('prepStep-areas').checked) return;
     var af = areaFloor(map.current);
-    if (!af || af.mode === 'none') return;
-    var pts = af.outline || af.polygon || [];
+    if (!af || af.mode === 'none') { map.areaEditor.overlay(g, pv); return; }
+    // The area tool draws a drawn outline itself, with its corners; this
+    // keeps the label and the grey of a floor that is left alone.
+    var drawnHere = areaToolOn() && drawn[map.current] ? drawn[map.current] : null;
+    var pts = drawnHere
+      ? drawnHere.map(function (c) { return { x: c[0], y: c[1] }; })
+      : (af.outline || af.polygon || []);
     // An area measured from the whole page is measured again on the cropped
     // page, so on a floor being trimmed it is the kept rectangle.
     var onScreen;
-    if (kept && af.outlineIsNew && af.basis === 'canvas') {
+    if (kept && af.outlineIsNew && af.basis === 'canvas' && !drawnHere) {
       onScreen = [k0, { x: k1.x, y: k0.y }, k1, { x: k0.x, y: k1.y }];
     } else {
       onScreen = pts.map(function (p) { return pv.toScreen(p.x * kx, p.y * ky); });
     }
-    if (onScreen.length < 3) return;
+    if (onScreen.length < 3) { map.areaEditor.overlay(g, pv); return; }
     g.save();
     if (kept) {
       g.beginPath();
@@ -1027,12 +1138,14 @@
     g.beginPath();
     onScreen.forEach(function (p, i) { if (i) g.lineTo(p.x, p.y); else g.moveTo(p.x, p.y); });
     g.closePath();
-    g.fillStyle = af.skipped ? 'rgba(148,163,184,0.18)' : 'rgba(236,72,153,0.18)';
-    g.fill();
-    g.strokeStyle = af.skipped ? '#94a3b8' : '#db2777';
-    g.lineWidth = 2 * dpr;
-    if (af.skipped) g.setLineDash([6 * dpr, 4 * dpr]);
-    g.stroke();
+    if (!drawnHere) {
+      g.fillStyle = af.skipped ? 'rgba(148,163,184,0.18)' : 'rgba(236,72,153,0.18)';
+      g.fill();
+      g.strokeStyle = af.skipped ? '#94a3b8' : '#db2777';
+      g.lineWidth = 2 * dpr;
+      if (af.skipped) g.setLineDash([6 * dpr, 4 * dpr]);
+      g.stroke();
+    }
     g.restore();
     // Labelled in points, not as a fraction of the drawing, so it reads the
     // same at any zoom.
@@ -1050,6 +1163,7 @@
     g.textBaseline = 'middle';
     g.fillText(label, x + 15 * dpr, y + 18 * dpr);
     g.restore();
+    map.areaEditor.overlay(g, pv);
   }
 
   // The paper the trim takes away, shaded, and the edge of what is kept
@@ -1150,6 +1264,7 @@
     }
     showEvidence();
     if (f) captionFor(f);
+    WD.AreaEditor.sync();
   }
 
   function setDisabled(id, off) {
@@ -1415,7 +1530,8 @@
       if (failed.areas) bits.push('<b>did not add requirement areas</b>');
       else if (r.areasWritten && r.areasWritten.length) {
         bits.push('put a requirement area on <b>' + r.areasWritten.length + '</b> '
-          + plural(r.areasWritten.length, 'floor'));
+          + plural(r.areasWritten.length, 'floor')
+          + (r.areasDrawn ? ', <b>' + r.areasDrawn + '</b> of them the outline you drew' : ''));
       } else {
         bits.push('<b>every floor already had a requirement area</b>');
       }
@@ -1458,6 +1574,7 @@
       repaired: (step.trim || {}).repairedCount || 0,
       floorCount: (step.trim || {}).floorCount,
       areasWritten: (step.areas || {}).floorsWritten,
+      areasDrawn: (step.areas || {}).areasDrawn || 0,
       areasRetightened: (step.retighten || []).map(function (x) { return x.floorName; }),
       wallTypesAdded: ((step.walls || {}).add || []).map(function (x) { return x.name; }),
       wallTypesUpdated: ((step.walls || {}).update || []).map(function (x) { return x.name; }),
@@ -1589,6 +1706,9 @@
     // A template picked here by hand wins over the saved default for the rest
     // of the visit.
     $('prepCapTpl').addEventListener('change', function () { capTplTouched = true; });
+    $('prepAreaDraw').innerHTML = WD.AreaEditor.controlsHtml();
+    areaEditor();
+    WD.AreaEditor.sync();
 
     $('fileInput').addEventListener('change', function (e) {
       if (e.target.files[0]) loadFile(e.target.files[0]);

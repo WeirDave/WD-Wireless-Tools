@@ -34,8 +34,8 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.72.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v2.3.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.19.2 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.11.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v2.6.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.12.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/wd-wireless-tools-v8.0-180x180.png" alt="Prep" width="105"><br><b>Prep</b><br><sub>v2.7.0 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -151,6 +151,7 @@ Read the device mix out of a project you have already set up in Ekahau, and appl
 - Stores ratios per person, not raw counts, so a template taken from a 500-person building applies to a 200-person one
 - Applies by typing how many people work there, as one number for every floor or a separate number per floor (0 leaves a floor alone)
 - Previews per floor before anything is written, including where the requirement area would go and how big it is
+- Draws each floor's requirement area on the plan, as a rectangle or any shape, instead of taking the one worked out from the walls; the same tool as Prep's Areas stage
 - Writes the requirement areas into a new copy of the project and downloads it; your file is never written to
 - Carries the device and usage profiles themselves, so a template applies to a project that has never seen them
 - For a floor that already has devices, asks per floor whether to keep them, replace the device count and keep the outline, or replace the count and redraw the outline; replacing sets the count and never adds to it, so running it twice does not double anything
@@ -162,7 +163,7 @@ Get a freshly imported project ready to draw in, in one pass over the file inste
 
 - One workbench: the stages down the left, one plan canvas in the middle that every stage draws on, the current stage's settings on the right, and a footer that always says what **Prepare** will write
 - The Trim stage is PlanTrim's box editor on the plan: drag a box, adjust it by its handles, Suggest, Draw my own, Apply to all floors, Back to automatic. Boxes are shared with PlanTrim, so a box drawn in either tool is used by both
-- The Areas stage draws each floor's requirement area on the plan as it will sit on the cropped sheet, and captures a new capacity template from a finished project without leaving Prep
+- The Areas stage draws each floor's requirement area on the plan as it will sit on the cropped sheet, lets you draw one yourself as a rectangle or any shape (the same tool as Capacity), and captures a new capacity template from a finished project without leaving Prep
 - Crops the empty canvas off each CAD sheet, puts a requirement area on every floor and loads your wall types, from one load and one save
 - Takes a headcount per floor for the requirement areas, the same way Capacity does
 - Keeps or replaces the devices on floors that already have them, starting from the same saved default as Capacity, with a choice per floor
@@ -242,7 +243,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.230.0
+WIRELESS TOOLS  v2.231.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.

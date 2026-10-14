@@ -33,7 +33,9 @@
        frame     function () -> {x, y, w, h} in image pixels, or null for the
                  whole sheet; what fit() frames
        dragPans  true: a plain left drag pans too (a view with no tool on it);
-                 or a function answering that at the moment of the drag
+                 or a function answering that at the moment of the drag, given
+                 the event, the point and the view - a tool with corners to
+                 grab pans everywhere except on them
        onDown / onMove / onUp
                  a tool's own handlers. A pan gesture is always taken first;
                  onDown returning true claims the drag, and onMove / onUp are
@@ -143,7 +145,7 @@
       // dragPans may be a function: a view whose tool is only sometimes on
       // (Prep's box editor, on the Trim stage) pans on a plain drag the rest
       // of the time.
-      var dragPans = typeof opts.dragPans === 'function' ? opts.dragPans() : opts.dragPans;
+      var dragPans = typeof opts.dragPans === 'function' ? opts.dragPans(e, p, pv) : opts.dragPans;
       if (panGesture(e) || (dragPans && e.button === 0)) {
         pv.drag = { mode: 'pan', px: p.x, py: p.y, ox: pv.view.x, oy: pv.view.y };
         stage.classList.add('is-panning');

@@ -123,15 +123,21 @@
         <span class="pb-stage-status">The device mix: which devices, on which usage, how many per person</span>
       </button>
     </div>
+    <div class="pb-stage" data-step="capStepArea">
+      <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capStepArea">
+        <span class="pb-stage-name">2 &middot; Draw the area</span>
+        <span class="pb-stage-status">Optional: choose each floor&rsquo;s requirement area on the plan</span>
+      </button>
+    </div>
     <div class="pb-stage" data-step="capStep3">
       <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capStep3">
-        <span class="pb-stage-name">2 &middot; Apply it to this project</span>
+        <span class="pb-stage-name">3 &middot; Apply it to this project</span>
         <span class="pb-stage-status">People per floor, and what happens to floors that already have devices</span>
       </button>
     </div>
     <div class="pb-stage" data-step="capStep1">
       <button type="button" class="pb-stage-open" data-action="call" data-fn="capGoTo" data-arg="capStep1">
-        <span class="pb-stage-name">3 &middot; What this project already has</span>
+        <span class="pb-stage-name">4 &middot; What this project already has</span>
         <span class="pb-stage-status">Read from the open project; can be made into a template</span>
       </button>
     </div>
@@ -159,8 +165,32 @@
       <div id="capTplView"></div>
     </div>
 
+    <div class="cap-card" id="capStepArea">
+      <div class="cap-step">2 &mdash; Draw the area <span class="cap-step-note">optional</span></div>
+      <p class="cap-lead">Each floor&rsquo;s requirement area is worked out from its walls. To
+        choose it yourself, draw it on the plan.</p>
+      <div class="pb-floorbar">
+        <div class="pb-floors" id="capMapStrip" role="group" aria-label="Floors"></div>
+        <div class="pb-view-tools">
+          <button type="button" class="btn btn-sec pb-fit" data-action="call" data-fn="capMapFit"
+                  title="Show the whole sheet again">Fit</button>
+          <button type="button" class="btn btn-sec pb-zoom" data-action="call" data-fn="capMapZoom" data-arg="out"
+                  aria-label="Zoom out" title="Zoom out">&minus;</button>
+          <span class="pb-zoom-level" id="capZoomLevel"></span>
+          <button type="button" class="btn btn-sec pb-zoom" data-action="call" data-fn="capMapZoom" data-arg="in"
+                  aria-label="Zoom in" title="Zoom in">+</button>
+        </div>
+      </div>
+      <div class="ptb-stage pb-canvas" id="capMapStage">
+        <canvas id="capMapCanvas"></canvas>
+        <div class="ptb-empty" id="capMapEmpty">Open a project to draw on its plan.</div>
+      </div>
+      <div class="pb-canvas-hint" id="capMapCaption"></div>
+      <div id="capAreaDraw"></div>
+    </div>
+
     <div class="cap-card" id="capStep3">
-      <div class="cap-step">2 &mdash; Apply it to this project</div>
+      <div class="cap-step">3 &mdash; Apply it to this project</div>
       <div class="cap-row">
         <label for="capHeadcount">Each floor is for</label>
         <input type="number" id="capHeadcount" class="cap-input cap-input--num" min="1" step="1" value="200"
@@ -177,8 +207,8 @@
       </div>
       <p class="cap-hint">
         Each floor below can have its own number of people: leave it blank to use the number
-        above, or type 0 to leave that floor alone. An area you drew yourself keeps its outline
-        and only gets the devices. Replacing sets a floor to the new number &mdash; it never adds
+        above, or type 0 to leave that floor alone. An area already drawn in Ekahau keeps its
+        outline and only gets the devices, unless you draw one on the plan in step 2. Replacing sets a floor to the new number &mdash; it never adds
         to what was there. The starting choice for floors with devices is set in
         <a href="/settings#capacity">Settings &rarr; Capacity</a>.
       </p>
@@ -187,7 +217,7 @@
     </div>
 
     <div class="cap-card" id="capStep1">
-      <div class="cap-step">3 &mdash; What this project already has <span class="cap-step-note">read only</span></div>
+      <div class="cap-step">4 &mdash; What this project already has <span class="cap-step-note">read only</span></div>
       <div id="capExtract"></div>
       <div class="cap-row mt-12">
         <button type="button" class="btn btn-sec" id="capFromProject" data-action="call" data-fn="capTemplateFromProject" hidden>
@@ -246,9 +276,12 @@
 
 <div id="toast" class="toast"></div>
 
+<script src="/assets/lib/jszip.min.js"></script>
 <script src="/assets/js/wd-shared.js"></script>
 <script src="/assets/js/wd-dev.js"></script>
 <script src="/assets/js/wd-dev-actions.js"></script>
+<script src="/assets/js/wd-planview.js"></script>
+<script src="/assets/js/wd-areaeditor.js"></script>
 <script src="/assets/js/capacity.js"></script>
 </body>
 </html>

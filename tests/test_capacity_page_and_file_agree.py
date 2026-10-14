@@ -85,6 +85,7 @@ PLAN = SLICE + r"""
   global.applyQuery = () => '?occupants=' + $('capHeadcount').value;
   global.shortDevice = s => s; global.basisWords = s => s; global.fmtPeople = String;
   global.floorPeopleHtml = () => ''; global.existingPickHtml = () => '';
+  global.drawnNote = () => ''; global.planSettled = () => {};
   const pending = [];
   global.api = (a, body, q) => new Promise(r => pending.push({ q, r }));
   eval(slice('function setApply(') + ';global.setApply=setApply;');

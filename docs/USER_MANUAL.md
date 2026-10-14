@@ -980,6 +980,25 @@ headcount. The plan shows each area in pink with its people and devices.
   **Settings → Capacity**. Each such floor also has a **This floor** dropdown.
 - **Re-measure areas that still cover the whole plan** — on by default; see
   *Running it again*.
+- **Draw the area** — under **Draw the area** in the panel, to choose a floor's
+  area yourself instead of taking the one worked out from its walls. **Draw a
+  rectangle** drags one out on the plan. **Draw a shape** takes a click for each
+  corner: click the first corner, double-click or press **Enter** to finish,
+  **Backspace** takes the last corner back, **Esc** cancels. Once an area is
+  drawn, drag a corner to move it, or the small dot in the middle of an edge to
+  add a corner. **Back to automatic** takes the drawing away. The floor strip
+  marks a floor with a drawn area **Your area**.
+  - It is written instead of the computed outline, on that floor only. Into an
+    area that is already on the floor if there is one (keeping its name and
+    requirement), as a new area if not.
+  - Draw on the plan as it is now. If the trim crops that floor, the outline
+    moves with the crop; a corner outside the cropped sheet is held on its
+    edge, and the floor says so.
+  - A floor set to keep its existing devices, or to 0 people, is not written,
+    so a drawing on it is not used. The floor says so. Choose one of the
+    **Replace** options for that floor to use it.
+  - A shape that crosses itself, has fewer than three corners or is too small
+    is refused as it is drawn.
 
 With no capacity templates, this stage is switched off and says *"Build one in
 Capacity first."*
@@ -1776,10 +1795,12 @@ you type.
 
 1. Drop the `.esx` on the page, or click to browse. Your default template is
    already picked and the plan already worked out.
-2. Check **Each floor is for** (people), and change any floor's own **People on
+2. Optional: draw any floor's requirement area on the plan (step 2, **Draw the
+   area**). Otherwise each is worked out from the walls.
+3. Check **Each floor is for** (people), and change any floor's own **People on
    this floor**.
-3. Check what happens to floors that already have devices.
-4. Press **Apply to N floors and download** at the bottom right. You get
+4. Check what happens to floors that already have devices.
+5. Press **Apply to N floors and download** at the bottom right. You get
    `<name> (capacity).esx`. Your original is not touched.
 
 
@@ -1789,13 +1810,43 @@ you type.
 
 ### The screen
 
-The three steps are listed down the left; click one to jump to it.
+The four steps are listed down the left; click one to jump to it.
 
 1. **1 · Template** — pick the device mix, or build or change one.
-2. **2 · Apply it to this project** — people per floor, and what happens to
+2. **2 · Draw the area** — optional. Draw each floor's requirement area on its
+   plan.
+3. **3 · Apply it to this project** — people per floor, and what happens to
    floors that already have devices.
-3. **3 · What this project already has** — read only. Also where you make a
+4. **4 · What this project already has** — read only. Also where you make a
    template from a project that is already set up.
+
+### Drawing the area
+
+By default each floor's requirement area is worked out from its walls, or from
+where the APs are, or from the plan. Step 2 shows the floors as tabs over the
+plan, with the area each would get as a dashed pink line. To choose one
+yourself, pick the floor and use the same tool Prep's **Requirement areas**
+stage has:
+
+- **Draw a rectangle** — drag one out on the plan.
+- **Draw a shape** — click each corner. Click the first corner, double-click or
+  press **Enter** to finish; **Backspace** takes the last corner back; **Esc**
+  cancels.
+- Once drawn, drag a corner to move it, or the small dot in the middle of an
+  edge to add a corner.
+- **Back to automatic** takes the drawing away.
+
+The floor's tab reads **Your area** and the floor card in step 3 says *The area
+you drew on the plan*, with its size. It is written instead of the computed
+outline: into the area already on the floor when there is one, keeping that
+area's name and requirement, or as a new area when there is not.
+
+A floor that is left alone — it keeps its existing devices, or is set to 0
+people — does not use a drawing, and its card says so. Choose a **Replace**
+option for the floor to use it. A shape that crosses itself, has fewer than
+three corners or is too small is refused as it is drawn.
+
+Drag the plan to move it, scroll to zoom, and **Fit** shows the whole sheet.
 
 The footer at the bottom right says what the button will do, or why it cannot:
 *"Pick a template first."*, or *"No floor would be written…"* when every floor
@@ -1856,7 +1907,9 @@ Each floor card says what will happen to it, in plain words:
 
 | The card says | What it will do |
 |---|---|
-| **your area - adding N capacity items** | Fills an area you drew. Your outline is not changed |
+| **your area - adding N capacity items** | Fills an area already drawn in Ekahau. Its outline is not changed |
+| **your area - adding N capacity items, outline replaced by the one you drew** | Fills that area, and its outline becomes the one drawn on the plan |
+| **create the area you drew** | No area on the floor, so the one drawn on the plan is made |
 | **create an area from …** | No area on the floor, so one is made from the walls you drew — or where the APs are, or the plan, in that order |
 | **keep - already has N devices** | The floor already carries devices and is left as it is |
 | **replace N devices with M, keep the outline** | Sets the floor to the new count; the outline stays |

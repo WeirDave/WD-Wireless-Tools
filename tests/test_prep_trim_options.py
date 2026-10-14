@@ -18,6 +18,7 @@ import struct
 import subprocess
 import tempfile
 import unittest
+from tests.area_stub import with_area_stub
 import zipfile
 import zlib
 from pathlib import Path
@@ -414,7 +415,7 @@ class TheTrimStageDrivesTheBoxes(unittest.TestCase):
     is what the trim will crop to."""
 
     def test_the_trim_controls_reach_the_server(self):
-        r = subprocess.run(["node", "-e", BOX_HARNESS, str(PREP_JS)],
+        r = subprocess.run(["node", "-e", with_area_stub(BOX_HARNESS), str(PREP_JS)],
                            capture_output=True, text=True, encoding="utf-8", timeout=120)
         if r.returncode != 0:
             raise AssertionError((r.stdout + r.stderr).strip())
@@ -483,7 +484,7 @@ class TheMarginIsOneSettingNotTwo(unittest.TestCase):
     def _node(self, settings, script):
         prelude = ("globalThis.__SETTINGS__ = " + json.dumps(settings) + ";\n"
                    + self.PRELUDE)
-        proc = subprocess.run(["node", "-e", prelude + script, str(PREP_JS)],
+        proc = subprocess.run(["node", "-e", with_area_stub(prelude + script), str(PREP_JS)],
                               capture_output=True, text=True, encoding="utf-8",
                               timeout=120)
         if proc.returncode != 0:

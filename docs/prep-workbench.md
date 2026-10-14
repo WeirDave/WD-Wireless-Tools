@@ -111,6 +111,15 @@ namespacing the handlers needs nothing new from `wd-shared.js`.
    `capacity_profiles.plan_application`: the kept polygon, or the computed
    rectangle when one is made or redrawn) and captures a template in a modal
    through the existing `/api/capacity/analyze`, `derive` and `save` routes.
+3b. **Done in suite 2.230.0:** the Areas stage can draw the area as well as
+   show it. `WD.AreaEditor` in `web/assets/js/wd-areaeditor.js` mounts on
+   `WD.PlanView` the way `WD.BoxEditor` does, with the same buttons and rules for
+   Prep and for Capacity, which shows the plan in its own card. The page sends
+   `floorAreas` ({floorId: [{x, y}]}, plan units) with the plan request and the
+   run request; `capacity_profiles.plan_application` and `apply_to` write it, and
+   `prep_pipeline.run` moves it by each crop's offset because the trim runs
+   first. The page's rules and the server's (`polygon_problem`) are twins;
+   `tests/test_area_editor.py` runs both on the same shapes.
 4. **Partly done in suite 2.195.0:** the Walls stage picks the template and
    lists every type added or updated. Editing types stays in Quick Walls, and
    Prep reloads the templates when its tab becomes visible again.

@@ -53,10 +53,14 @@
     fileName = file.name;
     floorOcc = {};
     floorExist = {};
+    drawn = {};
+    lastPlan = null;
+    if (map.editor) map.editor.cancel();
     // A new project starts from the saved defaults again.
     $('capExisting').value = savedExisting;
     file.arrayBuffer().then(function (buf) {
       fileBytes = buf;
+      loadMap(buf);
       $('dropzone').style.display = 'none';
       $('editor').classList.add('active');
       $('fileBadge').textContent = fileName;
@@ -528,7 +532,213 @@
       + (Object.keys(floorExist).length
           ? '&floorExisting=' + encodeURIComponent(JSON.stringify(floorExist)) : '')
       + (Object.keys(floorOcc).length
-          ? '&floorOccupants=' + encodeURIComponent(JSON.stringify(floorOcc)) : '');
+          ? '&floorOccupants=' + encodeURIComponent(JSON.stringify(floorOcc)) : '')
+      + (WD.AreaEditor.param(drawn)
+          ? '&floorAreas=' + encodeURIComponent(WD.AreaEditor.param(drawn)) : '');
+  }
+
+  // ── drawing the area on the plan ───────────────────────────────────────────
+  /* The same tool Prep's Areas stage uses (WD.AreaEditor), on the same plan
+     canvas (WD.PlanView). What is drawn here goes to the server as floorAreas
+     with the rest of the plan, so the preview below and the file Apply writes
+     are made from the same outline. */
+  var drawn = {};            // floorPlanId -> [[x, y], ...] in plan units
+  var lastPlan = null;       // the newest plan the server sent
+  var map = { file: null, floors: [], current: null, view: null, editor: null };
+
+  function mapFloor(id) {
+    return map.floors.filter(function (f) { return f.id === id; })[0] || null;
+  }
+
+  function planFloor(id) {
+    return ((lastPlan && lastPlan.floors) || []).filter(function (f) {
+      return f.floorPlanId === id;
+    })[0] || null;
+  }
+
+  function floorSize(id) {
+    var f = mapFloor(id);
+    return f && f.w && f.h ? { w: f.w, h: f.h } : null;
+  }
+
+  function areaToolOn() { return !!(fileBytes && map.current && map.view && map.view.img); }
+
+  // What the floor would get without a drawing, for the dashed line.
+  function shownOutline() {
+    var f = planFloor(map.current);
+    if (!f || f.mode === 'none' || f.drawn || !f.outline) return null;
+    return f.outline.map(function (p) { return [p.x, p.y]; });
+  }
+
+  function areaEditor() {
+    if (map.editor) return map.editor;
+    map.editor = WD.AreaEditor.create({
+      get: function () { return drawn[map.current] || null; },
+      set: function (p) {
+        if (p) drawn[map.current] = p;
+        else delete drawn[map.current];
+      },
+      commit: function () { areasChanged(); },
+      size: function () { return floorSize(map.current); },
+      shown: shownOutline,
+      enabled: areaToolOn,
+      onMode: function () { WD.AreaEditor.sync(); },
+    });
+    WD.AreaEditor.bind({
+      editor: map.editor,
+      floor: function () { return mapFloor(map.current); },
+      drawn: function () { return drawn[map.current] || null; },
+      enabled: areaToolOn,
+      why: function () {
+        if (!fileBytes) return 'Open a project to draw on its plan.';
+        if (!areaToolOn()) return 'The plan is still loading.';
+        var f = planFloor(map.current);
+        return f && f.drawnUnused ? drawnUnusedText(f) : '';
+      },
+      clear: function () { delete drawn[map.current]; areasChanged(); },
+    });
+    return map.editor;
+  }
+
+  function drawnUnusedText(f) {
+    return 'The area you drew here is not used: '
+      + (f.mode === 'none' ? 'nobody is on this floor.'
+        : 'the floor keeps its existing devices and area. Choose Replace under “Floors that '
+          + 'already have devices” to use it.');
+  }
+
+  function mapView() {
+    if (!map.view) {
+      areaEditor();
+      map.view = WD.PlanView.create({
+        canvas: $('capMapCanvas'),
+        stage: $('capMapStage'),
+        overlay: function (g, pv) { zoomReadout(); map.editor.overlay(g, pv); },
+        // A plain drag pans, except on a corner of the drawn area or while
+        // one is being drawn.
+        dragPans: function (e, p, pv) { return !map.editor.claims(e, p, pv); },
+        onDown: function (e, p, pv) { return map.editor.onDown(e, p, pv); },
+        onMove: function (e, p, pv, dragging) { map.editor.onMove(e, p, pv, dragging); },
+        onUp: function (e, p, pv) { map.editor.onUp(e, p, pv); },
+      });
+    }
+    return map.view;
+  }
+
+  function zoomReadout() {
+    var el = $('capZoomLevel');
+    if (!el) return;
+    el.textContent = map.view && map.view.img
+      ? Math.round(map.view.view.scale / (window.devicePixelRatio || 1) * 100) + '%' : '';
+  }
+
+  function loadMap(buf) {
+    var empty = $('capMapEmpty');
+    map.floors = [];
+    map.current = null;
+    if (map.view) map.view.setImage(null);
+    empty.hidden = false;
+    // Drawing is optional: a plan that cannot be shown never stops a template
+    // being applied, so nothing here is allowed to throw into loadFile.
+    try {
+      map.file = WD.ProjectFile.fromBytes(buf);
+    } catch (e) {
+      map.file = null;
+      empty.textContent = 'The floor plans could not be read from this project.';
+      return;
+    }
+    empty.textContent = 'Reading the project…';
+    var file = map.file;
+    file.floors().then(function (floors) {
+      if (map.file !== file) return;
+      map.floors = floors;
+      map.current = floors.length ? floors[0].id : null;
+      if (!floors.length) {
+        empty.textContent = 'This project has no floor plans.';
+        renderStrip();
+        return;
+      }
+      renderStrip();
+      showFloor();
+    }, function () {
+      if (map.file !== file) return;
+      empty.textContent = 'The floor plans could not be read from this project.';
+    });
+  }
+
+  function renderStrip() {
+    $('capMapStrip').innerHTML = map.floors.map(function (f) {
+      return '<button type="button" class="pb-floor ' + (drawn[f.id] ? 'is-manual' : 'is-auto')
+        + (f.id === map.current ? ' is-current' : '') + '"'
+        + ' data-action="call" data-fn="capMapSelect" data-arg="' + WD.escAttr(f.id) + '">'
+        + '<span class="pb-floor-name">' + esc(f.name) + '</span>'
+        + (drawn[f.id] ? ' <span class="pb-floor-state">Your area</span>' : '')
+        + '</button>';
+    }).join('');
+  }
+
+  function showFloor() {
+    var id = map.current;
+    if (!id) return;
+    var empty = $('capMapEmpty');
+    var file = map.file;
+    $('capMapCaption').textContent = 'Drag the plan to move it; the wheel zooms. Draw a rectangle '
+      + 'or a shape to choose the area yourself, then drag its corners.';
+    file.image(id).then(function (im) {
+      if (map.current !== id || map.file !== file) return;
+      empty.hidden = true;
+      var pv = mapView();
+      if (pv.img === im) pv.draw();
+      else pv.setImage(im);
+      zoomReadout();
+      WD.AreaEditor.sync();
+    }, function (e) {
+      if (map.current !== id || map.file !== file) return;
+      mapView().setImage(null);
+      empty.hidden = false;
+      empty.textContent = (e && e.message) || 'This floor plan could not be displayed.';
+      WD.AreaEditor.sync();
+    });
+  }
+
+  window.capMapSelect = function (id) {
+    if (map.editor) map.editor.cancel();
+    map.current = id;
+    renderStrip();
+    showFloor();
+    WD.AreaEditor.sync();
+  };
+
+  window.capMapFit = function () { if (map.view) map.view.reset(); };
+
+  window.capMapZoom = function (dir) {
+    var pv = map.view;
+    if (!pv || !pv.img) return;
+    var k = dir === 'in' ? WD.PlanView.ZOOM_STEP : 1 / WD.PlanView.ZOOM_STEP;
+    pv.zoomAt(k, pv.canvas.width / 2, pv.canvas.height / 2);
+  };
+
+  // What the server said about each floor is what the dashed line shows, so
+  // the drawing is brought up to date when the plan arrives.
+  function planSettled(plan) {
+    lastPlan = plan;
+    if (map.view) map.view.draw();
+    WD.AreaEditor.sync();
+  }
+
+  // The preview below is asked again, so it describes what was just drawn.
+  function areasChanged() {
+    renderStrip();
+    if (map.view) map.view.draw();
+    WD.AreaEditor.sync();
+    capPlan();
+  }
+
+  // One line under a floor about the area drawn on it, or ''.
+  function drawnNote(f) {
+    var line = f.drawnProblem ? 'The area you drew was not used: ' + f.drawnProblem
+      : f.drawnUnused ? drawnUnusedText(f) : '';
+    return line ? '<div class="cap-sub">' + esc(line) + '</div>' : '';
   }
 
   // A blank field hands the floor back to the building headcount; 0 means
@@ -573,12 +783,13 @@
     setApply(false, 'Working out what applying it would do…');
     api('plan', fileBytes, applyQuery()).then(function (r) {
       if (seq !== planSeq) return;
+      planSettled(r && r.ok ? r : null);
       if (!r || !r.ok) {
         host.innerHTML = '<div class="cap-empty">' + esc((r && r.error) || 'Could not plan that.') + '</div>';
         // The reason is in the card above; the footer points at it rather
         // than repeat a paragraph, and never just says "nothing".
         setApply(false, 'This template cannot be applied to this project - the reason is under '
-          + '2 — Apply it to this project.');
+          + '3 — Apply it to this project.');
         $('capApplyBtn').textContent = 'Apply and download';
         return;
       }
@@ -613,7 +824,10 @@
           facts = 'Using the area you drew'
             + (f.targetAreaName ? ' (<b>' + esc(f.targetAreaName) + '</b>)' : '')
             + (f.targetVertexCount ? ', ' + f.targetVertexCount + ' points' : '')
-            + ' — the outline is not changed, only the devices are written into it.';
+            + (f.drawn
+                ? ' — its outline is replaced by the one you drew on the plan, and the devices '
+                  + 'are written into it.'
+                : ' — the outline is not changed, only the devices are written into it.');
         } else if (f.mode === 'replace') {
           var many = (f.existingAreaCount || 1) > 1;
           facts = 'Already carries <b>' + (f.existingDevices || 0) + '</b> device'
@@ -622,7 +836,9 @@
             + (f.existingChoice === 'keep'
                 ? 'Kept as it is.'
                 : 'Set to <b>' + (f.totalDevices || 0) + '</b> &mdash; replaced, not added to'
-                  + (f.existingChoice === 'reshape'
+                  + (f.drawn
+                      ? '; the outline is the one you drew on the plan'
+                      : f.existingChoice === 'reshape'
                       ? '; the outline is redrawn from <b>' + esc(basisWords(f.basis)) + '</b>'
                       : '; the outline is kept')
                   + (many ? ', and the other ' + (f.existingAreaCount - 1)
@@ -631,6 +847,11 @@
                       + ' counting twice' : '')
                   + '.')
             + existingPickHtml(f, i);
+        } else if (f.drawn) {
+          facts = 'The area you drew on the plan &mdash; <b>' + size + '</b>'
+            + (f.fractionOfCanvas != null
+                ? ' <span class="cap-sub">(' + (f.fractionOfCanvas * 100).toFixed(1)
+                  + '% of the page)</span>' : '');
         } else {
           facts = 'Area from <b>' + esc(basisWords(f.basis)) + '</b>'
             + (f.padMeters ? ' plus ' + f.padMeters + ' m padding' : '')
@@ -643,7 +864,7 @@
           + '<div class="cap-floor-head"><span class="cap-floor-name">'
           + esc(f.floorName || 'Floor plan') + '</span>'
           + '<span class="cap-badge cap-badge--' + cls + '">' + esc(f.action) + '</span></div>'
-          + '<div class="cap-facts">' + facts + '</div>'
+          + '<div class="cap-facts">' + facts + '</div>' + drawnNote(f)
           + floorPeopleHtml(f, i, r.devicesPerPerson) + '</div>';
       }).join('');
       var perFloorTable = r.rows.length
@@ -798,6 +1019,10 @@
         + (r.areasReshaped ? ', ' + r.areasReshaped + ' of them with a redrawn outline' : '')
         + '.');
     }
+    if (r.areasDrawn) {
+      bits.push('Used the outline you drew on the plan for ' + r.areasDrawn + ' floor'
+        + (r.areasDrawn === 1 ? '' : 's') + '.');
+    }
     if (r.areasCleared) {
       bits.push('Cleared the devices from ' + r.areasCleared + ' other capacity area'
         + (r.areasCleared === 1 ? '' : 's') + ' so the floor total is not counted twice.');
@@ -824,6 +1049,7 @@
     if (basis === 'walls') return 'the walls you drew';
     if (basis === 'aps') return 'where the APs are';
     if (basis === 'image') return 'the floor plan image';
+    if (basis === 'drawn') return 'the area you drew';
     return 'the whole page';
   }
 
@@ -846,6 +1072,9 @@
 
   // ── wiring ─────────────────────────────────────────────────────────────────
   function init() {
+    $('capAreaDraw').innerHTML = WD.AreaEditor.controlsHtml();
+    areaEditor();
+    WD.AreaEditor.sync();
     var dz = $('dropzone'), input = $('fileInput');
     dz.addEventListener('click', function () { input.click(); });
     dz.addEventListener('dragover', function (e) { e.preventDefault(); dz.classList.add('dragover'); });

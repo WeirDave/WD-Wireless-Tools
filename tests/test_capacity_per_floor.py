@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from tests.area_stub import with_area_stub
 import zipfile
 from pathlib import Path
 
@@ -250,7 +251,7 @@ function last(kind) { return calls.filter(u => u.indexOf('/' + kind) >= 0).pop()
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
 class PerFloorControlTests(unittest.TestCase):
     def test_the_per_floor_box_reaches_the_server(self):
-        r = subprocess.run(["node", "-e", PAGE_HARNESS, str(CAPACITY_JS)],
+        r = subprocess.run(["node", "-e", with_area_stub(PAGE_HARNESS), str(CAPACITY_JS)],
                            capture_output=True, text=True, encoding="utf-8",
                            timeout=120)
         if r.returncode != 0:

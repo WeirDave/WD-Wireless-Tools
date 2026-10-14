@@ -13,6 +13,7 @@ what reaches the panel and what is sent to ``plantrim/boxes_save``.
 import shutil
 import subprocess
 import unittest
+from tests.area_stub import with_area_stub
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -105,7 +106,7 @@ function last() { return calls.filter(u => u.indexOf('/prep/plan') >= 0).pop(); 
 @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
 class ASetAsideBoxIsNamedAndKept(unittest.TestCase):
     def test_the_panel_names_it_and_the_store_keeps_it(self):
-        r = subprocess.run(["node", "-e", HARNESS, str(PREP_JS)],
+        r = subprocess.run(["node", "-e", with_area_stub(HARNESS), str(PREP_JS)],
                            capture_output=True, text=True, encoding="utf-8", timeout=120)
         if r.returncode != 0:
             raise AssertionError((r.stdout + r.stderr).strip())
