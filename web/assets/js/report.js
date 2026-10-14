@@ -593,7 +593,8 @@
       'Choosing <b>Save to PDF</b> in Firefox, or <b>Save as PDF</b> in Chrome '
       + 'or Edge, offers the file name above. Printing to <b>Microsoft Print to '
       + 'PDF</b> or <b>Adobe PDF</b> produces the same document, but those are '
-      + 'printers and name the file themselves — you will have to type it.';
+      + 'printers and leave the File name box empty — Print / Save PDF copies '
+      + 'the name to the clipboard, so press <b>Ctrl+V</b> in that box.';
   }
   window.renderPrintHint = renderPrintHint;
 
@@ -5835,8 +5836,27 @@
   window.addEventListener('beforeprint', function () { lightThemeForPrint(true); });
   window.addEventListener('afterprint', function () { lightThemeForPrint(false); });
 
+  /* Microsoft Print to PDF leaves the Save dialog's File name box empty, and
+     a page cannot fill it: the name of a printer's output file belongs to
+     Windows, not to the document. What the page can do is put the name on the
+     clipboard at the moment Print is pressed, so it is one Ctrl+V away in any
+     destination that does not offer it. Done before anything is awaited,
+     because a clipboard write needs the click that started this to still be
+     recent. Best effort: a refused write must never stop the print. */
+  function copyDocNameForSaveDialog() {
+    var name = document.title;
+    try {
+      if (!name || !navigator.clipboard || !navigator.clipboard.writeText) return;
+      navigator.clipboard.writeText(name).then(function () {
+        if (WD.toast) WD.toast('File name copied — paste it into the Save dialog with Ctrl+V');
+      }, function () {});
+    } catch (e) {}
+  }
+  window.copyDocNameForSaveDialog = copyDocNameForSaveDialog;
+
   window.printReport = async function () {
     syncDocTitle();
+    copyDocNameForSaveDialog();
     var host = document.getElementById('reportCanvas');
     await applyAntennaSegmentCrop(host, collectOpts());
     var images = Array.prototype.slice.call(host.querySelectorAll('img'));

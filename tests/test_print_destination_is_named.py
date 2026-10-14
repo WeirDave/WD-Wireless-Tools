@@ -107,6 +107,83 @@ class TheHintSaysWhichDestinationKeepsTheName(unittest.TestCase):
         self.assertIn("—", text, "the em dash did not survive")
 
 
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class PressingPrintPutsTheNameOnTheClipboard(unittest.TestCase):
+    """Microsoft Print to PDF leaves the File name box empty and a page cannot
+    fill it, so Print / Save PDF copies the name for a Ctrl+V. The real
+    `printReport` is run against recording stubs."""
+
+    PROBE = r"""
+        const fs = require('fs');
+        const src = fs.readFileSync(process.argv[1], 'utf8');
+        function slice(marker) {
+          const a = src.indexOf(marker);
+          if (a < 0) throw new Error(marker + ' moved');
+          let b = a, depth = 0, seen = false;
+          while (b < src.length && !(seen && depth === 0)) {
+            if (src[b] === '{') { depth++; seen = true; }
+            else if (src[b] === '}') depth--;
+            b++;
+          }
+          return src.slice(a, b);
+        }
+        const copyFn = slice('  function copyDocNameForSaveDialog() {');
+        const printFn = slice('  window.printReport = async function () {');
+        const mode = process.argv[2];
+        const calls = [];
+        global.window = { print: () => calls.push('print') };
+        global.WD = { toast: (m) => calls.push('toast:' + m) };
+        global.document = {
+          title: 'Report - AP Installation - Invented Site - v1',
+          getElementById: () => ({ querySelectorAll: () => [] }),
+        };
+        // Node 21+ makes `navigator` a read-only getter on global.
+        Object.defineProperty(global, 'navigator', { configurable: true, value:
+          mode === 'none' ? {} : { clipboard: { writeText: (t) => {
+            calls.push('copy:' + t);
+            return mode === 'refuse' ? Promise.reject(new Error('denied')) : Promise.resolve();
+          } } } });
+        global.syncDocTitle = () => calls.push('sync');
+        global.collectOpts = () => ({});
+        global.applyAntennaSegmentCrop = () => Promise.resolve();
+        eval(copyFn);
+        eval(printFn);
+        (async () => {
+          await window.printReport();
+          await new Promise((r) => setTimeout(r, 20));
+          console.log(JSON.stringify(calls));
+        })().catch((e) => { console.error(e); process.exit(1); });
+    """
+
+    def run_print(self, mode):
+        r = subprocess.run(
+            ["node", "-e", self.PROBE, str(REPORT_JS), mode],
+            capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).strip())
+        return json.loads(r.stdout.strip().splitlines()[-1])
+
+    def test_the_title_is_copied_after_it_is_settled_and_before_the_dialog(self):
+        calls = self.run_print("ok")
+        title = "Report - AP Installation - Invented Site - v1"
+        self.assertIn("copy:" + title, calls)
+        self.assertLess(calls.index("sync"), calls.index("copy:" + title))
+        self.assertLess(calls.index("copy:" + title), calls.index("print"))
+
+    def test_it_says_it_was_copied(self):
+        self.assertTrue(any(c.startswith("toast:") and "Ctrl+V" in c
+                            for c in self.run_print("ok")))
+
+    def test_a_refused_clipboard_never_stops_the_print(self):
+        calls = self.run_print("refuse")
+        self.assertIn("print", calls)
+        self.assertFalse(any(c.startswith("toast:") for c in calls),
+                         "claimed a copy that was refused")
+
+    def test_no_clipboard_api_never_stops_the_print(self):
+        self.assertIn("print", self.run_print("none"))
+
+
 class TheHintIsOnScreenAndNotOnThePaper(unittest.TestCase):
     def test_it_is_marked_not_to_print(self):
         """It sits beside the Print button, so without this it prints onto the

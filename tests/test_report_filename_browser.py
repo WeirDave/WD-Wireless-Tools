@@ -327,6 +327,25 @@ class DroppedFileNamesTheReport(unittest.TestCase):
             _StubApi.report_settings = {}
             _StubApi.settings_delay = 0
 
+    def test_the_title_is_still_the_name_when_the_print_dialog_opens(self):
+        """What a destination reads is `document.title` at the instant
+        `window.print()` runs, not after the drop. `printReport` is run for
+        real with only `print` replaced, and the title is read inside it - so a
+        beforeprint handler, a theme switch or anything else between the click
+        and the dialog that disturbed the name would show here."""
+        probe = (
+            "var done = arguments[arguments.length - 1];"
+            "var seen = null;"
+            "window.print = function () { seen = document.title; };"
+            "window.printReport().then(function () { done(seen); });")
+        for kind, driver in self._each_browser():
+            with self.subTest(browser=kind):
+                self._drop(driver, {"ok": True, "folder": SITE})
+                driver.set_script_timeout(60)
+                at_print = driver.execute_async_script(probe)
+                self.assertEqual(
+                    at_print, "Report - AP Installation - " + SITE + " - v1")
+
     def test_it_asks_with_the_name_and_the_byte_size(self):
         """The size is what makes the answer safe to act on: two buildings
         surveyed from one template share a file name."""
