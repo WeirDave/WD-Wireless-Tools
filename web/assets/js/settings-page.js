@@ -126,6 +126,7 @@
     var c = settings.cloud || {};
 
     document.getElementById('sOutputDir').value = g.output_dir || '';
+    document.getElementById('sTerminalTab').checked = g.terminal_tab !== false;
     renderSubfolders(g.subfolders || [], g.subfolder_names || {});
     renderCustomDests(g.custom_destinations || []);
 
@@ -369,6 +370,7 @@
     var patch = {
       global: {
         output_dir: document.getElementById('sOutputDir').value,
+        terminal_tab: document.getElementById('sTerminalTab').checked,
         subfolders: cleanKeys,
         subfolder_names: cleanNames,
         custom_destinations: collectCustomDests()

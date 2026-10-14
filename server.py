@@ -42,6 +42,7 @@ from tools import housekeeping
 from tools import report_store
 from tools import settings as suite_settings
 from tools import settings_backup
+from tools import terminal_tab
 from tools import share_recipients
 from tools import updater
 from tools import applog
@@ -2179,6 +2180,11 @@ def _restart_in_new_console():
 
     if os.name == "nt":
         bat = install_root / LAUNCHER_SCRIPT_WIN
+        # A tab, when Windows Terminal is there and Settings allows it. The old
+        # tab is not killed: the launcher leaves cleanly on this exit code, which
+        # is what closes a Windows Terminal tab - a killed cmd.exe leaves it open.
+        if bat.is_file() and terminal_tab.restart_in_tab(str(bat)):
+            os._exit(terminal_tab.RESTART_EXIT_CODE)
         if bat.is_file():
             subprocess.Popen(
                 ["cmd.exe", "/c", str(bat)],

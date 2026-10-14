@@ -2223,6 +2223,7 @@ folded sections and dismissed tips are not settings; they stay in the browser.
 | Setting | Where it is changed | What it does |
 | --- | --- | --- |
 | **Local project folder** | Settings | The root folder your site folders live in; Cloud Manager scans it |
+| **Open the launcher in a Windows Terminal tab** | Settings | Windows only. On by default. `Start WD Wireless Tools.bat` opens as a tab in your open Windows Terminal window instead of a console of its own, and a restart does the same. Off: it always runs in the window it was started from |
 | **Default subfolders** | Settings | Folders created in every new site folder |
 | **Custom destinations** | Settings | Extra sorting bins for Squirrel, each with its own file types |
 
@@ -2369,9 +2370,15 @@ Double-click `Start WD Wireless Tools.bat` (Windows) or
 `Start WD Wireless Tools.command` (macOS). The first run installs the Python
 packages it needs, about a minute. It then opens `http://localhost:8675`.
 
-**Keep the black terminal window open while you work.** Closing it, or
+**Keep the terminal window (or tab) open while you work.** Closing it, or
 `Ctrl+C`, stops the suite. It prints the version and the log's location at
 start.
+
+On Windows with Windows Terminal installed, the launcher opens as a new tab in
+your most recent Windows Terminal window (or starts one if none is open). Run it
+from a PowerShell tab you already have open and it runs in that tab. A restart
+from the app opens a fresh tab and closes the old one. Turn this off with
+**Open the launcher in a Windows Terminal tab** in Settings → General.
 
 On macOS, if Gatekeeper blocks the `.command` file, right-click it, choose
 **Open**, and confirm **Open**. Only needed once.
