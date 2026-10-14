@@ -73,6 +73,15 @@
       "control": "sOutputDir"
     },
     {
+      "key": "global.terminal_tab",
+      "label": "Open the launcher in a Windows Terminal tab",
+      "category": "preference",
+      "owner": "Suite",
+      "section": "general",
+      "home": "settings",
+      "control": "sTerminalTab"
+    },
+    {
       "key": "global.subfolders",
       "label": "Default subfolders",
       "category": "preference",

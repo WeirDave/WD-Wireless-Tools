@@ -36,6 +36,14 @@ DEFAULTS = {
         # how stale the backup is. A record rather than a choice - it is
         # in the registry's "internal" list and has no control.
         "last_settings_export": "",
+        # Windows only: open the launcher in a tab of the Windows Terminal
+        # window that is already open instead of a console of its own. On by
+        # default because the console is the thing nobody asked for; a switch
+        # because a person who launches from somewhere else on purpose should
+        # be able to say so. Read by tools/terminal_tab.py, which the launcher
+        # runs before anything else, so it has to be readable without the
+        # server.
+        "terminal_tab": True,
     },
     "organizer": {
         "image_ext": [

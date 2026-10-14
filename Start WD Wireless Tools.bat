@@ -33,6 +33,17 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM ---- Windows Terminal -------------------------------------------------------
+REM Open in a tab of the Windows Terminal window already on screen, rather than
+REM a console of our own. tools/terminal_tab.py decides: it exits 0 once a tab
+REM is running this launcher, and 1 for "stay here" - already inside a terminal,
+REM switched off in Settings, or no wt.exe. The tab passes --in-tab back so it
+REM can never open a second one from inside itself.
+if /i "%~1"=="--in-tab" goto :launcher_ready
+python -m tools.terminal_tab "%~f0"
+if not errorlevel 1 exit /b 0
+:launcher_ready
+
 REM ---- Check for dependencies -------------------------------------------------
 python -c "import flask, waitress, requests, browser_cookie3, cryptography, keyring, PIL" 2>nul
 if errorlevel 1 (
@@ -65,6 +76,10 @@ for /f "tokens=5" %%p in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":8675
 
 REM ---- Launch -----------------------------------------------------------------
 python server.py
+
+REM 75 is "restarted: a new tab is already running". Leaving cleanly closes this
+REM tab; killing the window leaves it open behind a non-zero exit.
+if %errorlevel%==75 exit /b 0
 
 if errorlevel 1 (
     echo.
