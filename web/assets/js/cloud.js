@@ -1290,6 +1290,18 @@ function indexRowData() {
       children: s.children,
     };
   });
+  /* Unassigned projects, the tree's last group. They had no checkbox and no
+     entry here, so the projects that land there - above all the ones a
+     colleague shared, which cannot be assigned to a site - could not be
+     ticked one by one, and Select all passed over them. */
+  ((data.orphans && data.orphans.cloudOnly) || []).forEach(o => {
+    rowData['op:' + o.id] = {
+      kind: 'cloud', id: o.id, name: o.name,
+      cloudOwner: (o.owner || ''),
+      siteName: '',
+      entityKind: 'projects',
+    };
+  });
   (data.localOnly || []).forEach(f => {
     rowData['l:' + f.path] = {
       kind: 'local', path: f.path, name: f.name, isDir: f.isDir,
@@ -3044,7 +3056,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
        +   `<span class="glh-letter local"></span>`
        + `</div>`;
     orphans.forEach((o, i) => {
-      const r = { status: 'orphan', key: 'op:' + o.id, kind: 'projects', noCheckbox: true, cloud: o, local: null };
+      const r = { status: 'orphan', key: 'op:' + o.id, kind: 'projects', cloud: o, local: null };
       {
       const _stripe = (i % 2) === 1;
       const _det = _isExternal(r.cloud, r.local)
@@ -4688,7 +4700,7 @@ function rowDetailHtml(r, stripe) {
     }
     acts.push(rdAction('down', 'Download',
       'downloadThenMove', [c.id, c.name],
-      { primary: !c.rejectedPairing, writes: 'local', title: 'Download the .esx from Ekahau Cloud, then move it into a site folder.' }));
+      { primary: !c.rejectedPairing, writes: 'local', title: 'Download the .esx from Ekahau Cloud. You choose the local folder first, and see the full path before anything is fetched.' }));
     acts.push(rdAction('link', 'Link to a local file…',
       'openLinkPicker', ['cloud', c.id, c.name],
       { quiet: true, title: 'Pair this cloud project with a local .esx yourself.' }));
@@ -8394,6 +8406,17 @@ function updateBulkBar() {
     pairCount > 0
       ? `Check ${pairCount} selected pair${pairCount === 1 ? '' : 's'} and, where the contents are identical, write the cloud's name and date into your local file so they agree`
       : undefined);
+  //: Cloud projects with no local copy, whoever owns them - reading is not
+  //: gated on ownership. A matched pair is Sync's, not this button's.
+  const downloadableCount = syncItems.filter(
+    d => d.kind === 'cloud' && isProjectSyncItem(d)).length;
+  setBtn('bulkDownloadBtn', true, downloadableCount > 0,
+    syncItems.some(isFilePairItem)
+      ? 'These already have a local copy - use Sync to refresh them. Select cloud projects with no local copy to download.'
+      : 'Select one or more cloud projects to download',
+    downloadableCount > 0
+      ? `Download ${downloadableCount} selected cloud project${downloadableCount === 1 ? '' : 's'} as .esx files into a local folder you choose. Works on projects somebody else owns.`
+      : undefined);
   setBtn('bulkVerifyBtn', true, verifyableCount > 0, 'Select one or more Name-matches pairs to verify (download cloud → overwrite local)');
   setBtn('bulkShareBtn', true, ownedCloudIds.size > 0,
     'Select one or more cloud projects you own — Ekahau only lets the owner add shares',
@@ -8740,7 +8763,16 @@ async function bulkSync(dir) {
   if (pullRenames.length) parts.push(`Rename <b>${pullRenames.length}</b> of those local files to match ${pullRenames.length === 1 ? 'its' : 'their'} cloud name${pullRenames.length === 1 ? '' : 's'}`);
   if (pairs.length) parts.push(`Rename <b>${pairs.length}</b> matched item${pairs.length === 1 ? '' : 's'}`);
   if (uploads.length) parts.push(`Upload <b>${uploads.length}</b> local .esx file${uploads.length === 1 ? '' : 's'} to Ekahau Cloud`);
-  if (downloads.length) parts.push(`Download <b>${downloads.length}</b> cloud project${downloads.length === 1 ? '' : 's'}`);
+  if (downloads.length) {
+    //: A project in no site has no folder to follow; where it goes is asked
+    //: after this, with the paths shown, rather than a folder per project
+    //: being invented for it.
+    const unsited = downloads.filter(d => !d.siteName).length;
+    parts.push(`Download <b>${downloads.length}</b> cloud project${downloads.length === 1 ? '' : 's'}`
+      + (unsited
+          ? ` — ${unsited === downloads.length ? 'you choose' : 'for the ' + unsited + ' with no site, you choose'} the local folder next`
+          : ''));
+  }
   if (siteCreates.length) {
     const noun = dir === 'to-cloud' ? 'cloud site' : 'local folder';
     const fileNote = createdFileCount
@@ -8989,12 +9021,11 @@ async function bulkSync(dir) {
       run: async (opId) => pyApi('upload_project', d.path, d.siteId || d.parentSiteId || undefined, opId),
     });
   }
+  const unsitedDownloads = [];
   for (const d of downloads) {
-
-    const destFolder = d.siteName || d.name;
-    const title = d.siteName
-      ? `Downloading "${d.name}.esx" → ${d.siteName}`
-      : `Downloading "${d.name}.esx"`;
+    if (!d.siteName) { unsitedDownloads.push({ id: d.id, name: d.name, siteName: '' }); continue; }
+    const destFolder = d.siteName;
+    const title = `Downloading "${d.name}.esx" → ${d.siteName}`;
     opEnqueue({
       title,
       type: 'download', pollBackend: true,
@@ -9003,7 +9034,7 @@ async function bulkSync(dir) {
       run: async (opId) => pyApi('download_project', d.id, destFolder, opId),
     });
   }
-
+  if (unsitedDownloads.length) await downloadProjects(unsitedDownloads, 0);
 }
 /* Sync, as the round trip the tool exists for.
 
@@ -9554,7 +9585,7 @@ if (typeof window !== 'undefined') window.syncEverything = syncEverything;
 
 function bulkDelete() {
 
-  const contextForKey = (k) => (k.startsWith('ct') ? 'projects' : currentTab);
+  const contextForKey = (k) => (k.startsWith('ct') || k.startsWith('op:') ? 'projects' : currentTab);
   const entries = [...selected].map(k => ({ k, d: rowData[k] })).filter(x => x.d);
   const items = [];
   let nPair = 0;
@@ -10422,13 +10453,16 @@ async function uploadFromLocal(path, name, siteId) {
 
 async function downloadThenMove(projectId, projectName) {
 
-  const rd = rowData['ct:' + projectId] || rowData['c:' + projectId] || rowData['p:' + projectId];
+  const rd = rowData['ct:' + projectId] || rowData['c:' + projectId]
+    || rowData['op:' + projectId] || rowData['p:' + projectId];
   const siteName = rd && (rd.siteName || (rd.cloud && rd.cloud.siteName)) || '';
-  const destFolder = siteName || projectName;
-  const skipPicker = !!siteName;
-  const promptMsg = skipPicker
-    ? `Download "${projectName}" into local folder "${siteName}"?`
-    : `Download "${projectName}" from Ekahau Cloud? You'll pick a site folder next.`;
+  /* No site means no folder to follow - a colleague's project never has one.
+     He is asked where it goes before it is fetched, not after. */
+  if (!siteName) {
+    return downloadProjects([{ id: projectId, name: projectName, siteName: '' }], 0);
+  }
+  const destFolder = siteName;
+  const promptMsg = `Download "${projectName}" into ${_dlPath(siteName, projectName)}?`;
   if (!confirm(promptMsg)) return;
   /* An unpaired cloud project: the row has no local side, which is why this
      could not be marked at all until `_rowKey` stopped requiring both. */
@@ -10436,9 +10470,7 @@ async function downloadThenMove(projectId, projectName) {
   try {
     const r = await runWithProgress(
       { title: `Downloading "${projectName}"`,
-        subtitle: skipPicker
-          ? `Landing in ${siteName} — the project's site folder.`
-          : 'Fetching from Ekahau Cloud — floor plan images can take a moment.' },
+        subtitle: `Landing in ${siteName} — the project's site folder.` },
       (opId) => pyApi('download_project', projectId, destFolder, opId, 'refuse')
     );
     /* A file already at the destination is a question, not a failure.
@@ -10467,23 +10499,196 @@ async function downloadThenMove(projectId, projectName) {
       return;
     }
     if (r && r.error) { toast(r.error, 'error'); return; }
-    if (skipPicker) {
-      toast(`Downloaded "${r.name || projectName}" into ${siteName}`, 'success');
-      _scheduleOpRefresh();
-    } else {
-      toast(`Downloaded "${r.name || projectName}" — pick a site to sort it under`, 'success');
-      /* `tidySource`: the folder this download just made, named after the
-         project, is removed after the move if it holds no file - otherwise
-         it stayed, empty, and was listed as a local-only site. */
-      _moveToSiteTargets = [{ kind: 'local', path: r.path, name: r.name || projectName,
-                              tidySource: !!r.createdFolder }];
-      await _openMoveToSitePicker();
-    }
+    toast(`Downloaded "${r.name || projectName}" into ${siteName}`, 'success');
+    _scheduleOpRefresh();
   } catch (err) {
     toast(err.message || 'Download failed', 'error');
   } finally {
     _setRowBusy(projectId, '', null);
   }
+}
+
+/* Download, with where it lands decided up front and shown in full.
+
+   Two things were wrong, both from one afternoon of pulling a colleague's
+   designs down. A project in no site - which is every project a colleague
+   shares, since only the owner can assign one - was saved into a new folder
+   named after it, one at a time, and the site picker opened *after* each
+   download to ask where it should have gone. And the bulk route queued the
+   same downloads with no question at all and no path anywhere on screen.
+
+   A colleague's work has no site to follow, so the destination is simply a
+   local folder he chooses - any folder under the project folder, including
+   one that has no cloud site and never will. The dialog shows every resulting
+   path before anything is fetched. */
+let _dlCtx = null;
+
+//: The clean-up `download_project` applies to a folder or file name, so the
+//: path shown here is the path written.
+function _dlSafeName(name) {
+  return String(name || '').replace(/[<>:"/\\|?*]/g, '-').trim().replace(/\.+$/, '');
+}
+
+function _dlPath(folder, name) {
+  const prefix = _outputDirPrefix();
+  const sep = prefix.includes('\\') ? '\\' : '/';
+  return prefix + sep + folder + sep + (_dlSafeName(name) || '?') + '.esx';
+}
+
+//: One folder per item for the current choice, or null while it is unset.
+function _dlFolders() {
+  if (!_dlCtx) return null;
+  const sel = document.getElementById('dlDest');
+  const v = sel ? sel.value : '';
+  if (v === '__site__') {
+    const f = _dlCtx.items.map(d => _dlSafeName(d.siteName));
+    return f.every(Boolean) ? f : null;
+  }
+  if (v === '__new__') {
+    const inp = document.getElementById('dlNew');
+    const f = _dlSafeName(inp ? inp.value : '');
+    return f ? _dlCtx.items.map(() => f) : null;
+  }
+  const f = _dlSafeName(v);
+  return f ? _dlCtx.items.map(() => f) : null;
+}
+
+function _dlUpdate() {
+  if (!_dlCtx) return;
+  const sel = document.getElementById('dlDest');
+  const inp = document.getElementById('dlNew');
+  if (inp) inp.hidden = !(sel && sel.value === '__new__');
+  const folders = _dlFolders();
+  const prev = document.getElementById('dlPreview');
+  if (prev) {
+    prev.innerHTML = '<table class="sync-plan"><thead><tr><th>Project</th>'
+      + '<th>Saved as</th></tr></thead><tbody>'
+      + _dlCtx.items.map((d, i) => '<tr><td class="sync-plan-name">' + e(d.name) + '</td>'
+        + '<td class="sync-plan-name"><span class="mono-path">'
+        + (folders ? e(_dlPath(folders[i], d.name)) : '<i>choose a folder above</i>')
+        + '</span></td></tr>').join('')
+      + '</tbody></table>';
+  }
+  //: Kept as it changes, because the dialog's body is gone by the time the
+  //: answer arrives.
+  const ex = document.getElementById('dlExists');
+  _dlCtx.picked = folders ? { folders, exists: ex ? ex.value : 'keepboth' } : null;
+  const ok = document.getElementById('confirmActionOkBtn');
+  if (ok) ok.disabled = !folders;
+}
+
+/* Resolves to { folders, exists } once he confirms, or null. `folders[i]` is
+   where `items[i]` goes. */
+async function _askDownloadPlan(items, leftOut) {
+  if (!_outputDir) {
+    toast('No local project folder is set yet - pick one first (Local folder in the menu).', 'error');
+    return null;
+  }
+  const folders = [];
+  try {
+    const d = await pyApi('get_data', 'sites');
+    const seen = new Set();
+    ((d.matched || []).map(p => p.local).concat(d.localOnly || [])).forEach(l => {
+      if (l && l.isDir !== false && l.name && !seen.has(l.name)) {
+        seen.add(l.name);
+        folders.push(l.name);
+      }
+    });
+    folders.sort((x, y) => x.localeCompare(y));
+  } catch (err) { /* the list is a convenience; "New folder" still works */ }
+  const allSited = items.every(d => _dlSafeName(d.siteName));
+  _dlCtx = { items };
+  const n = items.length;
+  let body = '<p class="sub">' + n + ' project' + (n === 1 ? '' : 's')
+    + ' will be saved as .esx file' + (n === 1 ? '' : 's') + '. Nothing on '
+    + 'Ekahau Cloud is changed.</p>'
+    + '<p class="sub">Project folder: <span class="mono-path">' + e(_outputDir) + '</span></p>'
+    + '<p><label>Save into <select id="dlDest" data-action-change="call" data-fn="_dlUpdate">'
+    + (allSited
+        ? '<option value="__site__" selected>Each project\'s own site folder</option>'
+        : '<option value="" selected>Choose a folder&hellip;</option>')
+    + folders.map(f => '<option value="' + a(f) + '">' + e(f) + '</option>').join('')
+    + '<option value="__new__">A new folder&hellip;</option></select></label> '
+    + '<input type="text" id="dlNew" placeholder="New folder name" hidden '
+    + 'data-action-input="call" data-fn="_dlUpdate"></p>'
+    + '<p class="sub">Someone else\'s projects cannot be put in a site, so keep '
+    + 'them in any folder you like - one that has no cloud site is fine.</p>'
+    + '<p><label>If a file of that name is already there <select id="dlExists" data-action-change="call" data-fn="_dlUpdate">'
+    + '<option value="keepboth" selected>Keep both (the new one gets a timestamp)</option>'
+    + '<option value="refuse">Skip it</option>'
+    + '<option value="overwrite">Replace it (no copy is kept)</option></select></label></p>'
+    + '<div class="sync-plan-wrap" id="dlPreview"></div>';
+  if (leftOut) {
+    body += '<p class="sub">' + leftOut + ' selected project'
+      + (leftOut === 1 ? ' already has' : 's already have') + ' a local copy and '
+      + (leftOut === 1 ? 'is' : 'are') + ' not in this list. Use Sync to refresh '
+      + (leftOut === 1 ? 'it' : 'them') + '.</p>';
+  }
+  const ctx = _dlCtx;
+  const shown = showConfirmModal('Download ' + n + ' project' + (n === 1 ? '' : 's'),
+    body, 'Download ' + n);
+  _dlUpdate();
+  const ok = await shown;
+  const okBtn = document.getElementById('confirmActionOkBtn');
+  if (okBtn) okBtn.disabled = false;
+  _dlCtx = null;
+  return ok ? ctx.picked : null;
+}
+
+async function downloadProjects(items, leftOut) {
+  const plan = await _askDownloadPlan(items, leftOut);
+  if (!plan) return;
+  clearSelection();
+  const out = { done: 0, skipped: 0, failed: 0 };
+  const call = async (d, folder, opId) => {
+    const r = await pyApi('download_project', d.id, folder, opId, plan.exists);
+    if (r && r.code === 'exists' && plan.exists === 'refuse') {
+      throw new Error('Skipped - a file of that name is already in ' + folder);
+    }
+    if (r && r.error) throw new Error(r.error);
+    return r;
+  };
+  const waits = items.map((d, i) => {
+    const folder = plan.folders[i];
+    const { promise } = opEnqueue({
+      title: 'Downloading "' + d.name + '.esx" → ' + folder,
+      type: 'download', pollBackend: true, undoable: false,
+      retryFn: (newId) => call(d, folder, newId),
+      run: (opId) => call(d, folder, opId),
+    });
+    return promise.then(() => { out.done++; }).catch(err => {
+      if (/^Skipped/.test((err && err.message) || '')) out.skipped++; else out.failed++;
+    });
+  });
+  await Promise.all(waits);
+  _scheduleOpRefresh();
+  const where = new Set(plan.folders);
+  const bits = [];
+  if (out.done) bits.push('Downloaded ' + out.done + (where.size === 1
+    ? ' into ' + _outputDirPrefix() + (_outputDirPrefix().includes('\\') ? '\\' : '/') + plan.folders[0]
+    : ' into ' + where.size + ' folders'));
+  if (out.skipped) bits.push(out.skipped + ' skipped (already there)');
+  if (out.failed) bits.push(out.failed + ' failed');
+  toast(bits.join(', ') || 'Nothing downloaded', out.failed ? 'error' : 'success');
+}
+
+/* The selection bar's Download. Any cloud project can be fetched - reading is
+   not gated on owning it - so a colleague's are included; a project the
+   selection already has a local copy of is left out and counted, because
+   replacing a local file is Sync's job and asks a different question. */
+function bulkDownload() {
+  const items = selectedSyncItems();
+  const cloud = items.filter(d => d.kind === 'cloud' && isProjectSyncItem(d));
+  const leftOut = items.filter(isFilePairItem).length;
+  if (!cloud.length) {
+    toast(leftOut
+      ? 'Every selected project already has a local copy. Use Sync to refresh them.'
+      : 'Select one or more cloud projects first.', 'info');
+    return;
+  }
+  return downloadProjects(
+    cloud.map(d => ({ id: d.id, name: d.name, siteName: d.siteName || '' })),
+    leftOut);
 }
 
 async function pickFolder() {

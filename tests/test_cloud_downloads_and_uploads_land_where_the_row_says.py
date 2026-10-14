@@ -128,7 +128,8 @@ out(res);
         self.assertEqual([self.FOLDER], self.r["row"]["dest"], self.r)
 
     def test_the_row_download_asks_about_the_real_folder(self):
-        self.assertIn('"%s"' % self.FOLDER, self.r["row"]["asked"], self.r)
+        # The folder, as part of the path he is shown - not just a name.
+        self.assertIn('/%s/' % self.FOLDER, self.r["row"]["asked"], self.r)
 
     def test_bulk_sync_lands_in_the_paired_folder(self):
         self.assertEqual([self.FOLDER], self.r["bulk"], self.r)
