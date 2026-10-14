@@ -127,13 +127,19 @@ class OpenTabTests(unittest.TestCase):
         opened.assert_not_called()
 
     def test_run_as_the_launcher_runs_it_it_is_silent_and_says_stay(self):
-        """`python -m tools.terminal_tab "<bat>"` is the real call. On the
-        machines this suite runs on it is not Windows, so the answer is 1 -
-        and nothing on stdout or stderr for the launcher to show."""
+        """`python -m tools.terminal_tab "<bat>"` is the real call, run here as
+        a subprocess to prove the entry point imports and exits quietly.
+
+        The environment says it is already inside Windows Terminal. Without
+        that, a Windows machine with `wt.exe` answers "handed off" - correctly -
+        and this test would open a real tab on whoever ran it. CI's Windows
+        runner did exactly that on its first run.
+        """
+        env = dict(os.environ, WT_SESSION="test")
         r = subprocess.run(
             [sys.executable, "-m", "tools.terminal_tab", BAT],
             cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
-            timeout=60)
+            env=env, timeout=60)
         self.assertEqual(tt.RUN_HERE, r.returncode, r.stdout + r.stderr)
         self.assertEqual("", r.stdout.strip() + r.stderr.strip())
 
