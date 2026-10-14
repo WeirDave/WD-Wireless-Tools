@@ -106,46 +106,49 @@ class _Mgr(cm.CloudManager):
         return True
 
 
-#: The real `downloadThenMove` for a project in no cloud site, then the real
-#: `confirmMoveToSite` with a destination picked; reports the move it sends.
+#: The real `downloadThenMove` for a project in no cloud site. It asks where
+#: the file goes *before* fetching - it used to save into a folder named after
+#: the project and open the site picker afterwards - and reports the call the
+#: page makes once a folder is chosen.
 UNFILED = r"""
-const DL = JSON.parse(%s);
 s.__set('data', { currentUser: 'pat@example.invalid', matched: [], cloudOnly: [],
                   localOnly: [], orphans: { cloudOnly: [] } });
+s.__set('_outputDir', '/invented/projects');
 s._setRowBusy = () => {};
-s.runWithProgress = async (spec, fn) => fn('op-1');
-s._openMoveToSitePicker = async () => {};
-let moveArgs = null;
+let picker = 0;
+s._openMoveToSitePicker = async () => { picker++; };
+let dl = null;
 s.pyApi = async (m, ...args) => {
-  if (m === 'download_project') return DL;
-  if (m === 'move_local_to_site') { moveArgs = args; return { ok: true }; }
+  if (m === 'download_project') { dl = args; return { ok: true }; }
+  if (m === 'get_data') return { matched: [], localOnly: [] };
   return { ok: true };
 };
+s.showConfirmModal = async () => {
+  s.document.getElementById('dlDest').value = '__new__';
+  s.document.getElementById('dlNew').value = 'Pier Nine';
+  s._dlUpdate();
+  return true;
+};
 await s.downloadThenMove('p-9', 'Pier Nine Survey');
-const t = s.__get('_moveToSiteTargets');
-t[0].destValue = '__new__'; t[0].destNewName = 'Pier Nine';
-await s.confirmMoveToSite();
 for (let i = 0; i < 5; i++) await settle();
-out(moveArgs);
+out({ dl, picker });
 """
 
 
 @unittest.skipUnless(cloud_vm.HAVE_NODE, "node is not installed")
 class AnUnfiledDownloadLeavesNoFolderTests(_Case):
 
-    def test_the_project_named_folder_is_gone_after_the_move(self):
+    def test_the_chosen_folder_is_the_only_one_made(self):
+        r = cloud_vm.run(UNFILED)
+        self.assertEqual(0, r["picker"], "the site picker should not open afterwards")
+        project_id, folder = r["dl"][0], r["dl"][1]
+        self.assertEqual(("p-9", "Pier Nine"), (project_id, folder), r)
         mgr = _Mgr(self.root)
-        (self.root / "Pier Nine").mkdir()
-        dl = mgr.download_project("p-9", "Pier Nine Survey")
-        self.assertTrue(dl.get("ok"), dl)
-        args = cloud_vm.run(UNFILED % json.dumps(json.dumps(dl)))
-        self.assertTrue(args, "the page never asked for the move")
-        path, folder, tidy = (list(args) + [None, None, None])[:3]
-        mv = mgr.move_local_to_site(path, folder, tidy_source=bool(tidy))
-        self.assertTrue(mv.get("ok"), mv)
+        done = mgr.download_project(project_id, folder)
+        self.assertTrue(done.get("ok"), done)
         self.assertTrue((self.root / "Pier Nine" / "Pier Nine Survey.esx").is_file())
         self.assertFalse((self.root / "Pier Nine Survey").exists(),
-                         "the empty project-named folder was left behind")
+                         "a folder named after the project was made")
         self.assertEqual(["Pier Nine"],
                          [f["name"] for f in cm.get_local_folders(str(self.root))])
 
