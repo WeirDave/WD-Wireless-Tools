@@ -41,6 +41,19 @@
   var drawn = {};
   var stage = 'trim';        // the stage whose panel and overlay are showing
   var STAGES = ['trim', 'areas', 'walls'];
+  var STAGE_LABEL = { trim: 'Trim the canvas', areas: 'Requirement areas', walls: 'Wall types' };
+  /* Which stages have been opened since this project was loaded.
+
+     Prepare stays greyed out until every stage that would run has been looked
+     at. Nothing else on the page says the rail is where you go next: the one
+     big button is Prepare, and a project that needs nothing changed could be
+     prepared without ever seeing what the three stages were going to do. Trim
+     starts seen because its panel is the one on screen when a project opens. */
+  var seen = { trim: true, areas: false, walls: false };
+  var ready = false;         // the newest preview found something to write
+  var readyNote = '';        // ...and the footer's account of it, or of why not
+  var running = false;       // a Prepare is in flight
+  var finished = false;      // a copy has been written for this project
   // Settings → Capacity → Floors that already have devices. Read only: the
   // dropdown here changes one run and never writes back. A failed read or an
   // unknown value leaves "keep", which changes nothing he set.
@@ -244,6 +257,8 @@
     if (map.areaEditor) map.areaEditor.cancel();
     trim = { boxes: {}, loaded: false, projectId: '', suggestions: {}, setAside: {} };
     lastPlan = null;
+    seen = { trim: true, areas: false, walls: false };
+    finished = false;
     if ($('prepExisting')) $('prepExisting').value = savedExisting;
     $('dropzone').style.display = 'none';
     $('editor').classList.add('active');
@@ -736,8 +751,46 @@
 
   // The footer's note is markup the renderer built from escaped parts.
   function setGo(on, note) {
-    $('prepGoBtn').disabled = !on;
-    $('prepGoNote').innerHTML = note || '';
+    ready = !!on;
+    readyNote = note || '';
+    syncGo();
+  }
+
+  // The stages that would run but have not been opened yet.
+  function unseenStages() {
+    return STAGES.filter(function (s) {
+      return $('prepStep-' + s).checked && !seen[s];
+    });
+  }
+
+  /* Everything that depends on whether the stages have been looked at, in one
+     place: the mark on each stage card, whether Prepare can be pressed, what
+     the button says and what the footer tells him. A stage left out is not
+     asked for - it has already been decided. */
+  function syncGo() {
+    STAGES.forEach(function (s) {
+      var mark = $('prepSeen-' + s);
+      if (!mark) return;
+      var on = $('prepStep-' + s).checked;
+      mark.textContent = !on ? '' : seen[s] ? '✓ Checked' : 'Click to check';
+      mark.className = 'pb-stage-seen' + (!on ? '' : seen[s] ? ' is-seen' : ' is-unseen');
+    });
+    var left = unseenStages();
+    var gated = ready && left.length > 0;
+    var btn = $('prepGoBtn');
+    btn.disabled = running || !ready || gated;
+    btn.textContent = running ? 'Preparing…' : finished ? 'Prepare again' : 'Prepare';
+    var why = '';
+    if (gated) {
+      why = 'Click ' + left.map(function (s) { return STAGE_LABEL[s]; }).join(' and ')
+        + ' on the left to check '
+        + (left.length === 1 ? 'it' : 'them') + ' first.';
+    }
+    btn.title = why;
+    $('prepGoNote').innerHTML = (gated
+      ? '<div class="pb-gate"><b>Prepare unlocks once every stage has been opened.</b> '
+        + esc(why) + '</div>'
+      : '') + readyNote;
   }
 
   // ── stages ─────────────────────────────────────────────────────────────────
@@ -745,6 +798,7 @@
   window.prepStage = function (name) {
     if (STAGES.indexOf(name) < 0) return;
     stage = name;
+    seen[name] = true;
     STAGES.forEach(function (s) {
       var panel = $('prepPanel-' + s);
       if (panel) panel.hidden = s !== name;
@@ -754,6 +808,7 @@
     if (map.areaEditor) map.areaEditor.cancel();
     if (lastPlan) renderMap(lastPlan);
     syncTrimControls();
+    syncGo();
   };
 
   // ── the plan: one canvas for every stage ───────────────────────────────────
@@ -1474,10 +1529,9 @@
   // ── the run ────────────────────────────────────────────────────────────────
 
   window.prepRun = function () {
-    if (!loaded()) return;
-    var btn = $('prepGoBtn'), label = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Preparing…';
+    if (!loaded() || running) return;
+    running = true;
+    syncGo();
     fetch('/api/prep/run' + query(), {
       method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
       body: fromDisk ? null : fileBytes,
@@ -1501,8 +1555,8 @@
     }).catch(function (e) {
       WD.toast('Could not prepare that project: ' + e.message, 'error');
     }).finally(function () {
-      btn.textContent = label;
-      btn.disabled = false;
+      running = false;
+      syncGo();
     });
   };
 
@@ -1603,7 +1657,10 @@
     return '<div class="prep-done"><b>Nothing needed writing.</b> '
       + summaryOf(r) + '.'
       + missedBlock(r)
-      + '<br><span class="prep-sub">' + esc(where) + '</span></div>';
+      + '<br><span class="prep-sub">' + esc(where) + '</span>'
+      + '<div class="prep-row pb-finish-row"><button type="button" class="btn btn-primary" '
+      + 'data-action="call" data-fn="prepFinish">Finish</button></div>'
+      + '</div>';
   }
 
   /* Opened from disk: the prepared copy is already sitting in the project
@@ -1623,16 +1680,13 @@
       return;
     }
     lastWritten = r.path || null;
-    var summary = summaryOf(r);
-    var missed = missedBlock(r);
-    host.innerHTML = '<div class="prep-done">Wrote <b>' + esc(r.filename || '') + '</b> — '
-      + summary + '.'
-      + missed
-      + '<br><span class="prep-sub">It is in <b>' + esc(r.dir || '') + '</b>, beside the '
-      + 'original, which is unchanged. Open it in Ekahau and start drawing.</span>'
-      + '<div class="prep-row" style="margin:10px 0 0">'
-      + '<button class="btn btn-sec" data-action="call" data-fn="prepReveal">Show me the file</button>'
-      + '</div></div>';
+    host.innerHTML = finishCard(r,
+      '<div>Wrote <b>' + esc(r.filename || '') + '</b> — ' + summaryOf(r) + '.</div>'
+      + missedBlock(r)
+      + '<div class="prep-sub">It is in <b>' + esc(r.dir || '') + '</b>, beside the '
+      + 'original, which is unchanged. Open it in Ekahau and start drawing.</div>',
+      'It asks before it replaces this copy.',
+      '<button type="button" class="btn btn-sec" data-action="call" data-fn="prepReveal">Show me the file</button>');
   }
 
   /* The prepared file is already there. It may be last week's output, or it
@@ -1647,9 +1701,9 @@
   }
 
   window.prepReplace = function () {
-    var btn = $('prepGoBtn'), label = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Preparing…';
+    if (running) return;
+    running = true;
+    syncGo();
     fetch('/api/prep/run' + query() + '&replace=1', {
       method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
     }).then(function (r) { return r.json(); })
@@ -1657,7 +1711,7 @@
       .catch(function (e) {
         WD.toast('Could not prepare that project: ' + e.message, 'error');
       })
-      .finally(function () { btn.textContent = label; btn.disabled = false; });
+      .finally(function () { running = false; syncGo(); });
   };
 
   window.prepReveal = function () {
@@ -1689,12 +1743,68 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
 
-    host.innerHTML = '<div class="prep-done">Wrote <b>' + esc(name) + '</b> — '
-      + summaryOf(r) + '.'
+    host.innerHTML = finishCard(r,
+      '<div>Wrote <b>' + esc(name) + '</b> — ' + summaryOf(r) + '.</div>'
       + missedBlock(r)
-      + '<br><span class="prep-sub">Your original is untouched. Open the downloaded copy '
-      + 'in Ekahau and start drawing.</span></div>';
+      + '<div class="prep-sub">Your original is untouched. Open the downloaded copy '
+      + 'in Ekahau and start drawing.</div>',
+      'That downloads another copy, so delete this one first.', '');
   }
+
+  /* A run that wrote a copy ends here, and has to read as finished. The
+     editor used to stay exactly as it was with a small green line under it,
+     which looked like unfinished business - the one tool in the suite that did
+     not say when it was done. So the result is a card with a heading, the one
+     thing to do next (Finish) and, said once, that the way back is open:
+     change a stage and press Prepare again. The page stays loaded because the
+     original is untouched and a second pass is a legitimate thing to want. */
+  function finishRow(extra) {
+    return '<div class="prep-row pb-finish-row">'
+      + '<button type="button" class="btn btn-primary" data-action="call" data-fn="prepFinish">Finish</button>'
+      + extra + '</div>';
+  }
+
+  function finishCard(r, body, again, extra) {
+    finished = true;
+    var partial = (r.failed || []).length > 0;
+    return '<div class="prep-done pb-finish">'
+      + '<div class="pb-finish-head">'
+      + (partial ? 'Written, but one part did not run' : '✓ Done — the prepared copy is written')
+      + '</div>'
+      + body
+      + '<div class="prep-sub pb-finish-again">Not right? Change a stage above and press '
+      + '<b>Prepare again</b>. ' + esc(again) + '</div>'
+      + finishRow(extra)
+      + '</div>';
+  }
+
+  /* Back to the start screen for the next project. Nothing is lost by leaving:
+     the copy is already written, and the original was never touched. */
+  window.prepFinish = function () {
+    fileBytes = null;
+    fileName = '';
+    fromDisk = false;
+    lastWritten = null;
+    lastPlan = null;
+    finished = false;
+    ready = false;
+    readyNote = '';
+    previewSeq++;                 // a preview still in flight must not land
+    fetch('/api/prep/forget', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
+      body: '{}',
+    }).catch(function () { /* nothing depends on it */ });
+    if (map.areaEditor) map.areaEditor.cancel();
+    resetMap();
+    $('prepResult').innerHTML = '';
+    $('prepPreview').innerHTML = '';
+    syncGo();
+    $('fileBadge').style.display = 'none';
+    $('editor').classList.remove('active');
+    $('dropzone').style.display = '';
+    window.scrollTo(0, 0);
+  };
 
   // ── wiring ─────────────────────────────────────────────────────────────────
 

@@ -11377,8 +11377,19 @@ body.tool-prep .editor.active, body.tool-plantrim .editor.active, body.tool-capa
 .pb-status { margin-top: 12px; }
 
 .pb-result:empty { display: none; }
-.pb-result { padding: 0 16px; max-height: 30vh; overflow-y: auto; }
+/* flex-shrink 0: the result is the last thing he reads and holds the Finish
+   button, so the plan above gives way to it rather than the other way round. */
+.pb-result { flex-shrink: 0; padding: 0 16px; max-height: 45vh; overflow-y: auto; }
 .pb-result > div { margin: 8px 0; }
+.pb-finish-head { font-size: var(--fs-emph); font-weight: 700; margin-bottom: 4px; }
+.pb-finish-again { margin-top: 6px; }
+.pb-finish-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; }
+.pb-gate { color: var(--attn); margin-bottom: 4px; }
+.pb-gate b { color: var(--attn); }
+.pb-stage-seen:empty { display: none; }
+.pb-stage-seen { font-weight: 600; }
+.pb-stage-seen.is-seen { color: var(--ok); }
+.pb-stage-seen.is-unseen { color: var(--attn); }
 .pb-footer {
   flex-shrink: 0; display: flex; align-items: center; gap: 16px;
   padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface-raised);
@@ -11913,7 +11924,7 @@ body.tool-walls, body.tool-prep, body.tool-walls #swapModal {
 .pb-rail-head { font-size: var(--rd-tag); }
 .pb-rail-foot, .pb-rail-foot p { font-size: var(--rd-small); line-height: 1.55; }
 .pb-stage-name { font-size: var(--rd-name); }
-.pb-stage-status, .pb-stage-note { font-size: var(--rd-small); }
+.pb-stage-status, .pb-stage-note, .pb-stage-seen { font-size: var(--rd-small); }
 .pb-willwrite { font-size: var(--rd-body); }
 .pb-footer .btn { font-size: var(--rd-body); }
 .pb-canvas-hint, .pb-hint, .pb-note, .pb-item, .pb-subhead { font-size: var(--rd-small); }

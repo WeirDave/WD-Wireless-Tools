@@ -76,9 +76,14 @@ function selectedText() { return ''; }
 function renderMap() {}
 function syncTrimControls() {}
 var trim = { boxes: {}, loaded: true, projectId: '' }, lastPlan = null, fromDisk = false;
+var STAGES = ['trim', 'areas', 'walls'], STAGE_LABEL = {};
+var seen = { trim: true, areas: true, walls: true }, ready = false, readyNote = '';
+var running = false, finished = false;
 eval(fn('function trimFloorLine(f) {'));
 eval(fn('function setStatus(step, text, cls) {'));
 eval(fn('function setGo(on, note) {'));
+eval(fn('function unseenStages() {'));
+eval(fn('function syncGo() {'));
 eval(fn('function renderPreview(r) {'));
 """
 

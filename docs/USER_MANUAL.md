@@ -928,13 +928,20 @@ loads your wall types.
 1. Drop the `.esx` on the page, or press **Open from disk…** (quicker for big
    projects — see below).
 2. The three stages are listed down the left, each with a one-line status.
-   Click one to check it on the plan; change only what needs it.
+   Click each one to check it on the plan; change only what needs it. A card
+   says **Click to check** until it has been opened and **✓ Checked** after.
 3. Read the footer at the bottom right — for example *"Will write: trim 2
    floors · requirement areas on 3 floors · 6 wall types added"*.
 4. Press **Prepare**. You get a new copy; your original is not touched.
+5. Press **Finish** on the result to go back to the start screen for the next
+   project.
 
-Every stage opens on your saved defaults, so a project that needs nothing
-looked at is one click. Untick a stage to leave it out. The plan in the middle
+Every stage opens on your saved defaults, so keeping them is fine — but
+**Prepare** stays greyed out until all three stages have been opened, so a
+project is never prepared without its stages having been seen. The footer
+names the ones still to open. Trim counts as opened when the project loads,
+because it is the stage on screen. Untick a stage to leave it out; a stage
+that is unticked is not asked for. The plan in the middle
 has the floors along its top, with **Fit**, **−** and **+**; the wheel zooms
 and Space-drag or a right drag pans.
 
@@ -1037,10 +1044,16 @@ normal picker. Cancelling does nothing.
 
 ### Prepare
 
-**Prepare** is greyed out until there is something to write, and the footer
-says why — nothing ticked, or *"This project is already prepared — there is
-nothing left to do."* After a run, a line above the footer says what each
-stage did.
+**Prepare** is greyed out until there is something to write, and until every
+stage that would run has been opened. The footer says which: *"Prepare unlocks
+once every stage has been opened"* with the stages still to click, or nothing
+ticked, or *"This project is already prepared — there is nothing left to do."*
+
+After a run, a card above the footer says **Done**, what each stage did and
+where the copy is. **Finish** closes the project and returns to the start
+screen. Staying on the page is also fine: change a stage and press **Prepare
+again**. Opened with **Open from disk…**, that asks before it replaces the
+earlier copy; with a dropped file it downloads another copy beside the first.
 
 ### Running it again
 
