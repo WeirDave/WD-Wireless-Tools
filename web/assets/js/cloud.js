@@ -4652,7 +4652,7 @@ function rowDetailHtml(r, stripe) {
     sentences.push('The names disagree. Pick the one to keep, or say these are not the same project.');
     acts.push(rdAction('arrowR', 'Cloud → Local',
       'syncRow', ['to-local', c.id, c.name, np(l.path), kind],
-      { primary: true, writes: 'local', title: 'Rename the local file so it matches the cloud project.' }));
+      { writes: 'local', title: 'Rename the local file so it matches the cloud project.' }));
     //: Renaming a cloud project is a change to it, and Ekahau lets only the
     //: owner make one - so on somebody else's project this was offered and
     //: then answered with a 403. The row still names the control, with why.
@@ -4999,7 +4999,7 @@ function locationBand(r) {
           { writes: 'local', title: 'Rename the local folder "' + folder + '" back to "' + site + '". The files inside it move with it.' })
         + rdAction('arrowL', 'Rename cloud site to match',
           'syncRow', ['to-cloud', c.siteId, folder, folderPath, 'sites'],
-          { primary: true, writes: 'cloud', title: 'Rename the cloud site "' + site + '" to "' + folder + '". Every project in it stays where it is.' }),
+          { writes: 'cloud', title: 'Rename the cloud site "' + site + '" to "' + folder + '". Every project in it stays where it is.' }),
     };
   }
 
@@ -5079,7 +5079,7 @@ function siteDetailHtml(r, stripe) {
       { writes: 'local', title: 'Rename the local folder so it matches the cloud site. The files inside it move with it.' }),
     rdAction('arrowL', 'Local → Cloud',
       'syncRow', ['to-cloud', c.id, l.name, np(l.path), 'sites'],
-      { primary: true, writes: 'cloud', title: 'Rename the cloud site so it matches your local folder. The projects in it stay where they are.' }),
+      { writes: 'cloud', title: 'Rename the cloud site so it matches your local folder. The projects in it stay where they are.' }),
     rdAction('notEqual', 'Not a match',
       'markNotMatch', [c.id, np(l.path), c.name, l.name],
       { quiet: true, title: 'Never pair this folder and this site again.' }),
@@ -5212,23 +5212,23 @@ function stalenessBadgeHtml(r) {
       const why = renamedOnly
         ? 'The cloud copy was RENAMED, which is why its date moved - the name stored inside your local file is the old one. No design change was detected. Downloading brings the rename across and replaces your local file with the copy Ekahau is holding.'
         : 'The cloud copy was edited more recently and the names agree, so this is a real change rather than a rename. Downloading replaces your local one with the copy Ekahau is holding.';
-      /* Primary only once the question is settled. A date on its own does not
-         say the design changed - it is the whole reason Check exists - so
-         while nothing has been compared and the backend has not classified
-         this as a rename, the emphasis belongs on the read-only action and
-         this one is the alternative. Offering an overwrite as the
-         recommendation on evidence we have said is inconclusive is the tool
-         pushing him at the irreversible option. */
-      const answered = renamedOnly || !!cmp;
-      const weight = provenSame ? ' quiet is-demoted' : (answered ? ' primary' : ' quiet');
-      /* The other answer to "the cloud is newer": keep the local one. Quiet,
-         because the date says the cloud has work in it, and gated on owning
-         the project because the replace deletes it. */
+      /* Neither direction is filled. Download and "replace cloud" are one
+         question asked from both ends - which copy do you keep - and they used
+         to disagree about its weight: one filled, the other `quiet`, which has
+         no border and no background, so the second did not read as a button at
+         all. "I couldn't even tell that was a button." Both are the same
+         outlined control, mirrored across the row; the filled button is kept
+         for the read-only check, the one action here with an opinion behind it
+         (a date on its own does not say the design changed, which is the whole
+         reason Check exists). */
+      const weight = provenSame ? ' is-demoted' : '';
+      /* The other answer to "the cloud is newer": keep the local one. Gated on
+         owning the project because the replace deletes it. */
       const notMine = ownershipBlock(r.cloud);
       const keepLocal = notMine
         ? rdUnavailable('up', 'Replace cloud with local…',
             notMine + ' Replacing it would delete their project.', 'cloud')
-        : `<button class="rd-btn quiet" data-writes="cloud" title="${a('Keep your local file instead: upload it over the newer cloud copy. You are asked to confirm first, with both dates shown.')}" data-action="call" data-fn="replaceNewerCloudWithLocal" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.local.name || '', r.cloud.name || '', Number(r.cloud.mtime) || 0, Number(r.local.mtime) || 0]))}" data-stop="1">${ic('up')}<span>Replace cloud with local…</span></button>`;
+        : `<button class="rd-btn" data-writes="cloud" title="${a('Keep your local file instead: upload it over the newer cloud copy. You are asked to confirm first, with both dates shown.')}" data-action="call" data-fn="replaceNewerCloudWithLocal" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.local.name || '', r.cloud.name || '', Number(r.cloud.mtime) || 0, Number(r.local.mtime) || 0]))}" data-stop="1">${ic('up')}<span>Replace cloud with local…</span></button>`;
       return cmpHtml + keepLocal
         + `<button class="rd-btn${weight}${renamedOnly ? ' is-renamed' : ''}" data-writes="local" title="${a(provenSame ? 'The contents were compared and match. Downloading would replace your local file with an identical one. ' + why : why)}" data-action="call" data-fn="verifyReplaceLocal" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.cloud.name, Number(r.cloud.mtime) || 0, Number(r.local.mtime) || 0]))}" data-stop="1">${ic('down')}<span>${label}</span></button>`
         + checkBtn;
@@ -5273,7 +5273,7 @@ function stalenessBadgeHtml(r) {
       /* Same reasoning as the download, and more so: this one deletes the old
          cloud project. It is the recommendation once something has actually
          been compared, not on a date alone. */
-      const weight = cmp ? ' primary' : ' quiet';
+      const weight = cmp ? ' primary' : '';
       return cmpHtml
         + `<button class="rd-btn${weight}" data-writes="cloud" title="${a(plan)}" data-action="call" data-fn="pushLocalOverCloud" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.local.name || '', r.cloud.name || '', r.matchType || '']))}" data-stop="1">${ic('up')}<span>Local newer · replace cloud</span></button>`
         + checkBtn;
