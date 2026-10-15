@@ -9693,9 +9693,19 @@ function bulkDelete() {
 document.getElementById('searchBox').addEventListener('input', renderRows);
 
 document.getElementById('rowsContainer').addEventListener('click', onRowChkClick);
+/* The x clears the search and the A-Z letter together. A letter left selected
+   after the search was cleared kept narrowing a list that then looked as if it
+   had lost rows; All is the state the page opens in. */
 function clearSearch() {
   const sb = document.getElementById('searchBox');
-  if (sb.value) { sb.value = ''; renderRows(); }
+  const hadLetter = activeLetter !== null;
+  activeLetter = null;
+  if (sb.value || hadLetter) {
+    sb.value = '';
+    renderRows();
+    const rc = document.getElementById('rowsContainer');
+    if (rc) rc.scrollTop = 0;
+  }
   sb.focus();
 }
 
