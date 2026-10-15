@@ -9056,7 +9056,7 @@ async function bulkSync(dir) {
    not is worse than the friction of being told you are not. */
 function syncEverythingPlan() {
   const down = [], up = [], upBlocked = [], inSync = [], fresh = [];
-  const downBlocked = [], diverged = [], siteRenames = [];
+  const downBlocked = [], diverged = [], siteRenames = [], othersFresh = [];
   const seenPair = new Set(), seenCloud = new Set();
 
   const isFile = (l) => /\.esx$/i.test(String((l && l.path) || ''));
@@ -9100,8 +9100,13 @@ function syncEverythingPlan() {
   const takeCloud = (c, siteName) => {
     if (!c || !c.id || seenCloud.has(c.id)) return;
     seenCloud.add(c.id);
-    fresh.push({ id: c.id, name: c.name || '',
-                 siteName: siteName || c.siteFolder || c.siteName || '' });
+    const row = { id: c.id, name: c.name || '', owner: c.owner || '',
+                  siteName: siteName || c.siteFolder || c.siteName || '' };
+    /* A sync is of your own work. A cloud project that is provably someone
+       else's is counted and named as left out, never put in the run -
+       `iOwn` is false only for that, so an unrecorded owner stays in, as
+       `ownershipOf` explains. */
+    (iOwn(c) ? fresh : othersFresh).push(row);
   };
 
   const walkKids = (kids, siteName) => {
@@ -9147,7 +9152,7 @@ function syncEverythingPlan() {
   (data.localOnly || []).forEach(l => walkKids(l.children, l.name));
   if (data.orphans) (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
 
-  return { down, up, upBlocked, downBlocked, fresh, inSync, diverged, siteRenames };
+  return { down, up, upBlocked, downBlocked, fresh, othersFresh, inSync, diverged, siteRenames };
 }
 
 function _syncSiteRowsHtml(rows) {
@@ -9278,6 +9283,12 @@ async function syncEverything() {
   const plan = syncEverythingPlan();
   const willDo = plan.down.length + plan.fresh.length + plan.up.length
     + plan.siteRenames.length;
+  const nOthers = (plan.othersFresh || []).length;
+  const othersNote = nOthers
+    ? nOthers + ' cloud project' + (nOthers === 1 ? ' belongs' : 's belong')
+      + ' to other people and ' + (nOthers === 1 ? 'is' : 'are')
+      + ' not part of a sync. Download one from its own row if you want it.'
+    : '';
 
   if (!willDo) {
     // Still say what is waiting to go up - that is the half of the loop this
@@ -9287,7 +9298,8 @@ async function syncEverything() {
       ? stuck + ' file' + (stuck === 1 ? '' : 's') + ' need' + (stuck === 1 ? 's' : '')
         + ' the pair confirmed before they can move — use Confirm this pair on '
         + 'the row. Nothing else to do.'
-      : 'Local and cloud already match', stuck ? 'info' : 'success');
+      : 'Local and cloud already match' + (othersNote ? '. ' + othersNote : ''),
+      stuck ? 'info' : 'success');
     return;
   }
 
@@ -9368,6 +9380,7 @@ async function syncEverything() {
       + '<p class="sub">All ' + plan.fresh.length + ' listed. These replace '
       + 'nothing — there is no local copy to overwrite.</p>';
   }
+  if (othersNote) body += '<p class="sub">' + e(othersNote) + '</p>';
 
   /* The half of the loop this could not finish. It can now.
 

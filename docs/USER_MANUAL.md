@@ -439,7 +439,9 @@ The plan opens first, in separate lists you tick separately:
   both dates. If some have not been compared, **Compare them first** runs the
   check without changing anything.
 - **Download cloud projects you have no local copy of.** Nothing is
-  overwritten.
+  overwritten. Only projects you own are included; projects that belong to
+  other people are counted in a line at the end of the dialog and left out.
+  Download one from its own row if you want it.
 - **Send newer local files up.** Each row names **the cloud project it
   replaces**. Read that column: each of those cloud projects is deleted.
 
