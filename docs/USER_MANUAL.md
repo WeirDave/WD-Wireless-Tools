@@ -870,6 +870,10 @@ change their type, or remove them, without redrawing.
   which is grouped by type and starts collapsed.
 - **Number the selected segments on the plan** labels each selected wall.
   Off by default.
+- A wall type that appears more than once in the project under the same name
+  is listed once everywhere in Visual Swap: in **Wall types on this floor**,
+  the **Selected** groups, and the **Change checked to**, **From** and **To**
+  lists. Choosing it covers every copy.
 
 **Other actions**
 

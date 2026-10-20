@@ -84,6 +84,65 @@
     return wallTypesList().find(w => w.id === id) || null;
   }
 
+  /* One name, one listing.
+
+     A project can hold several wall types with the same name: Ekahau lets a
+     type be copied, and a template applied over a project can add a type next
+     to the one the project already had. Each has its own id, and walls are
+     drawn against an id. This tool swaps walls for walls, so two entries
+     reading "Window, Thick" in a dropdown are one choice to the person using
+     it - and picking the "wrong" one of the pair made a swap leave walls
+     behind.
+
+     So every id resolves to the *listing* it belongs to. The listing's own id
+     is the one among the same-named types that the most walls already use
+     (ties keep the project's order), which keeps a swap to it as small as
+     possible. Matching is on the name with case and spacing ignored and
+     nothing else: "Window, Thick(Copy)" is a different name and stays its own
+     listing. A type with no name or no id is never merged with anything.
+
+     The index is built when the swap window opens, not on every read, so the
+     listing a name resolves to cannot change under the person's hands as
+     their swaps move walls between ids. */
+  let typeIndex = null;
+
+  function typeNameKey(wt) {
+    return String((wt && wt.name) || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  function buildTypeIndex() {
+    const used = new Map();
+    state.segments.forEach(s => {
+      const id = segmentTypeId(s);
+      if (id) used.set(id, (used.get(id) || 0) + 1);
+    });
+    const byName = new Map();
+    wallTypesList().forEach(w => {
+      const k = typeNameKey(w);
+      if (!k || !w.id) return;
+      if (!byName.has(k)) byName.set(k, []);
+      byName.get(k).push(w);
+    });
+    const listing = new Map();   // any id -> the id of its listing
+    const members = new Map();   // listing id -> every id in it
+    byName.forEach(list => {
+      const head = list.slice()
+        .sort((a, b) => (used.get(b.id) || 0) - (used.get(a.id) || 0))[0].id;
+      members.set(head, list.map(w => w.id));
+      list.forEach(w => listing.set(w.id, head));
+    });
+    return { listing, members };
+  }
+
+  function typeIdx() {
+    if (!typeIndex) typeIndex = buildTypeIndex();
+    return typeIndex;
+  }
+
+  function listingId(id) {
+    return id ? (typeIdx().listing.get(id) || id) : id;
+  }
+
   function extractPointRef(entry) {
     if (entry == null) return null;
     if (typeof entry === 'string') return entry;
@@ -405,8 +464,13 @@
   }
 
   function populateTypeSelectors() {
-    const wts = [...wallTypesList()].sort((a, b) =>
-      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+    typeIndex = null;
+    // One entry per listing: a same-named duplicate is reachable through the
+    // entry that stands for it, not as a second line of the same words.
+    const wts = wallTypesList()
+      .filter(w => !w.id || listingId(w.id) === w.id)
+      .sort((a, b) =>
+        (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
     const opts = ['<option value="">Pick a wall type…</option>']
       .concat(wts.map(w =>
         `<option value="${escAttr(w.id)}">${esc(w.name)}</option>`)).join('');
@@ -418,7 +482,8 @@
   function renderLegend() {
     const counts = new Map();
     state.segGeom.forEach(g => {
-      counts.set(g.typeId, (counts.get(g.typeId) || 0) + 1);
+      const id = listingId(g.typeId);
+      counts.set(id, (counts.get(id) || 0) + 1);
     });
 
     const rows = [];
@@ -504,7 +569,7 @@
   }
 
   function groupKeyOf(g) {
-    return g.typeId || NO_TYPE;
+    return listingId(g.typeId) || NO_TYPE;
   }
 
   // Group the current selection by wall type, longest segment first inside each
@@ -516,10 +581,10 @@
       if (!g) return;
       const key = groupKeyOf(g);
       if (!map.has(key)) {
-        const wt = typeById(g.typeId);
+        const wt = typeById(listingId(g.typeId));
         map.set(key, {
           key,
-          name: typeLabel(g.typeId),
+          name: typeLabel(listingId(g.typeId)),
           color: wt ? safeColor(wt.color) : '#888',
           segs: [],
         });
@@ -1676,7 +1741,7 @@
     const before = selectionSnapshot();
     const changes = [];
     for (const seg of state.segments) {
-      if (doomed.has(seg.id) && segmentTypeId(seg) !== targetId) {
+      if (doomed.has(seg.id) && listingId(segmentTypeId(seg)) !== listingId(targetId)) {
         changes.push({ id: seg.id, from: segmentTypeId(seg), to: targetId });
       }
     }
@@ -1701,7 +1766,10 @@
     const toId   = $('swapToType').value;
     const scope  = $('swapScope').value;
     if (!fromId || !toId) { toast('Pick both a From and a To wall type'); return; }
-    if (fromId === toId) { toast('From and To are the same — nothing to swap'); return; }
+    if (listingId(fromId) === listingId(toId)) {
+      toast('From and To are the same — nothing to swap');
+      return;
+    }
 
     const target = typeById(toId);
     if (!target) { toast('Target wall type not found'); return; }
@@ -1709,9 +1777,10 @@
     const before = selectionSnapshot();
     const changes = [];
     for (const seg of state.segments) {
-      if (segmentTypeId(seg) !== fromId) continue;
+      // "From" is a listing, so it takes every id the listing stands for.
+      if (listingId(segmentTypeId(seg)) !== listingId(fromId)) continue;
       if (scope === 'floor' && segmentFloorId(seg) !== state.currentFloorId) continue;
-      changes.push({ id: seg.id, from: fromId, to: toId });
+      changes.push({ id: seg.id, from: segmentTypeId(seg), to: toId });
     }
     if (!changes.length) { toast('No walls of that type in scope'); return; }
 
