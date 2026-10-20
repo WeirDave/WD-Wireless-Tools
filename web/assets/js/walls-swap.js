@@ -94,20 +94,38 @@
      it - and picking the "wrong" one of the pair made a swap leave walls
      behind.
 
-     So every id resolves to the *listing* it belongs to. The listing's own id
-     is the one among the same-named types that the most walls already use
-     (ties keep the project's order), which keeps a swap to it as small as
-     possible. Matching is on the name with case and spacing ignored and
-     nothing else: "Window, Thick(Copy)" is a different name and stays its own
-     listing. A type with no name or no id is never merged with anything.
+     So every id resolves to the *listing* it belongs to. Matching is on the
+     name with case and spacing ignored and any trailing "(Copy)" removed, as
+     many times as Ekahau added it: "Window, Thick(Copy)(Copy)" is a copy of
+     "Window, Thick", not a type of its own, and a copy is never a separate
+     line in a list whose job is to say what a wall becomes. (An earlier
+     version kept "(Copy)" names apart on the reading that a different name is
+     a different type; the copies are exactly what was still being listed.)
+     Only a trailing "(Copy)" is dropped - "(Copy 2)" too - so a name that
+     merely contains the word elsewhere is left alone.
+
+     The listing's own id is the original when it is in the project, otherwise
+     the copy that the most walls already use (ties keep the project's order),
+     so the entry reads as the original's name and a swap to it lands on a type
+     actually called that. A type with no name or no id is never merged with
+     anything.
 
      The index is built when the swap window opens, not on every read, so the
      listing a name resolves to cannot change under the person's hands as
      their swaps move walls between ids. */
   let typeIndex = null;
 
+  const COPY_TAIL = /(?:\s*\(copy(?:\s*\d+)?\))+\s*$/i;
+
+  // What a type is called with Ekahau's "(Copy)" suffixes taken off. A name
+  // that is nothing but the suffix keeps it, so it still has a name.
+  function baseName(name) {
+    const n = String(name || '').trim();
+    return n.replace(COPY_TAIL, '').trim() || n;
+  }
+
   function typeNameKey(wt) {
-    return String((wt && wt.name) || '').trim().replace(/\s+/g, ' ').toLowerCase();
+    return baseName(wt && wt.name).replace(/\s+/g, ' ').toLowerCase();
   }
 
   function buildTypeIndex() {
@@ -126,8 +144,10 @@
     const listing = new Map();   // any id -> the id of its listing
     const members = new Map();   // listing id -> every id in it
     byName.forEach(list => {
-      const head = list.slice()
-        .sort((a, b) => (used.get(b.id) || 0) - (used.get(a.id) || 0))[0].id;
+      const copyRank = w => (COPY_TAIL.test(String(w.name || '').trim()) ? 1 : 0);
+      const head = list.slice().sort((a, b) =>
+        copyRank(a) - copyRank(b)
+        || (used.get(b.id) || 0) - (used.get(a.id) || 0))[0].id;
       members.set(head, list.map(w => w.id));
       list.forEach(w => listing.set(w.id, head));
     });
@@ -241,7 +261,7 @@
   function typeLabel(typeId) {
     if (!typeId) return '(no wall type)';
     const wt = typeById(typeId);
-    return wt?.name || '(deleted wall type)';
+    return wt?.name ? baseName(wt.name) : '(deleted wall type)';
   }
 
   function colorOf(seg) {
@@ -473,7 +493,7 @@
         (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
     const opts = ['<option value="">Pick a wall type…</option>']
       .concat(wts.map(w =>
-        `<option value="${escAttr(w.id)}">${esc(w.name)}</option>`)).join('');
+        `<option value="${escAttr(w.id)}">${esc(baseName(w.name))}</option>`)).join('');
     $('swapTargetType').innerHTML = opts;
     $('swapFromType').innerHTML = opts;
     $('swapToType').innerHTML = opts;
@@ -1745,16 +1765,16 @@
         changes.push({ id: seg.id, from: segmentTypeId(seg), to: targetId });
       }
     }
-    if (!changes.length) { toast(`Already ${target.name} — nothing to change`); return; }
+    if (!changes.length) { toast(`Already ${baseName(target.name)} — nothing to change`); return; }
 
     const n = applyTypeChanges(state.segments, changes);
     refreshGeomTypes();
 
-    const label = `Swap ${n} wall${n === 1 ? '' : 's'} → ${target.name}`;
+    const label = `Swap ${n} wall${n === 1 ? '' : 's'} → ${baseName(target.name)}`;
     pushHistory({ kind: 'type', label, changes, before, after: selectionSnapshot() });
 
     writeSegmentsBack();
-    undoToast(`Swapped ${n} wall${n === 1 ? '' : 's'} → ${target.name}`);
+    undoToast(`Swapped ${n} wall${n === 1 ? '' : 's'} → ${baseName(target.name)}`);
 
     renderLegend();
     renderSelection();
@@ -1788,11 +1808,11 @@
     refreshGeomTypes();
 
     const scopeLbl = scope === 'floor' ? 'on this floor' : 'across the project';
-    const label = `Swap all ${n} ${typeById(fromId)?.name || 'wall'} → ${target.name} ${scopeLbl}`;
+    const label = `Swap all ${n} ${baseName(typeById(fromId)?.name) || 'wall'} → ${baseName(target.name)} ${scopeLbl}`;
     pushHistory({ kind: 'type', label, changes, before, after: selectionSnapshot() });
 
     writeSegmentsBack();
-    undoToast(`Swapped ${n} wall${n === 1 ? '' : 's'} → ${target.name} ${scopeLbl}`);
+    undoToast(`Swapped ${n} wall${n === 1 ? '' : 's'} → ${baseName(target.name)} ${scopeLbl}`);
     renderLegend();
     renderSelection();
     render();

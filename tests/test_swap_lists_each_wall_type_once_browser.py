@@ -28,9 +28,11 @@ if HAVE_SELENIUM:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
 
-# (id, name, colour). `door-2` is deliberately the most-used copy, `win-2`
-# differs only in case and spacing, and the "(Copy)" type must stay its own
-# entry because its name is different.
+# (id, name, colour). `door-2` is deliberately the most-used same-name copy and
+# `win-2` differs only in case and spacing. Ekahau's "(Copy)" and
+# "(Copy)(Copy)" are copies of the type, not types of their own. The "Shelf"
+# copies have no original in the project. "Copy Station Wall" only contains the
+# word, so it is a name of its own.
 TYPES = [
     ("wall-1", "Wall, Invented A", "#C9A27A"),
     ("door-1", "Door, Invented B", "#8B5A2B"),
@@ -38,10 +40,16 @@ TYPES = [
     ("win-1", "Window, Invented C", "#0093EA"),
     ("win-2", "window,  invented c", "#ADE1FF"),
     ("win-copy", "Window, Invented C(Copy)", "#999999"),
+    ("win-copy2", "Window, Invented C(Copy)(Copy)", "#777777"),
+    ("shelf-c1", "Shelf, Invented D(Copy)", "#AA5500"),
+    ("shelf-c2", "Shelf, Invented D(Copy)(Copy)", "#BB6600"),
+    ("copy-wall", "Copy Station Wall", "#336699"),
 ]
 # What each segment is drawn with, in order.
 DRAWN = (["wall-1"] * 3 + ["door-1"] * 2 + ["door-2"] * 5
-         + ["win-1"] * 2 + ["win-2"] * 1 + ["win-copy"] * 4)
+         + ["win-1"] * 2 + ["win-2"] * 1 + ["win-copy"] * 4
+         + ["win-copy2"] * 2 + ["shelf-c1"] * 3 + ["shelf-c2"] * 1
+         + ["copy-wall"] * 1)
 
 SELECTS = ["swapTargetType", "swapFromType", "swapToType"]
 
@@ -145,8 +153,8 @@ class TheSwapListsEachWallTypeOnce(BrowserPagesHarness):
                     self.assertEqual(
                         sorted(texts),
                         sorted(["Wall, Invented A", "Door, Invented B",
-                                "Window, Invented C",
-                                "Window, Invented C(Copy)"]),
+                                "Window, Invented C", "Shelf, Invented D",
+                                "Copy Station Wall"]),
                         "%s lists a name more than once, or lost one" % sel)
 
     def test_the_legend_counts_a_name_as_one_row(self):
@@ -158,8 +166,9 @@ class TheSwapListsEachWallTypeOnce(BrowserPagesHarness):
                 self.assertEqual(rows, {
                     "Wall, Invented A": 3,
                     "Door, Invented B": 7,         # 2 + 5, both copies
-                    "Window, Invented C": 3,       # 2 + 1, both copies
-                    "Window, Invented C(Copy)": 4,
+                    "Window, Invented C": 9,       # 2 + 1 + 4 + 2, every copy
+                    "Shelf, Invented D": 4,        # 3 + 1, no original
+                    "Copy Station Wall": 1,
                 })
 
     def test_a_selection_groups_by_name(self):
@@ -208,6 +217,7 @@ class TheSwapListsEachWallTypeOnce(BrowserPagesHarness):
         for kind, drv in self.each_browser():
             with self.subTest(browser=kind):
                 self.open_swap(drv)
+                before = self.types(drv)
                 self.pick(drv, "swapFromType", "Wall, Invented A")
                 self.pick(drv, "swapToType", "Window, Invented C")
                 drv.execute_script(
@@ -215,11 +225,11 @@ class TheSwapListsEachWallTypeOnce(BrowserPagesHarness):
                     "applyQuickSwap();")
                 got = self.types(drv)
                 self.assertEqual(got["wall-1"], 0)
-                landed = {k: v for k, v in got.items()
-                          if k in ("win-1", "win-2") and v}
-                self.assertEqual(sum(landed.values()), 3 + 3,
-                                 "the three walls must arrive, and the "
-                                 "existing window walls stay where they were")
+                self.assertEqual(got["win-1"], 2 + 3,
+                                 "walls swapped to a name land on the "
+                                 "original, not on a copy")
+                for k in ("win-2", "win-copy", "win-copy2"):
+                    self.assertEqual(got[k], before[k], k)
 
     def test_a_copy_of_the_name_is_not_a_swap(self):
         """Swapping a name to itself changes nothing, whichever copy was meant."""
@@ -234,20 +244,41 @@ class TheSwapListsEachWallTypeOnce(BrowserPagesHarness):
                     "applyQuickSwap();")
                 self.assertEqual(self.types(drv), before)
 
-    def test_a_different_name_stays_its_own_entry(self):
-        """"(Copy)" is a name of its own and is not folded into the original."""
+    def test_copies_are_the_original(self):
+        """"(Copy)" and "(Copy)(Copy)" go with "Window, Invented C"."""
         for kind, drv in self.each_browser():
             with self.subTest(browser=kind):
                 self.open_swap(drv)
-                self.pick(drv, "swapFromType", "Window, Invented C(Copy)")
+                self.pick(drv, "swapFromType", "Window, Invented C")
                 self.pick(drv, "swapToType", "Wall, Invented A")
                 drv.execute_script(
                     "document.getElementById('swapScope').value = 'project';"
                     "applyQuickSwap();")
                 got = self.types(drv)
-                self.assertEqual(got["win-copy"], 0)
-                self.assertEqual(got["win-1"], 2)
-                self.assertEqual(got["win-2"], 1)
+                for k in ("win-1", "win-2", "win-copy", "win-copy2"):
+                    self.assertEqual(got[k], 0, k)
+                self.assertEqual(got["wall-1"], 3 + 9)
+
+    def test_copies_with_no_original_read_as_the_base_name(self):
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                self.open_swap(drv)
+                self.pick(drv, "swapFromType", "Shelf, Invented D")
+                self.pick(drv, "swapToType", "Wall, Invented A")
+                drv.execute_script(
+                    "document.getElementById('swapScope').value = 'project';"
+                    "applyQuickSwap();")
+                got = self.types(drv)
+                self.assertEqual(got["shelf-c1"] + got["shelf-c2"], 0)
+                self.assertEqual(got["wall-1"], 3 + 4)
+
+    def test_a_name_that_only_contains_the_word_is_left_alone(self):
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                self.open_swap(drv)
+                texts = [o["text"] for o in drv.execute_script(
+                    OPTIONS, "swapFromType") if o["value"]]
+                self.assertEqual(texts.count("Copy Station Wall"), 1)
 
 
 if __name__ == "__main__":

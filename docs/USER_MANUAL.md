@@ -873,7 +873,9 @@ change their type, or remove them, without redrawing.
 - A wall type that appears more than once in the project under the same name
   is listed once everywhere in Visual Swap: in **Wall types on this floor**,
   the **Selected** groups, and the **Change checked to**, **From** and **To**
-  lists. Choosing it covers every copy.
+  lists. Copies made with Clone or in Ekahau, named "(Copy)" or
+  "(Copy)(Copy)" after the original, are listed under the original's name.
+  Choosing it covers every copy.
 
 **Other actions**
 
