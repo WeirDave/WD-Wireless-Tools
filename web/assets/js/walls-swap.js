@@ -115,18 +115,10 @@
      their swaps move walls between ids. */
   let typeIndex = null;
 
-  const COPY_TAIL = /(?:\s*\(copy(?:\s*\d+)?\))+\s*$/i;
-
-  // What a type is called with Ekahau's "(Copy)" suffixes taken off. A name
-  // that is nothing but the suffix keeps it, so it still has a name.
-  function baseName(name) {
-    const n = String(name || '').trim();
-    return n.replace(COPY_TAIL, '').trim() || n;
-  }
-
-  function typeNameKey(wt) {
-    return baseName(wt && wt.name).replace(/\s+/g, ' ').toLowerCase();
-  }
+  // The rule for what counts as the same type lives in walls.js, which also
+  // offers to merge the copies; the lists here and the cards there must agree.
+  const baseName = wallTypeBaseName;
+  const typeNameKey = wallTypeNameKey;
 
   function buildTypeIndex() {
     const used = new Map();
@@ -144,7 +136,7 @@
     const listing = new Map();   // any id -> the id of its listing
     const members = new Map();   // listing id -> every id in it
     byName.forEach(list => {
-      const copyRank = w => (COPY_TAIL.test(String(w.name || '').trim()) ? 1 : 0);
+      const copyRank = w => (wallTypeIsCopy(w) ? 1 : 0);
       const head = list.slice().sort((a, b) =>
         copyRank(a) - copyRank(b)
         || (used.get(b.id) || 0) - (used.get(a.id) || 0))[0].id;

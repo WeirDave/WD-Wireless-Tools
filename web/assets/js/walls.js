@@ -566,10 +566,156 @@ function applyAuditHeight(wallTypeId) {
   renderAll();
 }
 
+// ------------------------------------------------------------ copies ---
+// One name is one wall type. A project can hold the same type more than once:
+// Ekahau names a copy "Window, Thick(Copy)", Clone below names it
+// "Window, Thick (Copy)", and applying a template can add a type beside one
+// with the same name. Each has its own id and walls are drawn against an id, so
+// the copies split a type's walls and each shows as its own card.
+//
+// This is the one definition of "the same type" - Visual Swap reads it too, so
+// the cards here and the lists there agree. Ignored: case, spacing, and any
+// trailing "(Copy)" (repeated, or "(Copy 2)"). Only a *trailing* one, so a name
+// that merely contains the word is left alone. A type with no name or no id is
+// never merged with anything.
+const COPY_TAIL = /(?:\s*\(copy(?:\s*\d+)?\))+\s*$/i;
+
+function wallTypeBaseName(name) {
+  const n = String(name || '').trim();
+  return n.replace(COPY_TAIL, '').trim() || n;
+}
+
+function wallTypeIsCopy(wt) {
+  return COPY_TAIL.test(String((wt && wt.name) || '').trim());
+}
+
+function wallTypeNameKey(wt) {
+  return wallTypeBaseName(wt && wt.name).replace(/\s+/g, ' ').toLowerCase();
+}
+
+// The groups of wall types that are one type, each with the one to keep: the
+// original if the project has it, otherwise the one most walls already use,
+// then a type Ekahau ships, then the project's order. Pure - counts is a map of
+// type id to drawn walls.
+function findCopyGroups(types, counts) {
+  const byName = new Map();
+  (types || []).forEach(w => {
+    const k = wallTypeNameKey(w);
+    if (!k || !w.id) return;
+    if (!byName.has(k)) byName.set(k, []);
+    byName.get(k).push(w);
+  });
+  const used = w => (counts && counts[w.id]) || 0;
+  const notStock = w => (typeof _ekahauDefaultKeys !== 'undefined' && _ekahauDefaultKeys
+    && _ekahauDefaultKeys.has(w.key)) ? 0 : 1;
+  const out = [];
+  byName.forEach(list => {
+    if (list.length < 2) return;
+    const keep = list.slice().sort((a, b) =>
+      (wallTypeIsCopy(a) ? 1 : 0) - (wallTypeIsCopy(b) ? 1 : 0)
+      || used(b) - used(a) || notStock(a) - notStock(b))[0];
+    out.push({ keep, copies: list.filter(w => w !== keep), name: wallTypeBaseName(keep.name) });
+  });
+  out.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+  return out;
+}
+
+function renderWallCopies() {
+  const panel = document.getElementById('wallCopies');
+  if (!panel) return;
+  const groups = esxZip ? findCopyGroups(wallTypes, _segmentCounts) : [];
+  if (!groups.length) { panel.hidden = true; panel.innerHTML = ''; return; }
+
+  const n = groups.reduce((t, g) => t + g.copies.length, 0);
+  const walls = c => { const k = segmentsUsing(c); return k + ' wall' + (k === 1 ? '' : 's'); };
+  panel.hidden = false;
+  panel.innerHTML =
+    `<div class="wall-audit-head">${n === 1
+        ? 'A wall type is a copy of another'
+        : `${n} wall types are copies of another`}</div>`
+    + `<div class="wall-audit-why">A copy has its own id, so the walls drawn with it `
+    + `are counted apart from the original's and it shows as a card of its own. `
+    + `Merging moves the walls on each copy to the type that is kept and removes `
+    + `the copy; the kept type keeps its own colour and settings. Nothing is `
+    + `written to the project until you save it.</div>`
+    + groups.map(g => `<div class="wall-audit-row">`
+        + `<span class="wall-audit-name">${esc(g.name)}</span>`
+        + `<span class="wall-audit-detail">keeps ${esc(g.keep.name)} (${esc(walls(g.keep))})`
+        + ` &middot; removes ${g.copies.map(c => `${esc(c.name)} (${esc(walls(c))})`).join(', ')}</span>`
+        + `<span class="wall-audit-spacer"></span>`
+        + `<button class="btn btn-sm" data-action="call" data-fn="mergeWallTypeCopies" data-arg="${WD.escAttr(g.keep.id)}">Merge</button>`
+        + `</div>`).join('')
+    + (groups.length > 1
+        ? `<div class="wall-audit-row"><span class="wall-audit-spacer"></span>`
+          + `<button class="btn btn-sm btn-primary" data-action="call" data-fn="mergeWallTypeCopies">Merge all</button></div>`
+        : '');
+}
+
+// Move the walls on each copy to the type that is kept, then remove the copy.
+// keepId limits it to one group; with none it merges every group. It asks first
+// and names every type it will remove, with its wall count, because removing a
+// type is not undone in this window - but nothing reaches the project file
+// until it is saved, and the file on disk is still the other copy.
+//
+// Segments are read and rewritten before any type is removed: a project whose
+// walls cannot be read merges nothing, rather than removing types and leaving
+// walls pointing at ids that no longer exist.
+async function mergeWallTypeCopies(keepId) {
+  if (!esxZip) return;
+  await loadSegmentCounts();
+  const groups = findCopyGroups(wallTypes, _segmentCounts)
+    .filter(g => !keepId || g.keep.id === keepId);
+  if (!groups.length) return;
+
+  let doc = null;
+  const file = esxZip.file('wallSegments.json');
+  if (file) {
+    try { doc = JSON.parse(await file.async('string')); }
+    catch (e) {
+      showToast('Could not read this project’s walls — nothing was merged');
+      return;
+    }
+  }
+
+  const removing = groups.reduce((t, g) => t + g.copies.length, 0);
+  const walls = c => { const k = segmentsUsing(c); return k + ' wall' + (k === 1 ? '' : 's'); };
+  const msg = `Merge ${removing} cop${removing === 1 ? 'y' : 'ies'} into `
+    + `${groups.length} wall type${groups.length === 1 ? '' : 's'}?\n\n`
+    + groups.map(g => `Keep "${g.name}" (${walls(g.keep)})\n`
+        + g.copies.map(c => `   remove "${c.name}" (${walls(c)})`).join('\n')).join('\n\n')
+    + `\n\nWalls on a removed type move to the one kept, which keeps its own `
+    + `colour and settings. Nothing is written to the project until you save it.`;
+  if (!confirm(msg)) return;
+
+  const toKeep = new Map();
+  groups.forEach(g => g.copies.forEach(c => toKeep.set(c.id, g.keep.id)));
+
+  let moved = 0;
+  if (doc && Array.isArray(doc.wallSegments)) {
+    doc.wallSegments.forEach(seg => {
+      const f = 'wallTypeId' in seg ? 'wallTypeId' : ('wallType' in seg ? 'wallType' : null);
+      const to = f && toKeep.get(seg[f]);
+      if (to) { seg[f] = to; moved++; }
+    });
+    if (moved) esxZip.file('wallSegments.json', JSON.stringify(doc, null, 2));
+  }
+
+  // A kept type that is itself a copy (the original is not in the project)
+  // reads as the original's name from here on.
+  groups.forEach(g => { if (wallTypeIsCopy(g.keep)) g.keep.name = g.name; });
+  wallTypes = wallTypes.filter(w => !toKeep.has(w.id));
+
+  await loadSegmentCounts();
+  renderAll();
+  showToast(`Merged ${removing} cop${removing === 1 ? 'y' : 'ies'} — `
+    + `${moved} wall${moved === 1 ? '' : 's'} moved — save to keep it`, 'success');
+}
+
 function renderAll() {
   renderHotkeyPanel();
   renderList();
   refreshWallAudit();
+  renderWallCopies();
   renderWillWrite();
   renderAreaPanel();
 }

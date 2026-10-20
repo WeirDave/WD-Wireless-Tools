@@ -696,6 +696,25 @@ form.
 > another type first, use **Visual Swap → Quick swap by type**, then delete.
 > Nothing is written until you save, so reopening the file undoes a delete.
 
+**Copies of a wall type.** A project can hold the same type more than once:
+Ekahau names a copy "Window, Thick(Copy)", **Clone** names one "Window, Thick
+(Copy)", and the same name can also be added beside an existing type. Each is a
+card of its own, and the walls drawn with it are counted apart. When the
+project has any, a notice appears above the cards, headed "wall types are
+copies of another", with one line per type: what it keeps and what it removes,
+with the number of drawn walls on each.
+
+- **Merge**, on a line, merges that type's copies. **Merge all** merges every
+  line.
+- A confirmation names each type it will remove and how many walls it holds.
+  Walls drawn with a removed copy move to the type that is kept.
+- The type kept is the original when the project has it, otherwise the copy
+  with the most walls. It keeps its own colour and settings. A kept copy with
+  no original in the project loses the "(Copy)" from its name.
+- Only a trailing "(Copy)" counts, with or without a space before it, so
+  "Copy Station Wall" is left alone.
+- Nothing is written until you save, so reopening the file undoes a merge.
+
 ### The Attenuation Areas tab
 
 Attenuation areas have their own tab beside **Wall Types**, named as Ekahau
