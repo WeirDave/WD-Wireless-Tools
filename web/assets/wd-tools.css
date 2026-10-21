@@ -8233,8 +8233,33 @@ body.tool-guide {
   .guide-topbar { padding: 12px 18px; }
 }
 
-.wd-about-modal { width: 480px; padding: 0; }
+/* Wide enough that the release notes of an available update read as lines
+   rather than a strip, on the 1366px laptop this is opened on. Two columns:
+   what this install is on the left, the update and its notes on the right.
+   The grid has one flexible row so the notes growing taller than the left
+   column does not spread the left column's sections apart. Below 760px it is
+   one column in source order, the same order it had when it was 480px wide. */
+.wd-about-modal { width: min(1100px, 94vw); max-width: 94vw; max-height: 94vh; padding: 0; }
 .wd-about-modal .modal-body { padding: 20px; }
+@media (min-width: 760px) {
+  .wd-about-body {
+    display: grid; column-gap: 28px;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-rows: auto auto auto 1fr;
+  }
+  .wd-about-body > .wd-about-hero { grid-column: 1; grid-row: 1; }
+  .wd-about-body > .wd-about-update { grid-column: 2; grid-row: 1 / -1; min-width: 0; }
+  .wd-about-body > .wd-about-diagnostics { grid-column: 1; grid-row: 2; }
+  .wd-about-body > .wd-about-linkList { grid-column: 1; grid-row: 3; }
+  .wd-about-body > .wd-about-credit { grid-column: 1; grid-row: 4; align-self: end; }
+  .wd-about-update .wd-about-updateRow { border-top: 0; padding-top: 0; }
+}
+/* The shared changelog box caps its list at 220px, sized for a 480px modal;
+   the box itself stays untouched because the file is identical in each
+   product. The 330px is the rest of the window - header, padding, the check
+   row, the button and the note - so the list takes what is left of the
+   screen and the window itself does not need a scrollbar. */
+.wd-update-panel .rc-list { max-height: clamp(180px, calc(94vh - 330px), 420px); }
 .wd-about-hero { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; }
 .wd-about-logo { width: 64px; height: 64px; border-radius: var(--r-md); flex-shrink: 0; }
 .wd-about-heroText { flex: 1; min-width: 0; }

@@ -807,7 +807,7 @@
           '<h3>About &mdash; WD Wireless Tools</h3>' +
           '<button class="btn btn-icon btn-sm wd-about-close" type="button" title="Close">&times;</button>' +
         '</div>' +
-        '<div class="modal-body">' +
+        '<div class="modal-body wd-about-body">' +
           '<div class="wd-about-hero">' +
             '<img class="wd-about-logo" src="/assets/wd-wireless-tools-v8.0-720x720.png" alt="">' +
             '<div class="wd-about-heroText">' +
@@ -817,15 +817,17 @@
                 '<span class="wd-about-tracking" id="wdAboutTracking"></span></div>' +
             '</div>' +
           '</div>' +
-          '<div class="wd-about-updateRow">' +
-            '<button class="btn wd-about-checkBtn" type="button">' +
-              '<span class="wd-about-checkSpinner" aria-hidden="true" hidden></span>' +
-              '<span class="wd-about-checkLabel">Check for updates</span>' +
-            '</button>' +
-            '<div class="wd-about-updateResult" role="status" aria-live="polite"></div>' +
+          '<div class="wd-about-update">' +
+            '<div class="wd-about-updateRow">' +
+              '<button class="btn wd-about-checkBtn" type="button">' +
+                '<span class="wd-about-checkSpinner" aria-hidden="true" hidden></span>' +
+                '<span class="wd-about-checkLabel">Check for updates</span>' +
+              '</button>' +
+              '<div class="wd-about-updateResult" role="status" aria-live="polite"></div>' +
+            '</div>' +
+            '<div class="wd-update-panel" hidden></div>' +
           '</div>' +
-          '<div class="wd-update-panel" hidden></div>' +
-          '<div class="wd-about-section">' +
+          '<div class="wd-about-section wd-about-diagnostics">' +
             '<div class="wd-about-sectionTitle">Diagnostics</div>' +
             '<div class="wd-about-logRow">' +
               '<span class="wd-about-logLabel">Log file</span>' +
@@ -839,7 +841,7 @@
               'written here, including ones that only appear in the terminal ' +
               'window. It stays on this computer.</div>' +
           '</div>' +
-          '<div class="wd-about-section">' +
+          '<div class="wd-about-section wd-about-linkList">' +
             '<div class="wd-about-sectionTitle">Links</div>' +
             '<div class="wd-about-links">' +
               '<a href="https://github.com/WeirDave?tab=repositories" target="_blank" rel="noopener">GitHub repository</a>' +
