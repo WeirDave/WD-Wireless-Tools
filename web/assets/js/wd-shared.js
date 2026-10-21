@@ -1108,28 +1108,66 @@
         ? '<div class="wd-update-changes"></div>' : '';
     }
 
+    var changelogWaiting = null;   // callbacks queued while the script loads
+
     function loadChangelog(done) {
       if (window.ReleaseChangelog) { done(); return; }
+      // One script tag however many screens ask before it arrives.
+      if (changelogWaiting) { changelogWaiting.push(done); return; }
+      changelogWaiting = [done];
       var s = document.createElement('script');
       // Beside this script, carrying whatever query it was loaded with (the
       // server already revalidates /assets/*.js on every request).
       s.src = _scriptSrc ? _scriptSrc.replace(/wd-shared\.js(\?.*)?$/, 'release-changelog.js$1')
                          : '/assets/js/release-changelog.js';
-      s.onload = done;
-      s.onerror = function () { /* the list is optional; the button is not */ };
+      s.onload = function () {
+        var queue = changelogWaiting; changelogWaiting = null;
+        queue.forEach(function (fn) { fn(); });
+      };
+      s.onerror = function () {
+        /* the list is optional; the button is not */
+        changelogWaiting = null;
+      };
       document.head.appendChild(s);
     }
 
-    function fillChanges() {
+    var fillSeq = 0;   // which draw of the list is the current one
+
+    /* `installed` is set on the screen that follows an update. The list was
+       fetched before the update ran, so it names every release newer than the
+       old install - which is exactly what has just arrived, bar anything newer
+       than what the update actually landed on. The shared box's own heading
+       says "since your version", true before the update and wrong after it, so
+       that line is replaced here; the shared file is not touched. */
+    function fillChanges(installed) {
       var box = host && host.querySelector('.wd-update-changes');
       if (!box || !state || !state.changes || !state.changes.length) return;
-      var mine = host;
+      var mine = host, seq = ++fillSeq;
       loadChangelog(function () {
-        // The panel may have been closed or redrawn while the script loaded.
-        var again = mine === host && host.querySelector('.wd-update-changes');
-        if (again && window.ReleaseChangelog) {
-          window.ReleaseChangelog.render(again, {
-            releases: state.changes, truncated: !!state.changesTruncated });
+        /* The panel may have been closed or redrawn while the script loaded,
+           and a screen that asked first must not draw over the one that asked
+           last: the update screen's list is filtered and retitled, the screen
+           before it is not. */
+        var again = mine === host && seq === fillSeq &&
+                    host.querySelector('.wd-update-changes');
+        if (!again || !window.ReleaseChangelog) return;
+        var releases = state.changes;
+        if (installed && installed.to) {
+          releases = releases.filter(function (r) {
+            return window.ReleaseChangelog.cmpVer(r.version, installed.to) <= 0;
+          });
+        }
+        if (!releases.length) { again.hidden = true; return; }
+        window.ReleaseChangelog.render(again, {
+          releases: releases, truncated: !!state.changesTruncated });
+        if (installed) {
+          var head = again.querySelector('.rc-head');
+          if (head) {
+            head.textContent = releases.length === 1
+              ? 'What’s new in this update'
+              : 'What’s new in this update (' + releases.length +
+                (state.changesTruncated ? '+' : '') + ' releases)';
+          }
         }
       });
     }
@@ -1380,7 +1418,16 @@
           '<button class="btn btn-primary wd-update-restartBtn" type="button">' +
             'Restart to finish</button>' +
           '<span class="wd-update-target">The new version loads after the restart.</span>' +
-        '</div>' });
+        '</div>' +
+        /* Under the button, not above it: the restart is the one thing this
+           screen is for, and the list scrolls inside its own box, so reading
+           the notes never pushes the button out of reach. */
+        (sameVersion ? '' :
+          changesHtml() +
+          '<div class="wd-update-note"><a class="wd-about-updateLink" href="' +
+            escAttr(config.releasesUrl.replace('/latest', '')) +
+            '" target="_blank" rel="noopener">Full release history &rarr;</a></div>') });
+      if (!sameVersion) fillChanges({ to: to });
       wire();
     }
 
