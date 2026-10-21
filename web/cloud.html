@@ -152,7 +152,7 @@
        dropdowns. Nothing that needs a selection is here at all. -->
   <div class="toolbar">
     <input type="text" class="search" id="searchBox" placeholder="Search...">
-    <button class="clear-search" data-action="call" data-fn="clearSearch" title="Clear search">&#215;</button>
+    <button class="clear-search" data-action="call" data-fn="clearSearch" title="Clear search" aria-label="Clear search"><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false"><path d="M5 5 L19 19 M19 5 L5 19" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></button>
 
     <button class="btn btn-blue" id="syncAllBtn" data-action="call" data-fn="syncEverything"
             title="Works out for each file which side is newer and does that, or nothing when the two already match. It never replaces a newer file with an older one, so it cannot overwrite work. Shows what it will do before it does it, and says what still needs to go up.">&#8645; Sync everything</button>
@@ -188,7 +188,7 @@
     </span>
     <button class="btn btn-blue" id="addNewBtn" data-action="call" data-fn="showModal" data-arg="createModal">+ New Site</button>
     <button class="btn" id="liveBtn" data-action="call" data-fn="toggleLive" title="Live: auto-refresh from Ekahau Cloud (pauses while selecting or a dialog is open)">Live</button>
-    <button class="btn-icon-only" data-action="call" data-fn="openSettings" title="Settings" aria-label="Settings">&#9881;</button>
+    <button class="btn-icon-only" data-action="call" data-fn="openSettings" title="Settings" aria-label="Settings"><svg class="gear-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path fill="currentColor" fill-rule="evenodd" d="M19.85 10.44 L22.43 10.77 L22.43 13.23 L19.85 13.56 L18.65 16.44 L20.25 18.50 L18.50 20.25 L16.44 18.65 L13.56 19.85 L13.23 22.43 L10.77 22.43 L10.44 19.85 L7.56 18.65 L5.50 20.25 L3.75 18.50 L5.35 16.44 L4.15 13.56 L1.57 13.23 L1.57 10.77 L4.15 10.44 L5.35 7.56 L3.75 5.50 L5.50 3.75 L7.56 5.35 L10.44 4.15 L10.77 1.57 L13.23 1.57 L13.56 4.15 L16.44 5.35 L18.50 3.75 L20.25 5.50 L18.65 7.56ZM8.40 12.00 a3.60 3.60 0 1 0 7.20 0 a3.60 3.60 0 1 0 -7.20 0Z"/></svg></button>
   </div>
 
   <!-- Not present until something is ticked. This is the half of the old
@@ -512,6 +512,7 @@
 <div class="modal-overlay" id="matchHelpModal">
   <div class="modal match-help">
     <h3>How matching works</h3>
+    <div class="mh-body">
     <p>Every Ekahau project has a hidden ID stamped inside its <code>.esx</code> file when it's first created. That ID sticks with the project through every edit, rename, upload, and download. When we see the same hidden ID on your computer AND in Ekahau Cloud, we know it's the same project — no guessing.</p>
 
     <p>For projects where we can't check IDs (created locally and never uploaded, or two files with unrelated histories), we fall back to name-based matching. Exact same name is very reliable. Same site code + similar name is likely. Only similar names is a guess, and we say so.</p>
@@ -561,6 +562,7 @@
         <b>Not this one</b> to rule a candidate out. <b>None of these</b> dismisses them all
         and leaves the file unpaired.</li>
     </ul>
+    </div>
 
     <div class="modal-actions cloud-modal-actions-loose">
       <button class="btn btn-blue" data-action="call" data-fn="closeModal" data-arg="matchHelpModal">Got it</button>

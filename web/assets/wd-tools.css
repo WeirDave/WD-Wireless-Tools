@@ -847,6 +847,11 @@ body.tool-cloud #liveBtn.live-on::before {
   transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
+/* The glyph was U+2699 at 15px in the disc's own background colour, which several
+   platforms draw as a speck. The gear is an SVG filled with the disc's text
+   colour, so it reads as a gear in both themes at the disc's size. */
+.btn-icon-only .gear-svg { width: 18px; height: 18px; display: block; }
+
 .btn-icon-only:hover {
   background: var(--text-2); border-color: var(--text-2);
 }
@@ -2511,6 +2516,23 @@ body.tool-cloud .toolbar input.search:focus {
   border-color: var(--blue); background: var(--surface);
 }
 
+/* The × that empties the search box. It was an unstyled browser button around a
+   default-size glyph - a few pixels to aim at. It is the box's own height
+   and its cross is drawn rather than typed, so it is easy to hit and to see. */
+body.tool-cloud .toolbar .clear-search {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 0; margin-left: -2px;
+  background: var(--surface-raised); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+body.tool-cloud .toolbar .clear-search:hover {
+  border-color: var(--blue); color: var(--blue-soft);
+}
+
+[data-theme="light"] body.tool-cloud .toolbar .clear-search:hover { color: var(--blue-dark); }
+
 .selall {
   display: flex; align-items: center; gap: 4px;
   font-size: 12px; color: var(--text-2); cursor: pointer; white-space: nowrap;
@@ -3636,15 +3658,35 @@ body.tool-cloud .toolbar input.search:focus {
 
 [data-theme="light"] .btn-info-chip:hover { color: var(--blue-dark); }
 
+/* The ⓘ explanation was the default 440px modal with a 640px max-width that
+   never applied, so it opened as a narrow strip with the full explanation
+   stacked in it and a scrollbar on every laptop. It is wide enough now to
+   read in columns, and the body is what scrolls - never the title or the
+   Got it button - on a window too short to hold it. */
 .modal.match-help {
-  max-width: 640px; padding: 24px 28px;
+  width: min(1280px, 96vw); max-width: 96vw; max-height: 96vh;
+  padding: 14px 24px; overflow: hidden;
+  display: flex; flex-direction: column;
 }
 
-.modal.match-help h3 { margin: 0 0 12px; font-size: 20px; }
+.modal.match-help .mh-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 6px;
+  columns: 3 340px; column-gap: 28px;
+}
 
-.modal.match-help h4 { margin: 18px 0 6px; font-size: 14px; color: var(--text); }
+.modal.match-help .mh-body > :first-child,
+.modal.match-help .mh-body > h4:first-child { margin-top: 0; }
 
-.modal.match-help p { margin: 8px 0; font-size: 13px; line-height: 1.55; color: var(--text); }
+.modal.match-help h4 { break-after: avoid; }
+.modal.match-help .mh-badge-row, .modal.match-help li { break-inside: avoid; }
+
+.modal.match-help > .modal-actions { flex: 0 0 auto; margin-top: 0; padding-top: 14px; }
+
+.modal.match-help h3 { margin: 0 0 8px; font-size: 20px; }
+
+.modal.match-help h4 { margin: 14px 0 4px; font-size: 14px; color: var(--text); }
+
+.modal.match-help p { margin: 6px 0; font-size: 13px; line-height: 1.45; color: var(--text); }
 
 .modal.match-help ul { margin: 8px 0 8px 20px; font-size: 13px; line-height: 1.6; color: var(--text); }
 
