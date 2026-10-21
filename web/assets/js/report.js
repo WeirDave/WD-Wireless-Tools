@@ -78,6 +78,7 @@
   var optOverrides = {};        // id -> true once this report deliberately differs
   var coverImage = null;        // { url, name, bytes } once one is stored
   var settingsAvailable = false; // false when there is no server behind the page
+  var settingsReady = null;      // settles when the first settings/get has been dealt with
   // The AP Labeler stores the Structured naming pattern it last used. The
   // label reference page uses it to say what each segment of a name means -
   // and only when a real name actually matches that pattern, so it never
@@ -167,8 +168,11 @@
       /* The saved revision (or the v1 default) is part of the file name. A
          project opened before these arrive was named without it, and nothing
          named it again. Only with a project open: before one is, the tab keeps
-         its own title rather than becoming "Report - AP Installation - v1". */
-      if (fileName) syncDocTitle();
+         its own title rather than becoming "Report - AP Installation - v1".
+         Not while the folder lookup is still out: fileName is set before it,
+         so a settings answer landing in that gap named the report after the
+         .esx alone, and the site only joined the name when loadFile finished. */
+      if (fileName && folderLookup !== 'pending') syncDocTitle();
     });
   }
 
@@ -366,7 +370,7 @@
   }
 
   function initReportSettings() {
-    return fetchSettings()
+    settingsReady = fetchSettings()
       .then(refreshCoverInfo)
       .then(migrateBrowserStorage)
       .catch(function () {
@@ -377,6 +381,7 @@
         if (typeof renderReportOpts === 'function') renderReportOpts();
         renderCoverSummary();
       });
+    return settingsReady;
   }
 
   // ── Settings panel ────────────────────────────────────────────────────────
@@ -1114,6 +1119,17 @@
      loud rather than leaving him looking at a name with no site in it and no
      way to find out why. */
   async function recoverProjectFolder(file) {
+    /* settingsAvailable is only true once settings/get has answered, so a
+       file dropped before that was told "no server" and never looked up: the
+       report kept the .esx name for good. On a slow machine that is the
+       ordinary order of events. Wait for the answer, but not for ever - a
+       server that never replies is the no-server case it always was. */
+    if (!settingsAvailable && settingsReady) {
+      var gaveUp;
+      await Promise.race([settingsReady,
+                          new Promise(function (done) { gaveUp = setTimeout(done, 8000); })]);
+      clearTimeout(gaveUp);
+    }
     if (!settingsAvailable) { folderLookup = 'no_server'; return; }
     var res;
     try {

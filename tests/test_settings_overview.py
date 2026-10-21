@@ -232,7 +232,7 @@ class ReportsBannerShowsWhatIsSaved(unittest.TestCase):
 
         const payload = JSON.parse(process.argv[2]);
         const calls = [];
-        let settingsAvailable = false, labelerPattern = null;
+        let settingsAvailable = false, labelerPattern = null, folderLookup = '';
         let unitsPref = 'feet', segGranularityPref = 'standard';
         const SEG_GRANULARITY = { standard: 1 };
         const applySettingsPayload = (p) => calls.push('apply:' + JSON.stringify(p || null));

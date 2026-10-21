@@ -559,6 +559,7 @@ const block =
 globalThis.projectFolder = '';
 globalThis.folderLookup = '';
 globalThis.settingsAvailable = true;
+globalThis.settingsReady = null;
 globalThis.calls = [];
 globalThis.WD = { api: async function (action, body) {
   calls.push([action, body]);
@@ -667,6 +668,34 @@ class ADroppedFileFindsItsFolder(unittest.TestCase):
           await recoverProjectFolder({ name: 'B04 - PD.esx', size: 1 });
           eq('a thrown call was not survived', folderLookup, 'failed');
           eq('a thrown call invented a folder', projectFolder, '');
+        """)
+
+    def test_a_file_dropped_before_the_settings_answer_waits_for_them(self):
+        """settingsAvailable only turns true when settings/get answers, so a
+        drop ahead of it was told "no server" and never looked up: the report
+        kept the .esx name for good. On a slow machine that is the usual
+        order, which is how the Report filename test failed in CI."""
+        self.check("""
+          settingsAvailable = false;
+          settingsReady = new Promise(function (go) {
+            setTimeout(function () { settingsAvailable = true; go(); }, 40);
+          });
+          answer = { ok: true, folder: 'Northwind Traders - Building 4' };
+          projectFolder = '';
+          await recoverProjectFolder({ name: 'B04 - PD.esx', size: 7 });
+          eq('the lookup was skipped', calls.length, 1);
+          eq('the folder was not taken', projectFolder, 'Northwind Traders - Building 4');
+          eq('a reason was left behind', folderLookup, '');
+        """)
+
+    def test_settings_that_never_become_available_still_end_as_no_server(self):
+        self.check("""
+          settingsAvailable = false;
+          settingsReady = Promise.resolve();
+          projectFolder = '';
+          await recoverProjectFolder({ name: 'B04 - PD.esx', size: 7 });
+          eq('a call was made with no server', calls.length, 0);
+          eq('no reason was recorded', folderLookup, 'no_server');
         """)
 
     def test_every_reason_says_what_to_do_about_it(self):

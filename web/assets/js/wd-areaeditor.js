@@ -34,6 +34,7 @@
   var CLOSE_CSS = 14;          // how near the first corner counts as "finish"
   var SLOP_CSS = 5;            // movement that is still a click
   var DEDUPE_CSS = 3;          // a second click this close adds nothing
+  var DOUBLE_MS = 500;          // a second click this soon, on the spot, is a double-click
   var COLOR = '#db2777';       // the colour Prep already draws the area in
 
   var MSG = {
@@ -171,14 +172,14 @@
 
     ed.start = function (kind) {
       if (!on() || (kind !== 'rect' && kind !== 'poly')) return;
-      st.pts = []; st.draft = null; st.cursor = null; st.drag = null; st.down = null;
+      st.pts = []; st.draft = null; st.cursor = null; st.drag = null; st.down = null; st.lastUp = null;
       mode(kind);
       redraw();
     };
 
     ed.cancel = function () {
       var was = st.mode;
-      st.pts = []; st.draft = null; st.cursor = null; st.drag = null; st.down = null;
+      st.pts = []; st.draft = null; st.cursor = null; st.drag = null; st.down = null; st.lastUp = null;
       if (was !== 'idle') mode('idle');
       redraw();
     };
@@ -191,7 +192,7 @@
     };
 
     function finish(poly) {
-      st.pts = []; st.draft = null; st.cursor = null; st.drag = null; st.down = null;
+      st.pts = []; st.draft = null; st.cursor = null; st.drag = null; st.down = null; st.lastUp = null;
       opts.set(poly);
       mode('idle');
       opts.commit(poly);
@@ -274,8 +275,15 @@
         var at = toPlan(pv, p);
         var last = st.pts.length ? toScreen(pv, st.pts[st.pts.length - 1]) : null;
         if (!last || dist(last, p) > DEDUPE_CSS * d) st.pts.push(at);
-        // A double-click is a click that finishes.
-        if (e.detail >= 2 && st.pts.length >= 3) { closeShape(); return; }
+        // A double-click is a click that finishes. The browser's own click
+        // count is not trusted alone: Safari's synthesised double-click
+        // arrives with a count of 1 on both mouse-ups, so a second click on
+        // the same spot straight after the first counts too.
+        var now = Date.now();
+        var again = e.detail >= 2 || (st.lastUp && now - st.lastUp.t <= DOUBLE_MS &&
+                                      dist(st.lastUp, p) <= SLOP_CSS * d);
+        if (again && st.pts.length >= 3) { closeShape(); return; }
+        st.lastUp = { x: p.x, y: p.y, t: now };
         pv.draw();
         return;
       }

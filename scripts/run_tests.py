@@ -202,10 +202,41 @@ class Result:
         return self.code == 0
 
 
+#: What a browser driver says when the browser, not the page, went away: the
+#: window closed under it, the session ended, the browser crashed or stopped
+#: answering. These are not statements about our code, and a run that fails on
+#: one of them alone has found nothing. A Firefox window vanished mid-test
+#: (`NoSuchWindowError`) and, because Firefox gates a release, left a finished
+#: version unpublished.
+_BROWSER_WENT_AWAY = re.compile(
+    r"NoSuchWindowError|NoSuchWindowException|no such window|target window already closed"
+    r"|InvalidSessionIdException|invalid session id|session deleted because of page crash"
+    r"|tab crashed|chrome not reachable|disconnected: not connected to DevTools"
+    r"|Failed to decode response from marionette|Tried to run command without establishing",
+    re.I)
+_SEPARATOR = re.compile(r"^={60,}\n", re.M)
+
+
+def browser_went_away(output: str) -> bool:
+    """True when a failed module failed **only** because the browser went away.
+
+    Every failure has to be an ERROR (a test that threw, not one whose
+    assertion was false) and every ERROR has to carry a driver-went-away
+    signature. A single assertion failure, or a single error that is anything
+    else, makes this False - a real finding is never retried into a pass.
+    """
+    blocks = _SEPARATOR.split(output)[1:]
+    failures = [b for b in blocks if b.startswith(("FAIL: ", "ERROR: "))]
+    if not failures:
+        return False
+    return all(b.startswith("ERROR: ") and _BROWSER_WENT_AWAY.search(b)
+               for b in failures)
+
+
 def run_module(module: str, user_root: Path, verbose: bool,
                timeout: float = MODULE_TIMEOUT, root: Path = ROOT,
-               detail: bool = False) -> Result:
-    user_dir = user_root / module
+               detail: bool = False, attempt: int = 1) -> Result:
+    user_dir = user_root / (module if attempt == 1 else f"{module}-attempt{attempt}")
     user_dir.mkdir()
     env = {**os.environ, "WD_USER_DIR": str(user_dir),
            "PYTHONIOENCODING": "utf-8"}
@@ -316,7 +347,23 @@ def run_all(modules: list[str], jobs: int, verbose: bool,
                     time.sleep(0.2)
                     continue
                 try:
-                    report(run_module(m, Path(users), verbose, timeout, root, detail))
+                    res = run_module(m, Path(users), verbose, timeout, root, detail)
+                    if not res.ok and is_browser(m) and browser_went_away(res.output):
+                        # Once, and said out loud: the first attempt's output
+                        # stays in the log so the flake is counted, not hidden.
+                        with lock:
+                            print(f"RETRY {m}: the browser went away mid-run, "
+                                  f"nothing else failed; running it once more",
+                                  file=out, flush=True)
+                            print(without_access_log(res.output).rstrip()[-3000:],
+                                  file=out, flush=True)
+                        res = run_module(m, Path(users), verbose, timeout, root,
+                                         detail, attempt=2)
+                        if res.ok:
+                            with lock:
+                                print(f"{m} passed on its second attempt; the first "
+                                      f"lost its browser", file=out, flush=True)
+                    report(res)
                 finally:
                     with lock:
                         active["n"] -= 1

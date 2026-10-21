@@ -116,6 +116,27 @@ class DrawingAShape(unittest.TestCase):
                             "click(180, 80, 2); out();")
         self.assertEqual(out["committed"], [[[10, 10], [90, 10], [90, 40]]])
 
+    def test_a_double_click_whose_browser_count_stays_at_one_still_finishes(self):
+        """Safari's synthesised double-click reports a click count of 1 on both
+        mouse-ups, so the count alone left the triangle unfinished there."""
+        out = node(EDITOR + "ed.start('poly'); click(20, 20); click(180, 20); click(180, 80, 1); "
+                            "click(181, 80, 1); out();")
+        self.assertEqual(out["committed"], [[[10, 10], [90, 10], [90, 40]]])
+        self.assertEqual(out["modes"], ["poly", "idle"])
+
+    def test_two_slow_clicks_on_one_spot_are_not_a_double_click(self):
+        out = node(EDITOR + "let t = 1000; Date.now = () => t; "
+                            "ed.start('poly'); click(20, 20); click(180, 20); click(180, 80, 1); "
+                            "t += 5000; click(180, 80, 1); out();")
+        self.assertEqual(out["committed"], [])
+        self.assertEqual(out["modes"], ["poly"], "still drawing")
+
+    def test_a_click_elsewhere_straight_after_one_is_just_another_corner(self):
+        out = node(EDITOR + "ed.start('poly'); click(20, 20); click(180, 20); click(180, 80, 1); "
+                            "click(100, 90, 1); out();")
+        self.assertEqual(out["committed"], [])
+        self.assertEqual(out["modes"], ["poly"])
+
     def test_enter_with_too_few_corners_says_so_and_keeps_drawing(self):
         out = node(EDITOR + "ed.start('poly'); click(20, 20); click(180, 20); key('Enter'); out();")
         self.assertEqual(out["refused"], ["An area needs at least three corners."])

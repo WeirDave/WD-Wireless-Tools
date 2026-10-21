@@ -68,6 +68,9 @@ class _StubApi(SimpleHTTPRequestHandler):
     #: Seconds settings/get takes to answer. A slow CI runner does this to the
     #: page for real: the project can be open before its settings have arrived.
     settings_delay = 0
+    #: Seconds report/find_folder takes to answer: the gap in which the project
+    #: is open and named after its file, and the folder has not yet arrived.
+    find_delay = 0
 
     def log_message(self, *a):
         pass
@@ -97,6 +100,8 @@ class _StubApi(SimpleHTTPRequestHandler):
             self._json({"ok": True, "settings": {
                 "report": type(self).report_settings, "aprename": {}}})
         elif action == "report/find_folder":
+            if type(self).find_delay:
+                time.sleep(type(self).find_delay)
             self._json(type(self).answer)
         else:
             self._json({"ok": True})
@@ -139,6 +144,11 @@ READY_JS = """
 return document.readyState === 'complete'
   && typeof window.renderFilenamePreview === 'function'
   && !!document.getElementById('dropzone');
+"""
+
+OPEN_JS = """
+var w = document.getElementById('workspace');
+return !!w && w.classList.contains('active');
 """
 
 PREVIEW_JS = """
@@ -228,6 +238,12 @@ class DroppedFileNamesTheReport(unittest.TestCase):
         # the tab, so wait for it to leave the page's title first (bounded; a
         # parse that never finishes is a failure of the assertion below).
         self._wait_until(lambda: driver.title != "WD Report", 30)
+        # ...and leaving "WD Report" is not the same as being named: a settings
+        # answer arriving while the folder lookup is out names the report after
+        # the file alone for a moment, and a slow runner held that for longer
+        # than the settle below. The workspace opening is the page saying the
+        # project is loaded and named, so that is what is waited for.
+        self._wait_until(lambda: driver.execute_script(OPEN_JS), 30)
         title = self._settled_title(driver)
         asked = [b for (a, b) in _StubApi.calls if a == "report/find_folder"]
         return title, asked
@@ -326,6 +342,37 @@ class DroppedFileNamesTheReport(unittest.TestCase):
         finally:
             _StubApi.report_settings = {}
             _StubApi.settings_delay = 0
+
+    def test_settings_arriving_before_the_folder_do_not_name_the_report_without_it(self):
+        """The project's file name is known before its folder is, and a settings
+        answer landing in that gap re-named the report after the file alone;
+        the site only joined the name when loading finished. Held by making
+        both answers slow and watching every title the tab has on the way."""
+        stem_only = "Report - AP Installation - B04 - PD - v1"
+        try:
+            _StubApi.settings_delay = 1.0
+            _StubApi.find_delay = 3.0
+            for kind, driver in self._each_browser():
+                with self.subTest(browser=kind):
+                    _StubApi.answer = {"ok": True, "folder": SITE}
+                    _StubApi.calls = []
+                    driver.get(self.url)
+                    self.assertTrue(self._wait_until(lambda: driver.execute_script(READY_JS), 30))
+                    self.assertTrue(self._wait_until(
+                        lambda: any(a == "settings/get" for (a, _) in _StubApi.calls), 30))
+                    driver.execute_script(DROP_NOW_JS, self.b64, ESX_NAME)
+                    seen = []
+
+                    def named():
+                        seen.append(driver.title)
+                        return driver.title.endswith(SITE + " - v1")
+                    self.assertTrue(self._wait_until(named, 40),
+                                    "the site never reached the title; saw %r" % (seen[-1:],))
+                    self.assertNotIn(stem_only, seen,
+                                     "the report was named without its site on the way")
+        finally:
+            _StubApi.settings_delay = 0
+            _StubApi.find_delay = 0
 
     def test_the_title_is_still_the_name_when_the_print_dialog_opens(self):
         """What a destination reads is `document.title` at the instant
