@@ -24,6 +24,16 @@ one; each is seven sheets for six pages.
 
 The server is ``http.server`` over ``web/``, never ``server.py``, which opens a
 browser window nobody closes.
+
+**A browser whose WebDriver print cannot show CSS paper sizes cannot answer
+this question, and says so.** Firefox 158 prints every sheet on the paper the
+print options name and ignores ``@page`` altogether - a three-line document
+with ``@page { size: A4 landscape }`` comes back portrait, by ``print_page`` and
+by BiDi's ``browsingContext.print`` alike - so every report failed here as
+``PPPPP`` for pages asking for ``LLLLL``, whatever the page did. Before
+measuring a browser the test prints a reference document with one landscape
+and one portrait sheet and measures nothing in a browser that cannot draw
+them. The check still runs wherever the print path honours ``@page``.
 """
 from __future__ import annotations
 
@@ -61,6 +71,14 @@ return Array.from(document.querySelectorAll('#reportCanvas [data-page-key]'))
   .map(function (e) { return e.classList.contains('is-landscape') ? 'L' : 'P'; })
   .join('');
 """
+
+#: Two named pages, landscape then portrait. A print path that honours CSS paper
+#: sizes returns ``LP``; one that does not returns the same letter twice.
+REFERENCE_HTML = (
+    "<style>@page land{size:A4 landscape}@page port{size:A4 portrait}"
+    ".l{page:land;break-after:page;height:100px}"
+    ".p{page:port;break-after:page;height:100px}</style>"
+    "<div class=l>L</div><div class=p>P</div>")
 
 SCENARIOS = [
     # What was reported: cover to Landscape, then Match all pages.
@@ -121,6 +139,13 @@ class EverySheetIsThePaperItsPageAskedFor(unittest.TestCase):
         except (WebDriverException, OSError):
             return None
 
+    @staticmethod
+    def _honours_css_page_size(driver):
+        driver.get("data:text/html;base64,"
+                   + base64.b64encode(REFERENCE_HTML.encode()).decode("ascii"))
+        return orientations(
+            base64.b64decode(driver.print_page(PrintOptions()))) == "LP"
+
     def _print(self, driver, setup):
         driver.get(self.url)
         time.sleep(1.2)
@@ -128,7 +153,15 @@ class EverySheetIsThePaperItsPageAskedFor(unittest.TestCase):
         driver.execute_async_script(DROP_JS, self.b64, "Sample.esx")
         driver.execute_script(
             "selectReport('placement'); goStage('review');" + setup)
-        time.sleep(0.8)
+        # Wait for the five pages instead of a fixed pause: a slow runner
+        # printed an empty report (0 pages asked) and failed on that alone.
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            asked = driver.execute_script(ASKED_JS)
+            if len(asked) >= 5:
+                break
+            time.sleep(0.25)
+        time.sleep(0.5)
         asked = driver.execute_script(ASKED_JS)
         pdf = base64.b64decode(driver.print_page(PrintOptions()))
         return asked, orientations(pdf)
@@ -139,8 +172,12 @@ class EverySheetIsThePaperItsPageAskedFor(unittest.TestCase):
             driver = self._driver(kind, binary)
             if driver is None:
                 continue
-            started += 1
             try:
+                if not self._honours_css_page_size(driver):
+                    print("%s: print ignores CSS paper sizes; orientation "
+                          "not measured" % kind)
+                    continue
+                started += 1
                 for name, setup in SCENARIOS:
                     with self.subTest(browser=kind, scenario=name):
                         asked, sheets = self._print(driver, setup)
@@ -158,7 +195,8 @@ class EverySheetIsThePaperItsPageAskedFor(unittest.TestCase):
             finally:
                 _browsers.shut_down(driver)
         if not started:
-            self.skipTest("none of Firefox, Chrome or Edge would start")
+            self.skipTest("no browser here prints CSS paper sizes, so none "
+                          "could be measured")
 
 
 if __name__ == "__main__":
