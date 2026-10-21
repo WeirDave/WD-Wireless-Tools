@@ -8749,6 +8749,8 @@ body.wd-has-update-banner .wd-update-badge { display: none; }
    shared sheet defines its --rc-* colours on .rc-box itself, so they are mapped
    here on a more specific selector rather than on :root. */
 .wd-update-changes { margin-bottom: 12px; }
+/* After an update the list sits under the Restart button, not above Update. */
+.wd-update-body.is-done .wd-update-changes { margin: 12px 0 0; }
 .wd-update-panel .rc-box {
   margin: 0;
   --rc-text: var(--text);
