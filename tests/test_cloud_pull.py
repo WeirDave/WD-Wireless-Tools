@@ -22,13 +22,14 @@ sys.path.insert(0, str(ROOT))
 from tools import cloud_manager as cm  # noqa: E402
 
 
-def _esx(path: Path, name: str, modified_iso: str) -> None:
+def _esx(path: Path, name: str, modified_iso: str, aps=()) -> None:
     with zipfile.ZipFile(path, "w") as z:
         z.writestr("project.json", json.dumps({"project": {
             "id": "proj-1", "name": name, "title": name,
             "history": {"modifiedAt": modified_iso},
         }}))
-        z.writestr("accessPoints.json", json.dumps({"accessPoints": []}))
+        z.writestr("accessPoints.json", json.dumps({"accessPoints": [
+            {"id": "ap-%d" % i, "name": "AP-%03d" % i} for i in aps]}))
         z.writestr("floorPlans.json", json.dumps({"floorPlans": []}))
 
 
@@ -88,6 +89,19 @@ class CloudPullTests(unittest.TestCase):
         )
         return mgr.verify_replace_local("cloud-proj", str(self.local))
 
+    def _own_sync_state(self):
+        """A sync-point store of its own, outside the project folder so it is
+        not mistaken for debris the pull left behind."""
+        from tools import sync_state
+        d = Path(tempfile.mkdtemp(prefix="wd-cloud-pull-state-"))
+        self.addCleanup(shutil.rmtree, d, True)
+        real = sync_state.STATE_FILE
+        sync_state.STATE_FILE = d / "sync_state.json"
+        self.addCleanup(lambda: setattr(sync_state, "STATE_FILE", real))
+        cm._ESX_META_CACHE.clear()
+        self.addCleanup(cm._ESX_META_CACHE.clear)
+        return sync_state
+
     def _strays(self):
         """Everything under the project folder that is not the live file.
 
@@ -131,9 +145,52 @@ class CloudPullTests(unittest.TestCase):
     # ---- everything that must not overwrite --------------------------------
 
     def test_local_newer_is_refused(self):
+        """Newer *and* holding something the cloud copy does not."""
+        _esx(self.local, "Example St - PD", "2026-10-01T08:00:00.000Z", aps=(1, 2))
+        self.original = self.local.read_bytes()
+        res = self._run()
+        self.assertEqual(res.get("error"), "local_newer")
+        self.assertLocalUntouched()
+
+    def test_a_later_date_on_the_same_design_is_not_a_reason_to_refuse(self):
+        """Saved to the cloud from Ekahau, the two copies hold one design but
+        carry dates from two clocks, and the local one can read as newer. That
+        was refused as "your local copy is the newer one" with nothing in the
+        local file for the cloud to lack - and downloading is the way to bring
+        the pair back into step. Nothing is lost, so nothing is refused."""
         _esx(self.local, "Example St - PD", "2026-10-01T08:00:00.000Z")
         self.original = self.local.read_bytes()
         res = self._run()
+        self.assertTrue(res.get("ok"), res)
+        self.assertEqual(self.local.read_bytes(), self.cloud_bytes)
+
+    def test_an_undated_save_of_the_same_design_is_not_refused_either(self):
+        """The size guard fires on any rewrite, including one that changed
+        only how the archive was packed."""
+        sync_state = self._own_sync_state()
+        meta = cm._esx_meta(self.local, int(self.local.stat().st_mtime))
+        sync_state.record("cloud-proj", str(self.local), meta["internalMtime"],
+                          meta["internalMtime"], local_size=1)
+        res = self._run()
+        self.assertTrue(res.get("ok"), res)
+
+    def test_an_undated_edit_that_changed_the_design_is_still_refused(self):
+        sync_state = self._own_sync_state()
+        _esx(self.local, "Example St - PD", LOCAL_OLD, aps=(1, 2, 3))
+        self.original = self.local.read_bytes()
+        meta = cm._esx_meta(self.local, int(self.local.stat().st_mtime))
+        sync_state.record("cloud-proj", str(self.local), meta["internalMtime"],
+                          meta["internalMtime"], local_size=1)
+        res = self._run()
+        self.assertEqual(res.get("error"), "local_newer")
+        self.assertLocalUntouched()
+
+    def test_a_comparison_that_cannot_be_made_refuses(self):
+        """Unknown is not safe: a cloud download that is not a readable
+        archive cannot clear a file that reads as newer."""
+        _esx(self.local, "Example St - PD", "2026-10-01T08:00:00.000Z")
+        self.original = self.local.read_bytes()
+        res = self._run(download={"esx": b"not an archive"})
         self.assertEqual(res.get("error"), "local_newer")
         self.assertLocalUntouched()
 

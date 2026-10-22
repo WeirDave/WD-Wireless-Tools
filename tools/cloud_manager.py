@@ -3822,22 +3822,25 @@ class CloudManager:
                 local_internal_mtime, _esx_size(src))
         except Exception:
             local_edited = False
+        refusal = None
         if local_edited:
-            return {
+            refusal = {
                 "error": "local_newer",
                 "message": ("The local file has been saved since it was last "
                             "synced with the cloud, although the date inside "
-                            "it did not change. Overwriting it would lose "
+                            "it did not change, and it holds changes the "
+                            "cloud copy does not. Overwriting it would lose "
                             "that work. Upload local to cloud first, or skip "
                             "this pair."),
                 "localMtime": local_internal_mtime,
                 "cloudMtime": cloud_mtime,
             }
-        if local_internal_mtime and cloud_mtime and (local_internal_mtime > cloud_mtime + _NEWER_TOLERANCE_S):
-            return {
+        elif local_internal_mtime and cloud_mtime and (local_internal_mtime > cloud_mtime + _NEWER_TOLERANCE_S):
+            refusal = {
                 "error": "local_newer",
-                "message": ("Local file is newer than cloud — overwriting would "
-                            "lose local changes. Upload local to cloud first, or "
+                "message": ("Local file is newer than cloud and holds changes "
+                            "the cloud copy does not — overwriting would "
+                            "lose them. Upload local to cloud first, or "
                             "skip this pair."),
                 "localMtime": local_internal_mtime,
                 "cloudMtime": cloud_mtime,
@@ -3854,6 +3857,30 @@ class CloudManager:
         if isinstance(result, dict) and result.get("error"):
             return result
         esx_bytes = result["esx"]
+
+        if refusal:
+            #: **A date is evidence of local work, not proof of it.** The two
+            #: clocks are Ekahau's and this machine's, and a file saved to the
+            #: cloud from Ekahau can come back stamped by one while the local
+            #: file carries the other - so the local file reads as newer than
+            #: a cloud copy holding exactly the same design, and the pull was
+            #: refused with "your local copy is the newer one" about a file
+            #: with nothing in it the cloud lacks. His way out was to delete
+            #: the local file and download again, which is this same pull with
+            #: the guard removed by hand. The cloud copy is already in memory,
+            #: so the contents settle it: the same design on both sides loses
+            #: nothing, and only a local file holding something the cloud does
+            #: not is refused. A comparison that cannot be made refuses too -
+            #: unknown is not safe.
+            from tools import esx_compare
+            try:
+                verdict = esx_compare.compare_esx(
+                    src.read_bytes(), esx_bytes, local_file_stem=src.stem)
+            except Exception as e:
+                applog.note_failure("comparing before a pull", e)
+                return refusal
+            if verdict.get("error") or verdict.get("designDiffers"):
+                return refusal
 
 
         #: **No copy is kept, and that is the decision rather than an
