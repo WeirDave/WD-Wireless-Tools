@@ -144,7 +144,29 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The browser tests are for stylesheet changes. They run when a .css file
+      # is in the push or pull request (or when started by hand from the
+      # Actions tab); any other change skips the steps below and the job
+      # finishes in seconds, so it neither takes time nor holds a release.
+      - name: Decide whether this change needs the browsers
+        id: css
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          base="$BEFORE"
+          [ "$EVENT" = pull_request ] && base="$PR_BASE"
+          run=true
+          if [ "$EVENT" != workflow_dispatch ] && [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            if git diff --name-only "$base" HEAD | grep -qi '[.]css$'; then run=true; else run=false; fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "Browsers needed: $run"
+
       - name: Set up Python
+        if: ${{ steps.css.outputs.run == 'true' }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: '3.14'
@@ -152,20 +174,24 @@ jobs:
           cache-dependency-path: requirements.txt
 
       - name: Set up Node.js
+        if: ${{ steps.css.outputs.run == 'true' }}
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
         with:
           node-version: '22'
 
       - name: Install dependencies
+        if: ${{ steps.css.outputs.run == 'true' }}
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install -r requirements-dev.txt
 
       - name: Report which browsers are available
+        if: ${{ steps.css.outputs.run == 'true' }}
         run: python -m tests.browsers_report
 
       - name: Run browser tests
+        if: ${{ steps.css.outputs.run == 'true' }}
         run: python scripts/run_tests.py --browsers-only
 
   # Safari, in a job of its own on macOS - the only place it exists.
