@@ -293,10 +293,11 @@ a message clipped at `{"s…`.
 is if we make CSS changes... we don't need to run every release through the
 browser."* **Drive a change through the browsers only when it changes CSS or
 page layout.** Any other change is verified by the suite; do not start a
-browser, and do not hold a release for one. The Safari CI job follows the same
-rule: it runs when a `.css` file changed (or by hand, from the Actions tab),
-and otherwise finishes in seconds - a full Safari run is about 40 minutes
-because the machine allows one session. When a CSS change is checked, it is
+browser, and do not hold a release for one. Every browser CI job (Firefox,
+Chrome, Edge and Safari) follows the same rule: it runs when a `.css` file is
+in the push or pull request (or by hand, from the Actions tab), and otherwise
+finishes in seconds - a full Safari run is about 40 minutes because the
+machine allows one session. When a CSS change is checked, it is
 checked in all four. Safari is checked in CI only
 (see the end of this section); on his machine, the other three:
 
