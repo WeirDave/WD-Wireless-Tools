@@ -164,6 +164,45 @@ class TheAimSheetSaysWhatEachAntennaDoes(ReportCase):
         """)
 
 
+class TheAimMapTellsApsApartAndShowsWhereEachPoints(ReportCase):
+    """A project that colour-codes its APs - here by mount, a tall pole and a
+    low bollard - has to see those colours on the Aim Sheet's floor map, and
+    every sector has to carry an arrow along its own azimuth. An older build
+    drew every marker in one brand colour with a hairline tick, so two mounts
+    that look nothing alike on site were indistinguishable on the sheet."""
+
+    def test_each_ap_is_painted_in_its_own_colour_with_an_arrow_along_its_azimuth(self):
+        self.run_block(KIT + r"""
+          const p = build([floor('f1', 'Level', 1500, 1000)], [
+            { n: 1, x: 300, y: 300, color: '#FFE600', radios: [{ ant: 'dir1', dir: 90 }] },
+            { n: 2, x: 700, y: 300, color: '#0068FF', radios: [{ ant: 'dir1', dir: 180 }] },
+            { n: 3, x: 1100, y: 300, color: '#FF0000', radios: [{ ant: 'dir1', dir: 270 }] },
+            { n: 4, x: 700, y: 700, color: '#0068FF', radios: [{ ant: 'omni1' }] },
+          ]);
+          // One pole at 9 ft, one bollard at 4 ft.
+          const radioOf = id => p.radios.find(r => r.accessPointId === id);
+          radioOf('ap1').antennaMounting = 'POLE';     radioOf('ap1').antennaHeight = 2.74;
+          radioOf('ap2').antennaMounting = 'BOLLARD';  radioOf('ap2').antennaHeight = 1.22;
+          open(p);
+          const html = render('aim', { inclOmni: true, signOff: false, shortLabels: true });
+          const map = html.slice(html.indexOf('rep-aim-map-section'));
+          const groups = map.split('<g class="rep-mark ').slice(1);
+          eq('a marker for every AP', groups.length, 4);
+          const byNumber = {};
+          groups.forEach(function (g) {
+            const num = />(\d+)<\/text>/.exec(g)[1];
+            byNumber[num] = {
+              pill: (/<rect class="rep-mark-pill"[^>]* fill="([^"]*)"/.exec(g) || [])[1],
+              cone: (/<g transform="rotate\(([-\d.]+)\)"><path class="rep-mark-cone"[^>]* fill="([^"]*)"/.exec(g) || []).slice(1),
+            };
+          });
+          eq('the pole sector is yellow, aimed east', [byNumber['1'].pill, byNumber['1'].cone], ['#FFE600', ['90', '#FFE600']]);
+          eq('the bollard sector is blue, aimed south', [byNumber['2'].pill, byNumber['2'].cone], ['#0068FF', ['180', '#0068FF']]);
+          eq('the third sector is red, aimed west', [byNumber['3'].pill, byNumber['3'].cone], ['#FF0000', ['270', '#FF0000']]);
+          eq('an omni is coloured and has no arrow', [byNumber['4'].pill, byNumber['4'].cone], ['#0068FF', []]);
+        """)
+
+
 class TheAimMapIsFittedAndReadable(ReportCase):
 
     def test_the_aim_map_is_a_fitted_plan_page_with_its_numbers_kept_apart(self):
