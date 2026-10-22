@@ -126,14 +126,31 @@ class DrawingTheAreaOnThePlan(BrowserPagesHarness):
         chain.release().perform()
 
     def click(self, drv, canvas, g, *points, double_last=False):
+        # safaridriver's double_click is not what a person's double-click is:
+        # its two clicks arrive with a click count of 1 and as far apart as
+        # the runner's round trips (a slow macOS runner made that longer than
+        # the page's double-click window, and the triangle was never sent).
+        # A real Safari double-click carries a count of 2 on the second
+        # press, so for Safari the second press is dispatched with one.
+        safari = drv.capabilities.get("browserName", "").lower() == "safari"
         chain, to = self.mouse(drv, canvas, g)
         for i, p in enumerate(points):
             to(*p)
-            if double_last and i == len(points) - 1:
+            if double_last and i == len(points) - 1 and not safari:
                 chain.double_click()
             else:
                 chain.click()
         chain.perform()
+        if double_last and safari:
+            x, y = self.at(g, *points[-1])
+            drv.execute_script("""
+              var c = arguments[0], r = c.getBoundingClientRect();
+              var o = {bubbles: true, cancelable: true, button: 0, detail: 2, view: window,
+                       clientX: r.left + r.width / 2 + arguments[1],
+                       clientY: r.top + r.height / 2 + arguments[2]};
+              c.dispatchEvent(new MouseEvent('mousedown', o));
+              c.dispatchEvent(new MouseEvent('mouseup', o));
+            """, canvas, x, y)
 
     def sent(self, drv):
         """The newest floorAreas the page asked the server about, as a dict."""
