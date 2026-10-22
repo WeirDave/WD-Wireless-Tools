@@ -287,9 +287,17 @@ move, rename, delete, share and replace-cloud need ownership; **reads do not**.
 plain language and shows the server's message in full - never a raw status or
 a message clipped at `{"s…`.
 
-### Browser verification — Chrome, Edge, Firefox and Safari, every time
+### Browser verification — when a stylesheet changes, not on every release
 
-**Anything user-facing is checked in all four.** Safari is checked in CI only
+*"the only time I ever said that we needed to run things through the browser
+is if we make CSS changes... we don't need to run every release through the
+browser."* **Drive a change through the browsers only when it changes CSS or
+page layout.** Any other change is verified by the suite; do not start a
+browser, and do not hold a release for one. The Safari CI job follows the same
+rule: it runs when a `.css` file changed (or by hand, from the Actions tab),
+and otherwise finishes in seconds - a full Safari run is about 40 minutes
+because the machine allows one session. When a CSS change is checked, it is
+checked in all four. Safari is checked in CI only
 (see the end of this section); on his machine, the other three:
 
     Chrome   C:\Program Files\Google\Chrome\Application\chrome.exe
