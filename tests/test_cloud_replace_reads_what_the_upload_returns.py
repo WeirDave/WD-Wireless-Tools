@@ -315,6 +315,27 @@ class TheListingIsAskedMoreThanOnceTests(_Base):
         self.assertTrue(out.get("ok"), out)
         self.assertEqual(["old-1"], api.deleted)
 
+    def test_a_large_upload_that_takes_a_minute_to_be_listed_is_waited_for(self):
+        """Eleven seconds of patience gave up on a big file with the upload
+        already in the account, leaving an unassigned duplicate and the old
+        project untouched. Eleven reads of lag is past what the old schedule
+        could cover (ten in total, across both waits)."""
+        mgr, api = self._mgr(listing_lag=11)
+        out = mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertTrue(out.get("ok"), out)
+        self.assertEqual(["old-1"], api.deleted)
+        self.assertEqual(1, len(api.uploaded), "it uploaded more than once")
+
+    def test_the_wait_for_a_new_upload_is_measured_in_minutes_not_seconds(self):
+        slept = []
+        with mock.patch.object(cm.time, "sleep", lambda s: slept.append(s)):
+            mgr, api = self._mgr(never_appears=True)
+            mgr.replace_cloud_project(str(self.esx), "old-1")
+        self.assertGreaterEqual(sum(slept), 120, slept)
+        self.assertLessEqual(sum(slept), 240,
+                             "the second look must be short, not a second "
+                             "full wait: %r" % slept)
+
     def test_verify_uploaded_asks_again_before_giving_up(self):
         mgr, api = self._mgr()
         api._pending = {"id": "new-1", "name": "x"}
@@ -379,6 +400,23 @@ class ItSaysWhatItUploadedTests(_Base):
                       f"the report does not name what it uploaded: {out}")
         self.assertIn("two copies", note.lower(),
                       f"the report does not say a duplicate exists: {out}")
+
+    def test_the_note_says_where_the_orphan_is_and_not_to_replace_again(self):
+        """An upload that is not listed is under Unassigned projects, named
+        from inside the file - not necessarily the filename - and the step he
+        is tempted to take (run the replace again) makes a third copy. The
+        note names the place, both possible names, the order of the manual
+        steps, and that warning."""
+        mgr, api = self._mgr(never_appears=True)
+        note = mgr.replace_cloud_project(str(self.esx), "old-1").get("note") or ""
+        low = note.lower()
+        self.assertIn("Unassigned projects", note, note)
+        self.assertIn("Stale Internal Name", note,
+                      "the name Ekahau gives it, taken from inside the file")
+        self.assertIn("Riverside Block - Phase 3", note)
+        self.assertIn("replace again", low, note)
+        self.assertLess(low.index("rename it"), low.index("delete the older"),
+                        "the delete must come last")
 
     def test_a_failed_upload_still_says_nothing_was_deleted(self):
         """The other side of it: no upload, no duplicate, and say so."""

@@ -3146,24 +3146,43 @@ class CloudManager:
                             .get("projectName") or "")
             except Exception:
                 internal = ""
+            # The upload has just spent its full patience on this same
+            # question; one more short look catches a listing that updated
+            # in the gap, and a second long wait would only double the stall.
             found = self._await_new_project(
                 set(before), esx_path,
-                expect_names=(uploaded_as, internal, old_name))
+                expect_names=(uploaded_as, internal, old_name),
+                backoff=self._LISTING_BACKOFF_S)
             new_id = found.get("id") or ""
             if found.get("name"):
                 uploaded_as = found["name"]
 
         if not new_id:
+            #: Say where the orphan is and what to do with it, in order. It
+            #: was uploaded but never renamed, never filed into the site and
+            #: never synced back, so it turns up under Unassigned projects
+            #: with the name from inside the file - which can differ from
+            #: the filename. And say not to run the replace again: that
+            #: uploads a third copy.
+            names = [uploaded_as]
+            if internal and internal.strip().lower() != uploaded_as.lower():
+                names.append(internal.strip())
             return {"error": "The upload finished, but Ekahau has not listed "
                              "the new project yet, so the old one was left "
                              "alone.",
                     "step": "verify", "deletedOld": False,
                     "uploadedAs": uploaded_as, "oldId": cloud_project_id,
-                    "note": "Your local file was uploaded as \"%s\". There are "
-                            "almost certainly two copies in the cloud now - "
-                            "the older one, and this upload. Refresh in a "
-                            "moment, check which is which, and remove the one "
-                            "you do not want." % uploaded_as}
+                    "note": "Your local file was uploaded, so there are two "
+                            "copies in the cloud: the older one (\"%s\") and "
+                            "this upload. Do not run the replace again - that "
+                            "would add a third. Refresh in a minute. The "
+                            "upload will be under Unassigned projects, named "
+                            "%s, because it was not renamed or filed into a "
+                            "site. Rename it to \"%s\", assign it to the "
+                            "site, and only then delete the older one."
+                            % (old_name or "the existing project",
+                               " or ".join("\"%s\"" % n for n in names),
+                               Path(esx_path).stem)}
 
         # ---- 2. verify before destroying anything ------------------------
         if progress_cb:
@@ -3276,8 +3295,19 @@ class CloudManager:
     # case answers on the first read and costs nothing.
     _LISTING_BACKOFF_S = (0.0, 1.0, 2.0, 3.0, 5.0)
 
+    #: How long to wait for a *new upload* to appear, as opposed to a project
+    #: we already know the id of. Ekahau lists a project only after it has
+    #: processed the file, and that scales with the file: eleven seconds was
+    #: enough for a small survey and not for a large one. The tool then gave
+    #: up with the upload sitting in the account unassigned and unrenamed,
+    #: the old project untouched, and two copies for him to untangle by hand.
+    #: About two and a half minutes in total; the usual case still answers on
+    #: the first read and costs nothing.
+    _UPLOAD_PATIENCE_S = (0.0, 1.0, 2.0, 3.0, 5.0, 8.0, 10.0, 15.0, 15.0,
+                          20.0, 20.0, 30.0, 30.0)
+
     def _await_new_project(self, before_ids, esx_path, expect_names=(),
-                           progress_cb=None):
+                           progress_cb=None, backoff=None):
         """The project this upload created, once the listing admits it exists.
 
         Only reached when the upload could not name what it made, and the
@@ -3312,7 +3342,8 @@ class CloudManager:
         names = {n.strip().lower() for n in expect_names if n and n.strip()}
 
         waited = 0.0
-        for wait in self._LISTING_BACKOFF_S:
+        for wait in (backoff if backoff is not None
+                     else self._UPLOAD_PATIENCE_S):
             if wait:
                 time.sleep(wait)
                 waited += wait
