@@ -5664,6 +5664,21 @@
       + '</div>';
   }
 
+  /* A canvas that starts white. A floor plan can be transparent - a CAD plan
+     is an SVG whose page is not painted - and both the crops below encode as
+     JPEG, which has no alpha: an unpainted canvas turns every transparent
+     pixel black, so the whole map printed as a black rectangle with the dark
+     plan lines lost in it. PlanTrim (2.190.0) and Prep (2.191.2) fixed the same
+     symptom by painting white underneath; this is the Report's copy of that. */
+  function whiteCanvas(w, h) {
+    var c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    var g = c.getContext('2d', {willReadFrequently: true});
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, w, h);
+    return c;
+  }
+
   function cropAntennaSegment(overlayEl) {
     sizeAntennaSegmentForPrint(overlayEl);
     if (overlayEl._segCropPromise) return overlayEl._segCropPromise;
@@ -5696,9 +5711,8 @@
       var srcW = Math.min(natW - srcX, Math.max(1, Math.round(natW * (x1 - x0) / W)));
       var srcH = Math.min(natH - srcY, Math.max(1, Math.round(natH * (y1 - y0) / H)));
       var outScale = Math.min(2, 1800 / Math.max(srcW, srcH));
-      var c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round(srcW * outScale));
-      c.height = Math.max(1, Math.round(srcH * outScale));
+      var c = whiteCanvas(Math.max(1, Math.round(srcW * outScale)),
+                          Math.max(1, Math.round(srcH * outScale)));
       c.getContext('2d').drawImage(img, srcX, srcY, srcW, srcH, 0, 0, c.width, c.height);
       c.toBlob(function (blob) {
         if (!blob) { done(); return; }
@@ -9243,8 +9257,7 @@
       var scale = Math.min(1, 500 / Math.max(natW, natH));
       var sW = Math.max(1, Math.round(natW * scale));
       var sH = Math.max(1, Math.round(natH * scale));
-      var c = document.createElement('canvas');
-      c.width = sW; c.height = sH;
+      var c = whiteCanvas(sW, sH);
       var g = c.getContext('2d', {willReadFrequently: true});
       g.drawImage(img, 0, 0, sW, sH);
       var data;
@@ -9291,9 +9304,8 @@
       var srcW = Math.round(natW * cW / VBW);
       var srcH = Math.round(natH * cH / VBH);
       var outScale = Math.min(1, 2000 / Math.max(srcW, srcH));
-      var out = document.createElement('canvas');
-      out.width = Math.max(1, Math.round(srcW * outScale));
-      out.height = Math.max(1, Math.round(srcH * outScale));
+      var out = whiteCanvas(Math.max(1, Math.round(srcW * outScale)),
+                            Math.max(1, Math.round(srcH * outScale)));
       out.getContext('2d').drawImage(img, srcX, srcY, srcW, srcH,
                                      0, 0, out.width, out.height);
       return new Promise(function (done) {
