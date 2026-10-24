@@ -3421,6 +3421,54 @@ class CloudManager:
                 "localProjectId": local_id, "project": found}
 
 
+    def _with_patience(self, fn, what):
+        """Run `fn`, asking again on a short rising schedule if it raises.
+
+        For the steps that follow an upload: Ekahau lists the new project
+        before the site service and the batch download can see it, so the
+        first call after an upload is the one most likely to be refused for
+        no reason that persists. The last failure is raised, and every earlier
+        one is logged so a refusal that needed three tries is still on record.
+        """
+        last = None
+        for wait in self._LISTING_BACKOFF_S:
+            if wait:
+                time.sleep(wait)
+            try:
+                return fn()
+            except Exception as e:
+                last = e
+                applog.get_logger().info("%s: attempt refused (%s)", what, e)
+        raise last
+
+    def _record_upload_sync_point(self, new_id, src):
+        """Note that the local file and the new cloud project are the same.
+
+        The sync-back has just written the cloud's copy over the local file,
+        which is exactly the state `sync_state.record` describes - and the
+        replace path already records it. Without this the first upload left no
+        note, so the row compared a local file whose dates had just moved
+        against a cloud project it had never been paired with, and read as
+        changed on one side or the other instead of settled.
+        """
+        try:
+            cloud_m = 0
+            try:
+                for p in self.api.get_projects():
+                    if p.get("id") == new_id:
+                        cloud_m = _parse_cloud_mtime(p)
+                        break
+            except Exception:
+                cloud_m = 0
+            fs_m = int(src.stat().st_mtime)
+            sync_state.record(new_id, str(src),
+                              cloud_m or fs_m,
+                              _esx_meta(src, fs_m).get("internalMtime") or fs_m,
+                              direction="push",
+                              local_size=_esx_size(src))
+        except Exception as e:
+            applog.note_failure("recording the sync point", e)
+
     def upload_project(self, esx_path, site_id=None, progress_cb=None):
         """Upload .esx to cloud. If site_id given, auto-assign to that site.
 
@@ -3509,6 +3557,7 @@ class CloudManager:
 
 
             renamed_to = None
+            rename_error = ""
             if new_id and new_project:
                 desired_name = Path(esx_path).stem
                 cloud_name = (new_project.get("name") or "").strip()
@@ -3520,9 +3569,12 @@ class CloudManager:
                         self.api.rename_project(new_id, desired_name)
                         renamed_to = desired_name
                     except Exception as e:
-
-
+                        #: Carried on from, but said: the cloud keeps the name
+                        #: from inside the file, and without a word here that
+                        #: looked like the upload having ignored the filename.
                         renamed_to = None
+                        rename_error = str(e)
+                        applog.note_failure("renaming the uploaded project", e)
 
 
             if site_id and new_id:
@@ -3530,7 +3582,9 @@ class CloudManager:
                     if progress_cb:
                         progress_cb(current=65,
                                     message="Assigning project to site…")
-                    self.api.assign_to_site(site_id, new_id)
+                    self._with_patience(
+                        lambda: self.api.assign_to_site(site_id, new_id),
+                        "assigning the uploaded project to its site")
                     ret = {"ok": True, "assigned": True, "siteId": site_id,
                            "datasetId": new_id}
                     if renamed_to:
@@ -3560,6 +3614,11 @@ class CloudManager:
                 ret = {"ok": True, "uploaded": True, "datasetId": new_id}
                 if renamed_to:
                     ret["renamedTo"] = renamed_to
+            if rename_error:
+                ret["renameError"] = rename_error
+                ret.setdefault("warning",
+                               "Uploaded, but the cloud project could not be "
+                               "renamed to match the file: " + rename_error)
 
             # ── Sync-back: download the cloud copy over the local file ──
             # The cloud assigns its own project ID and metadata to the
@@ -3572,8 +3631,20 @@ class CloudManager:
                         progress_cb(current=68,
                                     message="Syncing cloud copy back to local…")
 
-                    dl = self.api.download_project(
-                        new_id, progress_cb=_remap(progress_cb, 68, 96))
+                    #: Ekahau answers the listing before the batch download
+                    #: is ready for a project it has only just processed, so a
+                    #: first refusal is asked again rather than reported.
+                    def _fetch():
+                        got = self.api.download_project(
+                            new_id, progress_cb=_remap(progress_cb, 68, 96))
+                        if isinstance(got, dict) and got.get("error"):
+                            raise RuntimeError(got["error"])
+                        return got
+                    try:
+                        dl = self._with_patience(
+                            _fetch, "syncing the uploaded project back")
+                    except RuntimeError as e:
+                        dl = {"error": str(e)}
                     if isinstance(dl, dict) and dl.get("error"):
                         ret["syncBackError"] = dl["error"]
                         ret.setdefault("warning",
@@ -3591,7 +3662,9 @@ class CloudManager:
                         _ESX_META_CACHE.pop(str(src), None)
                         _ESX_TYPE_CACHE.pop(str(src), None)
                         ret["syncedBack"] = True
+                        self._record_upload_sync_point(new_id, src)
                 except Exception as e:
+                    applog.note_failure("syncing the uploaded project back", e)
                     ret["syncBackError"] = str(e)
                     ret.setdefault("warning",
                                    f"Uploaded OK, but sync-back failed: {e}")
