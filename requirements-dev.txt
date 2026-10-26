@@ -24,3 +24,10 @@
 # present, so nothing here has to install geckodriver or chromedriver - is
 # in every 4.x release well below this floor.
 selenium>=4.36.0
+#
+# `pymupdf` reads back the PDF that Firefox prints, so a test can measure the
+# sheet instead of assuming it. `tests/test_dev_toolbar_does_not_print.py`
+# skips without it, and nothing installed it, so on the runner that test was
+# a skip reported as a pass. Wheels are abi3, so one floor covers every
+# Python the matrix uses.
+pymupdf>=1.24.0

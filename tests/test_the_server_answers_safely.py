@@ -306,6 +306,21 @@ class TheUploadRoutesUseIt(unittest.TestCase):
         self.assertEqual(400, r.status_code)
         self.assertIn("single file", r.get_json()["error"].lower())
 
+    def test_prep_refuses_it_when_opened_from_disk_too(self):
+        """Opened from disk nothing is uploaded, so there is no copy to check
+        on the way in - and the preview re-reads the archive on every change."""
+        from unittest.mock import patch
+        tmp = Path(tempfile.mkdtemp(prefix="wd-prep-bomb-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        on_disk = tmp / "invented.esx"
+        on_disk.write_bytes(self.bomb)
+        with patch.dict(server._PREP_PROJECT, {"path": str(on_disk)}):
+            for action in ("plan", "run", "suggest"):
+                with self.subTest(action=action):
+                    r = self.post(f"/api/prep/{action}?source=disk")
+                    self.assertEqual(400, r.status_code, r.get_data(as_text=True))
+                    self.assertIn("single file", r.get_json()["error"].lower())
+
     def test_the_refusal_is_a_sentence_rather_than_a_fault(self):
         """400 with words, not 500 with "something went wrong"."""
         body = self.post("/api/plantrim/analyze?name=x.esx").get_json()

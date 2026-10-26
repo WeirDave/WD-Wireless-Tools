@@ -54,6 +54,28 @@ class SeveralAddressesInOneFieldTests(unittest.TestCase):
         self.assertEqual(["ada@example.com", "bo@example.net"],
                          sr.split_addresses(pasted))
 
+    def test_a_plain_address_before_a_named_one_is_not_swallowed(self):
+        """The display-name part of `Name <addr>` used to run backwards across
+        separators and eat every plain address typed before it, so a share went
+        to fewer people than were typed."""
+        for text, want in (
+            ("a@example.com, Bob Sample <b@example.com>",
+             ["a@example.com", "b@example.com"]),
+            ("a@example.com; b@example.org\nBob <c@example.net>",
+             ["a@example.com", "b@example.org", "c@example.net"]),
+            ('x@example.com, "Sample, Bob" <b@example.com>, y@example.org',
+             ["x@example.com", "b@example.com", "y@example.org"]),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(want, sr.split_addresses(text))
+
+    def test_a_long_list_without_brackets_is_not_quadratic(self):
+        import time
+        text = "a@example.com " * 4000
+        start = time.perf_counter()
+        sr.split_addresses(text)
+        self.assertLess(time.perf_counter() - start, 1.0)
+
     def test_order_is_kept_and_duplicates_are_not(self):
         self.assertEqual(
             ["a@example.com", "b@example.com"],

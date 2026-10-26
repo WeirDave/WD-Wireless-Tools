@@ -1714,13 +1714,13 @@
       var ink = WD.readableOn(hex);
       var ring = WD.outlineOn(hex);
       return '<div class="ar-cseq-row" data-i="' + i + '"' +
-        ' tabindex="0" role="listitem" style="--cseq-color:' + esc(hex) + '"' +
+        ' tabindex="0" role="listitem" style="--cseq-color:' + escAttr(hex) + '"' +
         ' title="Drag to reorder"' +
         ' aria-label="' + escAttr(colorLabel(k)) + ', position ' + (i + 1) +
         ' of ' + (last + 1) + '. Drag to reorder, or use the arrow keys.">' +
         '<span class="ar-cseq-edge"></span>' +
-        '<span class="ar-cseq-dot" style="background:' + esc(hex) +
-          ';color:' + esc(ink) + ';border-color:' + esc(ring) + '">' + (i + 1) + '</span>' +
+        '<span class="ar-cseq-dot" style="background:' + escAttr(hex) +
+          ';color:' + escAttr(ink) + ';border-color:' + escAttr(ring) + '">' + (i + 1) + '</span>' +
         '<span class="ar-cseq-name">' + esc(colorLabel(k)) + '</span>' +
         '<span class="ar-cseq-ct">' + state.byKey[k] +
           ' AP' + (state.byKey[k] === 1 ? '' : 's') + '</span>' +
@@ -2663,7 +2663,7 @@
         // Named, not just coloured: a dot on its own says nothing, and the
         // name is the word he sees in Ekahau's own menu.
         swatch = '<span title="' + escAttr(colorLabel(colorKey(it.ap.color))) +
-          '" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + rc + ';border:' + border + ';vertical-align:middle;margin-right:4px"></span>';
+          '" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + escAttr(rc) + ';border:' + border + ';vertical-align:middle;margin-right:4px"></span>';
       } else {
         swatch = '<span title="' + escAttr(colorLabel(WD.CLEAR_KEY)) +
           '" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#fff;border:2px solid #222;vertical-align:middle;margin-right:4px;box-sizing:border-box"></span>';

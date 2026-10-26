@@ -186,6 +186,37 @@ class AttributeEscaping(unittest.TestCase):
             "attribute values must use escAttr/a(), which escapes the quote:\n  "
             + "\n  ".join(offenders))
 
+    def test_a_colour_written_into_markup_goes_through_the_attribute_escaper(self):
+        """A colour is read out of the project file and lands in `style="..."`.
+
+        `esc` leaves the quote, and a raw interpolation leaves everything, so
+        either one lets a colour such as `rgb(1" data-fn="..." x="2)` close the
+        style attribute and add its own. v2.236 found eight sites: two used
+        `esc`, the rest interpolated the colour as it was. The executed check is
+        `test_a_colour_from_a_project_stays_in_its_attribute.py`; this one is
+        for the sites that check cannot reach.
+        """
+        prop = (r"(?:--[a-z-]*(?:color|colour|swatch)[a-z-]*|background(?:-color)?"
+                r"|(?<![-\w])color|border-color|fill|stroke)")
+        patterns = [
+            re.compile(prop + r"""\s*:\s*['"]\s*\+\s*(?=\S)(?!(?:WD\.)?escAttr\()"""),
+            re.compile(prop + r"""\s*:\s*\$\{\s*(?=\S)(?!(?:WD\.)?escAttr\()"""),
+        ]
+        offenders = []
+        for path in sorted(JS_DIR.glob("*.js")):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            comments = _comment_lines(text)
+            for lineno, line in enumerate(text.split("\n"), 1):
+                if lineno in comments:
+                    continue
+                for pattern in patterns:
+                    if pattern.search(line):
+                        offenders.append(f"{path.name}:{lineno} {line.strip()[:90]}")
+        self.assertEqual(
+            [], offenders,
+            "a colour in a style attribute must be wrapped in escAttr(...):\n  "
+            + "\n  ".join(offenders))
+
     def test_no_value_is_escaped_by_stringify_and_a_replace(self):
         """The shape that got past the check above, twice.
 

@@ -1224,13 +1224,12 @@
     if (proj.imageUrls[imageId]) return proj.imageUrls[imageId];
     var entry = esxZip.file('image-' + imageId);
     if (!entry) return null;
-    var blob = await entry.async('blob');
+    var bytes = await entry.async('uint8array');
     var meta = proj.images[imageId] || {};
-    var mime = meta.imageFormat === 'SVG' ? 'image/svg+xml'
-      : meta.imageFormat === 'JPEG' ? 'image/jpeg'
-      : meta.imageFormat === 'PNG' ? 'image/png'
-      : 'image/*';
-    var typed = new Blob([blob], { type: mime });
+    // What the file is wins over what images.json calls it - a plan labelled
+    // PNG that is really an SVG is refused outright when typed image/png.
+    var mime = WD.imageMime(bytes, meta.imageFormat);
+    var typed = new Blob([bytes], mime ? { type: mime } : undefined);
     var url = URL.createObjectURL(typed);
     proj.imageUrls[imageId] = url;
     return url;

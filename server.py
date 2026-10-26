@@ -1279,7 +1279,10 @@ def api_prep(action):
         else:
             src = Path(tmpdir) / "in.esx"
             src.write_bytes(blob)
-            esx_guard.check(src)
+        # Both branches: a project opened from disk is read where it lies, and
+        # the preview re-reads it on every change. The check reads only the
+        # central directory.
+        esx_guard.check(src)
         if action == "suggest":
             # PlanTrim's Suggest, on whichever copy Prep has: the one on disk
             # or the one just sent. Proposals only - the page puts them on the
@@ -2122,6 +2125,9 @@ def api_update():
                                         install_git_if_missing=install_git)
     except updater.UpdateError as e:
         print(f"  [update] FAILED: {e}", flush=True)
+        # A refusal is part of normal use, so a warning; but it goes in the one
+        # log, which is what is left once the terminal line has scrolled away.
+        applog.note_failure("update", e, level=logging.WARNING)
         return jsonify({
             "ok": False,
             "error": str(e),

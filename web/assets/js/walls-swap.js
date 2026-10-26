@@ -520,7 +520,7 @@
     }
     el.innerHTML = rows.map(r => `
       <button class="swap-legend-row" data-action="call" data-fn="selectAllOfType" data-arg="${escAttr(r.key)}" title="Select all ${escAttr(r.name)} walls on this floor">
-        <span class="swap-legend-swatch" style="--swap-swatch:${r.color}"></span>
+        <span class="swap-legend-swatch" style="--swap-swatch:${escAttr(r.color)}"></span>
         <span class="swap-legend-name">${esc(r.name)}</span>
         <span class="swap-legend-count">${r.count}</span>
       </button>
@@ -666,7 +666,7 @@
         +     'data-group-key="' + escAttr(gr.key) + '"' + parentAttrs
         +     ' data-action-change="call" data-fn="toggleSwapGroup" data-arg-this="1" '
         +     'title="Check or uncheck every ' + escAttr(gr.name) + ' in the selection">'
-        +   '<span class="swap-legend-swatch" style="--swap-swatch:' + gr.color + '"></span>'
+        +   '<span class="swap-legend-swatch" style="--swap-swatch:' + escAttr(gr.color) + '"></span>'
         +   '<span class="swap-legend-name">' + esc(gr.name) + '</span>'
         +   '<span class="swap-sel-group-count">' + gr.checked + ' of ' + gr.segs.length + '</span>'
         + '</div>'

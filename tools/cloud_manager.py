@@ -2705,8 +2705,11 @@ def pick_folder_dialog(initial=""):
         kwargs = {}
         if sys.platform == "win32":
             kwargs["creationflags"] = 0x08000000
+        # UTF-8 both ways - see folder_organizer._tk_dialog_result.
+        env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
         out = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                             text=True, timeout=180, **kwargs)
+                             encoding="utf-8", errors="replace", timeout=180,
+                             env=env, **kwargs)
         return out.stdout.strip()
     except Exception:
         return ""

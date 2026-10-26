@@ -63,7 +63,13 @@ def split_addresses(text: str) -> list[str]:
     """
     if not text:
         return []
-    cleaned = re.sub(r"[^<>]*<([^>]+)>", r"\1 ", text)
+    # The display name stops at a separator, or it would run backwards over
+    # every plain address typed before it. A quoted name may hold a comma.
+    # Skipped when there is no bracket: scanning for a name from every start
+    # position is quadratic on a long plain list.
+    cleaned = text
+    if "<" in text:
+        cleaned = re.sub(r'(?:"[^"]*"|[^<>,;\r\n"])*<([^<>]+)>', r"\1 ", text)
     out, seen = [], set()
     for chunk in _SEPARATORS.split(cleaned):
         candidate = chunk.strip().strip("<>,;").lower()

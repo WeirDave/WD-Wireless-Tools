@@ -46,6 +46,7 @@ conservative half of the problem rather than a guess at provenance.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 import zipfile
@@ -362,6 +363,22 @@ def plan(esx_path, steps=None, wall_types=None, template=None, occupants=None,
 
 # ── the run ──────────────────────────────────────────────────────────────────
 
+def _publish(staged: Path, target: Path) -> None:
+    """Put the finished project at *target* in one rename.
+
+    The staged file lives in a temp directory that may be on another drive, so
+    it is copied beside *target* first. ``shutil.move`` straight onto an
+    existing "(prepared)" file falls back, on Windows, to copying over it, and a
+    failure part-way leaves a truncated project where the last good one was.
+    """
+    part = target.with_name(target.name + ".part")
+    try:
+        shutil.copyfile(staged, part)
+        os.replace(part, target)
+    finally:
+        part.unlink(missing_ok=True)
+
+
 def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
         occupants=None, margin: int | str = esx_trimmer.DEFAULT_MARGIN_PRESET,
         boxes=None, retighten: bool = True, floor_occupants=None,
@@ -526,7 +543,7 @@ def run(esx_path, dest=None, steps=None, wall_types=None, template=None,
         #: destination, so the source is still sitting where it was. That is
         #: the whole of the safety here, and it is better than a copy aside:
         #: the original keeps its own name and needs no restoring.
-        shutil.move(str(cur), str(target))
+        _publish(cur, target)
         result.update(written=True, path=str(target))
         return result
     finally:

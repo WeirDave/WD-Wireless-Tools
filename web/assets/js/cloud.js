@@ -1151,7 +1151,10 @@ function onData(kind, jsonStr, opts) {
      automatically just had those files go away" is what the other behaviour
      looks like from his side - and the held-back candidates are exactly the
      thing the matcher can recompute differently between two polls. */
-  if (background) {
+  //: Only when something has been drawn. After a failed first load there is
+  //: nothing he is reading, and setting `data` back to the never-drawn null
+  //: broke every later render.
+  if (background && _drawnData) {
     const now = _viewFingerprint(data);
     if (now === _drawnFingerprint) { _pendingData = null; _showRefreshBar(false); return; }
     _pendingData = jsonStr;
@@ -3194,7 +3197,10 @@ function renderHeldBackSection(heldBack) {
    operation, not a second implementation of it. */
 async function heldBackNoneOfThese(localPath) {
   const group = _groupHeldBack(_collectHeldBack(buildPassOwner(ownerFilter(),
-    (data && data.currentUser) || ''))).find(g => g.local && g.local.path === localPath);
+    (data && data.currentUser) || ''))).find(
+      //: The button carries the path through `p()`, which turns backslashes into
+      //: slashes; the group holds it as the server sent it. Compare like with like.
+      g => g.local && np(g.local.path) === np(localPath));
   if (!group || !group.candidates.length) return;
 
   const n = group.candidates.length;
@@ -4414,9 +4420,12 @@ function fixInternalName(localPath, cloudName, label, cloudId) {
      notices. "I shouldn't have to recheck twice." */
   promise.then(() => {
     if (cloudId) return settlePair(cloudId, localPath);
+    _setRowBusy(cloudId, localPath, null);
     _scheduleOpRefresh();
   }).catch(() => {
-    if (cloudId) _setRowBusy(cloudId, localPath, null);
+    // Whether or not the row has a cloud side: the mark is keyed on both, and
+    // one that is never cleared fires the 30 s "taking longer" toast later.
+    _setRowBusy(cloudId, localPath, null);
   });
 }
 
@@ -4434,7 +4443,7 @@ function bulkFixInternalNames() {
   }
   clearSelection();
   rows.forEach(d => fixInternalName(
-    d.localPath, d.cloudName, d.localName || d.cloudName));
+    d.localPath, d.cloudName, d.localName || d.cloudName, d.cloudId));
   toast(`Setting the project name inside ${rows.length} file`
     + (rows.length === 1 ? '' : 's'), 'info');
 }
@@ -8240,19 +8249,22 @@ function refreshSelAll() {
 }
 /* A <details> menu stays open after a click, leaving it covering the row the
    action just ran on. Close it on any activation inside, and on a click
-   anywhere else. Escape closes them all. */
+   anywhere else. Escape closes them all. That is the main menu (`.wd-menu`)
+   and every row's action menu (`details.row-menu`); the row menus were left
+   out and stayed open until the same summary was clicked again. */
+const OPEN_MENUS = '.wd-menu[open], details.row-menu[open]';
 document.addEventListener('click', (ev) => {
-  const inside = ev.target.closest ? ev.target.closest('.wd-menu') : null;
-  document.querySelectorAll('.wd-menu[open]').forEach(m => {
+  const inside = ev.target.closest ? ev.target.closest('.wd-menu, details.row-menu') : null;
+  document.querySelectorAll(OPEN_MENUS).forEach(m => {
     if (m !== inside) m.open = false;
   });
-  if (inside && ev.target.closest('.wd-menu-item')) {
+  if (inside && ev.target.closest('.wd-menu-item, .row-menu-item')) {
     setTimeout(() => { inside.open = false; }, 0);
   }
 });
 document.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape') {
-    document.querySelectorAll('.wd-menu[open]').forEach(m => { m.open = false; });
+    document.querySelectorAll(OPEN_MENUS).forEach(m => { m.open = false; });
   }
 });
 

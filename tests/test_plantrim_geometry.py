@@ -271,6 +271,21 @@ class SvgIsCroppedByMovingItsWindowTests(unittest.TestCase):
         self.assertEqual((400.0, 300.0), (w, h))
         self.assertEqual((200.0, 100.0, 800.0, 600.0), vb)
 
+    def test_a_hyphenated_attribute_on_the_root_is_not_the_size(self):
+        """`stroke-width` ends in `width`, and a word boundary sits after the
+        hyphen, so the crop used to rewrite the stroke and leave the real width
+        and the viewBox disagreeing."""
+        blob = (b'<svg xmlns="http://www.w3.org/2000/svg" stroke-width="2" '
+                b'data-height="9" width="1000" height="500"><g/></svg>')
+        _s, _e, w, h, vb = T.svg_viewport(blob)
+        self.assertEqual((1000.0, 500.0, None), (w, h, vb))
+        out = T.crop_svg(blob, (100, 50, 600, 300))
+        _s, _e, w, h, vb = T.svg_viewport(out)
+        self.assertEqual((500.0, 250.0), (w, h))
+        self.assertEqual((100.0, 50.0, 500.0, 250.0), vb)
+        self.assertIn(b'stroke-width="2"', out)
+        self.assertIn(b'data-height="9"', out)
+
     def test_the_body_of_the_document_is_copied_through_untouched(self):
         out = T.crop_svg(self.PLAIN, (0, 0, 400, 300))
         self.assertIn(b'<rect x="1" y="1" width="10" height="10"/>', out)

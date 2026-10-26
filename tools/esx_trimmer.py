@@ -63,7 +63,6 @@ from __future__ import annotations
 import io
 import json
 import re
-import shutil
 import struct
 import zipfile
 from dataclasses import dataclass, field
@@ -638,7 +637,12 @@ def offset_metadata(members: dict, floor_id: str, dx: float, dy: float,
 #: megabytes - there is no reason to parse the whole thing to edit one element.
 _SVG_HEAD_BYTES = 8192
 _SVG_ROOT = re.compile(rb"<svg\b[^>]*>", re.S)
-_SVG_ATTR = re.compile(rb'(\b(?:width|height|viewBox)\s*=\s*)(["\'])(.*?)\2', re.S)
+#: Anchored by what may not come before the name, not by `\b`: a word boundary
+#: sits after a hyphen, so `stroke-width` or `data-height` on the root would
+#: otherwise be read, and rewritten, as the size.
+_SVG_NAME_START = rb"(?<![\w:.-])"
+_SVG_ATTR = re.compile(
+    _SVG_NAME_START + rb'((?:width|height|viewBox)\s*=\s*)(["\'])(.*?)\2', re.S)
 
 
 def svg_viewport(blob: bytes):
@@ -832,7 +836,7 @@ def crop_svg(blob: bytes, box) -> bytes:
     tag = blob[start:end]
     for attr, value in (("width", _svg_num(new_w)), ("height", _svg_num(new_h)),
                         ("viewBox", " ".join(_svg_num(v) for v in view))):
-        pattern = re.compile(rb'\b' + attr.encode() + rb'\s*=\s*(["\']).*?\1',
+        pattern = re.compile(_SVG_NAME_START + attr.encode() + rb'\s*=\s*(["\']).*?\1',
                              re.S | re.I)
         replacement = f'{attr}="{value}"'.encode()
         if pattern.search(tag):
@@ -1596,18 +1600,23 @@ def _run(source: Path, dest: Path | None, margin, dry_run: bool,
 
     tmp = Path(str(dest) + ".tmp")
     tmp.parent.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(source) as zin, \
-            zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
-        for info in zin.infolist():
-            n = info.filename
-            if n.startswith("image-") and n[len("image-"):] in new_images:
-                zout.writestr(n, new_images[n[len("image-"):]])
-            elif n in dirty and members.get(n) is not None:
-                zout.writestr(n, json.dumps(members[n], indent=1))
-            else:
-                zout.writestr(info, raw[n])
-
-    shutil.move(str(tmp), str(dest))
+    try:
+        with zipfile.ZipFile(source) as zin, \
+                zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
+            for info in zin.infolist():
+                n = info.filename
+                if n.startswith("image-") and n[len("image-"):] in new_images:
+                    zout.writestr(n, new_images[n[len("image-"):]])
+                elif n in dirty and members.get(n) is not None:
+                    zout.writestr(n, json.dumps(members[n], indent=1))
+                else:
+                    zout.writestr(info, raw[n])
+        # One rename, never shutil.move: on Windows a rename onto an existing
+        # file raises, and move() then copies straight over the destination,
+        # where a failure part-way leaves a truncated project.
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
     report.bytes_after = Path(dest).stat().st_size
     report.written = True
     return report

@@ -86,9 +86,13 @@
       .replace(/"/g, '&quot;');
   };
 
+  /* A colour that is safe to put in a style value. The functional forms take
+     only the characters a colour can contain, never "[^)]+": a colour comes out
+     of a project file, and a quote inside the parentheses would close the
+     attribute it is written into. */
   WD.safeColor = function (c) {
     if (typeof c !== 'string') return '#888';
-    return /^#[0-9a-fA-F]{3,8}$|^rgba?\([^)]+\)$|^hsla?\([^)]+\)$/.test(c) ? c : '#888';
+    return /^#[0-9a-fA-F]{3,8}$|^(?:rgb|hsl)a?\(\s*[0-9.%,\/\s-]+\)$/.test(c) ? c : '#888';
   };
 
   /* ── A floor plan's image type ───────────────────────────────────
@@ -1914,50 +1918,10 @@
       });
   };
 
-  function checkServerVersion() {
-    fetch('/api/version', { cache: 'no-store' }).then(function (r) {
-      return r.ok ? r.json() : null;
-    }).then(function (info) {
-      if (!info) return;
-      var existing = document.getElementById('wdStaleBanner');
-      if (!info.restartReady) { if (existing) existing.remove(); return; }
-      if (existing) return;
-      var b = document.createElement('div');
-      b.id = 'wdStaleBanner';
-      b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;'
-        + 'display:flex;align-items:center;gap:10px;padding:8px 16px;'
-        + 'background:#b45309;color:#fff;font:13px/1.4 system-ui,sans-serif;';
-      b.innerHTML = '<span style="font-size:16px">⚠</span>'
-        + '<span id="wdStaleMsg"><b>Server is running v' + WD.esc(info.version)
-        + '</b> but v' + WD.esc(info.onDiskVersion)
-        + ' is on disk. Click <b>Restart</b> to load it.</span>'
-        + '<button type="button" id="wdStaleRestart" style="margin-left:auto;'
-        + 'padding:4px 12px;border:1px solid rgba(255,255,255,.5);border-radius:4px;'
-        + 'background:transparent;color:#fff;cursor:pointer;font:inherit">Restart now</button>'
-        + '<button type="button" style="background:none;border:none;color:#fff;'
-        + 'cursor:pointer;font-size:18px;padding:0 4px" title="Dismiss">&times;</button>';
-      b.querySelector('[title="Dismiss"]').onclick = function () { b.remove(); };
-      b.querySelector('#wdStaleRestart').onclick = function () {
-        var btn = b.querySelector('#wdStaleRestart');
-        var msg = b.querySelector('#wdStaleMsg');
-        btn.disabled = true; btn.textContent = 'Restarting…';
-        msg.innerHTML = '<b>Restarting server…</b> Page will reload when ready.';
-        var oldStarted = info.startedAt;
-        fetch('/api/restart', { method: 'POST' }).catch(function () {});
-        var deadline = Date.now() + 20000;
-        (function poll() {
-          if (Date.now() > deadline) { msg.innerHTML = '<b>Server did not restart.</b> Close and reopen manually.'; return; }
-          fetch('/api/version', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (j) {
-            if (j && j.startedAt && j.startedAt !== oldStarted) setTimeout(function () { location.reload(); }, 200);
-            else setTimeout(poll, 500);
-          }).catch(function () { setTimeout(poll, 700); });
-        })();
-      };
-      document.body.prepend(b);
-    }).catch(function () {});
-  }
-  checkServerVersion();
-  setInterval(checkServerVersion, 30000);
+  /* The stale-server banner is WD.checkServerVersion, above, and nothing else.
+     A second, older copy lived here: it polled /api/version every 30 s from every
+     tab, posted /api/restart without the header the server requires, and
+     removed the real banner whenever its own condition was false. */
 
   // ── Space-to-pan, shared by every pannable canvas ─────────────────────────
   // Ekahau pans on hold-Space-and-drag, and that is the reflex the user brings

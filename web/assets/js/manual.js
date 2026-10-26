@@ -88,16 +88,19 @@
   if (scroller) scroller.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('scroll', onScroll, { passive: true });
   window.addEventListener('resize', onScroll, { passive: true });
-  markCurrent();
 
   // --- return to where you were ------------------------------------------
+  // Read before the first markCurrent(): that call saves the section in view,
+  // which on a freshly loaded page is none, and so overwrote the very value
+  // this restores - "return to where you were" never returned anywhere.
+  var at = null;
   if (!location.hash) {
-    var at = null;
     try { at = sessionStorage.getItem('wd-manual-at'); } catch (e) {}
-    if (at) {
-      var el = document.getElementById(at.slice(1));
-      if (el) el.scrollIntoView();
-      markCurrent();
-    }
+  }
+  markCurrent();
+  if (at) {
+    var el = document.getElementById(at.slice(1));
+    if (el) el.scrollIntoView();
+    markCurrent();
   }
 })();

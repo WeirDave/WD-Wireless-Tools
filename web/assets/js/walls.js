@@ -798,7 +798,7 @@ const ftOf = m => Math.round(m / WDAreas.FT_M * 10) / 10;
 
 function areaCard(name, color, meta, actions) {
   return `
-    <div class="area-card" style="--wall-color:${safeColor(color)}">
+    <div class="area-card" style="--wall-color:${escAttr(safeColor(color))}">
       <div class="wall-swatch"></div>
       <div class="wall-info">
         <div class="wall-name-row"><span class="wall-name">${esc(name)}</span></div>
@@ -1055,7 +1055,7 @@ function renderHotkeyPanel() {
     if (wt) {
       html += `
         <div class="hotkey-slot"
-             style="--slot-color:${safeColor(wt.color)}"
+             style="--slot-color:${escAttr(safeColor(wt.color))}"
              draggable="true"
              title="Drag to move this shortcut to another slot"
              data-slot="${n}"
@@ -1110,7 +1110,8 @@ function renderWallCard(wt, i) {
   const att2 = two.attenuationFactor ?? '—';
   const att5 = five.attenuationFactor ?? '—';
   const att6 = six.attenuationFactor ?? '—';
-  const kb = wt.keybindNumber;
+  // A number whatever the file holds: it is written into markup below.
+  const kb = Number(wt.keybindNumber) || 0;
   const kbBadge = kb ? `<span class="wall-keybind-badge">[${kb}]</span>` : '';
 
   /* The button carries the answer, not just the verb.
@@ -1135,7 +1136,7 @@ function renderWallCard(wt, i) {
 
   return `
     <div class="wall-card" draggable="true"
-         style="--wall-color:${safeColor(wt.color)}"
+         style="--wall-color:${escAttr(safeColor(wt.color))}"
          data-card-index="${i}"
          data-action-dragstart="call" data-fn-dragstart="onCardDragStart"
          data-action-dragend="call" data-fn-dragend="onCardDragEnd"

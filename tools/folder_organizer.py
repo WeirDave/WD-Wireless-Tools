@@ -35,6 +35,12 @@ UNDO_DIR = CONFIG_DIR / "organizer_undo"
 ACORN_STATE_DIR = CONFIG_DIR / "acorn_state"
 
 
+def _utf8_child_env() -> dict:
+    """The environment for a child that prints a path: UTF-8 on its stdout,
+    whatever the console code page and whatever the parent was started with."""
+    return {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
+
+
 def _tk_dialog_result(code: str, timeout: int = 180) -> dict:
     """Run a Tk file/folder dialog in its own subprocess and say what happened.
 
@@ -63,8 +69,13 @@ def _tk_dialog_result(code: str, timeout: int = 180) -> dict:
         kwargs = {}
         if sys.platform == "win32":
             kwargs["creationflags"] = 0x08000000
+        # UTF-8 both ways. `text=True` decodes with the locale (cp1252 on
+        # Windows) and the child encodes with it too, so a folder name outside
+        # that code page - Polish, Czech, any CJK - made the picker die with
+        # UnicodeEncodeError before it could print the path.
         out = subprocess.run([sys.executable, "-c", code], capture_output=True,
-                             text=True, timeout=timeout, **kwargs)
+                             encoding="utf-8", errors="replace", timeout=timeout,
+                             env=_utf8_child_env(), **kwargs)
     except subprocess.TimeoutExpired:
         return {"path": "", "ran": False, "why": "it did not respond"}
     except Exception as exc:                       # noqa: BLE001 - reported

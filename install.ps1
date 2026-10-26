@@ -282,7 +282,14 @@ function Select-Method {
 
 function Invoke-Git {
   param([string[]]$Arguments, [string]$WorkDir, [switch]$AllowFailure)
-  $out = & git -C $WorkDir @Arguments 2>&1
+  # Windows PowerShell 5.1 turns any line a native command writes to stderr
+  # into a terminating error under 'Stop' - and git reports progress there on
+  # success ("From <url>" after a fetch, "HEAD is now at ..." after a
+  # checkout). The exit code below is what says whether git failed.
+  $prevEap = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try { $out = & git -C $WorkDir @Arguments 2>&1 | ForEach-Object { "$_" } }
+  finally { $ErrorActionPreference = $prevEap }
   if ($LASTEXITCODE -ne 0 -and -not $AllowFailure) {
     throw "git $($Arguments -join ' ') failed: $out"
   }

@@ -236,6 +236,17 @@ class ThePageIsToldWhetherTheInstallIsIntactTests(unittest.TestCase):
         out = self.post(updater.UpdateError("refused"))
         self.assertIs(out["intact"], True)
 
+    def test_a_refusal_is_written_to_the_one_log(self):
+        """The terminal line scrolls away and the page shows a sentence; the log
+        is what is left to read when someone asks why an update did not happen.
+        A refusal is expected, so it is a warning and not an error."""
+        with self.assertLogs("wd", "WARNING") as logged:
+            self.post(updater.UpdateError("refused for a stated reason"))
+        self.assertTrue(any("refused for a stated reason" in line
+                            for line in logged.output), logged.output)
+        self.assertFalse(any(line.startswith("ERROR") for line in logged.output),
+                         logged.output)
+
     def test_a_failure_partway_is_not(self):
         out = self.post(updater.UpdateError("stopped partway", intact=False))
         self.assertIs(out["intact"], False)
