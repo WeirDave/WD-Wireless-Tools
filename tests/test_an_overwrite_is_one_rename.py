@@ -12,6 +12,7 @@ left beside it. Every project here is invented.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import sys
@@ -31,15 +32,28 @@ BOX = [100, 100, 500, 400]
 PREVIOUS = b"the previous finished project, which must survive"
 
 
+@contextlib.contextmanager
 def _failing_final_rename(destination: Path):
-    """os.replace that fails only for the destination, so staging still works."""
-    real = os.replace
+    """A rename that fails only for the destination, so staging still works.
 
-    def replace(src, dst, *a, **kw):
+    Both entry points are patched: before Python 3.12 `Path.replace` calls an
+    `os.replace` captured at import, which patching `os.replace` never reaches.
+    """
+    real_os, real_path = os.replace, Path.replace
+
+    def fail_if_final(dst):
         if os.fspath(dst) == os.fspath(destination):
             raise OSError("simulated failure on the final rename")
-        return real(src, dst, *a, **kw)
-    return patch("os.replace", replace)
+
+    def os_replace(src, dst, *a, **kw):
+        fail_if_final(dst)
+        return real_os(src, dst, *a, **kw)
+
+    def path_replace(self, target):
+        fail_if_final(target)
+        return real_path(self, target)
+    with patch("os.replace", os_replace), patch.object(Path, "replace", path_replace):
+        yield
 
 
 @unittest.skipIf(Image is None, "Pillow is required to trim a floor plan")
