@@ -446,7 +446,13 @@ members a file should carry; `download_project` refuses a short archive,
 not "identical"), and a local file's gap count rides on its row as
 `local.surveyGaps`. **Verified against real files**: every Ekahau-saved file
 with surveys is complete and the one Cloud Manager copy was short, so the
-rule has no false positives on real data. Recipe and endpoints:
+rule has no false positives on real data. **The count has to be copied
+into the listing**: `build_projects_data` and `build_sites_data` rebuild each
+local file field by field, and v2.236.0 shipped with `surveyGaps` computed and
+shown nowhere because neither copied it - the control tests handed the page a
+row that already had the count. `tests/test_survey_gaps_reach_the_listing.py`
+runs the real builders over a real folder. A new per-file field needs a line
+in both builders. Recipe and endpoints:
 `docs/dev-notes/ekahau-cloud-api.md`.
 
 ## Uploading to Ekahau Cloud — what is known, and what is not

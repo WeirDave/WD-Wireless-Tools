@@ -2247,6 +2247,11 @@ def build_sites_data(api, output_dir):
 
                  "projectId": f.get("projectId") or "",
                  "projectType": f.get("projectType"),
+                 #: Rows are rebuilt field by field, so a field the scan
+                 #: computes and this list does not copy never reaches the
+                 #: page: surveyGaps was counted for every file and shown
+                 #: for none until v2.236.1.
+                 "surveyGaps": int(f.get("surveyGaps") or 0),
                  #: Same reasoning as the cloud side above - no size.
               "meta": _row_meta(0, int(f.get("mtime") or 0))}
         esx_by_folder.setdefault(f["folder"], []).append(item)
@@ -2470,6 +2475,8 @@ def build_projects_data(api, output_dir):
               "owner": f.get("owner") or "",
               "projectId": f.get("projectId") or "",
               "projectType": f.get("projectType"),
+              #: See the note on the same field in build_sites_data.
+              "surveyGaps": int(f.get("surveyGaps") or 0),
               #: Same reasoning as the cloud side above.
               "meta": _row_meta(int(f.get("size") or 0), int(f.get("mtime") or 0))}
              for f in get_local_esx_files(output_dir)]
