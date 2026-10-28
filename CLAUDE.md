@@ -432,6 +432,23 @@ Two registry tests each match a bug that shipped: "no setting lives in two
 stores", and "every `settings/update` sends a `patch` envelope" (a page posted
 `{report: {...}}`, saved nothing, and reported success).
 
+## A downloaded `.esx` has to carry the survey samples
+
+A survey record names its samples and does not hold them: they are the zip's
+`track-<id>.bin` and `spectrum-<id>.bin`. Until v2.236.0 `download_project`
+wrote the batch and the floor plans and stopped, so **every project Cloud
+Manager downloaded, pulled or synced back kept its survey records and lost
+the signal and noise data behind them** - and nothing said so, because row
+status is decided from dates and a comparison only sees what one side has that
+the other lacks. `tools/esx_survey_data.py` is the one definition of which
+members a file should carry; `download_project` refuses a short archive,
+`compare_esx` reports `surveyGaps` on each side (two equally short copies are
+not "identical"), and a local file's gap count rides on its row as
+`local.surveyGaps`. **Verified against real files**: every Ekahau-saved file
+with surveys is complete and the one Cloud Manager copy was short, so the
+rule has no false positives on real data. Recipe and endpoints:
+`docs/dev-notes/ekahau-cloud-api.md`.
+
 ## Uploading to Ekahau Cloud — what is known, and what is not
 
 **Cloud Manager replaces a cloud project by composition:**

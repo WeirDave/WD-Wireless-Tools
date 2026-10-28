@@ -41,9 +41,22 @@ people's projects on their behalf is not a side effect an upload should have.
 record of it:**
 
 - `GET /projectapi/v1/projects/{id}/batch` returns every document keyed
-  exactly as the `.esx` members. `download_project` writes each key as
-  `{key}.json` and the result is byte-identical to Ekahau's own download
-  (`docs/releases/v1.8.41.md`).
+  exactly as the `.esx` members - **except that the survey samples are not in
+  it.** `download_project` writes each key as `{key}.json`, with two
+  exceptions that Ekahau's own download worker makes and that a download
+  built on the batch alone got wrong until v2.236.0: `surveys` is written as
+  **one `survey-<id>.json` per survey** (never a merged `surveys.json`, which
+  Ekahau Pro does not read), and the samples are fetched separately from
+  `GET .../binaryFiles/<id>?redirect=true` - `track-<binaryFileId>.bin` for
+  every `wifiTracks[]` entry, `spectrum-<chunk>.bin` for every
+  `spectrumSessions[].chunks[]`, and `wcs-<id>.csv` for a floor plan's
+  `ciscoWcsRadioMappingDataId`. Floor plans are `imageFiles/<id>`. A survey
+  with `status: DELETED` has no files. The recipe was read from the public
+  `project-download-worker-*.js` that `www.ekahau.cloud` serves; re-read it
+  there if Ekahau changes the layout. `tools/esx_survey_data.py` is the
+  shared definition, and `download_project` refuses to return an archive
+  whose own surveys point at members it does not contain. The v1.8.41 note's
+  "byte-identical" claim was verified on a project with no survey data.
 - That batch response therefore **includes `projectHistorys`** — a real `.esx`
   contains `projectHistorys.json`, and it can only have come from there. So
   **the cloud stores the revision chain**, which is the data a server would

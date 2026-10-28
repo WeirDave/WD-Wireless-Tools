@@ -1460,10 +1460,17 @@ function comparisonIsSettled(cmp) {
      is exactly the test `stalenessBadgeHtml` already used to decide whether to
      offer any action at all, so the badge, the count and the row now agree by
      construction rather than by three people remembering to. */
-  return !!(cmp && !cmp.designDiffers && cmp.nameState !== 'internal_only');
+  /* Two copies that both lack the same survey samples differ in nothing, so
+     "the design matches" is true of them - and they are not settled. */
+  return !!(cmp && !cmp.designDiffers && cmp.nameState !== 'internal_only'
+            && !cmp.surveyDataIncomplete);
 }
 
 function isOutOfSync(row) {
+  /* A local file missing the samples its surveys point at is out of step with
+     the cloud whatever the dates say: they match the cloud's whatever is
+     missing, which is how such files read as "same" for as long as they did. */
+  if (row && row.local && Number(row.local.surveyGaps) > 0) return true;
   if (!row || !row.staleness) return false;
   //: Through the same retirement test the row's own controls use, or the chip
   //: would go on counting a pair as settled from a measurement that no longer
@@ -4550,7 +4557,23 @@ async function replaceNewerCloudWithLocal(cloudId, localPath, localName, cloudNa
   _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName, true);
 }
 
-async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matchType) {
+async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matchType, surveyGaps) {
+  /* A local file that has lost its survey samples would replace a cloud
+     project that may still hold them. It can be what he means - the samples
+     may be gone everywhere - so it asks once, and says what it will delete. */
+  if (Number(surveyGaps) > 0) {
+    const ok = await showConfirmModal(
+      'Replace the cloud copy with a file missing survey data?',
+      '<p><b>' + e(localName || '') + '</b> is missing ' + Number(surveyGaps)
+      + ' file' + (Number(surveyGaps) === 1 ? '' : 's') + ' of signal and '
+      + 'noise samples that its surveys refer to.</p>'
+      + '<p class="sub">The cloud project <b>' + e(cloudName || '') + '</b> may '
+      + 'still hold them. Replacing it uploads this file and then deletes that '
+      + 'project, and a cloud delete cannot be undone. To get the samples back '
+      + 'instead, use <b>Re-download survey data</b> on the row.</p>',
+      'Replace it anyway');
+    if (!ok) return;
+  }
   /* No dialog on a proven pair - the ordering is what makes it safe, and he
      performs this constantly. On a name-only pair the question is not whether
      the operation is safe but whether these two are the same project, and that
@@ -4731,6 +4754,33 @@ function rowDetailHtml(r, stripe) {
     if (tone === 'rd-plain') tone = 'rd-differs';
     sentences.push(where.sentence);
     acts.push(where.acts);
+  }
+
+  /* A file whose surveys point at samples it does not contain.
+
+     The signal-strength and noise samples are separate members of the .esx,
+     and for as long as Cloud Manager built a download from the batch and the
+     floor plans alone, every project it downloaded or synced back arrived
+     without them. Nothing on the row said so: the dates match the cloud's
+     whatever is missing, so it read as the same file, and a comparison of two
+     copies built the same way found them identical. This reads the archive
+     itself, so it does not depend on the other side at all.
+
+     Offered as a download only on a proven pair, and not when the date
+     already puts a download on the row. */
+  const gaps = Number(l && l.surveyGaps) || 0;
+  if (gaps && l && !cmp) {
+    tone = 'rd-differs'; icon = 'alert';
+    sentences.push('Survey data is missing from this local file: ' + gaps
+      + (gaps === 1 ? ' file' : ' files') + ' of signal and noise samples '
+      + (gaps === 1 ? 'its surveys refer to is' : 'its surveys refer to are')
+      + ' not in it.');
+    if (c && canPullFromCloud(r) && !stale) {
+      acts.push(rdAction('down', 'Re-download survey data',
+        'verifyReplaceLocal', [c.id, np(l.path), c.name, Number(c.mtime) || 0, Number(l.mtime) || 0],
+        { primary: true, writes: 'local',
+          title: 'Takes the cloud copy over this local file, including every survey’s signal and noise samples. Your local file is replaced by the copy Ekahau is holding; if your local file turns out to be the newer one, nothing is changed.' }));
+    }
   }
 
   /* A measured comparison outranks anything inferred from a date, so it speaks
@@ -5284,7 +5334,7 @@ function stalenessBadgeHtml(r) {
          been compared, not on a date alone. */
       const weight = cmp ? ' primary' : '';
       return cmpHtml
-        + `<button class="rd-btn${weight}" data-writes="cloud" title="${a(plan)}" data-action="call" data-fn="pushLocalOverCloud" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.local.name || '', r.cloud.name || '', r.matchType || '']))}" data-stop="1">${ic('up')}<span>Local newer · replace cloud</span></button>`
+        + `<button class="rd-btn${weight}" data-writes="cloud" title="${a(plan)}" data-action="call" data-fn="pushLocalOverCloud" data-args-json="${a(JSON.stringify([r.cloud.id, np(r.local.path), r.local.name || '', r.cloud.name || '', r.matchType || ''].concat(Number(r.local.surveyGaps) > 0 ? [Number(r.local.surveyGaps)] : [])))}" data-stop="1">${ic('up')}<span>Local newer · replace cloud</span></button>`
         + checkBtn;
     }
     /* Only a guessed pairing reaches here now - same site code, or similar
@@ -9069,6 +9119,7 @@ async function bulkSync(dir) {
 function syncEverythingPlan() {
   const down = [], up = [], upBlocked = [], inSync = [], fresh = [];
   const downBlocked = [], diverged = [], siteRenames = [], othersFresh = [];
+  const shortLocal = [];
   const seenPair = new Set(), seenCloud = new Set();
 
   const isFile = (l) => /\.esx$/i.test(String((l && l.path) || ''));
@@ -9090,6 +9141,7 @@ function syncEverythingPlan() {
          row asks, which is how a pair the row happily pushes ended up in a
          list headed "not part of this run". */
       matchType: pr.matchType,
+      surveyGaps: Number(pr.local.surveyGaps) || 0,
     };
     /* Both sides moved since this machine last had them the same, which
        two dates cannot say and a recorded sync point can. It is taken out of
@@ -9100,12 +9152,21 @@ function syncEverythingPlan() {
       diverged.push(row);
     } else if (pr.staleness === 'cloud_newer') {
       (PULLABLE_MATCH_TYPES.has(pr.matchType) ? down : downBlocked).push(row);
+    } else if (pr.staleness === 'local_newer' && row.surveyGaps > 0) {
+      /* Newer, and short. Sending it up replaces the cloud project - the copy
+         that may still hold the signal and noise samples this file has lost -
+         with one that cannot. Not part of the run; named in the dialog. */
+      shortLocal.push(row);
     } else if (pr.staleness === 'local_newer') {
       //: Ownership as well as match type - see the note on `mayPush`. A push
       //: ends in a cloud delete, and Ekahau refuses that to anyone but the
       //: owner, so an unowned pair belongs in the blocked list the dialog
       //: shows rather than in the run.
       (PUSHABLE_MATCH_TYPES.has(pr.matchType) && iOwn(pr.cloud) ? up : upBlocked).push(row);
+    } else if (row.surveyGaps > 0 && PULLABLE_MATCH_TYPES.has(pr.matchType)) {
+      /* In step by date, short by content. The dates cannot see it, so this
+         is the pair a date-only plan reported as already matching. */
+      down.push(row);
     } else inSync.push(row);
   };
 
@@ -9164,7 +9225,7 @@ function syncEverythingPlan() {
   (data.localOnly || []).forEach(l => walkKids(l.children, l.name));
   if (data.orphans) (data.orphans.cloudOnly || []).forEach(c => takeCloud(c));
 
-  return { down, up, upBlocked, downBlocked, fresh, othersFresh, inSync, diverged, siteRenames };
+  return { down, up, upBlocked, downBlocked, fresh, othersFresh, inSync, diverged, siteRenames, shortLocal };
 }
 
 function _syncSiteRowsHtml(rows) {
@@ -9196,6 +9257,10 @@ function _syncRowsHtml(rows, dir) {
    "both changed" is one to leave alone. */
 function _syncVerdictCell(d) {
   const cmp = _compareResults.get(_compareKey(d.cloudId, d.localPath));
+  if (!cmp && d.surveyGaps > 0) {
+    return '<td class="sync-plan-verdict"><span class="cmp-differs">'
+      + 'survey data missing</span></td>';
+  }
   if (!cmp) return '<td class="sync-plan-verdict sub">not checked</td>';
   const cls = cmp.designDiffers ? 'cmp-differs' : 'cmp-same';
   const text = cmp.designDiffers ? cmp.summary : (cmp.renamedOnly ? 'name only' : 'identical');
@@ -9306,6 +9371,13 @@ async function syncEverything() {
     // Still say what is waiting to go up - that is the half of the loop this
     // cannot finish yet, and silence would read as "all done".
     const stuck = plan.upBlocked.length + plan.downBlocked.length;
+    const shorts = (plan.shortLocal || []).length;
+    if (shorts && !stuck) {
+      toast(shorts + ' newer local file' + (shorts === 1 ? ' is' : 's are')
+        + ' missing survey data, so ' + (shorts === 1 ? 'it was' : 'they were')
+        + ' not sent up. Nothing else to do.', 'info');
+      return;
+    }
     toast(stuck
       ? stuck + ' file' + (stuck === 1 ? '' : 's') + ' need' + (stuck === 1 ? 's' : '')
         + ' the pair confirmed before they can move — use Confirm this pair on '
@@ -9365,7 +9437,8 @@ async function syncEverything() {
       + 'holding, and that cloud copy stays there afterwards.</p>';
 
     const unchecked = plan.down.filter(
-      d => !_compareResults.get(_compareKey(d.cloudId, d.localPath))).length;
+      d => !(d.surveyGaps > 0)
+        && !_compareResults.get(_compareKey(d.cloudId, d.localPath))).length;
     if (unchecked) {
       /* Replaces the paragraph that used to apologise for not knowing. The
          dates cannot tell him whether both sides changed; the comparison can,
@@ -9426,6 +9499,20 @@ async function syncEverything() {
         + 'name beside ' + (one ? 'it' : 'each') + ' is the one you mean, then '
         + 'tick it.</p>';
     }
+  }
+
+  if ((plan.shortLocal || []).length) {
+    const n = plan.shortLocal.length;
+    const names = plan.shortLocal
+      .map(d => e(d.localName || d.cloudName || '')).join(', ');
+    body += '<p class="sub warn"><b>' + n + ' newer local file'
+      + (n === 1 ? ' is' : 's are') + ' missing survey data and '
+      + (n === 1 ? 'is' : 'are') + ' not part of this run:</b> ' + names
+      + '. Their surveys refer to signal and noise samples that are not in '
+      + (n === 1 ? 'the file' : 'the files') + ', and the cloud copy may '
+      + 'still hold them. Sending ' + (n === 1 ? 'it' : 'them') + ' up would '
+      + 'replace the cloud project with a copy that cannot. Open the row to '
+      + 'see what is missing.</p>';
   }
 
   if (plan.upBlocked.length || plan.downBlocked.length) {

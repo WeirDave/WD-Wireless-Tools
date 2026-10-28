@@ -426,6 +426,26 @@ On a **Same site code** or **Similar name** pair, the download and replace
 buttons are greyed out with the reason, and **Confirm this pair** sits beside
 them.
 
+### Survey data missing from a local file
+
+A survey's signal-strength and noise samples are stored as separate files
+inside the `.esx`. A local file whose surveys refer to samples that are not in
+it is marked on its row: **Survey data is missing from this local file**, with
+the number of missing files. The marker does not depend on the dates, which
+can match the cloud's exactly, and it counts the row as out of step in the
+list's filter and totals.
+
+**Re-download survey data** on that row takes the cloud copy over the local
+file, including every survey's samples. **Sync everything** also lists these
+files under *Replace local files with the cloud copy*, with the verdict
+*survey data missing*. A file like this that is **newer** than the cloud is
+left out of Sync everything, because sending it up would replace a cloud
+project that may still hold the samples; **Local newer · replace cloud** on
+its row asks for confirmation first and names what will be deleted.
+
+**Check what differs** also reports this. When the two copies both lack the
+same samples it says *Survey data is incomplete* instead of *Exact match*.
+
 ### Sync everything
 
 **⇅ Sync everything** needs no selection. For every pair it works out which

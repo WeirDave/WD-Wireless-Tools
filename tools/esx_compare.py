@@ -38,6 +38,8 @@ import io
 import json
 import zipfile
 
+from tools import esx_survey_data
+
 #: Fields that move when nothing about the design does. Stripped everywhere
 #: they appear, at any depth.
 #:
@@ -222,7 +224,9 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes,
     """
     out = {"identical": False, "designDiffers": False, "renamedOnly": False,
            "differences": [], "imagesCompared": 0, "summary": "",
-           "nameState": None}
+           "nameState": None,
+           "surveyGaps": {"local": 0, "cloud": 0},
+           "surveyDataIncomplete": False}
 
     try:
         lz = zipfile.ZipFile(io.BytesIO(local_bytes))
@@ -233,6 +237,15 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes,
     with lz, cz:
         local = _members(lz)
         cloud = _members(cz)
+        #: Measured separately from the diff below because the diff only sees
+        #: what one side has and the other lacks. Two copies that both lack
+        #: the same samples differ in nothing, and used to compare as
+        #: identical - which is how a download that had dropped every survey's
+        #: signal and noise data read as "the same as the cloud" for as long
+        #: as the cloud copy was built the same way.
+        out["surveyGaps"] = {
+            "local": len(esx_survey_data.missing_members(lz)),
+            "cloud": len(esx_survey_data.missing_members(cz))}
 
     local_name = _names(_as_json(local.get("project.json", b"")))
     cloud_name = _names(_as_json(cloud.get("project.json", b"")))
@@ -316,13 +329,36 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes,
     out["differences"] = (design_diffs + meta_diffs)[:MAX_REPORTED_MEMBERS]
     out["designDiffers"] = bool(design_diffs)
     out["renamedOnly"] = bool(renamed and not design_diffs)
-    out["identical"] = not design_diffs and not meta_diffs and not renamed
+    out["surveyDataIncomplete"] = bool(out["surveyGaps"]["local"]
+                                       or out["surveyGaps"]["cloud"])
+    out["identical"] = (not design_diffs and not meta_diffs and not renamed
+                        and not out["surveyDataIncomplete"])
     out["renamed"] = renamed
     out["summary"] = _summarise(out, design_diffs, renamed)
     return out
 
 
+def _gap_sentence(out) -> str:
+    """Which side is short, in words that say what is actually lost."""
+    gaps = out["surveyGaps"]
+    sides = [("local file", gaps["local"]), ("cloud copy", gaps["cloud"])]
+    parts = ["the %s is missing %d survey file%s"
+             % (name, n, "" if n == 1 else "s") for name, n in sides if n]
+    return ("Survey data is incomplete: " + " and ".join(parts) + " its "
+            "surveys refer to, so the signal and noise samples are not in "
+            "it.")
+
+
 def _summarise(out, design_diffs, renamed) -> str:
+    if out.get("surveyDataIncomplete"):
+        if not design_diffs:
+            return _gap_sentence(out)
+        return _gap_sentence(out) + " " + _summarise_diffs(
+            out, design_diffs, renamed)
+    return _summarise_diffs(out, design_diffs, renamed)
+
+
+def _summarise_diffs(out, design_diffs, renamed) -> str:
     if out["identical"]:
         # The design and the project name agree; only the file on disk is
         # called something else. That is not a difference in the project, but

@@ -772,17 +772,36 @@ class EkahauAPI:
 
         Ekahau's web UI builds the .esx client-side in a worker; there's no
         server endpoint that hands out a finished file. We reproduce that
-        flow: batch → per-image S3 fetch → ZIP assembly. Verified byte-equal
-        to a reference .esx from their UI.
+        flow, member for member: batch → floor-plan images → survey files →
+        track and spectrum binaries → ZIP assembly.
+
+        **The survey half is not optional, and was missing.** A survey record
+        names its samples (`wifiTracks[].binaryFileId`,
+        `spectrumSessions[].chunks`) but does not contain them: they are
+        separate members, `track-<id>.bin` and `spectrum-<id>.bin`, fetched
+        from `binaryFiles/<id>`. This used to write the batch and the images
+        and stop, plus a merged `surveys.json` that Ekahau never writes - so
+        every project downloaded, pulled or synced back arrived with its
+        survey records and none of their signal-strength or noise samples,
+        and Ekahau Pro showed surveys with nothing behind them. Ekahau's own
+        worker writes one `survey-<id>.json` per survey and fetches every
+        binary; a deleted survey (`status: DELETED`) is left out.
+
+        **A download that came out short is an error, never a file.** Any
+        binary that cannot be fetched fails the whole download, as Ekahau's
+        does, and the finished archive is checked against its own survey
+        records before it is returned: a hollow copy written over a complete
+        local file is the one outcome here that cannot be undone.
 
         progress_cb(stage=..., current=..., total=..., message=...) is called
-        at stage boundaries. Downloads spend most of their time in the image
-        loop, so we emit per-image progress there with a real N-of-N total.
+        at stage boundaries. Downloads spend most of their time fetching
+        files, so we emit per-file progress there with a real N-of-N total.
 
         Returns {"esx": bytes, "name": str} or {"error": str}.
         """
         import io as _io
         import zipfile as _zip
+        from tools import esx_survey_data as _sd
 
         if progress_cb:
             progress_cb(stage="batch", current=5, total=100,
@@ -797,9 +816,35 @@ class EkahauAPI:
                      or (batch.get("project") or {}).get("title")
                      or f"project-{project_id}")
 
-        images = batch.get("images") or []
-        n_images = sum(1 for img in images if img.get("id"))
+        images = [img for img in (batch.get("images") or []) if img.get("id")]
+        surveys = _sd.live(batch.get("surveys"))
+        tracks = [t for s in surveys for t in (s.get("wifiTracks") or [])
+                  if isinstance(t, dict) and t.get("binaryFileId")]
+        chunks = [c for s in surveys for sess in (s.get("spectrumSessions") or [])
+                  if isinstance(sess, dict) for c in (sess.get("chunks") or []) if c]
+        wcs = [fp for fp in _sd.live(batch.get("floorPlans"))
+               if fp.get("ciscoWcsRadioMappingDataId")]
 
+        #: (member name, URL) for everything fetched rather than read from the
+        #: batch. One list, so the total the progress bar shows is the number
+        #: of files that will actually be fetched.
+        fetches = [(f"image-{img['id']}",
+                    f"{API_BASE}/{project_id}/imageFiles/{img['id']}?redirect=true",
+                    "floor plan image") for img in images]
+        fetches += [(_sd.track_member(t["binaryFileId"]),
+                     f"{API_BASE}/{project_id}/binaryFiles/{t['binaryFileId']}?redirect=true",
+                     "survey track") for t in tracks]
+        fetches += [(_sd.spectrum_member(c),
+                     f"{API_BASE}/{project_id}/binaryFiles/{c}?redirect=true",
+                     "spectrum chunk") for c in chunks]
+        fetches += [(_sd.wcs_member(fp["ciscoWcsRadioMappingDataId"]),
+                     f"{API_BASE}/{project_id}/binaryFiles/{fp['ciscoWcsRadioMappingDataId']}?redirect=true",
+                     "radio-mapping file") for fp in wcs]
+        #: A file can be named twice (two tracks sharing a binary); fetch once.
+        seen_members = set()
+        fetches = [f for f in fetches
+                   if not (f[0] in seen_members or seen_members.add(f[0]))]
+        n_fetch = len(fetches)
 
         base_pct = 10
 
@@ -807,36 +852,48 @@ class EkahauAPI:
         with _zip.ZipFile(buf, "w", _zip.ZIP_DEFLATED) as zf:
             zf.writestr("version", "2.0")
             for key, value in batch.items():
+                if key == "surveys":
+                    continue  # one survey-<id>.json each, below
                 zf.writestr(f"{key}.json", json.dumps({key: value}, ensure_ascii=False))
+            for survey in surveys:
+                if survey.get("id"):
+                    zf.writestr(_sd.survey_member(survey["id"]),
+                                json.dumps({"surveys": [survey]}, ensure_ascii=False))
             if progress_cb:
+                what = f"{len(images)} floor plan image{'s' if len(images) != 1 else ''}"
+                extra = len(fetches) - len(images)
+                if extra:
+                    what += f" and {extra} survey file{'s' if extra != 1 else ''}"
                 progress_cb(stage="images", current=base_pct, total=100,
-                            message=f"Downloading {n_images} floor plan image{'s' if n_images != 1 else ''}…")
-            done_images = 0
-            for img in images:
-                image_id = img.get("id")
-                if not image_id:
-                    continue
+                            message=f"Downloading {what}…")
+            done = 0
+            for member, path, kind in fetches:
                 try:
-                    r = self.http.get(
-                        f"{EKAHAU_URL}{API_BASE}/{project_id}/imageFiles/{image_id}?redirect=true",
-                        allow_redirects=True, timeout=180,
-                    )
+                    r = self.http.get(f"{EKAHAU_URL}{path}",
+                                      allow_redirects=True, timeout=180)
                     r.raise_for_status()
-                    zf.writestr(f"image-{image_id}", r.content)
+                    zf.writestr(member, r.content)
                 except Exception as e:
-                    return {"error": f"Failed fetching image {image_id}: {e}",
+                    return {"error": f"Failed fetching {kind} {member}: {e}",
                             "sessionDead": _session_is_dead(e)}
-                done_images += 1
-                if progress_cb and n_images > 0:
-                    pct = base_pct + int(85 * done_images / n_images)
+                done += 1
+                if progress_cb and n_fetch > 0:
+                    pct = base_pct + int(85 * done / n_fetch)
                     progress_cb(current=pct,
-                                message=f"Downloading floor plan {done_images} of {n_images}…")
+                                message=f"Downloading file {done} of {n_fetch}…")
 
             if progress_cb:
                 progress_cb(stage="assemble", current=95, total=100,
                             message="Assembling .esx…")
 
-        return {"esx": buf.getvalue(), "name": proj_name}
+        data = buf.getvalue()
+        gaps = _sd.missing_in_bytes(data)
+        if gaps:
+            return {"error": "The downloaded project is missing %d survey "
+                             "file%s its own surveys refer to, so it was not "
+                             "saved. Nothing was changed."
+                             % (len(gaps), "" if len(gaps) == 1 else "s")}
+        return {"esx": data, "name": proj_name}
 
     def upload_project(self, esx_path, progress_cb=None):
         """Upload a local .esx file to Ekahau Cloud (3-step presigned flow).
@@ -1481,6 +1538,7 @@ def get_local_esx_files(output_dir):
                             "owner": em["author"],
                             "projectId": em["projectId"],
                             "projectName": em["projectName"],
+                            "surveyGaps": em.get("surveyGaps", 0),
                             "projectType": _esx_project_type(f, mtime)})
         except OSError:
             continue
@@ -1531,10 +1589,20 @@ def _esx_meta(path, mtime):
     if hit and hit[0] == stamp:
         return hit[1]
     meta = {"author": "", "projectId": "", "projectName": "",
-            "internalMtime": 0}
+            "internalMtime": 0, "surveyGaps": 0}
     try:
         import zipfile
         with zipfile.ZipFile(path) as z:
+            #: How many files the project's own surveys point at that are not
+            #: in the archive. Read from the archive's contents because
+            #: nothing else can see it: the dates match the cloud's whatever
+            #: is missing, which is how copies without their samples read as
+            #: "same" for as long as they did.
+            try:
+                from tools import esx_survey_data
+                meta["surveyGaps"] = len(esx_survey_data.missing_members(z))
+            except Exception:
+                pass
             if "project.json" in z.namelist():
                 with z.open("project.json") as pj:
                     data = json.load(pj)
