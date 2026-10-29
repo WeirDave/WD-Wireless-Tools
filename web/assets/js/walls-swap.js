@@ -916,6 +916,7 @@
     const pct = (state.fitScale > 0 && state.view.scale > 0)
       ? Math.round((state.view.scale / state.fitScale) * 100) : 100;
     $('swapZoomLabel').textContent = pct + '%';
+    updateRemoveAllButton();
   }
 
   window.onSwapFloorChange = function () {
@@ -1815,7 +1816,14 @@
     const n = doomed.size;
     if (!n) { toast('Nothing checked'); return; }
     if (!confirm(`Delete ${n} wall${n === 1 ? '' : 's'} from the project? Nothing is written to disk until you press Save the *.esx.`)) return;
+    removeSegments(doomed, `Delete ${n} wall${n === 1 ? '' : 's'}`,
+      `Deleted ${n} wall${n === 1 ? '' : 's'}`);
+  };
 
+  /* The one place walls leave the project, for Delete selected and for
+     Remove all walls alike: the same history entry, the same freed-point
+     cleanup, the same undo. `doomed` is a Set of segment ids. */
+  function removeSegments(doomed, label, doneMsg) {
     const before = selectionSnapshot();
     // Keep the original index so an undo puts each wall back where it was.
     const removed = [];
@@ -1831,7 +1839,6 @@
     doomed.forEach(id => { state.selected.delete(id); state.excluded.delete(id); });
     pruneExcluded();
 
-    const label = `Delete ${n} wall${n === 1 ? '' : 's'}`;
     pushHistory({ kind: 'delete', label, removed, removedPoints, before, after: selectionSnapshot() });
 
     writeSegmentsBack();
@@ -1842,7 +1849,75 @@
     renderSelection();
     updateStatus();
     render();
-    undoToast(`Deleted ${n} wall${n === 1 ? '' : 's'}`);
+    undoToast(doneMsg);
+  }
+
+  /* Remove all walls: every wall on the floor in view, or every wall in the
+     project. Independent of the selection on purpose - it is for starting a
+     floor or a whole job from a clean plan, not for the walls last caught
+     by a marquee. "Whole project" is the whole .esx, which is the building
+     the file describes; the file has no finer unit above a floor.
+
+     Scope "floor" takes the floor's index entry, so a wall whose geometry
+     could not be drawn still goes. Scope "project" takes state.segments,
+     which also holds a wall that sits on no floor at all. */
+  function removeAllScope() {
+    const el = $('swapRemoveScope');
+    return el && el.value === 'project' ? 'project' : 'floor';
+  }
+
+  function removeAllIds(scope) {
+    if (scope === 'project') return state.segments.map(seg => seg.id);
+    return (state.segmentsByFloor.get(state.currentFloorId) || []).map(seg => seg.id);
+  }
+
+  function updateRemoveAllButton() {
+    const btn = $('swapRemoveAllBtn');
+    if (!btn) return;
+    const scope = removeAllScope();
+    const n = removeAllIds(scope).length;
+    const where = scope === 'project' ? 'in the whole project' : 'on this floor';
+    btn.disabled = !n;
+    btn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" '
+      + 'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">'
+      + '<path d="M2.5 4h11M6 4V2.5h4V4M4 4l1 9.5h6L12 4"/></svg>'
+      + (n ? 'Remove all ' + n + ' wall' + (n === 1 ? '' : 's') + ' ' + where
+           : 'No walls ' + where);
+  }
+
+  window.onSwapRemoveScopeChange = function () { updateRemoveAllButton(); };
+
+  window.removeAllWalls = function () {
+    const scope = removeAllScope();
+    const ids = removeAllIds(scope);
+    const n = ids.length;
+    if (!n) { toast('No walls to remove'); return; }
+    const walls = (k) => `${k} wall${k === 1 ? '' : 's'}`;
+    let msg, label, done;
+    if (scope === 'project') {
+      // Name every floor and its count, so the size of what is about to go is
+      // on the dialog rather than only on the button.
+      const lines = [];
+      let listed = 0;
+      state.floors.forEach(f => {
+        const k = (state.segmentsByFloor.get(f.id) || []).length;
+        listed += k;
+        if (k) lines.push(`  ${f.name}: ${walls(k)}`);
+      });
+      if (n > listed) lines.push(`  Not on any floor: ${walls(n - listed)}`);
+      msg = `Remove ALL ${walls(n)} from the whole project?\n\n${lines.join('\n')}\n\n`
+        + 'Nothing is written to disk until you press Save the *.esx, and Undo brings them back.';
+      label = `Remove all ${walls(n)} from the project`;
+      done = `Removed all ${walls(n)} from the project`;
+    } else {
+      const floor = state.floors.find(f => f.id === state.currentFloorId);
+      msg = `Remove all ${walls(n)} on ${floor ? floor.name : 'this floor'}?\n\n`
+        + 'Nothing is written to disk until you press Save the *.esx, and Undo brings them back.';
+      label = `Remove all ${walls(n)} on this floor`;
+      done = `Removed all ${walls(n)} on this floor`;
+    }
+    if (!confirm(msg)) return;
+    removeSegments(new Set(ids), label, done);
   };
 
   const HISTORY_LIMIT = 50;

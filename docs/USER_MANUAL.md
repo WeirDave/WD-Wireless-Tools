@@ -923,6 +923,14 @@ change their type, or remove them, without redrawing.
 - **Quick swap by type** changes every wall of one type at once: choose
   **From**, **To** and **Scope** (**Whole project**, the default, or **This
   floor only**), then press **Swap all**.
+- **Remove all walls** clears a floor or the whole project in one step,
+  whether or not anything is selected. Open the **Remove all walls** panel in
+  the sidebar, choose **Scope** (**This floor only**, the default, or **Whole
+  project**), then press the red button, which names the scope and the number
+  of walls it will remove. The confirmation lists the count for every floor
+  when the scope is the whole project. Wall points left unused are removed
+  with the walls. The button is unavailable, and says so, when the scope holds
+  no walls.
 - Each swap or delete shows a message with an **Undo** button. The toolbar
   undo and redo buttons step back through up to 50 changes. Closing Visual
   Swap keeps your changes but clears that undo history.

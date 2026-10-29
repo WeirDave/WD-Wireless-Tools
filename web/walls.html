@@ -553,6 +553,27 @@
         </div>
       </div>
 
+      <div class="swap-panel swap-panel-foldable" id="swapPanelRemoveAll" data-fold="removeall">
+        <div class="swap-panel-header" data-action="call" data-fn="toggleSwapPanel" data-arg="removeall" title="Click to collapse or expand">
+          <span class="swap-fold-chevron">▾</span>
+          <span>Remove all walls</span>
+        </div>
+        <div class="swap-panel-body">
+          <p class="swap-panel-hint">Start from a clean plan — take out every wall on the floor in view, or every wall in the whole project. Asks first, and Undo puts them back.</p>
+          <div class="swap-quick-row">
+            <label for="swapRemoveScope">Scope</label>
+            <select id="swapRemoveScope" class="swap-target-select" data-action-change="call" data-fn="onSwapRemoveScopeChange">
+              <option value="floor" selected>This floor only</option>
+              <option value="project">Whole project</option>
+            </select>
+          </div>
+          <button class="btn btn-swap-delete" id="swapRemoveAllBtn" data-action="call" data-fn="removeAllWalls" disabled title="Remove every wall in the chosen scope, whether or not it is selected">
+            <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l1 9.5h6L12 4"/></svg>
+            Remove all walls
+          </button>
+        </div>
+      </div>
+
       <div class="swap-footer-hint">
         Changes stay in memory until you press <strong>Save .esx</strong> (top right) or close and save from Quick Walls.
       </div>
