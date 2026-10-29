@@ -11492,10 +11492,26 @@ body.tool-prep .editor.active, body.tool-plantrim .editor.active, body.tool-capa
 }
 .pt-rail-next { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 6px; }
 .pt-rail-next .ptb-where:empty { display: none; }
-.pb-canvas-hint kbd {
+.pb-canvas-hint kbd, .pb-note kbd {
   font: 11px/1 ui-monospace, monospace; padding: 2px 5px; border-radius: var(--r-xs);
   border: 1px solid var(--border); background: var(--bg);
 }
+.pb-howto ul { margin: 6px 0 0; padding-left: 18px; }
+.pb-howto li { margin: 4px 0; }
+/* The wall template as rows: swatch, name, what happens to it. */
+.pw-group { display: flex; flex-direction: column; }
+.pw-head { margin-bottom: 4px; }
+.pw-row {
+  display: grid; grid-template-columns: 14px 1fr auto; column-gap: 8px; row-gap: 0;
+  align-items: start; padding: 3px 0; border-top: 1px solid var(--border);
+}
+.pw-swatch {
+  width: 14px; height: 14px; margin-top: 3px; border-radius: var(--r-xs);
+  border: 1px solid var(--border); background: var(--surface-2);
+}
+.pw-name { color: var(--text); overflow-wrap: anywhere; }
+.pw-row .prep-badge { margin-top: 2px; }
+.pw-detail { grid-column: 2 / -1; font-size: 11px; color: var(--text-3); }
 .pb-panel .ptb-cropbar { margin: 0; }
 .pb-panel .ptb-cropbtn { width: 100%; justify-content: center; }
 .pb-panel .ptb-hint { margin: 0; }

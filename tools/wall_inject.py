@@ -115,6 +115,58 @@ def _match(existing: list):
     return find
 
 
+def _stock_keys() -> frozenset:
+    """Ekahau's own keys for its stock wall types, read from the shipped
+    ``ekahau_defaults.json``. Empty when that file cannot be read, which the
+    plan reports as "not known" rather than calling every type the template's
+    own."""
+    from tools import template_store
+    try:
+        doc = json.loads(Path(template_store.DEFAULTS_FILE).read_text(encoding="utf-8"))
+        return frozenset(k for k in (_stock_key(w) for w in doc["wallTypes"]) if k)
+    except (OSError, ValueError, KeyError, TypeError):
+        return frozenset()
+
+
+def _attenuation(wt: dict):
+    return sorted(
+        ((p or {}).get("band") or "", (p or {}).get("attenuationFactor") or 0)
+        for p in (wt.get("propagationProperties") or []))
+
+
+#: What an update can change, in the words the Prep page uses for them.
+_CHANGE_LABELS = (
+    ("name", lambda w: w.get("name")),
+    ("colour", lambda w: str(w.get("color") or "").lower()),
+    ("number key", lambda w: w.get("keybindNumber")),
+    ("attenuation", _attenuation),
+    ("thickness", lambda w: w.get("thickness")),
+    ("height", lambda w: (w.get("lowerEdge"), w.get("upperEdge"))),
+)
+
+#: Fields the labels above already cover (and the id, which never counts).
+_COVERED = {"id", "name", "color", "keybindNumber", "propagationProperties",
+            "thickness", "lowerEdge", "upperEdge"}
+
+
+def _what_differs(have: dict, wt: dict) -> list:
+    """The things about a type that applying the template would change, as
+    short labels. A difference that is none of those is "other settings", so a
+    row never claims to change something while naming nothing."""
+    out = [label for label, read in _CHANGE_LABELS if read(have) != read(wt)]
+    rest = lambda w: {k: v for k, v in w.items() if k not in _COVERED}
+    if rest(have) != rest(wt):
+        out.append("other settings")
+    return out
+
+
+def _colour(wt: dict):
+    c = str(wt.get("color") or "")
+    ok = len(c) in (4, 7, 9) and c.startswith("#") and all(
+        ch in "0123456789abcdefABCDEF" for ch in c[1:])
+    return c if ok else None
+
+
 def plan_into_members(members: dict, wall_types: list) -> dict:
     """What applying these types would do, without doing it.
 
@@ -122,6 +174,12 @@ def plan_into_members(members: dict, wall_types: list) -> dict:
     (``was`` names it, which differs when Ekahau renamed it), ``unchanged``
     counts the ones already exactly as the template has them, and ``skip`` is
     only for entries that cannot be applied at all.
+
+    Each entry also says whether it is one of Ekahau's own stock types
+    (``stock``; ``None`` when the stock list could not be read), the colour to
+    show beside it, and for an update ``changes``, the labels of what differs.
+    ``same`` lists the unchanged ones the same way, so the page can show the
+    whole template instead of only the part that is work.
     """
     if MEMBER not in members:
         return {"error": "This project has no wallTypes.json, so there is "
@@ -133,7 +191,15 @@ def plan_into_members(members: dict, wall_types: list) -> dict:
         return {"error": f"wallTypes.json could not be read: {exc}"}
 
     find = _match(existing)
-    add, update, skip = [], [], []
+    stock_keys = _stock_keys()
+
+    def describe(wt, **more):
+        entry = {"name": wt.get("name"), "color": _colour(wt),
+                 "stock": (_stock_key(wt) in stock_keys) if stock_keys else None}
+        entry.update(more)
+        return entry
+
+    add, update, skip, same = [], [], [], []
     unchanged = 0
     seen, seen_words, seen_targets = set(), set(), set()
     for wt in wall_types or []:
@@ -152,16 +218,18 @@ def plan_into_members(members: dict, wall_types: list) -> dict:
         seen.add(k)
         seen_words.add(w)
         if at is None:
-            add.append({"name": name})
+            add.append(describe(wt))
             continue
         seen_targets.add(at)
         have = existing[at]
         if _same(have, wt):
             unchanged += 1
+            same.append(describe(wt))
             continue
-        update.append({"name": name, "was": have.get("name")})
+        update.append(describe(wt, was=have.get("name"),
+                               changes=_what_differs(have, wt)))
     return {"ok": True, "add": add, "update": update, "unchanged": unchanged,
-            "skip": skip, "existing": len(existing),
+            "same": same, "skip": skip, "existing": len(existing),
             "total": len(existing) + len(add)}
 
 

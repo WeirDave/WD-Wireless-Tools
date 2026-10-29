@@ -95,7 +95,7 @@ class WallInjection(unittest.TestCase):
         report = wall_inject.inject(self.esx, [wall_type("Concrete", 3.0, "tpl-id")])
         self.assertTrue(report.get("written"), report)
         self.assertEqual(report["add"], [])
-        self.assertEqual(report["update"], [{"name": "Concrete", "was": "Concrete"}])
+        self.assertEqual([(u["name"], u["was"]) for u in report["update"]], [("Concrete", "Concrete")])
         types = read_member(self.esx, "wallTypes.json")["wallTypes"]
         concrete = [w for w in types if w["name"] == "Concrete"]
         self.assertEqual(len(concrete), 1)
@@ -219,7 +219,7 @@ class WallInjection(unittest.TestCase):
         first = dict(wall_type("Invented Pod"), color="#111111")
         second = dict(wall_type("Invented Pod"), color="#999999")
         report = wall_inject.inject(self.esx, [first, second])
-        self.assertEqual(report["add"], [{"name": "Invented Pod"}])
+        self.assertEqual([a["name"] for a in report["add"]], ["Invented Pod"])
         self.assertEqual(len(report["skip"]), 1)
         pods = [w for w in read_member(self.esx, "wallTypes.json")["wallTypes"]
                 if w["name"] == "Invented Pod"]

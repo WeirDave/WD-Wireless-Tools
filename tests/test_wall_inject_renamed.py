@@ -83,7 +83,7 @@ class EkahausRenaming(unittest.TestCase):
         """He has to be able to see which of his types it landed on."""
         plan = wall_inject.plan_into_members(members(["Dry Wall"]),
                                              template(["Wall, Dry"]))
-        self.assertEqual(plan["update"], [{"name": "Wall, Dry", "was": "Dry Wall"}])
+        self.assertEqual([(u["name"], u["was"]) for u in plan["update"]], [("Wall, Dry", "Dry Wall")])
 
 
 class DistinctTypesStayDistinct(unittest.TestCase):

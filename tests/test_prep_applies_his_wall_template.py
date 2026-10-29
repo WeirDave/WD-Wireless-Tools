@@ -95,18 +95,23 @@ class TheTemplateLands(unittest.TestCase):
 PROBE = r"""
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf8');
-const a = src.indexOf('  function renderPreview(r) {');
-if (a < 0) throw new Error('renderPreview moved');
-let b = a, depth = 0, seen = false;
-while (b < src.length && !(seen && depth === 0)) {
-  if (src[b] === '{') { depth++; seen = true; }
-  else if (src[b] === '}') depth--;
-  b++;
+function slice(head) {
+  const a = src.indexOf(head);
+  if (a < 0) throw new Error(head + ' moved');
+  let b = a, depth = 0, seen = false;
+  while (b < src.length && !(seen && depth === 0)) {
+    if (src[b] === '{') { depth++; seen = true; }
+    else if (src[b] === '}') depth--;
+    b++;
+  }
+  return src.slice(a, b);
 }
+const code = slice('  function wallTypeRows(') + ' ' + slice('  function renderPreview(r) {');
 const el = {};
 function $(id) { return el[id] || (el[id] = { id, hidden: false, innerHTML: '', textContent: '', disabled: false }); }
 function esc(s) { return String(s); }
 function plural(n, one) { return n === 1 ? one : one + 's'; }
+function escAttr(s) { return esc(s); }
 function renderMap() {}
 function syncTrimControls() {}
 function marginWords() { return ''; }
@@ -115,7 +120,7 @@ function setStatus(step, text) { $('prepStatus-' + step).textContent = text; }
 var trim = { boxes: {}, loaded: true }, lastPlan = null, fromDisk = false;
 let go = null;
 function setGo(on, note) { go = { on, note }; }
-eval(src.slice(a, b));
+eval(code);
 renderPreview(JSON.parse(process.argv[2]));
 console.log(JSON.stringify({ go, html: $('prepStatus-walls').textContent + ' '
                                        + $('prepWallList').innerHTML }));

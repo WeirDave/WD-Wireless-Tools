@@ -668,11 +668,6 @@
       var add = w.add || [], upd = w.update || [], skip = w.skip || [];
       var todo = add.length + upd.length;
       willDo += todo;
-      var chips = function (xs) {
-        return xs.map(function (x) {
-          return '<span class="prep-chip">' + esc(x.name) + '</span>';
-        }).join('');
-      };
       setStatus('walls', selectedText('prepWallTpl') + ' · ' + (todo
         ? [add.length ? add.length + ' to add' : '', upd.length ? upd.length + ' to update' : '']
             .filter(Boolean).join(', ')
@@ -681,21 +676,20 @@
       if (add.length) wb.push(add.length + ' wall ' + plural(add.length, 'type') + ' added');
       if (upd.length) wb.push(upd.length + ' updated');
       if (wb.length) writes.push(wb.join(', '));
-      // Chips, not a comma-joined list. Half the shipped names have a comma
-      // in them - "Door, Hollow Wood", "Wall, Cinder Block" - so joining on
-      // commas produces a run of words with no way to tell where one type
-      // ends and the next begins.
       var wl = [];
-      if (add.length) wl.push('<div class="pb-item"><b>Adding</b><br>' + chips(add) + '</div>');
-      if (upd.length) {
-        wl.push('<div class="pb-item"><b>Setting to the template’s version</b><br>' + chips(upd)
-          + '<br><span class="prep-sub">Types the project already has, given the template’s '
-          + 'colour, number key and attenuation. Walls drawn with them stay on them.</span></div>');
+      var shown = wallTypeRows(add, upd, w.same || []);
+      if (shown) wl.push(shown);
+      else {
+        // An older server that names only the work: the names are all there is.
+        var names = function (xs) { return xs.map(function (x) { return esc(x.name); }).join('; '); };
+        if (add.length) wl.push('<div class="pb-item"><b>Adding</b><br>' + names(add) + '</div>');
+        if (upd.length) wl.push('<div class="pb-item"><b>Setting to the template’s version</b><br>'
+          + names(upd) + '</div>');
       }
       if (!todo) {
         wl.push('<div class="pb-item prep-sub">Every type in this template is already here, '
           + 'exactly as the template has it.</div>');
-      } else if (w.unchanged) {
+      } else if (w.unchanged && !(w.same || []).length) {
         wl.push('<div class="pb-item prep-sub">' + w.unchanged + ' already match the template.</div>');
       }
       if (skip.length) {
@@ -722,6 +716,61 @@
     } else {
       setGo(false, 'This project is already prepared — there is nothing left to do.');
     }
+  }
+
+  // The wall template as a list a person can read: one row per type, a swatch
+  // of its colour, and what applying the template does to it, grouped by where
+  // the type comes from. A bare run of names left no way to tell Ekahau's own
+  // types from the ones only this template carries, or which would change.
+  // Returns '' when the server did not say which are Ekahau's.
+  function wallTypeRows(add, upd, same) {
+    var all = [];
+    add.forEach(function (x) { all.push({ x: x, state: 'add' }); });
+    upd.forEach(function (x) { all.push({ x: x, state: 'update' }); });
+    same.forEach(function (x) { all.push({ x: x, state: 'same' }); });
+    if (!all.length) return '';
+    var known = all.every(function (r) { return r.x.stock === true || r.x.stock === false; });
+    if (!known) return '';
+
+    var rowHtml = function (r) {
+      var x = r.x;
+      var colour = /^#[0-9a-f]{3,8}$/i.test(x.color || '') ? ' style="background:' + escAttr(x.color) + '"' : '';
+      var badge = r.state === 'add' ? '<span class="prep-badge prep-badge--do">Add</span>'
+        : r.state === 'update' ? '<span class="prep-badge prep-badge--do">Update</span>'
+        : '<span class="prep-badge prep-badge--skip">Matches</span>';
+      var detail = '';
+      if (r.state === 'update') {
+        var bits = [];
+        if (x.was && x.was !== x.name) bits.push('called “' + esc(x.was) + '” in this project');
+        if ((x.changes || []).length) bits.push('changes ' + x.changes.map(function (c) { return esc(c); }).join(', '));
+        detail = bits.join(' · ');
+      } else if (r.state === 'add') {
+        detail = 'not in this project yet';
+      }
+      return '<div class="pw-row"><span class="pw-swatch"' + colour + '></span>'
+        + '<span class="pw-name">' + esc(x.name) + '</span>' + badge
+        + (detail ? '<span class="pw-detail">' + detail + '</span>' : '') + '</div>';
+    };
+    var count = function (rows) {
+      var n = { add: 0, update: 0, same: 0 };
+      rows.forEach(function (r) { n[r.state]++; });
+      return [n.add ? n.add + ' to add' : '', n.update ? n.update + ' to update' : '',
+              n.same ? n.same + ' already match' : ''].filter(Boolean).join(', ');
+    };
+    var group = function (title, lead, rows) {
+      if (!rows.length) return '';
+      return '<div class="pb-item pw-group"><div class="pw-head"><b>' + esc(title) + '</b> '
+        + '<span class="prep-sub">· ' + rows.length + ' ' + plural(rows.length, 'type') + ': '
+        + esc(count(rows)) + '</span><br><span class="prep-sub">' + esc(lead) + '</span></div>'
+        + rows.map(rowHtml).join('') + '</div>';
+    };
+    return group('Ekahau default types',
+                 'The types every Ekahau project starts with. Matching ones are left as they are.',
+                 all.filter(function (r) { return r.x.stock; }))
+      + group('Only in this template',
+              'Not Ekahau defaults: the template’s own additions.',
+              all.filter(function (r) { return !r.x.stock; }))
+      + '<div class="pb-item prep-sub">Walls already drawn with these types stay on them.</div>';
   }
 
   function selectedText(id) {
@@ -1001,9 +1050,11 @@
     if (stage === 'trim' && $('prepStep-trim').checked) {
       cap.textContent = trim.boxes[f.id]
         ? 'Drag a handle or an edge to adjust your box, or drag inside it to move it. '
-          + 'Space-drag, middle or right drag pans; the wheel zooms.'
-        : 'The dashed line is what automatic keeps. Drag a rectangle to choose your own. '
-          + 'Space-drag, middle or right drag pans; the wheel zooms.';
+          + 'To move the plan, hold Space (the cursor becomes a hand) and drag; '
+          + 'the wheel zooms.'
+        : 'The dashed line is what automatic keeps. Press and drag to draw a box of your own. '
+          + 'To move the plan, hold Space (the cursor becomes a hand) and drag; '
+          + 'the wheel zooms.';
     } else if (stage === 'areas') {
       cap.textContent = 'The requirement area each floor gets. Draw a rectangle or a shape to '
         + 'choose your own, then drag its corners. Drag the plan to move it; the wheel zooms.';
