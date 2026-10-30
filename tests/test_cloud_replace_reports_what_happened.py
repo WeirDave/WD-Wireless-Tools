@@ -196,11 +196,20 @@ class ThePartialFailuresAreSaidTests(_Base):
         self.assertEqual([("site-4", "new-1")], api.assigned)
         self.assertIsNone(out.get("warning"))
 
-    def test_a_failed_sync_back_is_reported_and_not_recorded(self):
+    def test_a_failed_sync_back_keeps_the_old_project_and_says_why(self):
+        """The read-back is the only proof the upload holds the file. When it
+        fails - a survey whose samples did not arrive fails exactly here - the
+        complete old project is the only good copy, so it is not deleted. This
+        used to be a warning on a successful replace, with the old project
+        already gone."""
         out, api = self._run(download_fails=True)
-        self.assertTrue(out.get("ok"), out)
-        self.assertIn("storage timed out", out.get("syncBackError") or "")
-        self.assertIn("downloaded back", out.get("warning") or "")
+        self.assertFalse(out.get("ok"), out)
+        self.assertEqual("readback", out.get("step"))
+        self.assertFalse(out.get("deletedOld"))
+        self.assertEqual([], api.deleted,
+                         "the old project was deleted over an unread upload")
+        self.assertIn("storage timed out", out.get("error") or "")
+        self.assertIn("two copies", out.get("note") or "")
         self.assertNotIn("new-1", ss.load(),
                          "recorded the pair in step after a failed sync-back")
 

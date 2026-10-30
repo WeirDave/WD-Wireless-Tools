@@ -450,7 +450,11 @@ class BuildProjectsDataTests(unittest.TestCase):
                 mock.patch.object(CM, "not_matches_set", return_value=set()), \
                 mock.patch.object(CM.sync_state, "prune") as prune:
             CM.build_projects_data(self.api(projects=[self.PROJECT]), "D:/x")
-        prune.assert_called_once_with(["p-1"])
+        #: With the grace period: a project missing from one listing keeps its
+        #: record for a while, because a wrong listing must not erase the
+        #: both-sides-changed guard (`tools/sync_state.prune`).
+        prune.assert_called_once_with(["p-1"],
+                                      older_than_s=CM._PRUNE_GRACE_S)
 
     def test_a_failure_to_prune_does_not_break_the_listing(self):
         with mock.patch.object(CM, "get_local_esx_files", return_value=[]), \

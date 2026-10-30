@@ -133,7 +133,10 @@ class ReplacingAnExistingCloudProjectTests(unittest.TestCase):
             result = api.upload_project(path)
             if result.get("error"):
                 return result
-            return {"ok": True, "uploaded": True, "datasetId": "new-1"}
+            #: `readBack` because the real upload reports it once the new
+            #: project's content has been fetched; the delete waits for it.
+            return {"ok": True, "uploaded": True, "datasetId": "new-1",
+                    "readBack": True}
 
         mgr.upload_project = fake_upload
         return mgr, api
@@ -302,7 +305,10 @@ class KeepingAnOlderLocalCopyOnPurposeTests(unittest.TestCase):
 
         def fake_upload(path, site_id=None, progress_cb=None):
             api.upload_project(path)
-            return {"ok": True, "uploaded": True, "datasetId": "new-1"}
+            #: `readBack` because the real upload reports it once the new
+            #: project's content has been fetched; the delete waits for it.
+            return {"ok": True, "uploaded": True, "datasetId": "new-1",
+                    "readBack": True}
 
         mgr.upload_project = fake_upload
         return mgr, api
@@ -329,7 +335,7 @@ class KeepingAnOlderLocalCopyOnPurposeTests(unittest.TestCase):
 
         class _Cm:
             def replace_cloud_project(self, path, cloud_id, progress_cb=None,
-                                      overwrite_newer=False):
+                                      overwrite_newer=False, **_more):
                 seen.append(overwrite_newer)
                 return {"ok": True}
 

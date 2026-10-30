@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 import requests
@@ -911,6 +912,25 @@ class EkahauAPI:
             return {"error": f"File not found: {esx_path}"}
         file_name = p.name
         file_size = p.stat().st_size
+
+        #: **Whole and readable before an upload slot is even asked for.** A
+        #: file Ekahau is still writing, or one cut short by a sync client, is
+        #: sent as it is - and a replace then deletes the good cloud project
+        #: on the strength of an upload that "succeeded". Opening the archive
+        #: and finding its project record is cheap next to that.
+        try:
+            import zipfile
+            with zipfile.ZipFile(p) as zf:
+                if "project.json" not in zf.namelist():
+                    return {"error": "That file is not a complete Ekahau "
+                                     "project (it has no project record), so "
+                                     "it was not uploaded. If Ekahau is still "
+                                     "saving it, wait and try again."}
+        except (OSError, zipfile.BadZipFile) as e:
+            return {"error": "That file could not be read as an Ekahau "
+                             "project (%s), so it was not uploaded. If Ekahau "
+                             "or a sync client is still writing it, wait and "
+                             "try again." % e}
 
 
         if progress_cb:
@@ -1839,6 +1859,27 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
         return (p or "").replace(chr(92), "/").lower()
 
 
+    #: **A link is about the file that was at that path when he made it.**
+    #: It is stored as a cloud id and a path, and nothing prunes it when the
+    #: file goes: delete the local .esx, download a *different* cloud project
+    #: into the same place, and the old link paired the new file with the
+    #: old project - as `manual`, which outranks Ekahau's own id and is
+    #: pushable without a question. So the link records the project id the
+    #: file carried, and it stops applying to a file carrying another one.
+    #: A link made before that was recorded has no id and applies as it did.
+    _linked_ids = {}
+    if manual_map:
+        try:
+            _linked_ids = {p["cloudId"]: (p.get("localProjectId") or "").strip().lower()
+                           for p in load_manual_matches()}
+        except Exception:
+            _linked_ids = {}
+
+    def _link_still_describes(cid, l):
+        was = _linked_ids.get(cid) or ""
+        now = (l.get("projectId") or "").strip().lower()
+        return not (was and now and was != now)
+
     pending = []
     for c in cloud_items:
         cid = c.get("id") or ""
@@ -1846,7 +1887,8 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
         if target_path:
             hit = next((i for i, l in enumerate(unmatched_local)
                         if _norm_path(l.get("path")) == target_path
-                        and not _blocked(c, l)), None)
+                        and not _blocked(c, l)
+                        and _link_still_describes(cid, l)), None)
             if hit is not None:
                 _take(c, hit, "manual")
                 continue
@@ -1885,8 +1927,18 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
                 def _rank(i):
                     l = unmatched_local[i]
                     ln = re.sub(r'\s+', ' ', str(l.get("name") or "")).strip().casefold()
-                    return (ln != want, abs(cm_ - int(l.get("mtime") or 0)),
-                            ln)
+                    lm = int(l.get("mtime") or 0)
+                    #: Among files named like the cloud project, **the most
+                    #: recently saved one**, not the one nearest the cloud's
+                    #: date. Copies of one project in two folders ("Site" and
+                    #: "Site Old") tie on name, and picking the nearer date
+                    #: paired the cloud with the *unedited* copy - the file
+                    #: he had worked on then sat as local-only, with no
+                    #: "local is newer" and no push offered for the edits.
+                    #: Newest first makes his work the visible side; a pull
+                    #: onto it is still guarded by the dates. Files not named
+                    #: like the cloud project keep the nearest-date rule.
+                    return (ln != want, -lm if ln == want else abs(cm_ - lm), ln)
                 _take(c, min(same_id, key=_rank), "id")
                 continue
         still_after_id.append(c)
@@ -1900,13 +1952,29 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
     #: same word for word. `namesDiffer` still reports the real spelling
     #: difference, so the rename is still offered.
     def _norm_name(s):
-        return re.sub(r'\s+', ' ', str(s or '')).strip().casefold()
+        #: Composed form too: "Cafe" with the accent typed as one character
+        #: and as two (macOS file names, a pasted cloud name) read as
+        #: different names, so the pair fell through to no match at all.
+        return re.sub(r'\s+', ' ',
+                      unicodedata.normalize('NFC', str(s or ''))).strip().casefold()
 
+    #: **Two projects of one name are told apart by where they live, and the
+    #: order is the names', not Ekahau's.** This walked the cloud listing as
+    #: Ekahau returned it and took the first same-named file on disk, so with
+    #: "Survey" in two sites the cloud project that happened to be listed
+    #: first took whichever folder was scanned first. The listing order moves
+    #: whenever any project is saved, and `exact` is pullable. Sorted, and a
+    #: file in the folder of the cloud project's own site is preferred.
     pending = []
-    for c in still_after_id:
+    for c in sorted(still_after_id,
+                    key=lambda c: (_norm_name(c["name"]), str(c.get("id") or ""))):
         cn = _norm_name(c["name"])
-        hit = next((i for i, l in enumerate(unmatched_local)
-                    if cn == _norm_name(l["name"]) and not _blocked(c, l)), None)
+        cands = [i for i, l in enumerate(unmatched_local)
+                 if cn == _norm_name(l["name"]) and not _blocked(c, l)]
+        where = {_norm_name(c.get("siteFolder")), _norm_name(c.get("siteName"))} - {""}
+        hit = next((i for i in cands
+                    if _norm_name(unmatched_local[i].get("folder")) in where),
+                   cands[0] if cands else None)
         if hit is not None:
             _take(c, hit, "exact", 3.0)
         else:
@@ -2490,7 +2558,12 @@ def build_projects_data(api, output_dir):
     #: `prune` writes only when something actually goes, so the ordinary
     #: refresh touches no file.
     try:
-        sync_state.prune([c.get("id") for c in cloud if c.get("id")])
+        live_ids = [c.get("id") for c in cloud if c.get("id")]
+        #: An account that lists nothing is far more likely a failed answer
+        #: than an account with nothing in it, and pruning against it would
+        #: erase every record.
+        if live_ids:
+            sync_state.prune(live_ids, older_than_s=_PRUNE_GRACE_S)
     except Exception as e:
         applog.note_failure("pruning sync points", e)
 
@@ -2622,6 +2695,102 @@ def _parse_cloud_mtime(pr):
     return 0
 
 
+def _incoming_is_newer(incoming, existing):
+    """Is `incoming` the more recently *saved* of two files, for a merge that
+    keeps the newer and discards the other with no copy?
+
+    The date inside an .esx is when Ekahau last saved it; the filesystem date
+    moves on copy, sync and antivirus touch, which is why the rest of the tool
+    does not trust it. Deciding "keep newer" on the filesystem date let a
+    merely re-synced older file replace the destination's genuinely newer work
+    - the loser being deleted. So an .esx is compared on the date inside it,
+    and the filesystem date is only the answer for files that have none.
+    """
+    try:
+        a_fs, b_fs = incoming.stat().st_mtime, existing.stat().st_mtime
+    except OSError:
+        return False
+    if incoming.suffix.lower() == ".esx" and existing.suffix.lower() == ".esx":
+        try:
+            a_in = _esx_meta(incoming, int(a_fs)).get("internalMtime") or 0
+            b_in = _esx_meta(existing, int(b_fs)).get("internalMtime") or 0
+        except Exception:
+            a_in = b_in = 0
+        if a_in and b_in:
+            return a_in > b_in + 1
+    return a_fs > b_fs + 1
+
+
+def _replace_keeping_old_until_moved(src, dst):
+    """Put `src` over `dst` without a moment when neither exists.
+
+    `dst.unlink()` then `shutil.move` left the destination gone if the move
+    then failed (a locked file, a full disk). The incoming file is moved in
+    beside the destination first and swapped in with one `os.replace`."""
+    tmp = dst.with_name(dst.name + ".wd-merge.tmp")
+    try:
+        shutil.move(str(src), str(tmp))
+        os.replace(tmp, dst)
+    except Exception:
+        try:
+            if tmp.exists() and not src.exists():
+                shutil.move(str(tmp), str(src))
+            elif tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+
+#: How long a sync point for a project missing from the listing is kept. See
+#: `sync_state.prune`: a listing that is wrong must not erase the record the
+#: both-sides-changed guards read.
+_PRUNE_GRACE_S = 30 * 24 * 3600
+
+
+def _fingerprint(path):
+    """Size and modification time to the nanosecond, or None.
+
+    Taken before a long transfer and compared just before the local file is
+    replaced. A download or an upload's read-back runs for seconds to
+    minutes, and the decision to overwrite was made at the start; a save from
+    Ekahau in that window was replaced by the older cloud copy without a
+    word. The comparison is on the file itself, not on the date inside it,
+    because a save that leaves the internal date alone is the case the dates
+    cannot see.
+    """
+    try:
+        st = Path(path).stat()
+        return (st.st_size, st.st_mtime_ns)
+    except OSError:
+        return None
+
+
+def _divergence_of(project_id, src, cloud_mtime, local_internal_mtime):
+    """What this machine's sync point says about a pair, read at the moment of
+    a write - never taken from the page.
+
+    The listing carries the same verdict (`divergence` on each matched row),
+    but only the whole-account Sync planner acted on it; the single-row Pull
+    and Push, and every bulk path that reaches them, asked the server only
+    "is the other side newer by date". A date cannot see a pair where *both*
+    sides were edited: the cloud copy edited at 09:00 and the local file at
+    10:00 reads as a plain "local is newer", and a push deletes the 09:00
+    work. The recorded sync point can, so the two destructive writes ask it
+    here, where the answer is current and the page cannot be stale.
+
+    An unreadable record is `unknown`, which means "fall back to the dates" -
+    the answer the tool gave before the record existed, not a new refusal.
+    """
+    try:
+        return sync_state.classify(
+            sync_state.load().get(str(project_id)), cloud_mtime,
+            local_internal_mtime, str(src), _esx_size(Path(src)))
+    except Exception as e:
+        applog.note_failure("reading the sync point before a write", e)
+        return sync_state.UNKNOWN
+
+
 _PROJECT_TYPE_LABELS = {
     "SIMULATED_PROJECT": "Design",
     "MEASURED_PROJECT": "Measured",
@@ -2689,6 +2858,7 @@ def build_duplicates_data(api, output_dir):
             "mtime": int(f.get("mtime", 0) or 0),
             "location": f["folder"],
             "owner": f.get("owner") or "",
+            "projectId": f.get("projectId") or "",
         })
 
 
@@ -2701,9 +2871,18 @@ def build_duplicates_data(api, output_dir):
                            for c in cloud_items]
         local_for_match = [{"path": l["path"], "name": l["name"],
                             "code": extract_site_code(l["name"]),
-                            "isDir": False, "folder": l["location"]}
+                            "isDir": False, "folder": l["location"],
+                            "projectId": l.get("projectId") or ""}
                            for l in local_items]
-        m = build_matches(cloud_for_match, local_for_match)
+        #: **The same inputs the Projects tab matches with.** This asked
+        #: without the project id, the links or the not-a-matches, so two
+        #: cloud projects sharing a name were told apart by listing order
+        #: rather than by which one the local file actually is - the tab then
+        #: marked the proven project as the extra, and "Delete extras" removes
+        #: the extras from the cloud for good.
+        mm_dup, _ = manual_matches_map()
+        m = build_matches(cloud_for_match, local_for_match,
+                          not_matches_set(), mm_dup)
         for entry in m["matched"]:
             if entry["cloud"].get("id"):
                 matched_cloud_ids.add(entry["cloud"]["id"])
@@ -2724,6 +2903,39 @@ def build_duplicates_data(api, output_dir):
         if not key:
             continue
         clusters_by_key.setdefault(key, []).append(item)
+
+    #: **Files that share a name are not duplicates when Ekahau says they are
+    #: different projects.** The grouping is by name alone, so `Baseline.esx`
+    #: in two sites' folders became one cluster and "Keep newest - delete
+    #: rest" removed one site's project. A project id is Ekahau's own record
+    #: of identity and survives every copy and rename, so two local files
+    #: carrying *different* ids are two projects, whatever they are called.
+    #: Copies of one project (same id) still cluster; a cloud project joins
+    #: the group of the local file that carries its id; and files that carry
+    #: no readable id stay together by name, as before.
+    split = {}
+    for key, items in clusters_by_key.items():
+        groups = {}
+        for it in items:
+            gid = ((it.get("projectId") or "").strip().lower()
+                   if it["side"] == "local" else "")
+            groups.setdefault(gid, []).append(it)
+        known = [g for g in groups if g]
+        if len(known) <= 1:
+            split[key] = items
+            continue
+        rest = []
+        for it in groups.get("", []):
+            cid = (it.get("id") or "").strip().lower()
+            if it["side"] == "cloud" and cid in groups:
+                groups[cid].append(it)
+            else:
+                rest.append(it)
+        for gid in known:
+            split["%s#%s" % (key, gid[:8])] = groups[gid]
+        if rest:
+            split[key] = rest
+    clusters_by_key = split
 
     clusters = []
     for key, items in clusters_by_key.items():
@@ -3011,7 +3223,9 @@ class CloudManager:
             if not od:
                 return {"error": "No local folder is set — pick one first"}
             _assert_inside(path, od)
-
+            if os.path.normcase(os.path.abspath(str(path))) ==                     os.path.normcase(os.path.abspath(str(od))):
+                return {"error": "That is the folder every site lives in "
+                                 "- it cannot be renamed from here."}
 
             if not new_name or new_name in (".", ".."):
                 return {"error": "Invalid name"}
@@ -3042,8 +3256,29 @@ class CloudManager:
                 return {"error": "No local folder is set — pick one first"}
             _assert_inside(path, od)
             p = Path(path)
+            #: The configured folder holds every site. `_assert_inside`
+            #: allows a path equal to its root, and nothing in the page sends
+            #: it - which is why this is a refusal here and not a prompt
+            #: there: the one request that can never be right.
+            if os.path.normcase(os.path.abspath(str(p))) ==                     os.path.normcase(os.path.abspath(str(od))):
+                return {"error": "That is the folder every site lives in, "
+                                 "not a site. Nothing was deleted."}
             if p.is_dir():
                 shutil.rmtree(p, onerror=_force_remove)
+                #: `_force_remove` swallows what it cannot remove, so
+                #: `rmtree` returns normally over a folder it only half
+                #: emptied - a file held open by another program is enough.
+                #: Reporting that as done told the page, and the merge's
+                #: "delete the source folder afterwards" step, that it was
+                #: gone. Say what is still there.
+                if p.exists():
+                    left = [q for q in p.rglob("*") if not q.is_dir()]
+                    return {"error": "Part of that folder could not be deleted "
+                                     "- %d file%s still there (a file open in "
+                                     "another program is the usual reason). "
+                                     "The rest was deleted."
+                                     % (len(left), "" if len(left) == 1 else "s"),
+                            "partial": True, "remaining": len(left)}
             else:
                 try:
                     p.unlink()
@@ -3055,7 +3290,7 @@ class CloudManager:
             return {"error": str(e)}
 
     def replace_cloud_project(self, esx_path, cloud_project_id, progress_cb=None,
-                              overwrite_newer=False):
+                              overwrite_newer=False, allow_missing_survey_data=False):
         """Put a local .esx up over an existing cloud project.
 
         "why can't we just automatically delete that first and then upload the
@@ -3125,6 +3360,39 @@ class CloudManager:
                                 .get("internalMtime") or fs_mtime)
         cloud_mtime = _parse_cloud_mtime(old)
         _NEWER_TOLERANCE_S = 60
+        #: **The cloud copy changed since the last time the two were the
+        #: same, and that is not visible in the dates.** A project edited in
+        #: the cloud at 09:00 and locally at 10:00 reads as "local is newer",
+        #: and this function then deletes the 09:00 work. The recorded sync
+        #: point separates that from an ordinary local edit. It is friction,
+        #: not a wall: the same confirm that lifts the newer-cloud refusal
+        #: (naming both dates) sends `overwrite_newer`, and a pair this
+        #: machine has no record of is `unknown` and is not refused.
+        if not overwrite_newer and local_internal_mtime and cloud_mtime:
+            moved = _divergence_of(cloud_project_id, esx_path, cloud_mtime,
+                                   local_internal_mtime)
+            if moved in (sync_state.BOTH_CHANGED, sync_state.CLOUD_CHANGED):
+                return {
+                    "error": "diverged",
+                    "step": "direction",
+                    "deletedOld": False,
+                    "oldId": cloud_project_id,
+                    "divergence": moved,
+                    "message": (
+                        ("Both your local file and the cloud copy of \"%s\" "
+                         "have been changed since they were last the same. "
+                         "Replacing the cloud copy would throw its changes "
+                         "away, and a cloud delete cannot be undone."
+                         if moved == sync_state.BOTH_CHANGED else
+                         "The cloud copy of \"%s\" has been changed since it "
+                         "was last the same as your local file. Replacing it "
+                         "would throw those changes away, and a cloud delete "
+                         "cannot be undone.")
+                        % (old_name or "that project")
+                        + " Nothing was uploaded and nothing was deleted."),
+                    "localMtime": local_internal_mtime,
+                    "cloudMtime": cloud_mtime,
+                }
         #: A missing date is Ekahau not saying, which is not Ekahau saying
         #: newer - a guard that fired on that would refuse his ordinary case.
         if (not overwrite_newer and local_internal_mtime and cloud_mtime
@@ -3164,6 +3432,33 @@ class CloudManager:
                                 owner_email or "someone else"),
                     "step": "ownership", "deletedOld": False,
                     "oldId": cloud_project_id}
+
+        #: **A file that has lost its survey samples must not silently replace
+        #: the project that may still hold them.** The row asked about this
+        #: in the page, and the bulk Sync paths did not - so the same file was
+        #: refused one way and deleted the cloud project the other. The server
+        #: is the one place every route passes, so it asks here; the page
+        #: lifts it with a confirm that says what is missing.
+        if not allow_missing_survey_data:
+            try:
+                gaps = int(_esx_meta(Path(esx_path), fs_mtime).get("surveyGaps") or 0)
+            except Exception:
+                gaps = 0
+            if gaps:
+                return {
+                    "error": "missing_survey_data",
+                    "step": "completeness",
+                    "deletedOld": False,
+                    "oldId": cloud_project_id,
+                    "surveyGaps": gaps,
+                    "message": ("\"%s\" is missing %d file%s of signal and "
+                                "noise samples that its surveys refer to. The "
+                                "cloud project may still hold them, and "
+                                "replacing it deletes that project for good. "
+                                "Nothing was uploaded and nothing was deleted."
+                                % (Path(esx_path).stem, gaps,
+                                   "" if gaps == 1 else "s")),
+                }
 
         #: Site and shares both come from the dataset listing. The raw
         #: `get_projects()` record carries no `sharedWith`, so reading it
@@ -3278,6 +3573,27 @@ class CloudManager:
                             "local file, uploaded as \"%s\"; the other is the "
                             "older cloud copy. Nothing was deleted."
                             % uploaded_as}
+
+        #: **The upload must have been read back before the old one goes.** The
+        #: listing check above only proves a row exists. Reading the new
+        #: project's content back (the sync-back) is what proves the upload
+        #: holds the file - a survey whose samples did not make it fails
+        #: right there with "failed fetching". That failure was a warning, and
+        #: the complete old project was deleted anyway. A duplicate is visible
+        #: and removable; a deleted project is not.
+        if not (up.get("readBack") or up.get("syncedBack")):
+            return {"error": "The new copy uploaded, but its content could not "
+                             "be read back from the cloud to check it (%s), so "
+                             "the old one was left alone."
+                             % (up.get("syncBackError") or "no reason given"),
+                    "step": "readback", "deletedOld": False, "newId": new_id,
+                    "uploadedAs": uploaded_as, "oldId": cloud_project_id,
+                    "note": "There are now two copies: the older cloud "
+                            "project (\"%s\") and this upload (\"%s\"). "
+                            "Nothing was deleted. Check the new one opens in "
+                            "Ekahau Cloud, then delete the older one - or "
+                            "delete the new one and try again."
+                            % (old_name or "the existing project", uploaded_as)}
 
         # ---- 3. only now, the old one ------------------------------------
         if progress_cb:
@@ -3579,6 +3895,10 @@ class CloudManager:
         try:
 
             before_ids = {p["id"] for p in self.api.get_projects()}
+            #: What the file was when the upload began, for the sync-back
+            #: below - see `_fingerprint`. An upload plus the wait for the
+            #: listing can run minutes.
+            seen_at_start = _fingerprint(esx_path)
 
             def _remap(cb, lo, hi):
                 """Wrap progress_cb to remap 0-100 → lo-hi."""
@@ -3730,17 +4050,46 @@ class CloudManager:
                     else:
                         esx_bytes = dl["esx"]
                         src = Path(esx_path)
-                        if progress_cb:
-                            progress_cb(current=97,
-                                        message="Replacing local file with cloud copy…")
-                        tmp = src.with_suffix(src.suffix + ".wd-syncback.tmp")
-                        with open(tmp, "wb") as f:
-                            f.write(esx_bytes)
-                        os.replace(tmp, src)
-                        _ESX_META_CACHE.pop(str(src), None)
-                        _ESX_TYPE_CACHE.pop(str(src), None)
-                        ret["syncedBack"] = True
-                        self._record_upload_sync_point(new_id, src)
+                        #: The cloud copy came back, so what was uploaded is
+                        #: readable - the proof `replace_cloud_project` waits
+                        #: for before it deletes the old project. Whether it
+                        #: then goes over the local file is a separate
+                        #: question, answered below.
+                        ret["readBack"] = True
+                        if _fingerprint(src) != seen_at_start:
+                            ret["syncBackError"] = (
+                                "the local file was saved while it was "
+                                "uploading, so it was left as it is")
+                            ret.setdefault(
+                                "warning",
+                                "Uploaded OK, but the local file was saved "
+                                "while it was uploading, so the cloud copy "
+                                "was not written over it. The local file is "
+                                "newer than what was uploaded.")
+                        else:
+                            if progress_cb:
+                                progress_cb(current=97,
+                                            message="Replacing local file with cloud copy…")
+                            tmp = src.with_suffix(src.suffix + ".wd-syncback.tmp")
+                            _bm = _lp()
+                            tmp_w, src_w = _bm.write_path(tmp), _bm.write_path(src)
+                            try:
+                                with open(tmp_w, "wb") as f:
+                                    f.write(esx_bytes)
+                                os.replace(tmp_w, src_w)
+                            except Exception:
+                                #: A file open in Ekahau makes the replace
+                                #: fail on Windows; the full-size temp file
+                                #: used to stay in a synced folder.
+                                try:
+                                    os.unlink(tmp_w)
+                                except OSError:
+                                    pass
+                                raise
+                            _ESX_META_CACHE.pop(str(src), None)
+                            _ESX_TYPE_CACHE.pop(str(src), None)
+                            ret["syncedBack"] = True
+                            self._record_upload_sync_point(new_id, src)
                 except Exception as e:
                     applog.note_failure("syncing the uploaded project back", e)
                     ret["syncBackError"] = str(e)
@@ -3944,6 +4293,7 @@ class CloudManager:
             fs_mtime = 0
         local_meta = _esx_meta(src, fs_mtime)
         local_internal_mtime = local_meta.get("internalMtime") or fs_mtime
+        seen_at_start = _fingerprint(src)
 
 
         try:
@@ -3974,6 +4324,14 @@ class CloudManager:
         except Exception:
             local_edited = False
         refusal = None
+        #: **Both sides moved since the two were last the same.** Neither date
+        #: test below sees it: the cloud copy being later than the local one
+        #: is the ordinary "cloud is newer", and it is also exactly what a
+        #: pair looks like when the local file was edited *and then* the
+        #: cloud copy was. A refusal here is lifted the same way the others
+        #: are - by the contents proving the cloud copy holds nothing less.
+        divergence = _divergence_of(project_id, src, cloud_mtime,
+                                    local_internal_mtime)
         if local_edited:
             refusal = {
                 "error": "local_newer",
@@ -3983,6 +4341,19 @@ class CloudManager:
                             "cloud copy does not. Overwriting it would lose "
                             "that work. Upload local to cloud first, or skip "
                             "this pair."),
+                "localMtime": local_internal_mtime,
+                "cloudMtime": cloud_mtime,
+            }
+        elif divergence == sync_state.BOTH_CHANGED:
+            refusal = {
+                "error": "diverged",
+                "message": ("Both this file and the cloud copy have been "
+                            "changed since they were last the same, so the "
+                            "cloud copy is not simply a newer version of it. "
+                            "Downloading would discard the changes made "
+                            "here. Nothing was changed. Use Check to see "
+                            "what differs, or upload local to cloud if the "
+                            "cloud changes are the ones to lose."),
                 "localMtime": local_internal_mtime,
                 "cloudMtime": cloud_mtime,
             }
@@ -4040,6 +4411,16 @@ class CloudManager:
         #: be a backup of a backup. It only runs when the cloud side is the
         #: newer of the two; the direction that would overwrite newer local
         #: work is refused higher up, by name.
+        #: **Decided at the top, written here - after a whole download.** A
+        #: save from Ekahau in between is newer than anything the checks above
+        #: looked at, and the replace below would put the older cloud copy
+        #: over it. The file itself is compared, not its internal date: the
+        #: date is what a save may leave alone.
+        if _fingerprint(src) != seen_at_start:
+            return {"error": "The local file was saved while the cloud copy "
+                             "was downloading, so it was left alone. Nothing "
+                             "was changed - look at it again before "
+                             "downloading."}
         tmp = src.with_suffix(src.suffix + ".wd-verify.tmp")
         #: Same length problem as the rename path - see `longpath.write_path`.
         _bm = _lp()
@@ -5253,14 +5634,13 @@ class CloudManager:
                         #: beat it each sent "overwrite", and whichever ran
                         #: second replaced the newest copy - the order of the
                         #: folders chose which work was lost.
-                        action = ("overwrite"
-                                  if s.stat().st_mtime > d.stat().st_mtime + 1
+                        action = ("overwrite" if _incoming_is_newer(s, d)
                                   else "skip")
                     if not d.exists():
                         shutil.move(str(s), str(d)); moved += 1
                         moves.append((str(s), str(d)))
                     elif action == "overwrite":
-                        d.unlink(); shutil.move(str(s), str(d)); overwritten += 1
+                        _replace_keeping_old_until_moved(s, d); overwritten += 1
                         moves.append((str(s), str(d)))
                     elif action == "keepboth":
 
@@ -5363,10 +5743,29 @@ class CloudManager:
         target = _nm_pair_key(cloud_id, local_path)
         if any(_nm_pair_key(p["cloudId"], p["localPath"]) == target for p in pairs):
             return {"ok": True, "already": True}
+        #: **One cloud project, one file.** The map the matcher reads is
+        #: keyed by cloud id, so a second link for the same project replaced
+        #: the first on screen while the first stayed in the file - and
+        #: removing the new one silently brought the old one back as a proven
+        #: pair. Two projects linked to one file were resolved by listing
+        #: order. Linking again is a change of mind, so it replaces.
+        norm_path = (local_path or "").replace(chr(92), "/").lower()
+        pairs = [p for p in pairs
+                 if p["cloudId"] != cloud_id
+                 and (p["localPath"] or "").replace(chr(92), "/").lower() != norm_path]
+        #: The project id the file carries now, so the link can tell when the
+        #: file at this path is later replaced by a different project's.
+        file_id = ""
+        try:
+            lp = Path(local_path)
+            file_id = (_esx_meta(lp, int(lp.stat().st_mtime)).get("projectId") or "")
+        except Exception:
+            file_id = ""
         pairs.append({
             "cloudId": cloud_id, "localPath": local_path,
             "cloudName": cloud_name, "localName": local_name,
             "addedAt": int(time.time()),
+            "localProjectId": file_id,
         })
         save_manual_matches(pairs)
 

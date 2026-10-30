@@ -70,7 +70,7 @@ const API_MAP = {
   //: the middle. The server treats anything but an explicit `false` as a
   //: dry run, so a caller that forgets it previews rather than writes.
   reconcile_pairs: ['reconcile_pairs', ['cloudIds', 'dryRun', 'opId']],
-  replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId', 'overwriteNewer']],
+  replace_cloud_project: ['replace_cloud_project', ['path', 'cloudId', 'opId', 'overwriteNewer', 'allowShort']],
   compare_with_cloud: ['compare_with_cloud', ['path', 'cloudId', 'opId', 'cloudMtime']],
   set_internal_project_name: ['set_internal_project_name', ['path', 'name', 'opId']],
   list_shares: ['list_shares', ['projectId']],
@@ -4475,7 +4475,7 @@ function bulkFixInternalNames() {
    upload-verify-delete sequence for the bulk path is how this repo grows two
    implementations of one operation, and the row and the planner disagreeing is
    exactly what this commit is fixing. */
-function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName, overwriteNewer) {
+function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName, overwriteNewer, allowShort) {
   _setRowBusy(cloudId, localPath, 'Uploading your local copy and replacing the cloud project…');
   const handle = opEnqueue({
     title: `Replacing cloud "${cloudName || localName}" with your local copy`,
@@ -4484,7 +4484,57 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName, ov
     busyRow: { cloudId, localPath,
                label: 'Uploading your local copy and replacing the cloud project…' },
     run: async (opId) => {
-      const r = await pyApi('replace_cloud_project', localPath, cloudId, opId, overwriteNewer === true);
+      /* One place issues the call the operation is made of, however many
+         times it is sent. */
+      const send = (force, short) => pyApi('replace_cloud_project', localPath, cloudId, opId,
+                                           force === true, short === true);
+      let r = await send(overwriteNewer, allowShort);
+
+      /* The file is missing signal and noise samples its surveys refer to, and
+         the cloud project may be the only place they still are. The row asks
+         before it gets here; the bulk runs do not, so the server's answer is
+         what asks them - the same file is not refused one way and sent the
+         other. */
+      if (r && r.error === 'missing_survey_data' && allowShort !== true) {
+        const ok = await showConfirmModal(
+          'Replace the cloud copy with a file missing survey data?',
+          '<p><b>' + e(localName || '') + '</b> is missing ' + Number(r.surveyGaps || 0)
+          + ' file' + (Number(r.surveyGaps) === 1 ? '' : 's') + ' of signal and noise samples '
+          + 'that its surveys refer to.</p>'
+          + '<p class="sub">The cloud project <b>' + e(cloudName || '') + '</b> may still hold them. '
+          + 'Replacing it uploads this file and then deletes that project, and a cloud delete '
+          + 'cannot be undone.</p>',
+          'Replace it anyway');
+        if (!ok) {
+          throw new Error('Not replaced — the file is missing survey data and you chose to keep the cloud copy. Nothing was uploaded and nothing was deleted.');
+        }
+        allowShort = true;
+        r = await send(overwriteNewer, true);
+      }
+
+      /* The server read the record of what the two sides last looked like
+         and found the cloud copy has changed since - something two dates
+         cannot show. It has uploaded nothing and deleted nothing. The one way
+         past is a confirm that names what is lost; it is asked here, from the
+         server's own answer, rather than from whatever the page believed when
+         the list was drawn, so no row can reach the delete without it. */
+      if (r && r.error === 'diverged' && overwriteNewer !== true) {
+        const ok = await showConfirmModal(
+          'Replace a cloud copy that has changed?',
+          '<p>The cloud project <b>' + e(cloudName || localName || '') + '</b> has been changed since '
+          + 'it was last the same as your local file'
+          + (r.divergence === 'both_changed' ? ', and so has the local file' : '') + '.</p>'
+          + '<p>Replacing it means <b>the changes made in the cloud are lost</b>. '
+          + 'Use <b>Check</b> on the row first if you are not sure what differs.</p>'
+          + '<p class="sub">Your local file is uploaded and checked first; the old cloud project '
+          + 'is deleted only after that succeeds. A cloud delete cannot be undone, '
+          + 'and anyone it was shared with loses access.</p>',
+          'Replace the cloud copy');
+        if (!ok) {
+          throw new Error('Not replaced — you chose to keep the cloud copy. Nothing was uploaded and nothing was deleted.');
+        }
+        r = await send(true, allowShort);
+      }
 
       if (r && r.error) {
         /* The server re-reads both dates before it deletes anything, because
@@ -4496,6 +4546,15 @@ function _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName, ov
         if (r.error === 'cloud_newer') {
           throw new Error('Not replaced — the cloud copy is the newer one. '
             + (r.message || 'Nothing was uploaded and nothing was deleted.'));
+        }
+        /* The cloud copy was changed since the two were last the same, which
+           the dates alone cannot show. The row asks before sending this
+           (`pushLocalOverCloud`), so reaching here means the page's picture
+           was out of date - say so rather than overwrite on a guess. */
+        if (r.error === 'diverged') {
+          throw new Error('Not replaced — ' + (r.message
+            || 'the cloud copy has changed since the two were last the same.')
+            + ' Refresh the list and try again.');
         }
         /* `note` is where the backend says what state the cloud is actually in
            - "nothing was deleted", or "there are now two copies and the new
@@ -4593,7 +4652,8 @@ async function pushLocalOverCloud(cloudId, localPath, localName, cloudName, matc
       'Replace it');
     if (!ok) return;
   }
-  _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName);
+  _enqueuePushLocalOverCloud(cloudId, localPath, localName, cloudName,
+                             false, Number(surveyGaps) > 0);
 }
 
 /* The badge used to be the whole story: it said the cloud copy was newer and
@@ -7329,6 +7389,9 @@ async function verifyReplaceLocal(cloudId, localPath, cloudName, cloudMtime, loc
         if (r.error === 'local_newer') {
           throw new Error('Not downloaded — your local copy is the newer one (' + (r.message || 'it would have been overwritten') + ')');
         }
+        if (r.error === 'diverged') {
+          throw new Error('Not downloaded — ' + (r.message || 'both copies have changed since they were last the same'));
+        }
         throw new Error(r.error);
       }
       // The badge goes when the refresh re-reads both sides; clearing the
@@ -7388,6 +7451,9 @@ async function bulkVerifyNameMatches() {
           _markVerifyFailed(d.cloudId, d.localPath);
           if (r.error === 'local_newer') {
             throw new Error('Skipped — local is newer than cloud');
+          }
+          if (r.error === 'diverged') {
+            throw new Error('Skipped — both copies have changed since they were last the same');
           }
           throw new Error(r.error);
         }
@@ -8981,6 +9047,9 @@ async function bulkSync(dir) {
             // wins - it just re-read both - and nothing was written.
             throw new Error('Skipped — the server says local is newer');
           }
+          if (r.error === 'diverged') {
+            throw new Error('Skipped — both copies have changed since they were last the same');
+          }
           throw new Error(r.error);
         }
         _scheduleOpRefresh();
@@ -9610,6 +9679,9 @@ async function syncEverything() {
           if (r.error === 'local_newer') {
             throw new Error('Skipped — the server says local is newer');
           }
+          if (r.error === 'diverged') {
+            throw new Error('Skipped — both copies have changed since they were last the same');
+          }
           throw new Error(r.error);
         }
         _scheduleOpRefresh();
@@ -9619,7 +9691,7 @@ async function syncEverything() {
     waits.push(promise.then(() => {
       results.done++;
     }).catch(err => {
-      if (/local is newer/i.test((err && err.message) || '')) results.skipped++;
+      if (/local is newer|since they were last the same/i.test((err && err.message) || '')) results.skipped++;
       else results.failed++;
     }));
   }
@@ -9784,7 +9856,10 @@ function bulkDelete() {
   _setDeleteWhat('deleteWhat', _deleteWhatHtml(items.map(d =>
     d.kind === 'cloud'
       ? _cloudDeleteEntry(d.id, d.name, (d.context || currentTab) === 'sites')
-      : { name: d.name, siteName: '', modified: 'on this computer',
+      : { name: d.name, siteName: '',
+          modified: 'on this computer' + (d.isDir || isSiteish(d)
+            ? (localFolderContentsText(d.path) ? ' · folder holding ' + localFolderContentsText(d.path) : '')
+            : ''),
           sharedLine: null, isSite: false })));
   showModal('deleteModal');
 }
@@ -10244,6 +10319,25 @@ async function confirmRename() {
   });
 }
 
+/* What a local folder holds, in words, for the dialogs that delete it.
+
+   The single-folder dialog counted floor plans, images and other files and
+   never the .esx projects, and the bulk dialog listed a folder by name and
+   "on this computer" and nothing else - so the files that are most often the
+   only copy were the ones neither dialog mentioned. `folder_inventory`
+   already counted them. Empty when the page has no inventory for the path,
+   which is not the same as an empty folder, so it claims nothing. */
+function localFolderContentsText(path) {
+  const l = localByPath(path), s = l && l.src;
+  if (!s || !s.total) return '';
+  const bits = [];
+  if (s.esx) bits.push(`${s.esx} .esx project${s.esx > 1 ? 's' : ''}`);
+  const other = (s.total || 0) - (s.esx || 0);
+  if (other > 0) bits.push(`${other} other file${other > 1 ? 's' : ''}`);
+  if (s.tuckedCount) bits.push(`${s.tuckedCount} in archive/output/backup subfolders`);
+  return bits.join(', ');
+}
+
 function startDelete(side, idOrPath, name, isDir, kind) {
   kind = kind || currentTab;
   deleteTarget = { side, idOrPath, kind, name };
@@ -10263,6 +10357,9 @@ function startDelete(side, idOrPath, name, isDir, kind) {
       : `Delete the local file <b>"${e(name)}.esx"</b> from disk. This cannot be undone.`;
     if (isDir) {
       const l = localByPath(idOrPath), s = l && l.src;
+      if (s && s.esx) {
+        warn += `<div class="del-warn">&#9888; This folder holds <b>${s.esx} .esx project${s.esx > 1 ? 's' : ''}</b>. Any that are not also in Ekahau Cloud are deleted for good.</div>`;
+      }
       if (s && s.srcCount) {
         const bits = [];
         if (s.plans) bits.push(`${s.plans} floor plan${s.plans > 1 ? 's' : ''}`);

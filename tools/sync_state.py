@@ -274,16 +274,29 @@ def forget(cloud_id, _path=None) -> None:
         save(pairs, _path)
 
 
-def prune(live_cloud_ids, _path=None) -> int:
+def prune(live_cloud_ids, _path=None, older_than_s=0) -> int:
     """Drop records for projects that are no longer in the account.
 
     Returns how many went. Without this the file grows for the life of the
     install, and a recycled id would read against a record for a project that
     no longer exists.
+
+    **A record is the only thing that can say "both of you changed it", and a
+    listing is not always the whole account.** A partial or empty answer from
+    Ekahau, or a different account signed in for an afternoon, makes every
+    project look gone, and the prune then erased the safety record for pairs
+    that are very much alive - after which the guards fall back to dates,
+    which cannot see a divergence. `older_than_s` keeps a record that was
+    written recently enough to still matter: a project really deleted costs a
+    few bytes for the grace period, a wrongly erased record costs the guard.
+    (An empty listing is the caller's to refuse - `prune([])` is how a test
+    clears the store.)
     """
     pairs = load(_path)
     live = {str(i) for i in (live_cloud_ids or [])}
-    dead = [k for k in pairs if k not in live]
+    now = time.time()
+    dead = [k for k in pairs if k not in live
+            and now - int((pairs[k] or {}).get("syncedAt") or 0) >= older_than_s]
     for k in dead:
         pairs.pop(k, None)
     if dead:
