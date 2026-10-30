@@ -6313,7 +6313,7 @@
 
   function placementKeyHtml(opts, aps) {
     var bits = [keySwatch('omni', aps) + ' Access point'];
-    if (opts.showCones) bits.push(keySwatch('dir', aps) + ' Directional, arrow shows aim');
+    if (opts.showCones) bits.push(keySwatch('dir', aps) + ' Directional, cone shows aim');
     return bits.join(' &nbsp;·&nbsp; ');
   }
 
@@ -8868,7 +8868,7 @@
       + REPORT_FOOTER;
   }
 
-  /* The aim sheet's floor map is the placement map's markers with the arrows
+  /* The aim sheet's floor map is the placement map's markers with the cones
      always on. It used to be its own marker code - a box centred on the dot,
      with a hairline tick - and that had no way to keep two numbers apart (86
      overlapping pairs on one floor of the odd-geometry fixture), let the tick
@@ -8895,7 +8895,7 @@
       +     '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + markers + '</svg>'
       +   '</div>'
       +   '<div class="rep-overview-key">' + WD.esc(labelHint)
-      +     ' The arrow on a marker points the way its antenna is aimed.'
+      +     ' The cone on a marker points the way its antenna is aimed.'
       +     placementNotes({ offPlan: stats.offPlan, stacked: stats.stacked }) + '</div>'
       + '</div>'
       + '</section>';
@@ -10346,7 +10346,7 @@
           description: 'A second line under the name, e.g. "C-4" — the nearest column-grid intersection, which is the coordinate system the crew on site already uses. Set the grid up first with the button below; until at least one floor is calibrated this adds nothing.' },
         { id: '_gridRefSetup', type: 'gridref-button', label: 'Set up column grid…',
           description: 'Click two intersections you can name on each floor plan. Nothing is read off the drawing. This is the building’s own column grid — not the section grid above, which only decides how a large floor is split across pages.' },
-        { id: 'showCones', label: 'Show aiming arrows on directional APs', default: false,
+        { id: 'showCones', label: 'Show aiming cones on directional APs', default: false,
           description: 'Off by default \u2014 this map is about where the APs go. The Antenna Aim Sheet covers aiming.' },
         { id: 'inclDirectional', label: 'Include directional APs', default: true,
           description: 'All AP types are on by default so nothing is missing from the map.' },
@@ -10569,13 +10569,13 @@
         { icon: '📋', title: 'Single-page table',
           description: 'Every directional AP as one row: AP name, floor, azimuth (with compass), tilt, mount height (meters + feet), antenna model.' },
         { icon: '🎯', title: 'Per-floor mini-map',
-          description: 'Below the table, a floor plan per floor with each AP numbered and an arrow showing the way its antenna points — a quick sanity check before climbing a ladder.' },
+          description: 'Below the table, a floor plan per floor with each AP numbered and a cone showing the way its antenna points — a quick sanity check before climbing a ladder.' },
         { icon: '✅', title: 'Sign-off row',
           description: 'Installer initials + date column on the right side of each row, so the printed sheet doubles as an as-built.' },
       ],
       sidebar: [
         { id: 'overview', label: 'Per-floor mini-maps', default: true,
-          description: 'A floor plan per floor below the table, with numbered APs and an arrow for the way each antenna points — sanity check before climbing a ladder.' },
+          description: 'A floor plan per floor below the table, with numbered APs and a cone for the way each antenna points — sanity check before climbing a ladder.' },
         { id: 'signOff',  label: 'Sign-off columns (initials + date)', default: true,
           description: 'Right side of each row keeps two blank cells so the printed sheet doubles as an as-built.' },
         { id: 'gridRef', type: 'check', label: 'Column grid reference', default: false,
@@ -10813,7 +10813,7 @@
         { icon: '📑', title: 'Table of contents & project overview',
           description: 'Section listing, key stats, and a floor-by-floor AP summary matrix.' },
         { icon: '🗺️', title: 'Scalable floor plan per floor',
-          description: 'Every AP plotted with a labeled rounded marker and directional arrows. Large floors split into zoomed sections so labels stay legible.' },
+          description: 'Every AP plotted with a labeled rounded marker and directional cones. Large floors split into zoomed sections so labels stay legible.' },
         { icon: '📋', title: 'Per-floor AP table',
           description: 'AP names, vendor, model, TX power, channel and width, mount, height and antenna code on every floor; azimuth and tilt too where a floor has directional APs. Floor and building are stated once in the heading and caption rather than on every row.' },
         { icon: '📡', title: 'Antenna specs reference',
