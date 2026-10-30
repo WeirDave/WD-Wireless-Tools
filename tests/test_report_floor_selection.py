@@ -344,5 +344,125 @@ class WhenNothingIsLeftTheReportSaysWhy(FloorSelectionCase):
         """)
 
 
+class TheStepsAfterTheScopeFollowIt(FloorSelectionCase):
+    """Which floors are in is decided first, and everything below it is about
+    those floors only: no plan is offered for a grid, and none is counted, on a
+    floor that will not be printed."""
+
+    SETUP = r"""
+      open(threeFloors());
+      E('currentReportId = "placement"');
+      E('settingsAvailable = true');
+      const names = id => els[id].children.map(o => o.textContent.replace(/\s+✓$/, ''));
+      const values = id => els[id].children.map(o => String(o.value));
+      // The stub does not clear children when innerHTML is set, so a second open starts empty by hand.
+      const reopen = (open, id) => { document.getElementById(id).children = []; open(); };
+    """
+
+    def test_the_section_grid_dialog_lists_only_the_included_floors(self):
+        self.run_block(self.SETUP + r"""
+          E('(function () { floorOff = new Set(["fB"]); })')();
+          window.openGridConfig();
+          eq('names', names('gridFloorSelect'), ['Ground Sample', 'Roof Sample']);
+          eq('values are real indexes into the project floors', values('gridFloorSelect'), ['0', '2']);
+          eq('opens on the first included floor', E('_gridFloorIdx'), 0);
+          E('(function () { floorOff = new Set(["fA"]); })')();
+          reopen(window.openGridConfig, 'gridFloorSelect');
+          eq('first floor out', names('gridFloorSelect'), ['Upper Sample', 'Roof Sample']);
+          eq('opens on the first floor that is in', E('_gridFloorIdx'), 1);
+          eq('and shows it', E('proj.floorPlans[_gridFloorIdx].name'), 'Upper Sample');
+        """)
+
+    def test_the_column_grid_dialog_lists_only_the_included_floors(self):
+        self.run_block(self.SETUP + r"""
+          E('(function () { floorOff = new Set(["fA", "fC"]); })')();
+          window.openGridRef();
+          eq('names', names('gridRefFloorSelect'), ['Upper Sample']);
+          eq('index', E('_grFloorIdx'), 1);
+          eq('modal opened', els.gridRefModal.hidden, false);
+        """)
+
+    def test_a_report_with_no_floors_in_opens_neither_dialog(self):
+        self.run_block(self.SETUP + r"""
+          const said = [];
+          window.alert = m => said.push(m);
+          window.setAllFloors(false);
+          document.getElementById('gridConfigModal').hidden = true;
+          document.getElementById('gridRefModal').hidden = true;
+          window.openGridConfig();
+          window.openGridRef();
+          eq('section grid stays shut', els.gridConfigModal.hidden, true);
+          eq('column grid stays shut', els.gridRefModal.hidden, true);
+          check('and says why', said.length === 1 && said[0].indexOf('No floors are included') >= 0);
+          check('both say why', toasts.some(t => t.msg.indexOf('No floors are included') >= 0));
+        """)
+
+    def test_apply_to_all_floors_leaves_a_floor_that_is_out_alone(self):
+        self.run_block(self.SETUP + r"""
+          E('(function () { floorOff = new Set(["fB"]); })')();
+          E('(function () { currentOpts.cropBoxes = { fB: { x: 0.2, y: 0.2, w: 0.3, h: 0.3 } }; })')();
+          window.openGridConfig();
+          E('(function () { _cropBox = { x: 0.1, y: 0.1, w: 0.5, h: 0.5 }; })')();
+          window.applyGridFloor(true);
+          const got = E('_cropBoxes');
+          eq('the floors that are in take the crop', [got.fA.w, got.fC.w], [0.5, 0.5]);
+          eq('the floor that is out keeps what it had', got.fB, { x: 0.2, y: 0.2, w: 0.3, h: 0.3 });
+          check('the message counts the floors it reached',
+                toasts.some(t => t.msg.indexOf('applied to all 2 floors') >= 0));
+        """)
+
+    def test_the_button_counts_only_included_floors(self):
+        self.run_block(self.SETUP + r"""
+          E('(function () { _floorGrids = { fB: { a: {}, b: {} } }; })')();
+          const opt = { id: '_gridRefSetup', type: 'gridref-button', label: 'Set up column grid' };
+          const render = () => E('renderOptHtml')(opt);
+          check('all floors in: one of three', render().indexOf('>1 of 3 floors<') >= 0);
+          E('(function () { floorOff = new Set(["fB"]); })')();
+          check('the calibrated floor is out: not set up', render().indexOf('>Not set up<') >= 0);
+          E('(function () { floorOff = new Set(["fA"]); })')();
+          check('two floors in, one calibrated', render().indexOf('>1 of 2 floors<') >= 0);
+        """)
+
+    def test_a_crop_on_a_floor_that_is_out_is_not_announced(self):
+        self.run_block(self.SETUP + r"""
+          E('(function () { currentOpts.cropBoxes = { fB: { x: 0, y: 0, w: 0.5, h: 0.5 } }; currentOpts.segCols = 2; currentOpts.segRows = 2; })')();
+          const opt = { id: '_gridConfig', type: 'grid-button', label: 'Configure grid' };
+          check('shown while the floor is in', E('renderOptHtml')(opt).indexOf('(cropped)') >= 0);
+          E('(function () { floorOff = new Set(["fB"]); })')();
+          check('not shown once it is out', E('renderOptHtml')(opt).indexOf('(cropped)') < 0);
+        """)
+
+    def test_the_column_grid_column_needs_a_calibrated_floor_that_is_in(self):
+        self.run_block(self.SETUP + r"""
+          E('(function () { _floorGrids = { fB: { a: {}, b: {} } }; })')();
+          const shows = () => E('showsGridColumn')({ gridRef: true });
+          eq('calibrated and in', shows(), true);
+          E('(function () { floorOff = new Set(["fB"]); })')();
+          eq('calibrated but out: no column of dashes', shows(), false);
+        """)
+
+    def test_the_scope_cards_come_before_the_options_that_depend_on_them(self):
+        """Choosing what the report covers is the first thing on the page after
+        the description of the report: floors, then APs, then the details and
+        options that only make sense for what is left."""
+        page = (ROOT / "web" / "report.html").read_text(encoding="utf-8")
+        order = [page.index(marker) for marker in (
+            'id="reportPreviewCard"', 'id="floorFilterCard"', 'id="apFilterCard"',
+            'id="reportDetailsSlot"', 'id="reportOptsSlot"')]
+        self.assertEqual(order, sorted(order))
+
+    def test_ticking_a_floor_redraws_the_options_that_count_floors(self):
+        self.run_block(DELEGATED_JS + self.SETUP + r"""
+          E('(function () { _floorGrids = { fB: { a: {}, b: {} } }; })')();
+          const html = draw();
+          const untick = tickBoxOf(html, 'fB');
+          const hit = delegated(untick, 'toggleFloor');
+          const box = { checked: false, getAttribute: k => k === 'data-floor-key' ? 'fB' : null };
+          window[hit.fn](box);
+          check('the options card was rewritten without that floor',
+                els.reportOptsSlot.innerHTML.indexOf('>Not set up<') >= 0);
+        """)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -151,17 +151,6 @@
 
     <div class="rep-config-card rep-config-wide" id="reportPreviewCard" hidden></div>
 
-    <div class="rep-config-grid">
-      <div class="rep-config-card" id="reportDetailsSlot">
-        <div class="rep-config-card-head">
-          <span class="rep-config-icon">📝</span>
-          <span>Your details</span>
-        </div>
-      </div>
-
-      <div class="rep-config-card" id="reportOptsSlot"></div>
-    </div>
-
     <div class="rep-config-card rep-config-wide" id="floorFilterCard" hidden>
       <div class="rep-config-card-head">
         <span class="rep-config-icon">🏢</span>
@@ -198,6 +187,17 @@
                placeholder="🔍 Filter by name…" data-action-input="call" data-fn="setApSearch" data-arg-value="1">
       </div>
       <div id="apFilterList"></div>
+    </div>
+
+    <div class="rep-config-grid">
+      <div class="rep-config-card" id="reportDetailsSlot">
+        <div class="rep-config-card-head">
+          <span class="rep-config-icon">📝</span>
+          <span>Your details</span>
+        </div>
+      </div>
+
+      <div class="rep-config-card" id="reportOptsSlot"></div>
     </div>
 
     <div class="rep-stage-nav">
@@ -339,7 +339,7 @@
           <dt>3. Apply</dt>
           <dd>Click <strong>Apply</strong> to save this floor&rsquo;s grid.</dd>
           <dt>4. Additional floors</dt>
-          <dd>Click <strong>Apply to All Floors</strong> to copy the grid position to every floor. Then switch floors with the dropdown and adjust the grid on each floor if the images aren&rsquo;t aligned.</dd>
+          <dd>Click <strong>Apply to All Floors</strong> to copy the grid position to every floor. Then switch floors with the dropdown and adjust the grid on each floor if the images aren&rsquo;t aligned. Only the floors chosen under <strong>Floors to include</strong> are listed and changed.</dd>
           <dt>5. Finish</dt>
           <dd>Click <strong>Done</strong> to apply and close.</dd>
         </dl>
@@ -407,7 +407,7 @@
           <dt>3. Check the drawn grid</dt>
           <dd>The grid it worked out is drawn over the plan. If it does not sit on the columns in the drawing, switch <strong>Letters run</strong> to the other axis.</dd>
           <dt>4. Save, then do the next floor</dt>
-          <dd>Each floor is set up separately &mdash; a mezzanine rarely shares the slab&rsquo;s column lines.</dd>
+          <dd>Each floor is set up separately &mdash; a mezzanine rarely shares the slab&rsquo;s column lines. Floors left out under <strong>Floors to include</strong> are not listed.</dd>
         </dl>
         <h4>When to leave it off</h4>
         <p>Nothing is read off the drawing, so this assumes one regular grid running square to the sheet. If the drawn grid does not line up &mdash; an interrupted bay, a rotated plan, a building carrying two grids of its own &mdash; press <strong>Turn off for this floor</strong>. A reference that is quietly wrong is worse than none, because whoever is on the ladder cannot tell.</p>

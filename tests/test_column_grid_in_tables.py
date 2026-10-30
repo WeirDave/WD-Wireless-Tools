@@ -106,6 +106,10 @@ function drChannelText() { return ''; }
 // under test and a real one would drag in half the file.
 function groupApsByFloor(aps) { return { [FLOOR.id]: aps.slice() }; }
 function sortedFloorOrder() { return [FLOOR]; }
+// The grid column asks which floors the report covers. None is left out here.
+function floorsInScope() {
+  return (proj.floorPlans || []).map(function (fp, idx) { return { fp: fp, idx: idx }; });
+}
 const REPORT_FOOTER = '<footer></footer>';
 
 const ctx = {

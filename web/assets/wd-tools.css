@@ -5708,7 +5708,7 @@ body.tool-report {
   display: flex; flex-direction: column; gap: 8px;
 }
 
-.rep-config-wide { grid-column: 1 / -1; }
+.rep-config-wide { grid-column: 1 / -1; margin-bottom: 16px; }
 
 .rep-config-card-head {
   display: flex; align-items: center; gap: 8px;

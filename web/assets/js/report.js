@@ -2460,6 +2460,26 @@
     return rows.length > 0 && rows.every(function (row) { return floorOff.has(row.key); });
   }
 
+  /* The floor plans this report is about, as {fp, idx} where idx is the plan's
+     place in proj.floorPlans - every picker below keeps indexing that array,
+     so an option's value stays a real index. A floor left out of the report is
+     not offered anywhere further down the Configure step: there is nothing to
+     set up on a floor that will not be printed. Once any floor is left out, a
+     floor holding no APs is out too - it has no row in the floor list, so it
+     could never have been ticked. */
+  function floorsInScope() {
+    var all = proj.floorPlans || [];
+    var active = floorScopeActive(currentReport());
+    var listed = {};
+    if (active) floorRows().forEach(function (row) { listed[row.key] = true; });
+    var out = [];
+    all.forEach(function (fp, idx) {
+      if (active && (!listed[fp.id] || floorOff.has(fp.id))) return;
+      out.push({ fp: fp, idx: idx });
+    });
+    return out;
+  }
+
   // "Level 2, Level 3" for a few floors, "2 of 9 floors" for many.
   function floorScopeLabel() {
     var rows = floorRows();
@@ -2536,6 +2556,8 @@
     configureDirty = true;
     renderFloorFilter();
     renderApFilter();
+    // The grid buttons count and offer floors, so they follow the choice.
+    renderReportOpts();
   }
 
   window.toggleFloor = function (cb) {
@@ -2954,8 +2976,13 @@
       var gc = (currentOpts.segCols || '') + '';
       var gr = (currentOpts.segRows || '') + '';
       var gridLabel = (gc && gr) ? gc + ' × ' + gr : 'Auto';
-      if (currentOpts.cropBoxes && Object.keys(currentOpts.cropBoxes).length) gridLabel += ' (cropped)';
-      if (currentOpts.segMerges && Object.keys(currentOpts.segMerges).length) gridLabel += ' (combined)';
+      var scopeIds = {};
+      floorsInScope().forEach(function (x) { scopeIds[x.fp.id] = true; });
+      var inScope = function (map) {
+        return Object.keys(map || {}).some(function (id) { return scopeIds[id]; });
+      };
+      if (inScope(currentOpts.cropBoxes)) gridLabel += ' (cropped)';
+      if (inScope(currentOpts.segMerges)) gridLabel += ' (combined)';
       if (_gridMemoryNote) desc = (desc ? desc + ' ' : '') + _gridMemoryNote;
       return '<div class="rep-check with-desc">'
         + '<span class="rep-check-body">'
@@ -2970,8 +2997,9 @@
        anyone has at this control - "is this on for this project?" - and
        because the checkbox above it does nothing until at least one is. */
     if (opt.type === 'gridref-button') {
-      var nFloors = (proj.floorPlans || []).length;
-      var nGrid = Object.keys(_floorGrids).length;
+      var scoped = floorsInScope();
+      var nFloors = scoped.length;
+      var nGrid = scoped.filter(function (x) { return !!_floorGrids[x.fp.id]; }).length;
       var gridRefLabel = nGrid
         ? nGrid + ' of ' + nFloors + ' floor' + (nFloors === 1 ? '' : 's')
         : 'Not set up';
@@ -3390,7 +3418,7 @@
   }
 
   function anyFloorHasGrid() {
-    return Object.keys(_floorGrids).length > 0;
+    return floorsInScope().some(function (x) { return !!_floorGrids[x.fp.id]; });
   }
 
   /* The reference for one access point, or '' - never a placeholder that could
@@ -3449,23 +3477,27 @@
                 + 'server behind this page.', 'warn');
       return;
     }
-    var fps = proj.floorPlans || [];
-    if (!fps.length) { showToast('No floor plans in this project.', 'warn'); return; }
+    if (!(proj.floorPlans || []).length) { showToast('No floor plans in this project.', 'warn'); return; }
+    var scoped = floorsInScope();
+    if (!scoped.length) { showToast('No floors are included in this report.', 'warn'); return; }
 
     var sel = document.getElementById('gridRefFloorSelect');
     sel.innerHTML = '';
-    fps.forEach(function (f, i) {
+    scoped.forEach(function (x) {
       var opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = (f.name || ('Floor ' + (i + 1)))
-        + (_floorGrids[f.id] ? '  ✓' : '');
+      opt.value = x.idx;
+      opt.textContent = gridRefOptionLabel(x.fp, x.idx);
       sel.appendChild(opt);
     });
-    _grFloorIdx = 0;
-    sel.value = '0';
+    _grFloorIdx = scoped[0].idx;
+    sel.value = String(scoped[0].idx);
     loadGridRefFloor();
     modal.hidden = false;
   };
+
+  function gridRefOptionLabel(f, i) {
+    return (f.name || ('Floor ' + (i + 1))) + (_floorGrids[f.id] ? '  ✓' : '');
+  }
 
   window.closeGridRef = function () {
     var modal = document.getElementById('gridRefModal');
@@ -3827,11 +3859,10 @@
     // The tick in the floor list, and the button's count, both just changed.
     var sel = document.getElementById('gridRefFloorSelect');
     if (sel) {
-      (proj.floorPlans || []).forEach(function (f, i) {
-        if (sel.options[i]) {
-          sel.options[i].textContent = (f.name || ('Floor ' + (i + 1)))
-            + (_floorGrids[f.id] ? '  ✓' : '');
-        }
+      Array.prototype.forEach.call(sel.options, function (o) {
+        var i = parseInt(o.value, 10);
+        var f = (proj.floorPlans || [])[i];
+        if (f) o.textContent = gridRefOptionLabel(f, i);
       });
     }
   };
@@ -3990,10 +4021,11 @@
   window.openGridConfig = function () {
     var modal = document.getElementById('gridConfigModal');
     if (!modal) return;
-    var fps = proj.floorPlans || [];
-    if (!fps.length) { alert('No floor plans in this project.'); return; }
-    _gridFloorIdx = 0;
-    var fp = fps[0];
+    if (!(proj.floorPlans || []).length) { alert('No floor plans in this project.'); return; }
+    var scoped = floorsInScope();
+    if (!scoped.length) { alert('No floors are included in this report.'); return; }
+    _gridFloorIdx = scoped[0].idx;
+    var fp = scoped[0].fp;
     var aps = filterApsForFloor(fp);
     var auto = computeAntennaGrid(fp.width, fp.height, aps, {}, fp.metersPerUnit);
     _gridCols = (currentOpts.segCols > 0) ? currentOpts.segCols : auto.cols;
@@ -4014,13 +4046,13 @@
 
     var sel = document.getElementById('gridFloorSelect');
     sel.innerHTML = '';
-    fps.forEach(function (f, i) {
+    scoped.forEach(function (x) {
       var opt = document.createElement('option');
-      opt.value = i;
-      opt.textContent = f.name || ('Floor ' + (i + 1));
+      opt.value = x.idx;
+      opt.textContent = x.fp.name || ('Floor ' + (x.idx + 1));
       sel.appendChild(opt);
     });
-    sel.value = '0';
+    sel.value = String(scoped[0].idx);
 
     _gridZoom = 1; _gridPanX = 0; _gridPanY = 0;
     updateGridPreview();
@@ -4482,23 +4514,27 @@
     if (allFloors) {
       var full = _cropBox.x < 0.001 && _cropBox.y < 0.001 && _cropBox.w > 0.999 && _cropBox.h > 0.999;
       var crop = full ? null : { x: _cropBox.x, y: _cropBox.y, w: _cropBox.w, h: _cropBox.h };
-      _cropBoxes = {};
+      /* Only the floors this report covers. A floor that is left out keeps
+         whatever was set on it, so ticking it again later finds it as it was. */
+      var fps = floorsInScope().map(function (x) { return x.fp; });
+      var inScope = {};
+      fps.forEach(function (f) { inScope[f.id] = true; });
+      Object.keys(_cropBoxes).forEach(function (id) { if (inScope[id]) delete _cropBoxes[id]; });
       if (crop) {
-        (proj.floorPlans || []).forEach(function (f) {
+        fps.forEach(function (f) {
           _cropBoxes[f.id] = { x: crop.x, y: crop.y, w: crop.w, h: crop.h };
         });
       }
       var here = (proj.floorPlans[_gridFloorIdx] || {}).id;
       var merge = here && _segMerges[here];
-      _segMerges = {};
+      Object.keys(_segMerges).forEach(function (id) { if (inScope[id]) delete _segMerges[id]; });
       if (merge) {
-        (proj.floorPlans || []).forEach(function (f) {
+        fps.forEach(function (f) {
           _segMerges[f.id] = JSON.parse(JSON.stringify(merge));
         });
       }
-      var fps = proj.floorPlans || [];
       var msg = 'Crop' + (merge ? ' and combined sections' : '')
-        + ' applied to all ' + fps.length + ' floors.';
+        + ' applied to all ' + fps.length + ' floor' + (fps.length === 1 ? '' : 's') + '.';
       if (fps.length > 1) msg += ' Check each floor — images may not be aligned.';
       // The crop was drawn on one floor; on the others it can cut APs off
       // their sheets without anyone looking at those floors.

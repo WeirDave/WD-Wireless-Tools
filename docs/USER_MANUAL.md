@@ -1387,7 +1387,13 @@ what was left out.
 
 ### Configure
 
-The Configure step has three cards.
+The Configure step starts with what the report covers, and only then the
+details and options that depend on it: the description of the report, then
+**Floors to include**, then **APs to include**, then **Your details**, **Cover
+page** and the report's own options. Everything below the first two cards is
+about the floors and APs left in. A floor that is left out is not offered in
+**Configure grid…** or **Set up column grid…**, is not counted on their
+buttons, and is not touched by **Apply to All Floors**.
 
 **Your details** — **Client / company**, **Prepared by**, **Project reference**
 and **Revision**. They start from Settings → Report. Changing one here affects
@@ -1441,14 +1447,18 @@ card; they cover every AP on the floors chosen in **Floors to include**
 ### Choosing which floors appear
 
 A building is often occupied a floor at a time, so one project can hold floors
-that are live and floors that are not. The **Floors to include** card, on the
-Configure step below the report options, lists each floor plan with its
+that are live and floors that are not. The **Floors to include** card, the first
+choice on the Configure step after the description of the report, lists each floor plan with its
 building and AP count. Every floor starts ticked.
 
 - Untick a floor to leave it out. Its sections, its APs, its rows in the tables
   and its share of the totals all go.
 - **Only** beside a floor includes that floor and leaves every other floor out.
 - **All floors** ticks every floor; **None** clears them all.
+- The steps after it follow the choice: **Configure grid…** and **Set up
+  column grid…** list only the floors that are in, and their buttons count
+  only those floors. With every floor cleared they report that no floors are
+  included rather than opening.
 - APs that sit on no floor plan have their own **(No floor plan)** row.
 - When floors are left out, the cover (or the header, if the cover is off) adds
   a **Floors** line naming the ones included.
