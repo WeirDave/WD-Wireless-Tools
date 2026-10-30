@@ -6313,7 +6313,7 @@
 
   function placementKeyHtml(opts, aps) {
     var bits = [keySwatch('omni', aps) + ' Access point'];
-    if (opts.showCones) bits.push(keySwatch('dir', aps) + ' Directional, cone shows aim');
+    if (opts.showCones) bits.push(keySwatch('dir', aps) + ' Directional cone shows aim');
     return bits.join(' &nbsp;·&nbsp; ');
   }
 

@@ -6164,6 +6164,10 @@ body.tool-report {
 .rep-key-swatch {
   display: inline-block; width: 10px; height: 10px; border-radius: 50%;
   vertical-align: middle; margin-right: 4px;
+  /* A dot is nothing but its background, and Firefox leaves backgrounds off
+     the paper unless asked: the key printed as "Access point" with a blank
+     gap in front of it. tests/test_key_swatch_prints.py. */
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
 }
 
 .rep-key-swatch.dir { background: #78716c; }
