@@ -176,7 +176,7 @@ class PageOrientationTests(unittest.TestCase):
         """
         start = self.js.index("class=\"rep-orient-all\"")
         window = self.js[start:start + 900]
-        self.assertIn("verified in Chrome, Edge and Firefox", window)
+        self.assertIn("works in Chrome and", window)
         self.assertNotIn("another browser", window,
                          "do not name a browser as broken without measuring it")
 

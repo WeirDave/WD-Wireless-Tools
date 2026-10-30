@@ -601,7 +601,7 @@
   function renderPrintHint() {
     var host = document.getElementById('repPrintHint');
     if (!host) return;
-    host.innerHTML =
+    host.innerHTML = sheetSizeHint() +
       'Choosing <b>Save to PDF</b> in Firefox, or <b>Save as PDF</b> in Chrome '
       + 'or Edge, offers the file name above. Printing to <b>Microsoft Print to '
       + 'PDF</b> or <b>Adobe PDF</b> produces the same document, but those are '
@@ -609,6 +609,21 @@
       + 'the name to the clipboard, so press <b>Ctrl+V</b> in that box.';
   }
   window.renderPrintHint = renderPrintHint;
+
+  /* Which paper the sheets come out on, said where the report is printed.
+
+     Only where the browser cannot turn sheets one at a time (see
+     sheetsFollowTheDialog): there the print dialog's Orientation sets every
+     sheet, so the reader has to set it to match what the report was laid out
+     for. Said wrongly, or not at all, the failure is a page cut off at the
+     right with nothing to say why. */
+  function sheetSizeHint() {
+    if (!sheetsFollowTheDialog()) return '';
+    return '<p><b>This version of Firefox prints every sheet the same way round.</b> '
+      + 'Set <b>Orientation</b> in the print dialog to match the report: '
+      + '<b>Portrait</b> unless <b>Landscape</b> is chosen on a page, which turns '
+      + 'every page. Turning pages one at a time works in Chrome and Edge.</p>';
+  }
 
   function renderFilenamePreview() {
     var host = document.getElementById('setNamePreview');
@@ -6263,8 +6278,58 @@
      map, which is why settings saved before this still load. */
   function pageOrientMode(pageKey, opts) {
     var map = opts && opts.pageOrient;
+    if (sheetsFollowTheDialog()) return documentOrientMode(map);
     return (map && map[pageKey]) || 'auto';
   }
+
+  /* Firefox 158 and later cannot turn one sheet and not the next.
+
+     Its PDF writer (print.experimental.skpdf, on by default from 158) puts
+     every sheet on the paper the print dialog names and ignores @page size,
+     named pages included. Measured by printing the real Placement Map through
+     Firefox's own print path: pages laid out landscape came out on portrait
+     Letter, with the right-hand side of each cut off. Chrome and Edge honour
+     the sizes and are unaffected, and Firefox 157 did too - which is why every
+     earlier check was green.
+
+     v2.235.3 saw Firefox 158 ignore @page and took it for a WebDriver quirk,
+     so the check stopped measuring Firefox rather than the report stopped
+     being cut off. It was not a quirk: Save to PDF does the same.
+
+     So where the sheet cannot follow the page, the page follows the sheet:
+     one orientation for the whole document, no named @page rules (the class
+     below switches them off), and the print dialog's Orientation decides the
+     paper. The layout can then never be wider than the sheet it lands on.
+
+     The override exists for tests, which need this path in a browser that is
+     not Firefox, and for Firefox 158+ when its fix lands. */
+  function sheetsFollowTheDialog() {
+    if (typeof window.repSheetsFollowDialog === 'boolean') return window.repSheetsFollowDialog;
+    var m = /\bFirefox\/(\d+)/.exec((navigator && navigator.userAgent) || '');
+    return !!m && parseInt(m[1], 10) >= 158;
+  }
+  window.sheetsFollowTheDialog = sheetsFollowTheDialog;
+
+  /* The one orientation the document prints in, where there is only one.
+     Landscape only when more pages were turned to it than were kept upright,
+     so a map saved from the days of per-page turning decides by majority and
+     a document nobody has touched is portrait, which every dialog opens on. */
+  function documentOrientMode(map) {
+    var land = 0, port = 0;
+    for (var k in (map || {})) {
+      if (map[k] === 'landscape') land++;
+      else if (map[k] === 'portrait') port++;
+    }
+    return land > port ? 'landscape' : 'portrait';
+  }
+
+  /* Said once, on the html element, so the print stylesheet can switch the
+     named pages off without a second copy of the rule. */
+  function markSheetPolicy() {
+    document.documentElement.classList.toggle('wd-sheet-follows-dialog', sheetsFollowTheDialog());
+  }
+  markSheetPolicy();
+  window.markSheetPolicy = markSheetPolicy;
   var floorOrientMode = pageOrientMode;   // the name the placement map used
 
   /* What a page wants when nobody has said. Decided per page type, because the
@@ -6366,8 +6431,8 @@
       + '<button type="button" class="rep-orient-all"'
       +   ' data-action="call" data-fn="matchAllPageOrient" data-arg="' + WD.escAttr(fpId) + '"'
       +   ' title="Give every page in this report the orientation this one is using.'
-      +   ' Mixing portrait and landscape in one document is'
-      +   ' verified in Chrome, Edge and Firefox.'
+      +   ' Mixing portrait and landscape in one document works in Chrome and'
+      +   ' Edge; Firefox 158 and later prints every sheet the same way round.'
       +   ' Use this to put the whole report one way round.">'
       +   'Match all pages</button>'
       + '</div>';
@@ -6438,6 +6503,20 @@
     currentOpts.pageOrient[fpId] = mode;
     var host = document.getElementById('reportCanvas');
     if (!host) return;
+    if (sheetsFollowTheDialog()) {
+      // There is one orientation for the whole document here, so a choice on
+      // one page is a choice on all of them.
+      var every = host.querySelectorAll('[data-page-key]');
+      for (var e = 0; e < every.length; e++) {
+        currentOpts.pageOrient[every[e].getAttribute('data-page-key')] = mode;
+      }
+      // Every other picker on the page now says the wrong thing.
+      var shown = documentOrientMode(currentOpts.pageOrient);
+      var all = host.querySelectorAll('.rep-orient-btn');
+      for (var a = 0; a < all.length; a++) {
+        all[a].classList.toggle('is-on', all[a].textContent.toLowerCase() === shown);
+      }
+    }
     var picker = host.querySelector('.rep-orient[data-for="' + fpId + '"]');
     if (picker) {
       var btns = picker.querySelectorAll('.rep-orient-btn');

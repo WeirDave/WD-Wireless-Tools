@@ -7447,6 +7447,23 @@ body.wd-has-stale-banner { padding-top: 52px; }
      the rule is skipped and the behaviour is what it was. */
   html:has(.rep-oriented) { page: placementPortrait; }
 
+  /* Firefox 158 and later writes every sheet at the size the print dialog
+     names and ignores @page size, so a page laid out landscape on a portrait
+     sheet is cut off at the right (report.js, sheetsFollowTheDialog). There the
+     report does not ask for a size at all: no named pages, so the layout is the
+     width of the sheet the dialog chose. Specificity is one class above every
+     rule it undoes. */
+  html.wd-sheet-follows-dialog,
+  html.wd-sheet-follows-dialog:has(.rep-oriented),
+  html.wd-sheet-follows-dialog .rep-placement-page,
+  html.wd-sheet-follows-dialog .rep-oriented,
+  html.wd-sheet-follows-dialog .rep-placement-page.is-landscape,
+  html.wd-sheet-follows-dialog .rep-oriented.is-landscape,
+  html.wd-sheet-follows-dialog .rep-placement-page *,
+  html.wd-sheet-follows-dialog .rep-oriented *,
+  html.wd-sheet-follows-dialog .rep-placement-page.is-landscape *,
+  html.wd-sheet-follows-dialog .rep-oriented.is-landscape * { page: auto; }
+
   /* A zoomed section's match-line label sits at the right edge of its wrapper.
      When the document's first sheet is landscape, Firefox 157 resolves that
      edge against the landscape width (10.2in) while the sheet it is printed on

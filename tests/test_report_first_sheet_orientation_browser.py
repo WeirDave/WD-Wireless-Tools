@@ -174,8 +174,11 @@ class EverySheetIsThePaperItsPageAskedFor(unittest.TestCase):
                 continue
             try:
                 if not self._honours_css_page_size(driver):
-                    print("%s: print ignores CSS paper sizes; orientation "
-                          "not measured" % kind)
+                    # Not a WebDriver quirk: Firefox 158+ ignores @page size
+                    # in its own Save to PDF as well. That path is measured by
+                    # test_firefox_sheets_follow_the_dialog.
+                    print("%s: print ignores CSS paper sizes; per-page "
+                          "orientation not measured here" % kind)
                     continue
                 started += 1
                 for name, setup in SCENARIOS:

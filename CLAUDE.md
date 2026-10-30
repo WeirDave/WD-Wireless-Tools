@@ -838,10 +838,27 @@ Traps:
   `apNotesPages(...)` **in its return expression**
   (`tests/test_ap_notes_last.py`), because the section is unbounded.
 
-- **Per-page orientation works in Firefox, Chrome and Edge**, via named
-  `@page` rules in `web/assets/wd-tools.css` (measured). **The invariant: layout
-  and sheet must never disagree** - where named pages are unavailable, pick one
-  orientation for the whole document. **A whitespace text node beside a
+- **Per-page orientation works in Chrome and Edge, and Firefox up to 157, and
+  not in Firefox 158+.** Named `@page` rules in `web/assets/wd-tools.css` turn
+  single sheets. Firefox 158 switched on a Skia PDF writer
+  (`print.experimental.skpdf`) that gives every sheet the paper the print
+  dialog names and ignores `@page` size entirely - Save to PDF included - so a
+  page laid out landscape landed on a portrait sheet and lost its right-hand
+  side. **The invariant: layout and sheet must never disagree.** Hence
+  `sheetsFollowTheDialog()` in `report.js` (Firefox >= 158 by user agent):
+  `pageOrientMode` returns one orientation for the whole document, the
+  `html.wd-sheet-follows-dialog` rule in the stylesheet turns the named pages
+  off, and the Print step says to set the dialog's Orientation.
+  `tests/test_firefox_sheets_follow_the_dialog.py` holds it.
+  **v2.235.3 got this wrong**: it saw Firefox 158 ignore `@page` through
+  WebDriver, called it a WebDriver quirk and made the check skip Firefox, so
+  the suite stayed green for the real fault. **A check that skips when it
+  cannot measure is not a pass** - find another way to measure. Firefox's own
+  print path is reachable from its chrome context
+  (`MOZ_REMOTE_ALLOW_SYSTEM_ACCESS=1`, `set_context("chrome")`,
+  `browsingContext.print(settings)`; set `outputFormat` to PDF or the file is
+  raster) and is what that test uses. If Firefox fixes the writer, the user
+  agent test is the only thing to loosen. **A whitespace text node beside a
   `display:none` sibling gets its own print box in Firefox** and can give
   page one the default paper; `dropPrintWhitespace` in `report.js` strips them
   (`tests/test_report_first_sheet_orientation_browser.py`). Label-placer

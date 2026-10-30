@@ -39,20 +39,29 @@ class TheHintSaysWhichDestinationKeepsTheName(unittest.TestCase):
     PROBE = r"""
         const fs = require('fs');
         const src = fs.readFileSync(process.argv[1], 'utf8');
-        const a = src.indexOf('  function renderPrintHint() {');
-        if (a < 0) throw new Error('renderPrintHint moved');
-        let b = a, depth = 0, seen = false;
-        while (b < src.length && !(seen && depth === 0)) {
-          if (src[b] === '{') { depth++; seen = true; }
-          else if (src[b] === '}') depth--;
-          b++;
+        function slice(marker) {
+          const a = src.indexOf(marker);
+          if (a < 0) throw new Error(marker + ' moved');
+          let b = a, depth = 0, seen = false;
+          while (b < src.length && !(seen && depth === 0)) {
+            if (src[b] === '{') { depth++; seen = true; }
+            else if (src[b] === '}') depth--;
+            b++;
+          }
+          return src.slice(a, b);
         }
         const host = { innerHTML: '' };
         const ids = JSON.parse(process.argv[2]);
         global.document = {
           getElementById: (id) => (ids.indexOf(id) > -1 ? host : null),
         };
-        eval(src.slice(a, b));
+        // The note about sheet sizes belongs to Firefox 158 and later; this
+        // is the text every other browser reads.
+        var window = {};
+        var navigator = { userAgent: 'node' };
+        eval(slice('  function sheetsFollowTheDialog() {'));
+        eval(slice('  function sheetSizeHint() {'));
+        eval(slice('  function renderPrintHint() {'));
         renderPrintHint();
         console.log(JSON.stringify(host.innerHTML));
     """

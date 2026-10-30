@@ -60,10 +60,15 @@ var currentReportId = 'a-report';   // keyEveryPage names pages after it
 let code = '';
 ['SHEET_W_IN', 'SHEET_H_IN', 'ROTATE_GAIN', 'SEG_HEAD_IN', 'SEG_INDEX_HEAD_IN',
  'SEG_BELOW_IN', 'SEG_FOOT_IN', 'SEG_FOOT_CONF_IN', 'KEY_PLAN_W_IN', 'KEY_PLAN_MAX_H_IN'].forEach(n => { code += constant(n); });
-['function pageOrientMode(', 'function orientCover(', 'function segOverlayRatio(',
+['function pageOrientMode(', 'function sheetsFollowTheDialog(', 'function documentOrientMode(',
+ 'function orientCover(', 'function segOverlayRatio(',
  'function segPrintSizeIn(', 'function sizeAntennaSegmentForPrint(',
  'function segmentedFloorWantsLandscape(', 'function keyPlanHeightIn(', 'function footerBelowIn(',
  'function resizeSegmentsForPrint('].forEach(s => { code += fn(s); });
+// sheetsFollowTheDialog reads the browser it is in; these are the per-page
+// path, which is every browser but Firefox 158 and later.
+var window = {};
+var navigator = { userAgent: 'node' };
 eval(code);
 
 // Just enough DOM: classes, attributes, inline custom properties, parents,

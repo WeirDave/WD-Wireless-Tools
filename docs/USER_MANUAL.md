@@ -1606,14 +1606,22 @@ and the cover on Auto follows whichever way most sheets run.
 
 **Match all pages** puts every page, the cover included, in the orientation of
 the page you pressed it on. All portrait gives only portrait sheets and all
-landscape gives only landscape sheets, in Firefox, Chrome and Edge.
+landscape gives only landscape sheets.
 
 On a landscape sheet the AP Labels page runs in two columns, as long as every
 AP name on that floor is 44 characters or fewer.
 
-A document mixing portrait and landscape prints correctly in Firefox, Chrome
-and Edge — each page gets the sheet it asked for. If a page ever comes out
-clipped at the right edge, press **Match all pages** and print again.
+A document mixing portrait and landscape prints correctly in Chrome and Edge —
+each page gets the sheet it asked for.
+
+**Firefox 158 and later cannot do that.** Its PDF writer puts every sheet on the
+paper the print dialog names and ignores a page's own size, so the report does
+not ask for one there: the whole document is one orientation, and choosing
+**Portrait** or **Landscape** on any page applies to every page. Set
+**Orientation** in the print dialog to match. Nothing is cut off at the right
+whichever way the dialog is set, because the pages are laid out to the width of
+the sheet the dialog chose. Mixed orientations in one PDF still need Chrome or
+Edge.
 
 ### Printing cleanly
 
