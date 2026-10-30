@@ -30,6 +30,7 @@
   --indigo: #6366f1; --indigo-dark: #4f46e5;
   --cyan: #0891b2;  --cyan-dark: #0e7490;
   --pink: #ec4899;  --pink-dark: #db2777;
+  --on-accent: #fff;   /* text on a solid brand or status fill; same in both themes */
   --lime: #84cc16;  --lime-dark: #65a30d;
   /* Capacity's blue. He asked twice for "standard blue", so this is the hue of
      CSS `blue` - 240 degrees, unchanged - lifted in lightness and nothing else.
@@ -743,7 +744,7 @@ mark {
   box-shadow: none;
 }
 
-.btn-primary { background: var(--green); color: #fff; border-color: var(--green); }
+.btn-primary { background: var(--green); color: var(--on-accent); border-color: var(--green); }
 
 .btn-primary:hover { background: var(--green-dark); border-color: var(--green-dark); }
 
@@ -761,19 +762,19 @@ mark {
 
 .btn-red:hover { background: var(--red-dark); border-color: var(--red-dark); }
 
-.btn-amber { background: var(--amber); color: #fff; border-color: var(--amber); }
+.btn-amber { background: var(--amber); color: var(--on-accent); border-color: var(--amber); }
 
 .btn-amber:hover { background: var(--amber-dark); border-color: var(--amber-dark); }
 
-.btn-rose { background: var(--rose); color: #fff; border-color: var(--rose); }
+.btn-rose { background: var(--rose); color: var(--on-accent); border-color: var(--rose); }
 
 .btn-rose:hover { background: var(--rose-dark); border-color: var(--rose-dark); }
 
-.btn-teal { background: var(--teal); color: #fff; border-color: var(--teal); }
+.btn-teal { background: var(--teal); color: var(--on-accent); border-color: var(--teal); }
 
 .btn-teal:hover { background: var(--teal-dark); border-color: var(--teal-dark); }
 
-.btn-purple { background: var(--purple); color: #fff; border-color: var(--purple); }
+.btn-purple { background: var(--purple); color: var(--on-accent); border-color: var(--purple); }
 
 .btn-purple:hover { background: var(--purple-dark); border-color: var(--purple-dark); }
 
@@ -11450,6 +11451,16 @@ body.tool-prep .editor.active, body.tool-plantrim .editor.active, body.tool-capa
 .pb-grid2 .btn {
   width: 100%; justify-content: center; text-align: center; box-sizing: border-box;
   padding-left: 8px; padding-right: 8px; font-size: 12.5px; text-decoration: none; white-space: normal;
+}
+/* The drawing tool that is on. wd-areaeditor.js sets aria-pressed and is-on
+   on "Draw a rectangle" / "Draw a shape"; without a rule here the pressed
+   button looked exactly like the idle one. The fill is the colour the area is
+   drawn in on the plan, so the button and the outline read as one thing. */
+.wd-area-controls .btn[aria-pressed="true"],
+.wd-area-controls .btn[aria-pressed="true"]:hover {
+  background: var(--pink-dark); border-color: var(--pink-dark); color: var(--on-accent);
+  box-shadow: inset 0 0 0 1px var(--pink-dark), 0 0 0 2px color-mix(in srgb, var(--pink-dark) 35%, transparent);
+  font-weight: 700;
 }
 .pb-check { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--text-2); }
 .pb-hint { font-size: 11.5px; line-height: 1.55; color: var(--text-3); margin: 0; }
