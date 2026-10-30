@@ -1772,7 +1772,7 @@ changes every name.
 
 | Ordering | What it does |
 |---|---|
-| **Nearest Neighbor** *(default)* | Walks to the closest remaining AP each time, starting at the top left — the way you would pace the building |
+| **Nearest Neighbor** *(default)* | Walks to the closest remaining AP each time, the way you would pace the building. It starts at the AP nearest the top left unless you click an AP on the plan to start there instead; click it again to go back to the automatic start. The start is remembered per floor while the project is open |
 | **Zigzag Rows** | Rows from the top, every other row reversed, so the walk never jumps back across the building |
 | **Rows, Left → Right** | Row by row, always left to right |
 | **Rows, Right → Left** | Row by row, always right to left |

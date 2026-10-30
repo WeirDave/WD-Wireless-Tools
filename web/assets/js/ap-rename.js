@@ -18,6 +18,7 @@
     templates: [],
     manualOrder: [],   // ap ids, in the order they were clicked
     manualUndo: [],    // snapshots of manualOrder, newest last
+    startAp: {},       // floor id -> ap id Nearest Neighbor starts from
     _showAllPreview: false
   };
 
@@ -1244,6 +1245,7 @@
       _floorPick = 'all'; _onlyFloor = null; _chosenFloors = {};
       S.manualOrder = [];
       S.manualUndo = [];
+      S.startAp = {};
       return parseEsx(zip);
     }).then(function () {
       if (!S.floors.length) {
@@ -1471,7 +1473,7 @@
     switch (method) {
       case 'row-ltr':   return sortByRow(sorted, false, floor);
       case 'row-rtl':   return sortByRow(sorted, true, floor);
-      case 'proximity':  return sortProximity(sorted);
+      case 'proximity':  return sortProximity(sorted, floor ? S.startAp[floor.id] : null);
       case 'row-snake':  return sortSnake(sorted, floor);
       case 'col-ttb':    return sortByColumn(sorted, false, floor);
       case 'col-btt':    return sortByColumn(sorted, true, floor);
@@ -1498,6 +1500,49 @@
   function isManual() {
     var el = $('arOrder');
     return !!el && el.value === 'manual';
+  }
+
+  /* ── Nearest Neighbor: pick where the walk starts ────────────────
+     One start per floor, kept in S.startAp. Clicking the AP that is already
+     the start hands the choice back to Auto (nearest the top-left). */
+  function isProximity() {
+    var el = $('arOrder');
+    return !!el && el.value === 'proximity';
+  }
+
+  window.arStartClick = function (apId) {
+    if (!isProximity() || !S.currentFloor || S.currentFloor === '__unplaced') return;
+    // The click that ends a pan lands on whatever was under the cursor.
+    if (_zoom.suppressClick) { _zoom.suppressClick = false; return; }
+    var ap = S.aps.find(function (a) { return a.id === apId; });
+    if (S.startAp[S.currentFloor] === apId) {
+      delete S.startAp[S.currentFloor];
+      toast('Start is automatic again');
+    } else {
+      S.startAp[S.currentFloor] = apId;
+      toast('Starting from ' + (ap ? ap.name : 'that AP'));
+    }
+    updateAll();
+  };
+
+  window.arStartReset = function () {
+    if (!S.currentFloor || !S.startAp[S.currentFloor]) return;
+    delete S.startAp[S.currentFloor];
+    updateAll();
+  };
+
+  function updateStartPanel() {
+    var panel = $('arStartPanel');
+    if (!panel) return;
+    var on = isProximity() && !!S.currentFloor && S.currentFloor !== '__unplaced';
+    panel.hidden = !on;
+    if (!on) return;
+    var id = S.startAp[S.currentFloor];
+    var ap = id && S.aps.find(function (a) { return a.id === id; });
+    $('arStartText').textContent = ap
+      ? 'Starts at ' + ap.name + ' (ringed on the plan) and moves to the nearest unnumbered AP each time.'
+      : 'Auto: starts at the AP nearest the top-left. Click any AP on the plan to start there instead.';
+    $('arStartReset').hidden = !ap;
   }
 
   function manualIndex(apId) {
@@ -1842,9 +1887,23 @@
      salesman and completely free here - a floor has tens of APs, not
      thousands, so a few full passes cost nothing and remove exactly the long
      recrossing hops that make a sequence unfollowable. */
-  function sortProximity(aps) {
-    if (aps.length < 3) return sortNearestNeighbor(aps);
-    var tour = greedyWalk(aps, startCorner(aps));
+  function sortProximity(aps, startId) {
+    /* A start he picked on the plan wins over the corner. It is only honoured
+       while that AP is in this set, so a pick left over from a floor, colour
+       or project that no longer holds it falls back to the corner instead of
+       numbering from nowhere. */
+    var picked = -1;
+    if (startId != null) {
+      for (var p = 0; p < aps.length; p++) {
+        if (aps[p].id === startId) { picked = p; break; }
+      }
+    }
+    if (aps.length < 3) {
+      var small = sortNearestNeighbor(aps);
+      if (picked >= 0 && small.length === 2 && small[0].id !== startId) small.reverse();
+      return small;
+    }
+    var tour = greedyWalk(aps, picked >= 0 ? picked : startCorner(aps));
     tour = twoOpt(tour);
     tour = orOpt(tour);
     return tour;
@@ -2355,6 +2414,7 @@
 
   function updateSpacingVisibility() {
     updateManualPanel();
+    updateStartPanel();
     var order = $('arOrder').value;
     var show = order === 'row-ltr' || order === 'row-rtl' ||
                order === 'col-ttb' || order === 'col-btt' ||
@@ -2461,6 +2521,7 @@
 
     var settings = getSettings();
     var manual = settings.order === 'manual';
+    var pickStart = settings.order === 'proximity';
     renderGuideLines(box, floor, settings.order);
     var floorAPs = getFloorAPs(S.currentFloor);
     var sorted = sortAPs(floorAPs, settings.order, floor);
@@ -2502,11 +2563,15 @@
       var newName = item.newName || ap.name;
 
       var marker = document.createElement('div');
-      marker.className = 'ar-marker' + (manual ? ' is-clickable' : '') +
+      var isStart = pickStart && S.startAp[S.currentFloor] === ap.id;
+      marker.className = 'ar-marker' + (manual || pickStart ? ' is-clickable' : '') +
         (manual && idx === sorted.length - 1 ? ' is-last' : '') +
+        (isStart ? ' is-last' : '') +
         (item.kept ? ' is-kept' : '');
       if (manual) {
         marker.onclick = function (e) { e.stopPropagation(); arManualClick(ap.id); };
+      } else if (pickStart) {
+        marker.onclick = function (e) { e.stopPropagation(); arStartClick(ap.id); };
       }
       marker.style.left = (fracX * 100) + '%';
       marker.style.top  = (fracY * 100) + '%';
@@ -2532,7 +2597,8 @@
       tip.className = 'ar-tip';
       tip.textContent = item.kept
         ? ap.name + '  (this floor keeps its names)'
-        : ap.name + ' → ' + newName + (manual ? '  (click to remove)' : '');
+        : ap.name + ' → ' + newName + (manual ? '  (click to remove)' : '') +
+          (pickStart ? (isStart ? '  (start — click to make it automatic)' : '  (click to start here)') : '');
       marker.appendChild(tip);
 
       box.appendChild(marker);

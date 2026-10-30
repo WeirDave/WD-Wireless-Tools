@@ -317,6 +317,13 @@
             <option value="manual">Manual (click order)</option>
           </select>
 
+          <!-- Nearest Neighbor only: where the walk begins on this floor. -->
+          <div class="ar-nest" id="arStartPanel" hidden>
+            <div class="ar-scope-desc" id="arStartText"></div>
+            <button type="button" id="arStartReset" data-action="call" data-fn="arStartReset" hidden
+                    title="Go back to starting at the AP nearest the top-left">Use automatic start</button>
+          </div>
+
           <div class="ar-colorseq" id="arColorPanel" hidden></div>
 
           <!-- Only meaningful for By Colour Groups, and only on a project with
