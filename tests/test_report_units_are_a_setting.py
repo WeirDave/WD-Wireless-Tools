@@ -282,6 +282,8 @@ class ThereIsOnlyOneCopyOfThem(unittest.TestCase):
         const renderApFilter = () => {};
         const syncDocTitle = () => {};
         const goStage = () => {};
+        // The remembered section grid is its own store, tested on its own.
+        const applySectionMemory = () => {};
         const window = {};
         eval(src.slice(a, b));
         window.selectReport('placement');

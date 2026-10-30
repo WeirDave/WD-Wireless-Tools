@@ -1166,6 +1166,7 @@
       // Needs proj.projectId, so it cannot run before the parse. Coming back
       // with nothing is the ordinary state, not a failure.
       await loadFloorGrids();
+      await loadSectionMemory();
 
       templateConfirmed = false;
       configureDirty = true;
@@ -1175,12 +1176,11 @@
       // put together.
       baseline = null; baselineName = ''; baselineError = '';
       // The grid, crop and combined sections were drawn on the last
-      // project's plans, and are keyed by floor id - so a revision of it
-      // would silently inherit them on floors nobody looked at. They are
-      // never saved as defaults (the grid button is not a value), so
-      // dropping them loses nothing the person chose to keep; the report's
-      // ordinary options stay as they were.
+      // project's plans, and are keyed by floor id - so they are dropped, and
+      // this project's own remembered grid (see "Section grid memory") is
+      // put in their place. The report's ordinary options stay as they were.
       PER_PROJECT_OPTS.forEach(function (k) { delete currentOpts[k]; });
+      applySectionMemory();
 
       dropzone.hidden = true;
       document.getElementById('dzTopbar').hidden = true;
@@ -2754,6 +2754,8 @@
         if (PERSON_LEVEL_OPTS.indexOf(k) !== -1) return;
         currentOpts[k] = saved[k];
       });
+      // The line above emptied the grid along with everything else.
+      applySectionMemory(true);
     }
     templateConfirmed = true;
     configureDirty = true;
@@ -2783,6 +2785,7 @@
       var gridLabel = (gc && gr) ? gc + ' × ' + gr : 'Auto';
       if (currentOpts.cropBoxes && Object.keys(currentOpts.cropBoxes).length) gridLabel += ' (cropped)';
       if (currentOpts.segMerges && Object.keys(currentOpts.segMerges).length) gridLabel += ' (combined)';
+      if (_gridMemoryNote) desc = (desc ? desc + ' ' : '') + _gridMemoryNote;
       return '<div class="rep-check with-desc">'
         + '<span class="rep-check-body">'
         +   '<span class="rep-check-label">' + WD.esc(opt.label) + '</span>'
@@ -3688,6 +3691,111 @@
   };
 
 
+  /* ── Section grid memory ────────────────────────────────────────────────
+     The grid (columns by rows), the crop on each floor and the combined cells
+     are kept per project, in the user directory beside the column grids, so
+     they survive switching report type and reopening the file. A project that
+     was never set up starts from the size last set on any project; its crops
+     and combined cells are never carried to another project, because they are
+     drawn on one project's plans.
+
+     A remembered crop is applied only if it leaves no AP off the sheets. The
+     project id survives a revision in Ekahau, and a revision moves APs, so a
+     crop that was right last time can cut one off without anyone looking at
+     that floor. */
+  var _sectionMemory = { project: null, last: null };
+  // What the options panel tells the person was filled in without their asking.
+  var _gridMemoryNote = '';
+  // Reset to Auto was pressed and nothing changed it since: Done then clears
+  // the size instead of writing the auto numbers down as a choice.
+  var _gridAutoReset = false;
+
+  async function loadSectionMemory() {
+    _sectionMemory = { project: null, last: null };
+    if (!proj || !proj.projectId) return;
+    try {
+      var res = await WD.api('report/sections/get', { projectId: proj.projectId });
+      if (res && res.ok) _sectionMemory = { project: res.project || null, last: res.last || null };
+    } catch (e) { /* nothing remembered is the ordinary state */ }
+  }
+
+  function applySectionMemory(quiet) {
+    _gridMemoryNote = '';
+    if (!proj || !(proj.floorPlans || []).length) return;
+    var mine = _sectionMemory.project, last = _sectionMemory.last;
+    var size = mine ? (mine.cols > 0 ? mine : null) : last;
+    if (size && size.cols > 0 && size.rows > 0 && !(currentOpts.segCols > 0)) {
+      currentOpts.segCols = size.cols;
+      currentOpts.segRows = size.rows;
+      _gridMemoryNote = mine ? 'Remembered for this project.'
+                             : 'Starts from the last grid size you set.';
+    }
+    if (!mine) return;
+    var floors = {};
+    proj.floorPlans.forEach(function (f) { floors[f.id] = f; });
+    var skipped = [];
+    if (mine.cropBoxes && !currentOpts.cropBoxes) {
+      var crops = {};
+      Object.keys(mine.cropBoxes).forEach(function (id) {
+        var fp = floors[id], c = mine.cropBoxes[id];
+        if (!fp || !c) return;
+        var left = apsOutsideCrop(filterApsForFloor(fp), fp.width, fp.height, c);
+        if (left.length) { skipped.push(fp.name || 'a floor'); return; }
+        crops[id] = { x: c.x, y: c.y, w: c.w, h: c.h };
+      });
+      if (Object.keys(crops).length) {
+        currentOpts.cropBoxes = crops;
+        _gridMemoryNote = 'Remembered for this project.';
+      }
+    }
+    if (mine.segMerges && !currentOpts.segMerges) {
+      var merges = {};
+      Object.keys(mine.segMerges).forEach(function (id) {
+        var m = mine.segMerges[id];
+        if (!floors[id] || !m) return;
+        if (m.cols !== currentOpts.segCols || m.rows !== currentOpts.segRows) return;
+        if (!segMergeGroups(m, m.cols, m.rows).length) return;
+        merges[id] = JSON.parse(JSON.stringify(m));
+      });
+      if (Object.keys(merges).length) {
+        currentOpts.segMerges = merges;
+        _gridMemoryNote = 'Remembered for this project.';
+      }
+    }
+    if (skipped.length && !quiet) {
+      showToast('The saved crop for ' + skipped.join(', ') + ' was not applied: '
+        + 'it would leave APs off the section sheets.', 'warn');
+    }
+  }
+
+  /* Called when the grid dialog is closed with Done, which is the only place
+     the grid is decided. The local copy is updated first, so switching report
+     type straight afterwards sees it even if the write is still on its way. */
+  function saveSectionMemory() {
+    if (!proj || !proj.projectId) return;
+    var o = currentOpts;
+    var entry = {};
+    if (o.segCols > 0 && o.segRows > 0) {
+      entry.cols = o.segCols;
+      entry.rows = o.segRows;
+      _sectionMemory.last = { cols: o.segCols, rows: o.segRows };
+    }
+    if (o.cropBoxes) entry.cropBoxes = JSON.parse(JSON.stringify(o.cropBoxes));
+    if (o.segMerges) entry.segMerges = JSON.parse(JSON.stringify(o.segMerges));
+    _sectionMemory.project = Object.keys(entry).length ? entry
+      : (_sectionMemory.last ? { auto: true } : null);
+    WD.api('report/sections/save', {
+      projectId: proj.projectId,
+      segCols: o.segCols, segRows: o.segRows,
+      cropBoxes: o.cropBoxes, segMerges: o.segMerges,
+    }).then(function (res) {
+      if (res && res.ok) _sectionMemory = { project: res.project || null, last: res.last || null };
+      else showToast('The grid could not be remembered for next time.', 'info');
+    }).catch(function () {
+      showToast('The grid could not be remembered for next time.', 'info');
+    });
+  }
+
   // ── Grid configuration modal ──
 
   var _gridCols = 0, _gridRows = 0, _gridFloorIdx = 0;
@@ -3720,6 +3828,7 @@
     _gridRows = (currentOpts.segRows > 0) ? currentOpts.segRows : auto.rows;
     _gridInitCols = _gridCols;
     _gridInitRows = _gridRows;
+    _gridAutoReset = false;
     _cropBoxes = {};
     var saved = currentOpts.cropBoxes || {};
     (proj.floorPlans || []).forEach(function (f) {
@@ -3764,11 +3873,13 @@
   };
 
   window.adjustGridCols = function (delta) {
+    _gridAutoReset = false;
     _gridCols = Math.max(1, Math.min(20, _gridCols + delta));
     updateGridPreview();
   };
 
   window.adjustGridRows = function (delta) {
+    _gridAutoReset = false;
     _gridRows = Math.max(1, Math.min(20, _gridRows + delta));
     updateGridPreview();
   };
@@ -4181,6 +4292,7 @@
     var aspect = cropW / cropH;
     var newCols = Math.max(1, Math.round(Math.sqrt(totalCells * aspect)));
     var newRows = Math.max(1, Math.round(totalCells / newCols));
+    _gridAutoReset = false;
     _gridCols = newCols;
     _gridRows = newRows;
     updateGridPreview();
@@ -4249,7 +4361,13 @@
     var pinsGrid = Object.keys(_segMerges).some(function (id) {
       return segMergeGroups(_segMerges[id], _gridCols, _gridRows).length;
     });
-    if (_gridCols !== _gridInitCols || _gridRows !== _gridInitRows || pinsGrid) {
+    if (_gridAutoReset) {
+      /* Auto is a choice that has to be able to stick: written down as the
+         numbers Auto happened to give, it would be remembered as a fixed
+         size and applied to the next project. */
+      delete currentOpts.segCols;
+      delete currentOpts.segRows;
+    } else if (_gridCols !== _gridInitCols || _gridRows !== _gridInitRows || pinsGrid) {
       currentOpts.segCols = _gridCols;
       currentOpts.segRows = _gridRows;
     }
@@ -4258,7 +4376,9 @@
     currentOpts.segMerges = Object.keys(_segMerges).length ? _segMerges : null;
     _mergeMode = false;
     _mergeSel = {};
+    _gridMemoryNote = '';
     configureDirty = true;
+    saveSectionMemory();
     releaseGridPanKeys();
     document.getElementById('gridConfigModal').hidden = true;
     renderReportOpts();
@@ -4270,6 +4390,7 @@
     var auto = computeAntennaGrid(fp.width, fp.height, aps, {}, fp.metersPerUnit);
     _gridCols = auto.cols;
     _gridRows = auto.rows;
+    _gridAutoReset = true;
     _cropBox = { x: 0, y: 0, w: 1, h: 1 };
     if (fp) delete _cropBoxes[fp.id];
     if (fp) delete _segMerges[fp.id];

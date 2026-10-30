@@ -1500,6 +1500,33 @@ def api_report_grid(action):
         return _route_failed(e, ok_key=True)
 
 
+SECTION_GRID_ACTIONS = {
+    "get": lambda d: report_store.section_grid_for_project(d.get("projectId")),
+    "save": lambda d: report_store.save_section_grid(d.get("projectId"), d),
+}
+
+
+@app.route("/api/report/sections/<action>", methods=["POST"])
+def api_report_sections(action):
+    """What a project's section grid was last left at: columns by rows, the
+    crop on each floor and the combined cells, plus the most recent size set
+    on any project.
+
+    Kept here and not in the .esx for the same reason as the column grid
+    above, and not in the project folder because that is a synced tree Cloud
+    Manager scans. See report_store.save_section_grid, which re-derives every
+    field rather than trusting the payload.
+    """
+    fn = SECTION_GRID_ACTIONS.get(action)
+    if not fn:
+        return jsonify({"ok": False, "error": f"unknown action: {action}"}), 404
+    try:
+        return jsonify(fn(request.get_json(silent=True) or {}))
+    except Exception as e:
+        applog.note_failure("report sections " + action, e)
+        return _route_failed(e, ok_key=True)
+
+
 @app.route("/api/report/find_folder", methods=["POST"])
 def api_report_find_folder():
     """Name the folder a dropped .esx came from.

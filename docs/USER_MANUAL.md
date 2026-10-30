@@ -1469,8 +1469,17 @@ Placement Map, on by default on AP Installation.
 **Reset to Auto**, **Reset Grid** and **Reset Zoom** start over. Scroll to
 zoom; hold `Space` and drag to pan.
 
-> The section grid is not saved. Reloading the page or picking another
-> template starts it again.
+**The grid is remembered.** Pressing **Done** saves it for the project: the
+columns and rows, each floor's crop box and the combined sections. Picking
+another report, or closing the file and opening it again, brings it back, and
+a line under the **Configure grid…** button says *Remembered for this
+project.* A project that has never been set up starts from the last columns ×
+rows set on any project (*Starts from the last grid size you set.*). Crops and
+combined sections are never copied to another project. A saved crop is skipped,
+with a message, when it would leave an AP off the section sheets, which can
+happen after the project is revised in Ekahau. **Reset to Auto**, then
+**Done**, returns the project to Auto and keeps it there. The grid is stored on
+this computer beside the column grid file, not in the `.esx`.
 
 ### Column grid references
 
