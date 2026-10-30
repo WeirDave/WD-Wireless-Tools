@@ -2464,12 +2464,6 @@
     var apIds = {};
     aps.forEach(function (ap) { apIds[ap.id] = true; });
     var surveys = (full.surveys || []).filter(function (sv) { return keepFloor[sv.floorPlanId]; });
-    var seen = {};
-    surveys.forEach(function (sv) {
-      (sv.wifiTracks || []).forEach(function (wt) {
-        (wt.accessPointMeasurementIds || []).forEach(function (id) { seen[id] = true; });
-      });
-    });
     var buildings = {};
     full.floorPlans.forEach(function (fp) {
       var bf = full.buildingFloors && full.buildingFloors[fp.id];
@@ -2482,8 +2476,11 @@
       radios: (full.radios || []).filter(function (r) { return apIds[r.accessPointId]; }),
       floorPlans: full.floorPlans.filter(function (fp) { return keepFloor[fp.id]; }),
       surveys: surveys,
-      // A measured radio belongs to the floors its measurement was seen on.
-      measuredRadios: (full.measuredRadios || []).filter(function (m) { return seen[m.accessPointMeasurementId]; }),
+      /* A measured radio is a design AP's radio as heard in a survey: its
+         accessPointId is always a design AP (checked against real projects),
+         and its accessPointMeasurementIds are the measurements, which sit on
+         several floors. It goes with its AP. */
+      measuredRadios: (full.measuredRadios || []).filter(function (m) { return apIds[m.accessPointId]; }),
       buildings: buildings,
     });
   }

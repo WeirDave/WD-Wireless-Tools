@@ -46,6 +46,12 @@ function threeFloors() {
     { id: 'm2', ssid: 'Bravo iPhone', mac: 'aa:aa:aa:aa:aa:02',
       channelByCenterFrequencyDefinedNarrowChannels: [5180] },
   ];
+  // The real shape: a measured radio names its design AP and a list of measurements.
+  p.measuredRadios = [
+    { id: 'mr1', accessPointId: 'ap1', accessPointMeasurementIds: ['m1'], status: 'OK' },
+    { id: 'mr2', accessPointId: 'ap5', accessPointMeasurementIds: ['m2'], status: 'OK' },
+    { id: 'mr3', accessPointId: 'ap6', accessPointMeasurementIds: ['m2'], status: 'OK' },
+  ];
   p.surveys = [
     { id: 's1', floorPlanId: 'fA', routePoints: [], wifiTracks: [{ accessPointMeasurementIds: ['m1'] }] },
     { id: 's2', floorPlanId: 'fB', routePoints: [], wifiTracks: [{ accessPointMeasurementIds: ['m2'] }] },
@@ -254,6 +260,17 @@ class EveryReportFollowsTheFloors(FloorSelectionCase):
           eq('the access point tile counts the floors in', stat && stat[1], '7');
           const fl = /<b>(\d+)<\/b><span>Floor plans?<\/span>/.exec(html);
           eq('the floor plan tile counts the floors in', fl && fl[1], '2');
+        """)
+
+    def test_the_summary_counts_the_measured_radios_of_the_floors_that_are_in(self):
+        self.run_block(r"""
+          open(threeFloors());
+          const tile = h => (/<b>(\d+)<\/b><span>Measured radios?<\/span>/.exec(h) || [])[1];
+          eq('all three with every floor in', tile(render('summary', {})), '3');
+          floorsOff(['fB']);
+          eq('only the Ground one with Upper out', tile(render('summary', {})), '1');
+          floorsOff(['fA', 'fB']);
+          eq('none, so no tile, with only the Roof in', tile(render('summary', {})), undefined);
         """)
 
     def test_interference_drops_a_device_seen_only_on_a_floor_that_is_out(self):
