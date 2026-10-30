@@ -1422,7 +1422,9 @@ shipped defaults** puts the template back to how it arrived.
 
 ### Choosing which APs appear
 
-The **APs to include** card lists every AP with a tick box and a count.
+The **Floors to include** card sits above it and decides which floors the
+report covers. The **APs to include** card lists every AP on those floors with
+a tick box and a count.
 
 - **Select all** and **None** tick or clear the lot.
 - The search box filters the list by name.
@@ -1432,8 +1434,28 @@ The **APs to include** card lists every AP with a tick box and a count.
 
 **Include directional APs** and **Include omni APs** decide which APs are
 eligible before any of this. Site Summary Sheet, Interference / Rogue Devices,
-Bill of Materials and Change / Audit Report always cover the whole project and
-do not show this card.
+Bill of Materials and Change / Audit Report do not show the **APs to include**
+card; they cover every AP on the floors chosen in **Floors to include**
+(Change / Audit always compares the whole of both files).
+
+### Choosing which floors appear
+
+A building is often occupied a floor at a time, so one project can hold floors
+that are live and floors that are not. The **Floors to include** card, on the
+Configure step below the report options, lists each floor plan with its
+building and AP count. Every floor starts ticked.
+
+- Untick a floor to leave it out. Its sections, its APs, its rows in the tables
+  and its share of the totals all go.
+- **Only** beside a floor includes that floor and leaves every other floor out.
+- **All floors** ticks every floor; **None** clears them all.
+- APs that sit on no floor plan have their own **(No floor plan)** row.
+- When floors are left out, the cover (or the header, if the cover is off) adds
+  a **Floors** line naming the ones included.
+- The card is hidden for a project with one floor, and for Change / Audit
+  Report.
+- The choice lasts while the file is open. Opening a project starts with every
+  floor included, so a floor added to the building later is in by default.
 
 ### Large floors — section splitting
 

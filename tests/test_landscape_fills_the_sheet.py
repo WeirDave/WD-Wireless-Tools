@@ -179,6 +179,8 @@ class TheCoverFollowsTheReport(_NodeProbe):
           globalThis.proj = { floorPlans: [{}] };
           globalThis.coverImage = null;
           globalThis.siteName = () => 'Example Site';
+          // The cover names the floors only when some are left out; none are here.
+          globalThis.floorScopeActive = () => false;
           const html = renderCover(3, '2026-01-01', { coverBrand: 'Report' }, 'APs', {}, {});
           check('the cover has no page key', /class="rep-cover[^"]*"[^>]*data-page-key="cover"/.test(html));
           check('the cover is not on a named page', /class="rep-cover rep-oriented/.test(html));

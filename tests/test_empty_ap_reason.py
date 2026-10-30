@@ -33,9 +33,12 @@ function slice(a, b) {
   if (i < 0 || j < 0) throw new Error('missing ' + a);
   return src.slice(i, j);
 }
-// Stand-ins for the two things the reason depends on.
+// Stand-ins for what the reason depends on. No floor is left out here; the
+// floor wording is tested in test_report_floor_selection.py.
 let proj = { accessPoints: [] };
 let apDisabled = new Set();
+let floorOff = new Set();
+function apFloorKey(ap) { return '_none'; }
 function apIsOmniOnly(ap) { return !!ap.omni; }
 eval(slice('  function emptyApReason(', '  function apMarkerLabel('));
 

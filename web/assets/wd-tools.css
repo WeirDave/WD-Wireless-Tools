@@ -5869,6 +5869,10 @@ body.tool-report {
   max-height: 420px; overflow-y: auto; padding: 6px 4px;
 }
 
+.rep-floor-row .rep-floor-only { margin-left: auto; flex: 0 0 auto; opacity: .6; }
+.rep-floor-row:hover .rep-floor-only,
+.rep-floor-row:focus-within .rep-floor-only { opacity: 1; }
+
 .rep-ap-empty {
   padding: 30px 20px; text-align: center;
   font-size: 13px; color: var(--text-3); font-style: italic;

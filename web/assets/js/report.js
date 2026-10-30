@@ -40,6 +40,13 @@
     projectName: '',
   };
   var apDisabled = new Set();
+  /* Floors left out of the report, by floor plan id, with '_none' standing for
+     the APs that sit on no floor plan. A set of what is OFF rather than of what
+     is on, so a floor added to the project later is in the report by default
+     instead of silently missing from it. */
+  var floorOff = new Set();
+  // True only while a report that reads the project directly is rendering.
+  var floorScopedRender = false;
   var currentReportId = DEFAULT_REPORT_ID;
   var currentOpts = {};
   var optsSeededFor = null;     // the report whose saved options currentOpts holds
@@ -1374,6 +1381,7 @@
 
     if (popts && popts.images) {
       apDisabled = new Set();
+      floorOff = new Set();
       for (var i = 0; i < target.floorPlans.length; i++) {
         var f = target.floorPlans[i];
         await readImageAsUrl(f.bitmapImageId || f.imageId);
@@ -2388,6 +2396,156 @@
     return key;
   }
 
+  /* ── Floors to include ─────────────────────────────────────────────────────
+     A building is built up a floor at a time, so one project holds plans for
+     floors that are live now and floors that were surveyed or planned for
+     another phase. A report of "the building" is wrong for either: the floors
+     are chosen here, once, and every report follows.
+
+     Reports that list APs get it through the AP list (an AP on an unticked
+     floor is not in it, so its floor has no section, and the cover counts only
+     the floors that remain). Summary, Bill of Materials and Interference read
+     the project itself, so they are handed a copy of it holding only the ticked
+     floors (see scopedProject). Change / Audit compares two files whose floors
+     are paired by name, which a subset would break, so it does not offer this. */
+  var NO_FLOOR_KEY = '_none';
+
+  function apFloorKey(ap) {
+    var fp = floorPlanForAp(ap);
+    return fp ? fp.id : NO_FLOOR_KEY;
+  }
+
+  // Every floor the AP list has a reason to name, in the order reports print them.
+  function floorRows() {
+    var count = {};
+    proj.accessPoints.forEach(function (ap) {
+      var k = apFloorKey(ap);
+      count[k] = (count[k] || 0) + 1;
+    });
+    return sortedFloorOrder(count).map(function (f) {
+      var bf = proj.buildingFloors && proj.buildingFloors[f.id];
+      var b = bf && proj.buildings && proj.buildings[bf.buildingId];
+      return {
+        key: f.id,
+        name: f.id === NO_FLOOR_KEY ? '(No floor plan)' : (f.name || 'Unnamed floor'),
+        building: (b && b.name) || '',
+        count: count[f.id] || 0,
+      };
+    });
+  }
+
+  function floorScopeApplies(r) { return !!r && !r.noFloorScope; }
+
+  function floorScopeActive(r) {
+    return floorScopeApplies(r) && floorRows().some(function (row) { return floorOff.has(row.key); });
+  }
+
+  function floorsAllOff() {
+    var rows = floorRows();
+    return rows.length > 0 && rows.every(function (row) { return floorOff.has(row.key); });
+  }
+
+  // "Level 2, Level 3" for a few floors, "2 of 9 floors" for many.
+  function floorScopeLabel() {
+    var rows = floorRows();
+    var on = rows.filter(function (row) { return !floorOff.has(row.key); });
+    var joined = on.map(function (row) { return row.name; }).join(', ');
+    if (on.length <= 3 && joined.length <= 60) return joined;
+    return on.length + ' of ' + rows.length + ' floors';
+  }
+
+  /* A copy of the project holding only the ticked floors: their plans, the APs
+     and radios on them, the surveys walked on them and the buildings they
+     belong to. Nothing in `full` is changed. */
+  function scopedProject(full) {
+    var keepFloor = {};
+    full.floorPlans.forEach(function (fp) { if (!floorOff.has(fp.id)) keepFloor[fp.id] = true; });
+    var aps = full.accessPoints.filter(function (ap) { return !floorOff.has(apFloorKey(ap)); });
+    var apIds = {};
+    aps.forEach(function (ap) { apIds[ap.id] = true; });
+    var surveys = (full.surveys || []).filter(function (sv) { return keepFloor[sv.floorPlanId]; });
+    var seen = {};
+    surveys.forEach(function (sv) {
+      (sv.wifiTracks || []).forEach(function (wt) {
+        (wt.accessPointMeasurementIds || []).forEach(function (id) { seen[id] = true; });
+      });
+    });
+    var buildings = {};
+    full.floorPlans.forEach(function (fp) {
+      var bf = full.buildingFloors && full.buildingFloors[fp.id];
+      if (keepFloor[fp.id] && bf && full.buildings && full.buildings[bf.buildingId]) {
+        buildings[bf.buildingId] = full.buildings[bf.buildingId];
+      }
+    });
+    return Object.assign({}, full, {
+      accessPoints: aps,
+      radios: (full.radios || []).filter(function (r) { return apIds[r.accessPointId]; }),
+      floorPlans: full.floorPlans.filter(function (fp) { return keepFloor[fp.id]; }),
+      surveys: surveys,
+      // A measured radio belongs to the floors its measurement was seen on.
+      measuredRadios: (full.measuredRadios || []).filter(function (m) { return seen[m.accessPointMeasurementId]; }),
+      buildings: buildings,
+    });
+  }
+
+  function renderFloorFilter() {
+    var card = document.getElementById('floorFilterCard');
+    var host = document.getElementById('floorFilterList');
+    if (!card || !host) return;
+    var rows = floorRows();
+    // One floor is not a choice; the card would be a tick box with nothing to decide.
+    card.hidden = !floorScopeApplies(currentReport()) || rows.length < 2;
+    if (card.hidden) return;
+
+    var onCount = rows.filter(function (row) { return !floorOff.has(row.key); }).length;
+    var countHost = document.getElementById('floorCount');
+    if (countHost) countHost.textContent = onCount + ' of ' + rows.length + ' included';
+
+    host.innerHTML = '<div class="rep-ap-grid rep-floor-grid">' + rows.map(function (row) {
+      var detail = (row.building ? row.building + ' · ' : '')
+        + row.count + ' AP' + (row.count === 1 ? '' : 's');
+      return '<label class="rep-ap-row rep-floor-row">'
+        + '<input type="checkbox" data-floor-key="' + WD.escAttr(row.key) + '" '
+        + (floorOff.has(row.key) ? '' : 'checked')
+        + ' data-action-change="call" data-fn="toggleFloor" data-arg-this="1">'
+        + '<span class="rep-ap-row-body">'
+        +   '<span class="rep-ap-row-name">' + WD.esc(row.name) + '</span>'
+        +   '<span class="rep-ap-row-model">' + WD.esc(detail) + '</span>'
+        + '</span>'
+        + '<button type="button" class="btn btn-secondary btn-sm rep-floor-only" '
+        +   'title="Include this floor and leave every other floor out" '
+        +   'data-action="call" data-fn="onlyFloor" data-stop="1" data-prevent="1" '
+        +   'data-arg="' + WD.escAttr(row.key) + '">Only</button>'
+        + '</label>';
+    }).join('') + '</div>';
+  }
+
+  function floorsChanged() {
+    configureDirty = true;
+    renderFloorFilter();
+    renderApFilter();
+  }
+
+  window.toggleFloor = function (cb) {
+    var key = cb.getAttribute('data-floor-key');
+    if (cb.checked) floorOff.delete(key); else floorOff.add(key);
+    floorsChanged();
+  };
+
+  window.setAllFloors = function (checked) {
+    floorRows().forEach(function (row) {
+      if (checked) floorOff.delete(row.key); else floorOff.add(row.key);
+    });
+    floorsChanged();
+  };
+
+  window.onlyFloor = function (key) {
+    floorRows().forEach(function (row) {
+      if (row.key === key) floorOff.delete(row.key); else floorOff.add(row.key);
+    });
+    floorsChanged();
+  };
+
   /* What the AP panel lists: `eligible` passes the report's omni/directional
      filter, `filtered` is what the search leaves of that. The count, the
      group badges and Toggle all read these, so none of them can act on or
@@ -2401,6 +2559,7 @@
     var inclOmni = ('inclOmni' in currentOpts) ? currentOpts.inclOmni
       : ('inclOmni' in sidebarDefaults) ? sidebarDefaults.inclOmni : false;
     var eligible = proj.accessPoints.filter(function (ap) {
+      if (floorOff.has(apFloorKey(ap))) return false;
       var omni = apIsOmniOnly(ap);
       if (omni && !inclOmni) return false;
       if (!omni && !inclDirectional) return false;
@@ -2911,6 +3070,7 @@
     var r = currentReport();
     var apCard = document.getElementById('apFilterCard');
     if (apCard) apCard.hidden = !!r.noApFilter;
+    renderFloorFilter();
 
     var settingItems = [];
     var optionItems = [];
@@ -4562,6 +4722,8 @@
       (extraRows || []).forEach(function (row) {
         if (row[1]) metaRows.push('<div><b>' + WD.esc(row[0]) + ':</b> ' + WD.esc(row[1]) + '</div>');
       });
+      // A report of some floors says so; its name is the building's either way.
+      if (floorScopeActive(r)) metaRows.push('<div><b>Floors:</b> ' + WD.esc(floorScopeLabel()) + '</div>');
       if (metaRows.length) meta = '<div class="rep-cover-meta">' + metaRows.join('') + '</div>';
     }
     var displayDate = (ctx && ctx.dateReadable) ? ctx.dateReadable : dateStr;
@@ -4607,6 +4769,7 @@
       if (opts.projectRef) rows.push('<span><b>Project ref:</b> ' + WD.esc(opts.projectRef) + '</span>');
       if (opts.revision)   rows.push('<span><b>Revision:</b> ' + WD.esc(opts.revision) + '</span>');
     }
+    if (floorScopeActive(r)) rows.push('<span><b>Floors:</b> ' + WD.esc(floorScopeLabel()) + '</span>');
     return '<header class="rep-doc-head">'
       + '<div class="rep-doc-brand"><img class="rep-brand-icon" src="../assets/report-v8.0-560x560.png" alt=""> ' + WD.esc(r.coverBrand) + '</div>'
       + '<h1 class="rep-doc-title">' + WD.esc(siteName()) + '</h1>'
@@ -4631,11 +4794,19 @@
       return;
     }
 
+    var scoped = floorScopeActive(r);
+    if (scoped && floorsAllOff()) {
+      host.innerHTML = '<div class="rep-empty">Every floor is unticked in the Floors to include '
+        + 'card. Tick the floors this report should cover.</div>';
+      return;
+    }
+
     var opts = collectOpts();
     var inclDirectional = ('inclDirectional' in opts) ? opts.inclDirectional : true;
     var inclOmni        = ('inclOmni'        in opts) ? opts.inclOmni        : false;
     var aps = proj.accessPoints.filter(function (a) {
       if (apDisabled.has(a.id)) return false;
+      if (scoped && floorOff.has(apFloorKey(a))) return false;
       var omni = apIsOmniOnly(a);
       if (omni && !inclOmni) return false;
       if (!omni && !inclDirectional) return false;
@@ -4649,11 +4820,13 @@
     var today = new Date();
     var dateStr = today.toISOString().slice(0, 10);
     var dateReadable = formatReadableDate(today);
+    var fullProj = proj;
+    var renderProj = (scoped && r.floorScope === 'project') ? scopedProject(fullProj) : fullProj;
     var ctx = {
       report: r,
       dateStr: dateStr,
       dateReadable: dateReadable,
-      proj: proj,
+      proj: renderProj,
       aps: aps,
       coverImage: coverImage,
       /* Six reports called this without their options, so their cover never
@@ -4670,7 +4843,18 @@
       fmtLength: fmtLength, unitsOf: unitsOf,
       floorPlanForAp: floorPlanForAp,
     };
-    host.innerHTML = r.render(aps, opts, ctx);
+    /* Summary, Bill of Materials and Interference read the project directly, so
+       for the length of their render the project is the ticked floors. Put back
+       in `finally`: a report that throws must not leave the next one looking at
+       a subset. */
+    proj = renderProj;
+    floorScopedRender = renderProj !== fullProj;
+    try {
+      host.innerHTML = r.render(aps, opts, ctx);
+    } finally {
+      proj = fullProj;
+      floorScopedRender = false;
+    }
     dropPrintWhitespace(host);
     // Every report, not only the one whose postRender happened to ask.
     applyPageOrientation(host, opts);
@@ -4718,10 +4902,15 @@
     var all = proj.accessPoints || [];
     if (!all.length) return 'This project has no access points in it.';
 
-    var enabled = all.filter(function (a) { return !apDisabled.has(a.id); });
-    if (!enabled.length) {
+    var ticked = all.filter(function (a) { return !apDisabled.has(a.id); });
+    if (!ticked.length) {
       return 'Every access point is unticked in the AP filter panel below. '
         + 'Tick the ones this report should cover.';
+    }
+    var enabled = ticked.filter(function (a) { return !floorOff.has(apFloorKey(a)); });
+    if (!enabled.length) {
+      return 'Every ticked access point is on a floor that is unticked in the Floors to '
+        + 'include card. Tick a floor that has them, or tick more access points.';
     }
 
     var omni = enabled.filter(apIsOmniOnly).length;
@@ -7487,6 +7676,8 @@
         function at(id) { return proj.floorPlans.findIndex(function (x) { return x.id === id; }); }
         return at(a) - at(b);
       });
+      // With floors left out, a device seen only on those floors is not this report's.
+      if (floorScopedRender && !floors.length) return;
       var floorNames = floors.map(function (fid) {
         var f = proj.floorPlans.find(function (x) { return x.id === fid; });
         return f ? f.name : '';
@@ -8837,7 +9028,9 @@
        has no way to show what was unticked in another report's panel, so it
        must not apply it: 35 APs became 30 rows with the cause out of sight. */
     var filtered = !currentReport().noApFilter;
-    var aps = (proj.accessPoints || []).filter(function (a) { return !filtered || !apDisabled.has(a.id); });
+    var aps = (proj.accessPoints || []).filter(function (a) {
+      return !filtered || (!apDisabled.has(a.id) && !floorOff.has(apFloorKey(a)));
+    });
     if (!aps.length) {
       showToast('There are no access points to export. Open an .esx, or tick some in the AP filter.', 'info');
       return;
@@ -10525,6 +10718,7 @@
       preview: PREVIEW_SUMMARY,
       bestFor: 'Client-facing project overview, kickoff decks, quick site-scoping snapshot.',
       noApFilter: true,
+      floorScope: 'project',
       sections: [
         { icon: '📄', title: 'Cover page',
           description: 'Site name, total AP count, floor count, your logo, date.' },
@@ -10582,6 +10776,7 @@
       preview: PREVIEW_HOTSPOT,
       bestFor: 'Security walk-arounds, "someone\'s wide-channel hotspot is stomping the network" incidents, baseline handoffs.',
       noApFilter: true,
+      floorScope: 'project',
       sections: [
         { icon: '📄', title: 'Cover page',
           description: 'Site name, interferer count, your cover image, date generated.' },
@@ -10638,6 +10833,7 @@
       preview: PREVIEW_BOM,
       bestFor: 'Procurement teams sizing purchase orders and cost estimates.',
       noApFilter: true,
+      floorScope: 'project',
       sections: [
         { icon: '📦', title: 'AP quantities',
           description: 'Grouped by vendor and model, with subtotals and a grand total. An AP with no model recorded is counted as "Unknown" rather than dropped.' },
@@ -10827,6 +11023,7 @@
       preview: PREVIEW_AUDIT,
       bestFor: 'Post-remediation write-ups, redesign hand-offs, and "prove we did what we said" audits.',
       noApFilter: true,
+      noFloorScope: true,
       sections: [
         { icon: '🔍', title: 'Compare stats',
           description: 'Before-and-after side-by-side: access point, radio and floor counts, with the change on each.' },

@@ -162,6 +162,19 @@
       <div class="rep-config-card" id="reportOptsSlot"></div>
     </div>
 
+    <div class="rep-config-card rep-config-wide" id="floorFilterCard" hidden>
+      <div class="rep-config-card-head">
+        <span class="rep-config-icon">🏢</span>
+        <span>Floors to include</span>
+        <span class="rep-ap-count" id="floorCount"></span>
+        <span class="rep-config-head-actions">
+          <button class="btn btn-secondary btn-sm" data-action="call" data-fn="setAllFloors" data-arg-json="true">All floors</button>
+          <button class="btn btn-secondary btn-sm" data-action="call" data-fn="setAllFloors" data-arg-json="false">None</button>
+        </span>
+      </div>
+      <div id="floorFilterList"></div>
+    </div>
+
     <div class="rep-config-card rep-config-wide" id="apFilterCard">
       <div class="rep-config-card-head">
         <span class="rep-config-icon">📡</span>
