@@ -47,6 +47,9 @@ window.top = EMBEDDED ? top : window;
 const API = (action, body) => { calls.push(action);
   return { then(f) { f({ ok: true }); return this; } }; };
 const SP = {};
+// What the page does about unsaved edits is held in test_settings_page_unsaved_changes.py.
+let dirty = false;
+const confirmDiscard = () => true;
 eval(src.slice(a, b));
 SP.rerunSetup();
 console.log(JSON.stringify({ calls, self: window.location.href, top: top.location.href }));

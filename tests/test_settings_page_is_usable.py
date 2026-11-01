@@ -1,0 +1,403 @@
+"""The Settings page can be read, reached and left by everyone who uses it.
+
+A design review of the page found five separate ways it let a person down, each
+of which looked fine on a mouse-driven screen:
+
+* Enter or Space on the open section's heading folded the only section on a wide
+  window and left an empty page. The CSS only stopped the mouse.
+* Twenty-odd fields had no accessible name: the labels sat above them as text
+  and were tied to nothing, the page had no heading and no main landmark, and a
+  group of radio buttons was a row of loose inputs.
+* The primary buttons were white on the Cloud blue, 2.77:1, and the muted
+  overview text on the dark page was 3.86:1.
+* Nothing said an edit was still unsaved, Cancel threw edits away without
+  asking, and Save and Cancel were offered on sections that have nothing to save.
+* Forget Login and Reset Organizer Defaults act at once, not on Save, and said
+  neither that nor what they would touch.
+
+What is held here is resolved or driven rather than read off the source: the
+colours are the painted ones, the handlers are the real functions run in Node
+against stubs, and the markup is parsed.
+"""
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import subprocess
+import unittest
+from html.parser import HTMLParser
+from pathlib import Path
+
+from tests.test_every_tool_has_its_own_brand import (
+    CSS, Palette, _contrast, _parts, _rules,
+)
+
+ROOT = Path(__file__).resolve().parent.parent
+HTML = (ROOT / "web" / "settings.html").read_text(encoding="utf-8")
+JS_PATH = ROOT / "web" / "assets" / "js" / "settings-page.js"
+NODE_TIMEOUT_S = 60
+
+
+class _Page(HTMLParser):
+    """The Settings markup: headings, landmarks, and what names each field."""
+
+    def __init__(self):
+        super().__init__()
+        self.h1 = 0
+        self.main = 0
+        self.summaries_with_h2 = 0
+        self.summaries = 0
+        self._in_summary = False
+        self.ids: set[str] = set()
+        self.label_for: set[str] = set()
+        self.labels: list[dict] = []
+        self.fields: list[dict] = []
+        self._label: dict | None = None
+        self.fieldsets: list[dict] = []
+        self._fs: list[dict] = []
+        self.classes: set[str] = set()
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        self.classes.update((a.get("class") or "").split())
+        if a.get("id"):
+            self.ids.add(a["id"])
+        if tag == "h1":
+            self.h1 += 1
+        if tag == "main":
+            self.main += 1
+        if tag == "summary":
+            self.summaries += 1
+            self._in_summary = True
+        if tag == "h2" and self._in_summary:
+            self.summaries_with_h2 += 1
+        if tag == "fieldset":
+            fs = {"legend": False, "radios": 0}
+            self._fs.append(fs)
+            self.fieldsets.append(fs)
+        if tag == "legend" and self._fs:
+            self._fs[-1]["legend"] = True
+        if tag == "label":
+            self._label = {"for": a.get("for"), "wraps": False}
+            self.labels.append(self._label)
+            if a.get("for"):
+                self.label_for.add(a["for"])
+        if tag in ("input", "select", "textarea"):
+            kind = (a.get("type") or "text") if tag == "input" else tag
+            f = {"id": a.get("id"), "type": kind, "aria": a.get("aria-label"),
+                 "wrapped": self._label is not None, "name": a.get("name")}
+            self.fields.append(f)
+            if self._label is not None:
+                self._label["wraps"] = True
+            if kind == "radio" and self._fs:
+                self._fs[-1]["radios"] += 1
+
+    def handle_endtag(self, tag):
+        if tag == "summary":
+            self._in_summary = False
+        if tag == "label":
+            self._label = None
+        if tag == "fieldset" and self._fs:
+            self._fs.pop()
+
+
+def _page() -> _Page:
+    p = _Page()
+    p.feed(HTML)
+    return p
+
+
+class TheMarkupHasStructureAndNames(unittest.TestCase):
+    def test_one_heading_one_landmark_and_a_heading_per_section(self):
+        p = _page()
+        self.assertEqual(p.h1, 1, "the page title is a heading")
+        self.assertEqual(p.main, 1, "the settings are the main landmark")
+        self.assertEqual((p.summaries, p.summaries_with_h2), (9, 9),
+                         "each section title is a heading inside its summary")
+
+    def test_every_field_that_is_typed_into_or_chosen_from_has_a_name(self):
+        p = _page()
+        unnamed = []
+        for f in p.fields:
+            if f["type"] in ("hidden", "file"):
+                continue
+            named = (f["wrapped"] or f["aria"]
+                     or (f["id"] and f["id"] in p.label_for))
+            if not named:
+                unnamed.append(f["id"] or f["name"] or f["type"])
+        self.assertEqual(unnamed, [], "no accessible name")
+
+    def test_no_label_is_left_pointing_at_nothing(self):
+        p = _page()
+        orphans = [l for l in p.labels
+                   if not l["wraps"] and not (l["for"] and l["for"] in p.ids)]
+        self.assertEqual(orphans, [])
+
+    def test_each_group_of_radio_buttons_is_a_fieldset_with_a_legend(self):
+        p = _page()
+        groups = [fs for fs in p.fieldsets if fs["radios"]]
+        self.assertEqual(len(groups), 3, "merge rule, default view, sites open as")
+        for fs in groups:
+            self.assertTrue(fs["legend"], "a group of radios names itself")
+
+    def test_the_three_radio_groups_share_one_set_of_rules(self):
+        """`s-radios` had no CSS at all, so 'Sites open as' fell back to the
+        uppercase grey of an ordinary label while its two siblings did not."""
+        self.assertNotIn("s-radios", _page().classes)
+
+
+PROBE = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+function slice(marker) {
+  const a = src.indexOf(marker);
+  if (a < 0) throw new Error(marker + ' moved');
+  let b = a, depth = 0, seen = false;
+  while (b < src.length && !(seen && depth === 0)) {
+    if (src[b] === '{') { depth++; seen = true; }
+    else if (src[b] === '}') depth--;
+    b++;
+  }
+  return src.slice(a, b);
+}
+const code = [
+  slice('  function setDirty('), slice('  function syncFooter('), slice('  function wireEditing('),
+  slice('  function confirmDiscard('), slice('  SP.cancel = function'),
+  slice('  function pinSummaries('), slice('  SP.forgetLogin = function'),
+  slice('  SP.resetOrganizer = function'),
+].join(';\n');
+
+const SCENARIOS = JSON.parse(process.argv[2]);
+const out = {};
+for (const name of Object.keys(SCENARIOS)) {
+  const sc = SCENARIOS[name];
+  const calls = [];
+  let dirty = false;
+  const handlers = {};
+  const footer = { cls: new Set(), classList: { toggle(c, on) { on ? footer.cls.add(c) : footer.cls.delete(c); } } };
+  const mark = { hidden: true };
+  const main = { addEventListener(ev, fn) { (handlers[ev] = handlers[ev] || []).push(fn); } };
+  const open = (sc.open || []).map(ro => ({ hasAttribute: (n) => n === 'data-readonly' && ro }));
+  const document = {
+    getElementById(id) { return { sFooter: footer, sDirty: mark }[id] || null; },
+    querySelector(sel) { return sel === '.s-main' ? main : null; },
+    querySelectorAll(sel) {
+      if (sel === 'details.s-section[open]') return open;
+      if (sel === 'details.s-section > summary') return sums;
+      return [];
+    },
+  };
+  const winHandlers = {};
+  let wide = !!sc.wide;
+  const mqListeners = [];
+  const window = {
+    addEventListener(ev, fn) { winHandlers[ev] = fn; },
+    matchMedia() { return { get matches() { return wide; }, addEventListener(ev, fn) { mqListeners.push(fn); } }; },
+  };
+  const sums = [0, 1].map(() => {
+    const el = { attrs: {}, clicks: [],
+      setAttribute(k, v) { el.attrs[k] = v; }, removeAttribute(k) { delete el.attrs[k]; },
+      addEventListener(ev, fn) { el.clicks.push(fn); } };
+    return el;
+  });
+  const location = { reload() { calls.push('reload'); } };
+  const confirms = [];
+  const confirm = (m) => { confirms.push(m); return sc.confirm !== false; };
+  const API = (a) => { calls.push('api:' + a); return { then(f) { f({ ok: true, settings: {} }); return this; } }; };
+  const WD = { toast() {} };
+  const SP = {};
+  const settings = {};
+  const checkCloud = () => {}, populate = () => {};
+  const body = code + `;
+    ${sc.drive}
+  `;
+  const result = new Function('document', 'window', 'location', 'confirm', 'API', 'WD', 'SP', 'settings',
+    'checkCloud', 'populate', 'calls', 'handlers', 'winHandlers', 'footer', 'mark', 'sums', 'confirms',
+    'mqListeners', 'setWide',
+    'var dirty = false;\n' + body)(document, window, location, confirm, API, WD, SP, settings,
+    checkCloud, populate, calls, handlers, winHandlers, footer, mark, sums, confirms, mqListeners,
+    (v) => { wide = v; });
+  out[name] = { result, calls, confirms, footer: [...footer.cls], dirtyShown: mark.hidden === false };
+}
+process.stdout.write(JSON.stringify(out));
+"""
+
+# Each scenario is a body of JS run against the real functions; its last
+# `return` is what comes back.
+SCENARIOS = {
+    # a real edit marks the page, the file picker does not
+    "edit": {"open": [False],
+             "drive": "wireEditing(); handlers.input[0]({ target: { id: 'sRepClient' } });"
+                      "return null;"},
+    "import_picker": {"open": [False],
+             "drive": "wireEditing(); handlers.change[0]({ target: { id: 'sImportFile' } });"
+                      "return null;"},
+    # sections with nothing to save lose Save and Cancel until something changes
+    "readonly_clean": {"open": [True], "drive": "syncFooter(); return null;"},
+    "readonly_dirty": {"open": [True],
+             "drive": "wireEditing(); handlers.change[0]({ target: { id: 'sRepUnits' } }); return null;"},
+    "editable_clean": {"open": [False], "drive": "syncFooter(); return null;"},
+    "mixed_open": {"open": [True, False], "drive": "syncFooter(); return null;"},
+    # Cancel
+    "cancel_clean": {"open": [False], "drive": "SP.cancel(); return null;"},
+    "cancel_dirty_declined": {"open": [False], "confirm": False,
+             "drive": "setDirty(true); SP.cancel(); return null;"},
+    "cancel_dirty_accepted": {"open": [False],
+             "drive": "setDirty(true); SP.cancel(); return null;"},
+    # headings that must not fold on a wide window
+    "wide_summary": {"wide": True, "drive":
+             "pinSummaries(); var ev = { prevented: false, preventDefault() { this.prevented = true; } };"
+             "sums[0].clicks[0](ev); return { prevented: ev.prevented, attrs: sums[0].attrs };"},
+    "narrow_summary": {"wide": False, "drive":
+             "pinSummaries(); var ev = { prevented: false, preventDefault() { this.prevented = true; } };"
+             "sums[0].clicks[0](ev); return { prevented: ev.prevented, attrs: sums[0].attrs };"},
+    "narrows_later": {"wide": True, "drive":
+             "pinSummaries(); setWide(false); mqListeners[0](); return { attrs: sums[0].attrs };"},
+    # actions that do not wait for Save
+    "forget_declined": {"confirm": False, "drive": "SP.forgetLogin(); return null;"},
+    "forget_accepted": {"drive": "SP.forgetLogin(); return null;"},
+    "reset_declined": {"confirm": False, "drive": "SP.resetOrganizer(); return null;"},
+    "reset_accepted": {"drive": "SP.resetOrganizer(); return null;"},
+}
+
+
+def _run() -> dict:
+    r = subprocess.run(["node", "-e", PROBE, str(JS_PATH), json.dumps(SCENARIOS)],
+                       capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
+    if r.returncode != 0:
+        raise AssertionError((r.stdout + r.stderr).strip())
+    return json.loads(r.stdout.strip().splitlines()[-1])
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class TheHandlersDoWhatThePageSays(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Each scenario's `drive` is a function body; wrap it so `return` works.
+        for sc in SCENARIOS.values():
+            if not sc["drive"].lstrip().startswith("return (function"):
+                sc["drive"] = "return (function () { " + sc["drive"] + " })();"
+        cls.out = _run()
+
+    def test_an_edit_marks_the_page_and_the_import_picker_does_not(self):
+        self.assertTrue(self.out["edit"]["dirtyShown"])
+        self.assertFalse(self.out["import_picker"]["dirtyShown"],
+                         "choosing a file to import is an action, not an unsaved setting")
+
+    def test_save_and_cancel_are_offered_only_where_there_is_something_to_save(self):
+        o = self.out
+        self.assertIn("is-readonly", o["readonly_clean"]["footer"])
+        self.assertNotIn("is-readonly", o["readonly_dirty"]["footer"],
+                         "an unsaved edit made elsewhere still needs its Save")
+        self.assertNotIn("is-readonly", o["editable_clean"]["footer"])
+        self.assertNotIn("is-readonly", o["mixed_open"]["footer"],
+                         "one section with controls open is enough")
+
+    def test_cancel_asks_before_it_discards_and_only_then(self):
+        o = self.out
+        self.assertEqual((o["cancel_clean"]["calls"], o["cancel_clean"]["confirms"]), (["reload"], []))
+        self.assertEqual((o["cancel_dirty_declined"]["calls"], len(o["cancel_dirty_declined"]["confirms"])),
+                         ([], 1))
+        self.assertEqual((o["cancel_dirty_accepted"]["calls"], len(o["cancel_dirty_accepted"]["confirms"])),
+                         (["reload"], 1))
+
+    def test_a_wide_window_cannot_fold_the_only_open_section(self):
+        wide = self.out["wide_summary"]["result"]
+        self.assertTrue(wide["prevented"], "Enter and Space reach the summary as a click")
+        self.assertEqual(wide["attrs"].get("tabindex"), "-1",
+                         "and the heading is out of the tab order")
+
+    def test_a_narrow_window_still_folds_its_sections(self):
+        narrow = self.out["narrow_summary"]["result"]
+        self.assertFalse(narrow["prevented"])
+        self.assertNotIn("tabindex", narrow["attrs"])
+        self.assertNotIn("tabindex", self.out["narrows_later"]["result"]["attrs"],
+                         "resizing from wide to narrow gives the headings back")
+
+    def test_forget_login_asks_and_says_what_it_does(self):
+        self.assertEqual(self.out["forget_declined"]["calls"], [])
+        acc = self.out["forget_accepted"]
+        self.assertEqual(acc["calls"], ["api:cloud/forget_login"])
+        self.assertRegex(acc["confirms"][0], r"(?i)sign in again")
+
+    def test_reset_names_what_it_resets_and_that_it_is_not_part_of_save(self):
+        self.assertEqual(self.out["reset_declined"]["calls"], [])
+        said = self.out["reset_accepted"]["confirms"][0]
+        self.assertRegex(said, r"(?i)rename rules")
+        self.assertRegex(said, r"(?i)straight away")
+        self.assertIn("api:settings/update", self.out["reset_accepted"]["calls"])
+
+
+class _Colours(Palette):
+    """`Palette` for Settings' body, taught `black` in a colour-mix."""
+
+    def __init__(self, theme: str):
+        super().__init__(theme, "tool-home")
+
+    def resolve(self, value, depth=0):
+        m = re.fullmatch(r"color-mix\(in srgb,\s*(.+?)\s+(\d+)%\s*,\s*black\)", value.strip())
+        if m:
+            a, p = self.resolve(m.group(1), depth + 1), int(m.group(2)) / 100
+            return tuple(x * p for x in a)
+        return super().resolve(value, depth)
+
+
+def _final(selector: str, prop: str) -> str:
+    """The last declaration of `prop` in a rule whose selector list names
+    exactly `selector` - the one that wins between equals."""
+    css = CSS.read_text(encoding="utf-8")
+    value = None
+    for sel, body in _rules(css):
+        if selector in _parts(sel):
+            for name, v in re.findall(r"(?<![\w-])([\w-]+)\s*:\s*([^;]+);", body):
+                if name == prop:
+                    value = v.strip()
+    if value is None:
+        raise AssertionError(f"{selector} no longer sets {prop}")
+    return value
+
+
+class TheTextCanBeRead(unittest.TestCase):
+    def test_a_primary_button_label_clears_four_and_a_half_to_one(self):
+        for theme in ("dark", "light"):
+            pal = _Colours(theme)
+            white = (1.0, 1.0, 1.0)
+            for state, sel in (("rest", ".btn-blue"), ("hover", ".btn-blue:hover")):
+                with self.subTest(theme=theme, state=state):
+                    fill = pal.resolve(_final(sel, "background"))
+                    self.assertGreaterEqual(round(_contrast(white, fill), 2), 4.5)
+
+    def test_the_update_banners_button_clears_four_and_a_half_to_one(self):
+        for theme in ("dark", "light"):
+            pal = _Colours(theme)
+            fill = pal.resolve(_final(".wd-update-download", "background"))
+            with self.subTest(theme=theme):
+                self.assertGreaterEqual(round(_contrast((1.0, 1.0, 1.0), fill), 2), 4.5)
+
+    def test_muted_text_on_the_settings_page_clears_four_and_a_half_to_one(self):
+        """The overview's titles, empty values and where-it-lives lines, the
+        re-run link, the drag and remove marks, and the update banner's detail."""
+        selectors = [".s-ov-title", ".s-ov-row .s-ov-val.is-empty", ".s-ov-where",
+                     ".settings-footer .rerun-link", ".sf-handle", ".sf-remove",
+                     ".wd-update-detail"]
+        for theme in ("dark", "light"):
+            pal = _Colours(theme)
+            for sel in selectors:
+                ink = pal.resolve(_final(sel, "color"))
+                # Page background, and the update banner's amber tint.
+                for where, bg in (("page", pal.resolve("var(--bg)")),
+                                  ("banner", pal.resolve("var(--amber-bg)"))):
+                    if where == "banner" and sel != ".wd-update-detail":
+                        continue
+                    with self.subTest(theme=theme, selector=sel, on=where):
+                        self.assertGreaterEqual(round(_contrast(ink, bg), 2), 4.5)
+
+    def test_the_column_holds_its_width_between_sections(self):
+        """It shrank to its content: a short section moved the list of sections
+        270px sideways and snapped it back on the next one."""
+        self.assertEqual(_final(".settings-wrap", "width"), "100%")
+
+
+if __name__ == "__main__":
+    unittest.main()

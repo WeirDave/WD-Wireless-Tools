@@ -751,9 +751,18 @@ mark {
 
 .btn-primary:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
 
-.btn-blue { background: var(--blue); color: white; border-color: var(--blue); }
+/* White on the Cloud blue itself measures 2.77:1, below the 4.5:1 a 13px label
+   needs. The fill is that blue mixed toward black, so it stays the same hue
+   (about 5.2:1; the hover is darker still). */
+.btn-blue {
+  background: color-mix(in srgb, var(--blue) 70%, black); color: white;
+  border-color: color-mix(in srgb, var(--blue) 70%, black);
+}
 
-.btn-blue:hover { background: var(--blue-dark); border-color: var(--blue-dark); }
+.btn-blue:hover {
+  background: color-mix(in srgb, var(--blue) 58%, black);
+  border-color: color-mix(in srgb, var(--blue) 58%, black);
+}
 
 .btn-green { background: var(--green); color: white; border-color: var(--green); }
 
@@ -8358,17 +8367,17 @@ body.tool-guide {
 }
 .wd-update-icon { color: var(--amber); font-size: 14px; }
 .wd-update-msg { flex: 1; min-width: 0; }
-.wd-update-detail { color: var(--text-3); }
+.wd-update-detail { color: var(--text-2); }
 .wd-update-detail a { color: var(--blue); text-decoration: none; }
 .wd-update-detail a:hover { text-decoration: underline; }
 .wd-update-download {
   padding: 4px 12px; border-radius: var(--r-sm); border: 0; cursor: pointer;
-  background: var(--blue); color: #fff !important; text-decoration: none;
+  background: color-mix(in srgb, var(--blue) 70%, black); color: #fff !important; text-decoration: none;
   font-family: var(--mono); font-size: 12px; font-weight: 600;
 }
 .wd-update-download:hover { filter: brightness(1.1); }
 .wd-update-close {
-  background: transparent; color: var(--text-3); border: 0;
+  background: transparent; color: var(--text-2); border: 0;
   font-size: 18px; cursor: pointer; line-height: 1; padding: 0 4px;
 }
 .wd-update-close:hover { color: var(--text); }
@@ -12373,12 +12382,65 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
 .settings-footer .rerun-link { font-size: 14px; }
 /* With the list down the side doing the choosing, the main column is the one
    section that is open; the others would only repeat the list. Its heading
-   stays as the title and does not fold away, which would leave a blank page. */
+   stays as the title and does not fold away, which would leave a blank page.
+   `pointer-events: none` only stopped the mouse: Enter or Space on the heading
+   still folded it, so settings-page.js (SP.pinSummaries) swallows the toggle and
+   takes the heading out of the tab order at these widths as well. */
 @media (min-width: 1001px) {
   .s-main details.s-section:not([open]) { display: none; }
   .s-main details.s-section[open] > summary { pointer-events: none; }
   .s-main details.s-section[open] > summary::before { content: none; }
 }
+
+/* The page as a settings surface: real headings, grouped controls, one width,
+   readable muted text and control edges that can be seen. Appended here so it
+   follows every earlier generation of these rules. */
+/* Fixed width and a reserved scrollbar gutter: the column used to shrink to
+   its content, so a short section moved the whole list 270px sideways. */
+.settings-wrap { width: 100%; }
+html:has(.settings-wrap) { scrollbar-gutter: stable; }
+.settings-title h1 { font-size: inherit; font-weight: inherit; margin: 0; }
+.s-section summary h2 { font: inherit; margin: 0; }
+.s-label, .s-field legend {
+  display: block; padding: 0; font-size: 13px; font-weight: 600; color: var(--text-2);
+  margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.s-field { border: 0; padding: 0; min-width: 0; }
+.s-nav-item:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.s-field input[type="text"], .s-field select { border-color: var(--border-strong); }
+.s-field input::placeholder { color: var(--text-2); opacity: 1; }
+.s-field input[type="checkbox"], .s-field input[type="radio"] {
+  width: 18px; height: 18px; flex-shrink: 0; margin: 0 6px 0 0; accent-color: var(--blue-dark);
+}
+.s-field label.s-check { display: flex; align-items: center; text-transform: none; letter-spacing: 0; }
+.s-radio-group { flex-direction: column; gap: 8px; }
+.s-radio-group label { align-items: flex-start; }
+.s-radio-group input[type="radio"] { margin-top: 1px; }
+.s-ov-title, .s-ov-row .s-ov-val.is-empty, .s-ov-where { color: var(--text-2); }
+.settings-footer .rerun-link { color: var(--text-2); }
+.settings-footer .rerun-link:hover { color: var(--text); }
+.sf-handle, .sf-remove, .s-cd-remove { color: var(--text-2); }
+.sf-remove, .s-cd-remove { min-width: 24px; min-height: 24px; }
+
+/* Plain buttons on this page had no fill of their own and took the browser's
+   grey. They use the suite's secondary-button tokens, and the Open Report link
+   reads as a button rather than as a link. */
+.settings-wrap .btn:not(.btn-blue):not(.btn-red):not(:disabled),
+.s-import-modal .btn:not(.btn-blue):not(.btn-red) {
+  background: var(--btn-sec); color: var(--text); text-decoration: none;
+}
+.settings-wrap .btn:not(.btn-blue):not(.btn-red):not(:disabled):hover,
+.s-import-modal .btn:not(.btn-blue):not(.btn-red):hover { background: var(--btn-sec-h); }
+.settings-wrap .btn:disabled { color: var(--text-2); }
+
+/* A change that has not been saved yet, beside the button that saves it. */
+.settings-footer .s-dirty { font-size: 14px; color: var(--text); display: inline-flex; align-items: center; gap: 8px; }
+.settings-footer .s-dirty::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--attn);
+}
+.settings-footer .s-dirty[hidden] { display: none; }
+/* Sections with nothing to save: the buttons would promise something. */
+.settings-footer.is-readonly .btn { display: none; }
 
 /* Report's wizard screens, at the same arm's-length sizes as the workbench
    tools. Screen only: the printed sheets have their own sizes and are

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WD Settings</title>
+<title>Suite Settings</title>
 <link rel="icon" href="/assets/wd-wireless-tools-v8.0-multi-size.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/wd-wireless-tools-v8.0-32x32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/assets/wd-wireless-tools-v8.0-180x180.png">
@@ -50,9 +50,9 @@
   </div>
 </div>
 
-<div class="settings-wrap">
+<main class="settings-wrap" id="main">
   <div class="settings-title">
-    <span>Suite Settings</span>
+    <h1>Suite Settings</h1>
     <a href="/" target="_top">&larr; Home</a>
   </div>
 
@@ -65,14 +65,14 @@
 
   <!-- General -->
   <details class="s-section" id="sec-general" open>
-    <summary>General</summary>
+    <summary><h2>General</h2></summary>
     <div class="s-body">
       <div class="s-field">
-        <label>Local project folder</label>
+        <label for="sOutputDir">Local project folder</label>
         <div class="s-row">
           <input type="text" id="sOutputDir" placeholder="Not set" readonly>
           <button class="btn btn-blue" data-action="call" data-fn="SP.pickFolder">Browse&hellip;</button>
-          <button class="btn" data-action="call" data-fn="SP.clearFolder" title="Clear">Clear</button>
+          <button class="btn" data-action="call" data-fn="SP.clearFolder" title="Empty the folder field. The folder itself is not touched.">Clear</button>
         </div>
         <div class="hint">Root folder where your Ekahau site folders live.</div>
       </div>
@@ -82,12 +82,11 @@
           <input type="checkbox" id="sTerminalTab">
           <span>Open the launcher in a Windows Terminal tab</span>
         </label>
-        <div class="hint mt-4">Windows only. When you start WD Wireless Tools from its launcher
-          (<code>Start WD Wireless Tools.bat</code>), it opens as a tab in your open Windows
-          Terminal window instead of a console of its own, and a restart does the same. Starting
-          it from a PowerShell tab you already have open runs it in that tab. Turn this off to
-          always run in the window the launcher was started from. Takes effect the next time
-          you start or restart.</div>
+        <div class="hint mt-4">Windows only. Started from its launcher
+          (<code>Start WD Wireless Tools.bat</code>), WD Wireless Tools opens as a tab in your
+          open Windows Terminal window instead of a console of its own. Turn this off to always
+          run in the window the launcher was started from. Takes effect the next time you start
+          or restart.</div>
       </div>
 
 
@@ -97,17 +96,17 @@
 
   <!-- Subfolder Structure -->
   <details class="s-section" id="sec-subfolders">
-    <summary>Subfolder Structure</summary>
+    <summary><h2>Subfolder Structure</h2></summary>
     <div class="s-body">
       <div class="s-field">
-        <label>Default subfolders</label>
-        <ul class="sf-list" id="sSfList"></ul>
+        <div class="s-label" id="sSfLabel">Default subfolders</div>
+        <ul class="sf-list" id="sSfList" aria-labelledby="sSfLabel"></ul>
         <button class="btn mt-8" data-action="call" data-fn="SP.addSubfolder">+ Add subfolder</button>
         <div class="hint">Created automatically in new site folders.</div>
       </div>
       <div class="s-field">
-        <label>Custom destinations (for Squirrel sorting)</label>
-        <div id="sCdList"></div>
+        <div class="s-label" id="sCdLabel">Custom destinations for sorting in Squirrel</div>
+        <div id="sCdList" role="group" aria-labelledby="sCdLabel"></div>
         <button class="btn mt-8" data-action="call" data-fn="SP.addCustomDest">+ Add destination</button>
         <div class="hint">Additional sorting bins with their own file-type rules.</div>
       </div>
@@ -116,34 +115,37 @@
 
   <!-- Squirrel -->
   <details class="s-section" id="sec-organizer">
-    <summary>Squirrel (File Organizer)</summary>
+    <summary><h2>Squirrel (File Organizer)</h2></summary>
     <div class="s-body">
       <div class="s-field">
-        <label>Image extensions</label>
+        <div class="hint">Each list below is separated by commas. Extensions keep their dot, as in <code>.png</code>.</div>
+      </div>
+      <div class="s-field">
+        <label for="sImageExt">Image extensions</label>
         <input type="text" id="sImageExt" placeholder=".png, .jpg, ...">
       </div>
       <div class="s-field">
-        <label>Floor plan extensions</label>
+        <label for="sPlanExt">Floor plan extensions</label>
         <input type="text" id="sPlanExt" placeholder=".dwg, .dxf, ...">
       </div>
       <div class="s-field">
-        <label>Report extensions</label>
+        <label for="sReportExt">Report extensions</label>
         <input type="text" id="sReportExt" placeholder=".docx, .xlsx, ...">
       </div>
       <div class="s-field">
-        <label>PDF report keywords</label>
+        <label for="sPdfKw">PDF report keywords</label>
         <input type="text" id="sPdfKw" placeholder="report, audit, ...">
       </div>
       <div class="s-field">
-        <label>JSON report keywords</label>
+        <label for="sJsonKw">JSON report keywords</label>
         <input type="text" id="sJsonKw" placeholder="waxframe, checkpoint, ...">
       </div>
       <div class="s-field">
-        <label>Folders to skip</label>
+        <label for="sSkipDirs">Folders to skip</label>
         <input type="text" id="sSkipDirs" placeholder="backups, output, ...">
       </div>
       <div class="s-field">
-        <label>Create-folder naming template</label>
+        <label for="sCreateTpl">Create-folder naming template</label>
         <input type="text" id="sCreateTpl" placeholder="e.g. {site_code} - {site_name}">
         <div class="hint">Used by &quot;Create Project Folder&quot; in Squirrel. Tokens:
           <code>{site_code}</code> <code>{site_name}</code> <code>{city}</code>
@@ -152,6 +154,7 @@
       </div>
       <div class="s-field text-right">
         <button class="btn btn-red" data-action="call" data-fn="SP.resetOrganizer">Reset Organizer Defaults</button>
+        <div class="hint mt-4">Applies straight away, without Save. It also clears Squirrel&rsquo;s rename rules.</div>
       </div>
           <div class="s-overview" data-section="squirrel"></div>
 </div>
@@ -159,10 +162,11 @@
 
   <!-- Cloud Manager -->
   <details class="s-section" id="sec-cloud">
-    <summary>Cloud Manager</summary>
+    <summary><h2>Cloud Manager</h2></summary>
     <div class="s-body">
       <div class="s-field">
-        <label>Merge conflict rule</label>
+        <fieldset class="s-field">
+        <legend>Merge conflict rule</legend>
         <div class="s-radio-group">
           <label><input type="radio" name="mergeRule" value="ask"> Ask me each time</label>
           <label><input type="radio" name="mergeRule" value="newer"> Keep newer (by timestamp)</label>
@@ -170,10 +174,10 @@
           <label><input type="radio" name="mergeRule" value="skip"> Skip existing files</label>
         </div>
         <div class="hint">What happens when a download finds a file of the same name already there.</div>
-      </div>
+      </fieldset>
 
-      <div class="s-field">
-        <label>Default view</label>
+      <fieldset class="s-field">
+        <legend>Default view</legend>
         <div class="s-radio-group">
           <label><input type="radio" name="setowner" value="all"> All &mdash; everything you can see, yours and other people&rsquo;s</label>
           <label><input type="radio" name="setowner" value="mine"> Mine &mdash; only projects and sites you own</label>
@@ -182,11 +186,11 @@
         <div class="hint">Which owners the Files list shows when Cloud Manager opens. Pressing
           <b>All</b>, <b>Mine</b> or <b>Others</b> in Cloud Manager's toolbar changes this
           too, so the list opens the way you last left it.</div>
-      </div>
+      </fieldset>
 
-      <div class="s-field">
-        <label>Sites open as</label>
-        <div class="s-radios">
+      <fieldset class="s-field">
+        <legend>Sites open as</legend>
+        <div class="s-radio-group">
           <label><input type="radio" name="setTreeOpen" value="all"> All sites expanded</label>
           <label><input type="radio" name="setTreeOpen" value="attention"> Only sites that need a decision &mdash; the rest stay closed</label>
           <label><input type="radio" name="setTreeOpen" value="none"> All sites collapsed</label>
@@ -194,10 +198,10 @@
         <div class="hint">How the Sites tree opens in Cloud Manager. Expand all and Collapse all
           in its toolbar still change what you are looking at, but only until you reload
           &mdash; this is the one that sticks.</div>
-      </div>
+      </fieldset>
 
       <div class="s-field">
-        <label>Live auto-refresh interval</label>
+        <label for="sLiveMs">Live auto-refresh interval</label>
         <select id="sLiveMs">
           <option value="15000">15 seconds</option>
           <option value="30000">30 seconds</option>
@@ -206,12 +210,13 @@
         </select>
       </div>
       <div class="s-field">
-        <label>Connection</label>
-        <div class="cloud-status" id="sCloudStatus">
+        <div class="s-label" id="sConnLabel">Connection</div>
+        <div class="cloud-status" id="sCloudStatus" role="group" aria-labelledby="sConnLabel">
           <span class="dot"></span>
           <span id="sCloudStatusText">Checking&hellip;</span>
         </div>
-        <button class="btn mt-8" data-action="call" data-fn="SP.forgetLogin">Forget Login</button>
+        <button class="btn mt-8" id="sForgetBtn" data-action="call" data-fn="SP.forgetLogin">Forget Login</button>
+        <div class="hint mt-4">Applies straight away, without Save. Cloud Manager asks you to sign in again.</div>
       </div>
           <div class="s-overview" data-section="cloud"></div>
 </div>
@@ -219,7 +224,7 @@
 
   <!-- Report -->
   <details class="s-section" id="sec-report">
-    <summary>Report</summary>
+    <summary><h2>Report</h2></summary>
     <div class="s-body">
       <div class="s-field">
         <label for="sRepClient">Client / company</label>
@@ -271,18 +276,14 @@
           is split across several. Ships as <b>Standard</b>.</div>
       </div>
       <div class="s-field">
-        <div class="hint">Both are the starting point for every report. Changing either in
-          Report's <b>Configure</b> step now affects that one report and nothing else
-          &mdash; until v2.152.0 it quietly changed the setting here as well, so
-          switching a single report to metres made metres the default for every report
-          afterwards. There is one copy of each, here.</div>
+        <div class="hint">Units and section size are the starting point for every report.
+          Changing either in Report's <b>Configure</b> step affects that one report and
+          nothing else; the saved copy of each is here.</div>
       </div>
       <div class="s-field">
-        <div class="hint">The report <b>cover image</b> is still chosen in Report itself &mdash;
-          it is a picture rather than a preference. Open Report and use
-          <b>Cover image&hellip;</b> above the report list. That panel also previews the
-          saved file name, which it can do because it knows the project you have
-          open.</div>
+        <div class="hint">The report <b>cover image</b> is chosen in Report itself, with
+          <b>Cover image&hellip;</b> above the report list, because it is a picture rather
+          than a preference.</div>
         <a class="btn mt-8" href="/report" target="_top">Open Report</a>
       </div>
           <div class="s-overview" data-section="report"></div>
@@ -291,7 +292,7 @@
 
   <!-- Quick Walls -->
   <details class="s-section" id="sec-walls">
-    <summary>Quick Walls</summary>
+    <summary><h2>Quick Walls</h2></summary>
     <div class="s-body">
       <div class="s-field">
         <label class="s-check">
@@ -325,7 +326,7 @@
 
   <!-- Capacity -->
   <details class="s-section" id="sec-capacity">
-    <summary>Capacity</summary>
+    <summary><h2>Capacity</h2></summary>
     <div class="s-body">
       <div class="s-field">
         <label for="sCapExisting">Floors that already have devices</label>
@@ -345,8 +346,8 @@
 
   <!-- Every other tool: nothing here to change, but the overview says what
        each one saves and which of its own controls owns it. -->
-  <details class="s-section" id="sec-elsewhere">
-    <summary>PlanTrim, Rename and the rest</summary>
+  <details class="s-section" id="sec-elsewhere" data-readonly>
+    <summary><h2>PlanTrim, Rename and the rest</h2></summary>
     <div class="s-body">
       <div class="s-field">
         <div class="hint">These settings are saved with all the others, in the same file,
@@ -359,11 +360,11 @@
     </div>
   </details>
 
-  <details class="s-section" id="sec-backup">
-    <summary>Backup &amp; restore</summary>
+  <details class="s-section" id="sec-backup" data-readonly>
+    <summary><h2>Backup &amp; restore</h2></summary>
     <div class="s-body">
       <div class="s-field">
-        <label>Your whole setup, in one file</label>
+        <h3 class="s-label">Your whole setup, in one file</h3>
         <div class="s-row">
           <button class="btn btn-blue" data-action="call" data-fn="SP.exportSettings"
                   title="Save everything you have configured to one file">&#11015; Export to a file&hellip;</button>
@@ -385,7 +386,7 @@
       </div>
 
       <div class="s-field">
-        <label>What a restore does not bring back</label>
+        <h3 class="s-label">What a restore does not bring back</h3>
         <div class="hint">Panel widths, which sections you left folded and tips
           you have dismissed stay with the browser you set them in. They are in
           the file so you can read it, but a restore skips them &mdash; carrying
@@ -395,7 +396,7 @@
       </div>
 
       <div class="s-field">
-        <label>Automatic copies</label>
+        <h3 class="s-label">Automatic copies</h3>
         <div class="hint">Before an update, and before an import, a copy of your
           settings is written to
           <code>~/.wd_wireless_tools/settings-backups/</code> without being
@@ -409,14 +410,15 @@
     </div>
   </details>
 
-  <div class="settings-footer">
+  <div class="settings-footer" id="sFooter">
     <button class="rerun-link" data-action="call" data-fn="SP.rerunSetup">Re-run Setup Wizard</button>
-    <button class="btn" data-action="call" data-fn="location.reload">Cancel</button>
-    <button class="btn btn-blue" data-action="call" data-fn="SP.save">Save</button>
+    <span class="s-dirty" id="sDirty" role="status" hidden>Unsaved changes</span>
+    <button class="btn" id="sCancelBtn" data-action="call" data-fn="SP.cancel">Cancel</button>
+    <button class="btn btn-blue" id="sSaveBtn" data-action="call" data-fn="SP.save">Save</button>
   </div>
   </div><!-- /s-main -->
   </div><!-- /s-layout -->
-</div>
+</main>
 
 <!-- Nothing is written until this has been read and confirmed. He has had
      settings change underneath him without warning; a restore is the last

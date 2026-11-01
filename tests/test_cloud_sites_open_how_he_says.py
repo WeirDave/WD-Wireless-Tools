@@ -277,16 +277,17 @@ const toast = () => {};
    comes after it. */
 const loadOverviews = () => {};
 const loadWallTemplates = () => {};
+const setDirty = () => {};
 
 const WD = { escAttr: s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;'),
              esc: s => String(s == null ? '' : s), toast(){} };
 
 const NAMES = ['document','API','settings','_subfolders','_subfolderNames',
                'collectCustomDests','splitComma','announceSave','toast',
-               'loadOverviews','loadWallTemplates','WD'];
+               'loadOverviews','loadWallTemplates','setDirty','WD'];
 const VALUES = [document, API, settings, _subfolders, _subfolderNames,
                 collectCustomDests, splitComma, announceSave, toast,
-                loadOverviews, loadWallTemplates, WD];
+                loadOverviews, loadWallTemplates, setDirty, WD];
 new Function(...NAMES, body)(...VALUES);
 
 setTimeout(() => {

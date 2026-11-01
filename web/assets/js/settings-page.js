@@ -30,6 +30,8 @@
   }
 
   function init() {
+    wireEditing();
+    pinSummaries();
     API('settings/get', {}).then(function (r) {
       if (!r.ok) return;
       settings = r.settings;
@@ -66,8 +68,92 @@
   function markNav() {
     var open = document.querySelector('details.s-section[open]');
     Array.prototype.forEach.call(document.querySelectorAll('.s-nav-item'), function (b) {
-      b.classList.toggle('is-current', !!open && b.getAttribute('data-sec') === open.id);
+      var here = !!open && b.getAttribute('data-sec') === open.id;
+      b.classList.toggle('is-current', here);
+      if (here) b.setAttribute('aria-current', 'true');
+      else b.removeAttribute('aria-current');
     });
+    syncFooter();
+  }
+
+  /* ── what has changed and not been saved ────────────────────────────────
+     Save writes the whole page at once, but nothing said whether there was
+     anything to write: Cancel threw edits away without asking, and moving
+     between sections kept them with no sign that they were still pending.
+     `dirty` is set by a real edit (never by populate(), which assigns values
+     without firing events) and cleared by a save, a reset or a reload. */
+  var dirty = false;
+
+  function setDirty(v) {
+    dirty = !!v;
+    syncFooter();
+  }
+
+  /* Save and Cancel are shown while there is something to save, or while a
+     section with controls is open. A section that only reports (PlanTrim and
+     the rest, Backup & restore) has nothing for them to do, and offering them
+     there promised something the page could not keep. */
+  function syncFooter() {
+    var foot = document.getElementById('sFooter');
+    var mark = document.getElementById('sDirty');
+    if (mark) mark.hidden = !dirty;
+    if (!foot) return;
+    var open = document.querySelectorAll('details.s-section[open]');
+    var readonly = open.length > 0 && Array.prototype.every.call(open, function (d) {
+      return d.hasAttribute('data-readonly');
+    });
+    foot.classList.toggle('is-readonly', readonly && !dirty);
+  }
+
+  function wireEditing() {
+    var main = document.querySelector('.s-main');
+    if (!main) return;
+    ['input', 'change'].forEach(function (ev) {
+      main.addEventListener(ev, function (e) {
+        var t = e.target;
+        // The import file picker is an action, not a setting.
+        if (t && t.id === 'sImportFile') return;
+        setDirty(true);
+      });
+    });
+    window.addEventListener('beforeunload', function (e) {
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+  }
+
+  function confirmDiscard() {
+    return !dirty || confirm('Discard your unsaved changes?');
+  }
+
+  SP.cancel = function () {
+    if (!confirmDiscard()) return;
+    dirty = false;          // so the reload does not ask a second time
+    location.reload();
+  };
+
+  /* On a wide window the open section's heading is the page title and the
+     list at the side does the choosing. It stays a <summary> so narrow windows
+     can fold sections, but there it must not fold: the mouse was already
+     stopped by CSS, and this stops Enter and Space, which would otherwise
+     leave an empty page, and takes the heading out of the tab order. */
+  function pinSummaries() {
+    var wide = window.matchMedia('(min-width: 1001px)');
+    var sums = document.querySelectorAll('details.s-section > summary');
+    function sync() {
+      Array.prototype.forEach.call(sums, function (sm) {
+        if (wide.matches) sm.setAttribute('tabindex', '-1');
+        else sm.removeAttribute('tabindex');
+      });
+    }
+    Array.prototype.forEach.call(sums, function (sm) {
+      sm.addEventListener('click', function (e) {
+        if (wide.matches) e.preventDefault();
+      });
+    });
+    sync();
+    if (wide.addEventListener) wide.addEventListener('change', sync);
   }
 
   SP.goSection = function (name) {
@@ -190,10 +276,11 @@
     list.innerHTML = effectiveNames.map(function (name, i) {
       return '<li class="sf-item" data-idx="' + i + '">' +
         '<span class="sf-handle">&#9776;</span>' +
-        '<input type="text" value="' + escAttr(name) + '" data-action-change="call"' +
+        '<input type="text" aria-label="Subfolder name ' + (i + 1) + '" value="' + escAttr(name) + '" data-action-change="call"' +
           ' data-fn="SP._updateSf" data-arg-json="' + i + '" data-arg-value="1">' +
         (effectiveNames.length > 1 ? '<button class="sf-remove" data-action="call"' +
-          ' data-fn="SP._removeSf" data-arg-json="' + i + '">&times;</button>' : '') +
+          ' data-fn="SP._removeSf" data-arg-json="' + i + '" aria-label="Remove subfolder ' +
+          escAttr(name) + '" title="Remove">&times;</button>' : '') +
         '</li>';
     }).join('');
   }
@@ -206,6 +293,7 @@
     var key = _subfolders.splice(i, 1)[0];
     delete _subfolderNames[key];
     renderSubfolders();
+    setDirty(true);
   };
 
   SP.addSubfolder = function () {
@@ -214,6 +302,7 @@
     _subfolders.push(key);
     _subfolderNames[key] = '';
     renderSubfolders();
+    setDirty(true);
     var items = document.querySelectorAll('#sSfList .sf-item input[type="text"]');
     var last = items[items.length - 1];
     if (last) { last.focus(); last.select(); }
@@ -236,13 +325,14 @@
         '<label>PDF keywords<input type="text" class="cd-pdfkw" value="' + escAttr((c.pdf_keywords || []).join(', ')) + '"></label>' +
         '<label>JSON keywords<input type="text" class="cd-jsonkw" value="' + escAttr((c.json_keywords || []).join(', ')) + '"></label>' +
       '</div>' +
-      '<button class="s-cd-remove" title="Remove">&times;</button>';
-    row.querySelector('.s-cd-remove').addEventListener('click', function () { row.remove(); });
+      '<button class="s-cd-remove" title="Remove this destination" aria-label="Remove this destination">&times;</button>';
+    row.querySelector('.s-cd-remove').addEventListener('click', function () { row.remove(); setDirty(true); });
     return row;
   }
 
   SP.addCustomDest = function () {
     document.getElementById('sCdList').appendChild(buildCdRow({}));
+    setDirty(true);
   };
 
   function collectCustomDests() {
@@ -272,18 +362,20 @@
 
   SP.pickFolder = function () {
     API('cloud/pick_folder', {}).then(function (r) {
-      if (r.path) document.getElementById('sOutputDir').value = r.path;
+      if (r.path) { document.getElementById('sOutputDir').value = r.path; setDirty(true); }
     });
   };
 
   SP.clearFolder = function () {
     document.getElementById('sOutputDir').value = '';
+    setDirty(true);
   };
 
   function checkCloud() {
     API('cloud/status', {}).then(function (r) {
       var el = document.getElementById('sCloudStatus');
       var txt = document.getElementById('sCloudStatusText');
+      var forget = document.getElementById('sForgetBtn');
       if (r.connected) {
         el.classList.add('connected');
         txt.textContent = 'Connected' + (r.email ? ' as ' + r.email : '');
@@ -291,10 +383,17 @@
         el.classList.remove('connected');
         txt.textContent = 'Not connected';
       }
+      if (forget) {
+        forget.disabled = !r.connected;
+        forget.title = r.connected ? ''
+          : 'Not signed in to Ekahau Cloud, so there is no saved login to forget.';
+      }
     });
   }
 
   SP.forgetLogin = function () {
+    if (!confirm('Forget the saved Ekahau Cloud login on this computer? '
+        + 'Cloud Manager will ask you to sign in again. Your projects are not touched.')) return;
     API('cloud/forget_login', {}).then(function () {
       WD.toast('Login forgotten', 'ok');
       checkCloud();
@@ -302,7 +401,8 @@
   };
 
   SP.resetOrganizer = function () {
-    if (!confirm('Reset all Squirrel settings to factory defaults?')) return;
+    if (!confirm('Reset all Squirrel settings, including its rename rules, to their defaults? '
+        + 'This is saved straight away, and it also replaces any unsaved changes on this page.')) return;
     API('settings/get', {}).then(function (r) {
       var defaults = {
         image_ext: [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tif", ".tiff", ".svg", ".webp", ".heic"],
@@ -315,7 +415,7 @@
         rename: { strip_prefix: "", strip_suffix: "", regex_from: "", regex_to: "", separator: "", case: "", prefix: "", suffix: "" }
       };
       API('settings/update', { patch: { organizer: defaults } }).then(function (r2) {
-        if (r2.ok) { settings = r2.settings; populate(); WD.toast('Organizer reset to defaults', 'ok'); }
+        if (r2.ok) { settings = r2.settings; populate(); setDirty(false); WD.toast('Organizer reset to defaults', 'ok'); }
       });
     });
   };
@@ -323,6 +423,8 @@
   /* Setup refuses to be framed, so inside the panel this navigates the tool
      window rather than the panel, which would show a refused page. */
   SP.rerunSetup = function () {
+    if (!confirmDiscard()) return;
+    dirty = false;
     API('settings/reset_setup', {}).then(function () {
       (EMBEDDED ? window.top : window).location.href = '/setup';
     });
@@ -430,6 +532,7 @@
     API('settings/update', { patch: patch }).then(function (r) {
       if (r.ok) {
         settings = r.settings;
+        setDirty(false);
         announceSave();
         loadOverviews();          // the values below the controls move too
         loadWallTemplates();      // and the template list, in case one changed
