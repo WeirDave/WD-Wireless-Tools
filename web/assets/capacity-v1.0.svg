@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 560" role="img" aria-label="Capacity: people inside a requirement area on a floor plan">
+  <rect x="62" y="150" width="436" height="300" rx="30" fill="none" stroke="#0a5cab" stroke-width="22" stroke-dasharray="52 30" stroke-linecap="round"/>
+  <g fill="#0a5cab">
+    <circle cx="168" cy="262" r="34"/>
+    <path d="M114 392c0-34 24-60 54-60s54 26 54 60z"/>
+  </g>
+  <g fill="#04b44a">
+    <circle cx="280" cy="262" r="34"/>
+    <path d="M226 392c0-34 24-60 54-60s54 26 54 60z"/>
+  </g>
+  <g fill="#0a5cab">
+    <circle cx="392" cy="262" r="34"/>
+    <path d="M338 392c0-34 24-60 54-60s54 26 54 60z"/>
+  </g>
+  <g fill="none" stroke="#04b44a" stroke-width="22" stroke-linecap="round">
+    <path d="M388 82a58 58 0 0 1 56 56"/>
+    <path d="M388 40a100 100 0 0 1 98 98"/>
+  </g>
+</svg>

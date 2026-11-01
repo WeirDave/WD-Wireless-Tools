@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 560" role="img" aria-label="Prep: a floor plan made ready, with a check mark">
+  <rect x="70" y="60" width="340" height="440" rx="30" fill="#f4f6f8"/>
+  <path d="M130 130h210v130H238v170H130z" fill="none" stroke="#0a5cab" stroke-width="22" stroke-linejoin="round"/>
+  <path d="M238 260v-52" stroke="#f4f6f8" stroke-width="30"/>
+  <path d="M130 320h70" stroke="#04b44a" stroke-width="22" stroke-linecap="round"/>
+  <path d="M130 372h40" stroke="#04b44a" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="400" cy="394" r="112" fill="#04b44a"/>
+  <path d="M344 394l42 44 76-92" fill="none" stroke="#ffffff" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -37,6 +37,18 @@
     else if (mq.addListener) mq.addListener(WD.syncFavicon);
   }
 
+  /* The theme toggle's icon is drawn, not a platform emoji: the moon and the
+     sun came out as different pictures on every operating system, and an
+     emoji takes no colour from the page. Both are fixed strings, never data. */
+  var _THEME_SVG = {
+    moon: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">'
+        + '<path d="M13.5 9.6A5.7 5.7 0 0 1 6.4 2.5a5.7 5.7 0 1 0 7.1 7.1z" fill="currentColor"/></svg>',
+    sun: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">'
+       + '<circle cx="8" cy="8" r="3" fill="currentColor"/>'
+       + '<path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M3.1 12.9l1.4-1.4M11.5 4.5l1.4-1.4"'
+       + ' stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>'
+  };
+
   WD.syncThemeUI = function () {
     var dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
     var icoTxt = dark ? '\u{1F319}' : '☀️';
@@ -44,9 +56,13 @@
     document.querySelectorAll('.theme-toggle').forEach(function (el) {
       var ico = el.querySelector('.ico');
       var txt = el.querySelector('.txt');
-      if (ico) ico.textContent = icoTxt;
+      if (ico) ico.innerHTML = dark ? _THEME_SVG.moon : _THEME_SVG.sun;
       if (txt) txt.textContent = lblTxt;
       if (!ico && !txt) el.textContent = icoTxt + ' ' + lblTxt;
+      /* The visible word is the current theme, so the accessible name leads
+         with it and then says what pressing does. */
+      el.setAttribute('aria-label',
+        lblTxt + ' theme. Switch to ' + (dark ? 'light' : 'dark') + ' theme.');
     });
     var btn = document.getElementById('themeBtn');
     if (btn) btn.textContent = icoTxt + ' ' + lblTxt;
@@ -569,6 +585,18 @@
     }
   };
 
+  /* A hamburger says whether its menu is open. Set from what is on the page
+     rather than from each call site, so every way a menu closes (another
+     menu opening, a click outside, Escape) leaves the buttons right. */
+  WD.syncMenuButtons = function () {
+    document.querySelectorAll('[data-action="menu"]').forEach(function (b) {
+      var m = document.getElementById(b.getAttribute('data-menu') || '');
+      b.setAttribute('aria-haspopup', 'true');
+      b.setAttribute('aria-expanded', m && m.classList.contains('open') ? 'true' : 'false');
+      if (!b.hasAttribute('aria-label')) b.setAttribute('aria-label', b.getAttribute('title') || 'Menu');
+    });
+  };
+
   WD.toggleMenu = function (ev, menuId) {
     if (ev) ev.stopPropagation();
     var menu = document.getElementById(menuId);
@@ -582,11 +610,54 @@
         document.addEventListener('click', function handler(e) {
           if (!e.target.closest('.menu-wrap, .help-menu-wrap')) {
             menu.classList.remove('open');
+            WD.syncMenuButtons();
           }
           document.removeEventListener('click', handler);
         }, { once: true });
       }, 0);
     }
+    WD.syncMenuButtons();
+  };
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    var open = document.querySelectorAll('.main-menu.open, .help-menu.open');
+    if (!open.length) return;
+    open.forEach(function (m) { m.classList.remove('open'); });
+    WD.syncMenuButtons();
+  });
+
+  /* The tool you were last in, so Home can say so. A path, never a project or
+     a file name: the suite keeps no record of what was opened. */
+  var _TOOL_PATHS = {
+    '/aprename': '/aprename', '/capacity': '/capacity', '/cloud': '/cloud',
+    '/plantrim': '/plantrim', '/prep': '/prep', '/walls': '/walls',
+    '/report': '/report', '/scale': '/scale',
+    '/squirrel': '/squirrel', '/organizer': '/squirrel',
+    '/rename': '/squirrel', '/squirrel/rename': '/squirrel'
+  };
+
+  WD.rememberTool = function () {
+    var tool = _TOOL_PATHS[window.location.pathname];
+    if (!tool) return;
+    try { localStorage.setItem('wd-last-tool', tool); } catch (e) { /* nothing to remember with */ }
+  };
+
+  WD.markLastTool = function () {
+    var launcher = document.querySelector('.launcher');
+    if (!launcher) return;
+    var last = '';
+    try { last = localStorage.getItem('wd-last-tool') || ''; } catch (e) { return; }
+    if (!last) return;
+    var tile = launcher.querySelector('a.tile[href="' + last + '"]');
+    if (!tile) return;
+    tile.classList.add('is-last');
+    var text = tile.querySelector('.tile-text');
+    if (!text || text.querySelector('.tile-last')) return;
+    var tag = document.createElement('div');
+    tag.className = 'tile-last';
+    tag.textContent = 'Last opened';
+    text.appendChild(tag);
   };
 
   WD.applyVersions = function () {
@@ -1873,6 +1944,9 @@
   document.addEventListener('DOMContentLoaded', function () {
     try { WD.sortNavMenus(); } catch (e) { /* an unsorted menu still works */ }
     WD.syncThemeUI();
+    WD.syncMenuButtons();
+    WD.rememberTool();
+    WD.markLastTool();
     WD.syncFavicon();
     WD.applyVersions();
     WD.checkServerVersion();

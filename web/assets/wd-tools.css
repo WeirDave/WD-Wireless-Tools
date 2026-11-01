@@ -26,6 +26,7 @@
   --red: #dc2626;   --red-dark: #b91c1c;
   --purple: #8b5cf6; --purple-dark: #7c3aed;
   --teal: #0d9488;  --teal-dark: #0f766e;
+  --teal-bright: #14b8a6;   /* PlanTrim's brand on a dark page; --teal is its light-theme one */
   --rose: #9F1B58;  --rose-dark: #7A1544;
   --indigo: #6366f1; --indigo-dark: #4f46e5;
   --cyan: #0891b2;  --cyan-dark: #0e7490;
@@ -575,8 +576,8 @@ mark {
 .main-menu.open { display: block; }
 
 .main-menu .menu-section {
-  padding: 10px 16px 4px; font-size: 10px; font-weight: 700;
-  letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-3);
+  padding: 10px 16px 4px; font-size: var(--fs-meta); font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-2);
 }
 
 .main-menu .menu-section:first-child { padding-top: 6px; }
@@ -606,8 +607,8 @@ mark {
 .help-menu.open { display: block; }
 
 .menu-section {
-  padding: 10px 16px 4px; font-size: 10px; font-weight: 700;
-  letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-3);
+  padding: 10px 16px 4px; font-size: var(--fs-meta); font-weight: 700;
+  letter-spacing: 1.2px; text-transform: uppercase; color: var(--text-2);
 }
 
 .menu-section:first-child { padding-top: 6px; }
@@ -1728,23 +1729,6 @@ body.tool-home .topbar {
   padding: 16px 20px 0; background: transparent;
 }
 
-.home-about-btn {
-  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
-  background: var(--card-bg, var(--surface));
-  border: 1px solid var(--nav-blue);
-  color: var(--text-2); border-radius: var(--radius-pill);
-  padding: 6px 12px 6px 10px; font-size: 12px; font-weight: 600;
-  transition: transform .12s ease, box-shadow .12s ease, background .15s ease, border-color .15s ease, color .15s ease;
-}
-.home-about-btn:hover {
-  background: var(--card-hover, var(--surface-hover));
-  color: var(--nav-blue); border-color: var(--nav-blue);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-hover);
-}
-.home-about-btn:active { transform: translateY(0); box-shadow: var(--shadow-active); }
-.home-about-ico { font-size: 14px; line-height: 1; }
-
 .theme-toggle {
   display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
   background: var(--card-bg, var(--surface));
@@ -1766,18 +1750,22 @@ body.tool-home .topbar {
   box-shadow: var(--shadow-active);
 }
 
-.theme-toggle .ico, .settings-btn .ico { font-size: 14px; line-height: 1; }
+.theme-toggle .ico, .settings-btn .ico { font-size: 14px; line-height: 1; display: inline-flex; align-items: center; }
 
 .wrap {
   width: 100%; max-width: 1100px;
   padding: 16px 24px 24px; text-align: center;
 }
 
-.suite-badge { display: inline-block; padding: 4px; margin-bottom: 2px; }
+.suite-badge { display: inline-block; padding: 4px; margin-bottom: 2px; font-size: inherit; font-weight: inherit; }
 
 .suite-badge img { width: clamp(90px, 12vh, 160px); max-width: 60vw; height: auto; display: block; }
 
-.tagline { color: var(--text-2); font-size: 14px; letter-spacing: 0.3px; margin-bottom: 16px; }
+.tagline { color: var(--text-2); font-size: var(--fs-emph); letter-spacing: 0.3px; margin-bottom: var(--sp-1); }
+
+/* The one thing the front door has to say that the tiles cannot: where the
+   work happens. Plain text, no panel. */
+.home-promise { color: var(--text-2); font-size: var(--fs-small); margin-bottom: var(--sp-4); }
 
 .tagline .suite-ver { color: var(--text); font-weight: 600; opacity: .85; }
 .tagline .suite-ver::before { content: "·"; margin: 0 6px 0 2px; opacity: .55; font-weight: 400; }
@@ -1792,27 +1780,48 @@ body.tool-home .topbar {
    there is a long way to go before scaling them softens anything. */
 .launcher {
   --tile-icon-size: 96px;
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  /* Columns follow the width rather than three fixed breakpoints: a tile is
+     never narrower than 300px, so the text beside the icon keeps room for
+     "Cloud Manager" at every window size, and a short last row keeps its
+     column width instead of stretching. */
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px;
   max-width: 1180px; margin: 0 auto;
 }
 
+/* A tile carries its tool's colour in three places that each do one job:
+   the icon artwork, a 2px outline (softened at rest, the title colour on
+   hover and focus), and the name, which is the brand mixed toward the page's
+   ink until it clears 4.5:1 on the card. The name is the only label that
+   says which tool this is, so it is the one thing that has to be readable;
+   tests/test_home_tiles_are_legible.py holds it in both themes. */
 .tile {
+  --tile-title: color-mix(in srgb, var(--tile-accent) 55%, white);
+  position: relative;
   background: var(--card-bg, var(--surface));
-  border: 2.5px solid var(--tile-accent, var(--blue)); border-radius: var(--r-lg);
+  border: 2px solid color-mix(in srgb, var(--tile-accent) 60%, transparent); border-radius: var(--r-lg);
   padding: 14px 16px; text-decoration: none; color: inherit;
   display: flex; align-items: center; gap: 14px;
-  transition: transform .1s ease, box-shadow .1s ease, background .12s ease;
+  transition: transform .1s ease, box-shadow .1s ease, background .12s ease, border-color .12s ease;
 }
 
-.tile:hover {
+[data-theme="light"] .tile { --tile-title: color-mix(in srgb, var(--tile-accent) 75%, black); }
+
+.tile:hover, .tile:focus-visible {
   transform: translateY(-2px);
   box-shadow: var(--shadow-lift);
+  border-color: var(--tile-title);
   background: color-mix(in srgb, var(--tile-accent) 12%, transparent);
 }
 
-[data-theme="light"] .tile:hover {
+[data-theme="light"] .tile:hover, [data-theme="light"] .tile:focus-visible {
   background: color-mix(in srgb, var(--tile-accent) 8%, transparent);
 }
+
+/* The page's own ink, not the brand: a ring in the tile's hue would sit
+   beside an outline of the same hue and disappear on Cloud Manager's. */
+.tile:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+
+.tile.is-last { background: color-mix(in srgb, var(--tile-accent) 7%, var(--card-bg, var(--surface))); }
 
 .tile-icon {
   width: var(--tile-icon-size, 96px); height: var(--tile-icon-size, 96px);
@@ -1824,7 +1833,7 @@ body.tool-home .topbar {
 .tile-text { min-width: 0; text-align: left; }
 
 .tile-name {
-  font-size: 16px; font-weight: 700; color: var(--tile-accent);
+  font-size: var(--fs-section); font-weight: 700; line-height: 1.25; color: var(--tile-title);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
@@ -1836,45 +1845,57 @@ body.tool-home .topbar {
    its own: a hover does not exist on a touch screen, and that was always the
    flaw in "put it in a tooltip". */
 .tile-desc {
-  font-size: 12.5px; line-height: 1.45; color: var(--text-2);
+  font-size: var(--fs-body); line-height: 1.45; color: var(--text-2);
   margin-top: 3px;
 }
 
+/* Empty until the version arrives, then it fills in; the row is kept so the
+   tile does not jump. A failed fetch leaves it blank, not "v...". */
 .tile-ver {
-  font-size: 11px; font-weight: 600; color: var(--text-3);
-  letter-spacing: 0.2px; margin-top: 4px;
+  font-size: var(--fs-meta); font-weight: 600; color: var(--text-2);
+  letter-spacing: 0.2px; margin-top: 4px; min-height: 1.4em;
 }
 
+.tile-last { font-size: var(--fs-meta); font-weight: 700; color: var(--tile-title); margin-top: 2px; }
+
 .tile--blue   { --tile-accent: var(--blue); }
-.tile--cyan   { --tile-accent: var(--cyan); }
 .tile--azure  { --tile-accent: var(--azure); }
-.tile--indigo { --tile-accent: var(--indigo); }
 .tile--green  { --tile-accent: var(--green); }
 .tile--lime   { --tile-accent: var(--lime); }
-.tile--teal   { --tile-accent: var(--teal); }
+.tile--teal   { --tile-accent: var(--teal-bright); }
 .tile--rose   { --tile-accent: var(--rose-bright); }
 .tile--red    { --tile-accent: var(--red); }
 .tile--amber  { --tile-accent: var(--amber); }
 .tile--purple { --tile-accent: var(--purple); }
-.tile--pink   { --tile-accent: var(--pink); }
+
+/* On white the lighter brands cannot carry a title or an outline; each takes
+   its own darker sibling, the one its tool page already uses. */
+[data-theme="light"] .tile--blue  { --tile-accent: var(--blue-dark); }
+[data-theme="light"] .tile--lime  { --tile-accent: var(--lime-dark); }
+[data-theme="light"] .tile--teal  { --tile-accent: var(--teal); }
+[data-theme="light"] .tile--rose  { --tile-accent: var(--rose); }
+[data-theme="light"] .tile--amber { --tile-accent: var(--amber-dark); }
 
 .launcher-footer {
-  grid-column: 1 / -1;
   display: flex; justify-content: center; gap: 12px;
-  margin-top: 4px;
+  margin: var(--sp-4) auto 0;
 }
 
 .launcher-link {
-  font-size: 13px; color: var(--text-3); text-decoration: none;
+  font-size: var(--fs-body); color: var(--text-2); text-decoration: none;
   padding: 6px 14px; border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   transition: color .12s, border-color .12s;
 }
 
-.launcher-link.link-blue  { color: var(--blue);  border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
-.launcher-link.link-green { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.launcher-link:hover { color: var(--text); border-color: var(--text-2); }
 
-.launcher-link:hover { opacity: .8; }
+.launcher-link:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tile, .theme-toggle { transition: none; }
+  .tile:hover, .tile:focus-visible, .theme-toggle:hover { transform: none; }
+}
 
 .foot { margin-top: 20px; color: var(--text-3); font-size: 12px; }
 
@@ -4653,7 +4674,7 @@ body                 { --tool-accent: var(--blue); --tool-title: var(--tool-acce
 body.tool-cloud      { --tool-accent: var(--blue); }
 body.tool-capacity   { --tool-accent: var(--azure);  --tool-title: color-mix(in srgb, var(--azure) 70%, white); }
 body.tool-aprename   { --tool-accent: var(--purple); }
-body.tool-plantrim   { --tool-accent: #14b8a6; }
+body.tool-plantrim   { --tool-accent: var(--teal-bright); }
 body.tool-prep       { --tool-accent: var(--lime); }
 body.tool-walls      { --tool-accent: var(--green);  --tool-title: #22c55e; }
 body.tool-report     { --tool-accent: var(--rose);   --tool-title: var(--rose-bright); }
@@ -5082,10 +5103,6 @@ body.tool-organizer .pick-sub { margin-bottom: clamp(12px, calc(5vh - 20px), 32p
 .pick-card-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
 
 .pick-card-desc { font-size: 14px; color: var(--text-2); line-height: 1.5; margin-bottom: 18px; flex: 1; }
-
-@media (max-width: 900px) {.launcher { grid-template-columns: 1fr 1fr; }}
-
-@media (max-width: 500px) {.launcher { grid-template-columns: 1fr; }}
 
 @media (max-width: 720px) {.dashboard { flex-wrap: wrap; }
 
@@ -12300,15 +12317,18 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
 /* -- Home on a large monitor ------------------------------------------------
    At 2519 wide the launcher was a 1180px strip of 16px names and 12.5px
    descriptions in the middle of the screen. Past 1800px it grows, and its
-   type with it; a laptop keeps the sizes it fits at. */
-@media (min-width: 1800px) and (min-height: 1000px) {
+   type with it; a laptop keeps the sizes it fits at. The height clause it
+   once had left a maximised 1080p browser (about 940px tall) on the small
+   sizes, so it is width alone. */
+@media (min-width: 1800px) {
   body.tool-home .wrap { max-width: 1620px; }
   body.tool-home .launcher { --tile-icon-size: 128px; max-width: 1560px; gap: 18px; }
   body.tool-home .tile { padding: 20px 24px; gap: 20px; }
-  body.tool-home .tile-name { font-size: 22px; }
-  body.tool-home .tile-desc { font-size: 16px; }
-  body.tool-home .tile-ver { font-size: 13px; }
-  body.tool-home .tagline { font-size: 17px; }
+  body.tool-home .tile-name { font-size: var(--fs-title); }
+  body.tool-home .tile-desc { font-size: var(--fs-emph); }
+  body.tool-home .tile-ver { font-size: var(--fs-body); }
+  body.tool-home .tagline { font-size: var(--fs-section); }
+  body.tool-home .home-promise { font-size: var(--fs-body); }
 }
 
 /* -- Settings: a section list down the side, and words that can be read ---

@@ -47,101 +47,99 @@
     </button>
   </div>
 
-  <div class="wrap">
-    <div class="suite-badge"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Wireless Tools"></div>
-    <div class="tagline">A suite of Ekahau workflow tools <span class="suite-ver" data-ver="suite">v&hellip;</span></div>
+  <main class="wrap" id="main">
+    <h1 class="suite-badge"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt="WD Wireless Tools"></h1>
+    <p class="tagline">A suite of Ekahau workflow tools <span class="suite-ver" data-ver="suite"></span></p>
+    <p class="home-promise">Everything runs on this computer. Cloud Manager contacts Ekahau Cloud only when you tell it to.</p>
 
     <div class="launcher">
-      <!-- Row 1: Blue family -->
-      <a class="tile tile--purple" href="/aprename" title="Replaces Ekahau's default &quot;Simulated AP-xxx&quot; names with a structured naming pattern you define, then downloads a labeled .esx.">
+      <a class="tile tile--purple" href="/aprename" aria-labelledby="tn-aprename" aria-describedby="td-aprename" title="Replaces Ekahau's default &quot;Simulated AP-xxx&quot; names with a structured naming pattern you define, then downloads a labeled .esx.">
         <div class="tile-icon"><img src="/assets/ap-labeler-v1.0-560x560.png" alt=""></div>
         <div class="tile-text">
-          <div class="tile-name">AP Labeler</div>
-          <div class="tile-desc">Replace default AP names with your own pattern</div>
-          <div class="tile-ver" data-ver="aprename">v&hellip;</div>
+          <h2 class="tile-name" id="tn-aprename">AP Labeler</h2>
+          <div class="tile-desc" id="td-aprename">Replace default AP names with your own pattern</div>
+          <div class="tile-ver" data-ver="aprename"></div>
         </div>
       </a>
 
-      <a class="tile tile--azure" href="/capacity" title="Reads the device and usage profiles out of a project you have already set up, stores them per person, and applies them to another project from one number: how many people work there.">
-        <div class="tile-icon"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt=""></div>
+      <a class="tile tile--azure" href="/capacity" aria-labelledby="tn-capacity" aria-describedby="td-capacity" title="Reads the device and usage profiles out of a project you have already set up, stores them per person, and applies them to another project from one number: how many people work there.">
+        <div class="tile-icon"><img src="/assets/capacity-v1.0.svg" alt=""></div>
         <div class="tile-text">
-          <div class="tile-name">Capacity</div>
-          <div class="tile-desc">Put your device mix into a project from a template</div>
-          <div class="tile-ver" data-ver="capacity">v&hellip;</div>
+          <h2 class="tile-name" id="tn-capacity">Capacity</h2>
+          <div class="tile-desc" id="td-capacity">Put your device mix into a project from a template</div>
+          <div class="tile-ver" data-ver="capacity"></div>
         </div>
       </a>
 
-      <a class="tile tile--blue" href="/cloud" title="Compares projects in Ekahau Cloud with your local .esx files and provides deliberate, preview-driven project-management actions.">
+      <a class="tile tile--blue" href="/cloud" aria-labelledby="tn-cloud" aria-describedby="td-cloud" title="Compares projects in Ekahau Cloud with your local .esx files and provides deliberate, preview-driven project-management actions.">
         <div class="tile-icon"><img src="/assets/cloud-manager-v8.0-560x560.png" alt=""></div>
         <div class="tile-text">
-          <div class="tile-name">Cloud Manager</div>
-          <div class="tile-desc">Compare and sync cloud projects with local files</div>
-          <div class="tile-ver" data-ver="cloud">v&hellip;</div>
+          <h2 class="tile-name" id="tn-cloud">Cloud Manager</h2>
+          <div class="tile-desc" id="td-cloud">Compare and sync cloud projects with local files</div>
+          <div class="tile-ver" data-ver="cloud"></div>
         </div>
       </a>
 
-      <!-- Row 2: Green family -->
-      <a class="tile tile--teal" href="/plantrim" title="Removes excess whitespace around the floor plan images inside an .esx, reducing file size and improving readability in Ekahau, moving every AP, wall and area with the crop.">
+      <a class="tile tile--teal" href="/plantrim" aria-labelledby="tn-plantrim" aria-describedby="td-plantrim" title="Removes excess whitespace around the floor plan images inside an .esx, reducing file size and improving readability in Ekahau, moving every AP, wall and area with the crop. Prep does this too, along with two other steps.">
         <div class="tile-icon"><img src="/assets/plantrim-v1.0-560x480.png" alt=""></div>
         <div class="tile-text">
-          <div class="tile-name">PlanTrim</div>
-          <div class="tile-desc">Crop empty space off imported floor plans</div>
-          <div class="tile-ver" data-ver="plantrim">v&hellip;</div>
+          <h2 class="tile-name" id="tn-plantrim">PlanTrim</h2>
+          <div class="tile-desc" id="td-plantrim">Crop empty space off imported floor plans, and only that</div>
+          <div class="tile-ver" data-ver="plantrim"></div>
         </div>
       </a>
 
-      <a class="tile tile--lime" href="/prep" title="Does the setup work on a freshly imported project in one pass over the file instead of three: crop the CAD sheets, put a requirement area on every floor, and load your wall types.">
-        <div class="tile-icon"><img src="/assets/wd-wireless-tools-v8.0-720x720.png" alt=""></div>
+      <a class="tile tile--lime" href="/prep" aria-labelledby="tn-prep" aria-describedby="td-prep" title="Does the setup work on a freshly imported project in one pass over the file instead of three: crop the CAD sheets, put a requirement area on every floor, and load your wall types.">
+        <div class="tile-icon"><img src="/assets/prep-v1.0.svg" alt=""></div>
         <div class="tile-text">
-          <div class="tile-name">Prep</div>
-          <div class="tile-desc">Trim plans, add areas and custom walls in one pass</div>
-          <div class="tile-ver" data-ver="prep">v&hellip;</div>
+          <h2 class="tile-name" id="tn-prep">Prep</h2>
+          <div class="tile-desc" id="td-prep">Crop, add areas and load wall types in one pass</div>
+          <div class="tile-ver" data-ver="prep"></div>
         </div>
       </a>
 
-      <a class="tile tile--green" href="/walls" title="Edits wall types inside an Ekahau .esx without uploading it - review every type the project uses, remap walls with hotkeys, and save it back.">
+      <a class="tile tile--green" href="/walls" aria-labelledby="tn-walls" aria-describedby="td-walls" title="Edits wall types inside an Ekahau .esx without uploading it - review every type the project uses, remap walls with hotkeys, and save it back.">
         <div class="tile-icon"><img src="/assets/quick-walls-v8.0-560x560.png" alt=""></div>
         <div class="tile-text">
-          <div class="tile-name">Quick Walls</div>
-          <div class="tile-desc">Edit and remap walls and shortcuts in your .esx</div>
-          <div class="tile-ver" data-ver="walls">v&hellip;</div>
+          <h2 class="tile-name" id="tn-walls">Quick Walls</h2>
+          <div class="tile-desc" id="td-walls">Review and remap wall types in an .esx, with hotkeys</div>
+          <div class="tile-ver" data-ver="walls"></div>
         </div>
       </a>
 
-      <!-- Row 3: Warm family -->
-      <a class="tile tile--rose" href="/report" title="Turns an Ekahau .esx into print-ready handoff documentation - AP placement maps, label references, antenna azimuths, tilts and mount heights.">
+      <a class="tile tile--rose" href="/report" aria-labelledby="tn-report" aria-describedby="td-report" title="Turns an Ekahau .esx into print-ready handoff documentation - AP placement maps, label references, antenna azimuths, tilts and mount heights.">
         <div class="tile-icon"><img src="/assets/report-v8.0-560x560.png" alt=""></div>
         <div class="tile-text">
-          <div class="tile-name">Report</div>
-          <div class="tile-desc">Build print-ready handoff documents for installers</div>
-          <div class="tile-ver" data-ver="report">v&hellip;</div>
+          <h2 class="tile-name" id="tn-report">Report</h2>
+          <div class="tile-desc" id="td-report">Build print-ready handoff documents for installers</div>
+          <div class="tile-ver" data-ver="report"></div>
         </div>
       </a>
 
-      <a class="tile tile--red" href="/scale" title="Converts architectural measurements between feet-and-inches, decimal feet, inches, metres and millimetres, for typing into Ekahau's scale field.">
+      <a class="tile tile--red" href="/scale" aria-labelledby="tn-scale" aria-describedby="td-scale" title="Converts architectural measurements between feet-and-inches, decimal feet, inches, metres and millimetres, for typing into Ekahau's scale field.">
         <div class="tile-icon"><img src="/assets/scale-v8.0-560x560.png" alt=""></div>
         <div class="tile-text">
-          <div class="tile-name">Scale</div>
-          <div class="tile-desc">Convert feet-inches, decimal, metres and mm</div>
-          <div class="tile-ver" data-ver="scale">v&hellip;</div>
+          <h2 class="tile-name" id="tn-scale">Scale</h2>
+          <div class="tile-desc" id="td-scale">Convert feet-inches, decimal, metres and mm</div>
+          <div class="tile-ver" data-ver="scale"></div>
         </div>
       </a>
 
-      <a class="tile tile--amber" href="/squirrel" title="File handling for loose Ekahau material: classify .esx files, images, floor plans and reports into project folders, bulk-rename folders and files, find duplicates, and undo an organize run.">
+      <a class="tile tile--amber" href="/squirrel" aria-labelledby="tn-squirrel" aria-describedby="td-squirrel" title="File handling for loose Ekahau material: classify .esx files, images, floor plans and reports into project folders, bulk-rename folders and files, find duplicates, and undo an organize run.">
         <div class="tile-icon"><img src="/assets/squirrel-v8.0-560x560.png" alt=""></div>
         <div class="tile-text">
-          <div class="tile-name">Squirrel</div>
-          <div class="tile-desc">Sort, rename and de-duplicate project files</div>
-          <div class="tile-ver" data-ver="squirrel">v&hellip;</div>
+          <h2 class="tile-name" id="tn-squirrel">Squirrel</h2>
+          <div class="tile-desc" id="td-squirrel">Sort, rename and de-duplicate project files</div>
+          <div class="tile-ver" data-ver="squirrel"></div>
         </div>
       </a>
-
-      <div class="launcher-footer">
-        <a class="launcher-link link-blue" href="/manual">User Guide</a>
-        <a class="launcher-link link-green" href="/settings">Settings</a>
-      </div>
     </div>
-  </div>
+
+    <nav class="launcher-footer" aria-label="Guide and settings">
+      <a class="launcher-link" href="/manual">User Guide</a>
+      <a class="launcher-link" href="/settings">Settings</a>
+    </nav>
+  </main>
 
 <div class="toast-container" id="toasts"></div>
 

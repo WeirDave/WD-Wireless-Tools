@@ -512,7 +512,12 @@
         "key": "wd-manual-at",
         "category": "ui-state",
         "label": "Section you were last reading in the User Manual"
-      }
+      },
+  {
+    "key": "wd-last-tool",
+    "category": "ui-state",
+    "label": "The tool last opened, so Home can mark it"
+  }
     ]
   },
   "retired_browser_keys": {

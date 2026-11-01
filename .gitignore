@@ -73,3 +73,6 @@ geckodriver/
 chromedriver/
 msedgedriver/
 se-metadata.json
+
+# Impeccable design-skill working files (local only)
+.impeccable/
