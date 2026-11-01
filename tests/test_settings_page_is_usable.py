@@ -245,15 +245,10 @@ SCENARIOS = {
              "drive": "setDirty(true); SP.cancel(); return null;"},
     "cancel_dirty_accepted": {"open": [False],
              "drive": "setDirty(true); SP.cancel(); return null;"},
-    # headings that must not fold on a wide window
-    "wide_summary": {"wide": True, "drive":
+    # the open section's heading must not fold, at any width
+    "summary": {"drive":
              "pinSummaries(); var ev = { prevented: false, preventDefault() { this.prevented = true; } };"
              "sums[0].clicks[0](ev); return { prevented: ev.prevented, attrs: sums[0].attrs };"},
-    "narrow_summary": {"wide": False, "drive":
-             "pinSummaries(); var ev = { prevented: false, preventDefault() { this.prevented = true; } };"
-             "sums[0].clicks[0](ev); return { prevented: ev.prevented, attrs: sums[0].attrs };"},
-    "narrows_later": {"wide": True, "drive":
-             "pinSummaries(); setWide(false); mqListeners[0](); return { attrs: sums[0].attrs };"},
     # actions that do not wait for Save
     "forget_declined": {"confirm": False, "drive": "SP.forgetLogin(); return null;"},
     "forget_accepted": {"drive": "SP.forgetLogin(); return null;"},
@@ -302,18 +297,11 @@ class TheHandlersDoWhatThePageSays(unittest.TestCase):
         self.assertEqual((o["cancel_dirty_accepted"]["calls"], len(o["cancel_dirty_accepted"]["confirms"])),
                          (["reload"], 1))
 
-    def test_a_wide_window_cannot_fold_the_only_open_section(self):
-        wide = self.out["wide_summary"]["result"]
-        self.assertTrue(wide["prevented"], "Enter and Space reach the summary as a click")
-        self.assertEqual(wide["attrs"].get("tabindex"), "-1",
+    def test_the_only_open_section_cannot_be_folded(self):
+        got = self.out["summary"]["result"]
+        self.assertTrue(got["prevented"], "Enter and Space reach the summary as a click")
+        self.assertEqual(got["attrs"].get("tabindex"), "-1",
                          "and the heading is out of the tab order")
-
-    def test_a_narrow_window_still_folds_its_sections(self):
-        narrow = self.out["narrow_summary"]["result"]
-        self.assertFalse(narrow["prevented"])
-        self.assertNotIn("tabindex", narrow["attrs"])
-        self.assertNotIn("tabindex", self.out["narrows_later"]["result"]["attrs"],
-                         "resizing from wide to narrow gives the headings back")
 
     def test_forget_login_asks_and_says_what_it_does(self):
         self.assertEqual(self.out["forget_declined"]["calls"], [])
@@ -397,6 +385,111 @@ class TheTextCanBeRead(unittest.TestCase):
         """It shrank to its content: a short section moved the list of sections
         270px sideways and snapped it back on the next one."""
         self.assertEqual(_final(".settings-wrap", "width"), "100%")
+
+
+class _Sections(HTMLParser):
+    """Each section's id and what it says about itself for the card."""
+
+    def __init__(self):
+        super().__init__()
+        self.sections: list[dict] = []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "details" and "s-section" in (a.get("class") or "").split():
+            self.sections.append({"id": a["id"], "desc": a.get("data-nav-desc"),
+                                  "icon": a.get("data-nav-icon")})
+
+
+def _sections() -> list[dict]:
+    p = _Sections()
+    p.feed(HTML)
+    return p.sections
+
+
+NAV_PROBE = r"""
+const fs = require('fs');
+const src = fs.readFileSync(process.argv[1], 'utf8');
+const a = src.indexOf('  function buildNav() {');
+if (a < 0) throw new Error('buildNav moved');
+let b = a, depth = 0, seen = false;
+while (b < src.length && !(seen && depth === 0)) {
+  if (src[b] === '{') { depth++; seen = true; }
+  else if (src[b] === '}') depth--;
+  b++;
+}
+const WD = { esc: s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'),
+             escAttr: s => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') };
+const nav = { innerHTML: '' };
+const secs = JSON.parse(process.argv[2]).map(d => ({
+  id: d.id, getAttribute: (n) => ({ 'data-nav-desc': d.desc, 'data-nav-icon': d.icon })[n] || null,
+  querySelector: () => ({ textContent: d.title }), addEventListener() {},
+}));
+const document = { getElementById: () => nav, querySelectorAll: () => secs };
+const markNav = () => {};
+eval(src.slice(a, b) + ';buildNav();');
+process.stdout.write(JSON.stringify({ html: nav.innerHTML }));
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+class TheSectionsAreCardsLikeHomes(unittest.TestCase):
+    def test_every_section_says_what_is_in_it_and_has_an_icon_that_exists(self):
+        secs = _sections()
+        self.assertEqual(len(secs), 9)
+        for sec in secs:
+            with self.subTest(section=sec["id"]):
+                self.assertTrue(sec["desc"], "a card says what is in its section")
+                icon = ROOT / "web" / sec["icon"].lstrip("/")
+                self.assertTrue(icon.is_file(), f"{sec['icon']} is not in web/")
+
+    def test_the_cards_are_built_from_the_sections_with_name_line_and_icon(self):
+        secs = [dict(s, title=s["id"].replace("sec-", "").title()) for s in _sections()]
+        r = subprocess.run(["node", "-e", NAV_PROBE, str(JS_PATH), json.dumps(secs)],
+                           capture_output=True, text=True, encoding="utf-8", timeout=NODE_TIMEOUT_S)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).strip())
+        html = json.loads(r.stdout.strip().splitlines()[-1])["html"]
+        cards = re.findall(r'<button type="button" class="s-nav-item"(.*?)</button>', html, flags=re.S)
+        self.assertEqual(len(cards), 9)
+        for card, sec in zip(cards, secs):
+            with self.subTest(section=sec["id"]):
+                self.assertIn(f'data-sec="{sec["id"]}"', card)
+                self.assertIn('data-fn="SP.goSection"', card)
+                self.assertIn(f'<span class="s-nav-name">{sec["title"]}</span>', card)
+                self.assertIn(f'<span class="s-nav-desc">{sec["desc"]}</span>', card)
+                self.assertIn(f'<img src="{sec["icon"]}" alt="">', card)
+
+    def test_a_card_name_clears_four_and_a_half_to_one_on_the_card_and_when_open(self):
+        css = CSS.read_text(encoding="utf-8")
+        accents = dict(re.findall(
+            r'\.s-nav-item\[data-sec="(sec-\w+)"\]\s*\{\s*--s-accent:\s*([^;]+);', css))
+        accents["neutral"] = re.search(
+            r"\.s-nav-item\s*\{\s*--s-accent:\s*([^;]+);", css).group(1)
+        self.assertGreaterEqual(len(accents), 7, "six tool sections and the neutral one")
+        formula = re.search(r"\.s-nav-item\s*\{[^}]*--s-title:\s*([^;]+);", css).group(1)
+        m = re.fullmatch(r"color-mix\(in srgb,\s*var\(--s-accent\)\s+(\d+)%\s*,\s*var\(--text\)\)", formula.strip())
+        self.assertTrue(m, "the card title formula changed shape: " + formula)
+        share = int(m.group(1)) / 100
+        for theme in ("dark", "light"):
+            pal = _Colours(theme)
+            card = pal.resolve("var(--card-bg)")
+            ink = pal.resolve("var(--text)")
+            for sec, acc in accents.items():
+                a = pal.resolve(acc)
+                title = tuple(x * share + y * (1 - share) for x, y in zip(a, ink))
+                for state, bg in (("card", card),
+                                  ("hover", tuple(x * 0.12 + y * 0.88 for x, y in zip(a, card))),
+                                  ("open", tuple(x * 0.14 + y * 0.86 for x, y in zip(a, card)))):
+                    with self.subTest(theme=theme, section=sec, state=state):
+                        self.assertGreaterEqual(round(_contrast(title, bg), 2), 4.5)
+
+    def test_each_tool_section_has_its_own_colour(self):
+        css = CSS.read_text(encoding="utf-8")
+        accents = re.findall(
+            r'\.s-nav-item\[data-sec="sec-\w+"\]\s*\{\s*--s-accent:\s*([^;]+);', css)
+        self.assertEqual(len(accents), 6)
+        self.assertEqual(len(set(accents)), 6, "two sections share a colour")
 
 
 if __name__ == "__main__":

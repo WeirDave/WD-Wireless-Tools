@@ -56,9 +56,15 @@
     nav.innerHTML = Array.prototype.map.call(secs, function (d) {
       var sum = d.querySelector('summary');
       var name = d.id.replace(/^sec-/, '');
+      var icon = d.getAttribute('data-nav-icon');
+      var desc = d.getAttribute('data-nav-desc');
       return '<button type="button" class="s-nav-item" data-sec="' + WD.escAttr(d.id) + '"'
         + ' data-action="call" data-fn="SP.goSection" data-arg="' + WD.escAttr(name) + '">'
-        + WD.esc(sum ? sum.textContent.trim() : name) + '</button>';
+        + (icon ? '<span class="s-nav-icon"><img src="' + WD.escAttr(icon) + '" alt=""></span>' : '')
+        + '<span class="s-nav-text"><span class="s-nav-name">'
+        + WD.esc(sum ? sum.textContent.trim() : name) + '</span>'
+        + (desc ? '<span class="s-nav-desc">' + WD.esc(desc) + '</span>' : '')
+        + '</span></button>';
     }).join('');
     Array.prototype.forEach.call(secs, function (d) {
       d.addEventListener('toggle', markNav);
@@ -133,27 +139,17 @@
     location.reload();
   };
 
-  /* On a wide window the open section's heading is the page title and the
-     list at the side does the choosing. It stays a <summary> so narrow windows
-     can fold sections, but there it must not fold: the mouse was already
-     stopped by CSS, and this stops Enter and Space, which would otherwise
-     leave an empty page, and takes the heading out of the tab order. */
+  /* The open section's heading is the page title and the cards choose the
+     section, at every width. It stays a <summary> because that is what a
+     <details> needs, but it must not fold: the mouse was already stopped by
+     CSS, and this stops Enter and Space, which would otherwise leave an empty
+     page, and takes the heading out of the tab order. */
   function pinSummaries() {
-    var wide = window.matchMedia('(min-width: 1001px)');
     var sums = document.querySelectorAll('details.s-section > summary');
-    function sync() {
-      Array.prototype.forEach.call(sums, function (sm) {
-        if (wide.matches) sm.setAttribute('tabindex', '-1');
-        else sm.removeAttribute('tabindex');
-      });
-    }
     Array.prototype.forEach.call(sums, function (sm) {
-      sm.addEventListener('click', function (e) {
-        if (wide.matches) e.preventDefault();
-      });
+      sm.setAttribute('tabindex', '-1');
+      sm.addEventListener('click', function (e) { e.preventDefault(); });
     });
-    sync();
-    if (wide.addEventListener) wide.addEventListener('change', sync);
   }
 
   SP.goSection = function (name) {
