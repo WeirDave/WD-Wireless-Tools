@@ -37,37 +37,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - name: Build the landing site
-        run: |
-          set -e
-          BUILD=docs-build
-          rm -rf "$BUILD"
-          mkdir -p "$BUILD"
-
-          # The page uses the suite's stylesheet and logos.
-          cp -r web/assets "$BUILD/assets"
-
-          cp web/pages/landing.html "$BUILD/index.html"
-
-          # Every path the hosted build answered. Same page at each: someone
-          # following an old "try Quick Walls in your browser" link lands on
-          # something that explains where it went, not on a 404.
-          for p in walls scale report cloud organizer; do
-            mkdir -p "$BUILD/$p"
-            cp web/pages/landing.html "$BUILD/$p/index.html"
-            sed -i \
-              -e 's|href="assets/|href="../assets/|g' \
-              -e 's|src="assets/|src="../assets/|g' \
-              "$BUILD/$p/index.html"
-          done
-
-          # Guides were published as flat .html files and are the sort of thing
-          # people bookmark, so they keep resolving too.
-          for g in guide guide-cloud guide-organizer guide-report; do
-            cp web/pages/landing.html "$BUILD/$g.html"
-          done
-
-          echo "--- Built tree ---"
-          find "$BUILD" -maxdepth 2 -type f -name '*.html' | sort
+        run: python scripts/build_pages_site.py docs-build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0

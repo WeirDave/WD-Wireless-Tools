@@ -6,7 +6,7 @@
 
 **A suite of Ekahau workflow tools.**
 
-Eight focused utilities for organizing projects, managing Ekahau Cloud, editing walls,
+Nine focused utilities for organizing projects, managing Ekahau Cloud, editing walls,
 converting scale, building installer-ready reports, trimming floor plans, and labeling access points.
 
 [![Latest Release](https://img.shields.io/github/v/release/WeirDave/WD-Wireless-Tools?style=for-the-badge&color=1e77ac)](https://github.com/WeirDave/WD-Wireless-Tools/releases/latest)
@@ -44,7 +44,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 ## Table of Contents
 
 - [What WD Wireless Tools Does](#what-wd-wireless-tools-does)
-- [Eight Tools, One Workflow](#eight-tools-one-workflow)
+- [Nine Tools, One Workflow](#nine-tools-one-workflow)
 - [Quick Start](#quick-start)
 - [Privacy and Local-First Design](#privacy-and-local-first-design)
 - [First Run](#first-run)
@@ -62,7 +62,7 @@ The suite runs from a tiny local Flask server and opens in your normal browser. 
 
 > **The important distinction:** the interface is browser-based, but nothing leaves your machine. Files are read and written locally; Cloud Manager contacts Ekahau Cloud only when you direct it to operate on your own tenant.
 
-## Eight Tools, One Workflow
+## Nine Tools, One Workflow
 
 ### Cloud Manager
 
@@ -183,7 +183,7 @@ Get a freshly imported project ready to draw in, in one pass over the file inste
 
 ### Which tools you get
 
-All eight tools are part of the desktop suite. Quick Walls, Scale and Report used to run as a browser demo on the project page; they are desktop-only now too, so every tool behaves the same way and every setting is saved in one place rather than depending on which browser you opened. The [project page](https://weirdave.github.io/WD-Wireless-Tools/) has a quick start.
+All nine tools are part of the desktop suite. Quick Walls, Scale and Report used to run as a browser demo on the project page; they are desktop-only now too, so every tool behaves the same way and every setting is saved in one place rather than depending on which browser you opened. The [project page](https://weirdave.github.io/WD-Wireless-Tools/) has a quick start.
 
 ### Install the complete desktop suite
 
