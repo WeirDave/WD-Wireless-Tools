@@ -18,7 +18,14 @@ is painted, not the text of a rule:
 * each tile is named by its own heading and described by its own line, and a
   version is blank until it arrives rather than the literal "v...";
 * the "last opened" mark is written by a tool page and read by Home, driven in
-  Node against stubs - a store with no writer is invisible.
+  Node against stubs - a store with no writer is invisible;
+* the tiles stay in alphabetical order (the page is used every day, so a tool
+  stays where the hand expects it), and a letter jumps to the tool it starts;
+* where two tools overlap, the tile itself says which to pick - it was a
+  sentence in a tooltip, which a touch screen never shows.
+
+How the nine tiles fall into columns is asked of a real browser, in
+`test_home_grid_browser.py`.
 """
 from __future__ import annotations
 
@@ -48,6 +55,9 @@ class _Tiles(HTMLParser):
         self.tiles: list[dict] = []
         self.cur: dict | None = None
         self.ids: dict[str, str] = {}
+        self.notes: dict[str, str] = {}
+        self.section_labelledby: str | None = None
+        self._note_for: str | None = None
         self._text_for: str | None = None
         self.h1 = 0
         self.main = 0
@@ -58,6 +68,8 @@ class _Tiles(HTMLParser):
             self.h1 += 1
         if tag == "main":
             self.main += 1
+        if tag == "section" and a.get("aria-labelledby"):
+            self.section_labelledby = a["aria-labelledby"]
         cls = (a.get("class") or "").split()
         if tag == "a" and "tile" in cls:
             tone = next((c[6:] for c in cls if c.startswith("tile--")), "")
@@ -74,6 +86,12 @@ class _Tiles(HTMLParser):
             if "tile-ver" in cls:
                 self.cur["ver"] = ""
                 self._text_for = "ver"
+            if "tile-name" in cls:
+                self.cur["name"] = ""
+                self._text_for = "name"
+            if "tile-note" in cls:
+                self._note_for = a.get("id")
+                self.notes[self._note_for] = ""
         if a.get("id"):
             self.ids[a["id"]] = tag
 
@@ -82,10 +100,17 @@ class _Tiles(HTMLParser):
             self.cur = None
         if tag == "div":
             self._text_for = None
+            self._note_for = None
+        if tag in ("h2", "h3"):
+            self._text_for = None
 
     def handle_data(self, data):
         if self.cur is not None and self._text_for == "ver":
             self.cur["ver"] += data
+        if self.cur is not None and self._text_for == "name":
+            self.cur["name"] += data
+        if self._note_for is not None:
+            self.notes[self._note_for] += data
 
 
 def _tiles() -> _Tiles:
@@ -137,8 +162,9 @@ class _HomePalette(Palette):
     def hover(self, tone: str):
         css = CSS.read_text(encoding="utf-8")
         pct = 12 if self.theme == "dark" else 8
-        # The hover background is the tint over the page, not over the card.
-        return _mix(self.accent(tone), self.resolve("var(--bg)"), pct / 100)
+        # The hover wash is the tint over the card, opaque: it used to be over
+        # nothing, which let the page's glow show through the tile.
+        return _mix(self.accent(tone), self.card(), pct / 100)
 
 
 class TileNamesAreLegible(unittest.TestCase):
@@ -166,15 +192,28 @@ class TileNamesAreLegible(unittest.TestCase):
                     self.assertNotIn(rgb, seen, "same colour as " + seen.get(rgb, ""))
                 seen[rgb] = t["href"]
 
-    def test_a_tile_outline_is_not_the_only_thing_that_names_a_tool(self):
-        """The name is text in its own right, so a softened outline at rest does
-        not remove the identification - but it must still be visible against
-        the card in the dark theme, where the card is close to the page."""
-        pal = _HomePalette("dark")
-        for t in _tiles().tiles:
-            with self.subTest(tile=t["href"]):
-                edge = _mix(pal.accent(t["tone"]), pal.card(), 0.6)
-                self.assertGreater(_contrast(edge, pal.resolve("var(--bg)")), 1.5)
+    def test_the_outline_at_rest_is_neutral_and_still_visible_in_both_themes(self):
+        """The name and the icon say which tool a tile is; the outline does not,
+        so at rest it is the same on all nine and is only the tile's edge. It
+        must still show against the page, most of all on white, where a white
+        card has nothing else to separate it."""
+        css = CSS.read_text(encoding="utf-8")
+        rule = re.search(r"\n\.tile \{([^}]*)\}", css)
+        self.assertTrue(rule, ".tile rule not found")
+        self.assertIn("border: 2px solid var(--border-strong)", rule.group(1))
+        for theme in ("dark", "light"):
+            pal = _HomePalette(theme)
+            with self.subTest(theme=theme):
+                self.assertGreater(_contrast(pal.resolve("var(--border-strong)"),
+                                             pal.resolve("var(--bg)")), 1.5)
+
+    def test_the_tools_colour_comes_back_on_hover_focus_and_the_last_opened_tile(self):
+        css = CSS.read_text(encoding="utf-8")
+        for selector in (r"\.tile:hover, \.tile:focus-visible", r"\.tile\.is-last"):
+            with self.subTest(selector=selector):
+                m = re.search(r"\n" + selector + r" \{([^}]*)\}", css)
+                self.assertTrue(m, selector)
+                self.assertIn("border-color: var(--tile-title)", m.group(1))
 
 
 class EveryTileHasItsOwnIcon(unittest.TestCase):
@@ -192,6 +231,22 @@ class EveryTileHasItsOwnIcon(unittest.TestCase):
                 self.assertTrue((ROOT / "web" / t["icon"].lstrip("/")).is_file(), t["icon"])
 
 
+class TheTilesStayWhereTheHandExpectsThem(unittest.TestCase):
+    def test_the_tiles_are_in_alphabetical_order(self):
+        names = [t["name"].strip() for t in _tiles().tiles]
+        self.assertEqual(names, sorted(names, key=str.lower))
+
+    def test_overlapping_tools_say_which_to_pick_on_the_tile(self):
+        p = _tiles()
+        by_href = {t["href"]: t for t in p.tiles}
+        for href, mentions in (("/plantrim", "Prep"), ("/prep", "PlanTrim"), ("/walls", "Prep")):
+            with self.subTest(tile=href):
+                ids = by_href[href]["describedby"].split()
+                notes = [p.notes[i] for i in ids if i in p.notes]
+                self.assertTrue(notes, "no note on the tile")
+                self.assertTrue(any(mentions in n for n in notes), notes)
+
+
 class TheTilesCanBeNavigatedByName(unittest.TestCase):
     def test_the_page_has_one_main_and_one_title(self):
         p = _tiles()
@@ -201,9 +256,15 @@ class TheTilesCanBeNavigatedByName(unittest.TestCase):
         p = _tiles()
         for t in p.tiles:
             with self.subTest(tile=t["href"]):
-                self.assertEqual(t["name_tag"], "h2")
-                self.assertEqual(p.ids.get(t["labelledby"]), "h2")
-                self.assertIn(t["describedby"], p.ids)
+                self.assertEqual(t["name_tag"], "h3")
+                self.assertEqual(p.ids.get(t["labelledby"]), "h3")
+                for ident in t["describedby"].split():
+                    self.assertIn(ident, p.ids)
+
+    def test_the_tiles_sit_under_one_labelled_heading(self):
+        p = _tiles()
+        self.assertEqual(p.section_labelledby, "launcher-h")
+        self.assertEqual(p.ids.get("launcher-h"), "h2")
 
     def test_a_version_is_blank_until_it_arrives(self):
         for t in _tiles().tiles:
@@ -247,8 +308,11 @@ function stubTile(href) {
   const text = { appended: [], querySelector: sel => (sel === '.tile-last' ? kids.find(k => k.className === 'tile-last') || null : null),
                  appendChild: n => { kids.push(n); } };
   const cls = new Set();
-  return { href, cls, text, kids,
+  const attrs = { 'aria-describedby': 'td-x' };
+  return { href, cls, text, kids, attrs,
            classList: { add: c => cls.add(c) },
+           getAttribute: k => (k in attrs ? attrs[k] : null),
+           setAttribute: (k, v) => { attrs[k] = v; },
            querySelector: sel => (sel === '.tile-text' ? text : null) };
 }
 const tiles = {};
@@ -287,10 +351,13 @@ WD.markLastTool();
 WD.markLastTool();
 console.log(JSON.stringify({
   prep: [...tiles['/prep'].cls], prepLabels: tiles['/prep'].kids.map(k => k.textContent),
+  prepDescribedBy: tiles['/prep'].attrs['aria-describedby'],
   cloud: [...tiles['/cloud'].cls], cloudLabels: tiles['/cloud'].kids.length }));
 """)
         self.assertEqual(out["prep"], ["is-last"])
         self.assertEqual(out["prepLabels"], ["Last opened"])
+        self.assertEqual(out["prepDescribedBy"], "td-x tl-prep",
+                         "the mark is part of the tile's description")
         self.assertEqual((out["cloud"], out["cloudLabels"]), ([], 0))
 
     def test_nothing_recorded_marks_nothing(self):
@@ -341,7 +408,7 @@ global.document = {
 WD.syncMenuButtons();
 const before = attrs['aria-expanded'];
 // The page's start-up handler is what registers the listener.
-const names = ['syncThemeUI','syncMenuButtons','wireMenuEscape','rememberTool','markLastTool','syncFavicon','applyVersions','checkServerVersion','checkForUpdates','checkSetup','wireSettingsLinks','sortNavMenus'];
+const names = ['syncThemeUI','syncMenuButtons','wireMenuEscape','rememberTool','markLastTool','wireTileJump','syncFavicon','applyVersions','checkServerVersion','checkForUpdates','checkSetup','wireSettingsLinks','sortNavMenus'];
 const ran = [];
 names.forEach(n => { WD[n] = WD[n] || (() => { ran.push(n); }); });
 const origWire = WD.wireMenuEscape;
@@ -365,6 +432,151 @@ console.log(JSON.stringify({ before, afterEnter, afterEsc: [menu.open, attrs['ar
         self.assertEqual(out["afterEsc"], [False, "false"])
         self.assertEqual(out["label"], "Menu")
         self.assertTrue(out["wired"], "the start-up handler never registers the Escape listener")
+
+
+class TheMenuAndTheTilesAreUsableFromTheKeyboard(unittest.TestCase):
+    """Driven against the real functions: Escape hands focus back to the
+    button, the arrow keys walk the menu, focus leaving it closes it, a menu
+    opened from the keyboard takes focus, and a letter jumps to the tool."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.node = shutil.which("node")
+        if not cls.node:
+            raise unittest.SkipTest("node is not installed")
+        cls.code = ";\n".join([_slice(SHARED, "  WD.syncMenuButtons = function"),
+                               _slice(SHARED, "  WD.toggleMenu = function"),
+                               _slice(SHARED, "  WD.wireMenuEscape = function"),
+                               _slice(SHARED, "  WD.jumpToTile = function"),
+                               _slice(SHARED, "  WD.wireTileJump = function"), ""])
+
+    def _run(self, body: str):
+        script = """
+const WD = {};
+let focused = null;
+const handlers = {};
+function el(name, extra) {
+  return Object.assign({ name, focus() { focused = this; }, tagName: 'A', closest: () => null }, extra || {});
+}
+const items = [el('a'), el('b'), el('c')];
+const btn = el('btn', { tagName: 'BUTTON' });
+const outside = el('outside');
+const menu = { id: 'm', open: false, parentNode: null,
+  classList: { contains: c => c === 'open' && menu.open, add: c => { if (c === 'open') menu.open = true; },
+               remove: c => { if (c === 'open') menu.open = false; } },
+  contains: n => items.indexOf(n) > -1,
+  querySelector: () => items[0],
+  querySelectorAll: () => items };
+const wrap = { contains: n => items.indexOf(n) > -1 || n === btn };
+menu.parentNode = wrap;
+items.forEach(i => { i.closest = () => wrap; });
+btn.closest = () => wrap;
+const tiles = ['Cloud Manager', 'Capacity', 'Prep', 'PlanTrim', 'Squirrel'].map(n =>
+  el(n, { querySelector: () => ({ textContent: n }) }));
+global.document = {
+  get activeElement() { return focused; },
+  getElementById: id => (id === 'm' ? menu : null),
+  querySelector: sel => (sel === '.launcher' ? {} : sel.indexOf('.main-menu.open') === 0 ? (menu.open ? menu : null)
+                          : sel.indexOf('[data-action="menu"]') === 0 ? btn : null),
+  querySelectorAll: sel => (sel === '[data-action="menu"]' ? [] : sel.indexOf('.launcher a.tile') === 0 ? tiles
+                            : sel.indexOf('.main-menu.open') === 0 ? (menu.open ? [menu] : []) : []),
+  addEventListener: (t, f) => { handlers[t] = f; },
+};
+global.setTimeout = () => 0;
+""" + self.code + "\n(async () => {\n" + body + "\n})().catch(e => { console.error(e && e.stack || e); process.exit(1); });\n"
+        proc = subprocess.run([self.node, "-e", script], capture_output=True, text=True,
+                              encoding="utf-8", timeout=NODE_TIMEOUT_S)
+        if proc.returncode:
+            raise AssertionError((proc.stdout + proc.stderr).strip())
+        return json.loads(proc.stdout.strip().splitlines()[-1])
+
+    def test_escape_hands_focus_back_to_the_button_only_when_it_was_in_the_menu(self):
+        out = self._run("""
+WD.wireMenuEscape();
+menu.open = true; focused = items[1];
+handlers.keydown({ key: 'Escape', preventDefault() {} });
+const fromInside = [menu.open, focused === btn];
+menu.open = true; focused = outside;
+handlers.keydown({ key: 'Escape', preventDefault() {} });
+console.log(JSON.stringify({ fromInside, fromOutside: [menu.open, focused === outside] }));
+""")
+        self.assertEqual(out["fromInside"], [False, True])
+        self.assertEqual(out["fromOutside"], [False, True], "focus elsewhere must not be pulled to the button")
+
+    def test_the_arrow_keys_home_and_end_walk_the_menu(self):
+        out = self._run("""
+WD.wireMenuEscape();
+menu.open = true; focused = btn;
+const path = [];
+for (const k of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp', 'End', 'Home']) {
+  handlers.keydown({ key: k, preventDefault() {} });
+  path.push(items.indexOf(focused));
+}
+console.log(JSON.stringify(path));
+""")
+        self.assertEqual(out, [0, 1, 2, 0, 2, 2, 0])
+
+    def test_arrow_keys_do_nothing_when_focus_is_elsewhere_on_the_page(self):
+        out = self._run("""
+WD.wireMenuEscape();
+menu.open = true; focused = outside;
+let prevented = false;
+handlers.keydown({ key: 'ArrowDown', preventDefault() { prevented = true; } });
+console.log(JSON.stringify({ prevented, stayed: focused === outside }));
+""")
+        self.assertEqual(out, {"prevented": False, "stayed": True})
+
+    def test_focus_leaving_the_menu_closes_it_and_focus_inside_does_not(self):
+        out = self._run("""
+WD.wireMenuEscape();
+menu.open = true;
+handlers.focusin({ target: items[0] });
+const inside = menu.open;
+handlers.focusin({ target: outside });
+console.log(JSON.stringify({ inside, afterOutside: menu.open }));
+""")
+        self.assertEqual(out, {"inside": True, "afterOutside": False})
+
+    def test_a_menu_opened_from_the_keyboard_takes_focus_and_one_opened_by_mouse_does_not(self):
+        out = self._run("""
+WD.toggleMenu({ detail: 0, stopPropagation() {} }, 'm');
+const byKeyboard = focused === items[0];
+menu.open = false; focused = null;
+WD.toggleMenu({ detail: 1, stopPropagation() {} }, 'm');
+console.log(JSON.stringify({ byKeyboard, byMouse: focused }));
+""")
+        self.assertEqual(out, {"byKeyboard": True, "byMouse": None})
+
+    def test_a_letter_focuses_the_first_tool_and_the_same_letter_moves_to_the_next(self):
+        out = self._run("""
+WD.wireTileJump();
+const seen = [];
+for (const k of ['c', 'c', 'c', 'p', 'p', 's', 'z']) {
+  let prevented = false;
+  handlers.keydown({ key: k, target: { tagName: 'BODY' }, preventDefault() { prevented = true; } });
+  seen.push([k, focused ? focused.name : null, prevented]);
+}
+console.log(JSON.stringify(seen));
+""")
+        self.assertEqual(out, [["c", "Cloud Manager", True], ["c", "Capacity", True], ["c", "Cloud Manager", True],
+                               ["p", "Prep", True], ["p", "PlanTrim", True], ["s", "Squirrel", True],
+                               ["z", "Squirrel", False]])
+
+    def test_typing_in_a_field_or_with_a_modifier_or_with_a_menu_open_does_not_jump(self):
+        out = self._run("""
+WD.wireTileJump();
+const tries = [
+  { key: 'c', target: { tagName: 'INPUT' } },
+  { key: 'c', target: { tagName: 'BODY' }, ctrlKey: true },
+  { key: 'Enter', target: { tagName: 'BODY' } },
+];
+for (const t of tries) handlers.keydown(Object.assign({ preventDefault() {} }, t));
+const afterThree = focused;
+menu.open = true;
+handlers.keydown({ key: 'c', target: { tagName: 'BODY' }, preventDefault() {} });
+console.log(JSON.stringify({ afterThree, withMenu: focused }));
+""")
+        self.assertEqual(out, {"afterThree": None, "withMenu": None})
 
 
 if __name__ == "__main__":
