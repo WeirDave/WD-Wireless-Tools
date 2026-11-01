@@ -606,6 +606,12 @@
       .forEach(function (m) { m.classList.remove('open'); });
     if (!wasOpen) {
       menu.classList.add('open');
+      /* Opened from the keyboard (a click with no pointer has detail 0): put
+         focus on the first item, or the next Tab lands on the page behind. */
+      if (ev && ev.detail === 0 && menu.querySelector) {
+        var first = menu.querySelector('.menu-item, .help-menu-item');
+        if (first && first.focus) first.focus();
+      }
       setTimeout(function () {
         document.addEventListener('click', function handler(e) {
           if (!e.target.closest('.menu-wrap, .help-menu-wrap')) {
@@ -619,11 +625,41 @@
     WD.syncMenuButtons();
   };
 
+  /* Keyboard handling for an open menu: Escape closes it and hands focus back
+     to its button when focus was inside it (display:none would drop it to the
+     page); the arrow keys, Home and End move through its items; and focus
+     leaving the menu closes it. */
   WD.wireMenuEscape = function () {
     document.addEventListener('keydown', function (e) {
-      if (e.key !== 'Escape') return;
       var open = document.querySelectorAll('.main-menu.open, .help-menu.open');
       if (!open.length) return;
+      var menu = open[0];
+      if (e.key === 'Escape') {
+        var hadFocus = !!(menu.contains && menu.contains(document.activeElement));
+        open.forEach(function (m) { m.classList.remove('open'); });
+        WD.syncMenuButtons();
+        if (hadFocus && menu.id) {
+          var btn = document.querySelector('[data-action="menu"][data-menu="' + menu.id + '"]');
+          if (btn && btn.focus) btn.focus();
+        }
+        return;
+      }
+      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].indexOf(e.key) < 0 || !menu.querySelectorAll) return;
+      var items = Array.prototype.slice.call(menu.querySelectorAll('.menu-item, .help-menu-item'));
+      if (!items.length) return;
+      var at = items.indexOf(document.activeElement);
+      var to = e.key === 'Home' ? 0
+             : e.key === 'End' ? items.length - 1
+             : e.key === 'ArrowDown' ? (at < 0 ? 0 : (at + 1) % items.length)
+             : (at <= 0 ? items.length - 1 : at - 1);
+      if (at < 0 && !(menu.parentNode && menu.parentNode.contains && menu.parentNode.contains(document.activeElement))) return;
+      e.preventDefault();
+      items[to].focus();
+    });
+    document.addEventListener('focusin', function (e) {
+      var open = document.querySelectorAll('.main-menu.open, .help-menu.open');
+      if (!open.length || !e.target || !e.target.closest) return;
+      if (e.target.closest('.menu-wrap, .help-menu-wrap')) return;
       open.forEach(function (m) { m.classList.remove('open'); });
       WD.syncMenuButtons();
     });
@@ -658,8 +694,41 @@
     if (!text || text.querySelector('.tile-last')) return;
     var tag = document.createElement('div');
     tag.className = 'tile-last';
+    tag.id = 'tl-' + last.replace(/\W+/g, '');
     tag.textContent = 'Last opened';
     text.appendChild(tag);
+    /* The mark is the only status this page reports, so it is part of what the
+       tile is described by. */
+    if (tile.getAttribute && tile.setAttribute) {
+      tile.setAttribute('aria-describedby', ((tile.getAttribute('aria-describedby') || '') + ' ' + tag.id).trim());
+    }
+  };
+
+  /* Nine tools in alphabetical order, used every day: typing a tool's first
+     letter focuses it (Enter opens), and the same letter again moves to the
+     next tool that starts with it - Cloud Manager and Capacity share a C,
+     PlanTrim and Prep a P, Scale and Squirrel an S. */
+  WD.jumpToTile = function (letter) {
+    var tiles = Array.prototype.slice.call(document.querySelectorAll('.launcher a.tile'));
+    var hits = tiles.filter(function (t) {
+      var n = t.querySelector('.tile-name');
+      return n && n.textContent.trim().toLowerCase().charAt(0) === letter;
+    });
+    if (!hits.length) return false;
+    var at = hits.indexOf(document.activeElement);
+    hits[(at + 1) % hits.length].focus();
+    return true;
+  };
+
+  WD.wireTileJump = function () {
+    if (!document.querySelector('.launcher')) return;
+    document.addEventListener('keydown', function (e) {
+      if (e.ctrlKey || e.metaKey || e.altKey || !e.key || e.key.length !== 1) return;
+      var t = e.target || {};
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '') || t.isContentEditable) return;
+      if (document.querySelector('.main-menu.open, .help-menu.open')) return;
+      if (WD.jumpToTile(e.key.toLowerCase())) e.preventDefault();
+    });
   };
 
   WD.applyVersions = function () {
@@ -1950,6 +2019,7 @@
     WD.wireMenuEscape();
     WD.rememberTool();
     WD.markLastTool();
+    WD.wireTileJump();
     WD.syncFavicon();
     WD.applyVersions();
     WD.checkServerVersion();
