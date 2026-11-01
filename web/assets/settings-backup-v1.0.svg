@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Backup: a box with an arrow going in">
+  <g stroke="#7d8794" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M6 11h36v8H6z"/>
+    <path d="M9 19v18a3 3 0 0 0 3 3h24a3 3 0 0 0 3-3V19"/>
+    <path d="M24 24v11M19 30l5 5 5-5"/>
+  </g>
+</svg>

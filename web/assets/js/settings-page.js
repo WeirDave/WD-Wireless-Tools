@@ -152,9 +152,17 @@
     });
   }
 
+  /* Choosing a card shows that section where the cards already are. It does
+     not go through the hash change, which is for arriving from a tool: that
+     scrolls the section to the top of the window and flashes it, and on a
+     narrow window that carried the cards, the thing just used, out of sight. */
   SP.goSection = function (name) {
-    if (location.hash === '#' + name) openHashSection();
-    else location.hash = name;
+    var sec = document.getElementById('sec-' + name);
+    if (!sec) return;
+    Array.prototype.forEach.call(document.querySelectorAll('details.s-section'),
+      function (d) { d.open = d === sec; });
+    if (window.history && history.replaceState) history.replaceState(null, '', '#' + name);
+    markNav();
   };
 
   /* Arriving from a tool's gear button, e.g. Cloud Manager sends

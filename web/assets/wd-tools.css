@@ -12448,6 +12448,7 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
 .s-ov-title { font-size: 13px; }
 .s-ov-row { font-size: 14px; }
 .s-ov-where { font-size: 13px; }
+.s-ov-row { row-gap: 1px; }
 .settings-footer {
   position: sticky; bottom: 0; padding: 12px 0; margin-top: 8px;
   background: var(--bg); border-top: 1px solid var(--border);
@@ -12480,6 +12481,7 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
 html:has(.settings-wrap) { scrollbar-gutter: stable; }
 .settings-title h1 { font-size: inherit; font-weight: inherit; margin: 0; }
 .s-section summary h2 { font: inherit; margin: 0; }
+.s-field .hint + .hint { margin-top: 8px; }
 .s-label, .s-field legend {
   display: block; padding: 0; font-size: 13px; font-weight: 600; color: var(--text-2);
   margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.5px;

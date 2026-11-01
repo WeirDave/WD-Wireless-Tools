@@ -165,7 +165,7 @@ const code = [
   slice('  function setDirty('), slice('  function syncFooter('), slice('  function wireEditing('),
   slice('  function confirmDiscard('), slice('  SP.cancel = function'),
   slice('  function pinSummaries('), slice('  SP.forgetLogin = function'),
-  slice('  SP.resetOrganizer = function'),
+  slice('  SP.resetOrganizer = function'), slice('  SP.goSection = function'),
 ].join(';\n');
 
 const SCENARIOS = JSON.parse(process.argv[2]);
@@ -179,12 +179,22 @@ for (const name of Object.keys(SCENARIOS)) {
   const mark = { hidden: true };
   const main = { addEventListener(ev, fn) { (handlers[ev] = handlers[ev] || []).push(fn); } };
   const open = (sc.open || []).map(ro => ({ hasAttribute: (n) => n === 'data-readonly' && ro }));
+  const secs = ['sec-general', 'sec-cloud', 'sec-report'].map((id) => ({
+    id, open: id === 'sec-general', scrolled: false,
+    scrollIntoView() { this.scrolled = true; },
+  }));
+  const history = { urls: [], replaceState(a, b, url) { this.urls.push(url); } };
+  let hashSet = false;
+  const location = { reload() { calls.push('reload'); }, set hash(v) { hashSet = true; }, get hash() { return ''; } };
+  let marked = 0;
+  const markNav = () => { marked++; };
   const document = {
-    getElementById(id) { return { sFooter: footer, sDirty: mark }[id] || null; },
+    getElementById(id) { return { sFooter: footer, sDirty: mark }[id] || secs.find((x) => x.id === id) || null; },
     querySelector(sel) { return sel === '.s-main' ? main : null; },
     querySelectorAll(sel) {
       if (sel === 'details.s-section[open]') return open;
       if (sel === 'details.s-section > summary') return sums;
+      if (sel === 'details.s-section') return secs;
       return [];
     },
   };
@@ -192,6 +202,7 @@ for (const name of Object.keys(SCENARIOS)) {
   let wide = !!sc.wide;
   const mqListeners = [];
   const window = {
+    history,
     addEventListener(ev, fn) { winHandlers[ev] = fn; },
     matchMedia() { return { get matches() { return wide; }, addEventListener(ev, fn) { mqListeners.push(fn); } }; },
   };
@@ -201,7 +212,6 @@ for (const name of Object.keys(SCENARIOS)) {
       addEventListener(ev, fn) { el.clicks.push(fn); } };
     return el;
   });
-  const location = { reload() { calls.push('reload'); } };
   const confirms = [];
   const confirm = (m) => { confirms.push(m); return sc.confirm !== false; };
   const API = (a) => { calls.push('api:' + a); return { then(f) { f({ ok: true, settings: {} }); return this; } }; };
@@ -214,11 +224,13 @@ for (const name of Object.keys(SCENARIOS)) {
   `;
   const result = new Function('document', 'window', 'location', 'confirm', 'API', 'WD', 'SP', 'settings',
     'checkCloud', 'populate', 'calls', 'handlers', 'winHandlers', 'footer', 'mark', 'sums', 'confirms',
-    'mqListeners', 'setWide',
+    'mqListeners', 'setWide', 'history', 'markNav', 'secs',
     'var dirty = false;\n' + body)(document, window, location, confirm, API, WD, SP, settings,
     checkCloud, populate, calls, handlers, winHandlers, footer, mark, sums, confirms, mqListeners,
-    (v) => { wide = v; });
-  out[name] = { result, calls, confirms, footer: [...footer.cls], dirtyShown: mark.hidden === false };
+    (v) => { wide = v; }, history, markNav, secs);
+  out[name] = { result, calls, confirms, footer: [...footer.cls], dirtyShown: mark.hidden === false,
+                open: secs.filter((x) => x.open).map((x) => x.id), scrolled: secs.some((x) => x.scrolled),
+                urls: history.urls, hashSet, marked };
 }
 process.stdout.write(JSON.stringify(out));
 """
@@ -249,6 +261,9 @@ SCENARIOS = {
     "summary": {"drive":
              "pinSummaries(); var ev = { prevented: false, preventDefault() { this.prevented = true; } };"
              "sums[0].clicks[0](ev); return { prevented: ev.prevented, attrs: sums[0].attrs };"},
+    # choosing a card
+    "go_section": {"drive": "SP.goSection('report'); return null;"},
+    "go_nowhere": {"drive": "SP.goSection('nonsense'); return null;"},
     # actions that do not wait for Save
     "forget_declined": {"confirm": False, "drive": "SP.forgetLogin(); return null;"},
     "forget_accepted": {"drive": "SP.forgetLogin(); return null;"},
@@ -302,6 +317,19 @@ class TheHandlersDoWhatThePageSays(unittest.TestCase):
         self.assertTrue(got["prevented"], "Enter and Space reach the summary as a click")
         self.assertEqual(got["attrs"].get("tabindex"), "-1",
                          "and the heading is out of the tab order")
+
+    def test_choosing_a_card_shows_that_section_without_moving_the_page(self):
+        o = self.out["go_section"]
+        self.assertEqual(o["open"], ["sec-report"], "that section alone")
+        self.assertFalse(o["scrolled"], "the cards are where the section is; do not move the page")
+        self.assertFalse(o["hashSet"], "a hash change scrolls and flashes the section, "
+                                       "which is for arriving from a tool")
+        self.assertEqual(o["urls"], ["#report"], "the address still names the section")
+        self.assertEqual(o["marked"], 1, "and the card is marked as current")
+
+    def test_choosing_a_section_that_is_not_there_changes_nothing(self):
+        o = self.out["go_nowhere"]
+        self.assertEqual((o["open"], o["urls"], o["marked"]), (["sec-general"], [], 0))
 
     def test_forget_login_asks_and_says_what_it_does(self):
         self.assertEqual(self.out["forget_declined"]["calls"], [])
@@ -442,6 +470,11 @@ class TheSectionsAreCardsLikeHomes(unittest.TestCase):
                 self.assertTrue(sec["desc"], "a card says what is in its section")
                 icon = ROOT / "web" / sec["icon"].lstrip("/")
                 self.assertTrue(icon.is_file(), f"{sec['icon']} is not in web/")
+
+    def test_no_two_sections_share_an_icon(self):
+        icons = [s["icon"] for s in _sections()]
+        self.assertEqual(len(icons), len(set(icons)),
+                         "General, Subfolder Structure and Backup & restore all wore the suite logo")
 
     def test_the_cards_are_built_from_the_sections_with_name_line_and_icon(self):
         secs = [dict(s, title=s["id"].replace("sec-", "").title()) for s in _sections()]

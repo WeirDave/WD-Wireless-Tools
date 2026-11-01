@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Settings: sliders">
+  <g stroke="#7d8794" stroke-width="3" stroke-linecap="round" fill="none">
+    <path d="M8 12h32M8 24h32M8 36h32"/>
+  </g>
+  <g fill="#7d8794">
+    <circle cx="31" cy="12" r="5"/>
+    <circle cx="16" cy="24" r="5"/>
+    <circle cx="27" cy="36" r="5"/>
+  </g>
+</svg>
