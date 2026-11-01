@@ -1815,32 +1815,25 @@ body.tool-home .hamburger-btn { width: 40px; height: 36px; padding: 0 9px; }
   .launcher > .tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
 }
 
-/* A tile carries its tool's colour in two places that each do one job: the
-   icon artwork, and the name, which is the brand mixed toward the page's ink
-   until it clears 4.5:1 on the card. The name is the only label that says
-   which tool this is, so it is the one thing that has to be readable;
-   tests/test_home_tiles_are_legible.py holds it in both themes.
-
-   The outline is neutral at rest and takes the tool's colour on hover, on
-   focus and on the tool last opened. It used to be tinted on all nine, which
-   left nothing to tell the last-opened tile from the rest, and put red and
-   green outlines on Scale and Quick Walls that read as error and success. */
+/* A tile is its tool's colour: the outline, the name and the hover wash all
+   use the brand, the same nine colours the tool pages carry. A redesign made
+   the outlines neutral and the names paler and he asked for the colours back,
+   so they are the brand itself - nothing is mixed toward white or black.
+   The last-opened tile is told apart by its tint and its "Last opened" mark,
+   not by being the only one with a coloured edge. */
 .tile {
-  --tile-title: color-mix(in srgb, var(--tile-accent) 55%, white);
+  --tile-title: var(--tile-accent);
   position: relative;
   background: var(--card-bg, var(--surface));
-  border: 2px solid var(--border-strong); border-radius: var(--r-lg);
+  border: 2.5px solid var(--tile-accent); border-radius: var(--r-lg);
   padding: 14px 16px; text-decoration: none; color: inherit;
   display: flex; align-items: center; gap: 14px;
   transition: transform .1s ease, box-shadow .1s ease, background .12s ease, border-color .12s ease;
 }
 
-[data-theme="light"] .tile { --tile-title: color-mix(in srgb, var(--tile-accent) 75%, black); }
-
 .tile:hover, .tile:focus-visible {
   transform: translateY(-2px);
   box-shadow: var(--shadow-lift);
-  border-color: var(--tile-title);
   background: color-mix(in srgb, var(--tile-accent) 12%, var(--card-bg, var(--surface)));
 }
 
@@ -1854,7 +1847,6 @@ body.tool-home .hamburger-btn { width: 40px; height: 36px; padding: 0 9px; }
 
 .tile.is-last {
   background: color-mix(in srgb, var(--tile-accent) 7%, var(--card-bg, var(--surface)));
-  border-color: var(--tile-title);
 }
 
 .tile-icon {
@@ -1910,19 +1902,11 @@ body.tool-home .hamburger-btn { width: 40px; height: 36px; padding: 0 9px; }
 .tile--azure  { --tile-accent: var(--azure); }
 .tile--green  { --tile-accent: var(--green); }
 .tile--lime   { --tile-accent: var(--lime); }
-.tile--teal   { --tile-accent: var(--teal-bright); }
+.tile--teal   { --tile-accent: var(--teal); }
 .tile--rose   { --tile-accent: var(--rose-bright); }
 .tile--red    { --tile-accent: var(--red); }
 .tile--amber  { --tile-accent: var(--amber); }
 .tile--purple { --tile-accent: var(--purple); }
-
-/* On white the lighter brands cannot carry a title or an outline; each takes
-   its own darker sibling, the one its tool page already uses. */
-[data-theme="light"] .tile--blue  { --tile-accent: var(--blue-dark); }
-[data-theme="light"] .tile--lime  { --tile-accent: var(--lime-dark); }
-[data-theme="light"] .tile--teal  { --tile-accent: var(--teal); }
-[data-theme="light"] .tile--rose  { --tile-accent: var(--rose); }
-[data-theme="light"] .tile--amber { --tile-accent: var(--amber-dark); }
 
 .launcher-footer {
   display: flex; justify-content: center; gap: 12px;

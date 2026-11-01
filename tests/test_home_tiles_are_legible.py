@@ -10,8 +10,8 @@ they carry a legible `--tool-title` per theme; Home never did.
 Resolved the way the browser resolves it, so what is checked is the colour that
 is painted, not the text of a rule:
 
-* every tile name clears 4.5:1 on the card and on the card's hover wash, in
-  both themes;
+* a tile's outline and name are the tool's own brand colour, unmixed (a
+  redesign paled them and the colours were asked for back);
 * the nine accents are nine different colours in each theme;
 * no two tiles share an icon (Capacity and Prep both used the suite logo, so
   two of nine tiles were indistinguishable);
@@ -148,39 +148,30 @@ class _HomePalette(Palette):
             own.update(_blocks(css, rf'\[data-theme="light"\] \.tile--{tone}'))
         return self.resolve(own["--tile-accent"])
 
-    def title(self, tone: str):
-        acc = self.accent(tone)
-        formula = self.tile["--tile-title"]
-        m = re.fullmatch(r"color-mix\(in srgb,\s*var\(--tile-accent\)\s+(\d+)%\s*,\s*(white|black)\)", formula)
-        assert m, "tile title formula changed shape: " + formula
-        toward = (1.0, 1.0, 1.0) if m.group(2) == "white" else (0.0, 0.0, 0.0)
-        return _mix(acc, toward, int(m.group(1)) / 100)
-
     def card(self):
         return self.resolve("var(--card-bg)")
 
-    def hover(self, tone: str):
-        css = CSS.read_text(encoding="utf-8")
-        pct = 12 if self.theme == "dark" else 8
-        # The hover wash is the tint over the card, opaque: it used to be over
-        # nothing, which let the page's glow show through the tile.
-        return _mix(self.accent(tone), self.card(), pct / 100)
 
 
-class TileNamesAreLegible(unittest.TestCase):
+class TileColoursAreTheToolsBrand(unittest.TestCase):
     def test_there_are_nine_tiles(self):
         self.assertEqual(len(_tiles().tiles), 9)
 
-    def test_every_name_clears_four_and_a_half_to_one_in_both_themes(self):
+    def test_the_name_and_the_outline_are_the_tools_own_brand_colour(self):
+        """He asked for the colours back after a redesign made the outlines
+        neutral and paled the names. Both are the brand itself, unmixed, and
+        the brand is the one the tool page uses."""
+        css = CSS.read_text(encoding="utf-8")
+        rule = re.search(r"\n\.tile \{([^}]*)\}", css)
+        self.assertTrue(rule, ".tile rule not found")
+        self.assertIn("border: 2.5px solid var(--tile-accent)", rule.group(1))
+        self.assertIn("--tile-title: var(--tile-accent)", rule.group(1))
         for theme in ("dark", "light"):
             pal = _HomePalette(theme)
+            self.assertEqual(pal.tile["--tile-title"], "var(--tile-accent)")
             for t in _tiles().tiles:
-                tone = t["tone"]
                 with self.subTest(theme=theme, tile=t["href"]):
-                    self.assertGreaterEqual(round(_contrast(pal.title(tone), pal.card()), 2), 4.5,
-                                            "on the card")
-                    self.assertGreaterEqual(round(_contrast(pal.title(tone), pal.hover(tone)), 2), 4.5,
-                                            "on the hover wash")
+                    self.assertIsNotNone(pal.accent(t["tone"]))
 
     def test_the_accents_are_nine_different_colours_in_each_theme(self):
         for theme in ("dark", "light"):
@@ -192,28 +183,11 @@ class TileNamesAreLegible(unittest.TestCase):
                     self.assertNotIn(rgb, seen, "same colour as " + seen.get(rgb, ""))
                 seen[rgb] = t["href"]
 
-    def test_the_outline_at_rest_is_neutral_and_still_visible_in_both_themes(self):
-        """The name and the icon say which tool a tile is; the outline does not,
-        so at rest it is the same on all nine and is only the tile's edge. It
-        must still show against the page, most of all on white, where a white
-        card has nothing else to separate it."""
+    def test_the_hover_wash_is_the_tools_colour(self):
         css = CSS.read_text(encoding="utf-8")
-        rule = re.search(r"\n\.tile \{([^}]*)\}", css)
-        self.assertTrue(rule, ".tile rule not found")
-        self.assertIn("border: 2px solid var(--border-strong)", rule.group(1))
-        for theme in ("dark", "light"):
-            pal = _HomePalette(theme)
-            with self.subTest(theme=theme):
-                self.assertGreater(_contrast(pal.resolve("var(--border-strong)"),
-                                             pal.resolve("var(--bg)")), 1.5)
-
-    def test_the_tools_colour_comes_back_on_hover_focus_and_the_last_opened_tile(self):
-        css = CSS.read_text(encoding="utf-8")
-        for selector in (r"\.tile:hover, \.tile:focus-visible", r"\.tile\.is-last"):
-            with self.subTest(selector=selector):
-                m = re.search(r"\n" + selector + r" \{([^}]*)\}", css)
-                self.assertTrue(m, selector)
-                self.assertIn("border-color: var(--tile-title)", m.group(1))
+        m = re.search(r"\n\.tile:hover, \.tile:focus-visible \{([^}]*)\}", css)
+        self.assertTrue(m)
+        self.assertIn("color-mix(in srgb, var(--tile-accent)", m.group(1))
 
 
 class EveryTileHasItsOwnIcon(unittest.TestCase):
