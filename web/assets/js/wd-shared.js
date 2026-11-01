@@ -619,13 +619,15 @@
     WD.syncMenuButtons();
   };
 
-  document.addEventListener('keydown', function (e) {
-    if (e.key !== 'Escape') return;
-    var open = document.querySelectorAll('.main-menu.open, .help-menu.open');
-    if (!open.length) return;
-    open.forEach(function (m) { m.classList.remove('open'); });
-    WD.syncMenuButtons();
-  });
+  WD.wireMenuEscape = function () {
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      var open = document.querySelectorAll('.main-menu.open, .help-menu.open');
+      if (!open.length) return;
+      open.forEach(function (m) { m.classList.remove('open'); });
+      WD.syncMenuButtons();
+    });
+  };
 
   /* The tool you were last in, so Home can say so. A path, never a project or
      a file name: the suite keeps no record of what was opened. */
@@ -1945,6 +1947,7 @@
     try { WD.sortNavMenus(); } catch (e) { /* an unsorted menu still works */ }
     WD.syncThemeUI();
     WD.syncMenuButtons();
+    WD.wireMenuEscape();
     WD.rememberTool();
     WD.markLastTool();
     WD.syncFavicon();

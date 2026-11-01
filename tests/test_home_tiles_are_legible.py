@@ -30,7 +30,7 @@ import unittest
 from html.parser import HTMLParser
 from pathlib import Path
 
-from test_every_tool_has_its_own_brand import (
+from tests.test_every_tool_has_its_own_brand import (
     CSS, Palette, _blocks, _contrast,
 )
 
@@ -307,6 +307,64 @@ WD.markLastTool();
 console.log(JSON.stringify(Object.values(tiles).map(t => [...t.cls].length + t.kids.length)));
 """)
         self.assertEqual(out, [0, 0, 0])
+
+
+class TheMenuButtonReportsAndEscapeCloses(unittest.TestCase):
+    """The hamburger on every page says whether its menu is open, and Escape
+    closes it. Driven against the real functions; the wiring call is asserted
+    through the page's own start-up handler, because a listener nobody
+    registers is invisible."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.node = shutil.which("node")
+        if not cls.node:
+            raise unittest.SkipTest("node is not installed")
+
+    def test_escape_closes_an_open_menu_and_the_button_says_so(self):
+        code = ";\n".join([_slice(SHARED, "  WD.syncMenuButtons = function"),
+                           _slice(SHARED, "  WD.wireMenuEscape = function"), ""])
+        init = _slice(SHARED, "  document.addEventListener('DOMContentLoaded', function () {")
+        script = """
+const WD = {};
+const attrs = {};
+const menu = { open: true, classList: { contains: c => c === 'open' && menu.open, remove: c => { if (c === 'open') menu.open = false; } } };
+const btn = { getAttribute: k => (k === 'data-menu' ? 'm' : k === 'title' ? 'Menu' : (k in attrs ? attrs[k] : null)),
+              setAttribute: (k, v) => { attrs[k] = v; }, hasAttribute: k => k in attrs };
+let keydown = null;
+global.document = {
+  getElementById: id => (id === 'm' ? menu : null),
+  querySelectorAll: sel => (sel === '[data-action="menu"]' ? [btn] : sel.indexOf('.main-menu.open') === 0 ? (menu.open ? [menu] : []) : []),
+  addEventListener: (type, fn) => { if (type === 'keydown') keydown = fn; },
+};
+""" + code + """
+WD.syncMenuButtons();
+const before = attrs['aria-expanded'];
+// The page's start-up handler is what registers the listener.
+const names = ['syncThemeUI','syncMenuButtons','wireMenuEscape','rememberTool','markLastTool','syncFavicon','applyVersions','checkServerVersion','checkForUpdates','checkSetup','wireSettingsLinks','sortNavMenus'];
+const ran = [];
+names.forEach(n => { WD[n] = WD[n] || (() => { ran.push(n); }); });
+const origWire = WD.wireMenuEscape;
+WD.wireMenuEscape = () => { ran.push('wireMenuEscape'); origWire(); };
+let handler = null;
+document.addEventListener = (type, fn) => { if (type === 'DOMContentLoaded') handler = fn; else if (type === 'keydown') keydown = fn; };
+%s
+handler();
+keydown({ key: 'Enter' });
+const afterEnter = [menu.open, attrs['aria-expanded']];
+keydown({ key: 'Escape' });
+console.log(JSON.stringify({ before, afterEnter, afterEsc: [menu.open, attrs['aria-expanded']], label: attrs['aria-label'], wired: ran.indexOf('wireMenuEscape') > -1 }));
+""" % (init + ");",)
+        proc = subprocess.run([self.node, "-e", script], capture_output=True, text=True,
+                              encoding="utf-8", timeout=NODE_TIMEOUT_S)
+        if proc.returncode:
+            raise AssertionError((proc.stdout + proc.stderr).strip())
+        out = json.loads(proc.stdout.strip().splitlines()[-1])
+        self.assertEqual(out["before"], "true")
+        self.assertEqual(out["afterEnter"], [True, "true"])
+        self.assertEqual(out["afterEsc"], [False, "false"])
+        self.assertEqual(out["label"], "Menu")
+        self.assertTrue(out["wired"], "the start-up handler never registers the Escape listener")
 
 
 if __name__ == "__main__":
