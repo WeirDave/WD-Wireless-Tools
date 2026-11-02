@@ -359,6 +359,15 @@ class _Colours(Palette):
         return super().resolve(value, depth)
 
 
+def _every(selector: str, prop: str) -> list:
+    """Every declaration of `prop` in a rule whose selector list names exactly
+    `selector`, in order - for asserting that a value is never among them."""
+    css = CSS.read_text(encoding="utf-8")
+    return [v.strip() for sel, body in _rules(css) if selector in _parts(sel)
+            for name, v in re.findall(r"(?<![\w-])([\w-]+)\s*:\s*([^;]+);", body)
+            if name == prop]
+
+
 def _final(selector: str, prop: str) -> str:
     """The last declaration of `prop` in a rule whose selector list names
     exactly `selector` - the one that wins between equals."""
@@ -584,11 +593,7 @@ class SettingsLooksTheSameWhereverItOpens(unittest.TestCase):
 
     def test_the_section_has_a_title_across_the_top_of_its_box(self):
         sel = ".s-main details.s-section[open] > summary"
-        positions = [v for s, body in _rules(CSS.read_text(encoding="utf-8"))
-                     if sel in _parts(s)
-                     for n, v in re.findall(r"(?<![\w-])([\w-]+)\s*:\s*([^;]+);", body)
-                     if n == "position"]
-        self.assertNotIn("absolute", positions,
+        self.assertNotIn("absolute", _every(sel, "position"),
                          "the heading was hidden when the card named the section")
         self.assertIn("var(--s-accent", _final(sel, "border-bottom"))
 
