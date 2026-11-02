@@ -516,6 +516,15 @@ class TheSectionsAreCardsLikeHomes(unittest.TestCase):
         m = re.fullmatch(r"color-mix\(in srgb,\s*var\(--s-accent\)\s+(\d+)%\s*,\s*var\(--text\)\)", formula.strip())
         self.assertTrue(m, "the card title formula changed shape: " + formula)
         share = int(m.group(1)) / 100
+        cur = re.search(
+            r"\.s-nav-item\.is-current\s*\{[^}]*background:\s*color-mix\(in srgb,\s*var\(--s-accent\)\s+(\d+)%",
+            css)
+        self.assertTrue(cur, "the open card's tint changed shape")
+        open_tint = int(cur.group(1)) / 100
+        self.assertEqual(_final(".s-nav-item.is-current .s-nav-name", "color"), "var(--text)",
+                         "the open card names itself in the page's ink; the contrast below assumes it")
+        self.assertGreaterEqual(open_tint, 0.2,
+                                "the open card is only told apart from the rest by its tint and ring")
         for theme in ("dark", "light"):
             pal = _Colours(theme)
             card = pal.resolve("var(--card-bg)")
@@ -523,11 +532,15 @@ class TheSectionsAreCardsLikeHomes(unittest.TestCase):
             for sec, acc in accents.items():
                 a = pal.resolve(acc)
                 title = tuple(x * share + y * (1 - share) for x, y in zip(a, ink))
+                # The open card names itself in the page's own ink: on the
+                # strong tint the mixed colour fell to 4.08:1 in the light theme.
                 for state, bg in (("card", card),
                                   ("hover", tuple(x * 0.12 + y * 0.88 for x, y in zip(a, card))),
-                                  ("open", tuple(x * 0.14 + y * 0.86 for x, y in zip(a, card)))):
+                                  ("open", tuple(x * open_tint + y * (1 - open_tint)
+                                                 for x, y in zip(a, card)))):
                     with self.subTest(theme=theme, section=sec, state=state):
-                        self.assertGreaterEqual(round(_contrast(title, bg), 2), 4.5)
+                        name = ink if state == "open" else title
+                        self.assertGreaterEqual(round(_contrast(name, bg), 2), 4.5)
 
     def test_each_tool_section_has_its_own_colour(self):
         css = CSS.read_text(encoding="utf-8")

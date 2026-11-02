@@ -12410,9 +12410,19 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
   transform: translateY(-2px); box-shadow: var(--shadow-lift);
   background: color-mix(in srgb, var(--s-accent) 12%, var(--card-bg, var(--surface)));
 }
+/* The open section has to be unmistakable, since the card is the only thing
+   that says which one it is: a strong tint, a second outline just outside the
+   first, and a chevron pointing at the section. A 14% tint and a 1px inner
+   line was invisible. */
 .s-nav-item.is-current {
-  background: color-mix(in srgb, var(--s-accent) 14%, var(--card-bg, var(--surface)));
-  box-shadow: inset 0 0 0 1px var(--s-accent);
+  background: color-mix(in srgb, var(--s-accent) 26%, var(--card-bg, var(--surface)));
+  box-shadow: 0 0 0 2px var(--s-accent);
+}
+.s-nav-item.is-current .s-nav-name { color: var(--text); }
+.s-nav-item.is-current::after {
+  content: ''; flex: 0 0 auto; margin-left: auto; width: 9px; height: 9px;
+  border-top: 3px solid var(--s-title); border-right: 3px solid var(--s-title);
+  transform: rotate(45deg); margin-right: 4px;
 }
 .s-nav-icon { flex: 0 0 auto; width: 40px; height: 40px; }
 .s-nav-icon img { width: 100%; height: 100%; object-fit: contain; display: block; }
