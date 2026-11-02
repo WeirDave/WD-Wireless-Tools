@@ -74,6 +74,13 @@ SETTINGS_DELAY = 1.5
 #: project anyway, so the defaults land on a project already on screen.
 SETTINGS_LATE = 6.5
 
+#: How long past SETTINGS_LATE the test keeps looking before it says they never
+#: came. It was 3 s, and on CI's Edge and Chrome the test failed on four pushes
+#: in a row with "the settings never arrived" and passed on rerun and locally:
+#: a loaded runner, not a missing response. A real fault still fails, after a
+#: bounded wait, and the failure now says when the request started and ended.
+SETTINGS_SLACK = 25
+
 FLOORS = [("fa", "Level 1"), ("fb", "Level 2")]
 
 
@@ -410,7 +417,8 @@ class DefaultsThatLandAfterTheWaitTests(_InABrowser, unittest.TestCase):
                 self._open(driver, self.schemed, "schemed-site.esx")
                 self.assertEqual(self._preview(driver), want, "not adopted at all")
                 # Until the defaults have landed, then a moment more.
-                landed = time.monotonic() + SETTINGS_LATE + 3
+                started = time.monotonic()
+                landed = started + SETTINGS_LATE + SETTINGS_SLACK
                 while time.monotonic() < landed and not driver.execute_script(
                         "return document.getElementById('arTemplateSelect')"
                         ".options.length > 1;"):
@@ -418,7 +426,14 @@ class DefaultsThatLandAfterTheWaitTests(_InABrowser, unittest.TestCase):
                 time.sleep(0.5)
                 self.assertTrue(driver.execute_script(
                     "return document.getElementById('arTemplateSelect').options.length > 1;"),
-                    "the settings never arrived")
+                    "the settings never arrived after %.0fs; the settings request, in ms from page "
+                    "start (start, end): %s" % (
+                        time.monotonic() - started,
+                        driver.execute_script(
+                            "return performance.getEntriesByType('resource')"
+                            ".filter(function (r) { return /api.settings.get/.test(r.name); })"
+                            ".map(function (r) { return [Math.round(r.startTime),"
+                            " Math.round(r.responseEnd)]; });")))
                 self.assertEqual(self._preview(driver), want)
                 self._open(driver, self.placeholder, "fresh-survey.esx")
                 self.assertEqual(
