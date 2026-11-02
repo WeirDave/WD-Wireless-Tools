@@ -12025,7 +12025,10 @@ body.tool-walls .pb-footer .pb-prepare:hover { background: var(--green-dark); bo
 }
 .wd-settings-panel {
   background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-md);
-  width: min(860px, 100%); height: min(88vh, 100%);
+  /* Wide enough for the page's own wide layout (cards down the side, from
+     1001px), so Settings looks the same in the panel as on its own. At 860px
+     it was always the narrow layout, which only the panel ever showed. */
+  width: min(1240px, 100%); height: min(92vh, 100%);
   display: flex; flex-direction: column; overflow: hidden;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
@@ -12058,7 +12061,7 @@ body.wd-settings-open { overflow: hidden; }
    is behind it and a second Home button would leave the panel open over a page
    that is no longer the one it was opened from. */
 body.wd-embedded .topbar { display: none; }
-body.wd-embedded .settings-wrap { padding-top: 16px; }
+body.wd-embedded .settings-wrap { padding-top: 16px; padding-bottom: 0; }
 
 /* Which print destination keeps the file name. Beside the Print button rather
    than in a tooltip: it decides which entry he picks in the print dialog, and
@@ -12426,18 +12429,35 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
   .s-nav-item { transition: none; }
   .s-nav-item:hover { transform: none; }
 }
+/* The cards down the left and the section's settings and buttons to the right
+   is the layout, at every width a window or the panel can be. It narrows
+   rather than changes: the cards lose their description line, then shrink,
+   and only on a phone-sized window, where two columns cannot both be read,
+   do they stack above the section as a grid. */
 @media (max-width: 1000px) {
-  .s-layout { grid-template-columns: 1fr; }
-  .s-nav {
-    position: static; max-height: none; overflow: visible; padding: 0;
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: 12px;
-  }
+  .s-layout { grid-template-columns: 240px minmax(0, 1fr); gap: 20px; }
 }
-@media (max-width: 640px) {
-  .s-nav { grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 8px; }
+@media (max-width: 800px) {
+  .s-layout { grid-template-columns: 190px minmax(0, 1fr); gap: 14px; }
   .s-nav-item { padding: 8px 10px; gap: 8px; }
   .s-nav-icon { width: 28px; height: 28px; }
   .s-nav-desc { display: none; }
+}
+/* A narrow column makes every description wrap to two lines, and nine of those
+   are taller than a short window or panel, which gave the list a scrollbar of
+   its own beside the page's. Narrow and short: the line goes, the cards stay. */
+@media (max-width: 1000px) and (max-height: 820px) {
+  .s-nav { gap: 8px; }
+  .s-nav-item { padding: 8px 10px; gap: 8px; }
+  .s-nav-icon { width: 28px; height: 28px; }
+  .s-nav-desc { display: none; }
+}
+@media (max-width: 560px) {
+  .s-layout { grid-template-columns: 1fr; }
+  .s-nav {
+    position: static; max-height: none; overflow: visible; padding: 0;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 8px;
+  }
 }
 .settings-title { font-size: 24px; }
 .s-section summary { font-size: 16px; padding: 14px 18px; }
@@ -12478,6 +12498,18 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
 /* Fixed width and a reserved scrollbar gutter: the column used to shrink to
    its content, so a short section moved the whole list 270px sideways. */
 .settings-wrap { width: 100%; }
+/* The page is as tall as the window, so Save and Cancel sit at the bottom of
+   it rather than just under a short section. In the panel a tool opens
+   Settings in, that was a third of the panel empty with the buttons floating
+   in the middle of it. */
+.settings-wrap { min-height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; }
+.settings-wrap .s-layout { flex: 1 1 auto; align-items: stretch; }
+.s-nav { align-self: start; }
+.s-main { display: flex; flex-direction: column; min-width: 0; }
+.s-main > .settings-footer { margin-top: auto; }
+@media (max-width: 560px) {
+  .settings-wrap .s-layout { grid-template-rows: auto 1fr; }
+}
 html:has(.settings-wrap) { scrollbar-gutter: stable; }
 .settings-title h1 { font-size: inherit; font-weight: inherit; margin: 0; }
 .s-section summary h2 { font: inherit; margin: 0; }

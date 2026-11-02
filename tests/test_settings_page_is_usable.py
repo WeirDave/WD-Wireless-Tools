@@ -374,6 +374,18 @@ def _final(selector: str, prop: str) -> str:
     return value
 
 
+def _first(selector: str, prop: str) -> str:
+    """The first declaration of `prop` in a rule naming `selector`: the base
+    rule, before any small-screen override of the same property."""
+    css = CSS.read_text(encoding="utf-8")
+    for sel, body in _rules(css):
+        if selector in _parts(sel):
+            for name, v in re.findall(r"(?<![\w-])([\w-]+)\s*:\s*([^;]+);", body):
+                if name == prop:
+                    return v.strip()
+    raise AssertionError(f"{selector} no longer sets {prop}")
+
+
 class TheTextCanBeRead(unittest.TestCase):
     def test_a_primary_button_label_clears_four_and_a_half_to_one(self):
         for theme in ("dark", "light"):
@@ -523,6 +535,31 @@ class TheSectionsAreCardsLikeHomes(unittest.TestCase):
             r'\.s-nav-item\[data-sec="sec-\w+"\]\s*\{\s*--s-accent:\s*([^;]+);', css)
         self.assertEqual(len(accents), 6)
         self.assertEqual(len(set(accents)), 6, "two sections share a colour")
+
+
+class SettingsLooksTheSameWhereverItOpens(unittest.TestCase):
+    """Settings is a page of its own, and a panel over Home or over any tool.
+    The panel was 860px wide, under the 1000px the page needs for its wide
+    layout, so it always showed the narrow one - cards across the top, a third
+    of the panel empty beneath a footer that floated mid-way - and nobody who
+    opened Settings from a tool or from Home ever saw the page as it is on its
+    own."""
+
+    def test_the_panel_is_wide_enough_to_keep_the_cards_beside_the_section(self):
+        width = _first(".wd-settings-panel", "width")
+        m = re.fullmatch(r"min\((\d+)px,\s*100%\)", width)
+        self.assertTrue(m, "the panel width changed shape: " + width)
+        css = CSS.read_text(encoding="utf-8")
+        narrow = int(re.search(
+            r"@media \(max-width: (\d+)px\)\s*\{\s*\.s-layout \{ grid-template-columns: 1fr;", css).group(1))
+        self.assertLessEqual(narrow, 600, "the cards stack above the section only on a phone-sized window")
+        frame = int(m.group(1)) - 2        # the panel's own border
+        self.assertGreater(frame, narrow,
+                           f"a {frame}px frame is inside the stacked layout (up to {narrow}px)")
+
+    def test_the_page_fills_the_window_so_the_buttons_sit_at_the_bottom(self):
+        self.assertEqual(_final(".settings-wrap", "min-height"), "100vh")
+        self.assertEqual(_final(".s-main > .settings-footer", "margin-top"), "auto")
 
 
 if __name__ == "__main__":
