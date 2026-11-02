@@ -12028,7 +12028,7 @@ body.tool-walls .pb-footer .pb-prepare:hover { background: var(--green-dark); bo
   /* Wide enough for the page's own wide layout (cards down the side, from
      1001px), so Settings looks the same in the panel as on its own. At 860px
      it was always the narrow layout, which only the panel ever showed. */
-  width: min(1240px, 100%); height: min(92vh, 100%);
+  width: min(1480px, 100%); height: min(94vh, 100%);
   display: flex; flex-direction: column; overflow: hidden;
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
 }
@@ -12456,6 +12456,16 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
 /* A narrow column makes every description wrap to two lines, and nine of those
    are taller than a short window or panel, which gave the list a scrollbar of
    its own beside the page's. Narrow and short: the line goes, the cards stay. */
+/* A window under about 880px tall cannot hold nine full cards beside a settings
+   box, and the list then grew a scrollbar of its own next to the box's. The
+   cards tighten and keep their description, on one line. */
+@media (max-height: 880px) {
+  .s-nav { gap: 8px; }
+  .s-nav-item { padding: 6px 10px; gap: 10px; }
+  .s-nav-icon { width: 32px; height: 32px; }
+  .s-nav-text { gap: 0; }
+  .s-nav-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
 @media (max-width: 1000px) and (max-height: 820px) {
   .s-nav { gap: 8px; }
   .s-nav-item { padding: 8px 10px; gap: 8px; }
@@ -12485,10 +12495,10 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
 }
 .settings-footer .rerun-link { font-size: 14px; }
 /* The cards choose the section, at every width, so the main column is the one
-   section that is open and the others would only repeat the cards. The card
-   already names it, so its heading stays for assistive technology and leaves
-   the screen. A narrow window used to fold the sections in place instead, which
-   gave the same page two ways to navigate.
+   section that is open and the others would only repeat the cards. Its heading
+   is the title of the pane, in the section's colour, so you can see which one
+   you are on without reading the cards. A narrow window used to fold the
+   sections in place instead, which gave the same page two ways to navigate.
    `pointer-events: none` only stopped the mouse: Enter or Space on the heading
    still folded it, so settings-page.js (SP.pinSummaries) swallows the toggle and
    takes the heading out of the tab order. */
@@ -12496,11 +12506,19 @@ body.tool-plantrim .pb-rail { overflow: hidden; }
 .s-main details.s-section[open] > summary { pointer-events: none; }
 .s-main details.s-section[open] > summary::before { content: none; }
 .s-main details.s-section[open] > summary {
-  position: absolute; width: 1px; height: 1px; overflow: hidden; padding: 0;
-  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+  padding: 14px 20px; font-size: var(--fs-title); font-weight: 700; line-height: 1.25;
+  color: var(--text);
+  background: color-mix(in srgb, var(--s-accent, var(--text-3)) 12%, var(--surface));
+  border-bottom: 3px solid var(--s-accent, var(--text-3));
 }
 .s-main details.s-section[open] > .s-body { border-top: 0; }
 .s-main details.s-section[open] { position: relative; }
+#sec-organizer { --s-accent: var(--amber); }
+#sec-cloud     { --s-accent: var(--blue); }
+#sec-report    { --s-accent: var(--rose-bright); }
+#sec-walls     { --s-accent: var(--green); }
+#sec-capacity  { --s-accent: var(--azure); }
+#sec-elsewhere { --s-accent: var(--teal); }
 
 /* The page as a settings surface: real headings, grouped controls, one width,
    readable muted text and control edges that can be seen. Appended here so it
@@ -12564,6 +12582,37 @@ html:has(.settings-wrap) { scrollbar-gutter: stable; }
 .settings-footer .s-dirty[hidden] { display: none; }
 /* Sections with nothing to save: the buttons would promise something. */
 .settings-footer.is-readonly .btn { display: none; }
+
+/* Nothing on this page moves when a section is chosen. The window used to be
+   one tall document that scrolled with the section's length, so the title went
+   off the top, a long section left the next short one scrolled out of sight,
+   and the buttons changed height on the two sections with nothing to save.
+   Now the title, the cards and the buttons stay where they are and only the
+   settings scroll, inside a box that is the same size for every section.
+   `overflow: clip` rather than `hidden`: a hidden box can still be scrolled by
+   script, and opening a section from a tool asks the section to scroll into
+   view. Below 561px there is no room for two columns, so the page flows and
+   scrolls as a document there. */
+@media (min-width: 561px) {
+  body:has(.settings-wrap) { display: flex; flex-direction: column; height: 100vh; overflow: clip; }
+  body:has(.settings-wrap) > .topbar { flex: 0 0 auto; }
+  .settings-wrap { flex: 1 1 auto; min-height: 0; overflow: clip; padding-bottom: 16px; }
+  .settings-wrap .s-layout { min-height: 0; grid-template-rows: minmax(0, 1fr); }
+  .s-nav { position: static; max-height: none; height: 100%; align-self: stretch; }
+  .s-main { min-height: 0; }
+  .s-main > details.s-section[open] { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+  .s-main > details.s-section[open] > .s-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  /* Browsers that wrap a <details>' content in an internal box (Chrome and Edge
+     since 131, Safari 18.4, Firefox 143) make that box the flex item, not
+     .s-body, so the rule above reached nothing there and a long section was cut
+     off at the bottom of its frame with no way to scroll to the rest. Where the
+     box exists it is the scroller. */
+  .s-main > details.s-section[open]::details-content {
+    display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  }
+  .s-main > .settings-footer { position: static; flex: 0 0 auto; }
+}
+.settings-footer { min-height: 60px; box-sizing: border-box; }
 
 /* Report's wizard screens, at the same arm's-length sizes as the workbench
    tools. Screen only: the printed sheets have their own sizes and are

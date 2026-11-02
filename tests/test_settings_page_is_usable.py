@@ -570,9 +570,32 @@ class SettingsLooksTheSameWhereverItOpens(unittest.TestCase):
         self.assertGreater(frame, narrow,
                            f"a {frame}px frame is inside the stacked layout (up to {narrow}px)")
 
-    def test_the_page_fills_the_window_so_the_buttons_sit_at_the_bottom(self):
-        self.assertEqual(_final(".settings-wrap", "min-height"), "100vh")
-        self.assertEqual(_final(".s-main > .settings-footer", "margin-top"), "auto")
+    def test_the_frame_is_fixed_and_only_the_settings_scroll(self):
+        """What the page does is held in a real browser by
+        test_settings_frame_holds_still_browser; this holds the rules it rests
+        on, so a change to one fails here in a second rather than there."""
+        self.assertEqual(_final(".settings-wrap", "overflow"), "clip",
+                         "`hidden` would let a section's scrollIntoView scroll the frame away")
+        self.assertEqual(_final(".s-main > .settings-footer", "position"), "static")
+        self.assertEqual(
+            _final(".s-main > details.s-section[open]::details-content", "overflow-y"), "auto",
+            "Chrome and Edge make this internal box the flex item, so it has to be the scroller")
+        self.assertEqual(_final(".s-main > details.s-section[open] > .s-body", "overflow-y"), "auto")
+
+    def test_the_section_has_a_title_across_the_top_of_its_box(self):
+        sel = ".s-main details.s-section[open] > summary"
+        positions = [v for s, body in _rules(CSS.read_text(encoding="utf-8"))
+                     if sel in _parts(s)
+                     for n, v in re.findall(r"(?<![\w-])([\w-]+)\s*:\s*([^;]+);", body)
+                     if n == "position"]
+        self.assertNotIn("absolute", positions,
+                         "the heading was hidden when the card named the section")
+        self.assertIn("var(--s-accent", _final(sel, "border-bottom"))
+
+    def test_the_panel_is_wider_than_it_was(self):
+        m = re.fullmatch(r"min\((\d+)px,\s*100%\)", _first(".wd-settings-panel", "width"))
+        self.assertTrue(m)
+        self.assertGreaterEqual(int(m.group(1)), 1400)
 
 
 if __name__ == "__main__":
