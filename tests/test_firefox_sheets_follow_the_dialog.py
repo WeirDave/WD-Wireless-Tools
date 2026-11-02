@@ -148,6 +148,10 @@ class EveryBrowserPrintsOneSheetSize(_Rig):
     def test_turned_pages_do_not_ask_for_a_sheet_of_their_own(self):
         started = 0
         for kind, binary in _browsers.triple():
+            # safaridriver has no Print Page command ("POST /print was not
+            # found"), so Safari cannot produce the PDF this measures.
+            if kind == "safari":
+                continue
             driver = _browsers.make_driver(kind, binary)
             if driver is None:
                 continue

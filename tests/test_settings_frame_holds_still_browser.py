@@ -124,6 +124,11 @@ class TheSettingsFrameHoldsStill(BrowserPagesHarness):
 
     def test_the_last_setting_of_every_section_can_be_reached(self):
         for kind, drv in self.each_browser():
+            # The mouse wheel is the point of this check, and safaridriver
+            # rejects a wheel action outright; script scrolling would pass
+            # without the fix (see below).
+            if kind == "safari":
+                continue
             drv.set_window_size(1600, 900)
             drv.get(self.base + "/settings")
             time.sleep(1.5)
