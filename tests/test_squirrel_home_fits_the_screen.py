@@ -52,7 +52,12 @@ return {
   innerHeight: window.innerHeight,
   sideways: document.documentElement.scrollWidth > window.innerWidth
             || content.scrollWidth > content.clientWidth,
-  cardSpills: cards.some(function (c) { return c.scrollWidth > c.clientWidth + 1; })
+  cardSpills: cards.some(function (c) { return c.scrollWidth > c.clientWidth + 1; }),
+  buttonBottoms: cards.map(function (c) {
+    return Math.round(c.querySelector(':scope > .btn').getBoundingClientRect().bottom);
+  }),
+  hintAboveButton: !!(hint.compareDocumentPosition(
+    cards[0].querySelector(':scope > .btn')) & Node.DOCUMENT_POSITION_FOLLOWING)
 };
 """
 
@@ -145,6 +150,17 @@ class SquirrelHomeFitsTheScreenTests(BrowserPagesHarness):
                 self.assertEqual(m["rows"], 1, m)
                 self.assertFalse(m["sideways"], m)
                 self.assertFalse(m["cardSpills"], m)
+
+    def test_every_button_is_on_one_line_even_with_a_last_folder_shown(self):
+        """Select Folder used to sit higher than the other four buttons,
+        because the last-folder hint was under it and took the room."""
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                m = self.measure(drv, 1440, 900)
+                if m["innerWidth"] < 1080:
+                    self.skipTest("%s gave a %dpx viewport" % (kind, m["innerWidth"]))
+                self.assertTrue(m["hintAboveButton"], m)
+                self.assertEqual(len(set(m["buttonBottoms"])), 1, m)
 
     def test_a_laptop_screen_shows_every_card_without_scrolling(self):
         """The screen the report came from: every card, top to bottom,

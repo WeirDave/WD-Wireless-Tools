@@ -8037,9 +8037,11 @@ body.wd-has-stale-banner { padding-top: 52px; }
   color: var(--text-2);
 }
 
+/* Sits between the description and the button, so the button stays on the line
+   every other card's button is on whether or not there is a last folder. */
 .pick-card-last-folder {
-  margin-top: 12px; padding-top: 12px;
-  border-top: 1px dashed var(--border);
+  margin-bottom: 18px; padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border);
   font-size: 11px; color: var(--text-3);
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   width: 100%;
