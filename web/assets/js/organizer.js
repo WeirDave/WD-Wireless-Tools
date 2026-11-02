@@ -25,6 +25,29 @@ function applyAdvancedUI() {
 }
 
 const ORG_DETAILS_KEY = 'wd-organizer-details';
+const ORG_FILTER_KEY = 'wd-organizer-filter';
+
+/* The list opens on what will move. A returning user has hundreds of site
+   folders and the card above says three files will move; listing everything
+   makes them scroll to find those three. Hiding is by class, not by a redraw,
+   so a box the user unticked or a destination they changed stays as it was. */
+function filterMode() { try { return localStorage.getItem(ORG_FILTER_KEY) === 'all' ? 'all' : 'moving'; } catch (e) { return 'moving'; } }
+function setOrgFilter(mode) {
+  try { localStorage.setItem(ORG_FILTER_KEY, mode === 'all' ? 'all' : 'moving'); } catch (e) {}
+  applyFilterUI();
+}
+function applyFilterUI() {
+  const mode = filterMode();
+  const list = document.getElementById('siteList');
+  if (list) list.classList.toggle('org-moving-only', mode === 'moving');
+  const note = document.getElementById('orgFilterNote');
+  if (note) note.hidden = mode !== 'moving';
+  document.querySelectorAll('#orgFilterBar [data-filter]').forEach(b => {
+    const on = b.getAttribute('data-filter') === mode;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
 
 function detailsOn() { try { return localStorage.getItem(ORG_DETAILS_KEY) === '1'; } catch (e) { return false; } }
 function toggleDetails() {
@@ -205,6 +228,16 @@ function renderPreview() {
 
 
 
+  const filterBar = document.getElementById('orgFilterBar');
+  if (filterBar) {
+    const hiddenSites = d.sites.filter(s => s.moves.length === 0 && !(advanced && (s.unreferenced || []).length)).length;
+    filterBar.innerHTML = `<span class="org-filter-label">Show</span>`
+      + `<button type="button" class="btn btn-sec btn-sm org-filter-btn" data-filter="moving" data-action="call" data-fn="setOrgFilter" data-arg="moving">Moving only (${movingCount})</button>`
+      + `<button type="button" class="btn btn-sec btn-sm org-filter-btn" data-filter="all" data-action="call" data-fn="setOrgFilter" data-arg="all">Everything (${d.sites.length} site folder${d.sites.length !== 1 ? 's' : ''})</button>`
+      + (hiddenSites ? `<span class="org-filter-note" id="orgFilterNote">${hiddenSites} site folder${hiddenSites !== 1 ? 's' : ''} with nothing to move hidden</span>` : '');
+  }
+  applyFilterUI();
+
   const bulkHost = document.getElementById('bulkDestRow');
   if (bulkHost) {
     bulkHost.innerHTML = advanced ? dests.map(dst => {
@@ -249,10 +282,12 @@ function renderPreview() {
   }
 
   let html = skippedNote;
+  if (movingCount === 0) html += '<div class="org-empty org-moving-empty">Nothing will move. Choose <b>Everything</b> above to see the files that stay.</div>';
   for (const site of d.sites) {
     const moveCount = site.moves.length;
     const stayCount = site.staying.length;
-    html += `<div class="site-group" data-site="${escAttr(site.folder)}">`;
+    const unrefHere = advanced && (site.unreferenced || []).length > 0;
+    html += `<div class="site-group" data-site="${escAttr(site.folder)}" data-moves="${moveCount}"${unrefHere ? ' data-keep="1"' : ''}>`;
     html += `<div class="site-header" data-action="toggle-class" data-class="collapsed">`;
     html += `<div><span class="site-name">${esc(site.folder)}</span>`;
     if (moveCount) html += `<span class="site-badge">${moveCount} move${moveCount !== 1 ? 's' : ''}</span>`;
@@ -302,7 +337,7 @@ function renderPreview() {
     }
 
     if (stayCount > 0) {
-      html += '<table class="file-table"><thead><tr><th colspan="3" class="org-staying-head">Staying in root</th></tr></thead><tbody>';
+      html += '<table class="file-table org-staying-table"><thead><tr><th colspan="3" class="org-staying-head">Staying in root</th></tr></thead><tbody>';
       for (const s of site.staying) {
         html += `<tr class="staying-row">`;
         html += `<td><span class="file-ext">${esc(s.ext)}</span>${esc(s.name)}${esxBadges(s)}</td>`;

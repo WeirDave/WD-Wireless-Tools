@@ -484,6 +484,11 @@
         "label": "Squirrel details expanded"
       },
       {
+        "key": "wd-organizer-filter",
+        "category": "ui-state",
+        "label": "Squirrel list filter (moving only or everything)"
+      },
+      {
         "key": "wd.walls.swapSidebarWidth",
         "category": "ui-state",
         "label": "Wall swap sidebar width"

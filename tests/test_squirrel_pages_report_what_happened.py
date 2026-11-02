@@ -151,6 +151,7 @@ function showScreen() {}
 function advancedOn() { return false; }
 function applyAdvancedUI() {}
 function applyDetailsUI() {}
+function applyFilterUI() {}
 function renderSuggestBanner() { return ''; }
 function renderDupSection() { return ''; }
 eval(fn('function destinationList(cfg) {'));

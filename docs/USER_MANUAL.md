@@ -2160,7 +2160,10 @@ in the menu under **Tools**.
    offers the last folder you used.
 2. Squirrel scans it and says how many files will move and how many stay.
 3. Press **Show File Details** to check where each file is going, and
-   uncheck any file that should stay where it is.
+   uncheck any file that should stay where it is. The list opens on
+   **Moving only**, which shows just the site folders with files to move;
+   press **Everything** beside it to list every site folder and the files
+   that stay. The choice is remembered.
 4. Press **Organize All Files** and confirm.
 5. If the result is not what you wanted, press **↶ Undo Last Organize**.
 

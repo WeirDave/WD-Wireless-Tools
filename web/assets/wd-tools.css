@@ -4822,7 +4822,8 @@ body:not(.tool-home):not(.tool-guide) :is(.topbar, .header, .dz-topbar, .report-
 .app { display: flex; flex-direction: column; height: 100vh; }
 
 .content {
-  flex: 1; overflow: auto; padding: 16px 24px;
+  --content-pad-top: 16px;
+  flex: 1; overflow: auto; padding: var(--content-pad-top) 24px;
   max-width: 1366px; margin: 0 auto; width: 100%;
   min-height: 0;
 }
@@ -4844,10 +4845,14 @@ body:not(.tool-home):not(.tool-guide) :is(.topbar, .header, .dz-topbar, .report-
   max-width: 620px; line-height: 1.55;
 }
 
+/* The scroll container pads its top, and a sticky box holds at the edge of that
+   padding, so rows scrolled up through the padding showed above the bar. The bar
+   takes the padding as its own: pulled up by it, padded by it, held that far up. */
 .sticky-header {
-  position: sticky; top: 0; z-index: var(--z-sticky);
-  background: var(--bg); padding-bottom: 8px;
-  border-bottom: 1px solid var(--border); margin-bottom: 12px;
+  position: sticky; top: calc(-1 * var(--content-pad-top, 0px)); z-index: var(--z-sticky);
+  background: var(--bg); padding-top: var(--content-pad-top, 0px); padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-top: calc(-1 * var(--content-pad-top, 0px)); margin-bottom: 12px;
 }
 
 body.tool-organizer .toolbar {
@@ -4863,6 +4868,16 @@ body.tool-organizer .toolbar .root-path {
 }
 
 .summary-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+
+.org-filter-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.org-filter-label { font-size: var(--fs-small); font-weight: 600; color: var(--text-2); }
+.org-filter-note { font-size: var(--fs-small); color: var(--text-2); }
+.org-filter-note[hidden] { display: none; }
+.org-filter-btn.active { background: var(--accent-dim, var(--surface-raised)); border-color: var(--tool-accent); color: var(--text); font-weight: 600; }
+.org-moving-empty { display: none; }
+#siteList.org-moving-only .org-moving-empty { display: block; }
+#siteList.org-moving-only .site-group[data-moves="0"]:not([data-keep]) { display: none; }
+#siteList.org-moving-only .org-staying-table { display: none; }
 
 .summary-chip {
   padding: 5px 0; font-size: 12px; font-weight: 600;
@@ -5181,7 +5196,7 @@ body.tool-cloud .topbar { padding: 5px 8px; }
 
 .header-actions { flex-wrap: wrap; }}
 
-@media (max-width: 720px) {.content { padding: 10px 8px; }
+@media (max-width: 720px) {.content { --content-pad-top: 10px; padding: 10px 8px; }
 
 body.tool-organizer .toolbar { flex-direction: column; align-items: stretch; }
 
