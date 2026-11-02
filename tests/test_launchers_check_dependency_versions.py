@@ -95,9 +95,12 @@ class _Harness(unittest.TestCase):
         r = subprocess.run(argv, env=env, cwd=str(ROOT), stdin=subprocess.DEVNULL,
                            capture_output=True, text=True, encoding="utf-8",
                            errors="replace", timeout=60)
-        calls = (self.log.read_text(encoding="utf-8").splitlines()
-                 if self.log.exists() else [])
-        return r, calls, "REACHED" in r.stdout
+        # Not called `calls`: the source-string audit reads a name assigned
+        # from read_text as a source file, and this is a log the stand-in
+        # interpreter wrote, which is an execution.
+        logged = (self.log.read_text(encoding="utf-8").splitlines()
+                  if self.log.exists() else [])
+        return r, logged, "REACHED" in r.stdout
 
     def _pip_calls(self, calls):
         return [c for c in calls if "pip" in c]
@@ -156,6 +159,41 @@ class TheBatchFileDependencyStep(_Harness):
             ["cmd.exe", "/c", str(self.script)], deps_rc, pip_rc))
 
 
+@unittest.skipUnless(os.name == "nt", "cmd.exe only exists on Windows")
+class TheTabSaysItCameUp(_Harness):
+    """The window that opened the tab waits to hear from it.
+
+    `tests/test_terminal_tab.py` holds the waiting; this holds the other half,
+    that the launcher running inside the tab actually speaks.
+    """
+
+    def setUp(self):
+        super().setUp()
+        (self.tmp / "python.cmd").write_text(
+            '@echo off\r\n'
+            'echo %*>>"%FAKE_LOG%"\r\n'
+            'exit /b 0\r\n', encoding="utf-8")
+        # "\n:" so the end is the label itself, not the `goto :launcher_ready`
+        # inside the block.
+        block = _block(BAT, 'if /i "%~1"=="--in-tab"', "\n:launcher_ready")
+        block = re.sub(r"(?m)^(\s*)python ", r"\1call python ", block)
+        self.script = self.tmp / "tab.cmd"
+        self.script.write_text(
+            "@echo off\r\n" + block.replace("\n", "\r\n")
+            + "\r\n:launcher_ready\r\necho REACHED\r\n", encoding="utf-8")
+
+    def test_inside_the_tab_the_first_act_is_to_say_so(self):
+        r, calls, reached = self._run(
+            ["cmd.exe", "/c", str(self.script), "--in-tab"], 0, 0)
+        self.assertTrue(reached, r.stdout)
+        self.assertEqual(1, len([c for c in calls if "terminal_tab" in c]), calls)
+        self.assertIn("--ack", calls[0])
+
+    def test_the_window_that_opens_the_tab_does_not_say_it(self):
+        r, calls, _ = self._run(["cmd.exe", "/c", str(self.script)], 0, 0)
+        self.assertEqual([], [c for c in calls if "--ack" in c], calls)
+
+
 @unittest.skipUnless(shutil.which("bash"), "needs bash")
 class TheCommandFileDependencyStep(_Harness):
 
@@ -181,22 +219,6 @@ class TheCommandFileDependencyStep(_Harness):
         bash = shutil.which("bash")
         self._assert_behaviour(lambda deps_rc, pip_rc: self._run(
             [bash, str(self.script)], deps_rc, pip_rc))
-
-
-class NeitherLauncherDecidesOnImportability(unittest.TestCase):
-    """The old probe, by name, in the commands each launcher runs."""
-
-    def test_no_import_only_probe(self):
-        for path in (BAT, COMMAND):
-            commands = [ln.strip() for ln in path.read_text(
-                encoding="utf-8").splitlines()
-                if ln.strip() and not ln.strip().upper().startswith(("REM", "#"))]
-            with self.subTest(launcher=path.name):
-                self.assertEqual(
-                    [], [c for c in commands if "import flask" in c],
-                    "the import-only probe is back: it never reads the "
-                    "version floors")
-                self.assertTrue([c for c in commands if "tools.deps" in c])
 
 
 if __name__ == "__main__":

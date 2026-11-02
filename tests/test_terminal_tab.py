@@ -1,7 +1,7 @@
 """The launcher opens in a Windows Terminal tab, and only when it should.
 
 `tools/terminal_tab.py` is what `Start WD Wireless Tools.bat` runs first. It
-decides one thing - hand off to `wt.exe -w 0 new-tab`, or stay in this window -
+decides one thing - hand off to a `wt.exe new-tab`, or stay in this window -
 and a wrong answer in either direction is visible: a tab opened from inside a
 tab is a loop, and a launcher that never hands off is the thing this exists to
 replace.
@@ -101,30 +101,178 @@ class TheTabCommandTests(unittest.TestCase):
         self.assertEqual("C:\\wd tools", cmd[cmd.index("-d") + 1])
 
 
+def _window_of(call):
+    argv = call[0][0]
+    return argv[argv.index("-w") + 1]
+
+
 class OpenTabTests(unittest.TestCase):
     def test_it_starts_the_tab_and_says_so(self):
         popen = MagicMock()
-        self.assertTrue(tt.open_tab(BAT, popen=popen, which=_which()))
+        self.assertTrue(tt.open_tab(BAT, popen=popen, which=_which(),
+                                    running=lambda: True))
         popen.assert_called_once()
         self.assertEqual(tt.tab_command(WT, BAT), popen.call_args[0][0])
+
+    def test_it_joins_the_open_window_when_a_terminal_is_running(self):
+        popen = MagicMock()
+        tt.open_tab(BAT, popen=popen, which=_which(), running=lambda: True)
+        self.assertEqual("0", _window_of(popen.call_args))
+
+    def test_it_makes_a_window_when_no_terminal_is_running(self):
+        """`-w 0` with nothing open is what opened nothing on a real machine."""
+        popen = MagicMock()
+        tt.open_tab(BAT, popen=popen, which=_which(), running=lambda: False)
+        self.assertEqual("-1", _window_of(popen.call_args))
 
     def test_a_wt_that_will_not_start_means_run_here_not_nothing(self):
         popen = MagicMock(side_effect=OSError("access denied"))
         with patch.object(tt, "_note_failure") as note:
-            self.assertFalse(tt.open_tab(BAT, popen=popen, which=_which()))
+            self.assertFalse(tt.open_tab(BAT, popen=popen, which=_which(),
+                                         running=lambda: True))
         note.assert_called_once()
 
     def test_main_reports_handed_off_only_when_a_tab_started(self):
         with patch.object(tt, "can_hand_off", return_value=True), \
-                patch.object(tt, "open_tab", return_value=True):
+                patch.object(tt, "open_confirmed_tab", return_value=True):
             self.assertEqual(tt.HANDED_OFF, tt.main([BAT]))
         with patch.object(tt, "can_hand_off", return_value=True), \
-                patch.object(tt, "open_tab", return_value=False):
+                patch.object(tt, "open_confirmed_tab", return_value=False):
             self.assertEqual(tt.RUN_HERE, tt.main([BAT]))
         with patch.object(tt, "can_hand_off", return_value=False), \
-                patch.object(tt, "open_tab") as opened:
+                patch.object(tt, "open_confirmed_tab") as opened:
             self.assertEqual(tt.RUN_HERE, tt.main([BAT]))
         opened.assert_not_called()
+
+
+class TheRunningTerminalTests(unittest.TestCase):
+    """`tasklist` is asked, and its answer read."""
+
+    def _run(self, stdout="", raises=None):
+        def run(argv, **kw):
+            if raises:
+                raise raises
+            return SimpleNamespace(stdout=stdout)
+        return run
+
+    def test_a_listed_process_means_running(self):
+        listing = '"WindowsTerminal.exe","1234","Console","1","90,000 K"\n'
+        self.assertTrue(tt.terminal_running(self._run(listing)))
+
+    def test_the_no_tasks_message_means_not_running(self):
+        info = "INFO: No tasks are running which match the specified criteria.\n"
+        self.assertFalse(tt.terminal_running(self._run(info)))
+
+    def test_tasklist_failing_means_not_running_and_does_not_raise(self):
+        self.assertFalse(tt.terminal_running(self._run(raises=OSError("no"))))
+        self.assertFalse(tt.terminal_running(
+            self._run(raises=subprocess.TimeoutExpired("tasklist", 15))))
+
+
+class TheTabMustSayItCameUpTests(unittest.TestCase):
+    """A tab that was asked for is not a tab that opened.
+
+    The failure this holds: Windows Terminal accepted the command, opened
+    nothing, and the launcher's own window closed behind it.
+    """
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory(prefix="wd-tt-ack-")
+        self.addCleanup(tmp.cleanup)
+        self.flag = Path(tmp.name) / "tab_started.flag"
+        patcher = patch.object(tt, "ack_path", return_value=self.flag)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _confirmed(self, *, running, comes_up_in):
+        """`comes_up_in`: the windows (`"0"`, `"-1"`) whose tab reports."""
+        opened = []
+
+        def popen(argv, **kw):
+            window = argv[argv.index("-w") + 1]
+            opened.append(window)
+            if window in comes_up_in:
+                self.flag.write_text("up", encoding="utf-8")
+
+        with patch.object(tt, "_note_failure") as note:
+            got = tt.open_confirmed_tab(
+                BAT, popen=popen, which=_which(), running=lambda: running,
+                wait=lambda: self.flag.exists())
+        return got, opened, note
+
+    def test_a_tab_that_reports_is_handed_off(self):
+        got, opened, note = self._confirmed(running=True, comes_up_in={"0"})
+        self.assertTrue(got)
+        self.assertEqual(["0"], opened)
+        note.assert_not_called()
+
+    def test_no_terminal_open_asks_for_a_new_window(self):
+        got, opened, _ = self._confirmed(running=False, comes_up_in={"-1"})
+        self.assertTrue(got)
+        self.assertEqual(["-1"], opened)
+
+    def test_a_window_that_cannot_be_reached_falls_back_to_a_new_one(self):
+        got, opened, note = self._confirmed(running=True, comes_up_in={"-1"})
+        self.assertTrue(got)
+        self.assertEqual(["0", "-1"], opened)
+        note.assert_not_called()
+
+    def test_a_new_window_that_does_not_open_falls_back_to_the_open_one(self):
+        got, opened, _ = self._confirmed(running=False, comes_up_in={"0"})
+        self.assertTrue(got)
+        self.assertEqual(["-1", "0"], opened)
+
+    def test_nothing_coming_up_means_run_here_and_say_why(self):
+        got, opened, note = self._confirmed(running=True, comes_up_in=set())
+        self.assertFalse(got, "the launcher closed its own window for a tab "
+                         "that never opened")
+        self.assertEqual(["0", "-1"], opened)
+        note.assert_called_once()
+
+    def test_a_flag_left_by_an_earlier_run_does_not_count(self):
+        self.flag.write_text("left over", encoding="utf-8")
+        got, _, _ = self._confirmed(running=True, comes_up_in=set())
+        self.assertFalse(got)
+
+    def test_wt_failing_to_start_does_not_wait(self):
+        waited = MagicMock()
+        with patch.object(tt, "_note_failure"):
+            got = tt.open_confirmed_tab(
+                BAT, popen=MagicMock(side_effect=OSError("denied")),
+                which=_which(), running=lambda: True, wait=waited)
+        self.assertFalse(got)
+        waited.assert_not_called()
+
+    def test_the_wait_stops_at_the_deadline_and_not_before_the_flag(self):
+        now = [0.0]
+        slept = []
+
+        def sleep(s):
+            slept.append(s)
+            now[0] += s
+        self.assertFalse(tt.wait_for_ack(timeout=1.0, sleep=sleep,
+                                         clock=lambda: now[0]))
+        self.assertAlmostEqual(1.0, sum(slept), places=3)
+        self.flag.write_text("up", encoding="utf-8")
+        self.assertTrue(tt.wait_for_ack(timeout=1.0, sleep=sleep,
+                                        clock=lambda: now[0]))
+
+    def test_the_tab_saying_so_writes_the_flag_the_launcher_waits_on(self):
+        self.assertFalse(self.flag.exists())
+        self.assertEqual(tt.HANDED_OFF, tt.main([tt.ACK_FLAG]))
+        self.assertTrue(self.flag.exists())
+
+    def test_ack_as_the_launcher_runs_it_writes_under_the_user_dir(self):
+        """`python -m tools.terminal_tab --ack`, for real, in a scratch dir."""
+        with tempfile.TemporaryDirectory(prefix="wd-tt-ackrun-") as scratch:
+            env = dict(os.environ, WD_USER_DIR=scratch)
+            r = subprocess.run(
+                [sys.executable, "-m", "tools.terminal_tab", tt.ACK_FLAG],
+                cwd=str(ROOT), capture_output=True, text=True,
+                encoding="utf-8", env=env, timeout=60)
+            self.assertEqual(tt.HANDED_OFF, r.returncode, r.stdout + r.stderr)
+            self.assertEqual("", r.stdout.strip() + r.stderr.strip())
+            self.assertTrue((Path(scratch) / tt.ACK_NAME).is_file())
 
     def test_run_as_the_launcher_runs_it_it_is_silent_and_says_stay(self):
         """`python -m tools.terminal_tab "<bat>"` is the real call, run here as

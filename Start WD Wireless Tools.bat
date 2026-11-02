@@ -33,7 +33,12 @@ REM a console of our own. tools/terminal_tab.py decides: it exits 0 once a tab
 REM is running this launcher, and 1 for "stay here" - already inside a terminal,
 REM switched off in Settings, or no wt.exe. The tab passes --in-tab back so it
 REM can never open a second one from inside itself.
-if /i "%~1"=="--in-tab" goto :launcher_ready
+REM The tab's first act is to say it came up. The window that opened it is
+REM waiting for that, and runs the launcher itself if it never hears.
+if /i "%~1"=="--in-tab" (
+    python -m tools.terminal_tab --ack >nul 2>&1
+    goto :launcher_ready
+)
 python -m tools.terminal_tab "%~f0"
 if not errorlevel 1 exit /b 0
 :launcher_ready
