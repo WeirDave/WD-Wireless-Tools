@@ -2,12 +2,6 @@
 title WD Wireless Tools
 cd /d "%~dp0"
 
-REM No update here on purpose. Installs sit on a release tag with HEAD
-REM detached, which is the intended state - so a bare "git pull" has no branch
-REM to merge and printed a raw git error on every launch. Updating is the app's
-REM job: it checks on start and offers the update in About, on the release
-REM channel the user chose.
-
 REM ---- Check for Python -------------------------------------------------------
 where python >nul 2>&1
 if errorlevel 1 (

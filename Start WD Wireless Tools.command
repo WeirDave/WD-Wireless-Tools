@@ -2,11 +2,6 @@
 
 cd "$(dirname "$0")"
 
-# No update here on purpose. Installs sit on a release tag with HEAD detached,
-# which is the intended state - so a bare "git pull" has no branch to merge and
-# printed a raw git error on every launch. Updating is the app's job: it checks
-# on start and offers the update in About, on the release channel the user chose.
-
 # Present is not current: the check reads the version floors in
 # requirements.txt, so an old package that still imports is upgraded too.
 # Exit 2 is "installed, but older than a floor" - the app still runs, so a
