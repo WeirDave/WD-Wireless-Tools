@@ -115,6 +115,14 @@ SCHEMED = [[f"QRX-BX-F{fl}-AP0{k}" for k in range(1, 4)] for fl in (1, 2)]
 PLACEHOLDER = [["AP-1", "AP-2"], ["AP-3", "AP-4"]]
 
 
+#: What the stub saw of each settings request, as (seconds since the module was
+#: imported, what happened). A late-defaults failure prints it: the page's own
+#: timing says when its fetch started and ended, this says whether the server
+#: ever received it and whether it could answer.
+SETTINGS_LOG: list = []
+_T0 = time.monotonic()
+
+
 class _StubApi(SimpleHTTPRequestHandler):
     delay = SETTINGS_DELAY
 
@@ -138,9 +146,16 @@ class _StubApi(SimpleHTTPRequestHandler):
             # project was read before it landed, and the late defaults then
             # wrote over the scheme adopted from the project - seen once in
             # CI's Firefox on Windows. The delay makes that race certain.
+            SETTINGS_LOG.append((round(time.monotonic() - _T0, 1), "settings/get received"))
             time.sleep(self.delay)
-            self._json({"ok": True, "settings": {"aprename": {
-                "defaults": DEFAULTS, "templates": [TEMPLATE]}}})
+            try:
+                self._json({"ok": True, "settings": {"aprename": {
+                    "defaults": DEFAULTS, "templates": [TEMPLATE]}}})
+                SETTINGS_LOG.append((round(time.monotonic() - _T0, 1), "answered"))
+            except OSError as e:
+                SETTINGS_LOG.append((round(time.monotonic() - _T0, 1),
+                                     "could not answer: " + type(e).__name__))
+                raise
         else:
             self._json({"ok": True})
 
@@ -418,6 +433,7 @@ class DefaultsThatLandAfterTheWaitTests(_InABrowser, unittest.TestCase):
                 self.assertEqual(self._preview(driver), want, "not adopted at all")
                 # Until the defaults have landed, then a moment more.
                 started = time.monotonic()
+                SETTINGS_LOG.append((round(started - _T0, 1), "test is waiting"))
                 landed = started + SETTINGS_LATE + SETTINGS_SLACK
                 while time.monotonic() < landed and not driver.execute_script(
                         "return document.getElementById('arTemplateSelect')"
@@ -426,9 +442,9 @@ class DefaultsThatLandAfterTheWaitTests(_InABrowser, unittest.TestCase):
                 time.sleep(0.5)
                 self.assertTrue(driver.execute_script(
                     "return document.getElementById('arTemplateSelect').options.length > 1;"),
-                    "the settings never arrived after %.0fs; the settings request, in ms from page "
-                    "start (start, end): %s" % (
-                        time.monotonic() - started,
+                    "the settings never arrived after %.0fs; the stub saw %s; the settings request, "
+                    "in ms from page start (start, end): %s" % (
+                        time.monotonic() - started, SETTINGS_LOG[-6:],
                         driver.execute_script(
                             "return performance.getEntriesByType('resource')"
                             ".filter(function (r) { return /api.settings.get/.test(r.name); })"
