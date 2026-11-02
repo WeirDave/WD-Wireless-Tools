@@ -597,10 +597,19 @@ class SettingsLooksTheSameWhereverItOpens(unittest.TestCase):
                          "the heading was hidden when the card named the section")
         self.assertIn("var(--s-accent", _final(sel, "border-bottom"))
 
-    def test_the_panel_is_wider_than_it_was(self):
+    def test_the_panel_is_wider_than_it_was_and_exactly_as_wide_as_its_content(self):
         m = re.fullmatch(r"min\((\d+)px,\s*100%\)", _first(".wd-settings-panel", "width"))
         self.assertTrue(m)
-        self.assertGreaterEqual(int(m.group(1)), 1400)
+        panel = int(m.group(1))
+        self.assertGreaterEqual(panel, 1240, "it was 860px")
+        # A panel wider than the content it holds is empty margin on both sides:
+        # at 1480px against a 1200px cap it showed as a wide blank gutter.
+        cap = re.fullmatch(r"(\d+)px", _final(".settings-wrap", "max-width"))
+        self.assertTrue(cap, "the page's content is capped in pixels")
+        self.assertEqual(panel, int(cap.group(1)),
+                         "the panel and the content it holds are the same width")
+        self.assertEqual(_final("body.wd-embedded .settings-wrap", "max-width"), "none",
+                         "inside the panel the content fills it")
 
 
 if __name__ == "__main__":

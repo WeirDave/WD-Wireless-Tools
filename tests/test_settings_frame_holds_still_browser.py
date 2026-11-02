@@ -98,6 +98,30 @@ class TheSettingsFrameHoldsStill(BrowserPagesHarness):
                                                  "%s moved between sections: %s against %s"
                                                  % (part, m[part], first[part]))
 
+    def test_the_panel_has_no_empty_margins_either_side(self):
+        """Settings opened as a panel over Home: the content fills it. The panel
+        was widened to 1480px while the content stayed capped at 1200px, which
+        left a blank gutter of well over a hundred pixels on both sides."""
+        for kind, drv in self.each_browser():
+            drv.set_window_size(1900, 1000)
+            drv.get(self.base + "/")
+            time.sleep(1.5)
+            drv.execute_script("WD.openSettings();")
+            time.sleep(2.5)
+            m = drv.execute_script("""
+              var f = document.querySelector('.wd-settings-frame');
+              var d = f.contentDocument;
+              var nav = d.getElementById('sNav').getBoundingClientRect();
+              var main = d.querySelector('.s-main').getBoundingClientRect();
+              var title = d.querySelector('.settings-title').getBoundingClientRect();
+              return {frame: f.clientWidth, left: Math.round(nav.left),
+                      right: Math.round(f.clientWidth - main.right),
+                      titleLeft: Math.round(title.left)};""")
+            with self.subTest(browser=kind):
+                self.assertLessEqual(m["left"], 48, m)
+                self.assertLessEqual(m["right"], 48, m)
+                self.assertLessEqual(m["titleLeft"], 48, m)
+
     def test_the_last_setting_of_every_section_can_be_reached(self):
         for kind, drv in self.each_browser():
             drv.set_window_size(1600, 900)
