@@ -117,16 +117,25 @@ def summary(result: dict) -> str:
 
 
 def main(argv=None) -> int:
-    """Exit 0 when everything is satisfied, 1 when it is not.
+    """Exit 0 when everything is satisfied, non-zero when it is not.
 
-    That is the whole interface the installers use, and it is why this is a
-    module rather than a function they inline: a shell comparing version
-    strings is how the wrong question got asked in the first place.
+    That is the whole interface the installers and the launchers use, and it
+    is why this is a module rather than a function they inline: a shell
+    comparing version strings is how the wrong question got asked in the
+    first place.
+
+    **1 means something is missing, 2 means everything is installed and
+    something is older than its floor.** The installers only ask "non-zero
+    or not". A launcher asks the second question too: when pip cannot reach
+    the network, a stale package still runs the app, and refusing to start
+    over it is a worse outcome than starting with a warning.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
     result = check()
     print(summary(result))
-    return 0 if result["ok"] else 1
+    if result["ok"]:
+        return 0
+    return 2 if result["outdated"] and not result["missing"] else 1
 
 
 if __name__ == "__main__":

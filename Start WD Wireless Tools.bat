@@ -45,30 +45,44 @@ if not errorlevel 1 exit /b 0
 :launcher_ready
 
 REM ---- Check for dependencies -------------------------------------------------
-python -c "import flask, waitress, requests, browser_cookie3, cryptography, keyring, PIL" 2>nul
-if errorlevel 1 (
+REM Present is not current. tools.deps compares the installed versions with the
+REM floors in requirements.txt, so a package that still imports but is older
+REM than its floor is upgraded too. Exit 0 is all current, 1 is something
+REM missing, 2 is everything installed but something older than a floor.
+python -m tools.deps >nul 2>&1
+set "DEPS_STATUS=%errorlevel%"
+if not "%DEPS_STATUS%"=="0" (
     echo.
-    echo  First-time setup: installing required Python packages...
-    echo  This only needs to happen once and takes about a minute.
+    echo  Installing or updating the required Python packages...
+    echo  This can take about a minute.
     echo.
-    python -m pip install --disable-pip-version-check -q -r requirements.txt
+    python -m pip install --disable-pip-version-check -q --upgrade -r requirements.txt
     if errorlevel 1 (
+        REM An older package still runs the app, so a failed update, offline
+        REM for example, starts with a warning. A missing package cannot start.
+        if "%DEPS_STATUS%"=="2" (
+            echo.
+            echo  Could not update some packages. Starting with the versions installed.
+            echo.
+        ) else (
+            echo.
+            echo  Some packages failed to install.
+            echo.
+            echo  Try running this command yourself in PowerShell or Command Prompt
+            echo    python -m pip install --upgrade -r "%~dp0requirements.txt"
+            echo.
+            echo  If pip itself is missing, run
+            echo    python -m ensurepip --upgrade
+            echo  then try the pip install command above again.
+            echo.
+            pause
+            exit /b 1
+        )
+    ) else (
         echo.
-        echo  Some packages failed to install.
+        echo  Done. Starting WD Wireless Tools...
         echo.
-        echo  Try running this command yourself in PowerShell or Command Prompt
-        echo    python -m pip install -r "%~dp0requirements.txt"
-        echo.
-        echo  If pip itself is missing, run
-        echo    python -m ensurepip --upgrade
-        echo  then try the pip install command above again.
-        echo.
-        pause
-        exit /b 1
     )
-    echo.
-    echo  Done. Starting WD Wireless Tools...
-    echo.
 )
 
 REM ---- Kill any stale instance on port 8675 -----------------------------------
