@@ -1484,8 +1484,9 @@ Placement Map, on by default on AP Installation.
 
 **Configure grid…** opens the plan so you can set the sections yourself:
 
-1. Pick the **Floor plan**. Drag the blue box over the building; drag its
-   corners or edges to resize it.
+1. Pick a floor from the **Floors** list down the left (a **Floor plan**
+   dropdown above the plan when the report has more than 20 floors). Drag the
+   blue box over the building; drag its corners or edges to resize it.
 2. Set **Columns:** and **Rows:** with − and +. Cells with no APs are drawn
    dashed and never become sheets.
 3. To print an open area on one sheet (a warehouse in one leg of an L-shaped
@@ -1495,7 +1496,7 @@ Placement Map, on by default on AP Installation.
    section and **Split** to undo. Changing the column or row count clears
    combined sections.
 4. Press **Apply** for this floor, or **Apply to All Floors** to copy the
-   position to every floor, then check each floor with the dropdown.
+   position to every floor, then check each floor from the list.
 5. Press **Done**.
 
 **Reset to Auto**, **Reset Grid** and **Reset Zoom** start over. Scroll to
@@ -1531,8 +1532,9 @@ Neither adds anything until at least one floor is set up. The
 **Setting a floor up.** Nothing is read off the drawing; you click two points
 and name them.
 
-1. Press the button on the **Set up column grid…** row and pick the
-   **Floor plan**.
+1. Press the button on the **Set up column grid…** row and pick the floor
+   from the **Floors** list down the left (a **Floor plan** dropdown when the
+   report has more than 20 floors). A tick beside a floor means it is set up.
 2. Press **1. Click an intersection**, click a point where a lettered line
    crosses a numbered one, and type its name. `A-1`, `A1` and `a 1` read the
    same.
