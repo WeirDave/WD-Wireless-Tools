@@ -2873,6 +2873,36 @@
     return dupes;
   }
 
+  function updateDownloadBtn() {
+    renderSimulatedWarn(S.preview);
+    var hasChanges = S.preview.some(function (it) { return it.oldName !== it.newName; });
+    var dupes = duplicateNames(S.preview);
+    var warn = $('arDupeWarn');
+    if (warn) {
+      if (dupes.length) {
+        // All of them. A collision you cannot see is one you cannot fix, and
+        // four was an arbitrary place to stop reading out the names.
+        var shown = dupes.map(esc).join(', ');
+        warn.innerHTML = '<b>' + dupes.length + ' name'
+          + (dupes.length === 1 ? '' : 's')
+          + ' would be used more than once</b> — ' + shown
+          + '. Ekahau will take them, and you will not be able to tell those '
+          + 'APs apart afterwards. Add a Floor segment, or switch Numbering to '
+          + '"Continuous" so the counter keeps going instead of restarting.'
+          + (_floorPick !== 'all'
+             ? ' If a new name matches one on a floor that is not being renamed, rename that floor too.'
+             : '');
+        warn.hidden = false;
+      } else {
+        warn.hidden = true;
+        warn.innerHTML = '';
+      }
+    }
+    $('arDownloadBtn').disabled = !hasChanges;
+    var note = $('arWillWrite');
+    if (note) note.textContent = willWriteText(S.preview, dupes.length);
+  }
+
   /* Ekahau names a newly placed AP "Simulated AP-47". Only that word is
      matched: a bare "AP-001" is exactly what the default pattern writes, so a
      generic-name test would flag every AP that was labelled correctly. A floor
@@ -2918,36 +2948,6 @@
           + '<span class="ar-sim-names">' + g.names.map(esc).join(', ') + '</span></div>';
       }).join('') + '</div>';
     warn.hidden = false;
-  }
-
-  function updateDownloadBtn() {
-    renderSimulatedWarn(S.preview);
-    var hasChanges = S.preview.some(function (it) { return it.oldName !== it.newName; });
-    var dupes = duplicateNames(S.preview);
-    var warn = $('arDupeWarn');
-    if (warn) {
-      if (dupes.length) {
-        // All of them. A collision you cannot see is one you cannot fix, and
-        // four was an arbitrary place to stop reading out the names.
-        var shown = dupes.map(esc).join(', ');
-        warn.innerHTML = '<b>' + dupes.length + ' name'
-          + (dupes.length === 1 ? '' : 's')
-          + ' would be used more than once</b> — ' + shown
-          + '. Ekahau will take them, and you will not be able to tell those '
-          + 'APs apart afterwards. Add a Floor segment, or switch Numbering to '
-          + '"Continuous" so the counter keeps going instead of restarting.'
-          + (_floorPick !== 'all'
-             ? ' If a new name matches one on a floor that is not being renamed, rename that floor too.'
-             : '');
-        warn.hidden = false;
-      } else {
-        warn.hidden = true;
-        warn.innerHTML = '';
-      }
-    }
-    $('arDownloadBtn').disabled = !hasChanges;
-    var note = $('arWillWrite');
-    if (note) note.textContent = willWriteText(S.preview, dupes.length);
   }
 
   /* The footer says what the download will do, beside the button that does
