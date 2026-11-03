@@ -295,9 +295,13 @@
       <button class="btn-icon" data-action="call" data-fn="closeGridConfig" title="Close">&times;</button>
     </div>
     <div class="grid-modal-body">
+      <nav class="grid-floor-rail" id="gridFloorRail" aria-label="Floors" hidden>
+        <div class="grid-floor-rail-head">Floors</div>
+        <div class="grid-floor-list" id="gridFloorList"></div>
+      </nav>
       <div class="grid-modal-main">
         <div class="grid-controls">
-          <label>Floor plan:
+          <label id="gridFloorSelectWrap">Floor plan:
             <select id="gridFloorSelect" data-action-change="call" data-fn="gridFloorChanged" data-arg-this="1"></select>
           </label>
           <div class="grid-spinners">
@@ -339,7 +343,7 @@
           <dt>3. Apply</dt>
           <dd>Click <strong>Apply</strong> to save this floor&rsquo;s grid.</dd>
           <dt>4. Additional floors</dt>
-          <dd>Click <strong>Apply to All Floors</strong> to copy the grid position to every floor. Then switch floors with the dropdown and adjust the grid on each floor if the images aren&rsquo;t aligned. Only the floors chosen under <strong>Floors to include</strong> are listed and changed.</dd>
+          <dd>Click <strong>Apply to All Floors</strong> to copy the grid position to every floor. Then switch floors from the list on the left (a dropdown above the plan when a project has more than 20) and adjust the grid on each floor if the images aren&rsquo;t aligned. Only the floors chosen under <strong>Floors to include</strong> are listed and changed.</dd>
           <dt>5. Finish</dt>
           <dd>Click <strong>Done</strong> to apply and close.</dd>
         </dl>
@@ -366,9 +370,13 @@
       <button class="btn-icon" data-action="call" data-fn="closeGridRef" title="Close">&times;</button>
     </div>
     <div class="grid-modal-body">
+      <nav class="grid-floor-rail" id="gridRefFloorRail" aria-label="Floors" hidden>
+        <div class="grid-floor-rail-head">Floors</div>
+        <div class="grid-floor-list" id="gridRefFloorList"></div>
+      </nav>
       <div class="grid-modal-main">
         <div class="grid-controls">
-          <label>Floor plan:
+          <label id="gridRefFloorSelectWrap">Floor plan:
             <select id="gridRefFloorSelect" data-action-change="call" data-fn="gridRefFloorChanged" data-arg-this="1"></select>
           </label>
           <label>Letters run:

@@ -382,6 +382,74 @@ class TheStepsAfterTheScopeFollowIt(FloorSelectionCase):
           eq('modal opened', els.gridRefModal.hidden, false);
         """)
 
+    def test_the_section_grid_dialog_lists_floors_down_the_left_and_a_click_switches(self):
+        self.run_block(self.SETUP + r"""
+          window.openGridConfig();
+          const html = els.gridFloorList.innerHTML;
+          ['Ground Sample', 'Upper Sample', 'Roof Sample'].forEach(function (n) {
+            check('lists ' + n, html.indexOf('>' + n + '<') >= 0);
+          });
+          eq('the list is shown, the dropdown is not',
+             [els.gridFloorRail.hidden, els.gridFloorSelectWrap.hidden], [false, true]);
+          check('the floor it opened on is marked', /grid-floor-tab is-current"[^>]*data-arg="0"/.test(html));
+          handlerOf(html, 'gridFloorPick', '2')();
+          eq('clicking Roof moves the dialog to it', E('_gridFloorIdx'), 2);
+          eq('and the dropdown agrees', els.gridFloorSelect.value, '2');
+          check('and the mark follows', /grid-floor-tab is-current"[^>]*data-arg="2"/.test(els.gridFloorList.innerHTML)
+                && !/grid-floor-tab is-current"[^>]*data-arg="0"/.test(els.gridFloorList.innerHTML));
+        """)
+
+    def test_the_section_grid_list_leaves_out_a_floor_that_is_out(self):
+        self.run_block(self.SETUP + r"""
+          E('(function () { floorOff = new Set(["fB"]); })')();
+          window.openGridConfig();
+          const html = els.gridFloorList.innerHTML;
+          check('Upper is not listed', html.indexOf('Upper Sample') < 0);
+          check('the others are', html.indexOf('Ground Sample') >= 0 && html.indexOf('Roof Sample') >= 0);
+        """)
+
+    def test_the_column_grid_dialog_lists_floors_and_ticks_the_calibrated_one(self):
+        self.run_block(self.SETUP + r"""
+          E('(function () { _floorGrids = { fB: { a: {}, b: {} } }; })')();
+          window.openGridRef();
+          const html = els.gridRefFloorList.innerHTML;
+          eq('the list is shown, the dropdown is not',
+             [els.gridRefFloorRail.hidden, els.gridRefFloorSelectWrap.hidden], [false, true]);
+          check('Upper carries a tick', /Upper Sample<\/span><span class="grid-floor-check"/.test(html));
+          check('Ground does not', !/Ground Sample<\/span><span class="grid-floor-check"/.test(html));
+          handlerOf(html, 'gridRefFloorPick', '1')();
+          eq('clicking Upper moves the dialog to it', E('_grFloorIdx'), 1);
+          eq('and the dropdown agrees', els.gridRefFloorSelect.value, '1');
+        """)
+
+    def test_twenty_floors_are_a_list_and_twenty_one_are_a_dropdown(self):
+        self.run_block(self.SETUP + r"""
+          const many = n => {
+            const p = threeFloors();
+            for (let i = 4; i <= n; i++) {
+              p.floorPlans.push({ id: 'x' + i, name: 'Level ' + i, width: 1000, height: 800,
+                metersPerUnit: 0.05, imageId: 'imC' });
+            }
+            return p;
+          };
+          open(many(20));
+          window.openGridConfig();
+          window.openGridRef();
+          eq('20 floors: section grid lists them',
+             [els.gridFloorRail.hidden, els.gridFloorSelectWrap.hidden], [false, true]);
+          eq('20 floors: column grid lists them',
+             [els.gridRefFloorRail.hidden, els.gridRefFloorSelectWrap.hidden], [false, true]);
+          open(many(21));
+          window.openGridConfig();
+          window.openGridRef();
+          eq('21 floors: section grid falls back to the dropdown',
+             [els.gridFloorRail.hidden, els.gridFloorSelectWrap.hidden], [true, false]);
+          eq('21 floors: column grid falls back to the dropdown',
+             [els.gridRefFloorRail.hidden, els.gridRefFloorSelectWrap.hidden], [true, false]);
+          check('and the dropdown still holds every floor',
+                els.gridFloorSelect.children.length >= 21);
+        """)
+
     def test_a_report_with_no_floors_in_opens_neither_dialog(self):
         self.run_block(self.SETUP + r"""
           const said = [];

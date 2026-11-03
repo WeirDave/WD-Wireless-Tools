@@ -8485,6 +8485,32 @@ body.wd-has-update-banner .wd-update-badge { display: none; }
 .grid-controls label { font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .grid-controls select { font-size: 13px; background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 8px; }
 .grid-controls select option { background: var(--bg); color: var(--text); }
+/* The floor picker in both grid dialogs: floors down the left, the way AP
+   Labeler lists them. Past 20 floors report.js hides this and shows the
+   Floor plan dropdown instead. The list scrolls inside the rail. */
+.grid-floor-rail {
+  width: 200px; flex-shrink: 0; min-height: 0;
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  border-right: 1px solid var(--border); padding-right: var(--sp-4);
+}
+.grid-floor-rail[hidden] { display: none; }
+.grid-floor-rail-head {
+  font-size: var(--fs-meta); font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.6px; color: var(--text-3);
+}
+.grid-floor-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); padding-right: 2px; }
+.grid-floor-tab {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2);
+  width: 100%; text-align: left; padding: 10px; font: inherit; font-size: var(--fs-body); font-weight: 600;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg);
+  color: var(--text); cursor: pointer; overflow-wrap: anywhere;
+}
+.grid-floor-tab:hover { border-color: var(--tool-accent); }
+.grid-floor-tab.is-current {
+  border-color: var(--tool-accent); background: color-mix(in srgb, var(--tool-accent) 12%, var(--bg));
+}
+.grid-floor-count { font-size: var(--fs-meta); font-weight: 400; color: var(--text-3); flex-shrink: 0; }
+.grid-floor-check { color: var(--ok); flex-shrink: 0; }
 .grid-spinners { display: flex; gap: 16px; }
 .grid-spinner { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
 .grid-spin-val { min-width: 24px; text-align: center; font-weight: 700; font-size: 15px; color: var(--text); }

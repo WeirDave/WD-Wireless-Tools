@@ -3492,6 +3492,8 @@
     _grFloorIdx = scoped[0].idx;
     sel.value = String(scoped[0].idx);
     loadGridRefFloor();
+    _gridPickFloors.ref = scoped;
+    drawGridFloorPicker('ref');
     modal.hidden = false;
   };
 
@@ -3535,7 +3537,28 @@
   window.gridRefFloorChanged = function (sel) {
     _grFloorIdx = parseInt(sel.value, 10) || 0;
     loadGridRefFloor();
+    drawGridFloorPicker('ref');
   };
+
+  window.gridRefFloorPick = function (idx) {
+    var sel = document.getElementById('gridRefFloorSelect');
+    sel.value = String(idx);
+    window.gridRefFloorChanged(sel);
+  };
+
+  /* The tick beside a floor, in the dropdown and in the list, follows what is
+     saved - so it is redrawn after a save and after a floor is turned off. */
+  function refreshGridRefFloorMarks() {
+    var sel = document.getElementById('gridRefFloorSelect');
+    if (sel && sel.options) {
+      Array.prototype.forEach.call(sel.options, function (o) {
+        var i = parseInt(o.value, 10);
+        var f = (proj.floorPlans || [])[i];
+        if (f) o.textContent = gridRefOptionLabel(f, i);
+      });
+    }
+    drawGridFloorPicker('ref');
+  }
 
   window.gridRefAxisChanged = function (sel) {
     _grAxis = sel.value === 'y' ? 'y' : 'x';
@@ -3857,14 +3880,7 @@
     configureDirty = true;
     showToast('Column grid saved for ' + (fp.name || 'this floor') + '.', 'success');
     // The tick in the floor list, and the button's count, both just changed.
-    var sel = document.getElementById('gridRefFloorSelect');
-    if (sel) {
-      Array.prototype.forEach.call(sel.options, function (o) {
-        var i = parseInt(o.value, 10);
-        var f = (proj.floorPlans || [])[i];
-        if (f) o.textContent = gridRefOptionLabel(f, i);
-      });
-    }
+    refreshGridRefFloorMarks();
   };
 
   window.clearGridRefFloor = async function () {
@@ -3890,6 +3906,7 @@
     resetFloorGrids(res.floors || {});
     configureDirty = true;
     loadGridRefFloor();
+    refreshGridRefFloorMarks();
     showToast('Column grid turned off for ' + (fp.name || 'this floor') + '.', 'info');
   };
 
@@ -4001,6 +4018,49 @@
 
   // ── Grid configuration modal ──
 
+  /* Both grid dialogs pick a floor the way AP Labeler does: the floors down the
+     left, one click each. A project with a great many floors would be a wall of
+     buttons, so past this many the "Floor plan" dropdown is shown instead. The
+     dropdown is filled either way and is what the current floor is read from;
+     the list only sets it and calls the same change handler. */
+  var GRID_FLOOR_LIST_MAX = 20;
+  var _gridPickFloors = { seg: [], ref: [] };
+  var GRID_PICKER_IDS = {
+    seg: { rail: 'gridFloorRail', wrap: 'gridFloorSelectWrap', list: 'gridFloorList',
+           select: 'gridFloorSelect', pick: 'gridFloorPick' },
+    ref: { rail: 'gridRefFloorRail', wrap: 'gridRefFloorSelectWrap', list: 'gridRefFloorList',
+           select: 'gridRefFloorSelect', pick: 'gridRefFloorPick' },
+  };
+
+  function drawGridFloorPicker(kind) {
+    var ids = GRID_PICKER_IDS[kind];
+    var scoped = _gridPickFloors[kind] || [];
+    var asList = scoped.length <= GRID_FLOOR_LIST_MAX;
+    document.getElementById(ids.rail).hidden = !asList;
+    document.getElementById(ids.wrap).hidden = asList;
+    if (!asList) return;
+    var cur = kind === 'seg' ? _gridFloorIdx : _grFloorIdx;
+    var host = document.getElementById(ids.list);
+    host.innerHTML = scoped.map(function (x) {
+      var name = x.fp.name || ('Floor ' + (x.idx + 1));
+      var note = '';
+      if (kind === 'seg') {
+        var n = filterApsForFloor(x.fp).length;
+        note = '<span class="grid-floor-count">(' + n + ')</span>';
+      } else if (_floorGrids[x.fp.id]) {
+        note = '<span class="grid-floor-check" title="Column grid set up">✓</span>';
+      }
+      var on = x.idx === cur;
+      return '<button type="button" class="grid-floor-tab' + (on ? ' is-current' : '') + '"'
+        + ' data-action="call" data-fn="' + ids.pick + '" data-arg="' + x.idx + '"'
+        + (on ? ' aria-current="true"' : '') + ' title="' + WD.escAttr(name) + '">'
+        + '<span class="grid-floor-name">' + WD.esc(name) + '</span>' + note + '</button>';
+    }).join('');
+    // Floor 47 chosen some other way stays in sight in the list.
+    var here = host.querySelector && host.querySelector('.is-current');
+    if (here && here.scrollIntoView) here.scrollIntoView({ block: 'nearest' });
+  }
+
   var _gridCols = 0, _gridRows = 0, _gridFloorIdx = 0;
   // What the dialog opened with, so Done can tell a change from a look.
   var _gridInitCols = 0, _gridInitRows = 0;
@@ -4053,6 +4113,8 @@
       sel.appendChild(opt);
     });
     sel.value = String(scoped[0].idx);
+    _gridPickFloors.seg = scoped;
+    drawGridFloorPicker('seg');
 
     _gridZoom = 1; _gridPanX = 0; _gridPanY = 0;
     updateGridPreview();
@@ -4074,6 +4136,13 @@
     var fc = newFp && _cropBoxes[newFp.id];
     _cropBox = fc ? { x: fc.x, y: fc.y, w: fc.w, h: fc.h } : { x: 0, y: 0, w: 1, h: 1 };
     updateGridPreview();
+    drawGridFloorPicker('seg');
+  };
+
+  window.gridFloorPick = function (idx) {
+    var sel = document.getElementById('gridFloorSelect');
+    sel.value = String(idx);
+    window.gridFloorChanged(sel);
   };
 
   window.adjustGridCols = function (delta) {
