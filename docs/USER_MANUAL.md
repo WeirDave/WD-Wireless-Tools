@@ -1866,12 +1866,15 @@ gave each AP in Ekahau. Within a colour, APs are walked nearest-neighbour.
 
 Every AP is drawn ringed in its Ekahau colour. Click APs on the plan in the
 order you want them numbered. A panel at the bottom of the naming panel shows
-**Next:** and how many are numbered.
+**Next:** and how many are numbered, for the floor shown first and then for the whole
+project (`2 of 19 on this floor · 22 of 39 numbered in all`).
 
 To take a number back:
 
 - right-click anywhere on the plan, or press Ctrl+Z — releases the last one;
-- click a numbered AP — removes that one, and the rest shift down;
+- click a numbered AP — removes that one, and the rest shift down. A message names the
+  number and the AP each time. To redo a floor, do not click through it again: every AP
+  clicked loses its number, and only the ones skipped stay numbered;
 - **Undo** — same as Ctrl+Z;
 - **Clear floor** — asks first, then clears the manual numbers on the floor shown and leaves the other floors as they are;
 - **Clear all** — asks first, then clears every manual number on every floor.

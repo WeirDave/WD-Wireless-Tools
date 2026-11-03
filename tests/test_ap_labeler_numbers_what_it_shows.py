@@ -162,7 +162,7 @@ eval(load([
 eval(load(['  window.arManualClick = function', '  window.arManualUndo = function',
   '  window.arManualClear = function', '  window.arManualClearFloor = function']));
 eval(load(['  function manualOnFloor(']));
-eval(load(['  function manualNextNum(', '  function counterStart(']));
+eval(load(['  function manualNextNum(', '  function counterStart(', '  function manualCountText(']));
 function nums() {
   const o = {};
   S.preview.forEach(function (it) { if (it.num != null) o[it.ap.id] = it.newName; });
@@ -204,6 +204,44 @@ console.log(JSON.stringify({ shownA: shownA, gotB: gotB, shownB: manualNextNum()
 """)
         self.assertEqual(got["shownA"], got["gotB"])
         self.assertEqual(got, {"shownA": 2, "gotB": 2, "shownB": 3})
+
+    def test_going_over_a_numbered_floor_again_says_what_each_click_removed(self):
+        """Redoing a floor by clicking through it a second time removes the
+        number from every AP clicked, leaving numbered only the ones skipped.
+        The rule stays - it is documented in the panel - but each removal has
+        to say so, or the floor just looks miscounted."""
+        got = self._run("all", r"""
+['a', 'b', 'c', 'd'].forEach(function (id) { window.arManualClick(id); });
+toasts.length = 0;
+window.arManualClick('b');
+console.log(JSON.stringify({ toast: toasts[toasts.length - 1],
+                             order: S.manualOrder, c: S.byId.c.newName }));
+""")
+        self.assertEqual(got["order"], ["a", "c", "d"], got)
+        self.assertEqual(got["c"], "AP-002", got)
+        self.assertIn("number 2", got["toast"], got)
+        self.assertIn("X2", got["toast"], got)
+
+    def test_numbering_an_unnumbered_ap_says_nothing(self):
+        got = self._run("all", r"""
+window.arManualClick('a');
+console.log(JSON.stringify({ toasts: toasts }));
+""")
+        self.assertEqual(got["toasts"], [])
+
+    def test_the_tally_counts_the_floor_on_screen_before_the_project(self):
+        got = self._run("all", r"""
+['a', 'b', 'c'].forEach(function (id) { window.arManualClick(id); });
+S.currentFloor = 'fl-a';
+const onA = manualCountText(4);
+S.currentFloor = 'fl-b';
+const onB = manualCountText(4);
+S.currentFloor = '__unplaced';
+console.log(JSON.stringify({ onA: onA, onB: onB, unplaced: manualCountText(4) }));
+""")
+        self.assertEqual(got["onA"], "2 of 2 on this floor · 3 of 4 numbered in all")
+        self.assertEqual(got["onB"], "1 of 2 on this floor · 3 of 4 numbered in all")
+        self.assertEqual(got["unplaced"], "3 of 4 numbered")
 
     def test_undo_names_the_number_that_was_released(self):
         got = self._run("perFloor", r"""
@@ -262,6 +300,150 @@ window.arManualClear();
 console.log(JSON.stringify({ order: S.manualOrder }));
 """)
         self.assertEqual(got, {"order": []})
+
+
+SIMULATED_HARNESS = r"""
+var S = { floors: [{ id: 'fl-a', name: 'One' }, { id: 'fl-b', name: 'Two' }],
+          aps: [], rawAPs: [], preview: [], file: { name: 'job.esx' } };
+var WARN = { hidden: true, innerHTML: '' };
+var BTN = { disabled: false, textContent: '' };
+var OTHER = {};
+function $(id) { return id === 'arSimWarn' ? WARN : id === 'arDownloadBtn' ? BTN : (OTHER[id] = OTHER[id] || { hidden: true, innerHTML: '', textContent: '' }); }
+var _floorPick = 'all';
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;'); }
+function toast() {}
+var window = {};
+var shown = [];
+function showFloor(id) { shown.push(id); }
+var asked = [];
+var ANSWER = true;
+function confirm(t) { asked.push(t); return ANSWER; }
+function floorName(id) { var f = S.floors.find(function (x) { return x.id === id; }); return f ? f.name : ''; }
+eval(load([
+  '  function stillSimulated(', '  function stillSimulatedByFloor(', '  function renderSimulatedWarn(',
+  '  function simulatedConfirmText(', '  function duplicateNames(', '  function updateDownloadBtn(',
+  '  function willWriteText(',
+]));
+eval(load(['  window.arShowFloor = function', '  window.arDownload = function']));
+var STILL_SIMULATED_RE = eval(/var STILL_SIMULATED_RE = (.*);/.exec(src)[1]);
+function row(floorId, newName, extra) {
+  return Object.assign({ ap: { id: 'ap-' + newName }, oldName: newName, newName: newName, floorId: floorId }, extra || {});
+}
+"""
+
+
+@unittest.skipUnless(shutil.which("node"), "node is not installed")
+class AnApThatStillSaysSimulatedIsReportedTests(unittest.TestCase):
+    """A missed AP looks exactly like one left on purpose until the file is
+    opened in Ekahau again, so the Labeler asks before and while it writes."""
+
+    def _run(self, body):
+        return run_node(SIMULATED_HARNESS + body)
+
+    def test_only_ekahaus_placeholder_name_is_flagged(self):
+        got = self._run(r"""
+const items = [row('fl-a', 'Simulated AP-47'), row('fl-a', 'simulated ap48'),
+               row('fl-a', 'AP-001'), row('fl-a', 'ZED-01-AP002'),
+               row('fl-b', 'Simulated AP-9', { kept: true })];
+console.log(JSON.stringify(stillSimulated(items).map(function (i) { return i.newName; })));
+""")
+        self.assertEqual(got, ["Simulated AP-47", "simulated ap48"])
+
+    def test_the_warning_lists_every_one_by_floor(self):
+        got = self._run(r"""
+renderSimulatedWarn([row('fl-b', 'Simulated AP-51'), row('fl-a', 'Simulated AP-47'),
+                     row('fl-a', 'Simulated AP-49'), row(null, 'Simulated AP-3'),
+                     row('fl-a', 'AP-002')]);
+console.log(JSON.stringify({ hidden: WARN.hidden, html: WARN.innerHTML }));
+""")
+        self.assertFalse(got["hidden"])
+        for name in ("Simulated AP-47", "Simulated AP-49", "Simulated AP-51", "Simulated AP-3"):
+            self.assertIn(name, got["html"])
+        self.assertNotIn("AP-002", got["html"])
+        self.assertIn("4 access points are", got["html"])
+        self.assertIn("One (2)", got["html"])
+        self.assertIn("Unplaced (1)", got["html"])
+
+    def test_the_warning_goes_when_nothing_is_left(self):
+        got = self._run(r"""
+renderSimulatedWarn([row('fl-a', 'Simulated AP-47')]);
+renderSimulatedWarn([row('fl-a', 'AP-001')]);
+console.log(JSON.stringify({ hidden: WARN.hidden, html: WARN.innerHTML }));
+""")
+        self.assertTrue(got["hidden"])
+        self.assertEqual(got["html"], "")
+
+    def test_the_warning_is_redrawn_whenever_the_preview_is(self):
+        """updateDownloadBtn runs after every click and every setting, so the
+        list shrinks as the missed APs are numbered."""
+        got = self._run(r"""
+S.preview = [row('fl-a', 'Simulated AP-47'), row('fl-a', 'AP-002')];
+updateDownloadBtn();
+const before = WARN.hidden;
+S.preview = [row('fl-a', 'AP-001'), row('fl-a', 'AP-002')];
+updateDownloadBtn();
+console.log(JSON.stringify({ before: before, after: WARN.hidden }));
+""")
+        self.assertEqual(got, {"before": False, "after": True})
+
+    def test_a_floor_button_in_the_warning_opens_that_floor(self):
+        got = self._run(r"""
+renderSimulatedWarn([row('fl-b', 'Simulated AP-51'), row(null, 'Simulated AP-3')]);
+const found = [];
+const re = /data-fn="([^"]+)" data-arg="([^"]*)"/g;
+let m;
+while ((m = re.exec(WARN.innerHTML))) found.push([m[1], m[2]]);
+found.forEach(function (f) { window[f[0]](f[1]); });
+console.log(JSON.stringify({ found: found, shown: shown }));
+""")
+        self.assertEqual(got["found"], [["arShowFloor", "fl-b"], ["arShowFloor", "__unplaced"]])
+        self.assertEqual(got["shown"], ["fl-b", "__unplaced"])
+
+    def _download(self, answer):
+        return self._run(r"""
+ANSWER = ANSWER_HERE;
+S.rawAPs = [{ id: 'ap-1', name: 'Simulated AP-47' }, { id: 'ap-2', name: 'Simulated AP-48' }];
+S.preview = [row('fl-a', 'Simulated AP-47'),
+             { ap: { id: 'ap-2' }, oldName: 'Simulated AP-48', newName: 'AP-001', floorId: 'fl-a' }];
+var built = 0;
+S.zip = { file: function () {}, generateAsync: function () { built++; return new Promise(function () {}); } };
+window.arDownload();
+console.log(JSON.stringify({ asked: asked, built: built }));
+""".replace("ANSWER_HERE", json.dumps(answer)))
+
+    def test_downloading_asks_first_and_names_the_ap(self):
+        got = self._download(False)
+        self.assertEqual(len(got["asked"]), 1, got)
+        self.assertIn("Simulated AP-47", got["asked"][0])
+        self.assertNotIn("AP-001", got["asked"][0])
+
+    def test_cancelling_the_question_builds_nothing(self):
+        self.assertEqual(self._download(False)["built"], 0)
+
+    def test_confirming_the_question_builds_the_file(self):
+        self.assertEqual(self._download(True)["built"], 1)
+
+    def test_a_long_list_is_counted_per_floor_not_cut_short(self):
+        got = self._run(r"""
+const items = [];
+for (let k = 0; k < 15; k++) items.push(row('fl-a', 'Simulated AP-' + k));
+console.log(JSON.stringify(simulatedConfirmText(stillSimulatedByFloor(items))));
+""")
+        self.assertIn("One (15)", got)
+        self.assertIn("listed under the preview", got)
+
+    def test_nothing_is_asked_when_no_ap_is_left(self):
+        got = self._run(r"""
+ANSWER = false;
+S.rawAPs = [{ id: 'ap-1', name: 'Simulated AP-47' }];
+S.preview = [{ ap: { id: 'ap-1' }, oldName: 'Simulated AP-47', newName: 'AP-001', floorId: 'fl-a' }];
+var built = 0;
+S.zip = { file: function () {}, generateAsync: function () { built++; return new Promise(function () {}); } };
+window.arDownload();
+console.log(JSON.stringify({ asked: asked.length, built: built }));
+""")
+        self.assertEqual(got, {"asked": 0, "built": 1})
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed")

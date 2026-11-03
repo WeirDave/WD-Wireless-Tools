@@ -1570,7 +1570,15 @@
       // Re-clicking a numbered AP takes it out and shifts the rest down. One
       // rule covers both "I clicked the wrong one" and "drop this from the
       // middle of the run", and the renumber is visible immediately.
+      var was = S.byId && S.byId[apId];
       S.manualOrder.splice(at, 1);
+      /* Said out loud because the rule bites when a floor is gone over a second
+         time: every AP clicked again loses its number, and the only ones left
+         numbered are the ones that were skipped. The row going back to its old
+         name was the only sign, and read as the tool miscounting. */
+      toast('Removed ' + (was && was.num != null ? 'number ' + was.num + ' from ' : '')
+        + (was && was.ap ? was.ap.name : 'that AP')
+        + ' — the numbers after it moved down. Undo puts it back.');
     }
     updateAll();
   };
@@ -1637,6 +1645,20 @@
   };
 
 
+  /* The tally is for the floor on screen first. The whole-project figure alone
+     read "22 of 39 numbered" over a floor with 19 APs and looked like the tool
+     counting APs that are not there. */
+  function manualCountText(placed) {
+    var all = S.manualOrder.length + ' of ' + placed + ' numbered';
+    if (!S.currentFloor || S.currentFloor === '__unplaced') return all;
+    var here = getFloorAPs(S.currentFloor).length;
+    var numberedHere = 0;
+    var onFloor = {};
+    getFloorAPs(S.currentFloor).forEach(function (ap) { onFloor[ap.id] = true; });
+    S.manualOrder.forEach(function (id) { if (onFloor[id]) numberedHere++; });
+    return numberedHere + ' of ' + here + ' on this floor · ' + all + ' in all';
+  }
+
   function updateManualPanel() {
     var panel = $('arManualPanel');
     if (!panel) return;
@@ -1646,7 +1668,7 @@
     var placed = 0;
     S.floors.forEach(function (f) { placed += getFloorAPs(f.id).length; });
     $('arManualNext').textContent = String(manualNextNum());
-    $('arManualCount').textContent = S.manualOrder.length + ' of ' + placed + ' numbered';
+    $('arManualCount').textContent = manualCountText(placed);
     $('arManualUndo').disabled = !S.manualUndo.length;
     $('arManualClear').disabled = !S.manualOrder.length;
     $('arManualClearFloor').disabled = !S.currentFloor || !manualOnFloor(S.currentFloor).length;
@@ -2566,7 +2588,7 @@
         // blue ones" impossible to do by eye - the one view where you are
         // picking APs by colour was the one view that did not show them.
         var uc = resolveColor(ap.color);
-        if (uc) { m.style.borderColor = uc; m.style.color = uc; }
+        if (uc) m.style.borderColor = uc;
         m.textContent = '+';
         m.setAttribute('data-ap-id', ap.id);
         m.onclick = function (e) { e.stopPropagation(); arManualClick(ap.id); };
@@ -2851,7 +2873,55 @@
     return dupes;
   }
 
+  /* Ekahau names a newly placed AP "Simulated AP-47". Only that word is
+     matched: a bare "AP-001" is exactly what the default pattern writes, so a
+     generic-name test would flag every AP that was labelled correctly. A floor
+     that is not being renamed is left out - leaving it alone was chosen. */
+  var STILL_SIMULATED_RE = /^\s*simulated\b/i;
+
+  function stillSimulated(items) {
+    return (items || []).filter(function (it) {
+      return !it.kept && STILL_SIMULATED_RE.test(it.newName || '');
+    });
+  }
+
+  function stillSimulatedByFloor(items) {
+    var order = [], by = {};
+    stillSimulated(items).forEach(function (it) {
+      var key = it.floorId || '__unplaced';
+      if (!by[key]) { by[key] = []; order.push(key); }
+      by[key].push(it.newName);
+    });
+    return order.map(function (key) {
+      return { floorId: key, name: key === '__unplaced' ? 'Unplaced' : (floorName(key) || 'Unnamed'),
+               names: by[key] };
+    });
+  }
+
+  window.arShowFloor = function (fpId) { showFloor(fpId); };
+
+  /* "Did you mean to leave these?" - an AP missed by hand looks exactly like
+     one left on purpose, until the file is opened again in Ekahau. */
+  function renderSimulatedWarn(items) {
+    var warn = $('arSimWarn');
+    if (!warn) return;
+    var groups = stillSimulatedByFloor(items);
+    if (!groups.length) { warn.hidden = true; warn.innerHTML = ''; return; }
+    var total = groups.reduce(function (n, g) { return n + g.names.length; }, 0);
+    warn.innerHTML = '<b>' + total + ' access point' + (total === 1 ? ' is' : 's are')
+      + ' still named “Simulated”</b> — Ekahau’s placeholder name. '
+      + 'If one was missed, number it; if they are meant to stay as they are, nothing needs doing.'
+      + '<div class="ar-sim-list">' + groups.map(function (g) {
+        return '<div class="ar-sim-floor"><button type="button" class="ar-sim-jump" '
+          + 'data-action="call" data-fn="arShowFloor" data-arg="' + escAttr(g.floorId) + '" '
+          + 'title="Show this floor">' + esc(g.name) + ' (' + g.names.length + ')</button> '
+          + '<span class="ar-sim-names">' + g.names.map(esc).join(', ') + '</span></div>';
+      }).join('') + '</div>';
+    warn.hidden = false;
+  }
+
   function updateDownloadBtn() {
+    renderSimulatedWarn(S.preview);
     var hasChanges = S.preview.some(function (it) { return it.oldName !== it.newName; });
     var dupes = duplicateNames(S.preview);
     var warn = $('arDupeWarn');
@@ -2900,6 +2970,20 @@
   };
 
   /* ── download ──────────────────────────────────────────────────── */
+  /* Every name when the list is short enough to read in a dialog; past that,
+     the count per floor, and the list on the page names each one. */
+  function simulatedConfirmText(groups) {
+    var total = groups.reduce(function (n, g) { return n + g.names.length; }, 0);
+    var lines = groups.map(function (g) {
+      return g.name + ' (' + g.names.length + ')' + (total <= 12 ? ': ' + g.names.join(', ') : '');
+    });
+    return total + ' access point' + (total === 1 ? ' is' : 's are') + ' still named “Simulated”:\n\n'
+      + lines.join('\n') + '\n\nDid you mean to leave ' + (total === 1 ? 'it' : 'them')
+      + ' like that? OK downloads the file as it is; Cancel goes back to number '
+      + (total === 1 ? 'it' : 'them') + '.'
+      + (total > 12 ? ' Every name is listed under the preview.' : '');
+  }
+
   window.arDownload = function () {
     if (!S.zip || !S.preview.length) return;
 
@@ -2913,6 +2997,9 @@
       toast('Nothing to label', 'error');
       return;
     }
+
+    var left = stillSimulatedByFloor(S.preview);
+    if (left.length && !confirm(simulatedConfirmText(left))) return;
 
     var modifiedAPs = JSON.parse(JSON.stringify(S.rawAPs));
     modifiedAPs.forEach(function (ap) {
