@@ -68,6 +68,7 @@ class TheSettingsScrollAndTheControlsStay(unittest.TestCase):
         self.assertIn('id="arManualPanel"', dock)
         self.assertIn('id="arManualUndo"', dock)
         self.assertIn('id="arManualClear"', dock)
+        self.assertIn('id="arManualClearFloor"', dock)
         self.assertIn('id="arManualNext"', dock)
 
     def test_the_preview_header_stays_put_while_the_rows_scroll(self):

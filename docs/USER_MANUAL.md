@@ -1871,7 +1871,8 @@ To take a number back:
 - right-click anywhere on the plan, or press Ctrl+Z — releases the last one;
 - click a numbered AP — removes that one, and the rest shift down;
 - **Undo** — same as Ctrl+Z;
-- **Clear all** — asks first, then clears every manual number.
+- **Clear floor** — asks first, then clears the manual numbers on the floor shown and leaves the other floors as they are;
+- **Clear all** — asks first, then clears every manual number on every floor.
 
 APs you have not clicked keep their current names and show a `–` in the
 number column.

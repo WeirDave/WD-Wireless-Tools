@@ -1614,6 +1614,28 @@
     updateAll();
   };
 
+  /* The numbered APs on the floor on screen. Only that floor's: the other
+     floors' clicks stay where they are, and under "restart each floor" their
+     numbers do not move either. */
+  function manualOnFloor(fpId) {
+    var here = {};
+    getFloorAPs(fpId).forEach(function (ap) { here[ap.id] = true; });
+    return S.manualOrder.filter(function (id) { return here[id]; });
+  }
+
+  window.arManualClearFloor = function () {
+    var onFloor = manualOnFloor(S.currentFloor);
+    if (!onFloor.length) return;
+    var name = floorName(S.currentFloor) || 'this floor';
+    if (!confirm('Clear ' + (onFloor.length === 1 ? 'the 1 manual number' : 'the ' + onFloor.length + ' manual numbers') + ' on ' + name + '?')) return;
+    manualSnapshot();
+    var gone = {};
+    onFloor.forEach(function (id) { gone[id] = true; });
+    S.manualOrder = S.manualOrder.filter(function (id) { return !gone[id]; });
+    updateAll();
+    toast('Cleared ' + onFloor.length + ' on ' + name + ' — next is ' + manualNextNum());
+  };
+
 
   function updateManualPanel() {
     var panel = $('arManualPanel');
@@ -1627,6 +1649,7 @@
     $('arManualCount').textContent = S.manualOrder.length + ' of ' + placed + ' numbered';
     $('arManualUndo').disabled = !S.manualUndo.length;
     $('arManualClear').disabled = !S.manualOrder.length;
+    $('arManualClearFloor').disabled = !S.currentFloor || !manualOnFloor(S.currentFloor).length;
   }
 
   /* Number colour group by colour group, in the order the engineer chose.

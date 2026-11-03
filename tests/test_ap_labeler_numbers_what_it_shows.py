@@ -145,6 +145,9 @@ var _scope = SCOPE, _nesting = 'floor', _floorPick = 'all', _segments = [], _col
 var _zoom = { suppressClick: false };
 var SET = { mode: 'simple', prefix: 'AP', sep: '-', digits: 3, startNum: 1, order: 'manual' };
 function getSettings() { return SET; }
+var asked = [], answer = true;
+function confirm(m) { asked.push(m); return answer; }
+function floorName(id) { var f = S.floors.find(function (x) { return x.id === id; }); return f ? f.name : ''; }
 function isManual() { return true; }
 var toasts = [];
 function toast(m) { toasts.push(m); }
@@ -156,7 +159,9 @@ eval(load([
   '  function getStartNum(', '  function buildSequence(', '  function generatePreview(',
   '  function manualIndex(', '  function manualSnapshot(',
 ]));
-eval(load(['  window.arManualClick = function', '  window.arManualUndo = function']));
+eval(load(['  window.arManualClick = function', '  window.arManualUndo = function',
+  '  window.arManualClear = function', '  window.arManualClearFloor = function']));
+eval(load(['  function manualOnFloor(']));
 eval(load(['  function manualNextNum(', '  function counterStart(']));
 function nums() {
   const o = {};
@@ -209,6 +214,54 @@ console.log(JSON.stringify({ had: had, toast: toasts[toasts.length - 1] }));
 """)
         self.assertEqual(got["had"], 1)
         self.assertTrue(got["toast"].startswith("Released 1 "), got)
+
+    def test_clear_floor_clears_only_the_floor_on_screen(self):
+        got = self._run("perFloor", r"""
+['a', 'c', 'b', 'd'].forEach(function (id) { window.arManualClick(id); });
+S.currentFloor = 'fl-a';
+window.arManualClearFloor();
+console.log(JSON.stringify({ order: S.manualOrder, nums: nums(), asked: asked,
+                             toast: toasts[toasts.length - 1] }));
+""")
+        self.assertEqual(got["order"], ["c", "d"], got)
+        self.assertEqual(got["nums"], {"c": "AP-001", "d": "AP-002"}, got)
+        self.assertEqual(len(got["asked"]), 1, got)
+        self.assertIn("One", got["asked"][0])
+        self.assertIn("next is 1", got["toast"])
+
+    def test_clear_floor_can_be_undone_and_declined(self):
+        got = self._run("all", r"""
+['a', 'c', 'b'].forEach(function (id) { window.arManualClick(id); });
+S.currentFloor = 'fl-a';
+answer = false;
+window.arManualClearFloor();
+const declined = S.manualOrder.slice();
+answer = true;
+window.arManualClearFloor();
+const cleared = S.manualOrder.slice();
+window.arManualUndo();
+console.log(JSON.stringify({ declined: declined, cleared: cleared, back: S.manualOrder }));
+""")
+        self.assertEqual(got["declined"], ["a", "c", "b"], got)
+        self.assertEqual(got["cleared"], ["c"], got)
+        self.assertEqual(got["back"], ["a", "c", "b"], got)
+
+    def test_clear_floor_on_a_floor_with_nothing_numbered_asks_nothing(self):
+        got = self._run("all", r"""
+window.arManualClick('c');
+S.currentFloor = 'fl-a';
+window.arManualClearFloor();
+console.log(JSON.stringify({ order: S.manualOrder, asked: asked }));
+""")
+        self.assertEqual(got, {"order": ["c"], "asked": []})
+
+    def test_clear_all_still_clears_every_floor(self):
+        got = self._run("all", r"""
+['a', 'c'].forEach(function (id) { window.arManualClick(id); });
+window.arManualClear();
+console.log(JSON.stringify({ order: S.manualOrder }));
+""")
+        self.assertEqual(got, {"order": []})
 
 
 @unittest.skipUnless(shutil.which("node"), "node is not installed")
