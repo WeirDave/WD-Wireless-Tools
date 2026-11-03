@@ -13,7 +13,8 @@
  * An outline is a list of [x, y] corners. Two ways to make one:
  *   rect   drag out a rectangle
  *   poly   click each corner; click the first corner, double-click or press
- *          Enter to finish; Backspace takes the last corner back; Esc cancels
+ *          Enter to finish; Undo last corner (or Backspace, or Ctrl+Z) takes
+ *          the last corner back; Esc cancels
  * and once there is one, drag a corner to move it or drag the small dot in the
  * middle of an edge to add a corner.
  *
@@ -117,6 +118,11 @@
   function create(opts) {
     var st = { mode: 'idle', pts: [], draft: null, cursor: null, drag: null, down: null, pv: null };
     var ed = {};
+    var listeners = [];
+
+    // The buttons follow the corner count, which moves without the mode
+    // changing, so the page's own onMode would not tell them.
+    function changed() { listeners.forEach(function (fn) { fn(); }); }
 
     function dpr() { return window.devicePixelRatio || 1; }
     function on() { return !opts.enabled || opts.enabled(); }
@@ -169,11 +175,26 @@
 
     ed.mode = function () { return st.mode; };
     ed.drawing = function () { return st.mode !== 'idle'; };
+    ed.corners = function () { return st.mode === 'poly' ? st.pts.length : 0; };
+    ed.listen = function (fn) { listeners.push(fn); };
+
+    // Takes the last corner back. True when there was one to take.
+    ed.undo = function () {
+      if (st.mode !== 'poly' || !st.pts.length) return false;
+      st.pts.pop();
+      // The click that follows is a new corner, not the second half of a
+      // double-click on the one just taken back.
+      st.lastUp = null;
+      changed();
+      redraw();
+      return true;
+    };
 
     ed.start = function (kind) {
       if (!on() || (kind !== 'rect' && kind !== 'poly')) return;
       st.pts = []; st.draft = null; st.cursor = null; st.drag = null; st.down = null; st.lastUp = null;
       mode(kind);
+      changed();
       redraw();
     };
 
@@ -181,6 +202,7 @@
       var was = st.mode;
       st.pts = []; st.draft = null; st.cursor = null; st.drag = null; st.down = null; st.lastUp = null;
       if (was !== 'idle') mode('idle');
+      changed();
       redraw();
     };
 
@@ -196,6 +218,7 @@
       opts.set(poly);
       mode('idle');
       opts.commit(poly);
+      changed();
       redraw();
     }
 
@@ -274,7 +297,7 @@
         if (first && dist(first, p) <= CLOSE_CSS * d) { closeShape(); return; }
         var at = toPlan(pv, p);
         var last = st.pts.length ? toScreen(pv, st.pts[st.pts.length - 1]) : null;
-        if (!last || dist(last, p) > DEDUPE_CSS * d) st.pts.push(at);
+        if (!last || dist(last, p) > DEDUPE_CSS * d) { st.pts.push(at); changed(); }
         // A double-click is a click that finishes. The browser's own click
         // count is not trusted alone: Safari's synthesised double-click
         // arrives with a count of 1 on both mouse-ups, so a second click on
@@ -332,9 +355,9 @@
           else { reject(MSG.few); }
           return true;
         }
-        if (e.key === 'Backspace' || e.key === 'Delete') {
-          st.pts.pop();
-          redraw();
+        if (e.key === 'Backspace' || e.key === 'Delete' ||
+            ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z'))) {
+          ed.undo();
           return true;
         }
       }
@@ -456,6 +479,10 @@
       + ' data-action="call" data-fn="WD.AreaEditor.start" data-arg="poly"'
       + ' title="Click each corner of any shape. It replaces the automatic area on this floor.">'
       + 'Draw a shape</button>'
+      + '<button type="button" class="btn btn-sec" id="wdAreaUndo"'
+      + ' data-action="call" data-fn="WD.AreaEditor.undo"'
+      + ' title="Take back the last corner you clicked while drawing a shape. Backspace and Ctrl+Z do the same.">'
+      + 'Undo last corner</button>'
       + '<button type="button" class="btn btn-sec" id="wdAreaClear"'
       + ' data-action="call" data-fn="WD.AreaEditor.clear"'
       + ' title="Take this floor\'s drawn area away and let it be worked out automatically">'
@@ -469,8 +496,10 @@
     var m = ctl.editor.mode();
     if (m === 'rect') return 'Drag out the rectangle on the plan. Esc cancels.';
     if (m === 'poly') {
-      return 'Click each corner. Click the first corner, double-click or press Enter to '
-        + 'finish; Backspace takes the last corner back; Esc cancels.';
+      var n = ctl.editor.corners();
+      return 'Click each corner' + (n ? ' (' + n + ' so far)' : '') + '. Click the first corner, '
+        + 'double-click or press Enter to finish. Undo last corner, Backspace or Ctrl+Z takes '
+        + 'the last one back; Esc cancels.';
     }
     var why = ctl.why && ctl.why();
     if (why) return why;
@@ -487,6 +516,7 @@
   function sync() {
     var q = function (id) { return document.getElementById(id); };
     var rect = q('wdAreaRect'), poly = q('wdAreaPoly'), clear = q('wdAreaClear'), hint = q('wdAreaHint');
+    var undo = q('wdAreaUndo');
     if (!rect || !ctl) return;
     var can = !!ctl.enabled();
     var m = ctl.editor.mode();
@@ -497,6 +527,7 @@
     rect.classList.toggle('is-on', m === 'rect');
     poly.classList.toggle('is-on', m === 'poly');
     clear.disabled = !can || !ctl.drawn();
+    if (undo) undo.disabled = !can || !ctl.editor.corners();
     if (hint) hint.textContent = hintText();
   }
 
@@ -514,6 +545,11 @@
 
   function bind(c) {
     ctl = c;
+    // Once per editor: the page binds again whenever it is asked to.
+    if (c.editor.listen && !c.editor.listening) {
+      c.editor.listening = true;
+      c.editor.listen(sync);
+    }
     installKeys();
     sync();
   }
@@ -523,6 +559,12 @@
     // Pressing the button that is already on puts the tool down again.
     if (ctl.editor.mode() === kind) ctl.editor.cancel();
     else ctl.editor.start(kind);
+    sync();
+  }
+
+  function undoCorner() {
+    if (!ctl || !ctl.enabled()) return;
+    ctl.editor.undo();
     sync();
   }
 
@@ -542,6 +584,7 @@
     bind: bind,
     sync: sync,
     start: startKind,
+    undo: undoCorner,
     clear: clearDrawn,
     MIN_SIDE: MIN_SIDE,
     MESSAGES: MSG,

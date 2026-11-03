@@ -148,6 +148,50 @@ class DrawingAShape(unittest.TestCase):
                             "click(20, 80); key('Backspace'); key('Enter'); out();")
         self.assertEqual(out["committed"], [[[10, 10], [90, 10], [90, 40]]])
 
+    def test_undo_takes_back_one_corner_at_a_time_until_there_are_none(self):
+        out = node(EDITOR + "ed.start('poly'); click(20, 20); click(180, 20); click(180, 80); "
+                            "const seen = [ed.corners()]; "
+                            "const r = [ed.undo(), ed.undo(), ed.undo(), ed.undo()]; "
+                            "seen.push(ed.corners()); "
+                            "console.log(JSON.stringify({ r, seen, mode: ed.mode() }));")
+        self.assertEqual(out["r"], [True, True, True, False], "the fourth has nothing to take back")
+        self.assertEqual(out["seen"], [3, 0])
+        self.assertEqual(out["mode"], "poly", "taking every corner back does not leave the tool")
+
+    def test_a_corner_clicked_after_an_undo_is_where_it_was_clicked(self):
+        out = node(EDITOR + "ed.start('poly'); click(20, 20); click(180, 20); click(100, 90); "
+                            "ed.undo(); click(180, 80); key('Enter'); out();")
+        self.assertEqual(out["committed"], [[[10, 10], [90, 10], [90, 40]]])
+
+    def test_a_click_on_the_corner_just_taken_back_is_not_a_double_click(self):
+        """Without forgetting the last click, putting the corner straight back
+        on the same spot read as a double-click and closed a two-corner shape."""
+        out = node(EDITOR + "ed.start('poly'); click(20, 20); click(180, 20); click(180, 80, 1); "
+                            "ed.undo(); click(180, 80, 1); out();")
+        self.assertEqual(out["committed"], [])
+        self.assertEqual(out["modes"], ["poly"], "still drawing")
+
+    def test_control_z_and_command_z_undo_but_shift_does_not(self):
+        out = node(EDITOR + "ed.start('poly'); click(20, 20); click(180, 20); click(180, 80); "
+                            "const a = ed.onKey({ key: 'z', ctrlKey: true }); "
+                            "const b = ed.onKey({ key: 'Z', metaKey: true }); "
+                            "const n = ed.corners(); "
+                            "ed.onKey({ key: 'z', ctrlKey: true, shiftKey: true }); "
+                            "console.log(JSON.stringify([a, b, n, ed.corners()]));")
+        self.assertEqual(out, [True, True, 1, 1])
+
+    def test_undo_does_nothing_outside_a_shape(self):
+        out = node(EDITOR + "const idle = ed.undo(); ed.start('rect'); "
+                            "console.log(JSON.stringify([idle, ed.undo(), ed.corners()]));")
+        self.assertEqual(out, [False, False, 0])
+
+    def test_listeners_hear_each_corner_come_and_go(self):
+        out = node(EDITOR + "const heard = []; ed.listen(() => heard.push(ed.corners())); "
+                            "ed.start('poly'); click(20, 20); click(180, 20); ed.undo(); "
+                            "click(180, 80); ed.cancel(); "
+                            "console.log(JSON.stringify(heard));")
+        self.assertEqual(out, [0, 1, 2, 1, 2, 0])
+
     def test_escape_cancels_and_leaves_nothing(self):
         out = node(EDITOR + "ed.start('poly'); click(20, 20); click(180, 20); key('Escape'); out();")
         self.assertEqual(out["committed"], [])
@@ -313,6 +357,34 @@ console.log(JSON.stringify([idle, poly, has, state()]));
         self.assertIn("The area you drew on Level 2", has)
         self.assertEqual(off["hint"], "Open a project to draw on its plan.")
         self.assertTrue(off["rect"], "the drawing buttons are off with the reason beside them")
+
+    def test_undo_last_corner_is_off_until_a_corner_is_down_and_then_takes_it_back(self):
+        out = node(CONTROLS + """
+const pv = WD.PlanView.create({ canvas, overlay: ed.overlay,
+  dragPans: (e, p, v) => !ed.claims(e, p, v),
+  onDown: ed.onDown, onMove: ed.onMove, onUp: ed.onUp });
+pv.setImage(img);
+pv.view.scale = 1; pv.view.x = 0; pv.view.y = 0;
+function click(x, y) {
+  fire('canvas', 'mousedown', { clientX: x, clientY: y });
+  fire('window', 'mouseup', { clientX: x, clientY: y, detail: 1 });
+}
+const idle = els.wdAreaUndo.disabled;
+press('wdAreaPoly'); const fresh = els.wdAreaUndo.disabled;
+click(20, 20); click(180, 20);
+const two = [els.wdAreaUndo.disabled, state().hint];
+press('wdAreaUndo');
+const one = [els.wdAreaUndo.disabled, ed.corners(), state().hint];
+press('wdAreaUndo');
+const none = [els.wdAreaUndo.disabled, ed.corners(), ed.mode()];
+console.log(JSON.stringify({ idle, fresh, two, one, none }));
+""")
+        self.assertTrue(out["idle"] and out["fresh"], "nothing to take back yet")
+        self.assertFalse(out["two"][0])
+        self.assertIn("(2 so far)", out["two"][1])
+        self.assertEqual(out["one"][:2], [False, 1])
+        self.assertIn("(1 so far)", out["one"][2])
+        self.assertEqual(out["none"], [True, 0, "poly"])
 
     def test_a_press_while_it_is_not_allowed_does_nothing(self):
         out = node(CONTROLS + "can = false; press('wdAreaRect'); console.log(JSON.stringify(ed.mode()));")

@@ -1046,7 +1046,8 @@ headcount. The plan shows each area in pink with its people and devices.
   area yourself instead of taking the one worked out from its walls. **Draw a
   rectangle** drags one out on the plan. **Draw a shape** takes a click for each
   corner: click the first corner, double-click or press **Enter** to finish,
-  **Backspace** takes the last corner back, **Esc** cancels. Once an area is
+  **Undo last corner** (or **Backspace**, or **Ctrl+Z**) takes the last corner
+  back, one corner at a time, and **Esc** cancels. Once an area is
   drawn, drag a corner to move it, or the small dot in the middle of an edge to
   add a corner. **Back to automatic** takes the drawing away. The floor strip
   marks a floor with a drawn area **Your area**.
@@ -1965,8 +1966,8 @@ stage has:
 
 - **Draw a rectangle** — drag one out on the plan.
 - **Draw a shape** — click each corner. Click the first corner, double-click or
-  press **Enter** to finish; **Backspace** takes the last corner back; **Esc**
-  cancels.
+  press **Enter** to finish; **Undo last corner** (or **Backspace**, or
+  **Ctrl+Z**) takes the last corner back, one corner at a time; **Esc** cancels.
 - Once drawn, drag a corner to move it, or the small dot in the middle of an
   edge to add a corner.
 - **Back to automatic** takes the drawing away.
