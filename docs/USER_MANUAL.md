@@ -1864,7 +1864,10 @@ gave each AP in Ekahau. Within a colour, APs are walked nearest-neighbour.
 
 ### Manual (click order)
 
-Every AP is drawn ringed in its Ekahau colour. Click APs on the plan in the
+Every AP still to be numbered is drawn as a large white disc with a thick ring in its
+Ekahau colour, edged dark, so it stands out on a busy plan and a pale colour still shows
+on white paper. A numbered AP is a smaller disc filled with its colour and showing its
+number, so what is left to do is the ringed discs. Click APs on the plan in the
 order you want them numbered. A panel at the bottom of the naming panel shows
 **Next:** and how many are numbered, for the floor shown first and then for the whole
 project (`2 of 19 on this floor · 22 of 39 numbered in all`).
@@ -1873,8 +1876,9 @@ To take a number back:
 
 - right-click anywhere on the plan, or press Ctrl+Z — releases the last one;
 - click a numbered AP — removes that one, and the rest shift down. A message names the
-  number and the AP each time. To redo a floor, do not click through it again: every AP
-  clicked loses its number, and only the ones skipped stay numbered;
+  number and the AP each time. To redo a floor, use **Clear floor** and start again; clicking
+  through a numbered floor a second time removes each number you click, and only the APs
+  skipped stay numbered;
 - **Undo** — same as Ctrl+Z;
 - **Clear floor** — asks first, then clears the manual numbers on the floor shown and leaves the other floors as they are;
 - **Clear all** — asks first, then clears every manual number on every floor.
@@ -1886,6 +1890,14 @@ number column.
 
 **Download labeled .esx** is greyed out until at least one name would change.
 If every AP already has the name the pattern gives it, the footer says so.
+
+**An AP still named “Simulated” is reported.** Ekahau gives a newly placed AP a name such as
+`Simulated AP-47`. While any AP on a floor being renamed would still carry one, an amber note
+under **Preview** says how many, and lists them floor by floor; the floor name opens that
+floor. Pressing **Download labeled .esx** then asks whether they were meant to stay, naming
+each one (up to twelve; past that, the count per floor): **OK** downloads as it is, **Cancel**
+goes back to number them. Floors left out under **Floors to rename**, and names the
+pattern writes itself such as `AP-001`, are not reported.
 
 ### Templates & Defaults
 
