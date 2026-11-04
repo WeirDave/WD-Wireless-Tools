@@ -11672,8 +11672,11 @@ body.tool-prep .editor.active, body.tool-plantrim .editor.active, body.tool-capa
 .cap-main .cap-wrap { margin: 0 auto; }
 .cap-main .cap-card { scroll-margin-top: var(--sp-4); }
 /* The plan inside the "Draw the area" card: a block in a scrolling column, not
-   a flex child of the workbench, so it is sized outright. */
-.cap-card .ptb-stage.pb-canvas { flex: none; height: min(52vh, 520px); margin: var(--sp-2) 0; }
+   a flex child of the workbench, so it is sized outright. It takes the height
+   the window has left under the card's own header and controls (about 250px),
+   and the card spans the whole column: a stage capped at 520px fitted a tall
+   sheet by height and left black bands either side of a small plan. */
+.cap-card .ptb-stage.pb-canvas { flex: none; height: clamp(480px, calc(100vh - 250px), 1600px); margin: var(--sp-2) 0; }
 
 /* Quick Walls in the same shell: the shortcuts on the rail, the wall types in
    the middle (scrolling on their own), the template in the panel. The template
@@ -12176,7 +12179,10 @@ body.tool-walls, body.tool-prep, body.tool-walls #swapModal {
 .cap-row label, .cap-input { font-size: var(--rd-body); }
 .cap-tpl-name { font-size: var(--rd-name); }
 .cap-step-note { font-size: var(--rd-tag); }
-.cap-wrap { max-width: 1280px; }
+/* Only the plan breaks out of the reading width; the other steps are text and
+   tables, which stay at 1280px, centred. */
+.cap-wrap { max-width: none; }
+.cap-wrap > .cap-card:not(#capStepArea) { max-width: 1280px; margin-left: auto; margin-right: auto; }
 
 /* -- PlanTrim ---------------------------------------------------------- */
 .ptb-row-name { font-size: var(--rd-body); }

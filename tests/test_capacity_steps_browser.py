@@ -111,5 +111,28 @@ class CapacityStepsRespond(BrowserPagesHarness):
                     ".getAttribute('aria-checked');")
                 self.assertEqual(checked, "true")
 
+    def test_the_plan_to_draw_on_uses_the_screen_it_is_given(self):
+        """"this box ... got all this black space on the left and the right
+        ... tons of screen real estate and we're not using it". The stage was
+        capped at 520px tall inside a 1280px card, so on a large window a
+        tall sheet was fitted by height into a small box. It must take the
+        width of the column and the height the window has left."""
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                self.open_project(drv)   # 2519 x 1279
+                drv.execute_script("capGoTo('capStepArea')")
+                time.sleep(0.4)
+                r = drv.execute_script("""
+                  var st = document.getElementById('capMapStage').getBoundingClientRect();
+                  var card = document.getElementById('capStepArea').getBoundingClientRect();
+                  return {w: st.width, h: st.height, cardW: card.width,
+                          winH: window.innerHeight,
+                          scrollsSideways: document.documentElement.scrollWidth > window.innerWidth};""")
+                self.assertGreater(r["w"], 1280, "the plan is still held to the reading width")
+                self.assertGreater(r["w"], r["cardW"] - 60, "the plan does not fill its card")
+                self.assertGreater(r["h"], r["winH"] * 0.6,
+                                   "the plan leaves most of the window height unused")
+                self.assertFalse(r["scrollsSideways"])
+
 if __name__ == "__main__":
     unittest.main()
