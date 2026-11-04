@@ -393,10 +393,15 @@ def _summarise_diffs(out, design_diffs, renamed) -> str:
             continue
         noun = d.get("noun")
         if noun:
+            #: Each count names the side it is on. "added" and "removed" said
+            #: neither: they are measured from the local file, so "1 added"
+            #: meant "only in the cloud copy", and nothing on the row said so.
             bits = []
-            for label in ("added", "removed", "changed"):
-                if d.get(label):
-                    bits.append("%d %s" % (d[label], label))
+            for key, label in (("added", "only in cloud"),
+                               ("removed", "only in local"),
+                               ("changed", "changed")):
+                if d.get(key):
+                    bits.append("%d %s" % (d[key], label))
             parts.append("%s (%s)" % (noun, ", ".join(bits)) if bits else noun)
         else:
             parts.append(d["member"].replace(".json", ""))

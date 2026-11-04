@@ -148,8 +148,13 @@ class TheComparisonTellsRenamesFromRealChangesTests(unittest.TestCase):
                  {"id": "ap-3", "name": "AP 3", "x": 50, "y": 60}]
         r = compare_esx(esx(), esx(aps=added))
         summary = r["summary"]
-        self.assertIn("1 added", summary)
-        self.assertIn("1 removed", summary)
+        #: First argument is the local file, second the cloud copy: the AP
+        #: only the second has is "only in cloud", and each count names its
+        #: side, because "added" and "removed" did not.
+        self.assertIn("1 only in cloud", summary)
+        self.assertIn("1 only in local", summary)
+        self.assertNotIn("added", summary)
+        self.assertNotIn("removed", summary)
 
     def test_a_recropped_floor_plan_image_is_detected(self):
         """The blind spot a document-only comparison would have, and it is his

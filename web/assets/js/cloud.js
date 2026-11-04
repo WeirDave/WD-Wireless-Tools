@@ -4859,7 +4859,16 @@ function rowDetailHtml(r, stripe) {
       sentences.push('Exact match — the contents and the name are the same on both sides. Nothing to do.'
                      + checkedWhen(cmp));
     } else if (cmp.summary) {
-      sentences.push(cmp.summary + checkedWhen(cmp));
+      /* Which copy is the later one, beside what differs. The summary names
+         what moved and on which side it exists; it says nothing about which
+         copy was saved last, and that is the other half of choosing. The
+         date sentence this replaced answered it, and was dropped the moment
+         a comparison existed. */
+      const newer = stale === 'cloud_newer' ? ' The cloud copy has the later date.'
+                  : stale === 'local_newer' ? ' Your local file has the later date.'
+                  : '';
+      sentences.push(cmp.summary + checkedWhen(cmp)
+                     + (cmp.designDiffers ? newer : ''));
     }
   } else if (stale === 'cloud_newer') {
     /* "what is the decision? Is that the last line where it says the cloud
