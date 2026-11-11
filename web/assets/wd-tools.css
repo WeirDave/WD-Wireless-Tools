@@ -7470,7 +7470,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
      Print with Report settings open and every page of the deliverable comes out
      with the dialog across the map. None of this shows on screen, which is why
      the list is kept deliberately wide. */
-  .wd-stale-banner, .wd-update-banner, .wd-update-badge,
+  .wd-stale-banner, .wd-update-pill,
   .modal-overlay, .grid-modal-overlay, .swap-modal, .swap-undo-toast,
   .toast-container, .ops-deck, .screen-home-btn { display: none !important; }
 
@@ -8355,14 +8355,13 @@ body.tool-guide {
   .wd-about-body > .wd-about-diagnostics { grid-column: 1; grid-row: 2; }
   .wd-about-body > .wd-about-linkList { grid-column: 1; grid-row: 3; }
   .wd-about-body > .wd-about-credit { grid-column: 1; grid-row: 4; align-self: end; }
-  .wd-about-update .wd-about-updateRow { border-top: 0; padding-top: 0; }
 }
 /* The shared changelog box caps its list at 220px, sized for a 480px modal;
    the box itself stays untouched because the file is identical in each
    product. The 330px is the rest of the window - header, padding, the check
    row, the button and the note - so the list takes what is left of the
    screen and the window itself does not need a scrollbar. */
-.wd-update-panel .rc-list { max-height: clamp(180px, calc(94vh - 330px), 420px); }
+.wd-update-panel .rc-list { max-height: clamp(180px, calc(94vh - 350px), 420px); }
 .wd-about-hero { display: flex; gap: 14px; align-items: center; margin-bottom: 16px; }
 .wd-about-logo { width: 64px; height: 64px; border-radius: var(--r-md); flex-shrink: 0; }
 .wd-about-heroText { flex: 1; min-width: 0; }
@@ -8371,11 +8370,25 @@ body.tool-guide {
 .wd-about-version { font-family: var(--mono); font-size: 12px; color: var(--text-3); margin-top: 6px; }
 .wd-about-version b { color: var(--text-2); font-weight: 600; }
 
-.wd-about-updateRow {
-  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 12px 0; margin: 0 0 14px;
-  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+/* The update area is a card: its title and the state of the install across the
+   top, the notes and the update button in the middle, "Check again" at the
+   foot. It turns amber while an update is waiting, matching the pill in the
+   page header that brought the reader here. */
+.wd-about-update {
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface); padding: 12px 14px;
 }
+.wd-about-update.is-newer { border-color: var(--amber); background: var(--amber-bg); }
+.wd-about-updateHead {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 12px; margin-bottom: 6px;
+}
+.wd-about-updateHead .wd-about-sectionTitle {
+  margin: 0; flex-shrink: 0; font-family: inherit; text-transform: none;
+  letter-spacing: 0; font-size: var(--fs-body); font-weight: 700; color: var(--text);
+}
+.wd-about-updateRow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.wd-about-update .wd-update-panel { margin-bottom: 10px; }
 .wd-about-checkBtn { display: inline-flex; align-items: center; gap: 8px; }
 .wd-about-checkBtn:disabled { opacity: 0.7; cursor: default; }
 .wd-about-checkSpinner {
@@ -8384,8 +8397,9 @@ body.tool-guide {
   animation: wd-about-spin 0.7s linear infinite;
 }
 @keyframes wd-about-spin { to { transform: rotate(360deg); } }
-.wd-about-updateResult { font-size: 12px; color: var(--text-3); flex: 1; min-width: 200px; }
-.wd-about-updateResult.is-newer { color: var(--amber); }
+.wd-about-updateResult { font-size: 12px; color: var(--text-3); flex: 1; min-width: 0; text-align: right; }
+.wd-about-updateResult.is-newer { color: var(--text); font-weight: 600; }
+.wd-about-updateResult.is-newer .wd-about-updateIcon { color: var(--amber); }
 .wd-about-updateResult.is-current { color: var(--green); }
 .wd-about-updateResult.is-error { color: var(--rose); }
 .wd-about-updateIcon { display: inline-block; margin-right: 2px; }
@@ -8407,47 +8421,28 @@ body.tool-guide {
 .wd-about-credit a { color: var(--blue); text-decoration: none; }
 .wd-about-credit a:hover { text-decoration: underline; }
 
-.wd-update-banner {
-  position: fixed; top: 0; left: 0; right: 0; z-index: calc(var(--z-modal) + 10);
-  display: flex; align-items: center; gap: 12px;
-  padding: 8px 16px;
-  background: var(--amber-bg); color: var(--text);
-  border-bottom: 1px solid var(--amber);
-  font-size: 13px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+/* The pill that says an update is waiting. It sits in the page header, to the
+   left of the theme toggle; margin-left:auto lets it take whatever space the
+   header has spare, so it lands against the toggle in a header laid out with
+   space-between as well as one that is already right-aligned. The fill is the
+   amber tint with the ordinary text colour on it - the pairing the old banner
+   used - so the label reads in both themes. Clicking opens About. */
+.wd-update-pill {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  margin: 0 8px 0 auto; padding: 4px 12px;
+  border: 1px solid var(--amber); border-radius: var(--radius-pill);
+  background: var(--amber-bg); color: var(--text); cursor: pointer;
+  font: 600 var(--fs-small)/1.2 var(--mono); white-space: nowrap;
 }
-.wd-update-icon { color: var(--amber); font-size: 14px; }
-.wd-update-msg { flex: 1; min-width: 0; }
-.wd-update-detail { color: var(--text-2); }
-.wd-update-detail a { color: var(--blue); text-decoration: none; }
-.wd-update-detail a:hover { text-decoration: underline; }
-.wd-update-download {
-  padding: 4px 12px; border-radius: var(--r-sm); border: 0; cursor: pointer;
-  background: color-mix(in srgb, var(--blue) 70%, black); color: #fff !important; text-decoration: none;
-  font-family: var(--mono); font-size: 12px; font-weight: 600;
+.wd-update-pill::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--amber);
 }
-.wd-update-download:hover { filter: brightness(1.1); }
-.wd-update-close {
-  background: transparent; color: var(--text-2); border: 0;
-  font-size: 18px; cursor: pointer; line-height: 1; padding: 0 4px;
+.wd-update-pill:hover { background: color-mix(in srgb, var(--amber) 22%, var(--amber-bg)); }
+.wd-update-pill:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+/* Only on a page with no theme toggle to sit beside. */
+.wd-update-pill.is-floating {
+  position: fixed; top: 12px; right: 16px; margin: 0; z-index: calc(var(--z-modal) - 1);
 }
-.wd-update-close:hover { color: var(--text); }
-body.wd-has-update-banner { padding-top: 40px; }
-body.wd-has-update-banner .dz-topbar { top: 40px; }
-body.wd-has-stale-banner.wd-has-update-banner { padding-top: 84px; }
-body.wd-has-stale-banner.wd-has-update-banner .dz-topbar { top: 84px; }
-
-.wd-update-badge {
-  position: fixed; bottom: 16px; right: 16px; z-index: calc(var(--z-modal) - 1);
-  display: flex; align-items: center; gap: 4px;
-  padding: 5px 12px; border-radius: var(--radius-pill); border: 1px solid var(--blue);
-  background: var(--blue); color: #fff; cursor: pointer;
-  font: 600 11px/1 var(--mono); white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  transition: filter 0.15s;
-}
-.wd-update-badge:hover { filter: brightness(1.15); }
-body.wd-has-update-banner .wd-update-badge { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════
    Grid configuration modal (Report tool)

@@ -405,30 +405,31 @@ class TheTextCanBeRead(unittest.TestCase):
                     fill = pal.resolve(_final(sel, "background"))
                     self.assertGreaterEqual(round(_contrast(white, fill), 2), 4.5)
 
-    def test_the_update_banners_button_clears_four_and_a_half_to_one(self):
+    def test_the_update_pills_label_clears_four_and_a_half_to_one(self):
+        """The pill in the header, and the amber card About turns into while an
+        update is waiting: the label and the status line both sit on the amber
+        tint, in both themes."""
         for theme in ("dark", "light"):
             pal = _Colours(theme)
-            fill = pal.resolve(_final(".wd-update-download", "background"))
-            with self.subTest(theme=theme):
-                self.assertGreaterEqual(round(_contrast((1.0, 1.0, 1.0), fill), 2), 4.5)
+            for sel, bg_sel in ((".wd-update-pill", ".wd-update-pill"),
+                                (".wd-about-updateResult.is-newer", ".wd-about-update.is-newer")):
+                ink = pal.resolve(_final(sel, "color"))
+                fill = pal.resolve(_final(bg_sel, "background"))
+                with self.subTest(theme=theme, selector=sel):
+                    self.assertGreaterEqual(round(_contrast(ink, fill), 2), 4.5)
 
     def test_muted_text_on_the_settings_page_clears_four_and_a_half_to_one(self):
         """The overview's titles, empty values and where-it-lives lines, the
-        re-run link, the drag and remove marks, and the update banner's detail."""
+        re-run link, and the drag and remove marks."""
         selectors = [".s-ov-title", ".s-ov-row .s-ov-val.is-empty", ".s-ov-where",
-                     ".settings-footer .rerun-link", ".sf-handle", ".sf-remove",
-                     ".wd-update-detail"]
+                     ".settings-footer .rerun-link", ".sf-handle", ".sf-remove"]
         for theme in ("dark", "light"):
             pal = _Colours(theme)
             for sel in selectors:
                 ink = pal.resolve(_final(sel, "color"))
-                # Page background, and the update banner's amber tint.
-                for where, bg in (("page", pal.resolve("var(--bg)")),
-                                  ("banner", pal.resolve("var(--amber-bg)"))):
-                    if where == "banner" and sel != ".wd-update-detail":
-                        continue
-                    with self.subTest(theme=theme, selector=sel, on=where):
-                        self.assertGreaterEqual(round(_contrast(ink, bg), 2), 4.5)
+                with self.subTest(theme=theme, selector=sel):
+                    self.assertGreaterEqual(
+                        round(_contrast(ink, pal.resolve("var(--bg)")), 2), 4.5)
 
     def test_the_column_holds_its_width_between_sections(self):
         """It shrank to its content: a short section moved the list of sections

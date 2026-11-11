@@ -367,7 +367,15 @@ crashes it and it reads as `InvalidSessionIdException`.
 - `tools/updater.py` is the whole mechanism. `detect_install()` picks git / ZIP
   / convert / manual / dev, and About leads with that one action.
   `/api/update/status` and `/api/update` in `server.py` are the only entry
-  points; the UI is `_showUpdatePanel()` in `wd-shared.js`.
+  points; the UI is `WD.Updater` in `wd-shared.js`.
+- **An update waiting is a pill in the page header, not a bar.** One
+  `.wd-update-pill` is placed before every `.theme-toggle` (a page with two
+  headers has two; a page with no toggle gets a floating one) and opens About,
+  where the Updates card turns amber. The full-width bar pushed every page down
+  and had to be dismissed, so the bar, its dismissal key and the bottom-corner
+  badge are gone; the pill simply stays until the install is current. Cloud
+  Manager's sign-in screen has no header, so no pill shows there until signed
+  in. `tests/test_update_pill_in_header_browser.py`.
 - **User data never lives in the install tree**, or updates break. Put new
   user-writable state under `~/.wd_wireless_tools/`. Shipped wall templates
   stay in `templates/` as read-only built-ins; user files in

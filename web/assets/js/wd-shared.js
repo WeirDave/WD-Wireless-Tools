@@ -806,8 +806,7 @@
        seconds while the mismatch lasts. */
     if (!existing) {
       try { localStorage.removeItem(WD_UPDATE_CACHE_KEY); } catch (e) {}
-      _removeUpdateBanner();
-      _removeUpdateBadge();
+      _removeUpdatePill();
     }
     if (existing) existing.remove();
     var b = document.createElement('div');
@@ -896,7 +895,6 @@
   // the update check below, which goes through /api/update/status.
   var WD_API_LATEST = 'https://api.github.com/repos/' + WD_REPO + '/releases/latest';
   var WD_UPDATE_CACHE_KEY = 'wd-update-check';
-  var WD_UPDATE_DISMISS_KEY = 'wd-update-dismissed';
   // A day was the right number while every check spent one of GitHub's 60
   // anonymous API calls an hour, shared by everyone behind the same address.
   // Since v2.98.1 a git install is answered by `git ls-remote` through our own
@@ -964,14 +962,17 @@
             '</div>' +
           '</div>' +
           '<div class="wd-about-update">' +
-            '<div class="wd-about-updateRow">' +
-              '<button class="btn wd-about-checkBtn" type="button">' +
-                '<span class="wd-about-checkSpinner" aria-hidden="true" hidden></span>' +
-                '<span class="wd-about-checkLabel">Check for updates</span>' +
-              '</button>' +
+            '<div class="wd-about-updateHead">' +
+              '<div class="wd-about-sectionTitle">Updates</div>' +
               '<div class="wd-about-updateResult" role="status" aria-live="polite"></div>' +
             '</div>' +
             '<div class="wd-update-panel" hidden></div>' +
+            '<div class="wd-about-updateRow">' +
+              '<button class="btn btn-sm wd-about-checkBtn" type="button">' +
+                '<span class="wd-about-checkSpinner" aria-hidden="true" hidden></span>' +
+                '<span class="wd-about-checkLabel">Check again</span>' +
+              '</button>' +
+            '</div>' +
           '</div>' +
           '<div class="wd-about-section wd-about-diagnostics">' +
             '<div class="wd-about-sectionTitle">Diagnostics</div>' +
@@ -1098,7 +1099,7 @@
     var label = modal.querySelector('.wd-about-checkLabel');
     if (btn) btn.disabled = busy;
     if (spinner) spinner.hidden = !busy;
-    if (label) label.textContent = busy ? 'Checking…' : 'Check for updates';
+    if (label) label.textContent = busy ? 'Checking…' : 'Check again';
   }
 
   /* "tracking main" or "tracking releases", beside the version.
@@ -1120,11 +1121,17 @@
     if (!modal) return;
     var el = modal.querySelector('.wd-about-updateResult');
     if (!el) return;
+    /* The card turns amber while there is something to install, so the one
+       thing worth acting on in this window is the thing that stands out. */
+    var card = modal.querySelector('.wd-about-update');
+    if (card) card.classList.toggle('is-newer', !!state.isNewer);
     if (state.isNewer) {
       el.className = 'wd-about-updateResult is-newer';
-      el.innerHTML =
-        '<span class="wd-about-updateIcon">&#8681;</span> ' +
-        'New release: <b>v' + WD.esc(state.latestVersion) + '</b>';
+      el.innerHTML = state.branch
+        ? '<span class="wd-about-updateIcon">&#8681;</span> ' +
+          'New commits on <b>' + WD.esc(state.branch) + '</b>'
+        : '<span class="wd-about-updateIcon">&#8681;</span> ' +
+          'Version <b>' + WD.esc(state.latestVersion) + '</b> is available';
       var panel = modal.querySelector('.wd-update-panel');
       if (panel) WD.Updater.mount(panel, state);
     } else {
@@ -1239,6 +1246,12 @@
 
     function primaryLabel() {
       if (info && info.method === 'zip') return 'Download and install update';
+      /* Name the version when there is one to name. A branch update moves
+         commits and not the version number, so "Update to v2.100.20" would be
+         the version already installed. */
+      if (state && state.latestVersion && !state.branch) {
+        return 'Update to v' + state.latestVersion;
+      }
       return 'Update now';
     }
 
@@ -1471,7 +1484,7 @@
 
     function renderDone(res, mode) {
       try { localStorage.removeItem(WD_UPDATE_CACHE_KEY); } catch (e) {}
-      _removeUpdateBanner();
+      _removeUpdatePill();
 
       if (mode === 'convert') {
         render({ cls: 'is-done', body:
@@ -1614,6 +1627,8 @@
     if (!modal) return;
     var el = modal.querySelector('.wd-about-updateResult');
     if (!el) return;
+    var card = modal.querySelector('.wd-about-update');
+    if (card) card.classList.remove('is-newer');
     el.className = 'wd-about-updateResult is-error';
     var msg;
     if (state && state.kind === 'ratelimit') {
@@ -1656,7 +1671,7 @@
           _renderUpdateError(cached);
         } else {
           _renderUpdateResult(cached);
-          _maybeShowUpdateBanner(cached);
+          _maybeShowUpdatePill(cached);
         }
         return Promise.resolve(cached);
       }
@@ -1723,7 +1738,7 @@
         };
         _writeUpdateCache(state);
         _renderUpdateResult(state);
-        _maybeShowUpdateBanner(state);
+        _maybeShowUpdatePill(state);
         return state;
       })
       .catch(function (err) {
@@ -1760,78 +1775,73 @@
       });
   };
 
-  function _maybeShowUpdateBanner(state) {
-    if (!state || !state.isNewer) { _removeUpdateBanner(); _removeUpdateBadge(); return; }
-    _renderUpdateBadge(state);
-    /* Dismiss until the next one - and for a branch update "the next one" is
-       a different commit, not a different version. The version does not move
-       between branch pushes, so keying on it would have meant one dismissal
-       silencing the banner for good. */
-    var token = state.branch ? ('branch:' + state.branchAt) : state.latestVersion;
-    try {
-      if (localStorage.getItem(WD_UPDATE_DISMISS_KEY) === token) return;
-    } catch (e) {}
-    _renderUpdateBanner(state);
+  /* The "an update is waiting" notice is a pill in the page header, beside the
+     theme toggle, and clicking it opens About - which is where the install is
+     identified and the update runs. It used to be a full-width bar across the
+     top of every page that pushed the page down and had to be dismissed; a
+     small pill in the corner says the same thing without taking the page's
+     space or needing to be put away. It stays until the install is current. */
+  function _maybeShowUpdatePill(state) {
+    if (!state || !state.isNewer) { _removeUpdatePill(); return; }
+    _renderUpdatePill(state);
   }
 
-  function _renderUpdateBanner(state) {
-    if (document.getElementById('wdUpdateBanner')) return;
-    var b = document.createElement('div');
-    b.id = 'wdUpdateBanner';
-    b.className = 'wd-update-banner';
+  function _updatePillTitle(state) {
     var n = state.behindBy || 0;
-    var headline = state.branch
-      ? '<b>' + (n ? n + ' new commit' + (n === 1 ? '' : 's') + ' on '
-                   : 'New commits on ') + WD.esc(state.branch) + '</b>'
-      : '<b>Update available: v' + WD.esc(state.latestVersion) + '</b>';
-    var detail = state.branch
-      ? ' &middot; Your checkout is behind the branch it follows. You’re on v'
-        + WD.esc(state.localVersion || '?') + '.'
-      : ' &middot; You’re running v' + WD.esc(state.localVersion || '?') + '.';
-    b.innerHTML =
-      '<span class="wd-update-icon">&#8681;</span>' +
-      '<span class="wd-update-msg">' + headline +
-        '<span class="wd-update-detail">' + detail + '</span>' +
-      '</span>' +
-      '<button class="wd-update-download" type="button">Update</button>' +
-      '<button class="wd-update-close" type="button" title="Dismiss until next release">&times;</button>';
-    b.querySelector('.wd-update-close').addEventListener('click', function () {
-      var token = state.branch ? ('branch:' + state.branchAt) : state.latestVersion;
-      try { localStorage.setItem(WD_UPDATE_DISMISS_KEY, token); } catch (e) {}
-      _removeUpdateBanner();
-    });
-    // Opens the About panel rather than linking out to GitHub — the panel is
-    // where the install is detected and the update actually runs.
-    b.querySelector('.wd-update-download').addEventListener('click', function (e) {
-      e.preventDefault();
-      WD.openAbout();
-    });
-    document.body.appendChild(b);
-    document.body.classList.add('wd-has-update-banner');
+    return state.branch
+      ? (n ? n + ' new commit' + (n === 1 ? '' : 's') + ' on ' : 'New commits on ') +
+        state.branch + '. This checkout is behind the branch it follows (it is on v' +
+        (state.localVersion || '?') + '). Click for details.'
+      : 'Update available: v' + state.latestVersion + ' (this is v' +
+        (state.localVersion || '?') + '). Click for details.';
   }
 
-  function _removeUpdateBanner() {
-    var el = document.getElementById('wdUpdateBanner');
-    if (el) el.remove();
-    document.body.classList.remove('wd-has-update-banner');
+  /* One pill beside every theme toggle, because some pages keep two headers
+     (a drop screen and a workspace) and only one is showing at a time; the
+     hidden header's pill is hidden with it. A page with no theme toggle gets a
+     single pill pinned to the top right instead. */
+  function _renderUpdatePill(state) {
+    var title = _updatePillTitle(state);
+    var toggles = document.querySelectorAll('.theme-toggle');
+    var wanted = [];
+    toggles.forEach(function (toggle) {
+      var prev = toggle.previousElementSibling;
+      var pill = prev && prev.classList.contains('wd-update-pill') ? prev : null;
+      if (!pill) {
+        pill = _newUpdatePill();
+        toggle.parentNode.insertBefore(pill, toggle);
+      }
+      wanted.push(pill);
+    });
+    var floating = document.getElementById('wdUpdatePillFloat');
+    if (toggles.length) {
+      if (floating) floating.remove();
+    } else if (!floating) {
+      floating = _newUpdatePill();
+      floating.id = 'wdUpdatePillFloat';
+      floating.classList.add('is-floating');
+      document.body.appendChild(floating);
+      wanted.push(floating);
+    } else {
+      wanted.push(floating);
+    }
+    wanted.forEach(function (pill) {
+      pill.title = title;
+      pill.setAttribute('aria-label', title);
+    });
   }
 
-  function _renderUpdateBadge(state) {
-    if (document.getElementById('wdUpdateBadge')) return;
+  function _newUpdatePill() {
     var b = document.createElement('button');
-    b.id = 'wdUpdateBadge';
-    b.className = 'wd-update-badge';
+    b.className = 'wd-update-pill';
     b.type = 'button';
-    b.title = 'Update available — click for details';
-    // textContent, so no escaping - WD.esc here would render the entities literally.
-    b.textContent = '⬆ v' + state.latestVersion;
+    b.textContent = 'Update';
     b.addEventListener('click', function () { WD.openAbout(); });
-    document.body.appendChild(b);
+    return b;
   }
 
-  function _removeUpdateBadge() {
-    var el = document.getElementById('wdUpdateBadge');
-    if (el) el.remove();
+  function _removeUpdatePill() {
+    document.querySelectorAll('.wd-update-pill').forEach(function (el) { el.remove(); });
   }
 
   WD.api = function (action, body) {

@@ -1346,7 +1346,7 @@ class ACancelledCheckIsNotAFailedOneTests(unittest.TestCase):
 
     def test_a_check_cut_off_by_navigation_is_not_cached(self):
         body = self.src[self.src.index("WD.checkForUpdates = function"):]
-        body = body[:body.index("function _maybeShowUpdateBanner")]
+        body = body[:body.index("function _maybeShowUpdatePill")]
         catch = body[body.index(".catch(function (err)"):]
         self.assertIn("if (_navigatingAway || _isAbortError(err))", catch)
         guard = catch.index("_navigatingAway")
@@ -1370,17 +1370,18 @@ class ACancelledCheckIsNotAFailedOneTests(unittest.TestCase):
         self.assertIn("_renderUpdateError(errState)", body)
 
 
-class TheBannerSaysSomethingTrueTests(unittest.TestCase):
+class ThePillSaysSomethingTrueTests(unittest.TestCase):
     """"Update available: v2.100.19" to someone already running 2.100.20 is
-    not an update, it is a contradiction - and he is exactly that person."""
+    not an update, it is a contradiction - and he is exactly that person. The
+    pill's hover text is where that wording lives now."""
 
     SHARED = Path(__file__).resolve().parent.parent / "web" / "assets" / "js" / "wd-shared.js"
 
     def setUp(self):
         src = self.SHARED.read_text(encoding="utf-8")
         self.src = src
-        self.banner = src[src.index("function _renderUpdateBanner"):]
-        self.banner = self.banner[:self.banner.index("function _removeUpdateBanner")]
+        self.banner = src[src.index("function _updatePillTitle"):]
+        self.banner = self.banner[:self.banner.index("function _renderUpdatePill")]
 
     def test_a_branch_update_is_worded_as_one(self):
         self.assertIn("New commits on", self.banner)
@@ -1388,15 +1389,6 @@ class TheBannerSaysSomethingTrueTests(unittest.TestCase):
 
     def test_a_release_update_still_names_the_version(self):
         self.assertIn("Update available: v", self.banner)
-
-    def test_dismissing_a_branch_update_keys_on_the_commit(self):
-        """The version does not move between branch pushes, so keying the
-        dismissal on it would mean one dismissal silenced the banner for
-        good."""
-        maybe = self.src[self.src.index("function _maybeShowUpdateBanner"):]
-        maybe = maybe[:maybe.index("function _renderUpdateBanner")]
-        self.assertIn("state.branch ? ('branch:' + state.branchAt)", maybe)
-        self.assertIn("state.branch ? ('branch:' + state.branchAt)", self.banner)
 
 
 if __name__ == "__main__":
