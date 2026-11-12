@@ -147,6 +147,11 @@ class TheUpdatePillSitsInTheHeader(BrowserPagesHarness):
                 WebDriverWait(drv, 15).until(lambda d: d.execute_script(
                     "var c = document.querySelector('#wdAboutModal.active .wd-about-update.is-newer');"
                     "return !!c && /9\\.0\\.9/.test(c.textContent);"))
+                # Opening About starts its own check, and the button reads
+                # "Checking..." until that finishes; read it once it is idle.
+                WebDriverWait(drv, 15).until(lambda d: d.execute_script(
+                    "var b = document.querySelector('#wdAboutModal .wd-about-checkBtn');"
+                    "return !!b && !b.disabled;"))
                 got = drv.execute_script(
                     "var c = document.querySelector('#wdAboutModal .wd-about-update');"
                     "var go = c.querySelector('.wd-update-goBtn');"
@@ -154,9 +159,11 @@ class TheUpdatePillSitsInTheHeader(BrowserPagesHarness):
                     " status: c.querySelector('.wd-about-updateResult').textContent,"
                     " go: go ? go.textContent : null,"
                     " check: c.querySelector('.wd-about-checkBtn').textContent};")
-                self.assertEqual(got["title"], "Updates", got)
-                self.assertIn("Version 9.0.9 is available", got["status"], got)
-                self.assertEqual(got["check"].strip(), "Check again", got)
+                # ascii(): the status line carries an arrow, and a failure
+                # message with one cannot be printed on a cp1252 console.
+                self.assertEqual(got["title"], "Updates", ascii(got))
+                self.assertIn("Version 9.0.9 is available", got["status"], ascii(got))
+                self.assertEqual(got["check"].strip(), "Check again", ascii(got))
 
     def test_the_update_button_names_the_version(self):
         for kind, drv in self.each_browser():
