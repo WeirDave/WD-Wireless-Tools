@@ -24,6 +24,27 @@ config block each — nothing below `CONFIG` names this app.
   `Update-WaxFrame.ps1`, which is where this design came from.
 
 
+## The status pill
+
+The pill in the page header (update state plus a second signal) is the
+updater's front door, and ports the same way. It is the `_pill*` / `_syncPill`
+block in `wd-shared.js` and the `.wd-status-pill` rules at the end of
+`wd-tools.css`; About hosts the cards it opens.
+
+- **One pill per theme toggle**, a floating one where a page has none. A page
+  with two headers (a drop screen and a workspace) gets two, and the hidden
+  header hides its own.
+- **The second signal is whatever the app has that goes stale without a page
+  noticing.** Here it is the Ekahau Cloud sign-in; in another app it would be
+  that app's own login or licence. Keep it to a **four-word state** answered
+  **from memory by the server** (`CloudManager.session_state`) and a separate
+  **asking** call (`session_check`) that runs only from a button. An app that
+  promises it does not phone home must not let a header do it on every page.
+- **Keep a flag for "was signed in, is not now".** A refused session is deleted
+  from disk, so afterwards "expired" and "never signed in" are the same on
+  disk; only a flag in the process tells them apart.
+- It does not apply to WaxFrame (a `file://` app with no server to ask).
+
 ## The dev toolbar
 
 **It is written to be copied again**, since he keeps one in every project, and

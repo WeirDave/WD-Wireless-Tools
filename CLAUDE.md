@@ -368,14 +368,28 @@ crashes it and it reads as `InvalidSessionIdException`.
   / convert / manual / dev, and About leads with that one action.
   `/api/update/status` and `/api/update` in `server.py` are the only entry
   points; the UI is `WD.Updater` in `wd-shared.js`.
-- **An update waiting is a pill in the page header, not a bar.** One
-  `.wd-update-pill` is placed before every `.theme-toggle` (a page with two
-  headers has two; a page with no toggle gets a floating one) and opens About,
-  where the Updates card turns amber. The full-width bar pushed every page down
-  and had to be dismissed, so the bar, its dismissal key and the bottom-corner
-  badge are gone; the pill simply stays until the install is current. Cloud
-  Manager's sign-in screen has no header, so no pill shows there until signed
-  in. `tests/test_update_pill_in_header_browser.py`.
+- **The status pill is in every page's header, always, not a bar.** One
+  `.wd-status-pill` is placed before every `.theme-toggle` (a page with two
+  headers has two; a page with no toggle gets a floating one; `/setup` gets
+  none) and opens About. It says two things: whether the install is current
+  ("Up to date" / "Update") and whether the Ekahau Cloud sign-in is good
+  (a cloud that is solid green when signed in, outline when there is no
+  sign-in, amber when it has expired). Either one wanting attention turns it
+  amber: "Update", "Sign in" or "Update · Sign in". About carries an
+  **Ekahau Cloud** card beside the **Updates** card, with "Log in to Ekahau
+  Cloud" and "Check now". The full-width bar, its dismissal key and the
+  bottom-corner badge are gone. Cloud Manager's sign-in screen has no header,
+  so no pill shows there until signed in.
+  `tests/test_status_pill_in_header_browser.py`.
+- **The pill must never contact Ekahau.** The Home page promises Cloud Manager
+  talks to Ekahau only when told to, and the pill is on every page and
+  refreshes every 30 seconds. `/api/cloud/session` (`CloudManager.session_state`)
+  answers from memory: connected this run, a saved sign-in not yet tried,
+  **expired** (Ekahau turned one away in this run - kept as a flag because the
+  saved files are deleted on refusal, so afterwards "expired" and "never signed
+  in" look identical on disk), or none. `/api/cloud/session_check` is the one
+  that asks, and it runs only from the About card's buttons and its wait for a
+  browser sign-in. `test_loading_a_page_never_contacts_ekahau` holds it.
 - **User data never lives in the install tree**, or updates break. Put new
   user-writable state under `~/.wd_wireless_tools/`. Shipped wall templates
   stay in `templates/` as read-only built-ins; user files in
