@@ -731,13 +731,40 @@
     });
   };
 
+  /* The tab title carries the version, so two tabs of the same tool - or a
+     tab left open across an update - can be told apart without opening About.
+     Home and the other suite pages say the suite number; a tool says its own
+     and the suite it shipped in, since release notes are written against the
+     suite. The tool is named by `data-tool` on the <title> element.
+     The Report is the one page whose title is not ours to extend: it is the
+     saved PDF's file name. So the number is only added while the title is
+     still the static one in the HTML, and a title the page has since replaced
+     is left alone. */
+  WD.titleWithVersions = function (base, tool, versions) {
+    var suite = versions && versions.suite;
+    var own = tool && versions && versions[tool];
+    if (!suite && !own) return base;
+    if (own) return base + ' v' + own + (suite ? ' (suite v' + suite + ')' : '');
+    return base + ' v' + suite;
+  };
+
+  var _baseTitle = typeof document !== 'undefined' ? document.title : ''; /* as written in the HTML, read before any page code can replace it */
+  var _versionedTitle = null; /* what this function last set it to */
+  WD.applyTitleVersion = function (versions) {
+    var el = document.querySelector('title');
+    if (!el) return;
+    if (document.title !== _baseTitle && document.title !== _versionedTitle) return;
+    _versionedTitle = WD.titleWithVersions(_baseTitle, el.getAttribute('data-tool'), versions);
+    document.title = _versionedTitle;
+  };
+
   WD.applyVersions = function () {
-    var els = document.querySelectorAll('[data-ver]');
-    if (!els.length) return;
     var url = _scriptSrc ? _scriptSrc.replace(/js\/wd-shared\.js.*$/, 'versions.json') : '/assets/versions.json';
+    var els = document.querySelectorAll('[data-ver]');
     fetch(url, { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (versions) {
+        WD.applyTitleVersion(versions);
         els.forEach(function (el) {
           var key = el.getAttribute('data-ver');
           var v = versions[key];
