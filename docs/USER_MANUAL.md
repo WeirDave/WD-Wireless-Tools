@@ -2586,8 +2586,11 @@ Open **Menu → About & Updates**. It checks for a newer release as it opens;
 
 1. Press **Update now** (git install) or **Download and install update** (ZIP
    install). Progress shows in the panel and the terminal window.
-2. The panel reports the change, for example `Updated v2.5.0 → v2.6.0`.
-3. Press **Restart to finish**. The page reloads on the new version.
+2. The panel reports the change, for example `Updated v2.5.0 → v2.6.0`, and the
+   app restarts on its own. There is no second button to press.
+3. The page reloads on the new version and **About** opens on what was
+   installed, with the release notes of the update. If the app does not come
+   back within 30 seconds, **Try restart again** appears in the panel.
 
 Beside the version it says what it compares against: tracking releases,
 tracking a named branch, or installed from a ZIP.

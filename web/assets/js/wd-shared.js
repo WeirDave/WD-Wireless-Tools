@@ -922,6 +922,14 @@
   // the update check below, which goes through /api/update/status.
   var WD_API_LATEST = 'https://api.github.com/repos/' + WD_REPO + '/releases/latest';
   var WD_UPDATE_CACHE_KEY = 'wd-update-check';
+  /* Set by the update screen just before it restarts the server, read once by
+     the page that loads afterwards. sessionStorage, so it belongs to this tab
+     and cannot outlive it. */
+  var WD_JUST_UPDATED_KEY = 'wd-just-updated';
+  /* While the page that follows an update is showing what was installed, the
+     background check that finishes after load must not replace it with "You're
+     on the latest release" and take the panel away. Cleared by opening About. */
+  var _holdInstalled = false;
   // A day was the right number while every check spent one of GitHub's 60
   // anonymous API calls an hour, shared by everyone behind the same address.
   // Since v2.98.1 a git install is answered by `git ls-remote` through our own
@@ -1038,6 +1046,7 @@
   }
 
   WD.openAbout = function () {
+    _holdInstalled = false;
     _ensureAboutModal();
     document.querySelectorAll('.main-menu.open, .help-menu.open, .wd-menu.open')
       .forEach(function (m) { m.classList.remove('open'); });
@@ -1162,6 +1171,7 @@
       var panel = modal.querySelector('.wd-update-panel');
       if (panel) WD.Updater.mount(panel, state);
     } else {
+      if (_holdInstalled) return;
       el.className = 'wd-about-updateResult is-current';
       el.innerHTML =
         '<span class="wd-about-updateIcon">&#10003;</span> ' +
@@ -1547,6 +1557,58 @@
         .catch(function (res) { renderFailed(res || {}); });
     }
 
+    /* Something arrived but the version did not move - a pull that brought
+       commits nothing in which bumped versions.json. "Updated v2.99.8 to
+       v2.99.8" is what that rendered as before, which reads as a bug in the
+       thing that just worked. Say what actually happened instead. */
+    function installedHeadline(from, to, commits) {
+      if (from && to && from === to) {
+        var n = commits || 0;
+        return '<span class="wd-update-tick">&#10003;</span> Pulled' +
+          (n ? ' <b>' + esc(String(n)) + '</b> commit' + (n === 1 ? '' : 's') : '') +
+          ' &mdash; still on <b>v' + esc(to) + '</b>';
+      }
+      return '<span class="wd-update-tick">&#10003;</span> Updated' +
+        (from && to ? ' <b>v' + esc(from) + '</b> &rarr; <b>v' + esc(to) + '</b>' : '');
+    }
+
+    /* The restart reloads the page, which would take the release notes with
+       it. They are kept for the page that loads next, which shows them
+       (showInstalled). Only releases up to the version that landed. */
+    function rememberInstalled(from, to, commits) {
+      try {
+        var changes = ((state && state.changes) || []).filter(function (r) {
+          return _cmpVer(r.version, to) <= 0;
+        });
+        sessionStorage.setItem(WD_JUST_UPDATED_KEY, JSON.stringify({
+          t: Date.now(), from: from, to: to, commits: commits || 0,
+          changes: changes, truncated: !!(state && state.changesTruncated)
+        }));
+      } catch (e) { /* the restart does not depend on it */ }
+    }
+
+    /* The page that follows an update restart: what was installed and what
+       changed, in the panel, with no button - the restart already happened. */
+    function showInstalled(rec, el) {
+      host = el;
+      state = { localVersion: rec.to, latestVersion: rec.to,
+                changes: rec.changes || [], changesTruncated: !!rec.truncated };
+      if (!host) return;
+      var same = !!(rec.from && rec.to && rec.from === rec.to);
+      host.hidden = false;
+      render({ cls: 'is-done', body:
+        '<div class="wd-update-headline">' +
+          installedHeadline(rec.from, rec.to, rec.commits) + '</div>' +
+        '<div class="wd-update-note">The app restarted and is running the new ' +
+          'version.</div>' +
+        (same ? '' :
+          changesHtml() +
+          '<div class="wd-update-note"><a class="wd-about-updateLink" href="' +
+            escAttr(config.releasesUrl.replace('/latest', '')) +
+            '" target="_blank" rel="noopener">Full release history &rarr;</a></div>') });
+      if (!same) fillChanges({ to: rec.to });
+    }
+
     function renderDone(res, mode) {
       try { localStorage.removeItem(WD_UPDATE_CACHE_KEY); } catch (e) {}
       _removeUpdatePill();
@@ -1573,21 +1635,8 @@
       var from = res.previousVersion || (state && state.localVersion) || '';
       var to = res.newVersion || (state && state.latestVersion) || '';
 
-      /* Something arrived but the version did not move - a pull that brought
-         commits nothing in which bumped versions.json. "Updated v2.99.8 →
-         v2.99.8" is what that rendered as before, which reads as a bug in the
-         thing that just worked. Say what actually happened instead. */
-      var sameVersion = from && to && from === to;
-      var headline;
-      if (sameVersion) {
-        var n = res.commits || 0;
-        headline = '<span class="wd-update-tick">&#10003;</span> Pulled' +
-          (n ? ' <b>' + esc(String(n)) + '</b> commit' + (n === 1 ? '' : 's') : '') +
-          ' &mdash; still on <b>v' + esc(to) + '</b>';
-      } else {
-        headline = '<span class="wd-update-tick">&#10003;</span> Updated' +
-          (from && to ? ' <b>v' + esc(from) + '</b> &rarr; <b>v' + esc(to) + '</b>' : '');
-      }
+      var sameVersion = !!(from && to && from === to);
+      var headline = installedHeadline(from, to, res.commits);
 
       render({ cls: 'is-done', body:
         '<div class="wd-update-headline">' + headline + '</div>' +
@@ -1601,13 +1650,11 @@
           'could not be removed and can be deleted: ' + esc(res.backup) + '</div>' : '') +
         stepsHtml(res.steps) +
         '<div class="wd-update-primaryRow">' +
-          '<button class="btn btn-primary wd-update-restartBtn" type="button">' +
-            'Restart to finish</button>' +
-          '<span class="wd-update-target">The new version loads after the restart.</span>' +
+          '<button class="btn btn-primary wd-update-restartBtn" type="button" disabled>' +
+            'Restarting…</button>' +
+          '<span class="wd-update-target">The page reloads on the new version ' +
+            'when the app is back.</span>' +
         '</div>' +
-        /* Under the button, not above it: the restart is the one thing this
-           screen is for, and the list scrolls inside its own box, so reading
-           the notes never pushes the button out of reach. */
         (sameVersion ? '' :
           changesHtml() +
           '<div class="wd-update-note"><a class="wd-about-updateLink" href="' +
@@ -1615,6 +1662,12 @@
             '" target="_blank" rel="noopener">Full release history &rarr;</a></div>') });
       if (!sameVersion) fillChanges({ to: to });
       wire();
+      /* The update button updates and restarts; there is no second button to
+         press. The one above stays as the retry if the app does not come back,
+         and the notes are carried to the page that loads next. */
+      rememberInstalled(from, to, res.commits);
+      var again = host && host.querySelector('.wd-update-restartBtn');
+      if (again) doRestart(again);
     }
 
     function renderFailed(res) {
@@ -1657,6 +1710,10 @@
             if (Date.now() > deadline) {
               btn.disabled = false;
               btn.textContent = 'Try restart again';
+              var why = btn.parentNode && btn.parentNode.querySelector('.wd-update-target');
+              if (why) why.textContent = 'The app did not come back. The update is ' +
+                'installed; if restarting does not work, close the terminal ' +
+                'window and start the app again.';
               return;
             }
             fetch(config.endpoints.version, { cache: 'no-store' })
@@ -1689,7 +1746,8 @@
       config: config,
       mount: mount,
       unmount: unmount,
-      run: run
+      run: run,
+      showInstalled: showInstalled
     };
   })();
 
@@ -2096,6 +2154,33 @@
     }, true);
   };
 
+  /* The page that loads after an update restart opens About on what was
+     installed, since the screen that said so went with the old page. */
+  function _showInstalledUpdate() {
+    var rec = null;
+    try {
+      var raw = sessionStorage.getItem(WD_JUST_UPDATED_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(WD_JUST_UPDATED_KEY);
+      rec = JSON.parse(raw);
+    } catch (e) { return; }
+    if (!rec || !rec.to || !rec.t || Date.now() - rec.t > 10 * 60 * 1000) return;
+    _ensureAboutModal();
+    var modal = document.getElementById(WD_ABOUT_ID);
+    var panel = modal && modal.querySelector('.wd-update-panel');
+    if (!panel) return;
+    _holdInstalled = true;
+    var el = modal.querySelector('.wd-about-updateResult');
+    if (el) {
+      el.className = 'wd-about-updateResult is-current';
+      el.innerHTML = '<span class="wd-about-updateIcon">&#10003;</span> ' +
+        'Running v' + WD.esc(rec.to) + '.';
+    }
+    WD.Updater.showInstalled(rec, panel);
+    modal.classList.add('active');
+    _renderLogPath();
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     try { WD.sortNavMenus(); } catch (e) { /* an unsorted menu still works */ }
     WD.syncThemeUI();
@@ -2110,6 +2195,7 @@
     WD.checkForUpdates({ force: false });
     WD.checkSetup();
     WD.wireSettingsLinks();
+    try { _showInstalledUpdate(); } catch (e) { /* About is optional here */ }
   });
 
   WD.copyDiagnostics = function () {

@@ -1,15 +1,17 @@
-"""After an update installs, the "Restart to finish" screen lists what arrived.
+"""The update button installs and restarts, and the notes of what arrived stay.
 
-The notes of the releases newer than the install were shown only above the
-Update button; the moment the update ran they were replaced by the restart
-screen, so the one time the person is about to restart onto new code was the
-one time the notes were gone.
+Pressing the update button installs and then restarts the app without a second
+press. The notes of the releases newer than the install were shown only above
+the Update button, and the restart reloads the page, so the notes are listed on
+the screen while it restarts and again on the page that loads afterwards.
 
-The probe mounts the real updater panel with invented releases, stubs the one
-request that installs (nothing is installed), presses the real Update button,
-and reads the real restart screen. A release newer than the version the update
-reports landing on must not be listed, a pull that moved no version must list
-nothing, and the heading must not say "since your version".
+The probe mounts the real updater panel with invented releases, stubs the
+requests that install and restart (nothing is installed, nothing restarts),
+presses the real Update button, and reads the real screen. A release newer than
+the version the update reports landing on must not be listed, a pull that moved
+no version must list nothing, and the heading must not say "since your
+version". The page after the restart is the real page load, reached by the
+updater's own reload.
 """
 from __future__ import annotations
 
@@ -35,7 +37,9 @@ return !!b && !b.disabled;
 # offered, 9.0.9 down to 9.0.5; an update that lands on 9.0.8 must not list
 # 9.0.9.
 MOUNT = """
-var landed = arguments[0], from = arguments[1];
+var landed = arguments[0], from = arguments[1], reloads = !!arguments[2];
+window.__restarts = 0;
+var versionCalls = 0;
 var changes = [];
 for (var v = 9; v >= 5; v--) {
   changes.push({ version: '9.0.' + v, title: 'Invented release ' + v,
@@ -49,12 +53,36 @@ window.fetch = function (url, opts) {
                                newVersion: landed, commits: 3, steps: ['Invented step'] });
     } });
   }
+  if (String(url).indexOf('/api/restart') === 0) {
+    window.__restarts++;
+    return Promise.resolve({ ok: true, json: function () { return Promise.resolve({ ok: true }); } });
+  }
+  /* The restart is done once /api/version reports another start time. */
+  if (reloads && String(url).indexOf('/api/version') === 0) {
+    versionCalls++;
+    return Promise.resolve({ ok: true, json: function () {
+      return Promise.resolve({ startedAt: versionCalls > 1 ? 'after' : 'before' });
+    } });
+  }
   return realFetch.apply(window, arguments);
 };
 var panel = document.querySelector('#wdAboutModal .wd-update-panel');
 WD.Updater.mount(panel, { localVersion: from, latestVersion: '9.0.9',
                           latestUrl: '', changes: changes, changesTruncated: false });
 return true;
+"""
+
+AFTER = """
+var q = function (s) { return document.querySelector('#wdAboutModal ' + s); };
+var head = q('.wd-update-headline');
+return {
+  open: document.getElementById('wdAboutModal').classList.contains('active'),
+  headline: head ? head.textContent : null,
+  versions: [].map.call(document.querySelectorAll('#wdAboutModal .wd-update-changes .rc-ver'),
+                        function (e) { return e.textContent; }),
+  restartButton: !!q('.wd-update-restartBtn'),
+  kept: sessionStorage.getItem('wd-just-updated') !== null
+};
 """
 
 HAS_GO = """
@@ -67,7 +95,8 @@ return true;
 """
 
 RESTART_READY = """
-return !!document.querySelector('#wdAboutModal .wd-update-restartBtn');
+return !!document.querySelector('#wdAboutModal .wd-update-restartBtn') &&
+       window.__restarts > 0;
 """
 
 READ = """
@@ -79,6 +108,10 @@ var vers = [].map.call(document.querySelectorAll('#wdAboutModal .wd-update-chang
                        function (e) { return e.textContent; });
 return {
   restart: !!btn,
+  restartText: btn ? btn.textContent : null,
+  restartDisabled: btn ? btn.disabled : null,
+  restarts: window.__restarts,
+  kept: sessionStorage.getItem('wd-just-updated') !== null,
   head: box && box.querySelector('.rc-head') ? box.querySelector('.rc-head').textContent : null,
   versions: vers,
   boxHidden: box ? box.hidden : null,
@@ -99,14 +132,14 @@ class TheRestartScreenListsWhatWasInstalled(BrowserPagesHarness):
             "method": "zip", "isGitInstall": False, "isDevCheckout": False,
             "currentVersion": "9.0.4", "reason": "Invented install."}
 
-    def finish_an_update(self, drv, landed):
+    def finish_an_update(self, drv, landed, reloads=False):
         drv.set_window_size(1366, 768)
         drv.get(self.base + "/cloud")
         WebDriverWait(drv, 15).until(lambda d: d.execute_script(
             "return typeof window.wdOpenAbout === 'function' && !!window.WD && !!WD.Updater;"))
         drv.execute_script(PREPARE)
         WebDriverWait(drv, 15).until(lambda d: d.execute_script(IDLE))
-        drv.execute_script(MOUNT, landed, "9.0.4")
+        drv.execute_script(MOUNT, landed, "9.0.4", reloads)
         WebDriverWait(drv, 15).until(lambda d: d.execute_script(HAS_GO))
         drv.execute_script(GO)
         WebDriverWait(drv, 15).until(lambda d: d.execute_script(RESTART_READY))
@@ -114,6 +147,40 @@ class TheRestartScreenListsWhatWasInstalled(BrowserPagesHarness):
             WebDriverWait(drv, 15).until(lambda d: d.execute_script(
                 "return document.querySelectorAll('#wdAboutModal .wd-update-changes .rc-item').length > 0"))
         return drv.execute_script(READ)
+
+    def test_the_update_button_restarts_on_its_own(self):
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                m = self.finish_an_update(drv, "9.0.9")
+                self.assertEqual(m["restarts"], 1, m)
+                self.assertEqual(m["restartText"], "Restarting…", m)
+                self.assertTrue(m["restartDisabled"], m)
+                self.assertTrue(m["kept"], "the notes must be kept for the next page")
+
+    def test_the_page_after_the_restart_shows_what_was_installed(self):
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                drv.set_window_size(1366, 768)
+                drv.get(self.base + "/cloud")
+                WebDriverWait(drv, 15).until(lambda d: d.execute_script(
+                    "return typeof window.wdOpenAbout === 'function' && !!window.WD && !!WD.Updater;"))
+                drv.execute_script(PREPARE)
+                WebDriverWait(drv, 15).until(lambda d: d.execute_script(IDLE))
+                drv.execute_script(MOUNT, "9.0.8", "9.0.4", True)
+                WebDriverWait(drv, 15).until(lambda d: d.execute_script(HAS_GO))
+                drv.execute_script("window.__marker = 1;")
+                drv.execute_script(GO)
+                # the updater's own reload: the marker set above goes with the old page
+                WebDriverWait(drv, 30).until(lambda d: d.execute_script(
+                    "return window.__marker === undefined && "
+                    "document.querySelectorAll('#wdAboutModal.active .wd-update-changes .rc-item').length > 0"))
+                WebDriverWait(drv, 15).until(lambda d: d.execute_script(IDLE))
+                m = drv.execute_script(AFTER)
+                self.assertTrue(m["open"], m)
+                self.assertIn("9.0.8", m["headline"], m)
+                self.assertEqual(m["versions"], ["v9.0.8", "v9.0.7", "v9.0.6", "v9.0.5"], m)
+                self.assertFalse(m["restartButton"], m)
+                self.assertFalse(m["kept"], "the record is read once")
 
     def test_the_notes_are_listed_under_the_restart_button(self):
         for kind, drv in self.each_browser():
