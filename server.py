@@ -1601,6 +1601,10 @@ def api_settings(action):
 
 CLOUD_ACTIONS = {
     "status": lambda d: cm.status(),
+    # The page header's Ekahau Cloud state. `session` answers from memory and
+    # never contacts Ekahau; `session_check` does, and runs only on a click.
+    "session": lambda d: cm.session_state(),
+    "session_check": lambda d: cm.session_check(),
     "open_login": lambda d: cm.open_login(),
     "forget_login": lambda d: cm.forget_login(),
     "get_data": lambda d: cm.get_data(d.get("kind", "sites")),

@@ -382,7 +382,7 @@ global.document = {
 WD.syncMenuButtons();
 const before = attrs['aria-expanded'];
 // The page's start-up handler is what registers the listener.
-const names = ['syncThemeUI','syncMenuButtons','wireMenuEscape','rememberTool','markLastTool','wireTileJump','syncFavicon','applyVersions','checkServerVersion','checkForUpdates','checkSetup','wireSettingsLinks','sortNavMenus'];
+const names = ['syncThemeUI','syncMenuButtons','wireMenuEscape','rememberTool','markLastTool','wireTileJump','syncFavicon','applyVersions','checkServerVersion','checkForUpdates','checkSetup','wireSettingsLinks','sortNavMenus','startStatusPill'];
 const ran = [];
 names.forEach(n => { WD[n] = WD[n] || (() => { ran.push(n); }); });
 const origWire = WD.wireMenuEscape;

@@ -806,7 +806,7 @@
        seconds while the mismatch lasts. */
     if (!existing) {
       try { localStorage.removeItem(WD_UPDATE_CACHE_KEY); } catch (e) {}
-      _removeUpdatePill();
+      _setPillUpdate({ kind: 'done' });
     }
     if (existing) existing.remove();
     var b = document.createElement('div');
@@ -961,6 +961,18 @@
                 '<span class="wd-about-tracking" id="wdAboutTracking"></span></div>' +
             '</div>' +
           '</div>' +
+          '<div class="wd-about-cloud is-idle" id="wdAboutCloud">' +
+            '<div class="wd-about-updateHead">' +
+              '<div class="wd-about-sectionTitle">Ekahau Cloud</div>' +
+              '<div class="wd-about-cloudState" role="status" aria-live="polite"></div>' +
+            '</div>' +
+            '<div class="wd-about-cloudNote"></div>' +
+            '<div class="wd-about-updateRow">' +
+              '<button class="btn btn-sm wd-about-cloudLogin" type="button">Log in to Ekahau Cloud</button>' +
+              '<button class="btn btn-sm wd-about-cloudCheck" type="button">Check now</button>' +
+              '<button class="btn btn-sm wd-about-cloudCancel" type="button" hidden>Cancel</button>' +
+            '</div>' +
+          '</div>' +
           '<div class="wd-about-update">' +
             '<div class="wd-about-updateHead">' +
               '<div class="wd-about-sectionTitle">Updates</div>' +
@@ -1004,6 +1016,7 @@
       if (e.target === overlay) WD.closeAbout();
     });
     overlay.querySelector('.wd-about-close').addEventListener('click', WD.closeAbout);
+    _wireCloudCard(overlay);
     overlay.querySelector('.wd-about-checkBtn').addEventListener('click', function () {
       WD.checkForUpdates({ force: true });
     });
@@ -1021,6 +1034,8 @@
       else _renderUpdateResult(cached);
     }
     document.getElementById(WD_ABOUT_ID).classList.add('active');
+    // From memory, not from Ekahau: the card is never blank and never asks.
+    _fetchCloudSession();
 
     // ...then find out whether it is still true. Opening About is the act of
     // asking, so answering from a cache and saying "you have the latest
@@ -1087,6 +1102,9 @@
   }
 
   WD.closeAbout = function () {
+    _stopCloudWait();
+    _cloudNote = '';
+    _renderCloudCard();
     var m = document.getElementById(WD_ABOUT_ID);
     if (m) m.classList.remove('active');
   };
@@ -1116,6 +1134,7 @@
   }
 
   function _renderUpdateResult(state) {
+    _setPillUpdate({ kind: state.isNewer ? 'newer' : 'current', state: state });
     _renderTracking(state);
     var modal = document.getElementById(WD_ABOUT_ID);
     if (!modal) return;
@@ -1484,7 +1503,7 @@
 
     function renderDone(res, mode) {
       try { localStorage.removeItem(WD_UPDATE_CACHE_KEY); } catch (e) {}
-      _removeUpdatePill();
+      _setPillUpdate({ kind: 'done' });
 
       if (mode === 'convert') {
         render({ cls: 'is-done', body:
@@ -1623,6 +1642,7 @@
   WD.runUpdate = function (mode) { WD.Updater.run(mode); };
 
   function _renderUpdateError(state) {
+    _setPillUpdate({ kind: 'error', state: state });
     var modal = document.getElementById(WD_ABOUT_ID);
     if (!modal) return;
     var el = modal.querySelector('.wd-about-updateResult');
@@ -1671,7 +1691,6 @@
           _renderUpdateError(cached);
         } else {
           _renderUpdateResult(cached);
-          _maybeShowUpdatePill(cached);
         }
         return Promise.resolve(cached);
       }
@@ -1738,7 +1757,6 @@
         };
         _writeUpdateCache(state);
         _renderUpdateResult(state);
-        _maybeShowUpdatePill(state);
         return state;
       })
       .catch(function (err) {
@@ -1775,15 +1793,72 @@
       });
   };
 
-  /* The "an update is waiting" notice is a pill in the page header, beside the
-     theme toggle, and clicking it opens About - which is where the install is
-     identified and the update runs. It used to be a full-width bar across the
-     top of every page that pushed the page down and had to be dismissed; a
-     small pill in the corner says the same thing without taking the page's
-     space or needing to be put away. It stays until the install is current. */
-  function _maybeShowUpdatePill(state) {
-    if (!state || !state.isNewer) { _removeUpdatePill(); return; }
-    _renderUpdatePill(state);
+  /* ── The status pill ──────────────────────────────────────────────────────
+     One small pill in the page header, beside the theme toggle, on every page.
+     It says two things at a glance - whether this install is current, and
+     whether the Ekahau Cloud sign-in is good - and lights up amber when either
+     wants attention. Clicking it opens About, where the Updates card and the
+     Ekahau Cloud card each carry their own button.
+
+     It replaced a pill that appeared only while an update was waiting. A pill
+     that is there only when there is bad news cannot say "all clear", and it
+     could not carry the sign-in, which goes stale without any page noticing.
+
+     The Cloud half is read from what the server already knows
+     (`/api/cloud/session`) and never contacts Ekahau: the Home page promises
+     Cloud Manager talks to Ekahau only when told to, and a header that asked on
+     every page load would break that. A sign-in that has gone stale shows once
+     Cloud Manager, or the Check button, has found out. */
+  var _pillUpdate = null;   // {kind: current|newer|error|done, state}
+  var _pillCloud = null;    // {state: connected|saved|expired|none, email, verifiedAt}
+
+  function _setPillUpdate(u) { _pillUpdate = u; _syncPill(); }
+
+  function _setPillCloud(c) {
+    _pillCloud = c;
+    _syncPill();
+    _renderCloudCard();
+  }
+
+  function _pillSummary() {
+    var upd = _pillUpdate, cl = _pillCloud;
+    var waiting = !!upd && upd.kind === 'newer';
+    var stale = !!cl && cl.state === 'expired';
+    var label, tone;
+    if (stale && waiting) { label = 'Update · Sign in'; tone = 'attn'; }
+    else if (stale)       { label = 'Sign in';          tone = 'attn'; }
+    else if (waiting)     { label = 'Update';           tone = 'attn'; }
+    else if (!upd)        { label = 'Checking…';        tone = 'idle'; }
+    else if (upd.kind === 'error') { label = 'Can’t check'; tone = 'idle'; }
+    else if (upd.kind === 'done')  { label = 'Updated';     tone = 'ok'; }
+    else                           { label = 'Up to date';  tone = 'ok'; }
+
+    var lines = [];
+    if (waiting) {
+      lines.push(_updatePillTitle(upd.state));
+    } else if (upd && upd.kind === 'error') {
+      lines.push('Could not check for updates just now.');
+    } else if (upd && upd.kind === 'done') {
+      lines.push('An update was installed. Restart to finish.');
+    } else if (upd) {
+      lines.push('This install is up to date' +
+        (upd.state && upd.state.localVersion ? ' (v' + upd.state.localVersion + ').' : '.'));
+    } else {
+      lines.push('Checking for updates.');
+    }
+    var cloudTone = 'none';
+    if (cl) {
+      cloudTone = cl.state;
+      lines.push({
+        connected: 'Ekahau Cloud: signed in' + (cl.email ? ' as ' + cl.email : '') + '.',
+        saved:     'Ekahau Cloud: a saved sign-in, not confirmed yet this session.',
+        expired:   'Ekahau Cloud: the sign-in has expired. Click to log in again.',
+        none:      'Ekahau Cloud: not signed in.'
+      }[cl.state] || '');
+    }
+    lines.push('Click for details.');
+    return { label: label, tone: tone, cloud: cloudTone,
+             title: lines.filter(Boolean).join(' ') };
   }
 
   function _updatePillTitle(state) {
@@ -1791,58 +1866,243 @@
     return state.branch
       ? (n ? n + ' new commit' + (n === 1 ? '' : 's') + ' on ' : 'New commits on ') +
         state.branch + '. This checkout is behind the branch it follows (it is on v' +
-        (state.localVersion || '?') + '). Click for details.'
+        (state.localVersion || '?') + ').'
       : 'Update available: v' + state.latestVersion + ' (this is v' +
-        (state.localVersion || '?') + '). Click for details.';
+        (state.localVersion || '?') + ').';
   }
 
   /* One pill beside every theme toggle, because some pages keep two headers
      (a drop screen and a workspace) and only one is showing at a time; the
      hidden header's pill is hidden with it. A page with no theme toggle gets a
-     single pill pinned to the top right instead. */
-  function _renderUpdatePill(state) {
-    var title = _updatePillTitle(state);
+     single pill pinned to the top right instead - except the first-run setup
+     page, which is a wizard that runs before there is anything to report. */
+  function _syncPill() {
+    var sum = _pillSummary();
     var toggles = document.querySelectorAll('.theme-toggle');
     var wanted = [];
     toggles.forEach(function (toggle) {
       var prev = toggle.previousElementSibling;
-      var pill = prev && prev.classList.contains('wd-update-pill') ? prev : null;
+      var pill = prev && prev.classList.contains('wd-status-pill') ? prev : null;
       if (!pill) {
-        pill = _newUpdatePill();
+        pill = _newStatusPill();
         toggle.parentNode.insertBefore(pill, toggle);
       }
       wanted.push(pill);
     });
-    var floating = document.getElementById('wdUpdatePillFloat');
-    if (toggles.length) {
+    var floating = document.getElementById('wdStatusPillFloat');
+    if (toggles.length || window.location.pathname === '/setup') {
       if (floating) floating.remove();
     } else if (!floating) {
-      floating = _newUpdatePill();
-      floating.id = 'wdUpdatePillFloat';
-      floating.classList.add('is-floating');
+      floating = _newStatusPill();
+      floating.id = 'wdStatusPillFloat';
       document.body.appendChild(floating);
       wanted.push(floating);
     } else {
       wanted.push(floating);
     }
     wanted.forEach(function (pill) {
-      pill.title = title;
-      pill.setAttribute('aria-label', title);
+      pill.className = 'wd-status-pill is-' + sum.tone +
+        (pill.id === 'wdStatusPillFloat' ? ' is-floating' : '');
+      pill.querySelector('.wd-status-label').textContent = sum.label;
+      pill.querySelector('.wd-status-cloud').className = 'wd-status-cloud is-' + sum.cloud;
+      pill.title = sum.title;
+      pill.setAttribute('aria-label', sum.label + '. ' + sum.title);
     });
   }
 
-  function _newUpdatePill() {
+  function _newStatusPill() {
     var b = document.createElement('button');
-    b.className = 'wd-update-pill';
     b.type = 'button';
-    b.textContent = 'Update';
+    b.className = 'wd-status-pill is-idle';
+    b.innerHTML =
+      '<span class="wd-status-dot" aria-hidden="true"></span>' +
+      '<span class="wd-status-label"></span>' +
+      '<span class="wd-status-cloud is-none" aria-hidden="true">' +
+        '<svg viewBox="0 0 16 16" focusable="false"><path d="M4.6 12.6a3.1 3.1 0 0 1-.5-6.1 4.5 4.5 0 0 1 8.6-.4 3.3 3.3 0 0 1-.7 6.5z"/></svg>' +
+      '</span>';
     b.addEventListener('click', function () { WD.openAbout(); });
     return b;
   }
 
-  function _removeUpdatePill() {
-    document.querySelectorAll('.wd-update-pill').forEach(function (el) { el.remove(); });
+  /* ── Ekahau Cloud: the sign-in, from any page ─────────────────────────────
+     The card in About. "Log in" opens Ekahau in the browser and then watches
+     for the session to land - the same wait the Cloud Manager sign-in screen
+     does, because the browser writes its cookies a little after the page has
+     them. `session_check` is what contacts Ekahau; it runs from these buttons
+     and from nothing else. */
+  var CLOUD_POLL_MS = 2000;
+  var CLOUD_SAY_AFTER_MS = 12000;
+  var CLOUD_GIVE_UP_MS = 10 * 60 * 1000;
+  var _cloudWait = null;      // {timer, started, stopped, busy, detail}
+  var _cloudBusy = false;
+  var _cloudNote = '';        // the last thing a check said, shown until the next
+
+  function _fetchCloudSession() {
+    return WD.api('cloud/session').then(function (r) {
+      if (r && r.state) _setPillCloud(r);
+      return r;
+    }).catch(function () { return null; });
   }
+
+  function _askCloud() {
+    return WD.api('cloud/session_check').then(function (r) {
+      if (r && r.state) { _cloudNote = r.unreachable ? (r.detail || '') : ''; _setPillCloud(r); }
+      return r;
+    });
+  }
+
+  function _stopCloudWait() {
+    if (!_cloudWait) return;
+    _cloudWait.stopped = true;
+    clearTimeout(_cloudWait.timer);
+    _cloudWait = null;
+  }
+
+  function _cloudTick(wait) {
+    if (wait.stopped || wait.busy) return;
+    wait.busy = true;
+    _askCloud().then(function (r) {
+      wait.busy = false;
+      if (wait.stopped) return;
+      if (r && r.state === 'connected') {
+        _stopCloudWait();
+        _cloudNote = '';
+        _renderCloudCard();
+        try { window.dispatchEvent(new CustomEvent('wd:cloud-session', { detail: r })); } catch (e) {}
+        if (WD.toast) WD.toast('Signed in to Ekahau Cloud' + (r.email ? ' as ' + r.email : ''), 'success');
+        return;
+      }
+      var waited = Date.now() - wait.started;
+      if (waited >= CLOUD_GIVE_UP_MS) {
+        _stopCloudWait();
+        _cloudNote = 'No Ekahau Cloud sign-in was found after 10 minutes. Log in again when you are ready.';
+        _renderCloudCard();
+        return;
+      }
+      wait.detail = waited >= CLOUD_SAY_AFTER_MS
+        ? 'Not found yet' + (r && r.detail ? ' — ' + r.detail : '') + '. Still checking.' : '';
+      _renderCloudCard();
+      wait.timer = setTimeout(function () { _cloudTick(wait); }, CLOUD_POLL_MS);
+    }).catch(function () {
+      wait.busy = false;
+      if (wait.stopped) return;
+      wait.detail = 'The tool’s own server did not answer. Still trying.';
+      _renderCloudCard();
+      wait.timer = setTimeout(function () { _cloudTick(wait); }, CLOUD_POLL_MS);
+    });
+  }
+
+  function _cloudLogin() {
+    _stopCloudWait();
+    _cloudNote = '';
+    var wait = { stopped: false, busy: false, timer: null, started: Date.now(), detail: '' };
+    _cloudWait = wait;
+    _renderCloudCard();
+    WD.api('cloud/open_login').then(function (r) {
+      if (r && r.error && WD.toast) WD.toast('The browser could not be opened: ' + r.error, 'error');
+    }).catch(function () {});
+    wait.timer = setTimeout(function () { _cloudTick(wait); }, CLOUD_POLL_MS);
+  }
+
+  function _cloudCheck() {
+    if (_cloudWait) {            // checking now is the same as the next tick
+      clearTimeout(_cloudWait.timer);
+      _cloudTick(_cloudWait);
+      return;
+    }
+    _cloudBusy = true;
+    _cloudNote = '';
+    _renderCloudCard();
+    _askCloud().catch(function () {
+      _cloudNote = 'The tool’s own server did not answer.';
+    }).then(function () {
+      _cloudBusy = false;
+      _renderCloudCard();
+    });
+  }
+
+  function _agoText(epochSeconds) {
+    if (!epochSeconds) return '';
+    var s = Math.max(0, Math.round(Date.now() / 1000 - epochSeconds));
+    if (s < 90) return 'just now';
+    var m = Math.round(s / 60);
+    if (m < 90) return m + ' min ago';
+    var h = Math.round(m / 60);
+    if (h < 36) return h + ' hours ago';
+    return Math.round(h / 24) + ' days ago';
+  }
+
+  function _renderCloudCard() {
+    var card = document.getElementById('wdAboutCloud');
+    if (!card) return;
+    var cl = _pillCloud || { state: 'none' };
+    var stateEl = card.querySelector('.wd-about-cloudState');
+    var noteEl = card.querySelector('.wd-about-cloudNote');
+    var login = card.querySelector('.wd-about-cloudLogin');
+    var check = card.querySelector('.wd-about-cloudCheck');
+    var cancel = card.querySelector('.wd-about-cloudCancel');
+    var status, note, tone;
+    if (_cloudWait) {
+      tone = 'wait'; status = 'Waiting for you to log in…';
+      note = 'Your browser should have opened. Log in to Ekahau Cloud, then come back here.' +
+             (_cloudWait.detail ? ' ' + _cloudWait.detail : '');
+    } else if (cl.state === 'connected') {
+      tone = 'ok'; status = '✓ Signed in' + (cl.email ? ' as ' + cl.email : '');
+      note = cl.verifiedAt ? 'Ekahau accepted this sign-in ' + _agoText(cl.verifiedAt) + '.' : '';
+    } else if (cl.state === 'expired') {
+      tone = 'attn'; status = 'Sign-in expired';
+      note = 'Ekahau no longer accepts the saved sign-in. Log in again in your browser; ' +
+             'this window picks the new sign-in up on its own.';
+    } else if (cl.state === 'saved') {
+      tone = 'idle'; status = 'Saved sign-in';
+      note = 'A sign-in is saved on this computer. It has not been used yet this session, ' +
+             'so Ekahau has not confirmed it.';
+    } else {
+      tone = 'idle'; status = 'Not signed in';
+      note = 'Cloud Manager needs an Ekahau Cloud sign-in. No other tool does.';
+    }
+    if (_cloudNote) note = (note ? note + ' ' : '') + _cloudNote;
+    card.className = 'wd-about-cloud is-' + tone;
+    stateEl.textContent = status;
+    noteEl.textContent = note;
+    var needsLogin = cl.state === 'expired' || cl.state === 'none';
+    login.hidden = !!_cloudWait;
+    login.textContent = needsLogin ? 'Log in to Ekahau Cloud' : 'Log in again';
+    login.classList.toggle('btn-primary', needsLogin);
+    check.hidden = cl.state === 'none' && !_cloudWait;
+    check.disabled = _cloudBusy;
+    check.textContent = _cloudBusy ? 'Checking…' : 'Check now';
+    cancel.hidden = !_cloudWait;
+  }
+
+  function _wireCloudCard(overlay) {
+    var card = overlay.querySelector('#wdAboutCloud');
+    card.querySelector('.wd-about-cloudLogin').addEventListener('click', _cloudLogin);
+    card.querySelector('.wd-about-cloudCheck').addEventListener('click', _cloudCheck);
+    card.querySelector('.wd-about-cloudCancel').addEventListener('click', function () {
+      _stopCloudWait();
+      _renderCloudCard();
+    });
+    _renderCloudCard();
+  }
+
+  WD.cloudSession = { refresh: _fetchCloudSession };
+
+  /* Draw the pill at once ("Checking..." until the update check answers, so the
+     header does not shift), then read the sign-in from the server and keep
+     reading it while the tab is showing. */
+  WD.startStatusPill = function () {
+    _syncPill();
+    _fetchCloudSession();
+    setInterval(function () { if (!document.hidden) _fetchCloudSession(); }, 30000);
+  };
+
+  /* The browser writes its cookies a little after the page has them, so coming
+     back to this tab while waiting is the moment most likely to find them. */
+  window.addEventListener('focus', function () {
+    if (_cloudWait) { clearTimeout(_cloudWait.timer); _cloudTick(_cloudWait); }
+    else _fetchCloudSession();
+  });
 
   WD.api = function (action, body) {
     return fetch('/api/' + action, {
@@ -2032,6 +2292,7 @@
     WD.wireTileJump();
     WD.syncFavicon();
     WD.applyVersions();
+    WD.startStatusPill();
     WD.checkServerVersion();
     WD.checkForUpdates({ force: false });
     WD.checkSetup();

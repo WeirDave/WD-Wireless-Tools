@@ -1346,7 +1346,7 @@ class ACancelledCheckIsNotAFailedOneTests(unittest.TestCase):
 
     def test_a_check_cut_off_by_navigation_is_not_cached(self):
         body = self.src[self.src.index("WD.checkForUpdates = function"):]
-        body = body[:body.index("function _maybeShowUpdatePill")]
+        body = body[:body.index("var _pillUpdate")]
         catch = body[body.index(".catch(function (err)"):]
         self.assertIn("if (_navigatingAway || _isAbortError(err))", catch)
         guard = catch.index("_navigatingAway")
@@ -1381,7 +1381,7 @@ class ThePillSaysSomethingTrueTests(unittest.TestCase):
         src = self.SHARED.read_text(encoding="utf-8")
         self.src = src
         self.banner = src[src.index("function _updatePillTitle"):]
-        self.banner = self.banner[:self.banner.index("function _renderUpdatePill")]
+        self.banner = self.banner[:self.banner.index("function _syncPill")]
 
     def test_a_branch_update_is_worded_as_one(self):
         self.assertIn("New commits on", self.banner)

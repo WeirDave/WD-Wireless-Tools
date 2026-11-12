@@ -994,6 +994,11 @@ class EkahauAPI:
 _session_search_notes = []
 _session_search_logged = ""
 _saved_session_note = ""
+#: True once Ekahau has answered and turned a saved sign-in away, until a sign-in
+#: is accepted. It is what lets the page header say "your sign-in went stale"
+#: rather than "you are not signed in" - the saved files are deleted when they
+#: are refused, so afterwards there is nothing on disk to tell the two apart.
+_saved_session_refused = False
 
 
 def session_search_summary():
@@ -1167,7 +1172,7 @@ def discard_saved_session(only_if_stamp=None):
 
 
 def try_saved_cookies():
-    global _saved_session_note
+    global _saved_session_note, _saved_session_refused
     stamp = _saved_session_stamp()
     cookies, csrf = load_cookies_from_disk()
     if not cookies or not csrf:
@@ -1175,8 +1180,10 @@ def try_saved_cookies():
     api = EkahauAPI(cookies, csrf)
     if api.test_connection():
         _saved_session_note = ""
+        _saved_session_refused = False
         return api
     if api.refused:
+        _saved_session_refused = True
         # Ekahau answered and turned it away: this session is dead, and it
         # would be tried first, and refused again, on every start and every
         # poll until something replaced it. A browser sign-in replaces it the
@@ -3058,6 +3065,14 @@ def _session_is_dead(e):
 
 
 class CloudManager:
+    #: Class-level so a manager built without `__init__` (several tests do)
+    #: still answers `session_state`.
+    #:
+    #: `_expired` - Ekahau turned a sign-in away in this run and nothing has
+    #: replaced it. `_verified_at` - when Ekahau last accepted the session.
+    _expired = False
+    _verified_at = None
+
     def __init__(self):
         self.api = None
         self.config = load_config()
@@ -3066,6 +3081,11 @@ class CloudManager:
         if self.api:
             return True
         self.api = try_saved_cookies() or try_browser_cookies()
+        if self.api is not None:
+            self._expired = False
+            self._verified_at = time.time()
+        elif _saved_session_refused:
+            self._expired = True
         return self.api is not None
 
     #: What a dead session reads as. It says what to do rather than what
@@ -3095,6 +3115,7 @@ class CloudManager:
             # Dropped so the next call re-validates via try_saved_cookies() /
             # try_browser_cookies() instead of trusting it forever.
             self.api = None
+            self._expired = True
             return self.SESSION_EXPIRED
         return str(e)
 
@@ -3116,6 +3137,54 @@ class CloudManager:
                 # screen shows it once it has waited a while.
                 "detail": "" if connected else session_search_summary()}
 
+    #: What the page header shows for Ekahau Cloud, in four words:
+    #: ``connected`` (Ekahau accepted the session in this run), ``saved`` (a
+    #: sign-in is on disk and has not been tried yet), ``expired`` (Ekahau
+    #: turned one away and nothing has replaced it) and ``none``.
+    #:
+    #: **This never touches the network.** It runs on every page load and on a
+    #: timer, and the Home page promises that Cloud Manager contacts Ekahau
+    #: only when told to; a header that phoned Ekahau on every page would
+    #: break that promise. It reports what this process already knows. To
+    #: find out for certain, `session_check` is the one that asks, and it only
+    #: runs when someone presses a button.
+    def session_state(self):
+        if self.api:
+            state = "connected"
+        elif self._expired:
+            state = "expired"
+        elif _saved_session_stamp():
+            state = "saved"
+        else:
+            state = "none"
+        return {"state": state,
+                "email": (self.api.user_email or "") if self.api else "",
+                "verifiedAt": self._verified_at}
+
+    def session_check(self):
+        """Ask Ekahau whether the sign-in still works - the one place the page
+        header contacts it, run from "Check now" and while waiting for a
+        browser sign-in to land. A refused session is dropped and replaced
+        from the browser if a fresh one is there; a network that is down says
+        so and keeps the session, because a dead network proves nothing about
+        the cookie."""
+        if self.api:
+            if self.api.test_connection():
+                self._verified_at = time.time()
+                return self.session_state()
+            if not self.api.refused:
+                out = self.session_state()
+                out["unreachable"] = True
+                out["detail"] = self.api.failure
+                return out
+            self.api = None
+            self._expired = True
+        self._ensure()
+        out = self.session_state()
+        if out["state"] != "connected":
+            out["detail"] = session_search_summary()
+        return out
+
     def open_login(self):
         try:
             if sys.platform == "win32":
@@ -3130,7 +3199,10 @@ class CloudManager:
 
     def forget_login(self):
         """Disconnect this process and remove every persisted Cloud session."""
+        global _saved_session_refused
         self.api = None
+        self._expired = False
+        _saved_session_refused = False
         if not clear_saved_cookies():
             return {"error": "The saved Cloud login could not be completely removed."}
         return {"ok": True}
@@ -4161,6 +4233,7 @@ class CloudManager:
             if isinstance(result, dict) and result.get("error"):
                 if result.get("sessionDead"):
                     self.api = None
+                    self._expired = True
                     return {"error": self.SESSION_EXPIRED, "sessionExpired": True}
                 return {k: v for k, v in result.items() if k != "sessionDead"}
             is_new_folder = not dest_dir.exists()

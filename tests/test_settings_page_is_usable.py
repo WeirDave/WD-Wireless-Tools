@@ -405,18 +405,47 @@ class TheTextCanBeRead(unittest.TestCase):
                     fill = pal.resolve(_final(sel, "background"))
                     self.assertGreaterEqual(round(_contrast(white, fill), 2), 4.5)
 
-    def test_the_update_pills_label_clears_four_and_a_half_to_one(self):
-        """The pill in the header, and the amber card About turns into while an
-        update is waiting: the label and the status line both sit on the amber
-        tint, in both themes."""
+    def test_the_status_pills_label_clears_four_and_a_half_to_one(self):
+        """The pill in the header, the amber card About turns into while an
+        update is waiting, and the Ekahau Cloud card beside it: every label
+        sits on either the plain surface or the amber tint, in both themes."""
         for theme in ("dark", "light"):
             pal = _Colours(theme)
-            for sel, bg_sel in ((".wd-update-pill", ".wd-update-pill"),
-                                (".wd-about-updateResult.is-newer", ".wd-about-update.is-newer")):
+            for sel, bg_sel in ((".wd-status-pill", ".wd-status-pill"),
+                                (".wd-status-pill", ".wd-status-pill.is-attn"),
+                                (".wd-about-updateResult.is-newer", ".wd-about-update.is-newer"),
+                                (".wd-about-cloudState", ".wd-about-cloud"),
+                                (".wd-about-cloud.is-ok .wd-about-cloudState", ".wd-about-cloud"),
+                                (".wd-about-cloud.is-attn .wd-about-cloudState", ".wd-about-cloud.is-attn"),
+                                (".wd-about-cloudNote", ".wd-about-cloud"),
+                                (".wd-about-cloudNote", ".wd-about-cloud.is-attn")):
                 ink = pal.resolve(_final(sel, "color"))
                 fill = pal.resolve(_final(bg_sel, "background"))
-                with self.subTest(theme=theme, selector=sel):
+                with self.subTest(theme=theme, selector=sel, on=bg_sel):
                     self.assertGreaterEqual(round(_contrast(ink, fill), 2), 4.5)
+
+    def test_the_pills_cloud_and_dot_clear_three_to_one(self):
+        """They carry the state, so they are graphics that have to be seen: the
+        cloud in each state on the pill's surface, and the amber dot on the
+        amber tint. (The outline cloud and the wording carry it as well, so
+        colour is never the only signal.)"""
+        for theme in ("dark", "light"):
+            pal = _Colours(theme)
+            surface = pal.resolve(_final(".wd-status-pill", "background"))
+            tint = pal.resolve(_final(".wd-status-pill.is-attn", "background"))
+            for sel, fill in ((".wd-status-cloud", surface),
+                              (".wd-status-cloud.is-saved", surface),
+                              (".wd-status-cloud.is-connected", surface),
+                              (".wd-status-cloud.is-expired", tint)):
+                ink = pal.resolve(_final(sel, "color"))
+                with self.subTest(theme=theme, selector=sel):
+                    self.assertGreaterEqual(round(_contrast(ink, fill), 2), 3.0)
+            dot = pal.resolve(_final(".wd-status-pill.is-attn .wd-status-dot", "background"))
+            with self.subTest(theme=theme, selector="the amber dot"):
+                self.assertGreaterEqual(round(_contrast(dot, tint), 2), 3.0)
+            ok = pal.resolve(_final(".wd-status-pill.is-ok .wd-status-dot", "background"))
+            with self.subTest(theme=theme, selector="the green dot"):
+                self.assertGreaterEqual(round(_contrast(ok, surface), 2), 3.0)
 
     def test_muted_text_on_the_settings_page_clears_four_and_a_half_to_one(self):
         """The overview's titles, empty values and where-it-lives lines, the

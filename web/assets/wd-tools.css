@@ -3526,7 +3526,7 @@ body.tool-cloud .toolbar .clear-search:hover {
 .share-targets {
   margin: 0 0 14px; padding: 12px 14px;
   border: 1px solid var(--border); border-radius: var(--radius);
-  background: var(--surface-2, var(--surface));
+  background: var(--surface-2);
 }
 .share-targets-head {
   font-size: 11px; font-weight: 700; letter-spacing: .6px;
@@ -7470,7 +7470,7 @@ body.wd-has-stale-banner { padding-top: 52px; }
      Print with Report settings open and every page of the deliverable comes out
      with the dialog across the map. None of this shows on screen, which is why
      the list is kept deliberately wide. */
-  .wd-stale-banner, .wd-update-pill,
+  .wd-stale-banner, .wd-status-pill,
   .modal-overlay, .grid-modal-overlay, .swap-modal, .swap-undo-toast,
   .toast-container, .ops-deck, .screen-home-btn { display: none !important; }
 
@@ -8348,13 +8348,14 @@ body.tool-guide {
   .wd-about-body {
     display: grid; column-gap: 28px;
     grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-    grid-template-rows: auto auto auto 1fr;
+    grid-template-rows: auto auto auto auto 1fr;
   }
   .wd-about-body > .wd-about-hero { grid-column: 1; grid-row: 1; }
+  .wd-about-body > .wd-about-cloud { grid-column: 1; grid-row: 2; min-width: 0; }
   .wd-about-body > .wd-about-update { grid-column: 2; grid-row: 1 / -1; min-width: 0; }
-  .wd-about-body > .wd-about-diagnostics { grid-column: 1; grid-row: 2; }
-  .wd-about-body > .wd-about-linkList { grid-column: 1; grid-row: 3; }
-  .wd-about-body > .wd-about-credit { grid-column: 1; grid-row: 4; align-self: end; }
+  .wd-about-body > .wd-about-diagnostics { grid-column: 1; grid-row: 3; }
+  .wd-about-body > .wd-about-linkList { grid-column: 1; grid-row: 4; }
+  .wd-about-body > .wd-about-credit { grid-column: 1; grid-row: 5; align-self: end; }
 }
 /* The shared changelog box caps its list at 220px, sized for a 480px modal;
    the box itself stays untouched because the file is identical in each
@@ -8421,28 +8422,59 @@ body.tool-guide {
 .wd-about-credit a { color: var(--blue); text-decoration: none; }
 .wd-about-credit a:hover { text-decoration: underline; }
 
-/* The pill that says an update is waiting. It sits in the page header, to the
-   left of the theme toggle; margin-left:auto lets it take whatever space the
-   header has spare, so it lands against the toggle in a header laid out with
-   space-between as well as one that is already right-aligned. The fill is the
-   amber tint with the ordinary text colour on it - the pairing the old banner
-   used - so the label reads in both themes. Clicking opens About. */
-.wd-update-pill {
+/* The status pill: whether this install is current and whether the Ekahau
+   Cloud sign-in is good, in the page header beside the theme toggle. It sits
+   quiet and neutral while everything is fine and turns amber while something
+   wants attention. margin-left:auto lets it take whatever space the header has
+   spare, so it lands against the toggle in a header laid out with
+   space-between as well as one that is already right-aligned. The label is
+   always the ordinary text colour, on a surface or on the amber tint, so it
+   reads in both themes; the dot and the cloud carry the state. The cloud is
+   solid when a sign-in exists and an outline when none does, so the state is
+   not carried by colour alone. Clicking opens About. */
+.wd-status-pill {
   display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
-  margin: 0 8px 0 auto; padding: 4px 12px;
-  border: 1px solid var(--amber); border-radius: var(--radius-pill);
-  background: var(--amber-bg); color: var(--text); cursor: pointer;
+  margin: 0 8px 0 auto; padding: 4px 10px 4px 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text); cursor: pointer;
   font: 600 var(--fs-small)/1.2 var(--mono); white-space: nowrap;
 }
-.wd-update-pill::before {
-  content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--amber);
-}
-.wd-update-pill:hover { background: color-mix(in srgb, var(--amber) 22%, var(--amber-bg)); }
-.wd-update-pill:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.wd-status-pill:hover { background: var(--surface-2); border-color: var(--text-3); }
+.wd-status-pill:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.wd-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; }
+.wd-status-pill.is-ok .wd-status-dot { background: var(--ok); }
+.wd-status-pill.is-attn { border-color: var(--amber); background: var(--amber-bg); }
+.wd-status-pill.is-attn:hover { background: color-mix(in srgb, var(--amber) 22%, var(--amber-bg)); border-color: var(--amber); }
+.wd-status-pill.is-attn .wd-status-dot { background: var(--amber); }
+.wd-status-cloud { display: inline-flex; align-items: center; color: var(--text-3); }
+.wd-status-cloud svg { width: 15px; height: 15px; display: block; }
+.wd-status-cloud svg path { fill: currentColor; stroke: currentColor; stroke-width: 1; stroke-linejoin: round; }
+.wd-status-cloud.is-none svg path { fill: none; stroke-width: 1.4; }
+.wd-status-cloud.is-saved { color: var(--text-2); }
+.wd-status-cloud.is-connected { color: var(--ok); }
+.wd-status-cloud.is-expired { color: var(--attn); }
 /* Only on a page with no theme toggle to sit beside. */
-.wd-update-pill.is-floating {
+.wd-status-pill.is-floating {
   position: fixed; top: 12px; right: 16px; margin: 0; z-index: calc(var(--z-modal) - 1);
 }
+
+/* The Ekahau Cloud card in About: the same card as Updates, in the left column
+   under the version. It turns amber while the sign-in has expired, matching the
+   pill that brought the reader here. */
+.wd-about-cloud {
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface); padding: 12px 14px; margin-bottom: 14px;
+}
+.wd-about-cloud.is-attn { border-color: var(--amber); background: var(--amber-bg); }
+.wd-about-cloud .wd-about-updateHead { margin-bottom: 4px; }
+.wd-about-cloudState {
+  font-size: 12px; color: var(--text-2); flex: 1; min-width: 0;
+  text-align: right; overflow-wrap: anywhere;
+}
+.wd-about-cloud.is-ok .wd-about-cloudState { color: var(--text); font-weight: 600; }
+.wd-about-cloud.is-attn .wd-about-cloudState { color: var(--text); font-weight: 600; }
+.wd-about-cloudNote { font-size: 12px; color: var(--text-2); line-height: 1.45; margin-bottom: 10px; }
+.wd-about-cloudNote:empty { display: none; }
 
 /* ═══════════════════════════════════════════════════════════════
    Grid configuration modal (Report tool)
