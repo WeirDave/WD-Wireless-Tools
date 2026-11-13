@@ -187,6 +187,86 @@ class ThePullKeepsWorkMadeHereTests(_OwnStateMixin, unittest.TestCase):
 
         self.assertTrue(res.get("ok"), res)
 
+    def _diverge(self):
+        _esx(self.local, SYNCED, aps=(1,))
+        self._record_sync_point("cloud-1", self.local)
+        _esx(self.local, LOCAL_EDIT, aps=(1, 2))
+        cm._ESX_META_CACHE.clear()
+
+    def _pull_anyway(self, cloud_bytes):
+        mgr = cm.CloudManager.__new__(cm.CloudManager)
+        mgr.config = {"output_dir": str(self.tmp)}
+        mgr._ensure = lambda: True
+
+        class Api:
+            def get(self, url):
+                return _Resp(200, {"name": "Example Survey",
+                                   "modifiedAt": CLOUD_EDIT})
+
+            def download_project(self, project_id, progress_cb=None):
+                return {"esx": cloud_bytes}
+        mgr.api = Api()
+        return mgr.verify_replace_local("cloud-1", str(self.local),
+                                        overwrite_local=True)
+
+    def test_the_confirmed_download_replaces_the_local_file(self):
+        """Refused by default, and the same call with the person's yes goes
+        through. Without a way past, the only route was deleting the file by
+        hand and downloading it again - this pull with no question at all."""
+        self._diverge()
+        cloud = self._cloud_bytes(aps=(1, 3))
+        refused = self._pull(cloud)
+        self.assertEqual("diverged", refused.get("error"), refused)
+
+        res = self._pull_anyway(cloud)
+
+        self.assertTrue(res.get("ok"), res)
+        self.assertEqual(cloud, self.local.read_bytes(),
+                         "the confirmed download did not replace the file")
+
+    def test_the_confirmed_download_records_the_pair_as_the_same(self):
+        """After it the two sides are the same file, so the next list does not
+        say both changed all over again."""
+        self._diverge()
+        res = self._pull_anyway(self._cloud_bytes(aps=(1, 3)))
+        self.assertTrue(res.get("ok"), res)
+        cm._ESX_META_CACHE.clear()
+        inner = cm._esx_meta(self.local, int(self.local.stat().st_mtime)
+                             ).get("internalMtime")
+        self.assertNotEqual(
+            sync_state.BOTH_CHANGED,
+            cm._divergence_of("cloud-1", self.local, _ts(CLOUD_EDIT), inner))
+
+    def test_the_confirmed_download_also_clears_a_newer_local_file(self):
+        """The other refusal: the local file simply carries the later date."""
+        _esx(self.local, CLOUD_EDIT, aps=(1, 2))
+        cm._ESX_META_CACHE.clear()
+        older = self.tmp / "_older.esx"
+        _esx(older, SYNCED, aps=(1, 3))
+        cloud = older.read_bytes()
+        older.unlink()
+
+        class Api:
+            def get(self_, url):
+                return _Resp(200, {"name": "Example Survey",
+                                   "modifiedAt": SYNCED})
+
+            def download_project(self_, project_id, progress_cb=None):
+                return {"esx": cloud}
+
+        def run(**kw):
+            mgr = cm.CloudManager.__new__(cm.CloudManager)
+            mgr.config = {"output_dir": str(self.tmp)}
+            mgr._ensure = lambda: True
+            mgr.api = Api()
+            return mgr.verify_replace_local("cloud-1", str(self.local), **kw)
+
+        before = self.local.read_bytes()
+        self.assertEqual("local_newer", run().get("error"))
+        self.assertEqual(before, self.local.read_bytes())
+        self.assertTrue(run(overwrite_local=True).get("ok"))
+        self.assertEqual(cloud, self.local.read_bytes())
+
 
 class _StubApi:
     def __init__(self, cloud_modified):
@@ -410,6 +490,124 @@ class ThePageAsksBeforeItSendsTheOverwriteTests(unittest.TestCase):
         self.assertTrue(again["threw"])
         self.assertEqual(0, again["asked"])
         self.assertEqual(1, again["n"])
+
+
+ROW_SCRIPT = r"""
+const fs = require('fs');
+const source = fs.readFileSync(process.argv[2], 'utf8');
+const a0 = source.indexOf('function _confirmPullOverLocal(');
+const b0 = source.indexOf('window.verifyReplaceLocal = verifyReplaceLocal;', a0);
+if (a0 < 0 || b0 < 0) throw new Error('the row download moved');
+const block = source.slice(a0, b0);
+
+let enqueued = null, asked = [], answer = true;
+const calls = [];
+let replies = [];
+function e(s) { return String(s == null ? '' : s); }
+function opEnqueue(spec) { enqueued = spec; return { promise: Promise.resolve() }; }
+async function pyApi(name, ...args) { calls.push([name, ...args]); return replies.shift(); }
+async function showConfirmModal(title, body, label) { asked.push({ title, body, label }); return answer; }
+function confirm() { return true; }
+function staleWhen(ts) { return 'T' + ts; }
+function _setRowBusy() {}
+function _markVerifyFailed() {}
+function _clearStaleness() {}
+function _scheduleOpRefresh() {}
+function settlePair() { return Promise.resolve(); }
+
+const api = new Function('opEnqueue','pyApi','showConfirmModal','confirm','staleWhen','e',
+  '_setRowBusy','_markVerifyFailed','_clearStaleness','_scheduleOpRefresh','settlePair',
+  block + '\nreturn verifyReplaceLocal;')(
+  opEnqueue, pyApi, showConfirmModal, confirm, staleWhen, e,
+  _setRowBusy, _markVerifyFailed, _clearStaleness, _scheduleOpRefresh, settlePair);
+
+const BOTH = { error: 'diverged', message: 'Both changed.', localMtime: 111, cloudMtime: 222 };
+const NEWER = { error: 'local_newer', message: 'Local newer.', localMtime: 333, cloudMtime: 222 };
+const OK = { ok: true, path: 'C:/x/a.esx' };
+async function go(rs, ans) {
+  replies = rs; calls.length = 0; asked = []; answer = ans;
+  await api('c1', 'C:/x/a.esx', 'Cloud A', 1, 2);
+  try {
+    await enqueued.run();
+    return { threw: false, asked: asked.length, calls: calls.map(c => c.slice()), ask: asked[0] };
+  } catch (err) {
+    return { threw: true, msg: err.message, asked: asked.length, calls: calls.map(c => c.slice()), ask: asked[0] };
+  }
+}
+(async () => {
+  const out = {};
+  out.yes = await go([BOTH, OK], true);
+  out.no = await go([BOTH], false);
+  out.plain = await go([OK], true);
+  out.newer = await go([NEWER, OK], true);
+  out.stillRefused = await go([BOTH, { error: 'Write failed' }], true);
+  console.log(JSON.stringify(out));
+})().catch(err => { console.error(err.stack || String(err)); process.exit(1); });
+"""
+
+
+class TheRowDownloadOffersAWayPastTheRefusalTests(unittest.TestCase):
+    """The page used to end at "Not downloaded" with nothing to press.
+
+    Run the real handler against recording stubs and assert the calls that
+    arrive, the way the push-side tests above do.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        if not shutil.which("node"):
+            raise unittest.SkipTest("node is not installed")
+        d = Path(tempfile.mkdtemp(prefix="wd-diverged-row-"))
+        try:
+            script = d / "probe.js"
+            script.write_text(ROW_SCRIPT, encoding="utf-8")
+            r = subprocess.run(["node", str(script), str(CLOUD_JS)],
+                               capture_output=True, encoding="utf-8",
+                               timeout=NODE_TIMEOUT_S)
+        finally:
+            shutil.rmtree(d, True)
+        if r.returncode != 0:
+            raise AssertionError((r.stdout + r.stderr).strip())
+        cls.out = json.loads(r.stdout.strip().splitlines()[-1])
+
+    def test_a_diverged_pair_is_asked_and_then_sent_with_the_override(self):
+        y = self.out["yes"]
+        self.assertEqual(1, y["asked"])
+        self.assertFalse(y["threw"], y)
+        self.assertEqual(
+            [["verify_replace_local", "c1", "C:/x/a.esx"],
+             ["verify_replace_local", "c1", "C:/x/a.esx", True]],
+            y["calls"], "the first call must not carry the override, "
+                        "the second must")
+
+    def test_the_question_names_both_dates_and_the_loss(self):
+        ask = self.out["yes"]["ask"]
+        self.assertIn("T111", ask["body"], "the local date is missing")
+        self.assertIn("T222", ask["body"], "the cloud date is missing")
+        self.assertIn("lost", ask["body"])
+        self.assertIn("discard", ask["label"].lower())
+
+    def test_declining_sends_nothing_further_and_reads_as_a_stop(self):
+        n = self.out["no"]
+        self.assertEqual(1, n["asked"])
+        self.assertEqual(1, len(n["calls"]), "a declined download sent again")
+        self.assertTrue(n["threw"])
+        self.assertIn("Nothing was changed", n["msg"])
+
+    def test_an_ordinary_download_is_never_asked(self):
+        p = self.out["plain"]
+        self.assertEqual(0, p["asked"])
+        self.assertEqual(1, len(p["calls"]))
+
+    def test_a_newer_local_file_is_asked_the_same_way(self):
+        n = self.out["newer"]
+        self.assertEqual(1, n["asked"])
+        self.assertEqual(True, n["calls"][-1][3])
+
+    def test_a_failure_after_the_yes_is_still_reported(self):
+        s = self.out["stillRefused"]
+        self.assertTrue(s["threw"])
+        self.assertIn("Write failed", s["msg"])
 
 
 if __name__ == "__main__":

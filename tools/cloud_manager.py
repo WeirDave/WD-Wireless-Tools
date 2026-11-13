@@ -4252,7 +4252,8 @@ class CloudManager:
         except Exception as e:
             return {"error": str(e)}
 
-    def verify_replace_local(self, project_id, local_path, progress_cb=None):
+    def verify_replace_local(self, project_id, local_path, progress_cb=None,
+                             overwrite_local=False):
         """Download the cloud project's current content over the local .esx.
 
         This is what "Cloud newer" means in practice: the cloud copy was edited
@@ -4268,6 +4269,17 @@ class CloudManager:
         Safe direction only: refuses if local's internal modifiedAt is
         meaningfully newer than cloud's. Sending local up to an existing cloud
         project is not implemented; the upload flow only creates new projects.
+
+        `overwrite_local` is the one way past those refusals: the caller has
+        asked the person, naming both dates, and they chose the cloud copy.
+        **Unrecoverable earns friction, not refusal** - a pair where both
+        sides changed, or where the local file is the later one, is an
+        ordinary state of work, and a guard with no way past it left the
+        only route as deleting the local file by hand and downloading again,
+        which is this same download with the check removed and no
+        confirmation at all. It skips the refusal and the content check; the
+        "saved while downloading" check below stays, because that one is
+        about a save the person has not seen.
 
         Returns {"ok": True, "path", "localMtime", "cloudMtime", ...}
         on success, {"error": "local_newer", ...} when the safe direction does
@@ -4380,7 +4392,7 @@ class CloudManager:
             return result
         esx_bytes = result["esx"]
 
-        if refusal:
+        if refusal and not overwrite_local:
             #: **A date is evidence of local work, not proof of it.** The two
             #: clocks are Ekahau's and this machine's, and a file saved to the
             #: cloud from Ekahau can come back stamped by one while the local

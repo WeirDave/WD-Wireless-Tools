@@ -64,7 +64,7 @@ const API_MAP = {
   set_external_override: ['set_external_override', ['items', 'value']],
   clear_external_override: ['clear_external_override', ['items']],
   list_manual_matches: ['list_manual_matches', []],
-  verify_replace_local: ['verify_replace_local', ['cloudId', 'localPath']],
+  verify_replace_local: ['verify_replace_local', ['cloudId', 'localPath', 'overwriteLocal']],
   //: `dryRun` is second because it is the one argument that decides whether
   //: anything is written, and a positional map is easiest to get wrong in
   //: the middle. The server treats anything but an explicit `false` as a
@@ -7368,6 +7368,29 @@ function staleWhen(ts) {
    times are Ekahau's own, read from project.json inside each .esx - not the
    file dates - so a copy, a restore or an antivirus touch cannot make the
    local file look newer than it is. */
+/* The question the download asks when it would overwrite work made here.
+
+   `r` is the server's refusal. Its dates are read at the moment of the refusal,
+   so they are preferred to the ones the row was drawn with. The wording says
+   which kind of refusal it was, because "both changed" and "your file is the
+   later one" are different things to be about to lose. */
+function _confirmPullOverLocal(r, fileName, cloudName, cloudMtime, localMtime) {
+  const lm = Number(r.localMtime) || localMtime;
+  const cm = Number(r.cloudMtime) || cloudMtime;
+  const why = r.error === 'diverged'
+    ? 'Both the local file and the cloud copy have been changed since they were last the same.'
+    : 'The local file has changes the cloud copy does not hold.';
+  return showConfirmModal(
+    'Download the cloud copy and discard local changes?',
+    '<p>' + e(why) + '</p>'
+    + '<p><b>' + e(fileName) + '</b><br>local file last edited <b>' + e(staleWhen(lm)) + '</b><br>'
+    + 'cloud <b>' + e(cloudName || '') + '</b> last edited <b>' + e(staleWhen(cm)) + '</b></p>'
+    + '<p>Downloading replaces the local file with the cloud copy. '
+    + '<b>Every change made in the local file since they were last the same is lost</b>, '
+    + 'and no copy of it is kept. Use <b>Check</b> on the row first if you are not sure what differs.</p>',
+    'Download and discard local changes');
+}
+
 async function verifyReplaceLocal(cloudId, localPath, cloudName, cloudMtime, localMtime) {
   const fileName = String(localPath).split(/[\\/]/).pop() || localPath;
   const lines = [
@@ -7392,7 +7415,25 @@ async function verifyReplaceLocal(cloudId, localPath, cloudName, cloudMtime, loc
     busyRow: { cloudId, localPath,
                label: 'Taking the cloud copy over your local file…' },
     run: async () => {
-      const r = await pyApi('verify_replace_local', cloudId, localPath);
+      let r = await pyApi('verify_replace_local', cloudId, localPath);
+
+      /* The server declined to overwrite local work, having changed nothing.
+         That is a question, not a wall: the ordinary state of a file that was
+         edited here and then saved in the cloud is exactly "both changed", and
+         a refusal with no way past it left deleting the local file by hand as
+         the only route - the same download with every check and every
+         confirmation removed. So the one way past is a confirm that names the
+         file and both dates and says what is lost, asked from the server's own
+         answer rather than from the page's picture of the pair. */
+      if (r && (r.error === 'diverged' || r.error === 'local_newer')) {
+        const ok = await _confirmPullOverLocal(r, fileName, cloudName, cloudMtime, localMtime);
+        if (!ok) {
+          _markVerifyFailed(cloudId, localPath);
+          throw new Error('Not downloaded — you chose to keep the local file. Nothing was changed.');
+        }
+        r = await pyApi('verify_replace_local', cloudId, localPath, true);
+      }
+
       if (r && r.error) {
         _markVerifyFailed(cloudId, localPath);
         if (r.error === 'local_newer') {

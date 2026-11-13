@@ -1664,7 +1664,10 @@ CLOUD_ACTIONS = {
     "set_external_override": lambda d: cm.set_external_override(d.get("items"), d.get("value")),
     "clear_external_override": lambda d: cm.clear_external_override(d.get("items")),
     "list_external_overrides": lambda d: cm.list_external_overrides(),
-    "verify_replace_local": lambda d: cm.verify_replace_local(d.get("cloudId"), d.get("localPath")),
+    #: `is True`, so a page that does not send it keeps the refusal.
+    "verify_replace_local": lambda d: cm.verify_replace_local(
+        d.get("cloudId"), d.get("localPath"),
+        overwrite_local=d.get("overwriteLocal") is True),
     "list_shares": lambda d: cm.list_shares(d.get("projectId")),
     "add_share": lambda d: cm.add_share(d.get("projectId"), d.get("email"), d.get("role", "READ_USER")),
     # Several recipients in one go. The endpoint always accepted an array;
