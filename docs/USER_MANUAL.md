@@ -2478,7 +2478,7 @@ auto-apply does nothing until you pick another.
 
 Prep's **Suite Settings** link opens this section, since Prep uses both.
 
-### PlanTrim, Rename and the rest
+### Other tools
 
 No controls here — each is chosen while doing the job — but the section
 lists what is saved.

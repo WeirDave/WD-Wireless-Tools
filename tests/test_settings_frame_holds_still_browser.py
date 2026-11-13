@@ -98,6 +98,49 @@ class TheSettingsFrameHoldsStill(BrowserPagesHarness):
                                                  "%s moved between sections: %s against %s"
                                                  % (part, m[part], first[part]))
 
+    CARDS = """
+      return Array.prototype.map.call(document.querySelectorAll('.s-nav-item'), function (c) {
+        var n = c.querySelector('.s-nav-name'), d = c.querySelector('.s-nav-desc');
+        var lh = function (e) { return parseFloat(getComputedStyle(e).lineHeight); };
+        return {card: Math.round(c.getBoundingClientRect().height),
+                nameLines: Math.round(n.getBoundingClientRect().height / lh(n)),
+                descLines: d && getComputedStyle(d).display !== 'none'
+                  ? Math.round(d.getBoundingClientRect().height / lh(d)) : 0,
+                cutOff: !!d && d.scrollWidth > d.clientWidth + 1,
+                name: n.textContent.trim()};
+      });"""
+
+    def test_no_card_wraps_and_choosing_one_resizes_none(self):
+        """Choosing Quick Walls made its description wrap onto a second line,
+        because the arrow beside it took the room, and every card below it moved
+        down. The PlanTrim card's name wrapped in every state. Neither is
+        allowed at a window wide enough for the cards beside the settings, in
+        a tall window and in a short one."""
+        for kind, drv in self.each_browser():
+            for width, height in ((1600, 900), (1600, 800)):
+                drv.set_window_size(width, height)
+                drv.get(self.base + "/settings")
+                time.sleep(1.5)
+                first = None
+                for sec in SECTIONS:
+                    with self.subTest(browser=kind, size=(width, height), section=sec):
+                        drv.execute_script(
+                            "document.querySelector('.s-nav-item[data-sec=\"sec-%s\"]').click();" % sec)
+                        time.sleep(0.3)
+                        cards = drv.execute_script(self.CARDS)
+                        for c in cards:
+                            self.assertEqual(c["nameLines"], 1, "wraps: %s" % c)
+                            self.assertLessEqual(c["descLines"], 1, "wraps: %s" % c)
+                            self.assertFalse(c["cutOff"], "its description is cut off: %s" % c)
+                        sizes = [c["card"] for c in cards]
+                        if first is None:
+                            first = sizes
+                            continue
+                        for got, want in zip(sizes, first):
+                            self.assertLessEqual(abs(got - want), 1,
+                                                 "a card changed size when %s was chosen: %s against %s"
+                                                 % (sec, sizes, first))
+
     def test_the_panel_has_no_empty_margins_either_side(self):
         """Settings opened as a panel over Home: the content fills it. The panel
         was widened to 1480px while the content stayed capped at 1200px, which
