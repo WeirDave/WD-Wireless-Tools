@@ -471,7 +471,8 @@ async function doUndo() {
   if (r.skipped) bits.push(`${r.skipped} skipped`);
   if (r.errors) bits.push(`${r.errors} error${r.errors !== 1 ? 's' : ''}`);
   toast(`Undo complete — ${bits.join(', ')}`);
-  setUndoState(false, 0);
+  // An earlier organize or group may still be waiting to be undone.
+  setUndoState(r.undo_available, r.undo_count);
   await doScan();
 }
 

@@ -83,9 +83,33 @@ def _canonical(value) -> str:
                       ensure_ascii=False, separators=(",", ":"))
 
 
-def _members(zf: zipfile.ZipFile) -> dict:
-    return {name: zf.read(name) for name in zf.namelist()
-            if not name.endswith("/")}
+class _MemberView:
+    """The members of an archive, each read when it is asked for.
+
+    The comparison used to read every member of both archives into a dict
+    first, so a project with its survey samples held all of them decompressed,
+    twice, to compare a few JSON documents. This reads one member at a time and
+    lets it go.
+    """
+
+    def __init__(self, zf: zipfile.ZipFile):
+        self._zf = zf
+        self._names = [n for n in zf.namelist() if not n.endswith("/")]
+        self._set = set(self._names)
+
+    def __iter__(self):
+        return iter(self._names)
+
+    def __contains__(self, name) -> bool:
+        return name in self._set
+
+    def __getitem__(self, name) -> bytes:
+        if name not in self._set:
+            raise KeyError(name)
+        return self._zf.read(name)
+
+    def get(self, name, default=None):
+        return self._zf.read(name) if name in self._set else default
 
 
 def _as_json(raw: bytes):
@@ -235,9 +259,9 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes,
     except zipfile.BadZipFile as exc:
         return {**out, "error": "Could not read one of the archives: %s" % exc}
 
-    with lz, cz:
-        local = _members(lz)
-        cloud = _members(cz)
+    try:
+        local = _MemberView(lz)
+        cloud = _MemberView(cz)
         #: Measured separately from the diff below because the diff only sees
         #: what one side has and the other lacks. Two copies that both lack
         #: the same samples differ in nothing, and used to compare as
@@ -248,94 +272,99 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes,
             "local": len(esx_survey_data.missing_members(lz)),
             "cloud": len(esx_survey_data.missing_members(cz))}
 
-    local_name = _names(_as_json(local.get("project.json", b"")))
-    cloud_name = _names(_as_json(cloud.get("project.json", b"")))
 
-    def _same(a, b):
-        return a.strip().casefold() == b.strip().casefold()
+        local_name = _names(_as_json(local.get("project.json", b"")))
+        cloud_name = _names(_as_json(cloud.get("project.json", b"")))
 
-    #: Folded the same way `nameState` folds, or a case-only difference read
-    #: as "renamed" beside a `nameState` of "same" - two halves of one result
-    #: disagreeing about the one thing the row was showing.
-    renamed = bool(local_name and cloud_name
-                   and not _same(local_name, cloud_name))
+        def _same(a, b):
+            return a.strip().casefold() == b.strip().casefold()
 
-    if cloud_name and local_name:
-        internal_ok = _same(local_name, cloud_name)
-        file_ok = _same(local_file_stem, cloud_name) if local_file_stem else internal_ok
-        out["nameState"] = ("same" if internal_ok and file_ok else
-                            "internal_only" if file_ok else
-                            "file_only" if internal_ok else "both")
-    # Deliberately *not* returned: the cloud project's name. The caller already
-    # has it from the ledger row, and this result reaches toasts and the log -
-    # the rule-zero test caught it going in here and was right to.
+        #: Folded the same way `nameState` folds, or a case-only difference read
+        #: as "renamed" beside a `nameState` of "same" - two halves of one result
+        #: disagreeing about the one thing the row was showing.
+        renamed = bool(local_name and cloud_name
+                       and not _same(local_name, cloud_name))
 
-    design_diffs = []
-    meta_diffs = []
+        if cloud_name and local_name:
+            internal_ok = _same(local_name, cloud_name)
+            file_ok = _same(local_file_stem, cloud_name) if local_file_stem else internal_ok
+            out["nameState"] = ("same" if internal_ok and file_ok else
+                                "internal_only" if file_ok else
+                                "file_only" if internal_ok else "both")
+        # Deliberately *not* returned: the cloud project's name. The caller already
+        # has it from the ledger row, and this result reaches toasts and the log -
+        # the rule-zero test caught it going in here and was right to.
 
-    for member in sorted(set(local) | set(cloud)):
-        in_local, in_cloud = member in local, member in cloud
-        is_meta = member in METADATA_MEMBERS
-        is_image = member.startswith("image-")
+        design_diffs = []
+        meta_diffs = []
 
-        if in_local != in_cloud:
-            entry = {"member": member,
-                     "state": "only in local" if in_local else "only in cloud"}
-            (meta_diffs if is_meta else design_diffs).append(entry)
-            continue
+        for member in sorted(set(local) | set(cloud)):
+            in_local, in_cloud = member in local, member in cloud
+            is_meta = member in METADATA_MEMBERS
+            is_image = member.startswith("image-")
 
-        if is_image:
-            out["imagesCompared"] += 1
-            # Images are opaque bytes, so the hash *is* the comparison. This is
-            # what catches a re-cropped floor plan, which every JSON document
-            # would report as unchanged.
-            if hashlib.sha256(local[member]).hexdigest() != \
-                    hashlib.sha256(cloud[member]).hexdigest():
-                design_diffs.append({"member": member, "state": "differs",
-                                     "kind": "floor plan image"})
-            continue
-
-        ldoc, cdoc = _as_json(local[member]), _as_json(cloud[member])
-        if ldoc is None or cdoc is None:
-            if local[member] != cloud[member]:
-                (meta_diffs if is_meta else design_diffs).append(
-                    {"member": member, "state": "differs"})
-            continue
-
-        if _canonical(ldoc) == _canonical(cdoc):
-            continue
-
-        if member == "project.json":
-            # Strip the name too and see whether anything else moved. This is
-            # the line that separates "renamed" from "redesigned".
-            l2 = _strip_volatile(ldoc)
-            c2 = _strip_volatile(cdoc)
-            for doc in (l2, c2):
-                if isinstance(doc.get("project"), dict):
-                    for key in NAME_KEYS:
-                        doc["project"].pop(key, None)
-            if json.dumps(l2, sort_keys=True) == json.dumps(c2, sort_keys=True):
+            if in_local != in_cloud:
+                entry = {"member": member,
+                         "state": "only in local" if in_local else "only in cloud"}
+                (meta_diffs if is_meta else design_diffs).append(entry)
                 continue
-            meta_diffs.append({"member": member, "state": "differs"})
-            continue
 
-        detail = _describe_collection(ldoc, cdoc)
-        entry = {"member": member, "state": "differs"}
-        if detail:
-            entry.update(detail)
-        elif isinstance(ldoc, dict) and isinstance(cdoc, dict):
-            entry["fields"] = _differing_fields([(ldoc, cdoc)])
-        (meta_diffs if is_meta else design_diffs).append(entry)
+            if is_image:
+                out["imagesCompared"] += 1
+                # Images are opaque bytes, so the hash *is* the comparison. This is
+                # what catches a re-cropped floor plan, which every JSON document
+                # would report as unchanged.
+                if hashlib.sha256(local[member]).hexdigest() != \
+                        hashlib.sha256(cloud[member]).hexdigest():
+                    design_diffs.append({"member": member, "state": "differs",
+                                         "kind": "floor plan image"})
+                continue
 
-    out["differences"] = (design_diffs + meta_diffs)[:MAX_REPORTED_MEMBERS]
-    out["designDiffers"] = bool(design_diffs)
-    out["renamedOnly"] = bool(renamed and not design_diffs)
-    out["surveyDataIncomplete"] = bool(out["surveyGaps"]["local"]
-                                       or out["surveyGaps"]["cloud"])
-    out["identical"] = (not design_diffs and not meta_diffs and not renamed
-                        and not out["surveyDataIncomplete"])
-    out["renamed"] = renamed
-    out["summary"] = _summarise(out, design_diffs, renamed)
+            ldoc, cdoc = _as_json(local[member]), _as_json(cloud[member])
+            if ldoc is None or cdoc is None:
+                if local[member] != cloud[member]:
+                    (meta_diffs if is_meta else design_diffs).append(
+                        {"member": member, "state": "differs"})
+                continue
+
+            if _canonical(ldoc) == _canonical(cdoc):
+                continue
+
+            if member == "project.json":
+                # Strip the name too and see whether anything else moved. This is
+                # the line that separates "renamed" from "redesigned".
+                l2 = _strip_volatile(ldoc)
+                c2 = _strip_volatile(cdoc)
+                for doc in (l2, c2):
+                    if isinstance(doc.get("project"), dict):
+                        for key in NAME_KEYS:
+                            doc["project"].pop(key, None)
+                if json.dumps(l2, sort_keys=True) == json.dumps(c2, sort_keys=True):
+                    continue
+                meta_diffs.append({"member": member, "state": "differs"})
+                continue
+
+            detail = _describe_collection(ldoc, cdoc)
+            entry = {"member": member, "state": "differs"}
+            if detail:
+                entry.update(detail)
+            elif isinstance(ldoc, dict) and isinstance(cdoc, dict):
+                entry["fields"] = _differing_fields([(ldoc, cdoc)])
+            (meta_diffs if is_meta else design_diffs).append(entry)
+
+        out["differences"] = (design_diffs + meta_diffs)[:MAX_REPORTED_MEMBERS]
+        out["designDiffers"] = bool(design_diffs)
+        out["renamedOnly"] = bool(renamed and not design_diffs)
+        out["surveyDataIncomplete"] = bool(out["surveyGaps"]["local"]
+                                           or out["surveyGaps"]["cloud"])
+        out["identical"] = (not design_diffs and not meta_diffs and not renamed
+                            and not out["surveyDataIncomplete"])
+        out["renamed"] = renamed
+        out["summary"] = _summarise(out, design_diffs, renamed)
+    finally:
+        lz.close()
+        cz.close()
+
     return out
 
 

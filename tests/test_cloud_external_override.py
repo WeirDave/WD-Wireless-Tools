@@ -160,14 +160,13 @@ class TheStoreTests(unittest.TestCase):
     def test_nothing_about_a_mark_reaches_the_project(self):
         """It is an annotation on this installation's view.
 
-        The three methods must not carry an api call between them - marking a
+        The two methods must not carry an api call between them - marking a
         project External is not something Ekahau should ever learn about, and
         it must work on a project he does not own, which is the case it exists
         for.
         """
         import inspect
-        for name in ("set_external_override", "clear_external_override",
-                     "list_external_overrides"):
+        for name in ("set_external_override", "clear_external_override"):
             src = inspect.getsource(getattr(self.cm.CloudManager, name))
             with self.subTest(method=name):
                 self.assertNotIn("self.api", src)
@@ -182,10 +181,9 @@ class TheStoreIsRegisteredTests(unittest.TestCase):
     calls - which is why the route table is exercised rather than read.
     """
 
-    def test_the_three_actions_are_routed_to_the_right_methods(self):
+    def test_the_two_actions_are_routed_to_the_right_methods(self):
         import server
-        for action in ("set_external_override", "clear_external_override",
-                       "list_external_overrides"):
+        for action in ("set_external_override", "clear_external_override"):
             with self.subTest(action=action):
                 self.assertIn(action, server.CLOUD_ACTIONS)
 

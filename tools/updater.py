@@ -66,8 +66,6 @@ class AppConfig:
     payload_files: tuple            # replaceable top-level files
     payload_dirs: tuple             # replaceable top-level directories
     user_data_dir: Path             # never touched by an update
-    launcher_win: str = ""
-    launcher_mac: str = ""
     # Files the user can edit that are ALSO tracked in the repo.  These are the
     # only paths that can make a pull abort; each is rescued into user_data_dir
     # before the update rather than blocking it forever.  Glob syntax.
@@ -110,19 +108,8 @@ CONFIG = AppConfig(
     ),
     payload_dirs=("tools", "web", "templates", "docs"),
     user_data_dir=user_dir(),
-    launcher_win="Start WD Wireless Tools.bat",
-    launcher_mac="Start WD Wireless Tools.command",
     rescuable_globs=("templates/*_walltemplate.json",),
 )
-
-# Back-compat aliases — existing callers and tests import these directly.
-ROOT = CONFIG.install_root
-GITHUB_REPO = CONFIG.repo
-GITHUB_API_LATEST = CONFIG.api_latest
-GITHUB_RELEASES_URL = CONFIG.releases_url
-CLONE_URL = CONFIG.clone_url
-PAYLOAD_FILES = CONFIG.payload_files
-PAYLOAD_DIRS = CONFIG.payload_dirs
 
 TAG_RE = re.compile(r"^v[0-9]+(?:\.[0-9]+)+$")
 GIT_TIMEOUT = 120
@@ -520,6 +507,90 @@ def rescue_dirty_templates(root: Path, cfg: AppConfig = CONFIG):
             if result.get("rescued"):
                 rescued.append(name)
     return rescued
+
+
+# A git install knows what the shipped copy of a template was, because git
+# does. A ZIP install does not: a template edited in place and a template that
+# a newer release changed look the same. So each ZIP install writes down what
+# it shipped, and the next update compares against that.
+SHIPPED_MANIFEST = "shipped_files.json"
+
+
+def _rescuable_files(root: Path, cfg: AppConfig) -> list[Path]:
+    """Files under `root` that match cfg.rescuable_globs, relative paths."""
+    found: dict[str, Path] = {}
+    for pattern in cfg.rescuable_globs:
+        for hit in root.glob(pattern):
+            if hit.is_file():
+                rel = Path(hit.relative_to(root).as_posix())
+                found[rel.as_posix()] = rel
+    return sorted(found.values())
+
+
+def _read_shipped_manifest(cfg: AppConfig, version: str) -> dict | None:
+    """What the install at `version` shipped, or None when that is not known."""
+    try:
+        data = json.loads((cfg.user_data_dir / SHIPPED_MANIFEST)
+                          .read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("version") != version:
+        return None
+    files = data.get("files")
+    return files if isinstance(files, dict) else None
+
+
+def record_shipped_files(root: Path, version: str, cfg: AppConfig = CONFIG):
+    """Write down the hash of every rescuable file as this release shipped it.
+
+    Best effort: a failure here costs the next update its comparison and
+    nothing else, so it is never allowed to fail an update that has installed.
+    """
+    if not cfg.rescuable_globs:
+        return
+    try:
+        from tools import atomic_write
+        files = {p.as_posix(): _sha256(root / p)
+                 for p in _rescuable_files(root, cfg)}
+        atomic_write.write_json(cfg.user_data_dir / SHIPPED_MANIFEST,
+                                {"version": version, "files": files})
+    except Exception:
+        pass
+
+
+def rescue_zip_edits(root: Path, new_tree: Path, before: str,
+                     cfg: AppConfig = CONFIG, log=None) -> list[str]:
+    """Keep the user's own work in the install tree before the tree is replaced.
+
+    The ZIP update swaps `templates/` wholesale, so a template edited in place,
+    or one the user dropped into that folder, would be deleted with it. Both are
+    copied into the user's data folder, where the app reads them in preference
+    to a shipped one - which is what a git update does for an edited file.
+
+    A file is the user's when it differs from what the installed release
+    shipped (the manifest), or, when that is not known, when the new release
+    does not contain it at all. A copy the user already has is never replaced.
+    Raises OSError if a copy cannot be made, so nothing is deleted unsaved.
+    """
+    if not cfg.rescuable_globs:
+        return []
+    shipped = _read_shipped_manifest(cfg, before)
+    kept = []
+    for rel in _rescuable_files(root, cfg):
+        posix = rel.as_posix()
+        if shipped is not None:
+            edited = shipped.get(posix) != _sha256(root / rel)
+        else:
+            edited = not (new_tree / rel).is_file()
+        dest = cfg.user_data_dir / rel
+        if not edited or dest.exists():
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(root / rel, dest)
+        kept.append(rel.name)
+    if kept and log:
+        log(f"Kept your edits to {', '.join(kept)} as personal copies.")
+    return kept
 
 
 def _ensure_origin(root: Path, cfg: AppConfig = CONFIG):
@@ -1447,6 +1518,14 @@ def zip_update(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
         say("Verifying contents…")
         new_version = _validate_payload(tree, release["version"], cfg)
 
+        try:
+            rescued = rescue_zip_edits(root, tree, before, cfg, say)
+        except OSError as e:
+            raise UpdateError(
+                f"Your edited templates could not be saved first ({e}), so "
+                "the update was not installed. The install is as it was.",
+                intact=True)
+
         say("Backing up the current install…")
         backup = _backup_install(root, before, cfg)
 
@@ -1464,11 +1543,13 @@ def zip_update(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
                 intact=False,
             )
 
+        record_shipped_files(root, new_version, cfg)
         say(f"Updated to v{new_version}.")
         leftover = _discard_backup(backup)
         return {"ok": True, "mode": "zip", "changed": True,
                 "previousVersion": before, "newVersion": new_version,
-                "target": release["tag"], "backup": leftover}
+                "target": release["tag"], "backup": leftover,
+                "rescuedTemplates": rescued}
     finally:
         shutil.rmtree(staging, ignore_errors=True)
 

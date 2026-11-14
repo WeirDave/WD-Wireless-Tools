@@ -132,6 +132,43 @@ def _undo_path(root: Path) -> Path:
     return UNDO_DIR / f"{key}.json"
 
 
+#: How many runs a root's undo log keeps. Each run is one Organize or one
+#: Group; Undo takes back the newest first.
+MAX_UNDO_RUNS = 20
+
+
+def _load_undo_runs(undo_file: Path) -> list:
+    """The runs in a root's undo log, oldest first. Raises if it is unreadable.
+
+    The log used to be one run - `{"moves": [...], "created_dirs": [...]}` - and
+    a second Organize or a Group replaced it, which made the first one
+    impossible to undo. A log in that shape is read as a single run.
+    """
+    with open(undo_file, encoding="utf-8") as f:
+        log = json.load(f)
+    if isinstance(log.get("runs"), list):
+        return [r for r in log["runs"] if isinstance(r, dict)]
+    if "moves" in log:
+        return [log]
+    return []
+
+
+def _record_undo_run(root_path: Path, run: dict) -> None:
+    """Add a run to the root's log. A run that moved nothing is not recorded,
+    and the runs already there are kept."""
+    if not run["moves"]:
+        return
+    undo_file = _undo_path(root_path)
+    try:
+        runs = _load_undo_runs(undo_file) if undo_file.exists() else []
+    except Exception:
+        runs = []  # unreadable: it could not have been undone anyway
+    runs.append({"moves": run["moves"], "created_dirs": run["created_dirs"]})
+    UNDO_DIR.mkdir(parents=True, exist_ok=True)
+    atomic_write.write_json(undo_file, {"root": str(root_path),
+                                        "runs": runs[-MAX_UNDO_RUNS:]})
+
+
 def _acorn_state_path(esx_path: Path) -> Path:
     """Where the last-known floor/summary snapshot for a given .esx is kept,
     separate from the human-readable Acorn.txt, so re-saving the note never
@@ -1607,7 +1644,6 @@ class FolderOrganizer:
         undo_log = {"root": str(root_path), "moves": [], "created_dirs": []}
 
 
-        undo_file = _undo_path(root_path)
         try:
             unreadable: list = []
             site_dirs = _site_dirs(root_path, skip, unreadable)
@@ -1633,9 +1669,7 @@ class FolderOrganizer:
             # Whatever moved is undoable, even if something above raised. A
             # run that moved nothing leaves the previous log alone: deleting
             # it made the last real organize impossible to undo.
-            if undo_log["moves"]:
-                UNDO_DIR.mkdir(parents=True, exist_ok=True)
-                atomic_write.write_json(undo_file, undo_log)
+            _record_undo_run(root_path, undo_log)
 
         undo_now = self.has_undo(str(root_path))
         return {
@@ -1657,22 +1691,26 @@ class FolderOrganizer:
         if not undo_file.exists():
             return {"ok": True, "available": False, "count": 0}
         try:
-            with open(undo_file) as f:
-                log = json.load(f)
+            runs = _load_undo_runs(undo_file)
         except Exception:
             return {"ok": True, "available": False, "count": 0}
+        if not runs:
+            return {"ok": True, "available": False, "count": 0}
+        # `count` is the newest run, which is what Undo takes back.
         return {
             "ok": True,
             "available": True,
-            "count": len(log.get("moves", [])),
+            "count": len(runs[-1].get("moves", [])),
+            "runs": len(runs),
         }
 
     def undo(self, root: str | None = None) -> dict:
-        """Reverse the last organize run for this root. Moves each file back
-        to its recorded original path (skipping any where the current file no
-        longer exists or the original slot is now occupied), then removes any
-        subfolders it created if they are still empty. Deletes the rollback log
-        on completion so it can't be undone twice."""
+        """Reverse the newest run (an Organize or a Group) for this root. Moves
+        each file back to its recorded original path (skipping any where the
+        current file no longer exists or the original slot is now occupied),
+        then removes any subfolders it created if they are still empty. That run
+        is dropped from the log so it can't be undone twice; earlier runs stay
+        and the next Undo takes back the one before."""
         root_path = Path(root or self._root or "")
         if not root_path.is_dir():
             return {"ok": False, "error": "No valid root folder set"}
@@ -1680,10 +1718,12 @@ class FolderOrganizer:
         if not undo_file.exists():
             return {"ok": False, "error": "Nothing to undo for this folder"}
         try:
-            with open(undo_file) as f:
-                log = json.load(f)
+            runs = _load_undo_runs(undo_file)
         except Exception as e:
             return {"ok": False, "error": f"Rollback log unreadable: {e}"}
+        if not runs:
+            return {"ok": False, "error": "Nothing to undo for this folder"}
+        log = runs[-1]
 
         restored = 0
         skipped = 0
@@ -1727,9 +1767,14 @@ class FolderOrganizer:
 
 
         try:
-            undo_file.unlink()
+            if len(runs) > 1:
+                atomic_write.write_json(undo_file, {"root": str(root_path),
+                                                    "runs": runs[:-1]})
+            else:
+                undo_file.unlink()
         except Exception:
             pass
+        undo_now = self.has_undo(str(root_path))
 
         return {
             "ok": True,
@@ -1738,6 +1783,8 @@ class FolderOrganizer:
             "errors": errors,
             "removed_dirs": removed_dirs,
             "details": details,
+            "undo_available": undo_now["available"],
+            "undo_count": undo_now["count"],
         }
 
 
@@ -2087,9 +2134,8 @@ class FolderOrganizer:
                                     "status": "error", "error": str(e)})
 
 
-        if undo_log["moves"]:
-            UNDO_DIR.mkdir(parents=True, exist_ok=True)
-            atomic_write.write_json(_undo_path(root_path), undo_log)
+        _record_undo_run(root_path, undo_log)
+        undo_now = self.has_undo(str(root_path))
 
         return {
             "ok": True,
@@ -2097,6 +2143,6 @@ class FolderOrganizer:
             "moved": moved,
             "errors": errors,
             "details": details,
-            "undo_available": len(undo_log["moves"]) > 0,
-            "undo_count": len(undo_log["moves"]),
+            "undo_available": undo_now["available"],
+            "undo_count": undo_now["count"],
         }

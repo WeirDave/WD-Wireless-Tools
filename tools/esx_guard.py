@@ -74,6 +74,24 @@ def open_zip(path):
     return zipfile.ZipFile(path)
 
 
+def copy_with_replacements(src, dest, replaced: dict) -> None:
+    """Write a copy of the archive `src` to `dest`, swapping in `replaced`.
+
+    `replaced` maps a member name to its new bytes. Every other member goes
+    across one at a time, so the copy needs room for the largest member and not
+    for the whole project: a surveyed one is mostly sample files that nobody
+    here wants to read. A name in `replaced` that the archive does not have is
+    added at the end. `dest` is the caller's temp file to rename over the top.
+    """
+    with open_zip(src) as zin, zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as out:
+        names = zin.namelist()
+        for name in names:
+            out.writestr(name, replaced[name] if name in replaced else zin.read(name))
+        for name, blob in replaced.items():
+            if name not in names:
+                out.writestr(name, blob)
+
+
 def check(path) -> None:
     """Raise `HostileArchive` if reading this archive would be unreasonable.
 

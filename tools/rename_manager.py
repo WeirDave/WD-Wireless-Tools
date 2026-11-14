@@ -15,6 +15,10 @@ from datetime import datetime
 from pathlib import Path
 from tools.user_dir import user_dir
 from tools import atomic_write
+import threading
+
+#: Serialises this store's read-modify-write; see atomic_write.serialised.
+_LOCK = threading.RLock()
 
 CONFIG_DIR = user_dir()
 DIRECTORY_PATH = CONFIG_DIR / "site_directory.json"
@@ -1271,6 +1275,7 @@ class RenameManager:
 
     # ── Profiles ──
 
+    @atomic_write.serialised(_LOCK)
     def save_profile(self, name: str, folder_fmt: str = "",
                      file_fmt: str = "", separator: str = " - ",
                      file_rules: dict | None = None,
@@ -1292,6 +1297,7 @@ class RenameManager:
         self._save_profiles(profiles)
         return {"ok": True}
 
+    @atomic_write.serialised(_LOCK)
     def delete_profile(self, name: str) -> dict:
         profiles = self._load_profiles()
         if name in profiles:

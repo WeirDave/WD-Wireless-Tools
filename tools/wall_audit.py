@@ -235,15 +235,18 @@ def repair_project(path: Path, heights: dict[str, float]) -> dict:
         return {"error": "No heights given, so there is nothing to change."}
 
     try:
+        # Only the one document that is changed is read here; every other
+        # member is copied across one at a time when the file is written.
         with esx_guard.open_zip(path) as z:
-            members = {n: z.read(n) for n in z.namelist()}
+            raw_types = (z.read("wallTypes.json")
+                         if "wallTypes.json" in z.namelist() else None)
     except (OSError, zipfile.BadZipFile) as e:
         return {"error": f"Could not read the project: {e}"}
-    if "wallTypes.json" not in members:
+    if raw_types is None:
         return {"error": "This project has no wallTypes.json to correct."}
 
     try:
-        doc = json.loads(members["wallTypes.json"])
+        doc = json.loads(raw_types)
         types = doc["wallTypes"]
     except (ValueError, KeyError) as e:
         return {"error": f"wallTypes.json could not be parsed: {e}"}
@@ -280,13 +283,11 @@ def repair_project(path: Path, heights: dict[str, float]) -> dict:
                          "a height in this project.", "skipped": skipped,
                 "notFound": missing}
 
-    members["wallTypes.json"] = (json.dumps(doc, indent=2, ensure_ascii=False)
-                                 + "\n").encode("utf-8")
+    new_types = (json.dumps(doc, indent=2, ensure_ascii=False)
+                 + "\n").encode("utf-8")
     tmp = path.with_suffix(path.suffix + ".wd-audit.tmp")
     try:
-        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
-            for name, blob in members.items():
-                out.writestr(name, blob)
+        esx_guard.copy_with_replacements(path, tmp, {"wallTypes.json": new_types})
         tmp.replace(path)
     except OSError as e:
         tmp.unlink(missing_ok=True)

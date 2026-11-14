@@ -400,6 +400,13 @@ crashes it and it reads as `InvalidSessionIdException`.
   install. Missing git on Windows installs via `winget` (`--scope user` first),
   falling back to ZIP with the reason. macOS git is described, never
   auto-installed.
+- **A ZIP update keeps edited templates.** `rescue_zip_edits` copies a template
+  edited in place (or added to the install's `templates/`) to the user folder
+  before the folder is replaced. A ZIP install cannot tell an edit from a
+  release change without a baseline, so each one writes `shipped_files.json`
+  (hashes, tagged with the version) in the user data folder; with no matching
+  record only a file the new release lacks is kept. Tests:
+  `tests/test_a_zip_update_keeps_the_users_templates.py`.
 - `convert_to_git()` checks out the tag matching the installed version, not
   the newest - converting and updating are separate decisions. It backs up
   first and sits behind a confirm step.
@@ -709,6 +716,18 @@ and Cloud Manager's local copy is a copy of what Ekahau still holds.
 **Writes rest on atomicity instead**: build in a temp file and rename over the
 top. `_rewrite_project_json` writes nothing when nothing changes, so callers can
 re-run safely.
+
+**Atomic is not serialised.** A store that reads its file, changes the copy and
+writes it back loses a change when two requests do it at once, because the
+server answers on several threads. Every such store takes
+`@atomic_write.serialised(_LOCK)` around the whole read-change-write
+(`tests/test_stores_do_not_lose_a_concurrent_change.py` runs six threads at
+each). A new store of that shape needs the same.
+
+**An `.esx` is rewritten one member at a time.** Read only the documents being
+changed and copy the rest with `esx_guard.copy_with_replacements`; a surveyed
+project is mostly sample files, and a dict of every member is the whole project
+in memory.
 
 **No text may promise a copy that is not kept.** Every place in `cloud.js` now
 names the cloud as the other copy. `NothingPromisesACopyThatIsNoLongerKeptTests`

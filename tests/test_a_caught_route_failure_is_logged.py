@@ -50,6 +50,19 @@ class CaughtRouteFailureTests(unittest.TestCase):
         self.assertEqual(r.get_json(), {"error": "missing field: 'name'"})
         noted.assert_not_called()
 
+    def test_a_missing_key_inside_a_tool_is_a_fault_and_is_logged(self):
+        # Compiled under a file name in tools/, so the traceback's last frame
+        # is where a real tool's own indexing would raise.
+        ns = {}
+        source = "def fn(d):\n    return {}['hidden']\n"
+        exec(compile(source,
+                     str(ROOT / "tools" / "probe_not_a_real_module.py"), "exec"), ns)
+        r, noted = self.post(ns["fn"])
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.get_json(), {"error": "missing field: 'hidden'"})
+        self.assertEqual(noted.call_count, 1)
+        self.assertIsInstance(noted.call_args.args[1], KeyError)
+
     def test_no_traceback_reaches_the_page(self):
         def fn(d):
             raise ValueError("plain words")

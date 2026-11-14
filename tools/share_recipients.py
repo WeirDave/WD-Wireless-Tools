@@ -27,6 +27,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tools.user_dir import user_dir
+import threading
+from tools import atomic_write
+
+#: Serialises this store's read-modify-write; see atomic_write.serialised.
+_LOCK = threading.RLock()
 
 FILE_NAME = "share_recipients.json"
 SCHEMA_VERSION = 1
@@ -186,6 +191,7 @@ def recent(limit: int = MAX_REMEMBERED) -> list[dict]:
     return entries[:max(0, int(limit))]
 
 
+@atomic_write.serialised(_LOCK)
 def remember(emails) -> list[dict]:
     """Record addresses a share actually succeeded for.
 
@@ -229,6 +235,7 @@ def remember(emails) -> list[dict]:
     return entries
 
 
+@atomic_write.serialised(_LOCK)
 def forget(email: str) -> dict:
     """Drop one address. His list, his call - no confirmation needed."""
     target = (email or "").strip().lower()
@@ -244,6 +251,7 @@ def forget(email: str) -> dict:
     return {"ok": True, "removed": removed, "recipients": data["recipients"]}
 
 
+@atomic_write.serialised(_LOCK)
 def forget_all() -> dict:
     data = {"version": SCHEMA_VERSION, "recipients": [], "nextSeq": 0}
     try:

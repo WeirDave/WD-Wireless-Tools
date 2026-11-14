@@ -1,12 +1,12 @@
 {
-  "suite": "2.247.0",
-  "cloud": "4.95.0",
-  "walls": "7.80.1",
-  "report": "2.77.1",
+  "suite": "2.248.0",
+  "cloud": "4.96.0",
+  "walls": "7.80.2",
+  "report": "2.77.2",
   "scale": "1.7.0",
-  "squirrel": "1.31.1",
-  "plantrim": "2.3.2",
+  "squirrel": "1.32.0",
+  "plantrim": "2.3.3",
   "aprename": "2.22.0",
   "capacity": "1.14.1",
-  "prep": "2.10.1"
+  "prep": "2.10.2"
 }

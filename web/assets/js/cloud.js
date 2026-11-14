@@ -78,6 +78,7 @@ const API_MAP = {
   add_shares: ['add_shares', ['projectId', 'emails', 'role']],
   recent_recipients: ['recent_recipients', []],
   forget_recipient: ['forget_recipient', ['email']],
+  forget_all_recipients: ['forget_all_recipients', []],
   remove_share: ['remove_share', ['projectId', 'email']],
   change_share_role: ['change_share_role', ['projectId', 'email', 'role']],
   toggle_group_share: ['toggle_group_share', ['projectId', 'groupId', 'groupName', 'role', 'enable']],
@@ -7128,7 +7129,24 @@ function _shareRecentRender() {
         + label + '" aria-label="Forget ' + label
         + '" data-action="call" data-fn="_shareForget" data-arg="' + label + '">&times;</button>'
         + '</span>';
-    }).join('');
+    }).join('')
+    + '<button type="button" class="share-recent-forget" '
+    + 'title="Remove every remembered address from this computer" '
+    + 'data-action="call" data-fn="_shareForgetAll">Forget all</button>';
+}
+
+async function _shareForgetAll() {
+  if (!confirm('Forget every address remembered for sharing on this computer?\n\n'
+      + 'Projects already shared stay shared; only this list is cleared.')) return;
+  try {
+    const r = await pyApi('forget_all_recipients');
+    if (r && (r.error || r.ok === false)) { toast(r.error || 'Could not clear the list', 'error'); return; }
+    _shareKnown = [];
+    _shareRecentRender();
+    _shareSuggestHide();
+  } catch (err) {
+    toast('Could not clear the list', 'error');
+  }
 }
 
 async function _shareForget(email) {

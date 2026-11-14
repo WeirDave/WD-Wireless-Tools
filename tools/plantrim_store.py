@@ -21,6 +21,11 @@ import os
 import tempfile
 from pathlib import Path
 from tools.user_dir import user_dir
+import threading
+from tools import atomic_write
+
+#: Serialises this store's read-modify-write; see atomic_write.serialised.
+_LOCK = threading.RLock()
 
 USER_DIR = user_dir()
 STORE = USER_DIR / "plantrim-boxes.json"
@@ -78,6 +83,7 @@ def load(project_id: str) -> dict:
     return clean_boxes(_load_all().get(project_id))
 
 
+@atomic_write.serialised(_LOCK)
 def save(project_id: str, boxes) -> dict:
     """Store *boxes* for *project_id*; an empty map forgets the project."""
     if not project_id:
@@ -102,6 +108,7 @@ def save(project_id: str, boxes) -> dict:
     return cleaned
 
 
+@atomic_write.serialised(_LOCK)
 def forget(project_id: str) -> None:
     data = _load_all()
     if data.pop(project_id, None) is not None:

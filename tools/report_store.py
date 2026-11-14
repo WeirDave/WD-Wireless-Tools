@@ -19,6 +19,11 @@ import tempfile
 from pathlib import Path
 
 from tools.settings import SETTINGS_DIR
+import threading
+from tools import atomic_write
+
+#: Serialises this store's read-modify-write; see atomic_write.serialised.
+_LOCK = threading.RLock()
 
 # Deliberately a sibling of settings.json and templates/, all under the one
 # directory the updater is required to leave alone.
@@ -338,6 +343,7 @@ def _clean_point(raw) -> dict | None:
     return {"x": x, "y": y, "col": col, "row": row}
 
 
+@atomic_write.serialised(_LOCK)
 def save_grid(project_id: str, floor_id: str, payload) -> dict:
     project_id = (project_id or "").strip()
     floor_id = (floor_id or "").strip()
@@ -364,6 +370,7 @@ def save_grid(project_id: str, floor_id: str, payload) -> dict:
     return {"ok": True, "floors": data["projects"][project_id]}
 
 
+@atomic_write.serialised(_LOCK)
 def clear_grid(project_id: str, floor_id: str) -> dict:
     """Turn the reference off for one floor.
 
@@ -523,6 +530,7 @@ def section_grid_for_project(project_id: str) -> dict:
             "last": data.get("last")}
 
 
+@atomic_write.serialised(_LOCK)
 def save_section_grid(project_id: str, payload) -> dict:
     """Remember what this project's grid was left at.
 

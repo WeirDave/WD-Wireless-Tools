@@ -28,6 +28,11 @@ import tempfile
 from pathlib import Path
 
 from tools.user_dir import user_dir
+import threading
+from tools import atomic_write
+
+#: Serialises this store's read-modify-write; see atomic_write.serialised.
+_LOCK = threading.RLock()
 
 USER_DIR = user_dir()
 STORE = USER_DIR / "attenuation-area-presets.json"
@@ -126,6 +131,7 @@ def _write(items: list) -> None:
         raise
 
 
+@atomic_write.serialised(_LOCK)
 def save(preset) -> list:
     """Keep this preset (replacing one of his own with the same name)."""
     item = clean(preset)
@@ -146,6 +152,7 @@ def save(preset) -> list:
     return all_presets()
 
 
+@atomic_write.serialised(_LOCK)
 def delete(name) -> list:
     """Remove one of his own presets. A built-in cannot be removed."""
     if _key(name) in {_key(p["name"]) for p in shipped()}:

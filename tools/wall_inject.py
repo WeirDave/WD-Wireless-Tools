@@ -75,8 +75,10 @@ def _words(name) -> tuple:
 
 
 def _read_members(path: Path) -> dict:
+    """The one member this module changes, by name. Nothing else is read: the
+    rest of the project is copied across, one member at a time, on write."""
     with esx_guard.open_zip(path) as z:
-        return {n: z.read(n) for n in z.namelist()}
+        return {MEMBER: z.read(MEMBER)} if MEMBER in z.namelist() else {}
 
 
 def _stock_key(wt) -> str:
@@ -366,9 +368,8 @@ def inject(esx_path, wall_types: list, dest=None) -> dict:
 
     tmp = target.with_suffix(target.suffix + ".wd-inject.tmp")
     try:
-        with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as out:
-            for name, blob in members.items():
-                out.writestr(name, blob)
+        # `dest` may be another file; the source is still `path`.
+        esx_guard.copy_with_replacements(path, tmp, {MEMBER: members[MEMBER]})
         tmp.replace(target)
     except OSError as exc:
         tmp.unlink(missing_ok=True)

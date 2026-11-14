@@ -23,6 +23,10 @@ import shutil
 from pathlib import Path
 from tools.user_dir import user_dir
 from tools import atomic_write
+import threading
+
+#: Serialises this store's read-modify-write; see atomic_write.serialised.
+_LOCK = threading.RLock()
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -266,6 +270,7 @@ class TemplateStore:
         return {"ok": True, "folder": str(USER_DIR),
                 "templates": [found[k] for k in sorted(found)]}
 
+    @atomic_write.serialised(_LOCK)
     def save(self, name: str, wall_types: list, overwrite: bool = False) -> dict:
         """Save a template to the user folder.
 
@@ -314,6 +319,7 @@ class TemplateStore:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    @atomic_write.serialised(_LOCK)
     def reset(self, filename: str) -> dict:
         """Drop the user's copy so the shipped built-in shows through again."""
         if _bad_template_name(filename):
@@ -329,6 +335,7 @@ class TemplateStore:
             _save_hidden(hidden)
         return {"ok": True, "reset": filename}
 
+    @atomic_write.serialised(_LOCK)
     def delete(self, filename: str) -> dict:
         """Delete a user template.  Built-ins are tombstoned, not removed."""
         if _bad_template_name(filename):

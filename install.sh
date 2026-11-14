@@ -426,6 +426,14 @@ else
       err "The copy failed and the previous install was put back."
       exit 1
     fi
+    # A template the user put into the install's own templates folder is theirs;
+    # the old folder is about to be deleted, so carry over any the release does
+    # not ship. (The in-app update also keeps edited ones; see rescue_zip_edits.)
+    for f in "$TARGET/.templates.wd-old"/*_walltemplate.json; do
+      if [ -f "$f" ] && [ ! -e "$TARGET/templates/$(basename "$f")" ]; then
+        cp -p "$f" "$TARGET/templates/" || true
+      fi
+    done
     for d in tools web templates docs; do rm -rf "$TARGET/.$d.wd-old"; done
     chmod +x "$TARGET/Start WD Wireless Tools.command" 2>/dev/null || true
 

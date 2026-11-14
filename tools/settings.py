@@ -11,6 +11,11 @@ import os
 import tempfile
 from pathlib import Path
 from tools.user_dir import user_dir
+import threading
+from tools import atomic_write
+
+#: Serialises this store's read-modify-write; see atomic_write.serialised.
+_LOCK = threading.RLock()
 
 SETTINGS_DIR = user_dir()
 SETTINGS_FILE = SETTINGS_DIR / "settings.json"
@@ -444,6 +449,7 @@ def _replace_whole_values(merged, patch):
     return merged
 
 
+@atomic_write.serialised(_LOCK)
 def update_settings(patch, _path=None, replace_unreadable=False):
     """Deep-merge *patch* into current settings, save, and return the result.
 

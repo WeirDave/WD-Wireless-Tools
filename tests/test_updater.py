@@ -19,9 +19,9 @@ def _make_install(root: Path, version: str = "2.5.0"):
     (root / "web" / "assets").mkdir(parents=True)
     (root / "web" / "assets" / "versions.json").write_text(
         json.dumps({"suite": version}), encoding="utf-8")
-    for name in updater.PAYLOAD_FILES:
+    for name in updater.CONFIG.payload_files:
         (root / name).write_text("x", encoding="utf-8")
-    for name in updater.PAYLOAD_DIRS:
+    for name in updater.CONFIG.payload_dirs:
         (root / name).mkdir(exist_ok=True)
     return root
 

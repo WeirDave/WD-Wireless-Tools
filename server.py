@@ -154,6 +154,29 @@ def _unhandled(exc):
     }), 500
 
 
+_TOOLS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools")
+
+
+def _raised_inside_a_tool(exc):
+    """True when the exception was raised by code in tools/, not by the route.
+
+    A route answers a KeyError as "missing field" because most are the route
+    table reading `d["name"]` from the request. A KeyError raised further in -
+    a tool indexing its own data - is a defect that would otherwise be reported
+    to the page as a bad request and leave nothing in the log.
+    """
+    tb = exc.__traceback__
+    if tb is None:
+        return False
+    while tb.tb_next is not None:
+        tb = tb.tb_next
+    try:
+        here = os.path.abspath(tb.tb_frame.f_code.co_filename)
+    except (OSError, ValueError):
+        return False
+    return os.path.normcase(here).startswith(os.path.normcase(_TOOLS_DIR + os.sep))
+
+
 def _route_failed(exc, status=500, *, ok_key=False, prefix=""):
     """The one way a route that caught an exception answers the page.
 
@@ -161,9 +184,10 @@ def _route_failed(exc, status=500, *, ok_key=False, prefix=""):
     explains itself - and never a traceback. A 500 is a fault, so its stack
     goes to the log file first: a route that catches and returns is otherwise
     the one failure that leaves no trace. A 400 is the request being wrong and
-    is not logged, which keeps the log to faults.
+    is not logged, which keeps the log to faults - unless it is a KeyError a
+    tool raised, which is a fault answered as a bad request.
     """
-    if status >= 500:
+    if status >= 500 or (isinstance(exc, KeyError) and _raised_inside_a_tool(exc)):
         applog.note_failure(f"{request.method} {request.path}", exc)
     body = {"ok": False} if ok_key else {}
     body["error"] = f"{prefix}{exc}"
@@ -948,7 +972,6 @@ RENAME_ACTIONS = {
     "load_directory":       lambda d: rm.load_directory(d["csv_text"], d.get("column_map", {})),
     "get_directory":        lambda d: rm.get_directory(),
     "get_tokens":           lambda d: rm.get_tokens(),
-    "match_folders":        lambda d: rm.match_folders(d["root"]),
     "preview_folder_rename": lambda d: rm.preview_folder_rename(
                                 d["root"], d["format"], d.get("separator", " - "),
                                 d.get("manual_values")),
@@ -1000,7 +1023,6 @@ TEMPLATE_ACTIONS = {
     "save":         lambda d: ts.save(d["name"], d["wallTypes"],
                                       overwrite=bool(d.get("overwrite"))),
     "delete":       lambda d: ts.delete(d["filename"]),
-    "reset":        lambda d: ts.reset(d["filename"]),
     "defaults":     lambda d: ts.get_defaults(),
 }
 
@@ -1039,8 +1061,6 @@ SETTINGS_ACTIONS = {
                             {"setup_complete": True, **_checked_patch(d.get("patch", {}))})},
     "reset_setup":      lambda d: {"ok": True, "settings": suite_settings.update_settings(
                             {"setup_complete": False})},
-    "get_destinations": lambda d: {"ok": True, "destinations": [
-                            dict(d) for d in suite_settings.get_destinations()]},
     # Backup and restore. `browser` carries the page's own localStorage, which
     # the server cannot see; export folds it into the bundle and import hands
     # the keys back for the page to write, because localStorage belongs to the
@@ -1685,7 +1705,6 @@ CLOUD_ACTIONS = {
     "list_manual_matches": lambda d: cm.list_manual_matches(),
     "set_external_override": lambda d: cm.set_external_override(d.get("items"), d.get("value")),
     "clear_external_override": lambda d: cm.clear_external_override(d.get("items")),
-    "list_external_overrides": lambda d: cm.list_external_overrides(),
     #: `is True`, so a page that does not send it keeps the refusal.
     "verify_replace_local": lambda d: cm.verify_replace_local(
         d.get("cloudId"), d.get("localPath"),
@@ -2151,7 +2170,7 @@ def _latest_release_or_raise(**kw):
         raise updater.UpdateError("GitHub did not say which release is the newest.")
     release = dict(release)
     release.setdefault("version", str(release["tag"]).lstrip("v"))
-    release.setdefault("url", updater.GITHUB_RELEASES_URL)
+    release.setdefault("url", updater.CONFIG.releases_url)
     release["notes"] = release.get("notes") or ""
     return release
 
@@ -2208,7 +2227,7 @@ def api_update():
             "intact": bool(getattr(e, "intact", False)),
             "steps": steps,
             "install": _install_info_or_none(),
-            "releasesUrl": updater.GITHUB_RELEASES_URL,
+            "releasesUrl": updater.CONFIG.releases_url,
         }), 200
     except Exception as e:
         print(f"  [update] FAILED: {e}", flush=True)
@@ -2218,7 +2237,7 @@ def api_update():
             "error": f"Unexpected error during update: {e}",
             "intact": False,
             "steps": steps,
-            "releasesUrl": updater.GITHUB_RELEASES_URL,
+            "releasesUrl": updater.CONFIG.releases_url,
         }), 200
 
     result["steps"] = steps

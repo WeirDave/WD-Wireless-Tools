@@ -571,6 +571,16 @@ try {
             }
           }
           Copy-Item -Path (Join-Path $tree '*') -Destination $target -Recurse -Force
+          # A template the user put into the install's own templates folder is
+          # theirs; the old folder is about to be deleted, so carry over any
+          # the release does not ship.
+          $oldTemplates = Join-Path $target '.templates.wd-old'
+          if (Test-Path -LiteralPath $oldTemplates) {
+            Get-ChildItem -LiteralPath $oldTemplates -Filter '*_walltemplate.json' -File | ForEach-Object {
+              $dest = Join-Path (Join-Path $target 'templates') $_.Name
+              if (-not (Test-Path -LiteralPath $dest)) { Copy-Item -LiteralPath $_.FullName -Destination $dest }
+            }
+          }
         } catch {
           foreach ($d in $aside) {
             $p = Join-Path $target $d

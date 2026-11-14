@@ -17,6 +17,7 @@ written once for the ones that had not.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import tempfile
@@ -44,3 +45,22 @@ def write_json(path, data, indent: int = 2, encoding: str = "utf-8") -> None:
     """`json.dumps` first - so a value that cannot be serialised raises before
     anything on disk has been touched - then `write_text`."""
     write_text(path, json.dumps(data, indent=indent), encoding)
+
+
+def serialised(lock):
+    """Run the decorated function holding `lock`.
+
+    An atomic write makes each file whole; it does not stop two requests each
+    reading the file, changing their copy and writing it back, which loses the
+    first one's change. The server handles requests on several threads, so a
+    store that reads, changes and writes takes this around the whole of it. The
+    lock is re-entrant: a function that calls another that is also serialised
+    on the same lock does not wait for itself.
+    """
+    def decorate(fn):
+        @functools.wraps(fn)
+        def run(*args, **kwargs):
+            with lock:
+                return fn(*args, **kwargs)
+        return run
+    return decorate

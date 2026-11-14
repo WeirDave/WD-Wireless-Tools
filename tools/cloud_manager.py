@@ -30,6 +30,11 @@ from tools import share_recipients
 from tools import applog
 from tools.settings import load_settings as _load_suite_settings
 from tools.settings import update_settings as _update_suite_settings
+import threading
+from tools import atomic_write
+
+#: Serialises this store's read-modify-write; see atomic_write.serialised.
+_LOCK = threading.RLock()
 
 #: Loaded when the server starts, on the main thread. On Windows it imports
 #: win32com, whose type-library cache is a file that two processes starting
@@ -540,6 +545,7 @@ def repoint_pairings(moves):
         applog.note_failure("carrying pairing decisions to a moved file", e)
 
 
+@atomic_write.serialised(_LOCK)
 def _repoint_stores(moves):
     for load, save in ((load_not_matches, save_not_matches),
                        (load_manual_matches, save_manual_matches)):
@@ -5884,6 +5890,7 @@ class CloudManager:
         save_config(cfg)
         return {"path": resolved}
 
+    @atomic_write.serialised(_LOCK)
     def mark_not_match(self, cloud_id, local_path, cloud_name="", local_name=""):
         if not cloud_id or not local_path:
             return {"error": "cloudId and localPath are required"}
@@ -5899,6 +5906,7 @@ class CloudManager:
         save_not_matches(pairs)
         return {"ok": True, "count": len(pairs)}
 
+    @atomic_write.serialised(_LOCK)
     def unmark_not_match(self, cloud_id, local_path):
         if not cloud_id or not local_path:
             return {"error": "cloudId and localPath are required"}
@@ -5913,6 +5921,7 @@ class CloudManager:
                 "file": str(NOT_MATCH_FILE)}
 
 
+    @atomic_write.serialised(_LOCK)
     def mark_manual_match(self, cloud_id, local_path, cloud_name="", local_name=""):
         if not cloud_id or not local_path:
             return {"error": "cloudId and localPath are required"}
@@ -5952,6 +5961,7 @@ class CloudManager:
             save_not_matches(nm_kept)
         return {"ok": True, "count": len(pairs)}
 
+    @atomic_write.serialised(_LOCK)
     def unmark_manual_match(self, cloud_id, local_path):
         if not cloud_id or not local_path:
             return {"error": "cloudId and localPath are required"}
@@ -5965,6 +5975,7 @@ class CloudManager:
         return {"ok": True, "pairs": load_manual_matches(),
                 "file": str(MANUAL_MATCH_FILE)}
 
+    @atomic_write.serialised(_LOCK)
     def set_external_override(self, items, value):
         """Mark projects External, or mark them as his, by hand.
 
@@ -5994,6 +6005,7 @@ class CloudManager:
         save_external_overrides(ordered)
         return {"ok": True, "count": len(ordered), "marked": len(items)}
 
+    @atomic_write.serialised(_LOCK)
     def clear_external_override(self, items):
         items = items or []
         keys = {_ov_key(i.get("cloudId"), i.get("localPath")) for i in items}
@@ -6003,7 +6015,3 @@ class CloudManager:
         kept = [e for e in entries if e["key"] not in keys]
         save_external_overrides(kept)
         return {"ok": True, "count": len(kept), "removed": len(entries) - len(kept)}
-
-    def list_external_overrides(self):
-        return {"ok": True, "entries": load_external_overrides(),
-                "file": str(EXTERNAL_OVERRIDE_FILE)}

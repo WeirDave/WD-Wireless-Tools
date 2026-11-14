@@ -9525,6 +9525,11 @@ body.tool-aprename .dropzone-logo { background-image: url(ap-labeler-v1.0-560x56
   color: var(--text-2); opacity: .7;
 }
 .share-recent-x:hover { opacity: 1; color: #d14; }
+.share-recent-forget {
+  border: 0; background: none; cursor: pointer; margin-left: auto;
+  padding: 3px 4px; font-size: 12px; color: var(--text-2);
+}
+.share-recent-forget:hover { color: var(--danger); text-decoration: underline; }
 
 @media (max-width: 560px) {
   .share-add-row { grid-template-columns: minmax(0, 1fr); }
