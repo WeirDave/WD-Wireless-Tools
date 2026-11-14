@@ -1763,7 +1763,7 @@ async function revealSourceFolder() {
 // as the second and was therefore silent, which left this button doing nothing
 // at all. A picker that cannot run falls through to the browser's own file
 // input - getting a project in matters more than which dialog did it.
-async function openFromDisk() {
+async function openFromDiskImpl(useCurrent) {
   const btn = document.querySelector('.dropzone-open-disk');
   const label = btn ? btn.textContent : '';
   if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
@@ -1772,7 +1772,7 @@ async function openFromDisk() {
     const res = await fetch('/api/walls/pick', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
-      body: '{}',
+      body: JSON.stringify(useCurrent ? { useCurrent: true } : {}),
     }).then(r => r.json());
     if (!res || !res.ok) {
       done();
@@ -1796,7 +1796,11 @@ async function openFromDisk() {
     showToast('Could not open that project: ' + e, 'error');
   }
 }
+// The page calls this with whatever its dispatcher hands over, so the
+// "current project" form is its own function rather than a flag on this one.
+const openFromDisk = () => openFromDiskImpl(false);
 window.openFromDisk = openFromDisk;
+if (window.WD && WD.Project) WD.Project.setLoader(() => openFromDiskImpl(true));
 
 let _tplCache = [];
 

@@ -144,6 +144,12 @@
     fileInput.click();
   };
 
+  if (window.WD && WD.Project) {
+    WD.Project.setLoader(function () {
+      return WD.Project.fetchFile().then(function (f) { return loadFile(f); });
+    });
+  }
+
   function loadFile(file) {
     if (!/\.esx$/i.test(file.name)) {
       toast('Not an .esx file', 'error');

@@ -101,6 +101,9 @@
       </div>
       <span id="fileBadge" class="file-badge" data-action="call" data-fn="prepLoadNewFile"
             title="Click to open another .esx"></span>
+      <button id="prepCheckBtn" class="btn btn-sm" type="button" style="display:none"
+              data-action="call" data-fn="prepProjectCheck"
+              title="Read-only: names, models, floors, mount heights, wall heights and survey data">Project check</button>
     </div>
     <div class="header-center">
       <h1><span>WD</span> Prep <span class="ver" data-ver="prep">v&hellip;</span></h1>
@@ -334,6 +337,7 @@
 <script src="/assets/lib/jszip.min.js"></script>
 <script src="/assets/js/wd-shared.js"></script>
 <script src="/assets/js/wd-dev.js"></script>
+<script src="/assets/js/wd-project.js"></script>
 <script src="/assets/js/wd-dev-actions.js"></script>
 <script src="/assets/js/wd-planview.js"></script>
 <script src="/assets/js/wd-areaeditor.js"></script>

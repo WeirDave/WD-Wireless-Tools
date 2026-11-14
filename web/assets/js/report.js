@@ -1072,12 +1072,18 @@
       return true;                                          // cancelled: done
     }
 
+    return openEsxPath(picked.path);
+  }
+
+  /* Read a project the person chose - in the picker just now, or earlier and
+     still current - through the server, which also says which folder it is in. */
+  async function openEsxPath(path) {
     var resp;
     try {
       resp = await fetch('/api/report/open_esx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
-        body: JSON.stringify({ path: picked.path })
+        body: JSON.stringify({ path: path })
       });
     } catch (e) { return false; }
     if (!resp.ok) {
@@ -1094,6 +1100,10 @@
     var blob = await resp.blob();
     await loadFile(new File([blob], name), folder);
     return true;
+  }
+
+  if (window.WD && WD.Project) {
+    WD.Project.setLoader(function (p) { return openEsxPath(p.path); });
   }
 
   window.loadNewFile = async function () {

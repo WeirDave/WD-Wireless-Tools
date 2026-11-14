@@ -27,6 +27,24 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM ---- Already running? -------------------------------------------------------
+REM Starting the launcher a second time used to stop the server that was
+REM already up, along with whatever it was in the middle of. tools/relaunch.py
+REM asks that server first: current and idle or busy, it opens a browser tab on
+REM it and this window is done (0); nothing there, or older code, falls through
+REM to the usual replace (1); older code that is mid-work is left alone (2).
+REM The tab this launcher may open next runs it again with --in-tab, and that
+REM pass has already been through this check.
+if /i "%~1"=="--in-tab" goto :past_attach
+if not defined PORT set "PORT=8675"
+python -m tools.relaunch %PORT%
+if not errorlevel 1 exit /b 0
+if errorlevel 2 (
+    pause
+    exit /b 1
+)
+:past_attach
+
 REM ---- Windows Terminal -------------------------------------------------------
 REM Open in a tab of the Windows Terminal window already on screen, rather than
 REM a console of our own. tools/terminal_tab.py decides: it exits 0 once a tab

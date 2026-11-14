@@ -45,6 +45,12 @@
   // ── file in ────────────────────────────────────────────────────────────────
   window.capLoadNewFile = function () { $('fileInput').click(); };
 
+  if (window.WD && WD.Project) {
+    WD.Project.setLoader(function () {
+      return WD.Project.fetchFile().then(function (f) { return loadFile(f); });
+    });
+  }
+
   function shortDevice(name) {
     return String(name || '').replace(/^Generic\s+/i, '');
   }

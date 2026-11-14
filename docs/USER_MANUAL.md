@@ -223,6 +223,63 @@ talking about.
 The **Dark / Light** button at the top right switches the theme on every page
 and remembers your choice. The browser's Back button works normally.
 
+### The current project
+
+Quick Walls, Prep, PlanTrim, AP Labeler, Capacity and Report each open an
+`.esx`, and Home carries the same control. In the header of each, to the left
+of the update pill and the theme button, a chip names the project you are
+working on (**No project** until you choose one). Press it to open its menu:
+
+- **Choose project…** opens the file picker, in the folder of the current
+  project. What you choose becomes the current project in every tool.
+- **Open in this tool** opens the current project in the tool you are in. It
+  appears only in a tool that can open one; Home has none to offer.
+- **Check project** runs the [Project check](#project-check) on it.
+- **Show folder** reveals the file in Explorer or Finder.
+- **Stop using** stops treating it as current. It stays under **Recent**.
+- **Recent** lists the last twelve projects. Press one to make it current
+  again; the **×** beside it removes it from the list, and **Clear recent
+  projects** empties the list. A project that has been moved or deleted is
+  shown struck through and cannot be chosen until it is back.
+
+Opening a project through the file picker in Quick Walls, Prep or Report
+(**Open from disk…** in the first two) makes it current too. When Prep writes a prepared copy beside the
+original, the prepared copy becomes the current project, so the next tool opens
+the file you want rather than the one you started from.
+
+**A project dragged in from a folder cannot be remembered.** The browser hands
+over the file's contents and name but never where it came from, so a dropped
+project is not current. Choose it with **Choose project…** if you want the
+other tools to open it.
+
+The list is kept in `current_project.json` in your user folder
+(`~/.wd_wireless_tools`), as file paths and times only, and never leaves the
+computer. **Clear recent projects** removes it.
+
+### Project check
+
+**Check project** (in the chip's menu, and **Project check** at the top of Prep
+once a project is open) reads the project and lists what is wrong with it, worst
+first. It changes nothing in the file. It reports:
+
+- **Access points sharing a name**, and **Directional antennas with no
+  azimuth** — marked **Fix**.
+- **Survey data missing from the file**, when the survey records name signal
+  samples that are not in the archive — marked **Fix**.
+- **Access points without a real name** (no name, a MAC address, or only "AP"
+  and a number), **Access points on no floor plan**, **Access points with no
+  model**, **Access points with no mount height**, and **Wall types whose name
+  states a height the file does not** — marked **Check**.
+
+Each item gives the count, a few examples, why it matters and where to fix it:
+a link to the tool that does it (**Fix in AP Labeler**, **Fix in Quick Walls**,
+**Fix in Cloud Manager**) or the place in Ekahau. A project with nothing to
+report says so.
+
+It checks what the file records. Channel plans, transmit power and co-channel
+distance are design choices with options, and stay in the Report's design
+review.
+
 
 ![The Home page, showing the nine tool tiles](../web/assets/manual/home-tiles.png)
 
@@ -2574,6 +2631,14 @@ from the app opens a fresh tab and closes the old one. Turn this off with
 
 On macOS, if Gatekeeper blocks the `.command` file, right-click it, choose
 **Open**, and confirm **Open**. Only needed once.
+
+**Starting it again while it is running** opens a new browser tab on the copy
+that is already up and leaves it alone, so a second double-click never stops an
+upload, a trim or a sync that is in progress. A copy running older code than is
+installed is replaced, unless it is in the middle of work: the launcher then
+says so and stops, and you start it again once the work has finished. If a copy
+is stuck and never finishes, set `WD_FORCE_RESTART=1` before starting the
+launcher and it is replaced regardless.
 
 ---
 

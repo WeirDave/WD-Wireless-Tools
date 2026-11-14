@@ -265,6 +265,7 @@
     $('fileBadge').textContent = name;
     $('fileBadge').title = name;
     $('fileBadge').style.display = 'inline-block';
+    $('prepCheckBtn').style.display = '';
     $('prepResult').innerHTML = '';
     lastWritten = null;
     resetMap();
@@ -286,7 +287,10 @@
      change by one character after clicking it. Falling through matters more
      than the message - a tool he cannot get a file into is not usable, and the
      plain input works everywhere. */
-  window.prepOpenFromDisk = function () {
+  // `useCurrent` is only ever the boolean the chip's loader passes. The
+  // dropzone button reaches this through the action dispatcher, which hands a
+  // handler whatever it has to hand, so anything but `true` means "ask".
+  window.prepOpenFromDisk = function (useCurrent) {
     var btn = document.querySelector('.dropzone-open-disk');
     var label = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
@@ -296,7 +300,7 @@
     fetch('/api/prep/pick', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-WD-Wireless-Tools': '1' },
-      body: '{}',
+      body: JSON.stringify(useCurrent === true ? { useCurrent: true } : {}),
     }).then(function (r) { return r.json(); }).then(function (res) {
       done();
       if (!res || !res.ok) {
@@ -325,6 +329,15 @@
       $('fileInput').click();
     });
   };
+
+  /* The check reads what is open here: a project opened from disk is the
+     current one and is read where it lies; a dropped one travels as its bytes,
+     because the server never learns a path for it. */
+  window.prepProjectCheck = function () {
+    if (!window.WD || !WD.Project) return;
+    WD.Project.check(fromDisk || !fileBytes ? null : new File([fileBytes], fileName));
+  };
+  if (window.WD && WD.Project) WD.Project.setLoader(function () { window.prepOpenFromDisk(true); });
 
   function loadFile(file) {
     // A dropped file has no path, so anything the server remembered about a
@@ -1852,6 +1865,7 @@
     $('prepPreview').innerHTML = '';
     syncGo();
     $('fileBadge').style.display = 'none';
+    $('prepCheckBtn').style.display = 'none';
     $('editor').classList.remove('active');
     $('dropzone').style.display = '';
     window.scrollTo(0, 0);

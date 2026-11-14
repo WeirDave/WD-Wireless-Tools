@@ -165,7 +165,7 @@ def run_node(script: str, js_path: Path) -> dict:
 
 
 PREP_HARNESS = r"""
-eval(slice('window.prepOpenFromDisk = function () {', '\n  };'));
+eval(slice('window.prepOpenFromDisk = function (useCurrent) {','\n  };'));
 function $(id) { return document.getElementById(id); }
 let fromDisk = false, fileBytes = null;
 function openEditor(name) { log.editorOpened++; }

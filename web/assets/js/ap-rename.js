@@ -1215,6 +1215,12 @@
     fileInput.click();
   };
 
+  if (window.WD && WD.Project) {
+    WD.Project.setLoader(function () {
+      return WD.Project.fetchFile().then(function (f) { return loadFile(f); });
+    });
+  }
+
   /* ── load & parse ESX ──────────────────────────────────────────── */
   function loadFile(file) {
     if (!/\.esx$/i.test(file.name)) {

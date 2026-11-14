@@ -61,6 +61,13 @@ class TheBatchLauncherTests(unittest.TestCase):
         # Exit 0 means every dependency is current.
         (tools / "deps.py").write_text("import sys\nsys.exit(0)\n",
                                        encoding="utf-8")
+        # What tools/relaunch.py would have answered: 1 is "nothing to attach
+        # to", which is what every test below that is not about attaching needs.
+        (tools / "relaunch.py").write_text(
+            "import os, sys\n"
+            "open(os.environ['FAKE_LOG'], 'a').write('relaunch ' + ' '.join(sys.argv[1:]) + '\\n')\n"
+            "sys.exit(int(os.environ.get('FAKE_RELAUNCH_RC', '1')))\n",
+            encoding="utf-8")
         (self.tmp / "server.py").write_text(
             "import os, sys\n"
             "open(os.environ['FAKE_LOG'], 'a').write('python server.py\\n')\n"
@@ -78,12 +85,13 @@ class TheBatchLauncherTests(unittest.TestCase):
              str(src)], capture_output=True, text=True, timeout=120)
         self.assertEqual(0, built.returncode, built.stdout + built.stderr)
 
-    def _run(self, port=None, server_rc=75):
+    def _run(self, port=None, server_rc=75, relaunch_rc=1):
         env = dict(os.environ)
         env.pop("PORT", None)
         if port:
             env["PORT"] = str(port)
         env.update(FAKE_LOG=str(self.log), FAKE_SERVER_RC=str(server_rc),
+                   FAKE_RELAUNCH_RC=str(relaunch_rc),
                    PATH=str(self.tmp) + os.pathsep + env.get("PATH", ""))
         r = subprocess.run(["cmd", "/c", str(self.tmp / BAT.name)], env=env,
                            cwd=str(self.tmp), stdin=subprocess.DEVNULL,
@@ -126,6 +134,32 @@ class TheBatchLauncherTests(unittest.TestCase):
         self.assertEqual(0, r.returncode)
         self.assertNotIn("closed normally", r.stdout)
 
+    def test_a_running_current_server_is_attached_to_not_stopped(self):
+        r, lines = self._run(relaunch_rc=0)
+        self.assertEqual(0, r.returncode, r.stdout + r.stderr)
+        self.assertEqual([], [l for l in lines if l.startswith("powershell")],
+                         "a server that was fine to use was stopped")
+        self.assertNotIn("python server.py", [l.strip() for l in lines],
+                         "a second server was started beside the first")
+
+    def test_it_asks_the_server_on_the_port_it_will_use(self):
+        _, lines = self._run(port=9123, relaunch_rc=0)
+        self.assertIn("relaunch 9123", [l.strip() for l in lines])
+        _, lines = self._run(relaunch_rc=0)
+        self.assertIn("relaunch 8675", [l.strip() for l in lines])
+
+    def test_a_server_busy_on_old_code_is_left_alone(self):
+        r, lines = self._run(relaunch_rc=2)
+        self.assertEqual(1, r.returncode, r.stdout + r.stderr)
+        self.assertEqual([], [l for l in lines if l.startswith("powershell")])
+        self.assertNotIn("python server.py", [l.strip() for l in lines])
+
+    def test_nothing_to_attach_to_goes_on_to_stop_and_start(self):
+        r, lines = self._run(relaunch_rc=1)
+        self.assertEqual(0, r.returncode, r.stdout + r.stderr)
+        self.assertEqual(1, len([l for l in lines if l.startswith("powershell")]))
+        self.assertIn("python server.py", [l.strip() for l in lines])
+
 
 @unittest.skipUnless(shutil.which("bash") and os.name != "nt",
                      "the macOS launcher is exercised on macOS and Linux; the "
@@ -140,7 +174,9 @@ class TheCommandLauncherTests(unittest.TestCase):
         script = self.tmp / "launcher.command"
         script.write_bytes(COMMAND.read_bytes().replace(b"\r\n", b"\n"))
         (self.tmp / "python3").write_text(
-            '#!/bin/sh\necho "python3 $*" >> "$FAKE_LOG"\nexit 0\n',
+            '#!/bin/sh\necho "python3 $*" >> "$FAKE_LOG"\n'
+            'case "$*" in *tools.relaunch*) exit "${FAKE_RELAUNCH_RC:-1}";; esac\n'
+            'exit 0\n',
             encoding="utf-8", newline="\n")
         (self.tmp / "lsof").write_text(
             '#!/bin/sh\necho "lsof $*" >> "$FAKE_LOG"\n'
@@ -160,12 +196,13 @@ class TheCommandLauncherTests(unittest.TestCase):
             'sleep() { :; }\n', encoding="utf-8", newline="\n")
         self.script = script
 
-    def _run(self, port=None):
+    def _run(self, port=None, relaunch_rc=1):
         env = dict(os.environ)
         env.pop("PORT", None)
         if port:
             env["PORT"] = str(port)
         env.update(FAKE_LOG=str(self.log), BASH_ENV=str(self.tmp / "env.sh"),
+                   FAKE_RELAUNCH_RC=str(relaunch_rc),
                    PATH=str(self.tmp) + os.pathsep + env.get("PATH", ""))
         r = subprocess.run([shutil.which("bash"), str(self.script)], env=env,
                            cwd=str(self.tmp), stdin=subprocess.DEVNULL,
@@ -181,6 +218,24 @@ class TheCommandLauncherTests(unittest.TestCase):
         self.assertTrue(any(l == "kill 111" for l in kills), lines)
         self.assertFalse(any("222" in l for l in kills),
                          "an unrelated program on the port was signalled")
+
+    def test_a_running_current_server_is_attached_to_not_signalled(self):
+        r, lines = self._run(relaunch_rc=0)
+        self.assertEqual(0, r.returncode, r.stdout + r.stderr)
+        self.assertEqual([], [l for l in lines if l.startswith("kill")])
+        # Attaching happens before the dependency check and before the server,
+        # so the only python3 call is the question to the running server.
+        self.assertEqual([], [l for l in lines if l.startswith("python3")
+                              and "tools.relaunch" not in l])
+
+    def test_a_server_busy_on_old_code_is_left_alone(self):
+        r, lines = self._run(relaunch_rc=2)
+        self.assertEqual(1, r.returncode)
+        self.assertEqual([], [l for l in lines if l.startswith("kill")])
+        # Attaching happens before the dependency check and before the server,
+        # so the only python3 call is the question to the running server.
+        self.assertEqual([], [l for l in lines if l.startswith("python3")
+                              and "tools.relaunch" not in l])
 
     def test_it_asks_about_the_port_the_app_will_use(self):
         _, lines = self._run(port=9123)

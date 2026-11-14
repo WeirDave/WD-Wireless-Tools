@@ -2,6 +2,19 @@
 
 cd "$(dirname "$0")"
 
+# Already running? Starting this a second time used to stop the server that was
+# up, along with whatever it was in the middle of. tools/relaunch.py asks that
+# server first: current, it opens a browser tab on it and there is nothing left
+# to do (0); nothing there, or older code, carries on to the usual replace (1);
+# older code that is mid-work is left alone (2).
+python3 -m tools.relaunch "${PORT:-8675}" 2>/dev/null
+relaunch_status=$?
+if [ "$relaunch_status" -eq 0 ]; then
+    exit 0
+elif [ "$relaunch_status" -eq 2 ]; then
+    exit 1
+fi
+
 # Present is not current: the check reads the version floors in
 # requirements.txt, so an old package that still imports is upgraded too.
 # Exit 2 is "installed, but older than a floor" - the app still runs, so a

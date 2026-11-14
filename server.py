@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from urllib.parse import quote
 from pathlib import Path
 
-from flask import Flask, request, jsonify, send_from_directory, redirect, send_file, make_response, Response
+from flask import Flask, request, jsonify, send_from_directory, redirect, send_file, make_response, Response, g
 
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"
@@ -45,6 +45,7 @@ from tools import settings_backup
 from tools import terminal_tab
 from tools import share_recipients
 from tools import updater
+from tools import current_project, project_health
 from tools import applog
 from tools import esx_guard
 from tools import esx_trimmer
@@ -202,6 +203,49 @@ def _required_bool(data, key):
     if not isinstance(value, bool):
         raise KeyError(f"{key} (must be true or false)")
     return value
+
+
+# Requests that are in the middle of doing something, counted so a second
+# launcher can tell a server that is idle from one that is halfway through an
+# upload or a rewrite - see tools/relaunch.py. Polling routes are not work:
+# the page asks them every few seconds whatever the server is doing.
+_inflight_lock = threading.Lock()
+_inflight = 0
+_NOT_WORK = ("/api/version", "/api/update/status", "/api/cloud/progress")
+_restarting = False
+
+
+def _is_work(path: str) -> bool:
+    return path.startswith("/api/") and path not in _NOT_WORK
+
+
+def _busy() -> bool:
+    """Is the server in the middle of something that stopping it would lose?"""
+    with _inflight_lock:
+        working = _inflight > 0
+    with _progress_lock:
+        reporting = bool(_progress)
+    return working or reporting or updater.update_running()
+
+
+@app.before_request
+def _count_work():
+    global _inflight
+    if _is_work(request.path):
+        with _inflight_lock:
+            _inflight += 1
+        g._wd_counted = True
+    return None
+
+
+@app.teardown_request
+def _uncount_work(_exc):
+    global _inflight
+    # `g` flag, not a path test: this runs for a request an earlier hook
+    # refused too, and it must only undo what _count_work did.
+    if g.pop("_wd_counted", False):
+        with _inflight_lock:
+            _inflight -= 1
 
 
 @app.before_request
@@ -579,34 +623,65 @@ def favicon():
 # the browser can never hand a path to a command line.
 _WALLS_PROJECT = {"path": None}
 
+def _choose_esx(use_current=False):
+    """The project a tool is to open from disk: the current one, or one chosen
+    in the native dialog. Returns (Path, None), or (None, a JSON response).
+
+    Quick Walls and Prep each carried a copy of the dialog code, so a change to
+    one - where it opens, what it says when it cannot - missed the other. The
+    dialog starts in the current project's folder, because the next project is
+    usually beside the last.
+    """
+    if use_current:
+        path = current_project.current_path()
+        if path is None:
+            return None, jsonify({
+                "ok": False,
+                "error": "The current project is not where it was. Choose it "
+                         "again."})
+        return path, None
+
+    from tools.folder_organizer import _tk_dialog_result
+    start = current_project.current()
+    initial = start["dir"] if start and os.path.isdir(start["dir"]) else ""
+    code = (
+        "import tkinter as tk\n"
+        "from tkinter import filedialog\n"
+        "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
+        "kw = {'title': 'Open an Ekahau project (.esx)', "
+        "'filetypes': [('Ekahau project', '*.esx'), ('All files', '*.*')]}\n"
+        "d = %r\n"
+        "if d: kw['initialdir'] = d\n"
+        "p = filedialog.askopenfilename(**kw)\n"
+        "print(p or '')\n"
+    ) % initial
+    res = _tk_dialog_result(code)
+    if not res["ran"]:
+        # A picker that never opened is not a cancel. Saying so is what lets
+        # the page offer the ordinary browse dialog instead of leaving a button
+        # that does nothing.
+        return None, jsonify({"ok": False, "code": "picker_unavailable",
+                              "error": "Could not open the file picker — %s."
+                                       % res["why"]})
+    if not res["path"]:
+        return None, jsonify({"ok": False, "code": "cancelled",
+                              "error": "No file selected"})
+    path = Path(res["path"])
+    if not path.is_file():
+        return None, jsonify({"ok": False, "error": "That file could not be opened"})
+    return path, None
+
 
 @app.route("/api/walls/<action>", methods=["POST"])
 def api_walls(action):
     try:
         if action == "pick":
-            from tools.folder_organizer import _tk_dialog_result
-            code = (
-                "import tkinter as tk\n"
-                "from tkinter import filedialog\n"
-                "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
-                "p = filedialog.askopenfilename(title='Open an Ekahau project (.esx)', filetypes=[('Ekahau project', '*.esx'), ('All files', '*.*')])\n"
-                "print(p or '')\n"
-            )
-            res = _tk_dialog_result(code)
-            if not res["ran"]:
-                # A picker that never opened is not a cancel. Saying so is what
-                # lets the page offer the ordinary browse dialog instead of
-                # leaving a button that does nothing.
-                return jsonify({"ok": False, "code": "picker_unavailable",
-                                "error": "Could not open the file picker — %s."
-                                         % res["why"]})
-            if not res["path"]:
-                return jsonify({"ok": False, "code": "cancelled",
-                                "error": "No file selected"})
-            path = Path(res["path"])
-            if not path.is_file():
-                return jsonify({"ok": False, "error": "That file could not be opened"})
+            data = request.get_json(silent=True) or {}
+            path, refused = _choose_esx(bool(data.get("useCurrent")))
+            if refused is not None:
+                return refused
             _WALLS_PROJECT["path"] = str(path)
+            current_project.set_current(path)
             return jsonify({"ok": True, "name": path.name, "dir": str(path.parent)})
 
         if action == "read":
@@ -948,6 +1023,7 @@ def _remember_picked_esx(result: dict) -> dict:
     picked = result.get("path") if isinstance(result, dict) else None
     if result.get("ok") and picked:
         _PICKED_ESX[str(picked)] = Path(picked)
+        current_project.set_current(picked)
     return result
 
 
@@ -1219,27 +1295,13 @@ def api_prep(action):
     rather than a project that was quietly never cropped.
     """
     if action == "pick":
-        from tools.folder_organizer import _tk_dialog_result
-        code = (
-            "import tkinter as tk\n"
-            "from tkinter import filedialog\n"
-            "r = tk.Tk(); r.withdraw(); r.attributes('-topmost', True)\n"
-            "p = filedialog.askopenfilename(title='Open an Ekahau project (.esx)', filetypes=[('Ekahau project', '*.esx'), ('All files', '*.*')])\n"
-            "print(p or '')\n"
-        )
-        res = _tk_dialog_result(code)
-        if not res["ran"]:
-            return jsonify({"ok": False, "code": "picker_unavailable",
-                            "error": "Could not open the file picker — %s."
-                                     % res["why"]})
-        if not res["path"]:
-            return jsonify({"ok": False, "code": "cancelled",
-                            "error": "No file selected"})
-        path = Path(res["path"])
-        if not path.is_file():
-            return jsonify({"ok": False, "error": "That file could not be opened"})
+        data = request.get_json(silent=True) or {}
+        path, refused = _choose_esx(bool(data.get("useCurrent")))
+        if refused is not None:
+            return refused
         _PREP_PROJECT["path"] = str(path)
         _PREP_PROJECT["written"] = None
+        current_project.set_current(path)
         return jsonify({"ok": True, "name": path.name, "dir": str(path.parent),
                         "bytes": path.stat().st_size})
 
@@ -1388,6 +1450,9 @@ def api_prep(action):
             # No download: the page gets the path and an offer to show it.
             if out.get("written"):
                 _PREP_PROJECT["written"] = str(dest)
+                # What Prep made is what the next tool should open, not the
+                # file it started from.
+                current_project.set_current(dest)
                 out["path"] = str(dest)
                 out["dir"] = str(dest.parent)
                 out["filename"] = dest.name
@@ -1608,6 +1673,9 @@ def api_report_open_esx():
     if not raw:
         return jsonify({"error": "No file was chosen."}), 400
     picked = _PICKED_ESX.get(raw)
+    if picked is None and current_project.is_known(raw):
+        # Chosen earlier, in this run or a previous one, and still on the list.
+        picked = Path(raw)
     if picked is None:
         return jsonify({"error": "Choose the file again."}), 403
     try:
@@ -1625,6 +1693,81 @@ def api_report_open_esx():
     response.headers["X-WD-File-Name"] = quote(path.name)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+@app.route("/api/project/<action>", methods=["POST"])
+def api_project(action):
+    """The project the person is working on, shared by every tool.
+
+    `pick` opens the native dialog and makes the choice current; `use` makes one
+    from the recent list current again; `file` sends the current project's bytes
+    to a tool that takes an upload; `health` is the read-only Preflight check.
+    Every path read here is one the person chose (tools/current_project.py), and
+    is checked again at the moment it is read.
+    """
+    data = request.get_json(silent=True) or {}
+
+    if action == "current":
+        return jsonify({"ok": True, "current": current_project.current(),
+                        "recent": current_project.recent()})
+
+    if action == "pick":
+        path, refused = _choose_esx(False)
+        if refused is not None:
+            return refused
+        result = current_project.set_current(path)
+        if result.get("ok"):
+            _PICKED_ESX[str(path)] = Path(path)
+        return jsonify(result)
+
+    if action == "use":
+        result = current_project.use(data.get("path"))
+        if result.get("ok"):
+            _PICKED_ESX[result["project"]["path"]] = Path(result["project"]["path"])
+        return jsonify(result)
+
+    if action == "forget":
+        return jsonify(current_project.forget(data.get("path")))
+
+    if action == "clear":
+        return jsonify(current_project.clear())
+
+    if action == "reveal":
+        path = current_project.current_path()
+        if path is None:
+            return jsonify({"ok": False, "error": "no folder known"})
+        return jsonify(reveal_tool.reveal(str(path)))
+
+    if action == "file":
+        path = current_project.current_path()
+        if path is None:
+            return jsonify({"ok": False, "error": "The current project is not "
+                                                  "where it was."}), 404
+        response = send_file(path, mimetype="application/octet-stream",
+                             as_attachment=False, conditional=False)
+        response.headers["X-WD-Project-Folder"] = quote(path.parent.name)
+        response.headers["X-WD-File-Name"] = quote(path.name)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    if action == "health":
+        # A project dropped into a tool arrives as the body; otherwise the
+        # check reads the current one where it lies.
+        body = (request.get_data(cache=False)
+                if request.mimetype == "application/octet-stream" else b"")
+        if body:
+            result = project_health.check_bytes(body)
+            result["source"] = "dropped"
+        else:
+            path = current_project.current_path()
+            if path is None:
+                return jsonify({"ok": False, "error": "No project is open. "
+                                "Choose one first."}), 404
+            result = project_health.check_path(path)
+            result["source"] = path.name
+        return jsonify(result)
+
+    return jsonify({"error": f"unknown action: {action}"}), 404
 
 
 @app.route("/api/settings/<action>", methods=["POST"])
@@ -2001,6 +2144,11 @@ def api_version():
         "onDiskVersion": on_disk,
         "restartReady": bool(on_disk and on_disk != startup),
         "pid": os.getpid(),
+        # What a second launcher needs to decide between opening a tab on this
+        # server and replacing it (tools/relaunch.py). The server answers for
+        # itself so the launcher never has to guess from a process list.
+        "busy": _busy(),
+        "restarting": _restarting,
         # About shows these so that "send me the log" is one action rather
         # than a hunt through a hidden folder, and so the panel can say how
         # long it keeps and how large it can get - he asked, and a number the
@@ -2274,6 +2422,10 @@ def _restart_in_new_console():
     exit, then close the old launcher window.  Mirrors the LensLedger pattern
     so every restart gives a clean terminal instead of appending to the old one.
     Runs in a background thread so the HTTP response flushes first."""
+    global _restarting
+    # Before the new launcher exists: it asks this process whether to attach,
+    # and must hear that this one is on its way out.
+    _restarting = True
     install_root = HERE
     old_window_pid = os.getppid()
 
