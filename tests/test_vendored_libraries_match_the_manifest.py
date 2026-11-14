@@ -41,7 +41,11 @@ class TheVendoredLibrariesMatchTheManifestTests(unittest.TestCase):
     def test_each_file_hashes_to_what_the_manifest_says(self):
         for row in _rows():
             with self.subTest(file=row["file"]):
-                actual = hashlib.sha256((LIB / row["file"]).read_bytes()).hexdigest()
+                # Line endings normalised: a Windows checkout converts LF to
+                # CRLF, and the manifest holds the hash of the file as
+                # published (and as stored in git).
+                data = (LIB / row["file"]).read_bytes().replace(b"\r\n", b"\n")
+                actual = hashlib.sha256(data).hexdigest()
                 self.assertEqual(
                     row["sha256"], actual,
                     f"{row['file']} changed without VENDORED.md changing")

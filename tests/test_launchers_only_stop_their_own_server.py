@@ -127,7 +127,10 @@ class TheBatchLauncherTests(unittest.TestCase):
         self.assertNotIn("closed normally", r.stdout)
 
 
-@unittest.skipUnless(shutil.which("bash"), "needs bash")
+@unittest.skipUnless(shutil.which("bash") and os.name != "nt",
+                     "the macOS launcher is exercised on macOS and Linux; the "
+                     "ps and kill stand-ins do not hold under the bash a "
+                     "Windows runner finds first")
 class TheCommandLauncherTests(unittest.TestCase):
 
     def setUp(self):
