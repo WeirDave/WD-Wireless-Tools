@@ -52,8 +52,26 @@ MAX_MEMBERS = 50_000
 MAX_RATIO = 500
 
 
-class HostileArchive(Exception):
-    """Reported to the page in plain language, like any other refusal."""
+class HostileArchive(zipfile.BadZipFile):
+    """Reported to the page in plain language, like any other refusal.
+
+    A `BadZipFile`, so every reader that already treats "this is not a usable
+    archive" as a plain-language answer treats this the same way, without each
+    of them learning a second exception.
+    """
+
+
+def open_zip(path):
+    """`zipfile.ZipFile(path)` for reading, after `check`.
+
+    Only the three upload routes asked before; the folder scans, the compare,
+    the rewrite and the trimmer read members out of archives that come from a
+    shared folder or from the cloud just as freely. This is the one way in, so
+    the question is asked wherever an `.esx` is read. `path` may be a path or a
+    file object.
+    """
+    check(path)
+    return zipfile.ZipFile(path)
 
 
 def check(path) -> None:

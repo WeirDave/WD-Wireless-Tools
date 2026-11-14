@@ -16,7 +16,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 
 ![Local First](https://img.shields.io/badge/local--first-private-5fa970?style=flat-square)
 ![No Telemetry](https://img.shields.io/badge/telemetry-none-5fa970?style=flat-square)
-![Python](https://img.shields.io/badge/python-3.10%2B-3776ab?style=flat-square&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/python-3.11%2B-3776ab?style=flat-square&logo=python&logoColor=white)
 ![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-6b7280?style=flat-square)
 
 ### [→ Install the suite](https://weirdave.github.io/WD-Wireless-Tools/)
@@ -27,15 +27,15 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 
 <table>
 <tr>
-<td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.94.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"><br><b>Quick Walls</b><br><sub>v7.80.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.31.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/cloud-manager-v8.0-560x560.png" alt="Cloud Manager" width="105"><br><b>Cloud Manager</b><br><sub>v4.95.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/quick-walls-v8.0-560x560.png" alt="Quick Walls" width="105"><br><b>Quick Walls</b><br><sub>v7.80.1 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/squirrel-v8.0-560x560.png" alt="Squirrel" width="105"><br><b>Squirrel</b><br><sub>v1.31.1 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/scale-v8.0-560x560.png" alt="Scale" width="105"><br><b>Scale</b><br><sub>v1.7.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.77.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v2.3.1 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/report-v8.0-560x560.png" alt="Report" width="105"><br><b>Report</b><br><sub>v2.77.1 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v2.3.2 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.22.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/capacity-v1.0.svg" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.14.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/prep-v1.0.svg" alt="Prep" width="105"><br><b>Prep</b><br><sub>v2.10.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/capacity-v1.0.svg" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.14.1 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/prep-v1.0.svg" alt="Prep" width="105"><br><b>Prep</b><br><sub>v2.10.1 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -187,7 +187,7 @@ All nine tools are part of the desktop suite. Quick Walls, Scale and Report used
 
 ### Install the complete desktop suite
 
-Install [Python 3.10 or newer](https://www.python.org/downloads/) first. On Windows, enable **Add Python to PATH** during installation.
+Install [Python 3.11 or newer](https://www.python.org/downloads/) first. On Windows, enable **Add Python to PATH** during installation.
 
 Then run one command. It installs the suite, or updates it if it is already there.
 
@@ -243,7 +243,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.246.22
+WIRELESS TOOLS  v2.247.0
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
@@ -287,7 +287,7 @@ Choose a folder containing loose project files. Squirrel shows the proposed orga
 
 ### Python is not recognized
 
-Install Python 3.10 or newer and enable **Add Python to PATH** on Windows. Reopen the terminal afterward.
+Install Python 3.11 or newer and enable **Add Python to PATH** on Windows. Reopen the terminal afterward.
 
 ### macOS blocks `Start WD Wireless Tools.command`
 

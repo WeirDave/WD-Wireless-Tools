@@ -69,6 +69,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from tools import image_format
+from tools import esx_guard
 
 # Files whose entries carry `location.coord` and a `location.floorPlanId`.
 POINT_FILES = {
@@ -253,10 +254,6 @@ class TrimReport:
     @property
     def repaired_count(self) -> int:
         return sum(1 for f in self.floors if f.repaired)
-
-    @property
-    def saved_bytes(self) -> int:
-        return max(0, self.bytes_before - self.bytes_after)
 
     @property
     def grew(self) -> bool:
@@ -1151,20 +1148,6 @@ def _plan_manual(members, plan, fid, name, box, w, h, refuse, skip) -> tuple:
     )
 
 
-def _coords_outside(members: dict, floor_id: str, box):
-    """What this floor would leave outside *box*: ``(items, total)``."""
-    bbox = _floor_coord_bbox(members, floor_id)
-    if not bbox:
-        return [], 0
-    x0, y0, x1, y1 = box
-    # _floor_coord_bbox is the union of every coordinate on the floor, so if it
-    # sits inside the box then so does every point that formed it, and the
-    # expensive walk can be skipped.
-    if bbox[0] >= x0 and bbox[1] >= y0 and bbox[2] <= x1 and bbox[3] <= y1:
-        return [], 0
-    return stranded_objects(members, floor_id, box)
-
-
 #: Files that reference an object by id rather than carrying geometry. When a
 #: cut removes the object, these have to lose the reference too or the project
 #: ships with a dangling id.
@@ -1483,10 +1466,15 @@ def _run(source: Path, dest: Path | None, margin, dry_run: bool,
 
     report = TrimReport(source=source, bytes_before=source.stat().st_size)
     raw: dict = {}
-    with zipfile.ZipFile(source) as z:
+    with esx_guard.open_zip(source) as z:
         names = z.namelist()
+        # Only what the analysis reads. The survey samples (`track-*.bin`,
+        # `spectrum-*.bin`) are most of a surveyed project's size and were read
+        # into memory on every analyze, plan and dry run only to be written
+        # straight back; they are streamed through at write time instead.
         for n in names:
-            raw[n] = z.read(n)
+            if n.endswith(".json") or n.startswith("image-"):
+                raw[n] = z.read(n)
 
     members: dict = {}
     for n, blob in raw.items():
@@ -1601,7 +1589,7 @@ def _run(source: Path, dest: Path | None, margin, dry_run: bool,
     tmp = Path(str(dest) + ".tmp")
     tmp.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with zipfile.ZipFile(source) as zin, \
+        with esx_guard.open_zip(source) as zin, \
                 zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
             for info in zin.infolist():
                 n = info.filename
@@ -1610,7 +1598,7 @@ def _run(source: Path, dest: Path | None, margin, dry_run: bool,
                 elif n in dirty and members.get(n) is not None:
                     zout.writestr(n, json.dumps(members[n], indent=1))
                 else:
-                    zout.writestr(info, raw[n])
+                    zout.writestr(info, raw[n] if n in raw else zin.read(n))
         # One rename, never shutil.move: on Windows a rename onto an existing
         # file raises, and move() then copies straight over the destination,
         # where a failure part-way leaves a truncated project.

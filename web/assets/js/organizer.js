@@ -1652,7 +1652,6 @@ function createFolderToSettings() {
   closeModal('createFolderModal');
   showSettings();
 }
-function showBulkRename() { window.location.href = '/squirrel/rename'; }
 
 function fmtSize(bytes) {
   if (bytes < 1024) return bytes + ' B';

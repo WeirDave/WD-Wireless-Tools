@@ -8,7 +8,6 @@ while leaving data stores (cookies, matches, undo logs) untouched.
 import copy
 import json
 import os
-import re
 import tempfile
 from pathlib import Path
 from tools.user_dir import user_dir
@@ -238,9 +237,53 @@ _CREATE_TOKEN_MIGRATION = {
 }
 
 
+def _restore_section_types(settings, defaults=None):
+    """Put the shipped default back wherever a section is not the kind of
+    value it has to be.
+
+    A section that ships as an object must stay an object. A saved file with
+    ``"organizer": null`` merged over the defaults replaced the whole section,
+    `_migrate_settings` then called `.get` on `None`, and every load and every
+    save failed - including the save that could have repaired it - until the
+    file was edited by hand. A file already in that state heals on the next
+    load; `update_settings` refuses to write one (see `_check_patch_types`).
+    """
+    defaults = DEFAULTS if defaults is None else defaults
+    for key, default in defaults.items():
+        if not isinstance(default, dict):
+            continue
+        if not isinstance(settings.get(key), dict):
+            settings[key] = copy.deepcopy(default)
+        else:
+            _restore_section_types(settings[key], default)
+    return settings
+
+
+def _check_patch_types(patch, defaults=None, path=""):
+    """Refuse a patch that turns an object section into anything else.
+
+    Raises ValueError naming the section. Applied before anything is merged,
+    so a refused patch changes nothing on disk.
+    """
+    defaults = DEFAULTS if defaults is None else defaults
+    if not isinstance(patch, dict):
+        return
+    for key, value in patch.items():
+        default = defaults.get(key)
+        if isinstance(default, dict):
+            here = f"{path}{key}"
+            if not isinstance(value, dict):
+                raise ValueError(
+                    f"Setting '{here}' holds a group of settings and cannot "
+                    "be replaced with a single value.")
+            _check_patch_types(value, default, here + ".")
+
+
 def _migrate_settings(settings):
     """In-place migration of legacy keys to current schema."""
-    org = settings.get("organizer", {})
+    org = settings.get("organizer")
+    if not isinstance(org, dict):
+        org = {}
     rn_section = settings.setdefault("rename", copy.deepcopy(DEFAULTS["rename"]))
 
     old_rename = org.get("rename")
@@ -339,7 +382,7 @@ def load_settings(_path=None, strict=False):
             raise
         saved = None
     if saved is not None:
-        settings = _deep_merge(settings, saved)
+        settings = _restore_section_types(_deep_merge(settings, saved))
     return _migrate_settings(settings)
 
 
@@ -410,6 +453,7 @@ def update_settings(patch, _path=None, replace_unreadable=False):
     Raises SettingsUnreadable rather than merging into the defaults when the
     file on disk cannot be read; see that class.
     """
+    _check_patch_types(patch)
     current = load_settings(_path=_path, strict=not replace_unreadable)
     merged = _replace_whole_values(_deep_merge(current, patch), patch)
     save_settings(merged, _path=_path, replace_unreadable=replace_unreadable)

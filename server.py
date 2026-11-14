@@ -32,7 +32,7 @@ from flask import Flask, request, jsonify, send_from_directory, redirect, send_f
 HERE = Path(__file__).resolve().parent
 WEB = HERE / "web"
 sys.path.insert(0, str(HERE))
-from tools.cloud_manager import CloudManager
+from tools.cloud_manager import CloudManager, unsafe_project_folder
 from tools.folder_organizer import FolderOrganizer
 from tools.rename_manager import RenameManager
 from tools.template_store import TemplateStore
@@ -168,6 +168,16 @@ def _route_failed(exc, status=500, *, ok_key=False, prefix=""):
     body = {"ok": False} if ok_key else {}
     body["error"] = f"{prefix}{exc}"
     return jsonify(body), status
+
+
+def _required_bool(data, key):
+    """A boolean the request has to state. Raises KeyError - which the cloud
+    route answers as a 400 naming the field - when it is absent or is anything
+    but true or false."""
+    value = data[key]
+    if not isinstance(value, bool):
+        raise KeyError(f"{key} (must be true or false)")
+    return value
 
 
 @app.before_request
@@ -1009,12 +1019,24 @@ def api_templates(action):
         return _route_failed(e)
 
 
+def _checked_patch(patch):
+    """A settings patch, refused if it points the project folder somewhere
+    that can never be one (see cloud_manager.unsafe_project_folder)."""
+    section = patch.get("global") if isinstance(patch, dict) else None
+    folder = section.get("output_dir") if isinstance(section, dict) else None
+    if folder:
+        why = unsafe_project_folder(folder)
+        if why:
+            raise ValueError(why)
+    return patch
+
+
 SETTINGS_ACTIONS = {
     "get":              lambda d: {"ok": True, "settings": suite_settings.load_settings()},
-    "update":           lambda d: {"ok": True, "settings": suite_settings.update_settings(d.get("patch", {}))},
+    "update":           lambda d: {"ok": True, "settings": suite_settings.update_settings(_checked_patch(d.get("patch", {})))},
     "needs_setup":      lambda d: {"ok": True, "needed": suite_settings.needs_setup()},
     "complete_setup":   lambda d: {"ok": True, "settings": suite_settings.update_settings(
-                            {"setup_complete": True, **(d.get("patch", {}))})},
+                            {"setup_complete": True, **_checked_patch(d.get("patch", {}))})},
     "reset_setup":      lambda d: {"ok": True, "settings": suite_settings.update_settings(
                             {"setup_complete": False})},
     "get_destinations": lambda d: {"ok": True, "destinations": [
@@ -1682,9 +1704,11 @@ CLOUD_ACTIONS = {
     "forget_all_recipients": lambda d: share_recipients.forget_all(),
     "remove_share": lambda d: cm.remove_share(d.get("projectId"), d.get("email")),
     "change_share_role": lambda d: cm.change_share_role(d.get("projectId"), d.get("email"), d.get("role")),
+    # `enable` must be stated. It defaulted to False, so a request that left
+    # it out *removed* the group's access - the destructive reading of silence.
     "toggle_group_share": lambda d: cm.toggle_group_share(d.get("projectId"), d.get("groupId"),
                                                           d.get("groupName", ""), d.get("role", "READ_USER"),
-                                                          d.get("enable", False)),
+                                                          _required_bool(d, "enable")),
     "transfer_ownership": lambda d: cm.transfer_ownership(d.get("projectId"), d.get("newOwnerEmail")),
     "bulk_share": lambda d: cm.bulk_share(
         d.get("projectIds") or [],
@@ -1697,9 +1721,11 @@ CLOUD_ACTIONS = {
     "get_my_group": lambda d: cm.get_my_group(d.get("groupName") or "My Sharing Group"),
     "add_group_member": lambda d: cm.add_group_member(d.get("email"), d.get("groupName") or "My Sharing Group"),
     "remove_group_member": lambda d: cm.remove_group_member(d.get("email"), d.get("groupName") or "My Sharing Group"),
+    # A missing `dryRun` is a dry run. `bool(None)` was False, which ran the
+    # live OFF-then-ON re-toggle across every owned project.
     "refresh_group_shares": lambda d: cm.refresh_group_shares(
         d.get("groupName") or "My Sharing Group",
-        bool(d.get("dryRun")),
+        d.get("dryRun", True) is not False,
         d.get("projectIds")),
 }
 
@@ -2130,6 +2156,16 @@ def _latest_release_or_raise(**kw):
     return release
 
 
+def _install_info_or_none():
+    """`detect_install()` shells out to git and can itself raise. Called from
+    inside an `except` block an exception here escapes the sibling handler, so
+    the real refusal was replaced by a generic 500."""
+    try:
+        return updater.detect_install()
+    except Exception:
+        return None
+
+
 @app.route("/api/update", methods=["POST"])
 def api_update():
     """Run the update.  Steps are echoed to the launcher console as they
@@ -2138,6 +2174,11 @@ def api_update():
     data = request.get_json(silent=True) or {}
     mode = data.get("mode")
     channel = data.get("channel") or "release"
+    if channel != "release":
+        # `main` checks out the tip of the branch with no tag or version gate.
+        # The page never sends a channel, so the only way here is a direct call.
+        return jsonify({"ok": False,
+                        "error": f"unknown update channel: {channel}"}), 400
     install_git = bool(data.get("installGit"))
     # "dev_pull" is the only mode a development checkout accepts, and it has to
     # be named: perform_update still refuses a bare update on a working copy.
@@ -2166,7 +2207,7 @@ def api_update():
             # was left half-installed" only on this, never by default.
             "intact": bool(getattr(e, "intact", False)),
             "steps": steps,
-            "install": updater.detect_install(),
+            "install": _install_info_or_none(),
             "releasesUrl": updater.GITHUB_RELEASES_URL,
         }), 200
     except Exception as e:
@@ -2250,6 +2291,12 @@ def _restart_in_new_console():
 def api_restart():
     """Restart the server by opening a fresh launcher console and closing the
     old one, so the terminal is clean after every restart."""
+    if updater.update_running():
+        # Restarting mid-update ends the process between the steps of an
+        # install.
+        return jsonify({"ok": False,
+                        "error": "An update is running. Restart when it has "
+                                 "finished."}), 409
     threading.Thread(target=_restart_in_new_console, daemon=True).start()
     return jsonify({"ok": True, "message": "restarting"})
 

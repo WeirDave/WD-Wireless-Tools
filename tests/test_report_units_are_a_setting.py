@@ -131,7 +131,7 @@ class ThePanelStartsFromTheSetting(unittest.TestCase):
         const fs = require('fs');
         const src = fs.readFileSync(process.argv[1], 'utf8');
         const a = src.indexOf('  function suitePrefFor(id) {');
-        const end = src.indexOf('  function shippedDefaultFor(');
+        const end = src.indexOf('  window.clearReportOptionDefaults = function');
         if (a < 0 || end < 0) throw new Error('optStartValue moved');
 
         const argv = JSON.parse(process.argv[2]);

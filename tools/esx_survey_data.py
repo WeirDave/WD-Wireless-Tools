@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import zipfile
+from tools import esx_guard
 
 SURVEY_PREFIX = "survey-"
 TRACK_PREFIX = "track-"
@@ -129,7 +130,7 @@ def missing_in_file(path) -> list:
     whether it is a valid zip is somebody else's question, and a flag that
     fires on every corrupt file would bury the one it exists to raise."""
     try:
-        with zipfile.ZipFile(path) as zf:
+        with esx_guard.open_zip(path) as zf:
             return missing_members(zf)
     except (OSError, zipfile.BadZipFile, ValueError):
         return []
@@ -138,7 +139,7 @@ def missing_in_file(path) -> list:
 def missing_in_bytes(data: bytes) -> list:
     import io
     try:
-        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+        with esx_guard.open_zip(io.BytesIO(data)) as zf:
             return missing_members(zf)
     except (zipfile.BadZipFile, ValueError):
         return []

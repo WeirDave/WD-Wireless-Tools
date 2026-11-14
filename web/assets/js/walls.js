@@ -250,14 +250,6 @@ function isStockType(wt) {
 const TEMPLATE_FIELDS = ['name', 'color', 'attenuationFactor', 'thickness',
                          'upperEdge', 'lowerEdge', 'keybindNumber'];
 
-function templateWouldChange(have, want) {
-  return TEMPLATE_FIELDS.some(f => {
-    const a = have[f] === undefined ? null : have[f];
-    const b = want[f] === undefined ? null : want[f];
-    return a !== b;
-  });
-}
-
 // Apply a template by adding to the list, never by replacing it.
 //
 // Replacing is what this used to do, and it deleted every wall type the

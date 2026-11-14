@@ -108,7 +108,7 @@ sha256_of() {
 }
 
 PY_MIN_MAJOR=3
-PY_MIN_MINOR=10
+PY_MIN_MINOR=11
 
 # The interpreter the app will actually run under, checked before anything is
 # downloaded. Installing an app that cannot start, and then saying "Ready", is
@@ -315,6 +315,17 @@ if [ "$METHOD" = "git" ] && { [ "$IS_GIT" -eq 1 ] || [ "$EXISTING" -eq 0 ]; }; t
       exit 1
     fi
 
+    # Commits that exist nowhere else. A tag checkout detaches HEAD, and from a
+    # branch holding unpushed work that leaves the work reachable only by
+    # reflog. In-app updates refuse the same case (is_dev_checkout).
+    AHEAD="$(git -C "$TARGET" rev-list --count '@{u}..HEAD' 2>/dev/null || true)"
+    case "$AHEAD" in
+      ''|0) ;;
+      *) err "This install has $AHEAD commit(s) that are not pushed anywhere, and an update would leave them behind."
+         err "Nothing was changed. Push or move them, then run this again."
+         exit 1 ;;
+    esac
+
     step "Checking out ${LABEL}…"
     git -C "$TARGET" -c advice.detachedHead=false checkout --force "$REF" >/dev/null
     NEW="$(suite_version "$TARGET")"
@@ -330,10 +341,11 @@ else
   RELEASE_JSON="$(curl -fsSL -H 'Accept: application/vnd.github+json' "$API_LATEST")" \
     || { err "Could not reach GitHub."; exit 1; }
   TAG="$(json_field "$RELEASE_JSON" tag_name)"
-  case "$TAG" in
-    v[0-9]*) ;;
-    *) err "GitHub returned an unexpected release tag: ${TAG:-(none)}"; exit 1 ;;
-  esac
+  # The same shape install.ps1 and tools/updater.py accept. `v[0-9]*` is a
+  # glob, and let through anything that merely begins with v and a digit.
+  if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+(\.[0-9]+)+$'; then
+    err "GitHub returned an unexpected release tag: ${TAG:-(none)}"; exit 1
+  fi
   VERSION="${TAG#v}"
 
   if [ -n "$CURRENT" ] && [ "$(cmp_ver "$VERSION" "$CURRENT")" -le 0 ]; then
@@ -394,7 +406,27 @@ else
 
     step "Installing…"
     mkdir -p "$TARGET"
-    cp -R "$TREE"/. "$TARGET"/
+    # The shipped folders are replaced, not merged: a module or page removed in
+    # a release would otherwise stay on disk - and `web/` is served as it
+    # stands. Each is renamed aside first and put back if the copy fails, so
+    # the install is the old one or the new one.
+    for d in tools web templates docs; do
+      rm -rf "$TARGET/.$d.wd-old"
+      if [ -d "$TARGET/$d" ]; then
+        mv "$TARGET/$d" "$TARGET/.$d.wd-old" || { err "Could not move $d aside."; exit 1; }
+      fi
+    done
+    if ! cp -R "$TREE"/. "$TARGET"/; then
+      for d in tools web templates docs; do
+        if [ -d "$TARGET/.$d.wd-old" ]; then
+          rm -rf "$TARGET/$d"
+          mv "$TARGET/.$d.wd-old" "$TARGET/$d"
+        fi
+      done
+      err "The copy failed and the previous install was put back."
+      exit 1
+    fi
+    for d in tools web templates docs; do rm -rf "$TARGET/.$d.wd-old"; done
     chmod +x "$TARGET/Start WD Wireless Tools.command" 2>/dev/null || true
 
     if [ -n "$CURRENT" ]; then ok "Updated v$CURRENT -> v$NEW"; else ok "Installed v$NEW"; fi

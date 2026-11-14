@@ -43,6 +43,7 @@ the only question that separates those two outcomes.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -227,6 +228,7 @@ class TheRealUpdateRunsTests(unittest.TestCase):
         partway, the one case the copy is still kept for.
         """
         real_move = shutil.move
+        real_replace = os.replace
         calls = []
 
         def move_then_fail(src, dst):
@@ -235,7 +237,15 @@ class TheRealUpdateRunsTests(unittest.TestCase):
                 raise OSError("disk full")
             return real_move(src, dst)
 
-        with mock.patch.object(updater.shutil, "move", move_then_fail):
+        def replace_unless_putting_back(src, dst):
+            # The install now undoes itself when a step fails, and only an
+            # undo that fails too leaves the copy as the one good version.
+            if str(src).endswith(".wd-old"):
+                raise OSError("handle held")
+            return real_replace(src, dst)
+
+        with mock.patch.object(updater.shutil, "move", move_then_fail),                 mock.patch.object(updater.os, "replace",
+                                  replace_unless_putting_back):
             with self.assertRaises(updater.UpdateError) as ctx:
                 self._run(self._release_zip())
         copies = self._copies_beside_the_install()

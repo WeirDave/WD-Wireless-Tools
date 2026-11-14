@@ -19,6 +19,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+from tools import esx_guard
 from tools import image_format
 from tools.rename_manager import (
     apply_file_rules as _apply_file_rules,
@@ -28,6 +29,7 @@ from tools.rename_manager import (
     _split_ext,
 )
 from tools.user_dir import user_dir
+from tools import atomic_write
 
 CONFIG_DIR = user_dir()
 ORGANIZER_CONFIG = CONFIG_DIR / "organizer_config.json"
@@ -149,8 +151,7 @@ def _read_acorn_state(esx_path: Path) -> dict | None:
 def _write_acorn_state(esx_path: Path, state: dict) -> None:
     try:
         ACORN_STATE_DIR.mkdir(parents=True, exist_ok=True)
-        with open(_acorn_state_path(esx_path), "w") as f:
-            json.dump(state, f, indent=2)
+        atomic_write.write_json(_acorn_state_path(esx_path), state)
     except OSError:
         pass
 
@@ -272,7 +273,7 @@ def _esx_image_names(path: Path) -> set[str]:
         return cached
     names: set[str] = set()
     try:
-        with zipfile.ZipFile(path, "r") as z:
+        with esx_guard.open_zip(path) as z:
             if "images.json" in z.namelist():
                 try:
                     body = json.loads(z.read("images.json"))
@@ -298,7 +299,7 @@ def _esx_floor_plan_names(path: Path) -> list[str] | None:
     """Return the ordered list of floor-plan names stored in an .esx's
     floorPlans.json, or None if the file can't be read as a valid .esx."""
     try:
-        with zipfile.ZipFile(path, "r") as z:
+        with esx_guard.open_zip(path) as z:
             if "floorPlans.json" not in z.namelist():
                 return None
             body = json.loads(z.read("floorPlans.json"))
@@ -314,7 +315,7 @@ def _esx_extracted_stems(path: Path) -> set[str]:
     unreferenced check listed Squirrel's own output as unreferenced. A stem
     he typed over in the extract dialog is not knowable here."""
     try:
-        with zipfile.ZipFile(path, "r") as z:
+        with esx_guard.open_zip(path) as z:
             if "floorPlans.json" not in z.namelist():
                 return set()
             body = json.loads(z.read("floorPlans.json"))
@@ -396,7 +397,7 @@ def _esx_summary(path: Path) -> dict | None:
         return cached
 
     try:
-        with zipfile.ZipFile(path, "r") as z:
+        with esx_guard.open_zip(path) as z:
             names = set(z.namelist())
 
             def _list_len(fname: str, key: str) -> int:
@@ -558,8 +559,7 @@ def _save_config(cfg):
         return
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    with open(ORGANIZER_CONFIG, "w") as f:
-        json.dump(cfg, f, indent=2)
+    atomic_write.write_json(ORGANIZER_CONFIG, cfg)
 
 
 def _unique_path(dest: Path, taken: set | None = None) -> Path:
@@ -998,7 +998,7 @@ class FolderOrganizer:
             return {"ok": False, "error": "File not found"}
         cfg = _load_config()
         try:
-            with zipfile.ZipFile(p, "r") as z:
+            with esx_guard.open_zip(p) as z:
                 names = set(z.namelist())
                 if "floorPlans.json" not in names:
                     return {"ok": False, "error": "No floorPlans.json inside — not a valid .esx?"}
@@ -1090,7 +1090,7 @@ class FolderOrganizer:
         written = []
         errors = []
         try:
-            with zipfile.ZipFile(p, "r") as z:
+            with esx_guard.open_zip(p) as z:
                 names = set(z.namelist())
                 body = json.loads(z.read("floorPlans.json"))
                 # images.json declares each image's format. It is the only way
@@ -1635,8 +1635,7 @@ class FolderOrganizer:
             # it made the last real organize impossible to undo.
             if undo_log["moves"]:
                 UNDO_DIR.mkdir(parents=True, exist_ok=True)
-                with open(undo_file, "w") as f:
-                    json.dump(undo_log, f, indent=2)
+                atomic_write.write_json(undo_file, undo_log)
 
         undo_now = self.has_undo(str(root_path))
         return {
@@ -2090,8 +2089,7 @@ class FolderOrganizer:
 
         if undo_log["moves"]:
             UNDO_DIR.mkdir(parents=True, exist_ok=True)
-            with open(_undo_path(root_path), "w") as f:
-                json.dump(undo_log, f, indent=2)
+            atomic_write.write_json(_undo_path(root_path), undo_log)
 
         return {
             "ok": True,

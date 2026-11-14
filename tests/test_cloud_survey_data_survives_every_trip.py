@@ -293,6 +293,16 @@ class _Trip(unittest.TestCase):
         self.cloud = _Cloud()
         self.api = _Ekahau(self.cloud)
         self.mgr = _Manager(self.api, self.root)
+        # The upload to storage is a bare `requests.put` of the open file now,
+        # not a call on the signed-in session, so the stand-in storage is wired
+        # in there: it reads the stream and stores the bytes.
+        put = mock.patch.object(
+            cm.requests, "put",
+            lambda url, data=None, headers=None, timeout=None, **_:
+                self.api.http.put(url, data=data.read() if hasattr(data, "read")
+                                  else data))
+        put.start()
+        self.addCleanup(put.stop)
         sync_state.prune([])
         self.addCleanup(sync_state.prune, [])
         cm.save_manual_matches([])

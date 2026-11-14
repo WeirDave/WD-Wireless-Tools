@@ -14,6 +14,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from tools.user_dir import user_dir
+from tools import atomic_write
 
 CONFIG_DIR = user_dir()
 DIRECTORY_PATH = CONFIG_DIR / "site_directory.json"
@@ -160,6 +161,28 @@ def _expand_folder_token(text: str, folder_label: str) -> str:
     return (text or "").replace("{folder}", folder_label.strip())
 
 
+#: A rename rule is typed into a box by the person using the tool, and Python's
+#: `re` cannot be interrupted: a pattern like `(a+)+$` against a long enough
+#: name never returns, and the request thread it ran on goes with it. The page
+#: previews as it types, so each pause launched another one; a saved rule in the
+#: Organizer would hang every scan.
+#:
+#: A rule is refused - read as if it were not valid, which is what a pattern
+#: that does not compile already did - when it is long, or when a group that
+#: repeats or chooses is itself repeated. That is the shape every catastrophic
+#: pattern has, and it is not a shape a prefix to strip or a name to match
+#: needs.
+_MAX_RULE_PATTERN = 200
+_REPEATED_VARIABLE_GROUP = re.compile(
+    r"\((?:[^()\\]|\\.)*(?:[+*]|\{\d*,\d*\}|\|)(?:[^()\\]|\\.)*\)\s*(?:[+*]|\{)")
+
+
+def is_safe_rule_pattern(pattern: str) -> bool:
+    if not isinstance(pattern, str) or len(pattern) > _MAX_RULE_PATTERN:
+        return False
+    return _REPEATED_VARIABLE_GROUP.search(pattern) is None
+
+
 def apply_file_rules(original_name: str, folder_label: str,
                      rules: dict | None = None) -> str:
     """Apply rule-based rename pipeline to a filename.
@@ -181,14 +204,14 @@ def apply_file_rules(original_name: str, folder_label: str,
     stem, ext = _split_ext(original_name)
 
     strip = r.get("strip_prefix") or ""
-    if strip:
+    if strip and is_safe_rule_pattern(strip):
         try:
             stem = re.sub(r"^(?:" + strip + ")", "", stem)
         except re.error:
             pass
 
     strip_end = r.get("strip_suffix") or ""
-    if strip_end:
+    if strip_end and is_safe_rule_pattern(strip_end):
         try:
             stem = re.sub(r"(?:" + strip_end + ")$", "", stem)
         except re.error:
@@ -196,7 +219,7 @@ def apply_file_rules(original_name: str, folder_label: str,
 
     rf = r.get("regex_from") or ""
     rt = r.get("regex_to") or ""
-    if rf:
+    if rf and is_safe_rule_pattern(rf):
         try:
             stem = re.sub(rf, rt, stem)
         except re.error:
@@ -535,8 +558,7 @@ class RenameManager:
         }
 
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with open(DIRECTORY_PATH, "w", encoding="utf-8") as f:
-            json.dump(directory, f, indent=2)
+        atomic_write.write_json(DIRECTORY_PATH, directory)
 
         all_tokens = self.get_tokens()["tokens"]
         return {
@@ -809,8 +831,7 @@ class RenameManager:
                 "renames": undo_log,
                 "timestamp": datetime.now().isoformat(),
             }
-            with open(_undo_path("folders"), "w", encoding="utf-8") as f:
-                json.dump(undo_data, f, indent=2)
+            atomic_write.write_json(_undo_path("folders"), undo_data)
 
         return {
             "ok": True,
@@ -949,8 +970,7 @@ class RenameManager:
                 "renames": undo_log,
                 "timestamp": datetime.now().isoformat(),
             }
-            with open(_undo_path("files"), "w", encoding="utf-8") as f:
-                json.dump(undo_data, f, indent=2)
+            atomic_write.write_json(_undo_path("files"), undo_data)
 
         return {"ok": True, "renamed": renamed, "errors": errors}
 
@@ -1081,6 +1101,16 @@ class RenameManager:
                                 "status": "error",
                                 "reason": "invalid path or name"})
                 continue
+            # The folder the page showed. `dst` is built from `src.parent`, so
+            # the check below can never say no; without this one, any file the
+            # request named could be renamed, wherever it was.
+            if root and not _is_inside(src, Path(root)):
+                skipped += 1
+                details.append({"old_name": src.name,
+                                "new_name": it.get("new_name"),
+                                "status": "error",
+                                "reason": "outside the folder being renamed"})
+                continue
             dst = src.parent / new_name
             if not _is_inside(dst, src.parent):
                 skipped += 1
@@ -1112,8 +1142,7 @@ class RenameManager:
                 "renames": undo_log,
                 "timestamp": datetime.now().isoformat(),
             }
-            with open(_undo_path("bulk"), "w", encoding="utf-8") as f:
-                json.dump(undo_data, f, indent=2)
+            atomic_write.write_json(_undo_path("bulk"), undo_data)
 
         return {"ok": True, "renamed": renamed, "skipped": skipped,
                 "details": details}
@@ -1234,8 +1263,7 @@ class RenameManager:
 
         if kept:
             data["renames"] = list(reversed(kept))
-            with open(undo_file, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+            atomic_write.write_json(undo_file, data)
         else:
             os.remove(str(undo_file))
         return {"ok": True, "reverted": reverted, "skipped": skipped,
@@ -1285,8 +1313,7 @@ class RenameManager:
 
     def _save_profiles(self, profiles: dict):
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        with open(PROFILES_PATH, "w", encoding="utf-8") as f:
-            json.dump(profiles, f, indent=2)
+        atomic_write.write_json(PROFILES_PATH, profiles)
 
     # ── CSV Helper ──
 

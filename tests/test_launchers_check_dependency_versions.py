@@ -145,7 +145,7 @@ class TheBatchFileDependencyStep(_Harness):
             'echo %* | findstr /c:"tools.deps" >nul && exit /b %FAKE_DEPS%\r\n'
             'echo %* | findstr /c:"pip" >nul && exit /b %FAKE_PIP%\r\n'
             'exit /b 0\r\n', encoding="utf-8")
-        block = _block(BAT, "python -m tools.deps", "REM ---- Kill any stale")
+        block = _block(BAT, "python -m tools.deps", "REM Everything from here is one parenthesised block")
         # A .cmd only returns control to its caller when it is `call`ed; the
         # real launcher runs python.exe, which always does.
         block = re.sub(r"(?m)^(\s*)python ", r"\1call python ", block)
@@ -209,7 +209,7 @@ class TheCommandFileDependencyStep(_Harness):
             'esac\n'
             'exit 0\n', encoding="utf-8", newline="\n")
         fake.chmod(0o755)
-        block = _block(COMMAND, "python3 -m tools.deps", "lsof")
+        block = _block(COMMAND, "python3 -m tools.deps", "# One function, called last")
         script = self.tmp / "step.sh"
         script.write_text(block + "\necho REACHED\n", encoding="utf-8",
                           newline="\n")

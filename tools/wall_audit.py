@@ -28,14 +28,9 @@ import shutil
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from tools import esx_guard
 
 FT = 0.3048
-
-# Objects that stand on the floor and stop short of the ceiling.
-PARTIAL_HEIGHT_NAME = re.compile(
-    r"shelf|shelv|rack|cubicle|bookshelf|partition|pod\b|booth|counter|"
-    r"bin\b|pallet|display|fixture",
-    re.I)
 
 # Deliberately full height, so never reported as missing one.
 #
@@ -136,7 +131,7 @@ def _suggest_height(name: str) -> tuple[float | None, str]:
 def audit_project(path: Path) -> ProjectReport:
     report = ProjectReport(path=path)
     try:
-        with zipfile.ZipFile(path) as z:
+        with esx_guard.open_zip(path) as z:
             names = set(z.namelist())
             if "wallTypes.json" not in names:
                 return report
@@ -240,7 +235,7 @@ def repair_project(path: Path, heights: dict[str, float]) -> dict:
         return {"error": "No heights given, so there is nothing to change."}
 
     try:
-        with zipfile.ZipFile(path) as z:
+        with esx_guard.open_zip(path) as z:
             members = {n: z.read(n) for n in z.namelist()}
     except (OSError, zipfile.BadZipFile) as e:
         return {"error": f"Could not read the project: {e}"}

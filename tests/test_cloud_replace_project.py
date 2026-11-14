@@ -148,6 +148,23 @@ class ReplacingAnExistingCloudProjectTests(unittest.TestCase):
         self.assertEqual(["old-1"], api.deleted)
         self.assertTrue(api.uploaded, "nothing was uploaded")
 
+    def test_an_upload_the_listing_reports_as_the_old_project_deletes_nothing(self):
+        """The id this trusts has to be a new one.
+
+        If the upload hands back the id of the project being replaced - or of
+        any project that was already there - everything after it verifies the
+        old copy against itself, and the last step deletes it.
+        """
+        for returned in ("old-1",):
+            mgr, api = self._mgr()
+            mgr.upload_project = lambda path, site_id=None, progress_cb=None,                 _id=returned: {"ok": True, "uploaded": True, "datasetId": _id,
+                               "readBack": True}
+            out = mgr.replace_cloud_project(str(self.esx), "old-1")
+            self.assertIn("error", out, out)
+            self.assertFalse(out.get("deletedOld"))
+            self.assertEqual([], api.deleted,
+                             "the project being replaced was deleted")
+
     def test_a_failed_upload_deletes_nothing(self):
         """The whole reason for the inverted order.
 

@@ -38,12 +38,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 REQUIREMENTS = ROOT / "requirements.txt"
 
-#: Distribution name -> the name you import, where they differ.
-_IMPORT_NAMES = {
-    "pillow": "PIL",
-    "browser_cookie3": "browser_cookie3",
-}
-
 _LINE = re.compile(r"^\s*([A-Za-z0-9._-]+)\s*>=\s*([0-9][0-9A-Za-z.\-]*)\s*$")
 
 
@@ -52,7 +46,7 @@ def floors(path: Path | None = None) -> dict:
 
     Only `>=` lines, which is every line in that file and is the form the
     check means. Anything else - a pin, an extra, a marker - is skipped
-    rather than guessed at, and `missing_floors` below says so.
+    rather than guessed at.
     """
     text = (path or REQUIREMENTS).read_text(encoding="utf-8")
     out = {}
@@ -66,10 +60,27 @@ def floors(path: Path | None = None) -> dict:
 
 
 def _parts(version: str):
-    """A comparable tuple. Trailing non-numeric segments are dropped rather
-    than guessed at - `12.3.0rc1` compares as `12.3.0`, which errs toward
-    accepting a pre-release somebody installed deliberately."""
-    return tuple(int(n) for n in re.findall(r"\d+", str(version or "")))
+    """The leading dotted number of a version, as a tuple of ints.
+
+    Everything after it is dropped rather than guessed at - `12.3.0rc1` reads
+    as `12.3.0`, which errs toward accepting a pre-release somebody installed
+    deliberately. Every digit used to count: `12.3rc1` read as `(12, 3, 1)`,
+    the release-candidate number became a patch level, and it passed a floor
+    of `12.3.1`.)
+    """
+    found = re.match(r"\s*(\d+(?:\.\d+)*)", str(version or ""))
+    return tuple(int(n) for n in found.group(1).split(".")) if found else ()
+
+
+def _at_least(found: str, floor: str) -> bool:
+    """`found >= floor`, with the shorter version padded with zeros.
+
+    Tuples of different length compare as `(12, 3) < (12, 3, 0)`, so an
+    installed `12.3` was reported older than a floor of `12.3.0`.
+    """
+    a, b = _parts(found), _parts(floor)
+    width = max(len(a), len(b))
+    return a + (0,) * (width - len(a)) >= b + (0,) * (width - len(b))
 
 
 def installed_version(distribution: str):
@@ -94,7 +105,7 @@ def check(path: Path | None = None) -> dict:
         if found is None:
             missing.append({"name": name, "need": floor})
             continue
-        if _parts(found) < _parts(floor):
+        if not _at_least(found, floor):
             outdated.append({"name": name, "need": floor, "have": found})
         else:
             ok.append({"name": name, "need": floor, "have": found})

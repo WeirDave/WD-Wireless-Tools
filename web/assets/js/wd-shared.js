@@ -170,16 +170,6 @@
   WD.FEET_PER_METRE = 3.280839895013123;
   WD.DEFAULT_CUSTOM_MARGIN_FT = 200;
 
-  /* Metres in, "84 ft (26 m)" out. One decimal under 10, none above, because
-     "25.6 ft" of clearance is false precision on a scanned drawing. */
-  WD.metresAsFeet = function (m) {
-    if (m == null || isNaN(m)) return '';
-    var ft = m * WD.FEET_PER_METRE;
-    var f = ft < 10 ? ft.toFixed(1) : String(Math.round(ft));
-    var mm = m < 10 ? m.toFixed(1) : String(Math.round(m));
-    return f + ' ft (' + mm + ' m)';
-  };
-
   WD.EKAHAU_COLORS = {
     yellow:  '#FFE600', orange: '#FF8500', red:     '#FF0000',
     magenta: '#FF00FF', purple: '#C297FF', blue:    '#0068FF',
@@ -1751,9 +1741,6 @@
     };
   })();
 
-  // Kept for callers that used the old entry point.
-  WD.runUpdate = function (mode) { WD.Updater.run(mode); };
-
   function _renderUpdateError(state) {
     var modal = document.getElementById(WD_ABOUT_ID);
     if (!modal) return;
@@ -2112,10 +2099,6 @@
       try { _settingsOnClose(); } catch (e) { /* a tool that cannot refresh
         still gets its page back, which is the point of the panel */ }
     }
-  };
-
-  WD.settingsOverlayOpen = function () {
-    return !!document.getElementById(SETTINGS_OVERLAY_ID);
   };
 
   /* The settings page tells us when it has saved, so a tool can pick the value

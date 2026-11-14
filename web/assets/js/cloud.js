@@ -607,11 +607,15 @@ async function startAuth() {
   try {
     let s = await pyApi('get_status');
     const remembered = rememberedProjectDirectory();
-    if (remembered && remembered !== s.outputDir) {
+    // The server's folder is the setting. The browser's copy only fills in a
+    // server that has none, which is a first run or a settings reset. It used
+    // to overwrite the server whenever the two differed, so a folder changed
+    // in Settings was silently put back to the old one at the next start.
+    if (remembered && !s.outputDir) {
       const restored = await pyApi('set_folder', remembered);
       if (restored && restored.path) s = { ...s, outputDir: restored.path };
       else forgetRememberedProjectDirectory();
-    } else if (!remembered && s.outputDir) {
+    } else if (s.outputDir && remembered !== s.outputDir) {
       rememberProjectDirectory(s.outputDir);
     }
     if (s.connected) { showApp(s.email); return; }
@@ -809,7 +813,6 @@ function startLive() {
   applyLiveUI();
 }
 function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } applyLiveUI(); }
-function restartLive() { if (liveTimer) { stopLive(); startLive(); } }
 function toggleLive() {
   if (liveTimer) {
     stopLive(); try { localStorage.setItem('wd-live', 'off'); } catch (e) {}

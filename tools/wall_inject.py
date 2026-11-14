@@ -39,6 +39,7 @@ import shutil
 import uuid
 import zipfile
 from pathlib import Path
+from tools import esx_guard
 
 MEMBER = "wallTypes.json"
 
@@ -74,7 +75,7 @@ def _words(name) -> tuple:
 
 
 def _read_members(path: Path) -> dict:
-    with zipfile.ZipFile(path) as z:
+    with esx_guard.open_zip(path) as z:
         return {n: z.read(n) for n in z.namelist()}
 
 

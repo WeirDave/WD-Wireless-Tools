@@ -53,6 +53,7 @@ import zipfile
 from pathlib import Path
 
 from tools import capacity_profiles, esx_trimmer, wall_inject
+from tools import esx_guard
 
 #: The one place execution order is decided.
 STEP_ORDER = ("trim", "areas", "walls")
@@ -102,7 +103,7 @@ def resolve_steps(steps=None) -> list:
 # ── reading, for the parts this module decides itself ────────────────────────
 
 def _members(path: Path) -> dict:
-    with zipfile.ZipFile(path) as z:
+    with esx_guard.open_zip(path) as z:
         return capacity_profiles._read_members(z)
 
 
@@ -217,15 +218,17 @@ def _drop_areas(src: Path, dest: Path, area_ids: set) -> None:
     a half-overwritten area is worse than a missing one, and the writer is
     about to create the replacement anyway.
     """
-    with zipfile.ZipFile(src) as z:
-        raw = {n: z.read(n) for n in z.namelist()}
-    body = json.loads(raw["areas.json"].decode("utf-8"))
-    body["areas"] = [a for a in body.get("areas", [])
-                     if not (isinstance(a, dict) and a.get("id") in area_ids)]
-    raw["areas.json"] = (json.dumps(body, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
-    with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as out:
-        for name, blob in raw.items():
-            out.writestr(name, blob)
+    # One member at a time: only `areas.json` is read for its content, and the
+    # rest - the survey samples are most of a surveyed project - pass straight
+    # from the source archive to the destination.
+    with esx_guard.open_zip(src) as z:
+        body = json.loads(z.read("areas.json").decode("utf-8"))
+        body["areas"] = [a for a in body.get("areas", [])
+                         if not (isinstance(a, dict) and a.get("id") in area_ids)]
+        areas_blob = (json.dumps(body, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+        with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as out:
+            for name in z.namelist():
+                out.writestr(name, areas_blob if name == "areas.json" else z.read(name))
 
 
 # ── the preview ──────────────────────────────────────────────────────────────

@@ -39,6 +39,7 @@ import json
 import zipfile
 
 from tools import esx_survey_data
+from tools import esx_guard
 
 #: Fields that move when nothing about the design does. Stripped everywhere
 #: they appear, at any depth.
@@ -229,8 +230,8 @@ def compare_esx(local_bytes: bytes, cloud_bytes: bytes,
            "surveyDataIncomplete": False}
 
     try:
-        lz = zipfile.ZipFile(io.BytesIO(local_bytes))
-        cz = zipfile.ZipFile(io.BytesIO(cloud_bytes))
+        lz = esx_guard.open_zip(io.BytesIO(local_bytes))
+        cz = esx_guard.open_zip(io.BytesIO(cloud_bytes))
     except zipfile.BadZipFile as exc:
         return {**out, "error": "Could not read one of the archives: %s" % exc}
 

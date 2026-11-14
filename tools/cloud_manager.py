@@ -25,6 +25,7 @@ import requests
 from tools.user_dir import user_dir
 from tools import sync_state
 from tools.settings import get_destinations as _get_suite_destinations
+from tools import esx_guard
 from tools import share_recipients
 from tools import applog
 from tools.settings import load_settings as _load_suite_settings
@@ -129,6 +130,65 @@ def _assert_inside(path, root):
     if _inside(a, b):
         return
     raise ValueError(f"Path is outside the allowed directory: {path}")
+
+
+_URL_QUERY_RE = re.compile(r"(https?://[^\s'\"?#]+)\?[^\s'\"]*")
+
+
+def redact_urls(text):
+    """*text* with the query string removed from every URL in it.
+
+    `requests` puts the full URL into the text of its exceptions. For a
+    presigned S3 address the query string **is** the credential - the
+    signature that lets anybody holding it read or write that object - and the
+    text went into the toast the page shows and the log file. The host and path
+    stay, because they say which call failed.
+    """
+    return _URL_QUERY_RE.sub(r"\1?...", str(text))
+
+
+def _remember_recipients(addresses):
+    """Record who was just shared with, without ever failing the share.
+
+    The shares have already happened by the time this runs. A damaged
+    recipients file used to raise from here, which turned a successful share
+    into a 500 - or into "Nothing was shared" - for a list that exists only to
+    save typing.
+    """
+    try:
+        share_recipients.remember(addresses)
+    except Exception as e:
+        applog.get_logger().warning("could not remember share recipients: %s", e)
+
+
+def unsafe_project_folder(path):
+    """Why *path* can never be the project folder, or None when it can.
+
+    Every local delete, rename and move is checked against this folder, so the
+    folder is the boundary. A drive root or the home directory made "delete
+    this site" mean "delete anything on the drive", and a folder holding the
+    user-data directory put the cookie store and settings inside reach of it.
+    None of those is somebody's project folder, so they are refused; this does
+    not ask about anything he can see and decide for himself.
+    """
+    try:
+        p = Path(path).resolve()
+    except (OSError, ValueError, RuntimeError):
+        return None
+    if p == p.parent:
+        return "That is the top of a drive, not a project folder."
+    try:
+        if p == Path.home().resolve():
+            return "That is your home folder, not a project folder."
+    except (OSError, RuntimeError):
+        pass
+    try:
+        CONFIG_DIR.resolve().relative_to(p)
+        return ("That folder contains this app's own settings, so it cannot "
+                "be the project folder.")
+    except (ValueError, OSError):
+        pass
+    return None
 
 
 def load_config():
@@ -875,7 +935,8 @@ class EkahauAPI:
                     r.raise_for_status()
                     zf.writestr(member, r.content)
                 except Exception as e:
-                    return {"error": f"Failed fetching {kind} {member}: {e}",
+                    return {"error": f"Failed fetching {kind} {member}: "
+                                     f"{redact_urls(e)}",
                             "sessionDead": _session_is_dead(e)}
                 done += 1
                 if progress_cb and n_fetch > 0:
@@ -958,13 +1019,23 @@ class EkahauAPI:
             size_mb = file_size / (1024 * 1024)
             progress_cb(stage="upload", current=15, total=100,
                         message=f"Uploading {size_mb:.1f} MB to Ekahau…")
-        with open(p, "rb") as f:
-            file_bytes = f.read()
-
-        s3_r = self.http.put(upload_url, data=file_bytes,
-                             headers={"Content-Type": "application/esx"},
-                             timeout=max(300, file_size // 50000))
-        s3_r.raise_for_status()
+        if not str(upload_url).startswith("https://"):
+            return {"error": "Ekahau answered with an upload address that is "
+                             "not HTTPS, so nothing was uploaded."}
+        # A bare request, not the signed-in session: the upload goes to
+        # storage that is not Ekahau's API, and the session's default headers
+        # carry the CSRF token and a Referer that have no business there. The
+        # file is streamed from the open handle rather than read into memory.
+        try:
+            with open(p, "rb") as f:
+                s3_r = requests.put(upload_url, data=f,
+                                    headers={"Content-Type": "application/esx"},
+                                    timeout=max(300, file_size // 50000))
+            s3_r.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            return {"error": "The upload to Ekahau's storage failed: "
+                             f"{redact_urls(e)}",
+                    "sessionDead": False}
         if progress_cb:
             progress_cb(current=85, message="Upload complete — finalizing…")
 
@@ -1019,6 +1090,13 @@ def _why_a_browser_failed(exc):
     return f"could not be read ({type(exc).__name__})"
 
 
+def _host_is_within(host, domain):
+    """Is a cookie's host the domain itself or one of its subdomains?"""
+    bare = str(domain or "").lstrip(".").lower()
+    h = str(host or "").lstrip(".").lower()
+    return bool(bare) and (h == bare or h.endswith("." + bare))
+
+
 def _firefox_cookies_including_wal(reader, domain):
     """Firefox's cookies as they are *now*, including what is still in its
     write-ahead log.
@@ -1046,6 +1124,10 @@ def _firefox_cookies_including_wal(reader, domain):
                 (f"%{domain}%",)).fetchall()
         finally:
             con.close()
+    # The query is a substring match, so `.ekahau.cloud.example.org` came back
+    # too - and a lookalike host's AccessToken could win. Only the domain and
+    # its subdomains are Ekahau's.
+    rows = [r for r in rows if _host_is_within(r[0], domain)]
     return [reader.create_cookie(*row) for row in rows]
 
 
@@ -1612,7 +1694,7 @@ def _esx_meta(path, mtime):
             "internalMtime": 0, "surveyGaps": 0}
     try:
         import zipfile
-        with zipfile.ZipFile(path) as z:
+        with esx_guard.open_zip(path) as z:
             #: How many files the project's own surveys point at that are not
             #: in the archive. Read from the archive's contents because
             #: nothing else can see it: the dates match the cloud's whatever
@@ -1658,12 +1740,6 @@ def _esx_meta(path, mtime):
     return meta
 
 
-def _esx_author(path, mtime):
-    """Back-compat shim — old call sites still ask for just the author.
-    New code should use _esx_meta and pluck the field it wants."""
-    return _esx_meta(path, mtime)["author"]
-
-
 _ESX_TYPE_CACHE = {}
 
 
@@ -1683,8 +1759,15 @@ def _esx_project_type(path, mtime):
     a badge that fails to appear is a much better UX than a scan that
     breaks the whole local ledger."""
     key = str(path)
+    # Keyed on size as well as the date, as `_esx_meta` is: a file rewritten
+    # within the same second, or with its timestamp preserved, keeps its mtime
+    # and would be served the old answer.
+    try:
+        stamp = (mtime, os.stat(path).st_size)
+    except OSError:
+        stamp = (mtime, -1)
     hit = _ESX_TYPE_CACHE.get(key)
-    if hit and hit[0] == mtime:
+    if hit and hit[0] == stamp:
         return hit[1]
     ptype = None
     try:
@@ -1701,7 +1784,9 @@ def _esx_project_type(path, mtime):
             ptype = "Design"
     except Exception:
         ptype = None
-    _ESX_TYPE_CACHE[key] = (mtime, ptype)
+    if len(_ESX_TYPE_CACHE) > _ESX_CACHE_MAX:
+        _ESX_TYPE_CACHE.clear()
+    _ESX_TYPE_CACHE[key] = (stamp, ptype)
     return ptype
 
 
@@ -1828,7 +1913,7 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
                         "localEditedUndated": undated_edit,
                         "differenceKind": _difference(c, l, stale)})
 
-    def _resolve_pass(cands, conflicts, mtype, base):
+    def _resolve_pass(cands, mtype, base):
         """Take the strongest candidates first, whoever Ekahau listed first.
 
         Each pass used to walk the cloud projects in listing order and let
@@ -2018,7 +2103,7 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
                 continue
             code_cands.append((sim, c, l))
 
-    _resolve_pass(code_cands, code_conflicts, "code", 2.0)
+    _resolve_pass(code_cands, "code", 2.0)
 
     for c in pending:
         if any(m["cloud"] is c for m in matched):
@@ -2049,7 +2134,7 @@ def build_matches(cloud_items, local_items, excluded=None, manual_map=None):
 
     #: Strongest-first, so the answer does not depend on Ekahau's listing
     #: order - see `_resolve_pass`.
-    _resolve_pass(fuzzy_cands, fuzzy_conflicts, "fuzzy", 0.0)
+    _resolve_pass(fuzzy_cands, "fuzzy", 0.0)
 
     for c in still:
         if any(m["cloud"] is c for m in matched):
@@ -2583,6 +2668,10 @@ def _dup_key(name):
     return re.sub(r"\s+", " ", stem).strip()
 
 
+class _SavedMeanwhile(Exception):
+    """The file changed on disk while it was being rebuilt."""
+
+
 def _rewrite_project_json(src, mutate):
     """Rewrite `project.json` inside a .esx, copying every other member across
     byte for byte, in its original order.
@@ -2605,8 +2694,9 @@ def _rewrite_project_json(src, mutate):
     import zipfile
 
     src = Path(src)
+    seen_at_start = _fingerprint(src)
     try:
-        with zipfile.ZipFile(_lp().write_path(src)) as zf:
+        with esx_guard.open_zip(_lp().write_path(src)) as zf:
             if "project.json" not in zf.namelist():
                 return {"error": "That .esx has no project.json"}
             members = [(i, zf.read(i.filename)) for i in zf.infolist()]
@@ -2627,7 +2717,7 @@ def _rewrite_project_json(src, mutate):
             try:
                 changed = bool(mutate(proj, doc))
             except ValueError as e:
-                return {"error": str(e)}
+                return {"error": redact_urls(e)}
             if changed:
                 raw = json.dumps(doc, ensure_ascii=False).encode("utf-8")
         rebuilt.append((info, raw))
@@ -2655,7 +2745,20 @@ def _rewrite_project_json(src, mutate):
                 keep_info.compress_type = info.compress_type
                 keep_info.external_attr = info.external_attr
                 out.writestr(keep_info, raw)
+        # Every other writer of a local .esx checks the file is as it was read
+        # before replacing it. A save from Ekahau while this rebuilt - tens of
+        # seconds on a large project - would otherwise be overwritten by the
+        # rebuild of the older content.
+        if _fingerprint(src) != seen_at_start:
+            raise _SavedMeanwhile()
         os.replace(tmp_w, src_w)
+    except _SavedMeanwhile:
+        try:
+            os.unlink(tmp_w)
+        except OSError:
+            pass
+        return {"error": "That file was saved while it was being updated, so "
+                         "nothing was changed. Try again."}
     except OSError as e:
         try:
             os.unlink(tmp_w)
@@ -3060,7 +3163,24 @@ def _session_is_dead(e):
 class CloudManager:
     def __init__(self):
         self.api = None
-        self.config = load_config()
+        self._config_override = None
+
+    @property
+    def config(self):
+        """The saved settings, read each time they are asked for.
+
+        This was read once when the module loaded. Settings, the setup wizard
+        and an import all write `global.output_dir` without telling this
+        object, so Cloud Manager - and the containment check every local delete
+        is made against - kept the old folder until a restart. Assigning to it
+        still pins a value, which is how the tests give it a folder.
+        """
+        override = getattr(self, "_config_override", None)
+        return override if override is not None else load_config()
+
+    @config.setter
+    def config(self, value):
+        self._config_override = value
 
     def _ensure(self):
         if self.api:
@@ -3096,7 +3216,7 @@ class CloudManager:
             # try_browser_cookies() instead of trusting it forever.
             self.api = None
             return self.SESSION_EXPIRED
-        return str(e)
+        return redact_urls(e)
 
     def _api_error(self, e):
         """The error payload for a listing. `sessionExpired` is what the page
@@ -3125,7 +3245,7 @@ class CloudManager:
             else:
                 subprocess.Popen(["xdg-open", EKAHAU_URL])
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
         return {"ok": True}
 
     def forget_login(self):
@@ -3149,9 +3269,16 @@ class CloudManager:
             from tools.reveal import reveal as _reveal
             return _reveal(p)
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
+
+    #: The two lists the page works with. `kind` is compared against
+    #: "projects" and anything else was treated as sites, so a typo in a delete
+    #: meant "delete a site".
+    _KINDS = ("projects", "sites")
 
     def get_data(self, kind):
+        if kind not in self._KINDS:
+            return {"error": f"Unknown kind: {kind!r}"}
         if not self._ensure():
             return {"error": self.SESSION_EXPIRED, "sessionExpired": True}
         try:
@@ -3186,6 +3313,8 @@ class CloudManager:
             return self._api_error(e)
 
     def rename_cloud(self, kind, cloud_id, name):
+        if kind not in self._KINDS:
+            return {"error": f"Unknown kind: {kind!r}"}
         if not self._ensure():
             return {"error": "Not connected"}
         try:
@@ -3194,6 +3323,8 @@ class CloudManager:
             return self._api_error(e)
 
     def delete_cloud(self, kind, cloud_id):
+        if kind not in self._KINDS:
+            return {"error": f"Unknown kind: {kind!r}. Nothing was deleted."}
         if not self._ensure():
             return {"error": "Not connected"}
         try:
@@ -3247,7 +3378,7 @@ class CloudManager:
             repoint_pairings([(str(old), str(new))])
             return {"ok": True, "newPath": str(new)}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def delete_local(self, path):
         try:
@@ -3287,7 +3418,7 @@ class CloudManager:
                     p.unlink()
             return {"ok": True}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def replace_cloud_project(self, esx_path, cloud_project_id, progress_cb=None,
                               overwrite_newer=False, allow_missing_survey_data=False):
@@ -3556,6 +3687,18 @@ class CloudManager:
                             % (old_name or "the existing project",
                                " or ".join("\"%s\"" % n for n in names),
                                Path(esx_path).stem)}
+
+        #: The id this is about to trust has to be a *new* one. If the listing
+        #: handed back the project being replaced - or any project that was
+        #: already there - everything below would verify the old copy against
+        #: itself and then delete it.
+        if new_id == cloud_project_id or new_id in before:
+            return {"error": "Ekahau did not report the upload as a new "
+                             "project, so the old one was left alone.",
+                    "step": "verify", "deletedOld": False,
+                    "uploadedAs": uploaded_as, "oldId": cloud_project_id,
+                    "note": "Nothing was deleted. Refresh, and check whether "
+                            "a second copy appeared before trying again."}
 
         # ---- 2. verify before destroying anything ------------------------
         if progress_cb:
@@ -3832,7 +3975,8 @@ class CloudManager:
                 return fn()
             except Exception as e:
                 last = e
-                applog.get_logger().info("%s: attempt refused (%s)", what, e)
+                applog.get_logger().info("%s: attempt refused (%s)", what,
+                                         redact_urls(e))
         raise last
 
     def _record_upload_sync_point(self, new_id, src):
@@ -3891,7 +4035,7 @@ class CloudManager:
         try:
             _assert_inside(esx_path, od)
         except ValueError as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
         try:
 
             before_ids = {p["id"] for p in self.api.get_projects()}
@@ -4042,7 +4186,7 @@ class CloudManager:
                         dl = self._with_patience(
                             _fetch, "syncing the uploaded project back")
                     except RuntimeError as e:
-                        dl = {"error": str(e)}
+                        dl = {"error": redact_urls(e)}
                     if isinstance(dl, dict) and dl.get("error"):
                         ret["syncBackError"] = dl["error"]
                         ret.setdefault("warning",
@@ -4100,7 +4244,7 @@ class CloudManager:
                 progress_cb(current=100, message="Done.")
             return ret
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def create_local_folder(self, name):
         base = self.config.get("output_dir", "")
@@ -4126,7 +4270,7 @@ class CloudManager:
                 (target / name).mkdir(exist_ok=True)
             return {"ok": True, "path": str(target), "subfolders": subfolder_names}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def download_project(self, project_id, dest_folder_name, progress_cb=None,
                          on_exists="refuse"):
@@ -4250,7 +4394,7 @@ class CloudManager:
             return {"ok": True, "path": str(target), "name": proj_name,
                     "replaced": replaced, "createdFolder": is_new_folder}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def verify_replace_local(self, project_id, local_path, progress_cb=None,
                              overwrite_local=False):
@@ -4308,18 +4452,31 @@ class CloudManager:
         seen_at_start = _fingerprint(src)
 
 
+        expired = {"error": "Ekahau Cloud sign-in has expired. "
+                            "Sign in again in your browser, then reconnect."}
+        gone = {"error": "That project is no longer in Ekahau Cloud - "
+                         "it may have been deleted or unshared. "
+                         "Nothing was changed locally."}
         try:
             resp = self.api.get(f"{API_BASE}/{project_id}")
             if resp.status_code in (401, 403):
-                return {"error": "Ekahau Cloud sign-in has expired. "
-                                 "Sign in again in your browser, then reconnect."}
+                return expired
             if resp.status_code == 404:
-                return {"error": "That project is no longer in Ekahau Cloud - "
-                                 "it may have been deleted or unshared. "
-                                 "Nothing was changed locally."}
+                return gone
             proj = resp.json()
         except Exception as e:
-            return {"error": f"Could not reach Ekahau Cloud: {e}. "
+            # `api.get` raises on an error status, so the checks above never
+            # see one: a 404 arrived as "Could not reach Ekahau Cloud: 404
+            # Client Error ... for url ...", and a 401 left the dead session in
+            # place. The status is read off the exception instead.
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if code == 401:
+                self.api = None
+            if code in (401, 403):
+                return expired
+            if code == 404:
+                return gone
+            return {"error": f"Could not reach Ekahau Cloud: {redact_urls(e)}. "
                              "Nothing was changed locally."}
         cloud_mtime = _parse_cloud_mtime(proj)
         cloud_name = proj.get("name") or proj.get("title") or ""
@@ -4665,7 +4822,7 @@ class CloudManager:
             users = (result or {}).get(project_id, [])
             return {"ok": True, "users": users}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def add_share(self, project_id, email, role="READ_USER"):
         """One recipient. Kept because callers and tests use it; it delegates."""
@@ -4708,7 +4865,7 @@ class CloudManager:
         try:
             r = self.api.bulk_add_shares([project_id], wanted, role)
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
         per_email = {}
         for row in (r or []):
@@ -4734,7 +4891,7 @@ class CloudManager:
                             "message": "That does not look like an email address."})
 
         if succeeded:
-            share_recipients.remember(succeeded)
+            _remember_recipients(succeeded)
 
         return {"ok": bool(succeeded), "results": results,
                 "shared": succeeded, "invalid": invalid}
@@ -4753,7 +4910,7 @@ class CloudManager:
                 return {"error": first.get("message") or "Remove failed"}
             return {"ok": True, "email": email}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
 
     def _ownership(self, project_ids):
@@ -4905,9 +5062,9 @@ class CloudManager:
                 #: Remembering an address Ekahau refused would offer it back
                 #: next time as though it had worked.
                 if succeeded:
-                    share_recipients.remember(succeeded)
+                    _remember_recipients(succeeded)
             except Exception as e:
-                results["emailError"] = str(e)
+                results["emailError"] = redact_urls(e)
 
 
         if share_with_group and group_id:
@@ -5026,7 +5183,7 @@ class CloudManager:
 
             return {"error": f"Transfer failed: {per_project or result}"}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
 
     def get_my_group(self, group_name="My Sharing Group"):
@@ -5052,7 +5209,7 @@ class CloudManager:
                 "members": trimmed,
             }}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def add_group_member(self, email, group_name="My Sharing Group"):
         """Fetch the current group so we have the member list to echo back,
@@ -5079,7 +5236,7 @@ class CloudManager:
                 added=[email], deleted=[], current_members=[])
             return {"ok": True, "email": email}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def _project_names(self, ids):
         """Names for ids, in order, falling back to the id when unlisted."""
@@ -5281,7 +5438,7 @@ class CloudManager:
                     "groupId": group_id, "groupName": group_name_actual,
                     "message": msg}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def remove_group_member(self, email, group_name="My Sharing Group"):
         """Same pattern as add, but the captured remove payload includes
@@ -5302,7 +5459,7 @@ class CloudManager:
                 added=[], deleted=[email], current_members=members_raw)
             return {"ok": True, "email": email}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def toggle_group_share(self, project_id, group_id, group_name, role, enable):
         """Enable or disable the user's "My Sharing Group" on a project.
@@ -5322,7 +5479,7 @@ class CloudManager:
             return {"ok": True, "enabled": bool(enable), "role": role,
                     "groupName": group_name}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def change_share_role(self, project_id, email, new_role):
         """Ekahau's API has no per-user role update — the toggle-userGroup
@@ -5368,7 +5525,7 @@ class CloudManager:
             return {"ok": True, "email": email, "role": new_role,
                     "message": message}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def move_local_to_site(self, esx_path, dest_folder_name, tidy_source=False):
         """Move a local .esx file into a site folder under output_dir.
@@ -5411,7 +5568,7 @@ class CloudManager:
                 out["removedFolder"] = str(src.parent)
             return out
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def merge_preview(self, src_path, dst_path):
         """Dry run: what would move from src into dst, and which files collide."""
@@ -5453,7 +5610,7 @@ class CloudManager:
             return {"srcName": src.name, "dstName": dst.name,
                     "nClean": len(files) - nconf, "nConflicts": nconf, "files": files}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def merge_preview_many(self, src_paths, dst_path):
         """Dry run for several source folders landing in one destination.
@@ -5554,7 +5711,7 @@ class CloudManager:
                     "nClean": total_clean, "nConflicts": total_conflicts,
                     "nCrossSource": total_cross}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def merge_execute_many(self, merges, dst_path):
         """Run several merges into one destination, in the order given.
@@ -5596,7 +5753,7 @@ class CloudManager:
                     "moved": moved, "overwritten": overwritten,
                     "keptboth": keptboth, "skipped": skipped}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def merge_execute(self, src_path, dst_path, ops):
         """Apply per-file operations. ops: [{rel, action}] where action is
@@ -5699,13 +5856,17 @@ class CloudManager:
                     "keptboth": keptboth, "skipped": skipped, "errors": errors[:20],
                     "srcEmpty": src_empty, "srcPath": str(src), "srcName": src.name}
         except Exception as e:
-            return {"error": str(e)}
+            return {"error": redact_urls(e)}
 
     def pick_folder(self):
         path = pick_folder_dialog(self.config.get("output_dir", ""))
         if path:
-            self.config["output_dir"] = path
-            save_config(self.config)
+            why = unsafe_project_folder(path)
+            if why:
+                return {"error": why}
+            cfg = self.config
+            cfg["output_dir"] = path
+            save_config(cfg)
             return {"path": path}
         return {"path": None}
 
@@ -5714,9 +5875,13 @@ class CloudManager:
         target = Path(path)
         if not target.is_dir():
             return {"error": f"Not a directory: {path}"}
+        why = unsafe_project_folder(target)
+        if why:
+            return {"error": why}
         resolved = str(target.resolve())
-        self.config["output_dir"] = resolved
-        save_config(self.config)
+        cfg = self.config
+        cfg["output_dir"] = resolved
+        save_config(cfg)
         return {"path": resolved}
 
     def mark_not_match(self, cloud_id, local_path, cloud_name="", local_name=""):

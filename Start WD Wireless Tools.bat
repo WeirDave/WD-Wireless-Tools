@@ -84,15 +84,26 @@ if not "%DEPS_STATUS%"=="0" (
     )
 )
 
-REM ---- Kill any stale instance on port 8675 -----------------------------------
-for /f "tokens=5" %%p in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":8675 "') do taskkill /PID %%p /F >nul 2>&1
+REM Everything from here is one parenthesised block, which cmd reads whole
+REM before running any of it. An update replaces this file while the old window
+REM is still waiting on python; read line by line, the window would resume at
+REM a stale offset in the new file and run half a command.
+REM PORT is set before the block because %PORT% is expanded when the block is
+REM read, not when it runs.
+if not defined PORT set "PORT=8675"
+(
+REM ---- Stop a stale WD Wireless Tools on the port this run will use -----------
+REM Only the port the app binds, and only a process that is running server.py.
+REM A different program on 8675, or an instance a second window started on
+REM another PORT, is left alone.
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr "LISTENING" ^| findstr ":%PORT% "') do powershell -NoProfile -Command "$p = Get-CimInstance Win32_Process -Filter 'ProcessId=%%p' -ErrorAction SilentlyContinue; if ($p -and $p.CommandLine -like '*server.py*') { Stop-Process -Id %%p -Force }" >nul 2>&1
 
 REM ---- Launch -----------------------------------------------------------------
 python server.py
 
 REM 75 is "restarted: a new tab is already running". Leaving cleanly closes this
 REM tab; killing the window leaves it open behind a non-zero exit.
-if %errorlevel%==75 exit /b 0
+if errorlevel 75 if not errorlevel 76 exit /b 0
 
 if errorlevel 1 (
     echo.
@@ -103,3 +114,5 @@ if errorlevel 1 (
 )
 
 pause
+exit /b
+)

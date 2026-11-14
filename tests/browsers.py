@@ -104,7 +104,7 @@ SWITCH = "WD_BROWSER_TESTS"
 def wanted() -> bool:
     """False only when `WD_BROWSER_TESTS=off`.
 
-    CI runs four jobs - Windows and macOS, Python 3.10 and 3.14 - and the
+    CI runs four jobs - Windows and macOS, Python 3.11 and 3.14 - and the
     browser tests drove Firefox, Chrome and Edge in all four. They check
     what a page does in a browser, which does not change with the Python
     running the harness, so three of those four runs repeated the fourth

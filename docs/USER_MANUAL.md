@@ -2517,7 +2517,7 @@ are kept.
 
 ## Install and Launch
 
-You need Windows or macOS, Python 3.10 or newer, and Chrome, Edge or Firefox.
+You need Windows or macOS, Python 3.11 or newer, and Chrome, Edge or Firefox.
 For Cloud Manager, one of those browsers must be signed in to Ekahau Cloud in
 a normal (not private) window.
 
@@ -2744,7 +2744,7 @@ terminal. Restarting never clears it; it keeps seven days and stays under
 
 | Problem | Fix |
 | --- | --- |
-| Python is not recognised | Install Python 3.10+, tick **Add python.exe to PATH**, reopen the terminal. The launcher prints these steps itself |
+| Python is not recognised | Install Python 3.11+, tick **Add python.exe to PATH**, reopen the terminal. The launcher prints these steps itself |
 | Packages fail to install | Run `python -m pip install -r requirements.txt` in the install folder. If pip is missing, run `python -m ensurepip --upgrade` first |
 | SmartScreen blocks the launcher | **More info → Run anyway**, once you are sure it came from this project's release page |
 | macOS will not open the launcher | Right-click it, choose **Open**, confirm **Open** |

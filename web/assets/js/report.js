@@ -797,14 +797,6 @@
     return out;
   }
 
-  function optionsDifferingFromSaved() {
-    var saved = reportOptionDefaults(currentReportId);
-    var now = collectSidebarValues();
-    return Object.keys(now).filter(function (k) {
-      return !(k in saved) ? now[k] !== shippedDefaultFor(k) : now[k] !== saved[k];
-    });
-  }
-
   /* Units and section size are suite settings with a per-report override, so
      "what this option starts at" is the setting rather than the value shipped
      in the option definition. Everything else starts at its own default.
@@ -828,23 +820,6 @@
     if (pref !== undefined && pref !== null && pref !== '') return pref;
     return opt.type === 'select' ? (opt.default || '') : !!opt.default;
   }
-
-  function shippedDefaultFor(id) {
-    var r = currentReport();
-    var opt = (r.sidebar || []).filter(function (o) { return o.id === id; })[0];
-    if (!opt) return undefined;
-    return optStartValue(opt);
-  }
-
-  window.saveReportOptionDefaults = function () {
-    if (!settingsAvailable) { showToast('No server, so there is nowhere to save these', 'warn'); return; }
-    var next = {};
-    Object.keys(savedReportDefaults || {}).forEach(function (k) { next[k] = savedReportDefaults[k]; });
-    next[currentReportId] = collectSidebarValues();
-    pushSettings({ report_defaults: next })
-      .then(function () { renderReportOpts(); showToast('Saved as your default for this report', 'success'); })
-      .catch(function (e) { showToast(e.message || 'Could not save', 'error'); });
-  };
 
   window.clearReportOptionDefaults = function () {
     if (!settingsAvailable) return;
@@ -1230,6 +1205,31 @@
     }
   }
 
+  /* Floor-plan sizes and AP coordinates go into SVG and style attributes by
+     concatenation all through this file (`viewBox`, `--w`, `cx`, `x1`...). In
+     a real project they are numbers; in a crafted one they can be a string
+     holding a quote, which closes the attribute and lets the file write markup
+     and CSS into the report. The strict CSP stops script, so this is spoofed
+     report content rather than code execution - but it is fixed once, here,
+     where the values enter, instead of escaping every one of the places that
+     draw them. Anything that is not a finite number becomes 0. */
+  function finiteOrZero(v) {
+    var n = (typeof v === 'number') ? v : Number(v);
+    return isFinite(n) ? n : 0;
+  }
+  function coerceDrawingNumbers(target) {
+    (target.floorPlans || []).forEach(function (f) {
+      if (!f || typeof f !== 'object') return;
+      ['width', 'height', 'metersPerUnit'].forEach(function (k) {
+        if (k in f) f[k] = finiteOrZero(f[k]);
+      });
+    });
+    (target.accessPoints || []).forEach(function (a) {
+      var c = a && a.location && a.location.coord;
+      if (c && typeof c === 'object') { c.x = finiteOrZero(c.x); c.y = finiteOrZero(c.y); }
+    });
+  }
+
   /* *zip* defaults to the open project. The Change / Audit report reads a
      second .esx through the same parser, and one parser reading two files is
      the point: an extraction that drifts between two copies is how the same
@@ -1370,6 +1370,7 @@
     target.antennas = {};
     ((ant && ant.antennaTypes) || []).forEach(function (a) { target.antennas[a.id] = a; });
     target.floorPlans = (fp && fp.floorPlans) || [];
+    coerceDrawingNumbers(target);
     target.images = {};
     ((img && img.images) || []).forEach(function (i) { target.images[i.id] = i; });
     target.buildings = {};

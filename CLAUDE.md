@@ -824,11 +824,11 @@ Traps:
   output.** `text=True` uses the locale - cp1252 on Windows - so a probe passes
   in CI and fails on his machine.
 
-- **CI runs Python 3.10 and 3.14; he runs 3.12.** A check on *how* the
+- **CI runs Python 3.11 and 3.14; he runs 3.12.** A check on *how* the
   interpreter reports something is a check on its version - e.g.
   `SyntaxWarning` vs `DeprecationWarning`. Assert that it happened, not its
   class or wording. Matrix: `[windows-latest, macos-latest]` x
-  `['3.10', '3.14']`.
+  `['3.11', '3.14']`.
 
 - **`zip_update` replaces a user's install and is now tested end to end** by
   `TheRealUpdateRunsTests` in

@@ -274,51 +274,6 @@
   // two drift apart.
   window.__ptReport = function () { return state.report; };
 
-  function renderFloors(res) {
-    if (!res.floors.length) {
-      $('ptFloors').innerHTML = '<div class="pt-empty">This project has no floor plans.</div>';
-      return;
-    }
-    $('ptFloors').innerHTML = res.floors.map(function (f) {
-      var right, badge;
-      if (f.action === 'trimmed') {
-        badge = 'Trim';
-        right = '<span class="pt-dims">' + f.oldSize[0] + '&times;' + f.oldSize[1] +
-                ' <span class="pt-arrow">&rarr;</span> ' + f.newSize[0] + '&times;' + f.newSize[1] +
-                '</span><span class="pt-saved">&minus;' + f.areaSavedPct + '% area</span>';
-      } else if (f.repaired) {
-        badge = 'Repair';
-        right = '<span class="pt-reason">White page behind the drawing restored</span>';
-      } else {
-        badge = f.action === 'skipped' ? 'Leave as is' : 'Refused';
-        right = '<span class="pt-reason">' + esc(f.reason || f.action) + '</span>';
-      }
-      return '<div class="pt-floor is-' + (f.action !== 'trimmed' && f.repaired ? 'repaired' : f.action) + '">' +
-               '<span class="pt-badge">' + badge + '</span>' +
-               '<span class="pt-floor-name">' + esc(f.name) + '</span>' +
-               right +
-             '</div>';
-    }).join('');
-
-    var n = res.trimmedCount;
-    var note = $('ptSizeNote');
-    if (!n && res.repairedCount) {
-      note.textContent = repairedSentence(res.repairedCount);
-    } else if (!n) {
-      note.textContent = 'Nothing to trim here — every floor plan is already tight, or cannot be ' +
-                         'cropped safely.';
-    } else {
-      // Empty canvas already compresses to almost nothing inside the .esx, so
-      // say up front that the file size will barely move. Otherwise a correct
-      // result reads like the tool did nothing.
-      note.innerHTML = n + ' of ' + res.floorCount + ' floor plan' +
-        (res.floorCount === 1 ? '' : 's') + ' will be cropped. ' +
-        '<strong>The file size will barely change</strong> — empty canvas already compresses to ' +
-        'almost nothing. What you gain is a plan that fills its page instead of sitting in one ' +
-        'corner of it.';
-    }
-  }
-
   // -------------------------------------------------------------------- trim
   window.ptTrim = function () {
     if (state.busy || !state.bytes || !hasWork(state.report)) return;

@@ -48,6 +48,10 @@ concurrency:
 
 jobs:
   decide:
+    # Only from main. The push trigger already is; a manual run from any other
+    # branch would read *that* branch's versions.json, run the suite on it and
+    # tag and publish its commit.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # This job only reads a file and asks whether a tag exists. The

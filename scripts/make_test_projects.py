@@ -108,12 +108,29 @@ def default_location() -> Path:
     return base / "WD-Cloud-Test"
 
 
+#: Written into a sandbox this script creates. It only wipes a folder that has
+#: it, because the target is whatever path was typed: pointing it at a real
+#: project folder used to `rmtree` it.
+SANDBOX_MARKER = ".wd-test-sandbox"
+
+
 def main():
-    target = Path(sys.argv[1]) if len(sys.argv) > 1 else default_location()
+    args = [a for a in sys.argv[1:] if a != "--force"]
+    force = "--force" in sys.argv[1:]
+    target = Path(args[0]) if args else default_location()
     if target.exists():
+        has_marker = (target / SANDBOX_MARKER).is_file()
+        if not has_marker and any(target.iterdir()) and not force:
+            print(f"Refusing to wipe {target}: it was not created by this "
+                  "script (no sandbox marker inside) and it is not empty.\n"
+                  "Pick a folder that does not exist, or pass --force if you "
+                  "are sure.")
+            raise SystemExit(2)
         print(f"Wiping existing sandbox at {target} ...")
         shutil.rmtree(target)
     target.mkdir(parents=True)
+    (target / SANDBOX_MARKER).write_text(
+        "created by scripts/make_test_projects.py\n", encoding="utf-8")
 
     total_files = 0
 

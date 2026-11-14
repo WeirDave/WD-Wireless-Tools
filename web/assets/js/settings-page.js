@@ -702,6 +702,18 @@
         + (same ? ' <span class="s-imp-same">' + same + ' already identical</span>' : '')
         + '</div>' + rows + '</div>';
     });
+    // Entries an import will not write: anything that is not a file an export
+    // itself produces, and the credential files. Named, so nothing is dropped
+    // without being said.
+    var refused = (p.files && p.files.refused) || [];
+    if (refused.length) {
+      detail += '<div class="s-imp-warn">' + refused.length + ' file'
+        + (refused.length === 1 ? ' in this export is' : 's in this export are')
+        + ' not a settings file and will be skipped: '
+        + refused.slice(0, 8).map(function (e) { return '<code>' + WD.esc(e.key) + '</code>'; }).join(', ')
+        + (refused.length > 8 ? ' and ' + (refused.length - 8) + ' more' : '')
+        + '.</div>';
+    }
     document.getElementById('sImportDetail').innerHTML = detail;
     document.getElementById('sImportApplyBtn').disabled = !p.willChangeAnything;
     WD.showModal('importModal');

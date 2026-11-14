@@ -21,9 +21,26 @@ if [ "$deps_status" -ne 0 ]; then
     fi
 fi
 
-lsof -ti tcp:8675 -sTCP:LISTEN 2>/dev/null | xargs -r kill -9 2>/dev/null
+# One function, called last, with `exit` after it: bash reads a script by byte
+# offset, and an update replaces this file while the old window is still
+# waiting on python. Everything it needs is read before the server starts.
+run_server() {
+    local port="${PORT:-8675}" pid
+    # Only the port this run will use, and only a process running server.py.
+    # SIGTERM first: SIGKILL gave a stale instance no chance to close cleanly.
+    for pid in $(lsof -ti tcp:"$port" -sTCP:LISTEN 2>/dev/null); do
+        if ps -p "$pid" -o command= 2>/dev/null | grep -q "server.py"; then
+            kill "$pid" 2>/dev/null
+            sleep 1
+            kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+        fi
+    done
 
-python3 server.py
+    python3 server.py
 
-echo
-echo "WD Wireless Tools has closed."
+    echo
+    echo "WD Wireless Tools has closed."
+}
+
+run_server
+exit $?

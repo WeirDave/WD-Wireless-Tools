@@ -34,6 +34,7 @@ tree disposable.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -42,6 +43,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -125,6 +128,14 @@ TAG_RE = re.compile(r"^v[0-9]+(?:\.[0-9]+)+$")
 GIT_TIMEOUT = 120
 LOCAL_GIT_TIMEOUT = 20
 NET_TIMEOUT = 60
+
+#: A release ZIP is a few megabytes. These bound a download that is not what it
+#: claims to be: `timeout=` is per read, so a server that trickles a byte a
+#: minute would hold a worker thread for as long as it liked, and nothing
+#: limited how much was written to disk. The checksum would reject the file
+#: afterwards; these stop it getting that far.
+DOWNLOAD_MAX_BYTES = 500 * 1024 * 1024
+DOWNLOAD_MAX_SECONDS = 15 * 60
 # Shorter than a fetch: this is a single ref listing, and it runs while someone
 # is waiting for a panel to open.
 GIT_LS_REMOTE_TIMEOUT = 30
@@ -833,7 +844,7 @@ def remote_release_tag(root: Path | None = None, cfg: AppConfig = CONFIG):
     for line in (proc.stdout or "").splitlines():
         _, _, ref = line.partition("refs/tags/")
         tag = ref.strip()
-        if not tag or not re.match(r"^v\d+(\.\d+)*$", tag):
+        if not tag or not TAG_RE.match(tag):
             continue
         if best is None or cmp_version(tag, best) > 0:
             best = tag
@@ -1172,14 +1183,27 @@ def releases_since(current: str, cfg: AppConfig = CONFIG,
 
 def _download(url: str, dest: Path):
     import requests
+    if not str(url).startswith("https://"):
+        raise UpdateError("Refusing to download a release over anything but "
+                          "HTTPS.")
+    started = time.monotonic()
+    written = 0
     try:
         with requests.get(url, stream=True, timeout=NET_TIMEOUT) as r:
             if not r.ok:
                 raise UpdateError(f"Download failed (HTTP {r.status_code}): {url}")
             with open(dest, "wb") as f:
                 for chunk in r.iter_content(chunk_size=65536):
-                    if chunk:
-                        f.write(chunk)
+                    if not chunk:
+                        continue
+                    written += len(chunk)
+                    if written > DOWNLOAD_MAX_BYTES:
+                        raise UpdateError("Download is larger than any release "
+                                          "should be and was stopped.")
+                    if time.monotonic() - started > DOWNLOAD_MAX_SECONDS:
+                        raise UpdateError("Download took too long and was "
+                                          "stopped.")
+                    f.write(chunk)
     except UpdateError:
         raise
     except Exception as e:
@@ -1240,6 +1264,77 @@ def _discard_backup(backup: Path) -> str | None:
     """
     shutil.rmtree(backup, ignore_errors=True)
     return str(backup) if backup.exists() else None
+
+
+class _InstallRolledBack(Exception):
+    """The install failed and every directory is back as it was."""
+
+
+def _install_payload(tree: Path, root: Path, cfg: AppConfig = CONFIG):
+    """Put the new payload in place so that a failure leaves the old one.
+
+    This was `copy2` over each top-level file - `server.py` first - then
+    `rmtree` of each payload folder and a move of the new one. A file held
+    open on Windows (an antivirus scan is enough) stopped `rmtree` partway:
+    the new `server.py` sat beside a half-deleted `tools/`, and the user was
+    told to restore a backup by hand.
+
+    Now each folder is **renamed aside** - one operation that either happens
+    or does not - the new one is moved in, and only when everything is in
+    place are the old ones deleted. Top-level files are staged next to their
+    targets first and replaced last. Any failure puts the renamed folders
+    back; `_InstallRolledBack` says that worked, and any other exception means
+    it did not.
+    """
+    aside = []
+    staged = []
+    try:
+        for name in cfg.payload_dirs:
+            dest = root / name
+            old = root / f".{name}.wd-old"
+            if old.exists():
+                shutil.rmtree(old, ignore_errors=True)
+            if old.exists():
+                raise OSError(f"{old.name} from an earlier attempt is in the way")
+            if dest.is_dir():
+                os.replace(dest, old)
+                aside.append((dest, old))
+            shutil.move(str(tree / name), str(dest))
+        for name in cfg.payload_files:
+            tmp = root / f"{name}.wd-new"
+            shutil.copy2(tree / name, tmp)
+            staged.append((tmp, root / name))
+        for tmp, target in staged:
+            os.replace(tmp, target)
+        staged = []
+    except Exception as exc:
+        for tmp, _ in staged:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+        failed = []
+        for dest, old in reversed(aside):
+            try:
+                if dest.exists():
+                    shutil.rmtree(dest)
+                os.replace(old, dest)
+            except Exception as back:
+                failed.append(f"{dest.name}: {back}")
+        if failed:
+            raise OSError("; ".join(failed)) from exc
+        raise _InstallRolledBack(str(exc)) from exc
+    for _, old in aside:
+        shutil.rmtree(old, ignore_errors=True)
+    # `zipfile` does not restore mode bits, so a launcher extracted from the
+    # ZIP is not executable and macOS could not open it after an update.
+    if os.name != "nt":
+        for name in cfg.payload_files:
+            if name.endswith((".command", ".sh")):
+                try:
+                    os.chmod(root / name, 0o755)
+                except OSError:
+                    pass
 
 
 def zip_update(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
@@ -1357,13 +1452,11 @@ def zip_update(root: Path | None = None, log=None, cfg: AppConfig = CONFIG):
 
         say("Installing…")
         try:
-            for name in cfg.payload_files:
-                shutil.copy2(tree / name, root / name)
-            for name in cfg.payload_dirs:
-                dest = root / name
-                if dest.is_dir():
-                    shutil.rmtree(dest)
-                shutil.move(str(tree / name), str(dest))
+            _install_payload(tree, root, cfg)
+        except _InstallRolledBack as e:
+            raise UpdateError(
+                f"The update could not be installed ({e.__cause__ or e}) and "
+                "was undone. The install is as it was.", intact=True)
         except Exception as e:
             raise UpdateError(
                 f"Install failed partway through: {e}. "
@@ -1458,6 +1551,30 @@ def _dump_settings_first(reason: str, log=None):
     return result
 
 
+#: One update at a time. Two at once - a double click, a second tab - ran two
+#: `git checkout`s against one index, or interleaved a `rmtree` with a move.
+_update_lock = threading.Lock()
+
+
+def update_running() -> bool:
+    """True while an update is in progress (the restart route checks this)."""
+    return _update_lock.locked()
+
+
+def _single_flight(fn):
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        if not _update_lock.acquire(blocking=False):
+            raise UpdateError("An update is already running. Wait for it to "
+                              "finish.", intact=True)
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            _update_lock.release()
+    return run
+
+
+@_single_flight
 def perform_update(mode: str | None = None, channel: str = "release", log=None,
                    install_git_if_missing: bool = False, cfg: AppConfig = CONFIG):
     """Run the correct update for this install.  `mode` forces a path."""
@@ -1500,6 +1617,14 @@ def perform_update(mode: str | None = None, channel: str = "release", log=None,
     if chosen == "convert":
         return convert_to_git(log=log, install_git_if_missing=install_git_if_missing, cfg=cfg)
     if chosen == "zip":
+        # A ZIP update rewrites the install folder and deletes what the ZIP
+        # does not ship, which on a git checkout is tracked files - and every
+        # later git update then refuses on "local edits". It is for an install
+        # that is a ZIP.
+        if info["method"] != "zip":
+            raise UpdateError(
+                "This install is updated with git, not from a ZIP, so a ZIP "
+                "update was not run.")
         return zip_update(log=log, cfg=cfg)
     raise UpdateError(
         "This install can't update itself automatically. "

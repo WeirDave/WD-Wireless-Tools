@@ -108,7 +108,7 @@ function Install-Git {
 # because the alternative - what this used to do - is a green "installed"
 # message in front of an app that will not start, with nothing saying why.
 $PythonMinMajor = 3
-$PythonMinMinor = 10
+$PythonMinMinor = 11
 $PythonWingetId = 'Python.Python.3.12'
 
 function Test-PythonStoreStub {
@@ -463,6 +463,15 @@ try {
                "them, then run this again.")
       }
 
+      # Commits that exist nowhere else. A tag checkout detaches HEAD, and from
+      # a branch holding unpushed work that leaves the work reachable only by
+      # reflog. In-app updates refuse the same case (is_dev_checkout).
+      $ahead = @(Invoke-Git -Arguments @('rev-list', '--count', '@{u}..HEAD') -WorkDir $target -AllowFailure)
+      if ($ahead.Count -gt 0 -and "$($ahead[0])".Trim() -match '^[1-9][0-9]*$') {
+        throw ("This install has $("$($ahead[0])".Trim()) commit(s) that are not pushed anywhere, and an update " +
+               "would leave them behind. Nothing was changed. Push or move them, then run this again.")
+      }
+
       Write-Step "Checking out $label…"
       Invoke-Git -Arguments @('-c', 'advice.detachedHead=false', 'checkout', '--force', $ref) -WorkDir $target | Out-Null
       $newVersion = Get-SuiteVersion $target
@@ -545,7 +554,35 @@ try {
         # catch below must not claim otherwise.
         $script:partway = if ($backup) { $backup } else { $target }
         New-Item -ItemType Directory -Path $target -Force | Out-Null
-        Copy-Item -Path (Join-Path $tree '*') -Destination $target -Recurse -Force
+        # The shipped folders are replaced, not merged: a module or page
+        # removed in a release would otherwise stay on disk - and web/ is
+        # served as it stands. Each is renamed aside first and put back if the
+        # copy fails, so the install is the old one or the new one.
+        $payloadDirs = @('tools', 'web', 'templates', 'docs')
+        $aside = @()
+        try {
+          foreach ($d in $payloadDirs) {
+            $p = Join-Path $target $d
+            $old = Join-Path $target ".$d.wd-old"
+            if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force }
+            if (Test-Path -LiteralPath $p) {
+              Rename-Item -LiteralPath $p -NewName ".$d.wd-old"
+              $aside += $d
+            }
+          }
+          Copy-Item -Path (Join-Path $tree '*') -Destination $target -Recurse -Force
+        } catch {
+          foreach ($d in $aside) {
+            $p = Join-Path $target $d
+            $old = Join-Path $target ".$d.wd-old"
+            if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue }
+            if (Test-Path -LiteralPath $old) { Rename-Item -LiteralPath $old -NewName $d -ErrorAction SilentlyContinue }
+          }
+          throw
+        }
+        foreach ($d in $aside) {
+          Remove-Item -LiteralPath (Join-Path $target ".$d.wd-old") -Recurse -Force -ErrorAction SilentlyContinue
+        }
 
         $script:partway = $null
         if ($currentVersion) { Write-Ok "Updated v$currentVersion -> v$newVersion" }

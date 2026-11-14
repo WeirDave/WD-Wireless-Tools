@@ -11,7 +11,7 @@ python -m unittest discover -s tests -v
 ```
 
 GitHub Actions runs the same suite automatically on Windows and macOS with
-both the minimum supported Python 3.10 and current Python 3.14. A release tag
+both the minimum supported Python 3.11 and current Python 3.14. A release tag
 must pass all four combinations before GitHub publishes its ZIP.
 
 The suite currently checks:

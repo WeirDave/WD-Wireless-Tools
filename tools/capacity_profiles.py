@@ -28,6 +28,8 @@ import re
 import zipfile
 from pathlib import Path
 from tools.user_dir import user_dir
+from tools import esx_guard
+from tools import atomic_write
 
 USER_DIR = user_dir() / "capacity"
 HERE = Path(__file__).resolve().parent
@@ -106,7 +108,7 @@ def extract(esx_path) -> dict:
     only once an occupant count is supplied - see `derive_template`.
     """
     esx_path = Path(esx_path)
-    with zipfile.ZipFile(esx_path) as zf:
+    with esx_guard.open_zip(esx_path) as zf:
         members = _read_members(zf)
 
     areas = (members.get("areas.json") or {}).get("areas", [])
@@ -509,7 +511,7 @@ def save_template(template: dict, replaces: str | None = None) -> dict:
     body = dict(template)
     body.pop("_file", None)
     body.pop("_builtin", None)
-    path.write_text(json.dumps(body, indent=2), encoding="utf-8")
+    atomic_write.write_json(path, body)
     if old is not None and not same:
         # Renamed in the editor: the old file goes, so one template does not
         # become two. Only after the new one is written.
@@ -545,7 +547,6 @@ def delete_template(filename: str) -> dict:
 # very thing this is avoiding.
 
 AREA_PAD_M = 0.5
-BASIS_ORDER = ("walls", "aps", "image", "canvas")
 
 
 def _bbox(points):
@@ -918,7 +919,7 @@ def plan_application(esx_path, template, occupants, replace_existing=False,
     told the run to keep.
     """
     esx_path = Path(esx_path)
-    with zipfile.ZipFile(esx_path) as zf:
+    with esx_guard.open_zip(esx_path) as zf:
         members = _read_members(zf)
 
     default_existing = existing if existing in EXISTING_CHOICES else (
@@ -1325,7 +1326,7 @@ def apply_to(src_path, dest_path, template, occupants,
     if not plan.get("ok"):
         return plan
 
-    with zipfile.ZipFile(src_path) as zf:
+    with esx_guard.open_zip(src_path) as zf:
         members = _read_members(zf)
         raw_names = [i.filename for i in zf.infolist()]
 
@@ -1485,7 +1486,7 @@ def apply_to(src_path, dest_path, template, occupants,
     tmp_fd, tmp_name = tempfile.mkstemp(suffix=".esx", dir=str(dest_path.parent))
     os.close(tmp_fd)
     try:
-        with zipfile.ZipFile(src_path) as zin, \
+        with esx_guard.open_zip(src_path) as zin, \
                 zipfile.ZipFile(tmp_name, "w", zipfile.ZIP_DEFLATED) as zout:
             for name in raw_names:
                 if name in members:

@@ -175,14 +175,61 @@ def _read_payload(path: Path) -> dict | None:
             "bytes": len(raw)}
 
 
+def importable_name(rel) -> str | None:
+    """The name a bundle entry may be written under, or None to refuse it.
+
+    An import used to write any key that landed inside the user directory and
+    refused the credential files by exact spelling. NTFS does not tell
+    `Cookies.json` from `cookies.json`, so the spelling that slipped past the
+    list was the file `load_cookies_from_disk` migrates into the encrypted
+    session store - a bundle could plant a Cloud session on a machine that had
+    none. Nothing outside what an export itself writes is accepted now, and
+    each part is compared case-folded with trailing dots and spaces removed,
+    which is how Windows reads a name.
+    """
+    if not isinstance(rel, str) or not rel.strip():
+        return None
+    parts = rel.replace("\\", "/").split("/")
+    if rel.startswith(("/", "\\")) or any(
+            p in ("", ".", "..") or ":" in p for p in parts):
+        return None
+    folded = [p.rstrip(". ").casefold() for p in parts]
+    if any(p in {n.casefold() for n in NEVER_EXPORT} for p in folded):
+        return None
+    if any(p.startswith(".") or not p for p in folded):
+        return None
+    if len(parts) == 1:
+        for name in EXPORT_FILES:
+            if folded[0] == name.casefold():
+                return name
+        return None
+    for folder in EXPORT_DIRS:
+        if folded[0] == folder.casefold():
+            return "/".join([folder] + [p.rstrip(". ") for p in parts[1:]])
+    return None
+
+
 def _write_payload(path: Path, payload: dict) -> None:
+    """Write one bundle entry atomically: a temp file beside it, then a rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     if "json" in payload:
-        path.write_text(json.dumps(payload["json"], indent=2), encoding="utf-8")
+        data = json.dumps(payload["json"], indent=2).encode("utf-8")
     elif "text" in payload:
-        path.write_text(payload["text"], encoding="utf-8")
+        data = payload["text"].encode("utf-8")
     elif "base64" in payload:
-        path.write_bytes(base64.b64decode(payload["base64"]))
+        data = base64.b64decode(payload["base64"])
+    else:
+        return
+    tmp = path.with_name(path.name + ".wd-import.tmp")
+    try:
+        tmp.write_bytes(data)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def _collect_files(root: Path) -> dict:
@@ -338,9 +385,13 @@ def preview_import(bundle: dict, browser: dict | None = None,
     result["settings"] = _diff_map(incoming_settings, current_settings, known)
 
     incoming_files = bundle.get("files") or {}
-    file_diff = {"add": [], "change": [], "same": []}
+    file_diff = {"add": [], "change": [], "same": [], "refused": []}
     for rel in sorted(incoming_files):
-        here = root / rel
+        name = importable_name(rel)
+        if name is None:
+            file_diff["refused"].append({"key": str(rel)})
+            continue
+        here = root / name
         payload = incoming_files[rel]
         if not here.is_file():
             file_diff["add"].append({"key": rel, "new": _describe(payload)})
@@ -551,6 +602,10 @@ def apply_import(bundle: dict, sections=("settings", "files"),
     root = Path(root) if root else _user_dir()
     want = set(sections or ())
     backup = backup_current(root=root, keep=keep)
+    # `backup_current` copies settings.json only, and an import can also
+    # overwrite templates and the share list. A full export goes aside first;
+    # it never stops the import (auto_dump reports its own failure).
+    auto_dump("import", root=root)
 
     applied = {"settings": 0, "files": []}
     if "settings" in want:
@@ -575,15 +630,16 @@ def apply_import(bundle: dict, sections=("settings", "files"),
             # resolves outside the user directory and passed. See
             # tools/safe_path.py - the same spelling was in the release
             # archive guard, and both are component comparisons now.
-            target = root / rel
+            name = importable_name(rel)
+            if name is None:
+                applied.setdefault("refused", []).append(rel)
+                continue
+            target = root / name
             if not is_within(target, root):
                 applied.setdefault("refused", []).append(rel)
                 continue
-            if any(part in NEVER_EXPORT for part in Path(rel).parts):
-                applied.setdefault("refused", []).append(rel)
-                continue
             _write_payload(Path(os.path.normpath(target)), payload)
-            applied["files"].append(rel)
+            applied["files"].append(name)
 
     browser_back = {}
     if "browser" in want:

@@ -69,7 +69,11 @@ def split_addresses(text: str) -> list[str]:
     # position is quadratic on a long plain list.
     cleaned = text
     if "<" in text:
-        cleaned = re.sub(r'(?:"[^"]*"|[^<>,;\r\n"])*<([^<>]+)>', r"\1 ", text)
+        # Bounded: a display name is a few words. Unbounded, a long run of
+        # text with one stray `<` was quadratic - 0.9 s at 8,000 characters -
+        # and ran on a request thread.
+        cleaned = re.sub(r'(?:"[^"]{0,200}"|[^<>,;\r\n"]){0,200}<([^<>]+)>',
+                         r"\1 ", text)
     out, seen = [], set()
     for chunk in _SEPARATORS.split(cleaned):
         candidate = chunk.strip().strip("<>,;").lower()
@@ -104,6 +108,20 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
+def _as_int(value, default: int) -> int:
+    """An integer from a stored field, or *default* for anything else.
+
+    The file can be edited, or arrive in a settings import, and `int("many")`
+    or `int(1e999)` raised out of `recent()`, `remember()` and `forget()` - in
+    `add_shares`, after the shares themselves had succeeded.
+    """
+    try:
+        n = int(value or default)
+    except (TypeError, ValueError, OverflowError):
+        return default
+    return n if abs(n) < 10**12 else default
+
+
 def _load() -> dict:
     path = store_path()
     try:
@@ -125,8 +143,8 @@ def _load() -> dict:
         clean.append({
             "email": email,
             "lastUsed": str(entry.get("lastUsed") or ""),
-            "count": int(entry.get("count") or 1),
-            "seq": int(entry.get("seq") or 0),
+            "count": _as_int(entry.get("count"), 1),
+            "seq": _as_int(entry.get("seq"), 0),
         })
     try:
         next_seq = int(data.get("nextSeq") or 0)

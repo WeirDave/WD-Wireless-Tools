@@ -22,6 +22,7 @@ import json
 import shutil
 from pathlib import Path
 from tools.user_dir import user_dir
+from tools import atomic_write
 
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
@@ -33,9 +34,6 @@ TPL_SUFFIX = "_walltemplate.json"
 DEFAULTS_FILE = BUILTIN_DIR / "ekahau_defaults.json"
 HIDDEN_NAME = "hidden.json"
 MIGRATED_NAME = ".migrated"
-
-# Back-compat alias — older code referenced the single combined directory.
-TPL_DIR = USER_DIR
 
 
 # Derived paths are computed per call, not frozen at import, so patching
@@ -59,8 +57,18 @@ def _load_hidden() -> set:
 
 def _save_hidden(hidden: set) -> None:
     USER_DIR.mkdir(parents=True, exist_ok=True)
-    with open(_hidden_file(), "w") as f:
-        json.dump({"hidden": sorted(hidden)}, f, indent=2)
+    atomic_write.write_json(_hidden_file(), {"hidden": sorted(hidden)})
+
+
+def _bad_template_name(filename) -> bool:
+    """A name that is not one plain file name.
+
+    A colon is refused as well as separators and `..`: on Windows `C:x` is a
+    drive-relative path, which `Path / "C:x"` resolves somewhere else entirely.
+    """
+    return (not isinstance(filename, str) or not filename.strip()
+            or ".." in filename or "/" in filename or "\\" in filename
+            or ":" in filename)
 
 
 #: The template files this repository ships, by name. **A list, not a scan.**
@@ -286,8 +294,7 @@ class TemplateStore:
             "wallTypes": wall_types,
         }
 
-        with open(filepath, "w") as f:
-            json.dump(tpl, f, indent=2)
+        atomic_write.write_json(filepath, tpl)
 
         hidden = _load_hidden()
         if filename in hidden:
@@ -309,7 +316,7 @@ class TemplateStore:
 
     def reset(self, filename: str) -> dict:
         """Drop the user's copy so the shipped built-in shows through again."""
-        if '..' in filename or '/' in filename or '\\' in filename:
+        if _bad_template_name(filename):
             return {"ok": False, "error": "Invalid filename"}
         if not (BUILTIN_DIR / filename).is_file():
             return {"ok": False, "error": f"No built-in template named {filename}"}
@@ -324,7 +331,7 @@ class TemplateStore:
 
     def delete(self, filename: str) -> dict:
         """Delete a user template.  Built-ins are tombstoned, not removed."""
-        if '..' in filename or '/' in filename or '\\' in filename:
+        if _bad_template_name(filename):
             return {"ok": False, "error": "Invalid filename"}
 
         filepath = USER_DIR / filename
