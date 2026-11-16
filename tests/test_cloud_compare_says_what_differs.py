@@ -181,10 +181,9 @@ class TheListIsOnTheRealRowTests(unittest.TestCase):
             raise AssertionError((r.stdout + r.stderr).strip())
         html = json.loads(r.stdout)["html"]
         self.assertIn("Real changes", html)
-        #: Which copy is later sits beside what differs, so the choice of
-        #: side can be made from the row. The row above is cloud_newer.
-        self.assertIn("The cloud copy has the later date.", html)
-        self.assertNotIn("Your local file has the later date.", html)
+        #: Which copy is newer is a tag on that side's cell
+        #: (`test_cloud_newer_side_is_marked`), not a sentence here.
+        self.assertNotIn("later date", html)
         self.assertIn("access points: 3 changed - fields: location", html)
 
 

@@ -195,11 +195,12 @@ class AnActionSitsUnderTheSideItChanges(unittest.TestCase):
             "a control that writes the local file is under the cloud column: "
             "%s" % (band,))
 
-    def test_a_download_is_on_the_local_side(self):
-        """Downloading replaces the file on disk."""
-        self.assertTrue(any("download" in x.lower() for x in self.out["cloudNewer"]["local"]),
+    def test_replacing_the_local_file_is_on_the_local_side(self):
+        """Taking the cloud copy over the file on disk changes the file on
+        disk, so the button is under the local column."""
+        self.assertTrue(any("replace local" in x.lower() for x in self.out["cloudNewer"]["local"]),
                         self.out["cloudNewer"])
-        self.assertFalse(any("download" in x.lower() for x in self.out["cloudNewer"]["cloud"]))
+        self.assertFalse(any("replace local" in x.lower() for x in self.out["cloudNewer"]["cloud"]))
 
     def test_replacing_the_cloud_copy_is_on_the_cloud_side(self):
         """This one deletes and re-uploads the cloud project, so the left lane

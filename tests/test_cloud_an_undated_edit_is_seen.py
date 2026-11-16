@@ -249,12 +249,14 @@ class TheRowSaysWhatHappenedTests(unittest.TestCase):
         cls.out = json.loads(r.stdout)
 
     def test_it_does_not_claim_a_later_date_it_does_not_have(self):
-        """Both dates on this row are the same; "later date" would be false."""
+        """Both dates on this row are the same; a date sentence would be false."""
         self.assertNotIn("later date", self.out["undated"])
         self.assertIn("date inside it did not change", self.out["undated"])
 
     def test_an_ordinary_local_newer_row_is_unchanged(self):
-        self.assertIn("later date", self.out["dated"])
+        #: Which side is newer is the tag on that side now, not a sentence.
+        self.assertIn("A real change, or only the name?", self.out["dated"])
+        self.assertNotIn("later date", self.out["dated"])
         self.assertNotIn("date inside it did not change", self.out["dated"])
 
 

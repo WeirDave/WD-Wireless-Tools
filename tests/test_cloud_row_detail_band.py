@@ -313,7 +313,7 @@ class ItStopsContradictingItsOwnFindingTests(unittest.TestCase):
     def test_an_unproven_or_differing_row_keeps_the_normal_wording(self):
         badge = self.out["differsBadge"]
         self.assertNotIn("is-demoted", badge)
-        self.assertIn("download", badge)
+        self.assertIn("replace local", badge.lower())
 
 
 class ThreeLevelsGetThreeTreatmentsTests(unittest.TestCase):

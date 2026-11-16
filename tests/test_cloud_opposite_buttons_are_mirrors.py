@@ -172,14 +172,24 @@ class OppositeButtonsAreMirrors(unittest.TestCase):
 
     def test_both_directions_carry_the_same_weight(self):
         for name in ("projectMismatch", "siteMismatch", "cloudNewerUnchecked",
-                     "cloudNewerDiffers", "cloudNewerRenamed", "moved",
-                     "folderRenamed"):
+                     "cloudNewerRenamed", "moved", "folderRenamed"):
             with self.subTest(name):
                 c, l = self.pair(name)
                 self.assertEqual(
                     weight(c), weight(l),
                     f"{name}: '{c['label']}' is {weight(c)} but "
                     f"'{l['label']}' is {weight(l)}")
+
+    def test_a_compared_difference_fills_the_newer_sides_button_only(self):
+        """The exception to the rule above, and the only one: once the two
+        files have been compared and really differ, the row does recommend a
+        direction - the newer copy over the older - so that button is filled,
+        exactly as "Local newer - replace cloud" already was. The opposite
+        direction stays an outlined button, never bare text."""
+        c, l = self.pair("cloudNewerDiffers")
+        self.assertEqual(weight(l), ["primary"], l["label"])
+        self.assertNotIn("primary", c["cls"], c["label"])
+        self.assertNotIn("quiet", c["cls"], c["label"])
 
     def test_a_direction_is_never_drawn_as_bare_text(self):
         """`quiet` has no border and no background. On a direction it is a

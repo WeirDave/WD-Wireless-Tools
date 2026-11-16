@@ -315,7 +315,7 @@ sections before you use them for the first time.
 4. Press **⇅ Sync everything**. Read the plan, untick anything you are unsure
    of, and press the **Sync** button at the bottom.
 5. To do one file only, use the button in the band under its row, such as
-   **Cloud newer · download** or **Local newer · replace cloud**.
+   **Cloud newer · replace local** or **Local newer · replace cloud**.
 
 ### Signing in and the folder
 
@@ -455,9 +455,13 @@ them and use **Fix names inside files**, which sets the name inside each
 
 ### Which side is newer
 
-When a pair differs, the band under the row says so and offers the action.
+When a pair differs, the copy that was saved last carries a **Newer** tag
+beside its date, and the band under the row offers the action. Each button
+sits under the side it changes: **Local newer · replace cloud** under the
+cloud, **Cloud newer · replace local** under the local file. Once the two have
+been compared, the one that matches the newer side is filled in.
 
-**Cloud newer · download** (or **Cloud renamed · download** when only the
+**Cloud newer · replace local** (or **Cloud renamed · replace local** when only the
 name changed in the cloud) replaces your local file with the cloud copy. It
 shows both dates and asks first. No second copy is kept on disk: the cloud
 copy is the other copy, and it is still there afterwards. If your local copy
@@ -2780,7 +2784,7 @@ Two things stand in its place:
   Quick Walls, PlanTrim, AP Labeler and Capacity save a new file and leave the
   original where it was. To overwrite, you pick the old file yourself.
 - **Cloud Manager is the one place that replaces a file you have, and there
-  the other copy is Ekahau's.** **Cloud newer · download** replaces your local
+  the other copy is Ekahau's.** **Cloud newer · replace local** replaces your local
   file with the cloud project, and that cloud project is still there
   afterwards — download again and you are back. No second copy is kept on
   your disk; it would be a copy of a copy.

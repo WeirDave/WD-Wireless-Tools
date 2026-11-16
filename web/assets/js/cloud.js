@@ -4868,11 +4868,7 @@ function rowDetailHtml(r, stripe) {
          copy was saved last, and that is the other half of choosing. The
          date sentence this replaced answered it, and was dropped the moment
          a comparison existed. */
-      const newer = stale === 'cloud_newer' ? ' The cloud copy has the later date.'
-                  : stale === 'local_newer' ? ' Your local file has the later date.'
-                  : '';
-      sentences.push(cmp.summary + checkedWhen(cmp)
-                     + (cmp.designDiffers ? newer : ''));
+      sentences.push(cmp.summary + checkedWhen(cmp));
     }
   } else if (stale === 'cloud_newer') {
     /* "what is the decision? Is that the last line where it says the cloud
@@ -4895,9 +4891,9 @@ function rowDetailHtml(r, stripe) {
          beside it is the rest of the sentence. Measured at his density: the
          long form put the same two lines of prose on seven consecutive rows,
          which is the noise this band exists to avoid. */
-      : 'The cloud copy has a later date. A real change, or just a rename?');
+      : 'A real change, or just a rename?');
   } else if (stale === 'local_newer' && r.localEditedUndated) {
-    /* The dates on this row agree, so "later date" would be false. The file
+    /* The dates on this row agree, so a date-based sentence would be false. The file
        changed size since it was last synced, and Ekahau left the date inside
        it alone - which is the edit the dates alone could never show. */
     sentences.push('Your local copy has been saved since it was last synced, '
@@ -4906,7 +4902,7 @@ function rowDetailHtml(r, stripe) {
     sentences.push(r.differenceKind === 'renamed'
       ? 'Your local copy was renamed — that is what moved its date, and no '
         + 'design change was detected.'
-      : 'Your local copy has a later date. A real change, or only the name?');
+      : 'A real change, or only the name?');
   }
 
   /* Proven identical in content, and still reported as different.
@@ -5339,8 +5335,8 @@ function stalenessBadgeHtml(r) {
       const label = provenSame
         ? 'Download anyway'
         : renamedOnly
-          ? 'Cloud renamed · download'
-          : 'Cloud newer · download';
+          ? 'Cloud renamed · replace local'
+          : 'Cloud newer · replace local';
       const why = renamedOnly
         ? 'The cloud copy was RENAMED, which is why its date moved - the name stored inside your local file is the old one. No design change was detected. Downloading brings the rename across and replaces your local file with the copy Ekahau is holding.'
         : 'The cloud copy was edited more recently and the names agree, so this is a real change rather than a rename. Downloading replaces your local one with the copy Ekahau is holding.';
@@ -5353,7 +5349,12 @@ function stalenessBadgeHtml(r) {
          for the read-only check, the one action here with an opinion behind it
          (a date on its own does not say the design changed, which is the whole
          reason Check exists). */
-      const weight = provenSame ? ' is-demoted' : '';
+      /* The mirror of "Local newer · replace cloud", and drawn the same way: it
+         is filled once something has actually been compared, and not on a date
+         alone. The two used to disagree - one filled, one outlined - so the
+         same situation read as a recommendation from one side and as nothing
+         from the other. */
+      const weight = provenSame ? ' is-demoted' : (cmp ? ' primary' : '');
       /* The other answer to "the cloud is newer": keep the local one. Gated on
          owning the project because the replace deletes it. */
       const notMine = ownershipBlock(r.cloud);
@@ -5624,8 +5625,16 @@ function cloudCell(r, localCodes) {
   /* On Flat, where the project lives is the point of the view, so it is
      shown; on Tree the site is the row above. */
   const where = locationDiffers(r) ? locationHtml(c.siteName, 'cloud') : '';
+  /* Which side is newer is said on the side, not in a sentence under the row.
+     "The cloud copy has the later date" made him ask which one that meant, and
+     a word beside the date answers it where he is already looking. Only while
+     the pair is still out of step: a pair whose comparison settled it has
+     nothing newer about it any more. Inline, because probes slice this
+     function out on its own. */
+  const newerTag = (!isSites && r.staleness === 'cloud_newer' && isOutOfSync(r))
+    ? ` <span class="newer-tag" title="The cloud copy was saved more recently than the local file.">Newer</span>` : '';
   const meta = isSites ? siteDigestHtml(r)
-    : `${where}<span class="cell-meta">${e(c.meta || '')}</span>`;
+    : `${newerTag}${where}<span class="cell-meta">${e(c.meta || '')}</span>`;
 
   /* Everything below that writes to Ekahau is refused up front on a project
      somebody else owns. `Check what differs` is not - it downloads a copy and
@@ -5702,7 +5711,15 @@ function localCell(r, cloudCodes) {
   const flagged = l.name.charAt(0) === '!';
   const srcUI = hasContents ? previewBadge(l) : '';
   const where = locationDiffers(r) ? locationHtml(l.folder, 'local') : '';
-  const meta = `${where}<span class="cell-meta">${e(l.meta || '')}</span>`;
+  /* Which side is newer is said on the side, not in a sentence under the row.
+     "The cloud copy has the later date" made him ask which one that meant, and
+     a word beside the date answers it where he is already looking. Only while
+     the pair is still out of step: a pair whose comparison settled it has
+     nothing newer about it any more. Inline, because probes slice this
+     function out on its own. */
+  const newerTag = (!isSites && r.staleness === 'local_newer' && isOutOfSync(r))
+    ? ` <span class="newer-tag" title="The local file was saved more recently than the cloud copy.">Newer</span>` : '';
+  const meta = `${newerTag}${where}<span class="cell-meta">${e(l.meta || '')}</span>`;
 
   const menu = rowMenu([
     menuItem('folder', `Show in ${navigator.platform.indexOf('Mac') >= 0 ? 'Finder' : 'Explorer'}`, 'revealInExplorer', [np(l.path)]),

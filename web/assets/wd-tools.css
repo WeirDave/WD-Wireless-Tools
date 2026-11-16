@@ -2956,6 +2956,17 @@ body.tool-cloud .toolbar .clear-search:hover {
   padding: 0 4px;
 }
 
+/* Which copy was saved last, said on the copy itself. It sits beside the date
+   it is about, and uses the status colour for "this is the one to trust", not
+   a brand colour. */
+.newer-tag {
+  flex: 0 0 auto; white-space: nowrap;
+  margin-right: 8px; padding: 0 6px;
+  font-size: 11px; font-weight: 600; letter-spacing: .02em;
+  text-transform: uppercase;
+  color: var(--ok); border: 1px solid var(--ok); border-radius: var(--r-xs);
+}
+
 /* A filter that hides rows announces itself here. The old version of this
    filter hid rows with nothing but a highlighted toolbar button to say so,
    and a short list read as missing data. */
@@ -12793,7 +12804,7 @@ body.tool-cloud :is(.lr-cell .cell-name, .ledger.tree .tree-parent .lr-cell .cel
   font-size: 15px;
 }
 body.tool-cloud .lr-cell.child-row .cell-name { font-size: 14px; }
-body.tool-cloud :is(.cell-meta, .owner-tag, .shared-tag, .ptype-tag, .lr-cell .ptype-tag,
+body.tool-cloud :is(.cell-meta, .newer-tag, .owner-tag, .shared-tag, .ptype-tag, .lr-cell .ptype-tag,
   .match-badge, .glh-letter, .lh-cell, .jump-letter, .owner-toggle-label,
   .view-btn, .ghost-add) { font-size: 13px; }
 body.tool-cloud :is(.row-detail .rd-text, .ub-text, .own-note-text,
