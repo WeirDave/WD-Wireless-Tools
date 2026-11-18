@@ -140,7 +140,10 @@ const bar = barMatch ? strip(barMatch[1]) : '';
 console.log(JSON.stringify({
   digest,
   childRows,
-  numbersInDigest: (digest.match(/\d+/g) || []).map(Number),
+  // A "5 ... hidden" clause counts rows that are NOT drawn, and says so;
+  // it is a different number from the ones this test holds to the rows.
+  numbersInDigest: (digest.split('\u00b7').filter(t => !/hidden/.test(t))
+    .join(' ').match(/\d+/g) || []).map(Number),
   saysNeedsADecision: /needs? a decision/.test(digest),
   bar,
   barIsAboveTheLedger: html.indexOf('uncompared-bar') >= 0

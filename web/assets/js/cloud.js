@@ -3013,6 +3013,7 @@ function renderSitesTree(hit, pass, passOwner, ownerFilterActive, projPass) {
          every site. */
       r.digest = siteDigest(children, {
         passOwner,
+        ownerMode: ownerFilter(),
         passFilter: activeFilter === 'all' ? null : (projPass || pass),
       });
       {
@@ -3681,7 +3682,8 @@ function siteDigest(children, opts) {
     status: 'orphan', cloud: null, local: l, paired: false }));
 
   const total = rows.length;
-  let visible = o.passOwner ? rows.filter(o.passOwner) : rows;
+  const ownerVisible = o.passOwner ? rows.filter(o.passOwner) : rows;
+  let visible = ownerVisible;
   if (o.passFilter) visible = visible.filter(r => o.passFilter(r.status, r));
 
   let attention = 0, unpaired = 0;
@@ -3692,7 +3694,15 @@ function siteDigest(children, opts) {
     else if (r.namesDiffer || isOutOfSync(r)) attention++;
   });
   const shown = visible.length;
+  /* Who hid them. "2 of 7 files" with only two rows underneath left five
+     files that existed as a number and nowhere else: they belonged to other
+     people, and the Owner filter on Mine was hiding them. A count that
+     narrows has to say which control did it, so the two causes are kept
+     apart - `byOwner` is the Owner toggle, `byFilter` is the status filter. */
   return { total, shown, narrowed: shown !== total,
+           byOwner: total - ownerVisible.length,
+           byFilter: ownerVisible.length - shown,
+           ownerMode: o.ownerMode || 'all',
            attention, unpaired, ok: shown - attention - unpaired };
 }
 
@@ -3708,10 +3718,30 @@ function siteDigestHtml(r) {
 
   const plural = (n) => `${n} file${n === 1 ? '' : 's'}`;
   if (d.narrowed) {
-    const title = d.shown
-      ? `This site holds ${plural(d.total)}; ${d.shown} of them match the filter you have on.`
-      : `This site holds ${plural(d.total)}, none of which match the filter you have on.`;
+    /* Name the control that is hiding the rest. Owner first: it is the one
+       that is on by default (Mine) and the one a reader does not connect to
+       a count in a site's header. */
+    const ownerWord = d.ownerMode === 'mine' ? 'Mine'
+                    : d.ownerMode === 'others' ? 'Others' : '';
+    const ownerWho = d.ownerMode === 'others'
+      ? `${d.byOwner} of yours`
+      : `${d.byOwner} owned by someone else`;
+    const why = [];
+    if (d.byOwner) {
+      why.push(`${ownerWho} ${d.byOwner === 1 ? 'is' : 'are'} hidden by the Owner filter${ownerWord ? ' (' + ownerWord + ')' : ''}`
+        + ' - choose All in the toolbar to see ' + (d.byOwner === 1 ? 'it' : 'them'));
+    }
+    if (d.byFilter) {
+      why.push(`${d.byFilter} ${d.byFilter === 1 ? 'is' : 'are'} hidden by the status filter you have on`);
+    }
+    const title = `This site holds ${plural(d.total)}; ${d.shown} ${d.shown === 1 ? 'is' : 'are'} shown. `
+      + (why.length ? why.join('. ') + '.' : 'The rest are hidden by a filter.');
     const parts = [`${d.shown} of ${plural(d.total)}`];
+    if (d.byOwner) {
+      parts.push(d.ownerMode === 'others' ? `${d.byOwner} yours hidden`
+                                          : `${d.byOwner} from other owners hidden`);
+    }
+    if (d.byFilter) parts.push(`${d.byFilter} hidden by filter`);
     if (d.attention) parts.push(`${d.attention} need${d.attention === 1 ? 's' : ''} a decision`);
     if (d.unpaired) parts.push(`${d.unpaired} unpaired`);
     /* No "all in sync" under a filter. That is a claim about the site, and
