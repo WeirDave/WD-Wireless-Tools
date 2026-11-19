@@ -504,6 +504,7 @@
     }
     var seq = ++previewSeq;
     $('prepPreview').innerHTML = '<div class="prep-empty">Reading the project…</div>';
+    holdFooterHeight();
     setGo(false, '');
     fetch('/api/prep/plan' + query(), {
       method: 'POST', headers: { 'X-WD-Wireless-Tools': '1' },
@@ -511,11 +512,34 @@
     }).then(function (r) { return r.json(); }).then(function (r) {
       if (seq !== previewSeq) return;    // a newer preview has overtaken this one
       renderPreview(r);
+      releaseFooterHeight();
     }).catch(function (e) {
       if (seq !== previewSeq) return;
       $('prepPreview').innerHTML = '<div class="prep-empty">'
         + esc('Could not read that project: ' + e.message) + '</div>';
+      releaseFooterHeight();
     });
+  }
+
+  /* The footer's sentence is emptied while a preview is out and written again
+     when it returns, and the plan above it takes whatever height the footer
+     leaves. Letting the footer shrink for that moment moved the plan's whole
+     stage by a couple of lines each time a box was let go, and back again when
+     the answer arrived - the plan jumped up and down under the box being
+     drawn. The footer keeps its height until there is a sentence to put in it;
+     a sentence that really is a different length then moves the stage once. */
+  function holdFooterHeight() {
+    var el = $('prepGoNote');
+    // The rendered height, not offsetHeight: that one is rounded, and half a
+    // pixel short is still a shift.
+    if (el && el.style) {
+      var h = el.getBoundingClientRect ? el.getBoundingClientRect().height : el.offsetHeight;
+      el.style.minHeight = (h || 0) + 'px';
+    }
+  }
+  function releaseFooterHeight() {
+    var el = $('prepGoNote');
+    if (el && el.style) el.style.minHeight = '';
   }
 
   // How much drawing this sheet actually carries beyond the building, each

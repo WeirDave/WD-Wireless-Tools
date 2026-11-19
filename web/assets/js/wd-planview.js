@@ -61,10 +61,18 @@
       return { x: ix * pv.view.scale + pv.view.x, y: iy * pv.view.scale + pv.view.y };
     };
 
+    // Canvas pixels under the pointer. The ratio is the bitmap over the box it
+    // is shown in, not the display's pixel ratio: the two agree only while the
+    // bitmap is the right size, and for the moment the box around it has
+    // changed height (a caption rewrapping, a footer gaining a line) the
+    // bitmap is still the old size, drawn stretched. Using the ratio keeps the
+    // box he is drawing under the pointer through that.
     pv.point = function (e) {
       var r = cv.getBoundingClientRect();
       var dpr = window.devicePixelRatio || 1;
-      return { x: (e.clientX - r.left) * dpr, y: (e.clientY - r.top) * dpr };
+      var kx = r.width > 0 && cv.width > 0 ? cv.width / r.width : dpr;
+      var ky = r.height > 0 && cv.height > 0 ? cv.height / r.height : dpr;
+      return { x: (e.clientX - r.left) * kx, y: (e.clientY - r.top) * ky };
     };
 
     pv.size = function () {
@@ -100,6 +108,18 @@
       g.fillRect(tl.x, tl.y, w, h);
       g.drawImage(pv.img, tl.x, tl.y, w, h);
       if (opts.overlay) opts.overlay(g, pv);
+    };
+
+    // At most one redraw per frame. A mouse reports far more often than a
+    // screen repaints, and every report redrew the whole plan - the sheet
+    // itself, not just the box - so a drag did several times the work it
+    // could show. Without requestAnimationFrame (a test, a headless host) it
+    // draws at once.
+    var frame = 0;
+    pv.requestDraw = function () {
+      if (typeof window.requestAnimationFrame !== 'function') { pv.draw(); return; }
+      if (frame) return;
+      frame = window.requestAnimationFrame(function () { frame = 0; pv.draw(); });
     };
 
     // A new image is framed afresh; null clears the stage.
@@ -170,7 +190,7 @@
         pv.view.x = d.ox + (p.x - d.px);
         pv.view.y = d.oy + (p.y - d.py);
         pv.autoFramed = false;
-        pv.draw();
+        pv.requestDraw();
         return;
       }
       if (opts.onMove) opts.onMove(e, p, pv, true);
@@ -191,7 +211,44 @@
       pv.draw();
     }
 
+    // The stage changes size without the window doing so: the caption under
+    // it rewraps when a box is drawn, the footer's sentence changes when the
+    // preview comes back. The bitmap was only ever resized on a window resize,
+    // so each of those left the plan stretched into its new box - it jumped by
+    // a few percent up or down every time a box was let go, and the pointer
+    // and the box he was drawing disagreed until the next resize.
+    //
+    // A small change keeps the plan exactly where it is, anchored on the
+    // middle of the stage, so the sheet does not rescale under him. A large
+    // one - the window dragged to another size - refits a view he has not
+    // moved, as a window resize always did.
+    var REFIT_CHANGE = 0.15;
+    function followStage() {
+      if (!pv.img) return;
+      var r = cv.getBoundingClientRect();
+      var dpr = window.devicePixelRatio || 1;
+      var w = Math.max(1, Math.round(r.width * dpr));
+      var h = Math.max(1, Math.round(r.height * dpr));
+      if (w === cv.width && h === cv.height) return;
+      var ow = cv.width, oh = cv.height;
+      pv.size();
+      var big = !(ow > 0 && oh > 0) ||
+                Math.abs(w - ow) / ow > REFIT_CHANGE || Math.abs(h - oh) / oh > REFIT_CHANGE;
+      if (pv.autoFramed && big) {
+        pv.fit();
+      } else {
+        pv.view.x += (cv.width - ow) / 2;
+        pv.view.y += (cv.height - oh) / 2;
+      }
+      // Resizing a canvas clears it: drawn in this same task, before it paints.
+      pv.draw();
+    }
+
     function onContext(e) { e.preventDefault(); }
+
+    var watcher = typeof window.ResizeObserver === 'function'
+      ? new window.ResizeObserver(followStage) : null;
+    if (watcher) watcher.observe(stage);
 
     stage.addEventListener('wheel', onWheel, { passive: false });
     cv.addEventListener('mousedown', onDown);
@@ -210,6 +267,9 @@
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       window.removeEventListener('resize', onResize);
+      if (watcher) watcher.disconnect();
+      if (frame && typeof window.cancelAnimationFrame === 'function') window.cancelAnimationFrame(frame);
+      frame = 0;
       if (typeof unsubPan === 'function') unsubPan();
     };
 
@@ -378,7 +438,7 @@
         if (drag.mode.indexOf('e') >= 0) b[2] = at.x;
       }
       opts.set(clampBox(normaliseBox(b), s));
-      pv.draw();
+      pv.requestDraw();
     };
 
     ed.onUp = function (e, p, pv) {

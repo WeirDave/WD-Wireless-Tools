@@ -209,6 +209,153 @@ console.log(JSON.stringify([refitted !== 999, held === pv.view.x]));
         self.assertEqual(out, [True, True])
 
 
+FOLLOW_SETUP = r"""
+let rect = { left: 0, top: 0, width: 400, height: 300 };
+canvas.getBoundingClientRect = () => rect;
+let roCallback = null, roGone = false;
+window.ResizeObserver = class {
+  constructor(cb) { roCallback = cb; }
+  observe() {}
+  disconnect() { roGone = true; }
+};
+const drawn = () => calls.filter(c => c[0] === 'drawImage').length;
+"""
+
+
+@needs_node
+class TheCanvasFollowsItsStage(unittest.TestCase):
+    """The stage changes height with no window resize - the caption under it
+    rewraps when a box is drawn, the footer's sentence changes when the preview
+    returns - and the bitmap was only ever resized on a window resize. Each
+    box let go in Prep stretched the plan into its new box (about 10% taller
+    for the length of the preview) and put the pointer and the box out of step,
+    which read as the plan bouncing up and down under the box being drawn."""
+
+    def test_the_bitmap_takes_the_new_size_and_is_redrawn_at_once(self):
+        out = node(FOLLOW_SETUP + r"""
+const pv = WD.PlanView.create({ canvas });
+pv.setImage(img);
+const before = drawn(), scale = pv.view.scale, y = pv.view.y;
+rect = { left: 0, top: 0, width: 400, height: 270 };
+roCallback();
+console.log(JSON.stringify({ size: [canvas.width, canvas.height], redrawn: drawn() - before,
+  scaleKept: pv.view.scale === scale, dy: pv.view.y - y }));
+""")
+        self.assertEqual(out["size"], [400, 270])
+        self.assertEqual(out["redrawn"], 1,
+                         "resizing a canvas clears it, so it is drawn again in the same task")
+        self.assertTrue(out["scaleKept"], "a small change does not rescale the sheet")
+        self.assertEqual(out["dy"], -15, "the plan stays on the middle of the stage")
+
+    def test_nothing_is_redrawn_when_the_size_has_not_changed(self):
+        out = node(FOLLOW_SETUP + r"""
+const pv = WD.PlanView.create({ canvas });
+pv.setImage(img);
+const before = drawn();
+roCallback();
+console.log(JSON.stringify(drawn() - before));
+""")
+        self.assertEqual(out, 0)
+
+    def test_a_large_change_refits_a_view_he_has_not_moved_and_only_that(self):
+        out = node(FOLLOW_SETUP + r"""
+const auto = WD.PlanView.create({ canvas });
+auto.setImage(img);
+const s0 = auto.view.scale;
+rect = { left: 0, top: 0, width: 800, height: 600 };
+roCallback();
+const refit = auto.view.scale / s0;
+// Another view, one he has panned, taken to the same new size.
+rect = { left: 0, top: 0, width: 400, height: 300 };
+const moved = WD.PlanView.create({ canvas });
+moved.setImage(img);
+moved.view.x += 5; moved.autoFramed = false;
+const s1 = moved.view.scale;
+rect = { left: 0, top: 0, width: 800, height: 600 };
+roCallback();
+console.log(JSON.stringify({ refit, movedKept: moved.view.scale === s1 }));
+""")
+        self.assertAlmostEqual(out["refit"], 2.0)
+        self.assertTrue(out["movedKept"])
+
+    def test_the_pointer_is_read_against_the_bitmap_not_the_display(self):
+        out = node(FOLLOW_SETUP + r"""
+const pv = WD.PlanView.create({ canvas });
+pv.setImage(img);
+// The box around the canvas has shrunk and the bitmap has not caught up.
+rect = { left: 10, top: 20, width: 200, height: 250 };
+console.log(JSON.stringify(pv.point({ clientX: 110, clientY: 145 })));
+""")
+        self.assertEqual(out, {"x": 200, "y": 150},
+                         "half way across and 125px down a 250px box is half way across a "
+                         "400px bitmap and half way down a 300px one")
+
+    def test_destroy_stops_watching(self):
+        out = node(FOLLOW_SETUP + r"""
+const pv = WD.PlanView.create({ canvas });
+pv.destroy();
+console.log(JSON.stringify(roGone));
+""")
+        self.assertTrue(out)
+
+
+@needs_node
+class OneRedrawPerFrame(unittest.TestCase):
+    """A mouse reports far more often than a screen repaints, and every report
+    redrew the whole sheet."""
+
+    def test_many_requests_in_a_frame_draw_once(self):
+        out = node(r"""
+const queued = [];
+window.requestAnimationFrame = cb => { queued.push(cb); return queued.length; };
+const pv = WD.PlanView.create({ canvas });
+pv.setImage(img);
+const before = calls.filter(c => c[0] === 'drawImage').length;
+pv.requestDraw(); pv.requestDraw(); pv.requestDraw();
+const asked = queued.length;
+const nowDrawn = calls.filter(c => c[0] === 'drawImage').length - before;
+queued.shift()();
+const afterFrame = calls.filter(c => c[0] === 'drawImage').length - before;
+pv.requestDraw();
+console.log(JSON.stringify({ asked, nowDrawn, afterFrame, again: queued.length }));
+""")
+        self.assertEqual(out, {"asked": 1, "nowDrawn": 0, "afterFrame": 1, "again": 1})
+
+    def test_without_animation_frames_it_draws_at_once(self):
+        out = node(r"""
+const pv = WD.PlanView.create({ canvas });
+pv.setImage(img);
+const before = calls.filter(c => c[0] === 'drawImage').length;
+pv.requestDraw();
+console.log(JSON.stringify(calls.filter(c => c[0] === 'drawImage').length - before));
+""")
+        self.assertEqual(out, 1)
+
+    def test_dragging_a_box_asks_for_a_frame_and_letting_go_draws_the_result(self):
+        out = node(r"""
+const queued = [];
+window.requestAnimationFrame = cb => { queued.push(cb); return queued.length; };
+let box = null;
+const ed = WD.BoxEditor.create({ get: () => box, set: b => { box = b; }, commit: () => {},
+  size: () => ({ w: 200, h: 100 }) });
+const pv = WD.PlanView.create({ canvas, onDown: ed.onDown, onMove: ed.onMove, onUp: ed.onUp,
+  overlay: ed.overlay });
+pv.setImage(img);
+const base = calls.filter(c => c[0] === 'drawImage').length;
+fire('canvas', 'mousedown', { clientX: 100, clientY: 100 });
+for (let i = 0; i < 20; i++) fire('window', 'mousemove', { clientX: 100 + i * 5, clientY: 100 + i * 3 });
+const duringDrag = calls.filter(c => c[0] === 'drawImage').length - base;
+const frames = queued.length;
+fire('window', 'mouseup', { clientX: 200, clientY: 160 });
+const afterUp = calls.filter(c => c[0] === 'drawImage').length - base;
+console.log(JSON.stringify({ duringDrag, frames, afterUp, box }));
+""")
+        self.assertEqual(out["duringDrag"], 0, "twenty moves did not draw the sheet twenty times")
+        self.assertEqual(out["frames"], 1)
+        self.assertGreaterEqual(out["afterUp"], 1, "letting go draws the finished box at once")
+        self.assertIsNotNone(out["box"])
+
+
 @needs_node
 class PanningAndTools(unittest.TestCase):
 
@@ -474,6 +621,77 @@ window['%s']();
 console.log(JSON.stringify(reset));
 """ % (handler, handler, handler))
         self.assertEqual(out, 1, "Fit resets a view that exists, and is safe before one does")
+
+
+@needs_node
+class TheFooterHoldsItsHeightWhileThePreviewIsOut(unittest.TestCase):
+    """preview() empties the footer's sentence and writes it again when the
+    answer arrives. The plan's stage takes whatever the footer leaves, so the
+    footer shrinking for that moment moved the stage by two lines every time a
+    box was let go, and back again when the preview returned."""
+
+    PROBE = r"""
+const els = {};
+const el = id => els[id] || (els[id] = { id, style: {}, innerHTML: '', textContent: '',
+  getBoundingClientRect: () => ({ height: 31.5 }) });
+const $ = el;
+const log = [];
+let previewSeq = 0;
+const loaded = () => true, chosenSteps = () => ['trim'], query = () => '', fileBytes = null;
+let fromDisk = true;
+const esc = s => s;
+const setGo = (on, note) => log.push(['setGo', els.prepGoNote.style.minHeight]);
+const renderPreview = r => log.push(['render', els.prepGoNote.style.minHeight]);
+eval(fn('function holdFooterHeight() {'));
+eval(fn('function releaseFooterHeight() {'));
+eval(fn('function preview() {'));
+let resolvers = [];
+globalThis.fetch = () => new Promise((res, rej) => resolvers.push({ res, rej }));
+const tick = () => new Promise(r => setTimeout(r, 0));
+"""
+
+    def run_probe(self, body):
+        return prep_node(self.PROBE + body)
+
+    def test_it_is_held_while_the_preview_is_out_and_let_go_when_it_returns(self):
+        out = self.run_probe(r"""
+(async () => {
+  preview();
+  const held = els.prepGoNote.style.minHeight;
+  resolvers[0].res({ json: () => Promise.resolve({ ok: true }) });
+  await tick(); await tick();
+  console.log(JSON.stringify({ held, log, after: els.prepGoNote.style.minHeight }));
+})();
+""")
+        self.assertEqual(out["held"], "31.5px", "the rendered height, fractions included")
+        self.assertEqual(out["log"][0], ["setGo", "31.5px"], "held before the sentence is emptied")
+        self.assertEqual(out["log"][1], ["render", "31.5px"], "still held while the answer is drawn")
+        self.assertEqual(out["after"], "", "and let go once there is a sentence in it")
+
+    def test_a_failed_preview_lets_it_go_too(self):
+        out = self.run_probe(r"""
+(async () => {
+  preview();
+  resolvers[0].rej(new Error('offline'));
+  await tick(); await tick();
+  console.log(JSON.stringify(els.prepGoNote.style.minHeight));
+})();
+""")
+        self.assertEqual(out, "")
+
+    def test_an_older_answer_does_not_let_go_of_a_newer_preview(self):
+        out = self.run_probe(r"""
+(async () => {
+  preview(); preview();
+  resolvers[0].res({ json: () => Promise.resolve({ ok: true }) });
+  await tick(); await tick();
+  const whileNewerIsOut = els.prepGoNote.style.minHeight;
+  resolvers[1].res({ json: () => Promise.resolve({ ok: true }) });
+  await tick(); await tick();
+  console.log(JSON.stringify([whileNewerIsOut, els.prepGoNote.style.minHeight]));
+})();
+""")
+        self.assertEqual(out, ["31.5px", ""])
 
 
 BROWSER_PAGE = """<!doctype html><meta charset="utf-8">
