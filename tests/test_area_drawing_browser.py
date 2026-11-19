@@ -269,6 +269,49 @@ class DrawingTheAreaOnThePlan(BrowserPagesHarness):
                 # The Prepare request carries the same outline.
                 self.assertEqual(self.sent(drv), got)
 
+    def green_at(self, drv, canvas, g, ux, uy):
+        """The green channel of the painted canvas at a plan point.
+
+        White paper is 255; the area's pink fill lowers it in proportion to
+        its strength (about 222 at the solid 18%, about 246 at the faint 5%),
+        so it tells the two apart without reading a screenshot."""
+        px = g["ox"] + ux / PLAN_W * IMG_W * g["s"]
+        py = g["oy"] + uy / PLAN_H * IMG_H * g["s"]
+        return drv.execute_script(
+            "var c = arguments[0], k = c.width / arguments[3];"
+            "return c.getContext('2d').getImageData(Math.round(arguments[1] * k),"
+            " Math.round(arguments[2] * k), 1, 1).data[1];", canvas, px, py, g["w"])
+
+    def test_prep_a_shape_drawn_on_the_areas_stage_is_what_prepare_will_write(self):
+        """With Trim on as well: the shape is what is sent, and the automatic
+        rectangle does not stay on the plan at full strength under it.
+
+        (500, 450) is inside the automatic rectangle and outside the triangle
+        drawn below, so it is pink only while the automatic area is what is
+        shown at full strength."""
+        for kind, drv in self.each_browser():
+            with self.subTest(browser=kind):
+                canvas = self.prep_open(drv)
+                g = self.geometry(drv, canvas)
+                time.sleep(0.5)
+                self.assertLess(self.green_at(drv, canvas, g, 500, 450), 235,
+                                "the automatic area is shown solid before anything is drawn")
+                drv.find_element(By.ID, "wdAreaPoly").click()
+                time.sleep(0.5)
+                self.assertGreater(self.green_at(drv, canvas, g, 500, 450), 240,
+                                   "while a shape is being drawn the automatic area is only "
+                                   "what the new one replaces, not still the area")
+                self.click(drv, canvas, g, (300, 300), (1500, 300), (1500, 1000), double_last=True)
+                got = self.wait_sent(drv, lambda x: x is not None and len(next(iter(x.values()))) == 3,
+                                     "the triangle was not sent")
+                self.assert_near(self.corners(got), [(300, 300), (1500, 300), (1500, 1000)])
+                WebDriverWait(drv, 20).until(lambda d: "Your area" in d.find_element(By.ID, "prepMapStrip").text)
+                time.sleep(0.5)
+                self.assertGreater(self.green_at(drv, canvas, g, 500, 450), 250,
+                                   "outside the shape that was drawn there is no area")
+                self.assertLess(self.green_at(drv, canvas, g, 1300, 400), 235,
+                                "inside the shape that was drawn the area is solid")
+
     def test_prep_a_plain_drag_on_the_areas_stage_still_pans_the_plan(self):
         for kind, drv in self.each_browser():
             with self.subTest(browser=kind):

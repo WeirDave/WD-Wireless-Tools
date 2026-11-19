@@ -1241,6 +1241,11 @@
       : (af.outline || af.polygon || []);
     // An area measured from the whole page is measured again on the cropped
     // page, so on a floor being trimmed it is the kept rectangle.
+    // While a rectangle or a shape is being drawn, the area the floor would
+    // get otherwise is only what the new one will replace: faint and dashed.
+    // Left solid it read as the area still being a rectangle, and its label
+    // sat on the spot where the first corner is clicked.
+    var drawing = areaToolOn() && map.areaEditor.drawing();
     var onScreen;
     if (kept && af.outlineIsNew && af.basis === 'canvas' && !drawnHere) {
       onScreen = [k0, { x: k1.x, y: k0.y }, k1, { x: k0.x, y: k1.y }];
@@ -1258,14 +1263,17 @@
     onScreen.forEach(function (p, i) { if (i) g.lineTo(p.x, p.y); else g.moveTo(p.x, p.y); });
     g.closePath();
     if (!drawnHere) {
-      g.fillStyle = af.skipped ? 'rgba(148,163,184,0.18)' : 'rgba(236,72,153,0.18)';
+      g.fillStyle = af.skipped ? 'rgba(148,163,184,0.18)'
+        : 'rgba(236,72,153,' + (drawing ? '0.05' : '0.18') + ')';
       g.fill();
       g.strokeStyle = af.skipped ? '#94a3b8' : '#db2777';
       g.lineWidth = 2 * dpr;
       if (af.skipped) g.setLineDash([6 * dpr, 4 * dpr]);
+      else if (drawing) g.setLineDash([7 * dpr, 5 * dpr]);
       g.stroke();
     }
     g.restore();
+    if (drawing) { map.areaEditor.overlay(g, pv); return; }
     // Labelled in points, not as a fraction of the drawing, so it reads the
     // same at any zoom.
     var st = areaFloorState(af);

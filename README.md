@@ -35,7 +35,7 @@ converting scale, building installer-ready reports, trimming floor plans, and la
 <td width="20%" align="center"><img src="web/assets/plantrim-v1.0-560x480.png" alt="PlanTrim" width="105"><br><b>PlanTrim</b><br><sub>v2.4.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/ap-labeler-v1.0-560x560.png" alt="AP Labeler" width="105"><br><b>AP Labeler</b><br><sub>v2.23.0 · Desktop</sub></td>
 <td width="20%" align="center"><img src="web/assets/capacity-v1.0.svg" alt="Capacity" width="105"><br><b>Capacity</b><br><sub>v1.15.0 · Desktop</sub></td>
-<td width="20%" align="center"><img src="web/assets/prep-v1.0.svg" alt="Prep" width="105"><br><b>Prep</b><br><sub>v2.11.0 · Desktop</sub></td>
+<td width="20%" align="center"><img src="web/assets/prep-v1.0.svg" alt="Prep" width="105"><br><b>Prep</b><br><sub>v2.11.1 · Desktop</sub></td>
 </tr>
 </table>
 
@@ -243,7 +243,7 @@ python server.py
 The startup banner identifies the installed suite version:
 
 ```text
-WIRELESS TOOLS  v2.249.2
+WIRELESS TOOLS  v2.249.3
 A suite of Ekahau workflow tools.
 
 Open http://localhost:8675/ in your browser to get started.
